@@ -9,7 +9,7 @@
 
 use std::path::PathBuf;
 
-use runvil::model::{CompletionError, ModelDescriptor, ModelId};
+use runvil::model::{CompletionError, ModelId, ModelInfo};
 
 use crate::performers::InferenceBroker;
 
@@ -65,7 +65,7 @@ pub enum CurrentModelError {
 /// lists no model, or the selected id is not representable; the prompt's
 /// declared roles then stay unbound. A failed listing or a selection
 /// absent from the list is a reported [`CurrentModelError`], never a
-/// fabricated fallback descriptor.
+/// fabricated fallback model info.
 ///
 /// # Errors
 /// Returns [`CurrentModelError::CatalogFetchFailed`] when the broker's
@@ -74,7 +74,7 @@ pub enum CurrentModelError {
 pub async fn current_model(
     host: &HostSnapshot,
     broker: &dyn InferenceBroker,
-) -> Result<Option<ModelDescriptor>, CurrentModelError> {
+) -> Result<Option<ModelInfo>, CurrentModelError> {
     let catalog = broker
         .models()
         .await

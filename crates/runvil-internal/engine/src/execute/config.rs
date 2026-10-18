@@ -16,7 +16,7 @@ use runvil_vfs::VfsRef;
 pub use limits::RunLimits;
 
 use crate::cancel::CancelHandle;
-use crate::model::ModelDescriptor;
+use crate::model::ModelInfo;
 use crate::parser::Prompt;
 use crate::tools::ToolCatalog;
 
@@ -91,7 +91,7 @@ pub struct RunContext {
     /// The run's current model, which the caller chooses, set before
     /// prepare. Input to prepare's fill function, which binds every
     /// declared role to it.
-    pub(super) model: Option<ModelDescriptor>,
+    pub(super) model: Option<ModelInfo>,
     /// The run's model satisfaction, written by
     /// [`prepare`](RunContext::prepare)'s fill function: which concrete
     /// model each declared role is bound to.
@@ -225,10 +225,10 @@ impl RunContext {
     /// [`prepare`](RunContext::prepare)'s fill
     /// function binds every declared role to this model. It also checks
     /// each role's hard keywords and context minimum against the model's
-    /// descriptor. With the default, `None`, the model bindings stay empty,
+    /// info. With the default, `None`, the model bindings stay empty,
     /// and selecting a declared role at run time fails.
     #[must_use]
-    pub fn model(mut self, model: ModelDescriptor) -> RunContext {
+    pub fn model(mut self, model: ModelInfo) -> RunContext {
         self.model = Some(model);
         self
     }
@@ -251,9 +251,9 @@ impl RunContext {
         self
     }
 
-    /// Sets the run's tool catalog: the descriptors of every tool of every
-    /// Plugin the caller can serve this run, declared by the prompt or not.
-    /// The catalog lists every tool the run can use: Lua calls one by id,
+    /// Sets the run's tool catalog: the `ToolInfo` values of every tool of
+    /// every Plugin the caller can serve this run, declared by the prompt or
+    /// not. The catalog lists every tool the run can use: Lua calls one by id,
     /// and a section offers one to its model with `tools.offer`. The caller
     /// performs every call. Read it back with
     /// [`catalog`](RunContext::catalog).
@@ -323,7 +323,7 @@ impl RunContext {
     ///
     /// Every declared model role binds to the context's current model.
     /// `prepare` then checks each role's hard keywords (`thinking`,
-    /// `no-thinking`) and context minimum against the model's descriptor.
+    /// `no-thinking`) and context minimum against the model's info.
     /// Each failed check is listed in [`Requirements::unmet_requirements`]
     /// with the required and actual values, and the role stays bound to
     /// the current model. Soft keywords record the author's intent only,
@@ -351,7 +351,7 @@ impl RunContext {
 
     /// Returns the run's current model, or `None` by default.
     #[must_use]
-    pub fn current_model(&self) -> Option<&ModelDescriptor> {
+    pub fn current_model(&self) -> Option<&ModelInfo> {
         self.model.as_ref()
     }
 
@@ -368,10 +368,10 @@ impl RunContext {
     /// Returns the run's model bindings, which map each declared role to a
     /// concrete model.
     ///
-    /// The bindings also hold the descriptors of the models this run may
+    /// The bindings also hold the `ModelInfo` values of the models this run may
     /// use. [`prepare`](RunContext::prepare)'s fill
     /// function writes them. A lookup goes from a role's label to a model
-    /// id, and from the id to the model's descriptor.
+    /// id, and from the id to the model's info.
     #[must_use]
     pub fn model_bindings(&self) -> &ModelBindings {
         &self.model_bindings
@@ -380,7 +380,7 @@ impl RunContext {
     /// Binds the role `label` to `model` as the prepare's fill would, for a
     /// test that starts the run without the prepare.
     #[cfg(test)]
-    pub(crate) fn bind_role_for_test(&mut self, label: &str, model: ModelDescriptor) {
+    pub(crate) fn bind_role_for_test(&mut self, label: &str, model: ModelInfo) {
         self.model_bindings.bind(label, model);
     }
 

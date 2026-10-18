@@ -5,12 +5,12 @@ use std::collections::BTreeMap;
 
 use mlua::Value;
 use runvil_types::plugins::PluginId;
-use runvil_types::tools::{ToolDescriptor, ToolId};
+use runvil_types::tools::{ToolId, ToolInfo};
 use serde_json::Value as Json;
 
 /// How a bound tool's output resumes into Lua at the `tools.call` boundary.
 ///
-/// Declared on the binding (from the descriptor's `structured_output`), not
+/// Declared on the binding (from the tool info's `structured_output`), not
 /// the tool implementation, so the caller's tool catalog decides how scripts
 /// receive the output. The model tool loop never consults the kind (its
 /// results are always added to the conversation as text).
@@ -49,17 +49,17 @@ pub struct ToolBinding {
 }
 
 impl ToolBinding {
-    /// Binds `alias` to the tool `descriptor` describes: the description is
-    /// the tool's own, and the output kind follows the descriptor's
+    /// Binds `alias` to the tool `info` describes: the description is the
+    /// tool's own, and the output kind follows the tool info's
     /// structured-output flag.
     #[must_use]
-    pub fn from_descriptor(alias: &str, descriptor: &ToolDescriptor) -> Self {
+    pub fn from_info(alias: &str, info: &ToolInfo) -> Self {
         Self {
             alias: alias.to_owned(),
-            description: descriptor.description.clone(),
-            id: descriptor.id.clone(),
-            schema: descriptor.parameters_schema.clone(),
-            output_kind: if descriptor.structured_output {
+            description: info.description.clone(),
+            id: info.id.clone(),
+            schema: info.parameters_schema.clone(),
+            output_kind: if info.structured_output {
                 ToolOutputKind::Structured
             } else {
                 ToolOutputKind::Plain

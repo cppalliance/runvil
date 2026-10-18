@@ -45,7 +45,7 @@ impl AskBroker for Failing {
 const PROBE: Package = Package::new("tests/probe", construct_probe);
 
 struct Probe {
-    tools: Vec<ToolDescriptor>,
+    tools: Vec<ToolInfo>,
 }
 
 #[expect(
@@ -57,7 +57,7 @@ fn construct_probe(
     _config: Value,
     _services: &HostServices,
 ) -> Result<Arc<dyn Plugin>, ToolError> {
-    let saw = ToolDescriptor::new(
+    let saw = ToolInfo::new(
         ToolId::parse(&format!("{name}/saw")).unwrap(),
         "Answer whether the call was lent a broker.",
         json!({ "type": "object", "properties": {} }),
@@ -66,7 +66,7 @@ fn construct_probe(
 }
 
 impl Plugin for Probe {
-    fn tools(&self) -> Vec<ToolDescriptor> {
+    fn tools(&self) -> Vec<ToolInfo> {
         self.tools.clone()
     }
 

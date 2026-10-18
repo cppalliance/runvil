@@ -10,8 +10,8 @@ use harness_runner::prepare::prepare;
 use harness_runner::recorder::{MemoryRecorder, RunOutcome};
 use runvil::cancel::CancelHandle;
 use runvil_plugin::{
-    HostServices, Package, Plugin, PluginFuture, PluginId, ToolContext, ToolDescriptor, ToolError,
-    ToolId, ToolOutput,
+    HostServices, Package, Plugin, PluginFuture, PluginId, ToolContext, ToolError, ToolId,
+    ToolInfo, ToolOutput,
 };
 use serde_json::{Value, json};
 
@@ -33,7 +33,7 @@ const CALLS_RECORD: &str = "---\nname: calls-record\ndescription: d\nrunvil: 0\n
 const CONTEXT: Package = Package::new("tests/context", construct);
 
 struct Record {
-    tools: Vec<ToolDescriptor>,
+    tools: Vec<ToolInfo>,
 }
 
 #[expect(
@@ -45,7 +45,7 @@ fn construct(
     _config: Value,
     _services: &HostServices,
 ) -> Result<Arc<dyn Plugin>, ToolError> {
-    let record = ToolDescriptor::new(
+    let record = ToolInfo::new(
         ToolId::parse(&format!("{name}/record")).unwrap(),
         "Write a file through the call's access and name the caller.",
         json!({ "type": "object", "properties": {} }),
@@ -56,7 +56,7 @@ fn construct(
 }
 
 impl Plugin for Record {
-    fn tools(&self) -> Vec<ToolDescriptor> {
+    fn tools(&self) -> Vec<ToolInfo> {
         self.tools.clone()
     }
 

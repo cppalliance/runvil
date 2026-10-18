@@ -1,12 +1,12 @@
-//! The caller-supplied [`ToolCatalog`] of tool descriptors and the catalog's
+//! The caller-supplied [`ToolCatalog`] of `ToolInfo` values and the catalog's
 //! construction error.
 
 use std::sync::Arc;
 
-use super::descriptor::ToolDescriptor;
 use super::ids::ToolId;
+use super::info::ToolInfo;
 
-/// A catalog of the tools a run may offer, given as tool descriptors.
+/// A catalog of the tools a run may offer, given as `ToolInfo` values.
 ///
 /// The caller builds the catalog from every Plugin it can serve, declared
 /// by the prompt or not, and keeps the tool implementations itself. The
@@ -18,11 +18,11 @@ use super::ids::ToolId;
 /// and the [`get`](Self::get) lookup relies on that check.
 ///
 /// Cloning is cheap, because all clones share one reference-counted list of
-/// descriptors.
+/// `ToolInfo` values.
 #[derive(Clone, Default)]
 #[non_exhaustive]
 pub struct ToolCatalog {
-    tools: Arc<[ToolDescriptor]>,
+    tools: Arc<[ToolInfo]>,
 }
 
 impl std::fmt::Debug for ToolCatalog {
@@ -38,16 +38,16 @@ impl std::fmt::Debug for ToolCatalog {
 }
 
 impl ToolCatalog {
-    /// Builds a catalog from tool descriptors, keeping the order they are
+    /// Builds a catalog from `ToolInfo` values, keeping the order they are
     /// given in.
     ///
     /// This is the only place the catalog checks identities.
     ///
     /// # Errors
-    /// Returns [`ToolCatalogError::DuplicateId`] if two descriptors share a
-    /// [`ToolId`].
-    pub fn new(tools: impl IntoIterator<Item = ToolDescriptor>) -> Result<Self, ToolCatalogError> {
-        let tools: Vec<ToolDescriptor> = tools.into_iter().collect();
+    /// Returns [`ToolCatalogError::DuplicateId`] if two `ToolInfo` values
+    /// share a [`ToolId`].
+    pub fn new(tools: impl IntoIterator<Item = ToolInfo>) -> Result<Self, ToolCatalogError> {
+        let tools: Vec<ToolInfo> = tools.into_iter().collect();
         let mut seen = std::collections::BTreeSet::new();
         for tool in &tools {
             if !seen.insert(&tool.id) {
@@ -61,17 +61,17 @@ impl ToolCatalog {
         })
     }
 
-    /// Returns the descriptor for `id`, if one is in the catalog.
+    /// Returns the tool info for `id`, if one is in the catalog.
     ///
-    /// The lookup scans the descriptors one by one.
+    /// The lookup scans the `ToolInfo` values one by one.
     #[must_use]
-    pub fn get(&self, id: &ToolId) -> Option<&ToolDescriptor> {
+    pub fn get(&self, id: &ToolId) -> Option<&ToolInfo> {
         self.tools.iter().find(|tool| tool.id == *id)
     }
 
-    /// Returns the catalog's descriptors in supplied order.
+    /// Returns the catalog's `ToolInfo` values in supplied order.
     #[must_use]
-    pub fn tools(&self) -> &[ToolDescriptor] {
+    pub fn tools(&self) -> &[ToolInfo] {
         &self.tools
     }
 }

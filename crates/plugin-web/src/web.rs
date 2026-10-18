@@ -9,8 +9,8 @@
 use std::sync::Arc;
 
 use runvil_plugin::{
-    HostServices, Package, Plugin, PluginFuture, PluginId, ServiceKey, ToolContext, ToolDescriptor,
-    ToolError, ToolErrorKind, ToolId, ToolOutput,
+    HostServices, Package, Plugin, PluginFuture, PluginId, ServiceKey, ToolContext, ToolError,
+    ToolErrorKind, ToolId, ToolInfo, ToolOutput,
 };
 use serde_json::{Value, json};
 use tokio::runtime::Handle;
@@ -43,7 +43,7 @@ const TOKIO_RUNTIME: ServiceKey<Handle> = ServiceKey::new(runvil_plugin::TOKIO_R
 /// The one object every run shares: its two-tool list and the two tools.
 #[derive(Debug)]
 struct Web {
-    tools: Vec<ToolDescriptor>,
+    tools: Vec<ToolInfo>,
     fetch: WebFetch,
     search: WebSearch,
 }
@@ -87,8 +87,8 @@ impl Web {
             })
         };
         let tools = vec![
-            ToolDescriptor::new(id("fetch")?, fetch.description(), fetch.parameters_schema()),
-            ToolDescriptor::new(
+            ToolInfo::new(id("fetch")?, fetch.description(), fetch.parameters_schema()),
+            ToolInfo::new(
                 id("search")?,
                 search.description(),
                 search.parameters_schema(),
@@ -102,7 +102,7 @@ impl Web {
     }
 
     /// Replaces the default fetch policy with a validated custom one,
-    /// rebuilding the fetch tool's descriptor to match.
+    /// rebuilding the fetch tool's info to match.
     #[cfg(test)]
     fn with_fetch_config(
         self,
@@ -116,7 +116,7 @@ impl Web {
 }
 
 impl Plugin for Web {
-    fn tools(&self) -> Vec<ToolDescriptor> {
+    fn tools(&self) -> Vec<ToolInfo> {
         self.tools.clone()
     }
 

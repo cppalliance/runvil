@@ -12,7 +12,7 @@ use mlua::{FromLuaMulti, MultiValue};
 use runvil_model_client::model::ModelSet;
 use runvil_types::emitter::Emitter;
 use runvil_types::seed::RunSeed;
-use runvil_types::tools::{ToolDescriptor, ToolId};
+use runvil_types::tools::{ToolId, ToolInfo};
 use runvil_types::untrusted::GuardNonce;
 use runvil_vfs::{Access, Origin, VfsRef};
 use serde_json::{Value as Json, json};
@@ -94,8 +94,8 @@ pub(crate) fn run_chunk(
 
 /// A tool as data under `id`, described as `<id> tool`.
 #[track_caller]
-pub(crate) fn tool_at(id: &str) -> ToolDescriptor {
-    ToolDescriptor::new(
+pub(crate) fn tool_at(id: &str) -> ToolInfo {
+    ToolInfo::new(
         ToolId::parse(id).expect("a fixture tool id is a valid tool id"),
         format!("{id} tool"),
         json!({ "type": "object" }),
@@ -103,9 +103,9 @@ pub(crate) fn tool_at(id: &str) -> ToolDescriptor {
 }
 
 /// The `tools/echo` fixture tool as data. No implementation is ever
-/// called: the VM binds descriptors and dispatch sees canned outputs.
+/// called: the VM binds `ToolInfo` values and dispatch sees canned outputs.
 #[track_caller]
-pub(crate) fn echo_tool() -> ToolDescriptor {
+pub(crate) fn echo_tool() -> ToolInfo {
     tool_at("tools/echo")
 }
 

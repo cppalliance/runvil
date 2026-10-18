@@ -13,7 +13,7 @@ use std::sync::Arc;
 
 use runvil::effect::ToolCallOrigin;
 use runvil::plugins::Prelude;
-use runvil::tools::{ToolCatalog, ToolDescriptor, ToolError, ToolErrorKind, ToolId, ToolOutput};
+use runvil::tools::{ToolCatalog, ToolError, ToolErrorKind, ToolId, ToolInfo, ToolOutput};
 use runvil::vfs::Access;
 use runvil::{MissingService, Prompt, Requirements, UnavailablePlugin};
 use runvil_plugin::{HostServices, Package, Plugin, PluginId, ServiceId, ToolContext};
@@ -34,7 +34,7 @@ enum RunPlugin {
     Usable {
         package: Package,
         plugin: Arc<dyn Plugin>,
-        tools: Vec<ToolDescriptor>,
+        tools: Vec<ToolInfo>,
     },
     /// Its `construct` failed, or its `ready` did before this run, for
     /// this reason.
@@ -176,13 +176,13 @@ impl HostRunContext {
     }
 
     /// The usable Plugin whose snapshot offers `tool`, and that tool's
-    /// descriptor.
-    fn offering(&self, tool: &ToolId) -> Option<(&Arc<dyn Plugin>, &ToolDescriptor)> {
+    /// info.
+    fn offering(&self, tool: &ToolId) -> Option<(&Arc<dyn Plugin>, &ToolInfo)> {
         match self.plugins.get(&tool.plugin())? {
             RunPlugin::Usable { plugin, tools, .. } => tools
                 .iter()
-                .find(|descriptor| descriptor.id == *tool)
-                .map(|descriptor| (plugin, descriptor)),
+                .find(|info| info.id == *tool)
+                .map(|info| (plugin, info)),
             RunPlugin::Unavailable(_) | RunPlugin::NeedsUnmet(_) => None,
         }
     }
@@ -218,7 +218,7 @@ impl ToolPerformer for HostRunContext {
 
     fn survives_stop(&self, tool: &ToolId) -> bool {
         self.offering(tool)
-            .is_some_and(|(_, descriptor)| descriptor.survives_stop)
+            .is_some_and(|(_, info)| info.survives_stop)
     }
 }
 
@@ -250,9 +250,9 @@ impl fmt::Debug for HostRunContext {
 /// itself.
 fn validated(
     plugin: &PluginId,
-    tools: Vec<ToolDescriptor>,
+    tools: Vec<ToolInfo>,
     seen: &mut BTreeSet<ToolId>,
-) -> Vec<ToolDescriptor> {
+) -> Vec<ToolInfo> {
     tools
         .into_iter()
         .filter(|tool| {

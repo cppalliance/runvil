@@ -7,7 +7,7 @@ use std::sync::Arc;
 
 use runvil_plugin::{
     HostServices, Package, Plugin, PluginFuture, PluginId, ServiceId, ServiceKey, ToolContext,
-    ToolDescriptor, ToolError, ToolId, ToolOutput,
+    ToolError, ToolId, ToolInfo, ToolOutput,
 };
 use serde_json::{Value, json};
 
@@ -45,7 +45,7 @@ pub(crate) fn broker_services(broker: Arc<dyn AskBroker>) -> HostServices {
 }
 
 struct Asker {
-    tools: Vec<ToolDescriptor>,
+    tools: Vec<ToolInfo>,
 }
 
 #[expect(
@@ -57,7 +57,7 @@ fn construct(
     _config: Value,
     _services: &HostServices,
 ) -> Result<Arc<dyn Plugin>, ToolError> {
-    let ask = ToolDescriptor::new(
+    let ask = ToolInfo::new(
         ToolId::parse(&format!("{name}/ask")).unwrap(),
         "Wait for the operator's next message.",
         json!({ "type": "object", "properties": {} }),
@@ -67,7 +67,7 @@ fn construct(
 }
 
 impl Plugin for Asker {
-    fn tools(&self) -> Vec<ToolDescriptor> {
+    fn tools(&self) -> Vec<ToolInfo> {
         self.tools.clone()
     }
 

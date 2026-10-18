@@ -11,7 +11,7 @@ use runvil::vfs::{Origin, VfsRef};
 use runvil::{MissingService, Prompt, UnavailablePlugin};
 use runvil_plugin::{
     HostServices, Package, Plugin, PluginFuture, PluginId, ServiceId, ServiceKey, ToolContext,
-    ToolDescriptor, ToolError, ToolId, ToolOutput,
+    ToolError, ToolId, ToolInfo, ToolOutput,
 };
 use serde_json::{Value, json};
 
@@ -31,11 +31,11 @@ const NEEDS_SESSION: &[ServiceId] = &[SESSION.id()];
 /// the name it was installed under and the called tool's id.
 struct Listed {
     name: PluginId,
-    tools: Vec<ToolDescriptor>,
+    tools: Vec<ToolInfo>,
 }
 
 impl Plugin for Listed {
-    fn tools(&self) -> Vec<ToolDescriptor> {
+    fn tools(&self) -> Vec<ToolInfo> {
         self.tools.clone()
     }
 
@@ -64,9 +64,9 @@ fn listed(
     for entry in config.as_array().into_iter().flatten() {
         let id = ToolId::parse(entry["id"].as_str().unwrap()).unwrap();
         let schema = json!({ "type": "object", "properties": {} });
-        let descriptor = ToolDescriptor::new(id, "A listed tool.", schema)
+        let info = ToolInfo::new(id, "A listed tool.", schema)
             .survives_stop(entry["survives_stop"].as_bool().unwrap_or(false));
-        tools.push(descriptor);
+        tools.push(info);
     }
     Ok(Arc::new(Listed {
         name: name.clone(),
@@ -412,7 +412,7 @@ async fn a_call_to_a_plugin_the_run_cannot_use_fails_naming_the_tool() {
 }
 
 #[test]
-fn survives_stop_answers_from_the_runs_snapshot_of_descriptors() {
+fn survives_stop_answers_from_the_runs_snapshot_of_tool_info() {
     let mut host = host(&[package("acme/kit")]);
     let config = json!([
         { "id": "kit/ask", "survives_stop": true },

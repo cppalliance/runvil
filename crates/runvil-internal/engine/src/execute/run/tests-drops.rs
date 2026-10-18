@@ -12,7 +12,7 @@ use std::sync::Arc;
 use runvil_types::event::{Event, ReplyOrigin};
 use runvil_types::ids::RoundId;
 use runvil_types::models::ThinkingMode;
-use runvil_types::tools::{ToolCatalog, ToolDescriptor, ToolId};
+use runvil_types::tools::{ToolCatalog, ToolId, ToolInfo};
 use serde_json::json;
 
 use super::run_context;
@@ -46,7 +46,7 @@ fn bound_sections(sections: &str) -> Run {
         .0
         .expect("the drop test prompt parses");
     let model = test_model_with("test-model", 4096, ThinkingMode::Never);
-    let echo = ToolDescriptor::new(
+    let echo = ToolInfo::new(
         ToolId::parse("tools/echo").expect("a valid tool id"),
         "Echoes its value.",
         json!({ "type": "object" }),

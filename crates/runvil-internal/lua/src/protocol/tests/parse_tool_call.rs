@@ -134,7 +134,7 @@ fn a_marked_empty_list_in_the_args_parses_to_an_empty_array() {
 fn a_tool_call_with_a_tool_object_decodes_to_its_id() {
     // The id-or-tool-object polymorphism at the protocol boundary: a tool
     // object stands for its canonical id, never its wire name.
-    let binding = crate::ToolBinding::from_descriptor("tools_echo", &crate::test_vm::echo_tool());
+    let binding = crate::ToolBinding::from_info("tools_echo", &crate::test_vm::echo_tool());
     let vm = crate::test_vm::lua_over(crate::ToolSet::new(
         Vec::new(),
         std::collections::BTreeMap::new(),

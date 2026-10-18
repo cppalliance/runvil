@@ -1,4 +1,4 @@
-//! Fixtures and descriptor tests for [`WebFetch`]: the loopback article,
+//! Fixtures and tool info tests for [`WebFetch`]: the loopback article,
 //! table, and JSON pages, the injected [`Lookup`] map, the mock servers
 //! and their routes, and the loopback policy builders, plus the abort of
 //! a dropped call's fetch. The policy tests (redirects, credentials, URL

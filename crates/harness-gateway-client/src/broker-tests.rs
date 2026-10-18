@@ -250,10 +250,10 @@ async fn models_lists_the_catalog_the_gateway_serves_under_the_brokers_key() {
         .await
         .expect("the keyed mock serves its catalog");
     assert_eq!(catalog.models().len(), 1, "the one served model");
-    let descriptor = catalog
+    let info = catalog
         .get(&ModelId::gateway("mock-model").expect("a literal model name is valid"))
         .expect("the served model is listed under its gateway id");
-    assert_eq!(descriptor.description(), "the mock model");
-    assert_eq!(descriptor.context().get(), 131_072);
-    assert_eq!(descriptor.thinking(), ThinkingMode::Switchable);
+    assert_eq!(info.description(), "the mock model");
+    assert_eq!(info.context().get(), 131_072);
+    assert_eq!(info.thinking(), ThinkingMode::Switchable);
 }

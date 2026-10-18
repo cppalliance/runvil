@@ -150,7 +150,7 @@ fn tool_objects_and_roles_reach_section_call_and_fanout_vms() {
             "bindings",
             "function binding_names() return tools.get('tools/echo').id .. ':' .. models.get('writer').name end",
         );
-    // The fixture tool's descriptor goes into the catalog and its
+    // The fixture tool's info goes into the catalog and its
     // implementation answers the run's calls; the run offers every
     // catalog tool.
     let trace = Scenario::new(source.build())

@@ -9,7 +9,7 @@
 //! [`HostServices`] maps service ids to the shared objects a Host provides,
 //! each read back through a typed [`ServiceKey`].
 //!
-//! The Engine never depends on this crate; it sees only tool descriptors,
+//! The Engine never depends on this crate; it sees only `ToolInfo` values,
 //! preludes, and ids. The Engine and filesystem names a Plugin author
 //! needs are re-exported here, so a Plugin crate names no other
 //! runvil crate.
@@ -67,7 +67,7 @@ pub use service::{HostServices, ServiceError, ServiceId, ServiceKey, TOKIO_RUNTI
 
 pub use runvil_types::plugins::{PluginId, PluginIdError, PluginIdErrorKind};
 pub use runvil_types::tools::{
-    OutputTrust, ToolCallOrigin, ToolCaller, ToolDescriptor, ToolError, ToolErrorKind, ToolId,
-    ToolIdError, ToolIdErrorKind, ToolOutput,
+    OutputTrust, ToolCallOrigin, ToolCaller, ToolError, ToolErrorKind, ToolId, ToolIdError,
+    ToolIdErrorKind, ToolInfo, ToolOutput,
 };
 pub use runvil_vfs::{Access, Entry, FileType, PathReason, Stat, VfsError};

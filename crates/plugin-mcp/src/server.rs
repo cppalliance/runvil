@@ -10,7 +10,7 @@ use rmcp::model::{
 };
 use rmcp::service::{Peer, PeerRequestOptions, RoleClient};
 use runvil_plugin::{
-    Plugin, PluginFuture, PluginId, ToolContext, ToolDescriptor, ToolError, ToolErrorKind, ToolId,
+    Plugin, PluginFuture, PluginId, ToolContext, ToolError, ToolErrorKind, ToolId, ToolInfo,
     ToolOutput,
 };
 use serde_json::Value;
@@ -43,7 +43,7 @@ pub(crate) struct Ready {
 /// One tool the server listed and the Plugin kept.
 #[derive(Debug)]
 pub(crate) struct Listed {
-    pub(crate) descriptor: ToolDescriptor,
+    pub(crate) info: ToolInfo,
     /// The name the server knows the tool by, which a call sends.
     pub(crate) mcp_name: String,
 }
@@ -79,7 +79,7 @@ pub(crate) fn catalog(plugin: &PluginId, tools: Vec<Tool>) -> Vec<Listed> {
             .to_owned();
         let schema = Value::Object((*tool.input_schema).clone());
         kept.push(Listed {
-            descriptor: ToolDescriptor::new(id, description, schema),
+            info: ToolInfo::new(id, description, schema),
             mcp_name,
         });
     }
@@ -115,7 +115,7 @@ impl Server {
             State::Ready(ready) => ready
                 .tools
                 .iter()
-                .find(|listed| listed.descriptor.id == *tool)
+                .find(|listed| listed.info.id == *tool)
                 .map(|listed| (ready.peer.clone(), listed.mcp_name.clone()))
                 .ok_or_else(|| ToolError::message(format!("MCP server has no tool {tool}"))),
             State::Starting => Err(ToolError::message("MCP server is still starting")),
@@ -187,12 +187,12 @@ async fn send(
 }
 
 impl Plugin for Server {
-    fn tools(&self) -> Vec<ToolDescriptor> {
+    fn tools(&self) -> Vec<ToolInfo> {
         match &*self.state.borrow() {
             State::Ready(ready) => ready
                 .tools
                 .iter()
-                .map(|listed| listed.descriptor.clone())
+                .map(|listed| listed.info.clone())
                 .collect(),
             State::Starting | State::Failed(_) => Vec::new(),
         }

@@ -17,7 +17,7 @@ use runvil::model::{
     Completion, CompletionError, CompletionOptions, Message, ModelBinding, ModelCatalog, ToolSchema,
 };
 use runvil::timestamp::Timestamp;
-use runvil::tools::{ToolCatalog, ToolDescriptor, ToolError, ToolId, ToolOutput};
+use runvil::tools::{ToolCatalog, ToolError, ToolId, ToolInfo, ToolOutput};
 use runvil::vfs::{
     Access, AcquireContext, Entry, ExecId, MemoryBackend, Stat, Vfs, VfsAccess, VfsError, VfsPath,
     VfsRef,
@@ -51,7 +51,7 @@ pub(crate) const WAITS: &str = "return tools.call('tests/runner/wait')";
 /// [`WAITS`] calls, so a section reaches it by full id without binding an
 /// alias.
 fn catalog() -> ToolCatalog {
-    let wait = ToolDescriptor::new(
+    let wait = ToolInfo::new(
         ToolId::parse("tests/runner/wait").expect("the wait tool id is valid"),
         "Wait until the test's tool performer answers.",
         json!({ "type": "object", "properties": {} }),

@@ -15,10 +15,10 @@ use harness_runner::recorder::{MemoryRecorder, RecordKind, RunId, RunOutcome};
 use runvil::cancel::CancelHandle;
 use runvil::effect::ToolCallOrigin;
 use runvil::model::{
-    Completion, CompletionError, CompletionResult, ModelDescriptor, ModelId, ThinkingMode, ToolCall,
+    Completion, CompletionError, CompletionResult, ModelId, ModelInfo, ThinkingMode, ToolCall,
 };
 use runvil::timestamp::Timestamp;
-use runvil::tools::{ToolCatalog, ToolDescriptor, ToolError, ToolId, ToolOutput};
+use runvil::tools::{ToolCatalog, ToolError, ToolId, ToolInfo, ToolOutput};
 use runvil::vfs::Access;
 use runvil::{Prompt, Run, RunContext};
 use serde_json::{Value, json};
@@ -74,13 +74,13 @@ fn run_of(sections: &str) -> Run {
     let source = format!("{PREAMBLE}{sections}");
     let (prompt, _parse_events) = Prompt::parse(&source, EXECUTION);
     let prompt = Arc::new(prompt.expect("the cap fixture parses"));
-    let model = ModelDescriptor::new(
+    let model = ModelInfo::new(
         ModelId::gateway(MODEL).expect("the model id is valid"),
         "The host's current model",
         NonZeroU32::new(131_072).expect("131072 is non-zero"),
         ThinkingMode::Never,
     );
-    let tool = ToolDescriptor::new(
+    let tool = ToolInfo::new(
         ToolId::parse(TOOL).expect("the tool id is valid"),
         "Park until the test opens the gate.",
         json!({ "type": "object", "properties": { "name": { "type": "string" } } }),

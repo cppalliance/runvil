@@ -11,7 +11,7 @@ use std::sync::{Arc, Mutex};
 use mlua::{Lua, Value};
 use runvil_model_client::model::ModelSet;
 use runvil_types::emitter::Emitter;
-use runvil_types::tools::{ToolDescriptor, ToolId};
+use runvil_types::tools::{ToolId, ToolInfo};
 use runvil_vfs::{
     Access, AcquireContext, ExecId, Origin, Vfs, VfsAccess, VfsError, VfsPath, VfsRef,
 };
@@ -226,10 +226,10 @@ fn program(source: &str) -> LuaProgram {
     .expect("test Lua must compile")
 }
 
-/// A fixture tool as data: `fixtures/<name>`. The VM binds descriptors and
-/// yields calls; no implementation is ever reached here.
-fn fixture_tool(name: &str) -> ToolDescriptor {
-    ToolDescriptor::new(
+/// A fixture tool as data: `fixtures/<name>`. The VM binds `ToolInfo`
+/// values and yields calls; no implementation is ever reached here.
+fn fixture_tool(name: &str) -> ToolInfo {
+    ToolInfo::new(
         ToolId::parse(&format!("fixtures/{name}"))
             .expect("a fixtures/<name> id is a valid tool id"),
         "fixture",

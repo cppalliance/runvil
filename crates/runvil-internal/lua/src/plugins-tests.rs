@@ -15,7 +15,7 @@ use crate::{SectionVm, ToolBinding};
 /// undeclared Plugins `alpha` and `gh`, every tool in id order under its
 /// wire name.
 fn plugin_set() -> ToolSet {
-    let bind = |id: &str| ToolBinding::from_descriptor(&id.replace(['/', '.'], "_"), &tool_at(id));
+    let bind = |id: &str| ToolBinding::from_info(&id.replace(['/', '.'], "_"), &tool_at(id));
     ToolSet::new(
         vec![
             PluginId::parse("web").expect("`web` is a valid Plugin id"),

@@ -17,7 +17,7 @@ use super::turn::advance_turn;
 use super::*;
 use crate::Error;
 use crate::lua::{SectionVm, current_tool_bindings};
-use crate::model::{ModelDescriptor, ModelSet};
+use crate::model::{ModelInfo, ModelSet};
 use crate::parser::ParseErrorKind;
 use crate::parser::Prompt;
 use crate::test_support::recording::{Observation, Observer, detail, null_emitter};

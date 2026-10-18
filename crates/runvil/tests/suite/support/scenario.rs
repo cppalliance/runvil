@@ -18,14 +18,14 @@ use std::sync::Arc;
 use runvil::effect::{AnswerRecord, Effect, EffectAnswer, EffectId, EffectRecord};
 use runvil::event::Event;
 use runvil::ids::Provenance;
-use runvil::model::{Completion, ModelDescriptor};
+use runvil::model::{Completion, ModelInfo};
 use runvil::timestamp::Timestamp;
 use runvil::tools::ToolCatalog;
 use runvil::vfs::perform_vfs_op;
 use runvil::{Prompt, Requirements, Run, RunContext, RunResult, RunSeed, Step};
 use serde_json::json;
 
-use super::{Reply, TestResult, Tool, canned, descriptor};
+use super::{Reply, TestResult, Tool, canned, tool_info};
 
 type Edit = Box<dyn Fn(RunContext) -> RunContext>;
 
@@ -39,7 +39,7 @@ const TEST_SEED: RunSeed = RunSeed::from_bytes([7; 32]);
 pub(crate) struct Scenario {
     args: String,
     started_at: Timestamp,
-    model: Option<ModelDescriptor>,
+    model: Option<ModelInfo>,
     tool: Option<Tool>,
     replies: Vec<Reply>,
     hold: Option<fn(&Effect) -> bool>,
@@ -86,7 +86,7 @@ impl Scenario {
     }
 
     /// Sets `model` as the run's current model, in place of [`canned`].
-    pub(crate) fn model(mut self, model: ModelDescriptor) -> Self {
+    pub(crate) fn model(mut self, model: ModelInfo) -> Self {
         self.model = Some(model);
         self
     }
@@ -118,8 +118,8 @@ impl Scenario {
             .provenance_start(u32::try_from(events.len())?)
             .model(model);
         if let Some(tool) = &self.tool {
-            let descriptor = descriptor(tool.id, json!({ "type": "object" }))?;
-            ctx = ctx.tools(ToolCatalog::new([descriptor])?);
+            let info = tool_info(tool.id, json!({ "type": "object" }))?;
+            ctx = ctx.tools(ToolCatalog::new([info])?);
         }
         if let Some(edit) = &self.context {
             ctx = edit(ctx);

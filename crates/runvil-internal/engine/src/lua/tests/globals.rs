@@ -16,7 +16,7 @@ use serde_json::json;
 
 use runvil_lua::{RESERVED_NAMES, Reserved, reserved_name};
 use runvil_types::plugins::PluginId;
-use runvil_types::tools::{ToolDescriptor, ToolId};
+use runvil_types::tools::{ToolId, ToolInfo};
 
 use super::{VmBinds, set_up_vm};
 use crate::execute::section_vm::VmSeed;
@@ -46,9 +46,9 @@ const OFFERED_WIRE_NAMES: [&str; 2] = ["gh_search", "web_search"];
 /// undeclared Plugin's `gh/search`.
 fn offering() -> ToolSet {
     let bind = |name: &str, id: &str| {
-        ToolBinding::from_descriptor(
+        ToolBinding::from_info(
             name,
-            &ToolDescriptor::new(
+            &ToolInfo::new(
                 ToolId::parse(id).expect("valid id"),
                 "a tool",
                 json!({ "type": "object" }),

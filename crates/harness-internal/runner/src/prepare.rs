@@ -36,7 +36,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use runvil::cancel::CancelHandle;
 use runvil::event::Event;
-use runvil::model::ModelDescriptor;
+use runvil::model::ModelInfo;
 use runvil::prompt::FileDecl;
 use runvil::timestamp::Timestamp;
 use runvil::vfs::VfsRef;
@@ -81,7 +81,7 @@ pub struct Services {
     pub name: String,
     /// The Host's current model, when one is selected; prepare binds
     /// every declared role to it and checks each role's requirements.
-    pub model: Option<ModelDescriptor>,
+    pub model: Option<ModelInfo>,
     /// The Host snapshot the `ui()` global serves, when the run has
     /// one.
     pub ui: Option<serde_json::Value>,

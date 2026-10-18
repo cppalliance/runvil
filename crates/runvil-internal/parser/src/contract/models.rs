@@ -2,7 +2,7 @@
 //!
 //! A role is a slot: a fill function at prepare maps it to a concrete model
 //! and checks the hard keywords and the context minimum against the filled
-//! descriptor. Parse only validates shape and exposes the declaration.
+//! model info. Parse only validates shape and exposes the declaration.
 
 use std::collections::{BTreeMap, btree_map};
 use std::num::NonZeroU32;
@@ -15,7 +15,7 @@ use crate::contract::{self, ContractKeys};
 ///
 /// Keywords are hard or soft. When a run is prepared, each role's hard
 /// keywords (`thinking` and `no-thinking`) and its minimum context window
-/// are checked against the descriptor of the model that fills the role.
+/// are checked against the model info of the model that fills the role.
 /// Soft keywords document the author's intent.
 ///
 /// The set of keywords is fixed, and a keyword outside the set is a parse

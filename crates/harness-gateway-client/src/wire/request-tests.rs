@@ -10,11 +10,9 @@ use std::num::NonZeroU32;
 use std::sync::Arc;
 
 use runvil::effect::{Effect, EffectAnswer};
-use runvil::model::{
-    Completion, CompletionResult, ModelDescriptor, ModelId, ThinkingMode, ToolCall,
-};
+use runvil::model::{Completion, CompletionResult, ModelId, ModelInfo, ThinkingMode, ToolCall};
 use runvil::timestamp::Timestamp;
-use runvil::tools::{ToolCatalog, ToolDescriptor, ToolId, ToolOutput};
+use runvil::tools::{ToolCatalog, ToolId, ToolInfo, ToolOutput};
 use runvil::{Prompt, Run, RunContext, RunResult, RunSeed, Step};
 use serde_json::json;
 
@@ -53,14 +51,14 @@ fn tool_round(offered: &[Offered]) -> Round {
     let first_wire_name = format!("example_test_{}", offered[0].0);
     let (parsed, _parse_events) = Prompt::parse(&source, "round");
     let prompt = parsed.expect("the round prompt parses");
-    let descriptors: Vec<ToolDescriptor> = offered
+    let tools: Vec<ToolInfo> = offered
         .iter()
         .map(|(name, description, parameters)| {
             let id = ToolId::parse(&format!("example/test/{name}")).expect("a valid tool id");
-            ToolDescriptor::new(id, *description, parameters.clone())
+            ToolInfo::new(id, *description, parameters.clone())
         })
         .collect();
-    let model = ModelDescriptor::new(
+    let model = ModelInfo::new(
         ModelId::gateway("m").expect("a valid model id"),
         "Plays the model from a script",
         NonZeroU32::new(8_192).expect("8192 is non-zero"),
@@ -68,7 +66,7 @@ fn tool_round(offered: &[Offered]) -> Round {
     );
     let ctx =
         RunContext::new("round", RunSeed::from_bytes([7; 32]), Timestamp::UNIX_EPOCH).model(model);
-    let catalog = ToolCatalog::new(descriptors).expect("the offered tools are distinct");
+    let catalog = ToolCatalog::new(tools).expect("the offered tools are distinct");
     let (ctx, requirements) = ctx.tools(catalog).prepare(&prompt);
     assert!(requirements.refusal().is_none(), "the round prepares");
     let mut run = Run::new(Arc::new(prompt), "", ctx);

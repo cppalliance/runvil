@@ -96,7 +96,7 @@ fn construct_starting(
 }
 
 impl Plugin for Starting {
-    fn tools(&self) -> Vec<ToolDescriptor> {
+    fn tools(&self) -> Vec<ToolInfo> {
         match *self.startup.phase.borrow() {
             Phase::Starting => Vec::new(),
             Phase::Ready | Phase::Failed(_) => self.echo.tools(),

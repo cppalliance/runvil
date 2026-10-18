@@ -1,8 +1,8 @@
-//! Tests for `ToolId`, `ToolDescriptor`, `ToolCatalog`, and tool output trust.
+//! Tests for `ToolId`, `ToolInfo`, `ToolCatalog`, and tool output trust.
 
 use serde_json::json;
 
-use super::{ToolCatalog, ToolCatalogErrorKind, ToolDescriptor, ToolId};
+use super::{ToolCatalog, ToolCatalogErrorKind, ToolId, ToolInfo};
 use crate::plugins::PluginId;
 use crate::test_support::{assert_send_sync, assert_wire, round_trip};
 
@@ -10,9 +10,9 @@ fn inspect_id() -> ToolId {
     ToolId::parse("fixtures/tools/inspect").expect("fixture id is valid")
 }
 
-/// The fixture descriptor: the `inspect` tool as data.
-fn inspect_descriptor() -> ToolDescriptor {
-    ToolDescriptor::new(
+/// The fixture tool info: the `inspect` tool as data.
+fn inspect_info() -> ToolInfo {
+    ToolInfo::new(
         inspect_id(),
         "Inspect a fixture.",
         json!({
@@ -23,10 +23,10 @@ fn inspect_descriptor() -> ToolDescriptor {
     )
 }
 
-/// A catalog fixture descriptor under `fixtures/tools/<id_name>`, described
+/// A catalog fixture tool info under `fixtures/tools/<id_name>`, described
 /// as `id_name`.
-fn catalog_descriptor(id_name: &str) -> ToolDescriptor {
-    ToolDescriptor::new(
+fn catalog_info(id_name: &str) -> ToolInfo {
+    ToolInfo::new(
         ToolId::parse(&format!("fixtures/tools/{id_name}")).expect("fixture id is valid"),
         id_name,
         json!({"type": "object"}),
@@ -119,29 +119,29 @@ fn an_empty_catalog_builds_and_holds_no_tools() {
 }
 
 #[test]
-fn a_descriptor_has_the_tools_surface_and_round_trips_through_serde() {
-    // The descriptor is the tool as data: identity, description, schema,
-    // and the output kind, so a catalog built from descriptors holds no
-    // implementation and round-trips through serde.
-    let descriptor = inspect_descriptor();
-    assert_eq!(descriptor.id, inspect_id());
-    assert_eq!(descriptor.description, "Inspect a fixture.");
-    assert_eq!(descriptor.parameters_schema["required"], json!(["path"]));
+fn a_tool_info_has_the_tools_surface_and_round_trips_through_serde() {
+    // The tool info is the tool as data: identity, description, schema,
+    // and the output kind, so a catalog built from `ToolInfo` values holds
+    // no implementation and round-trips through serde.
+    let info = inspect_info();
+    assert_eq!(info.id, inspect_id());
+    assert_eq!(info.description, "Inspect a fixture.");
+    assert_eq!(info.parameters_schema["required"], json!(["path"]));
     assert!(
-        !descriptor.structured_output,
-        "a descriptor that does not declare structured output stays plain text"
+        !info.structured_output,
+        "a tool info that does not declare structured output stays plain text"
     );
-    assert_eq!(round_trip(&descriptor), descriptor);
+    assert_eq!(round_trip(&info), info);
 }
 
 #[test]
-fn a_descriptor_logged_without_survives_stop_reads_as_not_surviving() {
+fn a_tool_info_logged_without_survives_stop_reads_as_not_surviving() {
     let wire = r#"{"id":"web/fetch","wire_name":"fetch","description":"d",
         "parameters_schema":{"type":"object"},"structured_output":false}"#;
-    let descriptor: ToolDescriptor =
-        serde_json::from_str(wire).expect("a descriptor from before the flag deserializes");
+    let info: ToolInfo =
+        serde_json::from_str(wire).expect("a tool info from before the flag deserializes");
     assert!(
-        !descriptor.survives_stop,
+        !info.survives_stop,
         "an absent flag reads as false, so a stop still reaches the call"
     );
 }
@@ -149,12 +149,12 @@ fn a_descriptor_logged_without_survives_stop_reads_as_not_surviving() {
 #[test]
 fn survives_stop_sets_the_flag_and_round_trips_through_serde() {
     assert!(
-        !inspect_descriptor().survives_stop,
-        "a new descriptor does not survive a stop"
+        !inspect_info().survives_stop,
+        "a new tool info does not survive a stop"
     );
-    let descriptor = inspect_descriptor().survives_stop(true);
-    assert!(descriptor.survives_stop);
-    assert_eq!(round_trip(&descriptor), descriptor);
+    let info = inspect_info().survives_stop(true);
+    assert!(info.survives_stop);
+    assert_eq!(round_trip(&info), info);
 }
 
 #[test]
@@ -167,7 +167,7 @@ fn a_tool_call_origin_keeps_its_logged_shape() {
 
 #[test]
 fn catalog_lookup_matches_the_whole_tool_id() {
-    let catalog = ToolCatalog::new([inspect_descriptor()]).expect("unique catalog");
+    let catalog = ToolCatalog::new([inspect_info()]).expect("unique catalog");
 
     let found = catalog
         .get(&inspect_id())
@@ -183,11 +183,8 @@ fn catalog_lookup_matches_the_whole_tool_id() {
 
 #[test]
 fn catalog_preserves_order_and_first_match_lookup() {
-    let catalog = ToolCatalog::new([
-        catalog_descriptor("inspect"),
-        catalog_descriptor("summarize"),
-    ])
-    .expect("distinct identities build a catalog");
+    let catalog = ToolCatalog::new([catalog_info("inspect"), catalog_info("summarize")])
+        .expect("distinct identities build a catalog");
 
     assert_eq!(
         catalog
@@ -209,7 +206,7 @@ fn catalog_preserves_order_and_first_match_lookup() {
 
 #[test]
 fn catalog_rejects_duplicate_tool_ids() {
-    let error = ToolCatalog::new([catalog_descriptor("inspect"), catalog_descriptor("inspect")])
+    let error = ToolCatalog::new([catalog_info("inspect"), catalog_info("inspect")])
         .expect_err("a repeated tool identity must be rejected at catalog construction");
     assert_eq!(error.kind(), ToolCatalogErrorKind::DuplicateId);
     assert_eq!(

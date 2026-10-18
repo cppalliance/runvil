@@ -15,7 +15,7 @@ use runvil::event::ReplyOrigin;
 use runvil::ids::RoundId;
 use runvil::model::{
     Completion, CompletionError, CompletionOptions, CompletionResult, Message, ModelBinding,
-    ModelCatalog, ModelDescriptor, ModelId, ThinkingMode, ToolSchema,
+    ModelCatalog, ModelId, ModelInfo, ThinkingMode, ToolSchema,
 };
 use runvil::timestamp::Timestamp;
 use runvil::{Prompt, Run, RunContext};
@@ -42,7 +42,7 @@ const INFERS_THEN_CHATS: &str = "---\nname: runner-broker\ndescription: infers t
 fn infers_then_chats() -> Run {
     let (prompt, _parse_events) = Prompt::parse(INFERS_THEN_CHATS, EXECUTION);
     let prompt = Arc::new(prompt.expect("the broker fixture parses"));
-    let model = ModelDescriptor::new(
+    let model = ModelInfo::new(
         ModelId::gateway("m").expect("the model id is valid"),
         "The host's current model",
         NonZeroU32::new(131_072).expect("131072 is non-zero"),

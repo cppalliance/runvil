@@ -18,7 +18,7 @@ use runvil::effect::Round;
 use runvil::event::ReplyOrigin;
 use runvil::model::{
     Completion, CompletionError, CompletionOptions, CompletionResult, Message, ModelBinding,
-    ModelCatalog, ModelDescriptor, ModelId, ThinkingMode, ToolSchema,
+    ModelCatalog, ModelId, ModelInfo, ThinkingMode, ToolSchema,
 };
 use runvil_plugin::ToolError;
 
@@ -74,7 +74,7 @@ fn request(name: &str, source: &str) -> RunRequest {
 /// The one stub model the stuck and streaming brokers list.
 fn stub_catalog() -> Result<ModelCatalog, Box<dyn Error>> {
     let window = NonZeroU32::new(131_072).ok_or("131072 is non-zero")?;
-    let model = ModelDescriptor::new(
+    let model = ModelInfo::new(
         ModelId::gateway("stub-model")?,
         "stub",
         window,

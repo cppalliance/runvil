@@ -1,4 +1,4 @@
-//! The [`ToolDescriptor`]: everything an Engine needs to know about a tool
+//! The [`ToolInfo`]: everything an Engine needs to know about a tool
 //! except how to run it.
 
 use serde::{Deserialize, Serialize};
@@ -8,20 +8,20 @@ use super::ids::ToolId;
 
 /// A tool described as data.
 ///
-/// A descriptor holds the tool's stable id, the description the model
+/// A `ToolInfo` holds the tool's stable id, the description the model
 /// reads, its parameter schema, whether its output is structured, and
 /// whether a stop leaves its calls running.
 ///
-/// The caller collects the descriptors of every Plugin it can serve into a
-/// [`ToolCatalog`](super::ToolCatalog). The implementations stay with the
-/// caller, keyed by [`ToolId`]. Every catalog tool is available to the
+/// The caller collects the `ToolInfo` values of every Plugin it can serve
+/// into a [`ToolCatalog`](super::ToolCatalog). The implementations stay with
+/// the caller, keyed by [`ToolId`]. Every catalog tool is available to the
 /// prompt's Lua, which calls one by id, and a section offers one to its
 /// model with `tools.offer`. The Engine issues each tool call as an effect
 /// that names the tool's id. The caller resolves that id to the
 /// implementation.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[non_exhaustive]
-pub struct ToolDescriptor {
+pub struct ToolInfo {
     /// The tool's stable identity. The catalog uses it as the key.
     pub id: ToolId,
     /// The one-sentence description the model reads.
@@ -36,21 +36,17 @@ pub struct ToolDescriptor {
     /// every other call in flight and lets the run go on; the run's end
     /// and the early end of the task that made the call still end this
     /// one. A question to the operator sets it, so the question
-    /// stays open. A descriptor serialized without the field reads as
+    /// stays open. A `ToolInfo` serialized without the field reads as
     /// `false`.
     #[serde(default)]
     pub survives_stop: bool,
 }
 
-impl ToolDescriptor {
-    /// Builds a descriptor with plain-text output that a stop reaches.
+impl ToolInfo {
+    /// Builds a `ToolInfo` with plain-text output that a stop reaches.
     #[must_use]
-    pub fn new(
-        id: ToolId,
-        description: impl Into<String>,
-        parameters_schema: Value,
-    ) -> ToolDescriptor {
-        ToolDescriptor {
+    pub fn new(id: ToolId, description: impl Into<String>, parameters_schema: Value) -> ToolInfo {
+        ToolInfo {
             id,
             description: description.into(),
             parameters_schema,
@@ -62,7 +58,7 @@ impl ToolDescriptor {
     /// Sets whether the tool's output is structured JSON (`true`) or plain
     /// text (`false`).
     #[must_use]
-    pub fn structured(mut self, structured: bool) -> ToolDescriptor {
+    pub fn structured(mut self, structured: bool) -> ToolInfo {
         self.structured_output = structured;
         self
     }
@@ -70,7 +66,7 @@ impl ToolDescriptor {
     /// Sets whether a stop leaves the tool's calls in flight (`true`) or
     /// drops them (`false`).
     #[must_use]
-    pub fn survives_stop(mut self, survives: bool) -> ToolDescriptor {
+    pub fn survives_stop(mut self, survives: bool) -> ToolInfo {
         self.survives_stop = survives;
         self
     }

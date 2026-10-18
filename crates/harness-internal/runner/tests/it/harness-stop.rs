@@ -4,7 +4,7 @@
 //! ends it `Cancelled`; two calls one round requested are in flight at
 //! once and one stop drops both; a prompt shaped like `chat` returns to its
 //! question after a stop during a tool call; and a stop leaves a question
-//! to the operator, or any call whose descriptor survives stops, open,
+//! to the operator, or any call whose tool info survives stops, open,
 //! while a cancel drops it.
 
 use std::sync::Arc;
@@ -354,7 +354,7 @@ async fn a_stop_leaves_a_question_to_the_operator_open() {
 }
 
 #[tokio::test]
-async fn a_stop_leaves_any_tool_call_whose_descriptor_survives_stops_in_flight() {
+async fn a_stop_leaves_any_tool_call_whose_info_survives_stops_in_flight() {
     let tool = Arc::new(Held::default());
     let recorder = Arc::new(MemoryRecorder::new());
     let harness = Harness::new(

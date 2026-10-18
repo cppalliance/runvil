@@ -2,13 +2,13 @@
 //! `prepare_dispatch` and `prepare_model_dispatch` over fixture tools as
 //! data and canned outputs, reported to a recorder.
 
-use runvil_types::tools::{OutputTrust, ToolDescriptor, ToolError, ToolErrorKind, ToolOutput};
+use runvil_types::tools::{OutputTrust, ToolError, ToolErrorKind, ToolInfo, ToolOutput};
 
 use super::*;
 use crate::test_vm::{TEST_SECTION, echo_tool, test_nonce, tool_at};
 use crate::tests::recording::{Recorder, boundary};
 
-fn binding(alias: &str, tool: &ToolDescriptor) -> ToolBinding {
+fn binding(alias: &str, tool: &ToolInfo) -> ToolBinding {
     ToolBinding::for_test(alias, "fixture capability", tool)
 }
 

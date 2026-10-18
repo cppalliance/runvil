@@ -7,15 +7,15 @@ use runvil::effect::{EffectRecord, ToolCaller};
 use runvil::tools::ToolCatalog;
 use serde_json::json;
 
-use super::support::{Scenario, TestResult, Tool, calls, descriptor, text};
+use super::support::{Scenario, TestResult, Tool, calls, text, tool_info};
 
 #[test]
 fn the_shipped_research_prompt_offers_its_web_tools_by_id_and_runs_end_to_end() -> TestResult {
     let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../prompts/research-person.md");
     let query = json!({ "type": "object", "properties": { "query": { "type": "string" } } });
     let catalog = ToolCatalog::new([
-        descriptor("web/fetch", query.clone())?,
-        descriptor("web/search", query)?,
+        tool_info("web/fetch", query.clone())?,
+        tool_info("web/search", query)?,
     ])?;
     let search = calls("web_search", json!({ "query": "Ada Lovelace" }))?;
     let trace = Scenario::tool(

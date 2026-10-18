@@ -104,9 +104,9 @@ async fn fetch_model_catalog_skips_entries_without_a_context_window() {
     // A gateway with speech-to-text lists its transcription models beside
     // the inference models, and those entries omit `context` and
     // `thinking` (they answer no completion request). The fetch must keep
-    // the inference descriptors instead of rejecting the whole list,
-    // otherwise the Harness binds each run on such a gateway to a fallback
-    // descriptor and the context precheck refuses real conversations.
+    // the inference models' `ModelInfo` values instead of rejecting the whole
+    // list, otherwise the Harness binds each run on such a gateway to a
+    // fallback model info and the context precheck refuses real conversations.
     async fn models() -> axum::Json<serde_json::Value> {
         axum::Json(serde_json::json!({
             "object": "list",
@@ -127,7 +127,7 @@ async fn fetch_model_catalog_skips_entries_without_a_context_window() {
     assert_eq!(
         catalog.models().len(),
         1,
-        "only the inference model is a descriptor"
+        "only the inference model gets a model info"
     );
     let chat = catalog
         .get(&ModelId::gateway("chat-model").expect("valid id"))

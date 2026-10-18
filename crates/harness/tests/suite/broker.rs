@@ -14,7 +14,7 @@ use runvil::event::ReplyOrigin;
 use runvil::ids::RoundId;
 use runvil::model::{
     Completion, CompletionError, CompletionOptions, CompletionResult, Message, ModelBinding,
-    ModelCatalog, ModelDescriptor, ModelId, ThinkingMode, ToolSchema,
+    ModelCatalog, ModelId, ModelInfo, ThinkingMode, ToolSchema,
 };
 
 use crate::support::Clock;
@@ -73,7 +73,7 @@ impl InferenceBroker for ScriptedBroker {
 
 #[tokio::test]
 async fn a_sections_round_reaches_the_broker_as_chat_and_a_nested_infer_round_as_infer() {
-    let catalog = ModelCatalog::new([ModelDescriptor::new(
+    let catalog = ModelCatalog::new([ModelInfo::new(
         ModelId::gateway(MODEL).expect("a literal model name is valid"),
         "the scripted model",
         NonZeroU32::new(131_072).expect("131072 is non-zero"),

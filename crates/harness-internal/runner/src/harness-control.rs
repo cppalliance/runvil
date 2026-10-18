@@ -38,7 +38,7 @@ impl RunControl {
     /// Drops the effects in flight, except tool calls that survive stops,
     /// and lets the run go on.
     ///
-    /// A call survives a stop when its tool's descriptor sets
+    /// A call survives a stop when its tool's info sets
     /// `survives_stop`, as the question to the operator does. Every other
     /// effect in flight is aborted and answered `Dropped`. The run's cancel
     /// flag stays clear.

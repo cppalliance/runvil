@@ -21,7 +21,7 @@ const GREETS: &str = "---\nname: greets\ndescription: d\nrunvil: 0\n\
     ```lua\nreturn tools.call('greeter/greet')\n```\n";
 
 struct Greeter {
-    tools: Vec<ToolDescriptor>,
+    tools: Vec<ToolInfo>,
 }
 
 #[expect(
@@ -33,7 +33,7 @@ fn construct_greeter(
     _config: Value,
     _services: &HostServices,
 ) -> Result<Arc<dyn Plugin>, ToolError> {
-    let greet = ToolDescriptor::new(
+    let greet = ToolInfo::new(
         ToolId::parse(&format!("{name}/greet")).unwrap(),
         "Answer with the run's greeting.",
         json!({ "type": "object", "properties": {} }),
@@ -42,7 +42,7 @@ fn construct_greeter(
 }
 
 impl Plugin for Greeter {
-    fn tools(&self) -> Vec<ToolDescriptor> {
+    fn tools(&self) -> Vec<ToolInfo> {
         self.tools.clone()
     }
 

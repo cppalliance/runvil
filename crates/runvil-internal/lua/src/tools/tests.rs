@@ -20,7 +20,7 @@ struct Foreign;
 impl mlua::UserData for Foreign {}
 
 fn echo_handle() -> LuaToolHandle {
-    LuaToolHandle::from_binding(&ToolBinding::from_descriptor("tools_echo", &echo_tool()))
+    LuaToolHandle::from_binding(&ToolBinding::from_info("tools_echo", &echo_tool()))
 }
 
 #[test]
@@ -253,13 +253,13 @@ fn the_shim_prelude_installs_tools_call_and_no_bare_global() {
 
 #[test]
 fn tool_call_counts_seed_by_id_and_explain_an_unseeded_key() {
-    let echo = ToolBinding::from_descriptor("tools_echo", &echo_tool());
+    let echo = ToolBinding::from_info("tools_echo", &echo_tool());
     let vm = lua_over(ToolSet::new(
         Vec::new(),
         BTreeMap::new(),
         vec![
             echo.clone(),
-            ToolBinding::from_descriptor("tools_other", &tool_at("tools/other")),
+            ToolBinding::from_info("tools_other", &tool_at("tools/other")),
         ],
     ));
     let counts = vm

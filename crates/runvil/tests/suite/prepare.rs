@@ -4,13 +4,11 @@
 //! sit in that crate's own suite.
 
 use runvil::model::ThinkingMode;
-use runvil::tools::{ToolCatalog, ToolDescriptor};
+use runvil::tools::{ToolCatalog, ToolInfo};
 use runvil::vfs::{MemoryBackend, Origin, RealBackend, VfsError, VfsRef};
 use runvil::{RequirementCheck, Requirements, UnmetRequirement};
 
-use super::support::{
-    Prepared, Scenario, TempRoot, TestResult, descriptor, greeter, model, prompt,
-};
+use super::support::{Prepared, Scenario, TempRoot, TestResult, greeter, model, prompt, tool_info};
 
 fn declaring(front: &str) -> String {
     prompt(front, &[("Only", "return 'done'")])
@@ -111,8 +109,8 @@ fn a_hard_keyword_the_current_model_fails_is_reported() -> TestResult {
     Ok(())
 }
 
-fn prepared_over(descriptor: &ToolDescriptor) -> TestResult<Prepared> {
-    let catalog = ToolCatalog::new([descriptor.clone()])?;
+fn prepared_over(info: &ToolInfo) -> TestResult<Prepared> {
+    let catalog = ToolCatalog::new([info.clone()])?;
     Scenario::default()
         .context(move |ctx| ctx.tools(catalog.clone()))
         .prepare(&declaring("plugins: [web]"))
@@ -120,25 +118,25 @@ fn prepared_over(descriptor: &ToolDescriptor) -> TestResult<Prepared> {
 
 #[test]
 fn a_prepared_context_keeps_the_caller_supplied_catalog() -> TestResult {
-    let descriptor = descriptor(
+    let info = tool_info(
         "web/fetch",
         serde_json::json!({"type": "object", "properties": {"url": {"type": "string"}}}),
     )?
     .structured(true);
     let Prepared {
         ctx, requirements, ..
-    } = prepared_over(&descriptor)?;
+    } = prepared_over(&info)?;
     assert!(
         requirements.is_satisfied(),
         "a catalog reports nothing: {requirements:?}"
     );
-    assert_eq!(ctx.catalog().tools(), [descriptor]);
+    assert_eq!(ctx.catalog().tools(), [info]);
     Ok(())
 }
 
 #[test]
 fn prepare_reports_nothing_for_a_declared_plugin_the_catalog_lacks() -> TestResult {
-    let other = descriptor(
+    let other = tool_info(
         "other/search",
         serde_json::json!({"type": "object", "properties": {}}),
     )?;

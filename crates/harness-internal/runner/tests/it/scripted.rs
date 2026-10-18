@@ -14,11 +14,11 @@ use harness_runner::performers::{BoxFuture, InferenceBroker, Timer};
 use runvil::effect::Round;
 use runvil::model::{
     Completion, CompletionError, CompletionErrorKind, CompletionOptions, CompletionResult, Message,
-    ModelBinding, ModelCatalog, ModelDescriptor, ModelId, ThinkingMode, ToolSchema,
+    ModelBinding, ModelCatalog, ModelId, ModelInfo, ThinkingMode, ToolSchema,
 };
 use runvil_plugin::{
-    HostServices, Package, Plugin, PluginFuture, PluginId, ServiceKey, ToolContext, ToolDescriptor,
-    ToolError, ToolId, ToolOutput,
+    HostServices, Package, Plugin, PluginFuture, PluginId, ServiceKey, ToolContext, ToolError,
+    ToolId, ToolInfo, ToolOutput,
 };
 use serde_json::{Value, json};
 use tokio::sync::mpsc;
@@ -129,7 +129,7 @@ impl InferenceBroker for ScriptedBroker {
 
 /// The scripted catalog: the one model, with a 131072-token window.
 fn catalog() -> ModelCatalog {
-    ModelCatalog::new([ModelDescriptor::new(
+    ModelCatalog::new([ModelInfo::new(
         ModelId::gateway(MODEL).expect("the model id is valid"),
         "The scripted model",
         NonZeroU32::new(131_072).expect("131072 is non-zero"),
@@ -207,7 +207,7 @@ const HOLD: Package = Package::new("tests/harness", construct_hold);
 
 struct HoldPlugin {
     held: Arc<Held>,
-    tools: Vec<ToolDescriptor>,
+    tools: Vec<ToolInfo>,
 }
 
 #[expect(
@@ -222,7 +222,7 @@ fn construct_hold(
     let held = services
         .get(&HELD)
         .ok_or_else(|| ToolError::message("the hold Plugin needs tests/held"))?;
-    let descriptor = ToolDescriptor::new(
+    let info = ToolInfo::new(
         ToolId::parse(&format!("{name}/hold")).unwrap(),
         "Hold until the call is dropped.",
         json!({ "type": "object", "properties": {} }),
@@ -230,12 +230,12 @@ fn construct_hold(
     .survives_stop(config["survives_stop"].as_bool().unwrap_or(false));
     Ok(Arc::new(HoldPlugin {
         held,
-        tools: vec![descriptor],
+        tools: vec![info],
     }))
 }
 
 impl Plugin for HoldPlugin {
-    fn tools(&self) -> Vec<ToolDescriptor> {
+    fn tools(&self) -> Vec<ToolInfo> {
         self.tools.clone()
     }
 

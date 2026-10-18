@@ -67,9 +67,9 @@
 #[non_exhaustive] pub struct runvil::model::Message { /* private fields */ }
 #[non_exhaustive] pub struct runvil::model::ModelBindings { /* private fields */ }
 #[non_exhaustive] pub struct runvil::model::ModelCatalog { /* private fields */ }
-#[non_exhaustive] pub struct runvil::model::ModelDescriptor { /* private fields */ }
 #[non_exhaustive] pub struct runvil::model::ModelId { /* private fields */ }
 #[non_exhaustive] pub struct runvil::model::ModelIdError { /* private fields */ }
+#[non_exhaustive] pub struct runvil::model::ModelInfo { /* private fields */ }
 #[non_exhaustive] pub struct runvil::model::ModelInvocation { .. }
 #[non_exhaustive] pub struct runvil::model::RawExchange { /* private fields */ }
 #[non_exhaustive] pub struct runvil::model::ToolArguments<'a> { /* private fields */ }
@@ -85,10 +85,10 @@
 #[non_exhaustive] pub struct runvil::prompt::ModelRole { /* private fields */ }
 #[non_exhaustive] pub struct runvil::prompt::ModelRoles { /* private fields */ }
 #[non_exhaustive] pub struct runvil::tools::ToolCatalog { /* private fields */ }
-#[non_exhaustive] pub struct runvil::tools::ToolDescriptor { .. }
 #[non_exhaustive] pub struct runvil::tools::ToolError { /* private fields */ }
 #[non_exhaustive] pub struct runvil::tools::ToolId(/* private fields */)
 #[non_exhaustive] pub struct runvil::tools::ToolIdError { /* private fields */ }
+#[non_exhaustive] pub struct runvil::tools::ToolInfo { .. }
 #[non_exhaustive] pub struct runvil::tools::ToolOutput { /* private fields */ }
 #[non_exhaustive] pub struct runvil::vfs::Entry { .. }
 #[non_exhaustive] pub struct runvil::vfs::MemoryBackend { /* private fields */ }
@@ -154,9 +154,9 @@ auto runvil::model::ModelBinding: Freeze, RefUnwindSafe, Send, Sync, Unpin, Unwi
 auto runvil::model::ModelBindings: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::model::ModelCatalog: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::model::ModelCatalogError: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
-auto runvil::model::ModelDescriptor: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::model::ModelId: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::model::ModelIdError: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
+auto runvil::model::ModelInfo: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::model::ModelInvocation: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::model::ParseRoleError: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::model::RawExchange: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
@@ -190,12 +190,12 @@ auto runvil::tools::OutputTrust: Freeze, RefUnwindSafe, Send, Sync, Unpin, Unwin
 auto runvil::tools::ToolCatalog: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::tools::ToolCatalogError: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::tools::ToolCatalogErrorKind: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
-auto runvil::tools::ToolDescriptor: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::tools::ToolError: Freeze, !RefUnwindSafe, Send, Sync, Unpin, !UnwindSafe
 auto runvil::tools::ToolErrorKind: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::tools::ToolId: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::tools::ToolIdError: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::tools::ToolIdErrorKind: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
+auto runvil::tools::ToolInfo: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::tools::ToolOutput: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::vfs::Access: !Freeze, !RefUnwindSafe, Send, Sync, Unpin, !UnwindSafe
 auto runvil::vfs::AcquireContext: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
@@ -284,9 +284,9 @@ derives runvil::model::ModelBinding: Clone, Debug, Eq, PartialEq
 derives runvil::model::ModelBindings: Clone, Debug, Default, Eq, PartialEq
 derives runvil::model::ModelCatalog: Clone, Debug, Default, Eq, PartialEq
 derives runvil::model::ModelCatalogError: Clone, Debug, Eq, PartialEq
-derives runvil::model::ModelDescriptor: Clone, Debug, Eq, PartialEq
 derives runvil::model::ModelId: Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd
 derives runvil::model::ModelIdError: Clone, Debug, Eq, PartialEq
+derives runvil::model::ModelInfo: Clone, Debug, Eq, PartialEq
 derives runvil::model::ModelInvocation: Clone, Debug, Default, Eq, PartialEq
 derives runvil::model::ParseRoleError: Clone, Debug, Eq, PartialEq
 derives runvil::model::RawExchange: Clone, Debug, Eq, PartialEq
@@ -320,12 +320,12 @@ derives runvil::tools::OutputTrust: Clone, Copy, Debug, Deserialize, Eq, Partial
 derives runvil::tools::ToolCatalog: Clone, Debug, Default
 derives runvil::tools::ToolCatalogError: Clone, Debug, Eq, PartialEq
 derives runvil::tools::ToolCatalogErrorKind: Clone, Copy, Debug, Eq, PartialEq
-derives runvil::tools::ToolDescriptor: Clone, Debug, Deserialize, Eq, PartialEq, Serialize
 derives runvil::tools::ToolError: Debug
 derives runvil::tools::ToolErrorKind: Clone, Copy, Debug, Eq, PartialEq
 derives runvil::tools::ToolId: Clone, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize
 derives runvil::tools::ToolIdError: Clone, Debug, Eq, PartialEq
 derives runvil::tools::ToolIdErrorKind: Clone, Copy, Debug, Eq, PartialEq
+derives runvil::tools::ToolInfo: Clone, Debug, Deserialize, Eq, PartialEq, Serialize
 derives runvil::tools::ToolOutput: Clone, Debug, Eq, PartialEq
 derives runvil::vfs::Access: Debug
 derives runvil::vfs::AcquireContext: Clone, Debug
@@ -490,11 +490,11 @@ pub fn runvil::Run::step(&mut self) -> runvil::Step
 pub fn runvil::RunContext::cancel(self, handle: runvil::cancel::CancelHandle) -> runvil::RunContext
 pub fn runvil::RunContext::cancel_handle(&self) -> runvil::cancel::CancelHandle
 pub fn runvil::RunContext::catalog(&self) -> &runvil::tools::ToolCatalog
-pub fn runvil::RunContext::current_model(&self) -> core::option::Option<&runvil::model::ModelDescriptor>
+pub fn runvil::RunContext::current_model(&self) -> core::option::Option<&runvil::model::ModelInfo>
 pub fn runvil::RunContext::depth(&self) -> u32
 pub fn runvil::RunContext::flags(self, flags: runvil::replay::Flags) -> runvil::RunContext
 pub fn runvil::RunContext::limits(self, limits: runvil::RunLimits) -> runvil::RunContext
-pub fn runvil::RunContext::model(self, model: runvil::model::ModelDescriptor) -> runvil::RunContext
+pub fn runvil::RunContext::model(self, model: runvil::model::ModelInfo) -> runvil::RunContext
 pub fn runvil::RunContext::model_bindings(&self) -> &runvil::model::ModelBindings
 pub fn runvil::RunContext::name(&self) -> &str
 pub fn runvil::RunContext::new(name: impl core::convert::Into<alloc::string::String>, seed: runvil::RunSeed, started_at: runvil::timestamp::Timestamp) -> runvil::RunContext
@@ -638,26 +638,26 @@ pub fn runvil::model::ModelBinding::with_invocation(self, invocation: runvil::mo
 pub fn runvil::model::ModelBinding::with_provider(self, provider: impl core::convert::Into<alloc::string::String>) -> Self
 pub fn runvil::model::ModelBindings::is_empty(&self) -> bool
 pub fn runvil::model::ModelBindings::len(&self) -> usize
-pub fn runvil::model::ModelBindings::model(&self, id: &runvil::model::ModelId) -> core::option::Option<&runvil::model::ModelDescriptor>
-pub fn runvil::model::ModelBindings::resolve(&self, label: &str) -> core::option::Option<&runvil::model::ModelDescriptor>
+pub fn runvil::model::ModelBindings::model(&self, id: &runvil::model::ModelId) -> core::option::Option<&runvil::model::ModelInfo>
+pub fn runvil::model::ModelBindings::resolve(&self, label: &str) -> core::option::Option<&runvil::model::ModelInfo>
 pub fn runvil::model::ModelBindings::role_id(&self, label: &str) -> core::option::Option<&runvil::model::ModelId>
 pub fn runvil::model::ModelCatalog::contains(&self, id: &runvil::model::ModelId) -> bool
 pub fn runvil::model::ModelCatalog::empty() -> Self
-pub fn runvil::model::ModelCatalog::get(&self, id: &runvil::model::ModelId) -> core::option::Option<&runvil::model::ModelDescriptor>
+pub fn runvil::model::ModelCatalog::get(&self, id: &runvil::model::ModelId) -> core::option::Option<&runvil::model::ModelInfo>
 pub fn runvil::model::ModelCatalog::is_empty(&self) -> bool
-pub fn runvil::model::ModelCatalog::models(&self) -> &[runvil::model::ModelDescriptor]
-pub fn runvil::model::ModelCatalog::new(models: impl core::iter::traits::collect::IntoIterator<Item = runvil::model::ModelDescriptor>) -> core::result::Result<runvil::model::ModelCatalog, runvil::model::ModelCatalogError>
-pub fn runvil::model::ModelDescriptor::context(&self) -> core::num::nonzero::NonZeroU32
-pub fn runvil::model::ModelDescriptor::description(&self) -> &str
-pub fn runvil::model::ModelDescriptor::id(&self) -> &runvil::model::ModelId
-pub fn runvil::model::ModelDescriptor::new(id: runvil::model::ModelId, description: impl core::convert::Into<alloc::string::String>, context: core::num::nonzero::NonZeroU32, thinking: runvil::model::ThinkingMode) -> Self
-pub fn runvil::model::ModelDescriptor::provider(&self) -> core::option::Option<&str>
-pub fn runvil::model::ModelDescriptor::thinking(&self) -> runvil::model::ThinkingMode
-pub fn runvil::model::ModelDescriptor::with_provider(self, provider: impl core::convert::Into<alloc::string::String>) -> Self
+pub fn runvil::model::ModelCatalog::models(&self) -> &[runvil::model::ModelInfo]
+pub fn runvil::model::ModelCatalog::new(models: impl core::iter::traits::collect::IntoIterator<Item = runvil::model::ModelInfo>) -> core::result::Result<runvil::model::ModelCatalog, runvil::model::ModelCatalogError>
 pub fn runvil::model::ModelId::gateway(name: impl core::convert::Into<alloc::string::String>) -> core::result::Result<runvil::model::ModelId, runvil::model::ModelIdError>
 pub fn runvil::model::ModelId::name(&self) -> &str
 pub fn runvil::model::ModelId::new(server: impl core::convert::Into<alloc::string::String>, name: impl core::convert::Into<alloc::string::String>) -> core::result::Result<runvil::model::ModelId, runvil::model::ModelIdError>
 pub fn runvil::model::ModelId::server(&self) -> &str
+pub fn runvil::model::ModelInfo::context(&self) -> core::num::nonzero::NonZeroU32
+pub fn runvil::model::ModelInfo::description(&self) -> &str
+pub fn runvil::model::ModelInfo::id(&self) -> &runvil::model::ModelId
+pub fn runvil::model::ModelInfo::new(id: runvil::model::ModelId, description: impl core::convert::Into<alloc::string::String>, context: core::num::nonzero::NonZeroU32, thinking: runvil::model::ThinkingMode) -> Self
+pub fn runvil::model::ModelInfo::provider(&self) -> core::option::Option<&str>
+pub fn runvil::model::ModelInfo::thinking(&self) -> runvil::model::ThinkingMode
+pub fn runvil::model::ModelInfo::with_provider(self, provider: impl core::convert::Into<alloc::string::String>) -> Self
 pub fn runvil::model::ModelInvocation::new() -> runvil::model::ModelInvocation
 pub fn runvil::model::ModelInvocation::with_max_tokens(self, max_tokens: core::option::Option<core::num::nonzero::NonZeroU32>) -> runvil::model::ModelInvocation
 pub fn runvil::model::ModelInvocation::with_temperature(self, temperature: core::option::Option<runvil::model::Temperature>) -> runvil::model::ModelInvocation
@@ -716,14 +716,11 @@ pub fn runvil::prompt::ModelRoles::is_empty(&self) -> bool
 pub fn runvil::prompt::ModelRoles::iter(&self) -> runvil::prompt::ModelRolesIter<'_>
 pub fn runvil::prompt::ModelRoles::len(&self) -> usize
 pub fn runvil::timestamp::Timestamp::to_rfc3339(self) -> alloc::string::String
-pub fn runvil::tools::ToolCatalog::get(&self, id: &runvil::tools::ToolId) -> core::option::Option<&runvil::tools::ToolDescriptor>
-pub fn runvil::tools::ToolCatalog::new(tools: impl core::iter::traits::collect::IntoIterator<Item = runvil::tools::ToolDescriptor>) -> core::result::Result<Self, runvil::tools::ToolCatalogError>
-pub fn runvil::tools::ToolCatalog::tools(&self) -> &[runvil::tools::ToolDescriptor]
+pub fn runvil::tools::ToolCatalog::get(&self, id: &runvil::tools::ToolId) -> core::option::Option<&runvil::tools::ToolInfo>
+pub fn runvil::tools::ToolCatalog::new(tools: impl core::iter::traits::collect::IntoIterator<Item = runvil::tools::ToolInfo>) -> core::result::Result<Self, runvil::tools::ToolCatalogError>
+pub fn runvil::tools::ToolCatalog::tools(&self) -> &[runvil::tools::ToolInfo]
 pub fn runvil::tools::ToolCatalogError::duplicate_id(&self) -> core::option::Option<&runvil::tools::ToolId>
 pub fn runvil::tools::ToolCatalogError::kind(&self) -> runvil::tools::ToolCatalogErrorKind
-pub fn runvil::tools::ToolDescriptor::new(id: runvil::tools::ToolId, description: impl core::convert::Into<alloc::string::String>, parameters_schema: serde_json::value::Value) -> runvil::tools::ToolDescriptor
-pub fn runvil::tools::ToolDescriptor::structured(self, structured: bool) -> runvil::tools::ToolDescriptor
-pub fn runvil::tools::ToolDescriptor::survives_stop(self, survives: bool) -> runvil::tools::ToolDescriptor
 pub fn runvil::tools::ToolError::is_cancelled(&self) -> bool
 pub fn runvil::tools::ToolError::is_retryable(&self) -> bool
 pub fn runvil::tools::ToolError::kind(&self) -> runvil::tools::ToolErrorKind
@@ -737,6 +734,9 @@ pub fn runvil::tools::ToolId::parse(id: &str) -> core::result::Result<runvil::to
 pub fn runvil::tools::ToolId::plugin(&self) -> runvil::plugins::PluginId
 pub fn runvil::tools::ToolIdError::field(&self) -> &str
 pub fn runvil::tools::ToolIdError::kind(&self) -> runvil::tools::ToolIdErrorKind
+pub fn runvil::tools::ToolInfo::new(id: runvil::tools::ToolId, description: impl core::convert::Into<alloc::string::String>, parameters_schema: serde_json::value::Value) -> runvil::tools::ToolInfo
+pub fn runvil::tools::ToolInfo::structured(self, structured: bool) -> runvil::tools::ToolInfo
+pub fn runvil::tools::ToolInfo::survives_stop(self, survives: bool) -> runvil::tools::ToolInfo
 pub fn runvil::tools::ToolOutput::text(&self) -> &str
 pub fn runvil::tools::ToolOutput::trust(&self) -> runvil::tools::OutputTrust
 pub fn runvil::tools::ToolOutput::trusted(text: impl core::convert::Into<alloc::string::String>) -> runvil::tools::ToolOutput
@@ -1361,11 +1361,6 @@ pub runvil::tools::OutputTrust::Trusted
 pub runvil::tools::OutputTrust::Untrusted
 pub runvil::tools::ToolCatalogError::DuplicateId::id: runvil::tools::ToolId
 pub runvil::tools::ToolCatalogErrorKind::DuplicateId
-pub runvil::tools::ToolDescriptor::description: alloc::string::String
-pub runvil::tools::ToolDescriptor::id: runvil::tools::ToolId
-pub runvil::tools::ToolDescriptor::parameters_schema: serde_json::value::Value
-pub runvil::tools::ToolDescriptor::structured_output: bool
-pub runvil::tools::ToolDescriptor::survives_stop: bool
 pub runvil::tools::ToolErrorKind::Backend
 pub runvil::tools::ToolErrorKind::Cancelled
 pub runvil::tools::ToolErrorKind::InvalidArguments
@@ -1375,6 +1370,11 @@ pub runvil::tools::ToolIdErrorKind::Charset
 pub runvil::tools::ToolIdErrorKind::Control
 pub runvil::tools::ToolIdErrorKind::Empty
 pub runvil::tools::ToolIdErrorKind::SegmentCount
+pub runvil::tools::ToolInfo::description: alloc::string::String
+pub runvil::tools::ToolInfo::id: runvil::tools::ToolId
+pub runvil::tools::ToolInfo::parameters_schema: serde_json::value::Value
+pub runvil::tools::ToolInfo::structured_output: bool
+pub runvil::tools::ToolInfo::survives_stop: bool
 pub runvil::vfs::Depth::One
 pub runvil::vfs::Depth::Recursive
 pub runvil::vfs::Entry::description: core::option::Option<alloc::string::String>

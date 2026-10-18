@@ -59,7 +59,7 @@ pub(super) fn sequence(trace: &Trace) -> Vec<(String, String)> {
 /// that skips the prepare.
 pub(super) fn bind_role(
     label: &str,
-    model: ModelDescriptor,
+    model: ModelInfo,
 ) -> impl FnOnce(RunContext) -> RunContext + 'static {
     let label = label.to_owned();
     move |mut ctx| {

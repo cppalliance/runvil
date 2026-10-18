@@ -14,11 +14,7 @@ fn offering_of(alias: &str, description: &str, tool: &FnTool) -> ToolSet {
     ToolSet::new(
         Vec::new(),
         std::collections::BTreeMap::new(),
-        vec![ToolBinding::for_test(
-            alias,
-            description,
-            &tool.descriptor(),
-        )],
+        vec![ToolBinding::for_test(alias, description, &tool.info())],
     )
 }
 

@@ -25,7 +25,7 @@ use std::sync::{Arc, Mutex};
 
 use mlua::{MultiValue, Thread};
 use runvil_lua::{Error, LuaProgram};
-use runvil_types::tools::{ToolDescriptor, ToolId};
+use runvil_types::tools::{ToolId, ToolInfo};
 use serde_json::json;
 
 use crate::execute::protocol::{Answer, Request, YieldParse};
@@ -45,12 +45,12 @@ fn test_models() -> ModelSet {
     )
 }
 
-/// A minimal tool descriptor behind a bound alias, for handle-form
+/// A minimal tool info behind a bound alias, for handle-form
 /// dispatch tests; dispatch never reaches an implementation through the
 /// yield boundary, so the tool is data alone.
 #[track_caller]
-fn stub_tool() -> ToolDescriptor {
-    ToolDescriptor::new(
+fn stub_tool() -> ToolInfo {
+    ToolInfo::new(
         ToolId::parse("tools/echo").expect("valid id"),
         "echo tool",
         json!({ "type": "object" }),
@@ -63,7 +63,7 @@ fn test_tools() -> ToolSet {
     ToolSet::new(
         Vec::new(),
         std::collections::BTreeMap::new(),
-        vec![ToolBinding::from_descriptor("tools_echo", &stub_tool())],
+        vec![ToolBinding::from_info("tools_echo", &stub_tool())],
     )
 }
 

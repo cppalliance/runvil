@@ -9,7 +9,7 @@ use mlua::{Function, Lua, MultiValue, Table};
 use runvil_model_client::model::ModelSet;
 use runvil_types::emitter::Emitter;
 use runvil_types::event::lifecycle;
-use runvil_types::tools::ToolDescriptor;
+use runvil_types::tools::ToolInfo;
 
 use crate::coro::MODEL_TOOL_CALL_REGISTRY;
 use crate::error::{Error, Result};
@@ -101,12 +101,12 @@ pub fn install_model_tool_call_shim(lua: &Lua) -> Result<()> {
 
 impl ToolBinding {
     /// Builds a binding for a test double: the identity and schema come
-    /// from the descriptor, and the description is `description`.
+    /// from `info`, and the description is `description`.
     #[must_use]
-    pub fn for_test(alias: &str, description: &str, descriptor: &ToolDescriptor) -> Self {
-        let mut described = descriptor.clone();
+    pub fn for_test(alias: &str, description: &str, info: &ToolInfo) -> Self {
+        let mut described = info.clone();
         description.clone_into(&mut described.description);
-        Self::from_descriptor(alias, &described)
+        Self::from_info(alias, &described)
     }
 }
 

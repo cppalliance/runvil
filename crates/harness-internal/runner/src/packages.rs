@@ -7,7 +7,7 @@ use std::collections::btree_map::Entry;
 use std::sync::Arc;
 
 use runvil_plugin::{
-    HostServices, Package, Plugin, PluginFuture, PluginId, ToolContext, ToolDescriptor, ToolError,
+    HostServices, Package, Plugin, PluginFuture, PluginId, ToolContext, ToolError, ToolInfo,
     ToolOutput,
 };
 use serde_json::Value;
@@ -136,7 +136,7 @@ fn native(
 struct Native;
 
 impl Plugin for Native {
-    fn tools(&self) -> Vec<ToolDescriptor> {
+    fn tools(&self) -> Vec<ToolInfo> {
         Vec::new()
     }
 

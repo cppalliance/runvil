@@ -18,7 +18,7 @@ runvil-types.workspace = true
 runvil-vfs.workspace = true
 
 [dev-dependencies]
-# The suite's and the `greeter` example's tool descriptors carry JSON
+# The suite's and the `greeter` example's `ToolInfo` values carry JSON
 # parameter schemas, and the suite reads its effect and event logs back
 # as JSON.
 serde_json.workspace = true

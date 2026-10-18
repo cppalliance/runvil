@@ -11,7 +11,7 @@ use std::task::{Context, Poll, Waker};
 use runvil_plugin::testing::TestCall;
 use runvil_plugin::{
     HostServices, OutputTrust, Package, Plugin, PluginFuture, PluginId, ServiceId, ServiceKey,
-    ToolContext, ToolDescriptor, ToolError, ToolErrorKind, ToolId, ToolOutput,
+    ToolContext, ToolError, ToolErrorKind, ToolId, ToolInfo, ToolOutput,
 };
 use serde_json::{Value, json};
 
@@ -30,7 +30,7 @@ const PACKAGE: Package = Package::new("acme/greeter", construct)
 /// The one object every run shares.
 struct Greeter {
     greeting: Arc<str>,
-    tools: Vec<ToolDescriptor>,
+    tools: Vec<ToolInfo>,
 }
 
 #[expect(
@@ -51,7 +51,7 @@ fn construct(
     let id = ToolId::parse(&format!("{name}/greet")).map_err(|e| {
         ToolError::new(ToolErrorKind::Backend, "greeter could not name its tool").with_source(e)
     })?;
-    let tools = vec![ToolDescriptor::new(
+    let tools = vec![ToolInfo::new(
         id,
         "Greets this run's visitor.",
         json!({"type": "object", "properties": {"mark": {"type": "string"}}}),
@@ -60,7 +60,7 @@ fn construct(
 }
 
 impl Plugin for Greeter {
-    fn tools(&self) -> Vec<ToolDescriptor> {
+    fn tools(&self) -> Vec<ToolInfo> {
         self.tools.clone()
     }
 

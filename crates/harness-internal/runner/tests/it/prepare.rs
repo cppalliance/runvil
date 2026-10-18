@@ -24,8 +24,8 @@ use runvil::RunErrorKind;
 use runvil::cancel::CancelHandle;
 use runvil::event::Event;
 use runvil_plugin::{
-    HostServices, Package, Plugin, PluginFuture, PluginId, ToolContext, ToolDescriptor, ToolError,
-    ToolErrorKind, ToolId, ToolOutput,
+    HostServices, Package, Plugin, PluginFuture, PluginId, ToolContext, ToolError, ToolErrorKind,
+    ToolId, ToolInfo, ToolOutput,
 };
 use serde_json::{Value, json};
 
@@ -131,7 +131,7 @@ pub(crate) const fn echo_package(name: &'static str, prelude: Option<&'static st
 
 /// A Plugin offering the one echo tool.
 struct Echo {
-    tools: Vec<ToolDescriptor>,
+    tools: Vec<ToolInfo>,
 }
 
 #[expect(
@@ -143,7 +143,7 @@ fn construct_echo(
     _config: Value,
     _services: &HostServices,
 ) -> Result<Arc<dyn Plugin>, ToolError> {
-    let echo = ToolDescriptor::new(
+    let echo = ToolInfo::new(
         ToolId::parse(&format!("{name}/echo")).unwrap(),
         "Echo the value argument.",
         json!({"type": "object", "properties": {"value": {"type": "string"}}}),
@@ -152,7 +152,7 @@ fn construct_echo(
 }
 
 impl Plugin for Echo {
-    fn tools(&self) -> Vec<ToolDescriptor> {
+    fn tools(&self) -> Vec<ToolInfo> {
         self.tools.clone()
     }
 

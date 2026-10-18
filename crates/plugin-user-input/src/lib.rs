@@ -29,7 +29,7 @@
 //!
 //! The operator's answer is trusted, so the ask tool answers with
 //! [`ToolOutput::trusted`](runvil_plugin::ToolOutput::trusted) and
-//! the text is never guard-wrapped. The ask tool's descriptor survives
+//! the text is never guard-wrapped. The ask tool's info survives
 //! stops: a stop leaves the question open. The other occasions
 //! [`Plugin::call`](runvil_plugin::Plugin::call) lists drop it, the
 //! early end of the task that asked included.
@@ -71,7 +71,7 @@
 //! - The crate names no async runtime. The Harness polls the ask call
 //!   inside the run's own future, so an [`InputBroker`] must not block
 //!   while polled.
-//! - The ask tool's descriptor sets `survives_stop`, so a stop leaves the
+//! - The ask tool's info sets `survives_stop`, so a stop leaves the
 //!   operator's question open; every other occasion `Plugin::call` lists
 //!   drops it.
 

@@ -4,8 +4,8 @@
 use std::sync::Arc;
 
 use runvil_plugin::{
-    HostServices, Plugin, PluginFuture, PluginId, ToolContext, ToolDescriptor, ToolError,
-    ToolErrorKind, ToolId, ToolOutput,
+    HostServices, Plugin, PluginFuture, PluginId, ToolContext, ToolError, ToolErrorKind, ToolId,
+    ToolInfo, ToolOutput,
 };
 use serde_json::{Value, json};
 
@@ -13,7 +13,7 @@ use crate::{ASK, INPUT_BROKER};
 
 /// The one object every run shares: its one-tool list.
 struct UserInput {
-    tools: Vec<ToolDescriptor>,
+    tools: Vec<ToolInfo>,
 }
 
 /// Builds the Plugin under `name`. It takes no configuration and reads
@@ -37,7 +37,7 @@ pub(crate) fn construct(
         )
         .with_source(e)
     })?;
-    let ask = ToolDescriptor::new(
+    let ask = ToolInfo::new(
         id,
         "Wait for the operator's next message and return its text.",
         json!({ "type": "object", "properties": {} }),
@@ -47,7 +47,7 @@ pub(crate) fn construct(
 }
 
 impl Plugin for UserInput {
-    fn tools(&self) -> Vec<ToolDescriptor> {
+    fn tools(&self) -> Vec<ToolInfo> {
         self.tools.clone()
     }
 

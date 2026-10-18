@@ -11,7 +11,7 @@ use crate::execute::tests::context::test_context;
 use crate::test_support::scenario::Scenario;
 use crate::test_support::scripted_chat::{ScriptedChat, text};
 use runvil_parser::test_support::parse_ok;
-use runvil_types::models::{ModelDescriptor, ModelId, ThinkingMode};
+use runvil_types::models::{ModelId, ModelInfo, ThinkingMode};
 use runvil_vfs::Origin;
 
 /// A prompt declaring no Plugins at all.
@@ -73,8 +73,8 @@ const DECLARES_ANALYST: &str = concat!(
 
 /// Builds the one current model the caller chose, with the given context
 /// window and thinking capability.
-fn current_model(context: u32, thinking: ThinkingMode) -> ModelDescriptor {
-    ModelDescriptor::new(
+fn current_model(context: u32, thinking: ThinkingMode) -> ModelInfo {
+    ModelInfo::new(
         ModelId::gateway("current").expect("the id is valid"),
         "The current model",
         NonZeroU32::new(context).expect("the context window is non-zero"),
@@ -83,7 +83,7 @@ fn current_model(context: u32, thinking: ThinkingMode) -> ModelDescriptor {
 }
 
 /// A scenario over `source` run under the one current model `model`.
-fn under_model(source: &str, name: &str, model: ModelDescriptor) -> Scenario {
+fn under_model(source: &str, name: &str, model: ModelInfo) -> Scenario {
     Scenario::new(source)
         .name(name)
         .context(move |ctx| ctx.model(model))

@@ -6,22 +6,22 @@
 //! tool under.
 //!
 //! This module holds vocabulary only: the implementation-free
-//! [`ToolDescriptor`] and the caller-supplied [`ToolCatalog`] of descriptors,
+//! [`ToolInfo`] and the caller-supplied [`ToolCatalog`] of `ToolInfo` values,
 //! trusted output ([`ToolOutput`], [`OutputTrust`]), the model-safe
 //! [`ToolError`], a call's [`ToolCallOrigin`], and the contract errors. The
-//! implementation trait behind a descriptor (`Plugin`) is the Plugin
+//! implementation trait behind a tool info (`Plugin`) is the Plugin
 //! contract's, in `runvil-plugin`, which the `plugin-*` crates
 //! implement; the prompt parser and
 //! the executor sit in their own crates and depend on `runvil-types`.
 
-mod descriptor;
 mod ids;
+mod info;
 mod origin;
 mod output;
 mod registry;
 
-pub use descriptor::ToolDescriptor;
 pub use ids::{ToolId, ToolIdError, ToolIdErrorKind};
+pub use info::ToolInfo;
 pub use origin::{ToolCallOrigin, ToolCaller};
 pub use output::{OutputTrust, ToolError, ToolErrorKind, ToolOutput};
 pub use registry::{ToolCatalog, ToolCatalogError, ToolCatalogErrorKind};

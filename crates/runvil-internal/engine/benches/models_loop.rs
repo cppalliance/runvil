@@ -27,7 +27,7 @@ use runvil_engine::test_support::scripted_chat::{ScriptedChat, ScriptedReply};
 use runvil_engine::test_support::{drive, perform_locally};
 use runvil_engine::{Effect, EffectAnswer, Run, RunContext, RunLimits, RunResult};
 use runvil_parser::Prompt;
-use runvil_types::models::{ModelCatalog, ModelDescriptor, ModelId, ThinkingMode};
+use runvil_types::models::{ModelCatalog, ModelId, ModelInfo, ThinkingMode};
 use runvil_types::seed::RunSeed;
 use runvil_types::timestamp::Timestamp;
 
@@ -51,7 +51,7 @@ fn bench_chat() -> ScriptedChat {
 /// The model catalog the bench prompts resolve against; `context` sizes the
 /// one model's window.
 fn bench_catalog(context: u32) -> ModelCatalog {
-    ModelCatalog::new([ModelDescriptor::new(
+    ModelCatalog::new([ModelInfo::new(
         ModelId::gateway("bench-model").expect("the bench model id is valid"),
         "A general model for benches",
         NonZeroU32::new(context).expect("the bench context is non-zero"),

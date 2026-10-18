@@ -102,7 +102,7 @@ fn the_offering_binds_every_catalog_tool_under_its_wire_name_in_id_order() {
     assert_eq!(
         fetch.description(),
         "alpha/fetch",
-        "the binding holds the descriptor's own text"
+        "the binding holds the tool info's own text"
     );
     assert_eq!(
         set.offered_binding("alpha/fetch"),
@@ -307,7 +307,7 @@ fn the_plugins_table_is_installed_in_the_h1_vm() {
 
 #[test]
 fn a_round_leaves_out_an_offered_binding_a_local_tool_shares_a_name_with() {
-    let offered = crate::lua::ToolBinding::from_descriptor("tools_echo", &echo_tool().descriptor());
+    let offered = crate::lua::ToolBinding::from_info("tools_echo", &echo_tool().info());
     let local = tool_schema_new("tools_echo", "the local echo", json!({ "type": "object" }))
         .expect("the local schema is valid");
     let (schemas, dispatch) =

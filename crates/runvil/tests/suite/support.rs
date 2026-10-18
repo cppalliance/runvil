@@ -8,10 +8,10 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use runvil::model::{
-    CompletionError, CompletionErrorKind, CompletionResult, ModelDescriptor, ModelId, ThinkingMode,
+    CompletionError, CompletionErrorKind, CompletionResult, ModelId, ModelInfo, ThinkingMode,
     ToolCall,
 };
-use runvil::tools::{ToolDescriptor, ToolError, ToolId, ToolOutput};
+use runvil::tools::{ToolError, ToolId, ToolInfo, ToolOutput};
 use serde_json::Value;
 
 mod scenario;
@@ -110,16 +110,12 @@ pub(super) fn shout() -> Tool {
 /// The model every scenario sets before prepare unless it names its own.
 /// It fills only roles a prompt declares, so a prompt without roles
 /// ignores it.
-pub(super) fn canned() -> TestResult<ModelDescriptor> {
+pub(super) fn canned() -> TestResult<ModelInfo> {
     model("canned", 8_192, ThinkingMode::Never)
 }
 
-pub(super) fn model(
-    name: &str,
-    window: u32,
-    thinking: ThinkingMode,
-) -> TestResult<ModelDescriptor> {
-    Ok(ModelDescriptor::new(
+pub(super) fn model(name: &str, window: u32, thinking: ThinkingMode) -> TestResult<ModelInfo> {
+    Ok(ModelInfo::new(
         ModelId::gateway(name)?,
         "A model the facade suite describes.",
         NonZeroU32::new(window).ok_or("a context window is never zero")?,
@@ -127,8 +123,8 @@ pub(super) fn model(
     ))
 }
 
-pub(super) fn descriptor(id: &str, schema: Value) -> TestResult<ToolDescriptor> {
-    Ok(ToolDescriptor::new(
+pub(super) fn tool_info(id: &str, schema: Value) -> TestResult<ToolInfo> {
+    Ok(ToolInfo::new(
         ToolId::parse(id)?,
         "A tool the facade suite describes.",
         schema,

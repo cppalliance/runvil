@@ -30,9 +30,7 @@ use super::scripted_chat::ScriptedChat;
 use crate::Error;
 use crate::execute::{Effect, EffectAnswer, Run, RunContext, RunError, RunLimits, RunResult};
 use crate::lua::{ToolBinding, ToolSet};
-use crate::model::{
-    CompletionErrorKind, ModelBinding, ModelDescriptor, ModelId, ModelSet, ThinkingMode,
-};
+use crate::model::{CompletionErrorKind, ModelBinding, ModelId, ModelInfo, ModelSet, ThinkingMode};
 use crate::parser::Prompt;
 
 #[path = "scenario-driving.rs"]
@@ -61,15 +59,15 @@ pub(crate) const TEST_MODEL: &str = "claude-sonnet-4-6";
 /// The gateway model `id` as the tests bind it: a 131072-token window and
 /// switchable thinking.
 #[track_caller]
-pub(crate) fn test_model(id: &str) -> ModelDescriptor {
+pub(crate) fn test_model(id: &str) -> ModelInfo {
     test_model_with(id, 131_072, ThinkingMode::Switchable)
 }
 
 /// The gateway model `id` on a `window`-token context window, with
 /// `thinking`.
 #[track_caller]
-pub(crate) fn test_model_with(id: &str, window: u32, thinking: ThinkingMode) -> ModelDescriptor {
-    ModelDescriptor::new(
+pub(crate) fn test_model_with(id: &str, window: u32, thinking: ThinkingMode) -> ModelInfo {
+    ModelInfo::new(
         ModelId::gateway(id).expect("the test model id is valid"),
         "A general model for tests",
         NonZeroU32::new(window).expect("the test model's window is non-zero"),
@@ -252,7 +250,7 @@ impl Scenario {
     /// as with [`offering`](Scenario::offering), the offered tools replace
     /// the offering the catalog builds.
     pub(crate) fn offer(mut self, alias: &str, tool: FnTool) -> Scenario {
-        let binding = ToolBinding::from_descriptor(alias, &tool.descriptor());
+        let binding = ToolBinding::from_info(alias, &tool.info());
         self.prefill
             .offering
             .get_or_insert_with(Vec::new)
@@ -394,7 +392,7 @@ impl Scenario {
         let mut ctx =
             RunContext::new(self.name.clone(), self.seed, TEST_STARTED_AT).vfs(self.store.vfs());
         if !self.tools.is_empty() {
-            let catalog = ToolCatalog::new(self.tools.iter().map(FnTool::descriptor))
+            let catalog = ToolCatalog::new(self.tools.iter().map(FnTool::info))
                 .expect("the scenario's tool ids differ");
             ctx = ctx.tools(catalog);
         }

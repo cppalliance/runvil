@@ -11,9 +11,9 @@ use std::sync::Arc;
 
 use runvil::effect::{Effect, EffectAnswer};
 use runvil::event::Event;
-use runvil::model::{Completion, CompletionResult, ModelDescriptor, ModelId, ThinkingMode};
+use runvil::model::{Completion, CompletionResult, ModelId, ModelInfo, ThinkingMode};
 use runvil::timestamp::Timestamp;
-use runvil::tools::{ToolCatalog, ToolDescriptor, ToolId, ToolOutput};
+use runvil::tools::{ToolCatalog, ToolId, ToolInfo, ToolOutput};
 use runvil::vfs::perform_vfs_op;
 use runvil::{Prompt, Run, RunContext, RunResult, RunSeed, Step};
 
@@ -74,7 +74,7 @@ pub fn greet() -> Result<String, Box<dyn Error>> {
     // 2. Build the context: run events number on from the parse events, and
     //    the model is set. A live caller draws the seed's 32 bytes from a
     //    CSPRNG; the example fixes them.
-    let model = ModelDescriptor::new(
+    let model = ModelInfo::new(
         ModelId::gateway("canned")?,
         "Always replies hi there",
         NonZeroU32::new(8_192).ok_or("a context window is never zero")?,
@@ -90,7 +90,7 @@ pub fn greet() -> Result<String, Box<dyn Error>> {
 
     // 3. Offer the shout tool, prepare, and refuse to run when prepare
     //    reports a gap.
-    let shout = ToolDescriptor::new(
+    let shout = ToolInfo::new(
         ToolId::parse("example/text/shout")?,
         "Returns the text in capital letters.",
         serde_json::json!({"type": "object", "properties": {"text": {"type": "string"}}}),

@@ -10,7 +10,7 @@
 
 use std::sync::Arc;
 
-use runvil_types::tools::{ToolDescriptor, ToolError, ToolId, ToolOutput};
+use runvil_types::tools::{ToolError, ToolId, ToolInfo, ToolOutput};
 
 /// The closure an [`FnTool`] answers its calls with.
 type FnToolHandler =
@@ -53,7 +53,7 @@ impl FnTool {
     }
 
     /// Marks the output text as one JSON value, so a binding built from
-    /// the descriptor resumes a script call as a Lua table.
+    /// the tool info resumes a script call as a Lua table.
     pub(crate) fn structured(mut self) -> FnTool {
         self.structured = true;
         self
@@ -65,11 +65,10 @@ impl FnTool {
         self.id.clone()
     }
 
-    /// The tool as data: the descriptor the Engine binds and advertises,
+    /// The tool as data: the tool info the Engine binds and advertises,
     /// what a scenario installs in the run's catalog.
-    pub(crate) fn descriptor(&self) -> ToolDescriptor {
-        ToolDescriptor::new(self.id(), &self.description, self.schema.clone())
-            .structured(self.structured)
+    pub(crate) fn info(&self) -> ToolInfo {
+        ToolInfo::new(self.id(), &self.description, self.schema.clone()).structured(self.structured)
     }
 
     /// Answers one call with `args` at once.

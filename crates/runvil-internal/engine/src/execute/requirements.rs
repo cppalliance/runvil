@@ -236,6 +236,6 @@ pub enum RequirementCheck {
     /// to the role.
     ContextMinimum,
     /// The role declares a hard keyword, `thinking` or `no-thinking`, that
-    /// the bound model's descriptor fails to satisfy.
+    /// the bound model's info fails to satisfy.
     HardKeyword,
 }

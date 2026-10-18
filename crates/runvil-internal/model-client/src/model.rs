@@ -21,7 +21,7 @@ pub use options::{
 // `runvil-types` and re-exported here so existing
 // `runvil_model_client::model::` paths keep resolving.
 pub use runvil_types::models::{
-    ModelCatalog, ModelCatalogError, ModelDescriptor, ModelId, ModelIdError, ThinkingMode,
+    ModelCatalog, ModelCatalogError, ModelId, ModelIdError, ModelInfo, ThinkingMode,
 };
 
 #[cfg(test)]

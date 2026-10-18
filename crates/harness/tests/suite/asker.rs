@@ -7,8 +7,8 @@ use std::sync::Arc;
 
 use harness::plugin::{HostContext, HostServices, PackageRegistry};
 use runvil_plugin::{
-    Package, Plugin, PluginFuture, PluginId, ServiceId, ServiceKey, ToolContext, ToolDescriptor,
-    ToolError, ToolErrorKind, ToolId, ToolOutput,
+    Package, Plugin, PluginFuture, PluginId, ServiceId, ServiceKey, ToolContext, ToolError,
+    ToolErrorKind, ToolId, ToolInfo, ToolOutput,
 };
 use serde_json::{Value, json};
 
@@ -61,7 +61,7 @@ pub(crate) fn broker_services(broker: Arc<dyn AskBroker>) -> HostServices {
 }
 
 struct Asker {
-    tools: Vec<ToolDescriptor>,
+    tools: Vec<ToolInfo>,
 }
 
 fn construct(
@@ -76,7 +76,7 @@ fn construct(
         )
         .with_source(e)
     })?;
-    let ask = ToolDescriptor::new(
+    let ask = ToolInfo::new(
         id,
         "Wait for the operator's next message.",
         json!({ "type": "object", "properties": {} }),
@@ -86,7 +86,7 @@ fn construct(
 }
 
 impl Plugin for Asker {
-    fn tools(&self) -> Vec<ToolDescriptor> {
+    fn tools(&self) -> Vec<ToolInfo> {
         self.tools.clone()
     }
 

@@ -10,12 +10,12 @@ use super::requirements::{RequirementCheck, Requirements, UnmetRequirement};
 
 /// The trivial model fill: binds every declared role to the
 /// context's current model and checks each role's hard keywords and
-/// context minimum against its descriptor, reporting required versus
+/// context minimum against its model info, reporting required versus
 /// actual into [`Requirements::unmet_requirements`]. With no current
 /// model there is nothing to fill or check.
 pub(super) fn fill_model_bindings(
     prompt: &Prompt,
-    model: Option<&crate::model::ModelDescriptor>,
+    model: Option<&crate::model::ModelInfo>,
     requirements: &mut Requirements,
 ) -> ModelBindings {
     let mut bindings = ModelBindings::default();
@@ -35,7 +35,7 @@ pub(super) fn fill_model_bindings(
         }
         for keyword in role.keywords() {
             // Soft keywords document author intent; only the hard
-            // keywords have a descriptor property to check against.
+            // keywords have a model info property to check against.
             let failed = match keyword {
                 ModelKeyword::Thinking if model.thinking() == ThinkingMode::Never => {
                     Some("thinking")

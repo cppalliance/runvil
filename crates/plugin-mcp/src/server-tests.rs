@@ -1,4 +1,4 @@
-//! Tests for the tool-name rule and the descriptors `catalog` builds.
+//! Tests for the tool-name rule and the `ToolInfo` values `catalog` builds.
 
 use rmcp::model::Tool;
 use runvil_plugin::PluginId;
@@ -22,7 +22,7 @@ fn ids(plugin: &str, tools: Vec<Tool>) -> Vec<String> {
     let plugin = PluginId::parse(plugin).expect("a Plugin name parses");
     catalog(&plugin, tools)
         .iter()
-        .map(|listed| listed.descriptor.id.to_string())
+        .map(|listed| listed.info.id.to_string())
         .collect()
 }
 
@@ -83,10 +83,7 @@ fn the_description_is_the_description_else_the_title_else_the_name() {
             plain("c"),
         ],
     );
-    let described: Vec<_> = listed
-        .iter()
-        .map(|l| l.descriptor.description.as_str())
-        .collect();
+    let described: Vec<_> = listed.iter().map(|l| l.info.description.as_str()).collect();
     assert_eq!(described, ["does a", "Title B", "c"]);
 }
 
@@ -98,8 +95,8 @@ fn the_parameters_are_the_input_schema_and_the_tool_is_plain_and_stoppable() {
         &plugin,
         vec![tool("get", &json!({ "inputSchema": schema }))],
     );
-    let descriptor = &listed[0].descriptor;
-    assert_eq!(descriptor.parameters_schema, schema);
-    assert!(!descriptor.structured_output);
-    assert!(!descriptor.survives_stop);
+    let info = &listed[0].info;
+    assert_eq!(info.parameters_schema, schema);
+    assert!(!info.structured_output);
+    assert!(!info.survives_stop);
 }

@@ -146,7 +146,7 @@ fn a_bound_alias_with_no_implementation_in_the_test_driver_table_resumes_as_a_to
          assert(not ok, 'an unresolvable identity raises at the call site')
          return err.kind .. '|' .. tostring(err)",
     );
-    let binding = ToolBinding::for_test("tools_echo", "echo capability", &echo_tool().descriptor());
+    let binding = ToolBinding::for_test("tools_echo", "echo capability", &echo_tool().info());
     let trace = arm_scenario(source).offering(vec![binding]).run();
     let out = trace.text();
     assert!(

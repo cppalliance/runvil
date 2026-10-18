@@ -6,7 +6,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use runvil_model_client::detail;
 use runvil_parser::ModelKeyword;
 use runvil_types::plugins::PluginId;
-use runvil_types::tools::ToolDescriptor;
+use runvil_types::tools::ToolInfo;
 
 use crate::execute::scheduler::TaskBuiltin;
 use crate::lua::{ToolBinding, ToolSet};
@@ -17,7 +17,7 @@ use super::super::config::RunContext;
 
 /// Builds the run's shared tool set: the frontmatter's declared Plugins,
 /// the `roster` moved out of the context, and every catalog tool the run
-/// can offer bound with the tool's descriptor data (its schema,
+/// can offer bound with the tool's info (its schema,
 /// description, and output kind), so run-time execution never consults the
 /// catalog again and never holds an implementation.
 pub(super) fn bound_tool_set(
@@ -37,7 +37,7 @@ pub(super) fn bound_tool_set(
 /// `web_fetch`). A tool whose name can't be offered is left out with a log
 /// line; a script still reaches it by id through the catalog bindings.
 fn offered_bindings(ctx: &RunContext) -> Vec<ToolBinding> {
-    let mut tools: Vec<&ToolDescriptor> = ctx.tools.tools().iter().collect();
+    let mut tools: Vec<&ToolInfo> = ctx.tools.tools().iter().collect();
     tools.sort_unstable_by(|left, right| left.id.cmp(&right.id));
     let mut taken = BTreeSet::new();
     let mut offered = Vec::new();
@@ -47,7 +47,7 @@ fn offered_bindings(ctx: &RunContext) -> Vec<ToolBinding> {
             tracing::warn!(tool = %tool.id, %name, %reason, "a tool is left out of the offering");
             continue;
         }
-        offered.push(ToolBinding::from_descriptor(&name, tool));
+        offered.push(ToolBinding::from_info(&name, tool));
         taken.insert(name);
     }
     offered
@@ -56,7 +56,7 @@ fn offered_bindings(ctx: &RunContext) -> Vec<ToolBinding> {
 /// Why `tool` can't be offered under `name`: a task built-in has the
 /// name, no model round could advertise it, or an earlier offered tool has
 /// it. `None` when it can be offered.
-fn offer_refusal(name: &str, tool: &ToolDescriptor, taken: &BTreeSet<String>) -> Option<String> {
+fn offer_refusal(name: &str, tool: &ToolInfo, taken: &BTreeSet<String>) -> Option<String> {
     if TaskBuiltin::from_name(name).is_some() {
         return Some("a task built-in has the same name".to_owned());
     }
@@ -83,7 +83,7 @@ pub(super) fn catalog_bindings(ctx: &RunContext) -> BTreeMap<String, ToolBinding
         .iter()
         .map(|tool| {
             let id = tool.id.to_string();
-            let binding = ToolBinding::from_descriptor(&id, tool);
+            let binding = ToolBinding::from_info(&id, tool);
             (id, binding)
         })
         .collect()
@@ -109,13 +109,13 @@ fn keyword_name(keyword: ModelKeyword) -> &'static str {
 /// Builds the run's shared model set from the prepared bindings: every
 /// filled role becomes a binding under its label, holding the role's
 /// keyword set (the handle's `capabilities`), the hard-keyword thinking
-/// switch as the frozen invocation, and the descriptor's provider id when
+/// switch as the frozen invocation, and the model info's provider id when
 /// the catalog names one. Unfilled roles produce no binding:
 /// `models.use` on the label fails at run time.
 pub(super) fn bound_model_set(prompt: &Prompt, ctx: &RunContext) -> ModelSet {
     let mut set = ModelSet::default();
     for (label, role) in prompt.frontmatter().models() {
-        let Some(descriptor) = ctx.model_bindings.resolve(label) else {
+        let Some(info) = ctx.model_bindings.resolve(label) else {
             continue;
         };
         let mut thinking = None;
@@ -128,11 +128,10 @@ pub(super) fn bound_model_set(prompt: &Prompt, ctx: &RunContext) -> ModelSet {
         }
         let mut binding = ModelBinding::new(
             label,
-            role.description()
-                .unwrap_or_else(|| descriptor.description()),
-            descriptor.id().clone(),
+            role.description().unwrap_or_else(|| info.description()),
+            info.id().clone(),
             ModelInvocation::new().with_thinking(thinking),
-            descriptor.context(),
+            info.context(),
         )
         .with_capabilities(
             role.keywords()
@@ -141,7 +140,7 @@ pub(super) fn bound_model_set(prompt: &Prompt, ctx: &RunContext) -> ModelSet {
                 .map(str::to_owned)
                 .collect(),
         );
-        if let Some(provider) = descriptor.provider() {
+        if let Some(provider) = info.provider() {
             binding = binding.with_provider(provider);
         }
         set.push(binding);

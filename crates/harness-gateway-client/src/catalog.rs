@@ -2,7 +2,7 @@
 
 use std::num::NonZeroU32;
 
-use runvil::model::{CompletionError, ModelCatalog, ModelDescriptor, ModelId, ThinkingMode};
+use runvil::model::{CompletionError, ModelCatalog, ModelId, ModelInfo, ThinkingMode};
 use serde::Deserialize;
 
 use crate::failure::{malformed, transport_failure};
@@ -184,11 +184,11 @@ pub async fn fetch_model_catalog(
         // `MalformedResponse`.
         malformed("model list response was not valid JSON").with_source(error)
     })?;
-    let mut descriptors = Vec::with_capacity(list.data.len());
+    let mut models = Vec::with_capacity(list.data.len());
     for entry in list.data {
         // An entry with no context window is not an inference model (the
-        // gateway lists its transcription models here too); it is not a
-        // descriptor and must not fail the catalog.
+        // gateway lists its transcription models here too); it gets no
+        // model info and must not fail the catalog.
         let Some(context) = entry.context else {
             continue;
         };
@@ -203,13 +203,13 @@ pub async fn fetch_model_catalog(
             malformed("a model declares a context window but no thinking mode")
                 .with_detail(escape_controls(id.name(), MAX_CATALOG_ERROR_BODY))
         })?;
-        let descriptor = ModelDescriptor::new(id, entry.description, context, thinking);
-        descriptors.push(match entry.provider {
-            Some(provider) => descriptor.with_provider(provider),
-            None => descriptor,
+        let info = ModelInfo::new(id, entry.description, context, thinking);
+        models.push(match entry.provider {
+            Some(provider) => info.with_provider(provider),
+            None => info,
         });
     }
-    ModelCatalog::new(descriptors).map_err(|error| {
+    ModelCatalog::new(models).map_err(|error| {
         malformed("gateway returned an inconsistent model catalog")
             .with_detail(escape_controls(&error.to_string(), MAX_CATALOG_ERROR_BODY))
     })

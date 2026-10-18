@@ -6,7 +6,7 @@ use std::pin::Pin;
 use std::sync::Arc;
 
 use runvil_types::plugins::PluginId;
-use runvil_types::tools::{ToolDescriptor, ToolError, ToolOutput};
+use runvil_types::tools::{ToolError, ToolInfo, ToolOutput};
 
 use crate::{HostServices, ServiceId, ToolContext};
 
@@ -33,7 +33,7 @@ pub trait Plugin: Send + Sync {
     /// returns its current list, and a Plugin still coming up returns what
     /// it has so far. Each tool's id sits under the name the Plugin was
     /// installed under, as in `web/fetch`.
-    fn tools(&self) -> Vec<ToolDescriptor>;
+    fn tools(&self) -> Vec<ToolInfo>;
 
     /// Resolves once the Plugin's tool list is complete, or with the
     /// reason it can't serve now.
@@ -86,7 +86,7 @@ pub trait Plugin: Send + Sync {
     ///   future on a stop, when the run ends (a cancel included), and when
     ///   the task that made the call ends early: it is cancelled, its owner
     ///   ends, or an ancestor is aborted. Only a stop spares a call whose
-    ///   tool's descriptor sets `survives_stop`. After a stop or a task's
+    ///   tool's info sets `survives_stop`. After a stop or a task's
     ///   early end, the run goes on.
     /// - `call` must not wait for another call of the same run to finish.
     ///   The Harness runs a bounded number of a run's tool calls at once

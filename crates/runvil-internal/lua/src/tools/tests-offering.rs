@@ -17,10 +17,10 @@ fn offering_set() -> ToolSet {
         vec![PluginId::parse("web").expect("`web` is a valid Plugin id")],
         std::collections::BTreeMap::new(),
         vec![
-            ToolBinding::from_descriptor("gh_issues_list", &tool_at("gh/issues.list")),
-            ToolBinding::from_descriptor("gh_search", &tool_at("gh/search")),
-            ToolBinding::from_descriptor("web_fetch", &tool_at("web/fetch")),
-            ToolBinding::from_descriptor("web_search", &tool_at("web/search")),
+            ToolBinding::from_info("gh_issues_list", &tool_at("gh/issues.list")),
+            ToolBinding::from_info("gh_search", &tool_at("gh/search")),
+            ToolBinding::from_info("web_fetch", &tool_at("web/fetch")),
+            ToolBinding::from_info("web_search", &tool_at("web/search")),
         ],
     )
 }

@@ -17,7 +17,7 @@
 //! canonical in `runvil-types`, and this crate uses it from there:
 //! [`client::Completion`] holds a round's metrics. The
 //! model identity/catalog vocabulary ([`model::ModelId`],
-//! [`model::ModelCatalog`], [`model::ModelDescriptor`],
+//! [`model::ModelCatalog`], [`model::ModelInfo`],
 //! [`model::ThinkingMode`]) is canonical there too and re-exported through
 //! the `model` paths.
 //!

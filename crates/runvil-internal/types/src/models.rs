@@ -1,4 +1,4 @@
-//! Public model vocabulary: stable identity, catalog, and descriptor.
+//! Public model vocabulary: stable identity, catalog, and model info.
 //!
 //! The caller supplies a [`ModelCatalog`], and catalog entries are named by
 //! their validated [`ModelId`]. These types are the shared vocabulary every
@@ -109,12 +109,12 @@ impl std::fmt::Display for ModelIdError {
 
 impl std::error::Error for ModelIdError {}
 
-/// The reason building a [`ModelCatalog`] from its descriptors failed.
+/// The reason building a [`ModelCatalog`] from its `ModelInfo` values failed.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum ModelCatalogError {
-    /// Two descriptors shared one stable [`ModelId`], which would make lookups
-    /// ambiguous.
+    /// Two `ModelInfo` values shared one stable [`ModelId`], which would make
+    /// lookups ambiguous.
     #[non_exhaustive]
     DuplicateId {
         /// The repeated identity's server namespace.
@@ -153,9 +153,14 @@ pub enum ThinkingMode {
 ///
 /// It holds the model's identity, description, context window, thinking
 /// mode, and the provider id the catalog names, if any.
+///
+/// Two gateway types share the name but are different types:
+/// `gateway_api_types::ModelInfo`, one entry of the gateway's `/v1/models`
+/// list, and `gateway_local::gguf::ModelInfo`, the metadata read from a
+/// GGUF file.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
-pub struct ModelDescriptor {
+pub struct ModelInfo {
     id: ModelId,
     description: String,
     context: NonZeroU32,
@@ -163,8 +168,8 @@ pub struct ModelDescriptor {
     provider: Option<String>,
 }
 
-impl ModelDescriptor {
-    /// Builds a descriptor from its identity and catalog fields.
+impl ModelInfo {
+    /// Builds a `ModelInfo` from its identity and catalog fields.
     ///
     /// The context window is a [`NonZeroU32`], so it always holds at least
     /// one token.
@@ -229,21 +234,21 @@ impl ModelDescriptor {
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct ModelCatalog {
-    models: Vec<ModelDescriptor>,
+    models: Vec<ModelInfo>,
 }
 
 impl ModelCatalog {
-    /// Builds a catalog from descriptors, keeping the order they are given
-    /// in.
+    /// Builds a catalog from `ModelInfo` values, keeping the order they are
+    /// given in.
     ///
     /// # Errors
-    /// Returns [`ModelCatalogError::DuplicateId`] when two descriptors share one
-    /// stable [`ModelId`], so each identity in the catalog names exactly one
-    /// descriptor.
+    /// Returns [`ModelCatalogError::DuplicateId`] when two `ModelInfo` values
+    /// share one stable [`ModelId`], so each identity in the catalog names
+    /// exactly one model info.
     pub fn new(
-        models: impl IntoIterator<Item = ModelDescriptor>,
+        models: impl IntoIterator<Item = ModelInfo>,
     ) -> std::result::Result<ModelCatalog, ModelCatalogError> {
-        let models: Vec<ModelDescriptor> = models.into_iter().collect();
+        let models: Vec<ModelInfo> = models.into_iter().collect();
         for (index, model) in models.iter().enumerate() {
             if models[..index].iter().any(|prior| prior.id() == model.id()) {
                 return Err(ModelCatalogError::DuplicateId {
@@ -261,9 +266,9 @@ impl ModelCatalog {
         Self { models: Vec::new() }
     }
 
-    /// Returns every descriptor.
+    /// Returns every model info.
     #[must_use]
-    pub fn models(&self) -> &[ModelDescriptor] {
+    pub fn models(&self) -> &[ModelInfo] {
         &self.models
     }
 
@@ -273,13 +278,13 @@ impl ModelCatalog {
         self.models.is_empty()
     }
 
-    /// Looks up a descriptor by stable identity.
+    /// Looks up a model info by stable identity.
     #[must_use]
-    pub fn get(&self, id: &ModelId) -> Option<&ModelDescriptor> {
+    pub fn get(&self, id: &ModelId) -> Option<&ModelInfo> {
         self.models.iter().find(|model| model.id() == id)
     }
 
-    /// Returns whether the catalog contains a descriptor with `id`.
+    /// Returns whether the catalog contains a model info with `id`.
     #[must_use]
     pub fn contains(&self, id: &ModelId) -> bool {
         self.get(id).is_some()
@@ -328,9 +333,9 @@ mod tests {
     }
 
     #[test]
-    fn a_model_descriptor_keeps_its_context_window_and_thinking_mode() {
+    fn a_model_info_keeps_its_context_window_and_thinking_mode() {
         let context = NonZeroU32::new(131_072).expect("test context window is non-zero");
-        let model = ModelDescriptor::new(
+        let model = ModelInfo::new(
             ModelId::gateway("analyst").expect("test model alias is valid"),
             "A careful analysis model",
             context,
@@ -341,16 +346,16 @@ mod tests {
     }
 
     #[test]
-    fn a_model_catalog_contains_each_descriptor_it_was_built_from() {
+    fn a_model_catalog_contains_each_model_info_it_was_built_from() {
         let ctx = NonZeroU32::new(8_192).expect("test context window is non-zero");
         let id = ModelId::gateway("small").expect("test model alias is valid");
-        let catalog = ModelCatalog::new([ModelDescriptor::new(
+        let catalog = ModelCatalog::new([ModelInfo::new(
             id.clone(),
             "A tiny model",
             ctx,
             ThinkingMode::Never,
         )])
-        .expect("a catalog with one descriptor builds");
+        .expect("a catalog with one model info builds");
         assert!(catalog.contains(&id));
         assert_eq!(catalog.models().len(), 1);
     }
@@ -358,17 +363,17 @@ mod tests {
     #[test]
     fn model_catalog_rejects_duplicate_ids() {
         let ctx = NonZeroU32::new(8_192).expect("test context window is non-zero");
-        let descriptor = |name: &str| {
-            ModelDescriptor::new(
+        let info = |name: &str| {
+            ModelInfo::new(
                 ModelId::gateway(name).expect("test model alias is valid"),
                 "d",
                 ctx,
                 ThinkingMode::Never,
             )
         };
-        let err = ModelCatalog::new([descriptor("dup"), descriptor("dup")])
+        let err = ModelCatalog::new([info("dup"), info("dup")])
             .expect_err("a catalog with duplicate ids must be rejected");
         assert!(matches!(err, ModelCatalogError::DuplicateId { .. }));
-        assert!(ModelCatalog::new([descriptor("a"), descriptor("b")]).is_ok());
+        assert!(ModelCatalog::new([info("a"), info("b")]).is_ok());
     }
 }

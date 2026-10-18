@@ -92,9 +92,9 @@ pub mod model {
     pub use runvil_model_client::model::TemperatureError;
     pub use runvil_types::models::ModelCatalog;
     pub use runvil_types::models::ModelCatalogError;
-    pub use runvil_types::models::ModelDescriptor;
     pub use runvil_types::models::ModelId;
     pub use runvil_types::models::ModelIdError;
+    pub use runvil_types::models::ModelInfo;
     pub use runvil_types::models::ThinkingMode;
 }
 
@@ -106,12 +106,12 @@ pub mod tools {
     pub use runvil_types::tools::ToolCatalog;
     pub use runvil_types::tools::ToolCatalogError;
     pub use runvil_types::tools::ToolCatalogErrorKind;
-    pub use runvil_types::tools::ToolDescriptor;
     pub use runvil_types::tools::ToolError;
     pub use runvil_types::tools::ToolErrorKind;
     pub use runvil_types::tools::ToolId;
     pub use runvil_types::tools::ToolIdError;
     pub use runvil_types::tools::ToolIdErrorKind;
+    pub use runvil_types::tools::ToolInfo;
     pub use runvil_types::tools::ToolOutput;
 }
 
