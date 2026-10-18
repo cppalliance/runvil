@@ -190,6 +190,65 @@ fn a_prelude_function_reads_the_json_global() {
 }
 
 #[test]
+fn a_prelude_function_calls_json_encode() {
+    let vm = section_vm();
+    install_preludes(
+        vm.lua(),
+        &[prelude(
+            "kit",
+            "kit = {}\nfunction kit.probe() return json.encode({ b = 1, a = { 1, 2 } }) end",
+        )],
+    )
+    .expect("the prelude installs");
+    let text: String = vm.eval("return kit.probe()");
+    assert_eq!(text, r#"{"a":[1,2],"b":1}"#);
+}
+
+#[test]
+fn json_encode_of_var_inside_a_prelude_function_cannot_read_the_view() {
+    let vm = section_vm_with_var(&json!({ "mode": "fast" }));
+    install_preludes(
+        vm.lua(),
+        &[prelude(
+            "kit",
+            "kit = {}\nfunction kit.encode_var() return json.encode(var) end",
+        )],
+    )
+    .expect("the prelude installs");
+    let (ok, kind, message): (bool, String, String) = vm.eval(
+        "local ok, err = pcall(kit.encode_var)\n\
+         return ok, err.kind, tostring(err)",
+    );
+    assert!(!ok, "encoding the prelude's var view raises");
+    assert_eq!(
+        (kind.as_str(), message.as_str()),
+        (
+            "lua",
+            "json.encode: value cannot be read (var is read-only); \
+             copy the fields you need into a plain table"
+        )
+    );
+    let section_text: String = vm.eval("return json.encode(var)");
+    assert_eq!(
+        section_text, r#"{"mode":"fast"}"#,
+        "section code reads its own var"
+    );
+}
+
+#[test]
+fn section_code_encoding_a_sealed_global_gets_the_preludes_hidden_table() {
+    let vm = section_vm();
+    install_preludes(
+        vm.lua(),
+        &[prelude("kit", "cfg = { name = 'kit', sizes = { 1, 2 } }")],
+    )
+    .expect("the prelude installs");
+    let (text, seal): (String, String) = vm.eval("return json.encode(cfg), getmetatable(cfg)");
+    assert_eq!(text, r#"{"name":"kit","sizes":[1,2]}"#);
+    assert_eq!(seal, "cfg is sealed", "the global is the sealed view");
+}
+
+#[test]
 fn a_prelude_that_assigns_no_global_installs_nothing() {
     let vm = section_vm();
     let before = global_names(&vm);

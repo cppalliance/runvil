@@ -1,5 +1,7 @@
 //! Concurrent fanout: per-arm start/terminal accounting, store writes across
-//! arms, and the propagated arm-failure error contract.
+//! arms, the propagated arm-failure error contract, and encoding a result.
+
+use runvil_parser::test_support::prompt;
 
 use crate::RunErrorKind;
 use crate::test_support::scenario::{Record, Scenario};
@@ -161,5 +163,25 @@ fn fanout_arm_failure_propagates() {
     assert!(
         error.to_string().contains("deliberately failed"),
         "error must preserve the arm's message: {error}"
+    );
+}
+
+#[test]
+fn json_encode_of_a_fanout_result_gives_its_fields_as_an_object() {
+    let source = prompt(
+        "",
+        &[
+            (
+                "Parent",
+                "
+                local r = tasks.fanout('### Worker', { 'alpha' })
+                return json.encode(r[1])",
+            ),
+            ("### Worker", "return item .. '-' .. sys.index"),
+        ],
+    );
+    assert_eq!(
+        Scenario::new(source).run().text(),
+        r#"{"exhausted":false,"item":"alpha","ok":true,"text":"alpha-1"}"#
     );
 }

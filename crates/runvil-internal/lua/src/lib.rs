@@ -11,9 +11,10 @@
 //! callback accepts one bounded, single-line UTF-8 string and reports it
 //! through the run's emitter as an `Event::Lua` checkpoint. A persistent
 //! `json` table decodes JSON text into Lua values (`json.decode` and
-//! `json.decode_lines`), holds `json.null`, the value every decoded JSON
-//! null becomes, and marks a table to encode as a JSON array
-//! (`json.array`).
+//! `json.decode_lines`), encodes Lua values as compact JSON text
+//! (`json.encode` and `json.encode_lines`), holds `json.null`, the value
+//! every decoded JSON null becomes, and marks a table to encode as a JSON
+//! array (`json.array`).
 //!
 //! The chunk's top-level return value becomes the section's result (the finish
 //! case of the exit rule). The `var` table is read back afterward as JSON for

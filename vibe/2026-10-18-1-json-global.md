@@ -407,7 +407,7 @@ Paths starting `L/` are under `crates/runvil-internal/lua/src/`, and paths start
 </step-1>
 <step-2>
 
-### Step 2: json.encode and json.encode_lines
+### Step 2: json.encode and json.encode_lines [completed]
 
 - Component: `none`
 - Tests: Verify runs these from the repository root in PowerShell, in this order, beside the FULL-scope commands in the Project Survey.

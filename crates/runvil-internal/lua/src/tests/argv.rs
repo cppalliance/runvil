@@ -84,6 +84,19 @@ fn a_frozen_argv_write_raises_the_whole_refusal_for_a_string_integer_or_other_ke
 }
 
 #[test]
+fn frozen_argv_holding_an_empty_list_encodes_it_as_an_empty_array() {
+    let argv = json!({ "items": [], "nested": { "more": [] } });
+    let vm = TestVm::new().argv(Argv::Frozen(Some(&argv))).build();
+    let out = run_argv(
+        &vm,
+        "return json.encode(argv.items) .. json.encode(argv.nested.more)",
+    )
+    .expect("frozen argv encodes");
+    assert_eq!(out.as_deref(), Some("[][]"));
+    vm.teardown();
+}
+
+#[test]
 fn frozen_nil_argv_reads_nil_and_rejects_assignment() {
     let vm = TestVm::new().argv(Argv::Frozen(None)).build();
     let out = run_argv(&vm, "assert(argv == nil, 'no argv reads nil') return 'ok'")

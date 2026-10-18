@@ -63,13 +63,16 @@ pub(crate) fn install_frozen(lua: &Lua, argv: Option<&Json>) -> Result<()> {
 
 /// Builds the frozen Lua form of an argv JSON value: tables become
 /// deep-frozen proxies, scalars bridge directly, and absent or null reads
-/// as nil.
+/// as nil. A list's data table carries mlua's array metatable, so an empty
+/// list read through the proxy still encodes as `[]`.
 fn frozen_json_value(lua: &Lua, value: Option<&Json>) -> Result<Value> {
     match value {
         None | Some(Json::Null) => Ok(Value::Nil),
         Some(Json::Array(values)) => {
             let data = lua
                 .create_table_with_capacity(values.len(), 0)
+                .map_err(Error::lua)?;
+            data.set_metatable(Some(lua.array_metatable()))
                 .map_err(Error::lua)?;
             for (index, value) in values.iter().enumerate() {
                 data.raw_set(index + 1, frozen_json_value(lua, Some(value))?)

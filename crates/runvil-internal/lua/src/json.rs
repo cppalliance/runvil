@@ -1,5 +1,6 @@
 //! The `json` Engine global: a plain table, like `string`, holding
-//! `json.null`, `json.array`, `json.decode`, and `json.decode_lines`.
+//! `json.null`, `json.array`, `json.decode`, `json.decode_lines`,
+//! `json.encode`, and `json.encode_lines`.
 //!
 //! `json.null` is mlua's null sentinel, a light userdata with a null
 //! pointer, and every decoded JSON null is that value. A marked list is a
@@ -9,8 +10,9 @@
 //! Null and list detection rely on the values themselves, never on fields
 //! of the `json` table, so reassigning a field cannot break them.
 
-#[path = "json-decode.rs"]
 mod decode;
+mod encode;
+mod keys;
 
 use mlua::{Lua, LuaSerdeExt, Table, Value};
 
@@ -34,6 +36,17 @@ pub(crate) fn install(lua: &Lua) -> Result<()> {
     json.raw_set(
         "decode_lines",
         lua.create_function(decode::decode_lines)
+            .map_err(Error::lua)?,
+    )
+    .map_err(Error::lua)?;
+    json.raw_set(
+        "encode",
+        lua.create_function(encode::encode).map_err(Error::lua)?,
+    )
+    .map_err(Error::lua)?;
+    json.raw_set(
+        "encode_lines",
+        lua.create_function(encode::encode_lines)
             .map_err(Error::lua)?,
     )
     .map_err(Error::lua)?;
