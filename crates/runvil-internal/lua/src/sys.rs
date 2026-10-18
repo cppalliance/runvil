@@ -33,6 +33,7 @@ fn guarded_json_value(
     match value {
         Json::Array(values) => {
             let data = lua.create_table_with_capacity(values.len(), 0)?;
+            data.set_metatable(Some(lua.array_metatable()))?;
             for (index, value) in values.iter().enumerate() {
                 data.raw_set(
                     index + 1,
@@ -99,6 +100,9 @@ fn guarded_table(
     Ok(proxy)
 }
 
+/// Copies a guarded value into plain tables for JSON conversion. A list's
+/// data table carries mlua's array metatable, and its copy takes it too,
+/// so an empty list converts to `[]` rather than `{}`.
 fn materialize_guarded_value(
     lua: &Lua,
     value: Value,
@@ -112,6 +116,13 @@ fn materialize_guarded_value(
         _ => table,
     };
     let plain = lua.create_table()?;
+    let marker = lua.array_metatable();
+    if source
+        .metatable()
+        .is_some_and(|metatable| metatable == marker)
+    {
+        plain.set_metatable(Some(marker))?;
+    }
     // `pairs` order is unspecified; each iteration only assigns one entry
     // into the fresh table, so the copy's content is fixed.
     for pair in source.pairs::<Value, Value>() {

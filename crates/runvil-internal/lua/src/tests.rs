@@ -1,4 +1,4 @@
-//! Crate-wide tests for section VMs: sandboxing, logging, tool scoping, store operations, `var`, and `argv`.
+//! Crate-wide tests for section VMs: sandboxing, logging, tool scoping, store operations, `var`, `argv`, and the `json` global.
 //!
 //! Each submodule holds one topic. The helpers below are shared by them;
 //! `recording`, `assert_chunk_name_resolves`, `refusal_line`, and the
@@ -37,6 +37,7 @@ mod budgets;
 mod cancellation;
 mod diagnostics;
 mod engine_misuse;
+mod json;
 mod library_load;
 mod logging;
 mod require;

@@ -183,6 +183,37 @@ fn assigning_nil_to_a_var_field_removes_it_from_var_and_its_snapshot() {
 }
 
 #[test]
+fn an_empty_marked_list_in_var_reads_back_as_an_empty_array() {
+    for source in ["var.items = json.array()", "var.items = json.decode('[]')"] {
+        let out = run(source, "").expect("a marked list passes the guard");
+        assert_eq!(out.var, json!({ "items": [] }), "after {source}");
+    }
+}
+
+#[test]
+fn a_nested_marked_list_reads_back_as_an_array_and_a_plain_empty_table_as_an_object() {
+    let nested = run("var.t = { list = json.array() }", "").expect("the nested list passes");
+    assert_eq!(nested.var, json!({ "t": { "list": [] } }));
+    let plain = run("var.items = {}", "").expect("an empty table passes the guard");
+    assert_eq!(plain.var, json!({ "items": {} }));
+}
+
+#[test]
+fn an_empty_list_seeded_from_rust_reads_back_as_an_empty_array() {
+    let seed = json!({ "items": [] });
+    let vm = TestVm::new().var(&seed).build();
+    assert_eq!(vm.var().expect("var reads back"), json!({ "items": [] }));
+}
+
+#[test]
+fn json_null_in_var_reads_back_as_null_and_equals_json_null_in_lua() {
+    let out = run("var.x = json.null\nreturn tostring(var.x == json.null)", "")
+        .expect("json.null passes the guard");
+    assert_eq!(out.returned.as_deref(), Some("true"));
+    assert_eq!(out.var, json!({ "x": null }));
+}
+
+#[test]
 fn reassigning_the_var_global_fails_read_back() {
     // `var = 5` drops the guarded proxy from reach; read-back must reject it
     // rather than silently roll the pre-reassignment data forward.

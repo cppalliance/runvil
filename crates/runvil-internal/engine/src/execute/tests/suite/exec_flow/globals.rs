@@ -214,6 +214,37 @@ fn missing_bare_global_in_prose_errors() {
     );
 }
 
+/// A bare global holding `json.null` reads as JSON null, so naming it in
+/// prose is the null-value substitution failure a null `var` field is.
+#[test]
+fn bare_global_holding_json_null_in_prose_is_the_null_value_failure() {
+    let source = PromptSource::new().prose(
+        "Only",
+        "
+        ```lua
+        nothing = json.null
+        ```
+
+        Value: {{ nothing }}.
+
+        ```lua
+        return prose
+        ```",
+    );
+    let trace = Scenario::new(source.build()).run();
+    let error = trace.error();
+    assert_eq!(
+        error.kind(),
+        RunErrorKind::Lua,
+        "the Lua read of `prose` raises the substitution failure: {error}"
+    );
+    let rendered = error.to_string();
+    assert!(
+        rendered.contains("missing {{ nothing }}") && rendered.contains("NullValue"),
+        "the error is the null-value failure naming the global: {rendered}"
+    );
+}
+
 #[test]
 fn sys_exposes_section_metadata() {
     let source = prompt(

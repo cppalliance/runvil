@@ -135,6 +135,22 @@ fn an_h1_repair_is_visible_to_every_downstream_section() {
 }
 
 #[test]
+fn an_h1_argv_holding_json_null_passes_the_freeze_and_reads_the_field_as_nil() {
+    let source = PromptSource::new()
+        .front(QUERY)
+        .h1("argv = { a = json.null }")
+        .section(
+            "Only",
+            "
+            assert(argv ~= nil, 'the repaired argv passes the freeze')
+            assert(argv.a == nil, 'a null field reads as nil once frozen')
+            return 'ok'",
+        );
+    let trace = Scenario::new(source.build()).args("broken json").run();
+    assert_eq!(trace.text(), "ok");
+}
+
+#[test]
 fn assigning_argv_in_an_h2_section_is_an_error() {
     let source = query_prompt("argv = { query = 'hijacked' }");
     let trace = Scenario::new(source).args("{\"query\":\"x\"}").run();

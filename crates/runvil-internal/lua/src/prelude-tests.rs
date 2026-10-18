@@ -175,6 +175,21 @@ fn a_prelude_receives_its_plugins_name_as_its_chunk_argument() {
 }
 
 #[test]
+fn a_prelude_function_reads_the_json_global() {
+    let vm = section_vm();
+    install_preludes(
+        vm.lua(),
+        &[prelude(
+            "kit",
+            "kit = {}\nfunction kit.probe() return type(json), json.decode('[1]')[1] end",
+        )],
+    )
+    .expect("the prelude installs");
+    let (kind, first): (String, i64) = vm.eval("return kit.probe()");
+    assert_eq!((kind.as_str(), first), ("table", 1));
+}
+
+#[test]
 fn a_prelude_that_assigns_no_global_installs_nothing() {
     let vm = section_vm();
     let before = global_names(&vm);

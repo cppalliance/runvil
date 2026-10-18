@@ -88,6 +88,19 @@ fn spawn_without_options_parses_every_seed_as_absent() {
 }
 
 #[test]
+fn a_spawn_item_holding_json_null_parses_to_a_null_field() {
+    let vm = crate::test_vm::TestVm::new().build();
+    let table: mlua::Table = vm.eval(
+        "return { op = 'spawn', target = '## Child', origin = 'author', \
+         item = { a = json.null }, var = { k = 1 } }",
+    );
+    match expect_request(Request::from_yield(vm.lua(), &Value::Table(table))) {
+        Request::Spawn { item, .. } => assert_eq!(item, Some(json!({ "a": null }))),
+        other => panic!("expected a spawn request, got {other:?}"),
+    }
+}
+
+#[test]
 fn spawn_seed_shape_errors_are_the_calls_error() {
     // `item` and `index` are author options: a wrong shape returns as
     // the call's answer so `tasks.spawn` raises it at the call site.

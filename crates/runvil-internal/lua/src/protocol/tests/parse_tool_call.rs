@@ -120,6 +120,17 @@ fn tool_call_without_args_parses_the_empty_object() {
 }
 
 #[test]
+fn a_marked_empty_list_in_the_args_parses_to_an_empty_array() {
+    let vm = crate::test_vm::TestVm::new().build();
+    let table: mlua::Table =
+        vm.eval("return { op = 'tool_call', alias = 'echo', args = { items = json.array() } }");
+    match expect_request(Request::from_yield(vm.lua(), &Value::Table(table))) {
+        Request::ToolCall { args, .. } => assert_eq!(args, json!({ "items": [] })),
+        other => panic!("expected a tool_call request, got {other:?}"),
+    }
+}
+
+#[test]
 fn a_tool_call_with_a_tool_object_decodes_to_its_id() {
     // The id-or-tool-object polymorphism at the protocol boundary: a tool
     // object stands for its canonical id, never its wire name.

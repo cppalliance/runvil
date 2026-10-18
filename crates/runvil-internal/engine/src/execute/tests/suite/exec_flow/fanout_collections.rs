@@ -169,6 +169,32 @@ fn fanout_collection_item_round_trips_members() {
     assert_eq!(Scenario::new(source).run().text(), "ok");
 }
 
+/// A `json.null` member is data: it runs one arm, whose `item` reads as
+/// `json.null`.
+#[test]
+fn fanout_over_a_json_null_member_runs_one_arm_whose_item_is_json_null() {
+    let source = prompt(
+        "",
+        &[
+            (
+                "Parent",
+                "
+                local r = tasks.fanout('### Worker', { json.null })
+                assert(#r == 1, 'one arm ran')
+                return r[1].text",
+            ),
+            (
+                "### Worker",
+                "
+                if item == json.null then return 'json.null' end
+                if item == nil then return 'nil' end
+                return type(item)",
+            ),
+        ],
+    );
+    assert_eq!(Scenario::new(source).run().text(), "json.null");
+}
+
 /// A worker resolves as a sibling: a top-level worker marked off-walk is
 /// shared infrastructure the walk never visits.
 #[test]

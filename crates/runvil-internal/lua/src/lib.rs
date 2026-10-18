@@ -9,7 +9,11 @@
 //! even an unbounded loop aborts promptly once the run is cancelled.
 //! Direct `print` and `warn` are unavailable. A persistent `log(message)`
 //! callback accepts one bounded, single-line UTF-8 string and reports it
-//! through the run's emitter as an `Event::Lua` checkpoint.
+//! through the run's emitter as an `Event::Lua` checkpoint. A persistent
+//! `json` table decodes JSON text into Lua values (`json.decode` and
+//! `json.decode_lines`), holds `json.null`, the value every decoded JSON
+//! null becomes, and marks a table to encode as a JSON array
+//! (`json.array`).
 //!
 //! The chunk's top-level return value becomes the section's result (the finish
 //! case of the exit rule). The `var` table is read back afterward as JSON for
@@ -70,6 +74,7 @@ mod globals;
 mod handles;
 mod hardening;
 mod iteration;
+mod json;
 mod messages;
 mod models;
 mod models_loop;

@@ -294,6 +294,19 @@ mod tests {
     }
 
     #[test]
+    fn collection_members_accepts_a_json_null_member_as_json_null() {
+        let lua = mlua::Lua::new();
+        let table = lua.create_table().expect("table creates");
+        table.raw_set(1, lua.null()).expect("member installs");
+        let members =
+            collection_members(&lua, &Value::Table(table)).expect("a null member is data");
+        let items: Vec<serde_json::Value> = lua
+            .from_value(Value::Table(members))
+            .expect("the members are JSON data");
+        assert_eq!(items, vec![serde_json::Value::Null]);
+    }
+
+    #[test]
     fn collection_members_rejects_a_non_scalar_key() {
         let lua = mlua::Lua::new();
         let value = eval(&lua, "local t = {}; t[{}] = 'x'; return t");
