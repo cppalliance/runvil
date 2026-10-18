@@ -4,19 +4,19 @@ overview: Add an always-on Lua `json` global with strict `json.encode` (plus an 
 todos:
   - id: marker-storage
     content: Keep mlua's array marker on list data in var and frozen argv storage (sys.rs, argv.rs)
-    status: pending
+    status: completed
   - id: json-module
     content: "Add the json module (strict and debug encode, encode_lines, decode, decode_lines, json.array, json.null) and install it in the same step: install_engine_globals, RESERVED_NAMES, VISIBLE_GLOBALS, and the lib.rs and prelude.rs docs"
-    status: pending
+    status: completed
   - id: tests
     content: Add the unit, integration, and regression tests under Testing Plan
-    status: pending
+    status: completed
   - id: docs
     content: "Update every affected chapter in runvil-docs/src/language: 04, 05, 06, 07, 08, 09, 11, 12, 13, 14, 15, and 17, as listed under Execution Instructions"
-    status: pending
+    status: completed
   - id: verify
     content: Run the exit criteria under Testing Plan
-    status: pending
+    status: completed
 isProject: false
 ---
 
