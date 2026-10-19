@@ -38,12 +38,17 @@
 //! else its name, and its parameters are its `inputSchema`.
 //!
 //! A call sends `tools/call` with the tool's original name and waits up to
-//! five minutes. Text blocks and embedded text resources come back joined
-//! with blank lines. An image, audio, or binary resource becomes a
+//! five minutes. The model receives the result as flattened text, wrapped
+//! as untrusted: text blocks and embedded text resources joined with blank
+//! lines. An image, audio, or binary resource becomes a
 //! placeholder such as `[image omitted: image/png]`, a resource link
 //! becomes `[resource: <uri>]`, and a result with no blocks but with
-//! `structuredContent` gives that JSON. A result marked `isError` is a
-//! backend error with the server's text, and a transport failure or the
+//! `structuredContent` gives that JSON. A script's `tools.call` instead
+//! receives the `CallToolResult` wire form as a table (`content`,
+//! `structuredContent`, `isError`, `_meta`, with camelCase block fields).
+//! Its block text is raw, so a script wraps it with `untrusted(s)` before
+//! forwarding it to a model. A result marked `isError` still raises: it is
+//! a backend error with the server's text, and a transport failure or the
 //! deadline is a transport error. Dropping a call sends the server
 //! `notifications/cancelled` for its request.
 //!

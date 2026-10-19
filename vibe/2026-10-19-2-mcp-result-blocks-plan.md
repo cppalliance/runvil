@@ -209,7 +209,7 @@ Every step keeps these constraints: model-facing MCP text stays byte-identical, 
 
 <step-2>
 
-### Step 2: plugin-mcp attaches the serialized CallToolResult
+### Step 2: plugin-mcp attaches the serialized CallToolResult [completed]
 
 - Component: plugin-mcp result payload
 - Tests: `cargo nextest run --locked -p plugin-mcp --all-features`

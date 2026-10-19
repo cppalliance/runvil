@@ -54,7 +54,8 @@ pub(crate) fn output(
     }
 }
 
-/// Joins a result's text. An `is_error` result becomes a backend error that
+/// Joins a result's text and attaches the result's MCP wire form as the
+/// structured payload. An `is_error` result becomes a backend error that
 /// carries the server's text.
 pub(crate) fn render(result: &CallToolResult) -> Result<ToolOutput, ToolError> {
     let text = text_of(result);
@@ -66,7 +67,14 @@ pub(crate) fn render(result: &CallToolResult) -> Result<ToolOutput, ToolError> {
         };
         return Err(ToolError::message(message).with_kind(ToolErrorKind::Backend));
     }
-    Ok(ToolOutput::untrusted(text))
+    let payload = serde_json::to_value(result).map_err(|e| {
+        ToolError::new(
+            ToolErrorKind::Other,
+            format!("the MCP tool result could not be serialized: {e}"),
+        )
+        .with_source(e)
+    })?;
+    Ok(ToolOutput::untrusted(text).with_structured(payload))
 }
 
 /// The text blocks, embedded text resources, and placeholders, joined with

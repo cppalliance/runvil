@@ -113,6 +113,55 @@ fn an_is_error_false_result_is_a_success() {
 }
 
 #[test]
+fn a_success_carries_the_wire_form_of_the_result_as_its_payload() {
+    let json_text =
+        r#"{"expires": "2026-01-01T00:00:00Z", "urls": ["https://example.test/p0260r20.pdf"]}"#;
+    let wire = json!({ "content": [
+        { "type": "text", "text": json_text },
+        {
+            "type": "resource_link",
+            "uri": "https://example.test/p0260r20.pdf",
+            "name": "P0260R20",
+            "mimeType": "application/pdf"
+        }
+    ] });
+    let output = render(&result(wire.clone())).expect("a success renders");
+    assert_eq!(output.structured(), Some(&wire));
+    assert_eq!(
+        output.text(),
+        format!("{json_text}\n\n[resource: https://example.test/p0260r20.pdf]")
+    );
+    assert_eq!(output.trust(), OutputTrust::Untrusted);
+}
+
+#[test]
+fn the_payload_keeps_structured_content() {
+    let output = render(&result(json!({
+        "content": [{ "type": "text", "text": "shown" }],
+        "structuredContent": { "a": 1 }
+    })))
+    .expect("a success renders");
+    let payload = output.structured().expect("a payload is attached");
+    assert_eq!(payload["structuredContent"], json!({ "a": 1 }));
+}
+
+#[test]
+fn an_is_error_result_raises_its_text_exactly() {
+    let error = render(&result(json!({ "isError": true, "content": [
+        { "type": "text", "text": "boom" }
+    ] })))
+    .expect_err("an isError result fails");
+    assert_eq!(error.kind(), ToolErrorKind::Backend);
+    assert_eq!(error.to_string(), "boom");
+    let empty = render(&result(json!({ "isError": true, "content": [] }))).expect_err("fails");
+    assert_eq!(empty.kind(), ToolErrorKind::Backend);
+    assert_eq!(
+        empty.to_string(),
+        "the MCP tool reported an error and gave no text"
+    );
+}
+
+#[test]
 fn a_timeout_is_a_transport_error_naming_the_deadline() {
     let error = service_error(&ServiceError::Timeout {
         timeout: Duration::from_secs(300),
