@@ -30,6 +30,11 @@ use workshop_registry::Registry;
 
 use super::{host_context, read_mcp_servers, services, with_plugins};
 
+#[path = "tests-mcp-fixture.rs"]
+mod mcp_fixture;
+#[path = "tests-mcp-results.rs"]
+mod mcp_results;
+
 /// The runtime's key, built from the Plugin contract's name as any Host
 /// builds it.
 const RUNTIME: ServiceKey<tokio::runtime::Handle> = ServiceKey::new(TOKIO_RUNTIME);
@@ -78,11 +83,29 @@ impl InferenceBroker for OfflineBroker {
 /// Runs the prompt `source` as one conversation over `host`, then reads
 /// the conversation's state and the outcome of its one run.
 async fn run_prompt(host: &Arc<HostContext>, source: String) -> Option<RunOutcome> {
+    run_over(
+        host,
+        source,
+        Arc::new(OfflineBroker),
+        HostSnapshot::default(),
+    )
+    .await
+}
+
+/// Runs the prompt `source` as one conversation over `host`, sending its
+/// rounds to `broker` under the Host snapshot `snapshot`, then reads the
+/// conversation's state and the outcome of its one run.
+async fn run_over(
+    host: &Arc<HostContext>,
+    source: String,
+    broker: Arc<dyn InferenceBroker>,
+    snapshot: HostSnapshot,
+) -> Option<RunOutcome> {
     let recorder = Arc::new(MemoryRecorder::new());
     let conversation = Conversations::new().open("browses");
     let harness = Harness::new(
         conversation.recorder(recorder.clone()),
-        Arc::new(OfflineBroker),
+        broker,
         Arc::new(TokioTimer),
         Arc::clone(host),
         conversation.run_services(),
@@ -93,7 +116,7 @@ async fn run_prompt(host: &Arc<HostContext>, source: String) -> Option<RunOutcom
         args: String::new(),
         input_text: None,
         vfs: VfsRef::default(),
-        host: HostSnapshot::default(),
+        host: snapshot,
     };
     tokio::time::timeout(Duration::from_secs(10), conversation.run(harness, request))
         .await

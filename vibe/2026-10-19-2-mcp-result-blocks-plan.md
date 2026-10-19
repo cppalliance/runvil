@@ -286,7 +286,7 @@ Every step keeps these constraints: model-facing MCP text stays byte-identical, 
 
 <step-5>
 
-### Step 5: End-to-end MCP result table through a Harness run
+### Step 5: End-to-end MCP result table through a Harness run [completed]
 
 - Component: End-to-end verification
 - Tests: `cargo nextest run --locked -p workshop-server --all-features -E 'test(mcp)'`; `cargo nextest run --locked --workspace --exclude workshop --exclude workshop-server --exclude workshop-server-api --all-features`; `cargo nextest run --locked -p workshop -p workshop-server -p workshop-server-api`; `CARGO_BUILD_WARNINGS=deny cargo clippy --workspace --exclude workshop --exclude workshop-server --exclude workshop-server-api --all-targets --all-features`; `CARGO_BUILD_WARNINGS=deny cargo clippy -p workshop -p workshop-server -p workshop-server-api --all-targets`; `cargo check -p gateway --no-default-features`; `cargo fmt --all --check`; `RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps --all-features --exclude workshop --exclude workshop-server --exclude workshop-server-api`; `RUSTDOCFLAGS="-D warnings" cargo doc -p runvil --no-deps`; `cargo +<nightly from crates/build-xtask/src/api/toolchain.rs> xtask api --check` with `CARGO_BUILD_WARNINGS` unset; `cargo test -p build-xtask`; `node --test crates/workshop/ui/test/docs-claims.mjs`
