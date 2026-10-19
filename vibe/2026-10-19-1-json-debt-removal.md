@@ -4,16 +4,16 @@ overview: "Remove the debt that the json-global and plugin-rename commits (07e7e
 todos:
   - id: w1-argv-null
     content: "W1 (D1-2): write the three regression tests and confirm they fail at the endpoint; in argv.rs make nested JSON null freeze as json.null (top-level null stays nil); update args_surface.rs line 138"
-    status: pending
+    status: completed
   - id: w2-confirm
     content: "W2 step 1: write the budget, C-1 list, held-key, debug-mode, encode_lines, and var.x tests in tests/json/limits.rs and sys_and_var.rs; run at endpoint and record which fail (skip changes for any that pass)"
-    status: pending
+    status: completed
   - id: w2-budget
     content: "W2 steps 2-4: add walk_budget.rs and HeapCeiling app data in vm.rs; move Encoder and keys.rs to the budget with lazy value reads, held-key cap, too_large refusal, HashSet in resolve; add check_value before from_value in sys.rs line 92"
-    status: pending
+    status: completed
   - id: exit-checks
     content: Run the exit checks from AGENTS.md (nextest, clippy, fmt, build-xtask, doc, xtask api --check) and commit
-    status: pending
+    status: completed
 isProject: false
 ---
 
