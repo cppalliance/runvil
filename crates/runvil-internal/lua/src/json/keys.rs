@@ -37,41 +37,41 @@ impl Rule {
     }
 }
 
-/// The shape a table's sorted `entries` give it, checking the rules in
-/// order: a marked list's key types, then an unmarked table's key types,
-/// then a mix of list items and named keys, then a missing list item.
-pub(super) fn shape(entries: &[(Value, Value)], marked: bool) -> Shape {
+/// The shape a table's sorted `keys` give it, checking the rules in order:
+/// a marked list's key types, then an unmarked table's key types, then a
+/// mix of list items and named keys, then a missing list item.
+pub(super) fn shape(keys: &[Value], marked: bool) -> Shape {
     let is_item = |key: &Value| matches!(key, Value::Integer(_));
-    let items = entries.iter().filter(|(key, _)| is_item(key)).count();
+    let items = keys.iter().filter(|key| is_item(key)).count();
     if marked {
-        if let Some((key, _)) = entries.iter().find(|(key, _)| !is_item(key)) {
+        if let Some(key) = keys.iter().find(|key| !is_item(key)) {
             return Shape::Broken(Rule::MarkedKey(key.type_name()));
         }
     } else {
-        if let Some((key, _)) = entries
+        if let Some(key) = keys
             .iter()
-            .find(|(key, _)| !matches!(key, Value::Integer(_) | Value::String(_)))
+            .find(|key| !matches!(key, Value::Integer(_) | Value::String(_)))
         {
             return Shape::Broken(Rule::KeyType(key.type_name()));
         }
         if items == 0 {
             return Shape::Object;
         }
-        if items < entries.len() {
+        if items < keys.len() {
             return Shape::Broken(Rule::Mixed);
         }
     }
-    match missing_item(entries, items) {
+    match missing_item(keys, items) {
         Some(item) => Shape::Broken(Rule::Missing(item)),
         None => Shape::List,
     }
 }
 
-/// The first of 1 to `count` absent from the integer keys of `entries`,
-/// which are in ascending order.
-fn missing_item(entries: &[(Value, Value)], count: usize) -> Option<i64> {
+/// The first of 1 to `count` absent from the integer `keys`, which are in
+/// ascending order.
+fn missing_item(keys: &[Value], count: usize) -> Option<i64> {
     let mut expected: i64 = 1;
-    for (key, _) in entries {
+    for key in keys {
         let Value::Integer(key) = key else {
             continue;
         };
@@ -85,19 +85,53 @@ fn missing_item(entries: &[(Value, Value)], count: usize) -> Option<i64> {
     (expected <= count).then_some(expected)
 }
 
-/// A table's entries in visiting order: booleans, then numbers by value,
-/// then strings bytewise, then every other key ranked by type name, in no
-/// fixed order within one type.
-pub(super) fn entries(table: &Table) -> mlua::Result<Vec<(Value, Value)>> {
-    let mut entries = table
-        .pairs::<Value, Value>()
-        .map(|pair| pair.map(|(key, value)| (position(&key), key, value)))
-        .collect::<mlua::Result<Vec<_>>>()?;
-    entries.sort_by(|left, right| compare(&left.0, &right.0));
-    Ok(entries
-        .into_iter()
-        .map(|(_, key, value)| (key, value))
-        .collect())
+/// A table's keys in visiting order, and how many of them hold a Lua
+/// reference.
+pub(super) struct Entries {
+    pub(super) keys: Vec<Value>,
+    pub(super) held: usize,
+}
+
+/// A table's keys in visiting order: booleans, then numbers by value, then
+/// strings bytewise, then every other key ranked by type name, in no fixed
+/// order within one type. Each value is dropped as soon as its pair is
+/// read, which frees the reference slot it holds, and a caller reads a
+/// value with `raw_get` when its turn comes. Gives `None` as soon as more
+/// than `room` keys hold references, so the key vector never grows past the
+/// cap.
+pub(super) fn entries(table: &Table, room: usize) -> mlua::Result<Option<Entries>> {
+    let mut found = Vec::new();
+    let mut held = 0;
+    for pair in table.pairs::<Value, Value>() {
+        let (key, _) = pair?;
+        if holds_reference(&key) {
+            held += 1;
+            if held > room {
+                return Ok(None);
+            }
+        }
+        found.push((position(&key), key));
+    }
+    found.sort_by(|left, right| compare(&left.0, &right.0));
+    Ok(Some(Entries {
+        keys: found.into_iter().map(|(_, key)| key).collect(),
+        held,
+    }))
+}
+
+/// Whether `key` takes a slot on the auxiliary reference stack while it is
+/// alive: integers, numbers, booleans, and light userdata are copied by
+/// value.
+fn holds_reference(key: &Value) -> bool {
+    matches!(
+        key,
+        Value::String(_)
+            | Value::Table(_)
+            | Value::Function(_)
+            | Value::Thread(_)
+            | Value::UserData(_)
+            | Value::Other(_)
+    )
 }
 
 /// A key's place in visiting order.

@@ -9,7 +9,9 @@
 //! becomes a placeholder string, so any value encodes, except a value too
 //! large to walk: the walk counts every value it visits, shared tables and
 //! repeated strings once per occurrence, and refuses past a budget sized
-//! from the Lua heap.
+//! from the Lua heap. It reads a table's keys first and each value when its
+//! turn comes, and refuses a path that holds too many keys as Lua
+//! references at once.
 
 use std::collections::HashSet;
 use std::ffi::c_void;
@@ -17,10 +19,10 @@ use std::ffi::c_void;
 use mlua::{Lua, LuaSerdeExt, LuaString, Table, Value};
 use serde_json::{Map, Number, Value as Json};
 
-use super::keys::{Rule, Shape, entries, shape};
+use super::keys::{Entries, Rule, Shape, entries, shape};
 use super::refusal;
 use crate::proxy::{key_path, key_text};
-use crate::walk_budget::{TooLarge, WalkBudget};
+use crate::walk_budget::{HELD_KEY_LIMIT, TooLarge, WalkBudget};
 
 /// The most tables deep a value may nest, the top-level table being level
 /// 1: the depth `json.decode` accepts.
@@ -71,14 +73,18 @@ fn debug_option(options: &Value, function: &str) -> mlua::Result<bool> {
             )));
         }
     };
+    let Some(options) = entries(table, HELD_KEY_LIMIT)? else {
+        return Err(too_large(function));
+    };
     let mut debug = false;
-    for (key, value) in entries(table)? {
+    for key in options.keys {
         if !matches!(&key, Value::String(name) if name == "debug") {
             return Err(refusal(format!(
                 "{function}: unknown option {}",
                 key_text(&key)
             )));
         }
+        let value: Value = table.raw_get(key)?;
         let Value::Boolean(flag) = value else {
             return Err(refusal(format!(
                 "{function}: option debug must be a boolean, got {}",
@@ -88,6 +94,12 @@ fn debug_option(options: &Value, function: &str) -> mlua::Result<bool> {
         debug = flag;
     }
     Ok(debug)
+}
+
+/// The refusal for a value too large to walk: past the value budget, the
+/// byte budget, or the held-key limit. It has no path.
+fn too_large(function: &str) -> mlua::Error {
+    refusal(format!("{function}: value is too large to encode"))
 }
 
 /// Why a value cannot be encoded, before the function name and path are
@@ -131,8 +143,9 @@ enum Resolved {
 }
 
 /// One walk over a value: the mode, the path of keys to the current value
-/// for error messages, the tables on that path for cycle detection, and
-/// what is left of the budget for values and text.
+/// for error messages, the tables on that path for cycle detection, what
+/// is left of the budget for values and text, and how many keys the tables
+/// on the path hold as Lua references.
 struct Encoder {
     function: &'static str,
     debug: bool,
@@ -140,6 +153,7 @@ struct Encoder {
     keys: Vec<Value>,
     tables: Vec<*const c_void>,
     budget: WalkBudget,
+    held: usize,
 }
 
 impl Encoder {
@@ -151,14 +165,15 @@ impl Encoder {
             keys: Vec::new(),
             tables: Vec::new(),
             budget: WalkBudget::for_vm(lua),
+            held: 0,
         }
     }
 
-    /// The refusal for a walk past its budget. It has no path, and it never
-    /// becomes a placeholder: one placeholder per remaining value would not
-    /// bound the work.
+    /// The refusal for a walk past its budget or the held-key limit. It has
+    /// no path, and it never becomes a placeholder: one placeholder per
+    /// remaining value would not bound the work.
     fn too_large(&self) -> mlua::Error {
-        refusal(format!("{}: value is too large to encode", self.function))
+        too_large(self.function)
     }
 
     /// Spends one value of the budget.
@@ -247,17 +262,26 @@ impl Encoder {
         if level > DEPTH_LIMIT {
             return self.fail(&Failure::TooDeep, "[too deep]".to_owned());
         }
-        let entries = entries(&data)?;
-        let shape = shape(&entries, self.is_marked(&data));
+        let Entries { keys, held } = self.keys_of(&data)?;
+        let shape = shape(&keys, self.is_marked(&data));
         self.tables.push(pointer);
+        self.held += held;
         let encoded = match shape {
-            Shape::List => self.list(entries, level).map(Json::Array),
-            Shape::Object => self.object(entries, level),
-            Shape::Broken(_) if self.debug => self.fallback(entries, level),
+            Shape::List => self.list(&data, keys, level).map(Json::Array),
+            Shape::Object => self.object(&data, keys, level),
+            Shape::Broken(_) if self.debug => self.fallback(&data, keys, level),
             Shape::Broken(rule) => Err(self.error(&Failure::Keys(rule))),
         };
+        self.held -= held;
         self.tables.pop();
         encoded
+    }
+
+    /// The keys of `data` in visiting order. A table whose reference-holding
+    /// keys, added to those the tables on the path already hold, would pass
+    /// `HELD_KEY_LIMIT` is refused, in debug mode too.
+    fn keys_of(&self, data: &Table) -> mlua::Result<Entries> {
+        entries(data, HELD_KEY_LIMIT.saturating_sub(self.held))?.ok_or_else(|| self.too_large())
     }
 
     fn is_marked(&self, table: &Table) -> bool {
@@ -266,10 +290,13 @@ impl Encoder {
             .is_some_and(|metatable| metatable == self.marker)
     }
 
-    /// Encodes the values of a list's entries, keys 1 to n in order.
-    fn list(&mut self, entries: Vec<(Value, Value)>, level: usize) -> mlua::Result<Vec<Json>> {
-        let mut items = Vec::with_capacity(entries.len());
-        for (key, value) in entries {
+    /// Encodes the values of a list's `keys`, 1 to n in order. Each value is
+    /// read from `data` when its turn comes, so only one holds a reference
+    /// at a time.
+    fn list(&mut self, data: &Table, keys: Vec<Value>, level: usize) -> mlua::Result<Vec<Json>> {
+        let mut items = Vec::with_capacity(keys.len());
+        for key in keys {
+            let value: Value = data.raw_get(key.clone())?;
             self.keys.push(key);
             let item = self.value(&value, level + 1);
             self.keys.pop();
@@ -279,10 +306,10 @@ impl Encoder {
     }
 
     /// Encodes an object whose keys are all strings, checking every key's
-    /// text before encoding any value.
-    fn object(&mut self, entries: Vec<(Value, Value)>, level: usize) -> mlua::Result<Json> {
-        let mut names = Vec::with_capacity(entries.len());
-        for (key, _) in &entries {
+    /// text before reading or encoding any value.
+    fn object(&mut self, data: &Table, keys: Vec<Value>, level: usize) -> mlua::Result<Json> {
+        let mut names = Vec::with_capacity(keys.len());
+        for key in &keys {
             let Value::String(name) = key else {
                 continue;
             };
@@ -297,7 +324,8 @@ impl Encoder {
             }
         }
         let mut object = Map::new();
-        for (name, (key, value)) in names.into_iter().zip(entries) {
+        for (name, key) in names.into_iter().zip(keys) {
+            let value: Value = data.raw_get(key.clone())?;
             self.keys.push(key);
             let encoded = self.value(&value, level + 1);
             self.keys.pop();
@@ -310,9 +338,9 @@ impl Encoder {
     /// boolean, number, and string key as text, later keys in visiting
     /// order replacing earlier ones with the same text, and every other
     /// key left out.
-    fn fallback(&mut self, entries: Vec<(Value, Value)>, level: usize) -> mlua::Result<Json> {
+    fn fallback(&mut self, data: &Table, keys: Vec<Value>, level: usize) -> mlua::Result<Json> {
         let mut object = Map::new();
-        for (key, value) in entries {
+        for key in keys {
             let name = match &key {
                 Value::Boolean(flag) => flag.to_string(),
                 Value::Integer(integer) => integer.to_string(),
@@ -322,6 +350,7 @@ impl Encoder {
                 _ => continue,
             };
             self.charge_bytes(name.len())?;
+            let value: Value = data.raw_get(key)?;
             let encoded = self.value(&value, level + 1)?;
             object.insert(name, encoded);
         }
@@ -336,23 +365,23 @@ impl Encoder {
             Resolved::Unreadable(label) => return Err(self.error(&Failure::Unreadable(label))),
             Resolved::Loop => return Err(self.error(&Failure::Cycle)),
         };
-        let entries = entries(&data)?;
+        // Only integer keys reach the list below, and they hold no
+        // reference, so `held` has nothing to add for this table.
+        let keys = self.keys_of(&data)?.keys;
         let marked = self.is_marked(&data);
-        let has_items = entries
-            .iter()
-            .any(|(key, _)| matches!(key, Value::Integer(_)));
-        if let (false, false, Some((key, _))) = (marked, has_items, entries.first()) {
+        let has_items = keys.iter().any(|key| matches!(key, Value::Integer(_)));
+        if let (false, false, Some(key)) = (marked, has_items, keys.first()) {
             return Err(refusal(format!(
                 "{} expects a list, got a table with a {} key",
                 self.function,
                 key.type_name()
             )));
         }
-        if let Shape::Broken(rule) = shape(&entries, marked) {
+        if let Shape::Broken(rule) = shape(&keys, marked) {
             return Err(self.error(&Failure::Keys(rule)));
         }
         self.tables.push(data.to_pointer());
-        let items = self.list(entries, 0);
+        let items = self.list(&data, keys, 0);
         self.tables.pop();
         items
     }

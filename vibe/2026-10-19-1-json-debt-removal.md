@@ -225,7 +225,7 @@ Acceptance: the four new tests pass, and these guards keep passing: `a_table_tha
 
 <step-3>
 
-### Step 3: Cap held keys and read values lazily in the encoder
+### Step 3: Cap held keys and read values lazily in the encoder [completed]
 
 - Component: Bounded conversion
 - Tests:
