@@ -189,9 +189,13 @@ end
 
 -- Suspending dispatch of a tool. The first argument is a tool id, a local
 -- tool's alias, or a tool object; the polymorphism decodes once, in the
--- protocol parse. The driver resumes a bound tool's result by
--- the binding's declared output kind: a plain binding's text as a string,
--- a structured binding's JSON output as a table.
+-- protocol parse. A tool whose output carries a structured payload returns
+-- it as a table, converted as `json.decode` converts JSON; its text is raw
+-- untrusted data, so a script forwarding it to a model must wrap it with
+-- `untrusted(s)`, and a payload over 8,388,608 bytes serialized raises.
+-- Any other bound tool's result resumes by the binding's declared output
+-- kind: a plain binding's text as a string, a structured binding's JSON
+-- output as a table.
 local function tools_call(alias_or_tool, args)
   return dispatch_tool({ op = "tool_call", alias = alias_or_tool, args = args })
 end

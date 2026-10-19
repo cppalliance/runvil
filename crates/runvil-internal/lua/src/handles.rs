@@ -14,6 +14,13 @@ use serde_json::Value as Json;
 /// the tool implementation, so the caller's tool catalog decides how scripts
 /// receive the output. The model tool loop never consults the kind (its
 /// results are always added to the conversation as text).
+///
+/// An output that carries a structured payload overrides the kind: the
+/// script receives the payload as a table converted as `json.decode`
+/// converts JSON, its text raw untrusted data a script must wrap with
+/// `untrusted(s)` before forwarding it to a model, and a payload over
+/// 8,388,608 bytes serialized raises. Every other output resumes by the
+/// kind.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum ToolOutputKind {
     /// The output text resumes as a Lua string.

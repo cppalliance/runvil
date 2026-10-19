@@ -38,6 +38,18 @@ impl Tool {
             handler: Box::new(move |_| Ok(ToolOutput::untrusted(text.clone()))),
         }
     }
+
+    /// The tool `id`, which answers every call with `text` as untrusted
+    /// output carrying `payload` as its structured payload.
+    pub(super) fn structured(id: &'static str, text: &str, payload: Value) -> Self {
+        let text = text.to_owned();
+        Self {
+            id,
+            handler: Box::new(move |_| {
+                Ok(ToolOutput::untrusted(text.clone()).with_structured(payload.clone()))
+            }),
+        }
+    }
 }
 
 /// The prompt `greeter`: fixed frontmatter, then the `front` lines, then

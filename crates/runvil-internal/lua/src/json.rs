@@ -11,6 +11,7 @@
 //! of the `json` table, so reassigning a field cannot break them.
 
 mod decode;
+pub(crate) use decode::INPUT_LIMIT;
 mod encode;
 mod keys;
 

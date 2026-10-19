@@ -231,7 +231,7 @@ Every step keeps these constraints: model-facing MCP text stays byte-identical, 
 
 <step-3>
 
-### Step 3: Script-issued calls resume with the payload as a Lua table
+### Step 3: Script-issued calls resume with the payload as a Lua table [completed]
 
 - Component: Engine payload handling
 - Tests: `cargo nextest run --locked -p runvil-lua -p runvil-engine -p runvil --all-features`; `node --test crates/workshop/ui/test/docs-claims.mjs`

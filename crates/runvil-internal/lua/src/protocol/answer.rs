@@ -41,17 +41,20 @@ pub enum VfsOutcome {
     Bool(bool),
 }
 
-/// One dispatched `tools.call`'s successful output, classified by the
-/// binding's declared [`ToolOutputKind`] so the envelope resumes the right
-/// Lua shape: a plain binding's text resumes as a Lua string, a structured
-/// binding's parsed JSON resumes as a Lua table through the serde boundary.
-/// The Engine performs the one conversion.
+/// One dispatched `tools.call`'s successful output, classified so the
+/// envelope resumes the right Lua shape: an output's structured payload
+/// resumes as a Lua table; otherwise the binding's declared
+/// [`ToolOutputKind`] decides - a plain binding's text resumes as a Lua
+/// string, a structured binding's parsed JSON resumes as a Lua table. Both
+/// tables cross the serde boundary as `json.decode` converts JSON. The
+/// Engine performs the one conversion.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ToolCallOutcome {
     /// A plain binding's output text, resumed as a Lua string - every
     /// existing tool, byte-identical to the tool loop's echo.
     Plain(String),
-    /// A structured binding's parsed JSON output, resumed as a Lua table.
+    /// An output's structured payload, or a structured binding's parsed
+    /// JSON output, resumed as a Lua table.
     Structured(serde_json::Value),
     /// A local Lua tool's call, resumed as `(true, nil, handler, args)`:
     /// the handler registered under `alias` and a fresh table converted
@@ -66,18 +69,43 @@ pub enum ToolCallOutcome {
 }
 
 impl ToolCallOutcome {
-    /// Classifies one dispatched tool's output text by the binding's
-    /// declared output kind.
+    /// Classifies one dispatched tool's output: its structured payload
+    /// when it carried one, else its text by the binding's declared output
+    /// kind.
     ///
-    /// Plain output passes through untouched. Structured output must parse
-    /// as JSON - the untrusted nonce wrap is a string mechanism, so a
-    /// structured binding whose output was wrapped fails here too, keeping
-    /// structured output effectively restricted to trusted tools.
+    /// A payload takes precedence over either kind and resumes unchanged.
+    /// Without one, plain output passes through untouched, and structured
+    /// output must parse as JSON - the untrusted nonce wrap is a string
+    /// mechanism, so a structured binding whose output was wrapped fails
+    /// here too, keeping text-borne structured output effectively
+    /// restricted to trusted tools.
     ///
     /// # Errors
-    /// Returns [`Error::Tool`] when a structured binding's output is not
-    /// valid JSON, retaining the parse failure as the cause.
-    pub fn from_dispatch(kind: ToolOutputKind, alias: &str, text: String) -> Result<Self> {
+    /// Returns [`Error::Tool`] when the payload serializes to more than
+    /// 8,388,608 bytes, or when a structured binding's output without a
+    /// payload is not valid JSON, retaining the parse failure as the cause.
+    pub fn from_dispatch(
+        kind: ToolOutputKind,
+        alias: &str,
+        text: String,
+        structured: Option<serde_json::Value>,
+    ) -> Result<Self> {
+        if let Some(value) = structured {
+            let limit = crate::json::INPUT_LIMIT;
+            // `Display` writes the same compact bytes as `serde_json::to_vec`,
+            // without its error path, which a `Value` never takes.
+            let actual = value.to_string().len();
+            if actual > limit {
+                let message = format!(
+                    "tool {alias:?} returned a structured result of {actual} bytes; the limit is {limit} bytes"
+                );
+                return Err(Error::Tool {
+                    cause: message.clone().into(),
+                    message,
+                });
+            }
+            return Ok(ToolCallOutcome::Structured(value));
+        }
         match kind {
             ToolOutputKind::Plain => Ok(ToolCallOutcome::Plain(text)),
             ToolOutputKind::Structured => match serde_json::from_str(&text) {

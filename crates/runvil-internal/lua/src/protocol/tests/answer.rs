@@ -249,7 +249,7 @@ fn from_dispatch_classifies_by_the_declared_output_kind() {
     use crate::ToolOutputKind;
 
     // Plain output passes through untouched.
-    match ToolCallOutcome::from_dispatch(ToolOutputKind::Plain, "echo", "raw".to_owned()) {
+    match ToolCallOutcome::from_dispatch(ToolOutputKind::Plain, "echo", "raw".to_owned(), None) {
         Ok(ToolCallOutcome::Plain(text)) => assert_eq!(text, "raw"),
         other => panic!("expected the plain passthrough, got {other:?}"),
     }
@@ -258,13 +258,18 @@ fn from_dispatch_classifies_by_the_declared_output_kind() {
         ToolOutputKind::Structured,
         "form",
         "{\"text\":\"hi\"}".to_owned(),
+        None,
     ) {
         Ok(ToolCallOutcome::Structured(json)) => assert_eq!(json, json!({ "text": "hi" })),
         other => panic!("expected the structured parse, got {other:?}"),
     }
     // Invalid JSON from a structured binding is the tool's error.
-    match ToolCallOutcome::from_dispatch(ToolOutputKind::Structured, "form", "not json".to_owned())
-    {
+    match ToolCallOutcome::from_dispatch(
+        ToolOutputKind::Structured,
+        "form",
+        "not json".to_owned(),
+        None,
+    ) {
         Err(Error::Tool { message, cause }) => {
             let detail = cause
                 .downcast_ref::<serde_json::Error>()
@@ -276,5 +281,77 @@ fn from_dispatch_classifies_by_the_declared_output_kind() {
             );
         }
         other => panic!("expected the typed tool error, got {other:?}"),
+    }
+}
+
+#[test]
+fn a_structured_payload_takes_precedence_over_either_declared_output_kind() {
+    use crate::ToolOutputKind;
+
+    let payload = json!({ "content": [{ "type": "text", "text": "hi" }], "isError": false });
+    for kind in [ToolOutputKind::Plain, ToolOutputKind::Structured] {
+        match ToolCallOutcome::from_dispatch(
+            kind,
+            "mcp",
+            "not json".to_owned(),
+            Some(payload.clone()),
+        ) {
+            Ok(ToolCallOutcome::Structured(json)) => {
+                assert_eq!(
+                    json, payload,
+                    "the payload resumes unchanged under {kind:?}"
+                );
+            }
+            other => panic!("expected the payload under {kind:?}, got {other:?}"),
+        }
+    }
+}
+
+#[test]
+fn a_structured_payload_resumes_with_json_decode_nulls_and_list_metatables() {
+    use crate::ToolOutputKind;
+
+    let lua = Lua::new();
+    crate::json::install(&lua).expect("the json global installs");
+    let payload = json!({ "a": null, "list": [1, 2], "empty": [] });
+    let outcome =
+        ToolCallOutcome::from_dispatch(ToolOutputKind::Plain, "mcp", String::new(), Some(payload))
+            .expect("a small payload resumes");
+    let (envelope, retained) = Answer::<Error>::ToolCallResult(Ok(outcome))
+        .into_envelope(&lua)
+        .expect("the envelope renders");
+    assert!(retained.is_none());
+    let (ok, result) = echo_through_lua(&lua, envelope);
+    assert!(ok);
+    let (null, list, empty, marked): (bool, bool, bool, bool) = lua
+        .load(
+            "local r = ...
+            local list = getmetatable(json.decode('[]'))
+            return r.a == json.null, getmetatable(r.list) == list,
+                getmetatable(r.empty) == list, list ~= nil",
+        )
+        .call(result)
+        .expect("the resumed table reads back through Lua");
+    assert!(null, "a JSON null resumes as json.null");
+    assert!(
+        list,
+        "a non-empty array carries json.decode's list metatable"
+    );
+    assert!(empty, "an empty array carries json.decode's list metatable");
+    assert!(marked, "json.decode marks lists with a metatable");
+}
+
+#[test]
+fn a_structured_payload_over_the_json_limit_is_the_tools_error() {
+    use crate::ToolOutputKind;
+
+    let payload = json!("x".repeat(8_388_608));
+    match ToolCallOutcome::from_dispatch(ToolOutputKind::Plain, "mcp", String::new(), Some(payload))
+    {
+        Err(Error::Tool { message, .. }) => assert_eq!(
+            message,
+            "tool \"mcp\" returned a structured result of 8388610 bytes; the limit is 8388608 bytes"
+        ),
+        other => panic!("expected the size error, got {other:?}"),
     }
 }

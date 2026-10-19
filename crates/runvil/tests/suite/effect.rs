@@ -3,7 +3,7 @@
 use runvil::effect::{AnswerRecord, EffectRecord, ToolCallOrigin, ToolCaller};
 use serde_json::{Value, json};
 
-use super::support::{Scenario, TestResult, prompt, shout, text};
+use super::support::{Scenario, TestResult, Tool, calls, prompt, shout, text};
 
 const GREET: &str = "
     local ask = tasks.spawn('## Ask')
@@ -105,5 +105,44 @@ fn each_effect_and_its_answer_log_as_one_json_line_that_parses_back() -> TestRes
         json!({ "Vfs": { "op": { "Write": { "path": "note.md", "contents": "hello" } } } })
     );
     assert_eq!(write["answer"], json!({ "Vfs": { "Ok": "Unit" } }));
+    Ok(())
+}
+
+fn rich() -> Tool {
+    Tool::structured(
+        "example/text/rich",
+        "rich text",
+        json!({ "content": [{ "type": "text", "text": "rich text" }], "isError": false }),
+    )
+}
+
+#[test]
+fn a_model_issued_call_resumes_the_wrapped_text_and_ignores_the_payload() -> TestResult {
+    let ask = "
+        tools.offer({ 'example/text/rich' })
+        models.use('writer')
+        local msgs = messages.new()
+        msgs:user('go')
+        models.loop(msgs)
+        local content = msgs[3].content
+        return msgs[3].role .. ' ' .. type(content) .. ' '
+            .. tostring(content == untrusted('rich text'))
+    ";
+    let source = prompt("models: { writer: {} }", &[("Ask", ask)]);
+    let replies = [calls("example_text_rich", json!({}))?, text("done")];
+    let trace = Scenario::tool(rich(), replies).run(&source)?;
+    assert_eq!(trace.text()?, "tool string true");
+    Ok(())
+}
+
+#[test]
+fn a_script_issued_call_resumes_the_payload_as_a_table() -> TestResult {
+    let call = "
+        local result = tools.call('example/text/rich', {})
+        return type(result) .. ' ' .. result.content[1].text .. ' '
+            .. tostring(result.isError)
+    ";
+    let trace = Scenario::tool(rich(), []).run(&prompt("", &[("Call", call)]))?;
+    assert_eq!(trace.text()?, "table rich text false");
     Ok(())
 }

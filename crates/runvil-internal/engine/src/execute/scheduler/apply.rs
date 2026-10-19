@@ -183,9 +183,10 @@ impl Scheduler {
     /// body: the succeeded/failed event, the trust rule, and the
     /// `ToolResult` report - under the model's call id when the model
     /// issued the call (a tool's own failure then resumes as untrusted
-    /// failure text), else as a script call classified by the binding's
-    /// declared output kind. The counts were taken at dispatch, so the
-    /// body is handed `None` for them.
+    /// failure text, and any structured payload is ignored), else as a
+    /// script call resuming the output's structured payload or, without
+    /// one, classified by the binding's declared output kind. The counts
+    /// were taken at dispatch, so the body is handed `None` for them.
     fn accept_tool_call(
         &self,
         chain: ChainIndex,
@@ -228,12 +229,16 @@ impl Scheduler {
                 section,
                 Some(call.report),
             ) {
-                Ok(outcome) => ToolCallOutcome::from_dispatch(
-                    call.binding.output_kind(),
-                    call.binding.alias(),
-                    outcome.into_content(),
-                )
-                .map_err(Error::from),
+                Ok(outcome) => {
+                    let (content, structured) = outcome.into_parts();
+                    ToolCallOutcome::from_dispatch(
+                        call.binding.output_kind(),
+                        call.binding.alias(),
+                        content,
+                        structured,
+                    )
+                    .map_err(Error::from)
+                }
                 Err(error) => Err(Error::from(error)),
             },
         }

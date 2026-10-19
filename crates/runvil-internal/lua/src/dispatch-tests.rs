@@ -168,3 +168,46 @@ fn a_model_issued_dispatch_reports_its_result_under_the_call_id() {
         "the model's result names the tool its alias is bound to"
     );
 }
+
+#[test]
+fn a_structured_payload_leaves_the_wrapped_content_and_the_tool_result_unchanged() {
+    let echo = binding("echo", &echo_tool());
+    let nonce = test_nonce();
+    let payload = serde_json::json!({ "content": [{ "type": "text", "text": "hi" }] });
+    let prepare = |output: ToolOutput| {
+        let recorder = Recorder::default();
+        let outcome = prepare_dispatch(
+            &echo,
+            Ok(output),
+            None,
+            &nonce,
+            recorder.emitter(),
+            TEST_SECTION,
+            Some(ScriptReport { turn: 1 }),
+        )
+        .expect("a canned output prepares");
+        (outcome, recorder.tool_results())
+    };
+    let (plain, plain_results) = prepare(ToolOutput::untrusted("hi"));
+    let (rich, rich_results) =
+        prepare(ToolOutput::untrusted("hi").with_structured(payload.clone()));
+    assert_eq!(plain.structured(), None);
+    assert_eq!(
+        rich.content(),
+        plain.content(),
+        "the payload does not change the wrapped content"
+    );
+    assert_eq!(rich.content(), nonce.wrap("hi"));
+    assert_eq!(rich.trust(), OutputTrust::Untrusted);
+    assert_eq!(
+        rich.structured(),
+        Some(&payload),
+        "the payload passes through unchanged"
+    );
+    assert_eq!(
+        rich_results, plain_results,
+        "the ToolResult event carries the wrapped text and no payload"
+    );
+    assert_eq!(rich_results[0].3, nonce.wrap("hi"));
+    assert_eq!(rich.into_parts(), (nonce.wrap("hi"), Some(payload)));
+}

@@ -176,6 +176,13 @@ fn resolve_entries(call: &str, set: &ToolSet, entries: Vec<String>) -> mlua::Res
 /// table as a Lua function, because yield cannot cross the Rust callback
 /// boundary.
 ///
+/// `tools.call` returns a tool's structured payload, when its output
+/// carries one, as a table converted as `json.decode` converts JSON. The
+/// payload's text is raw untrusted data, so a script forwarding it to a
+/// model must wrap it with `untrusted(s)`; a payload over 8,388,608 bytes
+/// serialized raises. Any other tool returns a string (Plain) or parsed
+/// JSON (Structured), by its binding's [`ToolOutputKind`](crate::ToolOutputKind).
+///
 /// # Errors
 /// Returns [`Error::LuaRuntime`] if a Lua table or callback cannot be created or
 /// installed.

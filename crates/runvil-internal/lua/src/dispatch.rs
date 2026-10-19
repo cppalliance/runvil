@@ -52,14 +52,16 @@ pub struct ModelReport {
 }
 
 /// The resolved outcome of one dispatched tool call: the final content -
-/// nonce-wrapped when untrusted - beside its trust marking. A model
-/// tool-loop dispatch reports the pair through the `ToolResult` event
-/// itself; a script-initiated dispatch reads only the content, its report
+/// nonce-wrapped when untrusted - beside its trust marking and the tool's
+/// structured payload, when its output carried one. A model tool-loop
+/// dispatch reports the pair through the `ToolResult` event itself; a
+/// script-initiated dispatch reads the content and the payload, its report
 /// already fired inside [`prepare_dispatch`].
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ToolDispatch {
     content: String,
     trust: OutputTrust,
+    structured: Option<serde_json::Value>,
 }
 
 impl ToolDispatch {
@@ -78,10 +80,24 @@ impl ToolDispatch {
         self.trust
     }
 
+    /// The tool output's structured payload, unwrapped and unchanged;
+    /// `None` when the output carried none. Only a script-issued call
+    /// resumes with it; the content stays what a model reads.
+    #[must_use]
+    pub fn structured(&self) -> Option<&serde_json::Value> {
+        self.structured.as_ref()
+    }
+
     /// Dissolves the outcome into its content.
     #[must_use]
     pub fn into_content(self) -> String {
         self.content
+    }
+
+    /// Dissolves the outcome into its content and structured payload.
+    #[must_use]
+    pub fn into_parts(self) -> (String, Option<serde_json::Value>) {
+        (self.content, self.structured)
     }
 }
 
@@ -151,7 +167,11 @@ pub fn prepare_dispatch(
             trust,
         );
     }
-    Ok(ToolDispatch { content, trust })
+    Ok(ToolDispatch {
+        content,
+        trust,
+        structured: output.structured().cloned(),
+    })
 }
 
 /// Applies the model-issued dispatch rules to one bound tool call's answer:
@@ -183,6 +203,7 @@ pub fn prepare_model_dispatch(
             Err(Error::Tool { message, .. }) => ToolDispatch {
                 content: nonce.wrap(&message),
                 trust: OutputTrust::Untrusted,
+                structured: None,
             },
             Err(error) => return Err(error),
         };
