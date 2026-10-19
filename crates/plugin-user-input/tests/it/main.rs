@@ -1,4 +1,4 @@
-//! Integration tests for `plugin-user-input`: the package's label, the ask
+//! Integration tests for `plugin-user-input`: the `PluginInfo`, the ask
 //! tool `construct` names under the installed name, the answers a call
 //! returns from the run's broker, and the prelude.
 #![expect(

@@ -21,7 +21,7 @@ use harness_runner::environment::HostSnapshot;
 use harness_runner::files::OutputError;
 use harness_runner::recorder::{MemoryRecorder, Record, RecordKind, RunOutcome};
 use harness_runner::{
-    Harness, HarnessError, HostContext, PackageRegistry, RunControl, RunReport, RunRequest,
+    Harness, HarnessError, HostContext, PluginRegistry, RunControl, RunReport, RunRequest,
 };
 use runvil::vfs::VfsRef;
 use runvil_plugin::HostServices;
@@ -69,10 +69,7 @@ fn plain_harness(recorder: &Arc<MemoryRecorder>, broker: ScriptedBroker) -> Harn
         recorder.clone(),
         Arc::new(broker),
         Arc::new(PendingTimer::default()),
-        Arc::new(HostContext::new(
-            PackageRegistry::new(),
-            HostServices::new(),
-        )),
+        Arc::new(HostContext::new(PluginRegistry::new(), HostServices::new())),
         HostServices::new(),
     )
 }

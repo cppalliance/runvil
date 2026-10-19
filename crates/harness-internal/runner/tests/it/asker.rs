@@ -6,13 +6,14 @@
 use std::sync::Arc;
 
 use runvil_plugin::{
-    HostServices, Package, Plugin, PluginFuture, PluginId, ServiceId, ServiceKey, ToolContext,
+    HostServices, Plugin, PluginFuture, PluginId, PluginInfo, ServiceId, ServiceKey, ToolContext,
     ToolError, ToolId, ToolInfo, ToolOutput,
 };
 use serde_json::{Value, json};
 
-/// The label: installed with no name, the Plugin is `user-input`.
-pub(crate) const ASKER: Package = Package::new("tests/user-input", construct)
+/// The `PluginInfo`: installed with no Plugin id given, the Plugin is
+/// `user-input`.
+pub(crate) const ASKER: PluginInfo = PluginInfo::new("tests/user-input", construct)
     .prelude(PRELUDE)
     .needs(NEEDS);
 
@@ -50,7 +51,7 @@ struct Asker {
 
 #[expect(
     clippy::unnecessary_wraps,
-    reason = "the Package construct signature fixes the return type"
+    reason = "the PluginInfo construct signature fixes the return type"
 )]
 fn construct(
     name: &PluginId,

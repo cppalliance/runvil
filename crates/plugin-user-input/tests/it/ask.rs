@@ -1,4 +1,4 @@
-//! The `user-input` Plugin through its public label: what `construct`
+//! The `user-input` Plugin through its public `PluginInfo`: what `construct`
 //! builds under the name the Host chose, what the ask tool answers from
 //! the run's broker, and the prelude a declaring prompt runs.
 
@@ -7,7 +7,7 @@ use std::pin::pin;
 use std::sync::Arc;
 use std::task::{Context, Poll, Waker};
 
-use plugin_user_input::{ASK, INPUT_BROKER, InputBroker, PACKAGE};
+use plugin_user_input::{ASK, INPUT_BROKER, InputBroker, PLUGIN};
 use runvil_plugin::testing::TestCall;
 use runvil_plugin::{
     HostServices, OutputTrust, Plugin, PluginId, ToolError, ToolErrorKind, ToolId,
@@ -51,8 +51,8 @@ fn block_on<F: Future>(future: F) -> F::Output {
 
 /// The Plugin installed under `name` with `config`.
 fn construct(name: &str, config: Value) -> Result<Arc<dyn Plugin>, ToolError> {
-    let name = PluginId::parse(name).expect("a one-segment Plugin name parses");
-    (PACKAGE.construct)(&name, config, &HostServices::new())
+    let name = PluginId::parse(name).expect("a one-segment Plugin id parses");
+    (PLUGIN.construct)(&name, config, &HostServices::new())
 }
 
 fn installed(name: &str) -> Arc<dyn Plugin> {
@@ -81,10 +81,10 @@ fn ask(services: HostServices) -> Result<runvil_plugin::ToolOutput, ToolError> {
 }
 
 #[test]
-fn the_package_is_runvil_user_input_and_needs_the_input_broker() {
-    assert_eq!(PACKAGE.name, "runvil/user-input");
-    assert_eq!(PACKAGE.needs, [INPUT_BROKER.id()]);
-    assert_eq!(PACKAGE.needs[0].to_string(), "runvil/input-broker");
+fn the_plugin_is_runvil_user_input_and_needs_the_input_broker() {
+    assert_eq!(PLUGIN.fqn, "runvil/user-input");
+    assert_eq!(PLUGIN.needs, [INPUT_BROKER.id()]);
+    assert_eq!(PLUGIN.needs[0].to_string(), "runvil/input-broker");
     assert_eq!(ASK, "ask");
 }
 
@@ -143,7 +143,7 @@ fn a_call_without_a_broker_fails_saying_no_operator_is_connected() {
 
 #[test]
 fn the_prelude_reads_the_installed_name_and_asks_through_it() {
-    let prelude = PACKAGE.prelude.expect("the Plugin has a prelude");
+    let prelude = PLUGIN.prelude.expect("the Plugin has a prelude");
     assert!(prelude.starts_with("local plugin = ...\n"), "{prelude}");
     assert!(
         prelude.contains("tools.call(plugin .. \"/ask\")"),

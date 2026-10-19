@@ -1,7 +1,7 @@
 //! Web access for prompts: a Plugin that gives a run two tools, one
 //! that fetches a page and one that searches the web.
 //!
-//! A Host installs [`PACKAGE`], by default under the name `web`, and every
+//! A Host installs [`PLUGIN`], by default under the name `web`, and every
 //! run then receives both tools: `web/fetch`, which fetches a URL and
 //! returns its content as text, and `web/search`, which runs a search
 //! through the Host's [`SearchProvider`]. The two tools always come
@@ -83,4 +83,4 @@ pub use crate::provider::{
     Freshness, SafeSearch, SearchError, SearchErrorKind, SearchProvider, SearchQuery, SearchResult,
     SearchResults,
 };
-pub use crate::web::{PACKAGE, SEARCH_PROVIDER};
+pub use crate::web::{PLUGIN, SEARCH_PROVIDER};

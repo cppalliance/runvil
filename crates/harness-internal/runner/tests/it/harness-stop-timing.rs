@@ -9,7 +9,7 @@ use std::sync::Arc;
 use std::sync::atomic::Ordering;
 
 use harness_runner::recorder::MemoryRecorder;
-use harness_runner::{Harness, HostContext, PackageRegistry, RunRequest};
+use harness_runner::{Harness, HostContext, PluginRegistry, RunRequest};
 use runvil::vfs::VfsRef;
 use runvil_plugin::HostServices;
 use serde_json::json;
@@ -143,10 +143,7 @@ async fn a_stop_seen_before_a_steps_effects_start_drops_the_round_in_flight_and_
         recorder.clone(),
         Arc::new(held_broker(&chat)),
         Arc::new(PendingTimer::default()),
-        Arc::new(HostContext::new(
-            PackageRegistry::new(),
-            HostServices::new(),
-        )),
+        Arc::new(HostContext::new(PluginRegistry::new(), HostServices::new())),
         HostServices::new(),
     );
     let vfs = stopping_store(&harness);

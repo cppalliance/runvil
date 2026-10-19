@@ -19,7 +19,7 @@ fn plain(name: &str) -> Tool {
 }
 
 fn ids(plugin: &str, tools: Vec<Tool>) -> Vec<String> {
-    let plugin = PluginId::parse(plugin).expect("a Plugin name parses");
+    let plugin = PluginId::parse(plugin).expect("a Plugin id parses");
     catalog(&plugin, tools)
         .iter()
         .map(|listed| listed.info.id.to_string())

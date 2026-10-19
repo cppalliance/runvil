@@ -1,4 +1,4 @@
-//! Integration tests for `plugin-mcp`, through `PACKAGE` and `TestCall`
+//! Integration tests for `plugin-mcp`, through `PLUGIN` and `TestCall`
 //! only, against a hand-written Streamable HTTP server.
 #![expect(
     clippy::expect_used,
@@ -31,8 +31,8 @@ fn runtime_services() -> HostServices {
 }
 
 fn construct(config: Value, services: &HostServices) -> Result<Arc<dyn Plugin>, ToolError> {
-    let name = PluginId::parse("remote").expect("a Plugin name parses");
-    (plugin_mcp::PACKAGE.construct)(&name, config, services)
+    let name = PluginId::parse("remote").expect("a Plugin id parses");
+    (plugin_mcp::PLUGIN.construct)(&name, config, services)
 }
 
 /// Installs the Plugin against `fixture` with these extra headers.
@@ -63,10 +63,10 @@ async fn call(plugin: &Arc<dyn Plugin>, tool: &str, args: Value) -> Result<Strin
 }
 
 #[test]
-fn the_package_is_runvil_mcp_with_no_prelude_and_no_needs() {
-    assert_eq!(plugin_mcp::PACKAGE.name, "runvil/mcp");
-    assert!(plugin_mcp::PACKAGE.prelude.is_none());
-    assert!(plugin_mcp::PACKAGE.needs.is_empty());
+fn the_plugin_is_runvil_mcp_with_no_prelude_and_no_needs() {
+    assert_eq!(plugin_mcp::PLUGIN.fqn, "runvil/mcp");
+    assert!(plugin_mcp::PLUGIN.prelude.is_none());
+    assert!(plugin_mcp::PLUGIN.needs.is_empty());
 }
 
 #[tokio::test(flavor = "multi_thread")]

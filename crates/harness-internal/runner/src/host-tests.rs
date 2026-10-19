@@ -1,6 +1,6 @@
 //! Tests for the Host's install and each run's snapshot: the default name,
 //! the refused names, a construct failure stored as unavailable, the
-//! requirements a run reports, the native that offers nothing, the tools
+//! requirements a run reports, the built-in that offers nothing, the tools
 //! its catalog keeps, the preludes it installs, and where each call goes.
 
 use std::collections::BTreeMap;
@@ -10,14 +10,14 @@ use runvil::effect::{ToolCallOrigin, ToolCaller};
 use runvil::vfs::{Origin, VfsRef};
 use runvil::{MissingService, Prompt, UnavailablePlugin};
 use runvil_plugin::{
-    HostServices, Package, Plugin, PluginFuture, PluginId, ServiceId, ServiceKey, ToolContext,
+    HostServices, Plugin, PluginFuture, PluginId, PluginInfo, ServiceId, ServiceKey, ToolContext,
     ToolError, ToolId, ToolInfo, ToolOutput,
 };
 use serde_json::{Value, json};
 
 use super::{HostContext, InstallError};
-use crate::packages::PackageRegistry;
 use crate::performers::ToolPerformer;
+use crate::registry::PluginRegistry;
 
 /// A Host-wide service a fixture's `construct` reads.
 const BACKEND: ServiceKey<str> = ServiceKey::new("tests/backend");
@@ -53,7 +53,7 @@ impl Plugin for Listed {
 #[expect(
     clippy::needless_pass_by_value,
     clippy::unnecessary_wraps,
-    reason = "the Package construct signature fixes the argument and return types"
+    reason = "the PluginInfo construct signature fixes the argument and return types"
 )]
 fn listed(
     name: &PluginId,
@@ -89,9 +89,9 @@ fn backed(
     listed(name, json!([tool(&format!("{name}/use"))]), services)
 }
 
-/// A package named `name` whose Plugin offers the configured tools.
-const fn package(name: &'static str) -> Package {
-    Package::new(name, listed)
+/// A Plugin with the FQN `fqn` that offers the configured tools.
+const fn info(fqn: &'static str) -> PluginInfo {
+    PluginInfo::new(fqn, listed)
 }
 
 /// One tool entry of a [`listed`] configuration.
@@ -103,19 +103,18 @@ fn name(text: &str) -> PluginId {
     PluginId::parse(text).unwrap()
 }
 
-/// A Host with no Host-wide services over a registry holding `packages`.
-fn host(packages: &[Package]) -> HostContext {
-    host_with(HostServices::new(), packages)
+/// A Host with no Host-wide services over a registry holding `infos`.
+fn host(infos: &[PluginInfo]) -> HostContext {
+    host_with(HostServices::new(), infos)
 }
 
-/// A Host over the Host-wide `services` and a registry holding
-/// `packages`.
-fn host_with(services: HostServices, packages: &[Package]) -> HostContext {
-    let mut registry = PackageRegistry::new();
-    for package in packages {
-        registry.add(*package).unwrap();
+/// A Host over the Host-wide `services` and a registry holding `infos`.
+fn host_with(services: HostServices, infos: &[PluginInfo]) -> HostContext {
+    let mut plugins = PluginRegistry::new();
+    for info in infos {
+        plugins.add(*info).unwrap();
     }
-    HostContext::new(registry, services)
+    HostContext::new(plugins, services)
 }
 
 /// A prompt with the given `plugins:` and `tools:` frontmatter lines.
@@ -139,8 +138,8 @@ fn catalog_ids(host: &HostContext, services: HostServices, prompt: &Prompt) -> V
 }
 
 #[test]
-fn install_names_the_plugin_after_its_package_names_second_segment_unless_the_host_picks_one() {
-    let mut host = host(&[package("acme/web")]);
+fn install_names_the_plugin_after_its_fqns_second_segment_unless_the_host_picks_one() {
+    let mut host = host(&[info("acme/web")]);
     assert_eq!(host.install("acme/web", None, Value::Null), Ok(name("web")));
     assert_eq!(
         host.install("acme/web", Some(name("browse")), Value::Null),
@@ -151,9 +150,9 @@ fn install_names_the_plugin_after_its_package_names_second_segment_unless_the_ho
 #[test]
 fn install_refuses_a_name_already_installed_and_its_punctuation_twin() {
     let mut host = host(&[
-        package("acme/user-input"),
-        package("other/user_input"),
-        package("other/ask"),
+        info("acme/user-input"),
+        info("other/user_input"),
+        info("other/ask"),
     ]);
     host.install("acme/user-input", None, Value::Null).unwrap();
     let taken = |name_: &str| InstallError::NameTaken {
@@ -174,16 +173,16 @@ fn install_refuses_a_name_already_installed_and_its_punctuation_twin() {
     );
     assert_eq!(
         taken("user_input").to_string(),
-        "Plugin name user_input is taken by the installed user-input; install it under another name"
+        "Plugin id user_input is taken by the installed user-input; install it under another Plugin id"
     );
 }
 
 #[test]
 fn a_construct_failure_is_stored_and_reported_as_unavailable_with_its_reason() {
-    let backed_package = Package::new("acme/backed", backed);
-    let mut bare = host(&[backed_package]);
+    let backed_info = PluginInfo::new("acme/backed", backed);
+    let mut bare = host(&[backed_info]);
     assert_eq!(
-        bare.install(backed_package.name, None, Value::Null),
+        bare.install(backed_info.fqn, None, Value::Null),
         Ok(name("backed")),
         "a construct failure is not an install error"
     );
@@ -203,9 +202,9 @@ fn a_construct_failure_is_stored_and_reported_as_unavailable_with_its_reason() {
 
     let mut wide = HostServices::new();
     wide.provide(&BACKEND, Arc::from("up")).unwrap();
-    let mut provided = host_with(wide, &[backed_package]);
+    let mut provided = host_with(wide, &[backed_info]);
     provided
-        .install(backed_package.name, None, Value::Null)
+        .install(backed_info.fqn, None, Value::Null)
         .unwrap();
     let (_run, requirements) = provided.begin_run(
         HostServices::new(),
@@ -220,11 +219,11 @@ fn a_construct_failure_is_stored_and_reported_as_unavailable_with_its_reason() {
 
 #[test]
 fn begin_run_reports_every_declared_plugin_it_cannot_serve() {
-    let needy = package("acme/needy").needs(NEEDS_SESSION);
-    let broken = Package::new("acme/broken", backed);
-    let mut host = host(&[needy, broken, package("acme/fine")]);
-    host.install(needy.name, None, Value::Null).unwrap();
-    host.install(broken.name, None, Value::Null).unwrap();
+    let needy = info("acme/needy").needs(NEEDS_SESSION);
+    let broken = PluginInfo::new("acme/broken", backed);
+    let mut host = host(&[needy, broken, info("acme/fine")]);
+    host.install(needy.fqn, None, Value::Null).unwrap();
+    host.install(broken.fqn, None, Value::Null).unwrap();
     host.install("acme/fine", None, Value::Null).unwrap();
 
     let (_run, requirements) = host.begin_run(
@@ -246,7 +245,7 @@ fn begin_run_reports_every_declared_plugin_it_cannot_serve() {
 }
 
 #[test]
-fn a_declared_native_is_met_when_installed_and_missing_when_not() {
+fn a_declared_builtin_is_met_when_installed_and_missing_when_not() {
     let declares = prompt("plugins:\n  - subagents\n");
     let mut host = host(&[]);
     let (_run, requirements) = host.begin_run(HostServices::new(), BTreeMap::new(), &declares);
@@ -261,7 +260,7 @@ fn a_declared_native_is_met_when_installed_and_missing_when_not() {
 }
 
 #[test]
-fn an_installed_native_adds_no_catalog_tool_and_no_prelude() {
+fn an_installed_builtin_adds_no_catalog_tool_and_no_prelude() {
     let mut host = host(&[]);
     host.install("runvil/subagents", None, Value::Null).unwrap();
     let declares = prompt("plugins:\n  - subagents\n");
@@ -271,12 +270,12 @@ fn an_installed_native_adds_no_catalog_tool_and_no_prelude() {
 }
 
 #[test]
-fn the_roster_lists_the_native_stub_as_usable_and_each_plugin_that_cannot_serve_with_its_reason() {
-    let needy = package("acme/needy").needs(NEEDS_SESSION);
-    let mut host = host(&[package("acme/kit"), needy]);
+fn the_roster_lists_the_builtin_stub_as_usable_and_each_plugin_that_cannot_serve_with_its_reason() {
+    let needy = info("acme/needy").needs(NEEDS_SESSION);
+    let mut host = host(&[info("acme/kit"), needy]);
     host.install("runvil/subagents", None, Value::Null).unwrap();
     host.install("acme/kit", None, Value::Null).unwrap();
-    host.install(needy.name, None, Value::Null).unwrap();
+    host.install(needy.fqn, None, Value::Null).unwrap();
     let failures = BTreeMap::from([(name("kit"), "the kit server is down".to_owned())]);
     let (run, _requirements) = host.begin_run(HostServices::new(), failures, &prompt(""));
     let (usable, unavailable) = run.roster();
@@ -300,7 +299,7 @@ fn the_roster_lists_the_native_stub_as_usable_and_each_plugin_that_cannot_serve_
 
 #[test]
 fn begin_run_drops_a_tool_outside_its_plugin_and_a_repeated_id() {
-    let mut host = host(&[package("acme/kit")]);
+    let mut host = host(&[info("acme/kit")]);
     let config = json!([tool("kit/good"), tool("other/escape"), tool("kit/good")]);
     host.install("acme/kit", None, config).unwrap();
     assert_eq!(
@@ -311,9 +310,9 @@ fn begin_run_drops_a_tool_outside_its_plugin_and_a_repeated_id() {
 
 #[test]
 fn a_plugin_whose_needs_the_run_lacks_offers_it_no_tools() {
-    let needy = package("acme/needy").needs(NEEDS_SESSION);
+    let needy = info("acme/needy").needs(NEEDS_SESSION);
     let mut host = host(&[needy]);
-    host.install(needy.name, None, json!([tool("needy/use")]))
+    host.install(needy.fqn, None, json!([tool("needy/use")]))
         .unwrap();
     assert!(catalog_ids(&host, HostServices::new(), &prompt("")).is_empty());
 
@@ -324,12 +323,12 @@ fn a_plugin_whose_needs_the_run_lacks_offers_it_no_tools() {
 
 #[test]
 fn an_undeclared_plugins_tools_reach_the_catalog_but_its_prelude_does_not() {
-    let declared = package("acme/declared").prelude("declared = {}\n");
-    let extra = package("acme/extra").prelude("extra = {}\n");
+    let declared = info("acme/declared").prelude("declared = {}\n");
+    let extra = info("acme/extra").prelude("extra = {}\n");
     let mut host = host(&[declared, extra]);
-    host.install(declared.name, None, json!([tool("declared/a")]))
+    host.install(declared.fqn, None, json!([tool("declared/a")]))
         .unwrap();
-    host.install(extra.name, None, json!([tool("extra/b")]))
+    host.install(extra.fqn, None, json!([tool("extra/b")]))
         .unwrap();
     let prompt = prompt("plugins:\n  - declared\n");
     assert_eq!(
@@ -347,11 +346,10 @@ fn an_undeclared_plugins_tools_reach_the_catalog_but_its_prelude_does_not() {
 
 #[test]
 fn preludes_follow_the_prompts_declaration_order_and_carry_the_installed_name() {
-    let with_prelude =
-        |package_name: &'static str| package(package_name).prelude("local plugin = ...\n");
+    let with_prelude = |fqn: &'static str| info(fqn).prelude("local plugin = ...\n");
     let mut host = host(&[with_prelude("acme/first"), with_prelude("acme/second")]);
-    for package_name in ["acme/first", "acme/second"] {
-        host.install(package_name, None, Value::Null).unwrap();
+    for fqn in ["acme/first", "acme/second"] {
+        host.install(fqn, None, Value::Null).unwrap();
     }
     host.install("acme/first", Some(name("third")), Value::Null)
         .unwrap();
@@ -382,7 +380,7 @@ async fn call(run: &dyn ToolPerformer, tool: &str) -> Result<ToolOutput, ToolErr
 
 #[tokio::test]
 async fn a_call_goes_to_the_plugin_its_tool_ids_first_segment_names() {
-    let mut host = host(&[package("acme/one"), package("acme/two")]);
+    let mut host = host(&[info("acme/one"), info("acme/two")]);
     host.install("acme/one", None, json!([tool("one/echo")]))
         .unwrap();
     host.install("acme/two", None, json!([tool("two/echo")]))
@@ -400,9 +398,9 @@ async fn a_call_goes_to_the_plugin_its_tool_ids_first_segment_names() {
 
 #[tokio::test]
 async fn a_call_to_a_plugin_the_run_cannot_use_fails_naming_the_tool() {
-    let needy = package("acme/needy").needs(NEEDS_SESSION);
+    let needy = info("acme/needy").needs(NEEDS_SESSION);
     let mut host = host(&[needy]);
-    host.install(needy.name, None, json!([tool("needy/use")]))
+    host.install(needy.fqn, None, json!([tool("needy/use")]))
         .unwrap();
     let (run, _requirements) = host.begin_run(HostServices::new(), BTreeMap::new(), &prompt(""));
     let error = call(&run, "needy/use")
@@ -413,7 +411,7 @@ async fn a_call_to_a_plugin_the_run_cannot_use_fails_naming_the_tool() {
 
 #[test]
 fn survives_stop_answers_from_the_runs_snapshot_of_tool_info() {
-    let mut host = host(&[package("acme/kit")]);
+    let mut host = host(&[info("acme/kit")]);
     let config = json!([
         { "id": "kit/ask", "survives_stop": true },
         tool("kit/fetch"),

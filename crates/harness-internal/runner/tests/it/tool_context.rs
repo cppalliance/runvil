@@ -10,7 +10,7 @@ use harness_runner::prepare::prepare;
 use harness_runner::recorder::{MemoryRecorder, RunOutcome};
 use runvil::cancel::CancelHandle;
 use runvil_plugin::{
-    HostServices, Package, Plugin, PluginFuture, PluginId, ToolContext, ToolError, ToolId,
+    HostServices, Plugin, PluginFuture, PluginId, PluginInfo, ToolContext, ToolError, ToolId,
     ToolInfo, ToolOutput,
 };
 use serde_json::{Value, json};
@@ -30,7 +30,7 @@ const CALLS_RECORD: &str = "---\nname: calls-record\ndescription: d\nrunvil: 0\n
 /// The fixture Plugin `context`: one tool, `context/record`, which writes
 /// [`WRITTEN`] to `/from-tool.md` through the access its call lends it
 /// and answers with the caller its origin names.
-const CONTEXT: Package = Package::new("tests/context", construct);
+const CONTEXT: PluginInfo = PluginInfo::new("tests/context", construct);
 
 struct Record {
     tools: Vec<ToolInfo>,
@@ -38,7 +38,7 @@ struct Record {
 
 #[expect(
     clippy::unnecessary_wraps,
-    reason = "the Package construct signature fixes the return type"
+    reason = "the PluginInfo construct signature fixes the return type"
 )]
 fn construct(
     name: &PluginId,

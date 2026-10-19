@@ -13,7 +13,7 @@ use std::task::Poll;
 use harness_runner::display_chain;
 use harness_runner::environment::CurrentModelError;
 use harness_runner::recorder::MemoryRecorder;
-use harness_runner::{Harness, HarnessError, HostContext, PackageRegistry};
+use harness_runner::{Harness, HarnessError, HostContext, PluginRegistry};
 use runvil::model::{Completion, CompletionError, CompletionErrorKind};
 use runvil_plugin::HostServices;
 
@@ -46,10 +46,7 @@ fn harness_over(recorder: &Arc<FailingRecorder>, broker: ScriptedBroker) -> Harn
         recorder.clone(),
         Arc::new(broker),
         Arc::new(PendingTimer::default()),
-        Arc::new(HostContext::new(
-            PackageRegistry::new(),
-            HostServices::new(),
-        )),
+        Arc::new(HostContext::new(PluginRegistry::new(), HostServices::new())),
         HostServices::new(),
     )
 }

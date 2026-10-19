@@ -1,9 +1,9 @@
 //! The Host's installed Plugins: [`HostContext`], built once at startup
-//! over a [`PackageRegistry`] and shared by every run, and the snapshot
+//! over a [`PluginRegistry`] and shared by every run, and the snapshot
 //! each run takes of it.
 //!
-//! A Host installs a package by the name the registry holds, under a local
-//! name, and install calls the package's `construct` once to build the one
+//! A Host installs a Plugin by the FQN the registry holds, under a Plugin
+//! id, and install calls the Plugin's `construct` once to build the one
 //! Plugin object every run shares. A construct failure is not an install
 //! error: the Plugin is stored as unavailable with the failure as its
 //! reason, and every run that needs it is refused naming that reason.
@@ -24,9 +24,9 @@ use std::sync::Arc;
 use futures_util::future::{Either, join_all, select};
 use runvil::cancel::CancelHandle;
 use runvil::{Prompt, Requirements};
-use runvil_plugin::{HostServices, Package, Plugin, PluginId};
+use runvil_plugin::{HostServices, Plugin, PluginId, PluginInfo};
 
-use crate::packages::{PackageRegistry, PluginKind};
+use crate::registry::{PluginKind, PluginRegistry};
 
 #[path = "host-run.rs"]
 mod run;
@@ -44,70 +44,69 @@ mod tests;
 /// every Harness behind an `Arc`. Dropping it drops the Plugin objects,
 /// which is where a Plugin cleans up.
 pub struct HostContext {
-    packages: PackageRegistry,
+    plugins: PluginRegistry,
     services: HostServices,
     installed: Vec<Installed>,
 }
 
-/// One installed Plugin: its local name, its label, and the built object
-/// or the reason building it failed.
+/// One installed Plugin: its Plugin id, its `PluginInfo`, and the built
+/// object or the reason building it failed.
 struct Installed {
     name: PluginId,
-    package: Package,
+    info: PluginInfo,
     plugin: Result<Arc<dyn Plugin>, String>,
 }
 
 impl HostContext {
-    /// A context with no Plugins, which installs from the packages
-    /// `packages` holds and hands `services` to each package's
-    /// `construct`.
+    /// A context with no Plugins, which installs from the Plugins
+    /// `plugins` holds and hands `services` to each Plugin's `construct`.
     ///
     /// `services` are Host-wide, such as a search provider. They reach
     /// only `construct`; a tool call reads the run's own services instead.
     #[must_use]
-    pub fn new(packages: PackageRegistry, services: HostServices) -> HostContext {
+    pub fn new(plugins: PluginRegistry, services: HostServices) -> HostContext {
         HostContext {
-            packages,
+            plugins,
             services,
             installed: Vec::new(),
         }
     }
 
-    /// Builds the Plugin of the package the registry holds as `package`
-    /// and adds it under `name`, or under the package name's second
-    /// segment when `name` is `None`, and returns the name it used.
+    /// Builds the Plugin the registry holds as `fqn` and adds it under
+    /// `name`, or under the FQN's second segment when `name` is `None`,
+    /// and returns the Plugin id it used.
     ///
-    /// `construct` runs once, here, with the name, `config`, and the
+    /// `construct` runs once, here, with the Plugin id, `config`, and the
     /// Host-wide services. A `construct` failure is not an error here: the
     /// Plugin is stored as unavailable, with the failure as the reason a
     /// run that needs it is refused.
     ///
     /// # Errors
-    /// Returns [`InstallError::UnknownPackage`] when the registry does not
-    /// hold `package`, [`InstallError::ReservedName`] when a native is
-    /// asked for under a name other than its own or another package under
-    /// a native's name, and [`InstallError::NameTaken`] when the name is
-    /// installed already or differs from an installed name only by `-`,
-    /// `_`, or `.`.
+    /// Returns [`InstallError::UnknownPlugin`] when the registry does not
+    /// hold `fqn`, [`InstallError::ReservedName`] when a built-in is asked
+    /// for under a Plugin id other than its own or another Plugin under a
+    /// built-in's Plugin id, and [`InstallError::NameTaken`] when the
+    /// Plugin id is installed already or differs from an installed one
+    /// only by `-`, `_`, or `.`.
     pub fn install(
         &mut self,
-        package: &str,
+        fqn: &str,
         name: Option<PluginId>,
         config: serde_json::Value,
     ) -> Result<PluginId, InstallError> {
-        let Some((package, kind, default)) = self.packages.entry(package) else {
-            return Err(InstallError::UnknownPackage {
-                package: package.to_owned(),
+        let Some((info, kind, default)) = self.plugins.entry(fqn) else {
+            return Err(InstallError::UnknownPlugin {
+                fqn: fqn.to_owned(),
             });
         };
         let name = name.unwrap_or_else(|| default.clone());
         let reserved = match kind {
-            PluginKind::Native => name != *default,
-            PluginKind::Linked => self.packages.reserves(&name),
+            PluginKind::Builtin => name != *default,
+            PluginKind::Linked => self.plugins.reserves(&name),
         };
         if reserved {
             return Err(InstallError::ReservedName {
-                package: package.name,
+                fqn: info.fqn,
                 name,
             });
         }
@@ -122,10 +121,10 @@ impl HostContext {
                 existing: existing.name.clone(),
             });
         }
-        let plugin = (package.construct)(&name, config, &self.services).map_err(|error| {
+        let plugin = (info.construct)(&name, config, &self.services).map_err(|error| {
             tracing::warn!(
                 plugin = %name,
-                package = package.name,
+                fqn = info.fqn,
                 %error,
                 "Plugin construct failed; it is installed as unavailable"
             );
@@ -133,7 +132,7 @@ impl HostContext {
         });
         self.installed.push(Installed {
             name: name.clone(),
-            package,
+            info,
             plugin,
         });
         Ok(name)
@@ -192,7 +191,7 @@ impl HostContext {
         let run = HostRunContext::snapshot(
             self.installed
                 .iter()
-                .map(|installed| (&installed.name, installed.package, &installed.plugin)),
+                .map(|installed| (&installed.name, installed.info, &installed.plugin)),
             services,
             failures,
         );
@@ -213,12 +212,12 @@ impl fmt::Debug for HostContext {
         f.debug_struct("HostContext")
             .field("services", &self.services)
             .field("installed", &installed)
-            .field("packages", &self.packages)
+            .field("plugins", &self.plugins)
             .finish()
     }
 }
 
-/// A mistake [`PackageRegistry::add`] or [`HostContext::install`] refuses
+/// A mistake [`PluginRegistry::add`] or [`HostContext::install`] refuses
 /// outright, so the Host's author sees it at startup.
 ///
 /// A Plugin whose `construct` fails is not one of these; it is installed
@@ -226,50 +225,50 @@ impl fmt::Debug for HostContext {
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 #[non_exhaustive]
 pub enum InstallError {
-    /// The added package's name is not `vendor/name`, or a segment of it
-    /// is not a valid one-segment name.
-    #[error("Plugin package name `{package}` is not a vendor/name pair")]
-    InvalidPackage {
-        /// The package name as the label spells it.
-        package: &'static str,
+    /// The added Plugin's FQN is not `vendor/name`, or a segment of it is
+    /// not a valid one-segment name.
+    #[error("Plugin fully qualified name `{fqn}` is not a vendor/name pair")]
+    InvalidFqn {
+        /// The FQN as its `PluginInfo` spells it.
+        fqn: &'static str,
     },
-    /// The registry holds the added package's name already, as a native or
-    /// as a package added before.
-    #[error("Plugin package `{package}` is already in the registry")]
-    DuplicatePackage {
-        /// The package name as the label spells it.
-        package: &'static str,
+    /// The registry holds the added Plugin's FQN already, as a built-in or
+    /// as a Plugin added before.
+    #[error("Plugin `{fqn}` is already in the registry")]
+    DuplicatePlugin {
+        /// The FQN as its `PluginInfo` spells it.
+        fqn: &'static str,
     },
-    /// The registry holds no package by the name the install asked for.
+    /// The registry holds no Plugin with the FQN the install asked for.
     #[error(
-        "Plugin package `{package}` is not in the registry; add it with PackageRegistry::add before building the HostContext"
+        "Plugin `{fqn}` is not in the registry; add it with PluginRegistry::add before building the HostContext"
     )]
-    UnknownPackage {
-        /// The package name the install asked for.
-        package: String,
+    UnknownPlugin {
+        /// The FQN the install asked for.
+        fqn: String,
     },
-    /// A native was asked for under a name other than its own, or another
-    /// package under a native's name.
+    /// A built-in was asked for under a Plugin id other than its own, or
+    /// another Plugin under a built-in's Plugin id.
     #[error(
-        "Plugin package `{package}` cannot be installed as {name}: a native Plugin keeps its own name, and no other package may take it"
+        "Plugin `{fqn}` cannot be installed as {name}: a built-in Plugin keeps its own Plugin id, and no other Plugin may take it"
     )]
     ReservedName {
-        /// The package name as the label spells it.
-        package: &'static str,
-        /// The name the install asked for.
+        /// The FQN as its `PluginInfo` spells it.
+        fqn: &'static str,
+        /// The Plugin id the install asked for.
         name: PluginId,
     },
-    /// The name is installed already (`existing` equals `name`), or it
-    /// differs from the installed `existing` only by `-`, `_`, or `.`, as
-    /// `user-input` and `user_input` do, which a model reading the tool
+    /// The Plugin id is installed already (`existing` equals `name`), or
+    /// it differs from the installed `existing` only by `-`, `_`, or `.`,
+    /// as `user-input` and `user_input` do, which a model reading the tool
     /// list cannot tell apart.
     #[error(
-        "Plugin name {name} is taken by the installed {existing}; install it under another name"
+        "Plugin id {name} is taken by the installed {existing}; install it under another Plugin id"
     )]
     NameTaken {
-        /// The name the install asked for.
+        /// The Plugin id the install asked for.
         name: PluginId,
-        /// The installed name it collides with.
+        /// The installed Plugin id it collides with.
         existing: PluginId,
     },
 }

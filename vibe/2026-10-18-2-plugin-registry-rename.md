@@ -784,7 +784,7 @@ Verify's FOCUSED scope adds each touched package's suite through the survey's co
 </step-1>
 <step-2>
 
-### Step 2: Plugin registry, Plugin info, built-in kind, and Plugin id wording
+### Step 2: Plugin registry, Plugin info, built-in kind, and Plugin id wording [completed]
 
 - Component: `none`
 - Tests: as the final step, Verify runs FULL scope, then these from the repository root in PowerShell, in this order. A search that must print nothing passes with empty output, and `rg` then exits 1.

@@ -9,7 +9,7 @@ publish = false
 # Every crate that defines a re-exported item: each `pub use` names the
 # defining crate's path. The Engine's types a Harness signature names are
 # re-exported through the `runvil` facade, their one public path, and
-# the service map and Plugin name through the Plugin contract.
+# the service map and Plugin id through the Plugin contract.
 [dependencies]
 harness-runner.workspace = true
 runvil.workspace = true

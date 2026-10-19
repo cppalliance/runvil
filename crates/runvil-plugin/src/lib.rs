@@ -1,8 +1,8 @@
 //! `runvil-plugin` - the contract a Plugin crate implements, and the
 //! one crate it depends on.
 //!
-//! A Plugin crate exports a [`Package`], built with [`Package::new`]: its
-//! `vendor/name`, an optional Lua prelude, the per-run services its calls
+//! A Plugin crate exports a [`PluginInfo`], built with [`PluginInfo::new`]:
+//! its `vendor/name`, an optional Lua prelude, the per-run services its calls
 //! read, and the `construct` function the Host calls once, at install, to
 //! build the one [`Plugin`] object every run shares. [`Plugin::call`]
 //! performs one tool call with the [`ToolContext`] the Harness lends it.
@@ -27,7 +27,7 @@
 //! - Only `[dev-dependencies]` enable `test-support`, which the
 //!   `test-support` leak guard enforces.
 //! - A Host builds each Plugin object once, through
-//!   [`Package::construct`], and every run shares it. Host-wide services
+//!   [`PluginInfo::construct`], and every run shares it. Host-wide services
 //!   reach only `construct`, and a run's own services reach only calls,
 //!   through [`ToolContext::service`]. Cleanup goes in the Plugin's
 //!   `Drop`; there is no shutdown hook.
@@ -62,7 +62,7 @@ mod service;
 pub mod testing;
 
 pub use context::ToolContext;
-pub use plugin::{Package, Plugin, PluginFuture};
+pub use plugin::{Plugin, PluginFuture, PluginInfo};
 pub use service::{HostServices, ServiceError, ServiceId, ServiceKey, TOKIO_RUNTIME};
 
 pub use runvil_types::plugins::{PluginId, PluginIdError, PluginIdErrorKind};

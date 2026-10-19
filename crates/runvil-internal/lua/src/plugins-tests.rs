@@ -100,7 +100,7 @@ fn required_lists_every_declared_plugin_in_name_order_and_extras_the_rest() {
     assert!(
         result
             .6
-            .contains("plugins.get takes a Plugin name, got integer"),
+            .contains("plugins.get takes a Plugin id, got integer"),
         "the refusal names the type: {}",
         result.6
     );
@@ -217,7 +217,7 @@ fn offer_records_each_plugin_once_from_a_name_an_object_or_a_list() {
 #[test]
 fn offer_refuses_a_wrong_or_extra_argument_and_an_absent_plugin_and_records_nothing() {
     let vm = lua_over(plugin_set());
-    let shape = "plugins.offer takes a Plugin name, a Plugin object, or a list of them, got";
+    let shape = "plugins.offer takes a Plugin id, a Plugin object, or a list of them, got";
     let absent = "plugins.offer: no Plugin named \"mcp\" in this run; declare it under \
                   plugins: to require it, or offer it only when plugins.get(\"mcp\") returns it";
     for (call, expected) in [

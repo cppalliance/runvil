@@ -7,7 +7,7 @@ repository.workspace = true
 publish = false
 
 [dependencies]
-# The Plugin contract: the package label, the Plugin trait, the context a
+# The Plugin contract: `PluginInfo`, the Plugin trait, the context a
 # call is lent, and the tool, error, and service vocabulary.
 runvil-plugin.workspace = true
 # `SearchProvider` is an `async_trait` trait.

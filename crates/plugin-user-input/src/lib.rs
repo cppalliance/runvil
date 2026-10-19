@@ -1,7 +1,7 @@
 //! `plugin-user-input` - the Plugin that lets a prompt section pause and
 //! ask the operator for their next message.
 //!
-//! A Host installs [`PACKAGE`], by default under the name `user-input`. A
+//! A Host installs [`PLUGIN`], by default under the name `user-input`. A
 //! prompt declares the Plugin in its frontmatter, and its sections then
 //! have an `input` table:
 //!
@@ -36,7 +36,7 @@
 //!
 //! # A run without an operator
 //!
-//! [`PACKAGE`] names [`INPUT_BROKER`] among its needs, so a run whose Host
+//! [`PLUGIN`] names [`INPUT_BROKER`] among its needs, so a run whose Host
 //! supplies no broker cannot use the Plugin, and a prompt that declares it
 //! is refused before the run starts with a line naming the Plugin and
 //! `runvil/input-broker`.
@@ -77,14 +77,14 @@
 
 mod ask;
 
-use runvil_plugin::{Package, ServiceId, ServiceKey, ToolError};
+use runvil_plugin::{PluginInfo, ServiceId, ServiceKey, ToolError};
 
-/// The Plugin's label, which a Host adds to its package registry.
+/// The Plugin's `PluginInfo`, which a Host adds to its Plugin registry.
 ///
-/// Its name is `runvil/user-input`, so a Host that picks no name
+/// Its FQN is `runvil/user-input`, so a Host that picks no Plugin id
 /// installs it as `user-input`. It has a prelude and needs the run's
 /// [`INPUT_BROKER`].
-pub const PACKAGE: Package = Package::new("runvil/user-input", ask::construct)
+pub const PLUGIN: PluginInfo = PluginInfo::new("runvil/user-input", ask::construct)
     .description("Ask the person running the prompt")
     .prelude(PRELUDE)
     .needs(NEEDS);
@@ -100,7 +100,7 @@ pub const ASK: &str = "ask";
 /// provides its broker among each run's services under this key.
 pub const INPUT_BROKER: ServiceKey<dyn InputBroker> = ServiceKey::new("runvil/input-broker");
 
-/// The package's needs: a run without a broker cannot use the Plugin.
+/// The Plugin's needs: a run without a broker cannot use the Plugin.
 const NEEDS: &[ServiceId] = &[INPUT_BROKER.id()];
 
 /// The Lua that defines `input.ask()` for a prompt that declares the

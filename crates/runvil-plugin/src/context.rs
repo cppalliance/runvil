@@ -26,7 +26,7 @@ mod tests;
 ///
 /// The services are the run's, such as its input broker. The Host-wide
 /// services never reach a call; a Plugin keeps any it needs from its
-/// [`Package::construct`](crate::Package::construct).
+/// [`PluginInfo::construct`](crate::PluginInfo::construct).
 #[derive(Debug)]
 pub struct ToolContext<'a> {
     tool: &'a ToolId,

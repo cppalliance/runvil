@@ -26,11 +26,11 @@
 //! - The loop never reads an event to decide anything; control comes
 //!   from the run's own word (`Step`, `Run::decided`), the cancel flag,
 //!   and the Host's stop.
-//! - A Host installs a Plugin only by a package name its
-//!   [`PackageRegistry`] holds. The registry holds the native
-//!   `runvil/subagents` from the start and refuses a duplicate name,
-//!   and install refuses the native's local name to every other package,
-//!   so no other Plugin can take `subagents`.
+//! - A Host installs a Plugin only by an FQN its Plugin registry,
+//!   [`PluginRegistry`], holds. The registry holds the built-in
+//!   `runvil/subagents` from the start and refuses a duplicate FQN, and
+//!   install refuses the built-in's Plugin id to every other Plugin, so no
+//!   other Plugin can take `subagents`.
 
 mod display_chain;
 pub mod effect_loop;
@@ -38,16 +38,16 @@ pub mod environment;
 pub mod files;
 mod harness;
 mod host;
-mod packages;
 pub mod performers;
 pub mod prepare;
 pub mod recorder;
+mod registry;
 
 pub use display_chain::display_chain;
 pub use harness::{Harness, HarnessError, RunControl, RunReport, RunRequest};
 pub use host::{HostContext, InstallError};
-pub use packages::{PackageRegistry, PluginKind};
 pub use recorder::{
     MemoryRecorder, Record, RecordKind, RecorderError, RecorderFuture, RunId, RunMeta, RunOutcome,
     RunRecorder,
 };
+pub use registry::{PluginKind, PluginRegistry};

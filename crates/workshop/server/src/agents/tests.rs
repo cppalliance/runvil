@@ -1,5 +1,5 @@
 //! The agent conversations' Harness setup: a prompt declaring
-//! `web` or the native `subagents` prepares over the server's installed
+//! `web` or the built-in `subagents` prepares over the server's installed
 //! Plugins, a Host without the
 //! search provider installs web as unavailable and refuses the prompt
 //! naming that service, outside a runtime the services leave the runtime
@@ -145,7 +145,7 @@ async fn a_prompt_declaring_subagents_prepares_on_the_servers_installed_plugins(
         Some(RunOutcome::Completed {
             final_text: "browsed".to_owned(),
         }),
-        "the server installs the native subagents"
+        "the server installs the built-in subagents"
     );
 }
 

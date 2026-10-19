@@ -54,7 +54,7 @@ const STARTUPS: ServiceKey<BTreeMap<String, Arc<Startup>>> = ServiceKey::new("te
 /// The fixture Plugin `slow`: the echo tool, offered once its startup
 /// leaves [`Phase::Starting`], ready or failed, so only the Harness keeps
 /// a failed one's tool out of a run.
-const SLOW: Package = Package::new("tests/slow", construct_starting);
+const SLOW: PluginInfo = PluginInfo::new("tests/slow", construct_starting);
 
 /// A prompt declaring `slow` and calling its tool once by id.
 const CALLS_SLOW: &str = "---\nname: calls-slow\ndescription: d\nrunvil: 0\n\
@@ -146,7 +146,7 @@ fn starting_host(names: &[&str], phase: Phase) -> (HostContext, Vec<StartupHandl
     wide.provide(&STARTUPS, Arc::new(startups)).unwrap();
     let mut host = HostContext::new(registry(&[SLOW]), wide);
     for name in names {
-        host.install(SLOW.name, Some(PluginId::parse(name).unwrap()), Value::Null)
+        host.install(SLOW.fqn, Some(PluginId::parse(name).unwrap()), Value::Null)
             .unwrap();
     }
     (host, handles)
@@ -320,7 +320,7 @@ async fn an_undeclared_plugin_whose_ready_fails_raises_its_reason_when_the_promp
 }
 
 #[tokio::test]
-async fn an_undeclared_installed_native_with_no_tools_has_an_object_the_prompt_can_offer() {
+async fn an_undeclared_installed_builtin_with_no_tools_has_an_object_the_prompt_can_offer() {
     let reads_stub = "---\nname: reads-stub\ndescription: d\nrunvil: 0\n---\n\n\
         # Title\n\n## Only\n\n```lua\n\
         local stub = plugins.get('subagents')\n\

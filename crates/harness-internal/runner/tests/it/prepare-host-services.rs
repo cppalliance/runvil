@@ -13,7 +13,7 @@ const NEEDS: &[ServiceId] = &[GREETING.id()];
 
 /// The fixture Plugin `greeter`: one tool, `greeter/greet`, answering
 /// with the run's greeting.
-const GREETER: Package = Package::new("tests/greeter", construct_greeter).needs(NEEDS);
+const GREETER: PluginInfo = PluginInfo::new("tests/greeter", construct_greeter).needs(NEEDS);
 
 /// A prompt declaring the greeter Plugin and returning its greeting.
 const GREETS: &str = "---\nname: greets\ndescription: d\nrunvil: 0\n\
@@ -26,7 +26,7 @@ struct Greeter {
 
 #[expect(
     clippy::unnecessary_wraps,
-    reason = "the Package construct signature fixes the return type"
+    reason = "the PluginInfo construct signature fixes the return type"
 )]
 fn construct_greeter(
     name: &PluginId,

@@ -20,7 +20,7 @@ struct UserInput {
 /// no Host-wide service; the broker arrives with each run.
 #[expect(
     clippy::needless_pass_by_value,
-    reason = "the Package construct signature fixes the argument types"
+    reason = "the PluginInfo construct signature fixes the argument types"
 )]
 pub(crate) fn construct(
     name: &PluginId,
@@ -57,7 +57,7 @@ impl Plugin for UserInput {
         _args: Value,
     ) -> PluginFuture<'a, Result<ToolOutput, ToolError>> {
         Box::pin(async move {
-            // The package's needs keep a run without a broker from seeing
+            // The Plugin's needs keep a run without a broker from seeing
             // the ask tool, so this branch is defensive.
             let broker = cx
                 .service(&INPUT_BROKER)

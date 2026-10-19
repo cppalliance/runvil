@@ -10,7 +10,7 @@ fn plugin_id_requires_exactly_one_segment() {
     assert_eq!(id.to_string(), "web");
 
     let two = PluginId::parse("runvil/web")
-        .expect_err("a vendor/name pair is a package name, not a Plugin id");
+        .expect_err("a vendor/name pair is a fully qualified name, not a Plugin id");
     assert_eq!(two.kind(), PluginIdErrorKind::SegmentCount);
 
     let tool = PluginId::parse("web/fetch").expect_err("two segments are a tool id");

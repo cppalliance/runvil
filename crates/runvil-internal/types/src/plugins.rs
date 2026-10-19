@@ -8,9 +8,9 @@
 //! a prompt declares them by plain name, which makes each one required
 //! and runs its prelude, and a tool names its Plugin through its
 //! [`ToolId`] prefix. A run's catalog holds the tools of every Plugin the
-//! caller can serve, declared or not. The Plugin contract - the `Package`
-//! label, the `Plugin` trait, and the services a Plugin reads - is in
-//! `runvil-plugin`, and installing Plugins is the caller's; the
+//! caller can serve, declared or not. The Plugin contract - the
+//! `PluginInfo`, the `Plugin` trait, and the services a Plugin reads - is
+//! in `runvil-plugin`, and installing Plugins is the caller's; the
 //! Engine never builds a Plugin.
 
 use std::str::FromStr;

@@ -1,4 +1,4 @@
-//! A Plugin's prelude through preparation: the prelude its package names
+//! A Plugin's prelude through preparation: the prelude its `PluginInfo` names
 //! reaches every section VM of the prepared run, and each tool call a
 //! prelude function makes is recorded as a `ToolCall` effect attributed to
 //! the calling script, its execution, and its section. Preludes install in
@@ -26,7 +26,7 @@ const SPEAKS: &str = "---\nname: speaks\ndescription: d\nrunvil: 0\n\
 
 /// The fixture Plugin `speaker`: the echo tool and a prelude that calls
 /// it.
-const SPEAKER: Package = echo_package("tests/speaker", Some(SPEAKER_PRELUDE));
+const SPEAKER: PluginInfo = echo_plugin("tests/speaker", Some(SPEAKER_PRELUDE));
 
 /// The logged record of the speaker's echo called with `value` from
 /// `section` by the section's script.
@@ -78,11 +78,10 @@ async fn a_preludes_tool_calls_are_recorded_as_script_calls_from_the_section_tha
 
 #[tokio::test]
 async fn preludes_install_in_the_prompts_declaration_order_not_the_install_order() {
-    let packages =
-        ["tests/first", "tests/second"].map(|name| echo_package(name, Some("shared = 1\n")));
-    let mut host = HostContext::new(registry(&packages), HostServices::new());
-    for package in packages {
-        host.install(package.name, None, Value::Null).unwrap();
+    let infos = ["tests/first", "tests/second"].map(|fqn| echo_plugin(fqn, Some("shared = 1\n")));
+    let mut host = HostContext::new(registry(&infos), HostServices::new());
+    for info in infos {
+        host.install(info.fqn, None, Value::Null).unwrap();
     }
     let declares_second_first = "---\nname: order\ndescription: d\nrunvil: 0\n\
         plugins:\n  - second\n  - first\n---\n\n# Title\n\n## Only\n\n```lua\nreturn 'ran'\n```\n";

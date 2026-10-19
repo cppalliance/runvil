@@ -42,7 +42,7 @@ impl AskBroker for Failing {
 /// The fixture Plugin `probe`: one tool, `probe/saw`, answering whether
 /// its call was lent a broker. It needs nothing, so a run without a
 /// broker can use it.
-const PROBE: Package = Package::new("tests/probe", construct_probe);
+const PROBE: PluginInfo = PluginInfo::new("tests/probe", construct_probe);
 
 struct Probe {
     tools: Vec<ToolInfo>,
@@ -50,7 +50,7 @@ struct Probe {
 
 #[expect(
     clippy::unnecessary_wraps,
-    reason = "the Package construct signature fixes the return type"
+    reason = "the PluginInfo construct signature fixes the return type"
 )]
 fn construct_probe(
     name: &PluginId,

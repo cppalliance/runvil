@@ -1,13 +1,13 @@
 //! Fixtures shared by the runner's suites: a one-section prompt, a run
-//! over it, fake performers that answer by script, and a package registry
-//! holding a suite's packages.
+//! over it, fake performers that answer by script, and a Plugin registry
+//! holding a suite's Plugins.
 
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::task::Poll;
 use std::time::Duration;
 
-use harness_runner::PackageRegistry;
+use harness_runner::PluginRegistry;
 use harness_runner::performers::{BoxFuture, InferenceBroker, Performers, Timer, ToolPerformer};
 use harness_runner::recorder::{
     MemoryRecorder, Record, RecorderError, RecorderFuture, RunId, RunMeta, RunOutcome, RunRecorder,
@@ -23,7 +23,7 @@ use runvil::vfs::{
     VfsRef,
 };
 use runvil::{Prompt, Run, RunContext, RunSeed};
-use runvil_plugin::Package;
+use runvil_plugin::PluginInfo;
 use serde_json::{Value, json};
 
 /// The run's execution identifier.
@@ -32,14 +32,14 @@ pub(crate) const EXECUTION: &str = "runner-test";
 /// The fixed seed every fixture run and recorded meta takes.
 pub(crate) const TEST_SEED: RunSeed = RunSeed::from_bytes([7; 32]);
 
-/// A registry holding the natives and each of `packages`, which a suite
-/// builds its Host over before it installs them by name.
-pub(crate) fn registry(packages: &[Package]) -> PackageRegistry {
-    let mut registry = PackageRegistry::new();
-    for package in packages {
-        registry.add(*package).unwrap();
+/// A registry holding the built-ins and each of `infos`, which a suite
+/// builds its Host over before it installs them by FQN.
+pub(crate) fn registry(infos: &[PluginInfo]) -> PluginRegistry {
+    let mut plugins = PluginRegistry::new();
+    for info in infos {
+        plugins.add(*info).unwrap();
     }
-    registry
+    plugins
 }
 
 /// A section body that calls the fixture wait tool by its full id and

@@ -24,8 +24,8 @@ use runvil::RunErrorKind;
 use runvil::cancel::CancelHandle;
 use runvil::event::Event;
 use runvil_plugin::{
-    HostServices, Package, Plugin, PluginFuture, PluginId, ToolContext, ToolError, ToolErrorKind,
-    ToolId, ToolInfo, ToolOutput,
+    HostServices, Plugin, PluginFuture, PluginId, PluginInfo, ToolContext, ToolError,
+    ToolErrorKind, ToolId, ToolInfo, ToolOutput,
 };
 use serde_json::{Value, json};
 
@@ -91,10 +91,10 @@ pub(crate) fn bare() -> HostContext {
     HostContext::new(registry(&[]), HostServices::new())
 }
 
-/// A Host with `package` installed under its default name.
-pub(crate) fn installing(package: Package) -> HostContext {
-    let mut host = HostContext::new(registry(&[package]), HostServices::new());
-    host.install(package.name, None, Value::Null).unwrap();
+/// A Host with `info` installed under its default Plugin id.
+pub(crate) fn installing(info: PluginInfo) -> HostContext {
+    let mut host = HostContext::new(registry(&[info]), HostServices::new());
+    host.install(info.fqn, None, Value::Null).unwrap();
     host
 }
 
@@ -118,14 +118,14 @@ pub(crate) fn services(recorder: &Arc<MemoryRecorder>, host: HostContext) -> Ser
 
 /// The fixture Plugin `tools`: one tool, `tools/echo`, echoing its
 /// `value` argument as trusted text.
-const TOOLS: Package = echo_package("tests/tools", None);
+const TOOLS: PluginInfo = echo_plugin("tests/tools", None);
 
-/// A package whose Plugin offers `<name>/echo`, with `prelude`.
-pub(crate) const fn echo_package(name: &'static str, prelude: Option<&'static str>) -> Package {
-    let package = Package::new(name, construct_echo);
+/// A Plugin with the FQN `fqn` that offers `<name>/echo`, with `prelude`.
+pub(crate) const fn echo_plugin(fqn: &'static str, prelude: Option<&'static str>) -> PluginInfo {
+    let info = PluginInfo::new(fqn, construct_echo);
     match prelude {
-        Some(prelude) => package.prelude(prelude),
-        None => package,
+        Some(prelude) => info.prelude(prelude),
+        None => info,
     }
 }
 
@@ -136,7 +136,7 @@ struct Echo {
 
 #[expect(
     clippy::unnecessary_wraps,
-    reason = "the Package construct signature fixes the return type"
+    reason = "the PluginInfo construct signature fixes the return type"
 )]
 fn construct_echo(
     name: &PluginId,
@@ -363,7 +363,7 @@ async fn a_script_reaches_an_undeclared_plugins_tool_by_full_id_without_its_prel
     let undeclared = "---\nname: undeclared\ndescription: d\nrunvil: 0\n---\n\n\
         # Title\n\n## Only\n\n```lua\n\
         return tools.call('extra/echo', { value = 'hi' }) .. '|' .. type(extra)\n```\n";
-    let extra = echo_package("tests/extra", Some("extra = {}\n"));
+    let extra = echo_plugin("tests/extra", Some("extra = {}\n"));
     assert_eq!(
         completed(drive_over(undeclared, installing(extra)).await),
         "hi|nil",
@@ -379,10 +379,10 @@ async fn the_lists_split_the_offering_by_declared_plugin_and_a_script_calls_a_to
         local extra = extras[1]\n\
         return #required .. ':' .. required[1].id .. '|' .. #extras .. ':' .. extra.id .. '|' .. \
           tools.call(extra, { value = 'hi' })\n```\n";
-    let extra = echo_package("tests/extra", None);
+    let extra = echo_plugin("tests/extra", None);
     let mut host = HostContext::new(registry(&[TOOLS, extra]), HostServices::new());
-    for package in [TOOLS, extra] {
-        host.install(package.name, None, Value::Null).unwrap();
+    for info in [TOOLS, extra] {
+        host.install(info.fqn, None, Value::Null).unwrap();
     }
     assert_eq!(
         completed(drive_over(offering, host).await),

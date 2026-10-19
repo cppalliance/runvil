@@ -1,6 +1,6 @@
-//! The `web` Plugin's label, [`PACKAGE`], the `construct` that builds its
-//! one shared object, and the keys of the two Host-wide services that
-//! `construct` reads.
+//! The `web` Plugin's `PluginInfo`, [`PLUGIN`], the `construct` that
+//! builds its one shared object, and the keys of the two Host-wide
+//! services that `construct` reads.
 //!
 //! The fetch client is built once, at install, with the default fetch
 //! policy and bound to the Host's runtime handle; the search tool is
@@ -9,7 +9,7 @@
 use std::sync::Arc;
 
 use runvil_plugin::{
-    HostServices, Package, Plugin, PluginFuture, PluginId, ServiceKey, ToolContext, ToolError,
+    HostServices, Plugin, PluginFuture, PluginId, PluginInfo, ServiceKey, ToolContext, ToolError,
     ToolErrorKind, ToolId, ToolInfo, ToolOutput,
 };
 use serde_json::{Value, json};
@@ -19,15 +19,15 @@ use crate::fetch::{FetchClient, WebFetch};
 use crate::provider::SearchProvider;
 use crate::search::WebSearch;
 
-/// The Plugin's label, which a Host adds to its package registry.
+/// The Plugin's `PluginInfo`, which a Host adds to its Plugin registry.
 ///
-/// Its name is `runvil/web`, so a Host that picks no name installs it
+/// Its FQN is `runvil/web`, so a Host that picks no Plugin id installs it
 /// as `web`. It has no prelude and needs no per-run service; its
 /// `construct` reads [`SEARCH_PROVIDER`] and the Plugin contract's
 /// [`runvil_plugin::TOKIO_RUNTIME`] service from the Host-wide
 /// services and takes no configuration but `null` or `{}`.
-pub const PACKAGE: Package =
-    Package::new("runvil/web", construct).description("Search the web and fetch pages");
+pub const PLUGIN: PluginInfo =
+    PluginInfo::new("runvil/web", construct).description("Search the web and fetch pages");
 
 /// The service key for the Host's search provider.
 ///
@@ -53,7 +53,7 @@ struct Web {
 /// and names the tools `<name>/fetch` and `<name>/search`.
 #[expect(
     clippy::needless_pass_by_value,
-    reason = "the Package construct signature fixes the argument types"
+    reason = "the PluginInfo construct signature fixes the argument types"
 )]
 fn construct(
     name: &PluginId,

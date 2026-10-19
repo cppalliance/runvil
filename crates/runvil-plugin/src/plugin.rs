@@ -1,4 +1,4 @@
-//! The [`Plugin`] trait and the [`Package`] label a Plugin crate exports.
+//! The [`Plugin`] trait and the [`PluginInfo`] a Plugin crate exports.
 
 use std::fmt;
 use std::future::Future;
@@ -21,7 +21,7 @@ pub type PluginFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 /// One Plugin object: the tools it offers and the calls it performs.
 ///
 /// The Host builds one object per installed Plugin, through
-/// [`Package::construct`], and every run shares it, so an implementation
+/// [`PluginInfo::construct`], and every run shares it, so an implementation
 /// is `Send + Sync`. Cleanup, such as stopping a child process, goes in
 /// the implementation's `Drop`, which runs when the Host drops the context
 /// holding the Plugin. There is no shutdown hook.
@@ -104,28 +104,28 @@ pub trait Plugin: Send + Sync {
     ) -> PluginFuture<'a, Result<ToolOutput, ToolError>>;
 }
 
-/// A Plugin crate's label, exported as a constant such as
-/// `plugin_web::PACKAGE`.
+/// A Plugin described as data, exported by its crate as a constant such
+/// as `plugin_web::PLUGIN`.
 ///
 /// It is fixed data the Host reads before anything is built. Adding it to
-/// the Harness's package registry is also what links the Plugin crate into
-/// the Host. A Plugin crate builds it with [`Package::new`], adding a
-/// [`Package::description`], and [`Package::prelude`] and
-/// [`Package::needs`] only where it has them:
+/// the Harness's Plugin registry is also what links the Plugin crate into
+/// the Host. A Plugin crate builds it with [`PluginInfo::new`], adding a
+/// [`PluginInfo::description`], and [`PluginInfo::prelude`] and
+/// [`PluginInfo::needs`] only where it has them:
 ///
 /// ```text
-/// pub const PACKAGE: Package = Package::new("acme/greeter", construct)
+/// pub const PLUGIN: PluginInfo = PluginInfo::new("acme/greeter", construct)
 ///     .description("Greet the person running the prompt")
 ///     .prelude(PRELUDE)
 ///     .needs(NEEDS);
 /// ```
 #[derive(Clone, Copy)]
 #[non_exhaustive]
-pub struct Package {
-    /// The package name, `vendor/name` with two segments, such as
-    /// `runvil/web`. A Host installs the Plugin under the second
-    /// segment unless it picks another name.
-    pub name: &'static str,
+pub struct PluginInfo {
+    /// The Plugin's fully qualified name (FQN): `vendor/name` with two
+    /// segments, such as `runvil/web`. A Host installs the Plugin under the
+    /// second segment unless it picks another Plugin id.
+    pub fqn: &'static str,
     /// Lua run once for each prompt that declares the Plugin, as a chunk
     /// whose `...` is the name the Plugin was installed under; `None` when
     /// the Plugin has no prelude.
@@ -150,28 +150,28 @@ pub struct Package {
         services: &HostServices,
     ) -> Result<Arc<dyn Plugin>, ToolError>,
     /// One line saying what the Plugin offers, for a Host listing the
-    /// packages it can install; empty unless the Plugin crate sets it.
+    /// Plugins it can install; empty unless the Plugin crate sets it.
     pub description: &'static str,
 }
 
-impl Package {
-    /// Builds the label for the package `name`, with an empty description,
-    /// no prelude, and no needs.
+impl PluginInfo {
+    /// Builds the `PluginInfo` for the FQN `fqn`, with an empty
+    /// description, no prelude, and no needs.
     #[expect(
         clippy::type_complexity,
         reason = "spelled out so a Plugin author reads the signature construct implements in one place"
     )]
     #[must_use]
     pub const fn new(
-        name: &'static str,
+        fqn: &'static str,
         construct: fn(
             name: &PluginId,
             config: serde_json::Value,
             services: &HostServices,
         ) -> Result<Arc<dyn Plugin>, ToolError>,
-    ) -> Package {
-        Package {
-            name,
+    ) -> PluginInfo {
+        PluginInfo {
+            fqn,
             prelude: None,
             needs: &[],
             construct,
@@ -181,8 +181,8 @@ impl Package {
 
     /// Sets the one line saying what the Plugin offers.
     #[must_use]
-    pub const fn description(self, description: &'static str) -> Package {
-        Package {
+    pub const fn description(self, description: &'static str) -> PluginInfo {
+        PluginInfo {
             description,
             ..self
         }
@@ -190,8 +190,8 @@ impl Package {
 
     /// Sets the Lua run once for each prompt that declares the Plugin.
     #[must_use]
-    pub const fn prelude(self, prelude: &'static str) -> Package {
-        Package {
+    pub const fn prelude(self, prelude: &'static str) -> PluginInfo {
+        PluginInfo {
             prelude: Some(prelude),
             ..self
         }
@@ -199,17 +199,17 @@ impl Package {
 
     /// Sets the per-run services the Plugin's calls read.
     #[must_use]
-    pub const fn needs(self, needs: &'static [ServiceId]) -> Package {
-        Package { needs, ..self }
+    pub const fn needs(self, needs: &'static [ServiceId]) -> PluginInfo {
+        PluginInfo { needs, ..self }
     }
 }
 
-impl fmt::Debug for Package {
-    /// Shows the name, the description, whether a prelude exists, and the
+impl fmt::Debug for PluginInfo {
+    /// Shows the FQN, the description, whether a prelude exists, and the
     /// needs.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("Package")
-            .field("name", &self.name)
+        f.debug_struct("PluginInfo")
+            .field("fqn", &self.fqn)
             .field("description", &self.description)
             .field("prelude", &self.prelude.is_some())
             .field("needs", &self.needs)

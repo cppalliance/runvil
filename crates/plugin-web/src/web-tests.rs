@@ -1,4 +1,4 @@
-//! Tests for the `web` Plugin's label and `construct`: the tools it names
+//! Tests for the `web` Plugin's `PluginInfo` and `construct`: the tools it names
 //! under the installed name, the configuration it accepts, the Host-wide
 //! services it reads, the custom fetch policy, and how a call dispatches:
 //! to the tool its last segment names, or failing on a tool it lacks.
@@ -12,7 +12,7 @@ use runvil_plugin::{
 use serde_json::{Value, json};
 use tokio::runtime::Handle;
 
-use super::{PACKAGE, SEARCH_PROVIDER, Web};
+use super::{PLUGIN, SEARCH_PROVIDER, Web};
 use crate::config::FetchConfig;
 use crate::fetch::FetchClient;
 use crate::provider::{SearchError, SearchProvider, SearchQuery, SearchResults};
@@ -51,19 +51,19 @@ fn services_with(provider: bool, runtime: bool) -> HostServices {
 }
 
 fn name(text: &str) -> PluginId {
-    PluginId::parse(text).expect("a one-segment Plugin name parses")
+    PluginId::parse(text).expect("a one-segment Plugin id parses")
 }
 
 /// The Plugin installed under `installed` with `config` and both services.
 fn construct(installed: &str, config: Value) -> Result<Arc<dyn Plugin>, ToolError> {
-    (PACKAGE.construct)(&name(installed), config, &services_with(true, true))
+    (PLUGIN.construct)(&name(installed), config, &services_with(true, true))
 }
 
 #[test]
-fn the_package_is_runvil_web_with_no_prelude_and_no_per_run_needs() {
-    assert_eq!(PACKAGE.name, "runvil/web");
-    assert!(PACKAGE.prelude.is_none());
-    assert!(PACKAGE.needs.is_empty());
+fn the_plugin_is_runvil_web_with_no_prelude_and_no_per_run_needs() {
+    assert_eq!(PLUGIN.fqn, "runvil/web");
+    assert!(PLUGIN.prelude.is_none());
+    assert!(PLUGIN.needs.is_empty());
 }
 
 #[tokio::test]
@@ -91,7 +91,7 @@ async fn construct_accepts_null_or_an_empty_object_and_refuses_any_other_configu
 async fn construct_fails_naming_whichever_host_wide_service_is_missing() {
     let missing = |provider, runtime| {
         let services = services_with(provider, runtime);
-        match (PACKAGE.construct)(&name("web"), Value::Null, &services) {
+        match (PLUGIN.construct)(&name("web"), Value::Null, &services) {
             Ok(_) => panic!("construct fails without both services"),
             Err(error) => error.to_string(),
         }

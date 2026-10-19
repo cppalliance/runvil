@@ -11,10 +11,10 @@
 mod asker;
 mod effect_loop;
 mod harness;
-mod packages;
 mod performers;
 mod prepare;
 mod recorder;
+mod registry;
 mod scripted;
 mod support;
 mod tool_context;

@@ -129,7 +129,7 @@ pub(crate) fn install_plugins(
         .create_function(|lua, name: Value| match name {
             Value::String(name) => plugin_object(lua, &name.to_str()?),
             other => Err(mlua::Error::external(format!(
-                "plugins.get takes a Plugin name, got {}",
+                "plugins.get takes a Plugin id, got {}",
                 other.type_name()
             ))),
         })
@@ -166,7 +166,7 @@ fn install_offer(
     table.set("offer", offer).map_err(Error::lua)
 }
 
-/// Reads `plugins.offer`'s one argument, a Plugin name, a Plugin object,
+/// Reads `plugins.offer`'s one argument, a Plugin id, a Plugin object,
 /// or an array of either, as the names of Plugins the run knows, checking
 /// every entry against `set`'s roster before returning any.
 fn plugin_names(lua: &Lua, set: &ToolSet, args: Variadic<Value>) -> mlua::Result<Vec<PluginId>> {
@@ -192,7 +192,7 @@ fn plugin_names(lua: &Lua, set: &ToolSet, args: Variadic<Value>) -> mlua::Result
 fn plugin_name(lua: &Lua, set: &ToolSet, value: &Value) -> mlua::Result<PluginId> {
     let rejected = |found: String| {
         mlua::Error::external(format!(
-            "plugins.offer takes a Plugin name, a Plugin object, or a list of them, got {found}"
+            "plugins.offer takes a Plugin id, a Plugin object, or a list of them, got {found}"
         ))
     };
     match value {

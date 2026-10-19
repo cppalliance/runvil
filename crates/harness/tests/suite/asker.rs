@@ -5,15 +5,16 @@
 
 use std::sync::Arc;
 
-use harness::plugin::{HostContext, HostServices, PackageRegistry};
+use harness::plugin::{HostContext, HostServices, PluginRegistry};
 use runvil_plugin::{
-    Package, Plugin, PluginFuture, PluginId, ServiceId, ServiceKey, ToolContext, ToolError,
+    Plugin, PluginFuture, PluginId, PluginInfo, ServiceId, ServiceKey, ToolContext, ToolError,
     ToolErrorKind, ToolId, ToolInfo, ToolOutput,
 };
 use serde_json::{Value, json};
 
-/// The label: installed with no name, the Plugin is `user-input`.
-const ASKER: Package = Package::new("tests/user-input", construct)
+/// The `PluginInfo`: installed with no Plugin id given, the Plugin is
+/// `user-input`.
+const ASKER: PluginInfo = PluginInfo::new("tests/user-input", construct)
     .prelude(PRELUDE)
     .needs(NEEDS);
 
@@ -40,12 +41,12 @@ pub(crate) trait AskBroker: Send + Sync {
 
 /// A Host with the fixture installed as `user-input`.
 pub(crate) fn asker_host() -> Arc<HostContext> {
-    let mut packages = PackageRegistry::new();
-    if let Err(error) = packages.add(ASKER) {
+    let mut plugins = PluginRegistry::new();
+    if let Err(error) = plugins.add(ASKER) {
         panic!("a new registry takes the fixture: {error}");
     }
-    let mut host = HostContext::new(packages, HostServices::new());
-    if let Err(error) = host.install(ASKER.name, None, Value::Null) {
+    let mut host = HostContext::new(plugins, HostServices::new());
+    if let Err(error) = host.install(ASKER.fqn, None, Value::Null) {
         panic!("an empty Host installs the fixture: {error}");
     }
     Arc::new(host)

@@ -17,7 +17,7 @@ use runvil::model::{
     ModelBinding, ModelCatalog, ModelId, ModelInfo, ThinkingMode, ToolSchema,
 };
 use runvil_plugin::{
-    HostServices, Package, Plugin, PluginFuture, PluginId, ServiceKey, ToolContext, ToolError,
+    HostServices, Plugin, PluginFuture, PluginId, PluginInfo, ServiceKey, ToolContext, ToolError,
     ToolId, ToolInfo, ToolOutput,
 };
 use serde_json::{Value, json};
@@ -203,7 +203,7 @@ const HELD: ServiceKey<Held> = ServiceKey::new("tests/held");
 /// The fixture Plugin `harness`: one tool, `harness/hold`, whose every
 /// call is held, and which a stop leaves in flight when its configuration
 /// sets `survives_stop`.
-const HOLD: Package = Package::new("tests/harness", construct_hold);
+const HOLD: PluginInfo = PluginInfo::new("tests/harness", construct_hold);
 
 struct HoldPlugin {
     held: Arc<Held>,
@@ -212,7 +212,7 @@ struct HoldPlugin {
 
 #[expect(
     clippy::needless_pass_by_value,
-    reason = "the Package construct signature fixes the argument types"
+    reason = "the PluginInfo construct signature fixes the argument types"
 )]
 fn construct_hold(
     name: &PluginId,
@@ -263,7 +263,7 @@ fn host_holding(held: &Arc<Held>, survives_stop: bool) -> HostContext {
     let mut services = HostServices::new();
     services.provide(&HELD, Arc::clone(held)).unwrap();
     let mut host = HostContext::new(registry(&[HOLD, ASKER]), services);
-    host.install(HOLD.name, None, json!({ "survives_stop": survives_stop }))
+    host.install(HOLD.fqn, None, json!({ "survives_stop": survives_stop }))
         .unwrap();
     host
 }
@@ -271,7 +271,7 @@ fn host_holding(held: &Arc<Held>, survives_stop: bool) -> HostContext {
 /// `host`, whose registry holds the fixture ask Plugin, with it installed
 /// as `user-input`.
 pub(crate) fn with_asker(mut host: HostContext) -> HostContext {
-    host.install(ASKER.name, None, Value::Null).unwrap();
+    host.install(ASKER.fqn, None, Value::Null).unwrap();
     host
 }
 

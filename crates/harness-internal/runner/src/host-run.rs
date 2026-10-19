@@ -16,7 +16,7 @@ use runvil::plugins::Prelude;
 use runvil::tools::{ToolCatalog, ToolError, ToolErrorKind, ToolId, ToolInfo, ToolOutput};
 use runvil::vfs::Access;
 use runvil::{MissingService, Prompt, Requirements, UnavailablePlugin};
-use runvil_plugin::{HostServices, Package, Plugin, PluginId, ServiceId, ToolContext};
+use runvil_plugin::{HostServices, Plugin, PluginId, PluginInfo, ServiceId, ToolContext};
 use serde_json::Value;
 
 use crate::performers::{BoxFuture, ToolPerformer};
@@ -32,14 +32,14 @@ pub(crate) struct HostRunContext {
 enum RunPlugin {
     /// It can serve; `tools` is its tool list after validation.
     Usable {
-        package: Package,
+        info: PluginInfo,
         plugin: Arc<dyn Plugin>,
         tools: Vec<ToolInfo>,
     },
     /// Its `construct` failed, or its `ready` did before this run, for
     /// this reason.
     Unavailable(String),
-    /// The run lacks these services from its package's needs.
+    /// The run lacks these services from the Plugin's needs.
     NeedsUnmet(Vec<ServiceId>),
 }
 
@@ -49,21 +49,27 @@ impl HostRunContext {
     ///
     /// A built Plugin named in `failures` is unavailable with the reason
     /// it maps to. Any other built Plugin is usable when `services`
-    /// provide every id its package needs; only then is its tool list read
+    /// provide every id the Plugin needs; only then is its tool list read
     /// and validated.
     pub(super) fn snapshot<'a>(
-        installed: impl Iterator<Item = (&'a PluginId, Package, &'a Result<Arc<dyn Plugin>, String>)>,
+        installed: impl Iterator<
+            Item = (
+                &'a PluginId,
+                PluginInfo,
+                &'a Result<Arc<dyn Plugin>, String>,
+            ),
+        >,
         services: HostServices,
         mut failures: BTreeMap<PluginId, String>,
     ) -> HostRunContext {
         let mut seen = BTreeSet::new();
         let plugins = installed
-            .map(|(name, package, built)| {
+            .map(|(name, info, built)| {
                 let state = match (built, failures.remove(name)) {
                     (Err(reason), _) => RunPlugin::Unavailable(reason.clone()),
                     (Ok(_), Some(reason)) => RunPlugin::Unavailable(reason),
                     (Ok(plugin), None) => {
-                        let unmet: Vec<ServiceId> = package
+                        let unmet: Vec<ServiceId> = info
                             .needs
                             .iter()
                             .copied()
@@ -71,7 +77,7 @@ impl HostRunContext {
                             .collect();
                         if unmet.is_empty() {
                             RunPlugin::Usable {
-                                package,
+                                info,
                                 plugin: Arc::clone(plugin),
                                 tools: validated(name, plugin.tools(), &mut seen),
                             }
@@ -138,7 +144,7 @@ impl HostRunContext {
             .plugins()
             .iter()
             .filter_map(|name| match self.plugins.get(name) {
-                Some(RunPlugin::Usable { package, .. }) => package
+                Some(RunPlugin::Usable { info, .. }) => info
                     .prelude
                     .map(|source| Prelude::new(name.clone(), source)),
                 _ => None,
