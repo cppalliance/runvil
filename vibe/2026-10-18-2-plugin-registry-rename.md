@@ -4,19 +4,19 @@ overview: "Rename the Plugin, tool, and model vocabulary so \"package\" is free 
 todos:
   - id: plan-record
     content: The Run Sequence copies the plan to vibe/YYYY-MM-DD-N-plugin-registry-rename.md, named by its seed date, and writes that path to vibe/ACTIVE in its seed commit, which Step 1 amends; every todo stays pending in the record until the Close commit
-    status: pending
+    status: completed
   - id: info-names
     content: "Step 1: ToolDescriptor -> ToolInfo and ModelDescriptor -> ModelInfo across runvil-types, the runvil facade, runvil-parser, runvil-lua, runvil-model-client, runvil-engine, runvil-plugin, the plugin-* crates, and the Harness crates, with the ModelInfo doc naming the gateway's two ModelInfo types; bless public-api.txt; pass the step's Tests"
-    status: pending
+    status: completed
   - id: plugin-registry
     content: "Step 2: Package -> PluginInfo (name -> fqn, and the prose word label), PACKAGE -> PLUGIN, PackageRegistry -> PluginRegistry, PluginKind::Native -> PluginKind::Builtin (native -> built-in in that sense), Plugin name -> Plugin id in the NameTaken, plugins.get, and plugins.offer messages, the InstallError variants and messages, the harness facade, Workshop callers, and the AGENTS.md Plugin entry; pass the step's Tests"
-    status: pending
+    status: completed
   - id: docs
     content: "runvil-docs commit, made and committed by the agent running this plan, in that repository, after Step 2 and before the Close commit: fully qualified name for package name (Plugin sense) in chapters 04, 05, 12, 13, and 17, bundled Plugins for built-in Plugin packages and Plugin id for Plugin name in chapter 12, and model info for model descriptor in chapter 10; pass the docs checks"
-    status: pending
+    status: completed
   - id: close
     content: "The Run Sequence's Close plan commit in runvil: mark every todo completed in the record and remove vibe/ACTIVE; push nothing"
-    status: pending
+    status: completed
 isProject: false
 ---
 
