@@ -9,7 +9,9 @@
 
 use runvil_model_client::client::{RawExchange, ToolCall};
 use runvil_model_client::model::CompletionErrorKind;
-use runvil_types::tools::ToolErrorKind;
+use runvil_types::tools::{OutputTrust, ToolErrorKind};
+
+use crate::model::CompletionResult;
 use serde_json::json;
 
 use super::*;
@@ -233,7 +235,73 @@ fn a_tool_call_answer_records_the_outputs_text_and_trust() {
         untrusted,
         AnswerRecord::ToolCall(Ok(ToolAnswerRecord::new("<html>", OutputTrust::Untrusted)))
     );
+    assert_eq!(
+        serde_json::to_string(&untrusted).expect("a tool answer records"),
+        r#"{"ToolCall":{"Ok":{"text":"<html>","trust":"untrusted"}}}"#
+    );
     assert_eq!(answer_round_trip(&untrusted), untrusted);
+}
+
+#[test]
+fn a_tool_answer_record_without_a_payload_serializes_without_a_structured_key() {
+    let trusted = ToolAnswerRecord::new("done", OutputTrust::Trusted);
+    assert_eq!(
+        serde_json::to_string(&trusted).expect("a tool answer record serializes"),
+        r#"{"text":"done","trust":"trusted"}"#
+    );
+    let untrusted = ToolAnswerRecord::new("<html>", OutputTrust::Untrusted);
+    assert_eq!(
+        serde_json::to_string(&untrusted).expect("a tool answer record serializes"),
+        r#"{"text":"<html>","trust":"untrusted"}"#
+    );
+}
+
+#[test]
+fn a_tool_answer_record_with_a_payload_serializes_sorted_keys_and_round_trips_exactly() {
+    let record = ToolAnswerRecord::new("done", OutputTrust::Untrusted).with_structured(json!({
+        "isError": false,
+        "content": [{"type": "text", "text": "done"}],
+        "structuredContent": {"zeta": 1, "alpha": 0.5},
+    }));
+    let text = serde_json::to_string(&record).expect("a tool answer record serializes");
+    assert_eq!(
+        text,
+        r#"{"structured":{"content":[{"text":"done","type":"text"}],"isError":false,"structuredContent":{"alpha":0.5,"zeta":1}},"text":"done","trust":"untrusted"}"#
+    );
+    let value = serde_json::to_value(&record).expect("a tool answer record converts");
+    let parsed: serde_json::Value =
+        serde_json::from_str(&text).expect("a serialized tool answer record parses");
+    assert_eq!(parsed, value);
+    assert_eq!(
+        serde_json::to_string(&value).expect("a record value serializes"),
+        text,
+        "the record's JSON matches its value form key for key"
+    );
+    let back: ToolAnswerRecord =
+        serde_json::from_str(&text).expect("a serialized tool answer record deserializes");
+    assert_eq!(back, record);
+}
+
+#[test]
+fn a_tool_answer_record_json_without_structured_deserializes_with_no_payload() {
+    let record: ToolAnswerRecord = serde_json::from_str(r#"{"text":"done","trust":"trusted"}"#)
+        .expect("a record without a payload deserializes");
+    assert_eq!(record.structured, None);
+    assert_eq!(record, ToolAnswerRecord::new("done", OutputTrust::Trusted));
+}
+
+#[test]
+fn a_tool_call_answer_records_the_payload_the_output_carries() {
+    let payload = json!({"content": [], "isError": false});
+    let record = EffectAnswer::ToolCall(Ok(
+        ToolOutput::untrusted("done").with_structured(payload.clone())
+    ))
+    .record();
+    let AnswerRecord::ToolCall(Ok(tool)) = &record else {
+        panic!("a tool call answer records a tool answer, got {record:?}");
+    };
+    assert_eq!(tool.structured, Some(payload));
+    assert_eq!(answer_round_trip(&record), record);
 }
 
 #[test]

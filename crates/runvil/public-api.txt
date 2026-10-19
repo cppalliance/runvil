@@ -549,6 +549,7 @@ pub fn runvil::effect::EffectAnswer::record(&self) -> runvil::effect::AnswerReco
 pub fn runvil::effect::FailureRecord::new(kind: impl core::convert::Into<alloc::string::String>, message: impl core::convert::Into<alloc::string::String>) -> runvil::effect::FailureRecord
 pub fn runvil::effect::Round::new(id: runvil::ids::RoundId, origin: runvil::event::ReplyOrigin) -> runvil::effect::Round
 pub fn runvil::effect::ToolAnswerRecord::new(text: impl core::convert::Into<alloc::string::String>, trust: runvil::tools::OutputTrust) -> runvil::effect::ToolAnswerRecord
+pub fn runvil::effect::ToolAnswerRecord::with_structured(self, value: serde_json::value::Value) -> runvil::effect::ToolAnswerRecord
 pub fn runvil::effect::ToolCallOrigin::new(execution: impl core::convert::Into<alloc::string::String>, section: impl core::convert::Into<alloc::string::String>, caller: runvil::effect::ToolCaller) -> runvil::effect::ToolCallOrigin
 pub fn runvil::event::Event::execution(&self) -> &str
 pub fn runvil::event::Event::provenance(&self) -> &runvil::ids::Provenance
@@ -950,6 +951,7 @@ pub runvil::effect::FailureRecord::kind: alloc::string::String
 pub runvil::effect::FailureRecord::message: alloc::string::String
 pub runvil::effect::Round::id: runvil::ids::RoundId
 pub runvil::effect::Round::origin: runvil::event::ReplyOrigin
+pub runvil::effect::ToolAnswerRecord::structured: core::option::Option<serde_json::value::Value>
 pub runvil::effect::ToolAnswerRecord::text: alloc::string::String
 pub runvil::effect::ToolAnswerRecord::trust: runvil::tools::OutputTrust
 pub runvil::effect::ToolCallOrigin::caller: runvil::effect::ToolCaller

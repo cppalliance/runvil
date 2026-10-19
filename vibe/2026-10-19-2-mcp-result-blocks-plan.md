@@ -265,7 +265,7 @@ Every step keeps these constraints: model-facing MCP text stays byte-identical, 
 
 <step-4>
 
-### Step 4: Persist the payload in ToolAnswerRecord
+### Step 4: Persist the payload in ToolAnswerRecord [completed]
 
 - Component: Engine payload handling
 - Tests: `cargo nextest run --locked -p runvil-engine --all-features`; `cargo +<nightly from crates/build-xtask/src/api/toolchain.rs> xtask api --check` with `CARGO_BUILD_WARNINGS` unset
