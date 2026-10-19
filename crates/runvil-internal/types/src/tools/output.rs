@@ -19,12 +19,24 @@ pub enum OutputTrust {
 ///
 /// Build one with [`ToolOutput::trusted`] or [`ToolOutput::untrusted`]. The
 /// trust level travels with the text, so code that handles the output reads
-/// the level from the output itself.
+/// the level from the output itself. An untrusted text is nonce-wrapped before
+/// it reaches model input.
+///
+/// An output may also carry a structured payload, attached with
+/// [`ToolOutput::with_structured`]. A calling script receives the payload in
+/// place of the text, while every delivery to a model uses the text. The trust
+/// rules apply to the text only: the payload is not wrapped, so a script that
+/// forwards text from it to a model must wrap that text with `untrusted(s)`.
+///
+/// A Plugin that attaches a payload to any output of a tool attaches one to
+/// every successful output of that tool, so the type a script receives from
+/// the tool stays fixed.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct ToolOutput {
     text: String,
     trust: OutputTrust,
+    structured: Option<serde_json::Value>,
 }
 
 impl ToolOutput {
@@ -34,6 +46,7 @@ impl ToolOutput {
         ToolOutput {
             text: text.into(),
             trust: OutputTrust::Trusted,
+            structured: None,
         }
     }
 
@@ -43,7 +56,17 @@ impl ToolOutput {
         ToolOutput {
             text: text.into(),
             trust: OutputTrust::Untrusted,
+            structured: None,
         }
+    }
+
+    /// Attaches `value` as the structured payload a calling script receives in
+    /// place of the text, returning the updated output. The text and its trust
+    /// level stay as they were built.
+    #[must_use]
+    pub fn with_structured(mut self, value: serde_json::Value) -> ToolOutput {
+        self.structured = Some(value);
+        self
     }
 
     /// Borrows the output text.
@@ -56,6 +79,12 @@ impl ToolOutput {
     #[must_use]
     pub fn trust(&self) -> OutputTrust {
         self.trust
+    }
+
+    /// Borrows the structured payload, or `None` when the output has none.
+    #[must_use]
+    pub fn structured(&self) -> Option<&serde_json::Value> {
+        self.structured.as_ref()
     }
 }
 

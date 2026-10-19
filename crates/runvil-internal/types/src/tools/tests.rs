@@ -42,6 +42,26 @@ fn tool_output_has_mandatory_trust() {
 }
 
 #[test]
+fn trusted_and_untrusted_outputs_carry_no_structured_payload() {
+    use super::ToolOutput;
+    assert_eq!(ToolOutput::trusted("a").structured(), None);
+    assert_eq!(ToolOutput::untrusted("b").structured(), None);
+}
+
+#[test]
+fn with_structured_keeps_text_and_trust_and_returns_the_payload() {
+    use super::{OutputTrust, ToolOutput};
+    let payload = json!({"content": [{"type": "text", "text": "hi"}]});
+    let output = ToolOutput::untrusted("hi").with_structured(payload.clone());
+    assert_eq!(output.text(), "hi");
+    assert_eq!(output.trust(), OutputTrust::Untrusted);
+    assert_eq!(output.structured(), Some(&payload));
+    let output = ToolOutput::trusted("t").with_structured(json!(null));
+    assert_eq!(output.trust(), OutputTrust::Trusted);
+    assert_eq!(output.structured(), Some(&json!(null)));
+}
+
+#[test]
 fn output_trust_serializes_as_its_snake_case_name() {
     use super::OutputTrust;
     assert_wire(&OutputTrust::Trusted, r#""trusted""#);

@@ -82,6 +82,10 @@ pub trait Plugin: Send + Sync {
     /// - `call` marks the trust of every output correctly. Output that
     ///   embeds data an attacker can influence is
     ///   [`ToolOutput::untrusted`].
+    /// - `call` attaches a structured payload with
+    ///   [`ToolOutput::with_structured`] to every successful output of a
+    ///   tool, or to none of them, so the type a script receives from the
+    ///   tool stays fixed.
     /// - `call` is cancellation-aware. The Harness drops the returned
     ///   future on a stop, when the run ends (a cancel included), and when
     ///   the task that made the call ends early: it is cancelled, its owner
