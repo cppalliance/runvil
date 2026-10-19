@@ -91,6 +91,7 @@ mod scope;
 mod sys;
 mod tools;
 mod vm;
+mod walk_budget;
 
 #[cfg(any(test, feature = "test-support"))]
 pub mod test_support;

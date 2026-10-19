@@ -38,6 +38,7 @@ use crate::iteration::install_deterministic_iteration;
 use crate::models::{ModelRuntime, RawModelIds};
 use crate::program::LuaProgram;
 use crate::scope::ToolRuntime;
+use crate::walk_budget::HeapCeiling;
 
 pub use inject::InjectFailure;
 pub use run::CoroStep;
@@ -258,6 +259,7 @@ impl SectionVm<Uninjected> {
         // bounded even when the run installs no explicit limits.
         lua.set_memory_limit(DEFAULT_LUA_MEMORY_BYTES)
             .map_err(Error::lua)?;
+        lua.set_app_data(HeapCeiling(DEFAULT_LUA_MEMORY_BYTES));
         let mut vm = Self {
             lua,
             bound_tools: Arc::new(ToolSet::default()),
@@ -342,6 +344,7 @@ impl SectionVm<Uninjected> {
         self.lua
             .set_memory_limit(memory_bytes)
             .map_err(Error::lua)?;
+        self.lua.set_app_data(HeapCeiling(memory_bytes));
         self.log_budget.store(log_events, Ordering::Relaxed);
         self.log_byte_budget
             .store(log_byte_budget(log_events), Ordering::Relaxed);

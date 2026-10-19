@@ -190,7 +190,7 @@ Acceptance: the three new or renamed tests pass, and these guards keep passing: 
 </step-1>
 <step-2>
 
-### Step 2: Budget the encoder's node and byte work
+### Step 2: Budget the encoder's node and byte work [completed]
 
 - Component: Bounded conversion
 - Tests:

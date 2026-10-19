@@ -6,8 +6,12 @@
 //! metatable with `raw_get`, and it compares tables by pointer. It builds a
 //! `serde_json` tree on the Rust heap, whose objects sort their keys, and
 //! writes it in one pass. In debug mode each failure inside the value
-//! becomes a placeholder string, so any value encodes.
+//! becomes a placeholder string, so any value encodes, except a value too
+//! large to walk: the walk counts every value it visits, shared tables and
+//! repeated strings once per occurrence, and refuses past a budget sized
+//! from the Lua heap.
 
+use std::collections::HashSet;
 use std::ffi::c_void;
 
 use mlua::{Lua, LuaSerdeExt, LuaString, Table, Value};
@@ -16,6 +20,7 @@ use serde_json::{Map, Number, Value as Json};
 use super::keys::{Rule, Shape, entries, shape};
 use super::refusal;
 use crate::proxy::{key_path, key_text};
+use crate::walk_budget::{TooLarge, WalkBudget};
 
 /// The most tables deep a value may nest, the top-level table being level
 /// 1: the depth `json.decode` accepts.
@@ -126,13 +131,15 @@ enum Resolved {
 }
 
 /// One walk over a value: the mode, the path of keys to the current value
-/// for error messages, and the tables on that path for cycle detection.
+/// for error messages, the tables on that path for cycle detection, and
+/// what is left of the budget for values and text.
 struct Encoder {
     function: &'static str,
     debug: bool,
     marker: Table,
     keys: Vec<Value>,
     tables: Vec<*const c_void>,
+    budget: WalkBudget,
 }
 
 impl Encoder {
@@ -143,7 +150,29 @@ impl Encoder {
             marker: lua.array_metatable(),
             keys: Vec::new(),
             tables: Vec::new(),
+            budget: WalkBudget::for_vm(lua),
         }
+    }
+
+    /// The refusal for a walk past its budget. It has no path, and it never
+    /// becomes a placeholder: one placeholder per remaining value would not
+    /// bound the work.
+    fn too_large(&self) -> mlua::Error {
+        refusal(format!("{}: value is too large to encode", self.function))
+    }
+
+    /// Spends one value of the budget.
+    fn charge_node(&mut self) -> mlua::Result<()> {
+        self.budget
+            .charge_node()
+            .map_err(|TooLarge| self.too_large())
+    }
+
+    /// Spends `count` bytes of text of the budget.
+    fn charge_bytes(&mut self, count: usize) -> mlua::Result<()> {
+        self.budget
+            .charge_bytes(count)
+            .map_err(|TooLarge| self.too_large())
     }
 
     /// The error for `failure` at the current path.
@@ -166,6 +195,7 @@ impl Encoder {
 
     /// Encodes `value`, which is at `level` if it is a table.
     fn value(&mut self, value: &Value, level: usize) -> mlua::Result<Json> {
+        self.charge_node()?;
         match value {
             Value::Nil => Ok(Json::Null),
             Value::LightUserData(pointer) if pointer.0.is_null() => Ok(Json::Null),
@@ -176,11 +206,14 @@ impl Encoder {
                 None if self.debug => Ok(Json::String(non_finite_text(*number))),
                 None => Err(self.error(&Failure::NotFinite)),
             },
-            Value::String(text) => match text.to_str() {
-                Ok(text) => Ok(Json::String(text.to_owned())),
-                Err(_) if self.debug => Ok(Json::String(text.to_string_lossy())),
-                Err(_) => Err(self.error(&Failure::NotUtf8)),
-            },
+            Value::String(text) => {
+                self.charge_bytes(text.as_bytes().len())?;
+                match text.to_str() {
+                    Ok(text) => Ok(Json::String(text.to_owned())),
+                    Err(_) if self.debug => Ok(Json::String(text.to_string_lossy())),
+                    Err(_) => Err(self.error(&Failure::NotUtf8)),
+                }
+            }
             Value::Table(table) => self.table(table, level),
             other => {
                 let kind = other.type_name();
@@ -196,7 +229,7 @@ impl Encoder {
     /// Encodes `table` at `level`, reading through a sealed view to its
     /// data table, which counts for the cycle and depth checks instead.
     fn table(&mut self, table: &Table, level: usize) -> mlua::Result<Json> {
-        let data = match resolve(table)? {
+        let data = match self.resolve(table)? {
             Resolved::Data(data) => data,
             Resolved::Unreadable(label) => {
                 let placeholder = match &label {
@@ -253,6 +286,7 @@ impl Encoder {
             let Value::String(name) = key else {
                 continue;
             };
+            self.charge_bytes(name.as_bytes().len())?;
             match name.to_str() {
                 Ok(text) => names.push(text.to_owned()),
                 Err(_) if self.debug => names.push(name.to_string_lossy()),
@@ -287,6 +321,7 @@ impl Encoder {
                 Value::String(name) => name.to_string_lossy(),
                 _ => continue,
             };
+            self.charge_bytes(name.len())?;
             let encoded = self.value(&value, level + 1)?;
             object.insert(name, encoded);
         }
@@ -296,7 +331,7 @@ impl Encoder {
     /// The items of `json.encode_lines`'s list argument, each encoded at
     /// level 1 while the list stays on the cycle path.
     fn items(&mut self, list: &Table) -> mlua::Result<Vec<Json>> {
-        let data = match resolve(list)? {
+        let data = match self.resolve(list)? {
             Resolved::Data(data) => data,
             Resolved::Unreadable(label) => return Err(self.error(&Failure::Unreadable(label))),
             Resolved::Loop => return Err(self.error(&Failure::Cycle)),
@@ -323,44 +358,50 @@ impl Encoder {
     }
 }
 
-/// Reads through sealed views. A sealed view is a table with no entries of
-/// its own whose metatable has both `__index` and `__metatable`: a table
-/// `__index` is its data, read by these same rules, and a function
-/// `__index` cannot be read, labelled by a string `__metatable`. Any other
-/// table is its own data.
-fn resolve(table: &Table) -> mlua::Result<Resolved> {
-    let mut current = table.clone();
-    let mut views = Vec::new();
-    loop {
-        let Some(metatable) = current.metatable() else {
-            return Ok(Resolved::Data(current));
-        };
-        let label: Value = metatable.raw_get("__metatable")?;
-        if label.is_nil()
-            || current
-                .pairs::<Value, Value>()
-                .next()
-                .transpose()?
-                .is_some()
-        {
-            return Ok(Resolved::Data(current));
-        }
-        match metatable.raw_get::<Value>("__index")? {
-            Value::Table(data) => {
-                views.push(current.to_pointer());
-                if views.contains(&data.to_pointer()) {
-                    return Ok(Resolved::Loop);
+impl Encoder {
+    /// Reads through sealed views. A sealed view is a table with no entries
+    /// of its own whose metatable has both `__index` and `__metatable`: a
+    /// table `__index` is its data, read by these same rules, and a
+    /// function `__index` cannot be read, labelled by a string
+    /// `__metatable`. Any other table is its own data. Each hop to another
+    /// view spends one value of the budget, and the views already passed
+    /// sit in a set, so a long chain costs time in proportion to its
+    /// length.
+    fn resolve(&mut self, table: &Table) -> mlua::Result<Resolved> {
+        let mut current = table.clone();
+        let mut views = HashSet::new();
+        loop {
+            let Some(metatable) = current.metatable() else {
+                return Ok(Resolved::Data(current));
+            };
+            let label: Value = metatable.raw_get("__metatable")?;
+            if label.is_nil()
+                || current
+                    .pairs::<Value, Value>()
+                    .next()
+                    .transpose()?
+                    .is_some()
+            {
+                return Ok(Resolved::Data(current));
+            }
+            match metatable.raw_get::<Value>("__index")? {
+                Value::Table(data) => {
+                    self.charge_node()?;
+                    views.insert(current.to_pointer());
+                    if views.contains(&data.to_pointer()) {
+                        return Ok(Resolved::Loop);
+                    }
+                    current = data;
                 }
-                current = data;
+                Value::Function(_) => {
+                    let label = match label {
+                        Value::String(label) => Some(label.to_string_lossy()),
+                        _ => None,
+                    };
+                    return Ok(Resolved::Unreadable(label));
+                }
+                _ => return Ok(Resolved::Data(current)),
             }
-            Value::Function(_) => {
-                let label = match label {
-                    Value::String(label) => Some(label.to_string_lossy()),
-                    _ => None,
-                };
-                return Ok(Resolved::Unreadable(label));
-            }
-            _ => return Ok(Resolved::Data(current)),
         }
     }
 }

@@ -12,6 +12,7 @@ mod decode;
 mod encode;
 mod envelope;
 mod errors;
+mod limits;
 mod lines;
 mod marked;
 mod views;
