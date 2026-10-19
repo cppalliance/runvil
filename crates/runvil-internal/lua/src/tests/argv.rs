@@ -97,6 +97,21 @@ fn frozen_argv_holding_an_empty_list_encodes_it_as_an_empty_array() {
 }
 
 #[test]
+fn frozen_argv_reads_nested_nulls_as_json_null() {
+    let argv = json!({ "a": null, "ids": [1, null, 3] });
+    let vm = TestVm::new().argv(Argv::Frozen(Some(&argv))).build();
+    let out = run_argv(
+        &vm,
+        "assert(argv.a == json.null, 'a null field reads json.null')\n\
+         assert(argv.ids[2] == json.null, 'a null list slot reads json.null')\n\
+         return 'ok'",
+    )
+    .expect("nested nulls read as json.null");
+    assert_eq!(out.as_deref(), Some("ok"));
+    vm.teardown();
+}
+
+#[test]
 fn frozen_nil_argv_reads_nil_and_rejects_assignment() {
     let vm = TestVm::new().argv(Argv::Frozen(None)).build();
     let out = run_argv(&vm, "assert(argv == nil, 'no argv reads nil') return 'ok'")

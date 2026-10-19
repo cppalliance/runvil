@@ -135,7 +135,7 @@ fn an_h1_repair_is_visible_to_every_downstream_section() {
 }
 
 #[test]
-fn an_h1_argv_holding_json_null_passes_the_freeze_and_reads_the_field_as_nil() {
+fn an_h1_argv_holding_json_null_passes_the_freeze_and_reads_the_field_as_json_null() {
     let source = PromptSource::new()
         .front(QUERY)
         .h1("argv = { a = json.null }")
@@ -143,7 +143,7 @@ fn an_h1_argv_holding_json_null_passes_the_freeze_and_reads_the_field_as_nil() {
             "Only",
             "
             assert(argv ~= nil, 'the repaired argv passes the freeze')
-            assert(argv.a == nil, 'a null field reads as nil once frozen')
+            assert(argv.a == json.null, 'a null field read as nil once frozen, not json.null')
             return 'ok'",
         );
     let trace = Scenario::new(source.build()).args("broken json").run();

@@ -44,6 +44,26 @@ fn frozen_argv_encodes_its_stored_data() {
 }
 
 #[test]
+fn frozen_and_writable_argv_encode_nested_nulls_alike() {
+    let argv = json!({ "ids": [1, null, 3], "tail": [1, null], "a": null });
+    let frozen = TestVm::new()
+        .argv(Argv::Frozen(Some(&argv)))
+        .shims()
+        .build();
+    let writable = TestVm::new()
+        .argv(Argv::Writable(Some(&argv)))
+        .shims()
+        .build();
+    for (mode, vm) in [("frozen", &frozen), ("writable", &writable)] {
+        assert_eq!(
+            encoded(vm, "json.encode(argv)"),
+            r#"{"a":null,"ids":[1,null,3],"tail":[1,null]}"#,
+            "{mode} argv"
+        );
+    }
+}
+
+#[test]
 fn a_var_value_127_levels_deep_encodes_because_views_add_no_level() {
     let mut deep = json!(1);
     for _ in 0..127 {

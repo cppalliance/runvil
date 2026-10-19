@@ -57,40 +57,45 @@ pub(crate) fn install_writable(lua: &Lua, argv: Option<&Json>) -> Result<()> {
 /// Returns [`Error::LuaRuntime`] if the value cannot be bridged or the guard
 /// cannot record it.
 pub(crate) fn install_frozen(lua: &Lua, argv: Option<&Json>) -> Result<()> {
-    let frozen = frozen_json_value(lua, argv)?;
+    let frozen = match argv {
+        None | Some(Json::Null) => Value::Nil,
+        Some(json) => frozen_json_value(lua, json)?,
+    };
     crate::globals::freeze_argv(lua, frozen)
 }
 
 /// Builds the frozen Lua form of an argv JSON value: tables become
-/// deep-frozen proxies, scalars bridge directly, and absent or null reads
-/// as nil. A list's data table carries mlua's array metatable, so an empty
-/// list read through the proxy still encodes as `[]`.
-fn frozen_json_value(lua: &Lua, value: Option<&Json>) -> Result<Value> {
+/// deep-frozen proxies and scalars bridge directly. A nested null reads
+/// `json.null`, as it does in the writable H1 value; only a top-level
+/// absent or null argv reads nil, which [`install_frozen`] handles before
+/// this runs. A list's data table carries mlua's array metatable, so an
+/// empty list read through the proxy still encodes as `[]`, and a list
+/// holding a null encodes whole.
+fn frozen_json_value(lua: &Lua, value: &Json) -> Result<Value> {
     match value {
-        None | Some(Json::Null) => Ok(Value::Nil),
-        Some(Json::Array(values)) => {
+        Json::Array(values) => {
             let data = lua
                 .create_table_with_capacity(values.len(), 0)
                 .map_err(Error::lua)?;
             data.set_metatable(Some(lua.array_metatable()))
                 .map_err(Error::lua)?;
             for (index, value) in values.iter().enumerate() {
-                data.raw_set(index + 1, frozen_json_value(lua, Some(value))?)
+                data.raw_set(index + 1, frozen_json_value(lua, value)?)
                     .map_err(Error::lua)?;
             }
             freeze_table(lua, data).map(Value::Table)
         }
-        Some(Json::Object(values)) => {
+        Json::Object(values) => {
             let data = lua
                 .create_table_with_capacity(0, values.len())
                 .map_err(Error::lua)?;
             for (key, value) in values {
-                data.raw_set(key.as_str(), frozen_json_value(lua, Some(value))?)
+                data.raw_set(key.as_str(), frozen_json_value(lua, value)?)
                     .map_err(Error::lua)?;
             }
             freeze_table(lua, data).map(Value::Table)
         }
-        Some(scalar) => lua.to_value(scalar).map_err(Error::lua),
+        scalar => lua.to_value(scalar).map_err(Error::lua),
     }
 }
 
