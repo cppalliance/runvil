@@ -6,7 +6,9 @@
 //! without the instruction hook ever firing. The budget is sized from the
 //! heap ceiling so that only expansion beyond the heap is refused.
 
-use mlua::Lua;
+use std::ffi::c_void;
+
+use mlua::{Lua, Value};
 
 use crate::vm::DEFAULT_LUA_MEMORY_BYTES;
 
@@ -15,6 +17,11 @@ use crate::vm::DEFAULT_LUA_MEMORY_BYTES;
 /// heap has at most `ceiling / 9` values, and `ceiling / 8` leaves room
 /// above that.
 const BYTES_PER_NODE: usize = 8;
+
+/// The most table levels `check_value` descends, the top-level table being
+/// level 1. A table nested past it is not counted and converts as it does
+/// today.
+const CHECK_DEPTH_LIMIT: usize = 200;
 
 /// The most keys one encode path may hold as Lua references at once:
 /// string, table, function, thread, and userdata keys, each of which takes
@@ -66,5 +73,47 @@ impl WalkBudget {
     pub(crate) fn charge_bytes(&mut self, n: usize) -> Result<(), TooLarge> {
         self.bytes = self.bytes.checked_sub(n).ok_or(TooLarge)?;
         Ok(())
+    }
+
+    /// Spends the budget on every value `value` holds, as a pre-walk for a
+    /// caller that converts the value with `from_value`, which reads a
+    /// shared table once per reference and builds the result on the Rust
+    /// heap before any Lua allocation. The walk reads each table lazily
+    /// with `Table::pairs`, so it never holds more than one entry of a
+    /// table, and it stops at the first value past the budget. It counts
+    /// every value it visits, repeats of a shared table included, and the
+    /// bytes of every string value and string key. It does not descend into
+    /// a table already on the path to it, or one at a level past
+    /// `CHECK_DEPTH_LIMIT`; the conversion that follows keeps its own
+    /// behavior for a cyclic or very deep value.
+    pub(crate) fn check_value(&mut self, value: &Value) -> Result<(), TooLarge> {
+        self.check_at(value, &mut Vec::new())
+    }
+
+    /// Spends the budget on `value` and, for a table, on its entries.
+    /// `path` holds the tables that lead to `value`.
+    fn check_at(&mut self, value: &Value, path: &mut Vec<*const c_void>) -> Result<(), TooLarge> {
+        self.charge_node()?;
+        match value {
+            Value::String(text) => self.charge_bytes(text.as_bytes().len()),
+            Value::Table(table) => {
+                let pointer = table.to_pointer();
+                if path.len() >= CHECK_DEPTH_LIMIT || path.contains(&pointer) {
+                    return Ok(());
+                }
+                path.push(pointer);
+                // An entry that cannot be read ends the walk of this table,
+                // and the conversion that follows reports it as it does today.
+                for (key, value) in table.pairs::<Value, Value>().map_while(Result::ok) {
+                    if let Value::String(name) = &key {
+                        self.charge_bytes(name.as_bytes().len())?;
+                    }
+                    self.check_at(&value, path)?;
+                }
+                path.pop();
+                Ok(())
+            }
+            _ => Ok(()),
+        }
     }
 }

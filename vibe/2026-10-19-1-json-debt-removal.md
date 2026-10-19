@@ -251,7 +251,7 @@ Acceptance: both new tests pass, the Step 2 tests in `limits.rs` still pass, and
 </step-3>
 <step-4>
 
-### Step 4: Refuse oversized var writes and run the exit checks
+### Step 4: Refuse oversized var writes and run the exit checks [completed]
 
 - Component: Bounded conversion
 - Tests:

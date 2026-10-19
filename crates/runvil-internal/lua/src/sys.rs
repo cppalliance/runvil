@@ -8,6 +8,7 @@ use serde_json::Value as Json;
 
 use crate::error::{Error, Result};
 use crate::proxy::{key_path, key_text, read_only_proxy};
+use crate::walk_budget::WalkBudget;
 
 /// The registry key holding the `var` proxy's hidden data table.
 ///
@@ -87,6 +88,14 @@ fn guarded_table(
                 return Err(mlua::Error::runtime(format!(
                     "{target} must be JSON data, got {}",
                     value.type_name()
+                )));
+            }
+            // `from_value` reads a shared table once per reference and builds
+            // the result on the Rust heap before any Lua allocation, so a
+            // value that outgrows the heap is refused before it converts.
+            if WalkBudget::for_vm(lua).check_value(&value).is_err() {
+                return Err(mlua::Error::runtime(format!(
+                    "{target} is too large to store"
                 )));
             }
             let json = lua.from_value::<Json>(value)?;

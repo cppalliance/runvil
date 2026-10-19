@@ -223,3 +223,87 @@ fn reassigning_the_var_global_fails_read_back() {
         "the error must name the reassignment: {error}"
     );
 }
+
+/// A VM whose Lua heap is 4 MiB, so a write may read at most 524,288 values
+/// and 4 MiB of text.
+fn small_heap_vm() -> BuiltVm {
+    TestVm::new()
+        .limits(4 * 1024 * 1024, DEFAULT_LUA_LOG_EVENTS)
+        .shims()
+        .build()
+}
+
+/// Runs `var.x = t` on `vm` under `pcall` and returns whether it raised, the
+/// error's kind, and its message.
+fn var_write_of_t(vm: &BuiltVm) -> (bool, String, String) {
+    vm.eval(
+        "local ok, err = pcall(function() var.x = t end)\n\
+         if ok then return false, '', '' end\n\
+         return true, tostring(err.kind), tostring(err)",
+    )
+}
+
+#[test]
+fn a_var_write_of_a_shared_table_past_the_budget_is_refused() {
+    // `t` is 19 levels of `{ t, t }` over one empty table: 20 tables in
+    // memory, but about 1 million values in a walk that reads a shared table
+    // once per reference, against the 524,288 that a 4 MiB heap allows.
+    // Without the check the conversion builds the whole tree on the Rust
+    // heap first and then fails differently, on a Lua memory error from
+    // rebuilding it.
+    let vm = small_heap_vm();
+    vm.eval::<()>("t = {} for i = 1, 19 do t = { t, t } end");
+    let (raised, kind, message) = var_write_of_t(&vm);
+    assert!(raised, "the oversized write must raise, not store");
+    assert_eq!(kind, "lua");
+    assert_eq!(refusal_line(&message), Some("var.x is too large to store"));
+}
+
+#[test]
+fn a_var_write_of_a_repeated_string_past_the_byte_budget_is_refused() {
+    // 32 references to one 512 KiB string are 16 MiB of text against a 4 MiB
+    // budget, though only one copy sits in the Lua heap and the walk has
+    // about 63 values. Only the charge for string values refuses this.
+    let vm = small_heap_vm();
+    vm.eval::<()>("s = string.rep('x', 2^19) t = { s } for i = 1, 5 do t = { t, t } end");
+    let (raised, kind, message) = var_write_of_t(&vm);
+    assert!(raised, "the oversized write must raise, not store");
+    assert_eq!(kind, "lua");
+    assert_eq!(refusal_line(&message), Some("var.x is too large to store"));
+}
+
+#[test]
+fn a_var_write_of_a_repeated_string_key_past_the_byte_budget_is_refused() {
+    // 32 references to one table whose only key is 512 KiB are 16 MiB of key
+    // text against a 4 MiB budget, and the value under the key is a number.
+    // Only the charge for string keys refuses this.
+    let vm = small_heap_vm();
+    vm.eval::<()>(
+        "local key = string.rep('x', 2^19)\n\
+         t = { { [key] = 1 } } for i = 1, 5 do t = { t, t } end",
+    );
+    let (raised, kind, message) = var_write_of_t(&vm);
+    assert!(raised, "the oversized write must raise, not store");
+    assert_eq!(kind, "lua");
+    assert_eq!(refusal_line(&message), Some("var.x is too large to store"));
+}
+
+#[test]
+fn a_var_write_of_a_table_that_contains_itself_keeps_the_recursion_error() {
+    // `t` holds itself twice, so a walk that followed the cycle would branch
+    // two ways at each of 200 levels and run out of budget, reporting the
+    // write as too large. The walk stops at the table already on its path
+    // and leaves the cycle to the conversion, whose recursion error stays.
+    let vm = small_heap_vm();
+    vm.eval::<()>("t = {} t.a = t t.b = t");
+    let (raised, _kind, message) = var_write_of_t(&vm);
+    assert!(raised, "a cyclic write must raise, not store");
+    assert!(
+        message.contains("recursive table"),
+        "the conversion's own error must stay, got {message}"
+    );
+    assert!(
+        !message.contains("too large to store"),
+        "a cycle is not oversized, got {message}"
+    );
+}
