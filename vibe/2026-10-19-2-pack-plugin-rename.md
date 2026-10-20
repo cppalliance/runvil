@@ -4,31 +4,31 @@ overview: "Rename the named unit of tools and preludes from Plugin to Pack, and 
 todos:
   - id: plan-record
     content: Record this plan as vibe/YYYY-MM-DD-N-pack-plugin-rename.md, named by its seed commit's date with N the next free number for that date (2 on 2026-10-19, after vibe/2026-10-19-1-json-debt-removal.md), and write that path to vibe/ACTIVE; both land in Step 1's commit
-    status: pending
+    status: completed
   - id: rulebook
     content: "Step 1: AGENTS.md gets the two one-line Pack and Plugin definitions in place of the Plugin paragraph, Five words, and the Pack lifecycle bullet; docs-claims.mjs drops the capability check, retargets the activation test to Packs, and rewrites the comment above PLUGIN_DOC_DIRS; pass docs-claims"
-    status: pending
+    status: completed
   - id: engine-names
     content: "Step 2: Engine and facade names (packs module, PackId family, UnavailablePack, RunContext::packs, Prelude::pack, ToolId::pack, Frontmatter uses, PackListError, Lua packs global and pack field, prelude chunk name) plus every caller in the Harness, runvil-plugin's re-export, plugin-* crates, Workshop server and UI (JSON uses), prompts/, and test fixtures; file renames; regenerate public-api.txt; pass every gate except the docs site build"
-    status: pending
+    status: completed
   - id: plugin-api-names
     content: "Step 3: Plugin API and Harness names (Pack trait, PackInfo, PackFuture, PackRegistry, PackOrigin, DuplicatePack and every InstallError message, harness::pack module) plus callers; each crate's PLUGIN constant and the UnknownPlugin and NameTaken variants keep their names until Step 5 deletes them; file renames; pass every gate except the docs site build"
-    status: pending
+    status: completed
   - id: mcp-pack
     content: "Step 4: the mcp Pack takes the whole server map, parses each entry on its own, names each namespace by its server's name as written, and offers get_dynamic_tools and call_dynamic_tool, both answering JSON text; Workshop installs runvil/mcp once under mcp with that map, on today's install API; the per-server tests go; pass every gate except the docs site build"
-    status: pending
+    status: completed
   - id: entry-points
     content: "Step 5: move PackRegistry (with a hand-written Debug that shows no config), PackOrigin, InstallError, and the built-in into runvil-plugin's src/registry.rs; PackRegistry::add takes the Pack's config and keys by FQN, so vendors may share a Pack id, and into_entries hands HostContext::new each Pack's info, id, and config; uses: entries become PackRef (a bare id means runvil, a third-party Pack is vendor/name) with their own parse messages; the Harness picks each run's Packs before the ready wait, which waits only on them and keys failures by FQN; HostContext::new builds every registered Pack and HostContext::install goes; each plugin-* crate exports install in place of PLUGIN; Workshop calls the three Plugins; rewrite the crate docs the reorganization makes false; regenerate public-api.txt; pass every gate except the docs site build, plus both runvil completeness searches and a read of every prose-search hit"
-    status: pending
+    status: completed
   - id: docs
     content: "runvil-docs commit: unit-sense Plugin to Pack, plugins: to uses:, plugins.* to packs.*, .plugin to .pack, Plugin id to Pack id, quoted messages, heading anchors and links; rewrite every passage the reorganization makes false or incomplete (Host installation, Host-chosen ids with the browse and operator examples, undeclared third-party Packs, vendor/name entries), found by search; draft after Step 2, land after Step 5; pass the docs site build, the runvil-docs completeness search, and the anchor check"
-    status: pending
+    status: completed
   - id: design
     content: "runvil-design commit: whole-file placeholder-based name swap in the mlua wrapper report, Appendix A included; superseded status line on the naming report; land after the runvil-docs commit, whose heading names the report's references take"
-    status: pending
+    status: completed
   - id: close
     content: "Close commit in runvil, with the subject Close plan: pack-plugin-rename and the Plan: trailer naming the record; mark every todo completed in the record and remove vibe/ACTIVE; push nothing"
-    status: pending
+    status: completed
 isProject: false
 ---
 
@@ -1006,7 +1006,7 @@ The repositories, their starting points, the tools, and the commands every gate 
 
 <step-6>
 
-### Step 6: Language guide rename and rewrite
+### Step 6: Language guide rename and rewrite [completed]
 
 - Component: language-guide
 - Tests: run in PowerShell:
@@ -1078,7 +1078,7 @@ $bad
 
 <step-7>
 
-### Step 7: Design report updates
+### Step 7: Design report updates [completed]
 
 - Component: design-reports
 - Tests: run in PowerShell:
