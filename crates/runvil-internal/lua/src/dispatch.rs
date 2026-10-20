@@ -52,14 +52,16 @@ pub struct ModelReport {
 }
 
 /// The resolved outcome of one dispatched tool call: the final content -
-/// nonce-wrapped when untrusted - beside its trust marking. A model
+/// nonce-wrapped when untrusted - beside its trust marking and the output's
+/// structured JSON text, which only a script-initiated call reads. A model
 /// tool-loop dispatch reports the pair through the `ToolResult` event
-/// itself; a script-initiated dispatch reads only the content, its report
-/// already fired inside [`prepare_dispatch`].
+/// itself; a script-initiated dispatch reads the content and structured
+/// JSON text, its report already fired inside [`prepare_dispatch`].
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ToolDispatch {
     content: String,
     trust: OutputTrust,
+    structured_json: Option<String>,
 }
 
 impl ToolDispatch {
@@ -82,6 +84,12 @@ impl ToolDispatch {
     #[must_use]
     pub fn into_content(self) -> String {
         self.content
+    }
+
+    /// Dissolves the outcome into its content and structured JSON text.
+    #[must_use]
+    pub fn into_parts(self) -> (String, Option<String>) {
+        (self.content, self.structured_json)
     }
 }
 
@@ -151,7 +159,11 @@ pub fn prepare_dispatch(
             trust,
         );
     }
-    Ok(ToolDispatch { content, trust })
+    Ok(ToolDispatch {
+        content,
+        trust,
+        structured_json: output.structured_json().map(str::to_owned),
+    })
 }
 
 /// Applies the model-issued dispatch rules to one bound tool call's answer:
@@ -183,6 +195,7 @@ pub fn prepare_model_dispatch(
             Err(Error::Tool { message, .. }) => ToolDispatch {
                 content: nonce.wrap(&message),
                 trust: OutputTrust::Untrusted,
+                structured_json: None,
             },
             Err(error) => return Err(error),
         };

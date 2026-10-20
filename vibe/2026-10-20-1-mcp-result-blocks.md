@@ -228,7 +228,7 @@ Components, in dependency order:
 
 <step-3>
 
-### Step 3: Decode structured JSON text for script-issued calls
+### Step 3: Decode structured JSON text for script-issued calls [completed]
 
 - Component: `structured-json-channel`
 - Tests: `cargo nextest run --locked -p runvil-lua --all-features`, `cargo nextest run --locked -p runvil-engine --all-features`

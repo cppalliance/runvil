@@ -249,7 +249,7 @@ fn from_dispatch_classifies_by_the_declared_output_kind() {
     use crate::ToolOutputKind;
 
     // Plain output passes through untouched.
-    match ToolCallOutcome::from_dispatch(ToolOutputKind::Plain, "echo", "raw".to_owned()) {
+    match ToolCallOutcome::from_dispatch(ToolOutputKind::Plain, "echo", "raw".to_owned(), None) {
         Ok(ToolCallOutcome::Plain(text)) => assert_eq!(text, "raw"),
         other => panic!("expected the plain passthrough, got {other:?}"),
     }
@@ -258,13 +258,18 @@ fn from_dispatch_classifies_by_the_declared_output_kind() {
         ToolOutputKind::Structured,
         "form",
         "{\"text\":\"hi\"}".to_owned(),
+        None,
     ) {
         Ok(ToolCallOutcome::Structured(json)) => assert_eq!(json, json!({ "text": "hi" })),
         other => panic!("expected the structured parse, got {other:?}"),
     }
     // Invalid JSON from a structured binding is the tool's error.
-    match ToolCallOutcome::from_dispatch(ToolOutputKind::Structured, "form", "not json".to_owned())
-    {
+    match ToolCallOutcome::from_dispatch(
+        ToolOutputKind::Structured,
+        "form",
+        "not json".to_owned(),
+        None,
+    ) {
         Err(Error::Tool { message, cause }) => {
             let detail = cause
                 .downcast_ref::<serde_json::Error>()
@@ -276,5 +281,103 @@ fn from_dispatch_classifies_by_the_declared_output_kind() {
             );
         }
         other => panic!("expected the typed tool error, got {other:?}"),
+    }
+}
+
+#[test]
+fn structured_json_text_resumes_decoded_with_json_null_and_marked_lists_over_either_kind() {
+    use crate::ToolOutputKind;
+
+    let structured = r#"{"content":[{"text":"hi"}],"meta":null,"empty":[]}"#;
+    for kind in [ToolOutputKind::Plain, ToolOutputKind::Structured] {
+        // The wrapped text is not JSON, so a Structured binding would fail
+        // on it: the structured JSON text must take precedence.
+        let outcome = ToolCallOutcome::from_dispatch(
+            kind,
+            "mcp",
+            "<untrusted_input_x>hi</untrusted_input_x>".to_owned(),
+            Some(structured.to_owned()),
+        )
+        .expect("structured JSON text decodes");
+        let lua = Lua::new();
+        let (args, retained) = Answer::<Error>::ToolCallResult(Ok(outcome))
+            .into_envelope(&lua)
+            .expect("the envelope renders");
+        assert!(retained.is_none());
+        let (ok, result): (bool, Table) = lua
+            .load("return ...")
+            .call(args)
+            .expect("the envelope reads back through Lua");
+        assert!(ok, "{kind:?}");
+        let content: Table = result.raw_get("content").expect("content is a table");
+        let first: Table = content
+            .raw_get(1)
+            .expect("the first content item is a table");
+        let text: String = first.raw_get("text").expect("the item holds text");
+        assert_eq!(text, "hi", "{kind:?}");
+        let meta: Value = result.raw_get("meta").expect("meta reads");
+        assert_eq!(
+            meta,
+            lua.null(),
+            "JSON null must be json.null under {kind:?}"
+        );
+        // The array metatable hides itself from `getmetatable`, so the
+        // marking is read from Rust.
+        for key in ["content", "empty"] {
+            let list: Table = result.raw_get(key).expect("the list is a table");
+            assert_eq!(
+                list.metatable(),
+                Some(lua.array_metatable()),
+                "{key} must carry the array metatable under {kind:?}"
+            );
+        }
+    }
+}
+
+#[test]
+fn structured_json_text_over_the_decode_limit_is_a_tool_error_naming_the_lengths() {
+    use crate::ToolOutputKind;
+
+    // Valid JSON padded past the limit: only the length check can refuse it,
+    // so the check must run before the parse.
+    let limit = crate::json::INPUT_LIMIT;
+    let oversized = format!("{}1", " ".repeat(limit));
+    match ToolCallOutcome::from_dispatch(
+        ToolOutputKind::Plain,
+        "mcp",
+        "flat".to_owned(),
+        Some(oversized),
+    ) {
+        Err(Error::Tool { message, .. }) => assert_eq!(
+            message,
+            format!(
+                "tool \"mcp\" returned structured JSON text of {} bytes; the limit is {limit} bytes",
+                limit + 1
+            )
+        ),
+        other => panic!("expected the size tool error, got {other:?}"),
+    }
+}
+
+#[test]
+fn structured_json_text_that_does_not_parse_is_a_tool_error_naming_the_alias() {
+    use crate::ToolOutputKind;
+
+    match ToolCallOutcome::from_dispatch(
+        ToolOutputKind::Plain,
+        "mcp",
+        "flat".to_owned(),
+        Some("{not json".to_owned()),
+    ) {
+        Err(Error::Tool { message, cause }) => {
+            let detail = cause
+                .downcast_ref::<serde_json::Error>()
+                .expect("the parse failure must survive as the cause");
+            assert_eq!(
+                message,
+                format!("tool \"mcp\" returned invalid structured JSON text: {detail}")
+            );
+        }
+        other => panic!("expected the parse tool error, got {other:?}"),
     }
 }

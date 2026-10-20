@@ -11,7 +11,7 @@ use runvil_parser::test_support::{one_section, prompt};
 use runvil_types::event::Event;
 
 use super::context::Recorder;
-use super::fixtures::{echo_tool, failing_tool, untrusted_echo_tool};
+use super::fixtures::{echo_tool, failing_tool, structured_echo_tool, untrusted_echo_tool};
 use super::models_loop::{LOOP_TO_TEXT, loop_events, loop_scenario};
 use super::*;
 use crate::model::CompletionErrorKind;
@@ -312,6 +312,45 @@ fn untrusted_tool_result_is_guard_wrapped_in_the_loop() {
     assert!(
         content.contains("echoed: hi"),
         "the wrapped block must still contain the tool output, got: {content}"
+    );
+}
+
+#[test]
+fn structured_json_text_resumes_a_script_call_decoded_while_the_model_reads_the_wrapped_text() {
+    // One tool, both call sites: the script's bound call resumes with the
+    // structured JSON text decoded (JSON null as `json.null`, arrays
+    // marked), while the model's call to the same tool reads only the
+    // nonce-wrapped flat text. `json.encode` sends a marked empty list as
+    // `[]`, where an unmarked one would be `{}`.
+    let gateway = ScriptedChat::new(vec![
+        calls(&[("call_1", "echo", "{\"value\":\"hi\"}")]),
+        text("final answer"),
+    ]);
+    let source = one_section(
+        "tools.offer('tools/structured_echo')\n\
+         local r = tools.call('tools/structured_echo', { value = 'hi' })\n\
+         assert(type(r) == 'table', 'expected a table, got ' .. type(r))\n\
+         local seen = r.content[1].text .. '|' .. tostring(r.meta == json.null)\n\
+           .. '|' .. json.encode(r.empty)\n\
+         local msgs = messages.new()\n\
+         msgs:user('ask the model')\n\
+         models.loop(msgs)\n\
+         return seen .. '|' .. msgs[#msgs].content",
+    );
+    let trace = loop_scenario(source)
+        .offer("echo", structured_echo_tool())
+        .chat(&gateway)
+        .run();
+    assert_eq!(trace.text(), "echoed: hi|true|[]|final answer");
+
+    let content = last_tool_turn_content(&gateway.requests());
+    assert!(
+        content.contains("<untrusted_input_") && content.contains("</untrusted_input_"),
+        "the model must read the wrapped text, got: {content}"
+    );
+    assert!(
+        content.contains("echoed: hi") && !content.contains("\"meta\""),
+        "the model must read the flat text, never the structured JSON text, got: {content}"
     );
 }
 

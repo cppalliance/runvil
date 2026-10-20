@@ -14,6 +14,11 @@ use serde_json::Value as Json;
 /// the tool implementation, so the caller's tool catalog decides how scripts
 /// receive the output. The model tool loop never consults the kind (its
 /// results are always added to the conversation as text).
+///
+/// A tool output carrying structured JSON text overrides the kind: a
+/// script-initiated `tools.call` resumes that text decoded into a table, as
+/// `json.decode` would, whose text is raw and untrusted, so a script
+/// forwarding any of it to a model must wrap it with `untrusted(s)`.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum ToolOutputKind {
     /// The output text resumes as a Lua string.

@@ -11,8 +11,9 @@ use serde_json::Value as Json;
 
 use super::refusal;
 
-/// The most bytes either function takes.
-const INPUT_LIMIT: usize = 8_388_608;
+/// The most bytes either function takes, and the most bytes of structured
+/// JSON text a tool call resumes decoded.
+pub(crate) const INPUT_LIMIT: usize = 8_388_608;
 
 /// `json.decode(text)`: the one JSON document `text` holds, as Lua values.
 pub(super) fn decode(lua: &Lua, text: Value) -> mlua::Result<Value> {

@@ -10,7 +10,7 @@
 
 use std::num::NonZeroU32;
 
-use mlua::{AnyUserData, Function, IntoLuaMulti, Lua, LuaSerdeExt, MultiValue, Value};
+use mlua::{AnyUserData, Function, IntoLuaMulti, Lua, LuaSerdeExt, MultiValue, Table, Value};
 use serde_json::json;
 
 use runvil_model_client::model::{ModelBinding, ModelId, ModelInvocation};

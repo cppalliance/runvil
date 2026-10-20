@@ -41,17 +41,18 @@ pub enum VfsOutcome {
     Bool(bool),
 }
 
-/// One dispatched `tools.call`'s successful output, classified by the
-/// binding's declared [`ToolOutputKind`] so the envelope resumes the right
-/// Lua shape: a plain binding's text resumes as a Lua string, a structured
-/// binding's parsed JSON resumes as a Lua table through the serde boundary.
+/// One dispatched `tools.call`'s successful output, classified so the
+/// envelope resumes the right Lua shape: a plain binding's text resumes as a
+/// Lua string, and a structured binding's parsed JSON, or an output's decoded
+/// structured JSON text, resumes as a Lua table through the serde boundary.
 /// The Engine performs the one conversion.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ToolCallOutcome {
     /// A plain binding's output text, resumed as a Lua string - every
     /// existing tool, byte-identical to the tool loop's echo.
     Plain(String),
-    /// A structured binding's parsed JSON output, resumed as a Lua table.
+    /// A structured binding's parsed JSON output, or the output's parsed
+    /// structured JSON text, resumed as a Lua table.
     Structured(serde_json::Value),
     /// A local Lua tool's call, resumed as `(true, nil, handler, args)`:
     /// the handler registered under `alias` and a fresh table converted
@@ -66,18 +67,31 @@ pub enum ToolCallOutcome {
 }
 
 impl ToolCallOutcome {
-    /// Classifies one dispatched tool's output text by the binding's
-    /// declared output kind.
+    /// Classifies one dispatched tool's output for the calling script.
     ///
-    /// Plain output passes through untouched. Structured output must parse
-    /// as JSON - the untrusted nonce wrap is a string mechanism, so a
+    /// When the output carries `structured_json`, that text decides the
+    /// outcome whatever the binding's kind: it must be at most
+    /// 8,388,608 bytes, the `json.decode` limit, and parse as JSON, and it
+    /// resumes as the decoded table, its text neither wrapped nor encoded.
+    /// Otherwise the binding's declared output kind classifies `text`:
+    /// plain output passes through untouched, and structured output must
+    /// parse as JSON - the untrusted nonce wrap is a string mechanism, so a
     /// structured binding whose output was wrapped fails here too, keeping
     /// structured output effectively restricted to trusted tools.
     ///
     /// # Errors
-    /// Returns [`Error::Tool`] when a structured binding's output is not
-    /// valid JSON, retaining the parse failure as the cause.
-    pub fn from_dispatch(kind: ToolOutputKind, alias: &str, text: String) -> Result<Self> {
+    /// Returns [`Error::Tool`] when `structured_json` exceeds the limit or
+    /// is not valid JSON, or when a structured binding's output is not
+    /// valid JSON, retaining any parse failure as the cause.
+    pub fn from_dispatch(
+        kind: ToolOutputKind,
+        alias: &str,
+        text: String,
+        structured_json: Option<String>,
+    ) -> Result<Self> {
+        if let Some(structured) = structured_json {
+            return Self::from_structured_json(alias, &structured);
+        }
         match kind {
             ToolOutputKind::Plain => Ok(ToolCallOutcome::Plain(text)),
             ToolOutputKind::Structured => match serde_json::from_str(&text) {
@@ -87,6 +101,29 @@ impl ToolCallOutcome {
                     cause: Box::new(error),
                 }),
             },
+        }
+    }
+
+    /// Decodes an output's structured JSON text: the length check first,
+    /// so oversized text is refused before any parsing, then the parse.
+    fn from_structured_json(alias: &str, structured: &str) -> Result<Self> {
+        let limit = crate::json::INPUT_LIMIT;
+        if structured.len() > limit {
+            let message = format!(
+                "tool {alias:?} returned structured JSON text of {} bytes; the limit is {limit} bytes",
+                structured.len()
+            );
+            return Err(Error::Tool {
+                cause: message.clone().into(),
+                message,
+            });
+        }
+        match serde_json::from_str(structured) {
+            Ok(json) => Ok(ToolCallOutcome::Structured(json)),
+            Err(error) => Err(Error::Tool {
+                message: format!("tool {alias:?} returned invalid structured JSON text: {error}"),
+                cause: Box::new(error),
+            }),
         }
     }
 }

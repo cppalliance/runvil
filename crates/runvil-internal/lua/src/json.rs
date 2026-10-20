@@ -14,6 +14,8 @@ mod decode;
 mod encode;
 mod keys;
 
+pub(crate) use decode::INPUT_LIMIT;
+
 use mlua::{Lua, LuaSerdeExt, Table, Value};
 
 use crate::error::{Error, Result};

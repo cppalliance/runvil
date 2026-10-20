@@ -39,6 +39,21 @@ pub(super) fn untrusted_echo_tool() -> FnTool {
     .description("Echo the value argument back as untrusted external data.")
 }
 
+/// The fixture Plugin's `tools/structured_echo`, which echoes its `value`
+/// argument as untrusted text and attaches the same echo as structured JSON
+/// text, `{"content":[{"text":"echoed: <value>"}],"empty":[],"meta":null}`, the way
+/// plugin-mcp attaches a serialized `CallToolResult`.
+#[track_caller]
+pub(super) fn structured_echo_tool() -> FnTool {
+    FnTool::new("tools/structured_echo", value_schema(), |args| {
+        let value = require_string_arg(&args, "value")?;
+        let echoed = format!("echoed: {value}");
+        let structured = json!({ "content": [{ "text": echoed }], "empty": [], "meta": null });
+        Ok(ToolOutput::untrusted(echoed).with_structured_json(structured.to_string()))
+    })
+    .description("Echo the value argument back as untrusted text and structured JSON text.")
+}
+
 /// Reads a required string argument from a fixture tool's call arguments.
 ///
 /// The fixtures declare their arguments `required` in their JSON schema, so a
