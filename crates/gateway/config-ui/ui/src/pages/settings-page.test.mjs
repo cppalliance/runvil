@@ -183,6 +183,8 @@ test("the About panel renders the medallion, version, and license link", async (
   const license = root.querySelector(".about-license");
   assert.equal(license.href, "https://www.boost.org/LICENSE_1_0.txt");
   assert.equal(license.rel, "noopener");
+  const licenseRule = await bundledDeclarations(".about-license");
+  assert.equal(licenseRule.get("color"), "var(--blue-text)", "the license link reads as a link, not an action");
 });
 
 test("a settings section puts its title above the card and lays each row as label, control, help", async () => {
@@ -210,18 +212,19 @@ test("a settings section puts its title above the card and lays each row as labe
   assert.deepEqual(order, ["label", "control", "help"], "the grid reads label, control, then help");
 });
 
-test("the card is a 4% tinted 12px block with no border or padding, and its rows are grid cells", async () => {
+test("the card is a raised 12px block with a line border and no padding, and its rows are grid cells", async () => {
   const card = await bundledDeclarations(".settings-card");
   assert.equal(card.get("border"), "0", "no border on the wrapper");
   assert.equal(card.get("padding"), "0", "no padding on the wrapper");
   assert.equal(card.get("background"), "none");
 
   const heading = await bundledDeclarations(".settings-card .section-heading");
-  assert.equal(heading.get("font-size"), "var(--font-size-sm)", "a 12px title");
-  assert.equal(heading.get("color"), "var(--cursor-text-secondary)");
+  assert.equal(heading.get("font-size"), "var(--font-size-lg)", "a 15px title");
+  assert.equal(heading.get("color"), "var(--text)");
 
   const body = await bundledDeclarations(".settings-card > .section-body");
-  assert.equal(body.get("background"), "var(--cursor-bg-quinary)", "a 4% tint");
+  assert.equal(body.get("background"), "var(--panel-2)", "the raised surface");
+  assert.equal(squash(body.get("border")), "1pxsolidvar(--line)", "a line border");
   assert.equal(body.get("border-radius"), "var(--radius-xl)", "a 12px radius");
   assert.equal(body.get("padding"), "0");
 
@@ -230,11 +233,11 @@ test("the card is a 4% tinted 12px block with no border or padding, and its rows
   const control = await bundledDeclarations(".field-row>:not(.field-head):not(.field-help)");
   assert.equal(control.get("grid-column"), "2", "the control sits on the right");
   const label = await bundledDeclarations(".field-head label");
-  assert.equal(label.get("font-size"), "var(--font-size-base)", "a 13px label");
+  assert.equal(label.get("font-size"), "var(--font-size-base)", "a 13.5px label");
   assert.equal(label.get("font-weight"), "400");
   const help = await bundledDeclarations(".field-help");
-  assert.equal(help.get("font-size"), "var(--font-size-base)", "13px help text");
-  assert.equal(help.get("color"), "var(--cursor-text-secondary)");
+  assert.equal(help.get("font-size"), "var(--font-size-base)", "13.5px help text");
+  assert.equal(help.get("color"), "var(--dim)");
 });
 
 test("banners are 12px cards, the pending one in the accent tint, and callouts carry a 4px left bar", async () => {
@@ -242,15 +245,15 @@ test("banners are 12px cards, the pending one in the accent tint, and callouts c
   assert.equal(banner.get("border-radius"), "var(--radius-xl)");
   assert.equal(squash(banner.get("padding")), "12px14px");
   const pending = await bundledDeclarations(".banner-pending");
-  assert.equal(pending.get("background"), "var(--cursor-accent-subtle)", "accent at 8%");
+  assert.equal(pending.get("background"), "var(--accent-subtle)", "accent at 8%");
   assert.equal(
     squash(pending.get("border-color")),
-    "color-mix(insrgb,var(--cursor-accent)20%,transparent)",
+    "color-mix(insrgb,var(--accent)20%,transparent)",
     "accent at 20%",
   );
   for (const [selector, color] of [
-    [".banner-restart", "var(--warning)"],
-    [".banner-warning", "var(--warning)"],
+    [".banner-restart", "var(--warn)"],
+    [".banner-warning", "var(--warn)"],
     [".banner-danger", "var(--danger)"],
   ]) {
     const callout = await bundledDeclarations(selector);

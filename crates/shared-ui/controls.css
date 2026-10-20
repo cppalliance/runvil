@@ -1,31 +1,31 @@
-/* Button, input, select, and switch base classes shared by both UIs, on
-   the Cursor Dark tokens from tokens.css. The rules live in the components
-   cascade layer: a consuming UI that declares its own layer order (the
-   gateway's base.css declares `reset, base, components, utilities`)
-   keeps its overrides winning on specificity, and a consuming UI with
-   no layers lets its unlayered rules override these. Interactive classes
-   inherit the consuming UI's focus convention - no focus frames are
-   added here.
+/* Button, input, select, and switch base classes, on the tokens from
+   tokens.css. The rules live in the components cascade layer: a
+   consuming UI that declares its own layer order (the gateway's base.css
+   declares `reset, base, components, utilities`) keeps its overrides
+   winning on specificity, and a consuming UI with no layers lets its
+   unlayered rules override these. Interactive classes inherit the
+   consuming UI's focus convention - no focus frames are added here.
 
-   The buttons and the switch carry Cursor's control values, the same ones
-   @workshop/look uses; the input and select keep the gateway's own soft
-   surface. */
+   The values are the Gateway UI style guide's: one orange primary action
+   per view, neutral raised buttons for the rest, a red tint for
+   destructive actions, and bordered fields that light their border on
+   focus. */
 
 @layer components {
-	/* Buttons: 24px tall, 8px padding, 6px radius, 13px weight 400. -sm is
-	   20px tall with a 4px radius; -xs is the same size, kept for the
-	   gateway's compact rows. A variant class picks the fill. */
+	/* Buttons: 28px tall, 12px padding, 9px radius. -sm and -xs are 24px
+	   tall with an 8px radius; -xs also drops to 12px text. A variant
+	   class picks the fill; a bare .button is a borderless text button. */
 	.button {
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;
-		gap: var(--space-1);
+		gap: var(--space-1-5);
 		height: var(--height-sm);
-		padding-inline: var(--space-2);
+		padding-inline: var(--space-3);
 		border: 1px solid transparent;
 		border-radius: var(--radius);
 		background: transparent;
-		color: var(--cursor-text-primary);
+		color: var(--dim);
 		font-size: var(--font-size-base);
 		font-weight: 400;
 		white-space: nowrap;
@@ -33,97 +33,118 @@
 		transition: background-color var(--duration-normal) ease-out, color var(--duration-normal) ease-out,
 			border-color var(--duration-normal) ease-out;
 	}
+	.button:hover {
+		color: var(--text);
+	}
 	.button:disabled {
-		border-color: transparent;
-		background: var(--cursor-control-disabled-bg);
-		color: var(--cursor-control-disabled-text);
+		opacity: 0.5;
 		pointer-events: none;
 	}
 	.button-sm,
 	.button-xs {
 		height: var(--height-xs);
+		padding-inline: var(--space-2);
 		border-radius: var(--radius-sm);
 	}
 	.button-xs {
 		font-size: var(--font-size-sm);
 	}
-	/* Dark label on Cursor's accent; hover mixes 10% white into it. */
+	/* The primary action: an orange wash over the dim accent border, with
+	   accent text. */
 	.button-primary {
-		background: var(--cursor-accent);
-		color: var(--cursor-text-invert);
+		border-color: var(--accent-dim);
+		background: linear-gradient(
+			180deg,
+			color-mix(in srgb, var(--accent) 18%, transparent),
+			color-mix(in srgb, var(--accent) 6%, transparent)
+		);
+		color: var(--accent);
+		font-weight: 600;
 	}
 	.button-primary:hover {
-		background: var(--cursor-accent-hover);
+		border-color: var(--accent);
+		color: var(--accent-hover);
 	}
-	.button-secondary {
-		background: var(--cursor-bg-tertiary);
+	/* Neutral raised buttons: a hover steps the surface up one level and
+	   lifts the text. */
+	.button-secondary,
+	.button-outline {
+		border-color: var(--line);
+		background: var(--panel-2);
 	}
-	.button-secondary:hover {
-		background: var(--cursor-bg-secondary);
+	.button-secondary:hover,
+	.button-outline:hover {
+		background: var(--panel-3);
 	}
 	.button-ghost {
 		background: transparent;
 	}
 	.button-ghost:hover {
-		background: var(--cursor-bg-tertiary);
-	}
-	.button-outline {
-		border-color: var(--cursor-stroke-secondary);
-		background: transparent;
-	}
-	.button-outline:hover {
-		background: var(--cursor-bg-quaternary);
+		background: var(--panel-2);
 	}
 	.button-danger {
-		border-color: var(--danger);
-		background: color-mix(in srgb, var(--danger) 10%, transparent);
-		color: var(--danger-text);
+		border-color: color-mix(in srgb, var(--danger) 30%, transparent);
+		background: color-mix(in srgb, var(--danger) 7%, transparent);
+		color: var(--danger);
 	}
 	.button-danger:hover {
-		background: color-mix(in srgb, var(--danger) 15%, transparent);
+		background: color-mix(in srgb, var(--danger) 14%, transparent);
+		color: var(--danger);
+	}
+	/* A disabled action drops its family color: at half opacity alone, an
+	   orange or red wash still reads as ready to press. */
+	.button-primary:disabled,
+	.button-danger:disabled {
+		border-color: var(--line);
+		background: var(--panel-2);
+		color: var(--faint);
 	}
 
-	/* Text input: rounded-full on the Cursor input surface. */
+	/* Text input: a bordered field on the page surface; focus lights the
+	   border. */
 	.input {
 		height: 2.25rem;
-		padding-inline: 0.875rem;
-		border: 1px solid transparent;
-		border-radius: 9999px;
-		background: var(--cursor-bg-input-surface);
-		color: var(--text-primary);
-		font-size: 0.8125rem;
+		padding-inline: var(--space-3);
+		border: 1px solid var(--line);
+		border-radius: var(--radius);
+		background: var(--panel);
+		color: var(--text);
+		font-size: var(--font-size-base);
 	}
 	.input::placeholder {
-		color: var(--input-placeholder);
+		color: var(--faint);
 	}
 	input::-ms-reveal {
 		display: none;
 	}
-	.input:hover {
-		background: var(--cursor-bg-tertiary);
+	.input:focus {
+		border-color: var(--line-focus);
+	}
+	.input:disabled {
+		opacity: 0.45;
 	}
 	.input[aria-invalid="true"] {
-		border-color: var(--cursor-danger);
+		border-color: color-mix(in srgb, var(--danger) 60%, transparent);
 	}
 	textarea.input {
 		height: auto;
 		padding-block: 0.625rem;
-		border-radius: 0.75rem;
+		border-radius: var(--radius);
 	}
 
-	/* Select trigger: same pill-and-soft-surface family as .input. */
+	/* Select trigger: the same bordered field as .input. */
 	.select {
 		display: inline-flex;
 		align-items: center;
 		justify-content: space-between;
 		gap: 0.5rem;
 		height: 2.25rem;
-		padding-inline: 0.875rem;
-		border: 1px solid transparent;
-		border-radius: 9999px;
-		background: var(--cursor-bg-input-surface);
-		color: var(--text-primary);
-		font-size: 0.8125rem;
+		padding-inline: var(--space-3);
+		border: 1px solid var(--line);
+		border-radius: var(--radius);
+		background: var(--panel);
+		color: var(--text);
+		font-size: var(--font-size-base);
 		cursor: pointer;
 	}
 	.select::after {
@@ -135,7 +156,7 @@
 		transform: translateY(-0.125rem) rotate(45deg);
 	}
 	.select:hover {
-		background: var(--cursor-bg-tertiary);
+		background: var(--panel-2);
 	}
 	.select:disabled {
 		opacity: 0.5;
@@ -145,8 +166,8 @@
 		height: 2rem;
 	}
 
-	/* Switch, on a <button role="switch" aria-checked>: a 32x20 track, 14%
-	   white when off and green when on, with a 16px white thumb that moves
+	/* Switch, on a <button role="switch" aria-checked>: a 32x20 track, the
+	   line color when off and green when on, with a 16px white thumb that moves
 	   12px over 200ms. The thumb is the ::after. */
 	.switch {
 		position: relative;
@@ -158,7 +179,7 @@
 		padding: 0;
 		border: 0;
 		border-radius: var(--radius-full);
-		background: var(--cursor-bg-secondary);
+		background: var(--line);
 		cursor: pointer;
 		transition: background-color var(--duration-slow) ease;
 	}
@@ -175,7 +196,7 @@
 		transition: transform var(--duration-slow) ease;
 	}
 	.switch[aria-checked="true"] {
-		background: var(--cursor-green);
+		background: var(--good);
 	}
 	.switch[aria-checked="true"]::after {
 		transform: translateX(12px);

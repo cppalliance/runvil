@@ -362,16 +362,18 @@ test("a non-numeric entry in a model's numeric field raises an alert under the i
   assert.equal(fixed.querySelector("input").value, "512", "the edit is kept");
 });
 
-test("model rows sit 12px apart with no hover fill, and the search box takes Cursor's padding", async () => {
+test("model rows sit 12px apart, mark the selection with an accent rule, and the search box is a pill", async () => {
   const list = await bundledDeclarations(".model-list");
   assert.equal(list.get("display"), "flex");
   assert.equal(list.get("flex-direction"), "column");
   assert.equal(list.get("gap"), "var(--space-3)", "a 12px gap");
   const hover = await bundledDeclarations(".model-row:hover");
-  assert.equal(hover.get("background"), undefined, "no hover fill");
+  assert.equal(hover.get("background"), "var(--panel-2)", "a hover raises the row");
+  const selected = await bundledDeclarations(".model-row[aria-current=true]");
+  assert.equal(selected.get("border-inline-start-color"), "var(--accent)");
   const search = await bundledDeclarations(".models-toolbar .input");
-  assert.equal(squash(search.get("padding")), "5px12px", "padding 5px 12px");
-  assert.equal(search.get("border-radius"), "var(--radius-sm)", "a 4px radius");
+  assert.equal(squash(search.get("padding")), "5px14px", "padding 5px 14px");
+  assert.equal(search.get("border-radius"), "var(--radius-full)", "a pill");
   const spin = await bundledDeclarations(".models-refresh.is-loading svg");
   assert.match(spin.get("animation") ?? "", /spin/, "the icon rotates while loading");
 });

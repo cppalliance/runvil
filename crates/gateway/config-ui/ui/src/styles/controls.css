@@ -29,7 +29,7 @@
 	   row, so no hover wash and no pointer. */
 	.menu-group-label {
 		padding: var(--space-2) var(--space-2) var(--space-1);
-		color: var(--text-secondary);
+		color: var(--dim);
 		font-size: var(--font-size-xs);
 		font-weight: 600;
 		letter-spacing: 0.04em;
@@ -62,8 +62,8 @@
 		border-radius: 9999px;
 		background: linear-gradient(
 			to right,
-			var(--text-secondary) calc(var(--slider-progress) * 100%),
-			var(--cursor-bg-tertiary) calc(var(--slider-progress) * 100%)
+			var(--dim) calc(var(--slider-progress) * 100%),
+			var(--panel-3) calc(var(--slider-progress) * 100%)
 		);
 	}
 	.slider::-webkit-slider-thumb {
@@ -73,82 +73,85 @@
 		margin-top: -5px;
 		border: 0;
 		border-radius: 50%;
-		background: var(--text-secondary);
+		background: var(--dim);
 		transition: box-shadow 140ms ease-out;
 	}
 	.slider:hover::-webkit-slider-thumb,
 	.slider:active::-webkit-slider-thumb {
-		box-shadow: 0 0 0 8px var(--cursor-bg-secondary);
+		box-shadow: 0 0 0 8px var(--line);
 	}
 	.slider::-moz-range-track {
 		height: 4px;
 		border-radius: 9999px;
-		background: var(--cursor-bg-tertiary);
+		background: var(--panel-3);
 	}
 	.slider::-moz-range-progress {
 		height: 4px;
 		border-radius: 9999px;
-		background: var(--text-secondary);
+		background: var(--dim);
 	}
 	.slider::-moz-range-thumb {
 		width: 14px;
 		height: 14px;
 		border: 0;
 		border-radius: 50%;
-		background: var(--text-secondary);
+		background: var(--dim);
 		transition: box-shadow 140ms ease-out;
 	}
 	.slider:hover::-moz-range-thumb,
 	.slider:active::-moz-range-thumb {
-		box-shadow: 0 0 0 8px var(--cursor-bg-secondary);
+		box-shadow: 0 0 0 8px var(--line);
 	}
 	.slider:disabled {
 		opacity: 0.5;
 		cursor: not-allowed;
 	}
 
-	/* Quant-style pill: h-6 rounded-full px-2.5, ~11.5px text. The
-	   accent variant reads the Cursor accent on its 8% tint. */
+	/* Tag pill: 24px tall and fully rounded, 11px text, a line border on
+	   the raised surface. A status reads as a tinted pill: the accent
+	   variant carries the accent on its 8% fill under a 35% border. */
 	.pill {
 		display: inline-flex;
 		align-items: center;
 		gap: 0.25rem;
-		height: 1.5rem;
+		height: var(--height-xs);
 		padding-inline: 0.625rem;
-		border-radius: 9999px;
-		background: var(--cursor-bg-quaternary);
-		color: var(--text-primary);
-		font-size: 0.71875rem;
+		border: 1px solid var(--line);
+		border-radius: var(--radius-full);
+		background: var(--panel-2);
+		color: var(--dim);
+		font-size: var(--font-size-xs);
 		font-weight: 500;
 		white-space: nowrap;
 	}
 	.pill-accent {
-		background: var(--cursor-accent-subtle);
-		color: var(--cursor-accent);
+		border-color: color-mix(in srgb, var(--accent) var(--tint-line), transparent);
+		background: color-mix(in srgb, var(--accent) var(--tint-fill), transparent);
+		color: var(--accent);
 	}
 
-	/* Chip/tag input: a wrapping soft field holding removable chips and
-	   a bare inline text entry. */
+	/* Chip/tag input: a wrapping bordered field, like .input, holding
+	   removable chips and a bare inline text entry. */
 	.chip-input {
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
 		gap: 0.375rem;
 		min-height: 2.25rem;
-		padding: 0.375rem 0.875rem;
-		border: 1px solid transparent;
-		border-radius: 1.125rem;
-		background: var(--cursor-bg-quaternary);
+		padding: 0.375rem var(--space-3);
+		border: 1px solid var(--line);
+		border-radius: var(--radius);
+		background: var(--panel);
 	}
 	.chip-input:focus-within {
-		border-color: var(--cursor-stroke-primary);
+		border-color: var(--line-focus);
 	}
 	.chip-input > input {
 		flex: 1;
 		min-width: 6ch;
 		border: 0;
 		background: transparent;
-		color: var(--text-primary);
+		color: var(--text);
 	}
 	/* The container's focus-within stroke is the visible focus
 	   indicator for the inner entry; a second ring inside the field
@@ -178,7 +181,7 @@
 		inset: -4px;
 	}
 	.chip-remove:hover {
-		background: var(--cursor-bg-secondary);
+		background: var(--line);
 	}
 
 	@media (prefers-reduced-motion: reduce) {

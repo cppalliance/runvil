@@ -1,11 +1,11 @@
 /* The shared menu surface (.menu, .menu-item) and the floating action
-   menu (.menu-popup) from dropdown.ts, on the Cursor Dark tokens. The
+   menu (.menu-popup) from dropdown.ts, on the shared tokens. The
    gateway's select listboxes and profile switcher consume the surface
    classes with their own behavior; the workshop's action menus come from
    dropdown.ts. Converged from the gateway's controls.css menu rules and
    the workshop's murm-ui-derived dropdown stylesheet; the danger rows
-   keep the neutral hover wash because --danger-text is tuned to pass
-   4.5:1 on --bg-hover. All rules live in the components layer so a
+   keep the neutral hover wash because --danger holds its contrast on
+   --panel-3. All rules live in the components layer so a
    consumer's own rules override them.
 
    Derived from murm-ui 0.2.0 styles/dropdown.css, copyright (c) 2026
@@ -16,9 +16,9 @@
 	.menu {
 		min-width: 8rem;
 		padding: var(--space-1);
-		border: 1px solid var(--border);
+		border: 1px solid var(--line);
 		border-radius: var(--radius-xl);
-		background: var(--bg-elevated);
+		background: var(--panel-2);
 		box-shadow: var(--shadow-popup);
 	}
 	.menu-item {
@@ -31,27 +31,28 @@
 		border: 0;
 		border-radius: var(--radius);
 		background: transparent;
-		color: var(--text-primary);
+		color: var(--text);
 		font: inherit;
 		font-size: var(--font-size-base);
 		text-align: start;
 		cursor: pointer;
 	}
 	.menu-item:hover {
-		background: var(--bg-hover);
+		background: var(--panel-3);
 	}
-	/* Keyboard focus reads through the same state background; Cursor
-	   menus draw no focus frame. */
+	/* Keyboard focus reads through the same state background; menus draw
+	   no focus frame. */
 	.menu-item:focus-visible {
 		outline: none;
-		background: var(--bg-hover);
+		background: var(--panel-3);
 	}
 	.menu-item[aria-selected="true"],
 	.menu-item--selected {
-		background: var(--cursor-bg-secondary);
+		background: var(--panel-3);
+		color: var(--text);
 	}
 	.menu-item--danger {
-		color: var(--danger-text);
+		color: var(--danger);
 	}
 	.menu-item__icon {
 		display: flex;
@@ -67,7 +68,7 @@
 	}
 	.menu-item__check {
 		margin-inline-start: auto;
-		color: var(--cursor-icon-primary);
+		color: var(--text);
 	}
 
 	/* The floating action menu: fixed against the viewport, fading in. */

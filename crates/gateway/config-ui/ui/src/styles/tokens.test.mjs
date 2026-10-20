@@ -1,5 +1,5 @@
 // Pins the CSS wiring end to end: the esbuild bundle must emit
-// dist/app.css containing the shared Cursor Dark design tokens
+// dist/app.css containing the style guide's design tokens
 // (shared-ui/tokens.css) and the cascade layer order, and
 // dist/index.html must link that stylesheet - a dropped import in
 // main.ts or a dropped <link> would ship an unstyled UI without any
@@ -18,13 +18,8 @@ const distDir = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", ".
 test("the bundled stylesheet defines the design tokens and layer order", async () => {
   const css = await readFile(path.join(distDir, "app.css"), "utf8");
   // \s* tolerates minified output; /i tolerates hex case changes.
-  assert.match(css, /--cursor-base:\s*#F0F0F0/i, "the Cursor Dark primitive is defined");
-  assert.match(css, /--accent:\s*#e4b570/i, "the Runvil gold accent token is defined");
-  assert.match(
-    css,
-    /--bg-primary:\s*var\(--cursor-editor\)/,
-    "the page background aliases the Cursor editor surface",
-  );
+  assert.match(css, /--panel:\s*#131520/i, "the page surface is defined");
+  assert.match(css, /--accent:\s*#ff8a1e/i, "the orange accent token is defined");
   assert.match(
     css,
     /@layer reset,\s*base,\s*components,\s*utilities/,
@@ -32,8 +27,8 @@ test("the bundled stylesheet defines the design tokens and layer order", async (
   );
   assert.match(
     css,
-    /textarea\.input\s*\{[^}]*height:\s*auto[^}]*border-radius:\s*0?\.75rem/,
-    "multiline inputs keep the rounded rectangle radius and natural height",
+    /textarea\.input\s*\{[^}]*height:\s*auto[^}]*border-radius:\s*var\(--radius\)/,
+    "multiline inputs keep the field radius and natural height",
   );
   assert.match(
     css,
@@ -51,79 +46,85 @@ test("the desk page links the bundled stylesheet", async () => {
   );
 });
 
-// The gateway sheet carries the same IDE values as @workshop/look, because
-// the two UIs are copies of one Cursor look. Hex literals compare without
-// case; a value written as a formula compares as written.
-const IDE_TOKENS = {
-  "--cursor-red": "#E34671",
-  "--cursor-blue": "#81A1C1",
-  "--cursor-cyan": "#88C0D0",
-  "--cursor-accent": "#81A1C1",
-  "--cursor-sidebar": "#141414",
-  "--cursor-shadow-primary": "#00000066",
-  "--cursor-bg-active": "#F0F0F01E",
-  "--cursor-bg-focused": "#F0F0F01E",
-  "--cursor-text-link": "#81A1C1",
-  "--cursor-text-invert": "#181818",
-  "--radius-xs": "2px",
+// The palette is the Gateway UI style guide's, value for value. Hex
+// literals compare without case.
+const STYLE_GUIDE_TOKENS = {
+  "--chrome": "#0f1118",
+  "--panel": "#131520",
+  "--panel-2": "#171a26",
+  "--panel-3": "#1c2030",
+  "--line": "#262b3a",
+  "--line-soft": "#20242f",
+  "--line-focus": "#33405e",
+  "--text": "#eceef4",
+  "--dim": "#9aa2b4",
+  "--faint": "#697082",
+  "--accent": "#ff8a1e",
+  "--accent-dim": "#8a4f16",
+  "--good": "#4bbf73",
+  "--good-text": "#5fd08a",
+  "--blue": "#4d8dfe",
+  "--blue-text": "#6ea6ff",
+  "--warn": "#e8b06a",
+  "--danger": "#e06a6a",
+  "--logo-tile": "#0c0e14",
+  "--font-size-root": "14.5px",
+  "--radius": "9px",
+  "--radius-xl": "12px",
 };
 
-test("the bundled stylesheet carries the IDE token values", async () => {
+test("the bundled stylesheet carries the style guide's palette", async () => {
   const css = await readFile(path.join(distDir, "app.css"), "utf8");
-  for (const [name, value] of Object.entries(IDE_TOKENS)) {
+  for (const [name, value] of Object.entries(STYLE_GUIDE_TOKENS)) {
     assert.match(css, new RegExp(`${name}:\\s*${value}\\s*;`, "i"), `${name} is ${value}`);
   }
   // The minifier writes 300ms as .3s, so the duration is pinned by value.
   assert.match(css, /--duration-slower:\s*(300ms|\.3s)\s*;/, "the slow transition is 300ms");
-  assert.match(
-    css,
-    /--cursor-shadow-secondary:\s*color-mix\(in srgb,\s*var\(--cursor-shadow-primary\) 60%,\s*transparent\)/,
-    "the secondary shadow ink is 60% of the widget shadow",
-  );
-  assert.match(
-    css,
-    /--cursor-shadow-tertiary:\s*color-mix\(in srgb,\s*var\(--cursor-shadow-primary\) 30%,\s*transparent\)/,
-    "the tertiary shadow ink is 30% of the widget shadow",
-  );
-  assert.match(
-    css,
-    /--cursor-accent-hover:\s*color-mix\(in srgb,\s*white 10%,\s*var\(--cursor-accent\)\)/,
-    "the accent hover mixes 10% white into the accent",
-  );
-  assert.match(
-    css,
-    /--code-font:\s*Consolas, Menlo, Monaco, "Droid Sans Mono", "Courier New", monospace/,
-    "the code font is Cursor's stack",
-  );
+  assert.doesNotMatch(css, /--cursor-/, "no Cursor Dark token survives");
 });
 
-test("the tertiary and quaternary text names are the Cursor tiers, not swapped literals", async () => {
-  const css = await readFile(path.join(distDir, "app.css"), "utf8");
-  assert.match(css, /--text-tertiary:\s*var\(--cursor-text-tertiary\)\s*;/);
-  assert.match(css, /--text-quaternary:\s*var\(--cursor-text-quaternary\)\s*;/);
-  assert.match(css, /--cursor-text-tertiary:\s*color-mix\(in srgb,\s*var\(--cursor-base\) 60%/);
-  assert.match(css, /--cursor-text-quaternary:\s*color-mix\(in srgb,\s*var\(--cursor-base\) 36%/);
+test("the root size is the style guide's 14.5px", async () => {
+  const html = await bundledDeclarations("html");
+  assert.equal(html.get("font-size"), "var(--font-size-root)");
 });
 
-test("buttons take Cursor's 24px control values and the accent primary", async () => {
+test("the primary button is the orange wash, the rest neutral raised, danger a red tint", async () => {
   const button = await bundledDeclarations(".button");
-  assert.equal(button.get("height"), "var(--height-sm)", "24px tall");
-  assert.equal(button.get("padding-inline"), "var(--space-2)", "8px padding");
-  assert.equal(button.get("border-radius"), "var(--radius)", "a 6px radius");
-  assert.equal(button.get("font-size"), "var(--font-size-base)", "13px");
-  assert.equal(button.get("font-weight"), "400");
+  assert.equal(button.get("height"), "var(--height-sm)", "28px tall");
+  assert.equal(button.get("padding-inline"), "var(--space-3)", "12px padding");
+  assert.equal(button.get("border-radius"), "var(--radius)", "a 9px radius");
+  assert.equal(button.get("color"), "var(--dim)");
   const small = await bundledDeclarations(".button-sm");
-  assert.equal(small.get("height"), "var(--height-xs)", "20px tall");
-  assert.equal(small.get("border-radius"), "var(--radius-sm)", "a 4px radius");
+  assert.equal(small.get("height"), "var(--height-xs)", "24px tall");
+  assert.equal(small.get("border-radius"), "var(--radius-sm)", "an 8px radius");
   const primary = await bundledDeclarations(".button-primary");
-  assert.equal(primary.get("background"), "var(--cursor-accent)", "the accent replaces the gold");
-  assert.equal(primary.get("color"), "var(--cursor-text-invert)");
-  const hover = await bundledDeclarations(".button-primary:hover");
-  assert.equal(hover.get("background"), "var(--cursor-accent-hover)");
-  const secondary = await bundledDeclarations(".button-secondary");
-  const secondaryHover = await bundledDeclarations(".button-secondary:hover");
-  assert.equal(secondary.get("background"), "var(--cursor-bg-tertiary)", "an 8% fill");
-  assert.equal(secondaryHover.get("background"), "var(--cursor-bg-secondary)", "a 14% hover");
+  assert.equal(squash(primary.get("border-color")), "var(--accent-dim)");
+  assert.match(squash(primary.get("background")), /^linear-gradient\(180deg,color-mix\(insrgb,var\(--accent\)18%,transparent\)/);
+  assert.equal(primary.get("color"), "var(--accent)");
+  const neutral = await bundledDeclarations(".button-outline");
+  assert.equal(neutral.get("border-color"), "var(--line)");
+  assert.equal(neutral.get("background"), "var(--panel-2)");
+  const neutralHover = await bundledDeclarations(".button-outline:hover");
+  assert.equal(neutralHover.get("background"), "var(--panel-3)", "a hover steps the surface up");
+  const danger = await bundledDeclarations(".button-danger");
+  assert.equal(danger.get("color"), "var(--danger)");
+  const disabled = await bundledDeclarations(".button:disabled");
+  assert.match(disabled.get("opacity"), /^0?\.5$/, "the minifier may drop the leading zero");
+  for (const selector of [".button-primary:disabled", ".button-danger:disabled"]) {
+    const disabledAction = await bundledDeclarations(selector);
+    assert.equal(disabledAction.get("border-color"), "var(--line)", `${selector} loses its family border`);
+    assert.equal(disabledAction.get("background"), "var(--panel-2)", `${selector} loses its wash`);
+    assert.equal(disabledAction.get("color"), "var(--faint)", `${selector} loses its text color`);
+  }
+});
+
+test("fields are bordered and light their border on focus", async () => {
+  const input = await bundledDeclarations(".input");
+  assert.equal(squash(input.get("border")), "1pxsolidvar(--line)");
+  assert.equal(input.get("border-radius"), "var(--radius)");
+  assert.equal(input.get("background"), "var(--panel)");
+  const focus = await bundledDeclarations(".input:focus");
+  assert.equal(focus.get("border-color"), "var(--line-focus)");
 });
 
 test("the switch is the single shared 32x20 track with a 16px thumb that moves 12px", async () => {
@@ -131,10 +132,10 @@ test("the switch is the single shared 32x20 track with a 16px thumb that moves 1
   const track = await bundledDeclarations(".switch");
   assert.equal(track.get("width"), "32px");
   assert.equal(track.get("height"), "20px");
-  assert.equal(track.get("background"), "var(--cursor-bg-secondary)", "14% white when off");
+  assert.equal(track.get("background"), "var(--line)", "the line color when off");
   assert.equal(squash(track.get("transition")), "background-colorvar(--duration-slow)ease");
   const on = await bundledDeclarations(".switch[aria-checked=true]");
-  assert.equal(on.get("background"), "var(--cursor-green)");
+  assert.equal(on.get("background"), "var(--good)");
   const thumb = await bundledDeclarations(".switch::after");
   assert.equal(thumb.get("width"), "16px");
   assert.equal(thumb.get("height"), "16px");
@@ -149,15 +150,16 @@ test("modals take the form modal values", async () => {
   const dialog = await bundledDeclarations(".modal-dialog");
   assert.equal(dialog.get("width"), "320px", "a 320px card");
   assert.equal(dialog.get("border-radius"), "var(--radius-xl)", "a 12px radius");
-  assert.equal(squash(dialog.get("border")), "1pxsolidvar(--cursor-stroke-secondary)", "a 12% stroke");
+  assert.equal(squash(dialog.get("border")), "1pxsolidvar(--line)", "a line border");
+  assert.equal(dialog.get("background"), "var(--panel-2)", "the raised surface");
   assert.equal(dialog.get("box-shadow"), "none");
   assert.match(dialog.get("animation") ?? "", /var\(--duration-slower\)/, "opens in 300ms");
   const title = await bundledDeclarations(".modal-dialog > h2");
   assert.equal(squash(title.get("padding")), "var(--space-3)var(--space-4)", "header 12px 16px");
-  assert.equal(title.get("font-size"), "var(--font-size-lg)", "a 14px title");
+  assert.equal(title.get("font-size"), "var(--font-size-lg)", "a 15px title");
   const actions = await bundledDeclarations(".modal-actions");
   assert.equal(actions.get("padding"), "10px", "footer padding 10px");
-  assert.equal(squash(actions.get("border-top")), "1pxsolidvar(--cursor-stroke-tertiary)", "an 8% top border");
+  assert.equal(squash(actions.get("border-top")), "1pxsolidvar(--line-soft)", "a soft top divider");
 });
 
 test("both modal families drop the scale-in under reduced motion", async () => {

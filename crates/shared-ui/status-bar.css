@@ -19,7 +19,7 @@
 		display: flex;
 		align-items: center;
 		background: var(--status-bar-bg);
-		border-top: 1px solid var(--border);
+		border-top: 1px solid var(--line);
 		font-size: 12px;
 		line-height: 22px;
 		font-variant-numeric: tabular-nums;

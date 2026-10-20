@@ -94,14 +94,14 @@ test("the nav column is sticky and clamp-wide, 48px from the content, and icon-o
   assert.equal(cell.get("border-radius"), "var(--radius)", "a 6px radius");
   assert.equal(cell.get("font-size"), "var(--font-size-sm)", "12px text");
   assert.equal(cell.get("line-height"), "var(--line-height-sm)", "16px lines");
-  assert.equal(cell.get("color"), "var(--cursor-text-secondary)");
+  assert.equal(cell.get("color"), "var(--dim)");
   const hover = await bundledDeclarations(".tab:hover");
   const selected = await bundledDeclarations(".tab[aria-current=page]");
-  assert.equal(hover.get("background"), "var(--cursor-bg-quaternary)", "6% hover fill");
-  assert.equal(selected.get("background"), "var(--cursor-bg-quaternary)", "6% selected fill");
+  assert.equal(hover.get("background"), "var(--panel-2)", "the hover raises the cell");
+  assert.equal(selected.get("background"), "var(--panel-2)", "the selected cell too");
 
   const divider = await bundledDeclarations(".tab-divider");
-  assert.equal(squash(divider.get("border-top")), "1pxsolidvar(--cursor-stroke-tertiary)");
+  assert.equal(squash(divider.get("border-top")), "1pxsolidvar(--line-soft)");
 
   const narrow = await bundledDeclarations(".tab-nav", { media: NARROW });
   assert.equal(narrow.get("width"), "40px", "a 40px column");

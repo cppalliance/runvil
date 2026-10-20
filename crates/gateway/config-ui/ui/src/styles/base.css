@@ -1,6 +1,6 @@
 /* Foundation stylesheet: cascade layer order, reset, typography, and
    focus defaults. The design tokens come from shared-ui/tokens.css (the
-   Cursor Dark sheet both Runvil UIs share), imported by main.ts
+   Gateway UI style guide's palette), imported by main.ts
    ahead of this file so the layer order below is declared before any
    layered component rules. Later selectors stay low-specificity because
    precedence is settled by the layer order declared here. */
@@ -52,20 +52,21 @@
 
 	html {
 		height: 100%;
+		font-size: var(--font-size-root);
 	}
 
 	body {
 		min-height: 100vh;
 		min-height: 100svh;
-		background: var(--bg-primary);
-		color: var(--text-primary);
+		background: var(--panel);
+		color: var(--text);
 		font-family: var(--font);
 		font-size: var(--font-size-base);
 	}
 
 	h1 {
-		font-size: 1.25rem;
-		font-weight: 600;
+		font-size: var(--font-size-title);
+		font-weight: var(--font-weight-title);
 	}
 
 	code,
@@ -76,11 +77,11 @@
 	}
 
 	a {
-		color: var(--cursor-text-link);
+		color: var(--blue-text);
 	}
 
 	:focus-visible {
-		outline: 2px solid var(--cursor-accent);
+		outline: 2px solid var(--accent);
 		outline-offset: 2px;
 	}
 

@@ -1,9 +1,9 @@
-/* Default skin for modal.ts's base classes, on the Cursor Dark tokens: the
-   form modal Cursor's settings pages and quick prompts open, the same
-   values @workshop/look gives its `form` skin. A 320px card with a 12px
-   radius and a 12% stroke and no shadow; a 14px title in a 12px 16px
-   header, a body padded 12px 16px 16px, and a footer padded 10px over an
-   8% top border, Cancel first and the primary action last. It opens in
+/* Default skin for modal.ts's base classes, on the shared tokens: the
+   form modal the settings pages and quick prompts open. A 320px card on
+   the raised surface with a 12px radius, a line border, and no shadow; a
+   15px title in a 12px 16px header, a body padded 12px 16px 16px, and a
+   footer padded 10px over a soft divider, Cancel first and the primary
+   action last. It opens in
    300ms, scaling up from 0.97, over a 0.5 backdrop.
 
    Every rule sits in the components layer, so a consumer's own per-prefix
@@ -25,11 +25,11 @@
 		width: 320px;
 		max-width: calc(100vw - 2rem);
 		padding: 0;
-		border: 1px solid var(--cursor-stroke-secondary);
+		border: 1px solid var(--line);
 		border-radius: var(--radius-xl);
-		background: var(--cursor-editor);
+		background: var(--panel-2);
 		box-shadow: none;
-		color: var(--cursor-text-primary);
+		color: var(--text);
 		animation: modal-form-open var(--duration-slower) var(--ease-out-cubic) both;
 	}
 	.modal-dialog > h2 {
@@ -41,7 +41,7 @@
 	.modal-dialog > p {
 		margin: 0;
 		padding: var(--space-3) var(--space-4) 0;
-		color: var(--cursor-text-secondary);
+		color: var(--dim);
 		font-size: var(--font-size-base);
 	}
 	.modal-dialog > div:not(.modal-actions) {
@@ -51,7 +51,7 @@
 		padding: var(--space-3) var(--space-4) var(--space-4);
 	}
 	.modal-dialog > div:not(.modal-actions) label {
-		color: var(--cursor-text-secondary);
+		color: var(--dim);
 		font-size: var(--font-size-sm);
 	}
 	.modal-dialog > div:not(.modal-actions) .input {
@@ -67,7 +67,7 @@
 		gap: var(--space-2);
 		margin: 0;
 		padding: 10px;
-		border-top: 1px solid var(--cursor-stroke-tertiary);
+		border-top: 1px solid var(--line-soft);
 	}
 
 	@keyframes modal-form-open {
