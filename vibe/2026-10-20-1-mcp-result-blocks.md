@@ -260,7 +260,7 @@ Components, in dependency order:
 
 <step-5>
 
-### Step 5: End-to-end repro and exit gates
+### Step 5: End-to-end repro and exit gates [completed]
 
 - Component: `end-to-end`
 - Tests: `cargo nextest run --locked -p workshop-server -E 'test(mcp_result_blocks)'`, `cargo nextest run --locked --workspace --exclude workshop --exclude workshop-server --exclude workshop-server-api --all-features`, `cargo nextest run --locked -p workshop -p workshop-server -p workshop-server-api`, `CARGO_BUILD_WARNINGS=deny cargo clippy --workspace --exclude workshop --exclude workshop-server --exclude workshop-server-api --all-targets --all-features`, `CARGO_BUILD_WARNINGS=deny cargo clippy -p workshop -p workshop-server -p workshop-server-api --all-targets`, `cargo check -p gateway --no-default-features`, `cargo fmt --all --check`, `RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps --all-features --exclude workshop --exclude workshop-server --exclude workshop-server-api`, `RUSTDOCFLAGS="-D warnings" cargo doc -p runvil --no-deps`, with `CARGO_BUILD_WARNINGS` unset `cargo +nightly-2026-09-05 xtask api --check`, `cargo test -p build-xtask`, `node --test crates/workshop/ui/test/docs-claims.mjs`

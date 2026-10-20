@@ -1,9 +1,9 @@
 //! Workshop server integration tests, one module per behavior area: the
 //! `/ws` socket and its heartbeat-driven frames, the `/agents/ws` socket
 //! and the built-in chat agent's gate, the realtime relay, the
-//! heartbeat loop, boot composition, the user-state bucket, the
-//! workspace file across a graceful shutdown, and the workspace save
-//! deadline through the full router.
+//! heartbeat loop, boot composition, MCP result blocks through the
+//! Harness, the user-state bucket, the workspace file across a graceful
+//! shutdown, and the workspace save deadline through the full router.
 
 #[path = "../common/mod.rs"]
 mod common;
@@ -13,6 +13,7 @@ mod boot;
 mod chat_gate;
 mod heartbeat;
 mod heartbeat_loop;
+mod mcp_result_blocks;
 mod realtime_relay;
 mod user_state;
 mod workshop_socket;
