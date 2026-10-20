@@ -265,8 +265,7 @@ impl Scheduler {
     /// up the timeout and the run goes on, so the chain parked on the
     /// timer leaves its wait with the cancelled error, as a dropped `Chat`
     /// or `ToolCall` does: a timed `tasks.join` or `tasks.join_any` raises
-    /// it, and the model's `await_tasks` resumes its tool call with it. A
-    /// timer nothing waits on is dropped silently. Under a run cancel the
+    /// it. A timer nothing waits on is dropped silently. Under a run cancel the
     /// drop wakes no one, since the cancel tears the waiter down with
     /// every other chain.
     fn drop_timer(&mut self, effect: EffectId) {
@@ -284,12 +283,7 @@ impl Scheduler {
         {
             return;
         }
-        let chain = &mut self.chains[owner.index()];
-        chain.waiting_on.clear();
-        let answer = match chain.awaiting.take() {
-            Some(_) => Answer::ToolCallResult(Err(Error::Interrupted)),
-            None => Answer::JoinAny(Err(Error::Interrupted)),
-        };
-        self.wake_from_wait(owner, answer);
+        self.chains[owner.index()].waiting_on.clear();
+        self.wake_from_wait(owner, Answer::JoinAny(Err(Error::Interrupted)));
     }
 }

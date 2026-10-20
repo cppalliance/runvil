@@ -6,8 +6,7 @@
 //! its terminal observation names how the owner ended, and its backing
 //! chain aborts with everything it owns in turn. An author-origin task
 //! left live is the author's bug, so the owner's own outcome becomes
-//! `tasks_live` naming the leaked ids; a model-origin task is abandoned
-//! quietly (the model learns through a notice). Tasks survive a section's
+//! `tasks_live` naming the leaked ids. Tasks survive a section's
 //! fall-through and a `jump` - those move the walk within one chain - and
 //! end with the chain itself: the root walk, a `call` child, or another
 //! task (a fanout arm among them). The H1 pass and the walk after it are
@@ -22,24 +21,20 @@ use runvil_vfs::Access;
 use crate::{Error, Result};
 
 use super::chain_record::ChainKind;
-use super::notices::TaskEnd;
 use super::tasks::{TaskBacking, TaskState};
 use super::{ChainIndex, Scheduler};
 
 impl Scheduler {
     /// Applies a task chain's end to its slot: the outcome lands in the
     /// slot, the slot moves to `Done`, the task's terminal observation
-    /// fires under its target section, a model task's notice is queued on
-    /// its owner, and an owner parked on a set containing the task is
-    /// woken with it delivered (the notice is queued first, so a model
-    /// parked in `await_tasks` reads it in the wake's answer). Otherwise
-    /// the slot holds the outcome until a wait takes it.
+    /// fires under its target section, and an owner parked on a set
+    /// containing the task is woken with it delivered. Otherwise the slot
+    /// holds the outcome until a wait takes it.
     ///
     /// # Errors
     /// Returns [`Error::Internal`] when the chain has no slot, which only a
     /// scheduler bug produces: every task chain registers its slot before
-    /// it is enqueued; or the internal fault of waking an owner parked in
-    /// the model's `await_tasks`.
+    /// it is enqueued.
     pub(super) fn complete_task(&mut self, id: ChainIndex, outcome: Result<String>) -> Result<()> {
         let chain = &self.chains[id.index()];
         let task = chain.task.clone();
@@ -51,7 +46,6 @@ impl Scheduler {
         let succeeded = outcome.is_ok();
         slot.state = TaskState::Done { ok: succeeded };
         let owner = slot.owner;
-        let origin = slot.origin;
         let target = slot.target.clone();
         emitter.emit(&target, |execution, section, provenance| {
             let task = task.clone();
@@ -71,17 +65,11 @@ impl Scheduler {
                 }
             }
         });
-        if origin == TaskOrigin::Model {
-            let end = match &outcome {
-                Ok(text) => TaskEnd::Completed(text),
-                Err(error) => TaskEnd::Failed(error),
-            };
-            self.queue_task_notice(owner, &task, &target, end);
-        }
         if let Some(slot) = self.tasks.get_mut(&task) {
             slot.outcome = Some(outcome);
         }
-        self.wake_waiter(owner, &task)
+        self.wake_waiter(owner, &task);
+        Ok(())
     }
 
     /// Applies the chain-end rules for tasks to `owner`'s `outcome`: every
@@ -141,14 +129,12 @@ impl Scheduler {
     /// it owns in turn (or its in-flight request is dropped), and its
     /// terminal observation fires under its target with `reason` - the
     /// observation is the reason's record, since no wait can reach an
-    /// abandoned slot once its owner is gone; a model task's abandonment
-    /// notice is queued and reported too, though the ending owner never
-    /// reads it. An internal timer slot ends the same way but reports
-    /// nothing and never counts as leaked: it is the wait's detail, not a
-    /// task the author started. Returns the abandoned author-origin ids in
-    /// spawn order, for the owner's `tasks_live` outcome; the caller
-    /// discards them for an owner that is itself being aborted, whose
-    /// outcome no one receives.
+    /// abandoned slot once its owner is gone. An internal timer slot ends
+    /// the same way but reports nothing and never counts as leaked: it is
+    /// the wait's detail, not a task the author started. Returns the
+    /// abandoned author-origin ids in spawn order, for the owner's
+    /// `tasks_live` outcome; the caller discards them for an owner that is
+    /// itself being aborted, whose outcome no one receives.
     pub(super) fn abandon_owned_tasks(
         &mut self,
         owner: ChainIndex,
@@ -196,17 +182,11 @@ impl Scheduler {
                     }
                 });
             }
-            match origin {
-                TaskOrigin::Model => {
-                    self.queue_task_notice(owner, &task, &target, TaskEnd::Abandoned(reason));
-                }
-                // `Author`, or an origin `runvil-types` adds behind
-                // its `#[non_exhaustive]` `TaskOrigin`: treated as the
-                // author's. `#[non_exhaustive]` denies this crate an
-                // exhaustive match, so a new variant lands here silently.
-                // Only one test pins which origins leak:
-                // `an_ending_owner_leaks_its_author_task_and_never_its_model_task`.
-                _ => leaked.push(task),
+            // `Author`, or an origin `runvil-types` adds behind its
+            // `#[non_exhaustive]` `TaskOrigin`, is treated as the author's
+            // and counts as leaked.
+            if origin != TaskOrigin::Model {
+                leaked.push(task);
             }
         }
         // The abandoned tasks' slots are free: the drain admits the
@@ -239,13 +219,13 @@ impl Scheduler {
         }
     }
 
-    /// Moves every task `from` owns to `to`, with the notices not yet
-    /// delivered: the H1 hand-off, where the pass and the walk are one
-    /// chain (`0`) on either side, so a task the pass spawned is waited
-    /// on, inspected, cancelled, or leaked by the walk exactly as if the
-    /// walk had spawned it. The pass's admission accounting moves with
-    /// the owner links: the slots the pass's tasks hold count against the
-    /// walk from here, under the limit the walk inherited from the pass.
+    /// Moves every task `from` owns to `to`: the H1 hand-off, where the
+    /// pass and the walk are one chain (`0`) on either side, so a task the
+    /// pass spawned is waited on, inspected, cancelled, or leaked by the
+    /// walk exactly as if the walk had spawned it. The pass's admission
+    /// accounting moves with the owner links: the slots the pass's tasks
+    /// hold count against the walk from here, under the limit the walk
+    /// inherited from the pass.
     pub(super) fn reassign_tasks(&mut self, from: ChainIndex, to: ChainIndex) {
         for slot in self.tasks.values_mut() {
             if slot.owner == from {
@@ -267,7 +247,5 @@ impl Scheduler {
                 *owner = to;
             }
         }
-        let notices = std::mem::take(&mut self.chains[from.index()].task_notices);
-        self.chains[to.index()].task_notices = notices;
     }
 }

@@ -4,8 +4,7 @@
 //! `Cancelled` when nothing catches it. A `Chat` drop is covered for both
 //! kinds of round, a nested `models.infer` round and a `models.loop` round.
 //! A `Timer` drop is covered for the timed `tasks.join_any` and
-//! `tasks.join` waits and the model's `await_tasks`, and under a run cancel,
-//! where the drop wakes no one.
+//! `tasks.join` waits, and under a run cancel, where the drop wakes no one.
 
 use std::sync::Arc;
 
@@ -20,7 +19,7 @@ use crate::execute::RunResult;
 use crate::execute::run::{
     AnswerRecord, Effect, EffectAnswer, EffectId, EffectRecord, Round, Run, Step,
 };
-use crate::model::{Completion, CompletionResult, ToolCall};
+use crate::model::{Completion, CompletionResult};
 use crate::parser::Prompt;
 use crate::test_support::scenario::{chat_answer, only_effect, test_model_with};
 use crate::test_support::scripted_chat::text;
@@ -334,41 +333,5 @@ fn under_a_run_cancel_a_dropped_timer_ends_the_run_cancelled_without_resuming_th
     assert!(
         matches!(result, RunResult::Cancelled),
         "the wait's pcall never resumed, so the run did not go on: {result:?}"
-    );
-}
-
-#[test]
-fn a_dropped_await_tasks_timer_resumes_the_models_tool_call_with_the_cancelled_error() {
-    let mut run = bound_sections(
-        "## Only\n\n```lua\nmodels.use('writer')\ntools.allow_tasks()\n\
-         local msgs = messages.new()\nmsgs:user('wait')\n\
-         local ok, err = pcall(models.loop, msgs)\n\
-         return tostring(ok) .. ':' .. err.kind\n```\n",
-    );
-    let (round, effect) = only_effect(run.step());
-    assert!(
-        matches!(effect, Effect::Chat { .. }),
-        "the loop's round: {effect:?}"
-    );
-    let call = ToolCall::from_parts("call-1", "await_tasks", json!({ "timeout": 30 }))
-        .expect("a whole call");
-    let completion = Completion::from_result(CompletionResult::ToolCalls(vec![call]), "m")
-        .expect("a tool-call result is accepted");
-    run.resume(round, EffectAnswer::Chat(Ok(Box::new(completion))));
-    let (timer, effect) = only_effect(run.step());
-    assert!(
-        matches!(effect, Effect::Timer { .. }),
-        "await_tasks parks on its timeout alone: {effect:?}"
-    );
-    run.resume(timer, EffectAnswer::Dropped);
-    let Step::Done { result, .. } = run.step() else {
-        panic!("the loop's caught drop ends the run");
-    };
-    let RunResult::Ok(out) = result else {
-        panic!("a caught drop leaves the run to succeed: {result:?}");
-    };
-    assert_eq!(
-        out, "false:cancelled",
-        "the loop raised the cancelled error"
     );
 }

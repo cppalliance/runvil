@@ -102,7 +102,7 @@ pub(super) enum Input<V> {
     /// A batch's texts, one per call the scheduler issued, or the value
     /// to raise.
     Batched(std::result::Result<Vec<String>, V>),
-    /// A bound tool's or a task built-in's text, or the value to raise.
+    /// A bound tool's text, or the value to raise.
     Dispatched(std::result::Result<String, V>),
     /// A local tool's handler and its arguments table.
     Local { handler: V, args: V },

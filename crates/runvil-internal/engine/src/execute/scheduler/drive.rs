@@ -222,7 +222,6 @@ impl Scheduler {
             chain.coroutine = None;
             chain.incoming = None;
             chain.waiting_on.clear();
-            chain.awaiting = None;
             chain.batch.clear();
             chain.blocked = None;
             chain.frame = None;

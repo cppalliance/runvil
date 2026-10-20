@@ -108,10 +108,8 @@ impl Scheduler {
             task,
             seed: None,
             waiting_on: Vec::new(),
-            awaiting: None,
             batch: Vec::new(),
             blocked: None,
-            task_notices: Vec::new(),
             note: None,
             ctx: start.ctx,
             access: None,
@@ -274,11 +272,8 @@ impl Scheduler {
             chain.coroutine = None;
             chain.incoming = None;
             // A chain aborted mid-wait leaves its set: no member's end may
-            // wake a dead chain. The model's parked `await_tasks` goes
-            // with it; its timer was abandoned above with the chain's
-            // other owned slots.
+            // wake a dead chain.
             chain.waiting_on.clear();
-            chain.awaiting = None;
             chain.batch.clear();
             chain.blocked = None;
             chain.frame = None;

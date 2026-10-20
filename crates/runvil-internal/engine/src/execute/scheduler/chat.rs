@@ -1,12 +1,9 @@
 //! The `chat` arm: one stateless tool-capable model round yielded by a
 //! section VM.
 //!
-//! Dispatch first takes the chain's model-task notices and pushes each
-//! onto the author's list as a user record, so the model reads them in
-//! this round, then refuses a list that is still empty. It then resolves
-//! the round's binding and tool scope (the bound and local halves, plus
-//! the model's task built-ins once the section has run
-//! `tools.allow_tasks`), records the scope on the chain as `advertised`,
+//! Dispatch first refuses an empty list. It then resolves the round's
+//! binding and tool scope (the bound and local halves), records the scope
+//! on the chain as `advertised`,
 //! prechecks the projected conversation, with room kept for the reply,
 //! against the model's context window (counting from the provider's usage
 //! for the chain's last measured round when the request extends it), and
@@ -31,9 +28,7 @@ use runvil_types::event::{ReplyOrigin, lifecycle};
 use runvil_types::ids::RoundId;
 use runvil_types::metrics::ToolCallEvent;
 
-use crate::execute::protocol::{
-    Answer, ChatOutcome, ChatResult, MessageContent, MessageRecord, RecordRole,
-};
+use crate::execute::protocol::{Answer, ChatOutcome, ChatResult};
 use crate::execute::run::Effect;
 use crate::execute::scope::{DispatchTarget, prepare_effective_scope};
 use crate::execute::turn::{Served, advance_turn, report_model_turn};
@@ -44,7 +39,6 @@ use crate::lua::{
 use crate::model::{Completion, CompletionErrorKind, CompletionResult, ModelBinding, ToolCall};
 use crate::{Error, Result};
 
-use super::builtins::{advertise_task_builtins, task_allowlist};
 use super::{ChainIndex, Continuation, Scheduler};
 
 /// The answer for a round refused as too large by `reason`'s gate, before
@@ -55,15 +49,6 @@ fn overflow_result(reason: OverflowReason, turn: u32) -> ChatResult {
         outcome: ChatOutcome::Overflow(reason),
         finish_reason: None,
         turn,
-    }
-}
-
-/// A model-task notice as the user record the round carries it in.
-fn notice_record(notice: String) -> MessageRecord {
-    MessageRecord {
-        role: RecordRole::User,
-        content: MessageContent::Text(notice),
-        tool_calls: Vec::new(),
     }
 }
 
@@ -101,27 +86,19 @@ impl Scheduler {
         }
     }
 
-    /// The fallible half of chat dispatch: the chain's model-task notices
-    /// pushed onto the list in queue order, the emptiness check, the
+    /// The fallible half of chat dispatch: the emptiness check, the
     /// binding (the handle whose `loop` ran, when one did, else the
     /// section's current model), the call-time tool scope recorded on the
     /// chain as `advertised`, the per-dispatch projection, the context
-    /// precheck, and the issued effect. The notices stay on the list
-    /// whatever the round's outcome. The send is recorded on the list only
-    /// once the precheck passes, so a refused round leaves the list's last
-    /// send in place.
+    /// precheck, and the issued effect. The send is recorded on the list
+    /// only once the precheck passes, so a refused round leaves the list's
+    /// last send in place.
     fn prepare_chat(
         &mut self,
         id: ChainIndex,
         list: &MessageList,
         binding: Option<ModelBinding>,
     ) -> Result<ChatDispatch> {
-        for notice in self.drain_task_notices(id) {
-            // The list refuses only a late system record.
-            list.push(notice_record(notice)).map_err(|error| {
-                Error::internal_with_cause("the list takes a notice's user record", error)
-            })?;
-        }
         let messages = list.to_records();
         if messages.is_empty() {
             return Err(Error::Lua("messages must not be empty".to_owned()));
@@ -146,13 +123,8 @@ impl Scheduler {
         let locals = vm.local_tool_schemas()?;
         let handles = frame.reporting_handles();
         let emitter = handles.emitter;
-        let (mut schemas, mut dispatch) =
+        let (schemas, dispatch) =
             prepare_effective_scope(&bound, &locals, emitter.as_ref(), &section)?;
-        // `tools.allow_tasks` is the section's opt-in: while its allowlist
-        // is set, every round offers the model its task built-ins.
-        if let Some(allowlist) = task_allowlist(vm)? {
-            advertise_task_builtins(&mut schemas, &mut dispatch, &allowlist)?;
-        }
         // The projection failure reports a failed turn before its call-site
         // error resumes into Lua, the loop's precedent.
         let conversation = match project_messages(&messages) {
@@ -365,7 +337,7 @@ impl ArrivedRound {
                 ToolCallEvent::new(call.id(), call.name(), tool_call_arguments(call).clone())
                     .with_tool(match advertised.get(call.name()) {
                         Some(DispatchTarget::Bound(tool)) => Some(tool.clone()),
-                        Some(DispatchTarget::Local | DispatchTarget::Builtin) | None => None,
+                        Some(DispatchTarget::Local) | None => None,
                     })
             })
             .collect();

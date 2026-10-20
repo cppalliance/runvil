@@ -11,7 +11,6 @@
 //! unchanged, so existing `crate::execute::protocol::*` paths keep working.
 
 pub(crate) use runvil_lua::{
-    Answer, Blocked, ChatOutcome, ChatResult, LocalToolOutcome, MessageContent, MessageRecord,
-    RecordRole, Request, SpawnVia, TaskDelivery, TaskPhase, TaskStatus, ToolCallOutcome,
-    ToolCallRecord, VfsOp, VfsOutcome, YieldParse,
+    Answer, Blocked, ChatOutcome, ChatResult, LocalToolOutcome, Request, SpawnVia, TaskDelivery,
+    TaskPhase, TaskStatus, ToolCallOutcome, ToolCallRecord, VfsOp, VfsOutcome, YieldParse,
 };

@@ -3,8 +3,7 @@
 //! when an earlier local handler in that batch runs model rounds of its
 //! own - through `models.infer`, its own `models.loop`, or a `call` into a
 //! section that runs one - and advances the chain's turn counter before
-//! the later calls dispatch. Bound tools, local tools, and the task
-//! built-ins (answered at once or parked in `await_tasks`) all report the
+//! the later calls dispatch. Bound tools and local tools both report the
 //! requesting round's turn.
 
 use runvil_parser::test_support::{one_section, prompt};
@@ -220,57 +219,5 @@ fn a_later_result_keeps_the_batch_turn_after_a_handler_calls_an_inferring_sectio
         turns.result_turn("c2"),
         batch,
         "the call dispatched after the handler reports the batch turn: {turns:?}"
-    );
-}
-
-#[test]
-fn a_later_task_status_answer_reports_the_batch_turn() {
-    let (out, turns) = run_turns(
-        loop_scenario(one_section(&grab_block(
-            "tools.allow_tasks()\n",
-            INFER_HANDLER,
-        ))),
-        vec![
-            calls(&[
-                ("c1", "grab", "{\"value\":\"a\"}"),
-                ("c2", "task_status", "{\"id\":\"0.0\"}"),
-            ]),
-            text("inner reply"),
-            text("final answer"),
-        ],
-    );
-    assert_eq!(out, "final answer");
-    let batch = turns.batch_turn("c1,c2");
-    assert_eq!(turns.reply_turn("inner reply"), batch + 1);
-    assert_eq!(
-        turns.result_turn("c2"),
-        batch,
-        "the built-in's answer reports the batch turn: {turns:?}"
-    );
-}
-
-#[test]
-fn a_parked_await_tasks_answer_reports_the_turn_it_was_dispatched_under() {
-    let (out, turns) = run_turns(
-        loop_scenario(one_section(&grab_block(
-            "tools.allow_tasks()\n",
-            INFER_HANDLER,
-        ))),
-        vec![
-            calls(&[
-                ("c1", "grab", "{\"value\":\"a\"}"),
-                ("c2", "await_tasks", "{\"timeout\":0.01}"),
-            ]),
-            text("inner reply"),
-            text("final answer"),
-        ],
-    );
-    assert_eq!(out, "final answer");
-    let batch = turns.batch_turn("c1,c2");
-    assert_eq!(turns.reply_turn("inner reply"), batch + 1);
-    assert_eq!(
-        turns.result_turn("c2"),
-        batch,
-        "the wake reports the turn stored at dispatch: {turns:?}"
     );
 }

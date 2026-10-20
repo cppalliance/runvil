@@ -1,4 +1,9 @@
-//! Fixture tools the execution suites bind and call.
+//! Fixture tools the execution suites bind and call, and the task
+//! lifecycle readers the task suites share.
+
+use std::collections::BTreeMap;
+
+use runvil_types::ids::TaskId;
 
 use super::*;
 
@@ -102,4 +107,49 @@ pub(super) fn scoped_tool(name: &str, description: &str) -> (FnTool, Arc<AtomicU
     })
     .description(description);
     (tool, calls)
+}
+
+/// Every task observation in `records`, as `(label, task id)` pairs in
+/// order, so a test can pair each started task with its terminals.
+pub(super) fn task_lifecycle(records: &[(String, Observation)]) -> Vec<(&'static str, TaskId)> {
+    records
+        .iter()
+        .filter_map(|(_, observation)| match observation {
+            Observation::TaskStarted { task, .. } => Some(("started", task.clone())),
+            Observation::TaskSucceeded { task } => Some(("succeeded", task.clone())),
+            Observation::TaskFailed { task } => Some(("failed", task.clone())),
+            Observation::TaskCancelled { task } => Some(("cancelled", task.clone())),
+            Observation::TaskAbandoned { task, .. } => Some(("abandoned", task.clone())),
+            _ => None,
+        })
+        .collect()
+}
+
+/// The terminal labels recorded per started task, in order. Every started
+/// task appears (with an empty list when it has no terminal); a terminal
+/// for a task that never started, or a second start, fails the test.
+pub(super) fn terminals_per_started_task(
+    records: &[(String, Observation)],
+) -> BTreeMap<TaskId, Vec<&'static str>> {
+    let events = task_lifecycle(records);
+    let mut terminals: BTreeMap<TaskId, Vec<&'static str>> = BTreeMap::new();
+    for (label, task) in &events {
+        if *label == "started" {
+            assert!(
+                terminals.insert(task.clone(), Vec::new()).is_none(),
+                "task {task} started twice: {events:?}"
+            );
+        }
+    }
+    for (label, task) in &events {
+        if *label != "started" {
+            terminals
+                .get_mut(task)
+                .unwrap_or_else(|| {
+                    panic!("task {task} reported `{label}` without starting: {events:?}")
+                })
+                .push(label);
+        }
+    }
+    terminals
 }

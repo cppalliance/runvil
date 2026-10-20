@@ -184,17 +184,17 @@ fn offer_local_registers_a_local_tool_and_names_itself_in_its_errors() {
 }
 
 #[test]
-fn the_tools_namespace_installs_its_six_functions() {
+fn the_tools_namespace_holds_exactly_its_five_functions() {
     let vm = lua_over(offering_set());
-    let kinds: String = vm.eval(
-        "local kinds = {}\n\
-         for _, name in ipairs({ 'offer', 'offer_local', 'required', \
-           'extras', 'get', 'allow_tasks' }) do kinds[#kinds + 1] = type(tools[name]) end\n\
-         return table.concat(kinds, ',')",
+    let keys: String = vm.eval(
+        "local keys = {}\n\
+         for key, value in pairs(tools) do keys[#keys + 1] = key .. ':' .. type(value) end\n\
+         table.sort(keys)\n\
+         return table.concat(keys, ',')",
     );
     assert_eq!(
-        kinds,
-        "function,function,function,function,function,function"
+        keys, "extras:function,get:function,offer:function,offer_local:function,required:function",
+        "the tools table holds exactly the namespace's functions"
     );
 }
 

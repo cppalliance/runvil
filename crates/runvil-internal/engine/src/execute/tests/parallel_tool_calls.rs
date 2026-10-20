@@ -1,8 +1,8 @@
 //! A round's catalog tool calls run in parallel: the loop sends every
 //! unanswered call as one batch, the scheduler issues each catalog call in
 //! the same step and answers once every issued call has landed, and the
-//! records append in call order. A local tool or a task built-in stops the
-//! batch and runs alone between its neighbors, a call that cannot be
+//! records append in call order. A local tool stops the batch and runs
+//! alone between its neighbors, a call that cannot be
 //! bound stops it and raises once the issued calls land, and a task
 //! cancelled while parked on a batch orphans every call in it and lists
 //! each in the step's `withdrawn`, which a decided run leaves empty. Each
@@ -146,10 +146,9 @@ fn a_rounds_catalog_calls_are_issued_in_one_step_and_append_in_call_order() {
 }
 
 #[test]
-fn a_local_call_or_a_task_builtin_runs_alone_between_its_neighbors() {
+fn local_calls_run_alone_between_their_neighbors() {
     let md = one_section(
         "tools.offer('tools/echo')\n\
-         tools.allow_tasks()\n\
          tools.offer_local('grab', 'Local grab', { value = 'string' }, function(args)\n\
            return 'grabbed ' .. args.value\n\
          end)\n\
@@ -167,7 +166,7 @@ fn a_local_call_or_a_task_builtin_runs_alone_between_its_neighbors() {
         calls_reply(&[
             ("c1", "echo", json!({ "value": "a" })),
             ("c2", "grab", json!({ "value": "b" })),
-            ("c3", "task_status", json!({ "id": "0.0" })),
+            ("c3", "grab", json!({ "value": "c" })),
             ("c4", "echo", json!({ "value": "d" })),
         ]),
     );
@@ -182,7 +181,7 @@ fn a_local_call_or_a_task_builtin_runs_alone_between_its_neighbors() {
     assert_eq!(
         call_value(&effect),
         "d",
-        "grab and task_status answer on the driver thread, then c4 issues"
+        "both grab calls answer on the driver thread, then c4 issues"
     );
     run.resume(last, tool_text("echoed d"));
     let (next, effect) = only_effect(run.step());

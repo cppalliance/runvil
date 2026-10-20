@@ -168,7 +168,7 @@ pub enum Request {
     },
     /// The unanswered calls of one model round, yielded by the loop's
     /// step: the scheduler issues every catalog call up to the first call
-    /// that must run alone (a task built-in or a local tool) and answers
+    /// that must run alone (a local tool) and answers
     /// once each issued call has landed, with one text per issued call in
     /// call order. The loop sends the call it stopped at as an ordinary
     /// [`Request::ToolCall`]. Shim-produced in every field, so a wrong
@@ -189,15 +189,13 @@ pub enum Request {
     },
     /// One stateless tool-capable model round over a `messages.new()`
     /// list, yielded by the `models.loop` shim once per round. The
-    /// dispatch arm first pushes the chain's undelivered model-task
-    /// notices onto the list as user records and refuses a list that is
-    /// still empty; the round advertises the section's current tool
+    /// dispatch arm first refuses an empty list; the round advertises the section's current tool
     /// scope, local Lua tools included, resolved in the dispatch arm
     /// where the tool scope sits.
     Chat {
         /// The list the round sends, which may be empty, since the
-        /// dispatch pushes pending notices before it refuses an empty
-        /// list. Its records were validated as the list added them.
+        /// dispatch, not the parse, refuses an empty list. Its records
+        /// were validated as the list added them.
         list: MessageList,
         /// The receiver of a handle's `loop`, as its frozen binding cloned
         /// out of the userdata while the VM handle is live; `None` when

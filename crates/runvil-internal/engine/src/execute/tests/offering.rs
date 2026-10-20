@@ -112,11 +112,10 @@ fn the_offering_binds_every_catalog_tool_under_its_wire_name_in_id_order() {
 }
 
 #[test]
-fn the_offering_leaves_out_a_name_that_is_reserved_unadvertisable_or_repeated() {
+fn the_offering_leaves_out_a_name_that_is_unadvertisable_or_repeated() {
     let mut rig = Rig::start(declaring_tools(vec![
         echo_tool(),
         offered_tool("gh/list"),
-        offered_tool("task/cancel"),
         shapeless_tool("bad/shape"),
         offered_tool("dup/a.b"),
         offered_tool("dup/a/b"),
@@ -130,8 +129,8 @@ fn the_offering_leaves_out_a_name_that_is_reserved_unadvertisable_or_repeated() 
             pair("ok_fine", "ok/fine"),
             pair("tools_echo", "tools/echo"),
         ],
-        "the task built-in name, the schema no round can advertise, and the \
-         later repeat are each left out"
+        "the schema no round can advertise and the later repeat are each \
+         left out"
     );
 }
 
@@ -171,6 +170,43 @@ fn a_script_offers_the_extras_and_the_model_calls_an_offered_tool_by_its_wire_na
             args: json!({ "value": "hi" }),
             origin: ToolCallOrigin::new(EXECUTION, "Only", ToolCaller::Model),
         }]
+    );
+}
+
+/// Every key on a section's `tools` table, sorted, each with its Lua type.
+const TOOLS_TABLE_KEYS: &str = "call:function,extras:function,get:function,offer:function,offer_local:function,required:function";
+
+#[test]
+fn a_section_tools_table_holds_only_its_api_and_its_round_advertises_only_the_offered_tool() {
+    let gateway = ScriptedChat::new(vec![text("done")]);
+    let source = one_section(
+        "local keys = {}\n\
+         for key, value in pairs(tools) do keys[#keys + 1] = key .. ':' .. type(value) end\n\
+         table.sort(keys)\n\
+         tools.offer(tools.extras())\n\
+         local history = messages.new()\n\
+         history:user('go')\n\
+         models.loop(history)\n\
+         return table.concat(keys, ',')",
+    );
+    let rig = Rig::run(catalog_scenario(source).tool(echo_tool()).chat(&gateway));
+    assert_eq!(
+        rig.trace().text(),
+        TOOLS_TABLE_KEYS,
+        "a section's tools table holds exactly the tools API"
+    );
+    let advertised: Vec<Vec<String>> = rig
+        .issued()
+        .iter()
+        .filter_map(|record| match record {
+            EffectRecord::Chat { tools, .. } => Some(tools.clone()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        advertised,
+        vec![vec!["tools_echo".to_owned()]],
+        "the round advertises exactly the offered tool"
     );
 }
 

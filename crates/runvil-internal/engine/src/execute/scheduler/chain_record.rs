@@ -24,7 +24,6 @@ use crate::model::{Message, ModelId};
 use crate::parser::{Block, BodyText, Prompt, Section};
 use crate::{Error, Result};
 
-use super::await_tasks::AwaitTasks;
 use super::{Counters, MAX_CALL_DEPTH};
 
 #[path = "chain_record-kind.rs"]
@@ -186,16 +185,10 @@ pub(super) struct Chain {
     /// A spawned chain's `item` and `sys.index` seeds, consumed by its
     /// first section entry; `None` afterward and on every other chain.
     pub(super) seed: Option<TaskSeed>,
-    /// The tasks the chain is parked on in a `join_any` wait (or the
-    /// model's `await_tasks`); empty while the chain is not waiting. A
-    /// member's chain end delivers it and clears the set.
+    /// The tasks the chain is parked on in a `join_any` wait; empty while
+    /// the chain is not waiting. A member's chain end delivers it and
+    /// clears the set.
     pub(super) waiting_on: Vec<TaskId>,
-    /// The model's `await_tasks` call the chain is parked in, when
-    /// `waiting_on` is that call's set rather than an author `join_any`:
-    /// the member's end answers the model's tool call with the drained
-    /// notices instead of delivering the member to the shim. `None`
-    /// otherwise.
-    pub(super) awaiting: Option<AwaitTasks>,
     /// The answers of the `tool_calls` batch the chain is parked on, in
     /// call order: `None` while a call is in flight, its text or failure
     /// once it lands. The chain is answered once no slot is open. Empty
@@ -207,13 +200,6 @@ pub(super) struct Chain {
     /// answer resumes the chain. `None` while the chain runs or between
     /// blocks.
     pub(super) blocked: Option<Blocked>,
-    /// Model-task notices not yet delivered into the chain's next model
-    /// round, in arrival order: queued (with their task) when a model
-    /// task the chain owns ends, drained - each drain joining its task -
-    /// by the loop shim's per-round request or by the
-    /// model's `await_tasks` answer. The H1 hand-off moves them to the
-    /// walk with the pass's tasks.
-    pub(super) task_notices: Vec<(TaskId, String)>,
     /// The latest progress note published through `tasks.note` for the
     /// task this chain backs, reported by `tasks.status`.
     pub(super) note: Option<String>,

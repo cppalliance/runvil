@@ -26,10 +26,6 @@ pub(super) enum DispatchTarget {
     Bound(ToolId),
     /// A Lua-local tool, answered by the section VM's handler.
     Local,
-    /// One of the model's task built-ins (`task`, `task_cancel`,
-    /// `task_status`, `await_tasks`), answered by the scheduler over its
-    /// task arena.
-    Builtin,
 }
 
 /// Builds the round's advertised scope under the validation boundary

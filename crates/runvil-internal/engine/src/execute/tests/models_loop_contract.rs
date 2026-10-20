@@ -2,16 +2,14 @@
 //! suites leave unpinned, each driven through the public Lua surface over
 //! `messages.new()` lists and asserting only what an author or the caller
 //! sees. The default and argument compactor, the list checks, an uncaught
-//! argument error, the drain's order, the single return value, and the
+//! argument error, the single return value, and the
 //! compactor call sit here; the exit rules, the batch rule, tool results,
 //! and the event trace sit in `rounds`.
 
-use runvil_parser::test_support::{one_section, prompt};
+use runvil_parser::test_support::one_section;
 
 use super::fixtures::structured_tool;
 use super::gateway::overflowing;
-use super::model_task_notices::loop_owner;
-use super::model_tasks::{CHILD_PARKED_ON_SLOW_TOOL, model_task_scenario};
 use super::models_loop::loop_scenario;
 use super::*;
 use crate::test_support::scenario::Trace;
@@ -145,42 +143,16 @@ fn the_list_error_still_raises_when_the_author_has_rebound_error() {
 }
 
 #[test]
-fn an_empty_list_raises_unless_a_pending_notice_fills_its_round() {
-    // The empty check runs at each round, after that round's drain: with
-    // nothing pending the call raises before any request, and once the
-    // author's cancel queues a notice, an empty list runs one round over it.
-    let gateway = ScriptedChat::new(vec![
-        calls(&[("call_1", "task", "{\"target\":\"## Child\"}")]),
-        text("started"),
-        text("read"),
-    ]);
-    let owner = loop_owner(
+fn an_empty_list_raises_before_any_round() {
+    let gateway = ScriptedChat::new(vec![text("unreachable")]);
+    let source = one_section(
         "local ok, err = pcall(models.loop, messages.new())\n\
-         assert(not ok, 'an empty list with nothing pending raises')\n\
-         local refused = err.kind .. ':' .. tostring(err)\n\
-         tasks.cancel(tasks.pending({ origin = 'model' })[1])\n\
-         local fresh = messages.new()\n\
-         models.loop(fresh)\n\
-         return refused .. '|' .. #fresh .. '|' .. fresh[1].role .. ':' .. fresh[1].content \
-         .. '|' .. fresh[2].content",
+         assert(not ok, 'an empty list raises')\n\
+         return err.kind .. ':' .. tostring(err)",
     );
-    let source = prompt(
-        "",
-        &[("Only", &owner), ("Child", CHILD_PARKED_ON_SLOW_TOOL)],
-    );
-    let trace = model_task_scenario(source).chat(&gateway).run();
-    assert_eq!(
-        trace.text(),
-        "lua:messages must not be empty|2\
-         |user:Task id=0.0 (## Child) was canceled: the author cancelled it|read"
-    );
-    let bodies = gateway.requests();
-    assert_eq!(bodies.len(), 3, "the refused call sends no request");
-    assert_eq!(
-        bodies[2].messages.len(),
-        1,
-        "the round over the empty list holds only the notice"
-    );
+    let trace = loop_scenario(source).chat(&gateway).run();
+    assert_eq!(trace.text(), "lua:messages must not be empty");
+    assert_eq!(gateway.call_count(), 0, "the refused call sends no request");
 }
 
 #[test]
@@ -208,53 +180,6 @@ fn an_uncaught_loop_arity_error_fails_the_run_naming_the_authors_prompt_line() {
         other => panic!("expected the mapped runtime error, got {other:?}"),
     }
     assert_eq!(gateway.call_count(), 0, "no round runs");
-}
-
-#[test]
-fn two_notices_drained_into_one_round_land_in_the_order_their_tasks_ended() {
-    // The author cancels the model's second task before its first, so the
-    // queue holds the second's notice first.
-    let gateway = ScriptedChat::new(vec![
-        calls(&[("call_1", "task", "{\"target\":\"## Child\"}")]),
-        calls(&[("call_2", "task", "{\"target\":\"## Child\"}")]),
-        text("started"),
-        text("read"),
-    ]);
-    let owner = loop_owner(
-        "local live = {}\n\
-         for _, t in ipairs(tasks.pending({ origin = 'model' })) do live[t.task] = t end\n\
-         tasks.cancel(live['0.1'])\n\
-         tasks.cancel(live['0.0'])\n\
-         models.loop(msgs)\n\
-         return #msgs .. '|' .. msgs[7].role .. ':' .. msgs[7].content \
-         .. '|' .. msgs[8].role .. ':' .. msgs[8].content",
-    );
-    let source = prompt(
-        "",
-        &[("Only", &owner), ("Child", CHILD_PARKED_ON_SLOW_TOOL)],
-    );
-    let trace = model_task_scenario(source).chat(&gateway).run();
-    assert_eq!(
-        trace.text(),
-        "9|user:Task id=0.1 (## Child) was canceled: the author cancelled it\
-         |user:Task id=0.0 (## Child) was canceled: the author cancelled it"
-    );
-    // The wire coalesces the two consecutive user records into one message.
-    let bodies = gateway.requests();
-    assert_eq!(bodies.len(), 4, "both notices ride one round");
-    let last = bodies[3].messages.last().expect("the round sends messages");
-    let ended_first = last
-        .content()
-        .find("Task id=0.1")
-        .expect("0.1's notice is sent");
-    let ended_second = last
-        .content()
-        .find("Task id=0.0")
-        .expect("0.0's notice is sent");
-    assert!(
-        last.role() == Role::User && ended_first < ended_second,
-        "the round's last message holds both notices in queue order: {last:?}"
-    );
 }
 
 #[test]

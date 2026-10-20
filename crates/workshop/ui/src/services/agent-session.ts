@@ -54,9 +54,9 @@ export interface ToolCallRow {
   readonly args: string;
   /**
    * The bound tool id the call resolved to, as the wire's one
-   * slash-separated string (`web/search`), or null for a Lua-local tool,
-   * a task built-in, or an entry the wire did not stamp. Views render a
-   * null tool as a generic tool.
+   * slash-separated string (`web/search`), or null for a Lua-local tool
+   * or an entry the wire did not stamp. Views render a null tool as a
+   * generic tool.
    */
   readonly tool: string | null;
 }

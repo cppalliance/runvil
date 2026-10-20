@@ -7,7 +7,6 @@ use serde_json::json;
 
 use super::decode::{collect_offer_entries, local_params_schema, tool_name};
 use super::userdata::LuaToolHandle;
-use crate::scope::TaskAllowlist;
 use crate::test_vm::{TestVm, echo_tool, lua_over, tool_at};
 use crate::{ToolBinding, ToolSet};
 
@@ -180,49 +179,6 @@ fn local_params_schema_rejects_an_unsupported_type() {
     assert!(
         error.to_string().contains("unsupported type \"table\""),
         "the rejection names the bad type: {error}"
-    );
-}
-
-#[test]
-fn allow_tasks_records_the_section_allowlist_and_rejects_bad_targets() {
-    let vm = TestVm::new().build();
-    let allowlist = || {
-        vm.tool_runtime()
-            .lock()
-            .expect("the runtime mutex is not poisoned")
-            .allowed_tasks
-            .clone()
-    };
-    assert_eq!(allowlist(), None, "nothing is allowed before the call");
-    vm.exec("tools.allow_tasks()");
-    assert_eq!(allowlist(), Some(TaskAllowlist::Any));
-    vm.exec("tools.allow_tasks({ '## Research', ' ## Draft ' })");
-    let narrowed = allowlist().expect("the list is recorded");
-    assert_eq!(
-        narrowed,
-        TaskAllowlist::Only(vec!["## Research".to_owned(), "## Draft".to_owned()]),
-        "the latest call replaces the earlier grant, headings trimmed"
-    );
-    assert!(narrowed.permits(" ## Draft") && !narrowed.permits("## Other"));
-    for (call, fragment) in [
-        ("tools.allow_tasks('## Research')", "got string"),
-        ("tools.allow_tasks({})", "at least one section"),
-        ("tools.allow_tasks({ 7 })", "got integer"),
-        ("tools.allow_tasks({ '  ' })", "non-empty"),
-    ] {
-        let error = vm.eval_err(call);
-        assert!(
-            error.to_string().contains(fragment),
-            "{call} names its fault: {error}"
-        );
-    }
-    assert_eq!(
-        allowlist(),
-        Some(TaskAllowlist::Only(vec![
-            "## Research".to_owned(),
-            "## Draft".to_owned()
-        ])),
-        "a refused call leaves the recorded allowlist alone"
     );
 }
 

@@ -44,14 +44,8 @@
 //! and its hand-off to the walk, `dispatch` the request arms, `chat` the
 //! one-round `chat` arm and its answer application, `tool_call` the
 //! script and model-issued `tool_call` arm (the two arms the
-//! section-visible `models.loop` shim drives), `builtins` the model's
-//! task built-ins (`task`, `task_cancel`, `task_status`) answered over
-//! the arena and advertised once a section runs `tools.allow_tasks`,
-//! `await_tasks` the fourth built-in, the model's wait over its live
-//! tasks, `notices` the model-task notices
-//! (queued at a model task's end, drained into the owner's next round or
-//! its `await_tasks` answer), `tasks` the task arena and the `spawn` arm,
-//! `admission` the admission limits, `task_end` the chain-end rules for
+//! section-visible `models.loop` shim drives), `tasks` the task arena and
+//! the `spawn` arm, `admission` the admission limits, `task_end` the chain-end rules for
 //! tasks, `waits` the `join_any` wait and the
 //! `ready`, `status`, `pending`, `note`, `concurrency`, and `cancel` arms over the arena,
 //! `timer` the wait shims' internal timeout as an effect-backed slot, and
@@ -61,15 +55,12 @@
 
 mod admission;
 mod apply;
-mod await_tasks;
-mod builtins;
 mod chain;
 mod chain_record;
 mod chat;
 mod dispatch;
 mod drive;
 mod h1;
-mod notices;
 mod pending;
 mod step;
 mod task_end;
@@ -95,7 +86,6 @@ use crate::{Error, Result};
 use super::context::RunState;
 use super::protocol::Answer;
 use super::run::{Effect, EffectAnswer, EffectId, Round};
-pub(in crate::execute) use builtins::TaskBuiltin;
 use chain_record::{Chain, ChatAnchor};
 use pending::{CallSite, Continuation, Pending, ToolCallContinuation, VfsContinuation};
 use tasks::TaskSlot;

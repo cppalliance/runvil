@@ -4,13 +4,8 @@
 //! tool call.
 //!
 //! Each call's route is decided once, by `tool_route`, on the driver
-//! thread before any leaf work. The four reserved model built-in names
-//! (`task`, `task_cancel`, `task_status`, `await_tasks`) are recognized
-//! before any lookup - a model-issued call to the first three is answered
-//! by the `builtins` module over the task arena, `await_tasks` by its own
-//! module (answered at once or parked on the chain's model tasks), and a
-//! script call to any of them answers as unbound; a local Lua tool is
-//! answered with its handler; anything else is a catalog tool, which
+//! thread before any leaf work. A local Lua tool is answered with its
+//! handler; anything else is a catalog tool, which
 //! resolves against the run's offering (a model call by wire name, a
 //! script call by canonical id, which also reaches a catalog tool left
 //! out of the offering), has its attempt counted, and is issued as a
@@ -26,14 +21,14 @@
 //! The loop sends a round's unanswered calls together as one
 //! `tool_calls` request. The arm walks them in the model's order and
 //! issues each catalog call at once into a slot of the chain's batch,
-//! stopping at the first call whose route is a reserved built-in name or
-//! a local tool. A call that fails to route or to prepare fills its slot
-//! with the error and stops the batch too. Each landed answer fills its call's
-//! slot, and the chain is answered once no slot is open: every text in
-//! call order, or the first failure in call order. Fewer texts than
-//! calls tells the loop where the batch stopped, and the loop sends that
-//! call alone as an ordinary `tool_call`. The calls in flight run
-//! concurrently, each under its own forked identity.
+//! stopping at the first call whose route is a local tool. A call that
+//! fails to route or to prepare fills its slot with the error and stops
+//! the batch too. Each landed answer fills its call's slot, and the
+//! chain is answered once no slot is open: every text in call order, or
+//! the first failure in call order. Fewer texts than calls tells the
+//! loop where the batch stopped, and the loop sends that call alone as
+//! an ordinary `tool_call`. The calls in flight run concurrently, each
+//! under its own forked identity.
 //!
 //! A local tool call is a two-yield handshake. The `tool_call` answer is
 //! [`ToolCallOutcome::Local`], which hands the shim the handler, and the
@@ -58,31 +53,22 @@ use crate::execute::section_context::LocalCall;
 use crate::lua::{ScriptReport, ToolCallCounts, current_tool_bindings};
 use crate::{Error, Result};
 
-use super::builtins::TaskBuiltin;
 use super::dispatch::unbound_tool_call;
 use super::{CallSite, ChainIndex, Continuation, Scheduler, ToolCallContinuation, prompt_origin};
 
 /// How one `tool_call` dispatch resolved: a bound call issued as an effect
-/// and parked on the pending table, an answer settled on the driver thread
-/// (a local Lua tool's handler, a task built-in), such an answer plus the
-/// task chain a `task` built-in started, enqueued behind the caller, or
-/// the chain parked in the model's `await_tasks` on its live tasks,
-/// answered when one ends or its timer fires.
+/// and parked on the pending table, or an answer settled on the driver
+/// thread (a local Lua tool's handler, a preparation failure).
 #[derive(Debug)]
 pub(super) enum ToolCallDispatch {
     Issued,
     Answered(Answer<Error>),
-    Started(Answer<Error>, ChainIndex),
-    Parked,
 }
 
 /// Where one tool call is answered, decided before any catalog lookup so
 /// a lone call and a batched one route alike.
 #[derive(Debug)]
 enum ToolRoute {
-    /// A reserved model built-in name: a model-issued call is answered
-    /// over the task arena, and a script call is unbound.
-    Builtin(TaskBuiltin),
     /// A local Lua tool of the chain's section VM, answered with its
     /// handler.
     Local,
@@ -94,8 +80,8 @@ enum ToolRoute {
 impl Scheduler {
     /// Dispatches a `tool_call` request. An issued bound call parks the
     /// chain in the pending table; a local Lua tool's handler resumes the
-    /// chain on the spot; every preparation failure - a reserved name, an
-    /// unbound alias, the counts install - is the call's answer, resumed
+    /// chain on the spot; every preparation failure - an unbound alias,
+    /// the counts install - is the call's answer, resumed
     /// into the caller so an author `pcall` catches it exactly as a tool
     /// failure.
     pub(super) fn dispatch_tool_call(
@@ -111,18 +97,10 @@ impl Scheduler {
             None => CallSite::Script { turn },
         };
         match self.prepare_tool_call(id, alias, args, site) {
-            // An issued call is parked on the pending table; a parked
-            // wait was recorded on the chain, and a member's end or the
-            // timer's firing answers it.
-            Ok(ToolCallDispatch::Issued | ToolCallDispatch::Parked) => {}
+            // An issued call is parked on the pending table.
+            Ok(ToolCallDispatch::Issued) => {}
             Ok(ToolCallDispatch::Answered(answer)) => {
                 self.answer_inline(id, answer);
-            }
-            // The caller runs first and the task waits for admission, the
-            // order `tasks.spawn` keeps.
-            Ok(ToolCallDispatch::Started(answer, child)) => {
-                self.answer_inline(id, answer);
-                self.spawned.push_back(child);
             }
             Err(error) => {
                 self.answer_inline(id, Answer::ToolCallResult(Err(error)));
@@ -146,7 +124,7 @@ impl Scheduler {
         let mut batch = Vec::with_capacity(calls.len());
         for (slot, call) in calls.into_iter().enumerate() {
             let issued = match self.tool_route(id, &call.name) {
-                Ok(ToolRoute::Builtin(_) | ToolRoute::Local) => break,
+                Ok(ToolRoute::Local) => break,
                 Ok(ToolRoute::Catalog) => self.prepare_catalog_call(
                     id,
                     &call.name,
@@ -172,14 +150,9 @@ impl Scheduler {
     }
 
     /// Decides the route of the call named `alias`, the one decision a
-    /// lone call and a batch share. The reservation wins over every
-    /// lookup: a bound or local tool registered under a reserved name is
-    /// never reachable. A local tool of the chain's section VM wins over
-    /// the catalog.
+    /// lone call and a batch share. A local tool of the chain's section VM
+    /// wins over the catalog.
     fn tool_route(&self, id: ChainIndex, alias: &str) -> Result<ToolRoute> {
-        if let Some(builtin) = TaskBuiltin::from_name(alias) {
-            return Ok(ToolRoute::Builtin(builtin));
-        }
         if self.chains[id.index()]
             .frame()?
             .vm()?
@@ -273,10 +246,9 @@ impl Scheduler {
     }
 
     /// The fallible half of tool-call dispatch, by the call's route: a
-    /// reserved name (a model-issued task built-in answered over the
-    /// arena, a script call to a reserved name unbound), a local tool (the
-    /// one-time counts install, the attempt counted, then the handler's
-    /// answer), or a catalog tool, which `prepare_catalog_call` issues.
+    /// local tool (the one-time counts install, the attempt counted, then
+    /// the handler's answer), or a catalog tool, which
+    /// `prepare_catalog_call` issues.
     ///
     /// Every report the call makes carries the turn of the model round
     /// that requested it, so a local handler earlier in the same batch
@@ -291,19 +263,6 @@ impl Scheduler {
         site: CallSite,
     ) -> Result<ToolCallDispatch> {
         match self.tool_route(id, alias)? {
-            // The built-ins serve the model; the author's own script
-            // reaches the arena through the `tasks` namespace, so a script
-            // call stays unbound.
-            ToolRoute::Builtin(builtin) => {
-                if let Some(call_id) = site.call_id() {
-                    let turn = self.call_turn(id, &site);
-                    return self.answer_task_builtin(id, builtin, &args, call_id, turn);
-                }
-                Err(unbound_tool_call(
-                    self.chains[id.index()].ctx.tool_set(),
-                    alias,
-                ))
-            }
             ToolRoute::Local => {
                 let report = ScriptReport {
                     turn: self.call_turn(id, &site),

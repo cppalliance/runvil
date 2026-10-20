@@ -4,7 +4,7 @@
 //! None`), which keeps the raise-at-call-site behavior; local Lua tools,
 //! whose handlers run inside the calling block coroutine - store calls,
 //! nested local calls, and bound calls included - with no leaf work of
-//! their own; and the reserved task names, refused before alias lookup.
+//! their own.
 //! The fixtures reach the
 //! model-issued form through the test-only `tools.call_as_model` install
 //! (`Scenario::raw_shims`); in production only the loop shim yields
@@ -171,33 +171,6 @@ pub(super) fn tool_result_lines(recorder: &ToolRecorder) -> Vec<String> {
         .into_iter()
         .filter(|line| line.contains("tool_result"))
         .collect()
-}
-
-#[test]
-fn a_reserved_task_name_answers_unbound_tool_before_alias_lookup() {
-    // `task_status` is registered as a local tool so the test proves the
-    // reservation wins over a lookup that would otherwise succeed.
-    let source = one_section(
-        "tools.offer_local('task_status', 'shadow', {}, function() return 'shadowed' end)
-         local kinds = {}
-         for _, name in ipairs({ 'task', 'task_cancel', 'task_status', 'await_tasks' }) do
-           local ok, err = pcall(tools.call, name, {})
-           assert(not ok, name .. ' must be refused')
-           kinds[#kinds + 1] = err.kind .. ':' .. err.name
-         end
-         return table.concat(kinds, ',')",
-    );
-    let trace = arm_scenario(source).run();
-    assert_eq!(
-        trace.text(),
-        "unbound_tool:task,unbound_tool:task_cancel,unbound_tool:task_status,\
-         unbound_tool:await_tasks"
-    );
-    let lines = tool_lines(&trace).lines();
-    assert!(
-        !lines.iter().any(|line| line.contains("tool_result")),
-        "a reserved name dispatches nothing: {lines:?}"
-    );
 }
 
 #[path = "tool_call_arm-local-handlers.rs"]

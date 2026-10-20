@@ -406,7 +406,7 @@ events! {
             /// The alias the call named.
             alias: String,
             /// The bound tool `alias` resolved to; `None` for a Lua-local
-            /// tool, a task built-in, or an event logged before the field.
+            /// tool or an event logged before the field.
             #[serde(default, skip_serializing_if = "Option::is_none")]
             tool: Option<ToolId>,
             /// The tool's output: untrusted unless `trusted`.
@@ -430,7 +430,7 @@ events! {
         },
         /// Reports a task's own progress note, set through `tasks.note`.
         /// The Engine never emits it: it stores the note on the task's
-        /// chain, and the task's owner reads it through `task_status`.
+        /// chain, and the task's owner reads it through `tasks.status`.
         TaskNote {
             /// The task that set the note.
             task: TaskId,

@@ -11,7 +11,7 @@ use std::collections::BTreeMap;
 
 use runvil_types::ids::{AbandonReason, TaskId};
 
-use super::model_task_acceptance::{task_lifecycle, terminals_per_started_task};
+use super::fixtures::{task_lifecycle, terminals_per_started_task};
 use super::scheduler::scheduler_scenario;
 use super::tasks::TaskRecorder;
 use super::*;

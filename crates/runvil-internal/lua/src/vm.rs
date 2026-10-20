@@ -373,8 +373,8 @@ impl<S> SectionVm<S> {
         self.instruction_budget.set_cancel(cancel);
     }
 
-    /// The section's tool-addition runtime: what `tools.offer`,
-    /// `packs.offer`, and `tools.allow_tasks` recorded.
+    /// The section's tool-addition runtime: what `tools.offer` and
+    /// `packs.offer` recorded.
     #[must_use]
     pub fn tool_runtime(&self) -> &Arc<Mutex<ToolRuntime>> {
         &self.tool_runtime

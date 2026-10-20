@@ -17,10 +17,10 @@
 pub(crate) use runvil_lua::{
     Argv, CoroStep, Library, LibraryBlock, LibraryKey, LuaBlockResult, MessageList, ModelReport,
     NonEmpty, OverflowReason, ProseState, QuotaResource, ScriptReport, SectionText, SectionVm,
-    TaskAllowlist, ToolBinding, ToolCallCounts, ToolSet, Uninjected, UsageAnchor,
-    current_tool_bindings, enrich_sys_model, install_preludes, install_section_loop_shim,
-    install_store_shims, install_ui, output_reserve, precheck, prepare_dispatch,
-    prepare_model_dispatch, project_messages, render_item, resolve_model_binding,
+    ToolBinding, ToolCallCounts, ToolSet, Uninjected, UsageAnchor, current_tool_bindings,
+    enrich_sys_model, install_preludes, install_section_loop_shim, install_store_shims, install_ui,
+    output_reserve, precheck, prepare_dispatch, prepare_model_dispatch, project_messages,
+    render_item, resolve_model_binding,
 };
 pub(crate) use runvil_lua::{run_store_op, store_error_message, store_probe_message};
 

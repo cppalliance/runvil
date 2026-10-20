@@ -1,6 +1,5 @@
 //! The `timer` arm: the internal timeout behind a timed wait (an author's
-//! `opts.timeout`, or the model's `await_tasks { timeout }`), as an
-//! effect-backed task slot.
+//! `opts.timeout`), as an effect-backed task slot.
 //!
 //! A timer is the one task backed by an in-flight leaf request rather than
 //! a chain: the request sleeps and posts back, and its slot sits in the
@@ -44,9 +43,9 @@ impl Scheduler {
         self.answer_inline(id, answer);
     }
 
-    /// The fallible half of timer dispatch, shared with the model's
-    /// `await_tasks`: the id allocation, the issued effect, and the slot.
-    pub(super) fn prepare_timer(&mut self, id: ChainIndex, duration: Duration) -> Result<TaskId> {
+    /// The fallible half of timer dispatch: the id allocation, the issued
+    /// effect, and the slot.
+    fn prepare_timer(&mut self, id: ChainIndex, duration: Duration) -> Result<TaskId> {
         let task = TaskId::from(self.allocate_child_id(id)?);
         let effect = self.issue(id, Effect::Timer { duration }, Continuation::Timer);
         self.tasks.insert(
@@ -88,6 +87,7 @@ impl Scheduler {
         slot.state = TaskState::Done { ok: true };
         slot.outcome = Some(Ok(String::new()));
         let (task, owner) = (task.clone(), slot.owner);
-        self.wake_waiter(owner, &task)
+        self.wake_waiter(owner, &task);
+        Ok(())
     }
 }

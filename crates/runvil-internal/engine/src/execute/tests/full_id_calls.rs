@@ -38,12 +38,12 @@ fn echo_and_concrete(lua: &str) -> Scenario {
         .tool(scoped_tool("concrete", "Concrete description.").0)
 }
 
-/// A catalog tool whose wire name, `task_cancel`, is a task built-in's, so
-/// the run cannot offer it; it echoes its `value` argument.
+/// A catalog tool whose parameters are not a JSON object, a schema no
+/// model round can advertise, so the run cannot offer it; it echoes its
+/// `value` argument.
 #[track_caller]
 fn unofferable_tool() -> FnTool {
-    let schema = json!({ "type": "object", "properties": { "value": { "type": "string" } } });
-    let tool = FnTool::new("task/cancel", schema, |args| {
+    let tool = FnTool::new("hidden/shape", json!("scalar"), |args| {
         let value = args["value"].as_str().unwrap_or_default();
         Ok(ToolOutput::trusted(format!("unoffered: {value}")))
     });
@@ -69,8 +69,8 @@ fn a_script_call_by_id_records_the_offered_tools_wire_name() {
 #[test]
 fn a_script_reaches_a_catalog_tool_left_out_of_the_offering_by_id() {
     let source = one_section(
-        "assert(tools.get('task/cancel') == nil, 'the tool is not offered')\n\
-         return tools.call('task/cancel', { value = 'hi' })",
+        "assert(tools.get('hidden/shape') == nil, 'the tool is not offered')\n\
+         return tools.call('hidden/shape', { value = 'hi' })",
     );
     let mut rig = Rig::start(catalog_scenario(source).tool(unofferable_tool()));
     assert!(
@@ -78,15 +78,15 @@ fn a_script_reaches_a_catalog_tool_left_out_of_the_offering_by_id() {
             .tool_set_for_test()
             .offered()
             .is_empty(),
-        "a tool whose wire name is a task built-in's is left out of the offering"
+        "a tool whose schema no round can advertise is left out of the offering"
     );
     let rig = rig.finish();
     assert_eq!(rig.trace().text(), "unoffered: hi");
     assert_eq!(
         rig.issued(),
         vec![EffectRecord::ToolCall {
-            tool: ToolId::parse("task/cancel").expect("valid id"),
-            alias: "task/cancel".to_owned(),
+            tool: ToolId::parse("hidden/shape").expect("valid id"),
+            alias: "hidden/shape".to_owned(),
             args: json!({ "value": "hi" }),
             origin: script_origin(),
         }],

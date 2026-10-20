@@ -5,19 +5,16 @@
 //! identical effects, events, provenances, and `sys.id`s), the
 //! batching-pairing property (answers delivered one per step, all at once,
 //! and shuffled within a batch produce identical per-task effects and
-//! events), and a model task whose owner ends first reporting `abandoned`
-//! in both its event and its notice.
+//! events).
 
 use runvil_types::event::Event;
-use runvil_types::ids::{AbandonReason, TaskId};
 
 use super::context::{parse, test_context};
-use super::model_tasks::model_task_scenario;
 use super::scheduler::scheduler_scenario;
 use super::*;
 use crate::execute::run::{Effect, Run, Step};
 use crate::test_support::scenario::{
-    Batching, EXECUTION, chat_answer, drive_batched, echo_chat, infer_prompt, text_of,
+    Batching, EXECUTION, drive_batched, echo_chat, infer_prompt, text_of,
 };
 use crate::test_support::{drive, perform_locally};
 
@@ -189,66 +186,4 @@ fn answers_one_per_step_all_at_once_and_reversed_produce_the_same_per_task_recor
         "the strategies differ in arrival order, so the property is not vacuous"
     );
     assert_eq!(one.events_by_task().len(), 4, "the parent and three arms");
-}
-
-#[test]
-fn a_model_task_whose_owner_ends_first_reports_abandoned_in_its_event_and_its_notice() {
-    // Round 1 starts the task; round 2 ends the loop and the section
-    // returns while the child is still live. The child's terminal is
-    // `TaskAbandoned` (not cancelled: it lost its owner rather than being
-    // stopped on purpose), and the notice queued for the model says so.
-    let md = "---\nname: mt\ndescription: d\nrunvil: 0\n---\n\n\
-        # ModelTasks\n\n\
-        ## Only\n\n\
-        ```lua\n\
-        tools.allow_tasks({ '## Child' })\n\
-        local msgs = messages.new()\n\
-        msgs:user('go')\n\
-        models.loop(msgs)\n\
-        return 'owner done'\n\
-        ```\n\n\
-        ## Child\n\n\
-        ```lua\n\
-        return models.infer('child work')\n\
-        ```\n";
-    let mut rounds = 0;
-    let (result, events) = drive(model_task_scenario(md).into_run(), |_, effect| {
-        perform_locally(effect, &mut |effect| {
-            if infer_prompt(effect) == "child work" {
-                return chat_answer(&text("child result"));
-            }
-            rounds += 1;
-            match rounds {
-                1 => chat_answer(&calls(&[("call_1", "task", "{\"target\":\"## Child\"}")])),
-                _ => chat_answer(&text("bye")),
-            }
-        })
-    });
-    assert_eq!(text_of(result), "owner done");
-    let child: TaskId = "0.0".parse().expect("a task id parses");
-    assert!(
-        events.iter().any(|event| matches!(
-            event,
-            Event::TaskAbandoned { task, reason: AbandonReason::OwnerReturned, .. } if *task == child
-        )),
-        "the child's terminal is abandoned with the owner's return as the reason: {events:?}"
-    );
-    assert!(
-        !events.iter().any(|event| matches!(
-            event,
-            Event::TaskCancelled { task, .. } | Event::TaskSucceeded { task, .. } if *task == child
-        )),
-        "abandoned is the child's only terminal: {events:?}"
-    );
-    let notice = events
-        .iter()
-        .find_map(|event| match event {
-            Event::TaskNotice { task, text, .. } if *task == child => Some(text.clone()),
-            _ => None,
-        })
-        .expect("the abandonment queues a notice for the model");
-    assert!(
-        notice.starts_with("Task id=0.0 (## Child) was abandoned: "),
-        "the notice names the task and says abandoned: {notice}"
-    );
 }

@@ -1,15 +1,12 @@
 //! Tests for how `models.loop` and a model handle's `loop` read their
 //! arguments: every documented form resolves the `messages.new()` list,
 //! each entry's argument errors are raised in order before any request
-//! leaves, and a plain array in the list's place is refused with the list
-//! error, also while a task notice is pending, which then waits for a
-//! round over a list.
+//! leaves, and a plain array or a single record in the list's place is
+//! refused with the list error.
 
-use runvil_parser::test_support::{one_section, prompt};
+use runvil_parser::test_support::one_section;
 
 use super::*;
-use crate::execute::tests::model_task_notices::loop_owner;
-use crate::execute::tests::model_tasks::{CHILD_PARKED_ON_SLOW_TOOL, model_task_scenario};
 
 /// The list refusal both loop entries raise, as `kind:message`.
 const LIST_REFUSAL: &str = "lua:models.loop needs a messages.new() list; build one with \
@@ -161,70 +158,33 @@ fn each_entry_checks_the_handle_then_the_arity_then_the_compactor_then_the_list(
 }
 
 #[test]
-fn a_plain_array_in_the_lists_place_is_refused_with_the_list_error() {
+fn a_plain_array_or_a_record_in_the_lists_place_is_refused_with_the_list_error() {
     let gateway = ScriptedChat::new(vec![text("unreachable")]);
     let source = one_section(
         "local other = models.get('other')
          local plain = { { role = 'user', content = 'hi' } }
+         local msgs = messages.new()
+         msgs:user('hi')
          local out = {}
          for _, call in ipairs({
            function() return other:loop(plain) end,
            function() return models.loop(plain) end,
+           function() return models.loop(msgs[1]) end,
          }) do
            local ok, err = pcall(call)
-           assert(not ok, 'a plain array is refused')
+           assert(not ok, 'a non-list is refused')
            out[#out + 1] = err.kind .. ':' .. tostring(err)
          end
          return table.concat(out, '|')",
     );
     let trace = loop_scenario(source).chat(&gateway).run();
-    assert_eq!(trace.text(), format!("{LIST_REFUSAL}|{LIST_REFUSAL}"));
+    assert_eq!(
+        trace.text(),
+        format!("{LIST_REFUSAL}|{LIST_REFUSAL}|{LIST_REFUSAL}")
+    );
     assert_eq!(
         gateway.call_count(),
         0,
         "the refusal fires before any request leaves"
     );
-}
-
-#[test]
-fn a_non_list_is_refused_with_the_list_error_while_a_task_notice_waits_for_the_list() {
-    // The author's cancel of the model's parked task queues its notice at
-    // once, so every refused call below runs with that notice pending.
-    let gateway = ScriptedChat::new(vec![
-        calls(&[("call_1", "task", "{\"target\":\"## Child\"}")]),
-        text("started"),
-        text("read"),
-    ]);
-    let owner = loop_owner(
-        "tasks.cancel(tasks.pending({ origin = 'model' })[1])\n\
-         local other = models.get('other')\n\
-         local plain = { { role = 'user', content = 'hi' } }\n\
-         local out = {}\n\
-         for _, call in ipairs({\n\
-           function() return other:loop(plain) end,\n\
-           function() return models.loop(plain) end,\n\
-           function() return models.loop(msgs[1]) end,\n\
-         }) do\n\
-           local ok, err = pcall(call)\n\
-           assert(not ok, 'a non-list is refused')\n\
-           out[#out + 1] = err.kind .. ':' .. tostring(err)\n\
-         end\n\
-         models.loop(msgs)\n\
-         out[#out + 1] = msgs[5].role .. ':' .. msgs[5].content\n\
-         return table.concat(out, '|')",
-    );
-    let source = prompt(
-        "",
-        &[("Only", &owner), ("Child", CHILD_PARKED_ON_SLOW_TOOL)],
-    );
-    let trace = model_task_scenario(source).chat(&gateway).run();
-    assert_eq!(
-        trace.text(),
-        format!(
-            "{LIST_REFUSAL}|{LIST_REFUSAL}|{LIST_REFUSAL}|\
-             user:Task id=0.0 (## Child) was canceled: the author cancelled it"
-        ),
-        "the notice stays queued through the refusals and reaches the list's next round"
-    );
-    assert_eq!(gateway.call_count(), 3, "no refused call sends a request");
 }

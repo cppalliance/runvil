@@ -8,7 +8,6 @@ use runvil_parser::ModelKeyword;
 use runvil_types::packs::PackId;
 use runvil_types::tools::ToolInfo;
 
-use crate::execute::scheduler::TaskBuiltin;
 use crate::lua::{ToolBinding, ToolSet};
 use crate::model::{ModelBinding, ModelInvocation, ModelSet};
 use crate::parser::Prompt;
@@ -58,13 +57,10 @@ fn offered_bindings(ctx: &RunContext) -> Vec<ToolBinding> {
     offered
 }
 
-/// Why `tool` can't be offered under `name`: a task built-in has the
-/// name, no model round could advertise it, or an earlier offered tool has
-/// it. `None` when it can be offered.
+/// Why `tool` can't be offered under `name`: no model round could
+/// advertise it, or an earlier offered tool has it. `None` when it can be
+/// offered.
 fn offer_refusal(name: &str, tool: &ToolInfo, taken: &BTreeSet<String>) -> Option<String> {
-    if TaskBuiltin::from_name(name).is_some() {
-        return Some("a task built-in has the same name".to_owned());
-    }
     if let Err(error) = detail::tool_schema_new(
         name,
         tool.description.as_str(),

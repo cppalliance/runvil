@@ -28,8 +28,8 @@ pub struct ToolCallEvent {
     pub name: String,
     /// The call arguments exactly as the model produced them.
     pub arguments: serde_json::Value,
-    /// The bound tool `name` resolved to; `None` for a Lua-local tool, a
-    /// task built-in, or a name outside the round's scope.
+    /// The bound tool `name` resolved to; `None` for a Lua-local tool or a
+    /// name outside the round's scope.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tool: Option<ToolId>,
 }
