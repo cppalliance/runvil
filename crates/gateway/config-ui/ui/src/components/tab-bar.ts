@@ -1,12 +1,15 @@
-// The tab bar: a slim header strip with the medallion (standalone only),
-// the profile switcher, and the right cluster holding the connection dot
+// The tab bar: a header strip with the medallion (standalone only), the
+// profile switcher, and the right cluster holding the connection dot
 // [Adapted: llama-swap] plus the container the Apply/Revert pair mounts
-// into; and, as its own element, Cursor's settings nav - seven icon+label
-// links in three groups, set in a sticky left column that drops its labels
-// and becomes a 40px icon column in a narrow window. The caller mounts the
-// strip above the desk and the nav beside the content.
+// into; and, as its own element, the sidebar - seven icon+label links in
+// three groups under a collapse toggle, set in a full-height left rail that
+// collapses to its icons on request and always in a narrow window. The
+// caller mounts the strip above the desk and the sidebar beside the
+// content.
 
 import {
+  ChevronLeft,
+  ChevronRight,
   Cloud,
   Cpu,
   Folder,
@@ -30,8 +33,8 @@ const APP_VERSION = typeof __APP_VERSION__ === "string" ? __APP_VERSION__ : "dev
 /** One tab: destination view, label, lucide icon, and hash target. */
 type Tab = readonly [view: PageId, label: string, icon: IconNode, href: string];
 
-/** The nav's icon size: Cursor's 12px settings-nav glyphs. */
-const ICON_SIZE = 12;
+/** The sidebar's icon size. */
+const ICON_SIZE = 14;
 
 /**
  * The tabs in nav order, grouped: the gateway's own settings, then the
@@ -68,7 +71,7 @@ export interface TabBarOptions {
 export interface TabBar {
   /** The `<header class="tab-bar">` strip: medallion, profile switcher, actions. */
   element: HTMLElement;
-  /** The `<nav class="tab-nav">` column of grouped links, mounted beside the content. */
+  /** The `<nav class="tab-nav">` sidebar of grouped links, mounted beside the content. */
   nav: HTMLElement;
   /** Moves `aria-current` (and the selected fill) to `view`. */
   setActivePage(view: PageId | null): void;
@@ -97,7 +100,30 @@ export function createTabBar(options: TabBarOptions): TabBar {
 
   const nav = document.createElement("nav");
   nav.setAttribute("aria-label", "Primary");
+  nav.id = "primary-nav";
   nav.className = "tab-nav";
+  // The toggle collapses the sidebar to its icons; the state lasts for the
+  // session only.
+  const toggle = document.createElement("button");
+  toggle.type = "button";
+  toggle.className = "tab-nav-toggle";
+  toggle.setAttribute("aria-controls", nav.id);
+  const setCollapsed = (collapsed: boolean) => {
+    nav.classList.toggle("is-collapsed", collapsed);
+    toggle.setAttribute("aria-expanded", String(!collapsed));
+    toggle.setAttribute("aria-label", collapsed ? "Expand sidebar" : "Collapse sidebar");
+    toggle.title = toggle.getAttribute("aria-label") ?? "";
+    toggle.replaceChildren(
+      lucideElement(collapsed ? ChevronRight : ChevronLeft, {
+        "aria-hidden": "true",
+        width: ICON_SIZE,
+        height: ICON_SIZE,
+      }),
+    );
+  };
+  setCollapsed(false);
+  toggle.addEventListener("click", () => setCollapsed(!nav.classList.contains("is-collapsed")));
+  nav.append(toggle);
   const tabByPage = new Map<PageId, HTMLAnchorElement>();
   TAB_GROUPS.forEach((group, index) => {
     if (index > 0) {
@@ -110,8 +136,8 @@ export function createTabBar(options: TabBarOptions): TabBar {
       const tab = document.createElement("a");
       tab.className = "tab";
       tab.href = href;
-      // The label is the link's name; the column hides it, so a tooltip
-      // keeps the icon-only column readable.
+      // The label is the link's name; a collapsed sidebar hides it, so a
+      // tooltip keeps the icon-only rail readable.
       tab.title = label;
       const svg = lucideElement(icon, {
         "aria-hidden": "true",

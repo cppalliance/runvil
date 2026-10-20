@@ -1,8 +1,8 @@
 // Pins the tab bar: the right-side actions cluster shows the baked crate
 // version (or the dev fallback) as a muted `vX.Y.Z` span, and the seven
-// tabs are Cursor's settings nav - a sticky left column of grouped links
-// that marks the current route, keeps a label for every icon, and
-// collapses to a 40px icon-only column under 710px.
+// tabs are the sidebar - a full-height left rail of grouped links that
+// marks the current route, keeps a label for every icon, collapses to its
+// icons from its toggle, and always shows only the icons under 710px.
 import assert from "node:assert/strict";
 import test from "node:test";
 
@@ -36,7 +36,8 @@ test("the primary nav is a column beside the content, with a divider between eac
     root.querySelector(".desk-layout > .desk-content > main#main"),
     "the content column holds main",
   );
-  const sequence = [...nav.children].map((child) =>
+  assert.ok(nav.firstElementChild.matches("button.tab-nav-toggle"), "the toggle leads the sidebar");
+  const sequence = [...nav.querySelectorAll(":scope > .tab, :scope > [role='separator']")].map((child) =>
     child.getAttribute("role") === "separator" ? "|" : child.textContent,
   );
   assert.deepEqual(
@@ -64,15 +65,15 @@ test("the nav marks exactly the current route and follows the hash", async () =>
   }
 });
 
-test("every nav cell has a 12px icon and a label that survives the icon-only column", async () => {
+test("every nav cell has a 14px icon and a label that survives the icon-only rail", async () => {
   const { root } = await openDesk();
   const tabs = [...root.querySelectorAll(".tab-nav .tab")];
   assert.equal(tabs.length, 7);
   for (const tab of tabs) {
     const icon = tab.querySelector("svg");
     assert.ok(icon, `${tab.textContent} has an icon`);
-    assert.equal(icon.getAttribute("width"), "12");
-    assert.equal(icon.getAttribute("height"), "12");
+    assert.equal(icon.getAttribute("width"), "14");
+    assert.equal(icon.getAttribute("height"), "14");
     assert.equal(icon.getAttribute("aria-hidden"), "true");
     const label = tab.querySelector(".tab-label");
     assert.ok(label && label.textContent !== "", "the label stays in the DOM for assistive tech");
@@ -80,31 +81,70 @@ test("every nav cell has a 12px icon and a label that survives the icon-only col
   }
 });
 
-test("the nav column is sticky and clamp-wide, 48px from the content, and icon-only under 710px", async () => {
+test("the toggle collapses the sidebar to its icons and expands it again", async () => {
+  const { root } = await openDesk();
+  const nav = root.querySelector("nav.tab-nav");
+  const toggle = nav.querySelector(".tab-nav-toggle");
+  assert.equal(toggle.getAttribute("aria-controls"), nav.id, "the toggle names the sidebar it controls");
+  assert.equal(toggle.getAttribute("aria-expanded"), "true", "the sidebar starts expanded");
+  assert.equal(toggle.getAttribute("aria-label"), "Collapse sidebar");
+  assert.equal(nav.classList.contains("is-collapsed"), false);
+
+  toggle.click();
+  assert.equal(nav.classList.contains("is-collapsed"), true, "a press collapses the sidebar");
+  assert.equal(toggle.getAttribute("aria-expanded"), "false");
+  assert.equal(toggle.getAttribute("aria-label"), "Expand sidebar");
+  assert.equal(nav.querySelectorAll(".tab .tab-label").length, 7, "the labels stay as link names");
+
+  toggle.click();
+  assert.equal(nav.classList.contains("is-collapsed"), false, "a second press expands it");
+  assert.equal(toggle.getAttribute("aria-expanded"), "true");
+});
+
+test("the sidebar is a full-height chrome rail under the header strip", async () => {
+  const header = await bundledDeclarations(".tab-bar");
+  assert.equal(header.get("position"), "sticky");
+  assert.equal(header.get("height"), "var(--desk-header-height)");
+
   const layout = await bundledDeclarations(".desk-layout");
   assert.equal(layout.get("display"), "flex");
-  assert.equal(squash(layout.get("gap")), "48px", "a 48px gap to the content");
+  assert.equal(squash(layout.get("min-height")), "calc(100svh-var(--desk-header-height))");
 
   const nav = await bundledDeclarations(".tab-nav");
   assert.equal(nav.get("position"), "sticky");
-  assert.equal(squash(nav.get("width")), "clamp(100px,25%,200px)");
+  assert.equal(nav.get("inset-block-start"), "var(--desk-header-height)", "pinned under the header");
+  assert.equal(squash(nav.get("height")), "calc(100svh-var(--desk-header-height))", "full height");
+  assert.equal(nav.get("width"), "var(--sidebar-width)");
+  assert.equal(nav.get("background"), "var(--chrome)");
+  assert.equal(squash(nav.get("border-right")), "1pxsolidvar(--line)");
 
   const cell = await bundledDeclarations(".tab");
-  assert.equal(squash(cell.get("padding")), "4px6px", "cells are padded 4px 6px");
-  assert.equal(cell.get("border-radius"), "var(--radius)", "a 6px radius");
-  assert.equal(cell.get("font-size"), "var(--font-size-sm)", "12px text");
-  assert.equal(cell.get("line-height"), "var(--line-height-sm)", "16px lines");
+  assert.equal(cell.get("border-radius"), "var(--radius)", "a 9px radius");
+  assert.equal(cell.get("font-size"), "var(--font-size-base)");
   assert.equal(cell.get("color"), "var(--dim)");
   const hover = await bundledDeclarations(".tab:hover");
   const selected = await bundledDeclarations(".tab[aria-current=page]");
-  assert.equal(hover.get("background"), "var(--panel-2)", "the hover raises the cell");
-  assert.equal(selected.get("background"), "var(--panel-2)", "the selected cell too");
+  assert.equal(hover.get("background"), "var(--panel-2)", "a hover raises the cell one step");
+  assert.equal(hover.get("color"), "var(--text)");
+  assert.equal(selected.get("background"), "var(--panel-3)", "the current page two steps");
+  assert.equal(selected.get("color"), "var(--text)");
 
   const divider = await bundledDeclarations(".tab-divider");
   assert.equal(squash(divider.get("border-top")), "1pxsolidvar(--line-soft)");
 
+  const collapsed = await bundledDeclarations(".tab-nav.is-collapsed");
+  assert.equal(collapsed.get("width"), "var(--sidebar-collapsed-width)");
+  const toggleRule = await bundledDeclarations(".tab-nav-toggle");
+  assert.equal(toggleRule.get("align-self"), "flex-end", "the toggle hugs its chevron at the rail's end");
+  const collapsedToggle = await bundledDeclarations(".tab-nav.is-collapsed .tab-nav-toggle");
+  assert.equal(collapsedToggle.get("align-self"), "center", "and centers over the icon column");
+  const collapsedLabel = await bundledDeclarations(".tab-nav.is-collapsed .tab-label");
+  assert.equal(squash(collapsedLabel.get("clip-path")), "inset(50%)", "the label hides but stays readable");
+
   const narrow = await bundledDeclarations(".tab-nav", { media: NARROW });
-  assert.equal(narrow.get("width"), "40px", "a 40px column");
+  assert.equal(narrow.get("width"), "var(--sidebar-collapsed-width)", "icons only in a narrow window");
+  const narrowToggle = await bundledDeclarations(".tab-nav-toggle", { media: NARROW });
+  assert.equal(narrowToggle.get("display"), "none", "the narrow rail has nothing to toggle");
   const label = await bundledDeclarations(".tab-label", { media: NARROW });
   assert.equal(squash(label.get("clip-path")), "inset(50%)", "the label hides but stays readable");
 });

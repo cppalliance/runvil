@@ -105,6 +105,11 @@
   --duration-slower: 300ms;
   --ease-out-cubic: cubic-bezier(0.215, 0.61, 0.355, 1);
 
+  /* Desk chrome: the title strip and the sidebar beside the content. */
+  --desk-header-height: 56px;
+  --sidebar-width: 150px;
+  --sidebar-collapsed-width: 56px;
+
   /* Status bar */
   --status-bar-height: 22px;
   --status-bar-bg: var(--chrome);
