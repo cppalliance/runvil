@@ -57,8 +57,8 @@ use super::dispatch::unbound_tool_call;
 use super::{CallSite, ChainIndex, Continuation, Scheduler, ToolCallContinuation, prompt_origin};
 
 /// How one `tool_call` dispatch resolved: a bound call issued as an effect
-/// and parked on the pending table, or an answer settled on the driver
-/// thread (a local Lua tool's handler, a preparation failure).
+/// and parked on the pending table, or a local Lua tool's answer settled
+/// on the driver thread. A preparation failure returns `Err` instead.
 #[derive(Debug)]
 pub(super) enum ToolCallDispatch {
     Issued,
