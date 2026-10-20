@@ -5,7 +5,7 @@ use serde_json::json;
 use super::Event;
 use super::ReplyOrigin;
 use super::lifecycle::{self, Lifecycle};
-use crate::ids::{AbandonReason, Provenance, RoundId, TaskId, TaskOrigin};
+use crate::ids::{AbandonReason, Provenance, RoundId, TaskId};
 use crate::metrics::{CallMetrics, ToolCallEvent, Usage};
 use crate::test_support::{assert_send_sync, assert_wire, round_trip};
 use crate::tools::ToolId;
@@ -114,7 +114,6 @@ fn lifecycle_of(event: &Event) -> Option<Lifecycle> {
         | Event::AssistantReply { .. }
         | Event::AssistantToolCalls { .. }
         | Event::ToolResult { .. }
-        | Event::TaskNotice { .. }
         | Event::TaskNote { .. }
         | Event::Request { .. }
         | Event::Response { .. } => None,
@@ -158,7 +157,6 @@ fn task_samples() -> Vec<Event> {
             provenance: provenance("0", 2),
             task: task("0.0"),
             target: "Worker".to_owned(),
-            origin: TaskOrigin::Author,
             input: Some("arg text".to_owned()),
             item: Some(json!({ "key": "value" })),
             index: Some(3),
@@ -245,14 +243,6 @@ fn content_samples() -> Vec<Event> {
             tool: Some(read_tool()),
             content: "file contents".to_owned(),
             trusted: false,
-        },
-        Event::TaskNotice {
-            execution: "run-1".to_owned(),
-            section: "Gather".to_owned(),
-            provenance: provenance("0", 15),
-            turn: 3,
-            task: task("0.1"),
-            text: "Task id=0.1 (## Worker) completed: done".to_owned(),
         },
         Event::TaskNote {
             execution: "run-1".to_owned(),
@@ -389,17 +379,29 @@ fn a_serialized_event_is_tagged_by_kind_with_its_coordinates_beside_the_payload(
         &event,
         r#"{"kind":"vfs_write_succeeded","execution":"run-1","section":"Gather","provenance":{"task":"0.2","seq":9}}"#,
     );
-    let notice = Event::TaskNotice {
+    let note = Event::TaskNote {
         execution: "run-1".to_owned(),
-        section: "Gather".to_owned(),
-        provenance: provenance("0", 10),
-        turn: 3,
+        section: "Worker".to_owned(),
+        provenance: provenance("0.1", 10),
         task: task("0.1"),
-        text: "Task id=0.1 (## Worker) completed: done".to_owned(),
+        text: "halfway".to_owned(),
     };
     assert_wire(
-        &notice,
-        r#"{"kind":"task_notice","execution":"run-1","section":"Gather","provenance":{"task":"0","seq":10},"turn":3,"task":"0.1","text":"Task id=0.1 (## Worker) completed: done"}"#,
+        &note,
+        r#"{"kind":"task_note","execution":"run-1","section":"Worker","provenance":{"task":"0.1","seq":10},"task":"0.1","text":"halfway"}"#,
+    );
+}
+
+#[test]
+fn a_task_started_line_carrying_an_origin_still_reads_back() {
+    // Logs written by earlier versions carry an `origin` key on
+    // `task_started`; it must be ignored, never rejected, so those logs
+    // still load.
+    let line = r#"{"kind":"task_started","execution":"run-1","section":"Gather","provenance":{"task":"0","seq":2},"task":"0.0","target":"Worker","origin":"author","input":null,"item":null,"index":null,"var":{}}"#;
+    let event: Event = serde_json::from_str(line).expect("an older task_started line parses");
+    assert!(
+        matches!(&event, Event::TaskStarted { task: started, target, .. } if *started == task("0.0") && target == "Worker"),
+        "the line must read back as the task's start: {event:?}"
     );
 }
 

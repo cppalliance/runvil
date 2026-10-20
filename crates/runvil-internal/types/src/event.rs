@@ -35,7 +35,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::ids::{AbandonReason, Provenance, RoundId, TaskId, TaskOrigin};
+use crate::ids::{AbandonReason, Provenance, RoundId, TaskId};
 use crate::metrics::{CallMetrics, ToolCallEvent};
 use crate::tools::ToolId;
 
@@ -295,18 +295,15 @@ events! {
             message: String,
         },
         // Tasks.
-        /// A task chain was started by `tasks.spawn`, by the `fanout` shim
-        /// for each of its arms, or by the model's `task` tool. The payload
-        /// is the task's spawn seeds: everything the caller needs to start
-        /// the same chain again under the same id. The event is reported
-        /// under the spawning section.
+        /// A task chain was started by `tasks.spawn` or by the `fanout` shim
+        /// for each of its arms. The payload is the task's spawn seeds:
+        /// everything the caller needs to start the same chain again under
+        /// the same id. The event is reported under the spawning section.
         TaskStarted {
             /// The task's id: its chain's hierarchical id.
             task: TaskId,
             /// The name of the section the task's chain starts at.
             target: String,
-            /// The principal that started the task.
-            origin: TaskOrigin,
             /// The `opts.input` override of the chain's `args`, when given.
             input: Option<String>,
             /// The `opts.item` seed installed as the chain's `item` global,
@@ -414,19 +411,6 @@ events! {
             /// Whether the dispatch treated the tool as trusted (its output
             /// not nonce-wrapped).
             trusted: bool,
-        },
-        /// A notice queued for a task's owner: the Engine's sentence telling
-        /// the model how a task it started ended. A completed task's final
-        /// text is embedded nonce-wrapped as untrusted; the rest of the
-        /// sentence is the Engine's. The event is reported under the
-        /// owner's section.
-        TaskNotice {
-            /// The owner's model-turn counter when the notice was queued.
-            turn: u32,
-            /// The task that ended.
-            task: TaskId,
-            /// The sentence the model reads.
-            text: String,
         },
         /// Reports a task's own progress note, set through `tasks.note`.
         /// The Engine never emits it: it stores the note on the task's

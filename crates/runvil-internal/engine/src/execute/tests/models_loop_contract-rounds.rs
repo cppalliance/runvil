@@ -12,7 +12,7 @@ use crate::execute::tests::fixtures::{echo_tool, failing_tool};
 use crate::execute::tests::models_loop::loop_events;
 use crate::execute::tests::tool_call_arm::{ToolRecorder, tool_result_lines};
 use crate::test_support::recording::{
-    ReplyReport, TaskNoticeReport, ThinkingReport, ToolCallsReport, ToolResultReport,
+    ReplyReport, ThinkingReport, ToolCallsReport, ToolResultReport,
 };
 use crate::test_support::scenario::{chat_answer, only_effect, text_of};
 
@@ -94,19 +94,6 @@ impl Observer for TraceRecorder {
             ..
         } = report;
         self.push(format!("{section}: thinking turn={turn} text={text}"));
-    }
-
-    fn on_task_notice(&self, report: TaskNoticeReport<'_>) {
-        let TaskNoticeReport {
-            section,
-            turn,
-            task,
-            text,
-            ..
-        } = report;
-        self.push(format!(
-            "{section}: notice turn={turn} task={task} text={text}"
-        ));
     }
 }
 

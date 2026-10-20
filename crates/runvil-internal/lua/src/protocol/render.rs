@@ -25,7 +25,6 @@ pub(crate) struct Retained<E> {
 fn task_status_table(lua: &Lua, status: TaskStatus) -> mlua::Result<mlua::Table> {
     let table = lua.create_table()?;
     table.raw_set("target", status.target)?;
-    table.raw_set("origin", status.origin.tag())?;
     table.raw_set("state", status.state.tag())?;
     if let Some(ok) = status.ok {
         table.raw_set("ok", ok)?;

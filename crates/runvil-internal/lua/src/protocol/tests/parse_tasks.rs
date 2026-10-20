@@ -1,18 +1,18 @@
 //! The task-operation request parsers: `spawn`'s target, seeds, var
-//! snapshot, origin, and fanout mark; the `timer` leaf request's
-//! author-supplied `seconds`, its domain checks, and the `Duration` it
-//! parses into; and `concurrency`'s
-//! optional shim-validated limit.
+//! snapshot, and fanout mark; the `timer` leaf request's author-supplied
+//! `seconds`, its domain checks, and the `Duration` it parses into;
+//! `pending`'s refusal of any argument; and `concurrency`'s optional
+//! shim-validated limit.
 
 use super::*;
 
 #[test]
-fn spawn_parses_target_seeds_var_and_origin() {
+fn spawn_parses_target_seeds_and_var() {
     let lua = Lua::new();
     let table = lua_table(
         &lua,
         "{ op = 'spawn', target = '## Child', input = 'override', item = { name = 'alpha' }, \
-           index = 3, origin = 'author', var = { k = 1 } }",
+           index = 3, var = { k = 1 } }",
     );
     let request = expect_request(Request::from_yield(&lua, &Value::Table(table)));
     match request {
@@ -22,7 +22,6 @@ fn spawn_parses_target_seeds_var_and_origin() {
             item,
             index,
             var,
-            origin,
             via,
         } => {
             assert_eq!(target, "## Child");
@@ -30,7 +29,6 @@ fn spawn_parses_target_seeds_var_and_origin() {
             assert_eq!(item, Some(json!({ "name": "alpha" })));
             assert_eq!(index, Some(3));
             assert_eq!(var, json!({ "k": 1 }));
-            assert_eq!(origin, TaskOrigin::Author);
             assert_eq!(
                 via,
                 crate::SpawnVia::Spawn,
@@ -48,7 +46,7 @@ fn spawn_reads_the_fanout_mark_and_rejects_a_non_boolean_one() {
     let lua = Lua::new();
     let table = lua_table(
         &lua,
-        "{ op = 'spawn', target = '### Worker', origin = 'author', fanout = true, \
+        "{ op = 'spawn', target = '### Worker', fanout = true, \
            var = { k = 1 } }",
     );
     match expect_request(Request::from_yield(&lua, &Value::Table(table))) {
@@ -62,7 +60,7 @@ fn spawn_reads_the_fanout_mark_and_rejects_a_non_boolean_one() {
 
     let table = lua_table(
         &lua,
-        "{ op = 'spawn', target = '### Worker', origin = 'author', fanout = 'yes', \
+        "{ op = 'spawn', target = '### Worker', fanout = 'yes', \
            var = { k = 1 } }",
     );
     assert_direct_yield(Request::from_yield(&lua, &Value::Table(table)));
@@ -73,7 +71,7 @@ fn spawn_without_options_parses_every_seed_as_absent() {
     let lua = Lua::new();
     let table = lua_table(
         &lua,
-        "{ op = 'spawn', target = '## Child', origin = 'author', var = { k = 1 } }",
+        "{ op = 'spawn', target = '## Child', var = { k = 1 } }",
     );
     match expect_request(Request::from_yield(&lua, &Value::Table(table))) {
         Request::Spawn {
@@ -91,7 +89,7 @@ fn spawn_without_options_parses_every_seed_as_absent() {
 fn a_spawn_item_holding_json_null_parses_to_a_null_field() {
     let vm = crate::test_vm::TestVm::new().build();
     let table: mlua::Table = vm.eval(
-        "return { op = 'spawn', target = '## Child', origin = 'author', \
+        "return { op = 'spawn', target = '## Child', \
          item = { a = json.null }, var = { k = 1 } }",
     );
     match expect_request(Request::from_yield(vm.lua(), &Value::Table(table))) {
@@ -107,7 +105,7 @@ fn spawn_seed_shape_errors_are_the_calls_error() {
     let lua = Lua::new();
     let table = lua_table(
         &lua,
-        "{ op = 'spawn', target = '## Child', origin = 'author', item = function() end, \
+        "{ op = 'spawn', target = '## Child', item = function() end, \
            var = { k = 1 } }",
     );
     match Request::from_yield(&lua, &Value::Table(table)) {
@@ -119,7 +117,7 @@ fn spawn_seed_shape_errors_are_the_calls_error() {
 
     let table = lua_table(
         &lua,
-        "{ op = 'spawn', target = '## Child', origin = 'author', index = -1, var = { k = 1 } }",
+        "{ op = 'spawn', target = '## Child', index = -1, var = { k = 1 } }",
     );
     match Request::from_yield(&lua, &Value::Table(table)) {
         YieldParse::Call(Answer::Spawn(Err(Error::Lua(message)))) => {
@@ -134,7 +132,7 @@ fn an_unconvertible_spawn_item_is_the_calls_error_naming_the_conversion_failure(
     let lua = Lua::new();
     let table = lua_table(
         &lua,
-        "{ op = 'spawn', target = '## Child', origin = 'author', item = { f = function() end }, \
+        "{ op = 'spawn', target = '## Child', item = { f = function() end }, \
            var = { k = 1 } }",
     );
     let item: Value = table
@@ -171,28 +169,38 @@ fn a_malformed_task_id_is_the_calls_error_naming_the_parse_failure() {
 }
 
 #[test]
-fn spawn_with_an_unknown_or_missing_origin_is_a_malformed_yield() {
-    // The origin is shim-produced, never an author argument: a wrong value
-    // is a hand-built yield, not a call error.
+fn pending_parses_without_an_argument_and_refuses_any_argument() {
+    // The shim passes the author's argument through unchanged, so the
+    // parse owns the refusal and names the argument's type.
     let lua = Lua::new();
-    for origin in ["nil", "1", "'operator'"] {
+    let table = lua_table(&lua, "{ op = 'pending' }");
+    let request = expect_request(Request::from_yield(&lua, &Value::Table(table)));
+    assert!(matches!(request, Request::Pending), "got {request:?}");
+    for (argument, kind) in [
+        ("{}", "table"),
+        ("{ origin = 'author' }", "table"),
+        ("'author'", "string"),
+    ] {
         let table = lua_table(
             &lua,
-            &format!(
-                "{{ op = 'spawn', target = '## Child', origin = {origin}, var = {{ k = 1 }} }}"
-            ),
+            &format!("{{ op = 'pending', argument = {argument} }}"),
         );
-        assert_direct_yield(Request::from_yield(&lua, &Value::Table(table)));
+        match Request::from_yield(&lua, &Value::Table(table)) {
+            YieldParse::Call(Answer::Pending(Err(Error::Lua(message)))) => {
+                assert_eq!(
+                    message,
+                    format!("tasks.pending takes no arguments, got {kind}")
+                );
+            }
+            other => panic!("expected the pending call error for {argument}, got {other:?}"),
+        }
     }
 }
 
 #[test]
 fn a_spawn_with_a_non_string_target_keeps_the_resolve_error() {
     let lua = Lua::new();
-    let table = lua_table(
-        &lua,
-        "{ op = 'spawn', target = 42, origin = 'author', var = { k = 1 } }",
-    );
+    let table = lua_table(&lua, "{ op = 'spawn', target = 42, var = { k = 1 } }");
     match Request::from_yield(&lua, &Value::Table(table)) {
         YieldParse::Call(Answer::Spawn(Err(Error::LuaRuntime { message, .. }))) => {
             assert!(

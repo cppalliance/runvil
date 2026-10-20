@@ -108,7 +108,6 @@ local function fanout(worker, collection)
       item = members[index],
       index = index,
       var = var,
-      origin = "author",
       fanout = true,
     })
     if not ok then

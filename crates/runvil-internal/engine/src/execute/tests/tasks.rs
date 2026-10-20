@@ -5,7 +5,7 @@
 //! `sys.taskid`), and spawn shares `call`'s target resolution and depth cap.
 //! The chain-end rules sit in `chain_end`.
 
-use runvil_types::ids::{TaskId, TaskOrigin};
+use runvil_types::ids::TaskId;
 
 use super::context::task;
 use super::scheduler::scheduler_scenario;
@@ -150,7 +150,6 @@ fn a_finished_child_moves_its_slot_to_done_and_reports_task_succeeded() {
         &Observation::TaskStarted {
             task: task("0.0"),
             target: "Child".to_owned(),
-            origin: TaskOrigin::Author,
             input: None,
             item: None,
             index: None,
@@ -220,7 +219,6 @@ fn task_started_includes_the_spawn_seeds_and_the_child_sees_them() {
         &Observation::TaskStarted {
             task: task("0.0"),
             target: "Child".to_owned(),
-            origin: TaskOrigin::Author,
             input: Some("child args".to_owned()),
             item: Some(json!({ "name": "alpha" })),
             index: Some(7),

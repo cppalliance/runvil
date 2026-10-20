@@ -32,7 +32,7 @@ use std::sync::Arc;
 use std::sync::atomic::Ordering;
 
 use runvil_types::event::Event;
-use runvil_types::ids::{TaskId, TaskOrigin};
+use runvil_types::ids::TaskId;
 
 use crate::execute::protocol::{Answer, TaskDelivery, TaskPhase, TaskStatus};
 use crate::lua::NonEmpty;
@@ -73,20 +73,15 @@ impl Scheduler {
         }
     }
 
-    /// The live tasks `owner` owns in spawn order, narrowed to `origin`
-    /// when given; an internal timer slot is never listed. The arena is a
-    /// hash map; ids order as paths and one owner's tasks are its direct
-    /// children, so sorting recovers spawn order.
-    pub(super) fn live_tasks_of(
-        &self,
-        owner: ChainIndex,
-        origin: Option<TaskOrigin>,
-    ) -> Vec<TaskId> {
+    /// The live tasks `owner` owns in spawn order; an internal timer slot
+    /// is never listed. The arena is a hash map; ids order as paths and one
+    /// owner's tasks are its direct children, so sorting recovers spawn
+    /// order.
+    pub(super) fn live_tasks_of(&self, owner: ChainIndex) -> Vec<TaskId> {
         let mut live: Vec<TaskId> = self
             .tasks
             .iter()
             .filter(|(_, slot)| slot.owner == owner && slot.state.is_live() && !slot.is_internal())
-            .filter(|(_, slot)| origin.is_none_or(|origin| slot.origin == origin))
             .map(|(task, _)| task.clone())
             .collect();
         live.sort_unstable();
@@ -207,7 +202,6 @@ impl Scheduler {
         let slot = self.visible_slot(id, task)?;
         let mut status = TaskStatus {
             target: slot.target.clone(),
-            origin: slot.origin,
             state: task_phase(slot.state),
             ok: slot.state.ok(),
             section: None,
@@ -228,16 +222,16 @@ impl Scheduler {
                     .is_some()
                     .then(|| chain.section_name().to_owned());
                 status.blocked = chain.blocked;
-                status.tasks = self.live_tasks_of(backing, None);
+                status.tasks = self.live_tasks_of(backing);
             }
         }
         Ok(status)
     }
 
     /// Dispatches a `pending` request: the chain's live tasks in spawn
-    /// order, narrowed to `origin` when given.
-    pub(super) fn dispatch_pending(&mut self, id: ChainIndex, origin: Option<TaskOrigin>) {
-        let tasks = self.live_tasks_of(id, origin);
+    /// order.
+    pub(super) fn dispatch_pending(&mut self, id: ChainIndex) {
+        let tasks = self.live_tasks_of(id);
         self.answer_inline(id, Answer::Pending(Ok(tasks)));
     }
 

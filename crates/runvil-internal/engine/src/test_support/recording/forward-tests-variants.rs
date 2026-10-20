@@ -1,7 +1,7 @@
 //! The every-variant coverage test: one value of each `Event` variant,
 //! forwarded alone, reaches exactly the seam the table names.
 
-use runvil_types::ids::{AbandonReason, RoundId, TaskOrigin};
+use runvil_types::ids::{AbandonReason, RoundId};
 
 use super::*;
 
@@ -156,7 +156,6 @@ fn one_of_every_event_variant() -> Vec<(Event, Seam)> {
                 provenance: provenance(),
                 task: task.clone(),
                 target: "Child".to_owned(),
-                origin: TaskOrigin::Author,
                 input: None,
                 item: None,
                 index: None,
@@ -289,17 +288,6 @@ fn one_of_every_event_variant() -> Vec<(Event, Seam)> {
                 tool: None,
                 content: "found".to_owned(),
                 trusted: false,
-            },
-            Seam::Content,
-        ),
-        (
-            Event::TaskNotice {
-                execution: "run".to_owned(),
-                section: "A".to_owned(),
-                provenance: provenance(),
-                turn: 1,
-                task,
-                text: "it ended".to_owned(),
             },
             Seam::Content,
         ),

@@ -5,7 +5,6 @@
 //! `infer` method, and the `infer` and `loop` methods a model handle
 //! carries.
 
-use runvil_types::ids::TaskOrigin;
 use runvil_types::metrics::ToolCallEvent;
 use serde_json::json;
 
@@ -51,7 +50,7 @@ fn fanout_yields_a_spawn_per_member_starting_with_the_first() {
     // The fanout shim is Lua over the task protocol: its first yield is the
     // `spawn` of the first member, including the worker as the target, the
     // member as the `item` seed, its 1-based position as `index`, the
-    // caller's `var` snapshot, the author origin, and the fanout mark.
+    // caller's `var` snapshot, and the fanout mark.
     let vm = scheduler_vm(&ModelSet::default(), None);
     match yielded_request(
         &vm,
@@ -63,7 +62,6 @@ fn fanout_yields_a_spawn_per_member_starting_with_the_first() {
             item,
             index,
             var,
-            origin,
             via,
         } => {
             assert_eq!(target, "### Worker");
@@ -71,7 +69,6 @@ fn fanout_yields_a_spawn_per_member_starting_with_the_first() {
             assert_eq!(item, Some(json!("a")));
             assert_eq!(index, Some(1));
             assert_eq!(var, json!({}));
-            assert_eq!(origin, TaskOrigin::Author);
             assert_eq!(via, SpawnVia::Fanout, "an arm's spawn sets the fanout mark");
         }
         other => panic!("expected a spawn request, got {other:?}"),
@@ -101,7 +98,7 @@ fn fanout_rejects_an_empty_collection_before_any_spawn() {
 }
 
 #[test]
-fn tasks_spawn_yields_the_target_seeds_var_and_author_origin() {
+fn tasks_spawn_yields_the_target_seeds_and_var() {
     let var = json!({ "k": 1 });
     let vm = scheduler_vm(&ModelSet::default(), Some(&var));
     let source =
@@ -113,7 +110,6 @@ fn tasks_spawn_yields_the_target_seeds_var_and_author_origin() {
             item,
             index,
             var,
-            origin,
             via,
         } => {
             assert_eq!(target, "## Child");
@@ -121,7 +117,6 @@ fn tasks_spawn_yields_the_target_seeds_var_and_author_origin() {
             assert_eq!(item, Some(json!({ "name": "a" })));
             assert_eq!(index, Some(2));
             assert_eq!(var, json!({ "k": 1 }));
-            assert_eq!(origin, TaskOrigin::Author);
             assert_eq!(via, SpawnVia::Spawn, "`tasks.spawn` is not a fanout arm");
         }
         other => panic!("expected a spawn request, got {other:?}"),

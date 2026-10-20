@@ -207,7 +207,7 @@ pub(crate) enum Error {
     #[error("tool-call loop did not converge")]
     ToolLoopExhausted,
 
-    /// A chain ended while author-origin tasks it owned were still live.
+    /// A chain ended while tasks it owned were still live.
     ///
     /// A spawned task ends with its owner, so a task the author neither
     /// waited on nor cancelled is the author's bug: the chain's outcome
@@ -215,11 +215,11 @@ pub(crate) enum Error {
     /// for a `call` chain) and the leaked tasks are abandoned. The message
     /// names the ids in spawn order; the Lua table lists them as `tasks`.
     #[error(
-        "chain ended with author tasks still live: {}; wait on or cancel every task a chain spawns before it ends",
+        "chain ended with tasks still live: {}; wait on or cancel every task a chain spawns before it ends",
         join_task_ids(.tasks)
     )]
     TasksLive {
-        /// The live author tasks, in spawn order.
+        /// The live tasks, in spawn order.
         tasks: Vec<TaskId>,
     },
 

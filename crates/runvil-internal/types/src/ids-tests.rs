@@ -1,6 +1,6 @@
-//! Tests for `ChainId`, `TaskId`, `TaskOrigin`, and `Provenance` rendering, parsing, and ordering.
+//! Tests for `ChainId`, `TaskId`, and `Provenance` rendering, parsing, and ordering.
 
-use super::{ChainId, Provenance, TaskId, TaskOrigin};
+use super::{ChainId, Provenance, TaskId};
 use crate::test_support::assert_wire;
 
 #[test]
@@ -61,24 +61,6 @@ fn ids_serialize_as_their_path_text() {
         serde_json::from_str::<ChainId>("\"0.x\"").is_err(),
         "a malformed path fails to deserialize"
     );
-}
-
-#[test]
-fn a_task_origin_round_trips_through_its_tag() {
-    assert_eq!(TaskOrigin::Author.tag(), "author");
-    assert_eq!(TaskOrigin::Model.tag(), "model");
-    for origin in [TaskOrigin::Author, TaskOrigin::Model] {
-        assert_eq!(origin.tag().parse::<TaskOrigin>(), Ok(origin));
-    }
-    let error = "Author"
-        .parse::<TaskOrigin>()
-        .expect_err("the tag vocabulary is exact, never case-folded");
-    assert_eq!(error.input(), "Author");
-    assert_eq!(
-        error.to_string(),
-        "invalid task origin `Author`: required `author` or `model`"
-    );
-    assert_wire(&TaskOrigin::Model, "\"model\"");
 }
 
 #[test]

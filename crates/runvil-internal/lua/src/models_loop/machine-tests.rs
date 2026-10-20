@@ -134,7 +134,7 @@ fn a_round_starts_with_the_chat_naming_the_handle_and_pushes_nothing() {
     assert!(matches!(machine.phase(), Phase::Chatting));
     assert!(
         records(&list).is_empty(),
-        "the chat dispatch adds the notices, not the machine"
+        "a round's start pushes no record"
     );
 }
 

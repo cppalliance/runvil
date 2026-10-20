@@ -1,7 +1,7 @@
 //! The task-operation request parsers: `spawn` and its seeds, the wait
 //! shims' internal `timer` and its author-supplied seconds, the `join_any`
-//! set, the single-task `ready`, `status`, and `cancel`, the `pending`
-//! origin filter, the `note` text, and the `concurrency` limit. The shims
+//! set, the single-task `ready`, `status`, and `cancel`, the argument-free
+//! `pending`, the `note` text, and the `concurrency` limit. The shims
 //! resolve a `Task` handle to its bare id before yielding, so every task
 //! field arrives as a path string; an id that does not parse is the
 //! author's argument error, raised at the call site.
@@ -10,7 +10,7 @@ use std::num::NonZeroU64;
 use std::time::Duration;
 
 use mlua::{Lua, LuaSerdeExt, Value};
-use runvil_types::ids::{TaskId, TaskOrigin};
+use runvil_types::ids::TaskId;
 
 use crate::protocol::{NonEmpty, Request, SpawnVia};
 
@@ -35,7 +35,7 @@ fn call_task(table: &mlua::Table) -> std::result::Result<TaskId, FieldFailure> {
 /// Parses a `spawn` request: the author-supplied `target` (validated with
 /// the `resolve_section_target` rule, as `call`'s is), the optional
 /// author-supplied `input`, `item`, and `index` seeds, plus the
-/// shim-produced `var` snapshot, `origin`, and `fanout` mark.
+/// shim-produced `var` snapshot and `fanout` mark.
 pub(super) fn parse_spawn(
     lua: &Lua,
     table: &mlua::Table,
@@ -85,21 +85,8 @@ pub(super) fn parse_spawn(
         item,
         index,
         var,
-        origin: shim_origin(table)?,
         via: shim_via(table)?,
     })
-}
-
-/// Reads a spawn's shim-produced `origin`: the author shim always says
-/// `author`, so any other shape is a hand-built yield.
-fn shim_origin(table: &mlua::Table) -> std::result::Result<TaskOrigin, FieldFailure> {
-    let Ok(Value::String(tag)) = table.raw_get::<Value>("origin") else {
-        return Err(FieldFailure::Malformed);
-    };
-    let Ok(tag) = tag.to_str() else {
-        return Err(FieldFailure::Malformed);
-    };
-    tag.parse().map_err(|_| FieldFailure::Malformed)
 }
 
 /// Reads a spawn's shim-produced `fanout` mark: the `fanout` shim marks its
@@ -189,36 +176,18 @@ pub(super) fn parse_cancel(table: &mlua::Table) -> std::result::Result<Request, 
     })
 }
 
-/// Parses a `pending` request: the optional author-supplied `origin`
-/// filter, which must name one of the two origins when present.
+/// Parses a `pending` request. The shim passes the author's argument
+/// through as `argument`, so this parse owns the check: `tasks.pending`
+/// takes none, and any value given is the call's error naming its type.
 pub(super) fn parse_pending(table: &mlua::Table) -> std::result::Result<Request, FieldFailure> {
-    let origin = match table.raw_get::<Value>("origin") {
-        Ok(Value::Nil) => None,
-        Ok(Value::String(tag)) => {
-            let Ok(tag) = tag.to_str() else {
-                return Err(call_error(
-                    "pending filter origin must be a valid UTF-8 string".to_owned(),
-                ));
-            };
-            match tag.parse::<TaskOrigin>() {
-                Ok(origin) => Some(origin),
-                Err(_) => {
-                    return Err(call_error(format!(
-                        "pending filter origin must be `author` or `model`, got `{}`",
-                        &*tag
-                    )));
-                }
-            }
-        }
-        Ok(other) => {
-            return Err(call_error(format!(
-                "pending filter origin must be a string, got {}",
-                other.type_name()
-            )));
-        }
-        Err(_) => return Err(FieldFailure::Malformed),
-    };
-    Ok(Request::Pending { origin })
+    match table.raw_get::<Value>("argument") {
+        Ok(Value::Nil) => Ok(Request::Pending),
+        Ok(other) => Err(call_error(format!(
+            "tasks.pending takes no arguments, got {}",
+            other.type_name()
+        ))),
+        Err(_) => Err(FieldFailure::Malformed),
+    }
 }
 
 /// Parses a `note` request: the author-supplied `text`.

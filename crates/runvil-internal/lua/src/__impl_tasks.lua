@@ -23,8 +23,7 @@ local raise, fail, engine_type = helpers.raise, helpers.fail, helpers.engine_typ
 -- tasks.spawn(target, opts?): start a chain over `target` and return at
 -- once with a Task handle. `opts.input` overrides the chain's args,
 -- `opts.item` becomes its `item` global, `opts.index` its `sys.index`; the
--- caller's `var` seeds the chain. The origin is the shim's own fact, never
--- an argument: this surface is the author's.
+-- caller's `var` seeds the chain.
 local function tasks_spawn(target, opts)
   if opts == nil then
     opts = {}
@@ -38,7 +37,6 @@ local function tasks_spawn(target, opts)
     item = opts.item,
     index = opts.index,
     var = var_snapshot(),
-    origin = "author",
   })
   if not ok then fail(result) end
   return { task = result }
@@ -209,17 +207,11 @@ local function tasks_status(task)
   return result
 end
 
--- tasks.pending(filter?) -> { Task, ... }: the caller's live tasks in spawn
--- order, narrowed to `filter.origin` (`author` or `model`) when given.
-local function tasks_pending(filter)
-  local origin
-  if filter ~= nil then
-    if type(filter) ~= "table" then
-      raise("lua", { message = "tasks.pending filter must be a table, got " .. engine_type(filter) })
-    end
-    origin = filter.origin
-  end
-  local ok, result = yield({ op = "pending", origin = origin })
+-- tasks.pending() -> { Task, ... }: the caller's live tasks in spawn order.
+-- The argument is passed through unchanged, so the protocol parse owns the
+-- check that none is given.
+local function tasks_pending(argument)
+  local ok, result = yield({ op = "pending", argument = argument })
   if not ok then fail(result) end
   local handles = {}
   for index, id in ipairs(result) do

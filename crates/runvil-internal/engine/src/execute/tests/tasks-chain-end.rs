@@ -1,4 +1,4 @@
-//! The chain-end rules: a chain ending with live author tasks fails as
+//! The chain-end rules: a chain ending with live tasks fails as
 //! `tasks_live` naming the leaked ids (as the run's error at the root, as
 //! the call's answer for a `call` chain), the leaked tasks are abandoned;
 //! a task spawned in H1 belongs to the walk after the hand-off; an aborted

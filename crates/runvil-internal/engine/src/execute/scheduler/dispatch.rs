@@ -89,7 +89,7 @@ fn blocked_on(request: &Request) -> Option<Blocked> {
         | Request::Timer { .. }
         | Request::Ready { .. }
         | Request::Status { .. }
-        | Request::Pending { .. }
+        | Request::Pending
         | Request::Concurrency { .. }
         | Request::Note { .. }
         | Request::Cancel { .. }
@@ -138,7 +138,6 @@ impl Scheduler {
                 item,
                 index,
                 var,
-                origin,
                 via,
             } => {
                 self.dispatch_spawn(
@@ -147,7 +146,6 @@ impl Scheduler {
                     input.as_deref(),
                     TaskSeed { item, index },
                     var,
-                    origin,
                     via,
                 );
                 Ok(())
@@ -168,8 +166,8 @@ impl Scheduler {
                 self.dispatch_status(id, &task);
                 Ok(())
             }
-            Request::Pending { origin } => {
-                self.dispatch_pending(id, origin);
+            Request::Pending => {
+                self.dispatch_pending(id);
                 Ok(())
             }
             Request::Concurrency { limit } => {

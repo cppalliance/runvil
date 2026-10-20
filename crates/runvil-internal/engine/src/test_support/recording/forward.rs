@@ -10,8 +10,8 @@ use runvil_types::event::Event;
 use runvil_types::tools::OutputTrust;
 
 use super::{
-    DebugCapture, DebugEvent, Observation, Observer, ReplyReport, TaskNoticeReport, ThinkingReport,
-    ToolCallsReport, ToolResultReport,
+    DebugCapture, DebugEvent, Observation, Observer, ReplyReport, ThinkingReport, ToolCallsReport,
+    ToolResultReport,
 };
 
 /// Declares the payload-free lifecycle pairs once and derives the
@@ -104,7 +104,6 @@ macro_rules! content_variants {
             | Event::AssistantReply { .. }
             | Event::AssistantToolCalls { .. }
             | Event::ToolResult { .. }
-            | Event::TaskNotice { .. }
     };
 }
 
@@ -224,7 +223,6 @@ fn forward_task(event: Event, observer: &dyn Observer) {
             section,
             task,
             target,
-            origin,
             input,
             item,
             index,
@@ -236,7 +234,6 @@ fn forward_task(event: Event, observer: &dyn Observer) {
             Observation::TaskStarted {
                 task,
                 target,
-                origin,
                 input,
                 item,
                 index,
@@ -364,20 +361,6 @@ fn forward_content(event: Event, observer: &dyn Observer) {
             } else {
                 OutputTrust::Untrusted
             },
-        }),
-        Event::TaskNotice {
-            execution,
-            section,
-            turn,
-            task,
-            text,
-            ..
-        } => observer.on_task_notice(TaskNoticeReport {
-            execution: &execution,
-            section: &section,
-            turn,
-            task: &task,
-            text: &text,
         }),
         // Routed here by `forward_one` for this group alone; `Event` is
         // `#[non_exhaustive]` in `runvil-types`.

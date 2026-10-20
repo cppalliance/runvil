@@ -204,7 +204,7 @@ Remove the Lua function, the four model task tools, and every Engine path that s
 
 <step-2>
 
-### Step 2: Remove TaskOrigin and make tasks.pending take no arguments
+### Step 2: Remove TaskOrigin and make tasks.pending take no arguments [completed]
 
 - Component: `none`
 - Tests: `cargo nextest run --locked -p runvil-types -p runvil-lua -p runvil-engine -p runvil --all-features`

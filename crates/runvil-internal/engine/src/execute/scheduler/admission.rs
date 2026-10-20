@@ -198,7 +198,6 @@ impl Scheduler {
             return Err(Error::internal("a task chain has a slot"));
         };
         let target = slot.target.clone();
-        let origin = slot.origin;
         let emitter = Arc::clone(self.chains[spawner.index()].ctx.emitter());
         // The start event fires at admission, on the spawner's sequence:
         // the task first runs now, and the payload's seeds are enough to
@@ -210,7 +209,6 @@ impl Scheduler {
                 provenance,
                 task,
                 target,
-                origin,
                 input: record.input,
                 item,
                 index,

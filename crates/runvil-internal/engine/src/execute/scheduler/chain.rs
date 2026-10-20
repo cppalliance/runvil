@@ -133,12 +133,12 @@ impl Scheduler {
 
     /// Finishes one chain: the frame's teardown boundary when the chain
     /// ends mid-section, the chain-end rules for the tasks it owns (a live
-    /// author task makes the outcome `tasks_live`; every live task is
-    /// abandoned), then the chain-end joins - every owned task's final
-    /// clock merges into this chain's own, so a waiting owner sees the
-    /// whole subtree transitively - and finally the outcome's delivery:
-    /// the run's result for the root chain, the call answer for a child
-    /// chain, the task slot's outcome for a spawned chain.
+    /// task makes the outcome `tasks_live` and is abandoned), then the
+    /// chain-end joins - every owned task's final clock merges into this
+    /// chain's own, so a waiting owner sees the whole subtree
+    /// transitively - and finally the outcome's delivery: the run's result
+    /// for the root chain, the call answer for a child chain, the task
+    /// slot's outcome for a spawned chain.
     ///
     /// `outcome` is the chain's end: a scalar return's value, `None` for a
     /// walk that ran off its slice's last section, or the chain's failure.
@@ -186,8 +186,8 @@ impl Scheduler {
         });
         // The frame drops here: the single teardown boundary.
         drop(frame);
-        // The chain's tasks end with it: a live author task turns a
-        // success into `tasks_live`, and every live task is abandoned.
+        // The chain's tasks end with it: a live task turns a success into
+        // `tasks_live` and is abandoned.
         let outcome = self.settle_owned_tasks(id, outcome);
         // The chain-end joins run after the settle - the abandoned tasks'
         // identities ended there, so their final clocks are recorded -

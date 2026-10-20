@@ -13,7 +13,7 @@ use std::num::NonZeroU64;
 use std::time::Duration;
 
 use runvil_model_client::model::ModelBinding;
-use runvil_types::ids::{TaskId, TaskOrigin};
+use runvil_types::ids::TaskId;
 
 use super::non_empty::NonEmpty;
 use super::record::ToolCallRecord;
@@ -80,9 +80,6 @@ pub enum Request {
         /// The caller's `var` snapshot, seeded into the chain and discarded
         /// when it ends.
         var: serde_json::Value,
-        /// The principal starting the task. Shim-produced, never
-        /// author-supplied: the author shim always says `author`.
-        origin: TaskOrigin,
         /// Which call started the task. Shim-produced: the `fanout` shim
         /// marks its arms, and `tasks.spawn` leaves the mark absent.
         via: SpawnVia,
@@ -118,12 +115,8 @@ pub enum Request {
         /// The task to inspect.
         task: TaskId,
     },
-    /// `tasks.pending(filter?)`: the caller's live tasks in spawn order,
-    /// optionally narrowed to one origin.
-    Pending {
-        /// `filter.origin`, when given.
-        origin: Option<TaskOrigin>,
-    },
+    /// `tasks.pending()`: the caller's live tasks in spawn order.
+    Pending,
     /// `tasks.concurrency(limit?)`: set the chain's admission limit for
     /// the tasks it spawns from here on, or read the effective limit back
     /// with no argument.

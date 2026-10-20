@@ -8,7 +8,7 @@
 //! request's answer is an ordinary [`Answer::ToolCallResult`]: the text
 //! on success, the error for a rejected return.
 
-use runvil_types::ids::{TaskId, TaskOrigin};
+use runvil_types::ids::TaskId;
 use runvil_types::metrics::ToolCallEvent;
 
 use crate::compactors::OverflowReason;
@@ -222,8 +222,6 @@ impl Blocked {
 pub struct TaskStatus {
     /// The name of the section the task's chain started at.
     pub target: String,
-    /// The principal that started the task.
-    pub origin: TaskOrigin,
     /// The lifecycle phase; a delivered task reports [`TaskPhase::Done`].
     pub state: TaskPhase,
     /// Whether the task ended well: `None` while it runs, `Some(false)`

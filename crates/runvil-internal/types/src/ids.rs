@@ -14,9 +14,6 @@
 //! width of a run are both unbounded (call nesting, fanout arm count) and
 //! because the path reads as the hierarchy it names in a log or a UI.
 //!
-//! [`TaskOrigin`] names the principal that started a task - the prompt's
-//! author through `tasks.spawn`, or the model through its `task` tool -
-//! and appears beside the task's id wherever the task is reported.
 //! [`AbandonReason`] names how a task's owner ended while the task was
 //! still live, for the `abandoned` terminal state. [`Provenance`] extends a
 //! task's id with a per-task sequence number: the replay key stamped on
@@ -257,109 +254,26 @@ impl RoundId {
     }
 }
 
-/// The principal that started a task: the prompt's author or the model.
-///
-/// The two are treated differently when the owner chain ends while the
-/// task is still live. An author task that outlives its owner is the
-/// author's bug, so it fails the owner chain. A model task that outlives
-/// its owner is abandoned and reported. Lua code writes an origin as its
-/// tag, `author` or `model`, for example in the `origin` filter of
-/// `tasks.pending`.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-#[non_exhaustive]
-pub enum TaskOrigin {
-    /// The prompt's author, through `tasks.spawn` or `tasks.fanout`, which
-    /// is built on it.
-    Author,
-    /// The model, through its `task` tool.
-    Model,
-}
-
-impl TaskOrigin {
-    /// Returns the origin's tag as Lua code writes it: `author` or `model`.
-    #[must_use]
-    pub fn tag(self) -> &'static str {
-        match self {
-            TaskOrigin::Author => "author",
-            TaskOrigin::Model => "model",
-        }
-    }
-
-    /// Every origin, in declaration order.
-    const ALL: [TaskOrigin; 2] = [TaskOrigin::Author, TaskOrigin::Model];
-}
-
-impl FromStr for TaskOrigin {
-    type Err = ParseTaskOriginError;
-
-    /// Parses a tag that is exactly `author` or `model`, never case-folded.
-    fn from_str(tag: &str) -> Result<Self, Self::Err> {
-        TaskOrigin::ALL
-            .into_iter()
-            .find(|origin| origin.tag() == tag)
-            .ok_or_else(|| ParseTaskOriginError {
-                input: tag.to_owned(),
-            })
-    }
-}
-
-/// The error returned when text is not a [`TaskOrigin`] tag.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ParseTaskOriginError {
-    /// The rejected text.
-    input: String,
-}
-
-impl ParseTaskOriginError {
-    /// Returns the rejected text.
-    #[must_use]
-    pub fn input(&self) -> &str {
-        &self.input
-    }
-}
-
-impl fmt::Display for ParseTaskOriginError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "invalid task origin `{}`: required ", self.input)?;
-        let last = TaskOrigin::ALL.len() - 1;
-        for (position, origin) in TaskOrigin::ALL.into_iter().enumerate() {
-            match position {
-                0 => {}
-                _ if position == last => f.write_str(" or ")?,
-                _ => f.write_str(", ")?,
-            }
-            write!(f, "`{}`", origin.tag())?;
-        }
-        Ok(())
-    }
-}
-
-impl std::error::Error for ParseTaskOriginError {}
-
 /// Why a live task was abandoned: how its owner chain ended while the task
 /// was still running.
 ///
 /// A task ends with its owner. The `abandoned` terminal state is separate
 /// from `cancelled`, because losing an owner and being stopped on purpose
-/// are different facts for a log, a UI, and the notice the model receives.
-/// The reason says which kind of owner end it was, so the notice can say
-/// more than "abandoned".
+/// are different facts for a log and a UI. The reason says which kind of
+/// owner end it was, so a report can say more than "abandoned".
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 #[non_exhaustive]
 pub enum AbandonReason {
     /// The owner ended normally, by returning a scalar or finishing its
-    /// walk, and left the task running. For an author task, the owner's
-    /// outcome becomes the `tasks_live` error. A model task is abandoned,
-    /// and the owner's outcome stands.
+    /// walk, and left the task running. The owner's outcome becomes the
+    /// `tasks_live` error.
     OwnerReturned,
     /// The owner failed.
     OwnerFailed,
     /// The owner's model tool loop ran past its round cap. This is a
     /// failure, reported apart from [`OwnerFailed`](Self::OwnerFailed)
-    /// because the notice the model receives must say that the model's own
-    /// task outlived the loop that started it.
+    /// because a report can then name the cap as the cause.
     ToolLoopExhausted,
     /// The owner was aborted from outside, either by fail-fast after a
     /// sibling failed fatally or because the owner's own owner ended first.

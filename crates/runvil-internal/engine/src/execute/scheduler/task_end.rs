@@ -4,18 +4,18 @@
 //! The chain-end rules: a task ends with its owner. When a chain ends,
 //! every live task it owns is abandoned - its slot moves to `Abandoned`,
 //! its terminal observation names how the owner ended, and its backing
-//! chain aborts with everything it owns in turn. An author-origin task
-//! left live is the author's bug, so the owner's own outcome becomes
-//! `tasks_live` naming the leaked ids. Tasks survive a section's
-//! fall-through and a `jump` - those move the walk within one chain - and
-//! end with the chain itself: the root walk, a `call` child, or another
-//! task (a fanout arm among them). The H1 pass and the walk after it are
-//! one chain, so the hand-off reassigns the pass's tasks to the walk.
+//! chain aborts with everything it owns in turn. A task left live is the
+//! author's bug, so the owner's own outcome becomes `tasks_live` naming the
+//! leaked ids. Tasks survive a section's fall-through and a `jump` - those
+//! move the walk within one chain - and end with the chain itself: the root
+//! walk, a `call` child, or another task (a fanout arm among them). The H1
+//! pass and the walk after it are one chain, so the hand-off reassigns the
+//! pass's tasks to the walk.
 
 use std::sync::Arc;
 
 use runvil_types::event::Event;
-use runvil_types::ids::{AbandonReason, TaskId, TaskOrigin};
+use runvil_types::ids::{AbandonReason, TaskId};
 use runvil_vfs::Access;
 
 use crate::{Error, Result};
@@ -76,7 +76,7 @@ impl Scheduler {
     /// live task the chain owns is abandoned (the reason names how the
     /// owner ended: the section ended, the tool loop was exhausted, or the
     /// owner failed some other way), and an `Ok` outcome that leaked
-    /// author-origin tasks becomes [`Error::TasksLive`] naming them in
+    /// tasks becomes [`Error::TasksLive`] naming them in
     /// spawn order. A failing chain keeps its own error - the leak is the
     /// lesser fault - but its tasks end all the same.
     pub(super) fn settle_owned_tasks(
@@ -132,9 +132,9 @@ impl Scheduler {
     /// abandoned slot once its owner is gone. An internal timer slot ends
     /// the same way but reports nothing and never counts as leaked: it is
     /// the wait's detail, not a task the author started. Returns the
-    /// abandoned author-origin ids in spawn order, for the owner's
-    /// `tasks_live` outcome; the caller discards them for an owner that is
-    /// itself being aborted, whose outcome no one receives.
+    /// abandoned ids in spawn order, for the owner's `tasks_live` outcome;
+    /// the caller discards them for an owner that is itself being aborted,
+    /// whose outcome no one receives.
     pub(super) fn abandon_owned_tasks(
         &mut self,
         owner: ChainIndex,
@@ -142,15 +142,15 @@ impl Scheduler {
     ) -> Vec<TaskId> {
         // The arena is a hash map; ids order as paths and one owner's tasks
         // are its direct children, so sorting recovers spawn order.
-        let mut live: Vec<(TaskId, TaskOrigin, TaskBacking, String)> = self
+        let mut live: Vec<(TaskId, TaskBacking, String)> = self
             .tasks
             .iter()
             .filter(|(_, slot)| slot.owner == owner && slot.state.is_live())
-            .map(|(task, slot)| (task.clone(), slot.origin, slot.backing, slot.target.clone()))
+            .map(|(task, slot)| (task.clone(), slot.backing, slot.target.clone()))
             .collect();
         live.sort_unstable_by(|left, right| left.0.cmp(&right.0));
         let mut leaked = Vec::new();
-        for (task, origin, backing, target) in live {
+        for (task, backing, target) in live {
             if let Some(slot) = self.tasks.get_mut(&task) {
                 slot.state = TaskState::Abandoned;
             }
@@ -182,12 +182,7 @@ impl Scheduler {
                     }
                 });
             }
-            // `Author`, or an origin `runvil-types` adds behind its
-            // `#[non_exhaustive]` `TaskOrigin`, is treated as the author's
-            // and counts as leaked.
-            if origin != TaskOrigin::Model {
-                leaked.push(task);
-            }
+            leaked.push(task);
         }
         // The abandoned tasks' slots are free: the drain admits the
         // queued chains that now fit at its next edge.
@@ -203,7 +198,7 @@ impl Scheduler {
     /// abandoning a task aborts its backing chain, and `abort_subtree`
     /// abandons that chain's own tasks (as `OwnerAborted`) on the way, so
     /// a nested slot is already terminal when its owner's turn comes and
-    /// `is_live()` skips it. The leaked-author list is discarded: no one
+    /// `is_live()` skips it. The leaked list is discarded: no one
     /// receives an outcome for a run that is ending.
     pub(super) fn settle_all_tasks(&mut self, reason: AbandonReason) {
         let mut owners: Vec<ChainIndex> = self

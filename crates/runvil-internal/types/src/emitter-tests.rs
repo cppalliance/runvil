@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use super::{DebugMode, Emitter, EventSink, LibraryLoad};
 use crate::event::{Event, lifecycle};
-use crate::ids::{AbandonReason, ChainId, Provenance, RoundId, TaskId, TaskOrigin};
+use crate::ids::{AbandonReason, ChainId, Provenance, RoundId, TaskId};
 use crate::tools::{OutputTrust, ToolId};
 
 fn root() -> TaskId {
@@ -114,7 +114,6 @@ fn payload_variants_cross_field_for_field() {
             provenance,
             task: task.clone(),
             target: "Worker".to_owned(),
-            origin: TaskOrigin::Author,
             input: Some("in".to_owned()),
             item: Some(serde_json::json!("x")),
             index: Some(2),
@@ -134,7 +133,7 @@ fn payload_variants_cross_field_for_field() {
     let events = sink.take();
     assert!(matches!(
         &events[0],
-        Event::TaskStarted { task: started, target, origin: TaskOrigin::Author, input: Some(input), item: Some(_), index: Some(2), var, .. }
+        Event::TaskStarted { task: started, target, input: Some(input), item: Some(_), index: Some(2), var, .. }
             if *started == task && target == "Worker" && input == "in" && var["k"] == 1
     ));
     assert!(matches!(

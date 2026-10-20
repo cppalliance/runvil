@@ -12,7 +12,7 @@
 //! the slot and the slot moves to `Done`; the owner later takes the result
 //! through a wait, which moves it to `Delivered`. Cancellation and
 //! abandonment (the owner ending first) are the two other terminal states,
-//! kept apart because the log and the model notice must tell "stopped on
+//! kept apart because the log and `tasks.status` must tell "stopped on
 //! purpose" from "lost its owner". A terminal slot is never removed: the
 //! arena is append-only as the chain arena is, so a late `status` can
 //! still report how a task ended.
@@ -20,7 +20,7 @@
 use std::sync::Arc;
 use std::sync::atomic::AtomicU32;
 
-use runvil_types::ids::{TaskId, TaskOrigin};
+use runvil_types::ids::TaskId;
 use runvil_vfs::{ExecId, detail};
 
 use crate::error::DepthVia;
@@ -36,7 +36,7 @@ use super::{ChainIndex, Counters, Scheduler, SpawnRecord, prompt_origin};
 /// Where a task's work runs.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum TaskBacking {
-    /// A chain in the arena: every author- or model-started task.
+    /// A chain in the arena: every spawned task.
     Chain(ChainIndex),
     /// An in-flight leaf effect: the internal timer behind a wait's
     /// timeout, never author-visible.
@@ -87,8 +87,6 @@ pub(super) struct TaskSlot {
     /// The chain that started the task: the only chain allowed to wait on,
     /// inspect, or cancel it, and the chain whose end ends the task.
     pub(super) owner: ChainIndex,
-    /// The principal that started the task.
-    pub(super) origin: TaskOrigin,
     /// The name of the section the task's chain started at: the section
     /// its terminal observations report under.
     pub(super) target: String,
@@ -123,10 +121,6 @@ impl Scheduler {
     /// into the spawner so an author `pcall` can catch it. `via` names the
     /// call that started the task: a `fanout` arm's depth-cap refusal is
     /// named after `tasks.fanout`.
-    #[expect(
-        clippy::too_many_arguments,
-        reason = "the spawn keeps the request's target, input, seeds, var snapshot, origin, and starting call explicit"
-    )]
     pub(super) fn dispatch_spawn(
         &mut self,
         id: ChainIndex,
@@ -134,10 +128,9 @@ impl Scheduler {
         input: Option<&str>,
         seed: TaskSeed,
         var: serde_json::Value,
-        origin: TaskOrigin,
         via: SpawnVia,
     ) {
-        match self.prepare_spawn(id, target, input, seed, var, origin, via) {
+        match self.prepare_spawn(id, target, input, seed, var, via) {
             Ok((task, child)) => {
                 self.answer_inline(id, Answer::Spawn(Ok(task)));
                 // The child waits for admission, queued behind the
@@ -151,23 +144,19 @@ impl Scheduler {
         }
     }
 
-    /// The fallible half of spawn dispatch, shared with the model's `task`
-    /// built-in: `call`'s depth cap against the spawner's call-depth field
-    /// (the refusal named after the author-facing call that tripped it,
-    /// `tasks.fanout` for an arm and `call` otherwise), `call`'s target
-    /// resolution over the spawner's visible set, the worker-template
-    /// check (a list section is not a target), then the task chain one
-    /// level deeper under the spawn's `args` and `var` snapshot, with its
-    /// own access capability (a concurrent thread of execution, forked
-    /// from the spawner's so the spawn is the happens-before edge; every
-    /// delivery of the task joins it back) and a fresh turn counter. The
-    /// child leaves this call queued for admission - holding no Lua VM
-    /// yet - with its `var` snapshot moved into the chain and its start
-    /// record stashed; the drain admits it when a slot frees up.
-    #[expect(
-        clippy::too_many_arguments,
-        reason = "the spawn keeps the request's target, input, seeds, var snapshot, origin, and starting call explicit"
-    )]
+    /// The fallible half of spawn dispatch: `call`'s depth cap against the
+    /// spawner's call-depth field (the refusal named after the
+    /// author-facing call that tripped it, `tasks.fanout` for an arm and
+    /// `call` otherwise), `call`'s target resolution over the spawner's
+    /// visible set, the worker-template check (a list section is not a
+    /// target), then the task chain one level deeper under the spawn's
+    /// `args` and `var` snapshot, with its own access capability (a
+    /// concurrent thread of execution, forked from the spawner's so the
+    /// spawn is the happens-before edge; every delivery of the task joins
+    /// it back) and a fresh turn counter. The child leaves this call queued
+    /// for admission - holding no Lua VM yet - with its `var` snapshot
+    /// moved into the chain and its start record stashed; the drain admits
+    /// it when a slot frees up.
     pub(super) fn prepare_spawn(
         &mut self,
         id: ChainIndex,
@@ -175,7 +164,6 @@ impl Scheduler {
         input: Option<&str>,
         seed: TaskSeed,
         var: serde_json::Value,
-        origin: TaskOrigin,
         via: SpawnVia,
     ) -> Result<(TaskId, ChainIndex)> {
         let chain = &self.chains[id.index()];
@@ -262,7 +250,6 @@ impl Scheduler {
             TaskSlot {
                 backing: TaskBacking::Chain(child),
                 owner: id,
-                origin,
                 target: worker.name().to_owned(),
                 state: TaskState::Running,
                 outcome: None,

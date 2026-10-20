@@ -10,7 +10,7 @@
 
 use std::fmt;
 
-use runvil_types::ids::{AbandonReason, TaskId, TaskOrigin};
+use runvil_types::ids::{AbandonReason, TaskId};
 use serde_json::Value;
 
 /// The payload-free observations as named constants, the spelling the
@@ -207,8 +207,6 @@ pub enum Observation {
         task: TaskId,
         /// The name of the section the task's chain starts at.
         target: String,
-        /// The principal that started the task.
-        origin: TaskOrigin,
         /// The `opts.input` override, when given.
         input: Option<String>,
         /// The `opts.item` seed, when given.

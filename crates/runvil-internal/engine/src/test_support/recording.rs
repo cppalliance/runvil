@@ -18,7 +18,6 @@
 //! that persists them owns treating them as untrusted.
 
 use runvil_types::event::ReplyOrigin;
-use runvil_types::ids::TaskId;
 use runvil_types::metrics::{CallMetrics, ToolCallEvent};
 use runvil_types::tools::OutputTrust;
 use serde_json::Value;
@@ -55,10 +54,6 @@ pub trait Observer: Send + Sync {
     /// Records one completed block of model thinking.
     #[expect(unused_variables, reason = "the default body discards the report")]
     fn on_thinking(&self, report: ThinkingReport<'_>) {}
-
-    /// Records one model-task notice as it was queued for the task's owner.
-    #[expect(unused_variables, reason = "the default body discards the report")]
-    fn on_task_notice(&self, report: TaskNoticeReport<'_>) {}
 }
 
 /// One completed assistant reply, as [`Observer::on_assistant_reply`]
@@ -132,22 +127,6 @@ pub struct ThinkingReport<'a> {
     /// The model that produced it.
     pub model: &'a str,
     /// The thinking text.
-    pub text: &'a str,
-}
-
-/// One model-task notice queued for the task's owner, as
-/// [`Observer::on_task_notice`] receives it.
-#[derive(Debug, Clone, Copy)]
-pub struct TaskNoticeReport<'a> {
-    /// The caller-chosen run identifier.
-    pub execution: &'a str,
-    /// The owner's reporting scope.
-    pub section: &'a str,
-    /// The owner's model-turn counter when the notice was queued.
-    pub turn: u32,
-    /// The task that ended.
-    pub task: &'a TaskId,
-    /// The sentence the model reads.
     pub text: &'a str,
 }
 

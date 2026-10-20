@@ -14,7 +14,7 @@ use mlua::{AnyUserData, Function, IntoLuaMulti, Lua, LuaSerdeExt, MultiValue, Va
 use serde_json::json;
 
 use runvil_model_client::model::{ModelBinding, ModelId, ModelInvocation};
-use runvil_types::ids::{TaskId, TaskOrigin};
+use runvil_types::ids::TaskId;
 
 use crate::Error;
 use crate::models::LuaModelHandle;

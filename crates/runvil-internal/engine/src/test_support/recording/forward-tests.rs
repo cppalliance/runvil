@@ -103,22 +103,6 @@ impl Observer for SeamRecorder {
                 "{execution}/{section}: result turn={turn} id={tool_call_id} alias={alias} content={content} trust={trust:?}"
             ));
     }
-
-    fn on_task_notice(&self, report: TaskNoticeReport<'_>) {
-        let TaskNoticeReport {
-            execution,
-            section,
-            turn,
-            task,
-            text,
-        } = report;
-        self.content
-            .lock()
-            .expect("the recorder mutex is not poisoned")
-            .push(format!(
-                "{execution}/{section}: notice turn={turn} task={task} text={text}"
-            ));
-    }
 }
 
 impl DebugCapture for SeamRecorder {

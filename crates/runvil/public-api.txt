@@ -9,7 +9,6 @@
 #[non_exhaustive] pub enum runvil::event::Event
 #[non_exhaustive] pub enum runvil::event::ReplyOrigin
 #[non_exhaustive] pub enum runvil::ids::AbandonReason
-#[non_exhaustive] pub enum runvil::ids::TaskOrigin
 #[non_exhaustive] pub enum runvil::model::CompletionErrorKind
 #[non_exhaustive] pub enum runvil::model::CompletionResult
 #[non_exhaustive] pub enum runvil::model::ModelCatalogError
@@ -132,11 +131,9 @@ auto runvil::event::ReplyOrigin: Freeze, RefUnwindSafe, Send, Sync, Unpin, Unwin
 auto runvil::ids::AbandonReason: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::ids::ChainId: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::ids::ParseIdError: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
-auto runvil::ids::ParseTaskOriginError: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::ids::Provenance: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::ids::RoundId: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::ids::TaskId: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
-auto runvil::ids::TaskOrigin: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::metrics::CallMetrics: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::metrics::ClientTiming: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::metrics::LlamaTimings: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
@@ -263,11 +260,9 @@ derives runvil::event::ReplyOrigin: Clone, Copy, Debug, Default, Deserialize, Eq
 derives runvil::ids::AbandonReason: Clone, Copy, Debug, Deserialize, Eq, Hash, PartialEq, Serialize
 derives runvil::ids::ChainId: Clone, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize
 derives runvil::ids::ParseIdError: Clone, Debug, Eq, PartialEq
-derives runvil::ids::ParseTaskOriginError: Clone, Debug, Eq, PartialEq
 derives runvil::ids::Provenance: Clone, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize
 derives runvil::ids::RoundId: Clone, Copy, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize
 derives runvil::ids::TaskId: Clone, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize
-derives runvil::ids::TaskOrigin: Clone, Copy, Debug, Deserialize, Eq, Hash, PartialEq, Serialize
 derives runvil::metrics::CallMetrics: Clone, Debug, Default, Deserialize, PartialEq, Serialize
 derives runvil::metrics::ClientTiming: Clone, Debug, Deserialize, PartialEq, Serialize
 derives runvil::metrics::LlamaTimings: Clone, Debug, Deserialize, PartialEq, Serialize
@@ -365,7 +360,6 @@ impl core::convert::TryFrom<f64> for runvil::model::Temperature { type Error = r
 impl core::error::Error for runvil::ParseError
 impl core::error::Error for runvil::RunError
 impl core::error::Error for runvil::ids::ParseIdError
-impl core::error::Error for runvil::ids::ParseTaskOriginError
 impl core::error::Error for runvil::model::CompletionError
 impl core::error::Error for runvil::model::ModelCatalogError
 impl core::error::Error for runvil::model::ModelIdError
@@ -385,7 +379,6 @@ impl core::fmt::Display for runvil::RunUid
 impl core::fmt::Display for runvil::effect::EffectId
 impl core::fmt::Display for runvil::ids::ChainId
 impl core::fmt::Display for runvil::ids::ParseIdError
-impl core::fmt::Display for runvil::ids::ParseTaskOriginError
 impl core::fmt::Display for runvil::ids::TaskId
 impl core::fmt::Display for runvil::model::CompletionError
 impl core::fmt::Display for runvil::model::ModelCatalogError
@@ -420,8 +413,6 @@ impl core::str::traits::FromStr for runvil::ids::ChainId
 impl core::str::traits::FromStr for runvil::ids::ChainId { type Err = runvil::ids::ParseIdError }
 impl core::str::traits::FromStr for runvil::ids::TaskId
 impl core::str::traits::FromStr for runvil::ids::TaskId { type Err = runvil::ids::ParseIdError }
-impl core::str::traits::FromStr for runvil::ids::TaskOrigin
-impl core::str::traits::FromStr for runvil::ids::TaskOrigin { type Err = runvil::ids::ParseTaskOriginError }
 impl core::str::traits::FromStr for runvil::model::Role
 impl core::str::traits::FromStr for runvil::model::Role { type Err = runvil::model::ParseRoleError }
 impl core::str::traits::FromStr for runvil::packs::GlobalName
@@ -560,9 +551,7 @@ pub fn runvil::ids::ChainId::child(&self, index: u32) -> Self
 pub fn runvil::ids::ChainId::entry(&self, index: u32) -> alloc::string::String
 pub fn runvil::ids::ChainId::root() -> Self
 pub fn runvil::ids::ParseIdError::input(&self) -> &str
-pub fn runvil::ids::ParseTaskOriginError::input(&self) -> &str
 pub fn runvil::ids::Provenance::new(task: runvil::ids::TaskId, seq: u32) -> runvil::ids::Provenance
-pub fn runvil::ids::TaskOrigin::tag(self) -> &'static str
 pub fn runvil::metrics::CallMetrics::new() -> runvil::metrics::CallMetrics
 pub fn runvil::metrics::CallMetrics::with_client(self, client: core::option::Option<runvil::metrics::ClientTiming>) -> runvil::metrics::CallMetrics
 pub fn runvil::metrics::CallMetrics::with_llama(self, llama: core::option::Option<runvil::metrics::LlamaTimings>) -> runvil::metrics::CallMetrics
@@ -1142,13 +1131,6 @@ pub runvil::event::Event::TaskNote::provenance: runvil::ids::Provenance
 pub runvil::event::Event::TaskNote::section: alloc::string::String
 pub runvil::event::Event::TaskNote::task: runvil::ids::TaskId
 pub runvil::event::Event::TaskNote::text: alloc::string::String
-pub runvil::event::Event::TaskNotice { .. }
-pub runvil::event::Event::TaskNotice::execution: alloc::string::String
-pub runvil::event::Event::TaskNotice::provenance: runvil::ids::Provenance
-pub runvil::event::Event::TaskNotice::section: alloc::string::String
-pub runvil::event::Event::TaskNotice::task: runvil::ids::TaskId
-pub runvil::event::Event::TaskNotice::text: alloc::string::String
-pub runvil::event::Event::TaskNotice::turn: u32
 pub runvil::event::Event::TaskResumed { .. }
 pub runvil::event::Event::TaskResumed::execution: alloc::string::String
 pub runvil::event::Event::TaskResumed::provenance: runvil::ids::Provenance
@@ -1159,7 +1141,6 @@ pub runvil::event::Event::TaskStarted::execution: alloc::string::String
 pub runvil::event::Event::TaskStarted::index: core::option::Option<u64>
 pub runvil::event::Event::TaskStarted::input: core::option::Option<alloc::string::String>
 pub runvil::event::Event::TaskStarted::item: core::option::Option<serde_json::value::Value>
-pub runvil::event::Event::TaskStarted::origin: runvil::ids::TaskOrigin
 pub runvil::event::Event::TaskStarted::provenance: runvil::ids::Provenance
 pub runvil::event::Event::TaskStarted::section: alloc::string::String
 pub runvil::event::Event::TaskStarted::target: alloc::string::String
@@ -1281,8 +1262,6 @@ pub runvil::ids::AbandonReason::RunTerminated
 pub runvil::ids::AbandonReason::ToolLoopExhausted
 pub runvil::ids::Provenance::seq: u32
 pub runvil::ids::Provenance::task: runvil::ids::TaskId
-pub runvil::ids::TaskOrigin::Author
-pub runvil::ids::TaskOrigin::Model
 pub runvil::metrics::CallMetrics::client: core::option::Option<runvil::metrics::ClientTiming>
 pub runvil::metrics::CallMetrics::llama: core::option::Option<runvil::metrics::LlamaTimings>
 pub runvil::metrics::CallMetrics::usage: core::option::Option<runvil::metrics::Usage>
@@ -1530,7 +1509,6 @@ pub struct runvil::cancel::Cancelled { /* private fields */ }
 pub struct runvil::effect::EffectId(/* private fields */)
 pub struct runvil::ids::ChainId(/* private fields */)
 pub struct runvil::ids::ParseIdError { /* private fields */ }
-pub struct runvil::ids::ParseTaskOriginError { /* private fields */ }
 pub struct runvil::ids::RoundId(/* private fields */)
 pub struct runvil::ids::TaskId(/* private fields */)
 pub struct runvil::model::ArgumentNames<'a> { /* private fields */ }

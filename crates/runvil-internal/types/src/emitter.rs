@@ -384,20 +384,6 @@ impl Emitter {
         });
     }
 
-    /// Reports one model-task notice as it is queued for the task's owner.
-    pub fn task_notice(&self, section: &str, turn: u32, task: &TaskId, text: &str) {
-        self.emit(section, |execution, section, provenance| {
-            Event::TaskNotice {
-                execution,
-                section,
-                provenance,
-                turn,
-                task: task.clone(),
-                text: text.to_owned(),
-            }
-        });
-    }
-
     /// Captures the request body of one completed model turn. The caller
     /// gates on [`captures_debug`](Self::captures_debug) so a run that did
     /// not opt in never clones a body.

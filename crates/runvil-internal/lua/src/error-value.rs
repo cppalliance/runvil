@@ -65,7 +65,7 @@ pub enum ErrorKind {
     TaskNotOwned,
     /// A task's result was already delivered once.
     TaskConsumed,
-    /// A section ended while author-origin tasks it owns were still live.
+    /// A section ended while tasks it owns were still live.
     TasksLive,
     /// The run was cancelled.
     Cancelled,

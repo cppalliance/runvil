@@ -125,24 +125,33 @@ fn status_reports_a_parked_task_and_then_a_finished_one() {
     // write answered at once, reads the mid-flight status (running,
     // blocked on `chat`, inside its section, with its note), and waits on
     // it; the round is released, and the spawner reads the terminal
-    // status (done, ok).
+    // status (done, ok). The key lists pin the table's shape: every key
+    // across the two reads, and no `origin`.
     let gateway = ScriptedChat::new(vec![text("slow answer")]);
     let md = tasks_prompt(
-        "local t = tasks.spawn('## Child')\n\
+        "local function keys(t)\n\
+           local names = {}\n\
+           for name in pairs(t) do names[#names + 1] = name end\n\
+           table.sort(names)\n\
+           return table.concat(names, ',')\n\
+         end\n\
+         local t = tasks.spawn('## Child')\n\
          local fresh = tasks.status(t)\n\
          log('fresh state=' .. fresh.state .. ' section=' .. tostring(fresh.section)\n\
            .. ' blocked=' .. tostring(fresh.blocked))\n\
          store.write('park', 'x')\n\
          local s = tasks.status(t)\n\
-         log('parked target=' .. s.target .. ' origin=' .. s.origin .. ' state=' .. s.state\n\
+         log('parked target=' .. s.target .. ' state=' .. s.state\n\
            .. ' ok=' .. tostring(s.ok) .. ' section=' .. tostring(s.section)\n\
            .. ' blocked=' .. tostring(s.blocked) .. ' turns=' .. s.turns\n\
            .. ' tasks=' .. #s.tasks .. ' depth=' .. s.depth .. ' note=' .. tostring(s.note))\n\
+         log('parked keys=' .. keys(s))\n\
          local _, ok, result = tasks.join_any({ t })\n\
          assert(ok and result == 'slow answer', tostring(result))\n\
          local d = tasks.status(t)\n\
          log('done state=' .. d.state .. ' ok=' .. tostring(d.ok) .. ' section=' .. tostring(d.section)\n\
            .. ' blocked=' .. tostring(d.blocked) .. ' turns=' .. d.turns .. ' note=' .. tostring(d.note))\n\
+         log('done keys=' .. keys(d))\n\
          return 'done'",
         &[(
             "Child",
@@ -164,10 +173,12 @@ fn status_reports_a_parked_task_and_then_a_finished_one() {
         logs,
         vec![
             "fresh state=running section=nil blocked=queued".to_owned(),
-            "parked target=Child origin=author state=running ok=nil section=Child blocked=chat \
+            "parked target=Child state=running ok=nil section=Child blocked=chat \
              turns=0 tasks=0 depth=1 note=working"
                 .to_owned(),
+            "parked keys=blocked,depth,note,section,state,target,tasks,turns".to_owned(),
             "done state=done ok=true section=nil blocked=nil turns=1 note=working".to_owned(),
+            "done keys=depth,note,ok,state,target,tasks,turns".to_owned(),
         ],
         "status fields before the child runs, while it is parked, and after it finished"
     );
@@ -321,8 +332,9 @@ fn cancel_ends_a_parked_task_idempotently_and_reports_task_cancelled_once() {
 #[test]
 fn pending_lists_the_callers_live_tasks_in_spawn_order() {
     // Two live children and one finished: `pending` names the live two in
-    // spawn order as handles every `tasks.*` accepts, and the origin filter
-    // narrows to the author's own.
+    // spawn order as handles every `tasks.*` accepts. `pending` takes no
+    // argument: an empty table and a table naming an origin are each the
+    // call's error, naming the argument's type.
     let md = tasks_prompt(
         "local a = tasks.spawn('## Parked')\n\
          local b = tasks.spawn('## Quick')\n\
@@ -331,10 +343,12 @@ fn pending_lists_the_callers_live_tasks_in_spawn_order() {
          local live = tasks.pending()\n\
          assert(#live == 2, 'two live tasks, got ' .. #live)\n\
          assert(live[1].task == a.task and live[2].task == c.task, live[1].task .. ',' .. live[2].task)\n\
-         assert(#tasks.pending({ origin = 'author' }) == 2, 'both are author tasks')\n\
-         assert(#tasks.pending({ origin = 'model' }) == 0, 'no model tasks')\n\
+         local ok1, e1 = pcall(tasks.pending, {})\n\
+         assert(not ok1 and e1.kind == 'lua', tostring(e1))\n\
+         local ok2, e2 = pcall(tasks.pending, { origin = 'author' })\n\
+         assert(not ok2 and e2.kind == 'lua', tostring(e2))\n\
          for _, t in ipairs(live) do tasks.cancel(t) end\n\
-         return 'done'",
+         return tostring(e1) .. '|' .. tostring(e2)",
         &[
             (
                 "Parked",
@@ -344,7 +358,11 @@ fn pending_lists_the_callers_live_tasks_in_spawn_order() {
         ],
     );
     let trace = scheduler_scenario(md).run();
-    assert_eq!(trace.text(), "done", "the cancelled tasks do not leak");
+    assert_eq!(
+        trace.text(),
+        "tasks.pending takes no arguments, got table|tasks.pending takes no arguments, got table",
+        "both arguments are refused and the cancelled tasks do not leak"
+    );
 }
 
 #[test]
@@ -400,5 +418,8 @@ fn the_wait_shims_validate_their_arguments_at_the_call_site() {
     assert!(parts[2].contains("Task handle or task id"), "{out}");
     assert!(parts[3].contains("not-an-id"), "{out}");
     assert!(parts[4].contains("must be a string"), "{out}");
-    assert!(parts[5].contains("robot"), "{out}");
+    assert_eq!(
+        parts[5], "tasks.pending takes no arguments, got table",
+        "{out}"
+    );
 }

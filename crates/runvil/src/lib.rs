@@ -61,11 +61,9 @@ pub mod ids {
     pub use runvil_types::ids::AbandonReason;
     pub use runvil_types::ids::ChainId;
     pub use runvil_types::ids::ParseIdError;
-    pub use runvil_types::ids::ParseTaskOriginError;
     pub use runvil_types::ids::Provenance;
     pub use runvil_types::ids::RoundId;
     pub use runvil_types::ids::TaskId;
-    pub use runvil_types::ids::TaskOrigin;
 }
 
 pub mod model {

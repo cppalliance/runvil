@@ -23,7 +23,7 @@
 
 use std::time::Duration;
 
-use runvil_types::ids::{TaskId, TaskOrigin};
+use runvil_types::ids::TaskId;
 
 use crate::execute::protocol::Answer;
 use crate::execute::run::{Effect, EffectId};
@@ -53,9 +53,6 @@ impl Scheduler {
             TaskSlot {
                 backing: TaskBacking::Effect(effect),
                 owner: id,
-                // The timer serves an author wait; the origin is reported
-                // nowhere, since the slot is internal.
-                origin: TaskOrigin::Author,
                 target: "timer".to_owned(),
                 state: TaskState::Running,
                 outcome: None,
