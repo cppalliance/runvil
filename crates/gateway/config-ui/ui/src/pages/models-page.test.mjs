@@ -389,6 +389,12 @@ test("model rows sit 12px apart, mark the selection with a family-colored rule, 
   const search = await bundledDeclarations(".models-toolbar .input");
   assert.equal(squash(search.get("padding")), "5px14px", "padding 5px 14px");
   assert.equal(search.get("border-radius"), "var(--radius-full)", "a pill");
+  const sideBySide = await bundledDeclarations(".split-list", { media: "(min-width: 768px)" });
+  assert.equal(
+    sideBySide.get("padding-inline-end"),
+    "var(--space-4)",
+    "the list's toolbar stays 16px off the divider, as the detail pane does",
+  );
   const spin = await bundledDeclarations(".models-refresh.is-loading svg");
   assert.match(spin.get("animation") ?? "", /spin/, "the icon rotates while loading");
 });

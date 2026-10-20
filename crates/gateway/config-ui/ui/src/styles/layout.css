@@ -192,9 +192,12 @@
 		.split {
 			flex-direction: row;
 		}
+		/* The list keeps the detail pane's 16px off the divider, so its
+		   toolbar never touches the line. */
 		.split-list {
 			flex: 0 1 clamp(460px, 32%, 620px);
 			max-width: 44%;
+			padding-inline-end: var(--space-4);
 			border-right: 1px solid var(--line);
 		}
 	}
