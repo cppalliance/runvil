@@ -211,7 +211,7 @@ Components, in dependency order:
 
 <step-2>
 
-### Step 2: Persist structured JSON text in ToolAnswerRecord
+### Step 2: Persist structured JSON text in ToolAnswerRecord [completed]
 
 - Component: `structured-json-channel`
 - Tests: `cargo nextest run --locked -p runvil-engine --all-features`, and, with `CARGO_BUILD_WARNINGS` unset, `cargo +nightly-2026-09-05 xtask api --check`

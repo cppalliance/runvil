@@ -2,17 +2,18 @@
 //! request's messages after the first `keep`, while the effect still holds
 //! the whole request. Then the answer record: a `Chat` answer projects to
 //! the reply or the requested tool names beside the model and finish
-//! reason, never the bodies; a `ToolCall` answer projects to its text and
-//! trust; and every failure projects to its kind's tag and its display
-//! text. Each record round-trips through serde, as a run log and a replay
-//! depend on.
+//! reason, never the bodies; a `ToolCall` answer projects to its text,
+//! trust, and structured JSON text when the output carries one; and every
+//! failure projects to its kind's tag and its display text. Each record
+//! round-trips through serde, as a run log and a replay depend on.
 
 use runvil_model_client::client::{RawExchange, ToolCall};
 use runvil_model_client::model::CompletionErrorKind;
-use runvil_types::tools::ToolErrorKind;
+use runvil_types::tools::{OutputTrust, ToolErrorKind};
 use serde_json::json;
 
 use super::*;
+use crate::model::CompletionResult;
 use crate::test_support::scenario::test_binding;
 
 /// Serializes the answer record and reads it back.
@@ -234,6 +235,52 @@ fn a_tool_call_answer_records_the_outputs_text_and_trust() {
         AnswerRecord::ToolCall(Ok(ToolAnswerRecord::new("<html>", OutputTrust::Untrusted)))
     );
     assert_eq!(answer_round_trip(&untrusted), untrusted);
+}
+
+#[test]
+fn a_tool_call_answer_records_the_outputs_structured_json_text() {
+    let json = r#"{"content":[],"isError":false}"#;
+    let output = ToolOutput::untrusted("flat").with_structured_json(json.to_owned());
+    let record = EffectAnswer::ToolCall(Ok(output)).record();
+    assert_eq!(
+        record,
+        AnswerRecord::ToolCall(Ok(
+            ToolAnswerRecord::new("flat", OutputTrust::Untrusted).with_structured_json(json)
+        ))
+    );
+}
+
+#[test]
+fn a_tool_answer_record_with_structured_json_round_trips_it_as_a_string_field_in_sorted_key_order()
+{
+    let record =
+        AnswerRecord::ToolCall(Ok(ToolAnswerRecord::new("flat", OutputTrust::Untrusted)
+            .with_structured_json(r#"{"a":1}"#)));
+    let line = serde_json::to_string(&record).expect("a tool answer records");
+    assert_eq!(
+        line,
+        r#"{"ToolCall":{"Ok":{"structured_json":"{\"a\":1}","text":"flat","trust":"untrusted"}}}"#
+    );
+    let value: serde_json::Value = serde_json::from_str(&line).expect("the line is JSON");
+    assert_eq!(
+        serde_json::to_string(&value).expect("a value serializes"),
+        line,
+        "the record's keys are already canonical"
+    );
+    assert_eq!(answer_round_trip(&record), record);
+}
+
+#[test]
+fn a_tool_answer_record_without_structured_json_omits_the_key() {
+    let record = EffectAnswer::ToolCall(Ok(ToolOutput::trusted("done"))).record();
+    assert_eq!(
+        serde_json::to_string(&record).expect("a tool answer records"),
+        r#"{"ToolCall":{"Ok":{"text":"done","trust":"trusted"}}}"#
+    );
+    let read: AnswerRecord =
+        serde_json::from_str(r#"{"ToolCall":{"Ok":{"text":"done","trust":"trusted"}}}"#)
+            .expect("a record without the key reads");
+    assert_eq!(read, record);
 }
 
 #[test]
