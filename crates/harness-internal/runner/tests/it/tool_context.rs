@@ -15,7 +15,7 @@ use runvil_plugin::{
 };
 use serde_json::{Value, json};
 
-use crate::prepare::{installing, services};
+use crate::prepare::{building, services};
 
 /// What the fixture tool writes to `/from-tool.md`.
 const WRITTEN: &str = "written through the context";
@@ -23,7 +23,7 @@ const WRITTEN: &str = "written through the context";
 /// A prompt calling the fixture tool by id from the section's script and
 /// returning its answer beside the file it wrote.
 const CALLS_RECORD: &str = "---\nname: calls-record\ndescription: d\nrunvil: 0\n\
-    uses:\n  - context\n---\n\n\
+    uses:\n  - tests/context\n---\n\n\
     # Title\n\n## Only\n\n```lua\nlocal caller = tools.call('context/record')\n\
     return caller .. '|' .. store.read('from-tool.md')\n```\n";
 
@@ -77,7 +77,7 @@ impl Pack for Record {
 #[tokio::test]
 async fn a_tool_writes_through_its_context_and_the_calling_script_reads_it_back() {
     let recorder = Arc::new(MemoryRecorder::new());
-    let prepared = prepare(CALLS_RECORD, "", services(&recorder, installing(CONTEXT)))
+    let prepared = prepare(CALLS_RECORD, "", services(&recorder, building(CONTEXT)))
         .await
         .unwrap();
     let outcome = drive_run(

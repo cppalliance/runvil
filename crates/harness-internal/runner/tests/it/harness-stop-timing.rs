@@ -9,9 +9,9 @@ use std::sync::Arc;
 use std::sync::atomic::Ordering;
 
 use harness_runner::recorder::MemoryRecorder;
-use harness_runner::{Harness, HostContext, PackRegistry, RunRequest};
+use harness_runner::{Harness, HostContext, RunRequest};
 use runvil::vfs::VfsRef;
-use runvil_plugin::HostServices;
+use runvil_plugin::{HostServices, PackRegistry};
 use serde_json::json;
 
 use super::{
@@ -19,7 +19,7 @@ use super::{
     request, run_beside, until,
 };
 use crate::asker::ASKER;
-use crate::scripted::{Held, HeldTimer, Operator, ScriptedBroker, held_broker, with_asker};
+use crate::scripted::{Held, HeldTimer, Operator, ScriptedBroker, held_broker};
 use crate::support::registry;
 
 /// A main section parked under a `pcall` on a 30-second timed
@@ -27,7 +27,7 @@ use crate::support::registry;
 /// ends, the main infers once, joins the child for the operator's answer,
 /// and returns how the wait ended, the reply, and the answer.
 const STOPS_TIMED_JOIN: &str = "---\nname: timed\ndescription: d\nrunvil: 0\n\
-    uses:\n  - user-input\nmodels:\n  writer: {}\n---\n\n\
+    uses:\n  - tests/user-input\nmodels:\n  writer: {}\n---\n\n\
     # Timed\n\n```lua\nmodels.default('writer')\n```\n\n\
     ## Main\n\n```lua\n\
     local asker = tasks.spawn('## Asker')\n\
@@ -54,7 +54,7 @@ const STOPS_BEFORE_A_STEP: &str = "---\nname: before-step\ndescription: d\nrunvi
 
 /// A prompt that hands the operator's answer to one model round.
 const ASKS_THEN_INFERS: &str = "---\nname: asks-infers\ndescription: d\nrunvil: 0\n\
-    uses:\n  - user-input\nmodels:\n  writer: {}\n---\n\n\
+    uses:\n  - tests/user-input\nmodels:\n  writer: {}\n---\n\n\
     # AsksInfers\n\n```lua\nmodels.default('writer')\n```\n\n\
     ## Only\n\n```lua\nreturn models.infer((input.ask()))\n```\n";
 
@@ -64,12 +64,10 @@ const WRITES_THEN_INFERS: &str = "---\nname: writes-infers\ndescription: d\nrunv
     # WritesInfers\n\n```lua\nmodels.default('writer')\n```\n\n\
     ## Only\n\n```lua\nstore.write('note.md', 'kept')\nreturn models.infer('after')\n```\n";
 
-/// A Host holding only the fixture ask Pack, as `user-input`.
+/// A Host that built only the fixture ask Pack, as `user-input`, beside
+/// the built-in.
 fn asker_host() -> Arc<HostContext> {
-    Arc::new(with_asker(HostContext::new(
-        registry(&[ASKER]),
-        HostServices::new(),
-    )))
+    Arc::new(HostContext::new(registry(&[ASKER]), HostServices::new()))
 }
 
 /// A store whose every write raises a stop through `harness`'s control.

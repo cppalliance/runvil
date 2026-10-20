@@ -18,7 +18,7 @@ use crate::support::{Clock, Offline};
 /// Reads the notes, asks the operator, and writes the approved notes.
 const REVIEW: &str = concat!(
     "---\nname: review\ndescription: Reads the notes, then asks the operator\nrunvil: 0\n",
-    "uses:\n  - user-input\n",
+    "uses:\n  - tests/user-input\n",
     "input: { path: notes.md, description: The operator's notes }\n",
     "output: { path: summary.md, description: The approved notes }\n",
     "---\n\n# Review\n\n## Approve\n\n```lua\n",

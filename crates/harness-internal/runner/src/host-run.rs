@@ -1,11 +1,12 @@
-//! One run's snapshot of the Host's Packs: [`HostRunContext`], which
-//! holds what each installed Pack looks like to the run and performs
-//! the run's tool calls.
+//! One run's snapshot of its Packs: [`HostRunContext`], which holds what
+//! each of the Packs picked for the run looks like to it and performs the
+//! run's tool calls.
 //!
 //! The snapshot reads each usable Pack's tool list once, after the wait
-//! for every Pack to be ready, so the run's catalog and the tools its
-//! calls may reach stay fixed for the run. A tool call goes to the Pack
-//! its id's first segment names.
+//! for the run's Packs to be ready, so the run's catalog and the tools
+//! its calls may reach stay fixed for the run. A run holds one Pack per
+//! Pack id, and a tool call goes to the Pack its id's first segment
+//! names.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
@@ -21,14 +22,14 @@ use serde_json::Value;
 
 use crate::performers::{BoxFuture, ToolPerformer};
 
-/// One run's frozen snapshot of every installed Pack, beside the run's
+/// One run's frozen snapshot of its Packs, by Pack id, beside the run's
 /// own services, which every call it performs is lent.
 pub(crate) struct HostRunContext {
     services: HostServices,
     packs: BTreeMap<PackId, RunPack>,
 }
 
-/// What one installed Pack looks like to a run.
+/// What one of the run's Packs looks like to it.
 enum RunPack {
     /// It can serve; `tools` is its tool list after validation.
     Usable {
@@ -44,22 +45,22 @@ enum RunPack {
 }
 
 impl HostRunContext {
-    /// Takes the snapshot of the `installed` Packs, in install order,
+    /// Takes the snapshot of the run's `packs`, which share no Pack id,
     /// with `services` as the run's own.
     ///
-    /// A built Pack named in `failures` is unavailable with the reason
-    /// it maps to. Any other built Pack is usable when `services`
+    /// A built Pack whose FQN `failures` names is unavailable with the
+    /// reason it maps to. Any other built Pack is usable when `services`
     /// provide every id the Pack needs; only then is its tool list read
     /// and validated.
     pub(super) fn snapshot<'a>(
-        installed: impl Iterator<Item = (&'a PackId, PackInfo, &'a Result<Arc<dyn Pack>, String>)>,
+        packs: impl Iterator<Item = (&'a PackId, PackInfo, &'a Result<Arc<dyn Pack>, String>)>,
         services: HostServices,
-        mut failures: BTreeMap<PackId, String>,
+        mut failures: BTreeMap<&'static str, String>,
     ) -> HostRunContext {
         let mut seen = BTreeSet::new();
-        let packs = installed
+        let packs = packs
             .map(|(name, info, built)| {
-                let state = match (built, failures.remove(name)) {
+                let state = match (built, failures.remove(info.fqn)) {
                     (Err(reason), _) => RunPack::Unavailable(reason.clone()),
                     (Ok(_), Some(reason)) => RunPack::Unavailable(reason),
                     (Ok(pack), None) => {
@@ -86,7 +87,7 @@ impl HostRunContext {
         HostRunContext { services, packs }
     }
 
-    /// Every usable Pack's tools, declared by the prompt or not.
+    /// The tools of each of the run's usable Packs.
     pub(crate) fn catalog(&self) -> ToolCatalog {
         let tools = self
             .packs
@@ -105,9 +106,9 @@ impl HostRunContext {
         })
     }
 
-    /// The run's roster: the names of the usable Packs, declared by the
-    /// prompt or not, with or without tools, and an entry with the reason
-    /// for each one that can't serve, both in name order.
+    /// The run's roster: the ids of its usable Packs, with or without
+    /// tools, and an entry with the reason for each one that can't serve,
+    /// both in id order.
     pub(crate) fn roster(&self) -> (Vec<PackId>, Vec<UnavailablePack>) {
         let mut usable = Vec::new();
         let mut unavailable = Vec::new();
@@ -131,27 +132,46 @@ impl HostRunContext {
     }
 
     /// The preludes of the usable Packs `prompt` declares, in
-    /// declaration order, each under the Pack's installed name.
+    /// declaration order, each under the Pack's id.
     pub(crate) fn preludes(&self, prompt: &Prompt) -> Vec<Prelude> {
         prompt
             .frontmatter()
             .uses()
             .iter()
-            .filter_map(|name| match self.packs.get(name) {
+            .filter_map(|entry| match self.packs.get(entry.id()) {
                 Some(RunPack::Usable { info, .. }) => info
                     .prelude
-                    .map(|source| Prelude::new(name.clone(), source)),
+                    .map(|source| Prelude::new(entry.id().clone(), source)),
                 _ => None,
             })
             .collect()
     }
 
-    /// What the snapshot cannot meet for `prompt`, for each Pack it
-    /// declares: one not installed, one that failed to build, and one
-    /// whose needs the run lacks.
-    pub(super) fn requirements(&self, prompt: &Prompt) -> Requirements {
+    /// What the run cannot meet for `prompt`, for each Pack it declares:
+    /// one the pick could not resolve, as `unresolved` holds it, missing
+    /// or unavailable with its reason, one that failed to build or to be
+    /// ready, and one whose needs the run lacks.
+    pub(super) fn requirements(
+        &self,
+        prompt: &Prompt,
+        unresolved: &BTreeMap<PackId, Option<String>>,
+    ) -> Requirements {
         let mut requirements = Requirements::default();
-        for name in prompt.frontmatter().uses().iter().cloned() {
+        for name in prompt
+            .frontmatter()
+            .uses()
+            .iter()
+            .map(|entry| entry.id().clone())
+        {
+            if let Some(reason) = unresolved.get(&name) {
+                match reason {
+                    None => requirements.missing_required.push(name),
+                    Some(reason) => requirements
+                        .unavailable
+                        .push(UnavailablePack::new(name, reason.clone())),
+                }
+                continue;
+            }
             match self.packs.get(&name) {
                 None => requirements.missing_required.push(name),
                 Some(RunPack::Unavailable(reason)) => requirements
@@ -244,8 +264,8 @@ impl fmt::Debug for HostRunContext {
     }
 }
 
-/// The tools of the Pack installed as `pack` that pass validation: a
-/// tool must sit under the Pack's name and must not repeat an id in
+/// The tools of the Pack whose id is `pack` that pass validation: a
+/// tool must sit under the Pack's id and must not repeat an id in
 /// `seen`. A tool that fails is logged and dropped, so it costs only
 /// itself.
 fn validated(pack: &PackId, tools: Vec<ToolInfo>, seen: &mut BTreeSet<ToolId>) -> Vec<ToolInfo> {
@@ -256,7 +276,7 @@ fn validated(pack: &PackId, tools: Vec<ToolInfo>, seen: &mut BTreeSet<ToolId>) -
                 tracing::warn!(
                     pack = %pack,
                     tool = %tool.id,
-                    "a Pack's tool id escapes its name; dropped"
+                    "a Pack's tool id escapes its Pack id; dropped"
                 );
                 return false;
             }

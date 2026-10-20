@@ -13,6 +13,8 @@ runvil-types.workspace = true
 runvil-vfs.workspace = true
 # The JSON a Pack's configuration and every tool call's arguments arrive as.
 serde_json.workspace = true
+# `InstallError`, the registry's refusal.
+thiserror.workspace = true
 
 [features]
 # `testing::TestCall`, which lends a `ToolContext` to a Plugin crate's own

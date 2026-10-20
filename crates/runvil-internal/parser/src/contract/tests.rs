@@ -28,8 +28,8 @@ fn the_full_contract_declaration_parses_and_round_trips() {
 
     let packs = fm.uses();
     assert_eq!(packs.len(), 2);
-    assert_eq!(packs[0].to_string(), "web");
-    assert_eq!(packs[1].to_string(), "mcp");
+    assert_eq!(packs[0].id().to_string(), "web");
+    assert_eq!(packs[1].id().to_string(), "mcp");
 
     let arg = fm.args().get("use_mcp").expect("the arg is declared");
     assert_eq!(arg.kind(), ArgType::Boolean);

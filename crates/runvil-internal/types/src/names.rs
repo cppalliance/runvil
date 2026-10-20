@@ -2,9 +2,9 @@
 //!
 //! A name is one or more segments separated by `/`. The id types built on
 //! it add their own segment count: a [`PackId`](crate::packs::PackId)
-//! is one segment, the local name a Pack is installed under (`web`),
-//! and a [`ToolId`](crate::tools::ToolId) is two or more, its Pack's
-//! local name first (`web/fetch`). Segments are lowercase ASCII
+//! is one segment, the second segment of a Pack's fully qualified name
+//! (`web` for `runvil/web`), and a [`ToolId`](crate::tools::ToolId) is
+//! two or more, its Pack's id first (`web/fetch`). Segments are lowercase ASCII
 //! alphanumeric plus `-`, `_`, `.`, and comparison is case-sensitive. A
 //! name carries no version, so a `@` is a parse error.
 

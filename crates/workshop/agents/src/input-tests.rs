@@ -268,12 +268,9 @@ async fn an_ask_is_answered_when_the_registry_receives_the_text() {
                   uses:\n  - user-input\n---\n\n\
                   # Ask\n\n## Only\n\n```lua\nreturn (input.ask())\n```\n";
     let mut packs = PackRegistry::new();
-    packs
-        .add(plugin_user_input::PLUGIN)
+    plugin_user_input::install(&mut packs, serde_json::Value::Null)
         .expect("a new registry takes the Pack");
-    let mut host = HostContext::new(packs, HostServices::new());
-    host.install(plugin_user_input::PLUGIN.fqn, None, serde_json::Value::Null)
-        .expect("an empty Host installs the Pack");
+    let host = HostContext::new(packs, HostServices::new());
     let (broker, registry, frames) = broker_fixture();
     let mut socket = frames.subscribe();
     let recorder = Arc::new(MemoryRecorder::new());

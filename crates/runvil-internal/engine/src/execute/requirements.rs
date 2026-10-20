@@ -153,8 +153,8 @@ fn push_new<T: PartialEq>(entries: &mut Vec<T>, incoming: Vec<T>) {
 ///
 /// The caller's Pack report lists each one the prompt declares, and the
 /// run's roster, set with
-/// [`RunContext::packs`](super::RunContext::packs), lists every one,
-/// declared or not.
+/// [`RunContext::packs`](super::RunContext::packs), lists every one the
+/// run holds.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct UnavailablePack {

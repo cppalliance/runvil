@@ -1,12 +1,13 @@
-//! Readiness at preparation: the Harness waits for every built Pack's
-//! `ready` before the run's snapshot, asking each one before any answers,
-//! so a Pack still starting has its tools in the run once it is ready, a
-//! Pack whose `ready` fails is unavailable to that run and offering it
-//! raises its reason, an installed Pack with no tools still reaches the
-//! prompt's Lua, a cancel during the wait ends the run as cancelled in both
-//! the report and the record, a cancel that lands while a refusal is
-//! recorded leaves the report holding what the record holds, and a Pack
-//! that keeps the default `ready` serves as before.
+//! Readiness at preparation: the Harness waits for the `ready` of each of
+//! the run's Packs before the run's snapshot, asking each one before any
+//! answers, so a Pack still starting has its tools in the run once it is
+//! ready, a Pack whose `ready` fails is unavailable to that run and
+//! offering it raises its reason, an undeclared third-party Pack that
+//! never gets ready holds no run up, a built Pack with no tools still
+//! reaches the prompt's Lua, a cancel during the wait ends the run as
+//! cancelled in both the report and the record, a cancel that lands while
+//! a refusal is recorded leaves the report holding what the record holds,
+//! and a Pack that keeps the default `ready` serves as before.
 
 use super::*;
 
@@ -47,14 +48,18 @@ struct Startup {
 /// startup it shares.
 type StartupHandle = (watch::Sender<Phase>, Arc<Startup>);
 
-/// Each [`Starting`] Pack's startup by its installed name, shared with
-/// the Packs as a Host-wide service.
+/// Each [`Starting`] Pack's startup by its Pack id, shared with the
+/// Packs as a Host-wide service.
 const STARTUPS: ServiceKey<BTreeMap<String, Arc<Startup>>> = ServiceKey::new("tests/startups");
 
 /// The fixture Pack `slow`: the echo tool, offered once its startup
 /// leaves [`Phase::Starting`], ready or failed, so only the Harness keeps
-/// a failed one's tool out of a run.
-const SLOW: PackInfo = PackInfo::new("tests/slow", construct_starting);
+/// a failed one's tool out of a run. It is a `runvil` Pack, so every run
+/// holds it, as every run holds [`SLOWER`].
+const SLOW: &str = "runvil/slow";
+
+/// A second [`Starting`] Pack beside [`SLOW`].
+const SLOWER: &str = "runvil/slower";
 
 /// A prompt declaring `slow` and calling its tool once by id.
 const CALLS_SLOW: &str = "---\nname: calls-slow\ndescription: d\nrunvil: 0\n\
@@ -127,36 +132,33 @@ impl Pack for Starting {
     }
 }
 
-/// A Host with [`SLOW`] installed under each of `names`, in order, every
-/// startup standing at `phase`, beside each Pack's handle in `names`
+/// A Host that built a [`Starting`] Pack for each of `fqns`, in order,
+/// every startup standing at `phase`, beside each Pack's handle in `fqns`
 /// order.
-fn starting_host(names: &[&str], phase: Phase) -> (HostContext, Vec<StartupHandle>) {
+fn starting_host(fqns: &[&'static str], phase: Phase) -> (HostContext, Vec<StartupHandle>) {
     let mut startups = BTreeMap::new();
     let mut handles = Vec::new();
-    for name in names {
+    let mut infos = Vec::new();
+    for fqn in fqns {
         let (moves, watched) = watch::channel(phase);
         let startup = Arc::new(Startup {
             phase: watched,
             asked: Notify::new(),
         });
-        startups.insert((*name).to_owned(), Arc::clone(&startup));
+        let (_vendor, id) = fqn.split_once('/').unwrap();
+        startups.insert(id.to_owned(), Arc::clone(&startup));
         handles.push((moves, startup));
+        infos.push(PackInfo::new(fqn, construct_starting));
     }
     let mut wide = HostServices::new();
     wide.provide(&STARTUPS, Arc::new(startups)).unwrap();
-    let mut host = HostContext::new(registry(&[SLOW]), wide);
-    for name in names {
-        host.install(SLOW.fqn, Some(PackId::parse(name).unwrap()), Value::Null)
-            .unwrap();
-    }
-    (host, handles)
+    (HostContext::new(registry(&infos), wide), handles)
 }
 
-/// A Host with [`SLOW`] installed as `slow`, whose startup stands at
-/// `phase`, beside the sender that moves it and the startup the Pack
-/// shares.
+/// A Host that built [`SLOW`], whose startup stands at `phase`, beside
+/// the sender that moves it and the startup the Pack shares.
 fn slow_host(phase: Phase) -> (HostContext, watch::Sender<Phase>, Arc<Startup>) {
-    let (host, mut handles) = starting_host(&["slow"], phase);
+    let (host, mut handles) = starting_host(&[SLOW], phase);
     let (moves, startup) = handles.pop().unwrap();
     (host, moves, startup)
 }
@@ -228,7 +230,7 @@ async fn a_pack_whose_ready_resolves_late_has_its_tools_in_the_run() {
 
 #[tokio::test]
 async fn every_starting_pack_is_asked_to_be_ready_before_any_of_them_answers() {
-    let (host, handles) = starting_host(&["slow", "slower"], Phase::Starting);
+    let (host, handles) = starting_host(&[SLOW, SLOWER], Phase::Starting);
     let recorder = recorder();
     let (prepared, ()) = tokio::time::timeout(PATIENCE, async {
         tokio::join!(
@@ -320,18 +322,36 @@ async fn an_undeclared_pack_whose_ready_fails_raises_its_reason_when_the_prompt_
 }
 
 #[tokio::test]
-async fn an_undeclared_installed_builtin_with_no_tools_has_an_object_the_prompt_can_offer() {
+async fn an_undeclared_third_party_pack_that_never_gets_ready_holds_no_run_up() {
+    let mut startups = BTreeMap::new();
+    let (_moves, watched) = watch::channel(Phase::Starting);
+    let startup = Arc::new(Startup {
+        phase: watched,
+        asked: Notify::new(),
+    });
+    startups.insert("stuck".to_owned(), startup);
+    let mut wide = HostServices::new();
+    wide.provide(&STARTUPS, Arc::new(startups)).unwrap();
+    let stuck = PackInfo::new("tests/stuck", construct_starting);
+    let host = HostContext::new(registry(&[stuck]), wide);
+    let outcome = tokio::time::timeout(PATIENCE, drive_over(COUNTS_OFFERED, host))
+        .await
+        .expect("no run waits on a Pack it does not hold");
+    assert_eq!(completed(outcome), "0 offered");
+}
+
+#[tokio::test]
+async fn an_undeclared_builtin_with_no_tools_has_an_object_the_prompt_can_offer() {
     let reads_stub = "---\nname: reads-stub\ndescription: d\nrunvil: 0\n---\n\n\
         # Title\n\n## Only\n\n```lua\n\
         local stub = packs.get('subagents')\n\
         packs.offer('subagents')\n\
         return stub.name .. ':' .. #stub.tools\n```\n";
-    let mut host = HostContext::new(registry(&[]), HostServices::new());
-    host.install("runvil/subagents", None, Value::Null).unwrap();
+    let host = HostContext::new(registry(&[]), HostServices::new());
     assert_eq!(
         completed(drive_over(reads_stub, host).await),
         "subagents:0",
-        "the stub is on the roster, so Lua sees it and offers it"
+        "every Host builds the stub and every run holds it, so Lua sees it and offers it"
     );
 }
 
@@ -419,7 +439,7 @@ async fn a_pack_that_keeps_the_default_ready_is_ready_at_once_and_serves_the_run
         "the default ready resolves Ok on its first poll"
     );
     assert_eq!(
-        completed(drive_over(CALLS_ECHO, installing(TOOLS)).await),
+        completed(drive_over(CALLS_ECHO, building(TOOLS)).await),
         "hi",
         "its tools reach the run as before"
     );

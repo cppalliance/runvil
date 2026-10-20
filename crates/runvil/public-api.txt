@@ -173,6 +173,7 @@ auto runvil::packs::GlobalNameErrorKind: Freeze, RefUnwindSafe, Send, Sync, Unpi
 auto runvil::packs::PackId: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::packs::PackIdError: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::packs::PackIdErrorKind: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
+auto runvil::packs::PackRef: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::packs::Prelude: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::prompt::ArgDecl: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::prompt::ArgType: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
@@ -303,6 +304,7 @@ derives runvil::packs::GlobalNameErrorKind: Clone, Copy, Debug, Eq, PartialEq
 derives runvil::packs::PackId: Clone, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize
 derives runvil::packs::PackIdError: Clone, Debug, Eq, PartialEq
 derives runvil::packs::PackIdErrorKind: Clone, Copy, Debug, Eq, PartialEq
+derives runvil::packs::PackRef: Clone, Debug, Deserialize, Eq, PartialEq
 derives runvil::packs::Prelude: Clone, Debug, Eq, PartialEq
 derives runvil::prompt::ArgDecl: Clone, Debug, Deserialize, Eq, PartialEq
 derives runvil::prompt::ArgType: Clone, Copy, Debug, Deserialize, Eq, PartialEq
@@ -685,6 +687,8 @@ pub fn runvil::packs::GlobalNameError::kind(&self) -> runvil::packs::GlobalNameE
 pub fn runvil::packs::PackId::contains(&self, tool: &runvil::tools::ToolId) -> bool
 pub fn runvil::packs::PackId::parse(name: &str) -> core::result::Result<runvil::packs::PackId, runvil::packs::PackIdError>
 pub fn runvil::packs::PackIdError::kind(&self) -> runvil::packs::PackIdErrorKind
+pub fn runvil::packs::PackRef::id(&self) -> &runvil::packs::PackId
+pub fn runvil::packs::PackRef::vendor(&self) -> &str
 pub fn runvil::packs::Prelude::new(pack: runvil::packs::PackId, source: impl core::convert::Into<alloc::string::String>) -> runvil::packs::Prelude
 pub fn runvil::packs::Prelude::pack(&self) -> &runvil::packs::PackId
 pub fn runvil::packs::Prelude::source(&self) -> &str
@@ -707,7 +711,7 @@ pub fn runvil::prompt::Frontmatter::models(&self) -> &runvil::prompt::ModelRoles
 pub fn runvil::prompt::Frontmatter::name(&self) -> &str
 pub fn runvil::prompt::Frontmatter::output(&self) -> core::option::Option<&runvil::prompt::FileDecl>
 pub fn runvil::prompt::Frontmatter::runvil(&self) -> core::option::Option<u32>
-pub fn runvil::prompt::Frontmatter::uses(&self) -> &[runvil::packs::PackId]
+pub fn runvil::prompt::Frontmatter::uses(&self) -> &[runvil::packs::PackRef]
 pub fn runvil::prompt::ModelRole::description(&self) -> core::option::Option<&str>
 pub fn runvil::prompt::ModelRole::keywords(&self) -> &[runvil::prompt::ModelKeyword]
 pub fn runvil::prompt::ModelRole::min_context(&self) -> core::option::Option<core::num::nonzero::NonZeroU32>
@@ -1534,6 +1538,7 @@ pub struct runvil::model::ModelBinding { /* private fields */ }
 pub struct runvil::model::ParseRoleError { /* private fields */ }
 pub struct runvil::model::Temperature(/* private fields */)
 pub struct runvil::packs::GlobalName { /* private fields */ }
+pub struct runvil::packs::PackRef { /* private fields */ }
 pub struct runvil::packs::Prelude { /* private fields */ }
 pub struct runvil::prompt::ArgsDeclIter<'a> { /* private fields */ }
 pub struct runvil::prompt::ModelRolesIter<'a> { /* private fields */ }

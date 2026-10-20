@@ -20,7 +20,7 @@ pub type PackFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 
 /// One Pack object: the tools it offers and the calls it performs.
 ///
-/// The Host builds one object per installed Pack, through
+/// The Host builds one object per registered Pack, through
 /// [`PackInfo::construct`], and every run shares it, so an implementation
 /// is `Send + Sync`. Cleanup, such as stopping a child process, goes in
 /// the implementation's `Drop`, which runs when the Host drops the context
@@ -31,8 +31,8 @@ pub trait Pack: Send + Sync {
     /// The Harness reads the list once when each run starts, after it
     /// awaits [`ready`](Pack::ready), so a Pack whose tools change
     /// returns its current list, and a Pack still coming up returns what
-    /// it has so far. Each tool's id sits under the name the Pack was
-    /// installed under, as in `web/fetch`.
+    /// it has so far. Each tool's id sits under the Pack id `construct`
+    /// received, as in `web/fetch`.
     fn tools(&self) -> Vec<ToolInfo>;
 
     /// Resolves once the Pack's tool list is complete, or with the
@@ -104,38 +104,41 @@ pub trait Pack: Send + Sync {
     ) -> PackFuture<'a, Result<ToolOutput, ToolError>>;
 }
 
-/// A Pack described as data, exported by its crate as a constant such
-/// as `plugin_web::PLUGIN`.
+/// A Pack described as data, which a Plugin adds to the Host's
+/// [`PackRegistry`](crate::PackRegistry).
 ///
-/// It is fixed data the Host reads before anything is built. Adding it to
-/// the Harness's Pack registry is also what links the Plugin crate into
-/// the Host. A Plugin crate builds it with [`PackInfo::new`], adding a
-/// [`PackInfo::description`], and [`PackInfo::prelude`] and
-/// [`PackInfo::needs`] only where it has them:
+/// It is fixed data the Host reads before anything is built. A Plugin
+/// crate keeps it in a private constant, builds it with
+/// [`PackInfo::new`], adding a [`PackInfo::description`], and
+/// [`PackInfo::prelude`] and [`PackInfo::needs`] only where it has them,
+/// and adds it from its `install` function:
 ///
 /// ```text
-/// pub const PLUGIN: PackInfo = PackInfo::new("acme/greeter", construct)
+/// const GREETER: PackInfo = PackInfo::new("acme/greeter", construct)
 ///     .description("Greet the person running the prompt")
 ///     .prelude(PRELUDE)
 ///     .needs(NEEDS);
+///
+/// pub fn install(packs: &mut PackRegistry, config: Value) -> Result<(), InstallError> {
+///     packs.add(GREETER, config["greeter"].clone())
+/// }
 /// ```
 #[derive(Clone, Copy)]
 #[non_exhaustive]
 pub struct PackInfo {
     /// The Pack's fully qualified name (FQN): `vendor/name` with two
-    /// segments, such as `runvil/web`. A Host installs the Pack under the
-    /// second segment unless it picks another Pack id.
+    /// segments, such as `runvil/web`. The second segment is the Pack id,
+    /// which prefixes every tool the Pack offers.
     pub fqn: &'static str,
     /// Lua run once for each prompt that declares the Pack, as a chunk
-    /// whose `...` is the name the Pack was installed under; `None` when
-    /// the Pack has no prelude.
+    /// whose `...` is the Pack id; `None` when the Pack has no prelude.
     pub prelude: Option<&'static str>,
     /// The per-run services the Pack's calls read. A run without every
     /// one of them cannot use the Pack.
     pub needs: &'static [ServiceId],
     /// Builds the one Pack object every run shares. The Host calls it
-    /// once, at install, with the name it chose, its JSON configuration
-    /// for the Pack, and the Host-wide services.
+    /// once, when it builds its Packs, with the Pack id, the config the
+    /// Plugin added the Pack with, and the Host-wide services.
     ///
     /// A failure, such as a missing Host-wide service, leaves the Pack
     /// unavailable, and its message appears in the refusal notice of each
@@ -150,7 +153,7 @@ pub struct PackInfo {
         services: &HostServices,
     ) -> Result<Arc<dyn Pack>, ToolError>,
     /// One line saying what the Pack offers, for a Host listing the
-    /// Packs it can install; empty unless the Plugin crate sets it.
+    /// Packs its registry holds; empty unless the Plugin crate sets it.
     pub description: &'static str,
 }
 

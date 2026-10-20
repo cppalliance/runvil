@@ -43,6 +43,7 @@ output:
 uses:
   - web
   - fs
+  - acme/poop
 args:
   topic:
     type: string
@@ -82,13 +83,14 @@ async fn a_full_frontmatter_prompt_answers_every_contract_section() {
         json["output"],
         serde_json::json!({ "path": "out.md", "description": "the result" })
     );
-    // Packs keep declaration order; the map-backed sections are
-    // sorted by name or label.
+    // Packs keep declaration order, each sent by its Pack id alone; the
+    // map-backed sections are sorted by name or label.
     assert_eq!(
         json["uses"],
         serde_json::json!([
             { "id": "web" },
             { "id": "fs" },
+            { "id": "poop" },
         ])
     );
     assert_eq!(

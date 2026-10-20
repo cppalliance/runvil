@@ -57,7 +57,7 @@ const VISIBLE_GLOBALS: [&str; 20] = [
 /// Each prelude loads from source under the chunk name
 /// `@pack:<id>` in its own restricted environment (see the module
 /// docs), and runs with the Pack's id as its one chunk argument, so
-/// `local pack = ...` reads the name the Pack was installed under.
+/// `local pack = ...` reads that id.
 /// The globals it defines must not collide with a reserved name
 /// ([`crate::RESERVED_NAMES`]), with any other name bound in `_G`, or with
 /// an earlier prelude's globals. A table global installs as an empty proxy that reads

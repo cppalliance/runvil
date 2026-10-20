@@ -1,5 +1,5 @@
 //! The Pack object and the `construct` that builds it: one ask tool,
-//! named under the name the Host chose.
+//! named under the Pack id `construct` receives.
 
 use std::sync::Arc;
 

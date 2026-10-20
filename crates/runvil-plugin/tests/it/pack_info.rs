@@ -1,6 +1,6 @@
-//! A fixture Plugin crate's whole Pack side: a `PLUGIN` constant, a
+//! A fixture Plugin crate's whole Pack side: a `GREETER` constant, a
 //! `construct` that reads a Host-wide service and names its tool under the
-//! name the Host chose, and an `impl Pack` whose `call` reads a per-run
+//! Pack id it receives, and an `impl Pack` whose `call` reads a per-run
 //! service through the context it is lent.
 
 use std::future::Future;
@@ -23,7 +23,7 @@ const VISITOR: ServiceKey<str> = ServiceKey::new("acme/visitor");
 
 const NEEDS: &[ServiceId] = &[VISITOR.id()];
 
-const PLUGIN: PackInfo = PackInfo::new("acme/greeter", construct)
+const GREETER: PackInfo = PackInfo::new("acme/greeter", construct)
     .prelude("local pack = ...\n")
     .needs(NEEDS);
 
@@ -108,17 +108,17 @@ fn host_wide() -> HostServices {
     services
 }
 
-fn installed_as(name: &str) -> Arc<dyn Pack> {
+fn built_as(name: &str) -> Arc<dyn Pack> {
     let name = PackId::parse(name).expect("a one-segment Pack id parses");
-    let Ok(pack) = (PLUGIN.construct)(&name, Value::Null, &host_wide()) else {
+    let Ok(pack) = (GREETER.construct)(&name, Value::Null, &host_wide()) else {
         panic!("construct succeeds when its Host-wide service is provided");
     };
     pack
 }
 
 #[test]
-fn construct_names_the_tools_under_the_name_the_host_chose() {
-    let tools = installed_as("hi").tools();
+fn construct_names_the_tools_under_the_pack_id_it_receives() {
+    let tools = built_as("hi").tools();
     let ids: Vec<String> = tools.iter().map(|tool| tool.id.to_string()).collect();
     assert_eq!(ids, ["hi/greet"]);
 }
@@ -126,7 +126,7 @@ fn construct_names_the_tools_under_the_name_the_host_chose() {
 #[test]
 fn construct_fails_with_a_tool_error_when_a_host_wide_service_is_missing() {
     let name = PackId::parse("greeter").expect("a one-segment Pack id parses");
-    let Err(error) = (PLUGIN.construct)(&name, Value::Null, &HostServices::new()) else {
+    let Err(error) = (GREETER.construct)(&name, Value::Null, &HostServices::new()) else {
         panic!("construct fails without its Host-wide service");
     };
     assert_eq!(
@@ -137,7 +137,7 @@ fn construct_fails_with_a_tool_error_when_a_host_wide_service_is_missing() {
 
 #[test]
 fn a_call_through_dyn_pack_answers_from_the_context_it_is_lent() {
-    let pack = installed_as("greeter");
+    let pack = built_as("greeter");
     let tool = pack.tools()[0].id.clone();
     let mut run = HostServices::new();
     run.provide(&VISITOR, Arc::from("Ada"))
@@ -151,7 +151,7 @@ fn a_call_through_dyn_pack_answers_from_the_context_it_is_lent() {
 
 #[test]
 fn a_call_without_the_per_run_service_it_needs_fails() {
-    let pack = installed_as("greeter");
+    let pack = built_as("greeter");
     let call = TestCall::new(pack.tools()[0].id.clone());
     let error = block_on(pack.call(call.context(), json!({})))
         .expect_err("the greet call fails without a visitor");
@@ -186,7 +186,7 @@ fn pack_info_from_new_has_no_prelude_and_no_needs_until_set() {
 
 #[test]
 fn pack_info_shows_its_fqn_prelude_presence_and_needs_in_debug_output() {
-    let shown = format!("{PLUGIN:?}");
+    let shown = format!("{GREETER:?}");
     assert!(shown.contains("acme/greeter"), "{shown}");
     assert!(shown.contains("prelude: true"), "{shown}");
     assert!(shown.contains("acme/visitor"), "{shown}");

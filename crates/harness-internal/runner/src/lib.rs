@@ -26,11 +26,13 @@
 //! - The loop never reads an event to decide anything; control comes
 //!   from the run's own word (`Step`, `Run::decided`), the cancel flag,
 //!   and the Host's stop.
-//! - A Host installs a Pack only by an FQN its Pack registry,
-//!   [`PackRegistry`], holds. The registry holds the built-in
-//!   `runvil/subagents` from the start and refuses a duplicate FQN, and
-//!   install refuses the built-in's Pack id to every other Pack, so no
-//!   other Pack can take `subagents`.
+//! - A [`HostContext`] builds every Pack its `PackRegistry` holds, and
+//!   only those. The registry holds the built-in `runvil/subagents` from
+//!   the start and refuses a duplicate FQN and the built-in's Pack id to
+//!   every other Pack, so no other Pack can take `subagents`.
+//! - A run holds only the Packs its prompt declares and every `runvil`
+//!   Pack whose Pack id no declaration takes, and waits on no other
+//!   Pack's `ready`.
 
 mod display_chain;
 pub mod effect_loop;
@@ -41,13 +43,11 @@ mod host;
 pub mod performers;
 pub mod prepare;
 pub mod recorder;
-mod registry;
 
 pub use display_chain::display_chain;
 pub use harness::{Harness, HarnessError, RunControl, RunReport, RunRequest};
-pub use host::{HostContext, InstallError};
+pub use host::HostContext;
 pub use recorder::{
     MemoryRecorder, Record, RecordKind, RecorderError, RecorderFuture, RunId, RunMeta, RunOutcome,
     RunRecorder,
 };
-pub use registry::{PackOrigin, PackRegistry};

@@ -5286,6 +5286,7 @@ dependencies = [
  "runvil-types",
  "runvil-vfs",
  "serde_json",
+ "thiserror 2.0.19",
 ]
 
 [[package]]

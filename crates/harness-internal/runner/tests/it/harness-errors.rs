@@ -13,9 +13,9 @@ use std::task::Poll;
 use harness_runner::display_chain;
 use harness_runner::environment::CurrentModelError;
 use harness_runner::recorder::MemoryRecorder;
-use harness_runner::{Harness, HarnessError, HostContext, PackRegistry};
+use harness_runner::{Harness, HarnessError, HostContext};
 use runvil::model::{Completion, CompletionError, CompletionErrorKind};
-use runvil_plugin::HostServices;
+use runvil_plugin::{HostServices, PackRegistry};
 
 use super::{
     OutputError, PendingTimer, RunOutcome, answers_to, plain_harness, request, run_beside, until,

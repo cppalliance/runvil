@@ -12,7 +12,7 @@ use crate::asker::{ASKER, AskBroker, BROKER, broker_services};
 /// A prompt declaring the probe Pack and returning what its one call
 /// saw.
 const PROBES: &str = "---\nname: probes\ndescription: d\nrunvil: 0\n\
-    uses:\n  - probe\n---\n\n# Title\n\n## Only\n\n\
+    uses:\n  - tests/probe\n---\n\n# Title\n\n## Only\n\n\
     ```lua\nreturn tools.call('probe/saw')\n```\n";
 
 /// A broker whose operator always types the same text.
@@ -106,7 +106,7 @@ async fn drive_prompt(source: &str, services: Services) -> RunOutcome {
 /// What the probe's one call saw, on a run with `input` as its broker.
 async fn probe_sees(input: Option<Arc<dyn AskBroker>>) -> String {
     let recorder = recorder();
-    let mut services = services(&recorder, installing(PROBE));
+    let mut services = services(&recorder, building(PROBE));
     services.services = with_input(input);
     completed(drive_prompt(PROBES, services).await)
 }
@@ -121,9 +121,9 @@ async fn a_tool_call_is_lent_no_broker_when_the_host_has_none() {
     assert_eq!(probe_sees(None).await, "false");
 }
 
-/// The frontmatter line declaring `user-input`, the way `chat.md`
-/// declares it.
-const REQUIRED: &str = "  - user-input\n";
+/// The frontmatter line declaring the fixture ask Pack by its FQN, whose
+/// Pack id is `user-input`, as `chat.md` declares the real one.
+const REQUIRED: &str = "  - tests/user-input\n";
 
 /// Asks once and returns the answer.
 const ASKS_ONCE: &str = "local text = input.ask()\nreturn text";
@@ -143,12 +143,12 @@ fn user_input_prompt(declaration: &str, lua: &str) -> String {
 }
 
 /// The preparation services over `recorder` with the fixture ask Pack
-/// installed as `user-input` and `input` as the run's broker.
+/// built as `user-input` and `input` as the run's broker.
 fn user_input_services(
     recorder: &Arc<MemoryRecorder>,
     input: Option<Arc<dyn AskBroker>>,
 ) -> Services {
-    let mut services = services(recorder, installing(ASKER));
+    let mut services = services(recorder, building(ASKER));
     services.services = with_input(input);
     services
 }

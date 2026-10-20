@@ -1,8 +1,9 @@
-//! Integration tests for `plugin-mcp`, through `PLUGIN` and `TestCall`
-//! only, against a hand-written Streamable HTTP server: the construct
-//! over a map of servers and the connection each server keeps here, the
-//! listing `get_dynamic_tools` answers in `listing`, and the calls
-//! `call_dynamic_tool` makes in `calls`.
+//! Integration tests for `plugin-mcp`, through `install` and `TestCall`
+//! only, against a hand-written Streamable HTTP server: the Pack
+//! `install` adds, its construct over a map of servers, and the
+//! connection each server keeps here, the listing `get_dynamic_tools`
+//! answers in `listing`, and the calls `call_dynamic_tool` makes in
+//! `calls`.
 #![expect(
     clippy::expect_used,
     reason = "test helpers panic on setup failure, which is the desired behavior"
@@ -18,13 +19,41 @@ use std::time::Duration;
 use fixture::Fixture;
 use runvil_plugin::HostServices;
 use serde_json::{Value, json};
-use support::{SECRET, call, construct, list, pack_over, ready, remote, runtime_services, settled};
+use support::{
+    SECRET, added, call, construct, list, pack_over, ready, remote, runtime_services, settled,
+};
 
 #[test]
-fn the_pack_is_runvil_mcp_with_no_prelude_and_no_needs() {
-    assert_eq!(plugin_mcp::PLUGIN.fqn, "runvil/mcp");
-    assert!(plugin_mcp::PLUGIN.prelude.is_none());
-    assert!(plugin_mcp::PLUGIN.needs.is_empty());
+fn install_adds_runvil_mcp_with_no_prelude_and_no_needs() {
+    let added = added(Value::Null);
+    let [(info, id, config)] = added.as_slice() else {
+        panic!("install adds one Pack: {added:?}");
+    };
+    assert_eq!(info.fqn, "runvil/mcp");
+    assert_eq!(id.to_string(), "mcp");
+    assert_eq!(*config, Value::Null);
+    assert!(info.prelude.is_none());
+    assert!(info.needs.is_empty());
+}
+
+#[test]
+fn install_adds_the_pack_with_the_server_map_under_its_pack_id() {
+    let servers = json!({ "docs": { "url": "http://127.0.0.1:1/mcp" } });
+    for (config, expected) in [
+        (json!({ "mcp": servers, "web": {} }), servers.clone()),
+        (json!({ "web": {} }), Value::Null),
+    ] {
+        let added = added(config.clone());
+        let read: Vec<(&str, String, &Value)> = added
+            .iter()
+            .map(|(info, id, config)| (info.fqn, id.to_string(), config))
+            .collect();
+        assert_eq!(
+            read,
+            [("runvil/mcp", "mcp".to_owned(), &expected)],
+            "{config}"
+        );
+    }
 }
 
 #[tokio::test(flavor = "multi_thread")]

@@ -1,10 +1,27 @@
 //! `runvil-plugin` - the contract a Plugin crate implements, and the
 //! one crate it depends on.
 //!
-//! A Plugin crate exports a [`PackInfo`], built with [`PackInfo::new`]:
-//! its `vendor/name`, an optional Lua prelude, the per-run services its calls
-//! read, and the `construct` function the Host calls once, at install, to
-//! build the one [`Pack`] object every run shares. [`Pack::call`]
+//! A Pack has a fully qualified name (FQN) such as `runvil/web`. Its
+//! first segment is the vendor, and its Pack id is the second segment,
+//! `web`, which prefixes its tools (`web/fetch`). A Plugin is an entry
+//! point which installs zero or more Packs. A linked Plugin is the
+//! `install` function of a Plugin crate (a `plugin-*` crate):
+//!
+//! ```text
+//! pub fn install(packs: &mut PackRegistry, config: Value) -> Result<(), InstallError>
+//! ```
+//!
+//! It calls [`PackRegistry::add`] once for each Pack it offers, with the
+//! sub-object of `config` under that Pack's id (`null` when the key is
+//! missing), and returns the first error. A library Plugin will be the
+//! entry point a dynamic library exports; it is not built yet.
+//! `runvil/subagents` is a built-in Pack every registry holds, which
+//! reserves its id for the Engine's subagent tools.
+//!
+//! Each Pack is a [`PackInfo`], built with [`PackInfo::new`]: its FQN, an
+//! optional Lua prelude, the per-run services its calls read, and the
+//! `construct` function the Host calls once, when it builds its Packs,
+//! to build the one [`Pack`] object every run shares. [`Pack::call`]
 //! performs one tool call with the [`ToolContext`] the Harness lends it.
 //! [`HostServices`] maps service ids to the shared objects a Host provides,
 //! each read back through a typed [`ServiceKey`].
@@ -31,9 +48,9 @@
 //!   reach only `construct`, and a run's own services reach only calls,
 //!   through [`ToolContext::service`]. Cleanup goes in the Pack's
 //!   `Drop`; there is no shutdown hook.
-//! - Every tool a Pack offers sits under the name `construct` receives,
-//!   as `web/fetch` sits under `web`. A tool that does not is dropped from
-//!   every run's catalog.
+//! - Every tool a Pack offers sits under the Pack id `construct`
+//!   receives, as `web/fetch` sits under `web`. A tool that does not is
+//!   dropped from every run's catalog.
 //! - [`Pack::ready`] resolves `Ok` once [`Pack::tools`] is complete,
 //!   or `Err` with a reason a model can read when the Pack can't serve
 //!   now. The Harness awaits it before each run's snapshot, and a Pack
@@ -57,12 +74,14 @@
 
 mod context;
 mod pack;
+mod registry;
 mod service;
 #[cfg(feature = "test-support")]
 pub mod testing;
 
 pub use context::ToolContext;
 pub use pack::{Pack, PackFuture, PackInfo};
+pub use registry::{InstallError, PackOrigin, PackRegistry};
 pub use service::{HostServices, ServiceError, ServiceId, ServiceKey, TOKIO_RUNTIME};
 
 pub use runvil_types::packs::{PackId, PackIdError, PackIdErrorKind};

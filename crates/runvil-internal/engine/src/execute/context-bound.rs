@@ -26,7 +26,12 @@ pub(super) fn bound_tool_set(
     roster: BTreeMap<PackId, Option<String>>,
 ) -> ToolSet {
     ToolSet::new(
-        prompt.frontmatter().uses().to_vec(),
+        prompt
+            .frontmatter()
+            .uses()
+            .iter()
+            .map(|entry| entry.id().clone())
+            .collect(),
         roster,
         offered_bindings(ctx),
     )

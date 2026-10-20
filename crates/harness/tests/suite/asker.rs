@@ -1,7 +1,8 @@
-//! The fixture ask Pack a suite Host installs in place of a real
+//! The fixture ask Pack a suite Host builds in place of a real
 //! user-input Pack, which Harness crates may not name: an ask tool that
 //! survives stops, a prelude defining `input.ask()`, a need for the run's
-//! broker, and a broker that fails with a `ToolError`.
+//! broker, and a broker that fails with a `ToolError`. A prompt declares
+//! it as `tests/user-input`.
 
 use std::sync::Arc;
 
@@ -12,8 +13,7 @@ use runvil_plugin::{
 };
 use serde_json::{Value, json};
 
-/// The `PackInfo`: installed with no Pack id given, the Pack is
-/// `user-input`.
+/// The `PackInfo`, whose Pack id is `user-input`.
 const ASKER: PackInfo = PackInfo::new("tests/user-input", construct)
     .prelude(PRELUDE)
     .needs(NEEDS);
@@ -39,17 +39,13 @@ pub(crate) trait AskBroker: Send + Sync {
     async fn wait(&self) -> Result<String, ToolError>;
 }
 
-/// A Host with the fixture installed as `user-input`.
+/// A Host that built the fixture, as `user-input`.
 pub(crate) fn asker_host() -> Arc<HostContext> {
     let mut packs = PackRegistry::new();
-    if let Err(error) = packs.add(ASKER) {
+    if let Err(error) = packs.add(ASKER, Value::Null) {
         panic!("a new registry takes the fixture: {error}");
     }
-    let mut host = HostContext::new(packs, HostServices::new());
-    if let Err(error) = host.install(ASKER.fqn, None, Value::Null) {
-        panic!("an empty Host installs the fixture: {error}");
-    }
-    Arc::new(host)
+    Arc::new(HostContext::new(packs, HostServices::new()))
 }
 
 /// Run services holding `broker` as the run's input broker.

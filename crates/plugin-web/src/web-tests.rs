@@ -1,5 +1,6 @@
-//! Tests for the `web` Pack's `PackInfo` and `construct`: the tools it names
-//! under the installed name, the configuration it accepts, the Host-wide
+//! Tests for the `web` Pack's `PackInfo`, `install`, and `construct`: the
+//! Pack `install` adds with its config, the tools `construct` names under
+//! the Pack id it receives, the configuration it accepts, the Host-wide
 //! services it reads, the custom fetch policy, and how a call dispatches:
 //! to the tool its last segment names, or failing on a tool it lacks.
 
@@ -7,12 +8,13 @@ use std::sync::Arc;
 
 use runvil_plugin::testing::TestCall;
 use runvil_plugin::{
-    HostServices, Pack, PackId, ServiceKey, TOKIO_RUNTIME, ToolError, ToolErrorKind, ToolId,
+    HostServices, InstallError, Pack, PackId, PackRegistry, ServiceKey, TOKIO_RUNTIME, ToolError,
+    ToolErrorKind, ToolId,
 };
 use serde_json::{Value, json};
 use tokio::runtime::Handle;
 
-use super::{PLUGIN, SEARCH_PROVIDER, Web};
+use super::{SEARCH_PROVIDER, WEB, Web, install};
 use crate::config::FetchConfig;
 use crate::fetch::FetchClient;
 use crate::provider::{SearchError, SearchProvider, SearchQuery, SearchResults};
@@ -54,20 +56,48 @@ fn name(text: &str) -> PackId {
     PackId::parse(text).expect("a one-segment Pack id parses")
 }
 
-/// The Pack installed under `installed` with `config` and both services.
-fn construct(installed: &str, config: Value) -> Result<Arc<dyn Pack>, ToolError> {
-    (PLUGIN.construct)(&name(installed), config, &services_with(true, true))
+/// The Pack built under the Pack id `id` with `config` and both services.
+fn construct(id: &str, config: Value) -> Result<Arc<dyn Pack>, ToolError> {
+    (WEB.construct)(&name(id), config, &services_with(true, true))
 }
 
 #[test]
 fn the_pack_is_runvil_web_with_no_prelude_and_no_per_run_needs() {
-    assert_eq!(PLUGIN.fqn, "runvil/web");
-    assert!(PLUGIN.prelude.is_none());
-    assert!(PLUGIN.needs.is_empty());
+    assert_eq!(WEB.fqn, "runvil/web");
+    assert!(WEB.prelude.is_none());
+    assert!(WEB.needs.is_empty());
+}
+
+#[test]
+fn install_adds_the_web_pack_with_the_config_under_its_pack_id() {
+    for (config, expected) in [
+        (json!({ "web": {}, "mcp": { "docs": {} } }), json!({})),
+        (json!({ "mcp": {} }), Value::Null),
+        (Value::Null, Value::Null),
+    ] {
+        let mut packs = PackRegistry::new();
+        install(&mut packs, config.clone()).expect("a registry without web takes it");
+        let added: Vec<(&str, PackId, Value)> = packs
+            .into_entries()
+            .filter(|(info, _, _)| info.fqn != "runvil/subagents")
+            .map(|(info, id, config)| (info.fqn, id, config))
+            .collect();
+        assert_eq!(added, [("runvil/web", name("web"), expected)], "{config}");
+    }
+}
+
+#[test]
+fn install_returns_the_registrys_refusal() {
+    let mut packs = PackRegistry::new();
+    install(&mut packs, Value::Null).expect("the first install adds web");
+    assert_eq!(
+        install(&mut packs, Value::Null),
+        Err(InstallError::DuplicatePack { fqn: "runvil/web" })
+    );
 }
 
 #[tokio::test]
-async fn construct_names_both_tools_under_the_installed_name() {
+async fn construct_names_both_tools_under_the_pack_id_it_receives() {
     let tools = construct("browse", Value::Null)
         .expect("construct succeeds with both services")
         .tools();
@@ -91,7 +121,7 @@ async fn construct_accepts_null_or_an_empty_object_and_refuses_any_other_configu
 async fn construct_fails_naming_whichever_host_wide_service_is_missing() {
     let missing = |provider, runtime| {
         let services = services_with(provider, runtime);
-        match (PLUGIN.construct)(&name("web"), Value::Null, &services) {
+        match (WEB.construct)(&name("web"), Value::Null, &services) {
             Ok(_) => panic!("construct fails without both services"),
             Err(error) => error.to_string(),
         }
@@ -108,9 +138,9 @@ async fn construct_fails_naming_whichever_host_wide_service_is_missing() {
 
 #[tokio::test]
 async fn a_custom_fetch_policy_reaches_the_fetch_tools_schema() {
-    let installed = name("web");
+    let id = name("web");
     let web = Web::new(
-        &installed,
+        &id,
         FetchClient::new().tool(Handle::current()),
         WebSearch::new(Arc::new(NoResults)),
     )
@@ -120,7 +150,7 @@ async fn a_custom_fetch_policy_reaches_the_fetch_tools_schema() {
         .build()
         .expect("valid policy");
     let web = web
-        .with_fetch_config(&installed, Handle::current(), policy)
+        .with_fetch_config(&id, Handle::current(), policy)
         .expect("the custom policy builds a fetch client");
     let fetch = web
         .tools()

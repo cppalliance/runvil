@@ -2,7 +2,7 @@
 
 use std::num::NonZeroU32;
 
-use runvil_types::packs::PackId;
+use runvil_types::packs::PackRef;
 
 use crate::{ArgsDecl, Error, ModelRoles, ParseErrorKind, Result};
 
@@ -66,10 +66,11 @@ pub struct Frontmatter {
     /// A file the prompt will leave in the store when it finishes.
     #[serde(default)]
     output: Option<FileDecl>,
-    /// Packs the prompt declares, by plain name, in declaration order:
-    /// each is required, and its prelude runs in every section.
+    /// Packs the prompt declares, each a bare Pack id or vendor/name, in
+    /// declaration order: each is required, and its prelude runs in every
+    /// section.
     #[serde(default)]
-    uses: Vec<PackId>,
+    uses: Vec<PackRef>,
     /// The typed args declaration; an absent `args:` key yields the default
     /// declaration (one optional string field named `prose`).
     #[serde(default)]
@@ -189,11 +190,12 @@ impl Frontmatter {
         self.output.as_ref()
     }
 
-    /// Returns the declared Packs, in declaration order.
+    /// Returns the `uses:` entries, in declaration order.
     ///
-    /// Every declared Pack is required.
+    /// Every declared Pack is required, and no two entries share a Pack
+    /// id.
     #[must_use]
-    pub fn uses(&self) -> &[PackId] {
+    pub fn uses(&self) -> &[PackRef] {
         &self.uses
     }
 

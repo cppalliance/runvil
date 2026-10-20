@@ -17,14 +17,13 @@ use runvil::model::{
     ModelBinding, ModelCatalog, ModelId, ModelInfo, ThinkingMode, ToolSchema,
 };
 use runvil_plugin::{
-    HostServices, Pack, PackFuture, PackId, PackInfo, ServiceKey, ToolContext, ToolError, ToolId,
-    ToolInfo, ToolOutput,
+    HostServices, Pack, PackFuture, PackId, PackInfo, PackRegistry, ServiceKey, ToolContext,
+    ToolError, ToolId, ToolInfo, ToolOutput,
 };
 use serde_json::{Value, json};
 use tokio::sync::mpsc;
 
 use crate::asker::{ASKER, AskBroker, broker_services};
-use crate::support::registry;
 
 /// The one model the scripted broker lists.
 pub(crate) const MODEL: &str = "m";
@@ -259,20 +258,17 @@ pub(crate) fn surviving_hold_host(held: &Arc<Held>) -> HostContext {
     host_holding(held, true)
 }
 
+/// A Host that built the hold Pack over `held` and the fixture ask Pack,
+/// which reach only a run that declares them.
 fn host_holding(held: &Arc<Held>, survives_stop: bool) -> HostContext {
     let mut services = HostServices::new();
     services.provide(&HELD, Arc::clone(held)).unwrap();
-    let mut host = HostContext::new(registry(&[HOLD, ASKER]), services);
-    host.install(HOLD.fqn, None, json!({ "survives_stop": survives_stop }))
+    let mut packs = PackRegistry::new();
+    packs
+        .add(HOLD, json!({ "survives_stop": survives_stop }))
         .unwrap();
-    host
-}
-
-/// `host`, whose registry holds the fixture ask Pack, with it installed
-/// as `user-input`.
-pub(crate) fn with_asker(mut host: HostContext) -> HostContext {
-    host.install(ASKER.fqn, None, Value::Null).unwrap();
-    host
+    packs.add(ASKER, Value::Null).unwrap();
+    HostContext::new(packs, services)
 }
 
 /// The operator: counts each question asked and each one torn down

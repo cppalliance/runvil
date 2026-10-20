@@ -1,11 +1,12 @@
-//! The agent conversations' Harness setup: a prompt declaring
-//! `web` or the built-in `subagents` prepares over the server's installed
-//! Packs, a Host without the
-//! search provider installs web as unavailable and refuses the prompt
-//! naming that service, outside a runtime the services leave the runtime
-//! out, and the ask id names the ask tool under the name user-input was
-//! installed as. The `mcp.json` reader returns the `mcpServers` object
-//! as it stands, or an empty one, and a prompt declaring `mcp` prepares,
+//! The agent conversations' Harness setup: after the server calls the
+//! three Plugins and builds its Host, every run holds the `web`,
+//! `user-input`, `subagents`, and `mcp` Packs, and the ask id is the
+//! fixed `user-input/ask`. A prompt declaring `web` or the built-in
+//! `subagents` prepares over the server's built Packs, a Host without the
+//! search provider builds web as unavailable and refuses the prompt
+//! naming that service, and outside a runtime the services leave the
+//! runtime out. The `mcp.json` reader returns the `mcpServers` object as
+//! it stands, or an empty one, and a prompt declaring `mcp` prepares,
 //! because the one mcp Pack reads the runtime the server provides. The
 //! servers value is the mcp Pack's configuration, so one it refuses
 //! refuses a prompt requiring `mcp`.
@@ -106,26 +107,45 @@ fn mcp_file(text: &str) -> (tempfile::TempDir, std::path::PathBuf) {
 }
 
 #[tokio::test]
-async fn a_prompt_declaring_web_prepares_on_the_servers_installed_packs() {
+async fn every_run_holds_the_packs_the_three_plugins_add_and_the_builtin() {
+    let lists = "---\nname: lists\ndescription: reads its Packs\nrunvil: 0\n---\n\n\
+        # Lists\n\n## Only\n\n```lua\n\
+        local names = {}\n\
+        for _, id in ipairs({ 'web', 'user-input', 'subagents', 'mcp' }) do\n\
+          names[#names + 1] = packs.get(id).name\n\
+        end\n\
+        return table.concat(names, ',')\n```\n";
+    let (host, _ask) = host_context(&Registry::new(), None);
+    assert_eq!(
+        run_prompt(&Arc::new(host), lists.to_owned()).await,
+        Some(RunOutcome::Completed {
+            final_text: "web,user-input,subagents,mcp".to_owned(),
+        }),
+        "a run that declares nothing holds every runvil Pack the server built"
+    );
+}
+
+#[tokio::test]
+async fn a_prompt_declaring_web_prepares_on_the_servers_built_packs() {
     let (host, _ask) = host_context(&Registry::new(), None);
     assert_eq!(
         run_prompt(&Arc::new(host), requiring("web")).await,
         Some(RunOutcome::Completed {
             final_text: "browsed".to_owned(),
         }),
-        "the server installs web and provides both services its install reads"
+        "the server adds web and provides both services its construct reads"
     );
 }
 
 #[tokio::test]
-async fn a_prompt_declaring_subagents_prepares_on_the_servers_installed_packs() {
+async fn a_prompt_declaring_subagents_prepares_on_the_servers_built_packs() {
     let (host, _ask) = host_context(&Registry::new(), None);
     assert_eq!(
         run_prompt(&Arc::new(host), requiring("subagents")).await,
         Some(RunOutcome::Completed {
             final_text: "browsed".to_owned(),
         }),
-        "the server installs the built-in subagents"
+        "the server's Host builds the built-in subagents"
     );
 }
 
@@ -151,12 +171,12 @@ async fn a_host_without_the_search_provider_refuses_a_prompt_requiring_web() {
 }
 
 #[test]
-fn the_ask_id_is_the_ask_tool_under_the_name_user_input_was_installed_as() {
+fn the_ask_id_is_the_fixed_user_input_ask_tool() {
     let (_host, ask) = host_context(&Registry::new(), None);
     assert_eq!(
         ask,
         Some(ToolId::parse("user-input/ask").expect("the id parses")),
-        "the server installs user-input under its default name"
+        "the user-input Plugin added its Pack, whose Pack id is user-input"
     );
 }
 
@@ -181,7 +201,7 @@ async fn a_prompt_declaring_mcp_prepares_on_the_runtime_the_server_provides() {
         Some(RunOutcome::Completed {
             final_text: "browsed".to_owned(),
         }),
-        "the server installs mcp once, and its construct finds the server's runtime"
+        "the server adds mcp once, and its construct finds the server's runtime"
     );
 }
 

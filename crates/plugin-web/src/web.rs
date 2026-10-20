@@ -1,16 +1,17 @@
-//! The `web` Pack's `PackInfo`, [`PLUGIN`], the `construct` that
-//! builds its one shared object, and the keys of the two Host-wide
-//! services that `construct` reads.
+//! The crate's Plugin, [`install`], the `web` Pack's `PackInfo`, the
+//! `construct` that builds its one shared object, and the keys of the two
+//! Host-wide services that `construct` reads.
 //!
-//! The fetch client is built once, at install, with the default fetch
-//! policy and bound to the Host's runtime handle; the search tool is
-//! built over the Host's search provider. The prompt never sees either.
+//! The fetch client is built once, when the Host builds its Packs, with
+//! the default fetch policy and bound to the Host's runtime handle; the
+//! search tool is built over the Host's search provider. The prompt never
+//! sees either.
 
 use std::sync::Arc;
 
 use runvil_plugin::{
-    HostServices, Pack, PackFuture, PackId, PackInfo, ServiceKey, ToolContext, ToolError,
-    ToolErrorKind, ToolId, ToolInfo, ToolOutput,
+    HostServices, InstallError, Pack, PackFuture, PackId, PackInfo, PackRegistry, ServiceKey,
+    ToolContext, ToolError, ToolErrorKind, ToolId, ToolInfo, ToolOutput,
 };
 use serde_json::{Value, json};
 use tokio::runtime::Handle;
@@ -19,15 +20,30 @@ use crate::fetch::{FetchClient, WebFetch};
 use crate::provider::SearchProvider;
 use crate::search::WebSearch;
 
-/// The Pack's `PackInfo`, which a Host adds to its Pack registry.
+/// The Pack's `PackInfo`.
 ///
-/// Its FQN is `runvil/web`, so a Host that picks no Pack id installs it
-/// as `web`. It has no prelude and needs no per-run service; its
-/// `construct` reads [`SEARCH_PROVIDER`] and the Plugin contract's
-/// [`runvil_plugin::TOKIO_RUNTIME`] service from the Host-wide
-/// services and takes no configuration but `null` or `{}`.
-pub const PLUGIN: PackInfo =
+/// Its FQN is `runvil/web`, so its Pack id is `web`. It has no prelude
+/// and needs no per-run service; its `construct` reads
+/// [`SEARCH_PROVIDER`] and the Plugin contract's
+/// [`runvil_plugin::TOKIO_RUNTIME`] service from the Host-wide services
+/// and takes no configuration but `null` or `{}`.
+const WEB: PackInfo =
     PackInfo::new("runvil/web", construct).description("Search the web and fetch pages");
+
+/// The Plugin: adds the `web` Pack to `packs` with `config["web"]`, which
+/// is `null` when `config` has no `web` key.
+///
+/// # Errors
+/// Returns the registry's [`InstallError`], such as
+/// [`InstallError::DuplicatePack`] when `packs` holds `runvil/web`
+/// already.
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "the Plugin signature fixes the argument types"
+)]
+pub fn install(packs: &mut PackRegistry, config: Value) -> Result<(), InstallError> {
+    packs.add(WEB, config["web"].clone())
+}
 
 /// The service key for the Host's search provider.
 ///
@@ -48,9 +64,10 @@ struct Web {
     search: WebSearch,
 }
 
-/// Builds the Pack under `name`: refuses any configuration but `null` or
-/// `{}`, reads the two Host-wide services or fails naming the missing one,
-/// and names the tools `<name>/fetch` and `<name>/search`.
+/// Builds the Pack under the Pack id `name`: refuses any configuration
+/// but `null` or `{}`, reads the two Host-wide services or fails naming
+/// the missing one, and names the tools `<name>/fetch` and
+/// `<name>/search`.
 #[expect(
     clippy::needless_pass_by_value,
     reason = "the PackInfo construct signature fixes the argument types"

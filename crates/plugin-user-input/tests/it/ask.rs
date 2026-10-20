@@ -1,15 +1,19 @@
-//! The `user-input` Pack through its public `PackInfo`: what `construct`
-//! builds under the name the Host chose, what the ask tool answers from
-//! the run's broker, and the prelude a declaring prompt runs.
+//! The `user-input` Pack through the crate's `install`: the one Pack it
+//! adds with its config, what `construct` builds under the Pack id it
+//! receives, what the ask tool answers from the run's broker, and the
+//! prelude a declaring prompt runs.
 
 use std::future::Future;
 use std::pin::pin;
 use std::sync::Arc;
 use std::task::{Context, Poll, Waker};
 
-use plugin_user_input::{ASK, INPUT_BROKER, InputBroker, PLUGIN};
+use plugin_user_input::{ASK, INPUT_BROKER, InputBroker, install};
 use runvil_plugin::testing::TestCall;
-use runvil_plugin::{HostServices, OutputTrust, Pack, PackId, ToolError, ToolErrorKind, ToolId};
+use runvil_plugin::{
+    HostServices, OutputTrust, Pack, PackId, PackInfo, PackRegistry, ToolError, ToolErrorKind,
+    ToolId,
+};
 use serde_json::{Value, json};
 
 /// A broker whose operator always types the same text.
@@ -47,13 +51,31 @@ fn block_on<F: Future>(future: F) -> F::Output {
     }
 }
 
-/// The Pack installed under `name` with `config`.
-fn construct(name: &str, config: Value) -> Result<Arc<dyn Pack>, ToolError> {
-    let name = PackId::parse(name).expect("a one-segment Pack id parses");
-    (PLUGIN.construct)(&name, config, &HostServices::new())
+/// Each Pack `install` adds to a fresh registry with `config`, beside
+/// the Pack id and config the registry holds it with.
+fn added(config: Value) -> Vec<(PackInfo, PackId, Value)> {
+    let mut packs = PackRegistry::new();
+    install(&mut packs, config).expect("a fresh registry takes the Pack");
+    packs
+        .into_entries()
+        .filter(|(info, _, _)| info.fqn != "runvil/subagents")
+        .collect()
 }
 
-fn installed(name: &str) -> Arc<dyn Pack> {
+/// The `PackInfo` `install` adds.
+fn user_input() -> PackInfo {
+    let mut added = added(Value::Null);
+    let (info, _id, _config) = added.pop().expect("install adds one Pack");
+    info
+}
+
+/// The Pack built under the Pack id `name` with `config`.
+fn construct(name: &str, config: Value) -> Result<Arc<dyn Pack>, ToolError> {
+    let name = PackId::parse(name).expect("a one-segment Pack id parses");
+    (user_input().construct)(&name, config, &HostServices::new())
+}
+
+fn built(name: &str) -> Arc<dyn Pack> {
     let Ok(pack) = construct(name, Value::Null) else {
         panic!("construct succeeds with no configuration");
     };
@@ -70,25 +92,45 @@ fn with_broker(broker: impl InputBroker + 'static) -> HostServices {
     services
 }
 
-/// Asks once through the Pack installed as `user-input`, with `services`
+/// Asks once through the Pack built under `user-input`, with `services`
 /// as the run's services.
 fn ask(services: HostServices) -> Result<runvil_plugin::ToolOutput, ToolError> {
-    let pack = installed("user-input");
+    let pack = built("user-input");
     let call = TestCall::new(pack.tools()[0].id.clone()).with_services(services);
     block_on(pack.call(call.context(), json!({})))
 }
 
 #[test]
 fn the_pack_is_runvil_user_input_and_needs_the_input_broker() {
-    assert_eq!(PLUGIN.fqn, "runvil/user-input");
-    assert_eq!(PLUGIN.needs, [INPUT_BROKER.id()]);
-    assert_eq!(PLUGIN.needs[0].to_string(), "runvil/input-broker");
+    let info = user_input();
+    assert_eq!(info.fqn, "runvil/user-input");
+    assert_eq!(info.needs, [INPUT_BROKER.id()]);
+    assert_eq!(info.needs[0].to_string(), "runvil/input-broker");
     assert_eq!(ASK, "ask");
 }
 
 #[test]
-fn construct_names_the_ask_tool_under_the_installed_name_and_marks_it_to_survive_a_stop() {
-    let tools = installed("operator").tools();
+fn install_adds_the_one_pack_with_the_config_under_its_pack_id() {
+    for (config, expected) in [
+        (json!({ "user-input": {}, "web": { "x": 1 } }), json!({})),
+        (json!({ "web": {} }), Value::Null),
+        (Value::Null, Value::Null),
+    ] {
+        let read: Vec<(&str, String, Value)> = added(config.clone())
+            .into_iter()
+            .map(|(info, id, config)| (info.fqn, id.to_string(), config))
+            .collect();
+        assert_eq!(
+            read,
+            [("runvil/user-input", "user-input".to_owned(), expected)],
+            "{config}"
+        );
+    }
+}
+
+#[test]
+fn construct_names_the_ask_tool_under_the_pack_id_it_receives_and_marks_it_to_survive_a_stop() {
+    let tools = built("operator").tools();
     assert_eq!(tools.len(), 1, "one tool: {tools:?}");
     let ask = &tools[0];
     assert_eq!(
@@ -140,8 +182,8 @@ fn a_call_without_a_broker_fails_saying_no_operator_is_connected() {
 }
 
 #[test]
-fn the_prelude_reads_the_installed_name_and_asks_through_it() {
-    let prelude = PLUGIN.prelude.expect("the Pack has a prelude");
+fn the_prelude_reads_the_pack_id_and_asks_through_it() {
+    let prelude = user_input().prelude.expect("the Pack has a prelude");
     assert!(prelude.starts_with("local pack = ...\n"), "{prelude}");
     assert!(
         prelude.contains("tools.call(pack .. \"/ask\")"),

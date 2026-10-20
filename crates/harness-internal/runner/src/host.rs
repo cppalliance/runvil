@@ -1,20 +1,24 @@
-//! The Host's installed Packs: [`HostContext`], built once at startup
-//! over a [`PackRegistry`] and shared by every run, and the snapshot
-//! each run takes of it.
+//! The Host's built Packs: [`HostContext`], built once at startup from
+//! every Pack a [`PackRegistry`] holds and shared by every run, the pick
+//! of each run's Packs, and the snapshot each run takes of them.
 //!
-//! A Host installs a Pack by the FQN the registry holds, under a Pack
-//! id, and install calls the Pack's `construct` once to build the one
-//! Pack object every run shares. A construct failure is not an install
-//! error: the Pack is stored as unavailable with the failure as its
-//! reason, and every run that needs it is refused naming that reason.
-//! Before each run, the Harness's preparation waits for every built Pack
-//! to be ready, and a Pack whose `ready` fails is unavailable to that run
-//! the same way.
-//! Then it takes a snapshot of every installed Pack with the run's own
-//! services: the catalog the Engine offers the run, the preludes of
-//! the Packs the prompt declares, the requirements the snapshot cannot
-//! meet, and the performer that sends each tool call to the Pack its id
-//! names.
+//! The Host's Plugins add Packs to the registry, and building the
+//! context calls each Pack's `construct` once, with the config its Plugin
+//! added it with, to build the one Pack object every run shares. A
+//! construct failure is not an error: the Pack is stored as unavailable
+//! with the failure as its reason, and every run that needs it is refused
+//! naming that reason.
+//!
+//! A run's Packs are the Packs its prompt declares under `uses:`, plus
+//! every `runvil` Pack whose Pack id no declaration takes, so a declared
+//! `acme/web` stands in for `runvil/web` and an undeclared third-party
+//! Pack is in no run. Before each run, the Harness's preparation picks
+//! those Packs and waits for each of them to be ready, and a Pack whose
+//! `ready` fails is unavailable to that run the same way. Then it takes a
+//! snapshot of them with the run's own services: the catalog the Engine
+//! offers the run, the preludes of the Packs the prompt declares, the
+//! requirements the pick and the snapshot cannot meet, and the performer
+//! that sends each tool call to the Pack its id names.
 
 use std::collections::BTreeMap;
 use std::fmt;
@@ -24,9 +28,7 @@ use std::sync::Arc;
 use futures_util::future::{Either, join_all, select};
 use runvil::cancel::CancelHandle;
 use runvil::{Prompt, Requirements};
-use runvil_plugin::{HostServices, Pack, PackId, PackInfo};
-
-use crate::registry::{PackOrigin, PackRegistry};
+use runvil_plugin::{HostServices, Pack, PackId, PackInfo, PackRegistry};
 
 #[path = "host-run.rs"]
 mod run;
@@ -37,118 +39,134 @@ pub(crate) use run::HostRunContext;
 #[path = "host-tests.rs"]
 mod tests;
 
-/// Every Pack a Host installed, the registry it installed them from,
-/// and the Host-wide services their `construct` functions read.
+/// The vendor whose Packs every run holds unless a declared Pack takes
+/// their id, and the vendor a bare `uses:` entry means.
+const RUNVIL: &str = "runvil";
+
+/// Every Pack a Host built and the Host-wide services their `construct`
+/// functions read.
 ///
-/// A Host builds one at startup, installs its Packs, and shares it with
-/// every Harness behind an `Arc`. Dropping it drops the Pack objects,
-/// which is where a Pack cleans up.
+/// A Host builds one at startup from the registry its Plugins filled and
+/// shares it with every Harness behind an `Arc`. Dropping it drops the
+/// Pack objects, which is where a Pack cleans up.
 pub struct HostContext {
-    packs: PackRegistry,
     services: HostServices,
-    installed: Vec<Installed>,
+    built: BTreeMap<&'static str, Built>,
 }
 
-/// One installed Pack: its Pack id, its `PackInfo`, and the built
-/// object or the reason building it failed.
-struct Installed {
-    name: PackId,
+/// One built Pack: its Pack id, its `PackInfo`, and the built object or
+/// the reason building it failed.
+struct Built {
+    id: PackId,
     info: PackInfo,
     pack: Result<Arc<dyn Pack>, String>,
 }
 
+/// The Packs one run holds, picked by [`HostContext::pick`] from its
+/// prompt's `uses:` entries, and what the pick cannot resolve.
+#[derive(Debug)]
+pub(crate) struct RunPacks {
+    /// The FQN of each of the run's Packs: the declared ones the Host
+    /// built, then every `runvil` Pack whose Pack id no entry takes.
+    fqns: Vec<&'static str>,
+    /// Each declared Pack id the Host built no Pack for, with the reason
+    /// it is unavailable, or `None` when it is simply missing.
+    unresolved: BTreeMap<PackId, Option<String>>,
+}
+
 impl HostContext {
-    /// A context with no Packs, which installs from the Packs
-    /// `packs` holds and hands `services` to each Pack's `construct`.
+    /// Builds every Pack `packs` holds, the built-ins included, handing
+    /// each `construct` its Pack id, its stored config, and `services`.
     ///
     /// `services` are Host-wide, such as a search provider. They reach
     /// only `construct`; a tool call reads the run's own services instead.
+    /// A `construct` failure is not an error here: the Pack is stored as
+    /// unavailable, with the failure as the reason a run that needs it is
+    /// refused.
     #[must_use]
     pub fn new(packs: PackRegistry, services: HostServices) -> HostContext {
-        HostContext {
-            packs,
-            services,
-            installed: Vec::new(),
-        }
+        let built = packs
+            .into_entries()
+            .map(|(info, id, config)| {
+                let pack = (info.construct)(&id, config, &services).map_err(|error| {
+                    tracing::warn!(
+                        pack = %id,
+                        fqn = info.fqn,
+                        %error,
+                        "Pack construct failed; it is built as unavailable"
+                    );
+                    error.to_string()
+                });
+                (info.fqn, Built { id, info, pack })
+            })
+            .collect();
+        HostContext { services, built }
     }
 
-    /// Builds the Pack the registry holds as `fqn` and adds it under
-    /// `name`, or under the FQN's second segment when `name` is `None`,
-    /// and returns the Pack id it used.
+    /// Picks the Packs a run of `prompt` holds: each Pack its `uses:`
+    /// entries name, plus every `runvil` Pack whose Pack id no entry
+    /// takes.
     ///
-    /// `construct` runs once, here, with the Pack id, `config`, and the
-    /// Host-wide services. A `construct` failure is not an error here: the
-    /// Pack is stored as unavailable, with the failure as the reason a
-    /// run that needs it is refused.
-    ///
-    /// # Errors
-    /// Returns [`InstallError::UnknownPlugin`] when the registry does not
-    /// hold `fqn`, [`InstallError::ReservedName`] when a built-in is asked
-    /// for under a Pack id other than its own or another Pack under a
-    /// built-in's Pack id, and [`InstallError::NameTaken`] when the
-    /// Pack id is installed already or differs from an installed one
-    /// only by `-`, `_`, or `.`.
-    pub fn install(
-        &mut self,
-        fqn: &str,
-        name: Option<PackId>,
-        config: serde_json::Value,
-    ) -> Result<PackId, InstallError> {
-        let Some((info, kind, default)) = self.packs.entry(fqn) else {
-            return Err(InstallError::UnknownPlugin {
-                fqn: fqn.to_owned(),
-            });
-        };
-        let name = name.unwrap_or_else(|| default.clone());
-        let reserved = match kind {
-            PackOrigin::Builtin => name != *default,
-            PackOrigin::Linked => self.packs.reserves(&name),
-        };
-        if reserved {
-            return Err(InstallError::ReservedName {
-                fqn: info.fqn,
-                name,
-            });
+    /// A bare entry means the `runvil` Pack of that id. One the Host did
+    /// not build is missing, or unavailable naming each other vendor's
+    /// Pack of that id; a `vendor/name` the Host did not build is
+    /// unavailable.
+    pub(crate) fn pick(&self, prompt: &Prompt) -> RunPacks {
+        let uses = prompt.frontmatter().uses();
+        let mut fqns = Vec::new();
+        let mut unresolved = BTreeMap::new();
+        for entry in uses {
+            let wanted = format!("{}/{}", entry.vendor(), entry.id());
+            if let Some((fqn, _)) = self.built.get_key_value(wanted.as_str()) {
+                fqns.push(*fqn);
+                continue;
+            }
+            let reason = if entry.vendor() == RUNVIL {
+                let others: Vec<&str> = self
+                    .built
+                    .iter()
+                    .filter(|(_, built)| built.id == *entry.id())
+                    .map(|(fqn, _)| *fqn)
+                    .collect();
+                (!others.is_empty()).then(|| {
+                    format!(
+                        "{id} means {wanted}, which is not installed; write {} to use that Pack",
+                        others.join(" or "),
+                        id = entry.id(),
+                    )
+                })
+            } else {
+                Some(format!("{wanted} is not installed"))
+            };
+            unresolved.insert(entry.id().clone(), reason);
         }
-        let twin = normalize(&name);
-        if let Some(existing) = self
-            .installed
-            .iter()
-            .find(|installed| normalize(&installed.name) == twin)
-        {
-            return Err(InstallError::NameTaken {
-                name,
-                existing: existing.name.clone(),
-            });
+        for (fqn, built) in &self.built {
+            let runvil = fqn
+                .split_once('/')
+                .is_some_and(|(vendor, _)| vendor == RUNVIL);
+            if runvil && !uses.iter().any(|entry| *entry.id() == built.id) {
+                fqns.push(*fqn);
+            }
         }
-        let pack = (info.construct)(&name, config, &self.services).map_err(|error| {
-            tracing::warn!(
-                pack = %name,
-                fqn = info.fqn,
-                %error,
-                "Pack construct failed; it is installed as unavailable"
-            );
-            error.to_string()
-        });
-        self.installed.push(Installed {
-            name: name.clone(),
-            info,
-            pack,
-        });
-        Ok(name)
+        RunPacks { fqns, unresolved }
     }
 
-    /// Waits until every built Pack's `ready` resolves, polling them
-    /// together, and returns the reason of each one that will not be
-    /// ready, by name.
+    /// Waits until the `ready` of each of the run's `packs` that built
+    /// resolves, polling them together, and returns the reason of each
+    /// one that will not be ready, by FQN.
     ///
     /// A cancel on `cancel` ends the wait with no failures, so each Pack
     /// is snapshotted as it stands, and a run cancelled here ends
     /// cancelled whatever the snapshot holds.
-    pub(crate) async fn wait_ready(&self, cancel: &CancelHandle) -> BTreeMap<PackId, String> {
-        let waits = self.installed.iter().filter_map(|installed| {
-            let pack = installed.pack.as_ref().ok()?;
-            Some(async move { (&installed.name, pack.ready().await) })
+    pub(crate) async fn wait_ready(
+        &self,
+        packs: &RunPacks,
+        cancel: &CancelHandle,
+    ) -> BTreeMap<&'static str, String> {
+        let waits = packs.fqns.iter().filter_map(|fqn| {
+            let (fqn, built) = self.built.get_key_value(fqn)?;
+            let pack = built.pack.as_ref().ok()?;
+            Some(async move { (*fqn, pack.ready().await) })
         });
         let joined = pin!(join_all(waits));
         // The cancel arm is polled first, so a run cancelled already does
@@ -157,128 +175,64 @@ impl HostContext {
             Either::Left(((), _)) => BTreeMap::new(),
             Either::Right((results, _)) => results
                 .into_iter()
-                .filter_map(|(name, result)| {
+                .filter_map(|(fqn, result)| {
                     let error = result.err()?;
                     tracing::warn!(
-                        pack = %name,
+                        fqn,
                         %error,
                         "Pack will not be ready; this run treats it as unavailable"
                     );
-                    Some((name.clone(), error.to_string()))
+                    Some((fqn, error.to_string()))
                 })
                 .collect(),
         }
     }
 
-    /// Takes one run's snapshot of every installed Pack with `services`,
-    /// the run's own services, and reports the requirements it cannot meet
-    /// for `prompt`.
+    /// Takes one run's snapshot of its `packs` with `services`, the run's
+    /// own services, and reports the requirements it cannot meet for
+    /// `prompt`.
     ///
     /// `failures` holds the reason of each Pack whose `ready` failed
-    /// before this run, which the run treats as unavailable. The snapshot
-    /// gives the run's catalog, which holds every usable Pack's tools,
-    /// declared or not, its roster, which names every installed Pack with
+    /// before this run, by FQN, which the run treats as unavailable. The
+    /// snapshot gives the run's catalog, which holds the tools of each of
+    /// its usable Packs, its roster, which names each of its Packs with
     /// the reason of each one that can't serve, and its declared preludes,
     /// the declared, usable Packs', in declaration order. It also performs
     /// the run's tool calls. The requirements cover every Pack the prompt
-    /// declares.
+    /// declares, the ones the pick could not resolve included.
     pub(crate) fn begin_run(
         &self,
+        packs: &RunPacks,
         services: HostServices,
-        failures: BTreeMap<PackId, String>,
+        failures: BTreeMap<&'static str, String>,
         prompt: &Prompt,
     ) -> (HostRunContext, Requirements) {
         let run = HostRunContext::snapshot(
-            self.installed
+            packs
+                .fqns
                 .iter()
-                .map(|installed| (&installed.name, installed.info, &installed.pack)),
+                .filter_map(|fqn| self.built.get(fqn))
+                .map(|built| (&built.id, built.info, &built.pack)),
             services,
             failures,
         );
-        let requirements = run.requirements(prompt);
+        let requirements = run.requirements(prompt, &packs.unresolved);
         (run, requirements)
     }
 }
 
 impl fmt::Debug for HostContext {
-    /// Shows the services, each installed name with whether it built, and
-    /// the registry.
+    /// Shows the services and each built Pack's FQN and Pack id with
+    /// whether it built, and never a Pack's config.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let installed: Vec<(&PackId, bool)> = self
-            .installed
+        let built: Vec<(&str, &PackId, bool)> = self
+            .built
             .iter()
-            .map(|installed| (&installed.name, installed.pack.is_ok()))
+            .map(|(fqn, built)| (*fqn, &built.id, built.pack.is_ok()))
             .collect();
         f.debug_struct("HostContext")
             .field("services", &self.services)
-            .field("installed", &installed)
-            .field("packs", &self.packs)
+            .field("built", &built)
             .finish()
     }
-}
-
-/// A mistake [`PackRegistry::add`] or [`HostContext::install`] refuses
-/// outright, so the Host's author sees it at startup.
-///
-/// A Pack whose `construct` fails is not one of these; it is installed
-/// as unavailable instead.
-#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
-#[non_exhaustive]
-pub enum InstallError {
-    /// The added Pack's FQN is not `vendor/name`, or a segment of it is
-    /// not a valid one-segment name.
-    #[error("Pack fully qualified name `{fqn}` is not a vendor/name pair")]
-    InvalidFqn {
-        /// The FQN as its `PackInfo` spells it.
-        fqn: &'static str,
-    },
-    /// The registry holds the added Pack's FQN already, as a built-in or
-    /// as a Pack added before.
-    #[error("Pack `{fqn}` is already in the registry")]
-    DuplicatePack {
-        /// The FQN as its `PackInfo` spells it.
-        fqn: &'static str,
-    },
-    /// The registry holds no Pack with the FQN the install asked for.
-    #[error(
-        "Pack `{fqn}` is not in the registry; add it with PackRegistry::add before building the HostContext"
-    )]
-    UnknownPlugin {
-        /// The FQN the install asked for.
-        fqn: String,
-    },
-    /// A built-in was asked for under a Pack id other than its own, or
-    /// another Pack under a built-in's Pack id.
-    #[error(
-        "Pack `{fqn}` cannot be installed as {name}: a built-in Pack keeps its own Pack id, and no other Pack may take it"
-    )]
-    ReservedName {
-        /// The FQN as its `PackInfo` spells it.
-        fqn: &'static str,
-        /// The Pack id the install asked for.
-        name: PackId,
-    },
-    /// The Pack id is installed already (`existing` equals `name`), or
-    /// it differs from the installed `existing` only by `-`, `_`, or `.`,
-    /// as `user-input` and `user_input` do, which a model reading the tool
-    /// list cannot tell apart.
-    #[error(
-        "Pack id {name} is taken by the installed {existing}; install it under another Pack id"
-    )]
-    NameTaken {
-        /// The Pack id the install asked for.
-        name: PackId,
-        /// The installed Pack id it collides with.
-        existing: PackId,
-    },
-}
-
-/// A name with each `-`, `_`, and `.` mapped to `-`, so two names that
-/// differ only by that punctuation compare equal. Names are lowercase
-/// only, so case needs no handling.
-fn normalize(name: &PackId) -> String {
-    name.to_string()
-        .chars()
-        .map(|c| if matches!(c, '-' | '_' | '.') { '-' } else { c })
-        .collect()
 }

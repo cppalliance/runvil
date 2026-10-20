@@ -30,8 +30,8 @@ impl Prompt {
     /// kind is:
     ///
     /// - `Frontmatter` when the `---` delimiters are missing, the frontmatter
-    ///   fails to decode, a Pack entry is not a plain name, or a Pack is
-    ///   declared twice.
+    ///   fails to decode, a `uses:` entry is neither a Pack id nor
+    ///   vendor/name, or two entries share a Pack id.
     /// - `Structure` when the H1 is missing, there is more than one H1, the H1
     ///   title is empty, a section heading skips a level (such as an H4
     ///   directly under an H2), a section heading is empty, or two sibling

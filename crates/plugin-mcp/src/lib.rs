@@ -2,11 +2,13 @@
 //! names, each reached over Streamable HTTP, whose tools a prompt lists
 //! and calls through two static tools.
 //!
-//! A Host installs [`PLUGIN`] once and passes the `mcpServers` object of
-//! an `mcp.json` file as the configuration: each server's entry under the
-//! server's name. A `null` configuration means no servers, and any other
-//! value that is not an object refuses the install. The Pack has no
-//! prelude, so declaring it, as in `uses: [mcp]`, only makes it required.
+//! The crate's Plugin, [`install`], adds the Pack `runvil/mcp`, whose
+//! Pack id is `mcp`, with the sub-object of its config under `mcp`. A Host
+//! passes the `mcpServers` object of an `mcp.json` file there: each
+//! server's entry under the server's name. A `null` configuration means
+//! no servers, and any other value that is not an object leaves the Pack
+//! unavailable. The Pack has no prelude, so declaring it, as in
+//! `uses: [mcp]`, only makes it required.
 //!
 //! The Pack offers exactly two tools under the Pack id `construct`
 //! receives, such as `mcp/get_dynamic_tools` under `mcp`, modeled on
@@ -37,16 +39,16 @@
 //! fields are ignored, because the format is defined outside this
 //! repository. A refused entry is a namespace with status `error` and the
 //! reason, and the other servers still connect, so one bad entry never
-//! refuses the install.
+//! leaves the Pack unavailable.
 //!
 //! String values in an entry may use `${env:NAME}`, which an unset
 //! variable refuses naming `NAME`, and `${userHome}`. Any other `${...}`
 //! form passes through unchanged. `headers` may not set `accept`,
 //! `Mcp-Session-Id`, or `Last-Event-Id`, which the client owns.
 //!
-//! Install does no I/O. It reads the Host's runtime from the Plugin
-//! contract's [`runvil_plugin::TOKIO_RUNTIME`] service, even with no
-//! servers, and starts one background task per parsed entry on it, which
+//! Building the Pack does no I/O. It reads the Host's runtime from the
+//! Plugin contract's [`runvil_plugin::TOKIO_RUNTIME`] service, even with
+//! no servers, and starts one background task per parsed entry on it, which
 //! connects, runs the handshake, and lists every page of tools within two
 //! minutes. The Pack's `ready` resolves at once, so a run can see the two
 //! tools while servers are still connecting, and the listing shows each
@@ -76,7 +78,7 @@
 //!
 //! - May depend on: `runvil-plugin`, `shared-*` crates, and outside
 //!   libraries. `cargo test -p build-xtask` enforces the Plugin family's
-//!   allow-list. Only [`PLUGIN`] is public.
+//!   allow-list. Only [`install`] is public.
 //! - Every output is untrusted, because descriptions, schemas, and results
 //!   all come from the servers.
 //! - No reason, log line, `Debug` output, or error names an `env` or
@@ -96,7 +98,10 @@ mod server;
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-use runvil_plugin::{HostServices, Pack, PackId, PackInfo, ServiceKey, TOKIO_RUNTIME, ToolError};
+use runvil_plugin::{
+    HostServices, InstallError, Pack, PackId, PackInfo, PackRegistry, ServiceKey, TOKIO_RUNTIME,
+    ToolError,
+};
 use serde_json::{Map, Value};
 use tokio::runtime::Handle;
 use tokio::sync::watch;
@@ -105,14 +110,29 @@ use crate::dynamic::{Mcp, Namespace};
 use crate::entry::Vars;
 use crate::server::{Server, State};
 
-/// The Pack's `PackInfo`, which a Host adds to its Pack registry.
+/// The Pack's `PackInfo`.
 ///
-/// Its FQN is `runvil/mcp`. The Host installs it once, passing the
-/// `mcpServers` object of an `mcp.json` file as the configuration, and
-/// provides the Plugin contract's [`runvil_plugin::TOKIO_RUNTIME`]
-/// service. It has no prelude and needs no per-run service.
-pub const PLUGIN: PackInfo =
+/// Its FQN is `runvil/mcp`, so its Pack id is `mcp`. Its config is the
+/// `mcpServers` object of an `mcp.json` file, and its `construct` reads
+/// the Plugin contract's [`runvil_plugin::TOKIO_RUNTIME`] service. It has
+/// no prelude and needs no per-run service.
+const MCP: PackInfo =
     PackInfo::new("runvil/mcp", construct).description("Tools from every configured MCP server");
+
+/// The Plugin: adds the `mcp` Pack to `packs` with `config["mcp"]`, which
+/// is `null`, meaning no servers, when `config` has no `mcp` key.
+///
+/// # Errors
+/// Returns the registry's [`InstallError`], such as
+/// [`InstallError::DuplicatePack`] when `packs` holds `runvil/mcp`
+/// already.
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "the Plugin signature fixes the argument types"
+)]
+pub fn install(packs: &mut PackRegistry, config: Value) -> Result<(), InstallError> {
+    packs.add(MCP, config["mcp"].clone())
+}
 
 /// The key `construct` reads the Host's runtime through.
 const RUNTIME: ServiceKey<Handle> = ServiceKey::new(TOKIO_RUNTIME);

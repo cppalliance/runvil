@@ -1,7 +1,8 @@
-//! The fixture ask Pack the Harness suites install in place of a real
+//! The fixture ask Pack the Harness suites build in place of a real
 //! user-input Pack, which Harness crates may not name: an ask tool that
 //! survives stops, a prelude defining `input.ask()`, a need for the run's
-//! broker, and a broker that fails with a `ToolError`.
+//! broker, and a broker that fails with a `ToolError`. A prompt declares
+//! it as `tests/user-input`.
 
 use std::sync::Arc;
 
@@ -11,8 +12,7 @@ use runvil_plugin::{
 };
 use serde_json::{Value, json};
 
-/// The `PackInfo`: installed with no Pack id given, the Pack is
-/// `user-input`.
+/// The `PackInfo`, whose Pack id is `user-input`.
 pub(crate) const ASKER: PackInfo = PackInfo::new("tests/user-input", construct)
     .prelude(PRELUDE)
     .needs(NEEDS);

@@ -1,9 +1,9 @@
 //! `plugin-user-input` - the Pack that lets a prompt section pause and
 //! ask the operator for their next message.
 //!
-//! A Host installs [`PLUGIN`], by default under the name `user-input`. A
-//! prompt declares the Pack in its frontmatter, and its sections then
-//! have an `input` table:
+//! The crate's Plugin, [`install`], adds the Pack `runvil/user-input`,
+//! whose Pack id is `user-input`. A prompt declares the Pack in its
+//! frontmatter, and its sections then have an `input` table:
 //!
 //! ````text
 //! uses:
@@ -18,11 +18,10 @@
 //!
 //! # Where this fits
 //!
-//! The Pack offers one tool, the ask tool, under `<name>/ask`, where
-//! `<name>` is the name the Host installed it under and the last segment
-//! is [`ASK`]. Its prelude defines `input.ask()`, which calls the ask tool
-//! by that full id, so every ask reaches the Harness as an ordinary tool
-//! call. The ask tool waits on the run's [`InputBroker`], provided among
+//! The Pack offers one tool, the ask tool, `user-input/ask`, whose last
+//! segment is [`ASK`]. Its prelude defines `input.ask()`, which calls the
+//! ask tool by that full id, so every ask reaches the Harness as an
+//! ordinary tool call. The ask tool waits on the run's [`InputBroker`], provided among
 //! the run's own services under [`INPUT_BROKER`]. A Host binds each run's
 //! broker to whoever launched the run, so the question reaches the right
 //! operator without naming the run or the section.
@@ -36,7 +35,7 @@
 //!
 //! # A run without an operator
 //!
-//! [`PLUGIN`] names [`INPUT_BROKER`] among its needs, so a run whose Host
+//! The Pack names [`INPUT_BROKER`] among its needs, so a run whose Host
 //! supplies no broker cannot use the Pack, and a prompt that declares it
 //! is refused before the run starts with a line naming the Pack and
 //! `runvil/input-broker`.
@@ -60,7 +59,7 @@
 //! - The model can ask the operator only when the prompt's Lua opts in.
 //!   A section offers the ask tool with `packs.offer('user-input')` or
 //!   by its id with `tools.offer("user-input/ask")`, and the model sees it
-//!   as `user-input_ask`. Neither installing nor declaring the Pack
+//!   as `user-input_ask`. Neither adding nor declaring the Pack
 //!   advertises anything to the model.
 //!
 //! ## Invariants
@@ -77,20 +76,36 @@
 
 mod ask;
 
-use runvil_plugin::{PackInfo, ServiceId, ServiceKey, ToolError};
+use runvil_plugin::{InstallError, PackInfo, PackRegistry, ServiceId, ServiceKey, ToolError};
+use serde_json::Value;
 
-/// The Pack's `PackInfo`, which a Host adds to its Pack registry.
+/// The Pack's `PackInfo`.
 ///
-/// Its FQN is `runvil/user-input`, so a Host that picks no Pack id
-/// installs it as `user-input`. It has a prelude and needs the run's
-/// [`INPUT_BROKER`].
-pub const PLUGIN: PackInfo = PackInfo::new("runvil/user-input", ask::construct)
+/// Its FQN is `runvil/user-input`, so its Pack id is `user-input`. It
+/// has a prelude and needs the run's [`INPUT_BROKER`].
+const USER_INPUT: PackInfo = PackInfo::new("runvil/user-input", ask::construct)
     .description("Ask the person running the prompt")
     .prelude(PRELUDE)
     .needs(NEEDS);
 
-/// The ask tool's last segment: its full id is `<name>/ask`, under the
-/// name the Host installed the Pack under.
+/// The Plugin: adds the `user-input` Pack to `packs` with
+/// `config["user-input"]`, which is `null` when `config` has no
+/// `user-input` key.
+///
+/// # Errors
+/// Returns the registry's [`InstallError`], such as
+/// [`InstallError::DuplicatePack`] when `packs` holds
+/// `runvil/user-input` already.
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "the Plugin signature fixes the argument types"
+)]
+pub fn install(packs: &mut PackRegistry, config: Value) -> Result<(), InstallError> {
+    packs.add(USER_INPUT, config["user-input"].clone())
+}
+
+/// The ask tool's last segment: its full id is `user-input/ask`, under
+/// the Pack's id.
 pub const ASK: &str = "ask";
 
 /// The service key for the input broker, the per-run service that carries
@@ -104,7 +119,7 @@ pub const INPUT_BROKER: ServiceKey<dyn InputBroker> = ServiceKey::new("runvil/in
 const NEEDS: &[ServiceId] = &[INPUT_BROKER.id()];
 
 /// The Lua that defines `input.ask()` for a prompt that declares the
-/// Pack. `...` is the name the Host installed the Pack under.
+/// Pack. `...` is the Pack's id.
 const PRELUDE: &str = r#"local pack = ...
 input = {}
 function input.ask(...)

@@ -14,7 +14,7 @@ use axum::routing::post;
 use serde::{Deserialize, Serialize};
 
 use runvil::Prompt;
-use runvil::packs::PackId;
+use runvil::packs::PackRef;
 use runvil::prompt::{ArgDecl, ArgsDecl, FileDecl, Frontmatter, ModelKeyword, ModelRole};
 
 use crate::error::AppError;
@@ -80,13 +80,15 @@ impl From<&FileDecl> for FileDto {
 /// A declared Pack.
 #[derive(Debug, Serialize)]
 struct PackDto {
-    /// The Pack's one-segment name, such as `web`.
+    /// The Pack id, such as `web`, which is `poop` for `acme/poop`.
     id: String,
 }
 
-impl From<&PackId> for PackDto {
-    fn from(id: &PackId) -> Self {
-        Self { id: id.to_string() }
+impl From<&PackRef> for PackDto {
+    fn from(entry: &PackRef) -> Self {
+        Self {
+            id: entry.id().to_string(),
+        }
     }
 }
 

@@ -1,7 +1,8 @@
 //! A Host runs one prompt through a Harness: it supplies a recorder, an
-//! offline inference broker, a tokio timer, and a context with no
-//! Packs installed, hands the run the operator's name, and prints the
-//! greeting the run leaves at its output file.
+//! offline inference broker, a tokio timer, and a context over a fresh
+//! Pack registry, which holds only the built-in, hands the run the
+//! operator's name, and prints the greeting the run leaves at its output
+//! file.
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -59,7 +60,7 @@ impl Timer for Clock {
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 1. Build one Harness for this run from the Host's recorder, broker,
-    //    timer, installed Packs, and the run's services.
+    //    timer, built Packs, and the run's services.
     let recorder = Arc::new(MemoryRecorder::new());
     let harness = Harness::new(
         recorder.clone(),

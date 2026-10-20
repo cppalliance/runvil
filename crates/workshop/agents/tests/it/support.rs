@@ -61,12 +61,9 @@ pub(crate) fn harness_for(
     source: String,
 ) -> (Harness, RunRequest) {
     let mut packs = PackRegistry::new();
-    packs
-        .add(plugin_user_input::PLUGIN)
+    plugin_user_input::install(&mut packs, serde_json::Value::Null)
         .expect("a new registry takes the Pack");
-    let mut host = HostContext::new(packs, HostServices::new());
-    host.install(plugin_user_input::PLUGIN.fqn, None, serde_json::Value::Null)
-        .expect("an empty Host installs the Pack");
+    let host = HostContext::new(packs, HostServices::new());
     let harness = Harness::new(
         conversation.recorder(recorder),
         Arc::new(Offline),

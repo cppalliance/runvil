@@ -935,7 +935,7 @@ The repositories, their starting points, the tools, and the commands every gate 
 
 <step-5>
 
-### Step 5: Plugins install Packs
+### Step 5: Plugins install Packs [completed]
 
 - Component: plugin-entry-points
 - Tests: run in PowerShell from `c:\Users\Vinnie\cursor\runvil`, in this order, after this step's `xtask api --bless`:

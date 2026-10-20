@@ -17,12 +17,12 @@ use serde_json::json;
 use super::{
     PendingTimer, RunOutcome, answers_to, answers_where, calls, request, run_beside, until,
 };
-use crate::scripted::{Held, MODEL, Operator, ScriptedBroker, hold_host, reply, with_asker};
+use crate::scripted::{Held, MODEL, Operator, ScriptedBroker, hold_host, reply};
 
 /// The held tool's id.
 const HOLD_TOOL: &str = "harness/hold";
 
-/// The fixture ask tool's id, under the name the asker is installed as.
+/// The fixture ask tool's id, under the asker's Pack id.
 const ASK_TOOL: &str = "user-input/ask";
 
 /// A model loop under a `pcall` that offers each of `tools` and names
@@ -32,7 +32,7 @@ fn loops_offering(tools: &[&str]) -> String {
     let mut offers = String::new();
     for tool in tools {
         let pack = tool.split('/').next().unwrap_or_default();
-        writeln!(packs, "  - {pack}").unwrap();
+        writeln!(packs, "  - tests/{pack}").unwrap();
         writeln!(offers, "tools.offer('{tool}')").unwrap();
     }
     format!(
@@ -77,7 +77,7 @@ async fn settle() {
 /// Main spawns Child, which asks the operator; Main then waits on a
 /// `wait` round, cancels Child, and waits on an `after` round.
 const CANCELS_AN_ASKER: &str = "---\nname: cancels\ndescription: d\nrunvil: 0\n\
-    uses:\n  - user-input\nmodels:\n  writer: {}\n---\n\n\
+    uses:\n  - tests/user-input\nmodels:\n  writer: {}\n---\n\n\
     # Cancels\n\n```lua\nmodels.default('writer')\n```\n\n\
     ## Main\n\n```lua\n\
     local t = tasks.spawn('## Child')\n\
@@ -164,7 +164,7 @@ async fn a_stop_starts_a_waiting_call_that_survives_stops() {
         recorder.clone(),
         Arc::new(calls_once(wire_names)),
         Arc::new(PendingTimer::default()),
-        Arc::new(with_asker(hold_host(&held))),
+        Arc::new(hold_host(&held)),
         operator.services(),
     );
     let watched = Arc::clone(&held);
@@ -221,7 +221,7 @@ async fn cancelling_a_task_drops_its_question_to_the_operator() {
         recorder.clone(),
         Arc::new(holds_back(&operator)),
         Arc::new(PendingTimer::default()),
-        Arc::new(with_asker(hold_host(&Arc::default()))),
+        Arc::new(hold_host(&Arc::default())),
         operator.services(),
     );
 

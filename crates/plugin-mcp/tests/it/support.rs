@@ -1,15 +1,16 @@
-//! What the topics share: the runtime service, the Pack over a map of
-//! servers, calls of its two tools, waits on a server's status, and a
-//! server that never answers.
+//! What the topics share: the runtime service, the Pack `install` adds,
+//! built over a map of servers, calls of its two tools, waits on a
+//! server's status, and a server that never answers.
 
 use std::sync::Arc;
 use std::time::Duration;
 
 use runvil_plugin::testing::TestCall;
 use runvil_plugin::{
-    HostServices, OutputTrust, Pack, PackId, ServiceKey, TOKIO_RUNTIME, ToolError, ToolId,
+    HostServices, OutputTrust, Pack, PackId, PackInfo, PackRegistry, ServiceKey, TOKIO_RUNTIME,
+    ToolError, ToolId,
 };
-use serde_json::{Value, json};
+use serde_json::{Map, Value, json};
 use tokio::net::TcpListener;
 use tokio::runtime::Handle;
 use tokio::task::JoinHandle;
@@ -30,13 +31,27 @@ pub(crate) fn runtime_services() -> HostServices {
     services
 }
 
-/// Builds the Pack under the Pack id `mcp` from `config`.
+/// Each Pack `install` adds to a fresh registry with `config`, beside
+/// the Pack id and config the registry holds it with.
+pub(crate) fn added(config: Value) -> Vec<(PackInfo, PackId, Value)> {
+    let mut packs = PackRegistry::new();
+    plugin_mcp::install(&mut packs, config).expect("a fresh registry takes the Pack");
+    packs
+        .into_entries()
+        .filter(|(info, _, _)| info.fqn != "runvil/subagents")
+        .collect()
+}
+
+/// Builds the Pack `install` adds, under the Pack id and with the config
+/// the registry holds it with, from the server map `servers`.
 pub(crate) fn construct(
-    config: Value,
+    servers: Value,
     services: &HostServices,
 ) -> Result<Arc<dyn Pack>, ToolError> {
-    let name = PackId::parse("mcp").expect("a Pack id parses");
-    (plugin_mcp::PLUGIN.construct)(&name, config, services)
+    let config = Map::from_iter([("mcp".to_owned(), servers)]);
+    let mut added = added(Value::Object(config));
+    let (info, id, config) = added.pop().expect("install adds one Pack");
+    (info.construct)(&id, config, services)
 }
 
 /// The Pack over the server map `servers`, on the test's runtime.

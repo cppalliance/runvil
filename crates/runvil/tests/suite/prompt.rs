@@ -40,8 +40,12 @@ fn the_frontmatter_lists_every_declaration_with_arguments_sorted_by_name() -> Te
             ),
         ]
     );
-    let packs: Vec<_> = frontmatter.uses().iter().map(ToString::to_string).collect();
-    assert_eq!(packs, ["text"]);
+    let packs: Vec<_> = frontmatter
+        .uses()
+        .iter()
+        .map(|entry| (entry.vendor(), entry.id().to_string()))
+        .collect();
+    assert_eq!(packs, [("runvil", "text".to_owned())]);
     let roles: Vec<_> = frontmatter
         .models()
         .iter()

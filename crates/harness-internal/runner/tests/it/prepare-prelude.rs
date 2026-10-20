@@ -1,13 +1,13 @@
 //! A Pack's prelude through preparation: the prelude its `PackInfo` names
 //! reaches every section VM of the prepared run, and each tool call a
 //! prelude function makes is recorded as a `ToolCall` effect attributed to
-//! the calling script, its execution, and its section. Preludes install in
+//! the calling script, its execution, and its section. Preludes run in
 //! the prompt's declaration order.
 
 use super::*;
 
 /// The prelude the speaker contributes: one table global whose function
-/// calls the speaker's echo tool under the name it was installed as.
+/// calls the speaker's echo tool under its Pack id.
 const SPEAKER_PRELUDE: &str = "local pack = ...\n\
     speaker = {}\n\
     function speaker.say(value)\n\
@@ -18,7 +18,7 @@ const SPEAKER_PRELUDE: &str = "local pack = ...\n\
 /// its prelude from two sections; the second also tries to replace the
 /// prelude's function and reports whether the table refused.
 const SPEAKS: &str = "---\nname: speaks\ndescription: d\nrunvil: 0\n\
-    uses:\n  - speaker\n---\n\n# Title\n\n\
+    uses:\n  - tests/speaker\n---\n\n# Title\n\n\
     ## First\n\n```lua\nspeaker.say('one')\n```\n\n\
     ## Second\n\n```lua\n\
     local sealed = not pcall(function() speaker.say = nil end)\n\
@@ -44,7 +44,7 @@ fn script_call(value: &str, section: &str) -> serde_json::Value {
 #[tokio::test]
 async fn a_preludes_tool_calls_are_recorded_as_script_calls_from_the_section_that_made_each() {
     let recorder = recorder();
-    let prepared = prepare(SPEAKS, "", services(&recorder, installing(SPEAKER)))
+    let prepared = prepare(SPEAKS, "", services(&recorder, building(SPEAKER)))
         .await
         .unwrap();
     let run_id = prepared.run_id;
@@ -77,14 +77,11 @@ async fn a_preludes_tool_calls_are_recorded_as_script_calls_from_the_section_tha
 }
 
 #[tokio::test]
-async fn preludes_install_in_the_prompts_declaration_order_not_the_install_order() {
+async fn preludes_run_in_the_prompts_declaration_order_not_the_registry_order() {
     let infos = ["tests/first", "tests/second"].map(|fqn| echo_pack(fqn, Some("shared = 1\n")));
-    let mut host = HostContext::new(registry(&infos), HostServices::new());
-    for info in infos {
-        host.install(info.fqn, None, Value::Null).unwrap();
-    }
+    let host = HostContext::new(registry(&infos), HostServices::new());
     let declares_second_first = "---\nname: order\ndescription: d\nrunvil: 0\n\
-        uses:\n  - second\n  - first\n---\n\n# Title\n\n## Only\n\n```lua\nreturn 'ran'\n```\n";
+        uses:\n  - tests/second\n  - tests/first\n---\n\n# Title\n\n## Only\n\n```lua\nreturn 'ran'\n```\n";
     let outcome = drive_over(declares_second_first, host).await;
     let RunOutcome::Failed { kind, message } = outcome else {
         panic!("the two preludes collide: {outcome:?}");

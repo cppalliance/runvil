@@ -224,9 +224,9 @@ fn pack_name(lua: &Lua, set: &ToolSet, value: &Value) -> mlua::Result<PackId> {
     }
 }
 
-/// Each Pack the run knows, in name order, with the ids of its offered
-/// tools in the set's id order: every declared Pack and every usable
-/// roster Pack, with or without tools, and every other Pack that
+/// Each Pack the run knows, in id order, with the ids of its offered
+/// tools in the set's id order: every declared Pack, each roster Pack
+/// that can serve, with or without tools, and every other Pack that
 /// offers one.
 fn pack_tools(set: &ToolSet) -> BTreeMap<PackId, Vec<String>> {
     let usable = set

@@ -1,41 +1,90 @@
-//! Tests for the `uses` key: Pack ids, entry forms, and duplicates.
+//! Tests for the `uses` key: bare Pack ids and vendor/name entries, the
+//! refused entry forms, and duplicates.
 
 use super::*;
 
 #[test]
-fn a_pack_id_must_be_exactly_one_segment() {
-    for id in ["runvil/web", "web/fetch", "web/", "runvil//web"] {
-        let error = parse_err(&prompt(&format!("uses: [{id}]"), &[]));
-        assert_eq!(error.kind(), ParseErrorKind::Frontmatter, "{id}: {error}");
-    }
-    assert_parse_error(
-        &prompt("uses: [runvil/web]", &[]),
-        ParseErrorKind::Frontmatter,
-        "invalid Pack id `runvil/web`: a Pack id is one segment, such as `web`, with no '/'",
+fn a_vendor_name_entry_names_its_vendor_and_its_pack_id() {
+    let prompt = parse_ok(&prompt("uses: [acme/poop]", &[]));
+    let entries = prompt.frontmatter().uses();
+    assert_eq!(entries.len(), 1);
+    assert_eq!(entries[0].vendor(), "acme");
+    assert_eq!(entries[0].id().to_string(), "poop");
+}
+
+#[test]
+fn a_bare_entry_means_the_runvil_pack_of_that_id() {
+    let prompt = parse_ok(&prompt("uses: [web, runvil/mcp]", &[]));
+    let entries = prompt.frontmatter().uses();
+    let read: Vec<(&str, String)> = entries
+        .iter()
+        .map(|entry| (entry.vendor(), entry.id().to_string()))
+        .collect();
+    assert_eq!(
+        read,
+        [("runvil", "web".to_owned()), ("runvil", "mcp".to_owned())]
     );
 }
 
 #[test]
-fn an_at_sign_in_a_pack_id_is_rejected() {
+fn an_entry_of_three_or_more_segments_is_refused_with_the_uses_entry_reason() {
+    for entry in ["a/b/c", "acme/web/extra/more"] {
+        assert_parse_error(
+            &prompt(&format!("uses: [{entry}]"), &[]),
+            ParseErrorKind::Frontmatter,
+            &format!(
+                "invalid uses entry `{entry}`: a uses entry is a Pack id, such as `web`, \
+                 or vendor/name, such as `acme/web`"
+            ),
+        );
+    }
+}
+
+#[test]
+fn an_entry_with_an_empty_segment_keeps_the_pack_id_reason() {
+    for entry in ["web/", "runvil//web"] {
+        assert_parse_error(
+            &prompt(&format!("uses: [\"{entry}\"]"), &[]),
+            ParseErrorKind::Frontmatter,
+            &format!("invalid uses entry `{entry}`: segments must not be empty"),
+        );
+    }
+}
+
+#[test]
+fn an_at_sign_in_an_entry_is_rejected_with_the_charset_reason() {
     // A Pack id carries no version, so `@` is a parse error.
-    let error = parse_err(&prompt("uses: [web@1]", &[]));
-    assert_eq!(error.kind(), ParseErrorKind::Frontmatter);
+    assert_parse_error(
+        &prompt("uses: [web@1]", &[]),
+        ParseErrorKind::Frontmatter,
+        "invalid uses entry `web@1`: segments may contain only lowercase ASCII letters, \
+         digits, '-', '_', '.'",
+    );
 }
 
 #[test]
-fn a_pack_id_with_uppercase_is_rejected() {
-    let error = parse_err(&prompt("uses: [Web]", &[]));
-    assert_eq!(error.kind(), ParseErrorKind::Frontmatter);
+fn an_entry_with_uppercase_is_rejected() {
+    for entry in ["Web", "Acme/web"] {
+        let error = parse_err(&prompt(&format!("uses: [{entry}]"), &[]));
+        assert_eq!(
+            error.kind(),
+            ParseErrorKind::Frontmatter,
+            "{entry}: {error}"
+        );
+    }
 }
 
 #[test]
-fn a_pack_entry_must_be_a_plain_name() {
-    let error = parse_err(&prompt("uses: [42]", &[]));
-    assert_eq!(error.kind(), ParseErrorKind::Frontmatter);
+fn an_entry_that_is_not_a_string_is_refused_naming_both_entry_forms() {
+    assert_parse_error(
+        &prompt("uses: [42]", &[]),
+        ParseErrorKind::Frontmatter,
+        "expected a Pack id, such as `web`, or vendor/name, such as `acme/web`",
+    );
 }
 
 #[test]
-fn the_map_form_of_a_pack_entry_is_refused_naming_the_plain_name_form() {
+fn the_map_form_of_an_entry_is_refused_naming_both_entry_forms() {
     for entry in [
         "  - ref: web\n",
         "  - ref: web\n    optional: true\n",
@@ -51,8 +100,8 @@ fn the_map_form_of_a_pack_entry_is_refused_naming_the_plain_name_form() {
         assert!(
             error
                 .to_string()
-                .contains("expected a Pack's plain name, such as `web`"),
-            "the refusal names the plain-name form: {error}"
+                .contains("expected a Pack id, such as `web`, or vendor/name, such as `acme/web`"),
+            "the refusal names both entry forms: {error}"
         );
         assert_eq!(
             error.line(),
@@ -63,8 +112,13 @@ fn the_map_form_of_a_pack_entry_is_refused_naming_the_plain_name_form() {
 }
 
 #[test]
-fn a_pack_declared_twice_is_refused() {
-    for entries in ["[web, mcp, web]", "[web, web]"] {
+fn a_pack_id_declared_twice_is_refused() {
+    for entries in [
+        "[web, mcp, web]",
+        "[web, web]",
+        "[web, acme/web]",
+        "[acme/web, zed/web]",
+    ] {
         let error = parse_err(&prompt(&format!("uses: {entries}"), &[]));
         assert_eq!(
             error.kind(),
@@ -80,18 +134,21 @@ fn a_pack_declared_twice_is_refused() {
 }
 
 #[test]
-fn a_list_of_distinct_packs_still_parses() {
-    let prompt = parse_ok(&prompt("uses: [web, web2, web-search]", &[]));
-    assert_eq!(prompt.frontmatter().uses().len(), 3);
+fn a_list_of_distinct_pack_ids_still_parses() {
+    let prompt = parse_ok(&prompt("uses: [web, web2, web-search, acme/poop]", &[]));
+    assert_eq!(prompt.frontmatter().uses().len(), 4);
 }
 
 #[test]
-fn the_uses_key_takes_plain_names() {
-    let prompt = parse_ok(&prompt("uses: [web, mcp]", &[]));
-    let packs = prompt.frontmatter().uses();
-    assert_eq!(packs.len(), 2);
-    assert_eq!(packs[0].to_string(), "web");
-    assert_eq!(packs[1].to_string(), "mcp");
+fn entries_keep_their_declaration_order() {
+    let prompt = parse_ok(&prompt("uses: [mcp, acme/poop, web]", &[]));
+    let ids: Vec<String> = prompt
+        .frontmatter()
+        .uses()
+        .iter()
+        .map(|entry| entry.id().to_string())
+        .collect();
+    assert_eq!(ids, ["mcp", "poop", "web"]);
 }
 
 #[test]

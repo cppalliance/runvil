@@ -17,7 +17,7 @@ const GREETER: PackInfo = PackInfo::new("tests/greeter", construct_greeter).need
 
 /// A prompt declaring the greeter Pack and returning its greeting.
 const GREETS: &str = "---\nname: greets\ndescription: d\nrunvil: 0\n\
-    uses:\n  - greeter\n---\n\n# Title\n\n## Only\n\n\
+    uses:\n  - tests/greeter\n---\n\n# Title\n\n## Only\n\n\
     ```lua\nreturn tools.call('greeter/greet')\n```\n";
 
 struct Greeter {
@@ -65,7 +65,7 @@ async fn prepare_greeter(
     run: HostServices,
 ) -> (Arc<MemoryRecorder>, Result<Prepared, PrepareError>) {
     let recorder = recorder();
-    let mut services = services(&recorder, installing(GREETER));
+    let mut services = services(&recorder, building(GREETER));
     services.services = run;
     let prepared = prepare(GREETS, "", services).await;
     (recorder, prepared)

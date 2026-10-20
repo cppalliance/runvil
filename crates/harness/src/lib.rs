@@ -1,10 +1,11 @@
 //! The Harness, which runs one prompt for a Host and records the run.
 //!
-//! A Host adds its Packs to a [`pack::PackRegistry`], builds one
-//! [`pack::HostContext`] over it, and installs Packs by fully
-//! qualified name. It installs them once and builds one Harness for each
-//! run. [`Harness::new`] takes the Host's recorder, inference broker,
-//! timer, installed Packs, and the run's own services. [`Harness::run`]
+//! A Host makes a [`pack::PackRegistry`], calls each Plugin it links,
+//! which adds its Packs to the registry, and builds one
+//! [`pack::HostContext`] over it, which builds every Pack the registry
+//! holds. It builds them once and builds one Harness for each run.
+//! [`Harness::new`] takes the Host's recorder, inference broker, timer,
+//! built Packs, and the run's own services. [`Harness::run`]
 //! runs the prompt to its end and returns its [`RunReport`]. While the run
 //! goes on, the Host steers it through the [`RunControl`] it took from
 //! `Harness::control` before the run started.
@@ -25,17 +26,17 @@ pub use harness_runner::performers::InferenceBroker;
 pub use harness_runner::performers::Timer;
 
 pub mod pack {
-    //! The registry a Host lists and installs Packs from, the context
-    //! a Host installs its Packs in, the services maps a Host fills, and
-    //! the Pack ids Packs are installed under. The Plugin crates
-    //! themselves are the Host's own dependencies.
+    //! The registry a Host's Plugins add Packs to, the context that
+    //! builds every Pack the registry holds, the services maps a Host
+    //! fills, and the Pack ids. The Plugin crates themselves are the
+    //! Host's own dependencies.
 
     pub use harness_runner::HostContext;
-    pub use harness_runner::InstallError;
-    pub use harness_runner::PackOrigin;
-    pub use harness_runner::PackRegistry;
     pub use runvil_plugin::HostServices;
+    pub use runvil_plugin::InstallError;
     pub use runvil_plugin::PackId;
+    pub use runvil_plugin::PackOrigin;
+    pub use runvil_plugin::PackRegistry;
 }
 
 pub mod record {

@@ -14,7 +14,6 @@ mod harness;
 mod performers;
 mod prepare;
 mod recorder;
-mod registry;
 mod scripted;
 mod support;
 mod tool_context;

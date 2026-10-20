@@ -182,9 +182,9 @@ pub struct LibraryBlock {
 pub struct ToolSet {
     /// The Packs the frontmatter declares, in declaration order.
     declared: Vec<PackId>,
-    /// Every installed Pack the caller reports, declared or not, with or
-    /// without tools: no reason when it can serve the run, and the reason,
-    /// written for the model, when it can't.
+    /// Every Pack the caller reports the run holds, with or without
+    /// tools: no reason when it can serve the run, and the reason, written
+    /// for the model, when it can't.
     roster: BTreeMap<PackId, Option<String>>,
     /// Every catalog tool the run can offer, in id order, each bound under
     /// its wire name.

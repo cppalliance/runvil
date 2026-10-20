@@ -28,7 +28,7 @@ fn provenance() -> Provenance {
     Provenance::new(TaskId::from(ChainId::root()), 0)
 }
 
-/// The ask tool's id under the name Workshop installs user-input as.
+/// The ask tool's fixed id, under the user-input Pack's id.
 const ASK_TOOL: &str = "user-input/ask";
 
 /// The ask tool's id, which Workshop recognizes a script's ask by.

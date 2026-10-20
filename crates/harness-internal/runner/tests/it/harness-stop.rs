@@ -21,10 +21,10 @@ use super::{
 };
 use crate::scripted::{
     Held, HeldTimer, MODEL, Operator, ScriptedBroker, held_broker, hold_host, reply,
-    surviving_hold_host, with_asker,
+    surviving_hold_host,
 };
 
-/// The fixture ask tool's id, under the name the asker is installed as.
+/// The fixture ask tool's id, under the asker's Pack id.
 const ASK_TOOL: &str = "user-input/ask";
 
 /// A main section parked under a `pcall` on a 30-second timed wait over
@@ -33,7 +33,7 @@ const ASK_TOOL: &str = "user-input/ask";
 /// then joins both children and returns how its own wait ended beside
 /// both children's reports.
 const STOPS_ALL: &str = "---\nname: stops\ndescription: d\nrunvil: 0\n\
-    uses:\n  - harness\nmodels:\n  writer: {}\n---\n\n\
+    uses:\n  - tests/harness\nmodels:\n  writer: {}\n---\n\n\
     # Stops\n\n```lua\nmodels.default('writer')\n```\n\n\
     ## Main\n\n```lua\n\
     local chat = tasks.spawn('## Chat')\n\
@@ -57,7 +57,7 @@ const STOPS_UNCAUGHT: &str = "---\nname: uncaught\ndescription: d\nrunvil: 0\n\
 /// The built-in chat's shape: ask the operator, run the model loop under
 /// a `pcall`, and ask again, with the held tool advertised to the model.
 const CHATS: &str = "---\nname: chats\ndescription: d\nrunvil: 0\n\
-    uses:\n  - harness\n  - user-input\n\
+    uses:\n  - tests/harness\n  - tests/user-input\n\
     models:\n  writer: {}\n---\n\n\
     # Chats\n\n```lua\nmodels.default('writer')\n```\n\n\
     ## Conversation\n\n```lua\n\
@@ -72,7 +72,7 @@ const CHATS: &str = "---\nname: chats\ndescription: d\nrunvil: 0\n\
 /// A model loop under a `pcall` with the held tool advertised, reporting
 /// how the loop call ended.
 const LOOPS_ONCE: &str = "---\nname: loops\ndescription: d\nrunvil: 0\n\
-    uses:\n  - harness\n\
+    uses:\n  - tests/harness\n\
     models:\n  writer: {}\n---\n\n\
     # Loops\n\n```lua\nmodels.default('writer')\n```\n\n\
     ## Only\n\n```lua\n\
@@ -84,12 +84,12 @@ const LOOPS_ONCE: &str = "---\nname: loops\ndescription: d\nrunvil: 0\n\
 
 /// A prompt that returns the operator's answer to one question.
 const ASKS: &str = "---\nname: asks\ndescription: d\nrunvil: 0\n\
-    uses:\n  - user-input\n---\n\n\
+    uses:\n  - tests/user-input\n---\n\n\
     # Asks\n\n## Only\n\n```lua\nreturn (input.ask())\n```\n";
 
 /// A prompt that returns what the held tool answers.
 const HOLDS: &str = "---\nname: holds\ndescription: d\nrunvil: 0\n\
-    uses:\n  - harness\n---\n\n\
+    uses:\n  - tests/harness\n---\n\n\
     # Holds\n\n## Only\n\n```lua\nreturn tools.call('harness/hold')\n```\n";
 
 #[tokio::test]
@@ -247,7 +247,7 @@ async fn a_chat_shaped_prompt_returns_to_its_question_after_a_stop_during_a_tool
         recorder.clone(),
         Arc::new(calls_hold_once()),
         Arc::new(PendingTimer::default()),
-        Arc::new(with_asker(hold_host(&tool))),
+        Arc::new(hold_host(&tool)),
         operator.services(),
     );
     let watched = Arc::clone(&tool);
@@ -306,7 +306,7 @@ fn asking_harness(recorder: &Arc<MemoryRecorder>, operator: &Arc<Operator>) -> H
         recorder.clone(),
         Arc::new(ScriptedBroker::replying()),
         Arc::new(PendingTimer::default()),
-        Arc::new(with_asker(hold_host(&Arc::default()))),
+        Arc::new(hold_host(&Arc::default())),
         operator.services(),
     )
 }

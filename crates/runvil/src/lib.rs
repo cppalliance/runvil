@@ -116,8 +116,9 @@ pub mod tools {
 }
 
 pub mod packs {
-    //! Pack ids, the Lua preludes Packs add to a run, and the
-    //! global names those preludes may define.
+    //! Pack ids, the `uses:` entries that declare Packs, the Lua
+    //! preludes Packs add to a run, and the global names those preludes
+    //! may define.
 
     pub use runvil_types::names::GlobalName;
     pub use runvil_types::names::GlobalNameError;
@@ -125,6 +126,7 @@ pub mod packs {
     pub use runvil_types::packs::PackId;
     pub use runvil_types::packs::PackIdError;
     pub use runvil_types::packs::PackIdErrorKind;
+    pub use runvil_types::packs::PackRef;
     pub use runvil_types::packs::Prelude;
 }
 

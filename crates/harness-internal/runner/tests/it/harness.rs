@@ -20,11 +20,9 @@ use std::time::Duration;
 use harness_runner::environment::HostSnapshot;
 use harness_runner::files::OutputError;
 use harness_runner::recorder::{MemoryRecorder, Record, RecordKind, RunOutcome};
-use harness_runner::{
-    Harness, HarnessError, HostContext, PackRegistry, RunControl, RunReport, RunRequest,
-};
+use harness_runner::{Harness, HarnessError, HostContext, RunControl, RunReport, RunRequest};
 use runvil::vfs::VfsRef;
-use runvil_plugin::HostServices;
+use runvil_plugin::{HostServices, PackRegistry};
 use serde_json::{Value, json};
 
 use crate::scripted::{Kept, MODEL, ScriptedBroker};

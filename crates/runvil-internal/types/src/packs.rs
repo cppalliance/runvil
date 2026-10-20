@@ -1,17 +1,17 @@
-//! The Pack identity vocabulary: [`PackId`] and its parse
-//! error, plus [`Prelude`], the Lua source a declared Pack hands
-//! the Engine.
+//! The Pack identity vocabulary: [`PackId`] and its parse error,
+//! [`PackRef`], one entry of a prompt's `uses:` list, and [`Prelude`],
+//! the Lua source a declared Pack hands the Engine.
 //!
-//! A Pack ships in a crate and is installed under a local, one-segment
-//! [`PackId`], such as `web`, and every tool it offers sits under that
-//! name, such as `web/fetch`. The Engine knows Packs by identity alone:
-//! a prompt declares them by plain name, which makes each one required
-//! and runs its prelude, and a tool names its Pack through its
-//! [`ToolId`] prefix. A run's catalog holds the tools of every Pack the
-//! caller can serve, declared or not. The Plugin contract - the
-//! `PackInfo`, the `Pack` trait, and the services a Pack reads - is
-//! in `runvil-plugin`, and installing Packs is the caller's; the
-//! Engine never builds a Pack.
+//! A Pack has a fully qualified name such as `runvil/web`, and its
+//! [`PackId`] is that name's second segment, `web`. Every tool it offers
+//! sits under that id, such as `web/fetch`. The Engine knows Packs by
+//! identity alone: a prompt declares them under `uses:`, each entry a
+//! [`PackRef`], which makes each one required and runs its prelude, and a
+//! tool names its Pack through its [`ToolId`] prefix. Which Packs a run
+//! holds, and so which tools its catalog offers, is the caller's choice.
+//! The Plugin contract - the `PackInfo`, the `Pack` trait, and the
+//! services a Pack reads - is in `runvil-plugin`, and building Packs is
+//! the caller's; the Engine never builds a Pack.
 
 use std::str::FromStr;
 
@@ -22,11 +22,12 @@ use crate::tools::ToolId;
 #[path = "packs-tests.rs"]
 mod tests;
 
-/// The local name a Pack is installed under: one segment, such as `web`.
+/// A Pack's id: one segment, the second segment of the Pack's fully
+/// qualified name, such as `web` for `runvil/web`.
 ///
 /// A Pack's id is the first segment of every tool id it contributes:
-/// `web` contributes `web/fetch`. An id is the name alone, and a name
-/// resolves to the only installed Pack of that name. A `@` version
+/// `web` contributes `web/fetch`. A run holds at most one Pack with a
+/// given id, so within a run the id names that Pack. A `@` version
 /// marker in the id is a parse error.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 #[non_exhaustive]
@@ -101,7 +102,7 @@ impl<'de> serde::Deserialize<'de> for PackId {
     /// Deserializes the id from its one-segment string and validates it
     /// the same way `PackId::parse` does. An invalid string, or any value
     /// that is not a string, such as a map or a number, fails
-    /// deserialization with a message naming the plain-name form.
+    /// deserialization with a message naming the one-segment form.
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         deserializer.deserialize_any(PackIdVisitor)
     }
@@ -116,12 +117,92 @@ impl serde::de::Visitor<'_> for PackIdVisitor {
     type Value = PackId;
 
     fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        formatter.write_str("a Pack's plain name, such as `web`")
+        formatter.write_str("a Pack id, such as `web`")
     }
 
     fn visit_str<E: serde::de::Error>(self, text: &str) -> Result<PackId, E> {
         PackId::parse(text)
             .map_err(|error| E::custom(format!("invalid Pack id `{text}`: {}", error.reason)))
+    }
+}
+
+/// The vendor a bare `uses:` entry means.
+const RUNVIL_VENDOR: &str = "runvil";
+
+/// What a `uses:` entry may be, for the refusal of any other form.
+const ENTRY_FORMS: &str = "a Pack id, such as `web`, or vendor/name, such as `acme/web`";
+
+/// One `uses:` entry: a bare Pack id, which means a runvil Pack, or
+/// vendor/name.
+///
+/// A bare entry, such as `web`, always names the `runvil` Pack of that
+/// id, and `vendor/name`, such as `acme/poop`, is the only way to name
+/// another vendor's Pack. `web` and `runvil/web` are the same entry. Only
+/// deserializing a `uses:` entry builds one.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PackRef {
+    /// The vendor, `runvil` for a bare entry.
+    vendor: String,
+    /// The Pack id, the entry's last segment.
+    id: PackId,
+}
+
+impl PackRef {
+    /// Returns the vendor, which is `"runvil"` when the entry is bare.
+    #[must_use]
+    pub fn vendor(&self) -> &str {
+        &self.vendor
+    }
+
+    /// Returns the Pack id, the entry's last segment.
+    #[must_use]
+    pub fn id(&self) -> &PackId {
+        &self.id
+    }
+
+    /// Parses one entry: one or two valid segments.
+    fn parse(text: &str) -> Result<PackRef, &'static str> {
+        let name = GlobalName::parse(text)
+            .map_err(|error| PackIdError::from_global_name_kind(error.kind()).reason)?;
+        let (vendor, id) = match name.segments() {
+            [id] => (RUNVIL_VENDOR, id),
+            [vendor, id] => (vendor.as_str(), id),
+            _ => {
+                return Err(
+                    "a uses entry is a Pack id, such as `web`, or vendor/name, such as `acme/web`",
+                );
+            }
+        };
+        Ok(PackRef {
+            vendor: vendor.to_owned(),
+            id: PackId::from_segment(id),
+        })
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for PackRef {
+    /// Deserializes one `uses:` entry from its string. An invalid string,
+    /// or any value that is not a string, such as a map or a number, fails
+    /// deserialization with a message naming both entry forms.
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        deserializer.deserialize_any(PackRefVisitor)
+    }
+}
+
+/// Deserializes a [`PackRef`] from a string alone, asking for any value
+/// for the reason [`PackIdVisitor`] does.
+struct PackRefVisitor;
+
+impl serde::de::Visitor<'_> for PackRefVisitor {
+    type Value = PackRef;
+
+    fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(ENTRY_FORMS)
+    }
+
+    fn visit_str<E: serde::de::Error>(self, text: &str) -> Result<PackRef, E> {
+        PackRef::parse(text)
+            .map_err(|reason| E::custom(format!("invalid uses entry `{text}`: {reason}")))
     }
 }
 
@@ -188,10 +269,9 @@ impl std::error::Error for PackIdError {}
 /// A prelude defines tables and functions, such as `sh.run(script)`, that
 /// call the Pack's own tools through `tools.call`. The Engine runs
 /// the source knowing only the Pack's id, which names the prelude in
-/// tracebacks and error messages. The chunk receives the Pack's local
-/// name as `...`, so `local pack = ...` lets it call
-/// `tools.call(pack .. "/ask")` whatever name the Pack was installed
-/// under.
+/// tracebacks and error messages. The chunk receives the Pack's id as
+/// `...`, so `local pack = ...` lets it call `tools.call(pack .. "/ask")`
+/// without spelling the id out.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Prelude {
     /// The Pack that contributed the source.

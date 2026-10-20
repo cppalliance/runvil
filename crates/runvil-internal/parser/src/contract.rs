@@ -1,8 +1,9 @@
 //! Parses the frontmatter contract keys: `uses`, `args`, and `models`.
 //!
 //! The YAML is the whole contract: Packs install, models declare, args
-//! type. Parsing validates the static shape - each Pack a one-segment
-//! plain name declared once, the alias grammar on map keys, the closed
+//! type. Parsing validates the static shape - each `uses:` entry a bare
+//! Pack id or vendor/name, no Pack id declared twice, the alias grammar
+//! on map keys, the closed
 //! model-keyword vocabulary, arg name and type sanity - and exposes the
 //! FULL declaration on the parsed [`Prompt`](crate::Prompt); satisfying
 //! the declaration against the caller's environment is prepare's job,
@@ -16,7 +17,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::marker::PhantomData;
 
-use runvil_types::packs::PackId;
+use runvil_types::packs::{PackId, PackRef};
 use serde::de::{self, MapAccess, Visitor};
 use serde::{Deserialize, Deserializer};
 
@@ -126,13 +127,14 @@ pub(crate) enum PackListError {
     Duplicate(PackId),
 }
 
-/// Refuses a `uses:` list that names one Pack twice.
+/// Refuses a `uses:` list that names one Pack id twice, whatever the
+/// vendors, because a run holds one Pack per Pack id.
 ///
-/// The refusal names the first Pack declared again.
-pub(crate) fn check_distinct_packs(packs: &[PackId]) -> Result<(), PackListError> {
+/// The refusal names the first Pack id declared again.
+pub(crate) fn check_distinct_packs(packs: &[PackRef]) -> Result<(), PackListError> {
     let mut seen = BTreeSet::new();
-    match packs.iter().find(|pack| !seen.insert(*pack)) {
-        Some(pack) => Err(PackListError::Duplicate(pack.clone())),
+    match packs.iter().find(|pack| !seen.insert(pack.id())) {
+        Some(pack) => Err(PackListError::Duplicate(pack.id().clone())),
         None => Ok(()),
     }
 }

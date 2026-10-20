@@ -56,7 +56,7 @@ const PLAIN: &str = "---\nname: plain\ndescription: d\nrunvil: 0\n---\n\n\
 
 /// A prompt declaring the fixture Pack and calling its tool once by id.
 const CALLS_ECHO: &str = "---\nname: calls-echo\ndescription: d\nrunvil: 0\n\
-    uses:\n  - tools\n---\n\n\
+    uses:\n  - tests/tools\n---\n\n\
     # Title\n\n## Only\n\n```lua\nreturn tools.call('tools/echo', { value = 'hi' })\n```\n";
 
 /// An empty in-memory recorder.
@@ -86,16 +86,14 @@ fn recorded_parse_events(recorder: &MemoryRecorder, run_id: RunId) -> Vec<Event>
     events
 }
 
-/// A Host with no Packs.
+/// A Host with no Packs but the built-in.
 pub(crate) fn bare() -> HostContext {
     HostContext::new(registry(&[]), HostServices::new())
 }
 
-/// A Host with `info` installed under its default Pack id.
-pub(crate) fn installing(info: PackInfo) -> HostContext {
-    let mut host = HostContext::new(registry(&[info]), HostServices::new());
-    host.install(info.fqn, None, Value::Null).unwrap();
-    host
+/// A Host that built `info` beside the built-in.
+pub(crate) fn building(info: PackInfo) -> HostContext {
+    HostContext::new(registry(&[info]), HostServices::new())
 }
 
 /// The preparation services over `recorder` and `host`, with no run
@@ -352,38 +350,67 @@ pub(crate) async fn drive_over(source: &str, host: HostContext) -> RunOutcome {
 #[tokio::test]
 async fn the_tool_performer_sends_the_effect_to_the_pack_its_id_names() {
     assert_eq!(
-        completed(drive_over(CALLS_ECHO, installing(TOOLS)).await),
+        completed(drive_over(CALLS_ECHO, building(TOOLS)).await),
         "hi",
         "the ToolCall effect reached the echo tool"
     );
 }
 
 #[tokio::test]
-async fn a_script_reaches_an_undeclared_packs_tool_by_full_id_without_its_prelude() {
+async fn a_script_reaches_an_undeclared_runvil_packs_tool_by_full_id_without_its_prelude() {
     let undeclared = "---\nname: undeclared\ndescription: d\nrunvil: 0\n---\n\n\
         # Title\n\n## Only\n\n```lua\n\
         return tools.call('extra/echo', { value = 'hi' }) .. '|' .. type(extra)\n```\n";
-    let extra = echo_pack("tests/extra", Some("extra = {}\n"));
+    let extra = echo_pack("runvil/extra", Some("extra = {}\n"));
     assert_eq!(
-        completed(drive_over(undeclared, installing(extra)).await),
+        completed(drive_over(undeclared, building(extra)).await),
         "hi|nil",
         "the undeclared Pack's tool is in the catalog, and its prelude is not installed"
     );
 }
 
 #[tokio::test]
+async fn an_undeclared_third_party_pack_is_not_in_the_run() {
+    let undeclared = "---\nname: undeclared\ndescription: d\nrunvil: 0\n---\n\n\
+        # Title\n\n## Only\n\n```lua\n\
+        local ok = pcall(tools.call, 'tools/echo', { value = 'hi' })\n\
+        return tostring(ok) .. '|' .. tostring(packs.get('tools'))\n```\n";
+    assert_eq!(
+        completed(drive_over(undeclared, building(TOOLS)).await),
+        "false|nil",
+        "tests/tools reaches only a run that declares it"
+    );
+}
+
+#[tokio::test]
+async fn a_bare_entry_another_vendor_answers_is_refused_naming_its_fqn() {
+    let recorder = recorder();
+    let declares_bare = "---\nname: bare\ndescription: d\nrunvil: 0\n\
+        uses:\n  - tools\n---\n\n# Title\n\n## Only\n\nDone.\n";
+    let error = prepare(declares_bare, "", services(&recorder, building(TOOLS)))
+        .await
+        .expect_err("a bare id means the runvil Pack, which the Host lacks");
+    let PrepareError::Refused { error, .. } = error else {
+        panic!("the refusal is a requirements refusal: {error}");
+    };
+    assert_eq!(
+        error.to_string(),
+        "the environment cannot satisfy this prompt:\n\
+         - tools is unavailable: tools means runvil/tools, which is not installed; \
+         write tests/tools to use that Pack"
+    );
+}
+
+#[tokio::test]
 async fn the_lists_split_the_offering_by_declared_pack_and_a_script_calls_a_tool_object() {
     let offering = "---\nname: offering\ndescription: d\nrunvil: 0\n\
-        uses:\n  - tools\n---\n\n# Title\n\n## Only\n\n```lua\n\
+        uses:\n  - tests/tools\n---\n\n# Title\n\n## Only\n\n```lua\n\
         local required, extras = tools.required(), tools.extras()\n\
         local extra = extras[1]\n\
         return #required .. ':' .. required[1].id .. '|' .. #extras .. ':' .. extra.id .. '|' .. \
           tools.call(extra, { value = 'hi' })\n```\n";
-    let extra = echo_pack("tests/extra", None);
-    let mut host = HostContext::new(registry(&[TOOLS, extra]), HostServices::new());
-    for info in [TOOLS, extra] {
-        host.install(info.fqn, None, Value::Null).unwrap();
-    }
+    let extra = echo_pack("runvil/extra", None);
+    let host = HostContext::new(registry(&[TOOLS, extra]), HostServices::new());
     assert_eq!(
         completed(drive_over(offering, host).await),
         "1:tools/echo|1:extra/echo|hi",

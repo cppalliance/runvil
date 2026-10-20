@@ -7,7 +7,6 @@ use std::sync::{Arc, Mutex};
 use std::task::Poll;
 use std::time::Duration;
 
-use harness_runner::PackRegistry;
 use harness_runner::performers::{BoxFuture, InferenceBroker, Performers, Timer, ToolPerformer};
 use harness_runner::recorder::{
     MemoryRecorder, Record, RecorderError, RecorderFuture, RunId, RunMeta, RunOutcome, RunRecorder,
@@ -23,7 +22,7 @@ use runvil::vfs::{
     VfsRef,
 };
 use runvil::{Prompt, Run, RunContext, RunSeed};
-use runvil_plugin::PackInfo;
+use runvil_plugin::{PackInfo, PackRegistry};
 use serde_json::{Value, json};
 
 /// The run's execution identifier.
@@ -32,12 +31,12 @@ pub(crate) const EXECUTION: &str = "runner-test";
 /// The fixed seed every fixture run and recorded meta takes.
 pub(crate) const TEST_SEED: RunSeed = RunSeed::from_bytes([7; 32]);
 
-/// A registry holding the built-ins and each of `infos`, which a suite
-/// builds its Host over before it installs them by FQN.
+/// A registry holding the built-ins and each of `infos` with a `null`
+/// config, which a suite builds its Host over.
 pub(crate) fn registry(infos: &[PackInfo]) -> PackRegistry {
     let mut packs = PackRegistry::new();
     for info in infos {
-        packs.add(*info).unwrap();
+        packs.add(*info, Value::Null).unwrap();
     }
     packs
 }

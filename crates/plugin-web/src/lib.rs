@@ -1,12 +1,12 @@
 //! Web access for prompts: a Pack that gives a run two tools, one
 //! that fetches a page and one that searches the web.
 //!
-//! A Host installs [`PLUGIN`], by default under the name `web`, and every
-//! run then receives both tools: `web/fetch`, which fetches a URL and
+//! The crate's Plugin, [`install`], adds the Pack `runvil/web`, whose
+//! Pack id is `web`, and a run then holds both of its tools unless it
+//! declares another vendor's `web`: `web/fetch`, which fetches a URL and
 //! returns its content as text, and `web/search`, which runs a search
 //! through the Host's [`SearchProvider`]. The two tools always come
-//! together, named under whatever name the Host installed the Pack
-//! under.
+//! together.
 //!
 //! The Pack has no prelude, so declaring it, as in `uses: [web]`,
 //! only makes it required. A prompt reaches the tools by id from Lua,
@@ -18,9 +18,9 @@
 //! [`SearchProvider`] goes under the key [`SEARCH_PROVIDER`], and the
 //! tokio runtime handle that every fetch is spawned onto goes under the
 //! Plugin contract's [`runvil_plugin::TOKIO_RUNTIME`] service.
-//! Install reads both; when either is missing, the Pack is installed as
-//! unavailable, no run receives its tools, and a prompt that declares it
-//! is refused naming the missing service.
+//! Building the Pack reads both; when either is missing, the Pack is
+//! built as unavailable, no run receives its tools, and a prompt that
+//! declares it is refused naming the missing service.
 //!
 //! The fetch tool is security-critical. The model supplies the URL, so the
 //! tool is the server-side request forgery (SSRF) boundary between an
@@ -57,8 +57,8 @@
 //!   credentials.
 //! - Every fetch runs on the Host's runtime handle, and dropping the call
 //!   aborts it.
-//! - Install accepts only a `null` or `{}` configuration; any other value
-//!   leaves the Pack unavailable.
+//! - The Pack accepts only a `null` or `{}` configuration; any other value
+//!   leaves it unavailable.
 
 mod address;
 #[cfg_attr(
@@ -83,4 +83,4 @@ pub use crate::provider::{
     Freshness, SafeSearch, SearchError, SearchErrorKind, SearchProvider, SearchQuery, SearchResult,
     SearchResults,
 };
-pub use crate::web::{PLUGIN, SEARCH_PROVIDER};
+pub use crate::web::{SEARCH_PROVIDER, install};

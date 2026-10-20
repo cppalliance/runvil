@@ -51,12 +51,13 @@ use crate::host::{HostContext, HostRunContext};
 use crate::performers::{InferenceBroker, Performers, Timer};
 use crate::recorder::{Record, RecordKind, RecorderError, RunId, RunMeta, RunOutcome, RunRecorder};
 
-/// What the caller owns and preparation borrows: the Host's installed
+/// What the caller owns and preparation borrows: the Host's built
 /// Packs and the run's own services, the real directories, the run's
 /// cancel flag, the recorder, the inference broker and the timer that
 /// reach beyond the runner, and the run's name.
 pub struct Services {
-    /// The Host's installed Packs, which the run takes its snapshot of.
+    /// The Host's built Packs, from which the run picks its own and takes
+    /// their snapshot.
     pub host: Arc<HostContext>,
     /// The run's own services, such as its input broker: every tool call
     /// of the run is lent them.
@@ -317,19 +318,19 @@ pub(crate) async fn prepare_noting_cancel(
     if let Some(model) = model {
         ctx = ctx.model(model);
     }
-    // The wait-snapshot-prepare-refuse ceremony: the run's whole
+    // The pick-wait-snapshot-prepare-refuse ceremony: the run's whole
     // filesystem, the real directories and the declared store, goes to
-    // the context as given; the snapshot is taken once every Pack is
-    // ready or the run is cancelled, its catalog is what the run offers,
-    // its roster gives each Pack's object in the run's Lua, its preludes
-    // go to every section VM, and the
-    // snapshot itself stays here as the tool performer, lending each call
-    // the run's services. A refusal after a cancel ends the run cancelled,
-    // as `Harness::run_to_end` reports it.
-    let ctx = ctx.vfs(vfs);
-    let failures = host.wait_ready(&cancel).await;
-    let (snapshot, unmet) = host.begin_run(services, failures, &prompt);
-    let (ctx, mut requirements) = prepare_from_snapshot(ctx, &snapshot, &prompt);
+    // the context as given; the run's Packs are picked from the prompt's
+    // `uses:` entries; the snapshot is taken once each of them is ready
+    // or the run is cancelled, its catalog is what the run offers, its
+    // roster gives each Pack's object in the run's Lua, its preludes go
+    // to every section VM, and the snapshot itself stays here as the tool
+    // performer, lending each call the run's services. A refusal after a
+    // cancel ends the run cancelled, as `Harness::run_to_end` reports it.
+    let packs = host.pick(&prompt);
+    let failures = host.wait_ready(&packs, &cancel).await;
+    let (snapshot, unmet) = host.begin_run(&packs, services, failures, &prompt);
+    let (ctx, mut requirements) = prepare_from_snapshot(ctx.vfs(vfs), &snapshot, &prompt);
     requirements.merge(unmet);
     if let Some(error) = requirements.refusal() {
         let cancelled = cancel.is_cancelled();
