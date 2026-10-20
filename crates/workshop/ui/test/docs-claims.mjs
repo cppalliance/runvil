@@ -45,8 +45,6 @@ const HOST_ALLOWED = /host-and-address|self-hosted|github-hosted/gi;
 const TERM_ALLOWED = /speech engine|database engine|test harness/gi;
 // Other programs' plugins, which keep a lowercase "plugin".
 const PLUGIN_ALLOWED = /Tauri plugin|ProseMirror plugin|esbuild plugin|NSIS plugin/gi;
-// Senses of "capability" other than the Plugin.
-const CAPABILITY_ALLOWED = /access capability|Tauri capability|model capabilities/gi;
 
 async function* walk(dir) {
   for (const entry of await readdir(dir, { withFileTypes: true })) {
@@ -111,9 +109,6 @@ test("rulebooks use Engine, Harness, Host, and Plugin as the root AGENTS.md defi
     if (/(?<![-_/:\w])plugins?(?![-_/:\w])/.test(text.replace(PLUGIN_ALLOWED, " "))) {
       offenders.push(`${where} (lowercase "plugin": required "Plugin" for the defined term, or the other program's name, such as "Tauri plugin")`);
     }
-    if (/capabilit/i.test(text.replace(CAPABILITY_ALLOWED, " "))) {
-      offenders.push(`${where} ("capability": the Plugin is never called a capability; another sense names what it grants, such as "access capability")`);
-    }
   }
   assert.deepEqual(offenders, [], "rulebook lines break the root AGENTS.md Definitions");
 });
@@ -160,8 +155,8 @@ test("Engine crates name the caller, never the Host or the Harness's crates and 
   assert.deepEqual(offenders, [], "Engine crate lines break the root AGENTS.md Engine rule");
 });
 
-// A Host installs each Plugin once, and every run receives every usable
-// Plugin's tools, so nothing activates a Plugin when a run starts. Comment
+// Packs are built once, when the Host sets up, and every run takes a
+// snapshot of them, so nothing activates a Pack when a run starts. Comment
 // lines are checked, not code, so a local variable keeps its name.
 const PLUGIN_DOC_DIRS = [
   "crates/runvil",
@@ -175,7 +170,7 @@ const PLUGIN_DOC_DIRS = [
   "crates/plugin-mcp",
 ];
 
-test("the root AGENTS.md and the Plugin-facing crates' comments never describe Plugin activation", async () => {
+test("the root AGENTS.md and the Pack-facing crates' comments never describe Pack activation", async () => {
   const offenders = await offendingLines("AGENTS.md", /activat/i);
   for (const dir of PLUGIN_DOC_DIRS) {
     for await (const full of walk(path.join(repoRoot, dir))) {
@@ -190,5 +185,5 @@ test("the root AGENTS.md and the Plugin-facing crates' comments never describe P
       });
     }
   }
-  assert.deepEqual(offenders, [], "a doc still says Plugins are activated; say installed, snapshotted, or declared");
+  assert.deepEqual(offenders, [], "a doc still says Packs are activated; say installed, snapshotted, or declared");
 });

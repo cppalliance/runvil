@@ -4,12 +4,13 @@ Multi-crate Rust workspace for the Engine, the Harness that runs it, the Gateway
 
 ## Definitions
 
-Four words have exactly one meaning each, everywhere in this repository: code comments, docs, rulebooks, and plans. Write them capitalized.
+Five words have exactly one meaning each, everywhere in this repository: code comments, docs, rulebooks, and plans. Write them capitalized.
 
 - **Engine**: the `runvil` and `runvil-*` crates. The Engine parses a prompt and steps a run. Whenever a run needs a model reply, a tool result, a timer, or a file, the Engine emits an effect and waits for its caller to answer it. In production the caller is the Harness.
 - **Harness**: the `harness` and `harness-*` crates. The Harness steps the Engine, performs every effect, returns each answer, and records every run through the recorder the Host supplies. Production code runs prompts only through the Harness.
 - **Host**: an application that runs prompts through the Harness, such as Workshop or Papergate. The Host makes every policy decision. It runs prompts only through the Harness; it may also use the Engine's parser and types to read prompts and show events.
-- **Plugin**: a named unit of tools, and optionally a Lua prelude, that a Host adds to its Plugin registry and installs into a `HostContext` by its fully qualified name (FQN), such as `runvil/web`, under a local name the Host chooses, its Plugin id, such as `web`. Every tool it offers sits under its Plugin id (`web/fetch`). A Host installs each Plugin once; `plugin-mcp`, installed once per MCP server, is the one exception until its redesign. Plugins ship in packages: a linked package is a `plugin-*` crate implementing `runvil-plugin`, and a library package is a dynamic library (not built yet). A Plugin is linked or library by the package it ships in, or built-in (`runvil/subagents`, reserved for subagent tools the Engine will implement under the fixed name `subagents`, which no other Plugin may take; not built yet). Linked and library Plugins use only the `runvil-plugin` API. Every run receives every usable Plugin's tools: those of each installed Plugin that built and whose per-run services the run has. Declaring a Plugin under `plugins:` in a prompt's frontmatter installs its Lua prelude and makes it required, and the prompt's Lua decides what the model sees. A Plugin has no other name: never capability, pack, or addon. A package is what Plugins ship in, never a Plugin.
+- **Pack**: code which installs an optional native prelude, an optional Lua prelude, and zero or more tools.
+- **Plugin**: an entry point which installs zero or more Packs.
 
 ### Using the terms
 
@@ -56,7 +57,7 @@ Four words have exactly one meaning each, everywhere in this repository: code co
 - Facade docs: `RUSTDOCFLAGS="-D warnings" cargo doc -p runvil --no-deps`, without `--all-features`, so the facade's docs build with default features.
 - Facade surface: `cargo +<pinned nightly> xtask api --check`, where the pinned nightly is the one named in `crates/build-xtask/src/api/toolchain.rs`; on any other toolchain it fails at once, naming the nightly it needs. It checks that every path a surface item's signature, fields, bounds, impls, or doc links name is a facade re-export (or std, core, alloc, or an allowlisted crate), that no surface doc text names an internal crate, and that the surface listing matches the committed `crates/runvil/public-api.txt`. Run it with `CARGO_BUILD_WARNINGS` unset (in PowerShell, `Remove-Item Env:CARGO_BUILD_WARNINGS` after the clippy gate set it), because the nightly cargo turns its own warnings into errors while that variable is set.
 - Boundary and structural checks: `cargo test -p build-xtask`. It enforces the product and container boundaries, the Workshop tier graph, the `## Invariants` marker, and lint inheritance.
-- Wording and rulebook scan: `node --test crates/workshop/ui/test/docs-claims.mjs`. It enforces the Engine wording rule, the rulebook Definitions, and the Plugin lifecycle wording (installed, snapshotted, or declared). It needs no `npm ci` and runs from any directory, because the file resolves the repository root from its own path.
+- Wording and rulebook scan: `node --test crates/workshop/ui/test/docs-claims.mjs`. It enforces the Engine wording rule, the rulebook Definitions, and the Pack lifecycle wording (installed, snapshotted, or declared). It needs no `npm ci` and runs from any directory, because the file resolves the repository root from its own path.
 
 ## Structural Rules
 
