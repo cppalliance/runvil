@@ -77,7 +77,7 @@ impl Scheduler {
     /// is never listed. The arena is a hash map; ids order as paths and one
     /// owner's tasks are its direct children, so sorting recovers spawn
     /// order.
-    pub(super) fn live_tasks_of(&self, owner: ChainIndex) -> Vec<TaskId> {
+    fn live_tasks_of(&self, owner: ChainIndex) -> Vec<TaskId> {
         let mut live: Vec<TaskId> = self
             .tasks
             .iter()
@@ -198,7 +198,7 @@ impl Scheduler {
     /// position while it is live (its section and what it is parked on)
     /// and the chain's counters and note, which the append-only arena
     /// keeps after the chain ends.
-    pub(super) fn task_status(&self, id: ChainIndex, task: &TaskId) -> Result<TaskStatus> {
+    fn task_status(&self, id: ChainIndex, task: &TaskId) -> Result<TaskStatus> {
         let slot = self.visible_slot(id, task)?;
         let mut status = TaskStatus {
             target: slot.target.clone(),

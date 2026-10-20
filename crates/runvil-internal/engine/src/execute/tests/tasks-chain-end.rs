@@ -1,11 +1,19 @@
 //! The chain-end rules: a chain ending with live tasks fails as
 //! `tasks_live` naming the leaked ids (as the run's error at the root, as
 //! the call's answer for a `call` chain), the leaked tasks are abandoned;
-//! a task spawned in H1 belongs to the walk after the hand-off; an aborted
-//! chain's owned tasks abort with it.
+//! a running task's terminal names how its owner ended (returned, failed,
+//! or exhausted its tool loop); a task spawned in H1 belongs to the walk
+//! after the hand-off; an aborted chain's owned tasks abort with it.
+
+use runvil_parser::test_support::prompt;
+use runvil_types::ids::AbandonReason;
 
 use super::*;
 use crate::execute::tests::context::task;
+use crate::execute::tests::fixtures::echo_tool;
+use crate::execute::tests::models_loop::LOOP_TO_TEXT;
+use crate::execute::tests::scheduler::asks;
+use crate::test_support::rig::RigTrace;
 
 /// A child body that parks on a store write and never returns on its own,
 /// so the task stays live until something ends it.
@@ -103,6 +111,100 @@ fn a_chain_failing_with_a_live_task_keeps_its_own_error_and_abandons_the_task() 
     assert!(
         no_task_reports(&records),
         "a task that never ran reports no start and no terminal: {records:?}"
+    );
+}
+
+/// A child body that parks on a model round the scenario holds, so the
+/// task is admitted and still running when its owner ends.
+const CHILD_PARKED_ON_HELD_ROUND: &str = "return models.infer('park')";
+
+/// Drives `scenario` with the child's round held, so the spawner's body
+/// must suspend after its spawn for the child to run. Asserts that task
+/// `0.0` started and then ended with its owner: its slot is Abandoned and
+/// its only terminal, under the child's section, carries `reason`.
+#[track_caller]
+fn run_abandoning_a_running_task(scenario: Scenario, reason: AbandonReason) -> RigTrace {
+    let mut rig = Rig::run(scenario.hold(asks("park")));
+    assert_eq!(
+        rig.task_state_for_test(&task("0.0")),
+        Some(TaskState::Abandoned),
+        "the running task ended with its owner"
+    );
+    let recorder = TaskRecorder::replayed(rig.trace());
+    let observations = recorder.observations_of(&task("0.0"));
+    assert!(
+        matches!(
+            observations.as_slice(),
+            [Observation::TaskStarted { .. }, Observation::TaskAbandoned { reason: seen, .. }]
+                if *seen == reason
+        ),
+        "the task started, then its one terminal names {reason:?}: {observations:?}"
+    );
+    let abandoned = Observation::TaskAbandoned {
+        task: task("0.0"),
+        reason,
+    };
+    recorder.position("Child", &abandoned);
+    rig
+}
+
+#[test]
+fn a_returning_owner_abandons_its_running_task_as_owner_returned() {
+    // The spawner suspends on a store write after the spawn, so the child
+    // is admitted and parks on its held round; the spawner then returns
+    // with the child live, which is the leak.
+    let md = spawner_prompt(
+        "tasks.spawn('## Child')\n\
+         store.write('own', 'x')\n\
+         return 'done'",
+        CHILD_PARKED_ON_HELD_ROUND,
+    );
+    let rig = run_abandoning_a_running_task(scheduler_scenario(md), AbandonReason::OwnerReturned);
+    match rig.trace().error().inner() {
+        Error::TasksLive { tasks } => assert_eq!(tasks, &[task("0.0")]),
+        other => panic!("expected tasks_live, got {other:?}"),
+    }
+}
+
+#[test]
+fn a_failing_owner_abandons_its_running_task_as_owner_failed() {
+    let md = spawner_prompt(
+        "tasks.spawn('## Child')\n\
+         store.write('own', 'x')\n\
+         error('spawner boom')",
+        CHILD_PARKED_ON_HELD_ROUND,
+    );
+    let rig = run_abandoning_a_running_task(scheduler_scenario(md), AbandonReason::OwnerFailed);
+    let error = rig.trace().error().inner();
+    assert!(
+        error.to_string().contains("spawner boom"),
+        "the owner keeps its own error over the leak: {error}"
+    );
+}
+
+#[test]
+fn an_exhausted_tool_loop_abandons_its_running_task_as_tool_loop_exhausted() {
+    // The owner's loop runs one round of tool calls under a cap of one, so
+    // it fails as exhausted while the child is parked on its held round.
+    let gateway = ScriptedChat::new(vec![calls(&[("call_0", "echo", "{\"value\":\"x\"}")])]);
+    let owner = format!(
+        "tasks.spawn('## Child')\n\
+         store.write('own', 'x')\n\
+         tools.offer('tools/echo')\n\
+         {LOOP_TO_TEXT}"
+    );
+    let md = prompt(
+        "max_tool_iterations: 1",
+        &[("Spawner", &owner), ("Child", CHILD_PARKED_ON_HELD_ROUND)],
+    );
+    let scenario = scheduler_scenario(md)
+        .offer("echo", echo_tool())
+        .chat(&gateway);
+    let rig = run_abandoning_a_running_task(scenario, AbandonReason::ToolLoopExhausted);
+    let error = rig.trace().error().inner();
+    assert!(
+        matches!(error, Error::ToolLoopExhausted),
+        "the owner's own error stands: {error:?}"
     );
 }
 

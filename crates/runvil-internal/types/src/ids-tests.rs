@@ -1,6 +1,7 @@
-//! Tests for `ChainId`, `TaskId`, and `Provenance` rendering, parsing, and ordering.
+//! Tests for `ChainId`, `TaskId`, and `Provenance` rendering, parsing, and
+//! ordering, and the phrase each `AbandonReason` renders.
 
-use super::{ChainId, Provenance, TaskId};
+use super::{AbandonReason, ChainId, Provenance, TaskId};
 use crate::test_support::assert_wire;
 
 #[test]
@@ -75,4 +76,21 @@ fn provenance_orders_by_task_then_sequence_and_round_trips() {
         "the task path orders before the sequence"
     );
     assert_wire(&later, r#"{"task":"0.2","seq":7}"#);
+}
+
+#[test]
+fn every_abandon_reason_renders_its_own_phrase() {
+    let phrases = [
+        (AbandonReason::OwnerReturned, "the section ended"),
+        (AbandonReason::OwnerFailed, "the owner failed"),
+        (
+            AbandonReason::ToolLoopExhausted,
+            "the tool loop was exhausted",
+        ),
+        (AbandonReason::OwnerAborted, "the owner was aborted"),
+        (AbandonReason::RunTerminated, "the run ended"),
+    ];
+    for (reason, phrase) in phrases {
+        assert_eq!(reason.why(), phrase, "{reason:?}");
+    }
 }

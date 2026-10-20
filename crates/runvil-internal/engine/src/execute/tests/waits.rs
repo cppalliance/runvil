@@ -333,8 +333,9 @@ fn cancel_ends_a_parked_task_idempotently_and_reports_task_cancelled_once() {
 fn pending_lists_the_callers_live_tasks_in_spawn_order() {
     // Two live children and one finished: `pending` names the live two in
     // spawn order as handles every `tasks.*` accepts. `pending` takes no
-    // argument: an empty table and a table naming an origin are each the
-    // call's error, naming the argument's type.
+    // argument: an empty table, a table naming an origin, and a table
+    // after a leading nil are each the call's error, naming the argument's
+    // type.
     let md = tasks_prompt(
         "local a = tasks.spawn('## Parked')\n\
          local b = tasks.spawn('## Quick')\n\
@@ -347,8 +348,10 @@ fn pending_lists_the_callers_live_tasks_in_spawn_order() {
          assert(not ok1 and e1.kind == 'lua', tostring(e1))\n\
          local ok2, e2 = pcall(tasks.pending, { origin = 'author' })\n\
          assert(not ok2 and e2.kind == 'lua', tostring(e2))\n\
+         local ok3, e3 = pcall(tasks.pending, nil, {})\n\
+         assert(not ok3 and e3.kind == 'lua', tostring(e3))\n\
          for _, t in ipairs(live) do tasks.cancel(t) end\n\
-         return tostring(e1) .. '|' .. tostring(e2)",
+         return tostring(e1) .. '|' .. tostring(e2) .. '|' .. tostring(e3)",
         &[
             (
                 "Parked",
@@ -360,8 +363,9 @@ fn pending_lists_the_callers_live_tasks_in_spawn_order() {
     let trace = scheduler_scenario(md).run();
     assert_eq!(
         trace.text(),
-        "tasks.pending takes no arguments, got table|tasks.pending takes no arguments, got table",
-        "both arguments are refused and the cancelled tasks do not leak"
+        "tasks.pending takes no arguments, got table|tasks.pending takes no arguments, got table|\
+         tasks.pending takes no arguments, got table",
+        "every argument is refused and the cancelled tasks do not leak"
     );
 }
 
