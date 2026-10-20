@@ -174,3 +174,53 @@ fn an_answer_that_is_not_a_tool_result_is_a_backend_error() {
     let other = output(Ok(ServerResult::empty(()))).expect_err("not a tool result");
     assert_eq!(other.kind(), ToolErrorKind::Backend);
 }
+
+fn structured_of(value: Value) -> Value {
+    let output = render(&result(value)).expect("a success renders");
+    let json = output
+        .structured_json()
+        .expect("a success carries the structured JSON text");
+    serde_json::from_str(json).expect("the structured JSON text parses")
+}
+
+#[test]
+fn a_success_attaches_the_call_tool_result_in_its_wire_form() {
+    let wire = json!({ "content": [
+        { "type": "text", "text": "hello" },
+        { "type": "resource_link", "uri": "https://example.com/r", "name": "r", "mimeType": "text/html" }
+    ] });
+    let output = render(&result(wire.clone())).expect("a success renders");
+    assert_eq!(output.text(), "hello\n\n[resource: https://example.com/r]");
+    let structured: Value =
+        serde_json::from_str(output.structured_json().expect("structured JSON text"))
+            .expect("parses");
+    assert_eq!(structured, wire);
+}
+
+#[test]
+fn structured_content_appears_in_the_structured_json_text() {
+    let structured = structured_of(json!({
+        "content": [{ "type": "text", "text": "shown" }],
+        "structuredContent": { "n": 1 }
+    }));
+    assert_eq!(structured["structuredContent"], json!({ "n": 1 }));
+    assert_eq!(structured["content"][0]["text"], json!("shown"));
+}
+
+#[test]
+fn binary_blocks_pass_through_as_base64_in_the_structured_json_text() {
+    let structured = structured_of(json!({ "content": [
+        { "type": "image", "data": "AAAA", "mimeType": "image/png" },
+        { "type": "resource", "resource": { "uri": "file:///b.bin", "mimeType": "application/pdf", "blob": "CCCC" } }
+    ] }));
+    assert_eq!(structured["content"][0]["data"], json!("AAAA"));
+    assert_eq!(structured["content"][1]["resource"]["blob"], json!("CCCC"));
+}
+
+#[test]
+fn an_empty_success_still_attaches_the_structured_json_text() {
+    assert_eq!(
+        structured_of(json!({ "content": [] }))["content"],
+        json!([])
+    );
+}

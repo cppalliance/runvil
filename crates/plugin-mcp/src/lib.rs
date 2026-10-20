@@ -42,7 +42,10 @@
 //! with blank lines. An image, audio, or binary resource becomes a
 //! placeholder such as `[image omitted: image/png]`, a resource link
 //! becomes `[resource: <uri>]`, and a result with no blocks but with
-//! `structuredContent` gives that JSON. A result marked `isError` is a
+//! `structuredContent` gives that JSON. That flattened text, wrapped as
+//! untrusted, is what the model receives. A script that calls the tool
+//! receives the whole `CallToolResult` as a table in its MCP wire form,
+//! with binary data as base64. A result marked `isError` is a
 //! backend error with the server's text, and a transport failure or the
 //! deadline is a transport error. Dropping a call sends the server
 //! `notifications/cancelled` for its request.

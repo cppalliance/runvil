@@ -245,7 +245,7 @@ Components, in dependency order:
 
 <step-4>
 
-### Step 4: plugin-mcp attaches the CallToolResult
+### Step 4: plugin-mcp attaches the CallToolResult [completed]
 
 - Component: `plugin-mcp-producer`
 - Tests: `cargo nextest run --locked -p plugin-mcp --all-features`
