@@ -9,7 +9,7 @@
 //! [`ToolInfo`] and the caller-supplied [`ToolCatalog`] of `ToolInfo` values,
 //! trusted output ([`ToolOutput`], [`OutputTrust`]), the model-safe
 //! [`ToolError`], a call's [`ToolCallOrigin`], and the contract errors. The
-//! implementation trait behind a tool info (`Plugin`) is the Plugin
+//! implementation trait behind a tool info (`Plugin`) is the Pack
 //! contract's, in `runvil-plugin`, which the `plugin-*` crates
 //! implement; the prompt parser and
 //! the executor sit in their own crates and depend on `runvil-types`.

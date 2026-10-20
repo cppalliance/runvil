@@ -53,7 +53,7 @@ pub(super) fn install_tool_objects(lua: &Lua, set: &ToolSet) -> Result<()> {
 }
 
 /// Installs `tools.required()` and `tools.extras()`, the offered tools
-/// whose Plugin the frontmatter declares and every other one, and
+/// whose Pack the frontmatter declares and every other one, and
 /// `tools.get(id)`.
 ///
 /// # Errors
@@ -67,7 +67,7 @@ pub(super) fn install_tool_lists(lua: &Lua, tools: &Table, set: &Arc<ToolSet>) -
                 for binding in set
                     .offered()
                     .iter()
-                    .filter(|binding| set.declared().contains(&binding.id().plugin()) == required)
+                    .filter(|binding| set.declared().contains(&binding.id().pack()) == required)
                 {
                     if let Some(object) = tool_object(lua, &binding.id().to_string())? {
                         objects.raw_push(object)?;

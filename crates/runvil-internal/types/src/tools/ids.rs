@@ -3,17 +3,17 @@
 use std::str::FromStr;
 
 use crate::names::{GlobalName, GlobalNameErrorKind};
-use crate::plugins::PluginId;
+use crate::packs::PackId;
 
-/// Identifies a tool by its Plugin's local name and the Plugin's own segments.
+/// Identifies a tool by its Pack's local name and the Pack's own segments.
 ///
 /// A tool id is a [`GlobalName`] of two or more segments, such as
-/// `web/fetch`. The first segment is the id of the Plugin that contributed
+/// `web/fetch`. The first segment is the id of the Pack that contributed
 /// the tool, and the last is the tool's own name. For example, `web/fetch`
 /// comes from `web`.
 ///
 /// The tool id stays its identity under any name a model request uses for
-/// it. When a Plugin is bound to a prompt, a selected tool can be offered
+/// it. When a Pack is bound to a prompt, a selected tool can be offered
 /// under a prompt-local alias. Calls under that alias still reach the same
 /// tool.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -21,7 +21,7 @@ use crate::plugins::PluginId;
 pub struct ToolId(GlobalName);
 
 impl ToolId {
-    /// Parses a tool id of two or more segments (`plugin/name`).
+    /// Parses a tool id of two or more segments (`pack/name`).
     ///
     /// # Errors
     /// Returns [`ToolIdError`] when the id has fewer than two segments
@@ -37,7 +37,7 @@ impl ToolId {
             return Err(ToolIdError {
                 field: "id",
                 kind: ToolIdErrorKind::SegmentCount,
-                reason: "a tool id has two or more segments, its Plugin's name first, such as `web/fetch`",
+                reason: "a tool id has two or more segments, its Pack's name first, such as `web/fetch`",
             });
         }
         Ok(ToolId(name))
@@ -51,21 +51,21 @@ impl ToolId {
         &segments[segments.len() - 1]
     }
 
-    /// Returns the id of the Plugin that contributed this tool.
+    /// Returns the id of the Pack that contributed this tool.
     ///
     /// It is the tool id's first segment, validated when the tool id was
     /// parsed. This method reuses that validation and builds the
-    /// [`PluginId`] directly.
+    /// [`PackId`] directly.
     #[must_use]
-    pub fn plugin(&self) -> PluginId {
-        PluginId::from_segment(self.0.first())
+    pub fn pack(&self) -> PackId {
+        PackId::from_segment(self.0.first())
     }
 
-    /// Returns the first segment, the contributing Plugin's local name.
+    /// Returns the first segment, the contributing Pack's local name.
     ///
-    /// Crate-internal: backs [`PluginId::contains`] without building a
-    /// [`PluginId`].
-    pub(crate) fn plugin_segment(&self) -> &str {
+    /// Crate-internal: backs [`PackId::contains`] without building a
+    /// [`PackId`].
+    pub(crate) fn pack_segment(&self) -> &str {
         self.0.first()
     }
 }

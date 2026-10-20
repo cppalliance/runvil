@@ -25,7 +25,7 @@ const STORE_SOURCE: &str = include_str!("__impl_store.lua");
 
 /// The registry key of the store dispatchers' phase table, kept by
 /// [`install_store_table`] so [`route_store_to_shims`] can switch every
-/// dispatcher to the yield shims once the Plugin preludes have installed.
+/// dispatcher to the yield shims once the Pack preludes have installed.
 const STORE_PHASE_REGISTRY: &str = "runvil.engine.store_phase";
 
 /// The store dispatcher program, compiled once and loaded per VM under the
@@ -192,7 +192,7 @@ pub fn store_probe_message(error: &VfsError) -> String {
 }
 
 /// Records a store conflict in the shared slot the Engine reads when the
-/// Plugin preludes return: a conflict a prelude caught with `pcall` must
+/// Pack preludes return: a conflict a prelude caught with `pcall` must
 /// still end the run with a determinism violation, so the direct closures
 /// write it here rather than only raising it.
 fn record_store_conflict<T>(
@@ -231,7 +231,7 @@ fn record_store_conflict<T>(
 /// what the claims model attributes operations to: a fanout arm's view is
 /// spawned from the caller's, so two unordered arms touching one path
 /// surface the conflict as [`VfsError::Conflict`]. A conflict these direct
-/// closures see - while the Plugin preludes install, before the yield
+/// closures see - while the Pack preludes install, before the yield
 /// shims install - is recorded in `conflicts`, the shared slot the Engine
 /// reads when the preludes return, so the run ends with a determinism
 /// violation even if the prelude caught the error.
@@ -358,7 +358,7 @@ pub(crate) fn install_store_table(
 
 /// Switches every store dispatcher [`install_store_table`] built on this
 /// VM to the yield shims in `shims`, whichever reference the prompt
-/// holds: a function a Plugin prelude captured while it installed yields
+/// holds: a function a Pack prelude captured while it installed yields
 /// from here on exactly as `store.*` does.
 ///
 /// # Errors

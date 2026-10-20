@@ -9,7 +9,7 @@
 use std::sync::Arc;
 
 use runvil_plugin::{
-    HostServices, Plugin, PluginFuture, PluginId, PluginInfo, ServiceKey, ToolContext, ToolError,
+    HostServices, PackId, Plugin, PluginFuture, PluginInfo, ServiceKey, ToolContext, ToolError,
     ToolErrorKind, ToolId, ToolInfo, ToolOutput,
 };
 use serde_json::{Value, json};
@@ -56,7 +56,7 @@ struct Web {
     reason = "the PluginInfo construct signature fixes the argument types"
 )]
 fn construct(
-    name: &PluginId,
+    name: &PackId,
     config: Value,
     services: &HostServices,
 ) -> Result<Arc<dyn Plugin>, ToolError> {
@@ -79,7 +79,7 @@ fn construct(
 
 impl Web {
     /// The Plugin over `fetch` and `search`, its tools named under `name`.
-    fn new(name: &PluginId, fetch: WebFetch, search: WebSearch) -> Result<Web, ToolError> {
+    fn new(name: &PackId, fetch: WebFetch, search: WebSearch) -> Result<Web, ToolError> {
         let id = |tool: &str| {
             ToolId::parse(&format!("{name}/{tool}")).map_err(|e| {
                 ToolError::new(ToolErrorKind::Backend, "web could not name its tools")
@@ -106,7 +106,7 @@ impl Web {
     #[cfg(test)]
     fn with_fetch_config(
         self,
-        name: &PluginId,
+        name: &PackId,
         runtime: Handle,
         config: crate::config::FetchConfig,
     ) -> Result<Web, crate::config::ConfigError> {

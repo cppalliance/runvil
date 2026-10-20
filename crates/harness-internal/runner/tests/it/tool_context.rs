@@ -10,7 +10,7 @@ use harness_runner::prepare::prepare;
 use harness_runner::recorder::{MemoryRecorder, RunOutcome};
 use runvil::cancel::CancelHandle;
 use runvil_plugin::{
-    HostServices, Plugin, PluginFuture, PluginId, PluginInfo, ToolContext, ToolError, ToolId,
+    HostServices, PackId, Plugin, PluginFuture, PluginInfo, ToolContext, ToolError, ToolId,
     ToolInfo, ToolOutput,
 };
 use serde_json::{Value, json};
@@ -23,7 +23,7 @@ const WRITTEN: &str = "written through the context";
 /// A prompt calling the fixture tool by id from the section's script and
 /// returning its answer beside the file it wrote.
 const CALLS_RECORD: &str = "---\nname: calls-record\ndescription: d\nrunvil: 0\n\
-    plugins:\n  - context\n---\n\n\
+    uses:\n  - context\n---\n\n\
     # Title\n\n## Only\n\n```lua\nlocal caller = tools.call('context/record')\n\
     return caller .. '|' .. store.read('from-tool.md')\n```\n";
 
@@ -41,7 +41,7 @@ struct Record {
     reason = "the PluginInfo construct signature fixes the return type"
 )]
 fn construct(
-    name: &PluginId,
+    name: &PackId,
     _config: Value,
     _services: &HostServices,
 ) -> Result<Arc<dyn Plugin>, ToolError> {

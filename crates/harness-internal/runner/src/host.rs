@@ -24,7 +24,7 @@ use std::sync::Arc;
 use futures_util::future::{Either, join_all, select};
 use runvil::cancel::CancelHandle;
 use runvil::{Prompt, Requirements};
-use runvil_plugin::{HostServices, Plugin, PluginId, PluginInfo};
+use runvil_plugin::{HostServices, PackId, Plugin, PluginInfo};
 
 use crate::registry::{PluginKind, PluginRegistry};
 
@@ -44,7 +44,7 @@ mod tests;
 /// every Harness behind an `Arc`. Dropping it drops the Plugin objects,
 /// which is where a Plugin cleans up.
 pub struct HostContext {
-    plugins: PluginRegistry,
+    packs: PluginRegistry,
     services: HostServices,
     installed: Vec<Installed>,
 }
@@ -52,21 +52,21 @@ pub struct HostContext {
 /// One installed Plugin: its Plugin id, its `PluginInfo`, and the built
 /// object or the reason building it failed.
 struct Installed {
-    name: PluginId,
+    name: PackId,
     info: PluginInfo,
     plugin: Result<Arc<dyn Plugin>, String>,
 }
 
 impl HostContext {
     /// A context with no Plugins, which installs from the Plugins
-    /// `plugins` holds and hands `services` to each Plugin's `construct`.
+    /// `packs` holds and hands `services` to each Plugin's `construct`.
     ///
     /// `services` are Host-wide, such as a search provider. They reach
     /// only `construct`; a tool call reads the run's own services instead.
     #[must_use]
-    pub fn new(plugins: PluginRegistry, services: HostServices) -> HostContext {
+    pub fn new(packs: PluginRegistry, services: HostServices) -> HostContext {
         HostContext {
-            plugins,
+            packs,
             services,
             installed: Vec::new(),
         }
@@ -91,10 +91,10 @@ impl HostContext {
     pub fn install(
         &mut self,
         fqn: &str,
-        name: Option<PluginId>,
+        name: Option<PackId>,
         config: serde_json::Value,
-    ) -> Result<PluginId, InstallError> {
-        let Some((info, kind, default)) = self.plugins.entry(fqn) else {
+    ) -> Result<PackId, InstallError> {
+        let Some((info, kind, default)) = self.packs.entry(fqn) else {
             return Err(InstallError::UnknownPlugin {
                 fqn: fqn.to_owned(),
             });
@@ -102,7 +102,7 @@ impl HostContext {
         let name = name.unwrap_or_else(|| default.clone());
         let reserved = match kind {
             PluginKind::Builtin => name != *default,
-            PluginKind::Linked => self.plugins.reserves(&name),
+            PluginKind::Linked => self.packs.reserves(&name),
         };
         if reserved {
             return Err(InstallError::ReservedName {
@@ -145,7 +145,7 @@ impl HostContext {
     /// A cancel on `cancel` ends the wait with no failures, so each Plugin
     /// is snapshotted as it stands, and a run cancelled here ends
     /// cancelled whatever the snapshot holds.
-    pub(crate) async fn wait_ready(&self, cancel: &CancelHandle) -> BTreeMap<PluginId, String> {
+    pub(crate) async fn wait_ready(&self, cancel: &CancelHandle) -> BTreeMap<PackId, String> {
         let waits = self.installed.iter().filter_map(|installed| {
             let plugin = installed.plugin.as_ref().ok()?;
             Some(async move { (&installed.name, plugin.ready().await) })
@@ -185,7 +185,7 @@ impl HostContext {
     pub(crate) fn begin_run(
         &self,
         services: HostServices,
-        failures: BTreeMap<PluginId, String>,
+        failures: BTreeMap<PackId, String>,
         prompt: &Prompt,
     ) -> (HostRunContext, Requirements) {
         let run = HostRunContext::snapshot(
@@ -204,7 +204,7 @@ impl fmt::Debug for HostContext {
     /// Shows the services, each installed name with whether it built, and
     /// the registry.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let installed: Vec<(&PluginId, bool)> = self
+        let installed: Vec<(&PackId, bool)> = self
             .installed
             .iter()
             .map(|installed| (&installed.name, installed.plugin.is_ok()))
@@ -212,7 +212,7 @@ impl fmt::Debug for HostContext {
         f.debug_struct("HostContext")
             .field("services", &self.services)
             .field("installed", &installed)
-            .field("plugins", &self.plugins)
+            .field("plugins", &self.packs)
             .finish()
     }
 }
@@ -256,7 +256,7 @@ pub enum InstallError {
         /// The FQN as its `PluginInfo` spells it.
         fqn: &'static str,
         /// The Plugin id the install asked for.
-        name: PluginId,
+        name: PackId,
     },
     /// The Plugin id is installed already (`existing` equals `name`), or
     /// it differs from the installed `existing` only by `-`, `_`, or `.`,
@@ -267,16 +267,16 @@ pub enum InstallError {
     )]
     NameTaken {
         /// The Plugin id the install asked for.
-        name: PluginId,
+        name: PackId,
         /// The installed Plugin id it collides with.
-        existing: PluginId,
+        existing: PackId,
     },
 }
 
 /// A name with each `-`, `_`, and `.` mapped to `-`, so two names that
 /// differ only by that punctuation compare equal. Names are lowercase
 /// only, so case needs no handling.
-fn normalize(name: &PluginId) -> String {
+fn normalize(name: &PackId) -> String {
     name.to_string()
         .chars()
         .map(|c| if matches!(c, '-' | '_' | '.') { '-' } else { c })

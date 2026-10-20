@@ -1,10 +1,10 @@
 //! What raises: a cycle, a heading out of reach or misspelled, a `jump`
-//! during a load, and a Plugin prelude that defines or calls `require`.
+//! during a load, and a Pack prelude that defines or calls `require`.
 //! A library that raises while loading runs again on the next `require`,
 //! and a raise in library code reports the library's location and
 //! prompt-file line.
 
-use runvil_types::plugins::Prelude;
+use runvil_types::packs::Prelude;
 
 use crate::RunErrorKind;
 use crate::execute::tests::preludes::prelude;
@@ -128,7 +128,7 @@ fn a_prelude_cannot_define_require_or_call_it_while_it_installs() {
         vec![prelude("shadow", "function require() return 'mine' end")],
     ));
     assert!(
-        defines.contains("Plugin `shadow`: its prelude defines the global `require`")
+        defines.contains("Pack `shadow`: its prelude defines the global `require`")
             && defines.contains("which is reserved as an Engine global"),
         "require is reserved: {defines}"
     );
@@ -137,7 +137,7 @@ fn a_prelude_cannot_define_require_or_call_it_while_it_installs() {
         vec![prelude("eager", "require '## lib'")],
     ));
     assert!(
-        calls.contains("Plugin `eager`: its prelude failed to load")
+        calls.contains("Pack `eager`: its prelude failed to load")
             && calls.contains("attempt to call a nil value (global 'require')"),
         "the prelude phase has no require: {calls}"
     );

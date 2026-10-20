@@ -14,7 +14,7 @@ use axum::routing::post;
 use serde::{Deserialize, Serialize};
 
 use runvil::Prompt;
-use runvil::plugins::PluginId;
+use runvil::packs::PackId;
 use runvil::prompt::{ArgDecl, ArgsDecl, FileDecl, Frontmatter, ModelKeyword, ModelRole};
 
 use crate::error::AppError;
@@ -51,8 +51,8 @@ struct ContractResponse {
     input: Option<FileDto>,
     /// The declared output file; `null` when absent.
     output: Option<FileDto>,
-    /// The declared Plugins, in declaration order.
-    plugins: Vec<PluginDto>,
+    /// The declared Packs, in declaration order.
+    uses: Vec<PackDto>,
     /// The typed args declaration.
     args: ArgsDto,
     /// The declared model roles, sorted by label.
@@ -77,15 +77,15 @@ impl From<&FileDecl> for FileDto {
     }
 }
 
-/// A declared Plugin.
+/// A declared Pack.
 #[derive(Debug, Serialize)]
-struct PluginDto {
-    /// The Plugin's one-segment name, such as `web`.
+struct PackDto {
+    /// The Pack's one-segment name, such as `web`.
     id: String,
 }
 
-impl From<&PluginId> for PluginDto {
-    fn from(id: &PluginId) -> Self {
+impl From<&PackId> for PackDto {
+    fn from(id: &PackId) -> Self {
         Self { id: id.to_string() }
     }
 }
@@ -195,7 +195,7 @@ impl From<&Frontmatter> for ContractResponse {
                 .map(std::num::NonZeroU32::get),
             input: frontmatter.input().map(FileDto::from),
             output: frontmatter.output().map(FileDto::from),
-            plugins: frontmatter.plugins().iter().map(PluginDto::from).collect(),
+            uses: frontmatter.uses().iter().map(PackDto::from).collect(),
             args: ArgsDto::from(frontmatter.args()),
             models: frontmatter
                 .models()

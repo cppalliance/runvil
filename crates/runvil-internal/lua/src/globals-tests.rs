@@ -23,7 +23,7 @@ const PROSE_REFUSAL: &str = "prose is read-only: assign to `var` or a section gl
 /// The text every test VM's `prose` renders.
 const PROSE: &str = "the block's prose";
 
-/// Builds a section VM the way section setup does up to the Plugin
+/// Builds a section VM the way section setup does up to the Pack
 /// preludes: frozen `argv`, the Engine globals, the control globals, and the
 /// coroutine shims, with a block's lazy `prose` installed.
 #[track_caller]

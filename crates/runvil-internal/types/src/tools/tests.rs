@@ -3,7 +3,7 @@
 use serde_json::json;
 
 use super::{ToolCatalog, ToolCatalogErrorKind, ToolId, ToolInfo};
-use crate::plugins::PluginId;
+use crate::packs::PackId;
 use crate::test_support::{assert_send_sync, assert_wire, round_trip};
 
 fn inspect_id() -> ToolId {
@@ -233,23 +233,20 @@ fn a_two_segment_tool_id_parses_and_exposes_its_name() {
 }
 
 #[test]
-fn a_tool_ids_plugin_is_its_first_segment() {
+fn a_tool_ids_pack_is_its_first_segment() {
     let id = ToolId::parse("web/fetch").expect("a valid tool id");
     assert_eq!(
-        id.plugin(),
-        PluginId::parse("web").expect("a valid Plugin id"),
-        "the first segment must yield the contributing Plugin's local name"
+        id.pack(),
+        PackId::parse("web").expect("a valid Pack id"),
+        "the first segment must yield the contributing Pack's local name"
     );
 }
 
 #[test]
-fn a_deeper_tool_id_names_its_plugin_first_and_its_tool_last() {
+fn a_deeper_tool_id_names_its_pack_first_and_its_tool_last() {
     let id = ToolId::parse("github/issues/create").expect("a valid tool id");
     assert_eq!(id.name(), "create");
-    assert_eq!(
-        id.plugin(),
-        PluginId::parse("github").expect("a valid Plugin id")
-    );
+    assert_eq!(id.pack(), PackId::parse("github").expect("a valid Pack id"));
 }
 
 #[test]

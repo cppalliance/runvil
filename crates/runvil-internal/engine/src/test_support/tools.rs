@@ -1,7 +1,7 @@
 //! The suites' fixture tool: [`FnTool`], a tool written as a closure.
 //!
 //! The Engine holds no implementation and names no implementation trait;
-//! the production trait (`Plugin`) is the Plugin contract's, in
+//! the production trait (`Plugin`) is the Pack contract's, in
 //! `runvil-plugin`, which the Engine never depends on. The suites
 //! still need something to perform a `ToolCall` effect with, so this is
 //! the test double: one tool per value, with its id, description, schema,

@@ -17,7 +17,7 @@ use runvil::model::{
     ModelBinding, ModelCatalog, ModelId, ModelInfo, ThinkingMode, ToolSchema,
 };
 use runvil_plugin::{
-    HostServices, Plugin, PluginFuture, PluginId, PluginInfo, ServiceKey, ToolContext, ToolError,
+    HostServices, PackId, Plugin, PluginFuture, PluginInfo, ServiceKey, ToolContext, ToolError,
     ToolId, ToolInfo, ToolOutput,
 };
 use serde_json::{Value, json};
@@ -215,7 +215,7 @@ struct HoldPlugin {
     reason = "the PluginInfo construct signature fixes the argument types"
 )]
 fn construct_hold(
-    name: &PluginId,
+    name: &PackId,
     config: Value,
     services: &HostServices,
 ) -> Result<Arc<dyn Plugin>, ToolError> {

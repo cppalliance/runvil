@@ -3,10 +3,10 @@
 //! walked section or the H1 pass leaves in `_G` is a reserved name, and
 //! every reserved global reads non-nil once the VM binds its conditional
 //! ones (`ui`, `item`, `prose`) and `require` installs over a resolver and
-//! a renderer. No Plugin prelude installs here, so what
+//! a renderer. No Pack prelude installs here, so what
 //! `_G` holds is exactly what the Engine installs. Model roles bind here
 //! too, since a role label is never a global, and the run offers tools of
-//! a declared Plugin and of another one, since a tool is never a global
+//! a declared Pack and of another one, since a tool is never a global
 //! either.
 
 use std::sync::Arc;
@@ -15,7 +15,7 @@ use mlua::Value;
 use serde_json::json;
 
 use runvil_lua::{RESERVED_NAMES, Reserved, reserved_name};
-use runvil_types::plugins::PluginId;
+use runvil_types::packs::PackId;
 use runvil_types::tools::{ToolId, ToolInfo};
 
 use super::{VmBinds, set_up_vm};
@@ -42,8 +42,8 @@ fn roles() -> ModelSet {
 /// The wire names of the tools [`offering`] offers.
 const OFFERED_WIRE_NAMES: [&str; 2] = ["gh_search", "web_search"];
 
-/// A set declaring the Plugin `web` and offering `web/search` beside the
-/// undeclared Plugin's `gh/search`.
+/// A set declaring the Pack `web` and offering `web/search` beside the
+/// undeclared Pack's `gh/search`.
 fn offering() -> ToolSet {
     let bind = |name: &str, id: &str| {
         ToolBinding::from_info(
@@ -56,7 +56,7 @@ fn offering() -> ToolSet {
         )
     };
     ToolSet::new(
-        vec![PluginId::parse("web").expect("valid Plugin")],
+        vec![PackId::parse("web").expect("valid Pack")],
         std::collections::BTreeMap::new(),
         vec![
             bind("gh_search", "gh/search"),

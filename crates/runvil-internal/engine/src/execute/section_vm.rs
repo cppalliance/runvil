@@ -4,7 +4,7 @@
 //! Every section driver - the walk's section entry and the
 //! fanout arm - runs the identical setup sequence: inject the Engine values,
 //! install the persistent Engine globals, install the control globals, install
-//! the Plugin preludes, install `require`, then install the store yield
+//! the Pack preludes, install `require`, then install the store yield
 //! shims.
 //! Only the deltas live at the call site: the driver builds its own `sys`
 //! JSON (both drivers take the next run-global `id`; the arm adds its
@@ -26,7 +26,7 @@
 use std::sync::Arc;
 
 use runvil_types::emitter::Emitter;
-use runvil_types::plugins::Prelude;
+use runvil_types::packs::Prelude;
 use runvil_vfs::Access;
 
 use crate::lua::{Library, LibraryKey, ProseState, SectionText, SectionVm, Uninjected};
@@ -82,7 +82,7 @@ pub(crate) struct SectionVmSetup<'a> {
     /// raw-model-id `models.get` fallback. Shared through the run's `Arc`,
     /// so every section VM serializes the one tree.
     pub(crate) ui: Option<&'a Arc<serde_json::Value>>,
-    /// The run's Plugin preludes, installed in order after the coroutine
+    /// The run's Pack preludes, installed in order after the coroutine
     /// shims and before `require`.
     pub(crate) preludes: &'a [Prelude],
     /// Test-only: installs the raw `tools.call_as_model` shim, so a fixture
@@ -99,7 +99,7 @@ pub(crate) struct SectionVmSetup<'a> {
 /// ([`SectionVm::install_scheduler_control_globals`] for `jump` and the
 /// `prompt` reads, plus [`SectionVm::install_coro_shims`] for the
 /// suspending calls, which the scheduler drives as yield shims), the run's
-/// Plugin preludes, [`SectionVm::install_require`] over `resolve` and
+/// Pack preludes, [`SectionVm::install_require`] over `resolve` and
 /// `render`, and the store yield shims. The caller applies
 /// the Lua limits itself before calling, so a limits failure propagates
 /// without touching the VM's teardown observation path.

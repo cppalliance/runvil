@@ -5,7 +5,7 @@ use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
 
-use runvil_types::plugins::PluginId;
+use runvil_types::packs::PackId;
 use runvil_types::tools::{ToolError, ToolInfo, ToolOutput};
 
 use crate::{HostServices, ServiceId, ToolContext};
@@ -145,7 +145,7 @@ pub struct PluginInfo {
         reason = "spelled out so a Plugin author reads the signature construct implements in one place"
     )]
     pub construct: fn(
-        name: &PluginId,
+        name: &PackId,
         config: serde_json::Value,
         services: &HostServices,
     ) -> Result<Arc<dyn Plugin>, ToolError>,
@@ -165,7 +165,7 @@ impl PluginInfo {
     pub const fn new(
         fqn: &'static str,
         construct: fn(
-            name: &PluginId,
+            name: &PackId,
             config: serde_json::Value,
             services: &HostServices,
         ) -> Result<Arc<dyn Plugin>, ToolError>,

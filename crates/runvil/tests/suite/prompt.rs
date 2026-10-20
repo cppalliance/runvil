@@ -9,7 +9,7 @@ use super::support::{Prepared, Scenario, TestResult, model, prompt};
 const CONTRACT: &str = "
     input: { path: names.md, description: The names to greet }
     output: { path: note.md, description: The note the greeter leaves }
-    plugins: [text]
+    uses: [text]
     args: { times: { type: integer, optional: true, default: 1 }, name: { type: string } }
     models: { writer: { keywords: [fast] } }
 ";
@@ -40,12 +40,8 @@ fn the_frontmatter_lists_every_declaration_with_arguments_sorted_by_name() -> Te
             ),
         ]
     );
-    let plugins: Vec<_> = frontmatter
-        .plugins()
-        .iter()
-        .map(ToString::to_string)
-        .collect();
-    assert_eq!(plugins, ["text"]);
+    let packs: Vec<_> = frontmatter.uses().iter().map(ToString::to_string).collect();
+    assert_eq!(packs, ["text"]);
     let roles: Vec<_> = frontmatter
         .models()
         .iter()
@@ -61,7 +57,7 @@ fn the_frontmatter_lists_every_declaration_with_arguments_sorted_by_name() -> Te
             .eq(["name", "times"])
     );
 
-    let misspelled = source.replace("plugins:", "plugns:");
+    let misspelled = source.replace("uses:", "use:");
     let parsed = Prompt::parse(&misspelled, "greeter").0;
     assert_eq!(
         parsed.err().map(|error| error.kind()),

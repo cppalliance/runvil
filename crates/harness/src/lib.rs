@@ -35,7 +35,7 @@ pub mod plugin {
     pub use harness_runner::PluginKind;
     pub use harness_runner::PluginRegistry;
     pub use runvil_plugin::HostServices;
-    pub use runvil_plugin::PluginId;
+    pub use runvil_plugin::PackId;
 }
 
 pub mod record {

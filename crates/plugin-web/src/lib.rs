@@ -8,7 +8,7 @@
 //! together, named under whatever name the Host installed the Plugin
 //! under.
 //!
-//! The Plugin has no prelude, so declaring it, as in `plugins: [web]`,
+//! The Plugin has no prelude, so declaring it, as in `uses: [web]`,
 //! only makes it required. A prompt reaches the tools by id from Lua,
 //! offering one to the model with `tools.offer("web/fetch")` or calling it
 //! with `tools.call("web/search", ...)`, whether or not it declares the

@@ -3,18 +3,18 @@
 //! `tools.get`, and `tools.offer_local`.
 
 use mlua::{Lua, Value, Variadic};
-use runvil_types::plugins::PluginId;
+use runvil_types::packs::PackId;
 
 use crate::ToolBinding;
 use crate::handles::ToolSet;
 use crate::test_vm::{lua_over, scoped, tool_at};
 use crate::tools::decode::collect_offer_entries;
 
-/// A set declaring the Plugin `web` and offering its two tools beside the
-/// two of the undeclared Plugin `gh`, in id order, under their wire names.
+/// A set declaring the Pack `web` and offering its two tools beside the
+/// two of the undeclared Pack `gh`, in id order, under their wire names.
 fn offering_set() -> ToolSet {
     ToolSet::new(
-        vec![PluginId::parse("web").expect("`web` is a valid Plugin id")],
+        vec![PackId::parse("web").expect("`web` is a valid Pack id")],
         std::collections::BTreeMap::new(),
         vec![
             ToolBinding::from_info("gh_issues_list", &tool_at("gh/issues.list")),
@@ -99,7 +99,7 @@ fn offering_a_tool_object_matches_offering_its_id() {
 }
 
 #[test]
-fn required_and_extras_split_the_offering_by_declared_plugin_and_share_objects() {
+fn required_and_extras_split_the_offering_by_declared_pack_and_share_objects() {
     let vm = lua_over(offering_set());
     let result: (String, String, bool, bool, bool, bool) = vm.eval(
         "local function ids(list)\n\
@@ -124,7 +124,7 @@ fn required_and_extras_split_the_offering_by_declared_plugin_and_share_objects()
             true,
             true,
         ),
-        "a declared Plugin's tools are required, the rest extras, both in id \
+        "a declared Pack's tools are required, the rest extras, both in id \
          order, every list a fresh array of the same shared objects"
     );
 }

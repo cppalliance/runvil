@@ -6,7 +6,7 @@
 //! have an `input` table:
 //!
 //! ````text
-//! plugins:
+//! uses:
 //!   - user-input
 //! ````
 //!
@@ -58,7 +58,7 @@
 //!   so a prompt that passes a question fails loudly instead of losing
 //!   it.
 //! - The model can ask the operator only when the prompt's Lua opts in.
-//!   A section offers the ask tool with `plugins.offer('user-input')` or
+//!   A section offers the ask tool with `packs.offer('user-input')` or
 //!   by its id with `tools.offer("user-input/ask")`, and the model sees it
 //!   as `user-input_ask`. Neither installing nor declaring the Plugin
 //!   advertises anything to the model.

@@ -12,11 +12,11 @@ use std::fmt;
 use std::sync::Arc;
 
 use runvil::effect::ToolCallOrigin;
-use runvil::plugins::Prelude;
+use runvil::packs::Prelude;
 use runvil::tools::{ToolCatalog, ToolError, ToolErrorKind, ToolId, ToolInfo, ToolOutput};
 use runvil::vfs::Access;
-use runvil::{MissingService, Prompt, Requirements, UnavailablePlugin};
-use runvil_plugin::{HostServices, Plugin, PluginId, PluginInfo, ServiceId, ToolContext};
+use runvil::{MissingService, Prompt, Requirements, UnavailablePack};
+use runvil_plugin::{HostServices, PackId, Plugin, PluginInfo, ServiceId, ToolContext};
 use serde_json::Value;
 
 use crate::performers::{BoxFuture, ToolPerformer};
@@ -25,7 +25,7 @@ use crate::performers::{BoxFuture, ToolPerformer};
 /// own services, which every call it performs is lent.
 pub(crate) struct HostRunContext {
     services: HostServices,
-    plugins: BTreeMap<PluginId, RunPlugin>,
+    packs: BTreeMap<PackId, RunPlugin>,
 }
 
 /// What one installed Plugin looks like to a run.
@@ -52,18 +52,12 @@ impl HostRunContext {
     /// provide every id the Plugin needs; only then is its tool list read
     /// and validated.
     pub(super) fn snapshot<'a>(
-        installed: impl Iterator<
-            Item = (
-                &'a PluginId,
-                PluginInfo,
-                &'a Result<Arc<dyn Plugin>, String>,
-            ),
-        >,
+        installed: impl Iterator<Item = (&'a PackId, PluginInfo, &'a Result<Arc<dyn Plugin>, String>)>,
         services: HostServices,
-        mut failures: BTreeMap<PluginId, String>,
+        mut failures: BTreeMap<PackId, String>,
     ) -> HostRunContext {
         let mut seen = BTreeSet::new();
-        let plugins = installed
+        let packs = installed
             .map(|(name, info, built)| {
                 let state = match (built, failures.remove(name)) {
                     (Err(reason), _) => RunPlugin::Unavailable(reason.clone()),
@@ -89,13 +83,13 @@ impl HostRunContext {
                 (name.clone(), state)
             })
             .collect();
-        HostRunContext { services, plugins }
+        HostRunContext { services, packs }
     }
 
     /// Every usable Plugin's tools, declared by the prompt or not.
     pub(crate) fn catalog(&self) -> ToolCatalog {
         let tools = self
-            .plugins
+            .packs
             .values()
             .filter_map(|plugin| match plugin {
                 RunPlugin::Usable { tools, .. } => Some(tools),
@@ -114,14 +108,14 @@ impl HostRunContext {
     /// The run's roster: the names of the usable Plugins, declared by the
     /// prompt or not, with or without tools, and an entry with the reason
     /// for each one that can't serve, both in name order.
-    pub(crate) fn roster(&self) -> (Vec<PluginId>, Vec<UnavailablePlugin>) {
+    pub(crate) fn roster(&self) -> (Vec<PackId>, Vec<UnavailablePack>) {
         let mut usable = Vec::new();
         let mut unavailable = Vec::new();
-        for (name, plugin) in &self.plugins {
+        for (name, plugin) in &self.packs {
             match plugin {
                 RunPlugin::Usable { .. } => usable.push(name.clone()),
                 RunPlugin::Unavailable(reason) => {
-                    unavailable.push(UnavailablePlugin::new(name.clone(), reason.clone()));
+                    unavailable.push(UnavailablePack::new(name.clone(), reason.clone()));
                 }
                 RunPlugin::NeedsUnmet(unmet) => {
                     let services: Vec<String> = unmet.iter().map(ToString::to_string).collect();
@@ -129,7 +123,7 @@ impl HostRunContext {
                         "the run lacks the services it needs: {}",
                         services.join(", ")
                     );
-                    unavailable.push(UnavailablePlugin::new(name.clone(), reason));
+                    unavailable.push(UnavailablePack::new(name.clone(), reason));
                 }
             }
         }
@@ -141,9 +135,9 @@ impl HostRunContext {
     pub(crate) fn preludes(&self, prompt: &Prompt) -> Vec<Prelude> {
         prompt
             .frontmatter()
-            .plugins()
+            .uses()
             .iter()
-            .filter_map(|name| match self.plugins.get(name) {
+            .filter_map(|name| match self.packs.get(name) {
                 Some(RunPlugin::Usable { info, .. }) => info
                     .prelude
                     .map(|source| Prelude::new(name.clone(), source)),
@@ -157,12 +151,12 @@ impl HostRunContext {
     /// whose needs the run lacks.
     pub(super) fn requirements(&self, prompt: &Prompt) -> Requirements {
         let mut requirements = Requirements::default();
-        for name in prompt.frontmatter().plugins().iter().cloned() {
-            match self.plugins.get(&name) {
+        for name in prompt.frontmatter().uses().iter().cloned() {
+            match self.packs.get(&name) {
                 None => requirements.missing_required.push(name),
                 Some(RunPlugin::Unavailable(reason)) => requirements
                     .unavailable
-                    .push(UnavailablePlugin::new(name, reason.clone())),
+                    .push(UnavailablePack::new(name, reason.clone())),
                 Some(RunPlugin::NeedsUnmet(unmet)) => {
                     for service in unmet {
                         tracing::warn!(
@@ -184,7 +178,7 @@ impl HostRunContext {
     /// The usable Plugin whose snapshot offers `tool`, and that tool's
     /// info.
     fn offering(&self, tool: &ToolId) -> Option<(&Arc<dyn Plugin>, &ToolInfo)> {
-        match self.plugins.get(&tool.plugin())? {
+        match self.packs.get(&tool.pack())? {
             RunPlugin::Usable { plugin, tools, .. } => tools
                 .iter()
                 .find(|info| info.id == *tool)
@@ -231,8 +225,8 @@ impl ToolPerformer for HostRunContext {
 impl fmt::Debug for HostRunContext {
     /// Shows the run's services and each Plugin's name and state.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let plugins: Vec<(&PluginId, &str)> = self
-            .plugins
+        let packs: Vec<(&PackId, &str)> = self
+            .packs
             .iter()
             .map(|(name, plugin)| {
                 let state = match plugin {
@@ -245,26 +239,22 @@ impl fmt::Debug for HostRunContext {
             .collect();
         f.debug_struct("HostRunContext")
             .field("services", &self.services)
-            .field("plugins", &plugins)
+            .field("plugins", &packs)
             .finish()
     }
 }
 
-/// The tools of the Plugin installed as `plugin` that pass validation: a
+/// The tools of the Plugin installed as `pack` that pass validation: a
 /// tool must sit under the Plugin's name and must not repeat an id in
 /// `seen`. A tool that fails is logged and dropped, so it costs only
 /// itself.
-fn validated(
-    plugin: &PluginId,
-    tools: Vec<ToolInfo>,
-    seen: &mut BTreeSet<ToolId>,
-) -> Vec<ToolInfo> {
+fn validated(pack: &PackId, tools: Vec<ToolInfo>, seen: &mut BTreeSet<ToolId>) -> Vec<ToolInfo> {
     tools
         .into_iter()
         .filter(|tool| {
-            if !plugin.contains(&tool.id) {
+            if !pack.contains(&tool.id) {
                 tracing::warn!(
-                    plugin = %plugin,
+                    plugin = %pack,
                     tool = %tool.id,
                     "a Plugin's tool id escapes its name; dropped"
                 );
@@ -272,7 +262,7 @@ fn validated(
             }
             if seen.contains(&tool.id) {
                 tracing::warn!(
-                    plugin = %plugin,
+                    plugin = %pack,
                     tool = %tool.id,
                     "a Plugin's tool id repeats an earlier tool; dropped"
                 );

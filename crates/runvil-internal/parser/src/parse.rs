@@ -6,7 +6,7 @@ use std::sync::Arc;
 use runvil_types::emitter::{DebugMode, Emitter, EventSink};
 use runvil_types::event::{Event, lifecycle};
 
-use crate::contract::{self, PluginListError};
+use crate::contract::{self, PackListError};
 use crate::fence::{self, FenceViolation};
 use crate::sections::{self, Heading};
 use crate::{Error, Frontmatter, ParseError, ParseErrorKind, Prompt, Result, frontmatter};
@@ -30,7 +30,7 @@ impl Prompt {
     /// kind is:
     ///
     /// - `Frontmatter` when the `---` delimiters are missing, the frontmatter
-    ///   fails to decode, a Plugin entry is not a plain name, or a Plugin is
+    ///   fails to decode, a Pack entry is not a plain name, or a Pack is
     ///   declared twice.
     /// - `Structure` when the H1 is missing, there is more than one H1, the H1
     ///   title is empty, a section heading skips a level (such as an H4
@@ -98,13 +98,11 @@ impl Prompt {
                 column,
             }
         })?;
-        contract::check_distinct_plugins(frontmatter.plugins()).map_err(
-            |refusal| match refusal {
-                PluginListError::Duplicate(_) => {
-                    Error::parse(ParseErrorKind::Frontmatter, refusal.to_string())
-                }
-            },
-        )?;
+        contract::check_distinct_packs(frontmatter.uses()).map_err(|refusal| match refusal {
+            PackListError::Duplicate(_) => {
+                Error::parse(ParseErrorKind::Frontmatter, refusal.to_string())
+            }
+        })?;
         // Everything past the frontmatter postdates the prompt's name, so a
         // failure from here on is stamped with it (and its span's position).
         let name = frontmatter.name().to_owned();

@@ -14,7 +14,7 @@ use std::sync::{Arc, Mutex};
 use runvil_types::emitter::{Emitter, EventSink};
 use runvil_types::event::Event;
 use runvil_types::ids::{ChainId, TaskId};
-use runvil_types::plugins::{PluginId, Prelude};
+use runvil_types::packs::{PackId, Prelude};
 use runvil_vfs::{Access, VfsRef};
 
 use crate::cancel::CancelHandle;
@@ -30,12 +30,12 @@ use super::section_vm::{SectionVmSetup, VmSeed};
 mod bound;
 
 /// The context inputs a run moves into its state whole, rather than
-/// copying them out of a borrow: the `ui` snapshot, the Plugin preludes,
+/// copying them out of a borrow: the `ui` snapshot, the Pack preludes,
 /// and the roster.
 pub(super) struct OwnedInputs {
     ui: Option<serde_json::Value>,
     preludes: Vec<Prelude>,
-    roster: BTreeMap<PluginId, Option<String>>,
+    roster: BTreeMap<PackId, Option<String>>,
 }
 
 impl OwnedInputs {
@@ -122,7 +122,7 @@ pub(crate) struct RunState {
     /// section VM the `ui()` global and the raw-model-id `models.get`
     /// fallback.
     ui: Option<Arc<serde_json::Value>>,
-    /// The run's Plugin preludes, in install order: every section VM
+    /// The run's Pack preludes, in install order: every section VM
     /// installs each one before `require`.
     preludes: Arc<[Prelude]>,
     /// Test-only: installs the raw `tools.call_as_model` shim in every
@@ -455,11 +455,7 @@ impl fmt::Debug for RunState {
             .field("ui", &self.ui)
             .field(
                 "preludes",
-                &self
-                    .preludes
-                    .iter()
-                    .map(Prelude::plugin)
-                    .collect::<Vec<_>>(),
+                &self.preludes.iter().map(Prelude::pack).collect::<Vec<_>>(),
             )
             .finish()
     }

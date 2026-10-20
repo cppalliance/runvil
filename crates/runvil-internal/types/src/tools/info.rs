@@ -12,7 +12,7 @@ use super::ids::ToolId;
 /// reads, its parameter schema, whether its output is structured, and
 /// whether a stop leaves its calls running.
 ///
-/// The caller collects the `ToolInfo` values of every Plugin it can serve
+/// The caller collects the `ToolInfo` values of every Pack it can serve
 /// into a [`ToolCatalog`](super::ToolCatalog). The implementations stay with
 /// the caller, keyed by [`ToolId`]. Every catalog tool is available to the
 /// prompt's Lua, which calls one by id, and a section offers one to its

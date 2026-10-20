@@ -152,7 +152,7 @@ fn debug_capture_none_changes_nothing() {
 #[test]
 fn tool_calls_count_increments_on_successful_dispatch() {
     let (tool, called) = scoped_tool("echo", "Echo a test value.");
-    let source = setup_prompt(PromptSource::new().front("plugins: [tools]").section(
+    let source = setup_prompt(PromptSource::new().front("uses: [tools]").section(
         "Only",
         "tools.call('tools/echo', { value = 'x' })
          assert(tools.calls['tools/echo'] == 1, 'expected 1 call, got ' .. tostring(tools.calls['tools/echo']))
@@ -227,7 +227,7 @@ fn tool_calls_count_zero_for_uncalled_alias_fails_epilog_assert() {
     // The first script dispatch installs the counts seeded from the
     // effective scope, so an offered but uncalled tool reads as 0 and an
     // author assert on it fails the run with its own message.
-    let source = setup_prompt(PromptSource::new().front("plugins: [tools]").prose(
+    let source = setup_prompt(PromptSource::new().front("uses: [tools]").prose(
         "Only",
         "```lua
          tools.offer('tools/search')
@@ -251,7 +251,7 @@ fn tool_calls_count_zero_for_uncalled_alias_fails_epilog_assert() {
 
 #[test]
 fn tool_calls_typo_alias_is_a_hard_error_with_seeded_set() {
-    let source = setup_prompt(PromptSource::new().front("plugins: [tools]").prose(
+    let source = setup_prompt(PromptSource::new().front("uses: [tools]").prose(
         "Only",
         "```lua
          tools.offer('tools/search')

@@ -67,7 +67,7 @@ fn log_byte_budget(log_events: u32) -> usize {
     (log_events as usize).saturating_mul(LUA_LOG_CHARACTER_LIMIT)
 }
 
-/// Packs owned values into a 1-based Lua sequence table.
+/// Collects owned values into a 1-based Lua sequence table.
 fn pack_sequence<T: mlua::IntoLua>(lua: &Lua, values: Vec<T>) -> mlua::Result<mlua::Table> {
     let table = lua.create_table_with_capacity(values.len(), 0)?;
     for (index, value) in values.into_iter().enumerate() {
@@ -112,7 +112,7 @@ pub struct Injected {
 #[derive(Debug)]
 pub struct SectionVm<S = Injected> {
     lua: Lua,
-    /// The run's shared tool set: the declared plugins and the offering.
+    /// The run's shared tool set: the declared Packs and the offering.
     /// Shared with the run, not snapshotted; nothing writes it during a
     /// run.
     pub(crate) bound_tools: Arc<ToolSet>,
@@ -139,7 +139,7 @@ pub struct SectionVm<S = Injected> {
     /// snapshots.
     sys_live: Arc<Mutex<Option<Json>>>,
     /// The slot the direct store closures record a claims-model conflict
-    /// into while the Plugin preludes install, for the executor to read
+    /// into while the Pack preludes install, for the executor to read
     /// once they return via
     /// [`take_store_conflict`](Self::take_store_conflict).
     store_conflicts: Arc<Mutex<Option<String>>>,
@@ -333,7 +333,7 @@ impl SectionVm<Uninjected> {
     ///
     /// Sets the heap ceiling (`lua_memory_bytes`) and resets the `log()` event
     /// budget (`lua_log_events`). Called by the executor right after
-    /// construction, ahead of the Plugin preludes and every block, so they
+    /// construction, ahead of the Pack preludes and every block, so they
     /// already spend the caller's run limits rather than only the safe
     /// non-env defaults installed in [`SectionVm::new`].
     ///
@@ -374,7 +374,7 @@ impl<S> SectionVm<S> {
     }
 
     /// The section's tool-addition runtime: what `tools.offer`,
-    /// `plugins.offer`, and `tools.allow_tasks` recorded.
+    /// `packs.offer`, and `tools.allow_tasks` recorded.
     #[must_use]
     pub fn tool_runtime(&self) -> &Arc<Mutex<ToolRuntime>> {
         &self.tool_runtime
@@ -398,7 +398,7 @@ impl<S> SectionVm<S> {
 
 impl SectionVm {
     /// Borrows the inner Lua state, for the section setup's installers
-    /// (the `ui` global, the loop and store shims, the Plugin preludes) and
+    /// (the `ui` global, the loop and store shims, the Pack preludes) and
     /// the driver's yield parsing and answer rendering.
     #[must_use]
     pub fn lua(&self) -> &Lua {

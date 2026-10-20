@@ -58,12 +58,12 @@ const SLOW: PluginInfo = PluginInfo::new("tests/slow", construct_starting);
 
 /// A prompt declaring `slow` and calling its tool once by id.
 const CALLS_SLOW: &str = "---\nname: calls-slow\ndescription: d\nrunvil: 0\n\
-    plugins:\n  - slow\n---\n\n\
+    uses:\n  - slow\n---\n\n\
     # Title\n\n## Only\n\n```lua\nreturn tools.call('slow/echo', { value = 'hi' })\n```\n";
 
 /// A prompt declaring `slow` and calling nothing.
 const DECLARES_SLOW: &str = "---\nname: declares-slow\ndescription: d\nrunvil: 0\n\
-    plugins:\n  - slow\n---\n\n# Title\n\n## Only\n\n```lua\nreturn 'ran'\n```\n";
+    uses:\n  - slow\n---\n\n# Title\n\n## Only\n\n```lua\nreturn 'ran'\n```\n";
 
 /// A Plugin-free prompt returning how many undeclared tools the run
 /// offers.
@@ -77,7 +77,7 @@ struct Starting {
 }
 
 fn construct_starting(
-    name: &PluginId,
+    name: &PackId,
     config: Value,
     services: &HostServices,
 ) -> Result<Arc<dyn Plugin>, ToolError> {
@@ -146,7 +146,7 @@ fn starting_host(names: &[&str], phase: Phase) -> (HostContext, Vec<StartupHandl
     wide.provide(&STARTUPS, Arc::new(startups)).unwrap();
     let mut host = HostContext::new(registry(&[SLOW]), wide);
     for name in names {
-        host.install(SLOW.fqn, Some(PluginId::parse(name).unwrap()), Value::Null)
+        host.install(SLOW.fqn, Some(PackId::parse(name).unwrap()), Value::Null)
             .unwrap();
     }
     (host, handles)
@@ -304,7 +304,7 @@ async fn an_undeclared_plugin_whose_ready_fails_leaves_the_run_going_without_its
 #[tokio::test]
 async fn an_undeclared_plugin_whose_ready_fails_raises_its_reason_when_the_prompt_offers_it() {
     let offers_slow = "---\nname: offers-slow\ndescription: d\nrunvil: 0\n---\n\n\
-        # Title\n\n## Only\n\n```lua\nplugins.offer('slow')\nreturn 'offered'\n```\n";
+        # Title\n\n## Only\n\n```lua\npacks.offer('slow')\nreturn 'offered'\n```\n";
     let (host, _moves, _startup) = slow_host(Phase::Failed("the fixture server is down"));
     let outcome = drive_over(offers_slow, host).await;
     let RunOutcome::Failed { message, .. } = &outcome else {
@@ -312,7 +312,7 @@ async fn an_undeclared_plugin_whose_ready_fails_raises_its_reason_when_the_promp
     };
     assert!(
         message.contains(
-            "plugins.offer: the slow Plugin is unavailable in this run: \
+            "packs.offer: the slow Pack is unavailable in this run: \
              the fixture server is down"
         ),
         "the failure names the Plugin and its ready failure: {message}"
@@ -323,8 +323,8 @@ async fn an_undeclared_plugin_whose_ready_fails_raises_its_reason_when_the_promp
 async fn an_undeclared_installed_builtin_with_no_tools_has_an_object_the_prompt_can_offer() {
     let reads_stub = "---\nname: reads-stub\ndescription: d\nrunvil: 0\n---\n\n\
         # Title\n\n## Only\n\n```lua\n\
-        local stub = plugins.get('subagents')\n\
-        plugins.offer('subagents')\n\
+        local stub = packs.get('subagents')\n\
+        packs.offer('subagents')\n\
         return stub.name .. ':' .. #stub.tools\n```\n";
     let mut host = HostContext::new(registry(&[]), HostServices::new());
     host.install("runvil/subagents", None, Value::Null).unwrap();
@@ -409,7 +409,7 @@ async fn a_cancel_that_lands_while_a_refusal_is_recorded_leaves_the_report_holdi
 #[tokio::test]
 async fn a_plugin_that_keeps_the_default_ready_is_ready_at_once_and_serves_the_run() {
     let echo = construct_echo(
-        &PluginId::parse("tools").unwrap(),
+        &PackId::parse("tools").unwrap(),
         Value::Null,
         &HostServices::new(),
     )

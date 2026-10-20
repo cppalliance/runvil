@@ -71,11 +71,11 @@ fn a_store_backend_that_refuses_its_session_fails_the_run_at_the_first_step() {
 }
 
 #[test]
-fn a_default_context_runs_a_plugin_free_prompt() {
-    // A prompt declaring no Plugins runs under a default context: no
+fn a_default_context_runs_a_pack_free_prompt() {
+    // A prompt declaring no Packs runs under a default context: no
     // catalog, no roster, no client, no real roots.
-    let trace = Scenario::new(one_section("return 'no Plugins'")).run();
-    assert_eq!(trace.text(), "no Plugins");
+    let trace = Scenario::new(one_section("return 'no Packs'")).run();
+    assert_eq!(trace.text(), "no Packs");
 }
 
 #[test]
@@ -94,13 +94,13 @@ fn default_run_context_store_handle_declares_a_fresh_store() {
 }
 
 #[test]
-fn offering_a_tool_its_present_plugin_does_not_offer_fails_the_section() {
-    // An id whose Plugin is active but contributed no such tool is no
+fn offering_a_tool_its_present_pack_does_not_offer_fails_the_section() {
+    // An id whose Pack is active but contributed no such tool is no
     // catalog tool of the run: the offer fails the section before any
-    // round advertises it. The catalog holds the Plugin's `echo`, never
+    // round advertises it. The catalog holds the Pack's `echo`, never
     // `search`.
     let source = prompt(
-        "plugins: [tools]",
+        "uses: [tools]",
         &[(
             "Only",
             "

@@ -289,7 +289,7 @@ fn a_one_byte_limit_fails_value_injection_with_teardown_observations() {
 fn one_execution_id_spans_parse_and_the_complete_runtime_lifecycle() {
     let gateway = ScriptedChat::new(vec![text("aliased final")]);
     let (tool, called) = scoped_tool("echo", "Echo a test value.");
-    let source = "---\nname: lifecycle\ndescription: Correlated lifecycle fixture\nrunvil: 0\nplugins:\n  - tools\nmodels:\n  writer: {}\n---\n\n\
+    let source = "---\nname: lifecycle\ndescription: Correlated lifecycle fixture\nrunvil: 0\nuses:\n  - tools\nmodels:\n  writer: {}\n---\n\n\
          # Lifecycle\n\n```lua\n\
          models.default('writer')\n```\n\n\
          ## Gather\n\n```lua\ntools.offer('tools/echo')\nstore.write('state.txt', 'before')\n```\n\n\

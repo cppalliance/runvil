@@ -54,7 +54,7 @@ impl SectionVm {
     }
 
     /// Takes the claims-model conflict the direct store closures recorded
-    /// while the Plugin preludes installed, clearing the slot. The executor
+    /// while the Pack preludes installed, clearing the slot. The executor
     /// reads it once the preludes return, so a conflict a prelude caught
     /// with `pcall` still ends the run with a determinism violation.
     #[must_use]

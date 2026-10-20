@@ -17,8 +17,8 @@ export interface RunContractFile {
   readonly description: string;
 }
 
-/** A declared Plugin: its one-segment name, such as `web`. */
-export interface RunContractPlugin {
+/** A declared Pack: its one-segment name, such as `web`. */
+export interface RunContractPack {
   readonly id: string;
 }
 
@@ -61,7 +61,7 @@ export interface RunContract {
   readonly maxToolIterations: number | null;
   readonly input: RunContractFile | null;
   readonly output: RunContractFile | null;
-  readonly plugins: readonly RunContractPlugin[];
+  readonly uses: readonly RunContractPack[];
   readonly args: RunContractArgs;
   readonly models: readonly RunContractModel[];
 }
@@ -77,7 +77,7 @@ function parseFile(value: unknown): RunContractFile | null {
   return { path, description };
 }
 
-function parsePlugin(value: unknown): RunContractPlugin | null {
+function parsePack(value: unknown): RunContractPack | null {
   if (!isRecord(value)) {
     return null;
   }
@@ -172,7 +172,7 @@ function parseContract(body: unknown): RunContract | null {
   if (!isRecord(body)) {
     return null;
   }
-  const { name, description, runvil, max_tool_iterations, plugins, models } = body;
+  const { name, description, runvil, max_tool_iterations, uses, models } = body;
   if (typeof name !== "string" || typeof description !== "string") {
     return null;
   }
@@ -190,16 +190,16 @@ function parseContract(body: unknown): RunContract | null {
   if (body.output !== null && output === null) {
     return null;
   }
-  if (!Array.isArray(plugins) || !Array.isArray(models)) {
+  if (!Array.isArray(uses) || !Array.isArray(models)) {
     return null;
   }
-  const parsedPlugins: RunContractPlugin[] = [];
-  for (const plugin of plugins) {
-    const parsed = parsePlugin(plugin);
+  const parsedPacks: RunContractPack[] = [];
+  for (const pack of uses) {
+    const parsed = parsePack(pack);
     if (parsed === null) {
       return null;
     }
-    parsedPlugins.push(parsed);
+    parsedPacks.push(parsed);
   }
   const args = parseArgs(body.args);
   if (args === null) {
@@ -220,7 +220,7 @@ function parseContract(body: unknown): RunContract | null {
     maxToolIterations: max_tool_iterations ?? null,
     input,
     output,
-    plugins: parsedPlugins,
+    uses: parsedPacks,
     args,
     models: parsedModels,
   };

@@ -12,7 +12,7 @@ use crate::execute::scope::{DispatchTarget, prepare_scoped_tools};
 use crate::test_support::rig::Rig;
 use crate::test_support::scenario::EXECUTION;
 use runvil_model_client::detail::tool_schema_new;
-use runvil_types::plugins::PluginId;
+use runvil_types::packs::PackId;
 
 /// A catalog tool under any id, described by its id, echoing its `value`
 /// argument as `<id>: <value>`, with parameters `schema`.
@@ -44,10 +44,10 @@ fn shapeless_tool(id: &str) -> FnTool {
     tool_at(id, json!("scalar"))
 }
 
-/// The one-section prompt that declares the `tools` Plugin and returns at
+/// The one-section prompt that declares the `tools` Pack and returns at
 /// once, prepared against a catalog of `tools`.
 fn declaring_tools(tools: Vec<FnTool>) -> Scenario {
-    let source = prompt("plugins: [tools]", &[("Only", "return 'ok'")]);
+    let source = prompt("uses: [tools]", &[("Only", "return 'ok'")]);
     tools
         .into_iter()
         .fold(catalog_scenario(source), Scenario::tool)
@@ -88,13 +88,13 @@ fn the_offering_binds_every_catalog_tool_under_its_wire_name_in_id_order() {
             pair("tools_concrete", "tools/concrete"),
             pair("tools_echo", "tools/echo"),
         ],
-        "a declared Plugin's tools are offered beside every other Plugin's"
+        "a declared Pack's tools are offered beside every other Pack's"
     );
     let set = rig.scheduler_for_test().tool_set_for_test();
     assert_eq!(
         set.declared(),
-        [PluginId::parse("tools").expect("valid Plugin")],
-        "the set records the declared Plugins"
+        [PackId::parse("tools").expect("valid Pack")],
+        "the set records the declared Packs"
     );
     let fetch = set
         .offered_binding("alpha_fetch")
@@ -221,16 +221,16 @@ fn model_call(id: &str, alias: &str, value: &str) -> EffectRecord {
 }
 
 #[test]
-fn a_script_offers_a_declared_plugins_tools_and_the_model_calls_one_by_its_wire_name() {
+fn a_script_offers_a_declared_packs_tools_and_the_model_calls_one_by_its_wire_name() {
     let gateway = ScriptedChat::new(vec![
         calls(&[("call_1", "tools_echo", r#"{"value":"hi"}"#)]),
         text("done"),
     ]);
     let source = prompt(
-        "plugins: [tools]",
+        "uses: [tools]",
         &[(
             "Only",
-            "tools.offer(plugins.get('tools').tools)\n\
+            "tools.offer(packs.get('tools').tools)\n\
              local history = messages.new()\n\
              history:user('go')\n\
              models.loop(history)\n\
@@ -248,20 +248,20 @@ fn a_script_offers_a_declared_plugins_tools_and_the_model_calls_one_by_its_wire_
     assert_eq!(
         advertised,
         vec![vec!["tools_echo".to_owned()]; 2],
-        "only the declared Plugin's tools are offered"
+        "only the declared Pack's tools are offered"
     );
     assert_eq!(calls, vec![model_call("tools/echo", "tools_echo", "hi")]);
 }
 
 #[test]
-fn a_script_offers_an_extra_plugins_tools_after_checking_plugins_get() {
+fn a_script_offers_an_extra_packs_tools_after_checking_packs_get() {
     let gateway = ScriptedChat::new(vec![
         calls(&[("call_1", "gh_search", r#"{"value":"q"}"#)]),
         text("done"),
     ]);
     let source = one_section(
-        "assert(plugins.get('missing') == nil, 'an unknown Plugin reads nil')\n\
-         local gh = plugins.get('gh')\n\
+        "assert(packs.get('missing') == nil, 'an unknown Pack reads nil')\n\
+         local gh = packs.get('gh')\n\
          if gh then tools.offer(gh.tools) end\n\
          local history = messages.new()\n\
          history:user('go')\n\
@@ -279,18 +279,18 @@ fn a_script_offers_an_extra_plugins_tools_after_checking_plugins_get() {
     assert_eq!(
         advertised,
         vec![vec!["gh_search".to_owned()]; 2],
-        "the extra Plugin's tools are offered and nothing else"
+        "the extra Pack's tools are offered and nothing else"
     );
     assert_eq!(calls, vec![model_call("gh/search", "gh_search", "q")]);
 }
 
 #[test]
-fn the_plugins_table_is_installed_in_the_h1_vm() {
+fn the_packs_table_is_installed_in_the_h1_vm() {
     let source = PromptSource::new()
-        .front("plugins: [tools]")
+        .front("uses: [tools]")
         .h1(
-            "return plugins.required()[1].name .. '|' .. plugins.extras()[1].name .. '|' .. \
-             tostring(tools.get('gh/search').plugin == plugins.get('gh'))",
+            "return packs.required()[1].name .. '|' .. packs.extras()[1].name .. '|' .. \
+             tostring(tools.get('gh/search').pack == packs.get('gh'))",
         )
         .build();
     let rig = Rig::run(
@@ -301,7 +301,7 @@ fn the_plugins_table_is_installed_in_the_h1_vm() {
     assert_eq!(
         rig.trace().text(),
         "tools|gh|true",
-        "the H1 pass reads the plugins table"
+        "the H1 pass reads the packs table"
     );
 }
 
@@ -320,5 +320,5 @@ fn a_round_leaves_out_an_offered_binding_a_local_tool_shares_a_name_with() {
     );
 }
 
-#[path = "offering-plugins.rs"]
-mod plugins;
+#[path = "offering-packs.rs"]
+mod packs;

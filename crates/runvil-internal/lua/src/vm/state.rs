@@ -127,11 +127,11 @@ impl SectionVm {
 
 /// Reads the section's effective tool bindings without mutating the tool
 /// runtime: the section's `tools.offer` tools in first-offer order, then
-/// every offered tool of each `plugins.offer` Plugin, Plugins in
-/// first-offer order and each Plugin's tools in id order. Each tool
+/// every offered tool of each `packs.offer` Pack, Packs in
+/// first-offer order and each Pack's tools in id order. Each tool
 /// appears once, at its first place, resolved against the offering.
 ///
-/// Rebuilt at each model operation so `tools.offer`, `plugins.offer`, and
+/// Rebuilt at each model operation so `tools.offer`, `packs.offer`, and
 /// `tools.offer_local` calls between blocks reach the next model turn.
 ///
 /// # Errors
@@ -144,15 +144,15 @@ pub fn current_tool_bindings(
     let runtime = runtime
         .lock()
         .map_err(|_| Error::Internal("tool declaration runtime was poisoned".into()))?;
-    let plugin_tools = runtime.plugins.iter().flat_map(|plugin| {
+    let pack_tools = runtime.packs.iter().flat_map(|pack| {
         bindings
             .offered()
             .iter()
-            .filter(move |binding| binding.id().plugin() == *plugin)
+            .filter(move |binding| binding.id().pack() == *pack)
             .map(ToolBinding::alias)
     });
     let mut names: Vec<&str> = Vec::new();
-    for name in runtime.added.iter().map(String::as_str).chain(plugin_tools) {
+    for name in runtime.added.iter().map(String::as_str).chain(pack_tools) {
         if !names.contains(&name) {
             names.push(name);
         }

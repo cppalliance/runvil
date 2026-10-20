@@ -303,7 +303,7 @@ fn number_lines_from(lines: &[&str], start: usize) -> String {
 /// executor's leaf-yield dispatch for a `store.*` call inside a block.
 ///
 /// The direct closures `install_store_table` builds are a second path.
-/// They run only while the Plugin preludes install, before
+/// They run only while the Pack preludes install, before
 /// `route_store_to_shims` switches the table to the yield shims. They share
 /// this function's operation bodies (the same [`Access`] calls and read
 /// helpers) and add lifecycle events, store-conflict recording, and

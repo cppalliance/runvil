@@ -1,4 +1,4 @@
-//! Tests for a Plugin prelude's restricted environment: the globals
+//! Tests for a Pack prelude's restricted environment: the globals
 //! it sees, the read-only `var` view at every depth, and its tool calls
 //! yielding from a block.
 
@@ -116,15 +116,15 @@ end";
     for (key, refusal) in [
         (
             "'mode'",
-            "var is read-only inside a Plugin prelude; cannot set 'mode'",
+            "var is read-only inside a Pack prelude; cannot set 'mode'",
         ),
         (
             "1",
-            "var is read-only inside a Plugin prelude; cannot set '1'",
+            "var is read-only inside a Pack prelude; cannot set '1'",
         ),
         (
             "2.5",
-            "var is read-only inside a Plugin prelude; cannot set 'number'",
+            "var is read-only inside a Pack prelude; cannot set 'number'",
         ),
     ] {
         let message: String = vm.eval(&format!("return probe_set({key})"));

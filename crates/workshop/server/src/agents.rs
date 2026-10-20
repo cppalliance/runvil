@@ -49,7 +49,7 @@ use harness::vfs::VfsRef;
 use harness::{Harness, RunRequest};
 use plugin_web::SEARCH_PROVIDER;
 use runvil::tools::ToolId;
-use runvil_plugin::{PluginId, ServiceKey};
+use runvil_plugin::{PackId, ServiceKey};
 use serde_json::Value;
 use workshop_agents::{
     Conversation, ConversationId, Conversations, LaunchError, TokioTimer, discover_agents,
@@ -177,7 +177,7 @@ fn with_plugins(
         tracing::warn!(%error, "the subagents Plugin was not installed");
     }
     for (server, entry) in servers {
-        let id = match PluginId::parse(&server.to_ascii_lowercase()) {
+        let id = match PackId::parse(&server.to_ascii_lowercase()) {
             Ok(id) => id,
             Err(error) => {
                 tracing::warn!(%server, %error, "the MCP server was skipped");

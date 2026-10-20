@@ -10,7 +10,7 @@ use rmcp::model::{
 };
 use rmcp::service::{Peer, PeerRequestOptions, RoleClient};
 use runvil_plugin::{
-    Plugin, PluginFuture, PluginId, ToolContext, ToolError, ToolErrorKind, ToolId, ToolInfo,
+    PackId, Plugin, PluginFuture, ToolContext, ToolError, ToolErrorKind, ToolId, ToolInfo,
     ToolOutput,
 };
 use serde_json::Value;
@@ -51,7 +51,7 @@ pub(crate) struct Listed {
 /// Keeps the tools whose lowercased names form a tool id under `plugin`,
 /// and drops, with a warning, any that do not or that repeat an earlier
 /// tool's id.
-pub(crate) fn catalog(plugin: &PluginId, tools: Vec<Tool>) -> Vec<Listed> {
+pub(crate) fn catalog(plugin: &PackId, tools: Vec<Tool>) -> Vec<Listed> {
     let mut seen = HashSet::new();
     let mut kept = Vec::new();
     for tool in tools {

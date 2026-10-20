@@ -7,7 +7,7 @@ use std::sync::Arc;
 
 use runvil_plugin::testing::TestCall;
 use runvil_plugin::{
-    HostServices, Plugin, PluginId, ServiceKey, TOKIO_RUNTIME, ToolError, ToolErrorKind, ToolId,
+    HostServices, PackId, Plugin, ServiceKey, TOKIO_RUNTIME, ToolError, ToolErrorKind, ToolId,
 };
 use serde_json::{Value, json};
 use tokio::runtime::Handle;
@@ -50,8 +50,8 @@ fn services_with(provider: bool, runtime: bool) -> HostServices {
     host
 }
 
-fn name(text: &str) -> PluginId {
-    PluginId::parse(text).expect("a one-segment Plugin id parses")
+fn name(text: &str) -> PackId {
+    PackId::parse(text).expect("a one-segment Plugin id parses")
 }
 
 /// The Plugin installed under `installed` with `config` and both services.

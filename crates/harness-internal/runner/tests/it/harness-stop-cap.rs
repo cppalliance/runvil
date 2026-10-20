@@ -26,17 +26,17 @@ const HOLD_TOOL: &str = "harness/hold";
 const ASK_TOOL: &str = "user-input/ask";
 
 /// A model loop under a `pcall` that offers each of `tools` and names
-/// each one's Plugin, reporting how the loop call ended.
+/// each one's Pack, reporting how the loop call ended.
 fn loops_offering(tools: &[&str]) -> String {
-    let mut plugins = String::new();
+    let mut packs = String::new();
     let mut offers = String::new();
     for tool in tools {
-        let plugin = tool.split('/').next().unwrap_or_default();
-        writeln!(plugins, "  - {plugin}").unwrap();
+        let pack = tool.split('/').next().unwrap_or_default();
+        writeln!(packs, "  - {pack}").unwrap();
         writeln!(offers, "tools.offer('{tool}')").unwrap();
     }
     format!(
-        "---\nname: loops\ndescription: d\nrunvil: 0\nplugins:\n{plugins}\
+        "---\nname: loops\ndescription: d\nrunvil: 0\nuses:\n{packs}\
          models:\n  writer: {{}}\n---\n\n\
          # Loops\n\n```lua\nmodels.default('writer')\n```\n\n\
          ## Only\n\n```lua\n{offers}local msgs = messages.new()\nmsgs:user('hold')\n\
@@ -77,7 +77,7 @@ async fn settle() {
 /// Main spawns Child, which asks the operator; Main then waits on a
 /// `wait` round, cancels Child, and waits on an `after` round.
 const CANCELS_AN_ASKER: &str = "---\nname: cancels\ndescription: d\nrunvil: 0\n\
-    plugins:\n  - user-input\nmodels:\n  writer: {}\n---\n\n\
+    uses:\n  - user-input\nmodels:\n  writer: {}\n---\n\n\
     # Cancels\n\n```lua\nmodels.default('writer')\n```\n\n\
     ## Main\n\n```lua\n\
     local t = tasks.spawn('## Child')\n\

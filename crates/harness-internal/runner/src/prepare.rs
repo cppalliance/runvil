@@ -365,7 +365,7 @@ fn prepare_from_snapshot(
 ) -> (RunContext, Requirements) {
     let (usable, unavailable) = snapshot.roster();
     ctx.tools(snapshot.catalog())
-        .plugins(usable, unavailable)
+        .packs(usable, unavailable)
         .preludes(snapshot.preludes(prompt))
         .prepare(prompt)
 }

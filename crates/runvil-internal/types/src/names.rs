@@ -1,9 +1,9 @@
 //! The one global naming grammar.
 //!
 //! A name is one or more segments separated by `/`. The id types built on
-//! it add their own segment count: a [`PluginId`](crate::plugins::PluginId)
-//! is one segment, the local name a Plugin is installed under (`web`),
-//! and a [`ToolId`](crate::tools::ToolId) is two or more, its Plugin's
+//! it add their own segment count: a [`PackId`](crate::packs::PackId)
+//! is one segment, the local name a Pack is installed under (`web`),
+//! and a [`ToolId`](crate::tools::ToolId) is two or more, its Pack's
 //! local name first (`web/fetch`). Segments are lowercase ASCII
 //! alphanumeric plus `-`, `_`, `.`, and comparison is case-sensitive. A
 //! name carries no version, so a `@` is a parse error.
@@ -17,13 +17,13 @@ mod tests;
 
 /// A validated slash-separated name, such as `web` or `web/fetch`.
 ///
-/// A name has one or more segments separated by `/`. [`PluginId`] and
+/// A name has one or more segments separated by `/`. [`PackId`] and
 /// [`ToolId`] are built on it and each adds its own segment count.
 ///
 /// Every value comes from [`GlobalName::parse`], so each segment always
 /// consists of one or more lowercase ASCII letters, digits, `-`, `_`, and `.`.
 ///
-/// [`PluginId`]: crate::plugins::PluginId
+/// [`PackId`]: crate::packs::PackId
 /// [`ToolId`]: crate::tools::ToolId
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct GlobalName {
@@ -61,7 +61,7 @@ impl GlobalName {
     /// Builds a one-segment name from a segment already validated as part
     /// of another name.
     ///
-    /// Crate-internal: backs [`crate::tools::ToolId::plugin`].
+    /// Crate-internal: backs [`crate::tools::ToolId::pack`].
     pub(crate) fn from_validated_segment(segment: &str) -> GlobalName {
         GlobalName {
             segments: vec![segment.to_owned()],
@@ -77,8 +77,8 @@ impl GlobalName {
 
     /// Returns the first segment.
     ///
-    /// Crate-internal: backs [`crate::tools::ToolId::plugin`] and
-    /// [`crate::plugins::PluginId::contains`].
+    /// Crate-internal: backs [`crate::tools::ToolId::pack`] and
+    /// [`crate::packs::PackId::contains`].
     pub(crate) fn first(&self) -> &str {
         &self.segments[0]
     }

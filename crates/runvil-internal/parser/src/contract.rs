@@ -1,7 +1,7 @@
-//! Parses the frontmatter contract keys: `plugins`, `args`, and `models`.
+//! Parses the frontmatter contract keys: `uses`, `args`, and `models`.
 //!
-//! The YAML is the whole contract: Plugins install, models declare, args
-//! type. Parsing validates the static shape - each Plugin a one-segment
+//! The YAML is the whole contract: Packs install, models declare, args
+//! type. Parsing validates the static shape - each Pack a one-segment
 //! plain name declared once, the alias grammar on map keys, the closed
 //! model-keyword vocabulary, arg name and type sanity - and exposes the
 //! FULL declaration on the parsed [`Prompt`](crate::Prompt); satisfying
@@ -9,14 +9,14 @@
 //! never the parser's.
 //!
 //! `args` and `models` are defined in submodules; this root owns the
-//! duplicate-Plugin check and the map deserializer the two map keys share.
+//! duplicate-Pack check and the map deserializer the two map keys share.
 
 use std::collections::btree_map::Entry;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::marker::PhantomData;
 
-use runvil_types::plugins::PluginId;
+use runvil_types::packs::PackId;
 use serde::de::{self, MapAccess, Visitor};
 use serde::{Deserialize, Deserializer};
 
@@ -118,21 +118,21 @@ where
     }
 }
 
-/// A refused `plugins:` list.
+/// A refused `uses:` list.
 #[derive(Debug, thiserror::Error)]
-pub(crate) enum PluginListError {
-    /// The list names this Plugin more than once.
-    #[error("invalid frontmatter: Plugin {0} is declared more than once under plugins")]
-    Duplicate(PluginId),
+pub(crate) enum PackListError {
+    /// The list names this Pack more than once.
+    #[error("invalid frontmatter: Pack id {0} is declared more than once under uses")]
+    Duplicate(PackId),
 }
 
-/// Refuses a `plugins:` list that names one Plugin twice.
+/// Refuses a `uses:` list that names one Pack twice.
 ///
-/// The refusal names the first Plugin declared again.
-pub(crate) fn check_distinct_plugins(plugins: &[PluginId]) -> Result<(), PluginListError> {
+/// The refusal names the first Pack declared again.
+pub(crate) fn check_distinct_packs(packs: &[PackId]) -> Result<(), PackListError> {
     let mut seen = BTreeSet::new();
-    match plugins.iter().find(|plugin| !seen.insert(*plugin)) {
-        Some(plugin) => Err(PluginListError::Duplicate(plugin.clone())),
+    match packs.iter().find(|pack| !seen.insert(*pack)) {
+        Some(pack) => Err(PackListError::Duplicate(pack.clone())),
         None => Ok(()),
     }
 }

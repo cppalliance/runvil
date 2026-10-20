@@ -17,7 +17,7 @@ const GREETER: PluginInfo = PluginInfo::new("tests/greeter", construct_greeter).
 
 /// A prompt declaring the greeter Plugin and returning its greeting.
 const GREETS: &str = "---\nname: greets\ndescription: d\nrunvil: 0\n\
-    plugins:\n  - greeter\n---\n\n# Title\n\n## Only\n\n\
+    uses:\n  - greeter\n---\n\n# Title\n\n## Only\n\n\
     ```lua\nreturn tools.call('greeter/greet')\n```\n";
 
 struct Greeter {
@@ -29,7 +29,7 @@ struct Greeter {
     reason = "the PluginInfo construct signature fixes the return type"
 )]
 fn construct_greeter(
-    name: &PluginId,
+    name: &PackId,
     _config: Value,
     _services: &HostServices,
 ) -> Result<Arc<dyn Plugin>, ToolError> {

@@ -5,7 +5,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use runvil_model_client::detail;
 use runvil_parser::ModelKeyword;
-use runvil_types::plugins::PluginId;
+use runvil_types::packs::PackId;
 use runvil_types::tools::ToolInfo;
 
 use crate::execute::scheduler::TaskBuiltin;
@@ -15,7 +15,7 @@ use crate::parser::Prompt;
 
 use super::super::config::RunContext;
 
-/// Builds the run's shared tool set: the frontmatter's declared Plugins,
+/// Builds the run's shared tool set: the frontmatter's declared Packs,
 /// the `roster` moved out of the context, and every catalog tool the run
 /// can offer bound with the tool's info (its schema,
 /// description, and output kind), so run-time execution never consults the
@@ -23,10 +23,10 @@ use super::super::config::RunContext;
 pub(super) fn bound_tool_set(
     prompt: &Prompt,
     ctx: &RunContext,
-    roster: BTreeMap<PluginId, Option<String>>,
+    roster: BTreeMap<PackId, Option<String>>,
 ) -> ToolSet {
     ToolSet::new(
-        prompt.frontmatter().plugins().to_vec(),
+        prompt.frontmatter().uses().to_vec(),
         roster,
         offered_bindings(ctx),
     )

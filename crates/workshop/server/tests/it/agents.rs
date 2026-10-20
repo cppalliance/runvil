@@ -35,7 +35,7 @@ const ECHO_MD: &str = r"---
 name: echo
 description: The echo test agent on the unified runtime.
 runvil: 0
-plugins:
+uses:
   - user-input
 ---
 

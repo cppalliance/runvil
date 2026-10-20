@@ -2,7 +2,7 @@
 name: chat
 description: The built-in Workshop chat agent on the unified runtime.
 runvil: 0
-plugins:
+uses:
   - web
   - user-input
 models:
@@ -25,7 +25,7 @@ models.default("chat")
 ## Conversation
 
 ```lua
-plugins.offer("web")
+packs.offer("web")
 tools.offer(tools.extras())
 local history = messages.new()
 while true do

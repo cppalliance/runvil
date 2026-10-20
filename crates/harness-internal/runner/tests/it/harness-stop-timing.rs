@@ -27,7 +27,7 @@ use crate::support::registry;
 /// ends, the main infers once, joins the child for the operator's answer,
 /// and returns how the wait ended, the reply, and the answer.
 const STOPS_TIMED_JOIN: &str = "---\nname: timed\ndescription: d\nrunvil: 0\n\
-    plugins:\n  - user-input\nmodels:\n  writer: {}\n---\n\n\
+    uses:\n  - user-input\nmodels:\n  writer: {}\n---\n\n\
     # Timed\n\n```lua\nmodels.default('writer')\n```\n\n\
     ## Main\n\n```lua\n\
     local asker = tasks.spawn('## Asker')\n\
@@ -54,7 +54,7 @@ const STOPS_BEFORE_A_STEP: &str = "---\nname: before-step\ndescription: d\nrunvi
 
 /// A prompt that hands the operator's answer to one model round.
 const ASKS_THEN_INFERS: &str = "---\nname: asks-infers\ndescription: d\nrunvil: 0\n\
-    plugins:\n  - user-input\nmodels:\n  writer: {}\n---\n\n\
+    uses:\n  - user-input\nmodels:\n  writer: {}\n---\n\n\
     # AsksInfers\n\n```lua\nmodels.default('writer')\n```\n\n\
     ## Only\n\n```lua\nreturn models.infer((input.ask()))\n```\n";
 

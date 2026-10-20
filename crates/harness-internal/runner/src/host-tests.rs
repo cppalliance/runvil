@@ -8,9 +8,9 @@ use std::sync::Arc;
 
 use runvil::effect::{ToolCallOrigin, ToolCaller};
 use runvil::vfs::{Origin, VfsRef};
-use runvil::{MissingService, Prompt, UnavailablePlugin};
+use runvil::{MissingService, Prompt, UnavailablePack};
 use runvil_plugin::{
-    HostServices, Plugin, PluginFuture, PluginId, PluginInfo, ServiceId, ServiceKey, ToolContext,
+    HostServices, PackId, Plugin, PluginFuture, PluginInfo, ServiceId, ServiceKey, ToolContext,
     ToolError, ToolId, ToolInfo, ToolOutput,
 };
 use serde_json::{Value, json};
@@ -30,7 +30,7 @@ const NEEDS_SESSION: &[ServiceId] = &[SESSION.id()];
 /// Offers the tools its configuration lists and answers each call with
 /// the name it was installed under and the called tool's id.
 struct Listed {
-    name: PluginId,
+    name: PackId,
     tools: Vec<ToolInfo>,
 }
 
@@ -56,7 +56,7 @@ impl Plugin for Listed {
     reason = "the PluginInfo construct signature fixes the argument and return types"
 )]
 fn listed(
-    name: &PluginId,
+    name: &PackId,
     config: Value,
     _services: &HostServices,
 ) -> Result<Arc<dyn Plugin>, ToolError> {
@@ -77,7 +77,7 @@ fn listed(
 /// Builds a [`Listed`] with one `<name>/use` tool, failing when the Host
 /// provides no [`BACKEND`].
 fn backed(
-    name: &PluginId,
+    name: &PackId,
     _config: Value,
     services: &HostServices,
 ) -> Result<Arc<dyn Plugin>, ToolError> {
@@ -99,8 +99,8 @@ fn tool(id: &str) -> Value {
     json!({ "id": id })
 }
 
-fn name(text: &str) -> PluginId {
-    PluginId::parse(text).unwrap()
+fn name(text: &str) -> PackId {
+    PackId::parse(text).unwrap()
 }
 
 /// A Host with no Host-wide services over a registry holding `infos`.
@@ -117,7 +117,7 @@ fn host_with(services: HostServices, infos: &[PluginInfo]) -> HostContext {
     HostContext::new(plugins, services)
 }
 
-/// A prompt with the given `plugins:` and `tools:` frontmatter lines.
+/// A prompt with the given `uses:` and `tools:` frontmatter lines.
 fn prompt(frontmatter: &str) -> Prompt {
     let source = format!(
         "---\nname: host-test\ndescription: d\nrunvil: 0\n{frontmatter}---\n\n\
@@ -189,11 +189,11 @@ fn a_construct_failure_is_stored_and_reported_as_unavailable_with_its_reason() {
     let (_run, requirements) = bare.begin_run(
         HostServices::new(),
         BTreeMap::new(),
-        &prompt("plugins:\n  - backed\n"),
+        &prompt("uses:\n  - backed\n"),
     );
     assert_eq!(
         requirements.unavailable,
-        [UnavailablePlugin::new(
+        [UnavailablePack::new(
             name("backed"),
             "backed needs tests/backend, and this host provides none"
         )]
@@ -209,7 +209,7 @@ fn a_construct_failure_is_stored_and_reported_as_unavailable_with_its_reason() {
     let (_run, requirements) = provided.begin_run(
         HostServices::new(),
         BTreeMap::new(),
-        &prompt("plugins:\n  - backed\n"),
+        &prompt("uses:\n  - backed\n"),
     );
     assert!(
         requirements.is_satisfied(),
@@ -229,7 +229,7 @@ fn begin_run_reports_every_declared_plugin_it_cannot_serve() {
     let (_run, requirements) = host.begin_run(
         HostServices::new(),
         BTreeMap::new(),
-        &prompt("plugins:\n  - needy\n  - absent\n  - fine\n  - broken\n"),
+        &prompt("uses:\n  - needy\n  - absent\n  - fine\n  - broken\n"),
     );
     assert_eq!(requirements.missing_required, [name("absent")]);
     assert_eq!(
@@ -241,12 +241,12 @@ fn begin_run_reports_every_declared_plugin_it_cannot_serve() {
         1,
         "the declared Plugin that failed to build is reported: {requirements:?}"
     );
-    assert_eq!(requirements.unavailable[0].plugin, name("broken"));
+    assert_eq!(requirements.unavailable[0].pack, name("broken"));
 }
 
 #[test]
 fn a_declared_builtin_is_met_when_installed_and_missing_when_not() {
-    let declares = prompt("plugins:\n  - subagents\n");
+    let declares = prompt("uses:\n  - subagents\n");
     let mut host = host(&[]);
     let (_run, requirements) = host.begin_run(HostServices::new(), BTreeMap::new(), &declares);
     assert_eq!(requirements.missing_required, [name("subagents")]);
@@ -263,7 +263,7 @@ fn a_declared_builtin_is_met_when_installed_and_missing_when_not() {
 fn an_installed_builtin_adds_no_catalog_tool_and_no_prelude() {
     let mut host = host(&[]);
     host.install("runvil/subagents", None, Value::Null).unwrap();
-    let declares = prompt("plugins:\n  - subagents\n");
+    let declares = prompt("uses:\n  - subagents\n");
     assert!(catalog_ids(&host, HostServices::new(), &declares).is_empty());
     let (run, _requirements) = host.begin_run(HostServices::new(), BTreeMap::new(), &declares);
     assert!(run.preludes(&declares).is_empty());
@@ -287,8 +287,8 @@ fn the_roster_lists_the_builtin_stub_as_usable_and_each_plugin_that_cannot_serve
     assert_eq!(
         unavailable,
         [
-            UnavailablePlugin::new(name("kit"), "the kit server is down"),
-            UnavailablePlugin::new(
+            UnavailablePack::new(name("kit"), "the kit server is down"),
+            UnavailablePack::new(
                 name("needy"),
                 "the run lacks the services it needs: tests/session"
             ),
@@ -330,7 +330,7 @@ fn an_undeclared_plugins_tools_reach_the_catalog_but_its_prelude_does_not() {
         .unwrap();
     host.install(extra.fqn, None, json!([tool("extra/b")]))
         .unwrap();
-    let prompt = prompt("plugins:\n  - declared\n");
+    let prompt = prompt("uses:\n  - declared\n");
     assert_eq!(
         catalog_ids(&host, HostServices::new(), &prompt),
         ["declared/a", "extra/b"]
@@ -339,7 +339,7 @@ fn an_undeclared_plugins_tools_reach_the_catalog_but_its_prelude_does_not() {
     let preludes: Vec<String> = run
         .preludes(&prompt)
         .iter()
-        .map(|prelude| prelude.plugin().to_string())
+        .map(|prelude| prelude.pack().to_string())
         .collect();
     assert_eq!(preludes, ["declared"]);
 }
@@ -353,12 +353,12 @@ fn preludes_follow_the_prompts_declaration_order_and_carry_the_installed_name() 
     }
     host.install("acme/first", Some(name("third")), Value::Null)
         .unwrap();
-    let prompt = prompt("plugins:\n  - third\n  - second\n  - first\n");
+    let prompt = prompt("uses:\n  - third\n  - second\n  - first\n");
     let (run, _requirements) = host.begin_run(HostServices::new(), BTreeMap::new(), &prompt);
     let order: Vec<String> = run
         .preludes(&prompt)
         .iter()
-        .map(|prelude| prelude.plugin().to_string())
+        .map(|prelude| prelude.pack().to_string())
         .collect();
     assert_eq!(order, ["third", "second", "first"]);
 }

@@ -4,7 +4,7 @@ use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
 
-use runvil_types::plugins::PluginId;
+use runvil_types::packs::PackId;
 
 use crate::error::{Error, Result};
 
@@ -109,15 +109,15 @@ impl TaskAllowlist {
     }
 }
 
-/// Tracks the tools and Plugins one section VM offered.
+/// Tracks the tools and Packs one section VM offered.
 #[derive(Debug, Default)]
 pub struct ToolRuntime {
     /// The wire names `tools.offer` put in the section's scope, in
     /// first-offer order.
     pub added: Vec<String>,
-    /// The Plugins `plugins.offer` put in the section's scope, in
+    /// The Packs `packs.offer` put in the section's scope, in
     /// first-offer order.
-    pub plugins: Vec<PluginId>,
+    pub packs: Vec<PackId>,
     /// The model's task allowlist, once `tools.allow_tasks` has run in the
     /// section; `None` leaves the task built-ins off the model's tool
     /// surface.

@@ -24,8 +24,8 @@ use runvil::RunErrorKind;
 use runvil::cancel::CancelHandle;
 use runvil::event::Event;
 use runvil_plugin::{
-    HostServices, Plugin, PluginFuture, PluginId, PluginInfo, ToolContext, ToolError,
-    ToolErrorKind, ToolId, ToolInfo, ToolOutput,
+    HostServices, PackId, Plugin, PluginFuture, PluginInfo, ToolContext, ToolError, ToolErrorKind,
+    ToolId, ToolInfo, ToolOutput,
 };
 use serde_json::{Value, json};
 
@@ -45,7 +45,7 @@ mod ready;
 /// A prompt declaring `web` as a required Plugin that no
 /// Host here installs.
 const NEEDS_WEB: &str = "---\nname: needs-web\ndescription: d\nrunvil: 0\n\
-    plugins:\n  - web\n---\n\n# Title\n\n## Only\n\nDone.\n";
+    uses:\n  - web\n---\n\n# Title\n\n## Only\n\nDone.\n";
 
 /// A prompt with unclosed frontmatter, so it does not parse.
 const UNCLOSED: &str = "---\nname: unclosed\ndescription: d\nrunvil: 0\n\n# Title\n";
@@ -56,7 +56,7 @@ const PLAIN: &str = "---\nname: plain\ndescription: d\nrunvil: 0\n---\n\n\
 
 /// A prompt declaring the fixture Plugin and calling its tool once by id.
 const CALLS_ECHO: &str = "---\nname: calls-echo\ndescription: d\nrunvil: 0\n\
-    plugins:\n  - tools\n---\n\n\
+    uses:\n  - tools\n---\n\n\
     # Title\n\n## Only\n\n```lua\nreturn tools.call('tools/echo', { value = 'hi' })\n```\n";
 
 /// An empty in-memory recorder.
@@ -139,7 +139,7 @@ struct Echo {
     reason = "the PluginInfo construct signature fixes the return type"
 )]
 fn construct_echo(
-    name: &PluginId,
+    name: &PackId,
     _config: Value,
     _services: &HostServices,
 ) -> Result<Arc<dyn Plugin>, ToolError> {
@@ -191,14 +191,14 @@ async fn an_unmet_requirement_is_refused_with_the_engines_notice_and_its_run_end
     let recorder = recorder();
     let error = prepare(NEEDS_WEB, "", services(&recorder, bare()))
         .await
-        .expect_err("a missing required Plugin refuses the run");
+        .expect_err("a missing required Pack refuses the run");
 
     let PrepareError::Refused { run_id, error, .. } = error else {
         panic!("the refusal is a requirements refusal: {error}");
     };
     assert_eq!(error.kind(), RunErrorKind::RequirementsUnmet);
     let notice = "the environment cannot satisfy this prompt:\n\
-        - missing required Plugin: web";
+        - missing required Pack: web";
     assert_eq!(
         error.to_string(),
         notice,
@@ -374,7 +374,7 @@ async fn a_script_reaches_an_undeclared_plugins_tool_by_full_id_without_its_prel
 #[tokio::test]
 async fn the_lists_split_the_offering_by_declared_plugin_and_a_script_calls_a_tool_object() {
     let offering = "---\nname: offering\ndescription: d\nrunvil: 0\n\
-        plugins:\n  - tools\n---\n\n# Title\n\n## Only\n\n```lua\n\
+        uses:\n  - tools\n---\n\n# Title\n\n## Only\n\n```lua\n\
         local required, extras = tools.required(), tools.extras()\n\
         local extra = extras[1]\n\
         return #required .. ':' .. required[1].id .. '|' .. #extras .. ':' .. extra.id .. '|' .. \

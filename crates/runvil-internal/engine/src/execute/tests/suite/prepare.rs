@@ -14,7 +14,7 @@ use runvil_parser::test_support::parse_ok;
 use runvil_types::models::{ModelId, ModelInfo, ThinkingMode};
 use runvil_vfs::Origin;
 
-/// A prompt declaring no Plugins at all.
+/// A prompt declaring no Packs at all.
 const DECLARES_NOTHING: &str = concat!(
     "---\n",
     "name: declares-nothing\n",

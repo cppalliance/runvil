@@ -8,7 +8,7 @@ use super::info::ToolInfo;
 
 /// A catalog of the tools a run may offer, given as `ToolInfo` values.
 ///
-/// The caller builds the catalog from every Plugin it can serve, declared
+/// The caller builds the catalog from every Pack it can serve, declared
 /// by the prompt or not, and keeps the tool implementations itself. The
 /// catalog lists every tool the run can use: the prompt's Lua calls one by
 /// its [`ToolId`], and a section offers one to its model with

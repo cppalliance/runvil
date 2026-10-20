@@ -48,7 +48,7 @@ impl InferenceBroker for Offline {
 pub(crate) fn prompt(lua: &str) -> String {
     format!(
         "---\nname: fixture\ndescription: a conversation fixture\nrunvil: 0\n\
-         plugins:\n  - user-input\n---\n\n\
+         uses:\n  - user-input\n---\n\n\
          # Fixture\n\n## Conversation\n\n```lua\n{lua}\n```\n"
     )
 }

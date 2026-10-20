@@ -38,7 +38,7 @@ const CONTRACT = {
   max_tool_iterations: 12,
   input: { path: "in/papers.md", description: "the papers" },
   output: { path: "out/verdicts.md", description: "the verdicts" },
-  plugins: [{ id: "tools/web" }],
+  uses: [{ id: "tools/web" }],
   args: {
     implicit: false,
     fields: [
@@ -94,8 +94,8 @@ const json = (body, status = 200) => ({
       contract.output?.description === "the verdicts",
   );
   check(
-    "plugins narrow",
-    contract.plugins.length === 1 && contract.plugins[0].id === "tools/web",
+    "uses narrow",
+    contract.uses.length === 1 && contract.uses[0].id === "tools/web",
   );
   check("a contract without tools narrows with no tools section", !("tools" in contract));
   check(
@@ -139,7 +139,7 @@ const json = (body, status = 200) => ({
       max_tool_iterations: null,
       input: null,
       output: null,
-      plugins: [],
+      uses: [],
       args: {
         implicit: true,
         fields: [

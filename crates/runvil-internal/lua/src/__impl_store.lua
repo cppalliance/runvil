@@ -1,6 +1,6 @@
 -- The `store` table's function values for a section VM: each one forwards
 -- to its direct Engine closure until the store yield shims install, then to
--- the matching shim (`__impl_coro.lua`), so a function a Plugin prelude
+-- the matching shim (`__impl_coro.lua`), so a function a Pack prelude
 -- captured while it installed (`local write = store.write`) follows the
 -- install phase exactly as a fresh `store.write` lookup does.
 --

@@ -1,4 +1,4 @@
-//! Plugin preludes in a run: every section VM installs the preludes
+//! Pack preludes in a run: every section VM installs the preludes
 //! handed to `RunContext::preludes`, fanout arms and spawned task chains
 //! included, and the libraries a section requires see them; a prelude
 //! that fails to load or whose global collides fails the run as a Lua
@@ -7,7 +7,7 @@
 //! caught or not; and a prelude's functions, called from a block, reach
 //! the yielding store and tool shims.
 
-use runvil_types::plugins::{PluginId, Prelude};
+use runvil_types::packs::{PackId, Prelude};
 
 use super::fixtures::echo_tool;
 use super::*;
@@ -15,9 +15,9 @@ use crate::execute::protocol::VfsOp;
 use crate::execute::run::{EffectRecord, ToolCallOrigin, ToolCaller};
 use crate::test_support::scenario::EXECUTION;
 
-/// A prelude contributed by the Plugin `id`.
+/// A prelude contributed by the Pack `id`.
 pub(super) fn prelude(id: &str, source: &str) -> Prelude {
-    Prelude::new(PluginId::parse(id).expect("a valid Plugin id"), source)
+    Prelude::new(PackId::parse(id).expect("a valid Pack id"), source)
 }
 
 /// A prelude defining one table global whose function greets a name.
@@ -92,7 +92,7 @@ fn a_prelude_that_calls_a_tool_while_loading_fails_the_run_as_lua_before_its_fir
             "tools.call('tools/echo', { value = 'early' })",
         )],
         &[
-            "Plugin `eager`: its prelude failed to load",
+            "Pack `eager`: its prelude failed to load",
             "it must not call tools while loading",
         ],
     );
@@ -104,15 +104,15 @@ fn two_preludes_defining_one_global_fail_the_run_as_lua_before_its_first_effect(
         EFFECT_FIRST,
         vec![prelude("first", GREETER), prelude("second", "greeter = {}")],
         &[
-            "Plugin `second`: its prelude defines the global `greeter`",
-            "which Plugin `first`'s prelude already defines",
+            "Pack `second`: its prelude defines the global `greeter`",
+            "which Pack `first`'s prelude already defines",
         ],
     );
 }
 
 #[test]
 fn a_prelude_global_named_like_an_offered_tools_wire_name_installs() {
-    let md = "---\nname: t\ndescription: d\nrunvil: 0\nplugins:\n  - tools\n---\n\n\
+    let md = "---\nname: t\ndescription: d\nrunvil: 0\nuses:\n  - tools\n---\n\n\
         # Preludes\n\n\
         ## Only\n\n\
         ```lua\nreturn tools_echo .. '|' .. tools.get('tools/echo').id\n```\n";
@@ -145,7 +145,7 @@ fn a_prelude_defining_ui_or_item_collides_on_a_run_that_binds_neither() {
             EFFECT_FIRST,
             vec![prelude("reserved", &format!("{name} = {{}}"))],
             &[
-                &format!("Plugin `reserved`: its prelude defines the global `{name}`"),
+                &format!("Pack `reserved`: its prelude defines the global `{name}`"),
                 "which is reserved as an Engine global",
             ],
         );

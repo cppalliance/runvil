@@ -64,7 +64,7 @@ fn store_error_fields(error: &runvil_vfs::VfsError) -> Vec<(String, ErrorField)>
 /// the anchor, count, rule, or UTF-8 offset its variant holds.
 ///
 /// One source for the shape, so a failure the direct closures raise
-/// while a Plugin prelude installs and one answered through the
+/// while a Pack prelude installs and one answered through the
 /// executor's effect path are indistinguishable to Lua code.
 #[must_use]
 pub fn store_error_value_fields(error: &runvil_vfs::VfsError) -> Vec<(String, ErrorField)> {

@@ -265,7 +265,7 @@ async fn an_ask_is_answered_when_the_registry_receives_the_text() {
     // conversation's broker, the registry completes the wait with the
     // operator's text, and the answer resumes the run to its result.
     let source = "---\nname: ask\ndescription: asks the operator\nrunvil: 0\n\
-                  plugins:\n  - user-input\n---\n\n\
+                  uses:\n  - user-input\n---\n\n\
                   # Ask\n\n## Only\n\n```lua\nreturn (input.ask())\n```\n";
     let mut plugins = PluginRegistry::new();
     plugins

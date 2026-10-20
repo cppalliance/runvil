@@ -202,7 +202,7 @@ fn a_local_call_or_a_task_builtin_runs_alone_between_its_neighbors() {
 #[test]
 fn a_call_the_round_cannot_bind_stops_the_batch_and_raises_once_the_issued_calls_land() {
     let md = one_section(
-        "plugins.offer('tools')\n\
+        "packs.offer('tools')\n\
          local msgs = messages.new()\n\
          msgs:user('asked')\n\
          local ok, err = pcall(models.loop, msgs)\n\

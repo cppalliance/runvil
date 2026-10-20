@@ -4,7 +4,7 @@
 //! `item` and `sys.index`), the live H1 pass (section 0) - and hands back
 //! a live [`SectionContext`] whose `Drop` is the teardown boundary. The
 //! setup half (Engine injection, Engine globals, the control surface, the
-//! Plugin preludes, `require`, the store yield shims) is
+//! Pack preludes, `require`, the store yield shims) is
 //! shared; only the seed, the `sys` extras, the visible set behind the
 //! `prompt` reads, and the origin `require` resolves from differ.
 
@@ -43,7 +43,7 @@ impl SectionContext {
     /// `prompt` reads resolved over the section's visible set, plus the
     /// coroutine yield shims for the suspending calls), and
     /// the rest of the shared setup half (Engine injection, Engine globals, the
-    /// Plugin preludes, `require`, the store yield shims).
+    /// Pack preludes, `require`, the store yield shims).
     ///
     /// `home` is the path of the caller's own walk slice and `index` the
     /// section's place in it. Each `prompt` read resolves that slice from
@@ -156,7 +156,7 @@ impl SectionContext {
     /// `when` like every section after it), VM construction over the
     /// run's shared sets, limits, and the shared
     /// setup half (Engine injection, Engine globals, the control surface, the
-    /// coroutine shims, the Plugin preludes, `require`, the store yield
+    /// coroutine shims, the Pack preludes, `require`, the store yield
     /// shims).
     ///
     /// H1's only deltas from a walked section: no `SECTION_STARTED`

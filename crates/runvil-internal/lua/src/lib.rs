@@ -30,20 +30,20 @@
 //! `SectionVm::run_chunk` as a Lua-category error.
 //!
 //! In scheduler mode the VM also holds `tasks`, the shims for spawning,
-//! waiting on, checking, noting, and cancelling tasks. Plugin preludes
-//! are the Lua source each Plugin the prompt declares contributes: each
+//! waiting on, checking, noting, and cancelling tasks. Pack preludes
+//! are the Lua source each Pack the prompt declares contributes: each
 //! runs once per VM in an environment of its own before `require`
 //! installs, and its globals are checked against the reserved-name list and
 //! raw-set into `_G`. The `input` table that `user-input` defines is one:
-//! `input.ask()` is an ordinary tool call to that Plugin's ask tool.
+//! `input.ask()` is an ordinary tool call to that Pack's ask tool.
 //!
 //! The `tools` table names every catalog tool the run can offer by its
 //! canonical id: `tools.required()` and `tools.extras()` list the tool
-//! objects of the declared Plugins and of every other Plugin, and
+//! objects of the declared Packs and of every other Pack, and
 //! `tools.offer` scopes a tool into a section by id or tool object. The
-//! `plugins` table holds one object per Plugin the run knows, whose
-//! `tools` lists that Plugin's tool objects, and `plugins.offer` scopes
-//! every tool of a Plugin into a section.
+//! `packs` table holds one object per Pack the run knows, whose
+//! `tools` lists that Pack's tool objects, and `packs.offer` scopes
+//! every tool of a Pack into a section.
 //!
 //! Most of this crate's public items exist for `runvil-engine`'s
 //! executor, which drives the VM and the coroutine protocol; the facade
@@ -79,7 +79,7 @@ mod json;
 mod messages;
 mod models;
 mod models_loop;
-mod plugins;
+mod packs;
 mod prelude;
 mod program;
 mod projection;

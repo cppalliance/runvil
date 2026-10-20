@@ -11,7 +11,7 @@
 //!
 //! - `bindings` - the run's journaled [`ModelBindings`].
 //! - `config` - the public [`RunContext`], whose `prepare` binds model
-//!   roles, and [`RunLimits`]; installing Plugins and taking each run's
+//!   roles, and [`RunLimits`]; installing Packs and taking each run's
 //!   catalog from them is the Harness's job.
 //! - `context` - the ambient `RunState` run state.
 //! - `error` - the public [`RunError`] and its stable [`RunErrorKind`].
@@ -57,7 +57,7 @@ pub use bindings::ModelBindings;
 pub use config::{RunContext, RunLimits};
 pub use error::{RunError, RunErrorKind, SourceLocation};
 pub use requirements::{
-    MissingService, RequirementCheck, Requirements, UnavailablePlugin, UnmetRequirement,
+    MissingService, RequirementCheck, Requirements, UnavailablePack, UnmetRequirement,
 };
 pub use run::{
     AnswerRecord, ChatAnswerRecord, Effect, EffectAnswer, EffectId, EffectRecord, FailureRecord,
@@ -132,7 +132,7 @@ pub fn perform_vfs_op(
 ///   itself ends in [`RunResult::Cancelled`].
 /// - [`RunErrorKind::Internal`] - an internal invariant failed.
 /// - [`RunErrorKind::RequirementsUnmet`] - a missing or unavailable
-///   required Plugin, a service the caller left out, a model requirement a
+///   required Pack, a service the caller left out, a model requirement a
 ///   bound model fails to meet
 ///   (a context minimum or a hard keyword), or an H1 block that failed the
 ///   prompt's hard gate.

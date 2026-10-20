@@ -17,7 +17,7 @@ fn finite_pipeline_runs_the_unified_surface_end_to_end() {
         text("refined text"),
     ]);
 
-    let source = with_writer(PromptSource::new().front("plugins: [tools]"))
+    let source = with_writer(PromptSource::new().front("uses: [tools]"))
         .prose(
             "Draft",
             "

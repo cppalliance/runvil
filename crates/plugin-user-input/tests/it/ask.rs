@@ -9,9 +9,7 @@ use std::task::{Context, Poll, Waker};
 
 use plugin_user_input::{ASK, INPUT_BROKER, InputBroker, PLUGIN};
 use runvil_plugin::testing::TestCall;
-use runvil_plugin::{
-    HostServices, OutputTrust, Plugin, PluginId, ToolError, ToolErrorKind, ToolId,
-};
+use runvil_plugin::{HostServices, OutputTrust, PackId, Plugin, ToolError, ToolErrorKind, ToolId};
 use serde_json::{Value, json};
 
 /// A broker whose operator always types the same text.
@@ -51,7 +49,7 @@ fn block_on<F: Future>(future: F) -> F::Output {
 
 /// The Plugin installed under `name` with `config`.
 fn construct(name: &str, config: Value) -> Result<Arc<dyn Plugin>, ToolError> {
-    let name = PluginId::parse(name).expect("a one-segment Plugin id parses");
+    let name = PackId::parse(name).expect("a one-segment Plugin id parses");
     (PLUGIN.construct)(&name, config, &HostServices::new())
 }
 

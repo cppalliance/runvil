@@ -9,7 +9,7 @@ use rmcp::model::{ClientCapabilities, ClientConfig, Implementation};
 use rmcp::service::ClientInitializeError;
 use rmcp::transport::StreamableHttpClientTransport;
 use rmcp::transport::streamable_http_client::StreamableHttpClientTransportConfig;
-use runvil_plugin::PluginId;
+use runvil_plugin::PackId;
 use tokio::sync::watch;
 
 use crate::entry::RemoteEntry;
@@ -66,7 +66,7 @@ fn retry_delay(failures: u32) -> Duration {
 /// rmcp sets no handshake timeout and does not guard `list_all_tools`
 /// against a server that repeats a cursor, so `deadline` bounds both.
 pub(crate) async fn run(
-    plugin: PluginId,
+    plugin: PackId,
     entry: RemoteEntry,
     deadline: Duration,
     state: watch::Sender<State>,

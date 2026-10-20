@@ -6,7 +6,7 @@
 //! with `/` and `.` replaced by `_`, such as `web_fetch`. The model sees
 //! only wire names; Lua names a tool by its canonical id (`web/fetch`) or
 //! by its tool object, and never by a global. `required` and `extras` list
-//! the tool objects of the declared Plugins and of every other Plugin,
+//! the tool objects of the declared Packs and of every other Pack,
 //! `get` reads one by id, `offer` scopes tools into the section,
 //! `offer_local` registers a prompt-author Lua function as a tool, `call`
 //! dispatches a catalog or local tool (installed by the

@@ -120,7 +120,7 @@ fn untrusted_nonce_differs_across_runs_under_different_seeds() {
     // different nonces, so an envelope's tag stays unguessable from one run
     // to the next as long as the caller draws each seed afresh. (Under one
     // seed the two runs agree byte for byte, which `run_inputs` pins.)
-    let source = setup_prompt(PromptSource::new().front("plugins: [tools]").section(
+    let source = setup_prompt(PromptSource::new().front("uses: [tools]").section(
         "Only",
         "return tools.call('tools/untrusted_echo', { value = 'hi' })",
     ));

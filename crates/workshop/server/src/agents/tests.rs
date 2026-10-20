@@ -38,7 +38,7 @@ const RUNTIME: ServiceKey<tokio::runtime::Handle> = ServiceKey::new(TOKIO_RUNTIM
 fn requiring(plugin: &str) -> String {
     format!(
         "---\nname: browses\ndescription: needs {plugin}\nrunvil: 0\n\
-        plugins:\n  - {plugin}\n---\n\n\
+        uses:\n  - {plugin}\n---\n\n\
         # Browses\n\n## Only\n\n```lua\nreturn 'browsed'\n```\n"
     )
 }

@@ -7,7 +7,7 @@ use std::sync::Arc;
 
 use harness::plugin::{HostContext, HostServices, PluginRegistry};
 use runvil_plugin::{
-    Plugin, PluginFuture, PluginId, PluginInfo, ServiceId, ServiceKey, ToolContext, ToolError,
+    PackId, Plugin, PluginFuture, PluginInfo, ServiceId, ServiceKey, ToolContext, ToolError,
     ToolErrorKind, ToolId, ToolInfo, ToolOutput,
 };
 use serde_json::{Value, json};
@@ -66,7 +66,7 @@ struct Asker {
 }
 
 fn construct(
-    name: &PluginId,
+    name: &PackId,
     _config: Value,
     _services: &HostServices,
 ) -> Result<Arc<dyn Plugin>, ToolError> {

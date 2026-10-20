@@ -6,7 +6,7 @@
 //! built-in's second install as a taken Plugin id.
 
 use harness_runner::{HostContext, InstallError, PluginKind, PluginRegistry};
-use runvil_plugin::{HostServices, PluginId, ServiceId, ServiceKey};
+use runvil_plugin::{HostServices, PackId, ServiceId, ServiceKey};
 use serde_json::Value;
 
 use crate::prepare::echo_plugin;
@@ -22,8 +22,8 @@ const NEEDS: &[ServiceId] = &[GREETING.id()];
 
 const NO_NEEDS: &[ServiceId] = &[];
 
-fn name(text: &str) -> PluginId {
-    PluginId::parse(text).unwrap()
+fn name(text: &str) -> PackId {
+    PackId::parse(text).unwrap()
 }
 
 #[test]

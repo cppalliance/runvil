@@ -12,10 +12,10 @@
 //! catalog, model info). [`tools`] is the runtime-agnostic tool vocabulary:
 //! the implementation-free [`ToolInfo`](tools::ToolInfo), the
 //! caller-provided [`ToolCatalog`](tools::ToolCatalog), trusted output, and
-//! the model-safe tool error, and [`plugins`] is the Plugin
-//! identity vocabulary, the [`PluginId`](plugins::PluginId) a
+//! the model-safe tool error, and [`packs`] is the Pack
+//! identity vocabulary, the [`PackId`](packs::PackId) a
 //! prompt declares and a tool id sits under. The implementation trait
-//! behind them (`Plugin`) is the Plugin contract's, in
+//! behind them (`Plugin`) is the Pack contract's, in
 //! `runvil-plugin`; the Engine issues effects naming ids and never
 //! holds an implementation. [`ids`] is the hierarchical, deterministic
 //! identity of a run's chains and tasks and the [`Provenance`](ids::Provenance)
@@ -42,7 +42,7 @@ pub mod ids;
 pub mod metrics;
 pub mod models;
 pub mod names;
-pub mod plugins;
+pub mod packs;
 pub mod replay;
 pub mod seed;
 #[cfg(test)]

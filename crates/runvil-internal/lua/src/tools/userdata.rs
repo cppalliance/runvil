@@ -1,8 +1,8 @@
 //! The tool object: one catalog tool as Lua sees it.
 //!
 //! Presentation only: the userdata exposes an offered tool's `id`, its
-//! catalog `description`, and its `plugin`, the Plugin object
-//! `plugins.get` returns, and stands for its id wherever `tools.offer` and
+//! catalog `description`, and its `pack`, the Pack object
+//! `packs.get` returns, and stands for its id wherever `tools.offer` and
 //! `tools.call` take a tool. The object is frozen and methodless, so
 //! `description` is always the catalog text. Unlike a model handle, which
 //! carries `infer` and `loop`, it is invoked only through
@@ -12,9 +12,9 @@ use mlua::{MetaMethod, UserData, UserDataFields, UserDataMethods, Value};
 use runvil_types::tools::ToolId;
 
 use crate::handles::ToolBinding;
-use crate::plugins::plugin_object;
+use crate::packs::pack_object;
 
-/// One catalog tool as Lua sees it: `id`, `description`, and `plugin`,
+/// One catalog tool as Lua sees it: `id`, `description`, and `pack`,
 /// all read-only.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct LuaToolHandle {
@@ -44,8 +44,8 @@ impl UserData for LuaToolHandle {
     fn add_fields<F: UserDataFields<Self>>(fields: &mut F) {
         fields.add_field_method_get("id", |_, this| Ok(this.id.to_string()));
         fields.add_field_method_get("description", |_, this| Ok(this.description.clone()));
-        fields.add_field_method_get("plugin", |lua, this| {
-            plugin_object(lua, &this.id.plugin().to_string())
+        fields.add_field_method_get("pack", |lua, this| {
+            pack_object(lua, &this.id.pack().to_string())
         });
     }
 

@@ -11,12 +11,12 @@ use super::*;
 use crate::execute::tests::context::{setup_prompt, with_writer};
 use crate::execute::tests::fixtures::echo_tool;
 
-/// The prompt `source` builds over the fixture tools Plugin, run under the
+/// The prompt `source` builds over the fixture tools Pack, run under the
 /// test model with the echo tool: the scope install the first
 /// `tools.call` runs is what `sys.model` reads after.
 #[track_caller]
 fn under_tools(source: PromptSource) -> Trace {
-    let source = setup_prompt(source.front("plugins: [tools]"));
+    let source = setup_prompt(source.front("uses: [tools]"));
     Scenario::new(source).bound().tool(echo_tool()).run()
 }
 

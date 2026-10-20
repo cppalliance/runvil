@@ -1,4 +1,4 @@
-//! Tests for the frontmatter contract keys: `plugins`, `args`, and
+//! Tests for the frontmatter contract keys: `uses`, `args`, and
 //! `models`.
 
 use std::num::NonZeroU32;
@@ -7,14 +7,14 @@ use super::{ArgType, ArgsDeclIter, ModelKeyword, ModelRolesIter};
 use crate::ParseErrorKind;
 use crate::test_support::{assert_parse_error, parse_err, parse_ok, prompt};
 
-#[path = "tests-plugins.rs"]
-mod plugins;
+#[path = "tests-packs.rs"]
+mod packs;
 
 #[test]
 fn the_full_contract_declaration_parses_and_round_trips() {
     let prompt = parse_ok(&prompt(
         "
-        plugins: [web, mcp]
+        uses: [web, mcp]
         args: { use_mcp: { type: boolean, default: true, \
                 description: Search MCP-connected private sources } }
         models: { analyst: { keywords: [frontier, thinking], min_context: 200000, \
@@ -26,10 +26,10 @@ fn the_full_contract_declaration_parses_and_round_trips() {
 
     let fm = prompt.frontmatter();
 
-    let plugins = fm.plugins();
-    assert_eq!(plugins.len(), 2);
-    assert_eq!(plugins[0].to_string(), "web");
-    assert_eq!(plugins[1].to_string(), "mcp");
+    let packs = fm.uses();
+    assert_eq!(packs.len(), 2);
+    assert_eq!(packs[0].to_string(), "web");
+    assert_eq!(packs[1].to_string(), "mcp");
 
     let arg = fm.args().get("use_mcp").expect("the arg is declared");
     assert_eq!(arg.kind(), ArgType::Boolean);
@@ -59,7 +59,7 @@ fn the_full_contract_declaration_parses_and_round_trips() {
 fn a_prompt_without_contract_keys_behaves_exactly_as_today() {
     let prompt = parse_ok(&prompt("", &[]));
     let fm = prompt.frontmatter();
-    assert!(fm.plugins().is_empty());
+    assert!(fm.uses().is_empty());
     assert!(fm.models().is_empty());
 }
 
@@ -284,11 +284,11 @@ fn contract_errors_report_their_frontmatter_line_and_column() {
     // error, so a rejection inside a contract key points at its own line
     // and column instead of being a bare message.
     let src = concat!(
-        "---\n",                 // line 1
-        "name: x\n",             // line 2
-        "description: d\n",      // line 3
-        "plugins:\n",            // line 4
-        "  - not a Plugin id\n", // line 5: the offending scalar
+        "---\n",               // line 1
+        "name: x\n",           // line 2
+        "description: d\n",    // line 3
+        "uses:\n",             // line 4
+        "  - not a Pack id\n", // line 5: the offending scalar
         "---\n",
         "\n# T\n\n## S\n\np\n",
     );

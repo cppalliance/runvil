@@ -33,7 +33,7 @@ const ASK_TOOL: &str = "user-input/ask";
 /// then joins both children and returns how its own wait ended beside
 /// both children's reports.
 const STOPS_ALL: &str = "---\nname: stops\ndescription: d\nrunvil: 0\n\
-    plugins:\n  - harness\nmodels:\n  writer: {}\n---\n\n\
+    uses:\n  - harness\nmodels:\n  writer: {}\n---\n\n\
     # Stops\n\n```lua\nmodels.default('writer')\n```\n\n\
     ## Main\n\n```lua\n\
     local chat = tasks.spawn('## Chat')\n\
@@ -57,7 +57,7 @@ const STOPS_UNCAUGHT: &str = "---\nname: uncaught\ndescription: d\nrunvil: 0\n\
 /// The built-in chat's shape: ask the operator, run the model loop under
 /// a `pcall`, and ask again, with the held tool advertised to the model.
 const CHATS: &str = "---\nname: chats\ndescription: d\nrunvil: 0\n\
-    plugins:\n  - harness\n  - user-input\n\
+    uses:\n  - harness\n  - user-input\n\
     models:\n  writer: {}\n---\n\n\
     # Chats\n\n```lua\nmodels.default('writer')\n```\n\n\
     ## Conversation\n\n```lua\n\
@@ -72,7 +72,7 @@ const CHATS: &str = "---\nname: chats\ndescription: d\nrunvil: 0\n\
 /// A model loop under a `pcall` with the held tool advertised, reporting
 /// how the loop call ended.
 const LOOPS_ONCE: &str = "---\nname: loops\ndescription: d\nrunvil: 0\n\
-    plugins:\n  - harness\n\
+    uses:\n  - harness\n\
     models:\n  writer: {}\n---\n\n\
     # Loops\n\n```lua\nmodels.default('writer')\n```\n\n\
     ## Only\n\n```lua\n\
@@ -84,12 +84,12 @@ const LOOPS_ONCE: &str = "---\nname: loops\ndescription: d\nrunvil: 0\n\
 
 /// A prompt that returns the operator's answer to one question.
 const ASKS: &str = "---\nname: asks\ndescription: d\nrunvil: 0\n\
-    plugins:\n  - user-input\n---\n\n\
+    uses:\n  - user-input\n---\n\n\
     # Asks\n\n## Only\n\n```lua\nreturn (input.ask())\n```\n";
 
 /// A prompt that returns what the held tool answers.
 const HOLDS: &str = "---\nname: holds\ndescription: d\nrunvil: 0\n\
-    plugins:\n  - harness\n---\n\n\
+    uses:\n  - harness\n---\n\n\
     # Holds\n\n## Only\n\n```lua\nreturn tools.call('harness/hold')\n```\n";
 
 #[tokio::test]

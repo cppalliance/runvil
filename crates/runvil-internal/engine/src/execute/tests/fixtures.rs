@@ -18,7 +18,7 @@ fn no_arguments() -> Value {
     json!({ "type": "object", "properties": {} })
 }
 
-/// The fixture Plugin's `tools/echo`, which echoes its `value` argument.
+/// The fixture Pack's `tools/echo`, which echoes its `value` argument.
 #[track_caller]
 pub(super) fn echo_tool() -> FnTool {
     FnTool::new("tools/echo", value_schema(), |args| {
@@ -28,7 +28,7 @@ pub(super) fn echo_tool() -> FnTool {
     .description("Echo the value argument back to the caller.")
 }
 
-/// The fixture Plugin's `tools/untrusted_echo`, which echoes its `value`
+/// The fixture Pack's `tools/untrusted_echo`, which echoes its `value`
 /// argument as untrusted external data, so its output is guard-wrapped.
 #[track_caller]
 pub(super) fn untrusted_echo_tool() -> FnTool {

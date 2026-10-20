@@ -3,7 +3,7 @@ name: research_person
 description: Research a person from the open web and return a concise, factual summary.
 runvil: 0
 max_tool_iterations: 20
-plugins:
+uses:
   - web
 models:
   researcher: {}

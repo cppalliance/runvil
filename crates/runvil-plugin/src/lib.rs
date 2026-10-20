@@ -65,7 +65,7 @@ pub use context::ToolContext;
 pub use plugin::{Plugin, PluginFuture, PluginInfo};
 pub use service::{HostServices, ServiceError, ServiceId, ServiceKey, TOKIO_RUNTIME};
 
-pub use runvil_types::plugins::{PluginId, PluginIdError, PluginIdErrorKind};
+pub use runvil_types::packs::{PackId, PackIdError, PackIdErrorKind};
 pub use runvil_types::tools::{
     OutputTrust, ToolCallOrigin, ToolCaller, ToolError, ToolErrorKind, ToolId, ToolIdError,
     ToolIdErrorKind, ToolInfo, ToolOutput,

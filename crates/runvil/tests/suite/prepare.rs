@@ -113,7 +113,7 @@ fn prepared_over(info: &ToolInfo) -> TestResult<Prepared> {
     let catalog = ToolCatalog::new([info.clone()])?;
     Scenario::default()
         .context(move |ctx| ctx.tools(catalog.clone()))
-        .prepare(&declaring("plugins: [web]"))
+        .prepare(&declaring("uses: [web]"))
 }
 
 #[test]
@@ -135,7 +135,7 @@ fn a_prepared_context_keeps_the_caller_supplied_catalog() -> TestResult {
 }
 
 #[test]
-fn prepare_reports_nothing_for_a_declared_plugin_the_catalog_lacks() -> TestResult {
+fn prepare_reports_nothing_for_a_declared_pack_the_catalog_lacks() -> TestResult {
     let other = tool_info(
         "other/search",
         serde_json::json!({"type": "object", "properties": {}}),

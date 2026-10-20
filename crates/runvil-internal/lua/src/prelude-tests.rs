@@ -1,11 +1,11 @@
-//! Tests for Plugin prelude install: the restricted environment, the
+//! Tests for Pack prelude install: the restricted environment, the
 //! collision checks, the top-level seal, and load failures.
 
 use std::num::NonZeroU32;
 use std::sync::Arc;
 
 use mlua::Value;
-use runvil_types::plugins::{PluginId, Prelude};
+use runvil_types::packs::{PackId, Prelude};
 use serde_json::json;
 
 use super::install_preludes;
@@ -42,8 +42,8 @@ fn section_vm() -> BuiltVm {
     prelude_vm(TestVm::new())
 }
 
-fn prelude(plugin: &str, source: &str) -> Prelude {
-    Prelude::new(PluginId::parse(plugin).expect("a valid Plugin id"), source)
+fn prelude(pack: &str, source: &str) -> Prelude {
+    Prelude::new(PackId::parse(pack).expect("a valid Pack id"), source)
 }
 
 /// Installs `preludes` and returns the failure's message.
@@ -100,9 +100,9 @@ fn a_table_global_is_sealed_at_its_top_level() {
     assert!(!ok, "assigning a field of a sealed table raises");
     assert!(
         message.contains("kit is read-only")
-            && message.contains("Plugin `kit`")
+            && message.contains("Pack `kit`")
             && message.contains("'extra'"),
-        "the refusal names the global, its Plugin, and the field: {message}"
+        "the refusal names the global, its Pack, and the field: {message}"
     );
     let seal: String = vm.eval("return getmetatable(kit)");
     assert_eq!(seal, "kit is sealed");
@@ -117,15 +117,15 @@ fn a_sealed_global_raises_the_whole_refusal_for_a_string_integer_or_other_key() 
     for (target, refusal) in [
         (
             "kit.extra",
-            "kit is read-only: Plugin `kit` defines it; cannot set 'extra'",
+            "kit is read-only: Pack `kit` defines it; cannot set 'extra'",
         ),
         (
             "kit[1]",
-            "kit is read-only: Plugin `kit` defines it; cannot set '1'",
+            "kit is read-only: Pack `kit` defines it; cannot set '1'",
         ),
         (
             "kit[true]",
-            "kit is read-only: Plugin `kit` defines it; cannot set 'boolean'",
+            "kit is read-only: Pack `kit` defines it; cannot set 'boolean'",
         ),
     ] {
         let message: String = vm.eval(&format!(
@@ -156,12 +156,12 @@ fn a_non_table_global_installs_as_it_is() {
 }
 
 #[test]
-fn a_prelude_receives_its_plugins_name_as_its_chunk_argument() {
+fn a_prelude_receives_its_packs_name_as_its_chunk_argument() {
     let vm = section_vm();
     install_preludes(
         vm.lua(),
         &[
-            prelude("kit", "local plugin = ...\nkit_name = plugin"),
+            prelude("kit", "local pack = ...\nkit_name = pack"),
             prelude("other-kit", "other_name = ..."),
         ],
     )
@@ -170,7 +170,7 @@ fn a_prelude_receives_its_plugins_name_as_its_chunk_argument() {
     assert_eq!(
         (kit.as_str(), other.as_str()),
         ("kit", "other-kit"),
-        "each prelude reads its own Plugin's local name from `...`"
+        "each prelude reads its own Pack's local name from `...`"
     );
 }
 
@@ -268,10 +268,10 @@ fn a_global_that_collides_with_an_engine_global_fails_naming_both_sides() {
     let vm = section_vm();
     let message = install_failure(&vm, &[prelude("kit", "store = {}")]);
     assert!(
-        message.contains("Plugin `kit`")
+        message.contains("Pack `kit`")
             && message.contains("`store`")
             && message.contains("Engine global"),
-        "the collision names the Plugin, the global, and the Engine global: {message}"
+        "the collision names the Pack, the global, and the Engine global: {message}"
     );
 }
 
@@ -283,10 +283,10 @@ fn a_global_named_tools_store_or_models_is_refused_and_leaves_the_namespace_in_p
         let message = install_failure(&vm, &[prelude("kit", &format!("{name} = {{}}"))]);
         assert!(
             message.contains(&format!(
-                "Plugin `kit`: its prelude defines the global `{name}`, \
+                "Pack `kit`: its prelude defines the global `{name}`, \
                  which is reserved as an Engine global"
             )),
-            "the collision names the Plugin, the global, and the reservation: {message}"
+            "the collision names the Pack, the global, and the reservation: {message}"
         );
         let after: mlua::Table = vm.lua().globals().raw_get(name).expect("a raw read");
         assert_eq!(
@@ -304,10 +304,10 @@ fn ui_and_item_collide_on_a_vm_that_binds_neither() {
         assert!(!bound, "the fixture VM binds no `{name}`");
         let message = install_failure(&vm, &[prelude("kit", &format!("{name} = 1"))]);
         assert!(
-            message.contains("Plugin `kit`")
+            message.contains("Pack `kit`")
                 && message.contains(&format!("`{name}`"))
                 && message.contains("reserved"),
-            "the collision names the Plugin and the reserved global: {message}"
+            "the collision names the Pack and the reserved global: {message}"
         );
     }
 }
@@ -327,10 +327,10 @@ fn argv_and_prose_collide_though_the_g_metatable_serves_them() {
         assert!(served, "the `_G` metatable serves `{name}` to author code");
         let message = install_failure(&vm, &[prelude("kit", &format!("{name} = 1"))]);
         assert!(
-            message.contains("Plugin `kit`")
+            message.contains("Pack `kit`")
                 && message.contains(&format!("`{name}`"))
                 && message.contains("reserved"),
-            "the collision names the Plugin and the reserved global: {message}"
+            "the collision names the Pack and the reserved global: {message}"
         );
     }
 }
@@ -364,17 +364,17 @@ fn a_prelude_sets_and_reads_metatables_as_the_base_functions_do() {
 }
 
 #[test]
-fn two_preludes_defining_one_global_fail_naming_both_plugins() {
+fn two_preludes_defining_one_global_fail_naming_both_packs() {
     let vm = section_vm();
     let message = install_failure(
         &vm,
         &[prelude("one", "shared = 1"), prelude("two", "shared = 2")],
     );
     assert!(
-        message.contains("Plugin `two`")
+        message.contains("Pack `two`")
             && message.contains("`shared`")
-            && message.contains("Plugin `one`"),
-        "the collision names the global and both Plugins: {message}"
+            && message.contains("Pack `one`"),
+        "the collision names the global and both Packs: {message}"
     );
 }
 
@@ -390,44 +390,44 @@ fn a_global_whose_name_is_not_a_utf8_string_fails_naming_the_key() {
         let vm = section_vm();
         let message = install_failure(&vm, &[prelude("kit", source)]);
         assert!(
-            message.contains("Plugin `kit`")
+            message.contains("Pack `kit`")
                 && message.contains(key)
                 && message.contains("must be a UTF-8 string"),
-            "the refusal names the Plugin and the key: {message}"
+            "the refusal names the Pack and the key: {message}"
         );
     }
 }
 
 #[test]
-fn a_prelude_that_raises_while_loading_fails_naming_its_plugin() {
+fn a_prelude_that_raises_while_loading_fails_naming_its_pack() {
     let vm = section_vm();
     let message = install_failure(&vm, &[prelude("boom", "local x = 1\nerror('boom')")]);
     assert!(
-        message.starts_with("Plugin `boom`: its prelude failed to load: ")
+        message.starts_with("Pack `boom`: its prelude failed to load: ")
             && message.contains("boom.")
             && message.contains(
                 "A prelude only defines functions; it must not call tools while loading."
             ),
-        "the failure names the Plugin and gives the rule: {message}"
+        "the failure names the Pack and gives the rule: {message}"
     );
     assert!(
-        traceback(&message).contains("plugin:boom:2:"),
+        traceback(&message).contains("pack:boom:2:"),
         "the traceback names the prelude chunk and line: {message}"
     );
 }
 
 #[test]
-fn a_prelude_that_calls_a_tool_while_loading_fails_naming_its_plugin() {
+fn a_prelude_that_calls_a_tool_while_loading_fails_naming_its_pack() {
     let vm = section_vm();
     let message = install_failure(&vm, &[prelude("eager", "tools.call('eager/run')")]);
     assert!(
-        message.starts_with("Plugin `eager`: its prelude failed to load: ")
+        message.starts_with("Pack `eager`: its prelude failed to load: ")
             && message.contains("yield")
             && message.contains("it must not call tools while loading."),
-        "the failure names the Plugin and gives the rule: {message}"
+        "the failure names the Pack and gives the rule: {message}"
     );
     assert!(
-        traceback(&message).contains("plugin:eager:1:"),
+        traceback(&message).contains("pack:eager:1:"),
         "the traceback names the prelude chunk and line: {message}"
     );
 }

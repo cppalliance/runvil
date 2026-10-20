@@ -21,7 +21,7 @@ pub use runvil_engine::RunLimits;
 pub use runvil_engine::RunResult;
 pub use runvil_engine::SourceLocation;
 pub use runvil_engine::Step;
-pub use runvil_engine::UnavailablePlugin;
+pub use runvil_engine::UnavailablePack;
 pub use runvil_engine::UnmetRequirement;
 pub use runvil_parser::ParseError;
 pub use runvil_parser::ParseErrorKind;
@@ -115,21 +115,21 @@ pub mod tools {
     pub use runvil_types::tools::ToolOutput;
 }
 
-pub mod plugins {
-    //! Plugin ids, the Lua preludes Plugins add to a run, and the
+pub mod packs {
+    //! Pack ids, the Lua preludes Packs add to a run, and the
     //! global names those preludes may define.
 
     pub use runvil_types::names::GlobalName;
     pub use runvil_types::names::GlobalNameError;
     pub use runvil_types::names::GlobalNameErrorKind;
-    pub use runvil_types::plugins::PluginId;
-    pub use runvil_types::plugins::PluginIdError;
-    pub use runvil_types::plugins::PluginIdErrorKind;
-    pub use runvil_types::plugins::Prelude;
+    pub use runvil_types::packs::PackId;
+    pub use runvil_types::packs::PackIdError;
+    pub use runvil_types::packs::PackIdErrorKind;
+    pub use runvil_types::packs::Prelude;
 }
 
 pub mod prompt {
-    //! What a prompt's frontmatter declares: its files, Plugins,
+    //! What a prompt's frontmatter declares: its files, Packs,
     //! arguments, and model roles.
 
     pub use runvil_parser::ArgDecl;

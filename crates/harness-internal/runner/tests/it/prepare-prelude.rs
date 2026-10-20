@@ -18,7 +18,7 @@ const SPEAKER_PRELUDE: &str = "local plugin = ...\n\
 /// its prelude from two sections; the second also tries to replace the
 /// prelude's function and reports whether the table refused.
 const SPEAKS: &str = "---\nname: speaks\ndescription: d\nrunvil: 0\n\
-    plugins:\n  - speaker\n---\n\n# Title\n\n\
+    uses:\n  - speaker\n---\n\n# Title\n\n\
     ## First\n\n```lua\nspeaker.say('one')\n```\n\n\
     ## Second\n\n```lua\n\
     local sealed = not pcall(function() speaker.say = nil end)\n\
@@ -84,7 +84,7 @@ async fn preludes_install_in_the_prompts_declaration_order_not_the_install_order
         host.install(info.fqn, None, Value::Null).unwrap();
     }
     let declares_second_first = "---\nname: order\ndescription: d\nrunvil: 0\n\
-        plugins:\n  - second\n  - first\n---\n\n# Title\n\n## Only\n\n```lua\nreturn 'ran'\n```\n";
+        uses:\n  - second\n  - first\n---\n\n# Title\n\n## Only\n\n```lua\nreturn 'ran'\n```\n";
     let outcome = drive_over(declares_second_first, host).await;
     let RunOutcome::Failed { kind, message } = outcome else {
         panic!("the two preludes collide: {outcome:?}");
@@ -92,8 +92,8 @@ async fn preludes_install_in_the_prompts_declaration_order_not_the_install_order
     assert_eq!(kind, "Lua");
     assert!(
         message.contains(
-            "Plugin `first`: its prelude defines the global `shared`, \
-             which Plugin `second`'s prelude already defines"
+            "Pack `first`: its prelude defines the global `shared`, \
+             which Pack `second`'s prelude already defines"
         ),
         "the second-declared Plugin's prelude ran second: {message}"
     );

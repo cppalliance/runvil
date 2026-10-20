@@ -12,7 +12,7 @@ use crate::asker::{ASKER, AskBroker, BROKER, broker_services};
 /// A prompt declaring the probe Plugin and returning what its one call
 /// saw.
 const PROBES: &str = "---\nname: probes\ndescription: d\nrunvil: 0\n\
-    plugins:\n  - probe\n---\n\n# Title\n\n## Only\n\n\
+    uses:\n  - probe\n---\n\n# Title\n\n## Only\n\n\
     ```lua\nreturn tools.call('probe/saw')\n```\n";
 
 /// A broker whose operator always types the same text.
@@ -53,7 +53,7 @@ struct Probe {
     reason = "the PluginInfo construct signature fixes the return type"
 )]
 fn construct_probe(
-    name: &PluginId,
+    name: &PackId,
     _config: Value,
     _services: &HostServices,
 ) -> Result<Arc<dyn Plugin>, ToolError> {
@@ -134,7 +134,7 @@ fn user_input_prompt(declaration: &str, lua: &str) -> String {
     let plugins = if declaration.is_empty() {
         String::new()
     } else {
-        format!("plugins:\n{declaration}")
+        format!("uses:\n{declaration}")
     };
     format!(
         "---\nname: asks-input\ndescription: d\nrunvil: 0\n{plugins}---\n\n\
@@ -173,7 +173,7 @@ async fn a_required_user_input_declaration_on_a_host_without_a_broker_is_refused
         "the notice names the Plugin and the missing service: {notice}"
     );
     assert!(
-        !notice.contains("missing required Plugin: user-input"),
+        !notice.contains("missing required Pack: user-input"),
         "the notice does not call the registered Plugin missing: {notice}"
     );
 }

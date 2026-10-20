@@ -10,7 +10,7 @@ use std::task::{Context, Poll, Waker};
 
 use runvil_plugin::testing::TestCall;
 use runvil_plugin::{
-    HostServices, OutputTrust, Plugin, PluginFuture, PluginId, PluginInfo, ServiceId, ServiceKey,
+    HostServices, OutputTrust, PackId, Plugin, PluginFuture, PluginInfo, ServiceId, ServiceKey,
     ToolContext, ToolError, ToolErrorKind, ToolId, ToolInfo, ToolOutput,
 };
 use serde_json::{Value, json};
@@ -38,7 +38,7 @@ struct Greeter {
     reason = "the PluginInfo construct signature fixes the argument types"
 )]
 fn construct(
-    name: &PluginId,
+    name: &PackId,
     config: Value,
     services: &HostServices,
 ) -> Result<Arc<dyn Plugin>, ToolError> {
@@ -109,7 +109,7 @@ fn host_wide() -> HostServices {
 }
 
 fn installed_as(name: &str) -> Arc<dyn Plugin> {
-    let name = PluginId::parse(name).expect("a one-segment Plugin id parses");
+    let name = PackId::parse(name).expect("a one-segment Plugin id parses");
     let Ok(plugin) = (PLUGIN.construct)(&name, Value::Null, &host_wide()) else {
         panic!("construct succeeds when its Host-wide service is provided");
     };
@@ -125,7 +125,7 @@ fn construct_names_the_tools_under_the_name_the_host_chose() {
 
 #[test]
 fn construct_fails_with_a_tool_error_when_a_host_wide_service_is_missing() {
-    let name = PluginId::parse("greeter").expect("a one-segment Plugin id parses");
+    let name = PackId::parse("greeter").expect("a one-segment Plugin id parses");
     let Err(error) = (PLUGIN.construct)(&name, Value::Null, &HostServices::new()) else {
         panic!("construct fails without its Host-wide service");
     };
@@ -171,7 +171,7 @@ fn plugin_info_from_new_has_no_prelude_and_no_needs_until_set() {
     assert_eq!(FULL.fqn, "acme/full");
     assert_eq!(FULL.prelude, Some("local plugin = ...\n"));
     assert_eq!(FULL.needs, [VISITOR.id()]);
-    let name = PluginId::parse("hi").expect("a one-segment Plugin id parses");
+    let name = PackId::parse("hi").expect("a one-segment Plugin id parses");
     for info in [BARE, FULL] {
         let Ok(plugin) = (info.construct)(&name, Value::Null, &host_wide()) else {
             panic!(

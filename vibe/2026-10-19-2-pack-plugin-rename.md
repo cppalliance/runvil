@@ -786,7 +786,7 @@ The repositories, their starting points, the tools, and the commands every gate 
 
 <step-2>
 
-### Step 2: Engine and facade names
+### Step 2: Engine and facade names [completed]
 
 - Component: pack-rename
 - Tests: run in PowerShell from `c:\Users\Vinnie\cursor\runvil`, in this order, after this step's `xtask api --bless`:

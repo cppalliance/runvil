@@ -16,8 +16,8 @@
 #[non_exhaustive] pub enum runvil::model::Role
 #[non_exhaustive] pub enum runvil::model::TemperatureError
 #[non_exhaustive] pub enum runvil::model::ThinkingMode
-#[non_exhaustive] pub enum runvil::plugins::GlobalNameErrorKind
-#[non_exhaustive] pub enum runvil::plugins::PluginIdErrorKind
+#[non_exhaustive] pub enum runvil::packs::GlobalNameErrorKind
+#[non_exhaustive] pub enum runvil::packs::PackIdErrorKind
 #[non_exhaustive] pub enum runvil::prompt::ArgType
 #[non_exhaustive] pub enum runvil::prompt::ModelKeyword
 #[non_exhaustive] pub enum runvil::tools::OutputTrust
@@ -47,7 +47,7 @@
 #[non_exhaustive] pub struct runvil::RunError { /* private fields */ }
 #[non_exhaustive] pub struct runvil::RunLimits { /* private fields */ }
 #[non_exhaustive] pub struct runvil::SourceLocation { .. }
-#[non_exhaustive] pub struct runvil::UnavailablePlugin { .. }
+#[non_exhaustive] pub struct runvil::UnavailablePack { .. }
 #[non_exhaustive] pub struct runvil::UnmetRequirement { .. }
 #[non_exhaustive] pub struct runvil::effect::ChatAnswerRecord { .. }
 #[non_exhaustive] pub struct runvil::effect::FailureRecord { .. }
@@ -75,9 +75,9 @@
 #[non_exhaustive] pub struct runvil::model::ToolArguments<'a> { /* private fields */ }
 #[non_exhaustive] pub struct runvil::model::ToolCall { /* private fields */ }
 #[non_exhaustive] pub struct runvil::model::ToolSchema { /* private fields */ }
-#[non_exhaustive] pub struct runvil::plugins::GlobalNameError { /* private fields */ }
-#[non_exhaustive] pub struct runvil::plugins::PluginId(/* private fields */)
-#[non_exhaustive] pub struct runvil::plugins::PluginIdError { /* private fields */ }
+#[non_exhaustive] pub struct runvil::packs::GlobalNameError { /* private fields */ }
+#[non_exhaustive] pub struct runvil::packs::PackId(/* private fields */)
+#[non_exhaustive] pub struct runvil::packs::PackIdError { /* private fields */ }
 #[non_exhaustive] pub struct runvil::prompt::ArgDecl { /* private fields */ }
 #[non_exhaustive] pub struct runvil::prompt::ArgsDecl { /* private fields */ }
 #[non_exhaustive] pub struct runvil::prompt::FileDecl { /* private fields */ }
@@ -111,7 +111,7 @@ auto runvil::RunSeed: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::RunUid: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::SourceLocation: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::Step: Freeze, !RefUnwindSafe, Send, Sync, Unpin, !UnwindSafe
-auto runvil::UnavailablePlugin: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
+auto runvil::UnavailablePack: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::UnmetRequirement: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::cancel::CancelHandle: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::cancel::Cancelled: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
@@ -167,13 +167,13 @@ auto runvil::model::ThinkingMode: Freeze, RefUnwindSafe, Send, Sync, Unpin, Unwi
 auto runvil::model::ToolArguments: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::model::ToolCall: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::model::ToolSchema: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
-auto runvil::plugins::GlobalName: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
-auto runvil::plugins::GlobalNameError: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
-auto runvil::plugins::GlobalNameErrorKind: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
-auto runvil::plugins::PluginId: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
-auto runvil::plugins::PluginIdError: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
-auto runvil::plugins::PluginIdErrorKind: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
-auto runvil::plugins::Prelude: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
+auto runvil::packs::GlobalName: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
+auto runvil::packs::GlobalNameError: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
+auto runvil::packs::GlobalNameErrorKind: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
+auto runvil::packs::PackId: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
+auto runvil::packs::PackIdError: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
+auto runvil::packs::PackIdErrorKind: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
+auto runvil::packs::Prelude: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::prompt::ArgDecl: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::prompt::ArgType: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::prompt::ArgsDecl: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
@@ -241,7 +241,7 @@ derives runvil::RunSeed: Clone, Copy, Debug, Deserialize, Eq, PartialEq, Seriali
 derives runvil::RunUid: Clone, Copy, Debug, Eq, Hash, PartialEq
 derives runvil::SourceLocation: Clone, Debug, Eq, PartialEq
 derives runvil::Step: Debug
-derives runvil::UnavailablePlugin: Clone, Debug, Eq, PartialEq
+derives runvil::UnavailablePack: Clone, Debug, Eq, PartialEq
 derives runvil::UnmetRequirement: Clone, Debug, Eq, PartialEq
 derives runvil::cancel::CancelHandle: Clone, Debug, Default
 derives runvil::cancel::Cancelled: Debug
@@ -297,13 +297,13 @@ derives runvil::model::ThinkingMode: Clone, Copy, Debug, Deserialize, Eq, Partia
 derives runvil::model::ToolArguments: Clone, Copy, Debug
 derives runvil::model::ToolCall: Clone, Debug, Eq, PartialEq
 derives runvil::model::ToolSchema: Clone, Debug, Eq, PartialEq, Serialize
-derives runvil::plugins::GlobalName: Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd
-derives runvil::plugins::GlobalNameError: Clone, Debug, Eq, PartialEq
-derives runvil::plugins::GlobalNameErrorKind: Clone, Copy, Debug, Eq, PartialEq
-derives runvil::plugins::PluginId: Clone, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize
-derives runvil::plugins::PluginIdError: Clone, Debug, Eq, PartialEq
-derives runvil::plugins::PluginIdErrorKind: Clone, Copy, Debug, Eq, PartialEq
-derives runvil::plugins::Prelude: Clone, Debug, Eq, PartialEq
+derives runvil::packs::GlobalName: Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd
+derives runvil::packs::GlobalNameError: Clone, Debug, Eq, PartialEq
+derives runvil::packs::GlobalNameErrorKind: Clone, Copy, Debug, Eq, PartialEq
+derives runvil::packs::PackId: Clone, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize
+derives runvil::packs::PackIdError: Clone, Debug, Eq, PartialEq
+derives runvil::packs::PackIdErrorKind: Clone, Copy, Debug, Eq, PartialEq
+derives runvil::packs::Prelude: Clone, Debug, Eq, PartialEq
 derives runvil::prompt::ArgDecl: Clone, Debug, Deserialize, Eq, PartialEq
 derives runvil::prompt::ArgType: Clone, Copy, Debug, Deserialize, Eq, PartialEq
 derives runvil::prompt::ArgsDecl: Clone, Debug, Default, Deserialize, Eq, PartialEq
@@ -369,8 +369,8 @@ impl core::error::Error for runvil::model::ModelCatalogError
 impl core::error::Error for runvil::model::ModelIdError
 impl core::error::Error for runvil::model::ParseRoleError
 impl core::error::Error for runvil::model::TemperatureError
-impl core::error::Error for runvil::plugins::GlobalNameError
-impl core::error::Error for runvil::plugins::PluginIdError
+impl core::error::Error for runvil::packs::GlobalNameError
+impl core::error::Error for runvil::packs::PackIdError
 impl core::error::Error for runvil::tools::ToolCatalogError
 impl core::error::Error for runvil::tools::ToolError
 impl core::error::Error for runvil::tools::ToolIdError
@@ -391,10 +391,10 @@ impl core::fmt::Display for runvil::model::ModelIdError
 impl core::fmt::Display for runvil::model::ParseRoleError
 impl core::fmt::Display for runvil::model::Role
 impl core::fmt::Display for runvil::model::TemperatureError
-impl core::fmt::Display for runvil::plugins::GlobalName
-impl core::fmt::Display for runvil::plugins::GlobalNameError
-impl core::fmt::Display for runvil::plugins::PluginId
-impl core::fmt::Display for runvil::plugins::PluginIdError
+impl core::fmt::Display for runvil::packs::GlobalName
+impl core::fmt::Display for runvil::packs::GlobalNameError
+impl core::fmt::Display for runvil::packs::PackId
+impl core::fmt::Display for runvil::packs::PackIdError
 impl core::fmt::Display for runvil::prompt::ArgType
 impl core::fmt::Display for runvil::timestamp::Timestamp
 impl core::fmt::Display for runvil::tools::ToolCatalogError
@@ -422,10 +422,10 @@ impl core::str::traits::FromStr for runvil::ids::TaskOrigin
 impl core::str::traits::FromStr for runvil::ids::TaskOrigin { type Err = runvil::ids::ParseTaskOriginError }
 impl core::str::traits::FromStr for runvil::model::Role
 impl core::str::traits::FromStr for runvil::model::Role { type Err = runvil::model::ParseRoleError }
-impl core::str::traits::FromStr for runvil::plugins::GlobalName
-impl core::str::traits::FromStr for runvil::plugins::GlobalName { type Err = runvil::plugins::GlobalNameError }
-impl core::str::traits::FromStr for runvil::plugins::PluginId
-impl core::str::traits::FromStr for runvil::plugins::PluginId { type Err = runvil::plugins::PluginIdError }
+impl core::str::traits::FromStr for runvil::packs::GlobalName
+impl core::str::traits::FromStr for runvil::packs::GlobalName { type Err = runvil::packs::GlobalNameError }
+impl core::str::traits::FromStr for runvil::packs::PackId
+impl core::str::traits::FromStr for runvil::packs::PackId { type Err = runvil::packs::PackIdError }
 impl core::str::traits::FromStr for runvil::tools::ToolId
 impl core::str::traits::FromStr for runvil::tools::ToolId { type Err = runvil::tools::ToolIdError }
 impl core::str::traits::FromStr for runvil::vfs::PathReason
@@ -466,7 +466,7 @@ pub const runvil::timestamp::Timestamp::UNIX_EPOCH: runvil::timestamp::Timestamp
 pub enum runvil::Step
 pub enum runvil::effect::Effect
 pub enum runvil::effect::EffectAnswer
-pub fn runvil::MissingService::new(plugin: runvil::plugins::PluginId, service: impl core::convert::Into<alloc::string::String>) -> runvil::MissingService
+pub fn runvil::MissingService::new(pack: runvil::packs::PackId, service: impl core::convert::Into<alloc::string::String>) -> runvil::MissingService
 pub fn runvil::ParseError::cause(&self) -> core::option::Option<&dyn core::error::Error + core::marker::Send + core::marker::Sync + 'static>
 pub fn runvil::ParseError::column(&self) -> core::option::Option<core::num::nonzero::NonZeroU32>
 pub fn runvil::ParseError::kind(&self) -> runvil::ParseErrorKind
@@ -498,8 +498,8 @@ pub fn runvil::RunContext::model(self, model: runvil::model::ModelInfo) -> runvi
 pub fn runvil::RunContext::model_bindings(&self) -> &runvil::model::ModelBindings
 pub fn runvil::RunContext::name(&self) -> &str
 pub fn runvil::RunContext::new(name: impl core::convert::Into<alloc::string::String>, seed: runvil::RunSeed, started_at: runvil::timestamp::Timestamp) -> runvil::RunContext
-pub fn runvil::RunContext::plugins(self, usable: alloc::vec::Vec<runvil::plugins::PluginId>, unavailable: alloc::vec::Vec<runvil::UnavailablePlugin>) -> runvil::RunContext
-pub fn runvil::RunContext::preludes(self, preludes: alloc::vec::Vec<runvil::plugins::Prelude>) -> runvil::RunContext
+pub fn runvil::RunContext::packs(self, usable: alloc::vec::Vec<runvil::packs::PackId>, unavailable: alloc::vec::Vec<runvil::UnavailablePack>) -> runvil::RunContext
+pub fn runvil::RunContext::preludes(self, preludes: alloc::vec::Vec<runvil::packs::Prelude>) -> runvil::RunContext
 pub fn runvil::RunContext::prepare(self, prompt: &runvil::Prompt) -> (runvil::RunContext, runvil::Requirements)
 pub fn runvil::RunContext::provenance_start(self, start: u32) -> runvil::RunContext
 pub fn runvil::RunContext::report_debug(self, mode: runvil::event::DebugMode) -> runvil::RunContext
@@ -534,7 +534,7 @@ pub fn runvil::SourceLocation::new(path: impl core::convert::Into<alloc::string:
 pub fn runvil::SourceLocation::with_column(self, column: core::option::Option<u32>) -> runvil::SourceLocation
 pub fn runvil::SourceLocation::with_line(self, line: core::option::Option<u32>) -> runvil::SourceLocation
 pub fn runvil::SourceLocation::with_span(self, span: core::option::Option<core::ops::range::Range<usize>>) -> runvil::SourceLocation
-pub fn runvil::UnavailablePlugin::new(plugin: runvil::plugins::PluginId, reason: impl core::convert::Into<alloc::string::String>) -> runvil::UnavailablePlugin
+pub fn runvil::UnavailablePack::new(pack: runvil::packs::PackId, reason: impl core::convert::Into<alloc::string::String>) -> runvil::UnavailablePack
 pub fn runvil::cancel::CancelHandle::cancel(&self)
 pub fn runvil::cancel::CancelHandle::cancelled(&self) -> runvil::cancel::Cancelled
 pub fn runvil::cancel::CancelHandle::child(&self) -> runvil::cancel::CancelHandle
@@ -680,14 +680,14 @@ pub fn runvil::model::ToolCall::name(&self) -> &str
 pub fn runvil::model::ToolSchema::description(&self) -> &str
 pub fn runvil::model::ToolSchema::name(&self) -> &str
 pub fn runvil::model::ToolSchema::parameters(&self) -> &serde_json::value::Value
-pub fn runvil::plugins::GlobalName::parse(s: &str) -> core::result::Result<runvil::plugins::GlobalName, runvil::plugins::GlobalNameError>
-pub fn runvil::plugins::GlobalNameError::kind(&self) -> runvil::plugins::GlobalNameErrorKind
-pub fn runvil::plugins::PluginId::contains(&self, tool: &runvil::tools::ToolId) -> bool
-pub fn runvil::plugins::PluginId::parse(name: &str) -> core::result::Result<runvil::plugins::PluginId, runvil::plugins::PluginIdError>
-pub fn runvil::plugins::PluginIdError::kind(&self) -> runvil::plugins::PluginIdErrorKind
-pub fn runvil::plugins::Prelude::new(plugin: runvil::plugins::PluginId, source: impl core::convert::Into<alloc::string::String>) -> runvil::plugins::Prelude
-pub fn runvil::plugins::Prelude::plugin(&self) -> &runvil::plugins::PluginId
-pub fn runvil::plugins::Prelude::source(&self) -> &str
+pub fn runvil::packs::GlobalName::parse(s: &str) -> core::result::Result<runvil::packs::GlobalName, runvil::packs::GlobalNameError>
+pub fn runvil::packs::GlobalNameError::kind(&self) -> runvil::packs::GlobalNameErrorKind
+pub fn runvil::packs::PackId::contains(&self, tool: &runvil::tools::ToolId) -> bool
+pub fn runvil::packs::PackId::parse(name: &str) -> core::result::Result<runvil::packs::PackId, runvil::packs::PackIdError>
+pub fn runvil::packs::PackIdError::kind(&self) -> runvil::packs::PackIdErrorKind
+pub fn runvil::packs::Prelude::new(pack: runvil::packs::PackId, source: impl core::convert::Into<alloc::string::String>) -> runvil::packs::Prelude
+pub fn runvil::packs::Prelude::pack(&self) -> &runvil::packs::PackId
+pub fn runvil::packs::Prelude::source(&self) -> &str
 pub fn runvil::prompt::ArgDecl::default(&self) -> core::option::Option<&serde_yaml_ng::value::Value>
 pub fn runvil::prompt::ArgDecl::description(&self) -> core::option::Option<&str>
 pub fn runvil::prompt::ArgDecl::is_optional(&self) -> bool
@@ -706,8 +706,8 @@ pub fn runvil::prompt::Frontmatter::max_tool_iterations(&self) -> core::option::
 pub fn runvil::prompt::Frontmatter::models(&self) -> &runvil::prompt::ModelRoles
 pub fn runvil::prompt::Frontmatter::name(&self) -> &str
 pub fn runvil::prompt::Frontmatter::output(&self) -> core::option::Option<&runvil::prompt::FileDecl>
-pub fn runvil::prompt::Frontmatter::plugins(&self) -> &[runvil::plugins::PluginId]
 pub fn runvil::prompt::Frontmatter::runvil(&self) -> core::option::Option<u32>
+pub fn runvil::prompt::Frontmatter::uses(&self) -> &[runvil::packs::PackId]
 pub fn runvil::prompt::ModelRole::description(&self) -> core::option::Option<&str>
 pub fn runvil::prompt::ModelRole::keywords(&self) -> &[runvil::prompt::ModelKeyword]
 pub fn runvil::prompt::ModelRole::min_context(&self) -> core::option::Option<core::num::nonzero::NonZeroU32>
@@ -730,8 +730,8 @@ pub fn runvil::tools::ToolError::with_kind(self, kind: runvil::tools::ToolErrorK
 pub fn runvil::tools::ToolError::with_source(self, source: impl core::convert::Into<alloc::boxed::Box<dyn core::error::Error + core::marker::Send + core::marker::Sync>>) -> runvil::tools::ToolError
 pub fn runvil::tools::ToolErrorKind::tag(self) -> &'static str
 pub fn runvil::tools::ToolId::name(&self) -> &str
+pub fn runvil::tools::ToolId::pack(&self) -> runvil::packs::PackId
 pub fn runvil::tools::ToolId::parse(id: &str) -> core::result::Result<runvil::tools::ToolId, runvil::tools::ToolIdError>
-pub fn runvil::tools::ToolId::plugin(&self) -> runvil::plugins::PluginId
 pub fn runvil::tools::ToolIdError::field(&self) -> &str
 pub fn runvil::tools::ToolIdError::kind(&self) -> runvil::tools::ToolIdErrorKind
 pub fn runvil::tools::ToolInfo::new(id: runvil::tools::ToolId, description: impl core::convert::Into<alloc::string::String>, parameters_schema: serde_json::value::Value) -> runvil::tools::ToolInfo
@@ -830,13 +830,13 @@ pub mod runvil::event
 pub mod runvil::ids
 pub mod runvil::metrics
 pub mod runvil::model
-pub mod runvil::plugins
+pub mod runvil::packs
 pub mod runvil::prompt
 pub mod runvil::replay
 pub mod runvil::timestamp
 pub mod runvil::tools
 pub mod runvil::vfs
-pub runvil::MissingService::plugin: runvil::plugins::PluginId
+pub runvil::MissingService::pack: runvil::packs::PackId
 pub runvil::MissingService::service: alloc::string::String
 pub runvil::ParseErrorKind::Fence
 pub runvil::ParseErrorKind::Frontmatter
@@ -846,9 +846,9 @@ pub runvil::ParseErrorKind::Lua
 pub runvil::ParseErrorKind::Structure
 pub runvil::RequirementCheck::ContextMinimum
 pub runvil::RequirementCheck::HardKeyword
-pub runvil::Requirements::missing_required: alloc::vec::Vec<runvil::plugins::PluginId>
+pub runvil::Requirements::missing_required: alloc::vec::Vec<runvil::packs::PackId>
 pub runvil::Requirements::missing_services: alloc::vec::Vec<runvil::MissingService>
-pub runvil::Requirements::unavailable: alloc::vec::Vec<runvil::UnavailablePlugin>
+pub runvil::Requirements::unavailable: alloc::vec::Vec<runvil::UnavailablePack>
 pub runvil::Requirements::unmet_requirements: alloc::vec::Vec<runvil::UnmetRequirement>
 pub runvil::RunErrorKind::Binding
 pub runvil::RunErrorKind::Cancelled
@@ -880,8 +880,8 @@ pub runvil::Step::Pending { .. }
 pub runvil::Step::Pending::effects: alloc::vec::Vec<(runvil::effect::EffectId, runvil::ids::Provenance, runvil::effect::Effect)>
 pub runvil::Step::Pending::events: alloc::vec::Vec<runvil::event::Event>
 pub runvil::Step::Pending::withdrawn: alloc::vec::Vec<runvil::effect::EffectId>
-pub runvil::UnavailablePlugin::plugin: runvil::plugins::PluginId
-pub runvil::UnavailablePlugin::reason: alloc::string::String
+pub runvil::UnavailablePack::pack: runvil::packs::PackId
+pub runvil::UnavailablePack::reason: alloc::string::String
 pub runvil::UnmetRequirement::actual: alloc::string::String
 pub runvil::UnmetRequirement::check: runvil::RequirementCheck
 pub runvil::UnmetRequirement::required: alloc::string::String
@@ -1339,13 +1339,13 @@ pub runvil::model::TemperatureError::OutOfRange::value: f64
 pub runvil::model::ThinkingMode::Always
 pub runvil::model::ThinkingMode::Never
 pub runvil::model::ThinkingMode::Switchable
-pub runvil::plugins::GlobalNameErrorKind::Charset
-pub runvil::plugins::GlobalNameErrorKind::Control
-pub runvil::plugins::GlobalNameErrorKind::Empty
-pub runvil::plugins::PluginIdErrorKind::Charset
-pub runvil::plugins::PluginIdErrorKind::Control
-pub runvil::plugins::PluginIdErrorKind::Empty
-pub runvil::plugins::PluginIdErrorKind::SegmentCount
+pub runvil::packs::GlobalNameErrorKind::Charset
+pub runvil::packs::GlobalNameErrorKind::Control
+pub runvil::packs::GlobalNameErrorKind::Empty
+pub runvil::packs::PackIdErrorKind::Charset
+pub runvil::packs::PackIdErrorKind::Control
+pub runvil::packs::PackIdErrorKind::Empty
+pub runvil::packs::PackIdErrorKind::SegmentCount
 pub runvil::prompt::ArgType::Boolean
 pub runvil::prompt::ArgType::Integer
 pub runvil::prompt::ArgType::Number
@@ -1533,8 +1533,8 @@ pub struct runvil::model::ArgumentNames<'a> { /* private fields */ }
 pub struct runvil::model::ModelBinding { /* private fields */ }
 pub struct runvil::model::ParseRoleError { /* private fields */ }
 pub struct runvil::model::Temperature(/* private fields */)
-pub struct runvil::plugins::GlobalName { /* private fields */ }
-pub struct runvil::plugins::Prelude { /* private fields */ }
+pub struct runvil::packs::GlobalName { /* private fields */ }
+pub struct runvil::packs::Prelude { /* private fields */ }
 pub struct runvil::prompt::ArgsDeclIter<'a> { /* private fields */ }
 pub struct runvil::prompt::ModelRolesIter<'a> { /* private fields */ }
 pub struct runvil::replay::Flags(/* private fields */)

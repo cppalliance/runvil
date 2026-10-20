@@ -7,7 +7,7 @@ use std::fmt;
 mod limits;
 
 use runvil_types::emitter::DebugMode;
-use runvil_types::plugins::{PluginId, Prelude};
+use runvil_types::packs::{PackId, Prelude};
 use runvil_types::replay::Flags;
 use runvil_types::seed::{RunSeed, RunUid};
 use runvil_types::timestamp::Timestamp;
@@ -22,13 +22,13 @@ use crate::tools::ToolCatalog;
 
 use super::bindings::ModelBindings;
 use super::fill;
-use super::requirements::{Requirements, UnavailablePlugin};
+use super::requirements::{Requirements, UnavailablePack};
 
 /// The inputs for one run of a prompt.
 ///
 /// The caller builds a context with `new` and the builder methods, among
-/// them the run's tool catalog ([`tools`](RunContext::tools)), Plugin
-/// roster ([`plugins`](RunContext::plugins)), and Plugin preludes
+/// them the run's tool catalog ([`tools`](RunContext::tools)), Pack
+/// roster ([`packs`](RunContext::packs)), and Pack preludes
 /// ([`preludes`](RunContext::preludes)). Then it calls
 /// [`prepare`](RunContext::prepare), which binds the prompt's model roles
 /// and reports what the caller must still satisfy. The Engine owns the
@@ -96,17 +96,17 @@ pub struct RunContext {
     /// [`prepare`](RunContext::prepare)'s fill function: which concrete
     /// model each declared role is bound to.
     pub(super) model_bindings: ModelBindings,
-    /// The run's tool catalog: every tool of every Plugin the caller can
+    /// The run's tool catalog: every tool of every Pack the caller can
     /// serve, declared by the prompt or not, with each tool under its
-    /// Plugin's name. Set with [`tools`](RunContext::tools); the run's
+    /// Pack's name. Set with [`tools`](RunContext::tools); the run's
     /// offering draws every tool from it. Empty by default.
     pub(super) tools: ToolCatalog,
-    /// The run's roster: every installed Plugin the caller reports, by
+    /// The run's roster: every installed Pack the caller reports, by
     /// name, with no reason when it can serve the run and the reason when
-    /// it can't. Set with [`plugins`](RunContext::plugins). Empty by
+    /// it can't. Set with [`packs`](RunContext::packs). Empty by
     /// default.
-    pub(super) roster: BTreeMap<PluginId, Option<String>>,
-    /// The run's Plugin preludes, in declaration order. Set with
+    pub(super) roster: BTreeMap<PackId, Option<String>>,
+    /// The run's Pack preludes, in declaration order. Set with
     /// [`preludes`](RunContext::preludes); every section VM installs each
     /// one before `require`. Empty by default.
     pub(super) preludes: Vec<Prelude>,
@@ -252,7 +252,7 @@ impl RunContext {
     }
 
     /// Sets the run's tool catalog: the `ToolInfo` values of every tool of
-    /// every Plugin the caller can serve this run, declared by the prompt or
+    /// every Pack the caller can serve this run, declared by the prompt or
     /// not. The catalog lists every tool the run can use: Lua calls one by id,
     /// and a section offers one to its model with `tools.offer`. The caller
     /// performs every call. Read it back with
@@ -263,38 +263,34 @@ impl RunContext {
         self
     }
 
-    /// Sets the run's roster: every installed Plugin that can serve the run,
+    /// Sets the run's roster: every installed Pack that can serve the run,
     /// declared by the prompt or not, and every one that can't, with the
     /// reason.
     ///
-    /// Each usable Plugin gets an object in the run's Lua, with or without
+    /// Each usable Pack gets an object in the run's Lua, with or without
     /// tools. An unavailable one gets none, and offering it raises its
     /// reason. A name in both lists counts as unavailable. Without a roster,
-    /// the run's Lua sees the declared Plugins and the Plugins with a tool
+    /// the run's Lua sees the declared Packs and the Packs with a tool
     /// in the catalog.
     #[must_use]
-    pub fn plugins(
-        mut self,
-        usable: Vec<PluginId>,
-        unavailable: Vec<UnavailablePlugin>,
-    ) -> RunContext {
+    pub fn packs(mut self, usable: Vec<PackId>, unavailable: Vec<UnavailablePack>) -> RunContext {
         self.roster = usable
             .into_iter()
-            .map(|plugin| (plugin, None))
+            .map(|pack| (pack, None))
             .chain(
                 unavailable
                     .into_iter()
-                    .map(|entry| (entry.plugin, Some(entry.reason))),
+                    .map(|entry| (entry.pack, Some(entry.reason))),
             )
             .collect();
         self
     }
 
-    /// Sets the Plugin preludes that every section VM of the run installs.
+    /// Sets the Pack preludes that every section VM of the run installs.
     ///
-    /// A prelude is Lua source that a Plugin the prompt declares
+    /// A prelude is Lua source that a Pack the prompt declares
     /// contributed. The caller passes them in the order the prompt
-    /// declares the Plugins. Every section VM of the run installs each
+    /// declares the Packs. Every section VM of the run installs each
     /// prelude after the Engine globals and before any block runs, so every
     /// block, and every library a block loads with `require`, can call what
     /// the preludes define.
@@ -318,7 +314,7 @@ impl RunContext {
     /// `prepare` uses the context's filesystem as given, because the caller
     /// builds the run's whole filesystem, including its real directories and
     /// the declared store. The caller checks before `prepare` that each
-    /// Plugin the prompt declares can serve, and merges that report into the
+    /// Pack the prompt declares can serve, and merges that report into the
     /// one `prepare` returns.
     ///
     /// Every declared model role binds to the context's current model.
@@ -458,11 +454,7 @@ impl fmt::Debug for RunContext {
             .field("roster", &self.roster)
             .field(
                 "preludes",
-                &self
-                    .preludes
-                    .iter()
-                    .map(Prelude::plugin)
-                    .collect::<Vec<_>>(),
+                &self.preludes.iter().map(Prelude::pack).collect::<Vec<_>>(),
             )
             .finish_non_exhaustive()
     }

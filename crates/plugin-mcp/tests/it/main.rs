@@ -13,8 +13,8 @@ use std::time::Duration;
 use fixture::Fixture;
 use runvil_plugin::testing::TestCall;
 use runvil_plugin::{
-    HostServices, OutputTrust, Plugin, PluginId, ServiceKey, TOKIO_RUNTIME, ToolError,
-    ToolErrorKind, ToolId,
+    HostServices, OutputTrust, PackId, Plugin, ServiceKey, TOKIO_RUNTIME, ToolError, ToolErrorKind,
+    ToolId,
 };
 use serde_json::{Value, json};
 use tokio::runtime::Handle;
@@ -31,7 +31,7 @@ fn runtime_services() -> HostServices {
 }
 
 fn construct(config: Value, services: &HostServices) -> Result<Arc<dyn Plugin>, ToolError> {
-    let name = PluginId::parse("remote").expect("a Plugin id parses");
+    let name = PackId::parse("remote").expect("a Plugin id parses");
     (plugin_mcp::PLUGIN.construct)(&name, config, services)
 }
 

@@ -7,7 +7,7 @@ use std::collections::btree_map::Entry;
 use std::sync::Arc;
 
 use runvil_plugin::{
-    HostServices, Plugin, PluginFuture, PluginId, PluginInfo, ToolContext, ToolError, ToolInfo,
+    HostServices, PackId, Plugin, PluginFuture, PluginInfo, ToolContext, ToolError, ToolInfo,
     ToolOutput,
 };
 use serde_json::Value;
@@ -27,7 +27,7 @@ mod tests;
 /// FQN.
 #[derive(Debug)]
 pub struct PluginRegistry {
-    entries: BTreeMap<&'static str, (PluginInfo, PluginKind, PluginId)>,
+    entries: BTreeMap<&'static str, (PluginInfo, PluginKind, PackId)>,
 }
 
 /// Where a Plugin comes from.
@@ -88,14 +88,14 @@ impl PluginRegistry {
     }
 
     /// The Plugin with the FQN `fqn`, its kind, and its default Plugin id.
-    pub(crate) fn entry(&self, fqn: &str) -> Option<(PluginInfo, PluginKind, &PluginId)> {
+    pub(crate) fn entry(&self, fqn: &str) -> Option<(PluginInfo, PluginKind, &PackId)> {
         let (info, kind, default) = self.entries.get(fqn)?;
         Some((*info, *kind, default))
     }
 
     /// Whether `name` is a built-in's default Plugin id, which only that
     /// built-in may be installed under.
-    pub(crate) fn reserves(&self, name: &PluginId) -> bool {
+    pub(crate) fn reserves(&self, name: &PackId) -> bool {
         self.entries
             .values()
             .any(|(_, kind, default)| *kind == PluginKind::Builtin && default == name)
@@ -119,7 +119,7 @@ const BUILTIN: [PluginInfo; 1] = [PluginInfo::new("runvil/subagents", builtin).d
     reason = "the PluginInfo construct signature fixes the return type"
 )]
 fn builtin(
-    _name: &PluginId,
+    _name: &PackId,
     _config: Value,
     _services: &HostServices,
 ) -> Result<Arc<dyn Plugin>, ToolError> {
@@ -149,8 +149,8 @@ impl Plugin for Builtin {
 
 /// The default Plugin id for the FQN `vendor/name`: its second segment,
 /// when both segments are valid one-segment names.
-pub(crate) fn default_id(fqn: &str) -> Option<PluginId> {
+pub(crate) fn default_id(fqn: &str) -> Option<PackId> {
     let (vendor, name) = fqn.split_once('/')?;
-    PluginId::parse(vendor).ok()?;
-    PluginId::parse(name).ok()
+    PackId::parse(vendor).ok()?;
+    PackId::parse(name).ok()
 }

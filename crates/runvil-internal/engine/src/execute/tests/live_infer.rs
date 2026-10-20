@@ -126,11 +126,11 @@ fn a_library_calls_engine_globals_at_load_time() {
 
 #[test]
 fn tool_objects_and_roles_reach_section_call_and_fanout_vms() {
-    // The offering arrives from the catalog: the Plugin installs the tool,
+    // The offering arrives from the catalog: the Pack installs the tool,
     // and every section VM reads its tool object by id - H1 never runs a
     // bind.
     let source = writer_role()
-        .front("plugins: [tools]")
+        .front("uses: [tools]")
         .section(
             "Parent",
             "

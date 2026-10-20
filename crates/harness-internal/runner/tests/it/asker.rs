@@ -6,7 +6,7 @@
 use std::sync::Arc;
 
 use runvil_plugin::{
-    HostServices, Plugin, PluginFuture, PluginId, PluginInfo, ServiceId, ServiceKey, ToolContext,
+    HostServices, PackId, Plugin, PluginFuture, PluginInfo, ServiceId, ServiceKey, ToolContext,
     ToolError, ToolId, ToolInfo, ToolOutput,
 };
 use serde_json::{Value, json};
@@ -54,7 +54,7 @@ struct Asker {
     reason = "the PluginInfo construct signature fixes the return type"
 )]
 fn construct(
-    name: &PluginId,
+    name: &PackId,
     _config: Value,
     _services: &HostServices,
 ) -> Result<Arc<dyn Plugin>, ToolError> {

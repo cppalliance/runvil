@@ -73,7 +73,7 @@ impl Scheduler {
     }
 
     /// The run's tool set: its offering, built from the catalog unless a
-    /// test replaced it, and the Plugins the prompt declares.
+    /// test replaced it, and the Packs the prompt declares.
     pub(crate) fn tool_set_for_test(&self) -> &ToolSet {
         self.ctx.tool_set()
     }

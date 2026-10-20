@@ -124,7 +124,7 @@ function contractFor(name) {
     max_tool_iterations: 12,
     input: { path: "in/papers.md", description: "the papers" },
     output: { path: "out/verdicts.md", description: "the verdicts" },
-    plugins: [{ id: "tools/web" }],
+    uses: [{ id: "tools/web" }],
     args: {
       implicit: false,
       fields: [

@@ -299,7 +299,7 @@ pub(crate) enum Error {
     #[error("unsupported runvil version: {0} (this build supports major 0)")]
     UnsupportedVersion(u32),
 
-    /// The environment cannot satisfy the prompt: a required Plugin is
+    /// The environment cannot satisfy the prompt: a required Pack is
     /// missing, unavailable, or needs a service the run lacks, the filled
     /// model fails a declared requirement (a context minimum or a hard
     /// keyword), or an H1 block failed the prompt's hard gate.

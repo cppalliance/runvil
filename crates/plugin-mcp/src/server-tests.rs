@@ -1,7 +1,7 @@
 //! Tests for the tool-name rule and the `ToolInfo` values `catalog` builds.
 
 use rmcp::model::Tool;
-use runvil_plugin::PluginId;
+use runvil_plugin::PackId;
 use serde_json::{Value, json};
 
 use super::catalog;
@@ -19,7 +19,7 @@ fn plain(name: &str) -> Tool {
 }
 
 fn ids(plugin: &str, tools: Vec<Tool>) -> Vec<String> {
-    let plugin = PluginId::parse(plugin).expect("a Plugin id parses");
+    let plugin = PackId::parse(plugin).expect("a Plugin id parses");
     catalog(&plugin, tools)
         .iter()
         .map(|listed| listed.info.id.to_string())
@@ -39,7 +39,7 @@ fn a_tool_name_is_lowercased_under_the_plugin_name() {
 
 #[test]
 fn the_original_name_is_kept_for_the_call() {
-    let plugin = PluginId::parse("papers").expect("parses");
+    let plugin = PackId::parse("papers").expect("parses");
     let listed = catalog(&plugin, vec![plain("Get_Paper")]);
     assert_eq!(listed[0].mcp_name, "Get_Paper");
 }
@@ -63,7 +63,7 @@ fn a_name_that_is_still_invalid_after_lowercasing_is_dropped() {
 
 #[test]
 fn two_names_that_collide_after_lowercasing_keep_the_first() {
-    let plugin = PluginId::parse("papers").expect("parses");
+    let plugin = PackId::parse("papers").expect("parses");
     let listed = catalog(
         &plugin,
         vec![plain("Search"), plain("other"), plain("SEARCH")],
@@ -74,7 +74,7 @@ fn two_names_that_collide_after_lowercasing_keep_the_first() {
 
 #[test]
 fn the_description_is_the_description_else_the_title_else_the_name() {
-    let plugin = PluginId::parse("papers").expect("parses");
+    let plugin = PackId::parse("papers").expect("parses");
     let listed = catalog(
         &plugin,
         vec![
@@ -89,7 +89,7 @@ fn the_description_is_the_description_else_the_title_else_the_name() {
 
 #[test]
 fn the_parameters_are_the_input_schema_and_the_tool_is_plain_and_stoppable() {
-    let plugin = PluginId::parse("papers").expect("parses");
+    let plugin = PackId::parse("papers").expect("parses");
     let schema = json!({ "type": "object", "properties": { "id": { "type": "string" } }, "required": ["id"] });
     let listed = catalog(
         &plugin,

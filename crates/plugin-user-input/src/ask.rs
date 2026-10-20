@@ -4,7 +4,7 @@
 use std::sync::Arc;
 
 use runvil_plugin::{
-    HostServices, Plugin, PluginFuture, PluginId, ToolContext, ToolError, ToolErrorKind, ToolId,
+    HostServices, PackId, Plugin, PluginFuture, ToolContext, ToolError, ToolErrorKind, ToolId,
     ToolInfo, ToolOutput,
 };
 use serde_json::{Value, json};
@@ -23,7 +23,7 @@ struct UserInput {
     reason = "the PluginInfo construct signature fixes the argument types"
 )]
 pub(crate) fn construct(
-    name: &PluginId,
+    name: &PackId,
     config: Value,
     _services: &HostServices,
 ) -> Result<Arc<dyn Plugin>, ToolError> {

@@ -4,7 +4,7 @@
 //! A Host installs [`PLUGIN`] once per server, under the server's name
 //! lowercased in ASCII, so the tools of a server named `wg21-papers` are
 //! `wg21-papers/<tool>`. The Plugin has no prelude, so declaring it, as in
-//! `plugins: [wg21-papers]`, only makes it required.
+//! `uses: [wg21-papers]`, only makes it required.
 //!
 //! The Host passes the server's entry from an `mcp.json` file as the
 //! configuration. A remote entry has `url` and optional `headers`, and a
@@ -73,7 +73,7 @@ mod server;
 use std::sync::Arc;
 
 use runvil_plugin::{
-    HostServices, Plugin, PluginId, PluginInfo, ServiceKey, TOKIO_RUNTIME, ToolError,
+    HostServices, PackId, Plugin, PluginInfo, ServiceKey, TOKIO_RUNTIME, ToolError,
 };
 use serde_json::Value;
 use tokio::runtime::Handle;
@@ -101,7 +101,7 @@ const RUNTIME: ServiceKey<Handle> = ServiceKey::new(TOKIO_RUNTIME);
     reason = "the PluginInfo construct signature fixes the argument types"
 )]
 fn construct(
-    name: &PluginId,
+    name: &PackId,
     config: Value,
     services: &HostServices,
 ) -> Result<Arc<dyn Plugin>, ToolError> {

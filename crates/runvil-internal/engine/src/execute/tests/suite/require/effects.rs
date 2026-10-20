@@ -17,10 +17,10 @@ fn effect_case(source: &PromptSource, chat: &ScriptedChat) -> Scenario {
         .bound()
 }
 
-/// The fixture tools Plugin and the `writer` role every effect case
+/// The fixture tools Pack and the `writer` role every effect case
 /// declares.
 fn effect_source() -> PromptSource {
-    PromptSource::new().front("plugins: [tools]\nmodels: { writer: {} }")
+    PromptSource::new().front("uses: [tools]\nmodels: { writer: {} }")
 }
 
 #[test]

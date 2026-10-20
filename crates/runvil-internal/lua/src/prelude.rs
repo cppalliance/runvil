@@ -1,7 +1,7 @@
-//! Plugin preludes: the Lua source each Plugin the prompt declares
+//! Pack preludes: the Lua source each Pack the prompt declares
 //! contributes, installed into every section VM before `require`.
 //!
-//! A prelude runs once per VM as a main chunk whose `...` is its Plugin's
+//! A prelude runs once per VM as a main chunk whose `...` is its Pack's
 //! local name, in an environment table of its own. That table's metatable `__index` is a lookup table of the base
 //! functions that survive hardening, the `string`, `table`, and `math`
 //! libraries, `tools`, `store`, `untrusted`, `json`, and a view of `var` that is
@@ -23,7 +23,7 @@ use std::collections::BTreeMap;
 
 use mlua::chunk::ChunkMode;
 use mlua::{Lua, Table, Value};
-use runvil_types::plugins::{PluginId, Prelude};
+use runvil_types::packs::{PackId, Prelude};
 
 use crate::error::{Error, Result};
 use crate::proxy::{key_path, key_text, read_only_proxy};
@@ -52,12 +52,12 @@ const VISIBLE_GLOBALS: [&str; 20] = [
     "json",
 ];
 
-/// Installs the run's Plugin preludes, in order, into a section VM.
+/// Installs the run's Pack preludes, in order, into a section VM.
 ///
 /// Each prelude loads from source under the chunk name
-/// `@plugin:<id>` in its own restricted environment (see the module
-/// docs), and runs with the Plugin's id as its one chunk argument, so
-/// `local plugin = ...` reads the name the Plugin was installed under.
+/// `@pack:<id>` in its own restricted environment (see the module
+/// docs), and runs with the Pack's id as its one chunk argument, so
+/// `local pack = ...` reads the name the Pack was installed under.
 /// The globals it defines must not collide with a reserved name
 /// ([`crate::RESERVED_NAMES`]), with any other name bound in `_G`, or with
 /// an earlier prelude's globals. A table global installs as an empty proxy that reads
@@ -69,33 +69,33 @@ const VISIBLE_GLOBALS: [&str; 20] = [
 /// prelude that calls `tools.call` while loading fails.
 ///
 /// # Errors
-/// Returns [`Error::LuaRuntime`] naming the Plugin when a prelude
-/// fails to load, and [`Error::Lua`] naming the Plugin, the global,
+/// Returns [`Error::LuaRuntime`] naming the Pack when a prelude
+/// fails to load, and [`Error::Lua`] naming the Pack, the global,
 /// and what it collides with when a global collides or is not named by a
 /// string.
 pub fn install_preludes(lua: &Lua, preludes: &[Prelude]) -> Result<()> {
     let globals = lua.globals();
-    let mut installed: BTreeMap<String, &PluginId> = BTreeMap::new();
+    let mut installed: BTreeMap<String, &PackId> = BTreeMap::new();
     for prelude in preludes {
-        let plugin = prelude.plugin();
+        let pack = prelude.pack();
         let env = environment(lua, &globals)?;
         lua.load(prelude.source())
-            .set_name(format!("@plugin:{plugin}"))
+            .set_name(format!("@pack:{pack}"))
             .set_mode(ChunkMode::Text)
             .set_environment(env.clone())
-            .call::<()>(plugin.to_string())
-            .map_err(|error| load_failure(plugin, error))?;
-        let defined = defined_globals(plugin, &env)?;
+            .call::<()>(pack.to_string())
+            .map_err(|error| load_failure(pack, error))?;
+        let defined = defined_globals(pack, &env)?;
         for name in defined.keys() {
-            check_collision(&globals, plugin, name, &installed)?;
+            check_collision(&globals, pack, name, &installed)?;
         }
         for (name, value) in defined {
             let value = match value {
-                Value::Table(table) => Value::Table(seal(lua, plugin, &name, table)?),
+                Value::Table(table) => Value::Table(seal(lua, pack, &name, table)?),
                 other => other,
             };
             globals.raw_set(name.as_str(), value).map_err(Error::lua)?;
-            installed.insert(name, plugin);
+            installed.insert(name, pack);
         }
     }
     Ok(())
@@ -126,7 +126,7 @@ fn environment(lua: &Lua, globals: &Table) -> Result<Table> {
 /// proxy whose `__index` reads `target` and hands back each table it finds
 /// as a view of its own, so no depth of `var` is writable through it.
 fn read_only_var(lua: &Lua, target: Table, path: String) -> mlua::Result<Table> {
-    let refusal = format!("{path} is read-only inside a Plugin prelude; cannot set");
+    let refusal = format!("{path} is read-only inside a Pack prelude; cannot set");
     let index = lua.create_function(move |lua, (_view, key): (Value, Value)| {
         match target.get::<Value>(key.clone())? {
             Value::Table(nested) => {
@@ -145,7 +145,7 @@ fn read_only_var(lua: &Lua, target: Table, path: String) -> mlua::Result<Table> 
 
 /// Reads the prelude's globals off its environment table's own entries,
 /// sorted by name so the checks and the install run in a fixed order.
-fn defined_globals(plugin: &PluginId, env: &Table) -> Result<BTreeMap<String, Value>> {
+fn defined_globals(pack: &PackId, env: &Table) -> Result<BTreeMap<String, Value>> {
     let mut defined = BTreeMap::new();
     for pair in env.pairs::<Value, Value>() {
         let (key, value) = pair.map_err(Error::lua)?;
@@ -160,7 +160,7 @@ fn defined_globals(plugin: &PluginId, env: &Table) -> Result<BTreeMap<String, Va
             other => format!("a key of type {}", other.type_name()),
         };
         return Err(Error::Lua(format!(
-            "Plugin `{plugin}`: its prelude defines a global under {key}; a global's \
+            "Pack `{pack}`: its prelude defines a global under {key}; a global's \
              name must be a UTF-8 string"
         )));
     }
@@ -176,12 +176,12 @@ fn defined_globals(plugin: &PluginId, env: &Table) -> Result<BTreeMap<String, Va
 /// installs does not depend on the run's `ui()` snapshot or the section.
 fn check_collision(
     globals: &Table,
-    plugin: &PluginId,
+    pack: &PackId,
     name: &str,
-    installed: &BTreeMap<String, &PluginId>,
+    installed: &BTreeMap<String, &PackId>,
 ) -> Result<()> {
     let collides_with = if let Some(owner) = installed.get(name) {
-        format!("which Plugin `{owner}`'s prelude already defines")
+        format!("which Pack `{owner}`'s prelude already defines")
     } else if let Some(kind) = crate::reserved_name(name) {
         format!("which is reserved as {kind}")
     } else if !matches!(
@@ -193,15 +193,15 @@ fn check_collision(
         return Ok(());
     };
     Err(Error::Lua(format!(
-        "Plugin `{plugin}`: its prelude defines the global `{name}`, {collides_with}"
+        "Pack `{pack}`: its prelude defines the global `{name}`, {collides_with}"
     )))
 }
 
 /// Seals a prelude's table global at its top level: an empty proxy whose
 /// `__index` reads the hidden table, whose `__newindex` raises, and whose
 /// `__metatable` is set, so `pairs` over it sees nothing.
-fn seal(lua: &Lua, plugin: &PluginId, name: &str, hidden: Table) -> Result<Table> {
-    let refusal = format!("{name} is read-only: Plugin `{plugin}` defines it; cannot set");
+fn seal(lua: &Lua, pack: &PackId, name: &str, hidden: Table) -> Result<Table> {
+    let refusal = format!("{name} is read-only: Pack `{pack}` defines it; cannot set");
     read_only_proxy(
         lua,
         Value::Table(hidden),
@@ -213,7 +213,7 @@ fn seal(lua: &Lua, plugin: &PluginId, name: &str, hidden: Table) -> Result<Table
 
 /// Maps a prelude's load or run failure to the model-facing message,
 /// keeping the Lua traceback after it and the `mlua` error as the cause.
-fn load_failure(plugin: &PluginId, error: mlua::Error) -> Error {
+fn load_failure(pack: &PackId, error: mlua::Error) -> Error {
     let rendered = match &error {
         mlua::Error::RuntimeError(message) => message.clone(),
         other => other.to_string(),
@@ -223,7 +223,7 @@ fn load_failure(plugin: &PluginId, error: mlua::Error) -> Error {
         None => (rendered.as_str(), None),
     };
     let mut message = format!(
-        "Plugin `{plugin}`: its prelude failed to load: {head}. A prelude only \
+        "Pack `{pack}`: its prelude failed to load: {head}. A prelude only \
          defines functions; it must not call tools while loading."
     );
     if let Some(traceback) = traceback {

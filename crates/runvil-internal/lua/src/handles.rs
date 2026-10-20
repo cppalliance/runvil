@@ -4,7 +4,7 @@
 use std::collections::BTreeMap;
 
 use mlua::Value;
-use runvil_types::plugins::PluginId;
+use runvil_types::packs::PackId;
 use runvil_types::tools::{ToolId, ToolInfo};
 use serde_json::Value as Json;
 
@@ -175,29 +175,29 @@ pub struct LibraryBlock {
     pub prose: String,
 }
 
-/// The run's tool set: the declared Plugins, the run's roster, and every
+/// The run's tool set: the declared Packs, the run's roster, and every
 /// catalog tool the run can offer. Nothing changes it during a run, so the
 /// run and every section VM share one `Arc<ToolSet>`.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct ToolSet {
-    /// The Plugins the frontmatter declares, in declaration order.
-    declared: Vec<PluginId>,
-    /// Every installed Plugin the caller reports, declared or not, with or
+    /// The Packs the frontmatter declares, in declaration order.
+    declared: Vec<PackId>,
+    /// Every installed Pack the caller reports, declared or not, with or
     /// without tools: no reason when it can serve the run, and the reason,
     /// written for the model, when it can't.
-    roster: BTreeMap<PluginId, Option<String>>,
+    roster: BTreeMap<PackId, Option<String>>,
     /// Every catalog tool the run can offer, in id order, each bound under
     /// its wire name.
     offered: Vec<ToolBinding>,
 }
 
 impl ToolSet {
-    /// Builds the run's tool set from the declared Plugins in declaration
+    /// Builds the run's tool set from the declared Packs in declaration
     /// order, the roster, and the offering in tool id order.
     #[must_use]
     pub fn new(
-        declared: Vec<PluginId>,
-        roster: BTreeMap<PluginId, Option<String>>,
+        declared: Vec<PackId>,
+        roster: BTreeMap<PackId, Option<String>>,
         offered: Vec<ToolBinding>,
     ) -> Self {
         Self {
@@ -207,16 +207,16 @@ impl ToolSet {
         }
     }
 
-    /// Returns the declared plugins in declaration order.
+    /// Returns the declared Packs in declaration order.
     #[must_use]
-    pub fn declared(&self) -> &[PluginId] {
+    pub fn declared(&self) -> &[PackId] {
         &self.declared
     }
 
-    /// Returns every installed Plugin the caller reports, with the reason,
+    /// Returns every installed Pack the caller reports, with the reason,
     /// written for the model, when it cannot serve the run.
     #[must_use]
-    pub fn roster(&self) -> &BTreeMap<PluginId, Option<String>> {
+    pub fn roster(&self) -> &BTreeMap<PackId, Option<String>> {
         &self.roster
     }
 

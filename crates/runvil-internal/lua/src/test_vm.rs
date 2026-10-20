@@ -109,7 +109,7 @@ pub(crate) fn echo_tool() -> ToolInfo {
     tool_at("tools/echo")
 }
 
-/// A test VM whose `tools` and `plugins` tables are installed over `set`.
+/// A test VM whose `tools` and `packs` tables are installed over `set`.
 #[track_caller]
 pub(crate) fn lua_over(set: ToolSet) -> BuiltVm {
     TestVm::new().tools(set).build()

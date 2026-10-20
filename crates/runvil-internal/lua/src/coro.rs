@@ -82,7 +82,7 @@ pub(crate) const MODEL_TOOL_CALL_REGISTRY: &str = "runvil.impl_coro.model_tool_c
 
 /// The registry key for the shim's store function table, stashed by the
 /// prelude install so the executor can install the store yield shims onto a
-/// VM's `store` table after the Plugin preludes install.
+/// VM's `store` table after the Pack preludes install.
 const STORE_REGISTRY: &str = "runvil.impl_coro.store";
 
 /// The registry key for the shim's block guard, stashed by the prelude
@@ -346,7 +346,7 @@ pub(crate) fn handle_method(lua: &Lua, name: &str) -> mlua::Result<Value> {
 
 /// Installs the store yield shims onto a VM's `store` table, replacing the
 /// dispatchers installed with the other Engine globals, and switches those
-/// dispatchers to the shims too, so a store function a Plugin prelude
+/// dispatchers to the shims too, so a store function a Pack prelude
 /// captured before this call (`local write = store.write`) yields as well.
 /// Every store operation, through whichever reference the prompt holds,
 /// then suspends the block as a leaf yield - uniformly for all backends,
