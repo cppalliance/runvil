@@ -4,7 +4,7 @@ overview: "Debt review of the Pack and Plugin rename (runvil fc4a1c0ed..8faa39a7
 todos:
   - id: remove-hostcontext-services
     content: "C1: remove HostContext's dead services field, its Debug line, and the stale doc clauses in crates/harness-internal/runner/src/host.rs; pass harness-runner, harness, and workshop-server tests, fmt, clippy, and rustdoc"
-    status: pending
+    status: completed
 isProject: false
 ---
 
