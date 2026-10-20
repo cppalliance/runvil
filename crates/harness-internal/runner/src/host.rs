@@ -43,14 +43,12 @@ mod tests;
 /// their id, and the vendor a bare `uses:` entry means.
 const RUNVIL: &str = "runvil";
 
-/// Every Pack a Host built and the Host-wide services their `construct`
-/// functions read.
+/// Every Pack a Host built.
 ///
 /// A Host builds one at startup from the registry its Plugins filled and
 /// shares it with every Harness behind an `Arc`. Dropping it drops the
 /// Pack objects, which is where a Pack cleans up.
 pub struct HostContext {
-    services: HostServices,
     built: BTreeMap<&'static str, Built>,
 }
 
@@ -84,6 +82,10 @@ impl HostContext {
     /// unavailable, with the failure as the reason a run that needs it is
     /// refused.
     #[must_use]
+    #[expect(
+        clippy::needless_pass_by_value,
+        reason = "the public signature takes the Host-wide services by value"
+    )]
     pub fn new(packs: PackRegistry, services: HostServices) -> HostContext {
         let built = packs
             .into_entries()
@@ -100,7 +102,7 @@ impl HostContext {
                 (info.fqn, Built { id, info, pack })
             })
             .collect();
-        HostContext { services, built }
+        HostContext { built }
     }
 
     /// Picks the Packs a run of `prompt` holds: each Pack its `uses:`
@@ -222,8 +224,8 @@ impl HostContext {
 }
 
 impl fmt::Debug for HostContext {
-    /// Shows the services and each built Pack's FQN and Pack id with
-    /// whether it built, and never a Pack's config.
+    /// Shows each built Pack's FQN and Pack id with whether it built, and
+    /// never a Pack's config.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let built: Vec<(&str, &PackId, bool)> = self
             .built
@@ -231,7 +233,6 @@ impl fmt::Debug for HostContext {
             .map(|(fqn, built)| (*fqn, &built.id, built.pack.is_ok()))
             .collect();
         f.debug_struct("HostContext")
-            .field("services", &self.services)
             .field("built", &built)
             .finish()
     }
