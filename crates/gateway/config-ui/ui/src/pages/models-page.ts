@@ -119,7 +119,9 @@ export function createModelsPage(deps: ModelsPageDeps): ModelsPage {
     title.textContent = deps.scope === "local" ? "Local" : "Remote";
 
     const split = document.createElement("div");
-    split.className = "split models-split";
+    // The family class picks the scope's hue for selections and filters:
+    // green for Local, blue for Remote.
+    split.className = `split models-split fam-${deps.scope}`;
     listBox = document.createElement("div");
     listBox.className = "split-list";
     detailBox = document.createElement("div");

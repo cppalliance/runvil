@@ -40,6 +40,17 @@ test("Local and Remote tabs render only their catalog subsets", async () => {
   assert.equal(root.querySelector(".orphan-section"), null, "Remote never shows local files");
 });
 
+test("the Local split carries the green family and the Remote split the blue", async () => {
+  const { dom, root } = await open();
+  assert.ok(root.querySelector(".models-split.fam-local"), "Local marks its split");
+  assert.equal(root.querySelector(".models-split.fam-remote"), null);
+
+  navigate(dom, "#/remote");
+  await settle();
+  assert.ok(root.querySelector(".models-split.fam-remote"), "Remote marks its split");
+  assert.equal(root.querySelector(".models-split.fam-local"), null);
+});
+
 test("STT entries show the Mic badge and implicit non-editable kind", async () => {
   const { dom, root } = await open();
   const row = [...root.querySelectorAll(".model-row")].find((entry) =>
@@ -362,7 +373,7 @@ test("a non-numeric entry in a model's numeric field raises an alert under the i
   assert.equal(fixed.querySelector("input").value, "512", "the edit is kept");
 });
 
-test("model rows sit 12px apart, mark the selection with an accent rule, and the search box is a pill", async () => {
+test("model rows sit 12px apart, mark the selection with a family-colored rule, and the search box is a pill", async () => {
   const list = await bundledDeclarations(".model-list");
   assert.equal(list.get("display"), "flex");
   assert.equal(list.get("flex-direction"), "column");
@@ -371,6 +382,10 @@ test("model rows sit 12px apart, mark the selection with an accent rule, and the
   assert.equal(hover.get("background"), "var(--panel-2)", "a hover raises the row");
   const selected = await bundledDeclarations(".model-row[aria-current=true]");
   assert.equal(selected.get("border-inline-start-color"), "var(--accent)");
+  const local = await bundledDeclarations(".fam-local .model-row[aria-current=true]");
+  assert.equal(local.get("border-inline-start-color"), "var(--good)", "Local rows take green");
+  const remote = await bundledDeclarations(".fam-remote .model-row[aria-current=true]");
+  assert.equal(remote.get("border-inline-start-color"), "var(--blue)", "Remote rows take blue");
   const search = await bundledDeclarations(".models-toolbar .input");
   assert.equal(squash(search.get("padding")), "5px14px", "padding 5px 14px");
   assert.equal(search.get("border-radius"), "var(--radius-full)", "a pill");

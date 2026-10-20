@@ -568,6 +568,21 @@
 	.model-row:hover {
 		background: var(--panel-2);
 	}
+	/* Local rows and filters take the green family, Remote the blue. */
+	.fam-local .model-row[aria-current="true"] {
+		border-inline-start-color: var(--good);
+	}
+	.fam-remote .model-row[aria-current="true"] {
+		border-inline-start-color: var(--blue);
+	}
+	.fam-local .filter-chip[aria-pressed="true"] {
+		background: color-mix(in srgb, var(--good) 14%, transparent);
+		color: var(--good-text);
+	}
+	.fam-remote .filter-chip[aria-pressed="true"] {
+		background: color-mix(in srgb, var(--blue) 14%, transparent);
+		color: var(--blue-text);
+	}
 	.model-name {
 		font-family: var(--font-mono);
 		font-size: 0.8125rem;
