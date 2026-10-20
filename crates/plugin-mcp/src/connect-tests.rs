@@ -3,7 +3,6 @@
 use std::collections::HashMap;
 use std::time::Duration;
 
-use runvil_plugin::PackId;
 use tokio::net::TcpListener;
 use tokio::sync::watch;
 
@@ -30,9 +29,9 @@ async fn a_server_that_never_answers_fails_within_the_startup_deadline() {
         url,
         headers: HashMap::new(),
     };
-    let pack = PackId::parse("silent").expect("parses");
+    let server = "silent".to_owned();
 
-    let task = tokio::spawn(run(pack, entry, Duration::from_millis(200), state));
+    let task = tokio::spawn(run(server, entry, Duration::from_millis(200), state));
     let mut watching = watching;
     let settled = tokio::time::timeout(
         Duration::from_secs(30),
@@ -75,9 +74,9 @@ async fn a_failed_server_stays_failed_while_a_later_attempt_is_in_flight() {
         url,
         headers: HashMap::new(),
     };
-    let pack = PackId::parse("silent").expect("parses");
+    let server = "silent".to_owned();
 
-    let task = tokio::spawn(run(pack, entry, Duration::from_secs(2), state));
+    let task = tokio::spawn(run(server, entry, Duration::from_secs(2), state));
     tokio::time::timeout(
         Duration::from_secs(30),
         watching.wait_for(|now| matches!(now, State::Failed(_))),
@@ -116,9 +115,9 @@ async fn a_refused_connection_fails_with_a_handshake_reason() {
         url,
         headers: HashMap::new(),
     };
-    let pack = PackId::parse("closed").expect("parses");
+    let server = "closed".to_owned();
 
-    tokio::spawn(run(pack, entry, Duration::from_secs(30), state));
+    tokio::spawn(run(server, entry, Duration::from_secs(30), state));
     let settled = tokio::time::timeout(
         Duration::from_secs(30),
         watching.wait_for(|now| !matches!(now, State::Starting)),
@@ -144,9 +143,9 @@ async fn a_failed_start_gives_a_reason_that_holds_no_part_of_the_url() {
         url: format!("http://{SECRET}@127.0.0.1:{port}/mcp/{SECRET}?key={SECRET}"),
         headers: HashMap::new(),
     };
-    let pack = PackId::parse("secret").expect("parses");
+    let server = "secret".to_owned();
 
-    tokio::spawn(run(pack, entry, Duration::from_secs(30), state));
+    tokio::spawn(run(server, entry, Duration::from_secs(30), state));
     let settled = tokio::time::timeout(
         Duration::from_secs(30),
         watching.wait_for(|now| !matches!(now, State::Starting)),

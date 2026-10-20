@@ -1,7 +1,6 @@
-//! The Pack one server is installed as: its state, its tool list, and
-//! its calls.
+//! One configured server: its state, the tools it listed, and the calls
+//! that go to it.
 
-use std::collections::HashSet;
 use std::time::Duration;
 
 use rmcp::model::{
@@ -9,9 +8,7 @@ use rmcp::model::{
     RequestId, Tool,
 };
 use rmcp::service::{Peer, PeerRequestOptions, RoleClient};
-use runvil_plugin::{
-    Pack, PackFuture, PackId, ToolContext, ToolError, ToolErrorKind, ToolId, ToolInfo, ToolOutput,
-};
+use runvil_plugin::{ToolError, ToolErrorKind, ToolOutput};
 use serde_json::Value;
 use tokio::runtime::Handle;
 use tokio::sync::watch;
@@ -39,87 +36,54 @@ pub(crate) struct Ready {
     pub(crate) tools: Vec<Listed>,
 }
 
-/// One tool the server listed and the Pack kept.
+/// One tool the server listed.
 #[derive(Debug)]
 pub(crate) struct Listed {
-    pub(crate) info: ToolInfo,
-    /// The name the server knows the tool by, which a call sends.
-    pub(crate) mcp_name: String,
+    /// The name the server lists the tool under, which a call sends.
+    pub(crate) name: String,
+    pub(crate) description: String,
+    pub(crate) input_schema: Value,
 }
 
-/// Keeps the tools whose lowercased names form a tool id under `pack`,
-/// and drops, with a warning, any that do not or that repeat an earlier
-/// tool's id.
-pub(crate) fn catalog(pack: &PackId, tools: Vec<Tool>) -> Vec<Listed> {
-    let mut seen = HashSet::new();
-    let mut kept = Vec::new();
-    for tool in tools {
-        let mcp_name = tool.name.to_string();
-        let lowered = mcp_name.to_ascii_lowercase();
-        let Ok(id) = ToolId::parse(&format!("{pack}/{lowered}")) else {
-            tracing::warn!(
-                %pack, tool = %mcp_name,
-                "dropping an MCP tool whose lowercased name is not a tool id of lowercase letters, digits, '-', '_', and '.'"
-            );
-            continue;
-        };
-        if !seen.insert(id.clone()) {
-            tracing::warn!(
-                %pack, tool = %mcp_name,
-                "dropping an MCP tool whose lowercased name matches an earlier tool's"
-            );
-            continue;
-        }
-        let description = tool
-            .description
-            .as_deref()
-            .or(tool.title.as_deref())
-            .unwrap_or(&mcp_name)
-            .to_owned();
-        let schema = Value::Object((*tool.input_schema).clone());
-        kept.push(Listed {
-            info: ToolInfo::new(id, description, schema),
-            mcp_name,
-        });
-    }
-    kept
+/// Keeps every tool the server listed, under the name it listed. A tool's
+/// description is its `description`, else its `title`, else its name.
+pub(crate) fn catalog(tools: Vec<Tool>) -> Vec<Listed> {
+    tools
+        .into_iter()
+        .map(|tool| {
+            let name = tool.name.to_string();
+            let description = tool
+                .description
+                .as_deref()
+                .or(tool.title.as_deref())
+                .unwrap_or(&name)
+                .to_owned();
+            Listed {
+                description,
+                input_schema: Value::Object((*tool.input_schema).clone()),
+                name,
+            }
+        })
+        .collect()
 }
 
-/// The Pack: a watch on the connection task's state, the task, and the
-/// Host's runtime.
+/// A server's connection: a watch on the connection task's state, and the
+/// task.
 #[derive(Debug)]
 pub(crate) struct Server {
     state: watch::Receiver<State>,
     connection: JoinHandle<()>,
-    runtime: Handle,
 }
 
 impl Server {
-    pub(crate) fn new(
-        state: watch::Receiver<State>,
-        connection: JoinHandle<()>,
-        runtime: Handle,
-    ) -> Server {
-        Server {
-            state,
-            connection,
-            runtime,
-        }
+    pub(crate) fn new(state: watch::Receiver<State>, connection: JoinHandle<()>) -> Server {
+        Server { state, connection }
     }
 
-    /// The peer and server-side name for `tool`, or the reason a call
-    /// cannot go out.
-    fn target(&self, tool: &ToolId) -> Result<(Peer<RoleClient>, String), ToolError> {
-        match &*self.state.borrow() {
-            State::Ready(ready) => ready
-                .tools
-                .iter()
-                .find(|listed| listed.info.id == *tool)
-                .map(|listed| (ready.peer.clone(), listed.mcp_name.clone()))
-                .ok_or_else(|| ToolError::message(format!("MCP server has no tool {tool}"))),
-            State::Starting => Err(ToolError::message("MCP server is still starting")),
-            State::Failed(reason) => Err(ToolError::message(reason.clone())),
-        }
+    /// The server's state now. The borrow holds the connection task's
+    /// next publish back, so it is dropped before any await.
+    pub(crate) fn state(&self) -> watch::Ref<'_, State> {
+        self.state.borrow()
     }
 }
 
@@ -185,65 +149,23 @@ async fn send(
     result::output(response)
 }
 
-impl Pack for Server {
-    fn tools(&self) -> Vec<ToolInfo> {
-        match &*self.state.borrow() {
-            State::Ready(ready) => ready
-                .tools
-                .iter()
-                .map(|listed| listed.info.clone())
-                .collect(),
-            State::Starting | State::Failed(_) => Vec::new(),
-        }
-    }
-
-    fn ready(&self) -> PackFuture<'_, Result<(), ToolError>> {
-        let mut state = self.state.clone();
-        Box::pin(async move {
-            let settled = state
-                .wait_for(|now| !matches!(now, State::Starting))
-                .await
-                .map_err(|_| {
-                    ToolError::message("MCP connection task ended before it finished starting")
-                })?;
-            match &*settled {
-                State::Failed(reason) => Err(ToolError::message(reason.clone())),
-                State::Starting | State::Ready(_) => Ok(()),
-            }
-        })
-    }
-
-    fn call<'a>(
-        &'a self,
-        cx: ToolContext<'a>,
-        args: Value,
-    ) -> PackFuture<'a, Result<ToolOutput, ToolError>> {
-        Box::pin(async move {
-            let (peer, name) = self.target(cx.tool())?;
-            let arguments = match args {
-                Value::Object(map) => map,
-                Value::Null => JsonObject::new(),
-                _ => {
-                    return Err(
-                        ToolError::message("MCP tool arguments must be a JSON object")
-                            .with_kind(ToolErrorKind::InvalidArguments),
-                    );
-                }
-            };
-            let mut task =
-                AbortOnDrop(
-                    self.runtime
-                        .spawn(send(peer, name, arguments, self.runtime.clone())),
-                );
-            match (&mut task.0).await {
-                Ok(outcome) => outcome,
-                Err(join) => Err(ToolError::new(
-                    ToolErrorKind::Transport,
-                    "the MCP call task did not finish",
-                )
-                .with_source(join)),
-            }
-        })
+/// Calls the tool `name` through `peer` with `arguments`, on `runtime`.
+/// Dropping the returned future aborts the call and tells the server to
+/// drop the request.
+pub(crate) async fn call(
+    runtime: &Handle,
+    peer: Peer<RoleClient>,
+    name: String,
+    arguments: JsonObject,
+) -> Result<ToolOutput, ToolError> {
+    let mut task = AbortOnDrop(runtime.spawn(send(peer, name, arguments, runtime.clone())));
+    match (&mut task.0).await {
+        Ok(outcome) => outcome,
+        Err(join) => Err(ToolError::new(
+            ToolErrorKind::Transport,
+            "the MCP call task did not finish",
+        )
+        .with_source(join)),
     }
 }
 

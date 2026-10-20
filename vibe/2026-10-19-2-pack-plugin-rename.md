@@ -882,7 +882,7 @@ The repositories, their starting points, the tools, and the commands every gate 
 
 <step-4>
 
-### Step 4: The mcp Pack with two static tools
+### Step 4: The mcp Pack with two static tools [completed]
 
 - Component: mcp-pack
 - Tests: run in PowerShell from `c:\Users\Vinnie\cursor\runvil`, in this order:

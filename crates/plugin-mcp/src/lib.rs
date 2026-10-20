@@ -1,19 +1,43 @@
-//! An MCP client Pack: it connects a prompt to one remote MCP server
-//! over Streamable HTTP and offers that server's tools as ordinary tools.
+//! An MCP client Pack: one Pack over every MCP server its configuration
+//! names, each reached over Streamable HTTP, whose tools a prompt lists
+//! and calls through two static tools.
 //!
-//! A Host installs [`PLUGIN`] once per server, under the server's name
-//! lowercased in ASCII, so the tools of a server named `wg21-papers` are
-//! `wg21-papers/<tool>`. The Pack has no prelude, so declaring it, as in
-//! `uses: [wg21-papers]`, only makes it required.
+//! A Host installs [`PLUGIN`] once and passes the `mcpServers` object of
+//! an `mcp.json` file as the configuration: each server's entry under the
+//! server's name. A `null` configuration means no servers, and any other
+//! value that is not an object refuses the install. The Pack has no
+//! prelude, so declaring it, as in `uses: [mcp]`, only makes it required.
 //!
-//! The Host passes the server's entry from an `mcp.json` file as the
-//! configuration. A remote entry has `url` and optional `headers`, and a
-//! `type` of `"sse"`, the legacy transport, is refused. A local entry has
-//! `command`, with optional `args`, `env`, and `cwd`. This Pack
-//! recognizes that shape and refuses it at install with `local MCP servers
-//! (command) are not supported yet`, so the Host installs it as
-//! unavailable. Other `type` values and unknown fields are ignored, because
-//! the format is defined outside this repository.
+//! The Pack offers exactly two tools under the Pack id `construct`
+//! receives, such as `mcp/get_dynamic_tools` under `mcp`, modeled on
+//! Cursor's `GetDynamicTools` and `CallDynamicTool`:
+//!
+//! - `get_dynamic_tools` takes the optional strings `namespace` and
+//!   `toolName` and answers JSON text, which a script reads with
+//!   `json.decode`. With no arguments it lists each server's namespace,
+//!   status, and tool names, in name order; with `namespace`, that
+//!   server's tools with their input schemas; with both, one tool.
+//! - `call_dynamic_tool` takes the strings `namespace` and `toolName` and
+//!   an optional object `arguments`, which defaults to `{}`, and calls that
+//!   server's tool.
+//!
+//! A namespace is the server's name exactly as the configuration writes
+//! it, and a tool's name is the one its server lists. Both must match
+//! exactly. A server's status is `ready`, `loading` while it is still
+//! starting, or `error` with the reason. A tool's description is its
+//! `description`, else its `title`, else its name. An unknown namespace
+//! or tool, a `toolName` without a `namespace`, and a call to a server
+//! that is not ready each give an error a model can read.
+//!
+//! Each entry is parsed on its own. A remote entry has `url` and optional
+//! `headers`, and a `type` of `"sse"`, the legacy transport, is refused. A
+//! local entry has `command`, with optional `args`, `env`, and `cwd`. This
+//! Pack recognizes that shape and refuses it with `local MCP servers
+//! (command) are not supported yet`. Other `type` values and unknown
+//! fields are ignored, because the format is defined outside this
+//! repository. A refused entry is a namespace with status `error` and the
+//! reason, and the other servers still connect, so one bad entry never
+//! refuses the install.
 //!
 //! String values in an entry may use `${env:NAME}`, which an unset
 //! variable refuses naming `NAME`, and `${userHome}`. Any other `${...}`
@@ -21,24 +45,20 @@
 //! `Mcp-Session-Id`, or `Last-Event-Id`, which the client owns.
 //!
 //! Install does no I/O. It reads the Host's runtime from the Plugin
-//! contract's [`runvil_plugin::TOKIO_RUNTIME`] service and starts one
-//! background task on it, which connects, runs the handshake, and lists
-//! every page of tools within two minutes. The Pack's `ready` waits for
-//! that task, so a run sees the tools of a server that is still starting.
-//! A server that fails to start is unavailable to each run that starts
-//! while it is down, with the reason, and the Pack keeps trying in the
-//! background, waiting 1 second after the first failure and doubling up to
-//! a minute, so a later run offers its tools once it answers. A server
-//! that is ready stays ready, and a later failure shows as a transport
-//! error on the call.
+//! contract's [`runvil_plugin::TOKIO_RUNTIME`] service, even with no
+//! servers, and starts one background task per parsed entry on it, which
+//! connects, runs the handshake, and lists every page of tools within two
+//! minutes. The Pack's `ready` resolves at once, so a run can see the two
+//! tools while servers are still connecting, and the listing shows each
+//! such server as `loading`. A server that fails to start shows as
+//! `error` with the reason, and its task keeps trying in the background,
+//! waiting 1 second after the first failure and doubling up to a minute,
+//! so the server lists its tools once it answers. A server that is ready
+//! stays ready, and a later failure shows as a transport error on the
+//! call.
 //!
-//! A tool whose name, lowercased in ASCII, is not a valid tool id, or that
-//! repeats an earlier tool's id after lowercasing, is dropped with a
-//! warning. A tool's description is its `description`, else its `title`,
-//! else its name, and its parameters are its `inputSchema`.
-//!
-//! A call sends `tools/call` with the tool's original name and waits up to
-//! five minutes. Text blocks and embedded text resources come back joined
+//! A call sends `tools/call` with the tool's name and waits up to five
+//! minutes. Text blocks and embedded text resources come back joined
 //! with blank lines. An image, audio, or binary resource becomes a
 //! placeholder such as `[image omitted: image/png]`, a resource link
 //! becomes `[resource: <uri>]`, and a result with no blocks but with
@@ -57,68 +77,92 @@
 //! - May depend on: `runvil-plugin`, `shared-*` crates, and outside
 //!   libraries. `cargo test -p build-xtask` enforces the Plugin family's
 //!   allow-list. Only [`PLUGIN`] is public.
-//! - Every output is untrusted.
+//! - Every output is untrusted, because descriptions, schemas, and results
+//!   all come from the servers.
 //! - No reason, log line, `Debug` output, or error names an `env` or
 //!   `headers` value. They may name keys.
 //! - It runs on the Host's runtime, read through the contract's
 //!   `TOKIO_RUNTIME` service, and `construct` does no I/O.
-//! - It starts no process: a local entry is refused at `construct`.
+//! - It starts no process: each local entry is refused at `construct`, on
+//!   its own.
 //! - Dropping a call tells the server to drop the request.
 
 mod connect;
+mod dynamic;
 mod entry;
 mod result;
 mod server;
 
+use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use runvil_plugin::{HostServices, Pack, PackId, PackInfo, ServiceKey, TOKIO_RUNTIME, ToolError};
-use serde_json::Value;
+use serde_json::{Map, Value};
 use tokio::runtime::Handle;
 use tokio::sync::watch;
 
+use crate::dynamic::{Mcp, Namespace};
 use crate::entry::Vars;
 use crate::server::{Server, State};
 
 /// The Pack's `PackInfo`, which a Host adds to its Pack registry.
 ///
-/// Its FQN is `runvil/mcp`. The Host installs it once per server,
-/// passing the server's `mcp.json` entry as the configuration, and
+/// Its FQN is `runvil/mcp`. The Host installs it once, passing the
+/// `mcpServers` object of an `mcp.json` file as the configuration, and
 /// provides the Plugin contract's [`runvil_plugin::TOKIO_RUNTIME`]
 /// service. It has no prelude and needs no per-run service.
 pub const PLUGIN: PackInfo =
-    PackInfo::new("runvil/mcp", construct).description("Tools from one MCP server");
+    PackInfo::new("runvil/mcp", construct).description("Tools from every configured MCP server");
 
 /// The key `construct` reads the Host's runtime through.
 const RUNTIME: ServiceKey<Handle> = ServiceKey::new(TOKIO_RUNTIME);
 
-/// Validates the entry, reads the runtime, and starts the connection task.
-/// It does no I/O itself.
-#[expect(
-    clippy::needless_pass_by_value,
-    reason = "the PackInfo construct signature fixes the argument types"
-)]
+/// Reads the runtime, parses each server's entry on its own, and starts
+/// one connection task per parsed entry. It does no I/O itself.
 fn construct(
     name: &PackId,
     config: Value,
     services: &HostServices,
 ) -> Result<Arc<dyn Pack>, ToolError> {
-    let env = |key: &str| std::env::var(key).ok();
-    let home = std::env::home_dir().map(|dir| dir.to_string_lossy().into_owned());
-    let entry = entry::parse(&config, &Vars { env: &env, home })?;
+    let entries = match config {
+        Value::Null => Map::new(),
+        Value::Object(entries) => entries,
+        _ => {
+            return Err(ToolError::message(
+                "the MCP configuration must be a JSON object of servers by name, as the \
+                 `mcpServers` object of an mcp.json file is",
+            ));
+        }
+    };
     let runtime = services.get(&RUNTIME).ok_or_else(|| {
         ToolError::message("MCP needs runvil/tokio-runtime, and this host provides none")
     })?;
-    let (state, watching) = watch::channel(State::Starting);
-    let connection = runtime.spawn(connect::run(
-        name.clone(),
-        entry,
-        connect::STARTUP_DEADLINE,
-        state,
-    ));
-    Ok(Arc::new(Server::new(
-        watching,
-        connection,
+    let env = |key: &str| std::env::var(key).ok();
+    let home = std::env::home_dir().map(|dir| dir.to_string_lossy().into_owned());
+    let vars = Vars { env: &env, home };
+    let mut namespaces = BTreeMap::new();
+    for (server, config) in entries {
+        let namespace = match entry::parse(&config, &vars) {
+            Ok(entry) => {
+                let (state, watching) = watch::channel(State::Starting);
+                let connection = runtime.spawn(connect::run(
+                    server.clone(),
+                    entry,
+                    connect::STARTUP_DEADLINE,
+                    state,
+                ));
+                Namespace::Server(Server::new(watching, connection))
+            }
+            Err(refused) => {
+                tracing::warn!(%server, reason = %refused, "the MCP server's entry was refused");
+                Namespace::Refused(refused.to_string())
+            }
+        };
+        namespaces.insert(server, namespace);
+    }
+    Ok(Arc::new(Mcp::new(
+        name,
+        namespaces,
         Handle::clone(&runtime),
-    )))
+    )?))
 }

@@ -168,12 +168,13 @@ pub struct AgentsConfig {
     /// directory still offers the embedded `chat` built-in - a state,
     /// not an error.
     pub path: PathBuf,
-    /// An `mcp.json`-format file whose `mcpServers` Workshop installs, one
-    /// Pack per server, each under its name lowercased. Leaving it out
-    /// means no MCP servers, and Workshop then reads no file. `${VAR}`
-    /// interpolation applies to the path, and an unset variable expands to
-    /// an empty string. The path is kept verbatim like other explicit
-    /// paths, so `anchor_path_defaults` leaves it alone.
+    /// An `mcp.json`-format file whose `mcpServers` object Workshop hands
+    /// to its one mcp Pack, which reaches each server under its name as
+    /// written. Leaving it out means no MCP servers, and Workshop then
+    /// reads no file. `${VAR}` interpolation applies to the path, and an
+    /// unset variable expands to an empty string. The path is kept
+    /// verbatim like other explicit paths, so `anchor_path_defaults`
+    /// leaves it alone.
     pub mcp: Option<PathBuf>,
 }
 

@@ -11,8 +11,9 @@
 //! the launched agent, a per-run broker over
 //! the server's inference broker ([`broker`]), the tokio timer, the
 //! server's [`HostContext`] with web, user-input, the built-in subagents,
-//! and the MCP servers of the configured `mcp.json` installed, and the
-//! conversation's own services, which hold its input broker. The Harness reaches the gateway
+//! and one mcp Pack over the servers of the configured `mcp.json`
+//! installed, and the conversation's own services, which hold its input
+//! broker. The Harness reaches the gateway
 //! only through that broker, which follows the live gateway binding and
 //! sends each round to the dropdown's current pick. The
 //! run's request carries the Host snapshot ([`bindings`]): the menu's
@@ -49,7 +50,7 @@ use harness::vfs::VfsRef;
 use harness::{Harness, RunRequest};
 use plugin_web::SEARCH_PROVIDER;
 use runvil::tools::ToolId;
-use runvil_plugin::{PackId, ServiceKey};
+use runvil_plugin::ServiceKey;
 use serde_json::Value;
 use workshop_agents::{
     Conversation, ConversationId, Conversations, LaunchError, TokioTimer, discover_agents,
@@ -74,33 +75,34 @@ const HARNESS_STATE_DIR: &str = "harness";
 const RUNTIME: ServiceKey<tokio::runtime::Handle> = ServiceKey::new(runvil_plugin::TOKIO_RUNTIME);
 
 /// The server's installed Packs over its Host-wide [`services`], beside
-/// the ask tool's id. `mcp` is the `[agents] mcp` setting: the servers of
-/// the file it names are installed too.
+/// the ask tool's id. `mcp` is the `[agents] mcp` setting: the mcp Pack
+/// is installed over the servers of the file it names.
 fn host_context(registry: &Registry, mcp: Option<&Path>) -> (HostContext, Option<ToolId>) {
     with_plugins(services(registry), read_mcp_servers(mcp))
 }
 
-/// The `mcpServers` entries of the `mcp.json`-format file at `setting`,
-/// sorted by server name, with every other top-level key ignored. No
-/// setting or a missing file gives no entries, and so does a file that
-/// cannot be read or is not an `mcpServers` object, with a warning that
-/// names the file and the rule and holds no entry value. An entry is
-/// handed on as it stands: `plugin-mcp` refuses a malformed one at its
-/// install.
-fn read_mcp_servers(setting: Option<&Path>) -> Vec<(String, Value)> {
+/// The `mcpServers` object of the `mcp.json`-format file at `setting`,
+/// with every other top-level key ignored. No setting or a missing file
+/// gives an empty object, and so does a file that cannot be read or is
+/// not an `mcpServers` object, with a warning that names the file and the
+/// rule and holds no entry value. The object is handed on as it stands:
+/// the mcp Pack refuses a malformed entry on its own, and the other
+/// servers still connect.
+fn read_mcp_servers(setting: Option<&Path>) -> Value {
+    let none = || Value::Object(serde_json::Map::new());
     let Some(path) = setting else {
-        return Vec::new();
+        return none();
     };
     let text = match std::fs::read_to_string(path) {
         Ok(text) => text,
-        Err(error) if error.kind() == io::ErrorKind::NotFound => return Vec::new(),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return none(),
         Err(error) => {
             tracing::warn!(
                 path = %path.display(),
                 %error,
-                "the MCP file could not be read; no MCP servers are installed"
+                "the MCP file could not be read; no MCP servers are configured"
             );
-            return Vec::new();
+            return none();
         }
     };
     let document = match serde_json::from_str::<Value>(&text) {
@@ -109,47 +111,38 @@ fn read_mcp_servers(setting: Option<&Path>) -> Vec<(String, Value)> {
             tracing::warn!(
                 path = %path.display(),
                 %error,
-                "the MCP file is not valid JSON; no MCP servers are installed"
+                "the MCP file is not valid JSON; no MCP servers are configured"
             );
-            return Vec::new();
+            return none();
         }
     };
     let Value::Object(mut top) = document else {
         tracing::warn!(
             path = %path.display(),
-            "the MCP file must be a JSON object; no MCP servers are installed"
+            "the MCP file must be a JSON object; no MCP servers are configured"
         );
-        return Vec::new();
+        return none();
     };
-    let servers = top.remove("mcpServers");
-    match servers {
-        None => Vec::new(),
-        // The map is ordered by key because `preserve_order` is off.
-        Some(Value::Object(servers)) => servers.into_iter().collect(),
+    match top.remove("mcpServers") {
+        None => none(),
+        Some(servers @ Value::Object(_)) => servers,
         Some(_) => {
             tracing::warn!(
                 path = %path.display(),
-                "the MCP file's `mcpServers` must be a JSON object; no MCP servers are installed"
+                "the MCP file's `mcpServers` must be a JSON object; no MCP servers are configured"
             );
-            Vec::new()
+            none()
         }
     }
 }
 
 /// A Host over the Host-wide `services` with the Packs agents may
 /// declare installed: `web`, `user-input`, so they can ask the operator,
-/// and the built-in `subagents`, under their default names, then each of
-/// `servers` as an MCP Pack under its name lowercased in ASCII, with its
-/// entry as the configuration. A name that does not parse as a Pack id,
-/// or that is taken, reserved for the built-in, or differs from an installed
-/// name only by punctuation, is skipped with a warning, and the other
-/// servers still install. The ask tool's id is `<name>/ask` under the name
-/// the user-input install returned, and `None` only if that install was
-/// refused.
-fn with_plugins(
-    services: HostServices,
-    servers: Vec<(String, Value)>,
-) -> (HostContext, Option<ToolId>) {
+/// the built-in `subagents`, and `mcp`, with the `servers` object as its
+/// configuration, each under its default name. The ask tool's id is
+/// `<name>/ask` under the name the user-input install returned, and
+/// `None` only if that install was refused.
+fn with_plugins(services: HostServices, servers: Value) -> (HostContext, Option<ToolId>) {
     let mut packs = PackRegistry::new();
     for info in [
         plugin_web::PLUGIN,
@@ -176,17 +169,8 @@ fn with_plugins(
     if let Err(error) = host.install("runvil/subagents", None, Value::Null) {
         tracing::warn!(%error, "the subagents Pack was not installed");
     }
-    for (server, entry) in servers {
-        let id = match PackId::parse(&server.to_ascii_lowercase()) {
-            Ok(id) => id,
-            Err(error) => {
-                tracing::warn!(%server, %error, "the MCP server was skipped");
-                continue;
-            }
-        };
-        if let Err(error) = host.install(plugin_mcp::PLUGIN.fqn, Some(id), entry) {
-            tracing::warn!(%server, %error, "the MCP server was not installed");
-        }
+    if let Err(error) = host.install(plugin_mcp::PLUGIN.fqn, None, servers) {
+        tracing::warn!(%error, "the mcp Pack was not installed");
     }
     (host, ask)
 }

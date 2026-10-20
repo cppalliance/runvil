@@ -1,66 +1,24 @@
 //! Integration tests for `plugin-mcp`, through `PLUGIN` and `TestCall`
-//! only, against a hand-written Streamable HTTP server.
+//! only, against a hand-written Streamable HTTP server: the construct
+//! over a map of servers and the connection each server keeps here, the
+//! listing `get_dynamic_tools` answers in `listing`, and the calls
+//! `call_dynamic_tool` makes in `calls`.
 #![expect(
     clippy::expect_used,
     reason = "test helpers panic on setup failure, which is the desired behavior"
 )]
 
+mod calls;
 mod fixture;
+mod listing;
+mod support;
 
-use std::sync::Arc;
 use std::time::Duration;
 
 use fixture::Fixture;
-use runvil_plugin::testing::TestCall;
-use runvil_plugin::{
-    HostServices, OutputTrust, Pack, PackId, ServiceKey, TOKIO_RUNTIME, ToolError, ToolErrorKind,
-    ToolId,
-};
+use runvil_plugin::HostServices;
 use serde_json::{Value, json};
-use tokio::runtime::Handle;
-
-const RUNTIME: ServiceKey<Handle> = ServiceKey::new(TOKIO_RUNTIME);
-const SECRET: &str = "ghp_secret_token_value_0042";
-
-fn runtime_services() -> HostServices {
-    let mut services = HostServices::new();
-    services
-        .provide(&RUNTIME, Arc::new(Handle::current()))
-        .expect("an empty map takes the runtime");
-    services
-}
-
-fn construct(config: Value, services: &HostServices) -> Result<Arc<dyn Pack>, ToolError> {
-    let name = PackId::parse("remote").expect("a Pack id parses");
-    (plugin_mcp::PLUGIN.construct)(&name, config, services)
-}
-
-/// Installs the Pack against `fixture` with these extra headers.
-fn install(fixture: &Fixture, headers: &Value) -> Arc<dyn Pack> {
-    construct(
-        json!({ "url": fixture.url, "headers": headers }),
-        &runtime_services(),
-    )
-    .expect("a remote entry installs")
-}
-
-async fn ready(pack: &Arc<dyn Pack>) {
-    tokio::time::timeout(Duration::from_secs(30), pack.ready())
-        .await
-        .expect("the server settles")
-        .expect("the server is ready");
-}
-
-async fn call(pack: &Arc<dyn Pack>, tool: &str, args: Value) -> Result<String, ToolError> {
-    let test = TestCall::new(ToolId::parse(tool).expect("a tool id parses"));
-    let output = pack.call(test.context(), args).await?;
-    assert_eq!(
-        output.trust(),
-        OutputTrust::Untrusted,
-        "every output is untrusted"
-    );
-    Ok(output.text().to_owned())
-}
+use support::{SECRET, call, construct, list, pack_over, ready, remote, runtime_services, settled};
 
 #[test]
 fn the_pack_is_runvil_mcp_with_no_prelude_and_no_needs() {
@@ -70,10 +28,39 @@ fn the_pack_is_runvil_mcp_with_no_prelude_and_no_needs() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn a_config_that_is_not_an_object_refuses_the_construct() {
+    for config in [json!([]), json!("servers"), json!(1)] {
+        let error = construct(config.clone(), &runtime_services())
+            .err()
+            .expect("only an object or null is a server map");
+        assert!(
+            error.to_string().contains("JSON object"),
+            "{config}: {error}"
+        );
+    }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_missing_runtime_service_fails_construct_naming_it_even_with_no_servers() {
+    for config in [
+        Value::Null,
+        json!({ "docs": { "url": "http://127.0.0.1:1/mcp" } }),
+    ] {
+        let error = construct(config.clone(), &HostServices::new())
+            .err()
+            .expect("no runtime is a failure");
+        assert!(
+            error.to_string().contains("runvil/tokio-runtime"),
+            "{config}: {error}"
+        );
+    }
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn the_initialize_request_names_runvil_and_declares_no_capabilities() {
     let fixture = Fixture::start().await;
-    let pack = install(&fixture, &json!({}));
-    ready(&pack).await;
+    let pack = pack_over(json!({ "remote": remote(&fixture, &json!({})) }));
+    ready(&pack, "remote").await;
 
     let initializes = fixture
         .shared
@@ -88,25 +75,12 @@ async fn the_initialize_request_names_runvil_and_declares_no_capabilities() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn ready_resolves_with_the_tools_from_both_pages_named_under_the_pack() {
-    let fixture = Fixture::start().await;
-    let pack = install(&fixture, &json!({}));
-    ready(&pack).await;
-
-    let ids: Vec<String> = pack.tools().iter().map(|t| t.id.to_string()).collect();
-    assert_eq!(ids, ["remote/echo", "remote/fail", "remote/hang"]);
-    ready(&pack).await;
-}
-
-#[tokio::test(flavor = "multi_thread")]
 async fn the_configured_headers_arrive_on_every_request() {
     let fixture = Fixture::start().await;
-    let pack = install(
-        &fixture,
-        &json!({ "Authorization": format!("Bearer {SECRET}"), "X-MCP-Tools": "echo" }),
-    );
-    ready(&pack).await;
-    call(&pack, "remote/echo", json!({}))
+    let headers = json!({ "Authorization": format!("Bearer {SECRET}"), "X-MCP-Tools": "echo" });
+    let pack = pack_over(json!({ "remote": remote(&fixture, &headers) }));
+    ready(&pack, "remote").await;
+    call(&pack, "remote", "Echo", json!({}))
         .await
         .expect("the call succeeds");
 
@@ -128,167 +102,59 @@ async fn the_configured_headers_arrive_on_every_request() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn a_call_sends_the_original_tool_name_and_returns_untrusted_text() {
-    let fixture = Fixture::start().await;
-    let pack = install(&fixture, &json!({}));
-    ready(&pack).await;
-
-    let text = call(&pack, "remote/echo", json!({ "q": "hello" }))
-        .await
-        .expect("succeeds");
-    assert_eq!(text, r#"echo: {"q":"hello"}"#);
-}
-
-#[tokio::test(flavor = "multi_thread")]
-async fn an_is_error_result_becomes_a_backend_error() {
-    let fixture = Fixture::start().await;
-    let pack = install(&fixture, &json!({}));
-    ready(&pack).await;
-
-    let error = call(&pack, "remote/fail", json!({}))
-        .await
-        .expect_err("isError fails");
-    assert_eq!(error.kind(), ToolErrorKind::Backend);
-    assert_eq!(error.to_string(), "it failed");
-}
-
-#[tokio::test(flavor = "multi_thread")]
-async fn arguments_that_are_not_an_object_are_refused_before_anything_is_sent() {
-    let fixture = Fixture::start().await;
-    let pack = install(&fixture, &json!({}));
-    ready(&pack).await;
-
-    let error = call(&pack, "remote/echo", json!([1]))
-        .await
-        .expect_err("refused");
-    assert_eq!(error.kind(), ToolErrorKind::InvalidArguments);
-    assert!(!fixture.methods().contains(&"tools/call".to_owned()));
-}
-
-#[tokio::test(flavor = "multi_thread")]
-async fn a_dropped_call_makes_the_server_receive_a_cancel_for_its_request_id() {
-    let fixture = Fixture::start().await;
-    let pack = install(&fixture, &json!({}));
-    ready(&pack).await;
-
-    let test = TestCall::new(ToolId::parse("remote/hang").expect("parses"));
-    {
-        let hanging = pack.call(test.context(), json!({}));
-        tokio::select! {
-            _ = hanging => panic!("the hang tool never answers"),
-            () = async {
-                tokio::time::timeout(Duration::from_secs(30), fixture.shared.hang_started.notified())
-                    .await
-                    .expect("the call reaches the server");
-            } => {}
-        }
-    }
-    tokio::time::timeout(
-        Duration::from_secs(30),
-        fixture.shared.cancel_arrived.notified(),
-    )
-    .await
-    .expect("dropping the call tells the server");
-
-    let recorded = fixture.shared.recorded.lock().expect("lock");
-    assert_eq!(recorded.cancelled.len(), 1);
-    assert_eq!(
-        Some(recorded.cancelled[0]["requestId"].clone()),
-        recorded.hang_id
-    );
-}
-
-#[tokio::test(flavor = "multi_thread")]
-async fn a_local_entry_fails_construct_as_not_supported_yet() {
-    let error = construct(
-        json!({ "command": "npx", "args": ["-y", "server"], "env": { "KEY": SECRET } }),
-        &runtime_services(),
-    )
-    .err()
-    .expect("a local entry is refused");
-    assert_eq!(
-        error.to_string(),
-        "local MCP servers (command) are not supported yet"
-    );
-}
-
-#[tokio::test(flavor = "multi_thread")]
-async fn a_missing_runtime_service_fails_construct_naming_it() {
-    let error = construct(
-        json!({ "url": "http://127.0.0.1:1/mcp" }),
-        &HostServices::new(),
-    )
-    .err()
-    .expect("no runtime is a failure");
-    assert!(
-        error.to_string().contains("runvil/tokio-runtime"),
-        "{error}"
-    );
-}
-
-#[tokio::test(flavor = "multi_thread")]
-async fn a_rejecting_server_fails_ready_with_a_reason_that_holds_no_header_value() {
+async fn a_rejecting_server_is_an_error_namespace_whose_reason_holds_no_header_value() {
     let fixture = Fixture::rejecting().await;
-    let pack = install(
-        &fixture,
-        &json!({ "Authorization": format!("Bearer {SECRET}") }),
-    );
+    let headers = json!({ "Authorization": format!("Bearer {SECRET}") });
+    let pack = pack_over(json!({ "remote": remote(&fixture, &headers) }));
 
-    let reason = tokio::time::timeout(Duration::from_secs(30), pack.ready())
-        .await
-        .expect("a rejection settles")
-        .expect_err("a 401 fails the start");
-    assert!(!reason.to_string().contains(SECRET), "{reason}");
-    tokio::time::timeout(Duration::from_secs(1), pack.ready())
-        .await
-        .expect("a later ready answers at once while retries go on")
-        .expect_err("the server still rejects");
-    assert!(pack.tools().is_empty());
-    let refused = call(&pack, "remote/echo", json!({}))
+    let entry = settled(&pack, "remote").await;
+    assert_eq!(entry["status"], "error", "a 401 fails the start: {entry}");
+    assert!(entry.get("tools").is_none(), "{entry}");
+    let reason = entry["reason"].as_str().expect("an error has a reason");
+    assert!(reason.contains("handshake"), "{reason}");
+    assert!(!list(&pack, json!({})).await.to_string().contains(SECRET));
+    let refused = call(&pack, "remote", "Echo", json!({}))
         .await
         .expect_err("no call goes out");
-    assert!(!refused.to_string().contains(SECRET));
+    assert!(!refused.to_string().contains(SECRET), "{refused}");
 }
 
 #[tokio::test(flavor = "multi_thread")]
 async fn a_server_that_rejects_its_first_connection_lists_its_tools_once_it_accepts() {
     let fixture = Fixture::rejecting().await;
-    let pack = install(&fixture, &json!({}));
-    tokio::time::timeout(Duration::from_secs(30), pack.ready())
-        .await
-        .expect("a rejection settles")
-        .expect_err("a 401 fails the start");
-    assert!(pack.tools().is_empty());
+    let pack = pack_over(json!({ "remote": remote(&fixture, &json!({})) }));
+    let entry = settled(&pack, "remote").await;
+    assert_eq!(entry["status"], "error", "a 401 fails the start: {entry}");
 
     fixture.accept();
-    tokio::time::timeout(Duration::from_secs(30), async {
-        while pack.tools().is_empty() {
-            tokio::time::sleep(Duration::from_millis(20)).await;
-        }
-    })
-    .await
-    .expect("a later attempt connects once the server accepts");
-
-    let ids: Vec<String> = pack.tools().iter().map(|t| t.id.to_string()).collect();
-    assert!(ids.contains(&"remote/echo".to_owned()), "{ids:?}");
-    let text = call(&pack, "remote/echo", json!({ "q": "hello" }))
+    let entry = ready(&pack, "remote").await;
+    assert_eq!(entry["tools"][0]["tool"], "Echo", "{entry}");
+    let text = call(&pack, "remote", "Echo", json!({ "q": "hello" }))
         .await
         .expect("succeeds");
     assert_eq!(text, r#"echo: {"q":"hello"}"#);
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn dropping_the_pack_ends_the_session_and_stops_the_connection_task() {
-    let fixture = Fixture::start().await;
-    let pack = install(&fixture, &json!({}));
-    ready(&pack).await;
+async fn dropping_the_pack_ends_every_session_and_stops_the_connection_tasks() {
+    let first = Fixture::start().await;
+    let second = Fixture::start().await;
+    let pack = pack_over(json!({
+        "first": remote(&first, &json!({})),
+        "second": remote(&second, &json!({})),
+    }));
+    ready(&pack, "first").await;
+    ready(&pack, "second").await;
     drop(pack);
 
     tokio::time::timeout(Duration::from_secs(30), async {
-        while fixture.shared.recorded.lock().expect("lock").deletes == 0 {
+        while [&first, &second]
+            .iter()
+            .any(|fixture| fixture.shared.recorded.lock().expect("lock").deletes == 0)
+        {
             tokio::time::sleep(Duration::from_millis(20)).await;
         }
     })
     .await
-    .expect("rmcp's worker ends the session when the service drops");
+    .expect("rmcp's worker ends each session when its service drops");
 }

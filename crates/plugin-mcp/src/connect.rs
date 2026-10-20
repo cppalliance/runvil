@@ -9,7 +9,6 @@ use rmcp::model::{ClientCapabilities, ClientConfig, Implementation};
 use rmcp::service::ClientInitializeError;
 use rmcp::transport::StreamableHttpClientTransport;
 use rmcp::transport::streamable_http_client::StreamableHttpClientTransportConfig;
-use runvil_plugin::PackId;
 use tokio::sync::watch;
 
 use crate::entry::RemoteEntry;
@@ -57,16 +56,17 @@ fn retry_delay(failures: u32) -> Duration {
     Duration::from_secs(1 << failures.min(6)).min(Duration::from_mins(1))
 }
 
-/// Connects to `entry` and publishes `Ready` or `Failed` on `state`,
-/// giving each attempt `deadline`. After a failure it waits
-/// [`retry_delay`] and tries again, until an attempt succeeds. Then it
-/// keeps the connection open until the task is aborted or the transport
-/// ends. Neither end changes the published state.
+/// Connects to `entry`, the server named `server` in the configuration,
+/// and publishes `Ready` or `Failed` on `state`, giving each attempt
+/// `deadline`. After a failure it logs the reason, waits [`retry_delay`],
+/// and tries again, until an attempt succeeds. Then it keeps the
+/// connection open until the task is aborted or the transport ends.
+/// Neither end changes the published state.
 ///
 /// rmcp sets no handshake timeout and does not guard `list_all_tools`
 /// against a server that repeats a cursor, so `deadline` bounds both.
 pub(crate) async fn run(
-    pack: PackId,
+    server: String,
     entry: RemoteEntry,
     deadline: Duration,
     state: watch::Sender<State>,
@@ -97,7 +97,7 @@ pub(crate) async fn run(
             Ok(Ok((service, tools))) => {
                 let ready = Ready {
                     peer: service.peer().clone(),
-                    tools: catalog(&pack, tools),
+                    tools: catalog(tools),
                 };
                 state.send_replace(State::Ready(ready));
                 // Holding the service keeps the session open; its end changes no state.
@@ -110,6 +110,7 @@ pub(crate) async fn run(
                 deadline.as_secs()
             ),
         };
+        tracing::warn!(%server, %reason, "the MCP server did not start; it is tried again");
         state.send_replace(State::Failed(reason));
         tokio::time::sleep(retry_delay(failures)).await;
         failures = failures.saturating_add(1);

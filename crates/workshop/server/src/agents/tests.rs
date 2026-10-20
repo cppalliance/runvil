@@ -4,12 +4,12 @@
 //! search provider installs web as unavailable and refuses the prompt
 //! naming that service, outside a runtime the services leave the runtime
 //! out, and the ask id names the ask tool under the name user-input was
-//! installed as. The `mcp.json` reader returns the servers sorted by
-//! name, and the install loop adds each under its lowercased name, skipping
-//! a name that does not parse or is taken. A remote `mcp.json` entry reads
-//! the runtime the server provides, so it fails only on its connection.
+//! installed as. The `mcp.json` reader returns the `mcpServers` object
+//! as it stands, or an empty one, and a prompt declaring `mcp` prepares,
+//! because the one mcp Pack reads the runtime the server provides. The
+//! servers value is the mcp Pack's configuration, so one it refuses
+//! refuses a prompt requiring `mcp`.
 
-use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -25,6 +25,7 @@ use runvil::model::{
 };
 use runvil::tools::ToolId;
 use runvil_plugin::{ServiceKey, TOKIO_RUNTIME};
+use serde_json::json;
 use workshop_agents::{Conversations, SessionState, TokioTimer};
 use workshop_registry::Registry;
 
@@ -42,16 +43,6 @@ fn requiring(pack: &str) -> String {
         # Browses\n\n## Only\n\n```lua\nreturn 'browsed'\n```\n"
     )
 }
-
-/// A local `mcp.json` entry, which `plugin-mcp` refuses at install, so a
-/// test installs it without opening a connection.
-fn local_entry() -> serde_json::Value {
-    serde_json::json!({ "command": "never-started" })
-}
-
-/// What `plugin-mcp` refuses `local_entry` with, which a run requiring the
-/// installed server is refused naming.
-const LOCAL_REFUSAL: &str = "local MCP servers (command) are not supported yet";
 
 /// Lists no model and refuses every round as `Unavailable`, so a run
 /// binds no model and nothing is fetched.
@@ -106,17 +97,6 @@ async fn run_prompt(host: &Arc<HostContext>, source: String) -> Option<RunOutcom
     recorder.outcome(conversation.run_id().expect("the recorder began the run"))
 }
 
-/// Whether a run requiring `pack` is refused as that Pack being
-/// installed but unavailable for the local-entry reason.
-async fn installed_as_a_refused_local_server(host: &Arc<HostContext>, pack: &str) -> bool {
-    match run_prompt(host, requiring(pack)).await {
-        Some(RunOutcome::Failed { message, .. }) => {
-            message.contains(&format!("- {pack} is unavailable: {LOCAL_REFUSAL}"))
-        }
-        _ => false,
-    }
-}
-
 /// An `mcp.json` file in a new directory holding `text`.
 fn mcp_file(text: &str) -> (tempfile::TempDir, std::path::PathBuf) {
     let dir = tempfile::TempDir::new().expect("tempdir");
@@ -155,7 +135,7 @@ async fn a_host_without_the_search_provider_refuses_a_prompt_requiring_web() {
     runtime_only
         .provide(&RUNTIME, Arc::new(tokio::runtime::Handle::current()))
         .expect("an empty map takes the runtime");
-    let (host, _ask) = with_plugins(runtime_only, Vec::new());
+    let (host, _ask) = with_plugins(runtime_only, json!({}));
 
     let outcome = run_prompt(&Arc::new(host), requiring("web")).await;
     let Some(RunOutcome::Failed { kind, message }) = outcome else {
@@ -190,15 +170,50 @@ fn outside_a_runtime_the_services_leave_the_runtime_out() {
     );
 }
 
+#[tokio::test]
+async fn a_prompt_declaring_mcp_prepares_on_the_runtime_the_server_provides() {
+    // The server's own `services` provides the runtime, and `plugin-mcp`
+    // reads it through a key of its own even with no servers, so only a
+    // run over both shows the two keys name the same service.
+    let (host, _ask) = host_context(&Registry::new(), None);
+    assert_eq!(
+        run_prompt(&Arc::new(host), requiring("mcp")).await,
+        Some(RunOutcome::Completed {
+            final_text: "browsed".to_owned(),
+        }),
+        "the server installs mcp once, and its construct finds the server's runtime"
+    );
+}
+
+#[tokio::test]
+async fn the_servers_value_is_the_mcp_packs_configuration() {
+    // A value that is neither null nor an object is the one configuration
+    // the construct refuses, so only that value reaching it fails the run.
+    let (host, _ask) = with_plugins(services(&Registry::new()), json!([]));
+
+    let outcome = run_prompt(&Arc::new(host), requiring("mcp")).await;
+    let Some(RunOutcome::Failed { kind, message }) = outcome else {
+        panic!("the run is refused as it prepares: {outcome:?}");
+    };
+    assert_eq!(kind, "RequirementsUnmet");
+    assert!(
+        message.contains("- mcp is unavailable: the MCP configuration must be a JSON object"),
+        "the refusal names the mcp Pack and its configuration rule: {message}"
+    );
+}
+
 #[test]
 fn no_setting_reads_no_file_and_gives_no_servers() {
-    assert!(read_mcp_servers(None).is_empty());
+    assert_eq!(read_mcp_servers(None), json!({}));
 }
 
 #[test]
 fn a_missing_mcp_file_gives_no_servers() {
     let dir = tempfile::TempDir::new().expect("tempdir");
-    assert!(read_mcp_servers(Some(&dir.path().join("absent.json"))).is_empty());
+    assert_eq!(
+        read_mcp_servers(Some(&dir.path().join("absent.json"))),
+        json!({})
+    );
 }
 
 #[test]
@@ -208,15 +223,16 @@ fn an_unreadable_mcp_file_gives_no_servers() {
     // than a missing file.
     let path = dir.path().join("mcp.json");
     std::fs::create_dir(&path).expect("directory in the file's place");
-    assert!(read_mcp_servers(Some(&path)).is_empty());
+    assert_eq!(read_mcp_servers(Some(&path)), json!({}));
 }
 
 #[test]
 fn a_malformed_mcp_file_gives_no_servers() {
     for text in ["{ \"mcpServers\": ", "[]", "{ \"mcpServers\": [] }"] {
         let (_dir, path) = mcp_file(text);
-        assert!(
-            read_mcp_servers(Some(&path)).is_empty(),
+        assert_eq!(
+            read_mcp_servers(Some(&path)),
+            json!({}),
             "`{text}` is not an object with an mcpServers object"
         );
     }
@@ -225,149 +241,38 @@ fn a_malformed_mcp_file_gives_no_servers() {
 #[test]
 fn a_file_without_mcp_servers_gives_no_servers() {
     let (_dir, path) = mcp_file(r#"{ "inputs": [] }"#);
-    assert!(read_mcp_servers(Some(&path)).is_empty());
+    assert_eq!(read_mcp_servers(Some(&path)), json!({}));
 }
 
 #[test]
 fn an_entry_that_is_not_an_object_is_handed_on_for_the_pack_to_refuse() {
-    let (_dir, path) = mcp_file(r#"{ "mcpServers": { "a": 1 } }"#);
+    let (_dir, path) = mcp_file(r#"{ "mcpServers": { "a": 1, "b": { "url": "x" } } }"#);
     assert_eq!(
         read_mcp_servers(Some(&path)),
-        [("a".to_owned(), serde_json::json!(1))],
+        json!({ "a": 1, "b": { "url": "x" } }),
         "one bad entry does not drop the file's other servers"
     );
 }
 
 #[test]
-fn a_valid_mcp_file_reads_back_sorted_by_name_and_ignores_other_keys() {
+fn a_valid_mcp_file_reads_back_its_servers_object_and_ignores_other_keys() {
     let (_dir, path) = mcp_file(
         r#"{
             "inputs": [{ "id": "token" }],
             "mcpServers": {
                 "wg21": { "url": "https://example.test/mcp" },
-                "github": { "command": "x", "args": ["a"] },
+                "GitHub": { "command": "x", "args": ["a"] },
                 "docs": { "url": "https://example.test/docs" }
             }
         }"#,
     );
-    let servers = read_mcp_servers(Some(&path));
-    let names: Vec<&str> = servers.iter().map(|(name, _)| name.as_str()).collect();
-    assert_eq!(names, ["docs", "github", "wg21"]);
     assert_eq!(
-        servers[1].1,
-        serde_json::json!({ "command": "x", "args": ["a"] }),
-        "each entry is handed on verbatim"
-    );
-}
-
-#[tokio::test]
-async fn each_entry_installs_once_under_its_lowercased_name() {
-    let (host, _ask) = with_plugins(
-        services(&Registry::new()),
-        vec![
-            ("GitHub".to_owned(), local_entry()),
-            ("WG21-Papers".to_owned(), local_entry()),
-        ],
-    );
-    let host = Arc::new(host);
-    assert!(installed_as_a_refused_local_server(&host, "github").await);
-    assert!(installed_as_a_refused_local_server(&host, "wg21-papers").await);
-}
-
-#[tokio::test]
-async fn a_name_that_does_not_parse_is_skipped_and_the_other_servers_install() {
-    let (host, _ask) = with_plugins(
-        services(&Registry::new()),
-        vec![
-            ("has/slash".to_owned(), local_entry()),
-            ("has space".to_owned(), local_entry()),
-            ("docs".to_owned(), local_entry()),
-        ],
-    );
-    assert!(
-        installed_as_a_refused_local_server(&Arc::new(host), "docs").await,
-        "the entry after the invalid names still installs"
-    );
-}
-
-#[tokio::test]
-async fn a_taken_name_or_punctuation_twin_is_skipped_and_the_other_servers_install() {
-    let (host, _ask) = with_plugins(
-        services(&Registry::new()),
-        vec![
-            ("web".to_owned(), local_entry()),
-            ("a-b".to_owned(), local_entry()),
-            ("A_B".to_owned(), local_entry()),
-            ("docs".to_owned(), local_entry()),
-        ],
-    );
-    let host = Arc::new(host);
-    assert!(installed_as_a_refused_local_server(&host, "a-b").await);
-    assert!(
-        !installed_as_a_refused_local_server(&host, "a_b").await,
-        "the twin of a-b is skipped, not installed beside it"
-    );
-    assert!(
-        installed_as_a_refused_local_server(&host, "docs").await,
-        "the entry after the skipped ones still installs"
-    );
-}
-
-#[tokio::test]
-async fn a_server_named_web_does_not_displace_the_web_pack() {
-    let (host, _ask) = with_plugins(
-        services(&Registry::new()),
-        vec![("web".to_owned(), local_entry())],
-    );
-    assert_eq!(
-        run_prompt(&Arc::new(host), requiring("web")).await,
-        Some(RunOutcome::Completed {
-            final_text: "browsed".to_owned(),
+        read_mcp_servers(Some(&path)),
+        json!({
+            "wg21": { "url": "https://example.test/mcp" },
+            "GitHub": { "command": "x", "args": ["a"] },
+            "docs": { "url": "https://example.test/docs" }
         }),
-        "web installs first, so the entry named web is the one refused"
-    );
-}
-
-#[tokio::test]
-async fn the_host_context_installs_the_servers_of_the_named_file() {
-    let (_dir, path) = mcp_file(r#"{ "mcpServers": { "GitHub": { "command": "x" } } }"#);
-    let (host, _ask) = host_context(&Registry::new(), Some(Path::new(&path)));
-    assert!(installed_as_a_refused_local_server(&Arc::new(host), "github").await);
-}
-
-/// A loopback URL nothing listens on: the port is bound to learn it, then
-/// freed, so a connection to it is refused at once.
-fn closed_loopback_url() -> String {
-    let listener = std::net::TcpListener::bind(("127.0.0.1", 0)).expect("bind a loopback port");
-    let port = listener.local_addr().expect("the bound address").port();
-    drop(listener);
-    format!("http://127.0.0.1:{port}/mcp")
-}
-
-#[tokio::test]
-async fn a_remote_mcp_entry_reads_the_runtime_the_server_provides() {
-    // The server's own `services` provides the runtime, and `plugin-mcp`
-    // reads it through a key of its own, so only a run over both shows the
-    // two keys name the same service.
-    let (host, _ask) = with_plugins(
-        services(&Registry::new()),
-        vec![(
-            "docs".to_owned(),
-            serde_json::json!({ "url": closed_loopback_url() }),
-        )],
-    );
-
-    let outcome = run_prompt(&Arc::new(host), requiring("docs")).await;
-    let Some(RunOutcome::Failed { kind, message }) = outcome else {
-        panic!("the run is refused as the closed port fails the handshake: {outcome:?}");
-    };
-    assert_eq!(kind, "RequirementsUnmet");
-    assert!(
-        message.contains("- docs is unavailable: the MCP handshake failed"),
-        "the server got past the runtime read and failed at the connection: {message}"
-    );
-    assert!(
-        !message.contains(TOKIO_RUNTIME),
-        "the server's runtime reaches plugin-mcp's key: {message}"
+        "the servers object is handed on verbatim, names and entries alike"
     );
 }
