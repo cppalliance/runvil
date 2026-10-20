@@ -42,6 +42,28 @@ fn tool_output_has_mandatory_trust() {
 }
 
 #[test]
+fn trusted_and_untrusted_outputs_carry_no_structured_json() {
+    use super::ToolOutput;
+    assert_eq!(ToolOutput::trusted("a").structured_json(), None);
+    assert_eq!(ToolOutput::untrusted("b").structured_json(), None);
+}
+
+#[test]
+fn with_structured_json_keeps_text_and_trust_and_returns_the_same_string() {
+    use super::{OutputTrust, ToolOutput};
+    let json = r#"{"content":[{"type":"text","text":"hi"}],"isError":false}"#;
+    for (base, trust) in [
+        (ToolOutput::trusted("t"), OutputTrust::Trusted),
+        (ToolOutput::untrusted("t"), OutputTrust::Untrusted),
+    ] {
+        let output = base.with_structured_json(json.to_owned());
+        assert_eq!(output.text(), "t");
+        assert_eq!(output.trust(), trust);
+        assert_eq!(output.structured_json(), Some(json));
+    }
+}
+
+#[test]
 fn output_trust_serializes_as_its_snake_case_name() {
     use super::OutputTrust;
     assert_wire(&OutputTrust::Trusted, r#""trusted""#);

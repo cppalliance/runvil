@@ -737,10 +737,12 @@ pub fn runvil::tools::ToolIdError::kind(&self) -> runvil::tools::ToolIdErrorKind
 pub fn runvil::tools::ToolInfo::new(id: runvil::tools::ToolId, description: impl core::convert::Into<alloc::string::String>, parameters_schema: serde_json::value::Value) -> runvil::tools::ToolInfo
 pub fn runvil::tools::ToolInfo::structured(self, structured: bool) -> runvil::tools::ToolInfo
 pub fn runvil::tools::ToolInfo::survives_stop(self, survives: bool) -> runvil::tools::ToolInfo
+pub fn runvil::tools::ToolOutput::structured_json(&self) -> core::option::Option<&str>
 pub fn runvil::tools::ToolOutput::text(&self) -> &str
 pub fn runvil::tools::ToolOutput::trust(&self) -> runvil::tools::OutputTrust
 pub fn runvil::tools::ToolOutput::trusted(text: impl core::convert::Into<alloc::string::String>) -> runvil::tools::ToolOutput
 pub fn runvil::tools::ToolOutput::untrusted(text: impl core::convert::Into<alloc::string::String>) -> runvil::tools::ToolOutput
+pub fn runvil::tools::ToolOutput::with_structured_json(self, json: alloc::string::String) -> runvil::tools::ToolOutput
 pub fn runvil::vfs::Access::append(&self, path: &str, contents: &[u8]) -> core::result::Result<(), runvil::vfs::VfsError>
 pub fn runvil::vfs::Access::close(self) -> core::result::Result<(), runvil::vfs::VfsError>
 pub fn runvil::vfs::Access::copy(&self, from: &str, to: &str) -> core::result::Result<(), runvil::vfs::VfsError>

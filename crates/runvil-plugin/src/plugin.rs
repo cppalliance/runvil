@@ -70,6 +70,11 @@ pub trait Plugin: Send + Sync {
     /// its origin, and the run's services. `args` is the JSON the model or
     /// the script passed.
     ///
+    /// An output may attach structured JSON text with
+    /// [`ToolOutput::with_structured_json`]. A script that issued the call
+    /// receives that text decoded; the model always receives the output's
+    /// text.
+    ///
     /// # Invariants
     ///
     /// - `call` must not block while polled. The Harness polls every
@@ -82,6 +87,9 @@ pub trait Plugin: Send + Sync {
     /// - `call` marks the trust of every output correctly. Output that
     ///   embeds data an attacker can influence is
     ///   [`ToolOutput::untrusted`].
+    /// - `call` attaches structured JSON text, a complete JSON document, to
+    ///   every successful output of a tool or to none of them, so the value a
+    ///   script receives keeps one type per tool.
     /// - `call` is cancellation-aware. The Harness drops the returned
     ///   future on a stop, when the run ends (a cancel included), and when
     ///   the task that made the call ends early: it is cancelled, its owner

@@ -20,11 +20,25 @@ pub enum OutputTrust {
 /// Build one with [`ToolOutput::trusted`] or [`ToolOutput::untrusted`]. The
 /// trust level travels with the text, so code that handles the output reads
 /// the level from the output itself.
+///
+/// An output may also carry structured JSON text, attached with
+/// [`ToolOutput::with_structured_json`], meant for a calling script. The
+/// model always receives [`ToolOutput::text`].
+///
+/// # Invariants
+///
+/// - The structured JSON text is a complete JSON document.
+/// - A tool that attaches structured JSON text to any output attaches it to
+///   every successful output, so the value a script receives keeps one type
+///   per tool.
+/// - A script receives the structured JSON text decoded and unwrapped, so the
+///   untrusted envelope does not cover it, whatever the output's trust.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct ToolOutput {
     text: String,
     trust: OutputTrust,
+    structured_json: Option<String>,
 }
 
 impl ToolOutput {
@@ -34,6 +48,7 @@ impl ToolOutput {
         ToolOutput {
             text: text.into(),
             trust: OutputTrust::Trusted,
+            structured_json: None,
         }
     }
 
@@ -43,6 +58,17 @@ impl ToolOutput {
         ToolOutput {
             text: text.into(),
             trust: OutputTrust::Untrusted,
+            structured_json: None,
+        }
+    }
+
+    /// Attaches `json`, a complete JSON document, as structured JSON text for
+    /// a calling script, keeping the text and trust.
+    #[must_use]
+    pub fn with_structured_json(self, json: String) -> ToolOutput {
+        ToolOutput {
+            structured_json: Some(json),
+            ..self
         }
     }
 
@@ -56,6 +82,12 @@ impl ToolOutput {
     #[must_use]
     pub fn trust(&self) -> OutputTrust {
         self.trust
+    }
+
+    /// Borrows the structured JSON text for a calling script, if attached.
+    #[must_use]
+    pub fn structured_json(&self) -> Option<&str> {
+        self.structured_json.as_deref()
     }
 }
 
