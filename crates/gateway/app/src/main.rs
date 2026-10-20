@@ -1,5 +1,6 @@
 //! The `runvil-gateway` binary:
-//! `runvil-gateway [--config PATH] [--profile NAME] [--no-tray] [--login] [--print-url] [--browser]`.
+//! `runvil-gateway [--config PATH] [--profile NAME] [--no-tray] [--login] [--print-url] [--browser]`,
+//! or `runvil-gateway diagnostics [--config PATH]`.
 //!
 //! This is a thin shell: it parses arguments into a typed `ServeOptions` and
 //! hands off to [`run_with_tray`], which owns the tokio runtime, provisioning,
@@ -21,7 +22,7 @@ use tracing_subscriber::Layer as _;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 
-use crate::cli::{LaunchCommand, ParseError, USAGE, parse_args};
+use crate::cli::{AppOptions, LaunchCommand};
 
 mod cli;
 
@@ -59,30 +60,30 @@ fn main() -> ExitCode {
         );
     }
 
-    let invocation = match parse_args(std::env::args_os()) {
-        Ok(invocation) => invocation,
-        Err(ParseError::Help) => {
-            println!("{USAGE}");
-            return ExitCode::SUCCESS;
-        }
-        Err(ParseError::Version) => {
-            println!("runvil-gateway {}", env!("CARGO_PKG_VERSION"));
-            return ExitCode::SUCCESS;
-        }
-        Err(ParseError::Usage(message)) => {
-            eprintln!("error: {message}");
-            eprintln!("{USAGE}");
-            return ExitCode::FAILURE;
+    let app_options = match AppOptions::from_args(std::env::args_os()) {
+        Ok(options) => options,
+
+        // clap returns `--help` and `--version` through the error channel.
+        // If `exit_code()` is `0` then clap returned `Err(DisplayHelp)` or
+        // `Err(DisplayVersion)` as a successful response and the program should
+        // exit successfully. Otherwise, there was an error parsing the command
+        // line args and the program should exit with a failure code.
+        Err(error) => {
+            let _ = error.print();
+            return match error.exit_code() {
+                0 => ExitCode::SUCCESS,
+                _ => ExitCode::FAILURE,
+            };
         }
     };
 
     // The diagnostics report is not a boot: it runs before the handoff
     // check and before logging starts, and never rotates a log, parses a
     // config, or mutates the state directory.
-    if invocation.command == LaunchCommand::Diagnostics {
+    if app_options.command == LaunchCommand::Diagnostics {
         print!(
             "{}",
-            gateway::diagnostics_json(invocation.serve.config_path)
+            gateway::diagnostics_json(app_options.serve.config_path)
         );
         return ExitCode::SUCCESS;
     }
@@ -97,13 +98,15 @@ fn main() -> ExitCode {
     // loser, recovery, bind, or publication. The lease holder re-resolves the
     // connection record; a loser waits only for the holder's validated record
     // and exits through this console-only path.
-    let _instance_lease = match settle_gateway_startup(&invocation.serve, OWNER_PUBLICATION_TIMEOUT)
-    {
+    let _instance_lease = match settle_gateway_startup(
+        &app_options.serve,
+        OWNER_PUBLICATION_TIMEOUT,
+    ) {
         Ok(GatewayStartup::Boot(lease)) => lease,
         Ok(GatewayStartup::OpenSettings(url)) => {
-            if invocation.print_url {
+            if app_options.print_url {
                 println!("{url}");
-            } else if invocation.login || invocation.serve.supervised {
+            } else if app_options.login || app_options.serve.supervised {
                 // A login-triggered start never opens a browser, and a
                 // supervised child leaves what the user sees to its
                 // supervisor; the running gateway leaves this launch
@@ -130,12 +133,12 @@ fn main() -> ExitCode {
     // out from under it.
     let logging = init_logging();
 
-    let result = if invocation.print_url {
-        run_printing_url(&invocation.serve)
-    } else if invocation.tray {
-        run_with_tray(&invocation.serve)
+    let result = if app_options.print_url {
+        run_printing_url(&app_options.serve)
+    } else if app_options.tray {
+        run_with_tray(&app_options.serve)
     } else {
-        run(&invocation.serve)
+        run(&app_options.serve)
     };
     let exit = match result {
         Ok(shutdown_reason) => {

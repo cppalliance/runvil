@@ -158,6 +158,7 @@ sha2 = "0.11"
 hmac = "0.13"
 subtle = "2.6"
 dotenvy = "0.15"
+clap = { version = "4.6", features = ["derive"] }
 tar = { version = "0.4.46", default-features = false }
 zip = { version = "9.0.4", default-features = false, features = ["deflate-flate2"] }
 # Loads the packaged whisper.cpp runtime without linking it into Cargo builds.

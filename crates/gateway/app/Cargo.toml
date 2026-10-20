@@ -28,6 +28,7 @@ build-ceiling.workspace = true
 # src/main.rs, enabled only by the `test-fixtures` feature.
 anyhow = { workspace = true, optional = true }
 axum.workspace = true
+clap.workspace = true
 dotenvy.workspace = true
 futures-util.workspace = true
 # GPU name and VRAM for GET /admin/system; probes NVML at runtime, so builds
