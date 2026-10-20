@@ -1,19 +1,19 @@
-//! The Host's installed Plugins: [`HostContext`], built once at startup
-//! over a [`PluginRegistry`] and shared by every run, and the snapshot
+//! The Host's installed Packs: [`HostContext`], built once at startup
+//! over a [`PackRegistry`] and shared by every run, and the snapshot
 //! each run takes of it.
 //!
-//! A Host installs a Plugin by the FQN the registry holds, under a Plugin
-//! id, and install calls the Plugin's `construct` once to build the one
-//! Plugin object every run shares. A construct failure is not an install
-//! error: the Plugin is stored as unavailable with the failure as its
+//! A Host installs a Pack by the FQN the registry holds, under a Pack
+//! id, and install calls the Pack's `construct` once to build the one
+//! Pack object every run shares. A construct failure is not an install
+//! error: the Pack is stored as unavailable with the failure as its
 //! reason, and every run that needs it is refused naming that reason.
-//! Before each run, the Harness's preparation waits for every built Plugin
-//! to be ready, and a Plugin whose `ready` fails is unavailable to that run
+//! Before each run, the Harness's preparation waits for every built Pack
+//! to be ready, and a Pack whose `ready` fails is unavailable to that run
 //! the same way.
-//! Then it takes a snapshot of every installed Plugin with the run's own
+//! Then it takes a snapshot of every installed Pack with the run's own
 //! services: the catalog the Engine offers the run, the preludes of
-//! the Plugins the prompt declares, the requirements the snapshot cannot
-//! meet, and the performer that sends each tool call to the Plugin its id
+//! the Packs the prompt declares, the requirements the snapshot cannot
+//! meet, and the performer that sends each tool call to the Pack its id
 //! names.
 
 use std::collections::BTreeMap;
@@ -24,9 +24,9 @@ use std::sync::Arc;
 use futures_util::future::{Either, join_all, select};
 use runvil::cancel::CancelHandle;
 use runvil::{Prompt, Requirements};
-use runvil_plugin::{HostServices, PackId, Plugin, PluginInfo};
+use runvil_plugin::{HostServices, Pack, PackId, PackInfo};
 
-use crate::registry::{PluginKind, PluginRegistry};
+use crate::registry::{PackOrigin, PackRegistry};
 
 #[path = "host-run.rs"]
 mod run;
@@ -37,34 +37,34 @@ pub(crate) use run::HostRunContext;
 #[path = "host-tests.rs"]
 mod tests;
 
-/// Every Plugin a Host installed, the registry it installed them from,
+/// Every Pack a Host installed, the registry it installed them from,
 /// and the Host-wide services their `construct` functions read.
 ///
-/// A Host builds one at startup, installs its Plugins, and shares it with
-/// every Harness behind an `Arc`. Dropping it drops the Plugin objects,
-/// which is where a Plugin cleans up.
+/// A Host builds one at startup, installs its Packs, and shares it with
+/// every Harness behind an `Arc`. Dropping it drops the Pack objects,
+/// which is where a Pack cleans up.
 pub struct HostContext {
-    packs: PluginRegistry,
+    packs: PackRegistry,
     services: HostServices,
     installed: Vec<Installed>,
 }
 
-/// One installed Plugin: its Plugin id, its `PluginInfo`, and the built
+/// One installed Pack: its Pack id, its `PackInfo`, and the built
 /// object or the reason building it failed.
 struct Installed {
     name: PackId,
-    info: PluginInfo,
-    plugin: Result<Arc<dyn Plugin>, String>,
+    info: PackInfo,
+    pack: Result<Arc<dyn Pack>, String>,
 }
 
 impl HostContext {
-    /// A context with no Plugins, which installs from the Plugins
-    /// `packs` holds and hands `services` to each Plugin's `construct`.
+    /// A context with no Packs, which installs from the Packs
+    /// `packs` holds and hands `services` to each Pack's `construct`.
     ///
     /// `services` are Host-wide, such as a search provider. They reach
     /// only `construct`; a tool call reads the run's own services instead.
     #[must_use]
-    pub fn new(packs: PluginRegistry, services: HostServices) -> HostContext {
+    pub fn new(packs: PackRegistry, services: HostServices) -> HostContext {
         HostContext {
             packs,
             services,
@@ -72,21 +72,21 @@ impl HostContext {
         }
     }
 
-    /// Builds the Plugin the registry holds as `fqn` and adds it under
+    /// Builds the Pack the registry holds as `fqn` and adds it under
     /// `name`, or under the FQN's second segment when `name` is `None`,
-    /// and returns the Plugin id it used.
+    /// and returns the Pack id it used.
     ///
-    /// `construct` runs once, here, with the Plugin id, `config`, and the
+    /// `construct` runs once, here, with the Pack id, `config`, and the
     /// Host-wide services. A `construct` failure is not an error here: the
-    /// Plugin is stored as unavailable, with the failure as the reason a
+    /// Pack is stored as unavailable, with the failure as the reason a
     /// run that needs it is refused.
     ///
     /// # Errors
     /// Returns [`InstallError::UnknownPlugin`] when the registry does not
     /// hold `fqn`, [`InstallError::ReservedName`] when a built-in is asked
-    /// for under a Plugin id other than its own or another Plugin under a
-    /// built-in's Plugin id, and [`InstallError::NameTaken`] when the
-    /// Plugin id is installed already or differs from an installed one
+    /// for under a Pack id other than its own or another Pack under a
+    /// built-in's Pack id, and [`InstallError::NameTaken`] when the
+    /// Pack id is installed already or differs from an installed one
     /// only by `-`, `_`, or `.`.
     pub fn install(
         &mut self,
@@ -101,8 +101,8 @@ impl HostContext {
         };
         let name = name.unwrap_or_else(|| default.clone());
         let reserved = match kind {
-            PluginKind::Builtin => name != *default,
-            PluginKind::Linked => self.packs.reserves(&name),
+            PackOrigin::Builtin => name != *default,
+            PackOrigin::Linked => self.packs.reserves(&name),
         };
         if reserved {
             return Err(InstallError::ReservedName {
@@ -121,34 +121,34 @@ impl HostContext {
                 existing: existing.name.clone(),
             });
         }
-        let plugin = (info.construct)(&name, config, &self.services).map_err(|error| {
+        let pack = (info.construct)(&name, config, &self.services).map_err(|error| {
             tracing::warn!(
-                plugin = %name,
+                pack = %name,
                 fqn = info.fqn,
                 %error,
-                "Plugin construct failed; it is installed as unavailable"
+                "Pack construct failed; it is installed as unavailable"
             );
             error.to_string()
         });
         self.installed.push(Installed {
             name: name.clone(),
             info,
-            plugin,
+            pack,
         });
         Ok(name)
     }
 
-    /// Waits until every built Plugin's `ready` resolves, polling them
+    /// Waits until every built Pack's `ready` resolves, polling them
     /// together, and returns the reason of each one that will not be
     /// ready, by name.
     ///
-    /// A cancel on `cancel` ends the wait with no failures, so each Plugin
+    /// A cancel on `cancel` ends the wait with no failures, so each Pack
     /// is snapshotted as it stands, and a run cancelled here ends
     /// cancelled whatever the snapshot holds.
     pub(crate) async fn wait_ready(&self, cancel: &CancelHandle) -> BTreeMap<PackId, String> {
         let waits = self.installed.iter().filter_map(|installed| {
-            let plugin = installed.plugin.as_ref().ok()?;
-            Some(async move { (&installed.name, plugin.ready().await) })
+            let pack = installed.pack.as_ref().ok()?;
+            Some(async move { (&installed.name, pack.ready().await) })
         });
         let joined = pin!(join_all(waits));
         // The cancel arm is polled first, so a run cancelled already does
@@ -160,9 +160,9 @@ impl HostContext {
                 .filter_map(|(name, result)| {
                     let error = result.err()?;
                     tracing::warn!(
-                        plugin = %name,
+                        pack = %name,
                         %error,
-                        "Plugin will not be ready; this run treats it as unavailable"
+                        "Pack will not be ready; this run treats it as unavailable"
                     );
                     Some((name.clone(), error.to_string()))
                 })
@@ -170,17 +170,17 @@ impl HostContext {
         }
     }
 
-    /// Takes one run's snapshot of every installed Plugin with `services`,
+    /// Takes one run's snapshot of every installed Pack with `services`,
     /// the run's own services, and reports the requirements it cannot meet
     /// for `prompt`.
     ///
-    /// `failures` holds the reason of each Plugin whose `ready` failed
+    /// `failures` holds the reason of each Pack whose `ready` failed
     /// before this run, which the run treats as unavailable. The snapshot
-    /// gives the run's catalog, which holds every usable Plugin's tools,
-    /// declared or not, its roster, which names every installed Plugin with
+    /// gives the run's catalog, which holds every usable Pack's tools,
+    /// declared or not, its roster, which names every installed Pack with
     /// the reason of each one that can't serve, and its declared preludes,
-    /// the declared, usable Plugins', in declaration order. It also performs
-    /// the run's tool calls. The requirements cover every Plugin the prompt
+    /// the declared, usable Packs', in declaration order. It also performs
+    /// the run's tool calls. The requirements cover every Pack the prompt
     /// declares.
     pub(crate) fn begin_run(
         &self,
@@ -191,7 +191,7 @@ impl HostContext {
         let run = HostRunContext::snapshot(
             self.installed
                 .iter()
-                .map(|installed| (&installed.name, installed.info, &installed.plugin)),
+                .map(|installed| (&installed.name, installed.info, &installed.pack)),
             services,
             failures,
         );
@@ -207,68 +207,68 @@ impl fmt::Debug for HostContext {
         let installed: Vec<(&PackId, bool)> = self
             .installed
             .iter()
-            .map(|installed| (&installed.name, installed.plugin.is_ok()))
+            .map(|installed| (&installed.name, installed.pack.is_ok()))
             .collect();
         f.debug_struct("HostContext")
             .field("services", &self.services)
             .field("installed", &installed)
-            .field("plugins", &self.packs)
+            .field("packs", &self.packs)
             .finish()
     }
 }
 
-/// A mistake [`PluginRegistry::add`] or [`HostContext::install`] refuses
+/// A mistake [`PackRegistry::add`] or [`HostContext::install`] refuses
 /// outright, so the Host's author sees it at startup.
 ///
-/// A Plugin whose `construct` fails is not one of these; it is installed
+/// A Pack whose `construct` fails is not one of these; it is installed
 /// as unavailable instead.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 #[non_exhaustive]
 pub enum InstallError {
-    /// The added Plugin's FQN is not `vendor/name`, or a segment of it is
+    /// The added Pack's FQN is not `vendor/name`, or a segment of it is
     /// not a valid one-segment name.
-    #[error("Plugin fully qualified name `{fqn}` is not a vendor/name pair")]
+    #[error("Pack fully qualified name `{fqn}` is not a vendor/name pair")]
     InvalidFqn {
-        /// The FQN as its `PluginInfo` spells it.
+        /// The FQN as its `PackInfo` spells it.
         fqn: &'static str,
     },
-    /// The registry holds the added Plugin's FQN already, as a built-in or
-    /// as a Plugin added before.
-    #[error("Plugin `{fqn}` is already in the registry")]
-    DuplicatePlugin {
-        /// The FQN as its `PluginInfo` spells it.
+    /// The registry holds the added Pack's FQN already, as a built-in or
+    /// as a Pack added before.
+    #[error("Pack `{fqn}` is already in the registry")]
+    DuplicatePack {
+        /// The FQN as its `PackInfo` spells it.
         fqn: &'static str,
     },
-    /// The registry holds no Plugin with the FQN the install asked for.
+    /// The registry holds no Pack with the FQN the install asked for.
     #[error(
-        "Plugin `{fqn}` is not in the registry; add it with PluginRegistry::add before building the HostContext"
+        "Pack `{fqn}` is not in the registry; add it with PackRegistry::add before building the HostContext"
     )]
     UnknownPlugin {
         /// The FQN the install asked for.
         fqn: String,
     },
-    /// A built-in was asked for under a Plugin id other than its own, or
-    /// another Plugin under a built-in's Plugin id.
+    /// A built-in was asked for under a Pack id other than its own, or
+    /// another Pack under a built-in's Pack id.
     #[error(
-        "Plugin `{fqn}` cannot be installed as {name}: a built-in Plugin keeps its own Plugin id, and no other Plugin may take it"
+        "Pack `{fqn}` cannot be installed as {name}: a built-in Pack keeps its own Pack id, and no other Pack may take it"
     )]
     ReservedName {
-        /// The FQN as its `PluginInfo` spells it.
+        /// The FQN as its `PackInfo` spells it.
         fqn: &'static str,
-        /// The Plugin id the install asked for.
+        /// The Pack id the install asked for.
         name: PackId,
     },
-    /// The Plugin id is installed already (`existing` equals `name`), or
+    /// The Pack id is installed already (`existing` equals `name`), or
     /// it differs from the installed `existing` only by `-`, `_`, or `.`,
     /// as `user-input` and `user_input` do, which a model reading the tool
     /// list cannot tell apart.
     #[error(
-        "Plugin id {name} is taken by the installed {existing}; install it under another Plugin id"
+        "Pack id {name} is taken by the installed {existing}; install it under another Pack id"
     )]
     NameTaken {
-        /// The Plugin id the install asked for.
+        /// The Pack id the install asked for.
         name: PackId,
-        /// The installed Plugin id it collides with.
+        /// The installed Pack id it collides with.
         existing: PackId,
     },
 }

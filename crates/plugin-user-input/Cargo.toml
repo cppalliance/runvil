@@ -10,7 +10,7 @@ publish = false
 # `InputBroker`, the trait a Host implements to deliver the operator's
 # answer, is an `async_trait` trait.
 async-trait.workspace = true
-# The Plugin contract: `PluginInfo`, the Plugin trait, the context a
+# The Plugin contract: `PackInfo`, the Pack trait, the context a
 # call is lent, and the tool and service vocabulary.
 runvil-plugin.workspace = true
 serde_json.workspace = true

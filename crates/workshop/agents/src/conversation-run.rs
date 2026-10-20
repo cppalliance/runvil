@@ -5,7 +5,7 @@
 
 use std::sync::Arc;
 
-use harness::plugin::HostServices;
+use harness::pack::HostServices;
 use harness::record::{RunOutcome, RunRecorder};
 use harness::{Harness, HarnessError, RunReport, RunRequest, display_chain};
 use plugin_user_input::{INPUT_BROKER, InputBroker};

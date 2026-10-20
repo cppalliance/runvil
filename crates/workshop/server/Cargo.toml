@@ -18,12 +18,12 @@ harness.workspace = true
 # The Gateway web search client the agent sessions' search provider
 # sends each search through.
 harness-gateway-client.workspace = true
-# The two Plugins every agent run's Host installs: `runvil/web`, with
+# The two Packs every agent run's Host installs: `runvil/web`, with
 # the search-provider and runtime services it reads, and
 # `runvil/user-input`, whose ask tool id the agent socket frames by.
 plugin-user-input.workspace = true
 plugin-web.workspace = true
-# The MCP client Plugin, installed once per server of the configured
+# The MCP client Pack, installed once per server of the configured
 # `mcp.json`.
 plugin-mcp.workspace = true
 # The Engine's public API: the events the agent socket frames as

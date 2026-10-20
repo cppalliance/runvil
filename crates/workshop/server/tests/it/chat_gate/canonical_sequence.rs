@@ -115,8 +115,8 @@ async fn gate_history_accumulates_across_three_turns_byte_exact() {
 }
 
 /// GATE 12 - web tools. The chat's `## Conversation` section offers the
-/// `web` Plugin, so the rounds its model loop sends advertise the
-/// Plugin's fetch and search tools; an offer in the H1 would not reach
+/// `web` Pack, so the rounds its model loop sends advertise the
+/// Pack's fetch and search tools; an offer in the H1 would not reach
 /// them.
 #[tokio::test]
 async fn gate_a_conversation_round_advertises_the_web_tools() {

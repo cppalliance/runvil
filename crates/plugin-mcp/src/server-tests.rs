@@ -18,16 +18,16 @@ fn plain(name: &str) -> Tool {
     tool(name, &json!({}))
 }
 
-fn ids(plugin: &str, tools: Vec<Tool>) -> Vec<String> {
-    let plugin = PackId::parse(plugin).expect("a Plugin id parses");
-    catalog(&plugin, tools)
+fn ids(pack: &str, tools: Vec<Tool>) -> Vec<String> {
+    let pack = PackId::parse(pack).expect("a Pack id parses");
+    catalog(&pack, tools)
         .iter()
         .map(|listed| listed.info.id.to_string())
         .collect()
 }
 
 #[test]
-fn a_tool_name_is_lowercased_under_the_plugin_name() {
+fn a_tool_name_is_lowercased_under_the_pack_name() {
     assert_eq!(
         ids(
             "papers",
@@ -39,8 +39,8 @@ fn a_tool_name_is_lowercased_under_the_plugin_name() {
 
 #[test]
 fn the_original_name_is_kept_for_the_call() {
-    let plugin = PackId::parse("papers").expect("parses");
-    let listed = catalog(&plugin, vec![plain("Get_Paper")]);
+    let pack = PackId::parse("papers").expect("parses");
+    let listed = catalog(&pack, vec![plain("Get_Paper")]);
     assert_eq!(listed[0].mcp_name, "Get_Paper");
 }
 
@@ -63,9 +63,9 @@ fn a_name_that_is_still_invalid_after_lowercasing_is_dropped() {
 
 #[test]
 fn two_names_that_collide_after_lowercasing_keep_the_first() {
-    let plugin = PackId::parse("papers").expect("parses");
+    let pack = PackId::parse("papers").expect("parses");
     let listed = catalog(
-        &plugin,
+        &pack,
         vec![plain("Search"), plain("other"), plain("SEARCH")],
     );
     let kept: Vec<_> = listed.iter().map(|l| l.mcp_name.as_str()).collect();
@@ -74,9 +74,9 @@ fn two_names_that_collide_after_lowercasing_keep_the_first() {
 
 #[test]
 fn the_description_is_the_description_else_the_title_else_the_name() {
-    let plugin = PackId::parse("papers").expect("parses");
+    let pack = PackId::parse("papers").expect("parses");
     let listed = catalog(
-        &plugin,
+        &pack,
         vec![
             tool("a", &json!({ "description": "does a", "title": "A" })),
             tool("b", &json!({ "title": "Title B" })),
@@ -89,12 +89,9 @@ fn the_description_is_the_description_else_the_title_else_the_name() {
 
 #[test]
 fn the_parameters_are_the_input_schema_and_the_tool_is_plain_and_stoppable() {
-    let plugin = PackId::parse("papers").expect("parses");
+    let pack = PackId::parse("papers").expect("parses");
     let schema = json!({ "type": "object", "properties": { "id": { "type": "string" } }, "required": ["id"] });
-    let listed = catalog(
-        &plugin,
-        vec![tool("get", &json!({ "inputSchema": schema }))],
-    );
+    let listed = catalog(&pack, vec![tool("get", &json!({ "inputSchema": schema }))]);
     let info = &listed[0].info;
     assert_eq!(info.parameters_schema, schema);
     assert!(!info.structured_output);

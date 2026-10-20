@@ -15,7 +15,7 @@
 //! the model-safe tool error, and [`packs`] is the Pack
 //! identity vocabulary, the [`PackId`](packs::PackId) a
 //! prompt declares and a tool id sits under. The implementation trait
-//! behind them (`Plugin`) is the Pack contract's, in
+//! behind them (`Pack`) is the Plugin contract's, in
 //! `runvil-plugin`; the Engine issues effects naming ids and never
 //! holds an implementation. [`ids`] is the hierarchical, deterministic
 //! identity of a run's chains and tasks and the [`Provenance`](ids::Provenance)

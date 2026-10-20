@@ -1,4 +1,4 @@
-//! A Plugin's prelude through preparation: the prelude its `PluginInfo` names
+//! A Pack's prelude through preparation: the prelude its `PackInfo` names
 //! reaches every section VM of the prepared run, and each tool call a
 //! prelude function makes is recorded as a `ToolCall` effect attributed to
 //! the calling script, its execution, and its section. Preludes install in
@@ -8,10 +8,10 @@ use super::*;
 
 /// The prelude the speaker contributes: one table global whose function
 /// calls the speaker's echo tool under the name it was installed as.
-const SPEAKER_PRELUDE: &str = "local plugin = ...\n\
+const SPEAKER_PRELUDE: &str = "local pack = ...\n\
     speaker = {}\n\
     function speaker.say(value)\n\
-      return tools.call(plugin .. '/echo', { value = value })\n\
+      return tools.call(pack .. '/echo', { value = value })\n\
     end\n";
 
 /// A prompt declaring the speaker, binding none of its tools, and calling
@@ -24,9 +24,9 @@ const SPEAKS: &str = "---\nname: speaks\ndescription: d\nrunvil: 0\n\
     local sealed = not pcall(function() speaker.say = nil end)\n\
     return speaker.say('two') .. '|' .. tostring(sealed)\n```\n";
 
-/// The fixture Plugin `speaker`: the echo tool and a prelude that calls
+/// The fixture Pack `speaker`: the echo tool and a prelude that calls
 /// it.
-const SPEAKER: PluginInfo = echo_plugin("tests/speaker", Some(SPEAKER_PRELUDE));
+const SPEAKER: PackInfo = echo_pack("tests/speaker", Some(SPEAKER_PRELUDE));
 
 /// The logged record of the speaker's echo called with `value` from
 /// `section` by the section's script.
@@ -78,7 +78,7 @@ async fn a_preludes_tool_calls_are_recorded_as_script_calls_from_the_section_tha
 
 #[tokio::test]
 async fn preludes_install_in_the_prompts_declaration_order_not_the_install_order() {
-    let infos = ["tests/first", "tests/second"].map(|fqn| echo_plugin(fqn, Some("shared = 1\n")));
+    let infos = ["tests/first", "tests/second"].map(|fqn| echo_pack(fqn, Some("shared = 1\n")));
     let mut host = HostContext::new(registry(&infos), HostServices::new());
     for info in infos {
         host.install(info.fqn, None, Value::Null).unwrap();
@@ -95,6 +95,6 @@ async fn preludes_install_in_the_prompts_declaration_order_not_the_install_order
             "Pack `first`: its prelude defines the global `shared`, \
              which Pack `second`'s prelude already defines"
         ),
-        "the second-declared Plugin's prelude ran second: {message}"
+        "the second-declared Pack's prelude ran second: {message}"
     );
 }

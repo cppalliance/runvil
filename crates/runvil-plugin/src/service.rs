@@ -1,10 +1,10 @@
-//! Host services: typed objects the Host hands to the Plugins it
+//! Host services: typed objects the Host hands to the Packs it
 //! installs, each under a named id.
 //!
-//! A Plugin names the per-run services its calls read as [`ServiceId`]s,
+//! A Pack names the per-run services its calls read as [`ServiceId`]s,
 //! and reads a service through a [`ServiceKey`], which binds an id
 //! literal to the provider's Rust type. The Host fills two
-//! [`HostServices`] maps: the Host-wide one a Plugin's `construct` reads,
+//! [`HostServices`] maps: the Host-wide one a Pack's `construct` reads,
 //! and each run's own, which its calls read.
 //!
 //! An id literal is a [`GlobalName`] with exactly one `/`, as in
@@ -75,7 +75,7 @@ impl fmt::Display for ServiceId {
 /// provider supplies.
 ///
 /// The crate that defines a service declares its key once, as a `const`.
-/// The Host provides the service under that key, and a Plugin reads
+/// The Host provides the service under that key, and a Pack reads
 /// the service through the same key.
 pub struct ServiceKey<T: ?Sized + Send + Sync + 'static> {
     id: ServiceId,
@@ -122,7 +122,7 @@ impl<T: ?Sized + Send + Sync + 'static> fmt::Debug for ServiceKey<T> {
 /// The id literal of the Host-wide service that supplies the Host's
 /// runtime as a `tokio::runtime::Handle`.
 ///
-/// A Plugin that runs on tokio, and the Host that provides the service,
+/// A Pack that runs on tokio, and the Host that provides the service,
 /// each build `ServiceKey::<Handle>::new(TOKIO_RUNTIME)`. This crate
 /// names no tokio type, so nothing here checks the provider's type: a
 /// provider supplied as any other type reads as missing, because

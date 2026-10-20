@@ -11,7 +11,7 @@ publish = false
 [dependencies]
 runvil-types.workspace = true
 runvil-vfs.workspace = true
-# The JSON a Plugin's configuration and every tool call's arguments arrive as.
+# The JSON a Pack's configuration and every tool call's arguments arrive as.
 serde_json.workspace = true
 
 [features]

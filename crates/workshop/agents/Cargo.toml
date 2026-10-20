@@ -13,7 +13,7 @@ async-trait.workspace = true
 # The Harness's public API: the per-run Harness a conversation drives, its
 # control, the recorder tee's trait, and the run's service map.
 harness.workspace = true
-# The user-input Plugin: the input broker's trait and the key a run's
+# The user-input Pack: the input broker's trait and the key a run's
 # broker is provided under.
 plugin-user-input.workspace = true
 # The Engine's public API: the events a conversation observes, and the

@@ -1,6 +1,6 @@
-//! A fixture Plugin crate's whole Plugin side: a `PLUGIN` constant, a
+//! A fixture Plugin crate's whole Pack side: a `PLUGIN` constant, a
 //! `construct` that reads a Host-wide service and names its tool under the
-//! name the Host chose, and an `impl Plugin` whose `call` reads a per-run
+//! name the Host chose, and an `impl Pack` whose `call` reads a per-run
 //! service through the context it is lent.
 
 use std::future::Future;
@@ -10,7 +10,7 @@ use std::task::{Context, Poll, Waker};
 
 use runvil_plugin::testing::TestCall;
 use runvil_plugin::{
-    HostServices, OutputTrust, PackId, Plugin, PluginFuture, PluginInfo, ServiceId, ServiceKey,
+    HostServices, OutputTrust, Pack, PackFuture, PackId, PackInfo, ServiceId, ServiceKey,
     ToolContext, ToolError, ToolErrorKind, ToolId, ToolInfo, ToolOutput,
 };
 use serde_json::{Value, json};
@@ -23,8 +23,8 @@ const VISITOR: ServiceKey<str> = ServiceKey::new("acme/visitor");
 
 const NEEDS: &[ServiceId] = &[VISITOR.id()];
 
-const PLUGIN: PluginInfo = PluginInfo::new("acme/greeter", construct)
-    .prelude("local plugin = ...\n")
+const PLUGIN: PackInfo = PackInfo::new("acme/greeter", construct)
+    .prelude("local pack = ...\n")
     .needs(NEEDS);
 
 /// The one object every run shares.
@@ -35,13 +35,13 @@ struct Greeter {
 
 #[expect(
     clippy::needless_pass_by_value,
-    reason = "the PluginInfo construct signature fixes the argument types"
+    reason = "the PackInfo construct signature fixes the argument types"
 )]
 fn construct(
     name: &PackId,
     config: Value,
     services: &HostServices,
-) -> Result<Arc<dyn Plugin>, ToolError> {
+) -> Result<Arc<dyn Pack>, ToolError> {
     if !config.is_null() {
         return Err(ToolError::message("greeter takes no configuration"));
     }
@@ -59,7 +59,7 @@ fn construct(
     Ok(Arc::new(Greeter { greeting, tools }))
 }
 
-impl Plugin for Greeter {
+impl Pack for Greeter {
     fn tools(&self) -> Vec<ToolInfo> {
         self.tools.clone()
     }
@@ -68,7 +68,7 @@ impl Plugin for Greeter {
         &'a self,
         cx: ToolContext<'a>,
         args: Value,
-    ) -> PluginFuture<'a, Result<ToolOutput, ToolError>> {
+    ) -> PackFuture<'a, Result<ToolOutput, ToolError>> {
         Box::pin(async move {
             match cx.tool().name() {
                 "greet" => {
@@ -108,12 +108,12 @@ fn host_wide() -> HostServices {
     services
 }
 
-fn installed_as(name: &str) -> Arc<dyn Plugin> {
-    let name = PackId::parse(name).expect("a one-segment Plugin id parses");
-    let Ok(plugin) = (PLUGIN.construct)(&name, Value::Null, &host_wide()) else {
+fn installed_as(name: &str) -> Arc<dyn Pack> {
+    let name = PackId::parse(name).expect("a one-segment Pack id parses");
+    let Ok(pack) = (PLUGIN.construct)(&name, Value::Null, &host_wide()) else {
         panic!("construct succeeds when its Host-wide service is provided");
     };
-    plugin
+    pack
 }
 
 #[test]
@@ -125,7 +125,7 @@ fn construct_names_the_tools_under_the_name_the_host_chose() {
 
 #[test]
 fn construct_fails_with_a_tool_error_when_a_host_wide_service_is_missing() {
-    let name = PackId::parse("greeter").expect("a one-segment Plugin id parses");
+    let name = PackId::parse("greeter").expect("a one-segment Pack id parses");
     let Err(error) = (PLUGIN.construct)(&name, Value::Null, &HostServices::new()) else {
         panic!("construct fails without its Host-wide service");
     };
@@ -136,62 +136,62 @@ fn construct_fails_with_a_tool_error_when_a_host_wide_service_is_missing() {
 }
 
 #[test]
-fn a_call_through_dyn_plugin_answers_from_the_context_it_is_lent() {
-    let plugin = installed_as("greeter");
-    let tool = plugin.tools()[0].id.clone();
+fn a_call_through_dyn_pack_answers_from_the_context_it_is_lent() {
+    let pack = installed_as("greeter");
+    let tool = pack.tools()[0].id.clone();
     let mut run = HostServices::new();
     run.provide(&VISITOR, Arc::from("Ada"))
         .expect("a valid, new id is accepted");
     let call = TestCall::new(tool).with_services(run);
-    let output = block_on(plugin.call(call.context(), json!({"mark": "!"})))
-        .expect("the greet call succeeds");
+    let output =
+        block_on(pack.call(call.context(), json!({"mark": "!"}))).expect("the greet call succeeds");
     assert_eq!(output.text(), "Hello, Ada!");
     assert_eq!(output.trust(), OutputTrust::Untrusted);
 }
 
 #[test]
 fn a_call_without_the_per_run_service_it_needs_fails() {
-    let plugin = installed_as("greeter");
-    let call = TestCall::new(plugin.tools()[0].id.clone());
-    let error = block_on(plugin.call(call.context(), json!({})))
+    let pack = installed_as("greeter");
+    let call = TestCall::new(pack.tools()[0].id.clone());
+    let error = block_on(pack.call(call.context(), json!({})))
         .expect_err("the greet call fails without a visitor");
     assert_eq!(error.to_string(), "no visitor is in this run");
 }
 
 #[test]
-fn plugin_info_from_new_has_no_prelude_and_no_needs_until_set() {
-    const BARE: PluginInfo = PluginInfo::new("acme/bare", construct);
-    const FULL: PluginInfo = PluginInfo::new("acme/full", construct)
-        .prelude("local plugin = ...\n")
+fn pack_info_from_new_has_no_prelude_and_no_needs_until_set() {
+    const BARE: PackInfo = PackInfo::new("acme/bare", construct);
+    const FULL: PackInfo = PackInfo::new("acme/full", construct)
+        .prelude("local pack = ...\n")
         .needs(NEEDS);
 
     assert_eq!(BARE.fqn, "acme/bare");
     assert_eq!(BARE.prelude, None);
     assert!(BARE.needs.is_empty());
     assert_eq!(FULL.fqn, "acme/full");
-    assert_eq!(FULL.prelude, Some("local plugin = ...\n"));
+    assert_eq!(FULL.prelude, Some("local pack = ...\n"));
     assert_eq!(FULL.needs, [VISITOR.id()]);
-    let name = PackId::parse("hi").expect("a one-segment Plugin id parses");
+    let name = PackId::parse("hi").expect("a one-segment Pack id parses");
     for info in [BARE, FULL] {
-        let Ok(plugin) = (info.construct)(&name, Value::Null, &host_wide()) else {
+        let Ok(pack) = (info.construct)(&name, Value::Null, &host_wide()) else {
             panic!(
                 "{}: construct succeeds with its Host-wide service",
                 info.fqn
             );
         };
-        let ids: Vec<String> = plugin.tools().iter().map(|t| t.id.to_string()).collect();
+        let ids: Vec<String> = pack.tools().iter().map(|t| t.id.to_string()).collect();
         assert_eq!(ids, ["hi/greet"], "{}", info.fqn);
     }
 }
 
 #[test]
-fn plugin_info_shows_its_fqn_prelude_presence_and_needs_in_debug_output() {
+fn pack_info_shows_its_fqn_prelude_presence_and_needs_in_debug_output() {
     let shown = format!("{PLUGIN:?}");
     assert!(shown.contains("acme/greeter"), "{shown}");
     assert!(shown.contains("prelude: true"), "{shown}");
     assert!(shown.contains("acme/visitor"), "{shown}");
     assert!(
-        !shown.contains("local plugin"),
+        !shown.contains("local pack"),
         "the prelude's text is not shown: {shown}"
     );
 }

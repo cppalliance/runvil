@@ -12,7 +12,7 @@ const GREETING: ServiceKey<str> = ServiceKey::new("acme/greeting");
 /// A second key with the greeting's literal and another type.
 const GREETING_AS_NUMBER: ServiceKey<u32> = ServiceKey::new("acme/greeting");
 
-/// A static slice of ids, the shape `PluginInfo::needs` holds.
+/// A static slice of ids, the shape `PackInfo::needs` holds.
 const NEEDS: &[ServiceId] = &[GREETING.id()];
 
 /// Stands in for the runtime handle, which this crate cannot name.
@@ -135,7 +135,7 @@ fn a_service_id_is_a_global_name_with_exactly_one_slash() {
         );
         assert!(
             std::error::Error::source(&error).is_none(),
-            "{literal}: the refusal carries no Plugin id parse failure: {error:?}"
+            "{literal}: the refusal carries no Pack id parse failure: {error:?}"
         );
         assert!(
             !services.provides(&key.id()),

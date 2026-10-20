@@ -1,24 +1,24 @@
-//! Web access for prompts: a Plugin that gives a run two tools, one
+//! Web access for prompts: a Pack that gives a run two tools, one
 //! that fetches a page and one that searches the web.
 //!
 //! A Host installs [`PLUGIN`], by default under the name `web`, and every
 //! run then receives both tools: `web/fetch`, which fetches a URL and
 //! returns its content as text, and `web/search`, which runs a search
 //! through the Host's [`SearchProvider`]. The two tools always come
-//! together, named under whatever name the Host installed the Plugin
+//! together, named under whatever name the Host installed the Pack
 //! under.
 //!
-//! The Plugin has no prelude, so declaring it, as in `uses: [web]`,
+//! The Pack has no prelude, so declaring it, as in `uses: [web]`,
 //! only makes it required. A prompt reaches the tools by id from Lua,
 //! offering one to the model with `tools.offer("web/fetch")` or calling it
 //! with `tools.call("web/search", ...)`, whether or not it declares the
-//! Plugin.
+//! Pack.
 //!
-//! The Host provides two Host-wide services beside the Plugin. Its
+//! The Host provides two Host-wide services beside the Pack. Its
 //! [`SearchProvider`] goes under the key [`SEARCH_PROVIDER`], and the
 //! tokio runtime handle that every fetch is spawned onto goes under the
 //! Plugin contract's [`runvil_plugin::TOKIO_RUNTIME`] service.
-//! Install reads both; when either is missing, the Plugin is installed as
+//! Install reads both; when either is missing, the Pack is installed as
 //! unavailable, no run receives its tools, and a prompt that declares it
 //! is refused naming the missing service.
 //!
@@ -58,7 +58,7 @@
 //! - Every fetch runs on the Host's runtime handle, and dropping the call
 //!   aborts it.
 //! - Install accepts only a `null` or `{}` configuration; any other value
-//!   leaves the Plugin unavailable.
+//!   leaves the Pack unavailable.
 
 mod address;
 #[cfg_attr(

@@ -1,15 +1,15 @@
-//! An MCP client Plugin: it connects a prompt to one remote MCP server
+//! An MCP client Pack: it connects a prompt to one remote MCP server
 //! over Streamable HTTP and offers that server's tools as ordinary tools.
 //!
 //! A Host installs [`PLUGIN`] once per server, under the server's name
 //! lowercased in ASCII, so the tools of a server named `wg21-papers` are
-//! `wg21-papers/<tool>`. The Plugin has no prelude, so declaring it, as in
+//! `wg21-papers/<tool>`. The Pack has no prelude, so declaring it, as in
 //! `uses: [wg21-papers]`, only makes it required.
 //!
 //! The Host passes the server's entry from an `mcp.json` file as the
 //! configuration. A remote entry has `url` and optional `headers`, and a
 //! `type` of `"sse"`, the legacy transport, is refused. A local entry has
-//! `command`, with optional `args`, `env`, and `cwd`. This Plugin
+//! `command`, with optional `args`, `env`, and `cwd`. This Pack
 //! recognizes that shape and refuses it at install with `local MCP servers
 //! (command) are not supported yet`, so the Host installs it as
 //! unavailable. Other `type` values and unknown fields are ignored, because
@@ -23,10 +23,10 @@
 //! Install does no I/O. It reads the Host's runtime from the Plugin
 //! contract's [`runvil_plugin::TOKIO_RUNTIME`] service and starts one
 //! background task on it, which connects, runs the handshake, and lists
-//! every page of tools within two minutes. The Plugin's `ready` waits for
+//! every page of tools within two minutes. The Pack's `ready` waits for
 //! that task, so a run sees the tools of a server that is still starting.
 //! A server that fails to start is unavailable to each run that starts
-//! while it is down, with the reason, and the Plugin keeps trying in the
+//! while it is down, with the reason, and the Pack keeps trying in the
 //! background, waiting 1 second after the first failure and doubling up to
 //! a minute, so a later run offers its tools once it answers. A server
 //! that is ready stays ready, and a later failure shows as a transport
@@ -49,7 +49,7 @@
 //!
 //! The client declares no `capabilities`, because an optional extension
 //! would make GitHub's remote server answer with interactive forms this
-//! Plugin cannot show. Its HTTP client refuses redirects, which keeps the
+//! Pack cannot show. Its HTTP client refuses redirects, which keeps the
 //! configured headers off any other server.
 //!
 //! ## Invariants
@@ -72,9 +72,7 @@ mod server;
 
 use std::sync::Arc;
 
-use runvil_plugin::{
-    HostServices, PackId, Plugin, PluginInfo, ServiceKey, TOKIO_RUNTIME, ToolError,
-};
+use runvil_plugin::{HostServices, Pack, PackId, PackInfo, ServiceKey, TOKIO_RUNTIME, ToolError};
 use serde_json::Value;
 use tokio::runtime::Handle;
 use tokio::sync::watch;
@@ -82,14 +80,14 @@ use tokio::sync::watch;
 use crate::entry::Vars;
 use crate::server::{Server, State};
 
-/// The Plugin's `PluginInfo`, which a Host adds to its Plugin registry.
+/// The Pack's `PackInfo`, which a Host adds to its Pack registry.
 ///
 /// Its FQN is `runvil/mcp`. The Host installs it once per server,
 /// passing the server's `mcp.json` entry as the configuration, and
 /// provides the Plugin contract's [`runvil_plugin::TOKIO_RUNTIME`]
 /// service. It has no prelude and needs no per-run service.
-pub const PLUGIN: PluginInfo =
-    PluginInfo::new("runvil/mcp", construct).description("Tools from one MCP server");
+pub const PLUGIN: PackInfo =
+    PackInfo::new("runvil/mcp", construct).description("Tools from one MCP server");
 
 /// The key `construct` reads the Host's runtime through.
 const RUNTIME: ServiceKey<Handle> = ServiceKey::new(TOKIO_RUNTIME);
@@ -98,13 +96,13 @@ const RUNTIME: ServiceKey<Handle> = ServiceKey::new(TOKIO_RUNTIME);
 /// It does no I/O itself.
 #[expect(
     clippy::needless_pass_by_value,
-    reason = "the PluginInfo construct signature fixes the argument types"
+    reason = "the PackInfo construct signature fixes the argument types"
 )]
 fn construct(
     name: &PackId,
     config: Value,
     services: &HostServices,
-) -> Result<Arc<dyn Plugin>, ToolError> {
+) -> Result<Arc<dyn Pack>, ToolError> {
     let env = |key: &str| std::env::var(key).ok();
     let home = std::env::home_dir().map(|dir| dir.to_string_lossy().into_owned());
     let entry = entry::parse(&config, &Vars { env: &env, home })?;

@@ -1,8 +1,8 @@
-//! `plugin-user-input` - the Plugin that lets a prompt section pause and
+//! `plugin-user-input` - the Pack that lets a prompt section pause and
 //! ask the operator for their next message.
 //!
 //! A Host installs [`PLUGIN`], by default under the name `user-input`. A
-//! prompt declares the Plugin in its frontmatter, and its sections then
+//! prompt declares the Pack in its frontmatter, and its sections then
 //! have an `input` table:
 //!
 //! ````text
@@ -14,11 +14,11 @@
 //! local text = input.ask()
 //! ````
 //!
-//! A prompt that does not declare the Plugin has no `input` global.
+//! A prompt that does not declare the Pack has no `input` global.
 //!
 //! # Where this fits
 //!
-//! The Plugin offers one tool, the ask tool, under `<name>/ask`, where
+//! The Pack offers one tool, the ask tool, under `<name>/ask`, where
 //! `<name>` is the name the Host installed it under and the last segment
 //! is [`ASK`]. Its prelude defines `input.ask()`, which calls the ask tool
 //! by that full id, so every ask reaches the Harness as an ordinary tool
@@ -31,14 +31,14 @@
 //! [`ToolOutput::trusted`](runvil_plugin::ToolOutput::trusted) and
 //! the text is never guard-wrapped. The ask tool's info survives
 //! stops: a stop leaves the question open. The other occasions
-//! [`Plugin::call`](runvil_plugin::Plugin::call) lists drop it, the
+//! [`Pack::call`](runvil_plugin::Pack::call) lists drop it, the
 //! early end of the task that asked included.
 //!
 //! # A run without an operator
 //!
 //! [`PLUGIN`] names [`INPUT_BROKER`] among its needs, so a run whose Host
-//! supplies no broker cannot use the Plugin, and a prompt that declares it
-//! is refused before the run starts with a line naming the Plugin and
+//! supplies no broker cannot use the Pack, and a prompt that declares it
+//! is refused before the run starts with a line naming the Pack and
 //! `runvil/input-broker`.
 //!
 //! # Failed and cancelled waits
@@ -60,7 +60,7 @@
 //! - The model can ask the operator only when the prompt's Lua opts in.
 //!   A section offers the ask tool with `packs.offer('user-input')` or
 //!   by its id with `tools.offer("user-input/ask")`, and the model sees it
-//!   as `user-input_ask`. Neither installing nor declaring the Plugin
+//!   as `user-input_ask`. Neither installing nor declaring the Pack
 //!   advertises anything to the model.
 //!
 //! ## Invariants
@@ -72,25 +72,25 @@
 //!   inside the run's own future, so an [`InputBroker`] must not block
 //!   while polled.
 //! - The ask tool's info sets `survives_stop`, so a stop leaves the
-//!   operator's question open; every other occasion `Plugin::call` lists
+//!   operator's question open; every other occasion `Pack::call` lists
 //!   drops it.
 
 mod ask;
 
-use runvil_plugin::{PluginInfo, ServiceId, ServiceKey, ToolError};
+use runvil_plugin::{PackInfo, ServiceId, ServiceKey, ToolError};
 
-/// The Plugin's `PluginInfo`, which a Host adds to its Plugin registry.
+/// The Pack's `PackInfo`, which a Host adds to its Pack registry.
 ///
-/// Its FQN is `runvil/user-input`, so a Host that picks no Plugin id
+/// Its FQN is `runvil/user-input`, so a Host that picks no Pack id
 /// installs it as `user-input`. It has a prelude and needs the run's
 /// [`INPUT_BROKER`].
-pub const PLUGIN: PluginInfo = PluginInfo::new("runvil/user-input", ask::construct)
+pub const PLUGIN: PackInfo = PackInfo::new("runvil/user-input", ask::construct)
     .description("Ask the person running the prompt")
     .prelude(PRELUDE)
     .needs(NEEDS);
 
 /// The ask tool's last segment: its full id is `<name>/ask`, under the
-/// name the Host installed the Plugin under.
+/// name the Host installed the Pack under.
 pub const ASK: &str = "ask";
 
 /// The service key for the input broker, the per-run service that carries
@@ -100,18 +100,18 @@ pub const ASK: &str = "ask";
 /// provides its broker among each run's services under this key.
 pub const INPUT_BROKER: ServiceKey<dyn InputBroker> = ServiceKey::new("runvil/input-broker");
 
-/// The Plugin's needs: a run without a broker cannot use the Plugin.
+/// The Pack's needs: a run without a broker cannot use the Pack.
 const NEEDS: &[ServiceId] = &[INPUT_BROKER.id()];
 
 /// The Lua that defines `input.ask()` for a prompt that declares the
-/// Plugin. `...` is the name the Host installed the Plugin under.
-const PRELUDE: &str = r#"local plugin = ...
+/// Pack. `...` is the name the Host installed the Pack under.
+const PRELUDE: &str = r#"local pack = ...
 input = {}
 function input.ask(...)
   if select('#', ...) > 0 then
     error("input.ask takes no arguments", 2)
   end
-  return tools.call(plugin .. "/ask")
+  return tools.call(pack .. "/ask")
 end
 "#;
 

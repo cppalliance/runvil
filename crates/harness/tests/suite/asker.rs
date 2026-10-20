@@ -1,20 +1,20 @@
-//! The fixture ask Plugin a suite Host installs in place of a real
-//! user-input Plugin, which Harness crates may not name: an ask tool that
+//! The fixture ask Pack a suite Host installs in place of a real
+//! user-input Pack, which Harness crates may not name: an ask tool that
 //! survives stops, a prelude defining `input.ask()`, a need for the run's
 //! broker, and a broker that fails with a `ToolError`.
 
 use std::sync::Arc;
 
-use harness::plugin::{HostContext, HostServices, PluginRegistry};
+use harness::pack::{HostContext, HostServices, PackRegistry};
 use runvil_plugin::{
-    PackId, Plugin, PluginFuture, PluginInfo, ServiceId, ServiceKey, ToolContext, ToolError,
+    Pack, PackFuture, PackId, PackInfo, ServiceId, ServiceKey, ToolContext, ToolError,
     ToolErrorKind, ToolId, ToolInfo, ToolOutput,
 };
 use serde_json::{Value, json};
 
-/// The `PluginInfo`: installed with no Plugin id given, the Plugin is
+/// The `PackInfo`: installed with no Pack id given, the Pack is
 /// `user-input`.
-const ASKER: PluginInfo = PluginInfo::new("tests/user-input", construct)
+const ASKER: PackInfo = PackInfo::new("tests/user-input", construct)
     .prelude(PRELUDE)
     .needs(NEEDS);
 
@@ -23,13 +23,13 @@ const BROKER: ServiceKey<dyn AskBroker> = ServiceKey::new("tests/input-broker");
 
 const NEEDS: &[ServiceId] = &[BROKER.id()];
 
-const PRELUDE: &str = r#"local plugin = ...
+const PRELUDE: &str = r#"local pack = ...
 input = {}
 function input.ask(...)
   if select('#', ...) > 0 then
     error("input.ask takes no arguments", 2)
   end
-  return tools.call(plugin .. "/ask")
+  return tools.call(pack .. "/ask")
 end
 "#;
 
@@ -41,11 +41,11 @@ pub(crate) trait AskBroker: Send + Sync {
 
 /// A Host with the fixture installed as `user-input`.
 pub(crate) fn asker_host() -> Arc<HostContext> {
-    let mut plugins = PluginRegistry::new();
-    if let Err(error) = plugins.add(ASKER) {
+    let mut packs = PackRegistry::new();
+    if let Err(error) = packs.add(ASKER) {
         panic!("a new registry takes the fixture: {error}");
     }
-    let mut host = HostContext::new(plugins, HostServices::new());
+    let mut host = HostContext::new(packs, HostServices::new());
     if let Err(error) = host.install(ASKER.fqn, None, Value::Null) {
         panic!("an empty Host installs the fixture: {error}");
     }
@@ -69,7 +69,7 @@ fn construct(
     name: &PackId,
     _config: Value,
     _services: &HostServices,
-) -> Result<Arc<dyn Plugin>, ToolError> {
+) -> Result<Arc<dyn Pack>, ToolError> {
     let id = ToolId::parse(&format!("{name}/ask")).map_err(|e| {
         ToolError::new(
             ToolErrorKind::Backend,
@@ -86,7 +86,7 @@ fn construct(
     Ok(Arc::new(Asker { tools: vec![ask] }))
 }
 
-impl Plugin for Asker {
+impl Pack for Asker {
     fn tools(&self) -> Vec<ToolInfo> {
         self.tools.clone()
     }
@@ -95,7 +95,7 @@ impl Plugin for Asker {
         &'a self,
         cx: ToolContext<'a>,
         _args: Value,
-    ) -> PluginFuture<'a, Result<ToolOutput, ToolError>> {
+    ) -> PackFuture<'a, Result<ToolOutput, ToolError>> {
         Box::pin(async move {
             let broker = cx
                 .service(&BROKER)

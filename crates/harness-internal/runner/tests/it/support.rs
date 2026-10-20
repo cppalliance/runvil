@@ -1,13 +1,13 @@
 //! Fixtures shared by the runner's suites: a one-section prompt, a run
-//! over it, fake performers that answer by script, and a Plugin registry
-//! holding a suite's Plugins.
+//! over it, fake performers that answer by script, and a Pack registry
+//! holding a suite's Packs.
 
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::task::Poll;
 use std::time::Duration;
 
-use harness_runner::PluginRegistry;
+use harness_runner::PackRegistry;
 use harness_runner::performers::{BoxFuture, InferenceBroker, Performers, Timer, ToolPerformer};
 use harness_runner::recorder::{
     MemoryRecorder, Record, RecorderError, RecorderFuture, RunId, RunMeta, RunOutcome, RunRecorder,
@@ -23,7 +23,7 @@ use runvil::vfs::{
     VfsRef,
 };
 use runvil::{Prompt, Run, RunContext, RunSeed};
-use runvil_plugin::PluginInfo;
+use runvil_plugin::PackInfo;
 use serde_json::{Value, json};
 
 /// The run's execution identifier.
@@ -34,12 +34,12 @@ pub(crate) const TEST_SEED: RunSeed = RunSeed::from_bytes([7; 32]);
 
 /// A registry holding the built-ins and each of `infos`, which a suite
 /// builds its Host over before it installs them by FQN.
-pub(crate) fn registry(infos: &[PluginInfo]) -> PluginRegistry {
-    let mut plugins = PluginRegistry::new();
+pub(crate) fn registry(infos: &[PackInfo]) -> PackRegistry {
+    let mut packs = PackRegistry::new();
     for info in infos {
-        plugins.add(*info).unwrap();
+        packs.add(*info).unwrap();
     }
-    plugins
+    packs
 }
 
 /// A section body that calls the fixture wait tool by its full id and
@@ -69,7 +69,7 @@ fn prompt(lua: &str) -> Arc<Prompt> {
     Arc::new(prompt.expect("the fixture prompt parses"))
 }
 
-/// A Plugin-free run over `prompt` with a fixed seed and start,
+/// A Pack-free run over `prompt` with a fixed seed and start,
 /// prepared against the fixture [`catalog`], over the run's filesystem
 /// `vfs`.
 fn prepared(prompt: Arc<Prompt>, vfs: VfsRef) -> Run {
@@ -82,20 +82,20 @@ fn prepared(prompt: Arc<Prompt>, vfs: VfsRef) -> Run {
     Run::new(prompt, "", ctx)
 }
 
-/// A Plugin-free run over `lua` with a fixed seed and start, over a
+/// A Pack-free run over `lua` with a fixed seed and start, over a
 /// fresh memory store.
 pub(crate) fn run(lua: &str) -> Run {
     run_over(lua, VfsRef::default())
 }
 
-/// A Plugin-free run over `lua` whose `store` table operates on
+/// A Pack-free run over `lua` whose `store` table operates on
 /// `vfs`: the test holds the handle, so it can read what the run wrote or
 /// mount a backend of its own.
 pub(crate) fn run_over(lua: &str, vfs: VfsRef) -> Run {
     prepared(prompt(lua), vfs)
 }
 
-/// A Plugin-free run over two sections: `## Main` runs `main`, and
+/// A Pack-free run over two sections: `## Main` runs `main`, and
 /// `## Child` runs `child` when the main spawns it as a task.
 pub(crate) fn run_with_child(main: &str, child: &str) -> Run {
     let source = format!(

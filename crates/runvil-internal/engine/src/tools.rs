@@ -5,7 +5,7 @@
 //! offers one to its model with `tools.offer`. The Engine issues each call as a
 //! `ToolCall` effect naming the [`ToolId`](runvil_types::tools::ToolId)
 //! for the caller to perform; the installed Pack the id names answers it
-//! (the `Plugin` trait, in `runvil-plugin`). The runtime-agnostic
+//! (the `Pack` trait, in `runvil-plugin`). The runtime-agnostic
 //! vocabulary - [`ToolCatalog`], [`ToolId`](runvil_types::tools::ToolId),
 //! the output and error types - sits in the `runvil-types` crate's
 //! `tools` module; this module is the crate-internal import surface for it,

@@ -1,10 +1,10 @@
 //! `runvil-plugin` - the contract a Plugin crate implements, and the
 //! one crate it depends on.
 //!
-//! A Plugin crate exports a [`PluginInfo`], built with [`PluginInfo::new`]:
+//! A Plugin crate exports a [`PackInfo`], built with [`PackInfo::new`]:
 //! its `vendor/name`, an optional Lua prelude, the per-run services its calls
 //! read, and the `construct` function the Host calls once, at install, to
-//! build the one [`Plugin`] object every run shares. [`Plugin::call`]
+//! build the one [`Pack`] object every run shares. [`Pack::call`]
 //! performs one tool call with the [`ToolContext`] the Harness lends it.
 //! [`HostServices`] maps service ids to the shared objects a Host provides,
 //! each read back through a typed [`ServiceKey`].
@@ -26,43 +26,43 @@
 //!   boundaries.
 //! - Only `[dev-dependencies]` enable `test-support`, which the
 //!   `test-support` leak guard enforces.
-//! - A Host builds each Plugin object once, through
-//!   [`PluginInfo::construct`], and every run shares it. Host-wide services
+//! - A Host builds each Pack object once, through
+//!   [`PackInfo::construct`], and every run shares it. Host-wide services
 //!   reach only `construct`, and a run's own services reach only calls,
-//!   through [`ToolContext::service`]. Cleanup goes in the Plugin's
+//!   through [`ToolContext::service`]. Cleanup goes in the Pack's
 //!   `Drop`; there is no shutdown hook.
-//! - Every tool a Plugin offers sits under the name `construct` receives,
+//! - Every tool a Pack offers sits under the name `construct` receives,
 //!   as `web/fetch` sits under `web`. A tool that does not is dropped from
 //!   every run's catalog.
-//! - [`Plugin::ready`] resolves `Ok` once [`Plugin::tools`] is complete,
-//!   or `Err` with a reason a model can read when the Plugin can't serve
-//!   now. The Harness awaits it before each run's snapshot, and a Plugin
-//!   whose `ready` fails is unavailable to that run. A Plugin that
+//! - [`Pack::ready`] resolves `Ok` once [`Pack::tools`] is complete,
+//!   or `Err` with a reason a model can read when the Pack can't serve
+//!   now. The Harness awaits it before each run's snapshot, and a Pack
+//!   whose `ready` fails is unavailable to that run. A Pack that
 //!   recovers serves the runs that start after it does.
-//! - [`Plugin::ready`] resolves within a bound the Plugin owns and
+//! - [`Pack::ready`] resolves within a bound the Pack owns and
 //!   enforces in its own task. It uses no runtime timer, because it may be
 //!   polled outside any particular runtime.
-//! - [`Plugin::ready`] is cancellation-safe, and after its first
-//!   resolution it answers at once unless the Plugin's state has changed.
-//! - [`Plugin::call`] must not block while polled. Every effect of a run
+//! - [`Pack::ready`] is cancellation-safe, and after its first
+//!   resolution it answers at once unless the Pack's state has changed.
+//! - [`Pack::call`] must not block while polled. Every effect of a run
 //!   is polled on the same task, so blocking or CPU-heavy work goes to the
 //!   Host's runtime.
-//! - [`Plugin::call`] must not panic. A panicking call's effect is
+//! - [`Pack::call`] must not panic. A panicking call's effect is
 //!   answered `Dropped`, and the panic is logged.
-//! - [`Plugin::call`] marks the trust of every output correctly: output
+//! - [`Pack::call`] marks the trust of every output correctly: output
 //!   that embeds data an attacker can influence is
 //!   [`ToolOutput::untrusted`].
-//! - [`Plugin::call`] is cancellation-aware: its future may be dropped
+//! - [`Pack::call`] is cancellation-aware: its future may be dropped
 //!   before it finishes, on the occasions its invariants list.
 
 mod context;
-mod plugin;
+mod pack;
 mod service;
 #[cfg(feature = "test-support")]
 pub mod testing;
 
 pub use context::ToolContext;
-pub use plugin::{Plugin, PluginFuture, PluginInfo};
+pub use pack::{Pack, PackFuture, PackInfo};
 pub use service::{HostServices, ServiceError, ServiceId, ServiceKey, TOKIO_RUNTIME};
 
 pub use runvil_types::packs::{PackId, PackIdError, PackIdErrorKind};

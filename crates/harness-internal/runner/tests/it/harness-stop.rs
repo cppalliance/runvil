@@ -299,7 +299,7 @@ async fn a_chat_shaped_prompt_returns_to_its_question_after_a_stop_during_a_tool
     );
 }
 
-/// A Harness on `operator` with the fixture ask Plugin and a broker no
+/// A Harness on `operator` with the fixture ask Pack and a broker no
 /// round reaches.
 fn asking_harness(recorder: &Arc<MemoryRecorder>, operator: &Arc<Operator>) -> Harness {
     Harness::new(

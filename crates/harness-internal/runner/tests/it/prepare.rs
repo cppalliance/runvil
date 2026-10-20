@@ -4,14 +4,14 @@
 //! `Parse` kind, and each failure leaves its parse events at the recorder;
 //! each preparation draws a fresh seed and start, both handed to the
 //! recorder when the run begins under the run's name; and the prepared tool
-//! performer sends a `ToolCall` effect to the Plugin its id names. The
+//! performer sends a `ToolCall` effect to the Pack its id names. The
 //! run's optional input broker - one of its own services, lent to every
-//! tool call and behind the fixture ask Plugin - sits in the `input`
-//! child module, the run's services meeting a Plugin's needs sit in the
-//! `host_services` child module, a Plugin's prelude reaching the prepared
+//! tool call and behind the fixture ask Pack - sits in the `input`
+//! child module, the run's services meeting a Pack's needs sit in the
+//! `host_services` child module, a Pack's prelude reaching the prepared
 //! run sits in the `prelude` child module, the prompt's declared input
 //! and output files sit in the `files` child module, and the wait for
-//! each Plugin to be ready sits in the `ready` child module.
+//! each Pack to be ready sits in the `ready` child module.
 
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -24,7 +24,7 @@ use runvil::RunErrorKind;
 use runvil::cancel::CancelHandle;
 use runvil::event::Event;
 use runvil_plugin::{
-    HostServices, PackId, Plugin, PluginFuture, PluginInfo, ToolContext, ToolError, ToolErrorKind,
+    HostServices, Pack, PackFuture, PackId, PackInfo, ToolContext, ToolError, ToolErrorKind,
     ToolId, ToolInfo, ToolOutput,
 };
 use serde_json::{Value, json};
@@ -42,7 +42,7 @@ mod prelude;
 #[path = "prepare-ready.rs"]
 mod ready;
 
-/// A prompt declaring `web` as a required Plugin that no
+/// A prompt declaring `web` as a required Pack that no
 /// Host here installs.
 const NEEDS_WEB: &str = "---\nname: needs-web\ndescription: d\nrunvil: 0\n\
     uses:\n  - web\n---\n\n# Title\n\n## Only\n\nDone.\n";
@@ -50,11 +50,11 @@ const NEEDS_WEB: &str = "---\nname: needs-web\ndescription: d\nrunvil: 0\n\
 /// A prompt with unclosed frontmatter, so it does not parse.
 const UNCLOSED: &str = "---\nname: unclosed\ndescription: d\nrunvil: 0\n\n# Title\n";
 
-/// A Plugin-free prompt whose one section returns a constant.
+/// A Pack-free prompt whose one section returns a constant.
 const PLAIN: &str = "---\nname: plain\ndescription: d\nrunvil: 0\n---\n\n\
     # Title\n\n## Only\n\n```lua\nreturn 'plain'\n```\n";
 
-/// A prompt declaring the fixture Plugin and calling its tool once by id.
+/// A prompt declaring the fixture Pack and calling its tool once by id.
 const CALLS_ECHO: &str = "---\nname: calls-echo\ndescription: d\nrunvil: 0\n\
     uses:\n  - tools\n---\n\n\
     # Title\n\n## Only\n\n```lua\nreturn tools.call('tools/echo', { value = 'hi' })\n```\n";
@@ -86,13 +86,13 @@ fn recorded_parse_events(recorder: &MemoryRecorder, run_id: RunId) -> Vec<Event>
     events
 }
 
-/// A Host with no Plugins.
+/// A Host with no Packs.
 pub(crate) fn bare() -> HostContext {
     HostContext::new(registry(&[]), HostServices::new())
 }
 
-/// A Host with `info` installed under its default Plugin id.
-pub(crate) fn installing(info: PluginInfo) -> HostContext {
+/// A Host with `info` installed under its default Pack id.
+pub(crate) fn installing(info: PackInfo) -> HostContext {
     let mut host = HostContext::new(registry(&[info]), HostServices::new());
     host.install(info.fqn, None, Value::Null).unwrap();
     host
@@ -116,33 +116,33 @@ pub(crate) fn services(recorder: &Arc<MemoryRecorder>, host: HostContext) -> Ser
     }
 }
 
-/// The fixture Plugin `tools`: one tool, `tools/echo`, echoing its
+/// The fixture Pack `tools`: one tool, `tools/echo`, echoing its
 /// `value` argument as trusted text.
-const TOOLS: PluginInfo = echo_plugin("tests/tools", None);
+const TOOLS: PackInfo = echo_pack("tests/tools", None);
 
-/// A Plugin with the FQN `fqn` that offers `<name>/echo`, with `prelude`.
-pub(crate) const fn echo_plugin(fqn: &'static str, prelude: Option<&'static str>) -> PluginInfo {
-    let info = PluginInfo::new(fqn, construct_echo);
+/// A Pack with the FQN `fqn` that offers `<name>/echo`, with `prelude`.
+pub(crate) const fn echo_pack(fqn: &'static str, prelude: Option<&'static str>) -> PackInfo {
+    let info = PackInfo::new(fqn, construct_echo);
     match prelude {
         Some(prelude) => info.prelude(prelude),
         None => info,
     }
 }
 
-/// A Plugin offering the one echo tool.
+/// A Pack offering the one echo tool.
 struct Echo {
     tools: Vec<ToolInfo>,
 }
 
 #[expect(
     clippy::unnecessary_wraps,
-    reason = "the PluginInfo construct signature fixes the return type"
+    reason = "the PackInfo construct signature fixes the return type"
 )]
 fn construct_echo(
     name: &PackId,
     _config: Value,
     _services: &HostServices,
-) -> Result<Arc<dyn Plugin>, ToolError> {
+) -> Result<Arc<dyn Pack>, ToolError> {
     let echo = ToolInfo::new(
         ToolId::parse(&format!("{name}/echo")).unwrap(),
         "Echo the value argument.",
@@ -151,7 +151,7 @@ fn construct_echo(
     Ok(Arc::new(Echo { tools: vec![echo] }))
 }
 
-impl Plugin for Echo {
+impl Pack for Echo {
     fn tools(&self) -> Vec<ToolInfo> {
         self.tools.clone()
     }
@@ -160,7 +160,7 @@ impl Plugin for Echo {
         &'a self,
         _cx: ToolContext<'a>,
         args: Value,
-    ) -> PluginFuture<'a, Result<ToolOutput, ToolError>> {
+    ) -> PackFuture<'a, Result<ToolOutput, ToolError>> {
         Box::pin(async move {
             let value = args
                 .get("value")
@@ -350,7 +350,7 @@ pub(crate) async fn drive_over(source: &str, host: HostContext) -> RunOutcome {
 }
 
 #[tokio::test]
-async fn the_tool_performer_sends_the_effect_to_the_plugin_its_id_names() {
+async fn the_tool_performer_sends_the_effect_to_the_pack_its_id_names() {
     assert_eq!(
         completed(drive_over(CALLS_ECHO, installing(TOOLS)).await),
         "hi",
@@ -359,27 +359,27 @@ async fn the_tool_performer_sends_the_effect_to_the_plugin_its_id_names() {
 }
 
 #[tokio::test]
-async fn a_script_reaches_an_undeclared_plugins_tool_by_full_id_without_its_prelude() {
+async fn a_script_reaches_an_undeclared_packs_tool_by_full_id_without_its_prelude() {
     let undeclared = "---\nname: undeclared\ndescription: d\nrunvil: 0\n---\n\n\
         # Title\n\n## Only\n\n```lua\n\
         return tools.call('extra/echo', { value = 'hi' }) .. '|' .. type(extra)\n```\n";
-    let extra = echo_plugin("tests/extra", Some("extra = {}\n"));
+    let extra = echo_pack("tests/extra", Some("extra = {}\n"));
     assert_eq!(
         completed(drive_over(undeclared, installing(extra)).await),
         "hi|nil",
-        "the undeclared Plugin's tool is in the catalog, and its prelude is not installed"
+        "the undeclared Pack's tool is in the catalog, and its prelude is not installed"
     );
 }
 
 #[tokio::test]
-async fn the_lists_split_the_offering_by_declared_plugin_and_a_script_calls_a_tool_object() {
+async fn the_lists_split_the_offering_by_declared_pack_and_a_script_calls_a_tool_object() {
     let offering = "---\nname: offering\ndescription: d\nrunvil: 0\n\
         uses:\n  - tools\n---\n\n# Title\n\n## Only\n\n```lua\n\
         local required, extras = tools.required(), tools.extras()\n\
         local extra = extras[1]\n\
         return #required .. ':' .. required[1].id .. '|' .. #extras .. ':' .. extra.id .. '|' .. \
           tools.call(extra, { value = 'hi' })\n```\n";
-    let extra = echo_plugin("tests/extra", None);
+    let extra = echo_pack("tests/extra", None);
     let mut host = HostContext::new(registry(&[TOOLS, extra]), HostServices::new());
     for info in [TOOLS, extra] {
         host.install(info.fqn, None, Value::Null).unwrap();
@@ -387,7 +387,7 @@ async fn the_lists_split_the_offering_by_declared_plugin_and_a_script_calls_a_to
     assert_eq!(
         completed(drive_over(offering, host).await),
         "1:tools/echo|1:extra/echo|hi",
-        "the declared Plugin's tool is required, the undeclared one's an extra, and its \
-         object reaches its Plugin"
+        "the declared Pack's tool is required, the undeclared one's an extra, and its \
+         object reaches its Pack"
     );
 }

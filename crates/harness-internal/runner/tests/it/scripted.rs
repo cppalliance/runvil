@@ -1,6 +1,6 @@
 //! The scripted Host the Harness suites run against: a broker that lists
 //! one model and plays each round from a script, performers whose every
-//! future is held until it is torn down, a Plugin whose one tool is
+//! future is held until it is torn down, a Pack whose one tool is
 //! held, and an operator who answers each question with the next text a
 //! test sends.
 
@@ -17,8 +17,8 @@ use runvil::model::{
     ModelBinding, ModelCatalog, ModelId, ModelInfo, ThinkingMode, ToolSchema,
 };
 use runvil_plugin::{
-    HostServices, PackId, Plugin, PluginFuture, PluginInfo, ServiceKey, ToolContext, ToolError,
-    ToolId, ToolInfo, ToolOutput,
+    HostServices, Pack, PackFuture, PackId, PackInfo, ServiceKey, ToolContext, ToolError, ToolId,
+    ToolInfo, ToolOutput,
 };
 use serde_json::{Value, json};
 use tokio::sync::mpsc;
@@ -196,45 +196,45 @@ pub(crate) fn held_broker(held: &Arc<Held>) -> ScriptedBroker {
     ScriptedBroker::new(move |_round, _messages| held.hold())
 }
 
-/// The Host-wide service the hold Plugin's construct reads its [`Held`]
+/// The Host-wide service the hold Pack's construct reads its [`Held`]
 /// from.
 const HELD: ServiceKey<Held> = ServiceKey::new("tests/held");
 
-/// The fixture Plugin `harness`: one tool, `harness/hold`, whose every
+/// The fixture Pack `harness`: one tool, `harness/hold`, whose every
 /// call is held, and which a stop leaves in flight when its configuration
 /// sets `survives_stop`.
-const HOLD: PluginInfo = PluginInfo::new("tests/harness", construct_hold);
+const HOLD: PackInfo = PackInfo::new("tests/harness", construct_hold);
 
-struct HoldPlugin {
+struct HoldPack {
     held: Arc<Held>,
     tools: Vec<ToolInfo>,
 }
 
 #[expect(
     clippy::needless_pass_by_value,
-    reason = "the PluginInfo construct signature fixes the argument types"
+    reason = "the PackInfo construct signature fixes the argument types"
 )]
 fn construct_hold(
     name: &PackId,
     config: Value,
     services: &HostServices,
-) -> Result<Arc<dyn Plugin>, ToolError> {
+) -> Result<Arc<dyn Pack>, ToolError> {
     let held = services
         .get(&HELD)
-        .ok_or_else(|| ToolError::message("the hold Plugin needs tests/held"))?;
+        .ok_or_else(|| ToolError::message("the hold Pack needs tests/held"))?;
     let info = ToolInfo::new(
         ToolId::parse(&format!("{name}/hold")).unwrap(),
         "Hold until the call is dropped.",
         json!({ "type": "object", "properties": {} }),
     )
     .survives_stop(config["survives_stop"].as_bool().unwrap_or(false));
-    Ok(Arc::new(HoldPlugin {
+    Ok(Arc::new(HoldPack {
         held,
         tools: vec![info],
     }))
 }
 
-impl Plugin for HoldPlugin {
+impl Pack for HoldPack {
     fn tools(&self) -> Vec<ToolInfo> {
         self.tools.clone()
     }
@@ -243,17 +243,17 @@ impl Plugin for HoldPlugin {
         &'a self,
         _cx: ToolContext<'a>,
         _args: Value,
-    ) -> PluginFuture<'a, Result<ToolOutput, ToolError>> {
+    ) -> PackFuture<'a, Result<ToolOutput, ToolError>> {
         self.held.hold()
     }
 }
 
-/// A Host holding the hold Plugin over `held`.
+/// A Host holding the hold Pack over `held`.
 pub(crate) fn hold_host(held: &Arc<Held>) -> HostContext {
     host_holding(held, false)
 }
 
-/// A Host holding the hold Plugin over `held`, its tool marked to
+/// A Host holding the hold Pack over `held`, its tool marked to
 /// survive a stop.
 pub(crate) fn surviving_hold_host(held: &Arc<Held>) -> HostContext {
     host_holding(held, true)
@@ -268,7 +268,7 @@ fn host_holding(held: &Arc<Held>, survives_stop: bool) -> HostContext {
     host
 }
 
-/// `host`, whose registry holds the fixture ask Plugin, with it installed
+/// `host`, whose registry holds the fixture ask Pack, with it installed
 /// as `user-input`.
 pub(crate) fn with_asker(mut host: HostContext) -> HostContext {
     host.install(ASKER.fqn, None, Value::Null).unwrap();

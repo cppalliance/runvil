@@ -11,7 +11,7 @@
 
 use std::sync::Arc;
 
-use harness::plugin::{HostContext, HostServices, PluginRegistry};
+use harness::pack::{HostContext, HostServices, PackRegistry};
 use harness::record::MemoryRecorder;
 use harness::vfs::VfsRef;
 use harness::{BoxFuture, Harness, HostSnapshot, InferenceBroker, RunRequest};
@@ -44,7 +44,7 @@ impl InferenceBroker for Offline {
 }
 
 /// A prompt whose one section runs `lua`, declaring the operator-input
-/// Plugin.
+/// Pack.
 pub(crate) fn prompt(lua: &str) -> String {
     format!(
         "---\nname: fixture\ndescription: a conversation fixture\nrunvil: 0\n\
@@ -60,13 +60,13 @@ pub(crate) fn harness_for(
     recorder: Arc<MemoryRecorder>,
     source: String,
 ) -> (Harness, RunRequest) {
-    let mut plugins = PluginRegistry::new();
-    plugins
+    let mut packs = PackRegistry::new();
+    packs
         .add(plugin_user_input::PLUGIN)
-        .expect("a new registry takes the Plugin");
-    let mut host = HostContext::new(plugins, HostServices::new());
+        .expect("a new registry takes the Pack");
+    let mut host = HostContext::new(packs, HostServices::new());
     host.install(plugin_user_input::PLUGIN.fqn, None, serde_json::Value::Null)
-        .expect("an empty Host installs the Plugin");
+        .expect("an empty Host installs the Pack");
     let harness = Harness::new(
         conversation.recorder(recorder),
         Arc::new(Offline),

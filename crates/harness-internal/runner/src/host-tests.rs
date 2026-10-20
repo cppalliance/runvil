@@ -10,14 +10,14 @@ use runvil::effect::{ToolCallOrigin, ToolCaller};
 use runvil::vfs::{Origin, VfsRef};
 use runvil::{MissingService, Prompt, UnavailablePack};
 use runvil_plugin::{
-    HostServices, PackId, Plugin, PluginFuture, PluginInfo, ServiceId, ServiceKey, ToolContext,
+    HostServices, Pack, PackFuture, PackId, PackInfo, ServiceId, ServiceKey, ToolContext,
     ToolError, ToolId, ToolInfo, ToolOutput,
 };
 use serde_json::{Value, json};
 
 use super::{HostContext, InstallError};
 use crate::performers::ToolPerformer;
-use crate::registry::PluginRegistry;
+use crate::registry::PackRegistry;
 
 /// A Host-wide service a fixture's `construct` reads.
 const BACKEND: ServiceKey<str> = ServiceKey::new("tests/backend");
@@ -34,7 +34,7 @@ struct Listed {
     tools: Vec<ToolInfo>,
 }
 
-impl Plugin for Listed {
+impl Pack for Listed {
     fn tools(&self) -> Vec<ToolInfo> {
         self.tools.clone()
     }
@@ -43,7 +43,7 @@ impl Plugin for Listed {
         &'a self,
         cx: ToolContext<'a>,
         _args: Value,
-    ) -> PluginFuture<'a, Result<ToolOutput, ToolError>> {
+    ) -> PackFuture<'a, Result<ToolOutput, ToolError>> {
         Box::pin(async move { Ok(ToolOutput::trusted(format!("{}:{}", self.name, cx.tool()))) })
     }
 }
@@ -53,13 +53,13 @@ impl Plugin for Listed {
 #[expect(
     clippy::needless_pass_by_value,
     clippy::unnecessary_wraps,
-    reason = "the PluginInfo construct signature fixes the argument and return types"
+    reason = "the PackInfo construct signature fixes the argument and return types"
 )]
 fn listed(
     name: &PackId,
     config: Value,
     _services: &HostServices,
-) -> Result<Arc<dyn Plugin>, ToolError> {
+) -> Result<Arc<dyn Pack>, ToolError> {
     let mut tools = Vec::new();
     for entry in config.as_array().into_iter().flatten() {
         let id = ToolId::parse(entry["id"].as_str().unwrap()).unwrap();
@@ -80,7 +80,7 @@ fn backed(
     name: &PackId,
     _config: Value,
     services: &HostServices,
-) -> Result<Arc<dyn Plugin>, ToolError> {
+) -> Result<Arc<dyn Pack>, ToolError> {
     if services.get(&BACKEND).is_none() {
         return Err(ToolError::message(
             "backed needs tests/backend, and this host provides none",
@@ -89,9 +89,9 @@ fn backed(
     listed(name, json!([tool(&format!("{name}/use"))]), services)
 }
 
-/// A Plugin with the FQN `fqn` that offers the configured tools.
-const fn info(fqn: &'static str) -> PluginInfo {
-    PluginInfo::new(fqn, listed)
+/// A Pack with the FQN `fqn` that offers the configured tools.
+const fn info(fqn: &'static str) -> PackInfo {
+    PackInfo::new(fqn, listed)
 }
 
 /// One tool entry of a [`listed`] configuration.
@@ -104,17 +104,17 @@ fn name(text: &str) -> PackId {
 }
 
 /// A Host with no Host-wide services over a registry holding `infos`.
-fn host(infos: &[PluginInfo]) -> HostContext {
+fn host(infos: &[PackInfo]) -> HostContext {
     host_with(HostServices::new(), infos)
 }
 
 /// A Host over the Host-wide `services` and a registry holding `infos`.
-fn host_with(services: HostServices, infos: &[PluginInfo]) -> HostContext {
-    let mut plugins = PluginRegistry::new();
+fn host_with(services: HostServices, infos: &[PackInfo]) -> HostContext {
+    let mut packs = PackRegistry::new();
     for info in infos {
-        plugins.add(*info).unwrap();
+        packs.add(*info).unwrap();
     }
-    HostContext::new(plugins, services)
+    HostContext::new(packs, services)
 }
 
 /// A prompt with the given `uses:` and `tools:` frontmatter lines.
@@ -138,7 +138,7 @@ fn catalog_ids(host: &HostContext, services: HostServices, prompt: &Prompt) -> V
 }
 
 #[test]
-fn install_names_the_plugin_after_its_fqns_second_segment_unless_the_host_picks_one() {
+fn install_names_the_pack_after_its_fqns_second_segment_unless_the_host_picks_one() {
     let mut host = host(&[info("acme/web")]);
     assert_eq!(host.install("acme/web", None, Value::Null), Ok(name("web")));
     assert_eq!(
@@ -173,13 +173,33 @@ fn install_refuses_a_name_already_installed_and_its_punctuation_twin() {
     );
     assert_eq!(
         taken("user_input").to_string(),
-        "Plugin id user_input is taken by the installed user-input; install it under another Plugin id"
+        "Pack id user_input is taken by the installed user-input; install it under another Pack id"
+    );
+}
+
+#[test]
+fn the_registry_and_install_refusals_name_the_pack() {
+    let refusals = [
+        InstallError::InvalidFqn { fqn: "web" },
+        InstallError::DuplicatePack { fqn: "acme/web" },
+        InstallError::UnknownPlugin {
+            fqn: "acme/web".to_owned(),
+        },
+    ];
+    let messages: Vec<String> = refusals.iter().map(ToString::to_string).collect();
+    assert_eq!(
+        messages,
+        [
+            "Pack fully qualified name `web` is not a vendor/name pair",
+            "Pack `acme/web` is already in the registry",
+            "Pack `acme/web` is not in the registry; add it with PackRegistry::add before building the HostContext",
+        ]
     );
 }
 
 #[test]
 fn a_construct_failure_is_stored_and_reported_as_unavailable_with_its_reason() {
-    let backed_info = PluginInfo::new("acme/backed", backed);
+    let backed_info = PackInfo::new("acme/backed", backed);
     let mut bare = host(&[backed_info]);
     assert_eq!(
         bare.install(backed_info.fqn, None, Value::Null),
@@ -218,9 +238,9 @@ fn a_construct_failure_is_stored_and_reported_as_unavailable_with_its_reason() {
 }
 
 #[test]
-fn begin_run_reports_every_declared_plugin_it_cannot_serve() {
+fn begin_run_reports_every_declared_pack_it_cannot_serve() {
     let needy = info("acme/needy").needs(NEEDS_SESSION);
-    let broken = PluginInfo::new("acme/broken", backed);
+    let broken = PackInfo::new("acme/broken", backed);
     let mut host = host(&[needy, broken, info("acme/fine")]);
     host.install(needy.fqn, None, Value::Null).unwrap();
     host.install(broken.fqn, None, Value::Null).unwrap();
@@ -239,7 +259,7 @@ fn begin_run_reports_every_declared_plugin_it_cannot_serve() {
     assert_eq!(
         requirements.unavailable.len(),
         1,
-        "the declared Plugin that failed to build is reported: {requirements:?}"
+        "the declared Pack that failed to build is reported: {requirements:?}"
     );
     assert_eq!(requirements.unavailable[0].pack, name("broken"));
 }
@@ -270,7 +290,7 @@ fn an_installed_builtin_adds_no_catalog_tool_and_no_prelude() {
 }
 
 #[test]
-fn the_roster_lists_the_builtin_stub_as_usable_and_each_plugin_that_cannot_serve_with_its_reason() {
+fn the_roster_lists_the_builtin_stub_as_usable_and_each_pack_that_cannot_serve_with_its_reason() {
     let needy = info("acme/needy").needs(NEEDS_SESSION);
     let mut host = host(&[info("acme/kit"), needy]);
     host.install("runvil/subagents", None, Value::Null).unwrap();
@@ -298,7 +318,7 @@ fn the_roster_lists_the_builtin_stub_as_usable_and_each_plugin_that_cannot_serve
 }
 
 #[test]
-fn begin_run_drops_a_tool_outside_its_plugin_and_a_repeated_id() {
+fn begin_run_drops_a_tool_outside_its_pack_and_a_repeated_id() {
     let mut host = host(&[info("acme/kit")]);
     let config = json!([tool("kit/good"), tool("other/escape"), tool("kit/good")]);
     host.install("acme/kit", None, config).unwrap();
@@ -309,7 +329,7 @@ fn begin_run_drops_a_tool_outside_its_plugin_and_a_repeated_id() {
 }
 
 #[test]
-fn a_plugin_whose_needs_the_run_lacks_offers_it_no_tools() {
+fn a_pack_whose_needs_the_run_lacks_offers_it_no_tools() {
     let needy = info("acme/needy").needs(NEEDS_SESSION);
     let mut host = host(&[needy]);
     host.install(needy.fqn, None, json!([tool("needy/use")]))
@@ -322,7 +342,7 @@ fn a_plugin_whose_needs_the_run_lacks_offers_it_no_tools() {
 }
 
 #[test]
-fn an_undeclared_plugins_tools_reach_the_catalog_but_its_prelude_does_not() {
+fn an_undeclared_packs_tools_reach_the_catalog_but_its_prelude_does_not() {
     let declared = info("acme/declared").prelude("declared = {}\n");
     let extra = info("acme/extra").prelude("extra = {}\n");
     let mut host = host(&[declared, extra]);
@@ -346,7 +366,7 @@ fn an_undeclared_plugins_tools_reach_the_catalog_but_its_prelude_does_not() {
 
 #[test]
 fn preludes_follow_the_prompts_declaration_order_and_carry_the_installed_name() {
-    let with_prelude = |fqn: &'static str| info(fqn).prelude("local plugin = ...\n");
+    let with_prelude = |fqn: &'static str| info(fqn).prelude("local pack = ...\n");
     let mut host = host(&[with_prelude("acme/first"), with_prelude("acme/second")]);
     for fqn in ["acme/first", "acme/second"] {
         host.install(fqn, None, Value::Null).unwrap();
@@ -379,7 +399,7 @@ async fn call(run: &dyn ToolPerformer, tool: &str) -> Result<ToolOutput, ToolErr
 }
 
 #[tokio::test]
-async fn a_call_goes_to_the_plugin_its_tool_ids_first_segment_names() {
+async fn a_call_goes_to_the_pack_its_tool_ids_first_segment_names() {
     let mut host = host(&[info("acme/one"), info("acme/two")]);
     host.install("acme/one", None, json!([tool("one/echo")]))
         .unwrap();
@@ -392,12 +412,12 @@ async fn a_call_goes_to_the_plugin_its_tool_ids_first_segment_names() {
     assert_eq!(answer(call(&run, "two/echo").await), "two:two/echo");
     let error = call(&run, "three/echo")
         .await
-        .expect_err("no Plugin is installed under three");
+        .expect_err("no Pack is installed under three");
     assert!(error.to_string().contains("three/echo"), "{error}");
 }
 
 #[tokio::test]
-async fn a_call_to_a_plugin_the_run_cannot_use_fails_naming_the_tool() {
+async fn a_call_to_a_pack_the_run_cannot_use_fails_naming_the_tool() {
     let needy = info("acme/needy").needs(NEEDS_SESSION);
     let mut host = host(&[needy]);
     host.install(needy.fqn, None, json!([tool("needy/use")]))
@@ -405,7 +425,7 @@ async fn a_call_to_a_plugin_the_run_cannot_use_fails_naming_the_tool() {
     let (run, _requirements) = host.begin_run(HostServices::new(), BTreeMap::new(), &prompt(""));
     let error = call(&run, "needy/use")
         .await
-        .expect_err("the run lacks the Plugin's needs");
+        .expect_err("the run lacks the Pack's needs");
     assert!(error.to_string().contains("needy/use"), "{error}");
 }
 

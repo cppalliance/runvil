@@ -43,7 +43,7 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use harness::plugin::{HostContext, HostServices, PluginRegistry};
+use harness::pack::{HostContext, HostServices, PackRegistry};
 use harness::record::RunId;
 use harness::vfs::VfsRef;
 use harness::{Harness, RunRequest};
@@ -73,7 +73,7 @@ const HARNESS_STATE_DIR: &str = "harness";
 /// tokio runtime service, as the handle it supplies.
 const RUNTIME: ServiceKey<tokio::runtime::Handle> = ServiceKey::new(runvil_plugin::TOKIO_RUNTIME);
 
-/// The server's installed Plugins over its Host-wide [`services`], beside
+/// The server's installed Packs over its Host-wide [`services`], beside
 /// the ask tool's id. `mcp` is the `[agents] mcp` setting: the servers of
 /// the file it names are installed too.
 fn host_context(registry: &Registry, mcp: Option<&Path>) -> (HostContext, Option<ToolId>) {
@@ -136,11 +136,11 @@ fn read_mcp_servers(setting: Option<&Path>) -> Vec<(String, Value)> {
     }
 }
 
-/// A Host over the Host-wide `services` with the Plugins agents may
+/// A Host over the Host-wide `services` with the Packs agents may
 /// declare installed: `web`, `user-input`, so they can ask the operator,
 /// and the built-in `subagents`, under their default names, then each of
-/// `servers` as an MCP Plugin under its name lowercased in ASCII, with its
-/// entry as the configuration. A name that does not parse as a Plugin id,
+/// `servers` as an MCP Pack under its name lowercased in ASCII, with its
+/// entry as the configuration. A name that does not parse as a Pack id,
 /// or that is taken, reserved for the built-in, or differs from an installed
 /// name only by punctuation, is skipped with a warning, and the other
 /// servers still install. The ask tool's id is `<name>/ask` under the name
@@ -150,31 +150,31 @@ fn with_plugins(
     services: HostServices,
     servers: Vec<(String, Value)>,
 ) -> (HostContext, Option<ToolId>) {
-    let mut plugins = PluginRegistry::new();
+    let mut packs = PackRegistry::new();
     for info in [
         plugin_web::PLUGIN,
         plugin_user_input::PLUGIN,
         plugin_mcp::PLUGIN,
     ] {
-        if let Err(error) = plugins.add(info) {
-            tracing::warn!(%error, "the Plugin was not added to the registry");
+        if let Err(error) = packs.add(info) {
+            tracing::warn!(%error, "the Pack was not added to the registry");
         }
     }
-    let mut host = HostContext::new(plugins, services);
+    let mut host = HostContext::new(packs, services);
     if let Err(error) = host.install(plugin_web::PLUGIN.fqn, None, Value::Null) {
-        tracing::warn!(%error, "the web Plugin was not installed");
+        tracing::warn!(%error, "the web Pack was not installed");
     }
     let ask = match host.install(plugin_user_input::PLUGIN.fqn, None, Value::Null) {
         Ok(name) => ToolId::parse(&format!("{name}/{}", plugin_user_input::ASK))
             .inspect_err(|error| tracing::warn!(%error, "the ask tool's id does not parse"))
             .ok(),
         Err(error) => {
-            tracing::warn!(%error, "the user-input Plugin was not installed");
+            tracing::warn!(%error, "the user-input Pack was not installed");
             None
         }
     };
     if let Err(error) = host.install("runvil/subagents", None, Value::Null) {
-        tracing::warn!(%error, "the subagents Plugin was not installed");
+        tracing::warn!(%error, "the subagents Pack was not installed");
     }
     for (server, entry) in servers {
         let id = match PackId::parse(&server.to_ascii_lowercase()) {
@@ -216,7 +216,7 @@ fn services(registry: &Registry) -> HostServices {
 /// run's Harness and the status reporter.
 ///
 /// Typed and construction-phased: the registry, the server's backoff, the
-/// run log, and the installed Plugins every run shares are captured when
+/// run log, and the installed Packs every run shares are captured when
 /// the composition root builds it, and the other subsystems are read
 /// through the registry at the point of use, so this handle never holds
 /// another subsystem's handle.
@@ -239,7 +239,7 @@ struct Inner {
     recorder: Arc<TursoRecorder>,
     /// The inference broker behind each run's broker.
     broker: WorkshopBroker,
-    /// The installed Plugins every run takes its snapshot of.
+    /// The installed Packs every run takes its snapshot of.
     host: Arc<HostContext>,
     /// The ask tool's id under the name user-input was installed as,
     /// which a script's ask result is recognized by; `None` only if that

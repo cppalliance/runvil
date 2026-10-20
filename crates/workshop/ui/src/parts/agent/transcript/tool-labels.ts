@@ -48,7 +48,7 @@ export interface TurnState {
 /**
  * The family of a bound tool id (the wire's `namespace/name` string).
  * The ask tool is recognized by its name, because a Host installs the
- * user-input Plugin under any namespace; the web tools are fixed ids.
+ * user-input Pack under any namespace; the web tools are fixed ids.
  * A null tool is generic.
  */
 export function toolKind(tool: string | null): ToolKind {

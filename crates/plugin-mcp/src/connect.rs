@@ -22,7 +22,7 @@ pub(crate) const STARTUP_DEADLINE: Duration = Duration::from_mins(2);
 /// What this client tells a server about itself. It declares no
 /// `capabilities`, because an optional extension such as
 /// `io.modelcontextprotocol/ui` would make GitHub's server answer with
-/// interactive forms that this Plugin cannot show.
+/// interactive forms that this Pack cannot show.
 fn client_config() -> ClientConfig {
     ClientConfig::new(
         ClientCapabilities::default(),
@@ -66,7 +66,7 @@ fn retry_delay(failures: u32) -> Duration {
 /// rmcp sets no handshake timeout and does not guard `list_all_tools`
 /// against a server that repeats a cursor, so `deadline` bounds both.
 pub(crate) async fn run(
-    plugin: PackId,
+    pack: PackId,
     entry: RemoteEntry,
     deadline: Duration,
     state: watch::Sender<State>,
@@ -97,7 +97,7 @@ pub(crate) async fn run(
             Ok(Ok((service, tools))) => {
                 let ready = Ready {
                     peer: service.peer().clone(),
-                    tools: catalog(&plugin, tools),
+                    tools: catalog(&pack, tools),
                 };
                 state.send_replace(State::Ready(ready));
                 // Holding the service keeps the session open; its end changes no state.

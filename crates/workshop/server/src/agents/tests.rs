@@ -1,6 +1,6 @@
 //! The agent conversations' Harness setup: a prompt declaring
 //! `web` or the built-in `subagents` prepares over the server's installed
-//! Plugins, a Host without the
+//! Packs, a Host without the
 //! search provider installs web as unavailable and refuses the prompt
 //! naming that service, outside a runtime the services leave the runtime
 //! out, and the ask id names the ask tool under the name user-input was
@@ -13,7 +13,7 @@ use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
 
-use harness::plugin::{HostContext, HostServices};
+use harness::pack::{HostContext, HostServices};
 use harness::record::{MemoryRecorder, RunOutcome};
 use harness::vfs::VfsRef;
 use harness::{BoxFuture, Harness, HostSnapshot, InferenceBroker, RunRequest};
@@ -34,11 +34,11 @@ use super::{host_context, read_mcp_servers, services, with_plugins};
 /// builds it.
 const RUNTIME: ServiceKey<tokio::runtime::Handle> = ServiceKey::new(TOKIO_RUNTIME);
 
-/// A prompt that requires the Plugin `plugin` and returns a fixed text.
-fn requiring(plugin: &str) -> String {
+/// A prompt that requires the Pack `pack` and returns a fixed text.
+fn requiring(pack: &str) -> String {
     format!(
-        "---\nname: browses\ndescription: needs {plugin}\nrunvil: 0\n\
-        uses:\n  - {plugin}\n---\n\n\
+        "---\nname: browses\ndescription: needs {pack}\nrunvil: 0\n\
+        uses:\n  - {pack}\n---\n\n\
         # Browses\n\n## Only\n\n```lua\nreturn 'browsed'\n```\n"
     )
 }
@@ -106,12 +106,12 @@ async fn run_prompt(host: &Arc<HostContext>, source: String) -> Option<RunOutcom
     recorder.outcome(conversation.run_id().expect("the recorder began the run"))
 }
 
-/// Whether a run requiring `plugin` is refused as that Plugin being
+/// Whether a run requiring `pack` is refused as that Pack being
 /// installed but unavailable for the local-entry reason.
-async fn installed_as_a_refused_local_server(host: &Arc<HostContext>, plugin: &str) -> bool {
-    match run_prompt(host, requiring(plugin)).await {
+async fn installed_as_a_refused_local_server(host: &Arc<HostContext>, pack: &str) -> bool {
+    match run_prompt(host, requiring(pack)).await {
         Some(RunOutcome::Failed { message, .. }) => {
-            message.contains(&format!("- {plugin} is unavailable: {LOCAL_REFUSAL}"))
+            message.contains(&format!("- {pack} is unavailable: {LOCAL_REFUSAL}"))
         }
         _ => false,
     }
@@ -126,7 +126,7 @@ fn mcp_file(text: &str) -> (tempfile::TempDir, std::path::PathBuf) {
 }
 
 #[tokio::test]
-async fn a_prompt_declaring_web_prepares_on_the_servers_installed_plugins() {
+async fn a_prompt_declaring_web_prepares_on_the_servers_installed_packs() {
     let (host, _ask) = host_context(&Registry::new(), None);
     assert_eq!(
         run_prompt(&Arc::new(host), requiring("web")).await,
@@ -138,7 +138,7 @@ async fn a_prompt_declaring_web_prepares_on_the_servers_installed_plugins() {
 }
 
 #[tokio::test]
-async fn a_prompt_declaring_subagents_prepares_on_the_servers_installed_plugins() {
+async fn a_prompt_declaring_subagents_prepares_on_the_servers_installed_packs() {
     let (host, _ask) = host_context(&Registry::new(), None);
     assert_eq!(
         run_prompt(&Arc::new(host), requiring("subagents")).await,
@@ -166,7 +166,7 @@ async fn a_host_without_the_search_provider_refuses_a_prompt_requiring_web() {
         message.contains(
             "- web is unavailable: web needs runvil/search-provider, and this host provides none"
         ),
-        "the refusal names the Plugin and the missing service: {message}"
+        "the refusal names the Pack and the missing service: {message}"
     );
 }
 
@@ -229,7 +229,7 @@ fn a_file_without_mcp_servers_gives_no_servers() {
 }
 
 #[test]
-fn an_entry_that_is_not_an_object_is_handed_on_for_the_plugin_to_refuse() {
+fn an_entry_that_is_not_an_object_is_handed_on_for_the_pack_to_refuse() {
     let (_dir, path) = mcp_file(r#"{ "mcpServers": { "a": 1 } }"#);
     assert_eq!(
         read_mcp_servers(Some(&path)),
@@ -314,7 +314,7 @@ async fn a_taken_name_or_punctuation_twin_is_skipped_and_the_other_servers_insta
 }
 
 #[tokio::test]
-async fn a_server_named_web_does_not_displace_the_web_plugin() {
+async fn a_server_named_web_does_not_displace_the_web_pack() {
     let (host, _ask) = with_plugins(
         services(&Registry::new()),
         vec![("web".to_owned(), local_entry())],

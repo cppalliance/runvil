@@ -8,8 +8,8 @@
 //! a prompt declares them by plain name, which makes each one required
 //! and runs its prelude, and a tool names its Pack through its
 //! [`ToolId`] prefix. A run's catalog holds the tools of every Pack the
-//! caller can serve, declared or not. The Pack contract - the
-//! `PluginInfo`, the `Plugin` trait, and the services a Pack reads - is
+//! caller can serve, declared or not. The Plugin contract - the
+//! `PackInfo`, the `Pack` trait, and the services a Pack reads - is
 //! in `runvil-plugin`, and installing Packs is the caller's; the
 //! Engine never builds a Pack.
 

@@ -13,7 +13,7 @@ use std::task::Poll;
 use harness_runner::display_chain;
 use harness_runner::environment::CurrentModelError;
 use harness_runner::recorder::MemoryRecorder;
-use harness_runner::{Harness, HarnessError, HostContext, PluginRegistry};
+use harness_runner::{Harness, HarnessError, HostContext, PackRegistry};
 use runvil::model::{Completion, CompletionError, CompletionErrorKind};
 use runvil_plugin::HostServices;
 
@@ -23,7 +23,7 @@ use super::{
 use crate::scripted::{Listing, ScriptedBroker};
 use crate::support::FailingRecorder;
 
-/// A Plugin-free prompt whose one section returns a constant.
+/// A Pack-free prompt whose one section returns a constant.
 const PLAIN: &str = "---\nname: plain\ndescription: d\nrunvil: 0\n---\n\n\
     # Title\n\n## Only\n\n```lua\nreturn 'plain'\n```\n";
 
@@ -39,14 +39,14 @@ const CATCHES_A_ROUND: &str = "---\nname: catches\ndescription: d\nrunvil: 0\n\
     local ok, err = pcall(models.infer, 'asked')\n\
     return tostring(ok) .. ':' .. err.kind\n```\n";
 
-/// A Harness over `recorder` and `broker` with no Plugins and no
+/// A Harness over `recorder` and `broker` with no Packs and no
 /// Host services.
 fn harness_over(recorder: &Arc<FailingRecorder>, broker: ScriptedBroker) -> Harness {
     Harness::new(
         recorder.clone(),
         Arc::new(broker),
         Arc::new(PendingTimer::default()),
-        Arc::new(HostContext::new(PluginRegistry::new(), HostServices::new())),
+        Arc::new(HostContext::new(PackRegistry::new(), HostServices::new())),
         HostServices::new(),
     )
 }

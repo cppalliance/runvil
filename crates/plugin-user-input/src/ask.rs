@@ -1,10 +1,10 @@
-//! The Plugin object and the `construct` that builds it: one ask tool,
+//! The Pack object and the `construct` that builds it: one ask tool,
 //! named under the name the Host chose.
 
 use std::sync::Arc;
 
 use runvil_plugin::{
-    HostServices, PackId, Plugin, PluginFuture, ToolContext, ToolError, ToolErrorKind, ToolId,
+    HostServices, Pack, PackFuture, PackId, ToolContext, ToolError, ToolErrorKind, ToolId,
     ToolInfo, ToolOutput,
 };
 use serde_json::{Value, json};
@@ -16,17 +16,17 @@ struct UserInput {
     tools: Vec<ToolInfo>,
 }
 
-/// Builds the Plugin under `name`. It takes no configuration and reads
+/// Builds the Pack under `name`. It takes no configuration and reads
 /// no Host-wide service; the broker arrives with each run.
 #[expect(
     clippy::needless_pass_by_value,
-    reason = "the PluginInfo construct signature fixes the argument types"
+    reason = "the PackInfo construct signature fixes the argument types"
 )]
 pub(crate) fn construct(
     name: &PackId,
     config: Value,
     _services: &HostServices,
-) -> Result<Arc<dyn Plugin>, ToolError> {
+) -> Result<Arc<dyn Pack>, ToolError> {
     if !(config.is_null() || config == json!({})) {
         return Err(ToolError::message("user-input takes no configuration"));
     }
@@ -46,7 +46,7 @@ pub(crate) fn construct(
     Ok(Arc::new(UserInput { tools: vec![ask] }))
 }
 
-impl Plugin for UserInput {
+impl Pack for UserInput {
     fn tools(&self) -> Vec<ToolInfo> {
         self.tools.clone()
     }
@@ -55,9 +55,9 @@ impl Plugin for UserInput {
         &'a self,
         cx: ToolContext<'a>,
         _args: Value,
-    ) -> PluginFuture<'a, Result<ToolOutput, ToolError>> {
+    ) -> PackFuture<'a, Result<ToolOutput, ToolError>> {
         Box::pin(async move {
-            // The Plugin's needs keep a run without a broker from seeing
+            // The Pack's needs keep a run without a broker from seeing
             // the ask tool, so this branch is defensive.
             let broker = cx
                 .service(&INPUT_BROKER)

@@ -1,4 +1,4 @@
-//! The `user-input` Plugin through its public `PluginInfo`: what `construct`
+//! The `user-input` Pack through its public `PackInfo`: what `construct`
 //! builds under the name the Host chose, what the ask tool answers from
 //! the run's broker, and the prelude a declaring prompt runs.
 
@@ -9,7 +9,7 @@ use std::task::{Context, Poll, Waker};
 
 use plugin_user_input::{ASK, INPUT_BROKER, InputBroker, PLUGIN};
 use runvil_plugin::testing::TestCall;
-use runvil_plugin::{HostServices, OutputTrust, PackId, Plugin, ToolError, ToolErrorKind, ToolId};
+use runvil_plugin::{HostServices, OutputTrust, Pack, PackId, ToolError, ToolErrorKind, ToolId};
 use serde_json::{Value, json};
 
 /// A broker whose operator always types the same text.
@@ -47,17 +47,17 @@ fn block_on<F: Future>(future: F) -> F::Output {
     }
 }
 
-/// The Plugin installed under `name` with `config`.
-fn construct(name: &str, config: Value) -> Result<Arc<dyn Plugin>, ToolError> {
-    let name = PackId::parse(name).expect("a one-segment Plugin id parses");
+/// The Pack installed under `name` with `config`.
+fn construct(name: &str, config: Value) -> Result<Arc<dyn Pack>, ToolError> {
+    let name = PackId::parse(name).expect("a one-segment Pack id parses");
     (PLUGIN.construct)(&name, config, &HostServices::new())
 }
 
-fn installed(name: &str) -> Arc<dyn Plugin> {
-    let Ok(plugin) = construct(name, Value::Null) else {
+fn installed(name: &str) -> Arc<dyn Pack> {
+    let Ok(pack) = construct(name, Value::Null) else {
         panic!("construct succeeds with no configuration");
     };
-    plugin
+    pack
 }
 
 /// Run services whose broker is `broker`.
@@ -70,16 +70,16 @@ fn with_broker(broker: impl InputBroker + 'static) -> HostServices {
     services
 }
 
-/// Asks once through the Plugin installed as `user-input`, with `services`
+/// Asks once through the Pack installed as `user-input`, with `services`
 /// as the run's services.
 fn ask(services: HostServices) -> Result<runvil_plugin::ToolOutput, ToolError> {
-    let plugin = installed("user-input");
-    let call = TestCall::new(plugin.tools()[0].id.clone()).with_services(services);
-    block_on(plugin.call(call.context(), json!({})))
+    let pack = installed("user-input");
+    let call = TestCall::new(pack.tools()[0].id.clone()).with_services(services);
+    block_on(pack.call(call.context(), json!({})))
 }
 
 #[test]
-fn the_plugin_is_runvil_user_input_and_needs_the_input_broker() {
+fn the_pack_is_runvil_user_input_and_needs_the_input_broker() {
     assert_eq!(PLUGIN.fqn, "runvil/user-input");
     assert_eq!(PLUGIN.needs, [INPUT_BROKER.id()]);
     assert_eq!(PLUGIN.needs[0].to_string(), "runvil/input-broker");
@@ -141,10 +141,10 @@ fn a_call_without_a_broker_fails_saying_no_operator_is_connected() {
 
 #[test]
 fn the_prelude_reads_the_installed_name_and_asks_through_it() {
-    let prelude = PLUGIN.prelude.expect("the Plugin has a prelude");
-    assert!(prelude.starts_with("local plugin = ...\n"), "{prelude}");
+    let prelude = PLUGIN.prelude.expect("the Pack has a prelude");
+    assert!(prelude.starts_with("local pack = ...\n"), "{prelude}");
     assert!(
-        prelude.contains("tools.call(plugin .. \"/ask\")"),
+        prelude.contains("tools.call(pack .. \"/ask\")"),
         "{prelude}"
     );
     assert!(

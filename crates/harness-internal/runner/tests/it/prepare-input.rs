@@ -1,15 +1,15 @@
 //! The run's optional input broker at preparation, supplied among its own
 //! services under the fixture's `BROKER`: every tool call of the run is
 //! lent it, or lent none when the Host has nobody to ask; and the fixture
-//! ask Plugin's `input.ask()` reaches it, and is refused on a run without
-//! one. The ask tool, read by its id, runs beside the Plugin's `input`
+//! ask Pack's `input.ask()` reaches it, and is refused on a run without
+//! one. The ask tool, read by its id, runs beside the Pack's `input`
 //! prelude global.
 
 use super::*;
 
 use crate::asker::{ASKER, AskBroker, BROKER, broker_services};
 
-/// A prompt declaring the probe Plugin and returning what its one call
+/// A prompt declaring the probe Pack and returning what its one call
 /// saw.
 const PROBES: &str = "---\nname: probes\ndescription: d\nrunvil: 0\n\
     uses:\n  - probe\n---\n\n# Title\n\n## Only\n\n\
@@ -39,10 +39,10 @@ impl AskBroker for Failing {
     }
 }
 
-/// The fixture Plugin `probe`: one tool, `probe/saw`, answering whether
+/// The fixture Pack `probe`: one tool, `probe/saw`, answering whether
 /// its call was lent a broker. It needs nothing, so a run without a
 /// broker can use it.
-const PROBE: PluginInfo = PluginInfo::new("tests/probe", construct_probe);
+const PROBE: PackInfo = PackInfo::new("tests/probe", construct_probe);
 
 struct Probe {
     tools: Vec<ToolInfo>,
@@ -50,13 +50,13 @@ struct Probe {
 
 #[expect(
     clippy::unnecessary_wraps,
-    reason = "the PluginInfo construct signature fixes the return type"
+    reason = "the PackInfo construct signature fixes the return type"
 )]
 fn construct_probe(
     name: &PackId,
     _config: Value,
     _services: &HostServices,
-) -> Result<Arc<dyn Plugin>, ToolError> {
+) -> Result<Arc<dyn Pack>, ToolError> {
     let saw = ToolInfo::new(
         ToolId::parse(&format!("{name}/saw")).unwrap(),
         "Answer whether the call was lent a broker.",
@@ -65,7 +65,7 @@ fn construct_probe(
     Ok(Arc::new(Probe { tools: vec![saw] }))
 }
 
-impl Plugin for Probe {
+impl Pack for Probe {
     fn tools(&self) -> Vec<ToolInfo> {
         self.tools.clone()
     }
@@ -74,7 +74,7 @@ impl Plugin for Probe {
         &'a self,
         cx: ToolContext<'a>,
         _args: Value,
-    ) -> PluginFuture<'a, Result<ToolOutput, ToolError>> {
+    ) -> PackFuture<'a, Result<ToolOutput, ToolError>> {
         let saw = cx.service(&BROKER).is_some();
         Box::pin(async move { Ok(ToolOutput::trusted(saw.to_string())) })
     }
@@ -128,21 +128,21 @@ const REQUIRED: &str = "  - user-input\n";
 /// Asks once and returns the answer.
 const ASKS_ONCE: &str = "local text = input.ask()\nreturn text";
 
-/// A one-section prompt that declares the user-input Plugin with
+/// A one-section prompt that declares the user-input Pack with
 /// `declaration` (none when empty) and runs `lua`.
 fn user_input_prompt(declaration: &str, lua: &str) -> String {
-    let plugins = if declaration.is_empty() {
+    let packs = if declaration.is_empty() {
         String::new()
     } else {
         format!("uses:\n{declaration}")
     };
     format!(
-        "---\nname: asks-input\ndescription: d\nrunvil: 0\n{plugins}---\n\n\
+        "---\nname: asks-input\ndescription: d\nrunvil: 0\n{packs}---\n\n\
          # Title\n\n## Only\n\n```lua\n{lua}\n```\n"
     )
 }
 
-/// The preparation services over `recorder` with the fixture ask Plugin
+/// The preparation services over `recorder` with the fixture ask Pack
 /// installed as `user-input` and `input` as the run's broker.
 fn user_input_services(
     recorder: &Arc<MemoryRecorder>,
@@ -162,7 +162,7 @@ async fn a_required_user_input_declaration_on_a_host_without_a_broker_is_refused
         user_input_services(&recorder, None),
     )
     .await
-    .expect_err("a required Plugin without its service refuses the run");
+    .expect_err("a required Pack without its service refuses the run");
     let PrepareError::Refused { error, .. } = error else {
         panic!("the refusal is a requirements refusal: {error}");
     };
@@ -170,11 +170,11 @@ async fn a_required_user_input_declaration_on_a_host_without_a_broker_is_refused
     let notice = error.to_string();
     assert!(
         notice.contains("- user-input needs tests/input-broker, and the environment provides none"),
-        "the notice names the Plugin and the missing service: {notice}"
+        "the notice names the Pack and the missing service: {notice}"
     );
     assert!(
         !notice.contains("missing required Pack: user-input"),
-        "the notice does not call the registered Plugin missing: {notice}"
+        "the notice does not call the registered Pack missing: {notice}"
     );
 }
 
@@ -253,7 +253,7 @@ async fn the_ask_tool_read_by_id_runs_beside_the_untouched_prelude_and_engine_gl
         completed(outcome),
         "hello|user-input/ask|function|function|function|nil",
         "the tool object is the ask tool, no tool is a global, and input, store, and \
-         tools are the Plugin's and the Engine's"
+         tools are the Pack's and the Engine's"
     );
 }
 

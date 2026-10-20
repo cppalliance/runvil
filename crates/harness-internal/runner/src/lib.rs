@@ -2,7 +2,7 @@
 //! [`Harness`] resolves the launch model through the Host's broker,
 //! prepares an Engine `Run` from the prompt's source (drawing the inputs
 //! the Engine refuses to draw itself, putting the declared input file in
-//! place, taking the run's snapshot of the [`HostContext`]'s Plugins,
+//! place, taking the run's snapshot of the [`HostContext`]'s Packs,
 //! beginning the run at its recorder),
 //! steps it, performs each chat, tool-call, and timer effect through its
 //! performer and answers each Vfs effect inline, feeds the answers back,
@@ -26,11 +26,11 @@
 //! - The loop never reads an event to decide anything; control comes
 //!   from the run's own word (`Step`, `Run::decided`), the cancel flag,
 //!   and the Host's stop.
-//! - A Host installs a Plugin only by an FQN its Plugin registry,
-//!   [`PluginRegistry`], holds. The registry holds the built-in
+//! - A Host installs a Pack only by an FQN its Pack registry,
+//!   [`PackRegistry`], holds. The registry holds the built-in
 //!   `runvil/subagents` from the start and refuses a duplicate FQN, and
-//!   install refuses the built-in's Plugin id to every other Plugin, so no
-//!   other Plugin can take `subagents`.
+//!   install refuses the built-in's Pack id to every other Pack, so no
+//!   other Pack can take `subagents`.
 
 mod display_chain;
 pub mod effect_loop;
@@ -50,4 +50,4 @@ pub use recorder::{
     MemoryRecorder, Record, RecordKind, RecorderError, RecorderFuture, RunId, RunMeta, RunOutcome,
     RunRecorder,
 };
-pub use registry::{PluginKind, PluginRegistry};
+pub use registry::{PackOrigin, PackRegistry};

@@ -2,7 +2,7 @@
 //! supplies, which drives that one run as a single future.
 //!
 //! A Host builds a [`Harness`] from its recorder, inference broker, timer,
-//! installed Plugins, and the run's services, takes the run's [`RunControl`], and
+//! installed Packs, and the run's services, takes the run's [`RunControl`], and
 //! awaits [`Harness::run`] on whatever executor it likes. The run resolves
 //! the launch model through the broker, prepares the request's source,
 //! drives the run through the effect loop, and reads the declared output
@@ -35,7 +35,7 @@ pub(crate) use control::StopSignal;
 /// Drives one run of a prompt for a Host.
 ///
 /// It holds what the Host supplies for the run: a recorder, an inference
-/// broker, a timer, the Host's installed Plugins, and the run's own
+/// broker, a timer, the Host's installed Packs, and the run's own
 /// services. [`Harness::run`] consumes it.
 pub struct Harness {
     recorder: Arc<dyn RunRecorder>,
@@ -127,7 +127,7 @@ impl Harness {
     ///
     /// The Harness records the run through `recorder`. It resolves the
     /// run's model and gets the model's replies through `broker`. It sleeps
-    /// through `timer`. Its tool calls go to the Plugins installed in
+    /// through `timer`. Its tool calls go to the Packs installed in
     /// `host`, and each call is lent `services`, the run's own, such as
     /// its input broker. A run has at most 10 tool calls in flight; the
     /// rest wait and start oldest first. All of this work happens in
@@ -162,10 +162,10 @@ impl Harness {
     /// Runs `request` to its end and reports how it ended.
     ///
     /// It resolves the run's model through the inference broker, prepares
-    /// the prompt from its source, waits for the Host's Plugins to be
+    /// the prompt from its source, waits for the Host's Packs to be
     /// ready, drives the run, and reads the declared output file if the
     /// run completed. The returned future is `Send`. Its only runtime needs
-    /// are those of the Host's performers and Plugins.
+    /// are those of the Host's performers and Packs.
     ///
     /// Three problems end the run as failed and still return a report with
     /// that outcome: a source that fails to parse, a declared input file
@@ -174,7 +174,7 @@ impl Harness {
     /// `run`, or while the broker lists its models, returns a report with
     /// the outcome `Cancelled` and `run_id` set to `None`. An environment
     /// that falls short after a cancel was raised, as when the cancel cuts
-    /// short the wait for a Plugin that is still starting, ends the run as
+    /// short the wait for a Pack that is still starting, ends the run as
     /// `Cancelled` instead, and the report carries the run's `run_id`.
     ///
     /// # Errors
@@ -192,7 +192,7 @@ impl Harness {
             recorder,
             broker,
             timer,
-            host: plugins,
+            host: packs,
             services,
             control,
         } = self;
@@ -222,7 +222,7 @@ impl Harness {
         };
 
         let services = Services {
-            host: plugins,
+            host: packs,
             services,
             vfs: vfs.clone(),
             input_text,

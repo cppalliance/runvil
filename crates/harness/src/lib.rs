@@ -1,10 +1,10 @@
 //! The Harness, which runs one prompt for a Host and records the run.
 //!
-//! A Host adds its Plugins to a [`plugin::PluginRegistry`], builds one
-//! [`plugin::HostContext`] over it, and installs Plugins by fully
+//! A Host adds its Packs to a [`pack::PackRegistry`], builds one
+//! [`pack::HostContext`] over it, and installs Packs by fully
 //! qualified name. It installs them once and builds one Harness for each
 //! run. [`Harness::new`] takes the Host's recorder, inference broker,
-//! timer, installed Plugins, and the run's own services. [`Harness::run`]
+//! timer, installed Packs, and the run's own services. [`Harness::run`]
 //! runs the prompt to its end and returns its [`RunReport`]. While the run
 //! goes on, the Host steers it through the [`RunControl`] it took from
 //! `Harness::control` before the run started.
@@ -24,16 +24,16 @@ pub use harness_runner::performers::BoxFuture;
 pub use harness_runner::performers::InferenceBroker;
 pub use harness_runner::performers::Timer;
 
-pub mod plugin {
-    //! The registry a Host lists and installs Plugins from, the context
-    //! a Host installs its Plugins in, the services maps a Host fills, and
-    //! the Plugin ids Plugins are installed under. The Plugin crates
+pub mod pack {
+    //! The registry a Host lists and installs Packs from, the context
+    //! a Host installs its Packs in, the services maps a Host fills, and
+    //! the Pack ids Packs are installed under. The Plugin crates
     //! themselves are the Host's own dependencies.
 
     pub use harness_runner::HostContext;
     pub use harness_runner::InstallError;
-    pub use harness_runner::PluginKind;
-    pub use harness_runner::PluginRegistry;
+    pub use harness_runner::PackOrigin;
+    pub use harness_runner::PackRegistry;
     pub use runvil_plugin::HostServices;
     pub use runvil_plugin::PackId;
 }

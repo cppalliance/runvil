@@ -1,4 +1,4 @@
-//! The Plugin one server is installed as: its state, its tool list, and
+//! The Pack one server is installed as: its state, its tool list, and
 //! its calls.
 
 use std::collections::HashSet;
@@ -10,8 +10,7 @@ use rmcp::model::{
 };
 use rmcp::service::{Peer, PeerRequestOptions, RoleClient};
 use runvil_plugin::{
-    PackId, Plugin, PluginFuture, ToolContext, ToolError, ToolErrorKind, ToolId, ToolInfo,
-    ToolOutput,
+    Pack, PackFuture, PackId, ToolContext, ToolError, ToolErrorKind, ToolId, ToolInfo, ToolOutput,
 };
 use serde_json::Value;
 use tokio::runtime::Handle;
@@ -40,7 +39,7 @@ pub(crate) struct Ready {
     pub(crate) tools: Vec<Listed>,
 }
 
-/// One tool the server listed and the Plugin kept.
+/// One tool the server listed and the Pack kept.
 #[derive(Debug)]
 pub(crate) struct Listed {
     pub(crate) info: ToolInfo,
@@ -48,25 +47,25 @@ pub(crate) struct Listed {
     pub(crate) mcp_name: String,
 }
 
-/// Keeps the tools whose lowercased names form a tool id under `plugin`,
+/// Keeps the tools whose lowercased names form a tool id under `pack`,
 /// and drops, with a warning, any that do not or that repeat an earlier
 /// tool's id.
-pub(crate) fn catalog(plugin: &PackId, tools: Vec<Tool>) -> Vec<Listed> {
+pub(crate) fn catalog(pack: &PackId, tools: Vec<Tool>) -> Vec<Listed> {
     let mut seen = HashSet::new();
     let mut kept = Vec::new();
     for tool in tools {
         let mcp_name = tool.name.to_string();
         let lowered = mcp_name.to_ascii_lowercase();
-        let Ok(id) = ToolId::parse(&format!("{plugin}/{lowered}")) else {
+        let Ok(id) = ToolId::parse(&format!("{pack}/{lowered}")) else {
             tracing::warn!(
-                %plugin, tool = %mcp_name,
+                %pack, tool = %mcp_name,
                 "dropping an MCP tool whose lowercased name is not a tool id of lowercase letters, digits, '-', '_', and '.'"
             );
             continue;
         };
         if !seen.insert(id.clone()) {
             tracing::warn!(
-                %plugin, tool = %mcp_name,
+                %pack, tool = %mcp_name,
                 "dropping an MCP tool whose lowercased name matches an earlier tool's"
             );
             continue;
@@ -86,7 +85,7 @@ pub(crate) fn catalog(plugin: &PackId, tools: Vec<Tool>) -> Vec<Listed> {
     kept
 }
 
-/// The Plugin: a watch on the connection task's state, the task, and the
+/// The Pack: a watch on the connection task's state, the task, and the
 /// Host's runtime.
 #[derive(Debug)]
 pub(crate) struct Server {
@@ -186,7 +185,7 @@ async fn send(
     result::output(response)
 }
 
-impl Plugin for Server {
+impl Pack for Server {
     fn tools(&self) -> Vec<ToolInfo> {
         match &*self.state.borrow() {
             State::Ready(ready) => ready
@@ -198,7 +197,7 @@ impl Plugin for Server {
         }
     }
 
-    fn ready(&self) -> PluginFuture<'_, Result<(), ToolError>> {
+    fn ready(&self) -> PackFuture<'_, Result<(), ToolError>> {
         let mut state = self.state.clone();
         Box::pin(async move {
             let settled = state
@@ -218,7 +217,7 @@ impl Plugin for Server {
         &'a self,
         cx: ToolContext<'a>,
         args: Value,
-    ) -> PluginFuture<'a, Result<ToolOutput, ToolError>> {
+    ) -> PackFuture<'a, Result<ToolOutput, ToolError>> {
         Box::pin(async move {
             let (peer, name) = self.target(cx.tool())?;
             let arguments = match args {

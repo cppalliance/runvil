@@ -10,7 +10,7 @@ use std::sync::{Arc, Mutex, PoisonError};
 use std::task::{Poll, Waker};
 
 use async_trait::async_trait;
-use harness::plugin::{HostContext, HostServices, PluginRegistry};
+use harness::pack::{HostContext, HostServices, PackRegistry};
 use harness::record::{MemoryRecorder, RecordKind, RunOutcome};
 use harness::vfs::VfsRef;
 use harness::{BoxFuture, Harness, HostSnapshot, InferenceBroker, RunRequest};
@@ -155,7 +155,7 @@ fn stuck_harness(catalog: ModelCatalog) -> (Harness, Arc<Started>) {
         Arc::new(MemoryRecorder::new()),
         Arc::new(broker),
         Arc::new(Clock),
-        Arc::new(HostContext::new(PluginRegistry::new(), HostServices::new())),
+        Arc::new(HostContext::new(PackRegistry::new(), HostServices::new())),
         HostServices::new(),
     );
     (harness, started)
@@ -265,7 +265,7 @@ async fn a_hosts_own_broker_streams_a_section_round_under_the_round_id_the_run_r
         recorder.clone(),
         Arc::new(broker),
         Arc::new(Clock),
-        Arc::new(HostContext::new(PluginRegistry::new(), HostServices::new())),
+        Arc::new(HostContext::new(PackRegistry::new(), HostServices::new())),
         HostServices::new(),
     );
     let report = harness

@@ -169,7 +169,7 @@ pub struct AgentsConfig {
     /// not an error.
     pub path: PathBuf,
     /// An `mcp.json`-format file whose `mcpServers` Workshop installs, one
-    /// Plugin per server, each under its name lowercased. Leaving it out
+    /// Pack per server, each under its name lowercased. Leaving it out
     /// means no MCP servers, and Workshop then reads no file. `${VAR}`
     /// interpolation applies to the path, and an unset variable expands to
     /// an empty string. The path is kept verbatim like other explicit

@@ -1,4 +1,4 @@
-//! The [`Plugin`] trait and the [`PluginInfo`] a Plugin crate exports.
+//! The [`Pack`] trait and the [`PackInfo`] a Plugin crate exports.
 
 use std::fmt;
 use std::future::Future;
@@ -13,54 +13,54 @@ use crate::{HostServices, ServiceId, ToolContext};
 /// A boxed future that may borrow for `'a`, the same type as
 /// `futures::future::BoxFuture`.
 ///
-/// [`Plugin::call`] and [`Plugin::ready`] return one, so the Harness can
-/// hold Plugins as `dyn Plugin`. An implementation wraps its body in
+/// [`Pack::call`] and [`Pack::ready`] return one, so the Harness can
+/// hold Packs as `dyn Pack`. An implementation wraps its body in
 /// `Box::pin(async move { ... })`.
-pub type PluginFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
+pub type PackFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 
-/// One Plugin object: the tools it offers and the calls it performs.
+/// One Pack object: the tools it offers and the calls it performs.
 ///
-/// The Host builds one object per installed Plugin, through
-/// [`PluginInfo::construct`], and every run shares it, so an implementation
+/// The Host builds one object per installed Pack, through
+/// [`PackInfo::construct`], and every run shares it, so an implementation
 /// is `Send + Sync`. Cleanup, such as stopping a child process, goes in
 /// the implementation's `Drop`, which runs when the Host drops the context
-/// holding the Plugin. There is no shutdown hook.
-pub trait Plugin: Send + Sync {
-    /// Returns the tools the Plugin offers now.
+/// holding the Pack. There is no shutdown hook.
+pub trait Pack: Send + Sync {
+    /// Returns the tools the Pack offers now.
     ///
     /// The Harness reads the list once when each run starts, after it
-    /// awaits [`ready`](Plugin::ready), so a Plugin whose tools change
-    /// returns its current list, and a Plugin still coming up returns what
-    /// it has so far. Each tool's id sits under the name the Plugin was
+    /// awaits [`ready`](Pack::ready), so a Pack whose tools change
+    /// returns its current list, and a Pack still coming up returns what
+    /// it has so far. Each tool's id sits under the name the Pack was
     /// installed under, as in `web/fetch`.
     fn tools(&self) -> Vec<ToolInfo>;
 
-    /// Resolves once the Plugin's tool list is complete, or with the
+    /// Resolves once the Pack's tool list is complete, or with the
     /// reason it can't serve now.
     ///
-    /// The Harness awaits every Plugin's `ready` together before each run
-    /// reads [`tools`](Plugin::tools). A Plugin whose `ready` fails is
+    /// The Harness awaits every Pack's `ready` together before each run
+    /// reads [`tools`](Pack::tools). A Pack whose `ready` fails is
     /// unavailable to that run, with the error's message as the reason.
-    /// The default resolves `Ok(())` at once, for a Plugin whose tools are
+    /// The default resolves `Ok(())` at once, for a Pack whose tools are
     /// known when `construct` returns.
     ///
     /// # Invariants
     ///
-    /// - `ready` resolves `Ok` once [`tools`](Plugin::tools) is complete,
-    ///   or `Err` with a reason a model can read when the Plugin can't serve
-    ///   now. A Plugin that recovers answers `Ok` to a later call.
-    /// - `ready` resolves within a bound the Plugin owns. The Plugin's own
+    /// - `ready` resolves `Ok` once [`tools`](Pack::tools) is complete,
+    ///   or `Err` with a reason a model can read when the Pack can't serve
+    ///   now. A Pack that recovers answers `Ok` to a later call.
+    /// - `ready` resolves within a bound the Pack owns. The Pack's own
     ///   task enforces that bound, and `ready` uses no runtime timer,
     ///   because it may be polled outside any particular runtime.
     /// - `ready` is cancellation-safe: a cancel drops it unresolved. After
-    ///   its first resolution it answers at once unless the Plugin's state
+    ///   its first resolution it answers at once unless the Pack's state
     ///   has changed.
     ///
     /// # Errors
     /// Returns a [`ToolError`], whose message is safe to show the model,
-    /// when the Plugin can't offer its tools now, such as when the backend
+    /// when the Pack can't offer its tools now, such as when the backend
     /// it connects to refuses it or is down.
-    fn ready(&self) -> PluginFuture<'_, Result<(), ToolError>> {
+    fn ready(&self) -> PackFuture<'_, Result<(), ToolError>> {
         Box::pin(async { Ok(()) })
     }
 
@@ -101,45 +101,45 @@ pub trait Plugin: Send + Sync {
         &'a self,
         cx: ToolContext<'a>,
         args: serde_json::Value,
-    ) -> PluginFuture<'a, Result<ToolOutput, ToolError>>;
+    ) -> PackFuture<'a, Result<ToolOutput, ToolError>>;
 }
 
-/// A Plugin described as data, exported by its crate as a constant such
+/// A Pack described as data, exported by its crate as a constant such
 /// as `plugin_web::PLUGIN`.
 ///
 /// It is fixed data the Host reads before anything is built. Adding it to
-/// the Harness's Plugin registry is also what links the Plugin crate into
-/// the Host. A Plugin crate builds it with [`PluginInfo::new`], adding a
-/// [`PluginInfo::description`], and [`PluginInfo::prelude`] and
-/// [`PluginInfo::needs`] only where it has them:
+/// the Harness's Pack registry is also what links the Plugin crate into
+/// the Host. A Plugin crate builds it with [`PackInfo::new`], adding a
+/// [`PackInfo::description`], and [`PackInfo::prelude`] and
+/// [`PackInfo::needs`] only where it has them:
 ///
 /// ```text
-/// pub const PLUGIN: PluginInfo = PluginInfo::new("acme/greeter", construct)
+/// pub const PLUGIN: PackInfo = PackInfo::new("acme/greeter", construct)
 ///     .description("Greet the person running the prompt")
 ///     .prelude(PRELUDE)
 ///     .needs(NEEDS);
 /// ```
 #[derive(Clone, Copy)]
 #[non_exhaustive]
-pub struct PluginInfo {
-    /// The Plugin's fully qualified name (FQN): `vendor/name` with two
-    /// segments, such as `runvil/web`. A Host installs the Plugin under the
-    /// second segment unless it picks another Plugin id.
+pub struct PackInfo {
+    /// The Pack's fully qualified name (FQN): `vendor/name` with two
+    /// segments, such as `runvil/web`. A Host installs the Pack under the
+    /// second segment unless it picks another Pack id.
     pub fqn: &'static str,
-    /// Lua run once for each prompt that declares the Plugin, as a chunk
-    /// whose `...` is the name the Plugin was installed under; `None` when
-    /// the Plugin has no prelude.
+    /// Lua run once for each prompt that declares the Pack, as a chunk
+    /// whose `...` is the name the Pack was installed under; `None` when
+    /// the Pack has no prelude.
     pub prelude: Option<&'static str>,
-    /// The per-run services the Plugin's calls read. A run without every
-    /// one of them cannot use the Plugin.
+    /// The per-run services the Pack's calls read. A run without every
+    /// one of them cannot use the Pack.
     pub needs: &'static [ServiceId],
-    /// Builds the one Plugin object every run shares. The Host calls it
+    /// Builds the one Pack object every run shares. The Host calls it
     /// once, at install, with the name it chose, its JSON configuration
-    /// for the Plugin, and the Host-wide services.
+    /// for the Pack, and the Host-wide services.
     ///
-    /// A failure, such as a missing Host-wide service, leaves the Plugin
+    /// A failure, such as a missing Host-wide service, leaves the Pack
     /// unavailable, and its message appears in the refusal notice of each
-    /// run whose prompt declares the Plugin.
+    /// run whose prompt declares the Pack.
     #[expect(
         clippy::type_complexity,
         reason = "spelled out so a Plugin author reads the signature construct implements in one place"
@@ -148,14 +148,14 @@ pub struct PluginInfo {
         name: &PackId,
         config: serde_json::Value,
         services: &HostServices,
-    ) -> Result<Arc<dyn Plugin>, ToolError>,
-    /// One line saying what the Plugin offers, for a Host listing the
-    /// Plugins it can install; empty unless the Plugin crate sets it.
+    ) -> Result<Arc<dyn Pack>, ToolError>,
+    /// One line saying what the Pack offers, for a Host listing the
+    /// Packs it can install; empty unless the Plugin crate sets it.
     pub description: &'static str,
 }
 
-impl PluginInfo {
-    /// Builds the `PluginInfo` for the FQN `fqn`, with an empty
+impl PackInfo {
+    /// Builds the `PackInfo` for the FQN `fqn`, with an empty
     /// description, no prelude, and no needs.
     #[expect(
         clippy::type_complexity,
@@ -168,9 +168,9 @@ impl PluginInfo {
             name: &PackId,
             config: serde_json::Value,
             services: &HostServices,
-        ) -> Result<Arc<dyn Plugin>, ToolError>,
-    ) -> PluginInfo {
-        PluginInfo {
+        ) -> Result<Arc<dyn Pack>, ToolError>,
+    ) -> PackInfo {
+        PackInfo {
             fqn,
             prelude: None,
             needs: &[],
@@ -179,36 +179,36 @@ impl PluginInfo {
         }
     }
 
-    /// Sets the one line saying what the Plugin offers.
+    /// Sets the one line saying what the Pack offers.
     #[must_use]
-    pub const fn description(self, description: &'static str) -> PluginInfo {
-        PluginInfo {
+    pub const fn description(self, description: &'static str) -> PackInfo {
+        PackInfo {
             description,
             ..self
         }
     }
 
-    /// Sets the Lua run once for each prompt that declares the Plugin.
+    /// Sets the Lua run once for each prompt that declares the Pack.
     #[must_use]
-    pub const fn prelude(self, prelude: &'static str) -> PluginInfo {
-        PluginInfo {
+    pub const fn prelude(self, prelude: &'static str) -> PackInfo {
+        PackInfo {
             prelude: Some(prelude),
             ..self
         }
     }
 
-    /// Sets the per-run services the Plugin's calls read.
+    /// Sets the per-run services the Pack's calls read.
     #[must_use]
-    pub const fn needs(self, needs: &'static [ServiceId]) -> PluginInfo {
-        PluginInfo { needs, ..self }
+    pub const fn needs(self, needs: &'static [ServiceId]) -> PackInfo {
+        PackInfo { needs, ..self }
     }
 }
 
-impl fmt::Debug for PluginInfo {
+impl fmt::Debug for PackInfo {
     /// Shows the FQN, the description, whether a prelude exists, and the
     /// needs.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("PluginInfo")
+        f.debug_struct("PackInfo")
             .field("fqn", &self.fqn)
             .field("description", &self.description)
             .field("prelude", &self.prelude.is_some())

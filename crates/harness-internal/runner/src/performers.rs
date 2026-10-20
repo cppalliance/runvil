@@ -21,7 +21,7 @@
 //! operation.
 //!
 //! The runner supplies the tool performer itself: the run's snapshot of
-//! the Host's Plugins, taken at preparation. The Host supplies the
+//! the Host's Packs, taken at preparation. The Host supplies the
 //! [`InferenceBroker`] and the [`Timer`].
 
 use std::future::Future;

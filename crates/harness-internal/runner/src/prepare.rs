@@ -9,8 +9,8 @@
 //! parse; put the prompt's declared `input:` file in place in the store
 //! (`files::stage_input`); hand the run's whole filesystem, real
 //! directories and the declared store, to the context as given; wait for
-//! every built Plugin to be ready, or for the run's cancel; take the
-//! run's snapshot of the Host's Plugins with the run's own services,
+//! every built Pack to be ready, or for the run's cancel; take the
+//! run's snapshot of the Host's Packs with the run's own services,
 //! which yields the catalog, the roster, the preludes, and the tool
 //! performer; set the first three on the context and prepare it; merge
 //! the snapshot's report into prepare's and refuse an unsatisfiable
@@ -22,7 +22,7 @@
 //! it began: the recorder ends it as failed with the refusal as the
 //! message, so the record answers "why did this run fail" for a run the
 //! loop never saw. A refusal after the run's cancel fired, as when a
-//! cancel cuts the wait short while a needed Plugin is still starting,
+//! cancel cuts the wait short while a needed Pack is still starting,
 //! ends the run as cancelled instead. `Harness::run_to_end` reports that
 //! ended run, and its caller reads the events recorded so far from the
 //! recorder.
@@ -52,11 +52,11 @@ use crate::performers::{InferenceBroker, Performers, Timer};
 use crate::recorder::{Record, RecordKind, RecorderError, RunId, RunMeta, RunOutcome, RunRecorder};
 
 /// What the caller owns and preparation borrows: the Host's installed
-/// Plugins and the run's own services, the real directories, the run's
+/// Packs and the run's own services, the real directories, the run's
 /// cancel flag, the recorder, the inference broker and the timer that
 /// reach beyond the runner, and the run's name.
 pub struct Services {
-    /// The Host's installed Plugins, which the run takes its snapshot of.
+    /// The Host's installed Packs, which the run takes its snapshot of.
     pub host: Arc<HostContext>,
     /// The run's own services, such as its input broker: every tool call
     /// of the run is lent them.
@@ -111,7 +111,7 @@ pub struct Prepared {
     pub run_id: RunId,
     /// The performers for the run: the caller's inference broker and timer
     /// beside the runner's own tool performer, the run's snapshot of the
-    /// Host's Plugins.
+    /// Host's Packs.
     pub performers: Performers,
     /// The prompt's declared `output:` path, which the caller reads with
     /// [`read_output`](crate::files::read_output) once the run completes.
@@ -132,7 +132,7 @@ pub enum PrepareError {
         #[source]
         source: ParseError,
     },
-    /// The environment cannot satisfy the prompt: a Plugin the prompt
+    /// The environment cannot satisfy the prompt: a Pack the prompt
     /// declares is missing, unavailable, or lacks a service it needs, or
     /// the current model falls short of a role's requirements. The Engine's
     /// model-readable notice, one line per gap, is the source; the run is
@@ -189,14 +189,14 @@ impl PrepareError {
 
 /// Prepares the prompt `source` for one run with `args`: draws the run's
 /// seed and start and begins the run at its recorder, parses the prompt,
-/// puts its declared input file in place, waits for every built Plugin
+/// puts its declared input file in place, waits for every built Pack
 /// to be ready or for the run's cancel, takes the run's snapshot of the
-/// Host's Plugins, sets the snapshot's catalog, roster, and declared
+/// Host's Packs, sets the snapshot's catalog, roster, and declared
 /// preludes on the context and prepares it, refuses an unsatisfiable
 /// prompt, and builds the `Run` and its performers.
 ///
-/// A Plugin whose `ready` fails is unavailable to this run, with its
-/// error as the reason. A cancel ends the wait, and each Plugin is
+/// A Pack whose `ready` fails is unavailable to this run, with its
+/// error as the reason. A cancel ends the wait, and each Pack is
 /// snapshotted as it stands.
 ///
 /// # Errors
@@ -319,9 +319,9 @@ pub(crate) async fn prepare_noting_cancel(
     }
     // The wait-snapshot-prepare-refuse ceremony: the run's whole
     // filesystem, the real directories and the declared store, goes to
-    // the context as given; the snapshot is taken once every Plugin is
+    // the context as given; the snapshot is taken once every Pack is
     // ready or the run is cancelled, its catalog is what the run offers,
-    // its roster gives each Plugin's object in the run's Lua, its preludes
+    // its roster gives each Pack's object in the run's Lua, its preludes
     // go to every section VM, and the
     // snapshot itself stays here as the tool performer, lending each call
     // the run's services. A refusal after a cancel ends the run cancelled,

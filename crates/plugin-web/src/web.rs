@@ -1,4 +1,4 @@
-//! The `web` Plugin's `PluginInfo`, [`PLUGIN`], the `construct` that
+//! The `web` Pack's `PackInfo`, [`PLUGIN`], the `construct` that
 //! builds its one shared object, and the keys of the two Host-wide
 //! services that `construct` reads.
 //!
@@ -9,7 +9,7 @@
 use std::sync::Arc;
 
 use runvil_plugin::{
-    HostServices, PackId, Plugin, PluginFuture, PluginInfo, ServiceKey, ToolContext, ToolError,
+    HostServices, Pack, PackFuture, PackId, PackInfo, ServiceKey, ToolContext, ToolError,
     ToolErrorKind, ToolId, ToolInfo, ToolOutput,
 };
 use serde_json::{Value, json};
@@ -19,15 +19,15 @@ use crate::fetch::{FetchClient, WebFetch};
 use crate::provider::SearchProvider;
 use crate::search::WebSearch;
 
-/// The Plugin's `PluginInfo`, which a Host adds to its Plugin registry.
+/// The Pack's `PackInfo`, which a Host adds to its Pack registry.
 ///
-/// Its FQN is `runvil/web`, so a Host that picks no Plugin id installs it
+/// Its FQN is `runvil/web`, so a Host that picks no Pack id installs it
 /// as `web`. It has no prelude and needs no per-run service; its
 /// `construct` reads [`SEARCH_PROVIDER`] and the Plugin contract's
 /// [`runvil_plugin::TOKIO_RUNTIME`] service from the Host-wide
 /// services and takes no configuration but `null` or `{}`.
-pub const PLUGIN: PluginInfo =
-    PluginInfo::new("runvil/web", construct).description("Search the web and fetch pages");
+pub const PLUGIN: PackInfo =
+    PackInfo::new("runvil/web", construct).description("Search the web and fetch pages");
 
 /// The service key for the Host's search provider.
 ///
@@ -48,18 +48,18 @@ struct Web {
     search: WebSearch,
 }
 
-/// Builds the Plugin under `name`: refuses any configuration but `null` or
+/// Builds the Pack under `name`: refuses any configuration but `null` or
 /// `{}`, reads the two Host-wide services or fails naming the missing one,
 /// and names the tools `<name>/fetch` and `<name>/search`.
 #[expect(
     clippy::needless_pass_by_value,
-    reason = "the PluginInfo construct signature fixes the argument types"
+    reason = "the PackInfo construct signature fixes the argument types"
 )]
 fn construct(
     name: &PackId,
     config: Value,
     services: &HostServices,
-) -> Result<Arc<dyn Plugin>, ToolError> {
+) -> Result<Arc<dyn Pack>, ToolError> {
     if !(config.is_null() || config == json!({})) {
         return Err(ToolError::message("web takes no configuration"));
     }
@@ -78,7 +78,7 @@ fn construct(
 }
 
 impl Web {
-    /// The Plugin over `fetch` and `search`, its tools named under `name`.
+    /// The Pack over `fetch` and `search`, its tools named under `name`.
     fn new(name: &PackId, fetch: WebFetch, search: WebSearch) -> Result<Web, ToolError> {
         let id = |tool: &str| {
             ToolId::parse(&format!("{name}/{tool}")).map_err(|e| {
@@ -115,7 +115,7 @@ impl Web {
     }
 }
 
-impl Plugin for Web {
+impl Pack for Web {
     fn tools(&self) -> Vec<ToolInfo> {
         self.tools.clone()
     }
@@ -124,7 +124,7 @@ impl Plugin for Web {
         &'a self,
         cx: ToolContext<'a>,
         args: Value,
-    ) -> PluginFuture<'a, Result<ToolOutput, ToolError>> {
+    ) -> PackFuture<'a, Result<ToolOutput, ToolError>> {
         Box::pin(async move {
             match cx.tool().name() {
                 "fetch" => self.fetch.call(args).await,

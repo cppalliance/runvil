@@ -1,12 +1,12 @@
 //! A Host runs one prompt through a Harness: it supplies a recorder, an
 //! offline inference broker, a tokio timer, and a context with no
-//! Plugins installed, hands the run the operator's name, and prints the
+//! Packs installed, hands the run the operator's name, and prints the
 //! greeting the run leaves at its output file.
 
 use std::sync::Arc;
 use std::time::Duration;
 
-use harness::plugin::{HostContext, HostServices, PluginRegistry};
+use harness::pack::{HostContext, HostServices, PackRegistry};
 use harness::record::{MemoryRecorder, RunOutcome};
 use harness::vfs::VfsRef;
 use harness::{BoxFuture, Harness, HostSnapshot, InferenceBroker, RunRequest, Timer};
@@ -59,13 +59,13 @@ impl Timer for Clock {
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 1. Build one Harness for this run from the Host's recorder, broker,
-    //    timer, installed Plugins, and the run's services.
+    //    timer, installed Packs, and the run's services.
     let recorder = Arc::new(MemoryRecorder::new());
     let harness = Harness::new(
         recorder.clone(),
         Arc::new(Offline),
         Arc::new(Clock),
-        Arc::new(HostContext::new(PluginRegistry::new(), HostServices::new())),
+        Arc::new(HostContext::new(PackRegistry::new(), HostServices::new())),
         HostServices::new(),
     );
 

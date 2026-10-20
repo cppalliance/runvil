@@ -9,7 +9,7 @@ publish = false
 # Every crate that defines a re-exported item: each `pub use` names the
 # defining crate's path. The Engine's types a Harness signature names are
 # re-exported through the `runvil` facade, their one public path, and
-# the service map and Plugin id through the Plugin contract.
+# the service map and Pack id through the Plugin contract.
 [dependencies]
 harness-runner.workspace = true
 runvil.workspace = true
@@ -17,7 +17,7 @@ runvil-plugin.workspace = true
 
 # The suite and the `run-prompt` example run a Host on tokio, as a real
 # Host does; the facade's own items name no tokio type. The suite's
-# fixture ask Plugin's broker is an `async_trait` trait.
+# fixture ask Pack's broker is an `async_trait` trait.
 [dev-dependencies]
 async-trait.workspace = true
 serde_json.workspace = true

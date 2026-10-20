@@ -4,7 +4,7 @@ use super::*;
 
 use std::sync::Arc;
 
-use harness::plugin::{HostContext, HostServices, PluginRegistry};
+use harness::pack::{HostContext, HostServices, PackRegistry};
 use harness::record::{MemoryRecorder, RunOutcome};
 use harness::vfs::VfsRef;
 use harness::{BoxFuture, Harness, HostSnapshot, InferenceBroker, RunRequest};
@@ -261,19 +261,19 @@ impl InferenceBroker for NoChat {
 #[tokio::test]
 async fn an_ask_is_answered_when_the_registry_receives_the_text() {
     // The broker behind a real run: a section parked on `input.ask()`
-    // calls the user-input Plugin's ask tool, the tool waits on the
+    // calls the user-input Pack's ask tool, the tool waits on the
     // conversation's broker, the registry completes the wait with the
     // operator's text, and the answer resumes the run to its result.
     let source = "---\nname: ask\ndescription: asks the operator\nrunvil: 0\n\
                   uses:\n  - user-input\n---\n\n\
                   # Ask\n\n## Only\n\n```lua\nreturn (input.ask())\n```\n";
-    let mut plugins = PluginRegistry::new();
-    plugins
+    let mut packs = PackRegistry::new();
+    packs
         .add(plugin_user_input::PLUGIN)
-        .expect("a new registry takes the Plugin");
-    let mut host = HostContext::new(plugins, HostServices::new());
+        .expect("a new registry takes the Pack");
+    let mut host = HostContext::new(packs, HostServices::new());
     host.install(plugin_user_input::PLUGIN.fqn, None, serde_json::Value::Null)
-        .expect("an empty Host installs the Plugin");
+        .expect("an empty Host installs the Pack");
     let (broker, registry, frames) = broker_fixture();
     let mut socket = frames.subscribe();
     let recorder = Arc::new(MemoryRecorder::new());

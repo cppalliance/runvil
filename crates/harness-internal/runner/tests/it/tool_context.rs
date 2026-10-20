@@ -1,4 +1,4 @@
-//! The context a tool call lends its Plugin: the Plugin writes the run's
+//! The context a tool call lends its Pack: the Pack writes the run's
 //! files through `cx.access()`, the calling section reads what it wrote
 //! on its next step, and `cx.origin()` names the section's script as the
 //! caller.
@@ -10,8 +10,8 @@ use harness_runner::prepare::prepare;
 use harness_runner::recorder::{MemoryRecorder, RunOutcome};
 use runvil::cancel::CancelHandle;
 use runvil_plugin::{
-    HostServices, PackId, Plugin, PluginFuture, PluginInfo, ToolContext, ToolError, ToolId,
-    ToolInfo, ToolOutput,
+    HostServices, Pack, PackFuture, PackId, PackInfo, ToolContext, ToolError, ToolId, ToolInfo,
+    ToolOutput,
 };
 use serde_json::{Value, json};
 
@@ -27,10 +27,10 @@ const CALLS_RECORD: &str = "---\nname: calls-record\ndescription: d\nrunvil: 0\n
     # Title\n\n## Only\n\n```lua\nlocal caller = tools.call('context/record')\n\
     return caller .. '|' .. store.read('from-tool.md')\n```\n";
 
-/// The fixture Plugin `context`: one tool, `context/record`, which writes
+/// The fixture Pack `context`: one tool, `context/record`, which writes
 /// [`WRITTEN`] to `/from-tool.md` through the access its call lends it
 /// and answers with the caller its origin names.
-const CONTEXT: PluginInfo = PluginInfo::new("tests/context", construct);
+const CONTEXT: PackInfo = PackInfo::new("tests/context", construct);
 
 struct Record {
     tools: Vec<ToolInfo>,
@@ -38,13 +38,13 @@ struct Record {
 
 #[expect(
     clippy::unnecessary_wraps,
-    reason = "the PluginInfo construct signature fixes the return type"
+    reason = "the PackInfo construct signature fixes the return type"
 )]
 fn construct(
     name: &PackId,
     _config: Value,
     _services: &HostServices,
-) -> Result<Arc<dyn Plugin>, ToolError> {
+) -> Result<Arc<dyn Pack>, ToolError> {
     let record = ToolInfo::new(
         ToolId::parse(&format!("{name}/record")).unwrap(),
         "Write a file through the call's access and name the caller.",
@@ -55,7 +55,7 @@ fn construct(
     }))
 }
 
-impl Plugin for Record {
+impl Pack for Record {
     fn tools(&self) -> Vec<ToolInfo> {
         self.tools.clone()
     }
@@ -64,7 +64,7 @@ impl Plugin for Record {
         &'a self,
         cx: ToolContext<'a>,
         _args: Value,
-    ) -> PluginFuture<'a, Result<ToolOutput, ToolError>> {
+    ) -> PackFuture<'a, Result<ToolOutput, ToolError>> {
         Box::pin(async move {
             cx.access()
                 .write("/from-tool.md", WRITTEN.as_bytes())

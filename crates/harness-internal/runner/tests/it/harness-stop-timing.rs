@@ -9,7 +9,7 @@ use std::sync::Arc;
 use std::sync::atomic::Ordering;
 
 use harness_runner::recorder::MemoryRecorder;
-use harness_runner::{Harness, HostContext, PluginRegistry, RunRequest};
+use harness_runner::{Harness, HostContext, PackRegistry, RunRequest};
 use runvil::vfs::VfsRef;
 use runvil_plugin::HostServices;
 use serde_json::json;
@@ -64,7 +64,7 @@ const WRITES_THEN_INFERS: &str = "---\nname: writes-infers\ndescription: d\nrunv
     # WritesInfers\n\n```lua\nmodels.default('writer')\n```\n\n\
     ## Only\n\n```lua\nstore.write('note.md', 'kept')\nreturn models.infer('after')\n```\n";
 
-/// A Host holding only the fixture ask Plugin, as `user-input`.
+/// A Host holding only the fixture ask Pack, as `user-input`.
 fn asker_host() -> Arc<HostContext> {
     Arc::new(with_asker(HostContext::new(
         registry(&[ASKER]),
@@ -143,7 +143,7 @@ async fn a_stop_seen_before_a_steps_effects_start_drops_the_round_in_flight_and_
         recorder.clone(),
         Arc::new(held_broker(&chat)),
         Arc::new(PendingTimer::default()),
-        Arc::new(HostContext::new(PluginRegistry::new(), HostServices::new())),
+        Arc::new(HostContext::new(PackRegistry::new(), HostServices::new())),
         HostServices::new(),
     );
     let vfs = stopping_store(&harness);

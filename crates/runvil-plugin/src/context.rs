@@ -11,7 +11,7 @@ use crate::{HostServices, ServiceKey};
 #[path = "context-tests.rs"]
 mod tests;
 
-/// What one tool call lends its Plugin: the called tool's id, the call's
+/// What one tool call lends its Pack: the called tool's id, the call's
 /// filesystem access, who made the call, and the run's own services.
 ///
 /// The access is the call's own identity, forked from the calling chain's,
@@ -21,12 +21,12 @@ mod tests;
 /// are concurrent with each other: one call's write to a path conflicts
 /// with a sibling's read or write of it, as between fanout arms. It is
 /// rooted at `/`. The context borrows everything for the call alone, so a
-/// Plugin cannot store the access, move it into a spawned task or thread,
+/// Pack cannot store the access, move it into a spawned task or thread,
 /// or keep it past the call.
 ///
 /// The services are the run's, such as its input broker. The Host-wide
-/// services never reach a call; a Plugin keeps any it needs from its
-/// [`PluginInfo::construct`](crate::PluginInfo::construct).
+/// services never reach a call; a Pack keeps any it needs from its
+/// [`PackInfo::construct`](crate::PackInfo::construct).
 #[derive(Debug)]
 pub struct ToolContext<'a> {
     tool: &'a ToolId,
@@ -53,7 +53,7 @@ impl<'a> ToolContext<'a> {
         }
     }
 
-    /// The tool that was called. A Plugin with several tools matches on
+    /// The tool that was called. A Pack with several tools matches on
     /// its [`name`](ToolId::name) to pick one.
     #[must_use]
     pub fn tool(&self) -> &'a ToolId {

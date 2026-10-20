@@ -846,7 +846,7 @@ The repositories, their starting points, the tools, and the commands every gate 
 
 <step-3>
 
-### Step 3: Plugin API and Harness names
+### Step 3: Plugin API and Harness names [completed]
 
 - Component: pack-rename
 - Tests: run in PowerShell from `c:\Users\Vinnie\cursor\runvil`, in this order:

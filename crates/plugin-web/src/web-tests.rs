@@ -1,4 +1,4 @@
-//! Tests for the `web` Plugin's `PluginInfo` and `construct`: the tools it names
+//! Tests for the `web` Pack's `PackInfo` and `construct`: the tools it names
 //! under the installed name, the configuration it accepts, the Host-wide
 //! services it reads, the custom fetch policy, and how a call dispatches:
 //! to the tool its last segment names, or failing on a tool it lacks.
@@ -7,7 +7,7 @@ use std::sync::Arc;
 
 use runvil_plugin::testing::TestCall;
 use runvil_plugin::{
-    HostServices, PackId, Plugin, ServiceKey, TOKIO_RUNTIME, ToolError, ToolErrorKind, ToolId,
+    HostServices, Pack, PackId, ServiceKey, TOKIO_RUNTIME, ToolError, ToolErrorKind, ToolId,
 };
 use serde_json::{Value, json};
 use tokio::runtime::Handle;
@@ -51,16 +51,16 @@ fn services_with(provider: bool, runtime: bool) -> HostServices {
 }
 
 fn name(text: &str) -> PackId {
-    PackId::parse(text).expect("a one-segment Plugin id parses")
+    PackId::parse(text).expect("a one-segment Pack id parses")
 }
 
-/// The Plugin installed under `installed` with `config` and both services.
-fn construct(installed: &str, config: Value) -> Result<Arc<dyn Plugin>, ToolError> {
+/// The Pack installed under `installed` with `config` and both services.
+fn construct(installed: &str, config: Value) -> Result<Arc<dyn Pack>, ToolError> {
     (PLUGIN.construct)(&name(installed), config, &services_with(true, true))
 }
 
 #[test]
-fn the_plugin_is_runvil_web_with_no_prelude_and_no_per_run_needs() {
+fn the_pack_is_runvil_web_with_no_prelude_and_no_per_run_needs() {
     assert_eq!(PLUGIN.fqn, "runvil/web");
     assert!(PLUGIN.prelude.is_none());
     assert!(PLUGIN.needs.is_empty());
@@ -135,9 +135,9 @@ async fn a_custom_fetch_policy_reaches_the_fetch_tools_schema() {
 
 #[tokio::test]
 async fn a_call_to_a_tool_web_does_not_offer_fails_naming_it() {
-    let plugin = construct("web", Value::Null).expect("construct succeeds");
+    let pack = construct("web", Value::Null).expect("construct succeeds");
     let call = TestCall::new(ToolId::parse("web/browse").expect("the id parses"));
-    let error = plugin
+    let error = pack
         .call(call.context(), json!({}))
         .await
         .expect_err("web has no browse tool");
@@ -146,17 +146,17 @@ async fn a_call_to_a_tool_web_does_not_offer_fails_naming_it() {
 
 #[tokio::test]
 async fn a_call_reaches_the_tool_its_last_segment_names() {
-    let plugin = construct("browse", Value::Null).expect("construct succeeds");
+    let pack = construct("browse", Value::Null).expect("construct succeeds");
 
     let search = TestCall::new(ToolId::parse("browse/search").expect("the id parses"));
-    let output = plugin
+    let output = pack
         .call(search.context(), json!({ "query": "rust" }))
         .await
         .expect("the search tool answers through the provider");
     assert_eq!(output.text(), r#"{"query":"rust","results":[]}"#);
 
     let fetch = TestCall::new(ToolId::parse("browse/fetch").expect("the id parses"));
-    let error = plugin
+    let error = pack
         .call(fetch.context(), json!({ "url": "https://1.2.3.4/" }))
         .await
         .expect_err("the fetch policy refuses an IP literal host");
