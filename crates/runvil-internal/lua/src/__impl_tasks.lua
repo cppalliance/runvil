@@ -208,9 +208,14 @@ local function tasks_status(task)
 end
 
 -- tasks.pending() -> { Task, ... }: the caller's live tasks in spawn order.
--- The argument is passed through unchanged, so the protocol parse owns the
--- check that none is given.
-local function tasks_pending(argument)
+-- The first non-nil argument, at any position, is passed through unchanged,
+-- so the protocol parse owns the check that none is given.
+local function tasks_pending(...)
+  local argument
+  for index = 1, select("#", ...) do
+    argument = select(index, ...)
+    if argument ~= nil then break end
+  end
   local ok, result = yield({ op = "pending", argument = argument })
   if not ok then fail(result) end
   local handles = {}

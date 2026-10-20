@@ -129,7 +129,7 @@ impl MessageList {
     /// # Errors
     /// Returns [`ListEditError::LateSystem`] naming a late system record's
     /// position.
-    pub fn push(&self, record: MessageRecord) -> std::result::Result<(), ListEditError> {
+    pub(crate) fn push(&self, record: MessageRecord) -> std::result::Result<(), ListEditError> {
         let mut state = self.state();
         if record.role == RecordRole::System
             && state
