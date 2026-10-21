@@ -180,11 +180,11 @@ pub enum Request {
         /// How the handler ended.
         outcome: LocalToolOutcome,
     },
-    /// One stateless tool-capable model round over a `messages.new()`
-    /// list, yielded by the `models.loop` shim once per round. The
-    /// dispatch arm first refuses an empty list; the round advertises the section's current tool
-    /// scope, local Lua tools included, resolved in the dispatch arm
-    /// where the tool scope sits.
+    /// One stateless tool-capable model round over a `messages.new()` list,
+    /// yielded by the `models.loop` shim once per round. The dispatch arm
+    /// first refuses an empty list; the round advertises the section's
+    /// current tool scope, local Lua tools included, resolved in the
+    /// dispatch arm where the tool scope sits.
     Chat {
         /// The list the round sends, which may be empty, since the
         /// dispatch, not the parse, refuses an empty list. Its records

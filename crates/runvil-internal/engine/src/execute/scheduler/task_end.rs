@@ -45,9 +45,9 @@ impl Scheduler {
         };
         let succeeded = outcome.is_ok();
         slot.state = TaskState::Done { ok: succeeded };
+        slot.outcome = Some(outcome);
         let owner = slot.owner;
-        let target = slot.target.clone();
-        emitter.emit(&target, |execution, section, provenance| {
+        emitter.emit(&slot.target, |execution, section, provenance| {
             let task = task.clone();
             if succeeded {
                 Event::TaskSucceeded {
@@ -65,9 +65,6 @@ impl Scheduler {
                 }
             }
         });
-        if let Some(slot) = self.tasks.get_mut(&task) {
-            slot.outcome = Some(outcome);
-        }
         self.wake_waiter(owner, &task);
         Ok(())
     }

@@ -208,15 +208,15 @@ local function tasks_status(task)
 end
 
 -- tasks.pending() -> { Task, ... }: the caller's live tasks in spawn order.
--- The first non-nil argument, at any position, is passed through unchanged,
--- so the protocol parse owns the check that none is given.
+-- A non-nil argument at any position is refused, naming its type.
 local function tasks_pending(...)
-  local argument
   for index = 1, select("#", ...) do
-    argument = select(index, ...)
-    if argument ~= nil then break end
+    local argument = select(index, ...)
+    if argument ~= nil then
+      raise("lua", { message = "tasks.pending takes no arguments, got " .. engine_type(argument) })
+    end
   end
-  local ok, result = yield({ op = "pending", argument = argument })
+  local ok, result = yield({ op = "pending" })
   if not ok then fail(result) end
   local handles = {}
   for index, id in ipairs(result) do

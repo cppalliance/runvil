@@ -3,20 +3,19 @@
 //!
 //! Dispatch first refuses an empty list. It then resolves the round's
 //! binding and tool scope (the bound and local halves), records the scope
-//! on the chain as `advertised`,
-//! prechecks the projected conversation, with room kept for the reply,
-//! against the model's context window (counting from the provider's usage
-//! for the chain's last measured round when the request extends it), and
-//! issues the single gateway round as a `Chat` effect - the
-//! same effect a nested `infer` issues, over the author's conversation
-//! and the advertised schemas. The driver classifies the answered
-//! completion into the round's answer when it arrives
+//! on the chain as `advertised`, prechecks the projected conversation, with
+//! room kept for the reply, against the model's context window (counting
+//! from the provider's usage for the chain's last measured round when the
+//! request extends it), and issues the single gateway round as a `Chat`
+//! effect - the same effect a nested `infer` issues, over the author's
+//! conversation and the advertised schemas. The driver classifies the
+//! answered completion into the round's answer when it arrives
 //! ([`Scheduler::accept_chat`]), emitting the round's events - the turn
 //! advance, the debug capture pair, turn completed or failed or truncated,
-//! thinking, and the reply or the tool-call batch - through the chain's
-//! own task-scoped emitter, and rejecting a tool name outside the scope
-//! the chain advertised for that round. The shim that yielded the round
-//! emits nothing; the scheduler owns every event.
+//! thinking, and the reply or the tool-call batch - through the chain's own
+//! task-scoped emitter, and rejecting a tool name outside the scope the
+//! chain advertised for that round. The shim that yielded the round emits
+//! nothing; the scheduler owns every event.
 
 use std::collections::BTreeMap;
 use std::sync::Arc;

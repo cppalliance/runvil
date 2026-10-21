@@ -169,32 +169,11 @@ fn a_malformed_task_id_is_the_calls_error_naming_the_parse_failure() {
 }
 
 #[test]
-fn pending_parses_without_an_argument_and_refuses_any_argument() {
-    // The shim passes the author's argument through unchanged, so the
-    // parse owns the refusal and names the argument's type.
+fn pending_parses_without_fields() {
     let lua = Lua::new();
     let table = lua_table(&lua, "{ op = 'pending' }");
     let request = expect_request(Request::from_yield(&lua, &Value::Table(table)));
     assert!(matches!(request, Request::Pending), "got {request:?}");
-    for (argument, kind) in [
-        ("{}", "table"),
-        ("{ origin = 'author' }", "table"),
-        ("'author'", "string"),
-    ] {
-        let table = lua_table(
-            &lua,
-            &format!("{{ op = 'pending', argument = {argument} }}"),
-        );
-        match Request::from_yield(&lua, &Value::Table(table)) {
-            YieldParse::Call(Answer::Pending(Err(Error::Lua(message)))) => {
-                assert_eq!(
-                    message,
-                    format!("tasks.pending takes no arguments, got {kind}")
-                );
-            }
-            other => panic!("expected the pending call error for {argument}, got {other:?}"),
-        }
-    }
 }
 
 #[test]

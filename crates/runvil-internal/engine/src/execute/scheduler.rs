@@ -29,29 +29,28 @@
 //! path ([`SlicePath`](super::walk_target::SlicePath)) rather than by
 //! borrow, and the scheduler owns itself outright.
 //!
-//! This file holds the scheduler core: the chain arena, the
-//! ready queue, the admission queues (spawned tasks wait there until
-//! the run's concurrency limits admit them), the pending table, the task
-//! arena, and
+//! This file holds the scheduler core: the chain arena, the ready queue,
+//! the admission queues (spawned tasks wait there until the run's
+//! concurrency limits admit them), the pending table, the task arena, and
 //! the one `issue` path every leaf arm hands its effect through. The
 //! submodules hold the rest: `pending` the pending table's entry (the
-//! `Continuation` an answer is applied by), `drive` the run-level step
-//! (the ready-queue drain, the terminal rules, and the teardown), `apply`
-//! the answer application, `chain` the chain lifecycle (arena insertion
-//! and the two chain-end paths), `chain_record` the chain record the
-//! arena holds, `step` one chain's step to its next
-//! suspension point, `walk` the section walk rules, `h1` the live H1 pass
-//! and its hand-off to the walk, `dispatch` the request arms, `chat` the
-//! one-round `chat` arm and its answer application, `tool_call` the
-//! script and model-issued `tool_call` arm (the two arms the
-//! section-visible `models.loop` shim drives), `tasks` the task arena and
-//! the `spawn` arm, `admission` the admission limits, `task_end` the chain-end rules for
-//! tasks, `waits` the `join_any` wait and the
-//! `ready`, `status`, `pending`, `note`, `concurrency`, and `cancel` arms over the arena,
-//! `timer` the wait shims' internal timeout as an effect-backed slot, and
-//! `test_hooks` (test builds only) the seams the suites inspect the arena
-//! through. A fanout is Lua over those arms (the `fanout` shim spawns one
-//! task per member, all up front, and waits on the live set).
+//! `Continuation` an answer is applied by), `drive` the run-level step (the
+//! ready-queue drain, the terminal rules, and the teardown), `apply` the
+//! answer application, `chain` the chain lifecycle (arena insertion and the
+//! two chain-end paths), `chain_record` the chain record the arena holds,
+//! `step` one chain's step to its next suspension point, `walk` the section
+//! walk rules, `h1` the live H1 pass and its hand-off to the walk,
+//! `dispatch` the request arms, `chat` the one-round `chat` arm and its
+//! answer application, `tool_call` the script and model-issued `tool_call`
+//! arm (the two arms the section-visible `models.loop` shim drives),
+//! `tasks` the task arena and the `spawn` arm, `admission` the admission
+//! limits, `task_end` the chain-end rules for tasks, `waits` the `join_any`
+//! wait and the `ready`, `status`, `pending`, `note`, `concurrency`, and
+//! `cancel` arms over the arena, `timer` the wait shims' internal timeout
+//! as an effect-backed slot, and `test_hooks` (test builds only) the seams
+//! the suites inspect the arena through. A fanout is Lua over those arms
+//! (the `fanout` shim spawns one task per member, all up front, and waits
+//! on the live set).
 
 mod admission;
 mod apply;

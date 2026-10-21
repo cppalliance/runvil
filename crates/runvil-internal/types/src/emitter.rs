@@ -351,9 +351,9 @@ impl Emitter {
     }
 
     /// Reports the result of one dispatched tool call. `tool` is the bound
-    /// tool `alias` resolved to, or `None` for a Lua-local tool or a task
-    /// built-in. The event records `trust` as its `trusted` flag: `true`
-    /// only for [`OutputTrust::Trusted`].
+    /// tool `alias` resolved to, or `None` for a Lua-local tool. The event
+    /// records `trust` as its `trusted` flag: `true` only for
+    /// [`OutputTrust::Trusted`].
     #[expect(
         clippy::too_many_arguments,
         reason = "the result report names its full run coordinates, including the alias and the tool it resolved to, in one call"

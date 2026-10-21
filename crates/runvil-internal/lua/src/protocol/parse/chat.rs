@@ -40,12 +40,12 @@ fn chat_error(message: impl Into<String>) -> FieldFailure {
 /// `loop` sets from its receiver, and the `messages` list, which must be a
 /// `messages.new()` list.
 ///
-/// The list validated each record as it added it, so the parse checks
-/// only that `messages` is such a list and clones its handle; the driver
-/// projects the records without re-checking them. An empty list parses:
-/// the driver refuses it at dispatch. Every author-argument failure is the call's error,
-/// raised at the `models.loop` call site so a program `pcall` catches it.
-/// The handle is checked first.
+/// The list validated each record as it added it, so the parse checks only
+/// that `messages` is such a list and clones its handle; the driver
+/// projects the records without re-checking them. An empty list parses: the
+/// driver refuses it at dispatch. Every author-argument failure is the
+/// call's error, raised at the `models.loop` call site so a program `pcall`
+/// catches it. The handle is checked first.
 pub(super) fn parse_chat(table: &mlua::Table) -> std::result::Result<Request, FieldFailure> {
     let binding = call_handle(table, "models.loop")?;
     let list = match table.raw_get::<Value>("messages") {

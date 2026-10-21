@@ -17,8 +17,8 @@ use chat::parse_chat;
 pub(crate) use chat::{NOT_A_LIST, parse_record};
 use store::parse_store;
 use tasks::{
-    parse_cancel, parse_concurrency, parse_join_any, parse_note, parse_pending, parse_ready,
-    parse_spawn, parse_status, parse_timer,
+    parse_cancel, parse_concurrency, parse_join_any, parse_note, parse_ready, parse_spawn,
+    parse_status, parse_timer,
 };
 use tools::{parse_local_tool_done, parse_tool_call, parse_tool_calls};
 
@@ -221,7 +221,7 @@ impl Request {
             "join_any" => classify(parse_join_any(table), |error| Answer::JoinAny(Err(error))),
             "ready" => classify(parse_ready(table), |error| Answer::Ready(Err(error))),
             "status" => classify(parse_status(table), |error| Answer::Status(Err(error))),
-            "pending" => classify(parse_pending(table), |error| Answer::Pending(Err(error))),
+            "pending" => YieldParse::Request(Request::Pending),
             "note" => classify(parse_note(table), |error| Answer::Note(Err(error))),
             "concurrency" => classify(parse_concurrency(table), |error| {
                 Answer::Concurrency(Err(error))
