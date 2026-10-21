@@ -4,28 +4,28 @@ overview: Three parts. First, each run's snapshot keeps one shared tool catalog,
 todos:
   - id: catalog
     content: "Part 1, harness-runner host-run.rs: rename RunPack to PackState, drop its tools field, build one ToolCatalog in snapshot and keep it on HostRunContext, catalog() returns a clone, offering() routes through catalog.get and the Pack id; module doc updated; runner tests pass unchanged"
-    status: pending
+    status: completed
   - id: insert
     content: "Part 2: rename PackRegistry::add to insert in runvil-plugin and every caller (three Plugin crates, runner and harness tests); change every add wording in runvil-plugin, the three Plugin crates' docs and tests, plugin-web's README, harness-runner host.rs, the harness facade docs, and Workshop's three log messages; rewrite PackRegistry's doc to say the Host owns it; add the Host-owns sentence to the runvil-plugin crate doc; both completeness searches print nothing and the prose search prints only its listed leftovers"
-    status: pending
+    status: completed
   - id: abi
     content: "Part 3, runvil-plugin: a new pub abi module with RvStatus, RvVerb (RV_PLUGIN_LOAD, RV_PLUGIN_UNLOAD), the version constants, RvStr, RvPluginInfo, RvHost, RvCall, and PluginEntry, every item documented and Debug; layout tests in abi-tests.rs; no unsafe code; crate doc lines 16-17 rewritten"
-    status: pending
+    status: completed
   - id: loader
     content: "Part 3, harness-plugin-loader: RvHost table and RvHost functions answering only the load call on its thread, with Plugin strings capped and bounded before they are read, send_load and send_unload, private ENTRY_POINT, plugin_files, open_library with the Windows search flags, Instance and Loaded (unload the Plugin, then close the library, by field order; no library for a linked Plugin), insert_plugin_dir returning a PluginReport and insert_plugin returning Result<Arc<Plugin>, PluginFailure>, with Plugin, PluginFailure, PluginSource; unit tests with linked fakes; wiring, Invariants doc that passes docs-claims, unsafe allowlist"
-    status: pending
+    status: completed
   - id: facade
     content: "Part 3, harness facade: a new plugin module re-exporting insert_plugin, insert_plugin_dir, Plugin, PluginFailure, PluginReport, and PluginSource"
-    status: pending
+    status: completed
   - id: fixture
     content: Part 3, harness-test-plugin (cdylib + rlib, no dependencies, dev-dependencies harness-plugin-loader and runvil-plugin, private mirrored ABI with its own layout asserts in unit tests, runvil_plugin as a pub unsafe extern C export with a Safety section and an expect of private_interfaces, answering RV_PLUGIN_LOAD with a boxed instance and RV_PLUGIN_UNLOAD by freeing it, RV_ERR_UNSUPPORTED otherwise) with end-to-end tests through insert_plugin_dir under CARGO_TARGET_TMPDIR; each test drops its report, then removes its directory; allowlist entry and crate wiring
-    status: pending
+    status: completed
   - id: verify
     content: After each code commit, run fmt, both clippy runs, both nextest runs, the three docs builds (workspace, runvil, harness), build-xtask tests, and docs-claims; after commit 2 only, the two completeness searches and the prose search
-    status: pending
+    status: completed
   - id: commit
     content: "Record the plan as vibe/2026-10-20-1-library-plugin-loading.md with vibe/ACTIVE, make the three code commits in part order, then Close plan: library-plugin-loading; push nothing"
-    status: pending
+    status: completed
 isProject: false
 ---
 
