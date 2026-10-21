@@ -176,20 +176,6 @@ pub(super) fn parse_cancel(table: &mlua::Table) -> std::result::Result<Request, 
     })
 }
 
-/// Parses a `pending` request. The shim passes the author's argument
-/// through as `argument`, so this parse owns the check: `tasks.pending`
-/// takes none, and any value given is the call's error naming its type.
-pub(super) fn parse_pending(table: &mlua::Table) -> std::result::Result<Request, FieldFailure> {
-    match table.raw_get::<Value>("argument") {
-        Ok(Value::Nil) => Ok(Request::Pending),
-        Ok(other) => Err(call_error(format!(
-            "tasks.pending takes no arguments, got {}",
-            other.type_name()
-        ))),
-        Err(_) => Err(FieldFailure::Malformed),
-    }
-}
-
 /// Parses a `note` request: the author-supplied `text`.
 pub(super) fn parse_note(table: &mlua::Table) -> std::result::Result<Request, FieldFailure> {
     Ok(Request::Note {

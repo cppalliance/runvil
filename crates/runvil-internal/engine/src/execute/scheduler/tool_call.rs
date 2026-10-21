@@ -3,19 +3,18 @@
 //! model's `call_id`), plus the `local_tool_done` arm that closes a local
 //! tool call.
 //!
-//! Each call's route is decided once, by `tool_route`, on the driver
-//! thread before any leaf work. A local Lua tool is answered with its
-//! handler; anything else is a catalog tool, which
-//! resolves against the run's offering (a model call by wire name, a
-//! script call by canonical id, which also reaches a catalog tool left
-//! out of the offering), has its attempt counted, and is issued as a
-//! `ToolCall` effect, carrying an identity forked from the chain's
-//! access, whose answer the driver applies through the shared dispatch
-//! body. The call's `CallSite` names who asked. A model-issued call,
-//! alone or batched, always resumes a bound tool with content - a tool's
-//! own failure becomes untrusted failure text - and `ToolResult` fires
-//! under the id and the turn of the round that requested the call; a
-//! script call keeps the raise-at-call-site behavior, and its
+//! Each call's route is decided once, by `tool_route`, on the driver thread
+//! before any leaf work. A local Lua tool is answered with its handler;
+//! anything else is a catalog tool, which resolves against the run's
+//! offering (a model call by wire name, a script call by canonical id,
+//! which also reaches a catalog tool left out of the offering), has its
+//! attempt counted, and is issued as a `ToolCall` effect, carrying an
+//! identity forked from the chain's access, whose answer the driver applies
+//! through the shared dispatch body. The call's `CallSite` names who asked.
+//! A model-issued call, alone or batched, always resumes a bound tool with
+//! content - a tool's own failure becomes untrusted failure text - and
+//! `ToolResult` fires under the id and the turn of the round that requested
+//! the call; a script call keeps the raise-at-call-site behavior, and its
 //! `ToolResult` fires under no id and the turn at dispatch.
 //!
 //! The loop sends a round's unanswered calls together as one
