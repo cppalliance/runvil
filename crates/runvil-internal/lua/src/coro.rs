@@ -24,7 +24,7 @@
 #[path = "coro-failure.rs"]
 mod failure;
 
-use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::{Arc, LazyLock};
 
 use mlua::{Function, Lua, StdLib, Table, Value};
@@ -133,8 +133,9 @@ static FANOUT_PROGRAM: LazyLock<std::result::Result<LuaProgram, SharedSource>> =
 /// `models.loop` shim is stashed in the registry for
 /// [`install_section_loop_shim`], and the chunk's `handle_methods` table, a
 /// model handle's `infer` and `loop`, for [`handle_method`].
-/// `max_tool_iterations`, the run's resolved round cap, and the
-/// `compactors` table go to [`loop_begin`](crate::models_loop::loop_begin),
+/// `max_tool_iterations`, the run's resolved round cap, the `compactors`
+/// table, and `loop_running`, the VM's flag that refuses a loop started
+/// while one runs, go to [`loop_begin`](crate::models_loop::loop_begin),
 /// which runs the loop's rules behind the shim's trampoline.
 ///
 /// Three further captures give the chunk the structured error shape:
@@ -164,6 +165,7 @@ pub(crate) fn install_shim_prelude(
     lua: &Lua,
     max_tool_iterations: usize,
     local_handler_depth: &Arc<AtomicU32>,
+    loop_running: &Arc<AtomicBool>,
     instruction_budget: &InstructionBudget,
 ) -> Result<()> {
     lua.load_std_libs(StdLib::COROUTINE).map_err(Error::lua)?;
@@ -188,8 +190,13 @@ pub(crate) fn install_shim_prelude(
     let is_model_handle = lua
         .create_function(|_, value: Value| Ok(crate::models::is_handle(&value)))
         .map_err(Error::lua)?;
-    let loop_begin =
-        crate::models_loop::loop_begin(lua, max_tool_iterations, compactors, instruction_budget)?;
+    let loop_begin = crate::models_loop::loop_begin(
+        lua,
+        max_tool_iterations,
+        compactors,
+        loop_running,
+        instruction_budget,
+    )?;
     let program = SHIM_PROGRAM.as_ref().map_err(Error::shared)?;
     let shims: Table = program
         .load(lua)?

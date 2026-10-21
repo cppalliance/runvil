@@ -2,6 +2,9 @@
 //! both entries' argument checks, the envelope failure, the chat answer's
 //! userdata, and each step's action.
 
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
+
 use mlua::{Function, Lua, MultiValue, Value};
 use runvil_model_client::model::{ModelBinding, ModelId, ModelInvocation};
 use runvil_types::metrics::ToolCallEvent;
@@ -9,7 +12,7 @@ use runvil_types::tools::ToolId;
 use serde_json::json;
 
 use super::machine::{Input, Phase, Then};
-use super::{act, envelope_failure, loop_begin, lua_type_name, read_input};
+use super::{LOOP_RUNNING, act, envelope_failure, loop_begin, lua_type_name, read_input};
 use crate::compactors::OverflowReason;
 use crate::error::Error;
 use crate::error_value::{ErrorField, ErrorKind, Raised, error_table, raised_from};
@@ -73,17 +76,27 @@ fn lua_type_name_is_luas_type_with_an_integer_named_integer() {
     }
 }
 
+/// `loop_begin` over a new flag on `lua`, capped at `max_rounds`, with an
+/// empty `compactors` table, and that flag.
+fn begin_with_flag(lua: &Lua, max_rounds: usize) -> (Function, Arc<AtomicBool>) {
+    let running = Arc::new(AtomicBool::new(false));
+    let compactors = lua.create_table().unwrap();
+    let budget = InstructionBudget::default();
+    let begin = loop_begin(lua, max_rounds, compactors, &running, &budget).unwrap();
+    (begin, running)
+}
+
 #[test]
 fn both_entries_check_their_arguments_in_order_with_the_shims_texts() {
     let lua = Lua::new();
-    let compactors = lua.create_table().unwrap();
-    let begin = loop_begin(&lua, 2, compactors, &InstructionBudget::default()).unwrap();
+    let (begin, _) = begin_with_flag(&lua, 2);
     let list = lua.create_userdata(MessageList::default()).unwrap();
     let outcomes: Vec<String> = lua
         .load(
             "local begin, h, list, null = ...
              local function probe(...)
                local step, tag, value = begin(...)
+               if step then step(false, 'ended') end
                return type(step) .. '|' .. tag .. '|' .. tostring(value.op or value)
              end
              return {
@@ -116,6 +129,57 @@ fn both_entries_check_their_arguments_in_order_with_the_shims_texts() {
             not_a_list,
             started,
         ]
+    );
+}
+
+#[test]
+fn a_running_loop_refuses_another_until_its_step_ends_or_fails() {
+    let lua = Lua::new();
+    let (begin, running) = begin_with_flag(&lua, 2);
+    let capped = loop_begin(
+        &lua,
+        0,
+        lua.create_table().unwrap(),
+        &running,
+        &InstructionBudget::default(),
+    )
+    .unwrap();
+    let flag = Arc::clone(&running);
+    let is_running = lua
+        .create_function(move |_, ()| Ok(flag.load(Ordering::Relaxed)))
+        .unwrap();
+    let list = lua.create_userdata(MessageList::default()).unwrap();
+    let seen: String = lua
+        .load(
+            "local begin, capped, running, list, h = ...
+             local seen = {}
+             local function note(label) seen[#seen + 1] = label .. '=' .. tostring(running()) end
+             local function refusal(...)
+               local refused, tag, err = begin(...)
+               return type(refused) .. '|' .. tag .. '|' .. tostring(err)
+             end
+             note('idle')
+             local step = begin(false, list)
+             note('started')
+             note('loop ' .. refusal(false, list))
+             note('method ' .. refusal(true, h, list))
+             note(step(false, 'ended'))
+             local _, exhausted = capped(false, list)
+             note('capped ' .. exhausted)
+             local failing = begin(false, list)
+             note('restarted')
+             note(tostring(pcall(failing, true, 'not a round')))
+             return table.concat(seen, ',')",
+        )
+        .call((begin, capped, is_running, list, handle(&lua)))
+        .unwrap();
+    let refused = format!("nil|raise|{LOOP_RUNNING}=true");
+    assert_eq!(
+        seen,
+        format!(
+            "idle=false,started=true,loop {refused},method {refused},raise=false,\
+             capped raise=false,restarted=true,false=false"
+        )
     );
 }
 

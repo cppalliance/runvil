@@ -140,6 +140,7 @@ impl SectionVm {
             &self.lua,
             max_tool_iterations,
             &self.local_handler_depth,
+            &self.loop_running,
             &self.instruction_budget,
         )
     }

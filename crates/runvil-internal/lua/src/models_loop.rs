@@ -14,6 +14,9 @@
 //! machine's typed input, steps the machine, and turns its next step into
 //! that action.
 
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
+
 use mlua::{AnyUserData, Function, Lua, LuaSerdeExt, MultiValue, Table, Value};
 use runvil_types::metrics::ToolCallEvent;
 
@@ -41,6 +44,10 @@ const NO_RECEIVER: &str =
 /// A handle's `loop` past its receiver and two arguments.
 const METHOD_ARITY: &str = "handle:loop takes (messages, compactor?)";
 
+/// Either entry called while a loop runs in the same section.
+const LOOP_RUNNING: &str = "a loop or a compactor is already running in this section; \
+                            ask a side question with models.infer(prompt)";
+
 /// Builds `loop_begin`, the shim chunk's last argument.
 ///
 /// `loop_begin(entry, ...)` takes `false` for `models.loop` or `true` for
@@ -57,7 +64,8 @@ const METHOD_ARITY: &str = "handle:loop takes (messages, compactor?)";
 /// makes either function fail.
 ///
 /// `max_tool_iterations` is the round cap, `compactors` the table that
-/// `compactors.fail` is read from at each call, and `budget` the VM's
+/// `compactors.fail` is read from at each call, `loop_running` the VM's
+/// flag that is set while one of its loops runs, and `budget` the VM's
 /// instruction budget, whose cancel flag the step reads where the shim
 /// called `cancel_requested()`.
 ///
@@ -67,24 +75,38 @@ pub(crate) fn loop_begin(
     lua: &Lua,
     max_tool_iterations: usize,
     compactors: Table,
+    loop_running: &Arc<AtomicBool>,
     budget: &InstructionBudget,
 ) -> Result<Function> {
+    let running = Arc::clone(loop_running);
     let budget = budget.clone();
     lua.create_function(move |lua, args: MultiValue| {
-        begin(lua, args, max_tool_iterations, &compactors, &budget)
+        begin(
+            lua,
+            args,
+            max_tool_iterations,
+            &compactors,
+            &running,
+            &budget,
+        )
     })
     .map_err(Error::lua)
 }
 
 /// `loop_begin`'s body: the entry flag, then that entry's argument checks
-/// in Functional Specification's order, then the machine and its step
-/// closure, whose body is `act(lua, machine.step(read_input(lua,
-/// machine.phase(), values, &budget)?))`, then the first action.
+/// in Functional Specification's order, then the refusal while `running`
+/// is set, then the machine and its step closure, whose body is
+/// `act(lua, machine.step(read_input(lua, machine.phase(), values,
+/// &budget)?))`, then the first action. `running` is set only once
+/// nothing here can fail and the first action leaves the machine running;
+/// the step clears it when the machine is done, before it builds that
+/// action, and whenever it fails.
 fn begin(
     lua: &Lua,
     args: MultiValue,
     max_rounds: usize,
     compactors: &Table,
+    running: &Arc<AtomicBool>,
     budget: &InstructionBudget,
 ) -> mlua::Result<MultiValue> {
     let mut args = args.into_iter();
@@ -129,16 +151,30 @@ fn begin(
         }
         _ => return refuse(lua, NOT_A_LIST),
     };
+    if running.load(Ordering::Relaxed) {
+        return refuse(lua, LOOP_RUNNING);
+    }
     let (mut machine, first) = Machine::begin(max_rounds, list, messages, handle, compactor);
+    let started = !matches!(machine.phase(), Phase::Done);
     let budget = budget.clone();
+    let cleared = Arc::clone(running);
     let step = lua.create_function_mut(move |lua, values: MultiValue| {
-        act(
-            lua,
-            machine.step(read_input(lua, machine.phase(), values, &budget)?),
-        )
+        let then =
+            read_input(lua, machine.phase(), values, &budget).map(|input| machine.step(input));
+        if then.is_err() || matches!(machine.phase(), Phase::Done) {
+            cleared.store(false, Ordering::Relaxed);
+        }
+        let action = act(lua, then?);
+        if action.is_err() {
+            cleared.store(false, Ordering::Relaxed);
+        }
+        action
     })?;
     let mut action = act(lua, first)?;
     action.push_front(Value::Function(step));
+    if started {
+        running.store(true, Ordering::Relaxed);
+    }
     Ok(action)
 }
 

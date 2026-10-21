@@ -17,7 +17,7 @@ mod install;
 mod run;
 mod state;
 
-use std::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
 use mlua::{Lua, LuaOptions, StdLib};
@@ -128,6 +128,8 @@ pub struct SectionVm<S = Injected> {
     /// How many local tool handlers are running on this VM; `jump` refuses
     /// while it is above zero.
     local_handler_depth: Arc<AtomicU32>,
+    /// Set while a `models.loop` or `handle:loop` runs on this VM.
+    loop_running: Arc<AtomicBool>,
     /// How many libraries `require` is loading on this VM; `jump` refuses
     /// while it is above zero.
     library_load_depth: Arc<AtomicU32>,
@@ -268,6 +270,7 @@ impl SectionVm<Uninjected> {
             model_runtime: Arc::new(Mutex::new(ModelRuntime::new())),
             jump_slot: Arc::new(Mutex::new(None)),
             local_handler_depth: Arc::new(AtomicU32::new(0)),
+            loop_running: Arc::new(AtomicBool::new(false)),
             library_load_depth: Arc::new(AtomicU32::new(0)),
             library_programs: Arc::new(Mutex::new(Vec::new())),
             sys_live: Arc::new(Mutex::new(None)),

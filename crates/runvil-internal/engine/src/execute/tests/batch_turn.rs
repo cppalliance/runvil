@@ -1,10 +1,11 @@
 //! Tests for the turn a model-issued tool result reports: every result in
 //! a batch carries the turn of the round that requested the batch, even
 //! when an earlier local handler in that batch runs model rounds of its
-//! own - through `models.infer`, its own `models.loop`, or a `call` into a
-//! section that runs one - and advances the chain's turn counter before
-//! the later calls dispatch. Bound tools and local tools both report the
-//! requesting round's turn.
+//! own - through `models.infer` or a `call` into a section that runs one -
+//! and advances the chain's turn counter before the later calls dispatch.
+//! Bound tools and local tools both report the requesting round's turn.
+//! A handler or a compactor cannot start its own loop while a loop runs in
+//! the section; once no loop runs, the next one starts normally.
 
 use runvil_parser::test_support::{one_section, prompt};
 use runvil_types::event::Event;
@@ -115,6 +116,25 @@ const INFER_HANDLER: &str = "return 'inferred ' .. models.infer('inner prompt')"
 /// The [`grab_block`] setup that puts the `echo` fixture in scope.
 const OFFER_ECHO: &str = "tools.offer('tools/echo')\n";
 
+/// The refusal of a loop started while another runs in the section.
+const LOOP_RUNNING: &str = "a loop or a compactor is already running in this section; \
+                            ask a side question with models.infer(prompt)";
+
+/// Lua text defining `run_loop(text, compactor)`, which runs `models.loop`
+/// under `compactor` over a list holding the one user message `text` and
+/// returns the last record's text, followed by `body`.
+fn with_run_loop(body: &str) -> String {
+    format!(
+        "local function run_loop(text, compactor)\n\
+           local msgs = messages.new()\n\
+           msgs:user(text)\n\
+           models.loop(msgs, compactor)\n\
+           return msgs[#msgs].content\n\
+         end\n\
+         {body}"
+    )
+}
+
 /// Drives `scenario` against `replies`, returning the run's output and its
 /// turn reports.
 #[track_caller]
@@ -154,38 +174,90 @@ fn a_later_bound_result_reports_the_batch_turn_after_a_handler_infers() {
 }
 
 #[test]
-fn a_handlers_own_loop_reports_its_round_and_the_outer_batch_keeps_its_turn() {
-    let handler = "local inner = messages.new()\n\
-                   inner:user('inner')\n\
-                   models.loop(inner)\n\
-                   return inner[#inner].content";
-    let (out, turns) = run_turns(
-        loop_scenario(one_section(&grab_block(OFFER_ECHO, handler))).offer("echo", echo_tool()),
-        vec![
-            calls(&[
-                ("c1", "grab", "{\"value\":\"a\"}"),
-                ("c2", "echo", "{\"value\":\"b\"}"),
-            ]),
-            calls(&[("i1", "echo", "{\"value\":\"x\"}")]),
-            text("inner done"),
-            text("final answer"),
-        ],
-    );
-    assert_eq!(out, "final answer");
-    let outer = turns.batch_turn("c1,c2");
-    let inner = turns.batch_turn("i1");
-    assert!(inner > outer, "the inner round follows the outer one");
+fn a_handlers_loop_during_a_loop_raises_loop_running_as_a_lua_error() {
+    let gateway = ScriptedChat::new(vec![
+        calls(&[("c1", "grab", "{\"value\":\"a\"}")]),
+        text("final answer"),
+    ]);
+    let source = one_section(&with_run_loop(
+        "local refusal\n\
+         tools.offer_local('grab', 'Grab a value', { value = 'string' }, function()\n\
+           local ok, err = pcall(run_loop, 'inner')\n\
+           refusal = tostring(ok) .. '|' .. err.kind .. '|' .. tostring(err)\n\
+           return 'refused'\n\
+         end)\n\
+         local final = run_loop('Use the tools.')\n\
+         return refusal .. '|' .. final",
+    ));
+    let trace = loop_scenario(source).chat(&gateway).run();
     assert_eq!(
-        turns.result_turn("i1"),
-        inner,
-        "the inner result reports the inner round"
+        trace.text(),
+        format!("false|lua|{LOOP_RUNNING}|final answer")
     );
-    assert_eq!(turns.result_turn("c1"), outer);
     assert_eq!(
-        turns.result_turn("c2"),
-        outer,
-        "the outer batch's later call reports the outer turn: {turns:?}"
+        gateway.call_count(),
+        2,
+        "the refused loop sends nothing and the outer loop goes on"
     );
+}
+
+#[test]
+fn an_overflow_compactors_loop_raises_loop_running() {
+    let gateway = ScriptedChat::new(vec![text("unreachable")]);
+    let source = one_section(&with_run_loop(
+        "local ok, err = pcall(run_loop, string.rep('x', 100000), function()\n\
+           run_loop('inner')\n\
+         end)\n\
+         return tostring(ok) .. '|' .. err.kind .. '|' .. tostring(err)",
+    ));
+    let trace = loop_scenario(source).chat(&gateway).run();
+    assert_eq!(trace.text(), format!("false|lua|{LOOP_RUNNING}"));
+    assert_eq!(
+        gateway.call_count(),
+        0,
+        "the precheck refuses the outer round and the compactor's loop never starts"
+    );
+}
+
+#[test]
+fn a_loop_after_an_earlier_loop_returned_runs_normally() {
+    let gateway = ScriptedChat::new(vec![text("first"), text("second")]);
+    let source = one_section(&with_run_loop(
+        "return run_loop('one') .. '|' .. run_loop('two')",
+    ));
+    let trace = loop_scenario(source).chat(&gateway).run();
+    assert_eq!(trace.text(), "first|second");
+    assert_eq!(gateway.call_count(), 2);
+}
+
+#[test]
+fn a_loop_after_an_earlier_loop_raised_under_pcall_runs_normally() {
+    let gateway = ScriptedChat::new(vec![text("after")]);
+    let source = one_section(&with_run_loop(
+        "local ok, err = pcall(run_loop, string.rep('x', 100000))\n\
+         return tostring(ok) .. '|' .. err.kind .. '|' .. run_loop('small')",
+    ));
+    let trace = loop_scenario(source).chat(&gateway).run();
+    assert_eq!(trace.text(), "false|context_exhausted|after");
+    assert_eq!(
+        gateway.call_count(),
+        1,
+        "only the loop after the raise sends"
+    );
+}
+
+#[test]
+fn a_handlers_loop_runs_normally_when_tools_call_reaches_it_outside_any_loop() {
+    let gateway = ScriptedChat::new(vec![text("inner reply")]);
+    let source = one_section(&with_run_loop(
+        "tools.offer_local('grab', 'Grab a value', { value = 'string' }, function(args)\n\
+           return run_loop(args.value)\n\
+         end)\n\
+         return tools.call('grab', { value = 'inner' })",
+    ));
+    let trace = loop_scenario(source).chat(&gateway).run();
+    assert_eq!(trace.text(), "inner reply");
+    assert_eq!(gateway.call_count(), 1);
 }
 
 #[test]
