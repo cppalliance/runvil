@@ -4,13 +4,13 @@ overview: "Two cheap, reversible fixes for debt the library Plugin loading work 
 todos:
   - id: d1-1-list-order
     content: "D1-1: add list_plugin_files seam in load.rs, add the regression and characterization tests, see the regression test fail, then test the extension before reading metadata and narrow the two Errors docs"
-    status: pending
+    status: completed
   - id: d1-2-abi-contract
     content: "D1-2: add the Threads and lifetime section and RvHost field-doc lines to abi.rs, and point the Instance Send SAFETY comment at it"
-    status: pending
+    status: completed
   - id: verify-exit-checks
     content: "Run the exit checks after each code commit: fmt, both clippy runs, both nextest runs, three docs builds, build-xtask tests, docs-claims"
-    status: pending
+    status: completed
 isProject: false
 ---
 
