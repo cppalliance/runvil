@@ -1160,7 +1160,7 @@ Commit this step alone, with the shape from the Execution Instructions (imperati
 
 <step-3>
 
-### Step 3: Add the Plugin C contract module
+### Step 3: Add the Plugin C contract module [completed]
 
 - Component: Plugin C contract
 - Tests:
