@@ -265,9 +265,9 @@ fn host_holding(held: &Arc<Held>, survives_stop: bool) -> HostContext {
     services.provide(&HELD, Arc::clone(held)).unwrap();
     let mut packs = PackRegistry::new();
     packs
-        .add(HOLD, json!({ "survives_stop": survives_stop }))
+        .insert(HOLD, json!({ "survives_stop": survives_stop }))
         .unwrap();
-    packs.add(ASKER, Value::Null).unwrap();
+    packs.insert(ASKER, Value::Null).unwrap();
     HostContext::new(packs, services)
 }
 

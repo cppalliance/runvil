@@ -1,4 +1,4 @@
-//! What the topics share: the runtime service, the Pack `install` adds,
+//! What the topics share: the runtime service, the Pack `install` inserts,
 //! built over a map of servers, calls of its two tools, waits on a
 //! server's status, and a server that never answers.
 
@@ -31,9 +31,9 @@ pub(crate) fn runtime_services() -> HostServices {
     services
 }
 
-/// Each Pack `install` adds to a fresh registry with `config`, beside
+/// Each Pack `install` inserts into a fresh registry with `config`, beside
 /// the Pack id and config the registry holds it with.
-pub(crate) fn added(config: Value) -> Vec<(PackInfo, PackId, Value)> {
+pub(crate) fn inserted(config: Value) -> Vec<(PackInfo, PackId, Value)> {
     let mut packs = PackRegistry::new();
     plugin_mcp::install(&mut packs, config).expect("a fresh registry takes the Pack");
     packs
@@ -42,15 +42,15 @@ pub(crate) fn added(config: Value) -> Vec<(PackInfo, PackId, Value)> {
         .collect()
 }
 
-/// Builds the Pack `install` adds, under the Pack id and with the config
+/// Builds the Pack `install` inserts, under the Pack id and with the config
 /// the registry holds it with, from the server map `servers`.
 pub(crate) fn construct(
     servers: Value,
     services: &HostServices,
 ) -> Result<Arc<dyn Pack>, ToolError> {
     let config = Map::from_iter([("mcp".to_owned(), servers)]);
-    let mut added = added(Value::Object(config));
-    let (info, id, config) = added.pop().expect("install adds one Pack");
+    let mut inserted = inserted(Value::Object(config));
+    let (info, id, config) = inserted.pop().expect("install inserts one Pack");
     (info.construct)(&id, config, services)
 }
 

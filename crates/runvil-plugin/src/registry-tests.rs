@@ -1,5 +1,5 @@
 //! Tests for the Pack registry: a new registry holds the built-in
-//! `runvil/subagents` and lists every Pack in FQN order, `add` refuses an
+//! `runvil/subagents` and lists every Pack in FQN order, `insert` refuses an
 //! FQN that is not a vendor/name pair, an FQN the registry holds already,
 //! and a third-party Pack taking the built-in's Pack id, and accepts a
 //! Pack id another vendor has; the registry keeps each Pack's config and
@@ -35,9 +35,9 @@ fn name(text: &str) -> PackId {
 fn a_new_registry_holds_the_builtin_and_lists_every_pack_in_fqn_order() {
     let mut packs = PackRegistry::new();
     packs
-        .add(fixture("tests/zeta").needs(NEEDS), Value::Null)
+        .insert(fixture("tests/zeta").needs(NEEDS), Value::Null)
         .unwrap();
-    packs.add(fixture("acme/alpha"), Value::Null).unwrap();
+    packs.insert(fixture("acme/alpha"), Value::Null).unwrap();
     let listed: Vec<(&str, PackOrigin, &[ServiceId])> = packs
         .list()
         .map(|(info, origin)| (info.fqn, origin, info.needs))
@@ -49,7 +49,7 @@ fn a_new_registry_holds_the_builtin_and_lists_every_pack_in_fqn_order() {
             (SUBAGENTS, PackOrigin::Builtin, NO_NEEDS),
             ("tests/zeta", PackOrigin::Linked, NEEDS),
         ],
-        "a Pack added with needs lists those needs"
+        "a Pack inserted with needs lists those needs"
     );
     let (builtin, _origin) = packs.list().nth(1).unwrap();
     assert!(
@@ -69,7 +69,7 @@ fn add_refuses_an_fqn_that_is_not_a_vendor_name_pair() {
         "acme/Web",
     ] {
         assert_eq!(
-            PackRegistry::new().add(fixture(bad), Value::Null),
+            PackRegistry::new().insert(fixture(bad), Value::Null),
             Err(InstallError::InvalidFqn { fqn: bad }),
             "{bad}"
         );
@@ -79,10 +79,10 @@ fn add_refuses_an_fqn_that_is_not_a_vendor_name_pair() {
 #[test]
 fn add_refuses_an_fqn_the_registry_holds_already_the_builtins_included() {
     let mut packs = PackRegistry::new();
-    packs.add(fixture("tests/tools"), Value::Null).unwrap();
+    packs.insert(fixture("tests/tools"), Value::Null).unwrap();
     for taken in ["tests/tools", SUBAGENTS] {
         assert_eq!(
-            packs.add(fixture(taken), Value::Null),
+            packs.insert(fixture(taken), Value::Null),
             Err(InstallError::DuplicatePack { fqn: taken }),
             "{taken}"
         );
@@ -91,14 +91,14 @@ fn add_refuses_an_fqn_the_registry_holds_already_the_builtins_included() {
         packs
             .list()
             .any(|(info, origin)| info.fqn == SUBAGENTS && origin == PackOrigin::Builtin),
-        "the refused add left the built-in in place"
+        "the refused insert left the built-in in place"
     );
 }
 
 #[test]
 fn add_refuses_a_third_party_pack_taking_the_builtins_pack_id() {
     let mut packs = PackRegistry::new();
-    let refused = packs.add(fixture("acme/subagents"), Value::Null);
+    let refused = packs.insert(fixture("acme/subagents"), Value::Null);
     assert_eq!(
         refused,
         Err(InstallError::ReservedName {
@@ -115,8 +115,8 @@ fn add_refuses_a_third_party_pack_taking_the_builtins_pack_id() {
 #[test]
 fn add_accepts_a_pack_whose_id_another_vendor_has() {
     let mut packs = PackRegistry::new();
-    packs.add(fixture("runvil/web"), Value::Null).unwrap();
-    assert_eq!(packs.add(fixture("acme/web"), Value::Null), Ok(()));
+    packs.insert(fixture("runvil/web"), Value::Null).unwrap();
+    assert_eq!(packs.insert(fixture("acme/web"), Value::Null), Ok(()));
     let ids: Vec<(&'static str, String)> = packs
         .into_entries()
         .map(|(info, id, _config)| (info.fqn, id.to_string()))
@@ -136,7 +136,7 @@ fn add_accepts_a_pack_whose_id_another_vendor_has() {
 fn the_registry_keeps_each_packs_config_and_hands_it_on_with_its_pack_id() {
     let mut packs = PackRegistry::new();
     packs
-        .add(fixture("acme/kit"), json!({ "depth": 2 }))
+        .insert(fixture("acme/kit"), json!({ "depth": 2 }))
         .unwrap();
     let entries: Vec<(&'static str, PackId, Value)> = packs
         .into_entries()
@@ -156,7 +156,7 @@ fn the_registrys_debug_output_shows_each_fqn_origin_and_pack_id_and_no_config() 
     let mut packs = PackRegistry::new();
     let secret = "Bearer ghp_secret_token_value_0042";
     packs
-        .add(
+        .insert(
             fixture("acme/mcp"),
             json!({ "docs": { "headers": { "Authorization": secret } } }),
         )

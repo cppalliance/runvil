@@ -104,14 +104,14 @@ pub trait Pack: Send + Sync {
     ) -> PackFuture<'a, Result<ToolOutput, ToolError>>;
 }
 
-/// A Pack described as data, which a Plugin adds to the Host's
+/// A Pack described as data, which a Plugin inserts into the Host's
 /// [`PackRegistry`](crate::PackRegistry).
 ///
 /// It is fixed data the Host reads before anything is built. A Plugin
 /// crate keeps it in a private constant, builds it with
 /// [`PackInfo::new`], adding a [`PackInfo::description`], and
 /// [`PackInfo::prelude`] and [`PackInfo::needs`] only where it has them,
-/// and adds it from its `install` function:
+/// and inserts it from its `install` function:
 ///
 /// ```text
 /// const GREETER: PackInfo = PackInfo::new("acme/greeter", construct)
@@ -120,7 +120,7 @@ pub trait Pack: Send + Sync {
 ///     .needs(NEEDS);
 ///
 /// pub fn install(packs: &mut PackRegistry, config: Value) -> Result<(), InstallError> {
-///     packs.add(GREETER, config["greeter"].clone())
+///     packs.insert(GREETER, config["greeter"].clone())
 /// }
 /// ```
 #[derive(Clone, Copy)]
@@ -138,7 +138,7 @@ pub struct PackInfo {
     pub needs: &'static [ServiceId],
     /// Builds the one Pack object every run shares. The Host calls it
     /// once, when it builds its Packs, with the Pack id, the config the
-    /// Plugin added the Pack with, and the Host-wide services.
+    /// Plugin inserted the Pack with, and the Host-wide services.
     ///
     /// A failure, such as a missing Host-wide service, leaves the Pack
     /// unavailable, and its message appears in the refusal notice of each

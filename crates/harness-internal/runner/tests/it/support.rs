@@ -36,7 +36,7 @@ pub(crate) const TEST_SEED: RunSeed = RunSeed::from_bytes([7; 32]);
 pub(crate) fn registry(infos: &[PackInfo]) -> PackRegistry {
     let mut packs = PackRegistry::new();
     for info in infos {
-        packs.add(*info, Value::Null).unwrap();
+        packs.insert(*info, Value::Null).unwrap();
     }
     packs
 }

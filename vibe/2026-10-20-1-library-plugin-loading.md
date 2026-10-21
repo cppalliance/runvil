@@ -1082,7 +1082,7 @@ Part 1 of the plan. Edit only `crates/harness-internal/runner/src/host-run.rs`. 
 
 <step-2>
 
-### Step 2: Rename PackRegistry add to insert
+### Step 2: Rename PackRegistry add to insert [completed]
 
 - Component: Insert vocabulary
 - Tests:

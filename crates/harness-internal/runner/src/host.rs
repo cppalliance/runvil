@@ -2,9 +2,9 @@
 //! every Pack a [`PackRegistry`] holds and shared by every run, the pick
 //! of each run's Packs, and the snapshot each run takes of them.
 //!
-//! The Host's Plugins add Packs to the registry, and building the
+//! The Host's Plugins insert Packs into the registry, and building the
 //! context calls each Pack's `construct` once, with the config its Plugin
-//! added it with, to build the one Pack object every run shares. A
+//! inserted it with, to build the one Pack object every run shares. A
 //! construct failure is not an error: the Pack is stored as unavailable
 //! with the failure as its reason, and every run that needs it is refused
 //! naming that reason.

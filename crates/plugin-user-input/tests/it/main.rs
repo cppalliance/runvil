@@ -1,4 +1,4 @@
-//! Integration tests for `plugin-user-input`: the Pack `install` adds,
+//! Integration tests for `plugin-user-input`: the Pack `install` inserts,
 //! the ask tool `construct` names under the Pack id it receives, the
 //! answers a call returns from the run's broker, and the prelude.
 #![expect(

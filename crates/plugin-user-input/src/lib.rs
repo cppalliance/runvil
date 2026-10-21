@@ -1,7 +1,7 @@
 //! `plugin-user-input` - the Pack that lets a prompt section pause and
 //! ask the operator for their next message.
 //!
-//! The crate's Plugin, [`install`], adds the Pack `runvil/user-input`,
+//! The crate's Plugin, [`install`], inserts the Pack `runvil/user-input`,
 //! whose Pack id is `user-input`. A prompt declares the Pack in its
 //! frontmatter, and its sections then have an `input` table:
 //!
@@ -59,7 +59,7 @@
 //! - The model can ask the operator only when the prompt's Lua opts in.
 //!   A section offers the ask tool with `packs.offer('user-input')` or
 //!   by its id with `tools.offer("user-input/ask")`, and the model sees it
-//!   as `user-input_ask`. Neither adding nor declaring the Pack
+//!   as `user-input_ask`. Neither inserting nor declaring the Pack
 //!   advertises anything to the model.
 //!
 //! ## Invariants
@@ -88,7 +88,7 @@ const USER_INPUT: PackInfo = PackInfo::new("runvil/user-input", ask::construct)
     .prelude(PRELUDE)
     .needs(NEEDS);
 
-/// The Plugin: adds the `user-input` Pack to `packs` with
+/// The Plugin: inserts the `user-input` Pack into `packs` with
 /// `config["user-input"]`, which is `null` when `config` has no
 /// `user-input` key.
 ///
@@ -101,7 +101,7 @@ const USER_INPUT: PackInfo = PackInfo::new("runvil/user-input", ask::construct)
     reason = "the Plugin signature fixes the argument types"
 )]
 pub fn install(packs: &mut PackRegistry, config: Value) -> Result<(), InstallError> {
-    packs.add(USER_INPUT, config["user-input"].clone())
+    packs.insert(USER_INPUT, config["user-input"].clone())
 }
 
 /// The ask tool's last segment: its full id is `user-input/ask`, under

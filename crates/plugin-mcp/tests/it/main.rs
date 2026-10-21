@@ -1,6 +1,6 @@
 //! Integration tests for `plugin-mcp`, through `install` and `TestCall`
 //! only, against a hand-written Streamable HTTP server: the Pack
-//! `install` adds, its construct over a map of servers, and the
+//! `install` inserts, its construct over a map of servers, and the
 //! connection each server keeps here, the listing `get_dynamic_tools`
 //! answers in `listing`, and the calls `call_dynamic_tool` makes in
 //! `calls`.
@@ -20,14 +20,14 @@ use fixture::Fixture;
 use runvil_plugin::HostServices;
 use serde_json::{Value, json};
 use support::{
-    SECRET, added, call, construct, list, pack_over, ready, remote, runtime_services, settled,
+    SECRET, call, construct, inserted, list, pack_over, ready, remote, runtime_services, settled,
 };
 
 #[test]
 fn install_adds_runvil_mcp_with_no_prelude_and_no_needs() {
-    let added = added(Value::Null);
-    let [(info, id, config)] = added.as_slice() else {
-        panic!("install adds one Pack: {added:?}");
+    let inserted = inserted(Value::Null);
+    let [(info, id, config)] = inserted.as_slice() else {
+        panic!("install inserts one Pack: {inserted:?}");
     };
     assert_eq!(info.fqn, "runvil/mcp");
     assert_eq!(id.to_string(), "mcp");
@@ -43,8 +43,8 @@ fn install_adds_the_pack_with_the_server_map_under_its_pack_id() {
         (json!({ "mcp": servers, "web": {} }), servers.clone()),
         (json!({ "web": {} }), Value::Null),
     ] {
-        let added = added(config.clone());
-        let read: Vec<(&str, String, &Value)> = added
+        let inserted = inserted(config.clone());
+        let read: Vec<(&str, String, &Value)> = inserted
             .iter()
             .map(|(info, id, config)| (info.fqn, id.to_string(), config))
             .collect();

@@ -1,5 +1,5 @@
 //! The `user-input` Pack through the crate's `install`: the one Pack it
-//! adds with its config, what `construct` builds under the Pack id it
+//! inserts with its config, what `construct` builds under the Pack id it
 //! receives, what the ask tool answers from the run's broker, and the
 //! prelude a declaring prompt runs.
 
@@ -51,9 +51,9 @@ fn block_on<F: Future>(future: F) -> F::Output {
     }
 }
 
-/// Each Pack `install` adds to a fresh registry with `config`, beside
+/// Each Pack `install` inserts into a fresh registry with `config`, beside
 /// the Pack id and config the registry holds it with.
-fn added(config: Value) -> Vec<(PackInfo, PackId, Value)> {
+fn inserted(config: Value) -> Vec<(PackInfo, PackId, Value)> {
     let mut packs = PackRegistry::new();
     install(&mut packs, config).expect("a fresh registry takes the Pack");
     packs
@@ -62,10 +62,10 @@ fn added(config: Value) -> Vec<(PackInfo, PackId, Value)> {
         .collect()
 }
 
-/// The `PackInfo` `install` adds.
+/// The `PackInfo` `install` inserts.
 fn user_input() -> PackInfo {
-    let mut added = added(Value::Null);
-    let (info, _id, _config) = added.pop().expect("install adds one Pack");
+    let mut inserted = inserted(Value::Null);
+    let (info, _id, _config) = inserted.pop().expect("install inserts one Pack");
     info
 }
 
@@ -116,7 +116,7 @@ fn install_adds_the_one_pack_with_the_config_under_its_pack_id() {
         (json!({ "web": {} }), Value::Null),
         (Value::Null, Value::Null),
     ] {
-        let read: Vec<(&str, String, Value)> = added(config.clone())
+        let read: Vec<(&str, String, Value)> = inserted(config.clone())
             .into_iter()
             .map(|(info, id, config)| (info.fqn, id.to_string(), config))
             .collect();

@@ -1,5 +1,5 @@
 //! Tests for the `web` Pack's `PackInfo`, `install`, and `construct`: the
-//! Pack `install` adds with its config, the tools `construct` names under
+//! Pack `install` inserts with its config, the tools `construct` names under
 //! the Pack id it receives, the configuration it accepts, the Host-wide
 //! services it reads, the custom fetch policy, and how a call dispatches:
 //! to the tool its last segment names, or failing on a tool it lacks.
@@ -77,19 +77,23 @@ fn install_adds_the_web_pack_with_the_config_under_its_pack_id() {
     ] {
         let mut packs = PackRegistry::new();
         install(&mut packs, config.clone()).expect("a registry without web takes it");
-        let added: Vec<(&str, PackId, Value)> = packs
+        let inserted: Vec<(&str, PackId, Value)> = packs
             .into_entries()
             .filter(|(info, _, _)| info.fqn != "runvil/subagents")
             .map(|(info, id, config)| (info.fqn, id, config))
             .collect();
-        assert_eq!(added, [("runvil/web", name("web"), expected)], "{config}");
+        assert_eq!(
+            inserted,
+            [("runvil/web", name("web"), expected)],
+            "{config}"
+        );
     }
 }
 
 #[test]
 fn install_returns_the_registrys_refusal() {
     let mut packs = PackRegistry::new();
-    install(&mut packs, Value::Null).expect("the first install adds web");
+    install(&mut packs, Value::Null).expect("the first install inserts web");
     assert_eq!(
         install(&mut packs, Value::Null),
         Err(InstallError::DuplicatePack { fqn: "runvil/web" })

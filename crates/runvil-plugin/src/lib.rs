@@ -11,12 +11,14 @@
 //! pub fn install(packs: &mut PackRegistry, config: Value) -> Result<(), InstallError>
 //! ```
 //!
-//! It calls [`PackRegistry::add`] once for each Pack it offers, with the
+//! It calls [`PackRegistry::insert`] once for each Pack it offers, with the
 //! sub-object of `config` under that Pack's id (`null` when the key is
 //! missing), and returns the first error. A library Plugin will be the
 //! entry point a dynamic library exports; it is not built yet.
 //! `runvil/subagents` is a built-in Pack every registry holds, which
 //! reserves its id for the Engine's subagent tools.
+//!
+//! The Host owns the [`PackRegistry`]; a Plugin only inserts its Packs into it.
 //!
 //! Each Pack is a [`PackInfo`], built with [`PackInfo::new`]: its FQN, an
 //! optional Lua prelude, the per-run services its calls read, and the

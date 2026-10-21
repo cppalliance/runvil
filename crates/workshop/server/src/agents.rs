@@ -145,20 +145,20 @@ fn read_mcp_servers(setting: Option<&Path>) -> Value {
 fn with_plugins(services: HostServices, servers: Value) -> (HostContext, Option<ToolId>) {
     let mut packs = PackRegistry::new();
     if let Err(error) = plugin_web::install(&mut packs, Value::Null) {
-        tracing::warn!(%error, "the web Plugin added no Pack");
+        tracing::warn!(%error, "the web Plugin inserted no Pack");
     }
     let ask = match plugin_user_input::install(&mut packs, Value::Null) {
         Ok(()) => ToolId::parse(&format!("user-input/{}", plugin_user_input::ASK))
             .inspect_err(|error| tracing::warn!(%error, "the ask tool's id does not parse"))
             .ok(),
         Err(error) => {
-            tracing::warn!(%error, "the user-input Plugin added no Pack");
+            tracing::warn!(%error, "the user-input Plugin inserted no Pack");
             None
         }
     };
     let mcp = Map::from_iter([("mcp".to_owned(), servers)]);
     if let Err(error) = plugin_mcp::install(&mut packs, Value::Object(mcp)) {
-        tracing::warn!(%error, "the mcp Plugin added no Pack");
+        tracing::warn!(%error, "the mcp Plugin inserted no Pack");
     }
     (HostContext::new(packs, services), ask)
 }

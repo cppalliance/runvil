@@ -1,7 +1,7 @@
 //! Web access for prompts: a Pack that gives a run two tools, one
 //! that fetches a page and one that searches the web.
 //!
-//! The crate's Plugin, [`install`], adds the Pack `runvil/web`, whose
+//! The crate's Plugin, [`install`], inserts the Pack `runvil/web`, whose
 //! Pack id is `web`, and a run then holds both of its tools unless it
 //! declares another vendor's `web`: `web/fetch`, which fetches a URL and
 //! returns its content as text, and `web/search`, which runs a search

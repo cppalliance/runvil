@@ -1,7 +1,7 @@
 //! The Harness, which runs one prompt for a Host and records the run.
 //!
 //! A Host makes a [`pack::PackRegistry`], calls each Plugin it links,
-//! which adds its Packs to the registry, and builds one
+//! which inserts its Packs into the registry, and builds one
 //! [`pack::HostContext`] over it, which builds every Pack the registry
 //! holds. It builds them once and builds one Harness for each run.
 //! [`Harness::new`] takes the Host's recorder, inference broker, timer,
@@ -26,7 +26,7 @@ pub use harness_runner::performers::InferenceBroker;
 pub use harness_runner::performers::Timer;
 
 pub mod pack {
-    //! The registry a Host's Plugins add Packs to, the context that
+    //! The registry a Host's Plugins insert Packs into, the context that
     //! builds every Pack the registry holds, the services maps a Host
     //! fills, and the Pack ids. The Plugin crates themselves are the
     //! Host's own dependencies.

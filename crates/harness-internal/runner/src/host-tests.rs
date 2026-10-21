@@ -150,7 +150,7 @@ fn host(packs: &[(PackInfo, Value)]) -> HostContext {
 fn host_with(services: HostServices, packs: &[(PackInfo, Value)]) -> HostContext {
     let mut registry = PackRegistry::new();
     for (info, config) in packs {
-        registry.add(*info, config.clone()).unwrap();
+        registry.insert(*info, config.clone()).unwrap();
     }
     HostContext::new(registry, services)
 }

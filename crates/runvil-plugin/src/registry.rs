@@ -1,7 +1,7 @@
 //! The Packs a Host builds: [`PackRegistry`], holding the built-ins
-//! from the start and each Pack a Plugin adds with its config, the
+//! from the start and each Pack a Plugin inserts with its config, the
 //! [`PackOrigin`] that says which a Pack is, and the [`InstallError`] an
-//! add refuses with.
+//! insert refuses with.
 
 use std::collections::BTreeMap;
 use std::fmt;
@@ -17,14 +17,18 @@ use crate::{HostServices, Pack, PackFuture, PackInfo, ToolContext};
 #[path = "registry-tests.rs"]
 mod tests;
 
-/// Every Pack a Host builds, by fully qualified name, each with its
-/// Pack id and its config.
+/// Every Pack a Host's Plugins insert, by fully qualified name, each
+/// with its Pack id and config.
 ///
-/// Every registry holds the built-ins, such as `runvil/subagents`, from
-/// the start. A Host makes one with [`PackRegistry::new`] and calls each
-/// Plugin it links, which adds its Packs with [`PackRegistry::add`]. The
-/// Host then builds every Pack the registry holds, through
-/// [`into_entries`](PackRegistry::into_entries).
+/// The Host owns the registry; a Plugin only inserts its Packs into it,
+/// by calling [`insert`](PackRegistry::insert) from its `install`
+/// function. The Host makes the registry with
+/// [`new`](PackRegistry::new), which holds the built-ins such as
+/// `runvil/subagents` from the start, and calls each Plugin it links. Then
+/// it hands the registry to `HostContext::new`, which reads it through
+/// [`into_entries`](PackRegistry::into_entries) and calls each Pack's
+/// `construct` once, at startup, to make the one Pack object every run
+/// shares.
 pub struct PackRegistry {
     entries: BTreeMap<&'static str, Registered>,
 }
@@ -44,7 +48,7 @@ pub enum PackOrigin {
     /// Built into every registry; its behavior will live in the Engine, and
     /// today's one built-in, `runvil/subagents`, has none yet.
     Builtin,
-    /// Added by a linked Plugin with [`PackRegistry::add`].
+    /// Inserted by a linked Plugin with [`PackRegistry::insert`].
     Linked,
 }
 
@@ -75,7 +79,7 @@ impl PackRegistry {
         PackRegistry::default()
     }
 
-    /// Adds `info` as a linked Pack with `config`, which its `construct`
+    /// Inserts `info` as a linked Pack with `config`, which its `construct`
     /// receives when the Host builds it.
     ///
     /// The Pack id is the FQN's second segment, so `runvil/web` is `web`,
@@ -88,7 +92,7 @@ impl PackRegistry {
     /// [`InstallError::DuplicatePack`] when the registry holds the FQN
     /// already, as it holds each built-in's from the start, and
     /// [`InstallError::ReservedName`] when the Pack id is a built-in's.
-    pub fn add(&mut self, info: PackInfo, config: Value) -> Result<(), InstallError> {
+    pub fn insert(&mut self, info: PackInfo, config: Value) -> Result<(), InstallError> {
         let id = pack_id(info.fqn).ok_or(InstallError::InvalidFqn { fqn: info.fqn })?;
         if self.entries.contains_key(info.fqn) {
             return Err(InstallError::DuplicatePack { fqn: info.fqn });
@@ -151,7 +155,7 @@ impl fmt::Debug for PackRegistry {
     }
 }
 
-/// A Pack [`PackRegistry::add`] refuses outright, so the Host's author
+/// A Pack [`PackRegistry::insert`] refuses outright, so the Host's author
 /// sees it at startup.
 ///
 /// A Pack whose `construct` fails is not one of these; the Host builds it
@@ -159,21 +163,21 @@ impl fmt::Debug for PackRegistry {
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 #[non_exhaustive]
 pub enum InstallError {
-    /// The added Pack's FQN is not `vendor/name`, or a segment of it is
+    /// The inserted Pack's FQN is not `vendor/name`, or a segment of it is
     /// not a valid one-segment name.
     #[error("Pack fully qualified name `{fqn}` is not a vendor/name pair")]
     InvalidFqn {
         /// The FQN as its `PackInfo` spells it.
         fqn: &'static str,
     },
-    /// The registry holds the added Pack's FQN already, as a built-in or
-    /// as a Pack added before.
+    /// The registry holds the inserted Pack's FQN already, as a built-in or
+    /// as a Pack inserted before.
     #[error("Pack `{fqn}` is already in the registry")]
     DuplicatePack {
         /// The FQN as its `PackInfo` spells it.
         fqn: &'static str,
     },
-    /// The added Pack's id is a built-in's, which only that built-in may
+    /// The inserted Pack's id is a built-in's, which only that built-in may
     /// have.
     #[error(
         "Pack `{fqn}` cannot take the Pack id {name}, which the built-in runvil/{name} reserves"

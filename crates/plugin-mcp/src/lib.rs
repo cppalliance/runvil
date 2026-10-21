@@ -2,7 +2,7 @@
 //! names, each reached over Streamable HTTP, whose tools a prompt lists
 //! and calls through two static tools.
 //!
-//! The crate's Plugin, [`install`], adds the Pack `runvil/mcp`, whose
+//! The crate's Plugin, [`install`], inserts the Pack `runvil/mcp`, whose
 //! Pack id is `mcp`, with the sub-object of its config under `mcp`. A Host
 //! passes the `mcpServers` object of an `mcp.json` file there: each
 //! server's entry under the server's name. A `null` configuration means
@@ -119,7 +119,7 @@ use crate::server::{Server, State};
 const MCP: PackInfo =
     PackInfo::new("runvil/mcp", construct).description("Tools from every configured MCP server");
 
-/// The Plugin: adds the `mcp` Pack to `packs` with `config["mcp"]`, which
+/// The Plugin: inserts the `mcp` Pack into `packs` with `config["mcp"]`, which
 /// is `null`, meaning no servers, when `config` has no `mcp` key.
 ///
 /// # Errors
@@ -131,7 +131,7 @@ const MCP: PackInfo =
     reason = "the Plugin signature fixes the argument types"
 )]
 pub fn install(packs: &mut PackRegistry, config: Value) -> Result<(), InstallError> {
-    packs.add(MCP, config["mcp"].clone())
+    packs.insert(MCP, config["mcp"].clone())
 }
 
 /// The key `construct` reads the Host's runtime through.

@@ -30,7 +30,7 @@ use crate::search::WebSearch;
 const WEB: PackInfo =
     PackInfo::new("runvil/web", construct).description("Search the web and fetch pages");
 
-/// The Plugin: adds the `web` Pack to `packs` with `config["web"]`, which
+/// The Plugin: inserts the `web` Pack into `packs` with `config["web"]`, which
 /// is `null` when `config` has no `web` key.
 ///
 /// # Errors
@@ -42,7 +42,7 @@ const WEB: PackInfo =
     reason = "the Plugin signature fixes the argument types"
 )]
 pub fn install(packs: &mut PackRegistry, config: Value) -> Result<(), InstallError> {
-    packs.add(WEB, config["web"].clone())
+    packs.insert(WEB, config["web"].clone())
 }
 
 /// The service key for the Host's search provider.
