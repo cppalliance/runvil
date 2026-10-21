@@ -17,6 +17,26 @@
 //! - Verb names follow `RV_<OBJECT>_<ACTION>`. Libraries open and close;
 //!   Plugins load and unload.
 //!
+//! # Threads and lifetime
+//!
+//! - [`RV_PLUGIN_LOAD`] runs on the thread of the insert call. Each
+//!   [`RvHost`] function answers only the [`RvCall`] it was handed, only
+//!   while that load call runs, and only on its thread. Any other use,
+//!   including during [`RV_PLUGIN_UNLOAD`], returns [`RV_ERR_MISUSE`].
+//! - [`RV_PLUGIN_UNLOAD`] may come on any thread, because the last holder
+//!   of the Plugin drops it. The instance must be freeable from a thread
+//!   other than the one that loaded it.
+//! - [`RV_PLUGIN_UNLOAD`] must stop every thread the Plugin started and
+//!   release everything it holds before it returns. A library Plugin's
+//!   library closes right after, and a thread still running crashes the
+//!   process.
+//! - A load call the loader rejects gets no [`RV_PLUGIN_UNLOAD`]: a
+//!   refusal, a recorded misuse, a non-OK status, or no description, even
+//!   when the Plugin returned [`RV_OK`]. The Plugin frees whatever it made
+//!   before returning on every such path. A load call that succeeds is
+//!   unloaded later, even if the loader then drops the Plugin, for example
+//!   because its name repeats one already loaded.
+//!
 //! # Reserved verbs
 //!
 //! Verbs 3 to 7 are reserved for later versions, so their numbers never
@@ -109,10 +129,12 @@ pub struct RvHost {
     pub api_minor: u32,
     /// Zero.
     pub reserved: u32,
-    /// Declines the load, at most once, with a UTF-8 reason of at most 1024
-    /// bytes; returns [`RV_ERR_REFUSED`].
+    /// Declines the load, at most once, on the thread running the load call,
+    /// with a UTF-8 reason of at most 1024 bytes; returns
+    /// [`RV_ERR_REFUSED`].
     pub refuse: unsafe extern "C" fn(*const RvCall, RvStr) -> RvStatus,
-    /// Names the Plugin, exactly once, during [`RV_PLUGIN_LOAD`].
+    /// Names the Plugin, exactly once, during [`RV_PLUGIN_LOAD`] and on the
+    /// thread running the load call.
     pub describe_plugin: unsafe extern "C" fn(*const RvCall, *const RvPluginInfo) -> RvStatus,
 }
 

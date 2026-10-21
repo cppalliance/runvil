@@ -150,8 +150,8 @@ impl Drop for Instance {
     }
 }
 
-// SAFETY: the C contract lets RV_PLUGIN_UNLOAD come on any thread, and the
-// loader never reads `plugin`.
+// SAFETY: the `# Threads and lifetime` section of `runvil_plugin::abi` lets
+// RV_PLUGIN_UNLOAD come on any thread, and the loader never reads `plugin`.
 unsafe impl Send for Instance {}
 // SAFETY: `Instance` has no method that takes `&self`, so sharing it
 // between threads exposes nothing.

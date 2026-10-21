@@ -187,7 +187,7 @@ Acceptance:
 
 <step-2>
 
-### Step 2: State the thread, unload, and failed-load rules in the C contract
+### Step 2: State the thread, unload, and failed-load rules in the C contract [completed]
 
 - Component: none
 - Tests: run in PowerShell from the `runvil` root, all must pass; this step adds no new test, so the docs build with warnings denied is the check on the new text
