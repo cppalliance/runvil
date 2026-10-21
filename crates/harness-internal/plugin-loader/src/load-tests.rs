@@ -8,7 +8,7 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use crate::load::{is_regular_file, plugin_files};
+use crate::load::{is_regular_file, list_plugin_files, plugin_files};
 
 /// Tells apart the directories one process makes; nextest runs each test
 /// in its own process, so the process id tells those apart.
@@ -149,6 +149,43 @@ fn plugin_files_returns_the_error_for_a_directory_it_cannot_read() {
     let error =
         plugin_files(&dir.path().join("missing")).expect_err("a missing directory is an I/O error");
     assert_eq!(error.kind(), io::ErrorKind::NotFound);
+}
+
+/// A `metadata` argument for `list_plugin_files` that fails with a
+/// permission error for the entry named `failing` and reads the real
+/// metadata of every other path.
+fn metadata_failing_for(failing: String) -> impl Fn(&Path) -> io::Result<fs::Metadata> {
+    move |path| {
+        if path
+            .file_name()
+            .is_some_and(|name| name == failing.as_str())
+        {
+            Err(io::Error::from(io::ErrorKind::PermissionDenied))
+        } else {
+            fs::metadata(path)
+        }
+    }
+}
+
+#[test]
+fn plugin_files_does_not_read_the_metadata_of_an_entry_without_the_library_extension() {
+    let dir = Scratch::new("plugin_files_does_not_read_other_metadata");
+    touch(dir.path(), &library_name("plugin"));
+    touch(dir.path(), "notes.txt");
+    let metadata = metadata_failing_for("notes.txt".to_owned());
+    let files = list_plugin_files(dir.path(), metadata).expect("the directory lists");
+    assert_eq!(file_names(&files), [library_name("plugin")]);
+}
+
+#[test]
+fn plugin_files_returns_the_metadata_error_of_an_entry_with_the_library_extension() {
+    let dir = Scratch::new("plugin_files_returns_the_metadata_error");
+    touch(dir.path(), &library_name("plugin"));
+    touch(dir.path(), &library_name("locked"));
+    let metadata = metadata_failing_for(library_name("locked"));
+    let error = list_plugin_files(dir.path(), metadata)
+        .expect_err("a library candidate whose metadata fails is an error");
+    assert_eq!(error.kind(), io::ErrorKind::PermissionDenied);
 }
 
 #[test]

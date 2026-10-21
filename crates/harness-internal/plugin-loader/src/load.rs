@@ -23,17 +23,33 @@ mod tests;
 ///
 /// # Errors
 /// Returns the I/O error when `directory`, or the metadata of an entry in
-/// it, cannot be read. An entry that is missing when its metadata is read
-/// is not an error.
+/// it with the platform's library extension, cannot be read. Other entries
+/// are never examined beyond their names. An entry that is missing when its
+/// metadata is read is not an error.
 pub(crate) fn plugin_files(directory: &Path) -> io::Result<Vec<PathBuf>> {
+    // A closure, because `std::fs::metadata` as a function item is generic
+    // over its argument and is not `Fn(&Path)` for every lifetime.
+    list_plugin_files(directory, |path| std::fs::metadata(path))
+}
+
+/// The body of [`plugin_files`], with the metadata read passed in. A test
+/// needs that seam: `std::fs::Metadata` cannot be constructed, and a real
+/// entry whose metadata fails needs a symbolic link loop that only Unix can
+/// make cheaply.
+fn list_plugin_files(
+    directory: &Path,
+    metadata: impl Fn(&Path) -> io::Result<std::fs::Metadata>,
+) -> io::Result<Vec<PathBuf>> {
     let directory = std::path::absolute(directory)?;
     let mut names = Vec::new();
     for entry in std::fs::read_dir(&directory)? {
         let entry = entry?;
         let path = entry.path();
+        if path.extension() != Some(OsStr::new(DLL_EXTENSION)) {
+            continue;
+        }
         // `metadata` follows a link.
-        let is_file = is_regular_file(std::fs::metadata(&path))?;
-        if is_file && path.extension() == Some(OsStr::new(DLL_EXTENSION)) {
+        if is_regular_file(metadata(&path))? {
             names.push(entry.file_name());
         }
     }

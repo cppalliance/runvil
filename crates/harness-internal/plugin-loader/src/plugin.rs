@@ -35,7 +35,8 @@ mod tests;
 ///
 /// # Errors
 /// Returns the I/O error when `directory`, or the metadata of an entry in
-/// it, cannot be read.
+/// it with the platform's library extension, cannot be read. Other entries
+/// are never examined beyond their names.
 #[expect(
     unused_variables,
     reason = "Plugins insert no Packs until insert_pack exists"
