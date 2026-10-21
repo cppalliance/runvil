@@ -1,5 +1,5 @@
 //! The unsafe allowlist: the workspace lint table denies `unsafe_code`,
-//! and only the four crates that own an unsafe boundary may relax it. Any
+//! and only the five crates that own an unsafe boundary may relax it. Any
 //! other `.rs` file that expects or allows `unsafe_code`, directly or
 //! through `cfg_attr` at any depth, is a violation. Runs as part of
 //! `cargo test -p build-xtask` and `cargo xtask tidy`.
@@ -18,11 +18,12 @@ use syn::{Meta, Token};
 
 /// The crate directories, relative to the workspace root, that own an
 /// unsafe boundary and may relax `unsafe_code` in the module that holds it.
-const OWNED: [&str; 4] = [
+const OWNED: [&str; 5] = [
     "crates/gateway/app",
     "crates/gateway/stt/whisper-ffi",
     "crates/gateway-api-discovery",
     "crates/workshop/desktop",
+    "crates/harness-internal/plugin-loader",
 ];
 
 /// Runs the allowlist over every `.rs` file in every workspace crate

@@ -2635,6 +2635,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "harness-plugin-loader"
+version = "0.3.0"
+dependencies = [
+ "runvil-plugin",
+ "thiserror 2.0.19",
+]
+
+[[package]]
 name = "harness-runner"
 version = "0.3.0"
 dependencies = [

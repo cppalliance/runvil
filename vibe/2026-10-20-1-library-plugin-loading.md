@@ -1207,7 +1207,7 @@ Commit this step alone, with the shape from the Execution Instructions (imperati
 
 <step-4>
 
-### Step 4: Insert linked Plugins
+### Step 4: Insert linked Plugins [completed]
 
 - Component: Plugin loader
 - Tests:

@@ -1,0 +1,17 @@
+[package]
+name = "harness-plugin-loader"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+# The C contract's Rust mirror (`runvil_plugin::abi`), the Pack registry the
+# inserts take, and `PackId`, which validates a Plugin's name.
+runvil-plugin.workspace = true
+# `LoadError`, why one Plugin did not load.
+thiserror.workspace = true
+
+[lints]
+workspace = true
