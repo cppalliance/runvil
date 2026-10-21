@@ -7,6 +7,8 @@ repository.workspace = true
 publish = false
 
 [dependencies]
+# Opens a Plugin's dynamic library and resolves its `runvil_plugin` symbol.
+libloading.workspace = true
 # The C contract's Rust mirror (`runvil_plugin::abi`), the Pack registry the
 # inserts take, and `PackId`, which validates a Plugin's name.
 runvil-plugin.workspace = true

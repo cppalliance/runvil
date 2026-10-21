@@ -11,6 +11,7 @@ publish = false
 # re-exported through the `runvil` facade, their one public path, and
 # the service map and Pack id through the Plugin contract.
 [dependencies]
+harness-plugin-loader.workspace = true
 harness-runner.workspace = true
 runvil.workspace = true
 runvil-plugin.workspace = true

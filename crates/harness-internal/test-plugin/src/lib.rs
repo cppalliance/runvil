@@ -4,8 +4,11 @@
 //!
 //! ## Invariants
 //!
-//! - No dependencies at all, so a library Plugin needs nothing from Runvil.
-//!   The C types below are a private copy of the contract's, not an import.
+//! - No `[dependencies]` at all, so a library Plugin needs nothing from
+//!   Runvil. Only the end-to-end tests in `tests/it` name other crates,
+//!   `harness-plugin-loader` and `runvil-plugin`, as `[dev-dependencies]`.
+//!   The C types below are a private copy of the contract's, not an
+//!   import.
 //! - Only `runvil_plugin` is public. The mirrored C types stay private, and
 //!   unit tests pin them to the same layout numbers as
 //!   `runvil_plugin::abi`.

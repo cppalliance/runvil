@@ -39,6 +39,19 @@ pub mod pack {
     pub use runvil_plugin::PackRegistry;
 }
 
+pub mod plugin {
+    //! Inserting Plugins into the Pack registry: from the dynamic libraries
+    //! in a Plugin directory, or linked into the Host, and what each insert
+    //! loaded.
+
+    pub use harness_plugin_loader::Plugin;
+    pub use harness_plugin_loader::PluginFailure;
+    pub use harness_plugin_loader::PluginReport;
+    pub use harness_plugin_loader::PluginSource;
+    pub use harness_plugin_loader::insert_plugin;
+    pub use harness_plugin_loader::insert_plugin_dir;
+}
+
 pub mod record {
     //! The recorder that receives every effect, answer, and event of a run,
     //! an in-memory recorder, and the seed each run's meta records.

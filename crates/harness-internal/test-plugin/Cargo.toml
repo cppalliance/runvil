@@ -11,9 +11,15 @@ publish = false
 [lib]
 crate-type = ["cdylib", "rlib"]
 
-# No dependencies of any kind: a library Plugin needs nothing from Runvil,
+# No `[dependencies]` of any kind: a library Plugin needs nothing from Runvil,
 # and this fixture proves it. The Harness may name no `build-*` crate, so
 # `build.rs` includes the file-size check's source instead.
+
+# Only the end-to-end tests in `tests/it` use these: the loader to insert
+# the built library, and the Plugin contract crate for `PackRegistry::new`.
+[dev-dependencies]
+harness-plugin-loader.workspace = true
+runvil-plugin.workspace = true
 
 [lints]
 workspace = true

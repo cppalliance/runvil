@@ -1340,7 +1340,7 @@ Commit this step alone, with the shape from the Execution Instructions (imperati
 
 <step-6>
 
-### Step 6: Insert library Plugins and expose them through the facade
+### Step 6: Insert library Plugins and expose them through the facade [completed]
 
 - Component: Plugin loader
 - Tests:
