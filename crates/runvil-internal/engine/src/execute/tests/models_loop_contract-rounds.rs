@@ -307,12 +307,9 @@ fn the_scheduler_reports_the_whole_trace_of_a_bound_round_a_local_round_and_a_re
     assert_eq!(trace.text(), "done");
     let recorder = TraceRecorder::default();
     trace.replay(&recorder);
-    let validated = [
-        "Only: Tool scope validation started",
-        "Only: Tool scope validation succeeded",
-        "Only: Model turn completed",
-    ];
-    let mut expected = vec![
+    // The first round renders the tool list under the validation pair; the
+    // later rounds reuse it.
+    let expected = vec![
         "Prompt: Parse started",
         "Only: Lua compilation started",
         "Only: Lua compilation succeeded",
@@ -320,27 +317,23 @@ fn the_scheduler_reports_the_whole_trace_of_a_bound_round_a_local_round_and_a_re
         "Loop: Run started",
         "Only: Section started",
         "Only: Lua chunk started",
-    ];
-    expected.extend(validated);
-    expected.extend([
+        "Only: Tool scope validation started",
+        "Only: Tool scope validation succeeded",
+        "Only: Model turn completed",
         "Only: tool_calls turn=1 calls=[\"call_1:echo\"]",
         "Only: Tool call succeeded",
         "Only: tool_result turn=1 id=call_1 alias=echo trust=Trusted content=echoed: a",
-    ]);
-    expected.extend(validated);
-    expected.extend([
+        "Only: Model turn completed",
         "Only: tool_calls turn=2 calls=[\"call_2:grab\"]",
         "Only: Tool call succeeded",
         "Only: tool_result turn=2 id=call_2 alias=grab trust=Trusted content=grabbed b",
-    ]);
-    expected.extend(validated);
-    expected.extend([
+        "Only: Model turn completed",
         "Only: reply turn=3 origin=Chat finish=None text=done",
         "Only: Lua chunk succeeded",
         "Only: Lua teardown started",
         "Only: Lua teardown succeeded",
         "Only: Section finished",
         "Loop: Run succeeded",
-    ]);
+    ];
     assert_eq!(recorder.lines(), expected);
 }

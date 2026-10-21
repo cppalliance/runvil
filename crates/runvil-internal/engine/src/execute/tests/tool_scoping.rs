@@ -47,7 +47,9 @@ fn an_offered_tool_advertises_its_concrete_schema_under_its_wire_name_and_dispat
         ..runvil_lua::ToolRuntime::default()
     });
     let effective = current_tool_bindings(&tools, &runtime).expect("the offered scope snapshots");
-    let (schemas, _) = prepare_scoped_tools(&effective, &[]).expect("schemas must build");
+    let schemas = prepare_scoped_tools(&effective, &[])
+        .expect("schemas must build")
+        .schemas;
     assert_eq!(schemas.len(), 1);
     assert_eq!(schemas[0].name(), "tools_concrete");
     assert_eq!(schemas[0].description(), "Concrete description.");
@@ -108,7 +110,9 @@ fn a_section_offer_by_id_scopes_the_tool_and_dispatches_it() {
     let (tool_bindings, tool_runtime) = vm.tool_bag_handles();
     let scope =
         current_tool_bindings(&tool_bindings, &tool_runtime).expect("tool scope must snapshot");
-    let (schemas, _) = prepare_scoped_tools(&scope, &[]).expect("schemas must build");
+    let schemas = prepare_scoped_tools(&scope, &[])
+        .expect("schemas must build")
+        .schemas;
     assert_eq!(schemas.len(), 1);
     assert_eq!(schemas[0].name(), "tools_section");
     vm.teardown(&null_emitter(), "Only");

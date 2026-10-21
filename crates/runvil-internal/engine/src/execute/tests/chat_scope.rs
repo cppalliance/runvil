@@ -1,6 +1,6 @@
 //! Tests for the `Chat` arm's tool scope from a section VM: every round
-//! advertises the section's current effective scope plus every local Lua
-//! tool.
+//! sends the section's rendered tool list, its effective scope plus every
+//! local Lua tool at the first round.
 
 use runvil_parser::test_support::one_section;
 

@@ -8,7 +8,7 @@ use super::fixtures::echo_tool;
 use super::models_loop::catalog_scenario;
 use super::*;
 use crate::execute::run::{EffectRecord, ToolCallOrigin, ToolCaller};
-use crate::execute::scope::{DispatchTarget, prepare_scoped_tools};
+use crate::execute::scope::prepare_scoped_tools;
 use crate::test_support::rig::Rig;
 use crate::test_support::scenario::EXECUTION;
 use runvil_model_client::detail::tool_schema_new;
@@ -342,13 +342,17 @@ fn a_round_leaves_out_an_offered_binding_a_local_tool_shares_a_name_with() {
     let offered = crate::lua::ToolBinding::from_info("tools_echo", &echo_tool().info());
     let local = tool_schema_new("tools_echo", "the local echo", json!({ "type": "object" }))
         .expect("the local schema is valid");
-    let (schemas, dispatch) =
-        prepare_scoped_tools(&[offered], &[local]).expect("the round's scope builds");
-    assert_eq!(schemas.len(), 1, "the model sees one tool under the name");
-    assert_eq!(schemas[0].description(), "the local echo");
+    let rendered = prepare_scoped_tools(&[offered], &[local]).expect("the round's scope builds");
+    assert_eq!(
+        rendered.schemas.len(),
+        1,
+        "the model sees one tool under the name"
+    );
+    assert_eq!(rendered.schemas[0].description(), "the local echo");
     assert!(
-        matches!(dispatch.get("tools_echo"), Some(DispatchTarget::Local)),
-        "the local tool answers the name: {dispatch:?}"
+        matches!(rendered.dispatch.get("tools_echo"), Some(None)),
+        "the local tool answers the name: {:?}",
+        rendered.dispatch
     );
 }
 

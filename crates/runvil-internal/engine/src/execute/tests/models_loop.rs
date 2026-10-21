@@ -2,10 +2,11 @@
 //! loop over an author-owned message list. One terminal turn with no tools,
 //! repeated model-tool rounds with automatic assistant and tool-result
 //! appends, the nil return, explicit terminal removal, local and bound
-//! tools, call-time tool scope, explicit-handle calls on a frozen binding,
-//! and the atomic append of a tool-call batch. The shared loop fixtures
-//! (`loop_models`, `loop_scenario`, `catalog_scenario`, `LOOP_TO_TEXT`,
-//! and the `loop_events` filter) sit here for every loop-driven sibling.
+//! tools, the tool list the first loop fixes, explicit-handle calls on a
+//! frozen binding, and the atomic append of a tool-call batch. The shared
+//! loop fixtures (`loop_models`, `loop_scenario`, `catalog_scenario`,
+//! `LOOP_TO_TEXT`, and the `loop_events` filter) sit here for every
+//! loop-driven sibling.
 //! The compactor argument's tests sit in `models_loop_compactors`; the
 //! loop's exit rules in `exit_rules`; its cap, scope gate, and
 //! result-record trust in `tool_loop`.
@@ -229,42 +230,32 @@ fn models_loop_dispatches_local_and_bound_tools() {
 }
 
 #[test]
-fn models_loop_reads_the_tool_scope_at_each_call() {
-    let gateway = ScriptedChat::new(vec![
-        text("no tools yet"),
-        calls(&[("call_1", "echo", "{\"value\":\"late\"}")]),
-        text("scoped in"),
-    ]);
+fn an_offer_after_the_first_loop_raises_and_the_second_loop_sends_the_same_empty_list() {
+    let gateway = ScriptedChat::new(vec![text("no tools"), text("still none")]);
     let source = one_section(
         "messages:user('first')
          models.loop()
-         tools.offer('tools/echo')
+         local ok, err = pcall(tools.offer, 'tools/echo')
+         assert(not ok, 'the first loop fixed the empty list')
          messages:user('second')
          models.loop()
-         assert(messages[#messages].content == 'scoped in', 'the second loop converged')
-         return 'ok'",
+         assert(messages[#messages].content == 'still none', 'the second loop converged')
+         return tostring(err)",
     );
-    // Nothing in scope at first: the first call advertises no tools, the
-    // `tools.offer` between calls scopes `echo` in for the second.
     let trace = loop_scenario(source)
         .offer("echo", echo_tool())
         .chat(&gateway)
         .run();
-    assert_eq!(trace.text(), "ok");
+    assert_eq!(
+        trace.text(),
+        "tools.offer: the section's tool list is fixed at its first models.loop round; \
+         make every offer before the first loop, or offer in another section"
+    );
     let bodies = gateway.requests();
-    assert_eq!(
-        bodies.len(),
-        3,
-        "one tool-free round, then a tool round and its terminal"
-    );
+    assert_eq!(bodies.len(), 2, "one tool-free round per loop");
     assert!(
-        bodies[0].tools.is_empty(),
-        "the first call predates the tools.offer: {bodies:?}"
-    );
-    assert_eq!(
-        bodies[1].tools[0].name(),
-        "echo",
-        "the second call advertises the newly offered tool: {bodies:?}"
+        bodies.iter().all(|body| body.tools.is_empty()),
+        "both loops send the empty list the first rendered: {bodies:?}"
     );
 }
 

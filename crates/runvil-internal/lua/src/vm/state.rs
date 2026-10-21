@@ -131,8 +131,9 @@ impl SectionVm {
 /// first-offer order and each Pack's tools in id order. Each tool
 /// appears once, at its first place, resolved against the offering.
 ///
-/// Rebuilt at each model operation so `tools.offer`, `packs.offer`, and
-/// `tools.offer_local` calls between blocks reach the next model turn.
+/// The section's first loop round renders its tool list from these
+/// bindings. `tools.offer`, `packs.offer`, and `tools.offer_local` raise
+/// after that, so the bindings never change once the list is rendered.
 ///
 /// # Errors
 /// Returns [`Error::Internal`] if the tool runtime's mutex is poisoned or an

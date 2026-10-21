@@ -1,10 +1,13 @@
-//! Per-VM tool runtime state: call counts and the scoped tool set a section sees.
+//! Per-VM tool runtime state: call counts, the scoped tool set a section
+//! sees, and the tool list its first loop round rendered from that set.
 
 use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
 
+use runvil_model_client::client::ToolSchema;
 use runvil_types::packs::PackId;
+use runvil_types::tools::ToolId;
 
 use crate::error::{Error, Result};
 
@@ -88,4 +91,19 @@ pub struct ToolRuntime {
     /// The Packs `packs.offer` put in the section's scope, in
     /// first-offer order.
     pub packs: Vec<PackId>,
+}
+
+/// The tool list a section's first loop round rendered.
+#[derive(Debug, Clone)]
+pub struct RenderedTools {
+    /// The schemas every round of the section sends.
+    pub schemas: Vec<ToolSchema>,
+    /// Each advertised name's catalog tool, `None` for a local tool.
+    ///
+    /// Every round copies this map onto its chain: the round's answer is
+    /// gated against its keys, and the reported batch names a catalog
+    /// tool's id. The `tool_call` the loop then yields resolves each name
+    /// itself, a wire name against the run's offering and a local alias
+    /// against the section VM's handlers.
+    pub dispatch: BTreeMap<String, Option<ToolId>>,
 }

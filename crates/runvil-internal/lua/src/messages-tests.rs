@@ -1,13 +1,16 @@
 //! Tests for the section's `messages` list and its parse through the
 //! protocol.
 
+use std::collections::BTreeMap;
+
 use mlua::{Lua, LuaSerdeExt, Value};
 use serde_json::json;
 
-use crate::Error;
+use super::MessageList;
 use crate::protocol::{Request, YieldParse};
 use crate::test_vm::TestVm;
 use crate::tests::{system, user};
+use crate::{Error, RenderedTools};
 
 #[path = "messages-tests-list.rs"]
 mod list;
@@ -40,6 +43,35 @@ fn messages_is_the_vms_one_empty_list_and_lua_reaches_no_other() {
     assert!(first_nil && same && new_nil);
     vm.exec("messages:user('u')");
     assert_eq!(vm.messages().to_records(), vec![user("u")]);
+}
+
+/// A rendered tool list advertising each of `names` as a local tool.
+fn rendered(names: &[&str]) -> RenderedTools {
+    RenderedTools {
+        schemas: Vec::new(),
+        dispatch: names
+            .iter()
+            .map(|name| ((*name).to_owned(), None))
+            .collect(),
+    }
+}
+
+#[test]
+fn a_list_is_rendered_only_once_a_tool_list_is_attached_and_keeps_the_first() {
+    let list = MessageList::default();
+    assert!(!list.rendered(), "a fresh list holds no rendered tool list");
+    assert!(list.rendered_tools().is_none());
+    list.clone().attach_rendered_tools(rendered(&["first"]));
+    assert!(list.rendered(), "a clone shares the attached list");
+    list.attach_rendered_tools(rendered(&["second"]));
+    let kept = list
+        .rendered_tools()
+        .expect("the list holds a rendered tool list");
+    assert_eq!(
+        kept.dispatch,
+        BTreeMap::from([("first".to_owned(), None)]),
+        "the first attached list stays"
+    );
 }
 
 #[test]

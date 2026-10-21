@@ -2,13 +2,15 @@
 //! over ids and tool objects, the `required` and `extras` lists,
 //! `tools.get`, and `tools.offer_local`.
 
+use std::collections::BTreeMap;
+
 use mlua::{Lua, Value, Variadic};
 use runvil_types::packs::PackId;
 
-use crate::ToolBinding;
 use crate::handles::ToolSet;
 use crate::test_vm::{lua_over, scoped, tool_at};
 use crate::tools::decode::collect_offer_entries;
+use crate::{RenderedTools, ToolBinding};
 
 /// A set declaring the Pack `web` and offering its two tools beside the
 /// two of the undeclared Pack `gh`, in id order, under their wire names.
@@ -180,6 +182,64 @@ fn offer_local_registers_a_local_tool_and_names_itself_in_its_errors() {
         errors.2.contains("invalid alias \"web/search\""),
         "a local alias keeps the alias grammar: {}",
         errors.2
+    );
+}
+
+#[test]
+fn every_offer_function_raises_once_the_tool_list_is_rendered_before_any_other_check() {
+    let vm = lua_over(offering_set());
+    vm.exec(
+        "tools.offer('web/search')\n\
+         packs.offer('web')\n\
+         tools.offer_local('helper', 'a local helper', {}, function() return '' end)",
+    );
+    let before = scoped(&vm);
+    vm.messages().attach_rendered_tools(RenderedTools {
+        schemas: Vec::new(),
+        dispatch: BTreeMap::new(),
+    });
+    let refusals: Vec<String> = vm.eval(
+        "local out = {}\n\
+         for _, offer in ipairs({\n\
+           function() tools.offer('gh/search') end,\n\
+           function() tools.offer('web/search') end,\n\
+           function() tools.offer('gh/missing') end,\n\
+           function() packs.offer('web') end,\n\
+           function() packs.offer('nope') end,\n\
+           function() tools.offer_local('other', 'x', {}, function() return '' end) end,\n\
+           function() tools.offer_local('helper', 'again', {}, function() return '' end) end,\n\
+           function() tools.offer_local() end,\n\
+         }) do\n\
+           local ok, err = pcall(offer)\n\
+           out[#out + 1] = ok and 'accepted' or tostring(err)\n\
+         end\n\
+         return out",
+    );
+    let fixed = "the section's tool list is fixed at its first models.loop round; make every \
+                 offer before the first loop, or offer in another section";
+    let calls = [
+        "tools.offer",
+        "tools.offer",
+        "tools.offer",
+        "packs.offer",
+        "packs.offer",
+        "tools.offer_local",
+        "tools.offer_local",
+        "tools.offer_local",
+    ];
+    assert_eq!(refusals.len(), calls.len(), "{refusals:?}");
+    for (refusal, call) in refusals.iter().zip(calls) {
+        assert!(
+            refusal.contains(&format!("{call}: {fixed}")),
+            "a new, a repeated, and an unknown entry, and a missing argument, all \
+             raise the fixed-list refusal first: {refusal}"
+        );
+    }
+    assert_eq!(scoped(&vm), before, "no refused offer reaches the scope");
+    assert!(
+        !vm.has_local_tool("other")
+            .expect("the local-tools registry reads"),
+        "no refused local offer registers"
     );
 }
 

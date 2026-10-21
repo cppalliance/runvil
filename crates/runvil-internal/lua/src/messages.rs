@@ -19,6 +19,11 @@
 //! valid by construction and skip that validation; `push` checks only the
 //! leading-system rule. A model round's request holds a clone of the same
 //! list, so the round reads every record with no second validation.
+//!
+//! The list also holds the section's rendered tool list, which the Engine
+//! attaches at the first loop round that builds its tools, so it lasts
+//! exactly as long as the section. Once one is attached, every offer
+//! function raises.
 
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
@@ -31,6 +36,7 @@ use serde_json::{Map, Value as Json};
 
 use crate::error::{Error, Result};
 use crate::protocol::{MessageRecord, RecordRole, parse_record};
+use crate::scope::RenderedTools;
 
 #[path = "messages-view.rs"]
 mod view;
@@ -92,6 +98,8 @@ struct ListState {
     records: Vec<Arc<MessageRecord>>,
     /// The last issued send: its round and the wire request it sent.
     last: Option<(RoundId, Vec<Message>)>,
+    /// Attached at the first successful build and never detached.
+    rendered: Option<RenderedTools>,
 }
 
 impl MessageList {
@@ -183,6 +191,26 @@ impl MessageList {
                 .count();
             (Some(after), u64::try_from(keep).unwrap_or(u64::MAX))
         })
+    }
+
+    /// Whether a rendered tool list is attached; no list means false.
+    #[must_use]
+    pub fn rendered(&self) -> bool {
+        self.state().rendered.is_some()
+    }
+
+    /// A copy of the attached rendered tool list, if one is attached.
+    #[must_use]
+    pub fn rendered_tools(&self) -> Option<RenderedTools> {
+        self.state().rendered.clone()
+    }
+
+    /// Attaches `tools` as the section's rendered tool list. A list that
+    /// already holds one keeps it.
+    ///
+    /// The Engine calls this only on a list with none attached.
+    pub fn attach_rendered_tools(&self, tools: RenderedTools) {
+        self.state().rendered.get_or_insert(tools);
     }
 }
 

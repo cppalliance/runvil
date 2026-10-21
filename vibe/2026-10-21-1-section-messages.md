@@ -806,7 +806,7 @@ Commit and rules:
 
 <step-3>
 
-### Step 3: Render the section's tool list once
+### Step 3: Render the section's tool list once [completed]
 
 - Component: Rendered tool list
 - Tests: run in PowerShell from `c:\Users\Vinnie\cursor\runvil`, in this order:

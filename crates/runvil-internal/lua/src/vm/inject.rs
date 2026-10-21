@@ -139,8 +139,15 @@ impl SectionVm<Uninjected> {
             &self.bound_tools,
             &self.tool_runtime,
             &self.local_tools,
+            &self.messages,
         )?;
-        install_packs(&self.lua, &globals, &self.bound_tools, &self.tool_runtime)?;
+        install_packs(
+            &self.lua,
+            &globals,
+            &self.bound_tools,
+            &self.tool_runtime,
+            &self.messages,
+        )?;
         install_models(
             &self.lua,
             &globals,

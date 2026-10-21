@@ -13,18 +13,20 @@
 //! prelude, since dispatch suspends), and `calls` is the read-only
 //! dispatch counter surface, keyed by id for a catalog tool and by alias
 //! for a local one. Offering an id the run cannot offer is a
-//! hard error. The installation logic sits here, out of the VM driver;
-//! the VM only calls the installers in setup order.
+//! hard error, and so is every offer once the section's first loop round
+//! rendered its tool list. The installation logic sits here, out of the
+//! VM driver; the VM only calls the installers in setup order.
 
 use std::sync::{Arc, Mutex};
 
-use mlua::{Function, Lua, MultiValue, Table, Value, Variadic};
+use mlua::{FromLuaMulti, Function, Lua, MultiValue, Table, Value, Variadic};
 use runvil_model_client::detail::tool_schema_new;
 use runvil_types::tools::ToolId;
 
 use crate::alias::Alias;
 use crate::error::{Error, Result};
 use crate::handles::{ToolBinding, ToolSet};
+use crate::messages::MessageList;
 use crate::scope::{ToolCallCounts, ToolRuntime};
 use crate::vm::LocalTools;
 
@@ -43,6 +45,21 @@ use objects::{install_tool_lists, install_tool_objects};
 /// scheduler's `Local` answer reads it back to hand the function to the
 /// shim.
 const LOCAL_HANDLERS_REGISTRY: &str = "runvil.tools.local_handlers";
+
+/// The refusal of an offer function once the section's tool list is
+/// rendered, after the calling function's name.
+const TOOL_LIST_FIXED: &str = "the section's tool list is fixed at its first models.loop round; \
+                               make every offer before the first loop, or offer in another \
+                               section";
+
+/// Refuses `call`, an offer function, once `list` holds the section's
+/// rendered tool list.
+pub(crate) fn refuse_after_render(call: &str, list: &MessageList) -> mlua::Result<()> {
+    if list.rendered() {
+        return Err(mlua::Error::external(format!("{call}: {TOOL_LIST_FIXED}")));
+    }
+    Ok(())
+}
 
 /// Reads the handler `tools.offer_local` registered under `alias` from the
 /// VM's handler table.
@@ -173,7 +190,8 @@ fn resolve_entries(call: &str, set: &ToolSet, entries: Vec<String>) -> mlua::Res
 ///
 /// The coroutine shim prelude installs the suspending `tools.call` on this
 /// table as a Lua function, because yield cannot cross the Rust callback
-/// boundary.
+/// boundary. Both offer functions refuse once `list`, the section's
+/// conversation, holds a rendered tool list.
 ///
 /// # Errors
 /// Returns [`Error::LuaRuntime`] if a Lua table or callback cannot be created or
@@ -184,12 +202,13 @@ pub(crate) fn install_tools(
     set: &Arc<ToolSet>,
     runtime: &Arc<Mutex<ToolRuntime>>,
     local_tools: &LocalTools,
+    list: &MessageList,
 ) -> Result<()> {
     let tools = lua.create_table().map_err(Error::lua)?;
     install_tool_objects(lua, set)?;
-    install_offer(lua, &tools, set, runtime)?;
+    install_offer(lua, &tools, set, runtime, list)?;
     install_tool_lists(lua, &tools, set)?;
-    install_offer_local(lua, &tools, local_tools)?;
+    install_offer_local(lua, &tools, local_tools, list)?;
 
     globals.raw_set("tools", tools).map_err(Error::lua)
 }
@@ -201,11 +220,14 @@ fn install_offer(
     tools: &Table,
     set: &Arc<ToolSet>,
     runtime: &Arc<Mutex<ToolRuntime>>,
+    list: &MessageList,
 ) -> Result<()> {
     let frozen = Arc::clone(set);
     let state = Arc::clone(runtime);
+    let list = list.clone();
     let offer = lua
         .create_function(move |_, args: Variadic<Value>| {
+            refuse_after_render("tools.offer", &list)?;
             let entries = collect_offer_entries("tools.offer", args)?;
             let resolved = resolve_entries("tools.offer", &frozen, entries)?;
             let mut state = state
@@ -226,38 +248,47 @@ fn install_offer(
 /// a fresh handler table: the alias and schema register on `local_tools`
 /// for membership and advertising, and the handler is written under the
 /// alias for the scheduler's `Local` answer to read back. An alias may
-/// equal an offered tool's wire name; the local tool wins in scope.
-fn install_offer_local(lua: &Lua, tools: &Table, local_tools: &LocalTools) -> Result<()> {
+/// equal an offered tool's wire name; the local tool wins in scope. The
+/// arguments convert after the rendered-list check, so that refusal comes
+/// first.
+fn install_offer_local(
+    lua: &Lua,
+    tools: &Table,
+    local_tools: &LocalTools,
+    list: &MessageList,
+) -> Result<()> {
     lua.set_named_registry_value(
         LOCAL_HANDLERS_REGISTRY,
         lua.create_table().map_err(Error::lua)?,
     )
     .map_err(Error::lua)?;
     let local = local_tools.clone();
+    let list = list.clone();
     let offer_local = lua
-        .create_function(
-            move |lua, (alias, description, params, handler): (String, String, Table, Function)| {
-                let alias = Alias::parse(alias).map_err(mlua::Error::external)?;
-                if local
-                    .contains(alias.as_str())
-                    .map_err(mlua::Error::external)?
-                {
-                    return Err(mlua::Error::external(format!(
-                        "tools.offer_local alias {:?} is already registered",
-                        alias.as_str()
-                    )));
-                }
-                let parameters = local_params_schema(&params)?;
-                let schema = tool_schema_new(alias.as_str(), description, parameters)
-                    .map_err(mlua::Error::external)?;
-                let handlers: Table = lua.named_registry_value(LOCAL_HANDLERS_REGISTRY)?;
-                handlers.raw_set(alias.as_str(), handler)?;
-                local
-                    .register(alias, schema)
-                    .map_err(mlua::Error::external)?;
-                Ok(())
-            },
-        )
+        .create_function(move |lua, args: MultiValue| {
+            refuse_after_render("tools.offer_local", &list)?;
+            let (alias, description, params, handler) =
+                <(String, String, Table, Function)>::from_lua_args(args, 1, None, lua)?;
+            let alias = Alias::parse(alias).map_err(mlua::Error::external)?;
+            if local
+                .contains(alias.as_str())
+                .map_err(mlua::Error::external)?
+            {
+                return Err(mlua::Error::external(format!(
+                    "tools.offer_local alias {:?} is already registered",
+                    alias.as_str()
+                )));
+            }
+            let parameters = local_params_schema(&params)?;
+            let schema = tool_schema_new(alias.as_str(), description, parameters)
+                .map_err(mlua::Error::external)?;
+            let handlers: Table = lua.named_registry_value(LOCAL_HANDLERS_REGISTRY)?;
+            handlers.raw_set(alias.as_str(), handler)?;
+            local
+                .register(alias, schema)
+                .map_err(mlua::Error::external)?;
+            Ok(())
+        })
         .map_err(Error::lua)?;
     tools.set("offer_local", offer_local).map_err(Error::lua)
 }

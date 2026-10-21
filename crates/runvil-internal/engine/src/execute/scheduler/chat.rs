@@ -2,15 +2,18 @@
 //! section VM.
 //!
 //! Dispatch first refuses an empty list. It then resolves the round's
-//! binding and tool scope (the bound and local halves), records the scope
-//! on the chain as `advertised`, prechecks the projected conversation, with
-//! room kept for the reply, against the model's context window (counting
-//! from the provider's usage for the chain's last measured round when the
-//! request extends it), and issues the single gateway round as a `Chat`
-//! effect - the same effect a nested `infer` issues, over the author's
-//! conversation and the advertised schemas. The driver classifies the
-//! answered completion into the round's answer when it arrives
-//! ([`Scheduler::accept_chat`]), emitting the round's events - the turn
+//! binding and the section's rendered tool list - built from the bound
+//! and local halves and attached to the list by the section's first
+//! round, then reused by every later round - copies the list's dispatch
+//! map onto the chain as `advertised`, prechecks the projected
+//! conversation, with room kept for the reply, against the model's
+//! context window (counting from the provider's usage for the chain's
+//! last measured round when the request extends it), and issues the
+//! single gateway round as a `Chat` effect - the same effect a nested
+//! `infer` issues, over the author's conversation and the advertised
+//! schemas. The driver classifies the answered completion into the
+//! round's answer when it arrives ([`Scheduler::accept_chat`]), emitting
+//! the round's events - the turn
 //! advance, the debug capture pair, turn completed or failed or truncated,
 //! thinking, and the reply or the tool-call batch - through the chain's own
 //! task-scoped emitter, and rejecting a tool name outside the scope the
@@ -26,10 +29,11 @@ use runvil_types::emitter::Emitter;
 use runvil_types::event::{ReplyOrigin, lifecycle};
 use runvil_types::ids::RoundId;
 use runvil_types::metrics::ToolCallEvent;
+use runvil_types::tools::ToolId;
 
 use crate::execute::protocol::{Answer, ChatOutcome, ChatResult};
 use crate::execute::run::Effect;
-use crate::execute::scope::{DispatchTarget, prepare_effective_scope};
+use crate::execute::scope::prepare_effective_scope;
 use crate::execute::turn::{Served, advance_turn, report_model_turn};
 use crate::lua::{
     MessageList, OverflowReason, current_tool_bindings, output_reserve, precheck, project_messages,
@@ -87,11 +91,14 @@ impl Scheduler {
 
     /// The fallible half of chat dispatch: the emptiness check, the
     /// binding (the handle whose `loop` ran, when one did, else the
-    /// section's current model), the call-time tool scope recorded on the
-    /// chain as `advertised`, the per-dispatch projection, the context
-    /// precheck, and the issued effect. The send is recorded on the list
-    /// only once the precheck passes, so a refused round leaves the list's
-    /// last send in place.
+    /// section's current model), the section's rendered tool list with its
+    /// map copied onto the chain as `advertised`, the per-dispatch
+    /// projection, the context precheck, and the issued effect. The first
+    /// round to reach the build renders the list and attaches it before
+    /// the projection and the precheck, so a refused first round still
+    /// fixes it; a round refused earlier attaches nothing. The send is
+    /// recorded on the list only once the precheck passes, so a refused
+    /// round leaves the list's last send in place.
     fn prepare_chat(
         &mut self,
         id: ChainIndex,
@@ -114,16 +121,20 @@ impl Scheduler {
                 section: section.clone(),
             })?
         };
-        // The scope is read at call time: `tools.offer` and `tools.offer_local`
-        // calls since the last model operation shape this round's
-        // advertised set, which is the section's effective bindings plus
-        // every local Lua tool.
-        let bound = current_tool_bindings(chain.ctx.tool_set(), vm.tool_runtime())?;
-        let locals = vm.local_tool_schemas()?;
         let handles = frame.reporting_handles();
         let emitter = handles.emitter;
-        let (schemas, dispatch) =
-            prepare_effective_scope(&bound, &locals, emitter.as_ref(), &section)?;
+        // The section's first round renders the effective bindings plus
+        // every local Lua tool, and every offer raises after that, so each
+        // later round sends the same list.
+        let rendered = if let Some(rendered) = list.rendered_tools() {
+            rendered
+        } else {
+            let bound = current_tool_bindings(chain.ctx.tool_set(), vm.tool_runtime())?;
+            let locals = vm.local_tool_schemas()?;
+            let rendered = prepare_effective_scope(&bound, &locals, emitter.as_ref(), &section)?;
+            list.attach_rendered_tools(rendered.clone());
+            rendered
+        };
         // The projection failure reports a failed turn before its call-site
         // error resumes into Lua, the loop's precedent.
         let conversation = match project_messages(&messages) {
@@ -136,7 +147,7 @@ impl Scheduler {
         let context = binding.context();
         let reserve = output_reserve(context, binding.invocation().max_tokens);
         let chain = &mut self.chains[id.index()];
-        chain.advertised = Some(dispatch);
+        chain.advertised = Some(rendered.dispatch);
         // The pre-dispatch precheck: a request that leaves the reply no
         // room never leaves. The refusal is the round's answer - the
         // overflow flag - and is observed as a failed turn, exactly as the
@@ -161,7 +172,7 @@ impl Scheduler {
             messages: conversation,
             after,
             keep,
-            tools: schemas,
+            tools: rendered.schemas,
             round,
         };
         self.issue(id, effect, Continuation::Chat(round.id));
@@ -327,17 +338,14 @@ impl ArrivedRound {
         served: &Served,
         turn: u32,
         calls: &[ToolCall],
-        advertised: &BTreeMap<String, DispatchTarget>,
+        advertised: &BTreeMap<String, Option<ToolId>>,
         global_exists: impl Fn(&str) -> bool,
     ) -> Result<ChatResult> {
         let events: Vec<ToolCallEvent> = calls
             .iter()
             .map(|call| {
                 ToolCallEvent::new(call.id(), call.name(), tool_call_arguments(call).clone())
-                    .with_tool(match advertised.get(call.name()) {
-                        Some(DispatchTarget::Bound(tool)) => Some(tool.clone()),
-                        Some(DispatchTarget::Local) | None => None,
-                    })
+                    .with_tool(advertised.get(call.name()).cloned().flatten())
             })
             .collect();
         self.emitter

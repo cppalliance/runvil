@@ -184,6 +184,7 @@ mod parallel_tool_calls;
 mod precheck_anchor;
 mod preludes;
 mod provenance;
+mod rendered_tools;
 mod rounds;
 mod run_inputs;
 mod run_termination;

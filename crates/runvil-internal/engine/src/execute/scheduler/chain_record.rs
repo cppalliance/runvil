@@ -11,12 +11,12 @@ use std::sync::Arc;
 use mlua::Thread;
 use runvil_types::ids::{ChainId, TaskId};
 use runvil_types::metrics::Usage;
+use runvil_types::tools::ToolId;
 use runvil_vfs::Access;
 
 use crate::error::DepthVia;
 use crate::execute::context::RunState;
 use crate::execute::protocol::{Answer, Blocked};
-use crate::execute::scope::DispatchTarget;
 use crate::execute::section_context::{SectionContext, TaskSeed};
 use crate::execute::walk_target::SlicePath;
 use crate::lua::UsageAnchor;
@@ -267,10 +267,12 @@ pub(super) struct Chain {
     /// `tasks.concurrency` lowers it, clamped to the parent's.
     pub(super) concurrency: NonZeroUsize,
     /// The tool scope the chain's last `chat` round advertised, keyed by
-    /// alias: the round's answer is checked against it, so a tool name the
-    /// model invents or reaches for outside the scope fails as out of
-    /// scope. `None` before the chain's first round.
-    pub(super) advertised: Option<BTreeMap<String, DispatchTarget>>,
+    /// alias, each name's catalog tool or `None` for a local tool: a copy
+    /// of the section's rendered tool list's map. The round's answer is
+    /// checked against it, so a tool name the model invents or reaches for
+    /// outside the scope fails as out of scope. `None` before the chain's
+    /// first round.
+    pub(super) advertised: Option<BTreeMap<String, Option<ToolId>>>,
     /// The provider's token counts for the chain's `chat` rounds, which the
     /// next round's context precheck counts from.
     pub(super) anchor: ChatAnchor,

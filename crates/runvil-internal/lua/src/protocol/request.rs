@@ -182,9 +182,10 @@ pub enum Request {
     },
     /// One stateless tool-capable model round over the section's list,
     /// yielded by the `models.loop` shim once per round. The dispatch arm
-    /// first refuses an empty list; the round advertises the section's
-    /// current tool scope, local Lua tools included, resolved in the
-    /// dispatch arm where the tool scope sits.
+    /// first refuses an empty list; the round sends the section's
+    /// rendered tool list, which the dispatch arm renders from the
+    /// section's tool scope, local Lua tools included, at the first round
+    /// and attaches to the list.
     Chat {
         /// The list the round sends, which may be empty, since the
         /// dispatch, not the parse, refuses an empty list. Its records

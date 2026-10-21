@@ -135,7 +135,7 @@ pub use crate::protocol::{
     MessageRecord, NonEmpty, RecordRole, Request, SpawnVia, TaskDelivery, TaskPhase, TaskStatus,
     ToolCallOutcome, ToolCallRecord, VfsOp, VfsOutcome, YieldParse,
 };
-pub use crate::scope::{ToolCallCounts, ToolRuntime};
+pub use crate::scope::{RenderedTools, ToolCallCounts, ToolRuntime};
 pub use crate::sys::enrich_sys_model;
 pub use crate::vm::{
     CoroStep, InjectFailure, Injected, SectionVm, Uninjected, current_tool_bindings,

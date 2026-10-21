@@ -10,7 +10,8 @@
 //! fresh array. A Pack object's `tools` reads the shared tool objects,
 //! so it passes straight to `tools.offer`. `packs.offer` puts every tool
 //! of a Pack in the section's scope, recording the Pack's name rather
-//! than its tools' wire names.
+//! than its tools' wire names, until the section's first loop round
+//! renders its tool list.
 
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
@@ -22,8 +23,9 @@ use runvil_types::packs::PackId;
 
 use crate::error::{Error, Result};
 use crate::handles::ToolSet;
+use crate::messages::MessageList;
 use crate::scope::ToolRuntime;
-use crate::tools::tool_object;
+use crate::tools::{refuse_after_render, tool_object};
 
 /// The registry key of the VM's Pack-object table, keyed by name.
 const PACK_OBJECTS_REGISTRY: &str = "runvil.packs.objects";
@@ -83,7 +85,8 @@ pub(crate) fn pack_object(lua: &Lua, name: &str) -> mlua::Result<Option<AnyUserD
 /// and per other Pack with offered tools, then installs
 /// `packs.required()`, the declared Packs, `packs.extras()`, the
 /// others, both in name order, `packs.get(name)`, and `packs.offer`,
-/// which records into the section's `runtime`.
+/// which records into the section's `runtime` until `list`, the section's
+/// conversation, holds a rendered tool list.
 ///
 /// # Errors
 /// Returns [`Error::LuaRuntime`] if an object or function cannot be created or installed.
@@ -92,6 +95,7 @@ pub(crate) fn install_packs(
     globals: &Table,
     set: &Arc<ToolSet>,
     runtime: &Arc<Mutex<ToolRuntime>>,
+    list: &MessageList,
 ) -> Result<()> {
     let objects = lua.create_table().map_err(Error::lua)?;
     let (mut required, mut extras) = (Vec::new(), Vec::new());
@@ -135,7 +139,7 @@ pub(crate) fn install_packs(
         })
         .map_err(Error::lua)?;
     table.set("get", get).map_err(Error::lua)?;
-    install_offer(lua, &table, set, runtime)?;
+    install_offer(lua, &table, set, runtime, list)?;
     globals.raw_set("packs", table).map_err(Error::lua)
 }
 
@@ -146,11 +150,14 @@ fn install_offer(
     table: &Table,
     set: &Arc<ToolSet>,
     runtime: &Arc<Mutex<ToolRuntime>>,
+    list: &MessageList,
 ) -> Result<()> {
     let set = Arc::clone(set);
     let state = Arc::clone(runtime);
+    let list = list.clone();
     let offer = lua
         .create_function(move |lua, args: Variadic<Value>| {
+            refuse_after_render("packs.offer", &list)?;
             let names = pack_names(lua, &set, args)?;
             let mut state = state
                 .lock()
