@@ -34,6 +34,15 @@ fn a_test_call_lends_its_tool_a_script_origin_and_a_working_filesystem() {
 }
 
 #[test]
+fn a_test_call_with_a_caller_lends_that_caller() {
+    let call = TestCall::new(inspect()).with_caller(ToolCaller::Model);
+    let cx = call.context();
+    assert_eq!(cx.tool(), &inspect());
+    assert_eq!(cx.origin().caller, ToolCaller::Model);
+    assert_eq!(cx.origin().section, "Test");
+}
+
+#[test]
 fn a_test_call_lends_the_services_it_was_given() {
     let mut services = HostServices::new();
     services

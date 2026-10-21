@@ -8,8 +8,10 @@ use crate::{HostServices, ToolContext};
 /// One tool call a test makes directly, without a Harness.
 ///
 /// It owns everything a [`ToolContext`] borrows: the called tool's id, an
-/// access over a fresh in-memory filesystem, an origin naming the script
-/// of the section `Test`, and the run's services, which are empty unless
+/// access over a fresh in-memory filesystem, an origin naming the section
+/// `Test` and a caller that is the script unless
+/// [`with_caller`](TestCall::with_caller) names another, and the run's
+/// services, which are empty unless
 /// [`with_services`](TestCall::with_services) supplies them.
 #[derive(Debug)]
 pub struct TestCall {
@@ -48,6 +50,14 @@ impl TestCall {
     #[must_use]
     pub fn with_services(mut self, services: HostServices) -> TestCall {
         self.services = services;
+        self
+    }
+
+    /// Returns the call with `caller` as the origin's caller, keeping its
+    /// execution and section.
+    #[must_use]
+    pub fn with_caller(mut self, caller: ToolCaller) -> TestCall {
+        self.origin = ToolCallOrigin::new("plugin-test", "Test", caller);
         self
     }
 
