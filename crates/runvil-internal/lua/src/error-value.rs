@@ -29,7 +29,6 @@ use std::str::FromStr;
 
 use mlua::{Function, Lua, Table, Value};
 
-use crate::compactors::OverflowReason;
 use crate::error::{Error, accepted_tags};
 
 pub(crate) use classify::{install_normalize_failure, normalized};
@@ -243,10 +242,7 @@ impl ErrorValue for Error {
     fn fields(&self) -> Vec<(String, ErrorField)> {
         match self {
             Error::ContextExhausted { reason } => {
-                vec![(
-                    "reason".to_owned(),
-                    ErrorField::String(reason.tag().to_owned()),
-                )]
+                vec![("reason".to_owned(), ErrorField::String(reason.clone()))]
             }
             Error::Store { cause, .. } => store_error_value_fields(cause),
             Error::Raised(raised) => raised
@@ -285,14 +281,11 @@ pub struct Raised {
 }
 
 impl Raised {
-    /// The overflow reason a `context_exhausted` table held, when it
-    /// parses.
+    /// The reason a `context_exhausted` table held, when it holds a
+    /// string one.
     #[must_use]
-    pub fn overflow_reason(&self) -> Option<OverflowReason> {
-        self.fields
-            .get("reason")
-            .and_then(ErrorField::as_str)
-            .and_then(OverflowReason::from_tag)
+    pub fn exhaustion_reason(&self) -> Option<&str> {
+        self.fields.get("reason").and_then(ErrorField::as_str)
     }
 }
 

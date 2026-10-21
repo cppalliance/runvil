@@ -27,33 +27,33 @@ fn context_exhaustion_maps_from_lua_and_classifies() {
     // The compactor's typed exhaustion crosses the crate seam
     // variant-for-variant and classifies as its own run-error kind, so a
     // caller can distinguish context exhaustion from a transport failure.
-    let lua_error = LuaError::ContextExhausted {
-        reason: runvil_lua::OverflowReason::Provider,
-    };
-    let error = Error::from(lua_error);
-    assert!(
-        matches!(
-            error,
-            Error::ContextExhausted {
-                reason: crate::lua::OverflowReason::Provider
-            }
+    for (reason, message) in [
+        (
+            "provider",
+            "context exhausted: the provider rejected the request as exceeding the model's context window",
         ),
-        "the mapping preserves the reason, got {error:?}"
-    );
-    assert!(
-        error.cause().is_none(),
-        "a variant with no originating error has no cause"
-    );
-    assert!(
-        error.to_string().starts_with("context exhausted: "),
-        "the diagnostic names the exhaustion: {error}"
-    );
-    let run_error = crate::RunError::from(error);
-    assert_eq!(run_error.kind(), crate::RunErrorKind::ContextExhausted);
-    assert!(
-        !run_error.is_retryable(),
-        "retrying an over-window request cannot succeed"
-    );
+        ("manual", "context exhausted: manual"),
+    ] {
+        let lua_error = LuaError::ContextExhausted {
+            reason: reason.to_owned(),
+        };
+        let error = Error::from(lua_error);
+        assert!(
+            matches!(&error, Error::ContextExhausted { reason: kept, .. } if kept == reason),
+            "the mapping preserves the reason, got {error:?}"
+        );
+        assert!(
+            error.cause().is_none(),
+            "a variant with no originating error has no cause"
+        );
+        assert_eq!(error.to_string(), message);
+        let run_error = crate::RunError::from(error);
+        assert_eq!(run_error.kind(), crate::RunErrorKind::ContextExhausted);
+        assert!(
+            !run_error.is_retryable(),
+            "retrying an over-window request cannot succeed"
+        );
+    }
 }
 
 #[test]

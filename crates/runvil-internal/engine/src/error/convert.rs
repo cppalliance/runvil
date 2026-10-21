@@ -311,8 +311,10 @@ impl Error {
     fn from_raised(raised: runvil_lua::Raised) -> Error {
         match raised.kind {
             runvil_lua::ErrorKind::ToolLoopExhausted => Error::ToolLoopExhausted,
-            runvil_lua::ErrorKind::ContextExhausted => match raised.overflow_reason() {
-                Some(reason) => Error::ContextExhausted { reason },
+            runvil_lua::ErrorKind::ContextExhausted => match raised.exhaustion_reason() {
+                Some(reason) => Error::ContextExhausted {
+                    reason: reason.to_owned(),
+                },
                 None => Error::Lua(raised.message),
             },
             runvil_lua::ErrorKind::EmptyModelReply => {

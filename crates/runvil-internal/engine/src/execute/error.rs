@@ -40,8 +40,9 @@ pub enum RunErrorKind {
     /// exhausted, or a `call`, `tasks.spawn`, or `tasks.fanout` arm would
     /// have nested past the call-depth cap.
     Quota,
-    /// The request overflowed the model's context window, and the selected
-    /// compactor left it over the limit.
+    /// `compactors.fail` raised context exhaustion: a request overflowed the
+    /// model's context window and the selected compactor left it over the
+    /// limit, or a section's Lua raised it with its own reason.
     ContextExhausted,
     /// A `{{ }}` prose substitution failed.
     Substitution,

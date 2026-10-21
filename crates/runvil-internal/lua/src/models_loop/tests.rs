@@ -366,7 +366,7 @@ fn act_names_each_call_return_and_raise_with_its_values() {
     let plain = Then::RaiseNormalized(value("plain"));
     assert_eq!(action(&lua, plain), tagged("raise", vec![value("plain")]));
     let typed = mlua::Error::external(Error::ContextExhausted {
-        reason: OverflowReason::Precheck,
+        reason: "precheck".to_owned(),
     });
     let new = Raised {
         kind: ErrorKind::EmptyModelReply,

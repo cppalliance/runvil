@@ -119,8 +119,8 @@ pub fn perform_vfs_op(
 ///   usable value.
 /// - [`RunErrorKind::Quota`] - a Lua resource quota (log events, log bytes,
 ///   or instructions) was exhausted.
-/// - [`RunErrorKind::ContextExhausted`] - the selected compactor exhausted the
-///   model's context window.
+/// - [`RunErrorKind::ContextExhausted`] - `compactors.fail` exhausted the
+///   model's context window, after an overflow or with a section's own reason.
 /// - [`RunErrorKind::Substitution`] - a `{{ }}` prose substitution failed.
 /// - [`RunErrorKind::Vfs`] - a run-scoped store operation failed, or the
 ///   run's handle lacks a store declaration.

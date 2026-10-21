@@ -129,16 +129,16 @@ pub enum Error {
         resource: QuotaResource,
     },
 
-    /// The selected compactor exhausted the model's context: a request
+    /// `compactors.fail` exhausted the model's context: a request
     /// overflowed the context window (the pre-dispatch precheck or a
-    /// provider rejection) and the policy - `compactors.fail`, the only
-    /// shipped one - does not compact. A stable typed error rather than a
-    /// bare [`Error::Lua`] so the caller and `pcall` sites can distinguish
-    /// context exhaustion from an authoring error.
-    #[error("context exhausted: {reason}")]
+    /// provider rejection) and the selected compactor did not compact, or
+    /// a caller raised it with its own reason. A stable typed error rather
+    /// than a bare [`Error::Lua`] so the caller and `pcall` sites can
+    /// distinguish context exhaustion from an authoring error.
+    #[error("context exhausted: {}", crate::compactors::exhaustion_detail(reason))]
     ContextExhausted {
-        /// Which overflow check fired.
-        reason: crate::compactors::OverflowReason,
+        /// `precheck` or `provider` after an overflow, else the caller's reason.
+        reason: String,
     },
 
     /// The run was cancelled, or the caller dropped a call the run was

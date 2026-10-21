@@ -372,15 +372,15 @@ pub(crate) enum Error {
         via: DepthVia,
     },
 
-    /// The selected compactor exhausted the model's context window: the
-    /// request overflowed on the pre-dispatch precheck or at the provider,
-    /// and the policy (`compactors.fail`, the only shipped one) does not
-    /// compact.
-    #[error("context exhausted: {reason}")]
+    /// `compactors.fail` exhausted the model's context window: the request
+    /// overflowed on the pre-dispatch precheck or at the provider and the
+    /// selected compactor did not compact, or a caller raised it with its
+    /// own reason.
+    #[error("context exhausted: {}", crate::lua::exhaustion_detail(reason))]
     #[non_exhaustive]
     ContextExhausted {
-        /// Which overflow check fired.
-        reason: crate::lua::OverflowReason,
+        /// `precheck` or `provider` after an overflow, else the caller's reason.
+        reason: String,
     },
 
     /// A run-scoped store operation failed at the virtual filesystem layer,

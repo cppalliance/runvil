@@ -13,7 +13,7 @@ use mlua::MultiValue;
 use runvil_lua::{Error, ErrorKind, LuaProgram};
 
 use crate::execute::protocol::Answer;
-use crate::lua::{CoroStep, LuaBlockResult, OverflowReason};
+use crate::lua::{CoroStep, LuaBlockResult};
 use crate::model::ModelSet;
 use crate::test_support::recording::null_emitter;
 
@@ -112,29 +112,31 @@ fn a_failure_envelope_raises_a_table_holding_the_kind_and_fields() {
     // author's `pcall` in the same shape as a shim raise: `kind` names the
     // failure, the kind's fields appear beside it, and `tostring` is the
     // typed error's display text unchanged.
-    let vm = scheduler_vm(&ModelSet::default(), None);
-    let program = compile_block(
-        r#"local ok, err = pcall(models.infer, "hi")
-           assert(not ok, "the failure envelope must raise")
-           return type(err) .. "|" .. tostring(err.kind) .. "|" .. tostring(err.reason) .. "|" .. tostring(err)"#,
-    );
-    let CoroStep::Yielded(thread, _values) =
-        vm.start_block_coro(&program).expect("the block suspends")
-    else {
-        panic!("the shim yield must suspend the block");
-    };
-    let error = Error::ContextExhausted {
-        reason: OverflowReason::Provider,
-    };
-    let display = error.to_string();
-    match vm
-        .resume_block_coro_answer::<Error>(&program, &thread, Answer::Infer(Err(error)))
-        .expect("the pcall'd block resumes")
-    {
-        CoroStep::Done(LuaBlockResult::Returned(Some(text))) => {
-            assert_eq!(text, format!("table|context_exhausted|provider|{display}"));
+    for reason in ["provider", "manual"] {
+        let vm = scheduler_vm(&ModelSet::default(), None);
+        let program = compile_block(
+            r#"local ok, err = pcall(models.infer, "hi")
+               assert(not ok, "the failure envelope must raise")
+               return type(err) .. "|" .. tostring(err.kind) .. "|" .. tostring(err.reason) .. "|" .. tostring(err)"#,
+        );
+        let CoroStep::Yielded(thread, _values) =
+            vm.start_block_coro(&program).expect("the block suspends")
+        else {
+            panic!("the shim yield must suspend the block");
+        };
+        let error = Error::ContextExhausted {
+            reason: reason.to_owned(),
+        };
+        let display = error.to_string();
+        match vm
+            .resume_block_coro_answer::<Error>(&program, &thread, Answer::Infer(Err(error)))
+            .expect("the pcall'd block resumes")
+        {
+            CoroStep::Done(LuaBlockResult::Returned(Some(text))) => {
+                assert_eq!(text, format!("table|context_exhausted|{reason}|{display}"));
+            }
+            other => panic!("expected the caught failure's rendering, got {other:?}"),
         }
-        other => panic!("expected the caught failure's rendering, got {other:?}"),
     }
 }
 
@@ -287,7 +289,7 @@ fn a_structured_raise_surfacing_as_the_coroutine_failure_keeps_its_table() {
         panic!("the shim yield must suspend the block");
     };
     let (envelope, _retained) = Answer::<Error>::Infer(Err(Error::ContextExhausted {
-        reason: OverflowReason::Precheck,
+        reason: "precheck".to_owned(),
     }))
     .into_envelope(vm.lua())
     .expect("the envelope renders");
@@ -316,22 +318,33 @@ fn a_raised_table_maps_onto_the_executor_error_type_by_kind() {
     // The executor's `From<runvil_lua::Error>` turns a kept table back
     // into the variant its kind names, so a Lua-side raise classifies the
     // same way as the Rust-raised error it replaces.
-    let exhausted = runvil_lua::Raised {
-        kind: ErrorKind::ContextExhausted,
-        message: "context exhausted: provider".to_owned(),
-        fields: [(
-            "reason".to_owned(),
-            runvil_lua::ErrorField::String("provider".to_owned()),
-        )]
-        .into_iter()
-        .collect(),
-    };
-    assert!(matches!(
-        crate::Error::from(Error::Raised(exhausted)),
-        crate::Error::ContextExhausted {
-            reason: OverflowReason::Provider
+    // A `context_exhausted` table keeps any reason string, and only a
+    // table with no reason falls back to a Lua failure.
+    for reason in ["provider", "manual"] {
+        let exhausted = runvil_lua::Raised {
+            kind: ErrorKind::ContextExhausted,
+            message: format!("context exhausted: {reason}"),
+            fields: [(
+                "reason".to_owned(),
+                runvil_lua::ErrorField::String(reason.to_owned()),
+            )]
+            .into_iter()
+            .collect(),
+        };
+        match crate::Error::from(Error::Raised(exhausted)) {
+            crate::Error::ContextExhausted { reason: kept, .. } => assert_eq!(kept, reason),
+            other => panic!("expected context exhaustion holding {reason:?}, got {other:?}"),
         }
-    ));
+    }
+    let reasonless = runvil_lua::Raised {
+        kind: ErrorKind::ContextExhausted,
+        message: "context exhausted".to_owned(),
+        fields: std::collections::BTreeMap::new(),
+    };
+    match crate::Error::from(Error::Raised(reasonless)) {
+        crate::Error::Lua(message) => assert_eq!(message, "context exhausted"),
+        other => panic!("a reasonless table must keep its message as a Lua failure, got {other:?}"),
+    }
     let loop_exhausted = runvil_lua::Raised {
         kind: ErrorKind::ToolLoopExhausted,
         message: "tool-call loop did not converge".to_owned(),

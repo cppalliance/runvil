@@ -49,10 +49,7 @@ impl runvil_lua::ErrorValue for Error {
         use runvil_lua::ErrorField;
         match self {
             Error::ContextExhausted { reason } => {
-                vec![(
-                    "reason".to_owned(),
-                    ErrorField::String(reason.tag().to_owned()),
-                )]
+                vec![("reason".to_owned(), ErrorField::String(reason.clone()))]
             }
             Error::Completion(error) if error.kind() == CompletionErrorKind::EmptyReply => error
                 .finish_reason()

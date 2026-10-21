@@ -16,8 +16,8 @@
 //! classification depend on it, and the loop shim's compactor invocation
 //! runs in Lua over the `compactors` global installed here.
 
+use std::borrow::Cow;
 use std::num::NonZeroU32;
-use std::str::FromStr;
 
 use mlua::{Function, Lua, Table};
 use runvil_model_client::client::{Message, Role};
@@ -25,7 +25,7 @@ use runvil_model_client::detail::{message_content_value, message_raw_tool_calls}
 use runvil_types::metrics::Usage;
 use serde_json::Value;
 
-use crate::error::{Error, Result, accepted_tags};
+use crate::error::{Error, Result};
 
 /// Why a request cannot fit the model's context window.
 ///
@@ -83,34 +83,16 @@ impl std::fmt::Display for OverflowReason {
 
 impl std::error::Error for OverflowReason {}
 
-impl FromStr for OverflowReason {
-    type Err = ParseOverflowReasonError;
-
-    /// Parses a reason from its exact tag, as [`OverflowReason::tag`]
-    /// renders it.
-    fn from_str(tag: &str) -> std::result::Result<OverflowReason, ParseOverflowReasonError> {
-        OverflowReason::from_tag(tag).ok_or_else(|| ParseOverflowReasonError {
-            input: tag.to_owned(),
-        })
-    }
-}
-
-/// The error returned when text is not an [`OverflowReason`] tag.
-#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
-#[error(
-    "invalid overflow reason `{input}`: required one of {}",
-    accepted_tags(OverflowReason::ALL.iter().map(|reason| reason.tag()))
-)]
-pub struct ParseOverflowReasonError {
-    /// The rejected text.
-    input: String,
-}
-
-impl ParseOverflowReasonError {
-    /// Returns the rejected text.
-    #[must_use]
-    pub fn input(&self) -> &str {
-        &self.input
+/// An overflow tag's description, or any other reason as given.
+///
+/// This is the detail a context exhaustion's message shows: an exact
+/// [`OverflowReason::tag`] reads as that overflow's [`Display`](std::fmt::Display),
+/// and a caller's own reason reads as itself.
+#[must_use]
+pub fn exhaustion_detail(reason: &str) -> Cow<'_, str> {
+    match OverflowReason::from_tag(reason) {
+        Some(overflow) => Cow::Owned(overflow.to_string()),
+        None => Cow::Borrowed(reason),
     }
 }
 
@@ -131,7 +113,9 @@ impl Compactor {
     #[must_use]
     pub fn invoke(self, reason: OverflowReason) -> Error {
         match self {
-            Compactor::Fail => Error::ContextExhausted { reason },
+            Compactor::Fail => Error::ContextExhausted {
+                reason: reason.tag().to_owned(),
+            },
         }
     }
 }
@@ -281,8 +265,9 @@ fn message_chars(message: &Message) -> u64 {
 
 /// Installs the `compactors` global holding the shipped policies.
 ///
-/// `compactors.fail` is a Rust-backed function: invoked with the overflow
-/// reason tag, it raises typed context exhaustion as an external error, so
+/// `compactors.fail` is a Rust-backed function: invoked with any reason
+/// string, the overflow's tag or the caller's own, it raises typed context
+/// exhaustion holding that reason as an external error, so
 /// the [`Error::ContextExhausted`] value crosses the Lua boundary
 /// downcastable rather than flattened to text; the loop shim, which invokes
 /// the selected compactor on an overflow round, normalizes that raise into
@@ -294,10 +279,7 @@ fn message_chars(message: &Message) -> u64 {
 /// Returns [`Error::Lua`] if the function or the global install fails.
 pub(crate) fn install_compactors(lua: &Lua, globals: &Table) -> Result<()> {
     let fail: Function = lua
-        .create_function(|_lua, tag: String| {
-            let reason = tag
-                .parse::<OverflowReason>()
-                .map_err(|error| mlua::Error::external(Error::Lua(error.to_string())))?;
+        .create_function(|_lua, reason: String| {
             Err::<(), _>(mlua::Error::external(Error::ContextExhausted { reason }))
         })
         .map_err(Error::lua)?;

@@ -1,6 +1,6 @@
 //! Tests for `models.loop`'s compactor argument: the omitted-compactor
-//! default, `compactors.fail` invocation with the overflow reason, typed
-//! context exhaustion raised at the call site, the non-function
+//! default, `compactors.fail` invocation with the overflow reason or a
+//! caller's own, typed context exhaustion raised at the call site, the non-function
 //! compactor's argument error, and an author compactor that returns or
 //! raises its own failure. The loop's round mechanics sit in
 //! `models_loop`; its exit rules in `exit_rules`.
@@ -10,7 +10,7 @@ use runvil_parser::test_support::one_section;
 use super::gateway::overflowing;
 use super::models_loop::loop_scenario;
 use super::*;
-use crate::lua::OverflowReason;
+use crate::RunErrorKind;
 
 #[test]
 fn an_omitted_compactor_defaults_to_fail_with_typed_precheck_exhaustion() {
@@ -23,12 +23,7 @@ fn an_omitted_compactor_defaults_to_fail_with_typed_precheck_exhaustion() {
     let trace = loop_scenario(source).chat(&gateway).run();
     let error = trace.error().inner();
     assert!(
-        matches!(
-            error,
-            Error::ContextExhausted {
-                reason: OverflowReason::Precheck
-            }
-        ),
+        matches!(error, Error::ContextExhausted { reason, .. } if reason == "precheck"),
         "the omitted compactor defaults to compactors.fail with the precheck reason, got {error:?}"
     );
     assert_eq!(
@@ -71,15 +66,37 @@ fn an_explicit_compactors_fail_invocation_reports_the_provider_reason() {
     let trace = loop_scenario(source).chat(&gateway).run();
     let error = trace.error().inner();
     assert!(
-        matches!(
-            error,
-            Error::ContextExhausted {
-                reason: OverflowReason::Provider
-            }
-        ),
+        matches!(error, Error::ContextExhausted { reason, .. } if reason == "provider"),
         "the explicit compactors.fail invocation reports the provider reason, got {error:?}"
     );
     assert_eq!(gateway.call_count(), 1, "the request left and was rejected");
+}
+
+#[test]
+fn an_uncaught_compactors_fail_with_a_callers_reason_ends_the_run_as_context_exhausted() {
+    let gateway = ScriptedChat::new(vec![text("unreachable")]);
+    let source = one_section(
+        "messages:user(string.rep('x', 100000))
+         models.loop(function() compactors.fail('manual') end)
+         return 'unreachable'",
+    );
+    let trace = loop_scenario(source).chat(&gateway).run();
+    let error = trace.error();
+    assert_eq!(error.kind(), RunErrorKind::ContextExhausted, "{error}");
+    assert!(
+        error.to_string().contains("manual"),
+        "the run's message holds the caller's reason, got: {error}"
+    );
+    assert!(
+        matches!(error.inner(), Error::ContextExhausted { reason, .. } if reason == "manual"),
+        "the reason survives as given, got {:?}",
+        error.inner()
+    );
+    assert_eq!(
+        gateway.call_count(),
+        0,
+        "the precheck fires before any request leaves"
+    );
 }
 
 #[test]

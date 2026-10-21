@@ -9,8 +9,8 @@ use runvil_types::metrics::Usage;
 use serde_json::{Value, json};
 
 use super::{
-    Compactor, OverflowReason, ParseOverflowReasonError, UsageAnchor, install_compactors,
-    output_reserve, precheck,
+    Compactor, OverflowReason, UsageAnchor, exhaustion_detail, install_compactors, output_reserve,
+    precheck,
 };
 use crate::Error;
 
@@ -38,10 +38,10 @@ fn raised_crate_error_ref(error: &mlua::Error) -> &Error {
     }
 }
 
-/// The overflow reason a raise held, when it was a context exhaustion.
-fn raised_reason(error: &mlua::Error) -> OverflowReason {
+/// The reason a raise held, when it was a context exhaustion.
+fn raised_reason(error: &mlua::Error) -> &str {
     match raised_crate_error_ref(error) {
-        Error::ContextExhausted { reason } => *reason,
+        Error::ContextExhausted { reason } => reason,
         other => panic!("expected ContextExhausted, got {other:?}"),
     }
 }
@@ -59,12 +59,7 @@ fn the_omitted_compactor_defaults_to_fail() {
     assert_eq!(resolve(None), Compactor::Fail);
     let error = Compactor::Fail.invoke(OverflowReason::Provider);
     assert!(
-        matches!(
-            error,
-            Error::ContextExhausted {
-                reason: OverflowReason::Provider
-            }
-        ),
+        matches!(&error, Error::ContextExhausted { reason } if reason == "provider"),
         "the default policy must raise typed context exhaustion, got {error:?}"
     );
 }
@@ -76,8 +71,9 @@ fn fail_invocation_raises_typed_exhaustion_holding_the_reason() {
         match error {
             Error::ContextExhausted { reason: raised } => {
                 assert_eq!(
-                    raised, reason,
-                    "the exhaustion must hold the invoking reason"
+                    raised,
+                    reason.tag(),
+                    "the exhaustion must hold the invoking reason's tag"
                 );
             }
             other => panic!("expected ContextExhausted, got {other:?}"),
@@ -96,58 +92,52 @@ fn fail_invocation_raises_typed_exhaustion_holding_the_reason() {
 }
 
 #[test]
-fn compactors_fail_raises_typed_exhaustion_from_lua() {
+fn compactors_fail_raises_typed_exhaustion_with_any_reason_from_lua() {
     let lua = lua_with_compactors();
-    for (tag, expected) in [
-        ("precheck", OverflowReason::Precheck),
-        ("provider", OverflowReason::Provider),
-    ] {
+    for reason in ["precheck", "provider", "manual", "Precheck", ""] {
         let error = lua
-            .load(format!("compactors.fail('{tag}')"))
+            .load(format!("compactors.fail('{reason}')"))
             .exec()
             .expect_err("compactors.fail always raises");
         assert_eq!(
             raised_reason(&error),
-            expected,
-            "the Lua raise must hold the typed exhaustion with the invocation reason"
+            reason,
+            "the Lua raise must hold the typed exhaustion with the reason as given"
         );
     }
 }
 
 #[test]
-fn compactors_fail_rejects_an_unknown_reason() {
-    let lua = lua_with_compactors();
-    let error = lua
-        .load("compactors.fail('bogus')")
-        .exec()
-        .expect_err("an unknown reason tag is an argument error");
-    let message = error.to_string();
-    assert!(
-        message.contains("bogus"),
-        "the argument error must name the rejected tag: {message}"
+fn the_exhaustion_message_details_an_overflow_tag_and_otherwise_gives_the_reason() {
+    let message = |reason: &str| {
+        Error::ContextExhausted {
+            reason: reason.to_owned(),
+        }
+        .to_string()
+    };
+    assert_eq!(
+        message("precheck"),
+        "context exhausted: the request precheck overflowed the model's context window"
     );
-    assert!(
-        !matches!(
-            raised_crate_error_ref(&error),
-            Error::ContextExhausted { .. }
-        ),
-        "a bad tag is an authoring error, never context exhaustion"
+    assert_eq!(
+        message("provider"),
+        "context exhausted: the provider rejected the request as exceeding the model's context window"
+    );
+    assert_eq!(message("manual"), "context exhausted: manual");
+    assert_eq!(
+        message("Precheck"),
+        "context exhausted: Precheck",
+        "only the exact tag reads as an overflow"
     );
 }
 
 #[test]
-fn an_overflow_reason_tag_parses_back_and_a_bad_one_lists_the_accepted_tags() {
+fn exhaustion_detail_is_an_overflow_tags_display_and_any_other_reason_itself() {
     for reason in OverflowReason::ALL {
-        assert_eq!(reason.tag().parse::<OverflowReason>(), Ok(*reason));
+        assert_eq!(exhaustion_detail(reason.tag()), reason.to_string());
     }
-    let error: ParseOverflowReasonError = "bogus"
-        .parse::<OverflowReason>()
-        .expect_err("an unknown tag is not a reason");
-    assert_eq!(error.input(), "bogus");
-    assert_eq!(
-        error.to_string(),
-        "invalid overflow reason `bogus`: required one of `precheck`, `provider`"
-    );
+    assert_eq!(exhaustion_detail("manual"), "manual");
+    assert_eq!(exhaustion_detail("provider "), "provider ");
 }
 
 #[test]
@@ -162,7 +152,7 @@ fn the_fail_policy_invokes_as_typed_exhaustion_for_either_reason() {
     for reason in [OverflowReason::Precheck, OverflowReason::Provider] {
         match Compactor::Fail.invoke(reason) {
             Error::ContextExhausted { reason: raised } => {
-                assert_eq!(raised, reason, "the policy holds the invoking reason");
+                assert_eq!(raised, reason.tag(), "the policy holds the invoking reason");
             }
             other => panic!("expected ContextExhausted, got {other:?}"),
         }

@@ -105,7 +105,7 @@ mod tests;
 pub use crate::argv::Argv;
 pub use crate::collection::render_item;
 pub use crate::compactors::{
-    Compactor, OverflowReason, ParseOverflowReasonError, UsageAnchor, output_reserve, precheck,
+    Compactor, OverflowReason, UsageAnchor, exhaustion_detail, output_reserve, precheck,
 };
 pub use crate::coro::{install_section_loop_shim, install_store_shims};
 pub use crate::dispatch::{

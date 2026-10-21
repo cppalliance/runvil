@@ -952,7 +952,7 @@ Commit and rules:
 
 <step-5>
 
-### Step 5: Let `compactors.fail` raise with any reason
+### Step 5: Let `compactors.fail` raise with any reason [completed]
 
 - Component: Compaction
 - Tests: run in PowerShell from `c:\Users\Vinnie\cursor\runvil`, in this order:
