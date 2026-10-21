@@ -3,7 +3,7 @@
 //!
 //! The userdata exposes a frozen [`ModelBinding`]'s fields to Lua, and it
 //! carries `infer` and `loop`, run as `h:infer(prompt)` and
-//! `h:loop(messages, compactor?)` on the handle's binding. Those two are
+//! `h:loop(compactor?)` on the handle's binding. Those two are
 //! the shim's Lua functions, read through field getters, because each may
 //! suspend and a Rust method cannot.
 

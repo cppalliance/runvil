@@ -39,8 +39,8 @@ fn loops_offering(tools: &[&str]) -> String {
         "---\nname: loops\ndescription: d\nrunvil: 0\nuses:\n{packs}\
          models:\n  writer: {{}}\n---\n\n\
          # Loops\n\n```lua\nmodels.default('writer')\n```\n\n\
-         ## Only\n\n```lua\n{offers}local msgs = messages.new()\nmsgs:user('hold')\n\
-         local ok, err = pcall(models.loop, msgs)\n\
+         ## Only\n\n```lua\n{offers}messages:user('hold')\n\
+         local ok, err = pcall(models.loop)\n\
          return tostring(ok) .. ':' .. err.kind\n```\n"
     )
 }

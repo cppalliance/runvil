@@ -142,9 +142,8 @@ fn a_script_offers_the_extras_and_the_model_calls_an_offered_tool_by_its_wire_na
     ]);
     let source = one_section(
         "tools.offer(tools.extras())\n\
-         local history = messages.new()\n\
-         history:user('go')\n\
-         models.loop(history)\n\
+         messages:user('go')\n\
+         models.loop()\n\
          return 'ok'",
     );
     let rig = Rig::run(catalog_scenario(source).tool(echo_tool()).chat(&gateway));
@@ -184,9 +183,8 @@ fn a_section_tools_table_holds_only_its_api_and_its_round_advertises_only_the_of
          for key, value in pairs(tools) do keys[#keys + 1] = key .. ':' .. type(value) end\n\
          table.sort(keys)\n\
          tools.offer(tools.extras())\n\
-         local history = messages.new()\n\
-         history:user('go')\n\
-         models.loop(history)\n\
+         messages:user('go')\n\
+         models.loop()\n\
          return table.concat(keys, ',')",
     );
     let rig = Rig::run(catalog_scenario(source).tool(echo_tool()).chat(&gateway));
@@ -267,9 +265,8 @@ fn a_script_offers_a_declared_packs_tools_and_the_model_calls_one_by_its_wire_na
         &[(
             "Only",
             "tools.offer(packs.get('tools').tools)\n\
-             local history = messages.new()\n\
-             history:user('go')\n\
-             models.loop(history)\n\
+             messages:user('go')\n\
+             models.loop()\n\
              return 'ok'",
         )],
     );
@@ -299,9 +296,8 @@ fn a_script_offers_an_extra_packs_tools_after_checking_packs_get() {
         "assert(packs.get('missing') == nil, 'an unknown Pack reads nil')\n\
          local gh = packs.get('gh')\n\
          if gh then tools.offer(gh.tools) end\n\
-         local history = messages.new()\n\
-         history:user('go')\n\
-         models.loop(history)\n\
+         messages:user('go')\n\
+         models.loop()\n\
          return 'ok'",
     );
     let rig = Rig::run(

@@ -104,8 +104,8 @@ pub enum Effect {
         /// The conversation to send, in wire order.
         messages: Vec<Message>,
         /// The earlier round whose request this one extends: the previous
-        /// send of the same `messages.new()` list. `None` on a list's first
-        /// send and on a nested `models.infer` round.
+        /// send of the same section's `messages` list. `None` on a
+        /// section's first send and on a nested `models.infer` round.
         after: Option<RoundId>,
         /// How many leading messages this request shares with `after`'s
         /// request; 0 when `after` is `None`.

@@ -51,10 +51,9 @@ pub(super) fn catalog_scenario(source: impl Into<String>) -> Scenario {
 /// The section body the cap, trust, scoping, exit-rule, and observation
 /// tests run: one loop over a single user message, then the terminal
 /// record's text.
-pub(super) const LOOP_TO_TEXT: &str = "local msgs = messages.new()\n\
-     msgs:user('ask the model')\n\
-     models.loop(msgs)\n\
-     return msgs[#msgs].content";
+pub(super) const LOOP_TO_TEXT: &str = "messages:user('ask the model')\n\
+     models.loop()\n\
+     return messages[#messages].content";
 
 /// The model-turn and tool-call observations `recorder` saw, in order,
 /// with every other boundary event (chunk, section, run) dropped, so a
@@ -80,15 +79,14 @@ pub(super) fn loop_events(recorder: &Recorder) -> Vec<String> {
 fn models_loop_appends_the_terminal_assistant_record_and_returns_nil() {
     let gateway = ScriptedChat::new(vec![text("final answer")]);
     let source = one_section(
-        "local msgs = messages.new()
-         msgs:user('hello')
-         local result = models.loop(msgs)
+        "messages:user('hello')
+         local result = models.loop()
          assert(result == nil, 'models.loop returns nil')
-         assert(#msgs == 2, 'the loop appended exactly the terminal record')
-         assert(msgs[2].role == 'assistant', 'the terminal record is an assistant message')
-         assert(msgs[2].content == 'final answer', 'the terminal record holds the reply text')
-         msgs:replace(#msgs, #msgs)
-         assert(#msgs == 1, 'explicit terminal removal shrinks the list')
+         assert(#messages == 2, 'the loop appended exactly the terminal record')
+         assert(messages[2].role == 'assistant', 'the terminal record is an assistant message')
+         assert(messages[2].content == 'final answer', 'the terminal record holds the reply text')
+         messages:replace(#messages, #messages)
+         assert(#messages == 1, 'explicit terminal removal shrinks the list')
          return 'ok'",
     );
     let trace = loop_scenario(source).chat(&gateway).run();
@@ -112,20 +110,19 @@ fn models_loop_repeats_model_tool_rounds_and_appends_each_exchange() {
     ]);
     let source = one_section(
         "tools.offer('tools/echo')
-         local msgs = messages.new()
-         msgs:user('echo twice')
-         models.loop(msgs)
-         assert(#msgs == 6, 'user plus two exchanges plus the terminal record')
-         assert(msgs[2].role == 'assistant', 'round one appends the assistant call')
-         assert(msgs[2].tool_calls[1].id == 'call_1', 'the assistant record holds the normalized call')
-         assert(msgs[2].tool_calls[1].name == 'echo', 'the call keeps its wire name')
-         assert(msgs[2].tool_calls[1].arguments.value == 'one', 'the call arguments stay parsed')
-         assert(msgs[3].role == 'tool', 'the correlated result follows its call')
-         assert(msgs[3].tool_call_id == 'call_1', 'the result answers call_1')
-         assert(msgs[3].content == 'echoed: one', 'the trusted result appends verbatim')
-         assert(msgs[4].tool_calls[1].id == 'call_2', 'round two appends its own call')
-         assert(msgs[5].tool_call_id == 'call_2', 'round two appends its own result')
-         assert(msgs[6].role == 'assistant' and msgs[6].content == 'both done', 'terminal text is the final record')
+         messages:user('echo twice')
+         models.loop()
+         assert(#messages == 6, 'user plus two exchanges plus the terminal record')
+         assert(messages[2].role == 'assistant', 'round one appends the assistant call')
+         assert(messages[2].tool_calls[1].id == 'call_1', 'the assistant record holds the normalized call')
+         assert(messages[2].tool_calls[1].name == 'echo', 'the call keeps its wire name')
+         assert(messages[2].tool_calls[1].arguments.value == 'one', 'the call arguments stay parsed')
+         assert(messages[3].role == 'tool', 'the correlated result follows its call')
+         assert(messages[3].tool_call_id == 'call_1', 'the result answers call_1')
+         assert(messages[3].content == 'echoed: one', 'the trusted result appends verbatim')
+         assert(messages[4].tool_calls[1].id == 'call_2', 'round two appends its own call')
+         assert(messages[5].tool_call_id == 'call_2', 'round two appends its own result')
+         assert(messages[6].role == 'assistant' and messages[6].content == 'both done', 'terminal text is the final record')
          return 'ok'",
     );
     let trace = loop_scenario(source)
@@ -161,10 +158,9 @@ fn replayed_tool_calls_reach_the_chat_effect_in_the_openai_shape() {
     ]);
     let source = one_section(
         "tools.offer('tools/echo')
-         local msgs = messages.new()
-         msgs:user('echo once')
-         models.loop(msgs)
-         return msgs[#msgs].content",
+         messages:user('echo once')
+         models.loop()
+         return messages[#messages].content",
     );
     let trace = loop_scenario(source)
         .offer("echo", echo_tool())
@@ -211,13 +207,12 @@ fn models_loop_dispatches_local_and_bound_tools() {
          tools.offer_local('grab', 'Local grab', { value = 'string' }, function(args)
            return 'grabbed ' .. args.value
          end)
-         local msgs = messages.new()
-         msgs:user('use both tools')
-         models.loop(msgs)
-         assert(#msgs == 6, 'both exchanges and the terminal record appended')
-         assert(msgs[3].content == 'grabbed x', 'the local handler ran on the section VM')
-         assert(msgs[3].tool_call_id == 'call_1', 'the local result correlates its call')
-         assert(msgs[5].content == 'echoed: y', 'the bound tool ran through dispatch')
+         messages:user('use both tools')
+         models.loop()
+         assert(#messages == 6, 'both exchanges and the terminal record appended')
+         assert(messages[3].content == 'grabbed x', 'the local handler ran on the section VM')
+         assert(messages[3].tool_call_id == 'call_1', 'the local result correlates its call')
+         assert(messages[5].content == 'echoed: y', 'the bound tool ran through dispatch')
          return 'ok'",
     );
     let trace = loop_scenario(source)
@@ -241,13 +236,12 @@ fn models_loop_reads_the_tool_scope_at_each_call() {
         text("scoped in"),
     ]);
     let source = one_section(
-        "local msgs = messages.new()
-         msgs:user('first')
-         models.loop(msgs)
+        "messages:user('first')
+         models.loop()
          tools.offer('tools/echo')
-         msgs:user('second')
-         models.loop(msgs)
-         assert(msgs[#msgs].content == 'scoped in', 'the second loop converged')
+         messages:user('second')
+         models.loop()
+         assert(messages[#messages].content == 'scoped in', 'the second loop converged')
          return 'ok'",
     );
     // Nothing in scope at first: the first call advertises no tools, the
@@ -279,13 +273,12 @@ fn a_handles_loop_runs_on_its_frozen_binding() {
     let gateway = ScriptedChat::new(vec![text("first"), text("second")]);
     let source = one_section(
         "local other = models.get('other')
-         local msgs = messages.new()
-         msgs:user('one')
-         other:loop(msgs)
-         msgs:user('two')
-         other:loop(msgs)
-         assert(#msgs == 4, 'each call appends its terminal record')
-         return msgs[2].content .. '|' .. msgs[4].content",
+         messages:user('one')
+         other:loop()
+         messages:user('two')
+         other:loop()
+         assert(#messages == 4, 'each call appends its terminal record')
+         return messages[2].content .. '|' .. messages[4].content",
     );
     let trace = loop_scenario(source).chat(&gateway).run();
     assert_eq!(trace.text(), "first|second");
@@ -314,26 +307,25 @@ fn the_author_list_never_shows_a_half_answered_tool_batch() {
         text("done"),
     ]);
     let source = one_section(
-        "local msgs = messages.new()
-         msgs:user('grab twice')
+        "messages:user('grab twice')
          local seen = {}
          tools.offer_local('grab', 'Local grab', { value = 'string' }, function(args)
-           seen[#seen + 1] = #msgs
-           for _, m in ipairs(msgs) do
+           seen[#seen + 1] = #messages
+           for _, m in ipairs(messages) do
              assert(m.tool_calls == nil, 'no assistant call record is visible mid-batch')
              assert(m.role ~= 'tool', 'no tool record is visible mid-batch')
            end
            return 'grabbed ' .. args.value
          end)
-         models.loop(msgs)
+         models.loop()
          assert(#seen == 2, 'both calls in the batch ran')
          assert(seen[1] == 1 and seen[2] == 1, 'each handler saw only the user message')
-         assert(#msgs == 5, 'user, the batch record, two results, and the terminal text')
-         assert(msgs[2].role == 'assistant' and #msgs[2].tool_calls == 2, 'one record holds the whole batch')
-         assert(msgs[2].tool_calls[1].id == 'c1' and msgs[2].tool_calls[2].id == 'c2', 'calls keep their order')
-         assert(msgs[3].tool_call_id == 'c1' and msgs[3].content == 'grabbed a', 'the first result follows')
-         assert(msgs[4].tool_call_id == 'c2' and msgs[4].content == 'grabbed b', 'the second result follows')
-         assert(msgs[5].role == 'assistant' and msgs[5].content == 'done', 'the terminal text is last')
+         assert(#messages == 5, 'user, the batch record, two results, and the terminal text')
+         assert(messages[2].role == 'assistant' and #messages[2].tool_calls == 2, 'one record holds the whole batch')
+         assert(messages[2].tool_calls[1].id == 'c1' and messages[2].tool_calls[2].id == 'c2', 'calls keep their order')
+         assert(messages[3].tool_call_id == 'c1' and messages[3].content == 'grabbed a', 'the first result follows')
+         assert(messages[4].tool_call_id == 'c2' and messages[4].content == 'grabbed b', 'the second result follows')
+         assert(messages[5].role == 'assistant' and messages[5].content == 'done', 'the terminal text is last')
          return 'ok'",
     );
     let trace = loop_scenario(source).chat(&gateway).run();

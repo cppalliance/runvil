@@ -45,8 +45,8 @@ fn tool_round(offered: &[Offered]) -> Round {
     let source = format!(
         "---\nname: round\ndescription: One tool round.\nrunvil: 0\n\
          models:\n  writer: {{}}\n---\n\n# Round\n\n## Ask\n\n\
-         ```lua\nmodels.use('writer')\n{offers}local msgs = messages.new()\n\
-         msgs:user('echo once')\nmodels.loop(msgs)\nreturn msgs[#msgs].content\n```\n"
+         ```lua\nmodels.use('writer')\n{offers}messages:user('echo once')\n\
+         models.loop()\nreturn messages[#messages].content\n```\n"
     );
     let first_wire_name = format!("example_test_{}", offered[0].0);
     let (parsed, _parse_events) = Prompt::parse(&source, "round");

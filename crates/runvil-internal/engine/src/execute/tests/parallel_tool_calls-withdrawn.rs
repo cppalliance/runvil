@@ -34,9 +34,8 @@ const CANCELLED_CHILD: &str = "---\nname: loop\ndescription: d\nrunvil: 0\n---\n
      return 'cancelled'\n```\n\n\
      ## Child\n\n```lua\n\
      tools.offer('tools/echo')\n\
-     local msgs = messages.new()\n\
-     msgs:user('go')\n\
-     models.loop(msgs)\n\
+     messages:user('go')\n\
+     models.loop()\n\
      return 'child done'\n```\n";
 
 /// A run of `source` over the loop models with `echo` offered, stepped by
@@ -194,15 +193,13 @@ const CANCELLED_PAIR: &str = "---\nname: loop\ndescription: d\nrunvil: 0\n---\n\
      return 'cancelled'\n```\n\n\
      ## A\n\n```lua\n\
      tools.offer('tools/echo')\n\
-     local msgs = messages.new()\n\
-     msgs:user('a')\n\
-     models.loop(msgs)\n\
+     messages:user('a')\n\
+     models.loop()\n\
      return 'a done'\n```\n\n\
      ## B\n\n```lua\n\
      tools.offer('tools/echo')\n\
-     local msgs = messages.new()\n\
-     msgs:user('b')\n\
-     models.loop(msgs)\n\
+     messages:user('b')\n\
+     models.loop()\n\
      return 'b done'\n```\n";
 
 #[test]

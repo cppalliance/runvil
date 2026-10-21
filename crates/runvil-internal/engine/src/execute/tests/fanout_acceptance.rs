@@ -283,11 +283,10 @@ fn three_arms_running_models_loop_hold_three_model_rounds_in_flight_at_once() {
         ### Worker\n\n\
         ```lua\n\
         tools.offer('tools/echo')\n\
-        local msgs = messages.new()\n\
-        msgs:user(item)\n\
-        models.loop(msgs)\n\
-        assert(#msgs == 4, 'user, the tool call, its result, and the terminal reply')\n\
-        return msgs[#msgs].content\n\
+        messages:user(item)\n\
+        models.loop()\n\
+        assert(#messages == 4, 'user, the tool call, its result, and the terminal reply')\n\
+        return messages[#messages].content\n\
         ```\n";
     let rig = Rig::run(loop_scenario(md).offer("echo", echo_tool()).chat(&gateway));
 

@@ -27,10 +27,9 @@ models.default("chat")
 ```lua
 packs.offer("web")
 tools.offer(tools.extras())
-local history = messages.new()
 while true do
     local text = input.ask()
-    history:user(text)
-    pcall(function() return models.loop(history) end)
+    messages:user(text)
+    pcall(function() return models.loop() end)
 end
 ```

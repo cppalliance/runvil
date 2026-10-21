@@ -19,9 +19,8 @@ fn round_section(messages: &[Value]) -> String {
 fn an_offered_pack_reaches_only_the_rounds_of_the_section_entry_that_offered_it() {
     let round = |section: &str| {
         format!(
-            "local history = messages.new()\n\
-             history:user('{section}')\n\
-             models.loop(history)\n"
+            "messages:user('{section}')\n\
+             models.loop()\n"
         )
     };
     let source = format!(

@@ -14,6 +14,7 @@ fn debug_text(vm: &BuiltVm, value: &str) -> String {
 fn values_that_are_not_json_data_become_type_placeholders() {
     let vm = json_vm();
     bind_foreign_values(&vm);
+    vm.exec("messages:user('u')");
     let described: String = vm.eval("return tostring(described)");
     assert_eq!(described, "probe", "the fixture defines __tostring");
     for (value, text) in [
@@ -21,7 +22,7 @@ fn values_that_are_not_json_data_become_type_placeholders() {
         ("co", r#""[thread]""#),
         ("light", r#""[userdata]""#),
         ("described", r#""[userdata]""#),
-        ("messages.new():user('u')[1]", r#""[userdata]""#),
+        ("messages[1]", r#""[userdata]""#),
         (
             "{ f = function() end, list = { co, described } }",
             r#"{"f":"[function]","list":["[thread]","[userdata]"]}"#,

@@ -33,7 +33,7 @@ pub use answer::{
 };
 pub use non_empty::NonEmpty;
 pub use parse::YieldParse;
-pub(crate) use parse::{NOT_A_LIST, parse_record};
+pub(crate) use parse::parse_record;
 pub use record::{ContentPart, MessageContent, MessageRecord, RecordRole, ToolCallRecord};
 pub(crate) use render::Retained;
 pub use request::{LocalToolOutcome, Request, SpawnVia, VfsOp};

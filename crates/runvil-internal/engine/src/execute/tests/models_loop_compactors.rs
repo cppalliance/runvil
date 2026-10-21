@@ -16,9 +16,8 @@ use crate::lua::OverflowReason;
 fn an_omitted_compactor_defaults_to_fail_with_typed_precheck_exhaustion() {
     let gateway = ScriptedChat::new(vec![text("unreachable")]);
     let source = one_section(
-        "local msgs = messages.new()
-         msgs:user(string.rep('x', 100000))
-         models.loop(msgs)
+        "messages:user(string.rep('x', 100000))
+         models.loop()
          return 'unreachable'",
     );
     let trace = loop_scenario(source).chat(&gateway).run();
@@ -43,11 +42,10 @@ fn an_omitted_compactor_defaults_to_fail_with_typed_precheck_exhaustion() {
 fn models_loop_raises_context_exhaustion_at_the_call_site() {
     let gateway = ScriptedChat::new(vec![text("unreachable")]);
     let source = one_section(
-        "local msgs = messages.new()
-         msgs:user(string.rep('x', 100000))
-         local ok, err = pcall(models.loop, msgs)
+        "messages:user(string.rep('x', 100000))
+         local ok, err = pcall(models.loop)
          assert(not ok, 'the overflow raises')
-         assert(#msgs == 1, 'a refused dispatch appends nothing')
+         assert(#messages == 1, 'a refused dispatch appends nothing')
          return tostring(err)",
     );
     let trace = loop_scenario(source).chat(&gateway).run();
@@ -66,9 +64,8 @@ fn an_explicit_compactors_fail_invocation_reports_the_provider_reason() {
         "This model's maximum context length is 4096 tokens.",
     )]);
     let source = one_section(
-        "local msgs = messages.new()
-         msgs:user('a small prompt')
-         models.loop(msgs, compactors.fail)
+        "messages:user('a small prompt')
+         models.loop(compactors.fail)
          return 'unreachable'",
     );
     let trace = loop_scenario(source).chat(&gateway).run();
@@ -94,8 +91,7 @@ fn a_non_function_compactor_is_the_calls_error_in_the_engines_type_names() {
     // both entries reach the compactor check.
     let gateway = ScriptedChat::new(vec![text("unreachable")]);
     let source = one_section(
-        "local msgs = messages.new()
-         msgs:user('hello')
+        "messages:user('hello')
          local writer = models.get('writer')
          local function refusal(entry, ...)
            local ok, err = pcall(entry, ...)
@@ -105,10 +101,10 @@ fn a_non_function_compactor_is_the_calls_error_in_the_engines_type_names() {
          end
          local out = {}
          for _, bad in ipairs({ 42, 4.5, 'summarize', {} }) do
-           out[#out + 1] = refusal(models.loop, msgs, bad)
-           out[#out + 1] = refusal(writer.loop, writer, msgs, bad)
+           out[#out + 1] = refusal(models.loop, bad)
+           out[#out + 1] = refusal(writer.loop, writer, bad)
          end
-         assert(#msgs == 1, 'a refused call appends nothing')
+         assert(#messages == 1, 'a refused call appends nothing')
          return table.concat(out, '|')",
     );
     let trace = loop_scenario(source).chat(&gateway).run();
@@ -137,16 +133,15 @@ fn a_compactor_that_returns_is_the_deferred_replacement_error() {
     // appends nothing.
     let rounds = Arc::new(AtomicUsize::new(0));
     let source = one_section(
-        "local msgs = messages.new()
-         msgs:user('a small prompt')
+        "messages:user('a small prompt')
          local seen
-         local ok, err = pcall(models.loop, msgs, function(reason)
+         local ok, err = pcall(models.loop, function(reason)
            seen = reason
            return { role = 'user', content = 'summary' }
          end)
          assert(not ok, 'a returning compactor raises')
          assert(seen == 'provider', 'the compactor ran with the reason tag')
-         assert(#msgs == 1, 'the refused round appends nothing')
+         assert(#messages == 1, 'the refused round appends nothing')
          return err.kind .. '|' .. tostring(err)",
     );
     let trace = loop_scenario(source).chat_with(overflowing(&rounds)).run();
@@ -174,11 +169,10 @@ fn cancel_during_a_looping_compactor_returns_promptly() {
     // way, and a hang fails through nextest's timeout.
     let gateway = ScriptedChat::new(vec![text("first"), text("unreachable")]);
     let source = one_section(
-        "local msgs = messages.new()
-         msgs:user('hello')
-         models.loop(msgs)
-         msgs:user(string.rep('x', 100000))
-         models.loop(msgs, function() while true do end end)
+        "messages:user('hello')
+         models.loop()
+         messages:user(string.rep('x', 100000))
+         models.loop(function() while true do end end)
          return 'unreachable'",
     );
     let trace = loop_scenario(source)
@@ -205,9 +199,8 @@ fn a_compactors_own_string_raise_reaches_the_caller_with_the_reason_tag() {
     // reason tag the compactor was invoked with.
     let rounds = Arc::new(AtomicUsize::new(0));
     let source = one_section(
-        "local msgs = messages.new()
-         msgs:user('a small prompt')
-         models.loop(msgs, function(reason) error('custom failure: ' .. reason, 0) end)
+        "messages:user('a small prompt')
+         models.loop(function(reason) error('custom failure: ' .. reason, 0) end)
          return 'unreachable'",
     );
     let trace = loop_scenario(source).chat_with(overflowing(&rounds)).run();

@@ -132,9 +132,8 @@ fn the_h1_decision_tool_idiom_runs_before_the_walk() {
           var.verdict = args.choice\n\
           return 'recorded'\n\
         end)\n\
-        local msgs = messages.new()\n\
-        msgs:user('interpret the guidance')\n\
-        models.loop(msgs)\n\
+        messages:user('interpret the guidance')\n\
+        models.loop()\n\
         ```\n\n\
         ## Result\n\n\
         ```lua\nreturn var.verdict\n```\n";

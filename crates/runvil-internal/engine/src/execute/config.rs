@@ -187,7 +187,7 @@ impl RunContext {
     /// to application state takes effect on the next run. A snapshot also
     /// makes `models.get` resolve an alias outside the prompt's declarations
     /// as a raw model id. So a prompt can run
-    /// `models.get(ui().selected_model):loop(...)` and skip
+    /// `models.get(ui().selected_model):loop()` and skip
     /// declaring its model. The default is `None`, which leaves the `ui`
     /// global absent and limits `models.get` to declared aliases.
     #[must_use]

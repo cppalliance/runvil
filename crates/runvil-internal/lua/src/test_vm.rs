@@ -20,7 +20,7 @@ use serde_json::{Value as Json, json};
 use crate::error::{Error, Result};
 use crate::tests::recording::null_emitter;
 use crate::vm::scalar_return;
-use crate::{Argv, MessageList, SectionText, SectionVm, ToolSet};
+use crate::{Argv, SectionText, SectionVm, ToolSet};
 
 /// The one guard-nonce seed of every test VM.
 pub(crate) const TEST_SEED: RunSeed = RunSeed::from_bytes([0x73; 32]);
@@ -142,7 +142,6 @@ pub(crate) struct TestVm<'a> {
     limits: Option<(usize, u32)>,
     raw_model_ids: bool,
     shims: bool,
-    messages: bool,
 }
 
 impl<'a> TestVm<'a> {
@@ -161,7 +160,6 @@ impl<'a> TestVm<'a> {
             limits: None,
             raw_model_ids: false,
             shims: false,
-            messages: false,
         }
     }
 
@@ -251,23 +249,15 @@ impl<'a> TestVm<'a> {
         self
     }
 
-    /// A fresh `messages.new()` list as the global `msgs`.
-    #[track_caller]
-    pub(crate) fn messages(mut self) -> Self {
-        self.messages = true;
-        self
-    }
-
     /// Builds the VM through Engine injection and stops there, so nothing
     /// installs after it, the persistent Engine globals included, failing
     /// the test at the first setup step that fails. [`shims`](Self::shims)
-    /// and [`messages`](Self::messages) need the Engine globals, so a VM
-    /// stopped here takes neither.
+    /// needs the Engine globals, so a VM stopped here does not take it.
     #[track_caller]
     pub(crate) fn inject(mut self) -> SectionVm {
         assert!(
-            !self.shims && !self.messages,
-            "shims() and messages() need the Engine globals, which inject() stops before"
+            !self.shims,
+            "shims() needs the Engine globals, which inject() stops before"
         );
         self.run_injection().0
     }
@@ -286,23 +276,10 @@ impl<'a> TestVm<'a> {
             vm.install_coro_shims(1)
                 .expect("the coroutine shims install");
         }
-        let messages = self.messages.then(|| {
-            let list = MessageList::default();
-            let userdata = vm
-                .lua()
-                .create_userdata(list.clone())
-                .expect("the list userdata builds");
-            vm.lua()
-                .globals()
-                .raw_set("msgs", userdata)
-                .expect("the global msgs installs");
-            list
-        });
         BuiltVm {
             vm,
             models,
             access,
-            messages,
             emitter: self.emitter,
             section: self.section.to_owned(),
         }
@@ -342,14 +319,13 @@ impl<'a> TestVm<'a> {
 }
 
 /// A built test VM: the section VM, which it derefs to, beside the model
-/// set and access it shares and the list `msgs` holds.
+/// set and access it shares.
 pub(crate) struct BuiltVm {
     vm: SectionVm,
     /// The run's model set the VM shares.
     pub(crate) models: Arc<Mutex<ModelSet>>,
     /// The access the VM's `store` table operates through.
     pub(crate) access: Arc<Access>,
-    messages: Option<MessageList>,
     emitter: Emitter,
     section: String,
 }
@@ -389,14 +365,6 @@ impl BuiltVm {
             .set_name("probe")
             .exec()
             .expect_err("the test chunk must raise")
-    }
-
-    /// The list the global `msgs` holds.
-    #[track_caller]
-    pub(crate) fn messages(&self) -> &MessageList {
-        self.messages
-            .as_ref()
-            .expect("the test VM was built with messages()")
     }
 
     /// Tears the VM down through its emitter, under its section.

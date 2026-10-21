@@ -51,10 +51,9 @@ const CHATS: &str = concat!(
     "---\nname: chats\ndescription: Says hello to the model\nrunvil: 0\n",
     "models: { writer: {} }\n",
     "---\n\n# Chats\n\n## Only\n\n```lua\n",
-    "local msgs = messages.new()\n",
-    "msgs:user('Hello, desk.')\n",
-    "models.get('writer'):loop(msgs)\n",
-    "return msgs[#msgs].content\n",
+    "messages:user('Hello, desk.')\n",
+    "models.get('writer'):loop()\n",
+    "return messages[#messages].content\n",
     "```\n",
 );
 

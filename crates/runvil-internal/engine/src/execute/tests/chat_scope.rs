@@ -19,11 +19,10 @@ fn a_round_advertises_the_section_scope_with_local_tools() {
          tools.offer_local('grab', 'Local grab', { value = 'string' }, function(args)
            return 'grabbed ' .. args.value
          end)
-         local msgs = messages.new()
-         msgs:user('use the local tool')
-         models.loop(msgs)
-         assert(msgs[2].tool_calls[1].name == 'grab', 'a local tool is in the advertised scope')
-         assert(msgs[3].role == 'tool', 'the shim dispatched the local tool')
+         messages:user('use the local tool')
+         models.loop()
+         assert(messages[2].tool_calls[1].name == 'grab', 'a local tool is in the advertised scope')
+         assert(messages[3].role == 'tool', 'the shim dispatched the local tool')
          return 'ok'",
     );
     let trace = loop_scenario(source)

@@ -62,11 +62,10 @@ const CHATS: &str = "---\nname: chats\ndescription: d\nrunvil: 0\n\
     # Chats\n\n```lua\nmodels.default('writer')\n```\n\n\
     ## Conversation\n\n```lua\n\
     tools.offer('harness/hold')\n\
-    local history = messages.new()\n\
     while true do\n\
     \x20   local text = input.ask()\n\
-    \x20   history:user(text)\n\
-    \x20   pcall(function() return models.loop(history) end)\n\
+    \x20   messages:user(text)\n\
+    \x20   pcall(function() return models.loop() end)\n\
     end\n```\n";
 
 /// A model loop under a `pcall` with the held tool advertised, reporting
@@ -77,9 +76,8 @@ const LOOPS_ONCE: &str = "---\nname: loops\ndescription: d\nrunvil: 0\n\
     # Loops\n\n```lua\nmodels.default('writer')\n```\n\n\
     ## Only\n\n```lua\n\
     tools.offer('harness/hold')\n\
-    local msgs = messages.new()\n\
-    msgs:user('hold twice')\n\
-    local ok, err = pcall(models.loop, msgs)\n\
+    messages:user('hold twice')\n\
+    local ok, err = pcall(models.loop)\n\
     return tostring(ok) .. ':' .. err.kind\n```\n";
 
 /// A prompt that returns the operator's answer to one question.

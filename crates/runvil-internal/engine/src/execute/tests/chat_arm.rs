@@ -44,12 +44,11 @@ fn a_text_round_reports_its_reply_and_the_loop_appends_it() {
     let gateway = ScriptedChat::new(vec![rich_text_reply("final answer")]);
     let source = one_section(
         "tools.offer('tools/echo')
-         local msgs = messages.new()
-         msgs:user('hello')
-         models.loop(msgs)
-         assert(#msgs == 2, 'the loop appends the reply')
-         assert(msgs[2].role == 'assistant', 'the appended record is the assistant reply')
-         assert(msgs[2].content == 'final answer', 'the reply text resumes')
+         messages:user('hello')
+         models.loop()
+         assert(#messages == 2, 'the loop appends the reply')
+         assert(messages[2].role == 'assistant', 'the appended record is the assistant reply')
+         assert(messages[2].content == 'final answer', 'the reply text resumes')
          return 'ok'",
     );
     let trace = loop_scenario(source)
@@ -104,14 +103,13 @@ fn a_tool_round_reports_the_batch_before_the_shim_dispatches_it() {
     ]);
     let source = one_section(
         "tools.offer('tools/echo')
-         local msgs = messages.new()
-         msgs:user('call the tool')
-         models.loop(msgs)
-         local call = msgs[2].tool_calls[1]
+         messages:user('call the tool')
+         models.loop()
+         local call = messages[2].tool_calls[1]
          assert(call.id == 'call_1', 'the call keeps its id')
          assert(call.name == 'echo', 'the call keeps its wire name')
          assert(call.arguments.value == 'hi', 'the arguments stay parsed')
-         assert(msgs[3].role == 'tool' and msgs[3].tool_call_id == 'call_1', 'the result answers the call')
+         assert(messages[3].role == 'tool' and messages[3].tool_call_id == 'call_1', 'the result answers the call')
          return 'ok'",
     );
     let trace = loop_scenario(source)
@@ -158,9 +156,8 @@ fn a_batch_names_the_tool_behind_a_bound_alias_and_none_behind_a_local_one() {
          tools.offer_local('grab', 'Local grab', { value = 'string' }, function(args)
            return 'grabbed ' .. args.value
          end)
-         local msgs = messages.new()
-         msgs:user('use both tools')
-         models.loop(msgs)
+         messages:user('use both tools')
+         models.loop()
          return 'ok'",
     );
     let trace = loop_scenario(source)
@@ -190,9 +187,8 @@ fn an_out_of_scope_tool_name_fails_the_round_with_out_of_scope_tool() {
     let gateway = ScriptedChat::new(vec![calls(&[("call_1", "rogue", "{}")])]);
     let source = one_section(
         "tools.offer('tools/echo')
-         local msgs = messages.new()
-         msgs:user('go rogue')
-         local ok, err = pcall(models.loop, msgs)
+         messages:user('go rogue')
+         local ok, err = pcall(models.loop)
          assert(not ok, 'an out-of-scope call raises')
          return err.kind .. '|' .. err.name .. '|' .. tostring(err)",
     );
@@ -216,9 +212,8 @@ fn an_out_of_scope_tool_name_fails_the_round_with_out_of_scope_tool() {
     let gateway = ScriptedChat::new(vec![calls(&[("call_1", "rogue", "{}")])]);
     let source = one_section(
         "tools.offer('tools/echo')
-         local msgs = messages.new()
-         msgs:user('go rogue')
-         models.loop(msgs)
+         messages:user('go rogue')
+         models.loop()
          return 'unreachable'",
     );
     let trace = loop_scenario(source)
@@ -246,11 +241,10 @@ fn an_empty_reply_is_a_completed_round_the_loop_raises_as_empty_model_reply() {
     // raise `empty_model_reply` carrying that finish reason.
     let gateway = ScriptedChat::new(vec![text_finish("", "stop")]);
     let source = one_section(
-        "local msgs = messages.new()
-         msgs:user('say nothing')
-         local ok, err = pcall(models.loop, msgs)
+        "messages:user('say nothing')
+         local ok, err = pcall(models.loop)
          assert(not ok, 'an empty first reply raises')
-         assert(#msgs == 1, 'the empty round appends nothing')
+         assert(#messages == 1, 'the empty round appends nothing')
          return err.kind .. '|' .. tostring(err.finish_reason)",
     );
     let trace = loop_scenario(source).chat(&gateway).run();
@@ -270,7 +264,7 @@ fn a_context_overflow_resumes_with_its_reason_for_the_compactor() {
     // the reason to the compactor. The precheck refuses before any request
     // leaves.
     let compacting_loop = "local seen
-         local ok = pcall(models.loop, msgs, function(reason)
+         local ok = pcall(models.loop, function(reason)
            seen = reason
            error('compacted', 0)
          end)
@@ -278,8 +272,7 @@ fn a_context_overflow_resumes_with_its_reason_for_the_compactor() {
          return seen";
     let gateway = ScriptedChat::new(vec![text("unreachable")]);
     let source = one_section(&format!(
-        "local msgs = messages.new()
-         msgs:user(string.rep('x', 100000))
+        "messages:user(string.rep('x', 100000))
          {compacting_loop}"
     ));
     let trace = loop_scenario(source).chat(&gateway).run();
@@ -294,8 +287,7 @@ fn a_context_overflow_resumes_with_its_reason_for_the_compactor() {
     // request, and a failed turn.
     let rounds = Arc::new(AtomicUsize::new(0));
     let source = one_section(&format!(
-        "local msgs = messages.new()
-         msgs:user('a small prompt')
+        "messages:user('a small prompt')
          {compacting_loop}"
     ));
     let trace = loop_scenario(source).chat_with(overflowing(&rounds)).run();

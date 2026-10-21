@@ -1,4 +1,4 @@
-//! Read-only views of a list's records, which `msgs[i]` and iteration
+//! Read-only views of a list's records, which `messages[i]` and iteration
 //! return.
 //!
 //! A view holds its record by `Arc`, so reading one copies nothing until a
@@ -15,7 +15,8 @@ use crate::protocol::MessageRecord;
 /// The fields a view reads, in the order `pairs` visits them.
 const FIELDS: [&str; 4] = ["role", "content", "tool_calls", "tool_call_id"];
 
-/// A read-only view of one record, which `msgs[i]` and iteration return.
+/// A read-only view of one record, which `messages[i]` and iteration
+/// return.
 /// It serializes as the record's JSON form, so a view converts like the
 /// record table it stands for.
 #[derive(Clone, Debug)]
@@ -95,8 +96,8 @@ impl UserData for RecordView {
             MetaMethod::NewIndex,
             |_, _, _: (Value, Value)| -> mlua::Result<()> {
                 Err(refusal(
-                    "records read from a messages.new() list are read-only; change the list \
-                     with replace(first, last, records...)"
+                    "records read from messages are read-only; change messages with \
+                     replace(first, last, records...)"
                         .to_owned(),
                 ))
             },

@@ -7,6 +7,7 @@ use super::*;
 fn values_that_are_not_json_data_raise_naming_their_path_and_type() {
     let vm = json_vm();
     bind_foreign_values(&vm);
+    vm.exec("messages:user('u')");
     for (call, message) in [
         (
             "json.encode({ a = { function() end } })",
@@ -21,7 +22,7 @@ fn values_that_are_not_json_data_raise_naming_their_path_and_type() {
             "json.encode: value must be JSON data, got lightuserdata",
         ),
         (
-            "json.encode({ m = messages.new():user('u')[1] })",
+            "json.encode({ m = messages[1] })",
             "json.encode: value.m must be JSON data, got userdata",
         ),
         (

@@ -24,25 +24,24 @@ use crate::error::{Error, Result};
 use crate::error_value::{ErrorKind, error_table, normalized};
 use crate::hardening::InstructionBudget;
 use crate::messages::MessageList;
-use crate::protocol::{ChatResult, NOT_A_LIST};
+use crate::protocol::ChatResult;
 
 mod machine;
 
 use machine::{Input, Machine, Phase, Then, raised};
 
-/// `models.loop`'s refusal of a model handle in the list's place.
-const HANDLE_FIRST: &str = "models.loop takes (messages, compactor?); \
-                            call handle:loop(messages, compactor?) to run on a model handle";
+/// `models.loop`'s refusal of a model handle in the compactor's place.
+const HANDLE_FIRST: &str = "models.loop takes (compactor?); \
+                            call handle:loop(compactor?) to run on a model handle";
 
-/// `models.loop`'s refusal past two arguments.
-const LOOP_ARITY: &str = "models.loop takes (messages, compactor?)";
+/// `models.loop`'s refusal past one argument.
+const LOOP_ARITY: &str = "models.loop takes (compactor?)";
 
 /// A handle's `loop` called without a model handle as its receiver.
-const NO_RECEIVER: &str =
-    "call loop on a model handle with a colon: handle:loop(messages, compactor?)";
+const NO_RECEIVER: &str = "call loop on a model handle with a colon: handle:loop(compactor?)";
 
-/// A handle's `loop` past its receiver and two arguments.
-const METHOD_ARITY: &str = "handle:loop takes (messages, compactor?)";
+/// A handle's `loop` past its receiver and one argument.
+const METHOD_ARITY: &str = "handle:loop takes (compactor?)";
 
 /// Either entry called while a loop runs in the same section.
 const LOOP_RUNNING: &str = "a loop or a compactor is already running in this section; \
@@ -53,10 +52,12 @@ const LOOP_RUNNING: &str = "a loop or a compactor is already running in this sec
 /// `loop_begin(entry, ...)` takes `false` for `models.loop` or `true` for
 /// a handle's `loop`, then that entry's arguments, and returns the
 /// call's step closure followed by the first action's tag and values;
-/// or `nil`, `"raise"`, and the argument error. The step closure, made
-/// with `create_function_mut`, owns the call's [`machine::Machine`]; it
-/// takes the last yield's resume values, or the last call's `ok` and
-/// first result, and returns the next action's tag and values. mlua
+/// or `nil`, `"raise"`, and the argument error. Every call runs over the
+/// section's list, read from the `_G` guard's `messages` slot. The step
+/// closure, made with `create_function_mut`, owns the call's
+/// [`machine::Machine`]; it takes the last yield's resume values, or the
+/// last call's `ok` and first result, and returns the next action's tag
+/// and values. mlua
 /// refuses a recursive call of such a closure, which cannot happen,
 /// because the step returns before every yield and every call. Every
 /// error the loop raises is a `"raise"` action, so it is raised from the
@@ -95,9 +96,9 @@ pub(crate) fn loop_begin(
 
 /// `loop_begin`'s body: the entry flag, then that entry's argument checks
 /// in Functional Specification's order, then the refusal while `running`
-/// is set, then the machine and its step closure, whose body is
-/// `act(lua, machine.step(read_input(lua, machine.phase(), values,
-/// &budget)?))`, then the first action. `running` is set only once
+/// is set, then the machine over the section's list and its step closure,
+/// whose body is `act(lua, machine.step(read_input(lua, machine.phase(),
+/// values, &budget)?))`, then the first action. `running` is set only once
 /// nothing here can fail and the first action leaves the machine running;
 /// the step clears it when the machine is done, before it builds that
 /// action, and whenever it fails.
@@ -119,7 +120,7 @@ fn begin(
         if !receiver {
             return refuse(lua, NO_RECEIVER);
         }
-        if args.len() > 3 {
+        if args.len() > 2 {
             return refuse(lua, METHOD_ARITY);
         }
         let mut args = args.into_iter();
@@ -128,12 +129,11 @@ fn begin(
         if receiver {
             return refuse(lua, HANDLE_FIRST);
         }
-        if args.len() > 2 {
+        if args.len() > 1 {
             return refuse(lua, LOOP_ARITY);
         }
         (None, args.into_iter())
     };
-    let messages = args.next().unwrap_or(Value::Nil);
     let compactor = match args.next().unwrap_or(Value::Nil) {
         Value::Nil => compactors.get::<Value>("fail")?,
         function @ Value::Function(_) => function,
@@ -145,15 +145,12 @@ fn begin(
             return refuse(lua, &message);
         }
     };
-    let list = match messages.as_userdata() {
-        Some(list) if crate::messages::is_list(&messages) => {
-            MessageList::clone(&*list.borrow::<MessageList>()?)
-        }
-        _ => return refuse(lua, NOT_A_LIST),
-    };
+    let messages = crate::globals::messages(lua).map_err(mlua::Error::external)?;
+    let list = MessageList::clone(&*messages.borrow::<MessageList>()?);
     if running.load(Ordering::Relaxed) {
         return refuse(lua, LOOP_RUNNING);
     }
+    let messages = Value::UserData(messages);
     let (mut machine, first) = Machine::begin(max_rounds, list, messages, handle, compactor);
     let started = !matches!(machine.phase(), Phase::Done);
     let budget = budget.clone();

@@ -15,10 +15,9 @@ fn the_research_person_shape_returns_the_last_reply() {
         Summarize the person.
 
         ```lua
-        local msgs = messages.new()
-        msgs:user(prose)
-        models.loop(msgs)
-        return msgs[#msgs].content
+        messages:user(prose)
+        models.loop()
+        return messages[#messages].content
         ```",
     );
     let trace = loop_scenario(source.build()).chat(&gateway).run();
@@ -37,12 +36,11 @@ fn the_research_person_shape_returns_the_last_reply() {
 fn the_chat_agent_shape_completes_both_turns() {
     let gateway = ScriptedChat::new(vec![text("first reply"), text("second reply")]);
     let source = one_section(
-        "local history = messages.new()
-         for _, text in ipairs({ 'first question', 'second question' }) do
-           history:user(text)
-           pcall(function() return models.loop(history) end)
+        "for _, text in ipairs({ 'first question', 'second question' }) do
+           messages:user(text)
+           pcall(function() return models.loop() end)
          end
-         return #history .. '|' .. history[2].content .. '|' .. history[4].content",
+         return #messages .. '|' .. messages[2].content .. '|' .. messages[4].content",
     );
     let trace = loop_scenario(source).chat(&gateway).run();
     assert_eq!(trace.text(), "4|first reply|second reply");

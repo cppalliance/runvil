@@ -44,14 +44,13 @@ uses:
 ## Conversation
 
 ```lua
-local history = messages.new()
 while true do
     local text = input.ask()
     if text == 'quit' then
         return
     end
-    history:user(text)
-    models.get('test-model'):loop(history)
+    messages:user(text)
+    models.get('test-model'):loop()
 end
 ```
 ";

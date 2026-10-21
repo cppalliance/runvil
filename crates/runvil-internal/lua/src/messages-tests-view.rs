@@ -5,7 +5,6 @@ use mlua::{LuaSerdeExt, Value};
 use serde_json::{Value as Json, json};
 
 use super::list::refusal;
-use crate::messages::MessageList;
 use crate::protocol::{
     ContentPart, MessageContent, MessageRecord, NonEmpty, ToolCallRecord, parse_record,
 };
@@ -13,7 +12,7 @@ use crate::test_vm::{BuiltVm, TestVm};
 use crate::tests::{assistant, system, tool_result, user};
 
 /// One record table of each shape, held in the global `shapes` and
-/// appended to `msgs` in order: plain text, content parts, tool calls,
+/// appended to `messages` in order: plain text, content parts, tool calls,
 /// and a tool result.
 #[track_caller]
 fn shapes(vm: &BuiltVm) {
@@ -26,7 +25,7 @@ fn shapes(vm: &BuiltVm) {
            { role = 'assistant', content = 'working', \
              tool_calls = { { id = 'call_1', name = 'echo', arguments = { value = 'hi' } } } }, \
            { role = 'tool', content = 'echoed: hi', tool_call_id = 'call_1' } } \
-         for _, record in ipairs(shapes) do msgs:append(record) end",
+         for _, record in ipairs(shapes) do messages:append(record) end",
     );
 }
 
@@ -95,18 +94,18 @@ fn to_json_round_trips_every_record_shape_through_parse_record() {
 
 #[test]
 fn each_view_field_reads_like_the_record_table_and_a_view_is_userdata() {
-    let vm = TestVm::new().messages().build();
+    let vm = TestVm::new().build();
     shapes(&vm);
     for index in 1..=4 {
         assert_eq!(
-            read(&vm, &format!("type(msgs[{index}])")),
+            read(&vm, &format!("type(messages[{index}])")),
             Some(json!("userdata"))
         );
         for field in ["role", "content", "tool_calls", "tool_call_id"] {
             assert_eq!(
-                read(&vm, &format!("msgs[{index}].{field}")),
+                read(&vm, &format!("messages[{index}].{field}")),
                 read(&vm, &format!("shapes[{index}].{field}")),
-                "msgs[{index}].{field}"
+                "messages[{index}].{field}"
             );
         }
     }
@@ -114,21 +113,21 @@ fn each_view_field_reads_like_the_record_table_and_a_view_is_userdata() {
 
 #[test]
 fn an_integral_float_index_reads_like_its_integer_and_other_keys_read_nil() {
-    let vm = TestVm::new().messages().build();
-    vm.exec("msgs:user('u1'):append({ role = 'user', content = 'u2', extra = 1 })");
+    let vm = TestVm::new().build();
+    vm.exec("messages:user('u1'):append({ role = 'user', content = 'u2', extra = 1 })");
     assert_eq!(
-        read(&vm, "msgs[2.0]"),
+        read(&vm, "messages[2.0]"),
         Some(json!({ "role": "user", "content": "u2" }))
     );
-    assert_eq!(read(&vm, "msgs[2]"), read(&vm, "msgs[2.0]"));
+    assert_eq!(read(&vm, "messages[2]"), read(&vm, "messages[2.0]"));
     for expr in [
-        "msgs[1.5]",
-        "msgs.nope",
-        "msgs[true]",
-        "msgs[0]",
-        "msgs[-1]",
-        "msgs[3]",
-        "msgs[2].extra",
+        "messages[1.5]",
+        "messages.nope",
+        "messages[true]",
+        "messages[0]",
+        "messages[-1]",
+        "messages[3]",
+        "messages[2].extra",
     ] {
         assert_eq!(read(&vm, expr), None, "{expr}");
     }
@@ -136,13 +135,13 @@ fn an_integral_float_index_reads_like_its_integer_and_other_keys_read_nil() {
 
 #[test]
 fn assigning_any_view_field_raises_the_read_only_error() {
-    let vm = TestVm::new().messages().build();
+    let vm = TestVm::new().build();
     shapes(&vm);
     let before = vm.messages().to_records();
     for field in ["role", "content", "tool_calls", "tool_call_id", "extra"] {
         assert_eq!(
-            refusal(&vm, &format!("msgs[3].{field} = 'x'")),
-            "records read from a messages.new() list are read-only; change the list with \
+            refusal(&vm, &format!("messages[3].{field} = 'x'")),
+            "records read from messages are read-only; change messages with \
              replace(first, last, records...)",
             "{field}"
         );
@@ -152,13 +151,13 @@ fn assigning_any_view_field_raises_the_read_only_error() {
 
 #[test]
 fn pairs_over_a_view_visits_its_present_fields_in_order() {
-    let vm = TestVm::new().messages().build();
+    let vm = TestVm::new().build();
     shapes(&vm);
     let visits: Vec<String> = vm.eval(
         "local visits = {} \
-         for i = 1, #msgs do \
+         for i = 1, #messages do \
            local fields = {} \
-           for key, value in pairs(msgs[i]) do \
+           for key, value in pairs(messages[i]) do \
              fields[#fields + 1] = key .. ':' .. type(value) \
            end \
            visits[i] = table.concat(fields, ' ') \
@@ -178,38 +177,29 @@ fn pairs_over_a_view_visits_its_present_fields_in_order() {
 
 #[test]
 fn a_view_appended_or_converted_gives_the_same_record_as_its_table_form() {
-    let vm = TestVm::new().messages().build();
+    let vm = TestVm::new().build();
     shapes(&vm);
-    let other = MessageList::default();
-    vm.lua()
-        .globals()
-        .set(
-            "other",
-            vm.lua()
-                .create_userdata(other.clone())
-                .expect("userdata creation cannot fail"),
-        )
-        .expect("a global set cannot fail");
-    vm.exec("for i = 1, #msgs do other:append(msgs[i]) end");
-    assert_eq!(other.to_records(), vm.messages().to_records());
+    vm.exec("for i = 2, 4 do messages:append(messages[i]) end");
+    let records = vm.messages().to_records();
+    assert_eq!(records[4..], records[1..4]);
     for index in 1..=4 {
-        let view = read(&vm, &format!("msgs[{index}]")).expect("the view is present");
+        let view = read(&vm, &format!("messages[{index}]")).expect("the view is present");
         let table = read(&vm, &format!("shapes[{index}]")).expect("the table is present");
         assert_eq!(
             parse_record(index, &view),
             parse_record(index, &table),
-            "msgs[{index}]"
+            "messages[{index}]"
         );
     }
 }
 
 #[test]
 fn writing_into_a_views_nested_tables_leaves_the_record_unchanged() {
-    let vm = TestVm::new().messages().build();
+    let vm = TestVm::new().build();
     shapes(&vm);
     let before = vm.messages().to_records();
     let (content, tool_calls): (Value, Value) = vm.eval(
-        "local parts_view, calls_view = msgs[2], msgs[3] \
+        "local parts_view, calls_view = messages[2], messages[3] \
          local parts = parts_view.content \
          parts[1].text = 'changed' \
          parts[3] = { type = 'text', text = 'more' } \
@@ -239,19 +229,19 @@ fn writing_into_a_views_nested_tables_leaves_the_record_unchanged() {
 
 #[test]
 fn pairs_ipairs_and_a_counted_loop_visit_every_record_in_order_as_views() {
-    let vm = TestVm::new().messages().build();
+    let vm = TestVm::new().build();
     let visit = "local seen = { pairs = {}, ipairs = {}, counted = {} } \
                  local function note(into, i, view) \
                    into[#into + 1] = i .. ':' .. type(view) .. ':' .. view.content \
                  end \
-                 for i, view in pairs(msgs) do note(seen.pairs, i, view) end \
-                 for i, view in ipairs(msgs) do note(seen.ipairs, i, view) end \
-                 for i = 1, #msgs do note(seen.counted, i, msgs[i]) end \
+                 for i, view in pairs(messages) do note(seen.pairs, i, view) end \
+                 for i, view in ipairs(messages) do note(seen.ipairs, i, view) end \
+                 for i = 1, #messages do note(seen.counted, i, messages[i]) end \
                  return table.concat(seen.pairs, ' '), table.concat(seen.ipairs, ' '), \
                    table.concat(seen.counted, ' ')";
     let empty: (String, String, String) = vm.eval(visit);
     assert_eq!(empty, (String::new(), String::new(), String::new()));
-    vm.exec("msgs:user('u1'):assistant('a1'):user('u2')");
+    vm.exec("messages:user('u1'):assistant('a1'):user('u2')");
     let full: (String, String, String) = vm.eval(visit);
     let every = "1:userdata:u1 2:userdata:a1 3:userdata:u2".to_owned();
     assert_eq!(full, (every.clone(), every.clone(), every));
@@ -259,28 +249,28 @@ fn pairs_ipairs_and_a_counted_loop_visit_every_record_in_order_as_views() {
 
 #[test]
 fn a_pairs_loop_that_appends_ends_after_the_records_it_started_with() {
-    let vm = TestVm::new().messages().build();
-    vm.exec("msgs:user('u1'):assistant('a1'):user('u2')");
+    let vm = TestVm::new().build();
+    vm.exec("messages:user('u1'):assistant('a1'):user('u2')");
     let ended: (i64, i64) = vm.eval(
         "local n = 0 \
-         for _ in pairs(msgs) do \
+         for _ in pairs(messages) do \
            n = n + 1 \
            if n > 10 then error('runaway pairs') end \
-           msgs:user('x') \
+           messages:user('x') \
          end \
-         return n, #msgs",
+         return n, #messages",
     );
     assert_eq!(ended, (3, 6));
 }
 
 #[test]
 fn a_pairs_loop_stops_early_when_the_list_shrinks_below_its_next_index() {
-    let vm = TestVm::new().messages().build();
-    vm.exec("msgs:user('u1'):assistant('a1'):user('u2')");
+    let vm = TestVm::new().build();
+    vm.exec("messages:user('u1'):assistant('a1'):user('u2')");
     let seen: String = vm.eval(
         "local seen = {} \
-         for i, view in pairs(msgs) do \
-           if i == 1 then msgs:replace(2, 3) end \
+         for i, view in pairs(messages) do \
+           if i == 1 then messages:replace(2, 3) end \
            seen[#seen + 1] = i .. ':' .. view.content \
          end \
          return table.concat(seen, ' ')",
@@ -291,13 +281,13 @@ fn a_pairs_loop_stops_early_when_the_list_shrinks_below_its_next_index() {
 #[test]
 fn pairs_keeps_its_starting_length_while_ipairs_reads_the_live_list() {
     let walk = |iterate: &str| -> String {
-        let vm = TestVm::new().messages().build();
-        vm.exec("msgs:user('u1'):assistant('a1'):user('u2')");
+        let vm = TestVm::new().build();
+        vm.exec("messages:user('u1'):assistant('a1'):user('u2')");
         vm.eval(&format!(
             "local seen = {{}} \
-             for i, view in {iterate}(msgs) do \
-               if i == 1 then msgs:append({{ role = 'user', content = 'u3' }}) end \
-               if i == 2 then msgs:replace(3, 3, {{ role = 'user', content = 'u2b' }}) end \
+             for i, view in {iterate}(messages) do \
+               if i == 1 then messages:append({{ role = 'user', content = 'u3' }}) end \
+               if i == 2 then messages:replace(3, 3, {{ role = 'user', content = 'u2b' }}) end \
                seen[#seen + 1] = i .. ':' .. view.content \
              end \
              return table.concat(seen, ' ')"

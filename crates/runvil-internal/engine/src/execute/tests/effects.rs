@@ -64,10 +64,9 @@ fn a_models_loop_round_issues_one_chat_effect_and_one_tool_call_effect_per_call(
     ]);
     let source = one_section(
         "tools.offer('tools/echo')\n\
-         local msgs = messages.new()\n\
-         msgs:user('hello')\n\
-         models.loop(msgs)\n\
-         return msgs[#msgs].content",
+         messages:user('hello')\n\
+         models.loop()\n\
+         return messages[#messages].content",
     );
     let rig = Rig::run(
         loop_scenario(source)
@@ -228,10 +227,9 @@ fn a_timed_wait_issues_exactly_one_timer_effect() {
 fn a_sections_round_is_the_runs_first_with_the_chat_origin() {
     let gateway = ScriptedChat::new(vec![text("answer")]);
     let source = one_section(
-        "local msgs = messages.new()\n\
-         msgs:user('hello')\n\
-         models.loop(msgs)\n\
-         return msgs[#msgs].content",
+        "messages:user('hello')\n\
+         models.loop()\n\
+         return messages[#messages].content",
     );
     let rig = Rig::run(loop_scenario(source).chat(&gateway));
     assert_eq!(rig.trace().text(), "answer");

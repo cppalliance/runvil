@@ -24,13 +24,12 @@ uses:
 ## Conversation
 
 ```lua
-local history = messages.new()
-history:user('launch@' .. tostring(ui().workspace_root))
-models.get('test-model'):loop(history)
+messages:user('launch@' .. tostring(ui().workspace_root))
+models.get('test-model'):loop()
 while true do
     local text = input.ask()
-    history:user(text .. '@' .. tostring(ui().workspace_root))
-    models.get('test-model'):loop(history)
+    messages:user(text .. '@' .. tostring(ui().workspace_root))
+    models.get('test-model'):loop()
 end
 ```
 ";

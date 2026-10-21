@@ -255,10 +255,7 @@ fn the_loops_tool_call_yields_carry_the_turn_of_the_requesting_round() {
     // carries both calls and that turn, so each call reports the round
     // that requested it however far the counter moved in between.
     let vm = scheduler_vm_with_tools(&test_models(), &test_tools(), None);
-    let (thread, yielded) = start(
-        &vm,
-        "local msgs = messages.new()\nmsgs:user('hi')\nmodels.loop(msgs)\nreturn #msgs",
-    );
+    let (thread, yielded) = start(&vm, "messages:user('hi')\nmodels.loop()\nreturn #messages");
     assert!(matches!(parse_request(&vm, yielded), Request::Chat { .. }));
     let call = |id: &str| ToolCallEvent::new(id, "tools_echo", json!({ "value": id }));
     let round = ChatResult {

@@ -1,5 +1,6 @@
-//! Tests for the `_G` guard: `argv` and `prose` stay guarded whatever author
-//! code does to `_G`'s metatable, the author's metatable composes behind the
+//! Tests for the `_G` guard: `argv`, `prose`, and `messages` stay guarded
+//! whatever author code does to `_G`'s metatable, the author's metatable
+//! composes behind the
 //! guard, and `setmetatable` and `getmetatable` behave as the base
 //! functions for every other value. Also the reserved-name list's own
 //! shape: each name once, and each keyword a word the compiler refuses as
@@ -20,12 +21,18 @@ const ARGV_REFUSAL: &str = "argv is frozen outside H1: assign it in H1 only";
 /// The refusal line of an assignment to `prose`.
 const PROSE_REFUSAL: &str = "prose is read-only: assign to `var` or a section global instead";
 
+/// The refusal line of an assignment to `messages`.
+const MESSAGES_REFUSAL: &str = "messages is the section's conversation and cannot be \
+                                reassigned; change it with append(record) or \
+                                replace(first, last, records...)";
+
 /// The text every test VM's `prose` renders.
 const PROSE: &str = "the block's prose";
 
 /// Builds a section VM the way section setup does up to the Pack
 /// preludes: frozen `argv`, the Engine globals, the control globals, and the
-/// coroutine shims, with a block's lazy `prose` installed.
+/// coroutine shims, with a block's lazy `prose` installed and one `kept`
+/// user record in `messages`.
 #[track_caller]
 fn frozen_vm() -> BuiltVm {
     let argv = json!({ "query": "papers" });
@@ -38,35 +45,37 @@ fn prose_vm(argv: Argv<'_>) -> BuiltVm {
     let vm = TestVm::new().argv(argv).shims().build();
     vm.install_lazy_prose(|_| Ok(PROSE.to_owned()))
         .expect("the prose guard installs");
+    vm.exec("messages:user('kept')");
     vm
 }
 
-/// The caught refusals of assigning `argv` and `prose`, each reduced to its
-/// first line.
+/// The caught refusals of assigning `argv`, `prose`, and `messages`, each
+/// reduced to its first line.
 #[track_caller]
-fn assignment_refusals(vm: &BuiltVm) -> (String, String) {
-    let (argv, prose): (String, String) = vm.eval(
-        "local _, argv_err = pcall(function() argv = 'hijacked' end)\n\
-         local _, prose_err = pcall(function() prose = 'overwritten' end)\n\
-         return tostring(argv_err), tostring(prose_err)",
-    );
-    (
-        refusal_line(&argv).unwrap_or(&argv).to_owned(),
-        refusal_line(&prose).unwrap_or(&prose).to_owned(),
-    )
+fn assignment_refusals(vm: &BuiltVm) -> [String; 3] {
+    let refusals: [String; 3] = vm
+        .eval::<(String, String, String)>(
+            "local _, argv_err = pcall(function() argv = 'hijacked' end)\n\
+             local _, prose_err = pcall(function() prose = 'overwritten' end)\n\
+             local _, messages_err = pcall(function() messages = {} end)\n\
+             return tostring(argv_err), tostring(prose_err), tostring(messages_err)",
+        )
+        .into();
+    refusals.map(|refusal| refusal_line(&refusal).unwrap_or(&refusal).to_owned())
 }
 
-/// Asserts `argv` and `prose` still read as the Engine set them and still
-/// refuse assignment with their unchanged refusals.
+/// Asserts `argv`, `prose`, and `messages` still read as the Engine set
+/// them and still refuse assignment with their unchanged refusals.
 #[track_caller]
 fn assert_guards_hold(vm: &BuiltVm, after: &str) {
-    let (query, prose): (String, String) = vm.eval("return argv.query, prose");
+    let (query, prose, kept): (String, String, String) =
+        vm.eval("return argv.query, prose, messages[1].content");
     assert_eq!(
-        (query.as_str(), prose.as_str()),
-        ("papers", PROSE),
-        "argv and prose read as the Engine set them after {after}"
+        (query.as_str(), prose.as_str(), kept.as_str()),
+        ("papers", PROSE, "kept"),
+        "argv, prose, and messages read as the Engine set them after {after}"
     );
-    let (argv_refusal, prose_refusal) = assignment_refusals(vm);
+    let [argv_refusal, prose_refusal, messages_refusal] = assignment_refusals(vm);
     assert_eq!(
         argv_refusal, ARGV_REFUSAL,
         "argv stays frozen after {after}"
@@ -75,6 +84,11 @@ fn assert_guards_hold(vm: &BuiltVm, after: &str) {
         prose_refusal, PROSE_REFUSAL,
         "prose stays read-only after {after}"
     );
+    assert_eq!(
+        messages_refusal, MESSAGES_REFUSAL,
+        "messages stays the section's list after {after}"
+    );
+    assert_eq!(vm.messages().to_records(), vec![crate::tests::user("kept")]);
 }
 
 /// Runs `source` on a stock Lua VM with the section VM's standard libraries
@@ -97,7 +111,7 @@ fn the_globals_chunk_name_resolves_to_the_guard_file() {
 }
 
 #[test]
-fn no_setmetatable_call_on_g_frees_argv_or_prose() {
+fn no_setmetatable_call_on_g_frees_argv_prose_or_messages() {
     for attempt in [
         "setmetatable(_G, nil)",
         "setmetatable(_G, {})",
@@ -109,11 +123,13 @@ fn no_setmetatable_call_on_g_frees_argv_or_prose() {
         let vm = frozen_vm();
         vm.eval::<()>(attempt);
         assert_guards_hold(&vm, attempt);
-        let captured: bool =
-            vm.eval("return captured == nil or (captured.argv == nil and captured.prose == nil)");
+        let captured: bool = vm.eval(
+            "return captured == nil or (captured.argv == nil and captured.prose == nil \
+             and captured.messages == nil)",
+        );
         assert!(
             captured,
-            "the author's __newindex never sees argv or prose after {attempt}"
+            "the author's __newindex never sees argv, prose, or messages after {attempt}"
         );
     }
 }
@@ -141,17 +157,20 @@ fn the_h1_argv_is_a_plain_global_that_no_author_metatable_intercepts() {
         vm.argv_json().expect("the repair reads back"),
         Some(json!({ "query": "repaired" }))
     );
-    let (prose_refusal, cleared): (String, bool) = vm.eval(
+    let (prose_refusal, messages_refusal, unseen, cleared): (String, String, bool, bool) = vm.eval(
         "local _, err = pcall(function() prose = 'x' end)\n\
-         argv = nil\n\
-         return tostring(err), argv == nil",
+             local _, messages_err = pcall(function() messages = {} end)\n\
+             argv = nil\n\
+             return tostring(err), tostring(messages_err), seen.messages == nil, argv == nil",
     );
     assert_eq!(refusal_line(&prose_refusal), Some(PROSE_REFUSAL));
+    assert_eq!(refusal_line(&messages_refusal), Some(MESSAGES_REFUSAL));
+    assert!(unseen, "the author's write hook never sees messages");
     assert!(cleared, "H1 can still clear argv");
 }
 
 #[test]
-fn editing_the_table_getmetatable_returns_cannot_free_argv_or_prose() {
+fn editing_the_table_getmetatable_returns_cannot_free_argv_prose_or_messages() {
     let vm = frozen_vm();
     let before: bool = vm.eval("return getmetatable(_G) == nil");
     assert!(before, "with no author metatable, getmetatable(_G) is nil");

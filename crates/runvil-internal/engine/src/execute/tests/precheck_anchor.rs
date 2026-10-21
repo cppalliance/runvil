@@ -2,12 +2,12 @@
 //! the room it keeps for the reply (the binding's `max_tokens`, else an
 //! eighth of the window) and the anchor it takes from the provider's usage
 //! after a served round, for the model that served it. Each case drives two
-//! or three rounds over one list and one 4096-token window, so the last
+//! or three rounds on one chain and one 4096-token window, so the last
 //! round's count decides whether the request leaves. The chat arm's overflow flag is in `chat_arm`; the
 //! compactor that receives it in `models_loop_compactors`. What a refused
 //! send leaves in the run log is in `resend`.
 
-use runvil_parser::test_support::one_section;
+use runvil_parser::test_support::{one_section, prompt};
 use runvil_types::metrics::{CallMetrics, Usage};
 
 use super::models_loop::{loop_models, loop_scenario};
@@ -60,11 +60,10 @@ fn run_rounds(lua: &str, replies: Vec<ScriptedReply>) -> (String, ScriptedChat) 
 /// outcome as `sent` or the exhaustion `kind:reason`.
 fn two_rounds(first: usize, second: usize) -> String {
     format!(
-        "local msgs = messages.new()\n\
-         msgs:user(string.rep('x', {first}))\n\
-         models.loop(msgs)\n\
-         msgs:user(string.rep('y', {second}))\n\
-         local ok, err = pcall(models.loop, msgs)\n\
+        "messages:user(string.rep('x', {first}))\n\
+         models.loop()\n\
+         messages:user(string.rep('y', {second}))\n\
+         local ok, err = pcall(models.loop)\n\
          if ok then return 'sent' end\n\
          return err.kind .. ':' .. err.reason"
     )
@@ -141,19 +140,22 @@ fn reported_reasoning_tokens_come_off_the_anchor() {
 
 #[test]
 fn a_rewritten_history_falls_back_to_the_estimate() {
-    // After a round with tiny usage, the author sends a rewritten list: the
-    // same shape, but its first message differs from the one that was
-    // sent. The anchor does not apply, and the full estimate refuses it.
-    let section = "local msgs = messages.new()\n\
-         msgs:user(string.rep('x', 11000))\n\
-         models.loop(msgs)\n\
-         local rewritten = messages.new()\n\
-         rewritten:user(string.rep('w', 11000)):assistant('ok'):user(string.rep('y', 4000))\n\
-         local ok, err = pcall(models.loop, rewritten)\n\
+    // After a round with tiny usage, the next section sends a rewritten
+    // history: the same shape, but its first message differs from the one
+    // that was sent. The anchor lives on the chain, so the second section
+    // meets it, but it does not apply, and the full estimate refuses it.
+    let first = "messages:user(string.rep('x', 11000))\n\
+         models.loop()";
+    let rewritten = "messages:user(string.rep('w', 11000)):assistant('ok')\
+         :user(string.rep('y', 4000))\n\
+         local ok, err = pcall(models.loop)\n\
          if ok then return 'sent' end\n\
          return err.kind .. ':' .. err.reason";
-    let (out, gateway) = run_rounds(section, vec![reply_with_usage("ok", 100, 5, None)]);
-    assert_eq!(out, "context_exhausted:precheck");
+    let gateway = ScriptedChat::new(vec![reply_with_usage("ok", 100, 5, None)]);
+    let trace = loop_scenario(prompt("", &[("First", first), ("Rewritten", rewritten)]))
+        .chat(&gateway)
+        .run();
+    assert_eq!(trace.text(), "context_exhausted:precheck");
     assert_eq!(gateway.call_count(), 1, "only the first round ran");
 }
 
@@ -162,12 +164,11 @@ fn a_merged_history_falls_back_to_the_estimate() {
     // The author drops the reply and adds another user message, so the
     // projection merges the two user messages into one. That is not the
     // list the anchor measured, so the full estimate applies.
-    let section = "local msgs = messages.new()\n\
-         msgs:user(string.rep('x', 11000))\n\
-         models.loop(msgs)\n\
-         msgs:replace(#msgs, #msgs)\n\
-         msgs:user(string.rep('y', 4000))\n\
-         local ok, err = pcall(models.loop, msgs)\n\
+    let section = "messages:user(string.rep('x', 11000))\n\
+         models.loop()\n\
+         messages:replace(#messages, #messages)\n\
+         messages:user(string.rep('y', 4000))\n\
+         local ok, err = pcall(models.loop)\n\
          if ok then return 'sent' end\n\
          return err.kind .. ':' .. err.reason";
     let (out, gateway) = run_rounds(section, vec![reply_with_usage("ok", 100, 5, None)]);
@@ -208,12 +209,11 @@ fn a_model_switch_leaves_the_second_round_on_the_estimate() {
     // refuse the second request (3604 plus the 512 reserve). The second
     // request goes to `other`, a different model, so another tokenizer's
     // count does not apply and the estimate of about 113 tokens admits it.
-    let section = "local msgs = messages.new()\n\
-         msgs:user('xxxxx')\n\
-         models.loop(msgs)\n\
-         msgs:user(string.rep('y', 400))\n\
+    let section = "messages:user('xxxxx')\n\
+         models.loop()\n\
+         messages:user(string.rep('y', 400))\n\
          models.use('other')\n\
-         local ok, err = pcall(models.loop, msgs)\n\
+         local ok, err = pcall(models.loop)\n\
          if ok then return 'sent' end\n\
          return err.kind .. ':' .. err.reason";
     let (out, gateway) = run_rounds(
@@ -230,12 +230,11 @@ fn another_alias_of_the_same_model_keeps_the_anchor() {
     // `twin` is a different alias with different settings, but it names the
     // model that `writer` named, so the 3500-token anchor still refuses the
     // second request.
-    let section = "local msgs = messages.new()\n\
-         msgs:user('xxxxx')\n\
-         models.loop(msgs)\n\
-         msgs:user(string.rep('y', 400))\n\
+    let section = "messages:user('xxxxx')\n\
+         models.loop()\n\
+         messages:user(string.rep('y', 400))\n\
          models.use('twin')\n\
-         local ok, err = pcall(models.loop, msgs)\n\
+         local ok, err = pcall(models.loop)\n\
          if ok then return 'sent' end\n\
          return err.kind .. ':' .. err.reason";
     let (out, gateway) =
@@ -251,14 +250,13 @@ fn the_next_served_round_anchors_on_the_new_model() {
     // of its own. The third request stays on `other` and extends the
     // second round, so the new measurement anchors it and refuses it. The
     // estimate of the third request is about 220 tokens.
-    let section = "local msgs = messages.new()\n\
-         msgs:user('xxxxx')\n\
-         models.loop(msgs)\n\
-         msgs:user(string.rep('y', 400))\n\
+    let section = "messages:user('xxxxx')\n\
+         models.loop()\n\
+         messages:user(string.rep('y', 400))\n\
          models.use('other')\n\
-         models.loop(msgs)\n\
-         msgs:user(string.rep('z', 400))\n\
-         local ok, err = pcall(models.loop, msgs)\n\
+         models.loop()\n\
+         messages:user(string.rep('z', 400))\n\
+         local ok, err = pcall(models.loop)\n\
          if ok then return 'sent' end\n\
          return err.kind .. ':' .. err.reason";
     let (out, gateway) = run_rounds(
@@ -278,15 +276,14 @@ fn a_return_to_the_first_model_uses_the_estimate() {
     // The second round on `other` replaced the measurement, so the third
     // request back on `writer` meets another model's anchor and counts by
     // the estimate.
-    let section = "local msgs = messages.new()\n\
-         msgs:user('xxxxx')\n\
-         models.loop(msgs)\n\
-         msgs:user('yyyy')\n\
+    let section = "messages:user('xxxxx')\n\
+         models.loop()\n\
+         messages:user('yyyy')\n\
          models.use('other')\n\
-         models.loop(msgs)\n\
-         msgs:user(string.rep('z', 400))\n\
+         models.loop()\n\
+         messages:user(string.rep('z', 400))\n\
          models.use('writer')\n\
-         local ok, err = pcall(models.loop, msgs)\n\
+         local ok, err = pcall(models.loop)\n\
          if ok then return 'sent' end\n\
          return err.kind .. ':' .. err.reason";
     let (out, gateway) = run_rounds(
@@ -326,9 +323,8 @@ fn run_with_max_tokens(lua: &str, max_tokens: u32) -> (String, ScriptedChat) {
 /// `sent` or the exhaustion `kind:reason`.
 fn one_round(size: usize) -> String {
     format!(
-        "local msgs = messages.new()\n\
-         msgs:user(string.rep('x', {size}))\n\
-         local ok, err = pcall(models.loop, msgs)\n\
+        "messages:user(string.rep('x', {size}))\n\
+         local ok, err = pcall(models.loop)\n\
          if ok then return 'sent' end\n\
          return err.kind .. ':' .. err.reason"
     )

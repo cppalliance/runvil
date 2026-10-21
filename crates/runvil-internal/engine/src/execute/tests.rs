@@ -188,6 +188,7 @@ mod rounds;
 mod run_inputs;
 mod run_termination;
 mod scheduler;
+mod section_messages;
 mod serial_driver;
 mod suite;
 mod tasks;

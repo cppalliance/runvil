@@ -6,11 +6,13 @@
 -- captures `setmetatable` or `getmetatable`. The chunk arguments are
 -- privileged captures, never globals: `globals` is the VM's globals table,
 -- `state` is the Engine's slot table (`argv_frozen` and `argv` once a
--- section freezes `argv`, `prose` once a block installs its render, and
--- `author` for the metatable author code set on `_G`), and `refuse_argv()`
--- and `refuse_prose()` raise the Engine's assignment refusals. The chunk
--- returns the guard and the two replacements for the Engine to install.
-local globals, state, refuse_argv, refuse_prose = ...
+-- section freezes `argv`, `prose` once a block installs its render,
+-- `messages` once injection installs the section's list, and `author` for
+-- the metatable author code set on `_G`), and `refuse_argv()`,
+-- `refuse_prose()`, and `refuse_messages()` raise the Engine's assignment
+-- refusals. The chunk returns the guard and the two replacements for the
+-- Engine to install.
+local globals, state, refuse_argv, refuse_prose, refuse_messages = ...
 
 local base_setmetatable, base_getmetatable = setmetatable, getmetatable
 local rawequal, rawget, rawset = rawequal, rawget, rawset
@@ -27,12 +29,13 @@ local guard = { __metatable = "_G is guarded" }
 -- `_G` keeps the author's other metamethods but never becomes weak.
 local own = { __index = true, __newindex = true, __metatable = true }
 
--- `argv` and `prose` never reach the author: `argv` serves the frozen value
--- once a section freezes it and is otherwise a plain global, so the H1
--- repair always lands in `_G`. Every other key goes to the author's
--- handler, read raw from the author's metatable on each access the way
--- Lua reads a metamethod, and tail-called so the handler's error levels
--- and yields behave as if it were the metamethod.
+-- `argv`, `prose`, and `messages` never reach the author: `argv` serves the
+-- frozen value once a section freezes it and is otherwise a plain global,
+-- so the H1 repair always lands in `_G`, and `messages` always serves the
+-- section's one list. Every other key goes to the author's handler, read
+-- raw from the author's metatable on each access the way Lua reads a
+-- metamethod, and tail-called so the handler's error levels and yields
+-- behave as if it were the metamethod.
 function guard.__index(t, key)
   if key == "argv" then
     return state.argv
@@ -41,6 +44,9 @@ function guard.__index(t, key)
     local render = state.prose
     if render == nil then return nil end
     return render()
+  end
+  if key == "messages" then
+    return state.messages
   end
   local author = state.author
   local handler = author and rawget(author, "__index")
@@ -57,6 +63,9 @@ function guard.__newindex(t, key, value)
   end
   if key == "prose" then
     return refuse_prose()
+  end
+  if key == "messages" then
+    return refuse_messages()
   end
   local author = state.author
   local handler = author and rawget(author, "__newindex")

@@ -21,10 +21,9 @@ fn grab_loop(handler: &str) -> String {
         "tools.offer_local('grab', 'Grab a value', {{ value = 'string' }}, function(args)
            {handler}
          end)
-         local msgs = messages.new()
-         msgs:user('Use the tool.')
-         models.loop(msgs)
-         return msgs[#msgs].content"
+         messages:user('Use the tool.')
+         models.loop()
+         return messages[#messages].content"
     ))
 }
 
@@ -74,10 +73,9 @@ fn local_tool_multiple_calls_in_one_response_all_run() {
            calls[#calls + 1] = args.value
            return 'ok ' .. args.value
          end)
-         local msgs = messages.new()
-         msgs:user('Use the tool.')
-         models.loop(msgs)
-         return table.concat(calls, ',') .. '|' .. msgs[#msgs].content",
+         messages:user('Use the tool.')
+         models.loop()
+         return table.concat(calls, ',') .. '|' .. messages[#messages].content",
     );
     let trace = loop_scenario(source).chat(&gateway).run();
     assert_eq!(
@@ -178,9 +176,8 @@ fn a_handler_that_calls_jump_fails_the_run() {
     let only = "tools.offer_local('grab', 'Grab a value', { value = 'string' }, function(args)
                   jump('## Other')
                 end)
-                local msgs = messages.new()
-                msgs:user('Use the tool.')
-                models.loop(msgs)
+                messages:user('Use the tool.')
+                models.loop()
                 return 'no jump'";
     let trace = loop_scenario(prompt("", &[("Only", only), OTHER]))
         .chat(&gateway)
@@ -223,9 +220,8 @@ fn a_saved_jump_reference_is_refused_in_a_handler_the_model_calls() {
         text("unreachable"),
     ]);
     let only = format!(
-        "{SAVED_JUMP_GRAB}local msgs = messages.new()\n\
-         msgs:user('Use the tool.')\n\
-         models.loop(msgs)\n\
+        "{SAVED_JUMP_GRAB}messages:user('Use the tool.')\n\
+         models.loop()\n\
          return 'no jump'"
     );
     let trace = loop_scenario(prompt("", &[("Only", &only), OTHER]))
@@ -277,9 +273,8 @@ fn jump_works_in_the_same_block_after_the_loop_returns() {
     let only = "tools.offer_local('grab', 'Grab a value', { value = 'string' }, function(args)
                   return 'got ' .. args.value
                 end)
-                local msgs = messages.new()
-                msgs:user('Use the tool.')
-                models.loop(msgs)
+                messages:user('Use the tool.')
+                models.loop()
                 jump('## Other')";
     let trace = loop_scenario(prompt("", &[("Only", only), OTHER]))
         .chat(&gateway)
@@ -323,10 +318,9 @@ fn a_local_tool_may_take_an_offered_wire_name_and_wins_in_scope() {
     let source = one_section(
         "tools.offer('tools/concrete')
          tools.offer_local('tools_concrete', 'Local concrete', {}, function() return 'local' end)
-         local msgs = messages.new()
-         msgs:user('Use the tool.')
-         models.loop(msgs)
-         return msgs[#msgs].content",
+         messages:user('Use the tool.')
+         models.loop()
+         return messages[#messages].content",
     );
     let trace = loop_scenario(source)
         .offer("tools_concrete", tool)

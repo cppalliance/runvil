@@ -4,7 +4,7 @@
 //! A call binds no global and advertises nothing; a wire name is the
 //! model's alone, and a model-issued call never resolves an id.
 
-use runvil_parser::test_support::one_section;
+use runvil_parser::test_support::{one_section, prompt};
 
 use super::fixtures::{echo_tool, scoped_tool};
 use super::models_loop::catalog_scenario;
@@ -33,7 +33,14 @@ fn script_origin() -> ToolCallOrigin {
 /// fixture and a second tool the prompts never offer.
 #[track_caller]
 fn echo_and_concrete(lua: &str) -> Scenario {
-    catalog_scenario(one_section(lua))
+    echo_and_concrete_sections(&[("Only", lua)])
+}
+
+/// A run of `sections`, each a heading and its Lua, prepared against the
+/// catalog [`echo_and_concrete`] uses.
+#[track_caller]
+fn echo_and_concrete_sections(sections: &[(&str, &str)]) -> Scenario {
+    catalog_scenario(prompt("", sections))
         .tool(echo_tool())
         .tool(scoped_tool("concrete", "Concrete description.").0)
 }
@@ -98,18 +105,22 @@ fn a_script_reaches_a_catalog_tool_left_out_of_the_offering_by_id() {
 fn a_script_call_advertises_nothing_until_the_tool_is_offered() {
     let gateway = ScriptedChat::new(vec![text("before"), text("after")]);
     let rig = Rig::run(
-        echo_and_concrete(
-            "tools.call('tools/echo', { value = 'a' })\n\
-             tools.call('tools/concrete', { value = 'b' })\n\
-             local before = messages.new()\n\
-             before:user('before')\n\
-             models.loop(before)\n\
-             tools.offer('tools/echo')\n\
-             local after = messages.new()\n\
-             after:user('after')\n\
-             models.loop(after)\n\
-             return 'ok'",
-        )
+        echo_and_concrete_sections(&[
+            (
+                "Before",
+                "tools.call('tools/echo', { value = 'a' })\n\
+                 tools.call('tools/concrete', { value = 'b' })\n\
+                 messages:user('before')\n\
+                 models.loop()",
+            ),
+            (
+                "After",
+                "tools.offer('tools/echo')\n\
+                 messages:user('after')\n\
+                 models.loop()\n\
+                 return 'ok'",
+            ),
+        ])
         .chat(&gateway),
     );
     assert_eq!(rig.trace().text(), "ok");

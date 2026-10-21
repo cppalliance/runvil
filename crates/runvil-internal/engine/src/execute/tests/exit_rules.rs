@@ -172,7 +172,7 @@ fn store_persists_across_sections() {
 /// single user message, returning the list's length ahead of the terminal
 /// record's text.
 fn loop_to_count_and_text() -> String {
-    LOOP_TO_TEXT.replacen("return ", "return #msgs .. '|' .. ", 1)
+    LOOP_TO_TEXT.replacen("return ", "return #messages .. '|' .. ", 1)
 }
 
 /// A run of [`loop_to_count_and_text`] against `replies`, with `offered`,
@@ -340,11 +340,10 @@ fn an_empty_reply_is_readable_at_the_call_site_and_appends_nothing() {
     // and the rejected round leaves the author's list untouched.
     let gateway = ScriptedChat::new(vec![text_finish("", "stop")]);
     let source = one_section(
-        "local msgs = messages.new()
-         msgs:user('say nothing')
-         local ok, err = pcall(models.loop, msgs)
+        "messages:user('say nothing')
+         local ok, err = pcall(models.loop)
          assert(not ok, 'the empty round raises')
-         assert(#msgs == 1, 'a rejected round appends nothing')
+         assert(#messages == 1, 'a rejected round appends nothing')
          return err.kind .. '|' .. tostring(err.finish_reason) .. '|' .. tostring(err)",
     );
     let trace = loop_scenario(source).chat(&gateway).run();
@@ -366,9 +365,8 @@ fn an_empty_reply_that_ignored_reasoning_says_so_at_the_call_site() {
         metrics: None,
     }]);
     let source = one_section(
-        "local msgs = messages.new()
-         msgs:user('think only')
-         local ok, err = pcall(models.loop, msgs)
+        "messages:user('think only')
+         local ok, err = pcall(models.loop)
          return err.kind .. '|' .. tostring(err)",
     );
     let trace = loop_scenario(source).chat(&gateway).run();

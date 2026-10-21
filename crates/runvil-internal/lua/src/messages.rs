@@ -1,15 +1,18 @@
-//! The `messages` namespace: the Rust-backed message list.
+//! The `messages` global: the section's one Rust-backed conversation.
 //!
-//! `messages.new()` returns a [`MessageList`] userdata. Its chainable
+//! Every section VM owns one [`MessageList`], which injection installs as
+//! the `messages` global, served from the `_G` guard's slot table so it
+//! keeps its identity for the section's whole life and an assignment of
+//! the global raises [`ASSIGNMENT_REFUSAL`]. Its chainable
 //! `system`/`user`/`assistant`/`tool`/`append` builders and `replace` are
 //! colon methods. Each edit validates its records as it adds them, keeps
 //! the system records leading the list, and drops fields a record does
 //! not hold, so a refused edit raises at the author's call and leaves the
-//! list unchanged. `#list` counts the records, `list[i]`, `pairs`, and
-//! `ipairs` read them as read-only views with metamethods only, and
-//! assignment is refused. `pairs` stops at the record count it started
-//! with, as the sandbox `pairs` does for a table, while `ipairs` reads the
-//! live list.
+//! list unchanged. `#messages` counts the records, `messages[i]`, `pairs`,
+//! and `ipairs` read them as read-only views with metamethods only, and
+//! assignment by index is refused. `pairs` stops at the record count it
+//! started with, as the sandbox `pairs` does for a table, while `ipairs`
+//! reads the live list.
 //!
 //! Author edits validate the records they add. Records the Engine adds by
 //! calling [`MessageList::push`] itself - the loop's state machine - are
@@ -20,8 +23,7 @@
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
 use mlua::{
-    AnyUserData, Function, Lua, LuaSerdeExt, MetaMethod, Table, UserData, UserDataMethods, Value,
-    Variadic,
+    AnyUserData, Function, Lua, LuaSerdeExt, MetaMethod, UserData, UserDataMethods, Value, Variadic,
 };
 use runvil_model_client::client::{Message, Role};
 use runvil_types::ids::RoundId;
@@ -33,27 +35,24 @@ use crate::protocol::{MessageRecord, RecordRole, parse_record};
 #[path = "messages-view.rs"]
 mod view;
 
-/// Installs the `messages` global holding `new`, which returns a new
-/// empty [`MessageList`].
+/// The refusal of an assignment of the `messages` global.
+pub(crate) const ASSIGNMENT_REFUSAL: &str = "messages is the section's conversation and cannot \
+                                             be reassigned; change it with append(record) or \
+                                             replace(first, last, records...)";
+
+/// Installs `list` as the `messages` global, served from the guard's slot.
 ///
 /// # Errors
-/// Returns [`Error::Lua`] if the global install fails.
-pub(crate) fn install_messages(lua: &Lua, globals: &Table) -> Result<()> {
-    let new = lua
-        .create_function(|lua, ()| lua.create_userdata(MessageList::default()))
-        .map_err(Error::lua)?;
-    let messages = lua.create_table().map_err(Error::lua)?;
-    messages.raw_set("new", new).map_err(Error::lua)?;
-    globals.raw_set("messages", messages).map_err(Error::lua)
+/// Returns [`Error::Lua`] if the userdata cannot be built or the guard's
+/// slot table cannot be written.
+pub(crate) fn install_messages(lua: &Lua, list: &MessageList) -> Result<()> {
+    let userdata = lua.create_userdata(list.clone()).map_err(Error::lua)?;
+    crate::globals::install_messages(lua, userdata)
 }
 
-/// Whether `value` is a `messages.new()` list.
-pub(crate) fn is_list(value: &Value) -> bool {
-    matches!(value, Value::UserData(userdata) if userdata.is::<MessageList>())
-}
-
-/// A `messages.new()` list. The same value is the Lua userdata and the
-/// handle a model round's request holds; clones share one list.
+/// A section's conversation, which the `messages` global holds. The same
+/// value is the Lua userdata and the handle a model round's request
+/// holds; clones share one list.
 #[derive(Clone, Debug, Default)]
 pub struct MessageList(Arc<Mutex<ListState>>);
 
@@ -427,8 +426,8 @@ impl UserData for MessageList {
             MetaMethod::NewIndex,
             |_, _, _: (Value, Value)| -> mlua::Result<()> {
                 Err(refusal(
-                    "a messages.new() list cannot be assigned to; add records with \
-                     append(record) and change them with replace(first, last, records...)"
+                    "messages cannot be assigned to by index; add records with append(record) \
+                     and change them with replace(first, last, records...)"
                         .to_owned(),
                 ))
             },

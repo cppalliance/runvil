@@ -1,6 +1,6 @@
 //! One finite pipeline end to end through the unified prompt model: explicit
 //! lazy `prose`, `models.infer`, the Rust-backed `models.loop` with tool
-//! dispatch, `messages.new()` builders, and synchronous `call`, driven
+//! dispatch, the `messages` builders, and synchronous `call`, driven
 //! through a run against a scripted gateway at `runvil: 0`.
 
 use runvil_parser::test_support::PromptSource;
@@ -31,12 +31,11 @@ fn finite_pipeline_runs_the_unified_surface_end_to_end() {
             "Refine",
             "
             tools.offer('tools/echo')
-            local msgs = messages.new()
-            msgs:system('You refine drafts.')
-            msgs:user(var.draft)
-            assert(models.loop(msgs) == nil, 'models.loop returns nil')
-            assert(msgs[#msgs].role == 'assistant', 'the terminal record is the assistant reply')
-            return call('## Deliver', msgs[#msgs].content)",
+            messages:system('You refine drafts.')
+            messages:user(var.draft)
+            assert(models.loop() == nil, 'models.loop returns nil')
+            assert(messages[#messages].role == 'assistant', 'the terminal record is the assistant reply')
+            return call('## Deliver', messages[#messages].content)",
         )
         .section("Deliver", "return 'delivered: ' .. args");
     let trace = Scenario::new(source.build())

@@ -110,7 +110,7 @@ fn sys_cannot_be_read_and_debug_mode_names_its_label() {
 #[test]
 fn a_message_record_view_is_not_json_data() {
     let vm = json_vm();
-    vm.exec("record = messages.new():user('u')[1]");
+    vm.exec("messages:user('u')\nrecord = messages[1]");
     assert_eq!(
         caught(&vm, "json.encode(record)"),
         lua_error("json.encode: value must be JSON data, got userdata")

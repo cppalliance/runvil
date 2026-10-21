@@ -51,10 +51,9 @@ fn an_h1_library_sets_prompt_wide_state_every_later_section_sees() {
             "Main",
             "
             require '## offers'
-            local msgs = messages.new()
-            msgs:user('ping')
-            models.loop(msgs)
-            return msgs[#msgs].content",
+            messages:user('ping')
+            models.loop()
+            return messages[#messages].content",
         )
         .section("setup", "models.default('writer')")
         .section("offers", "tools.offer('tools/echo')");

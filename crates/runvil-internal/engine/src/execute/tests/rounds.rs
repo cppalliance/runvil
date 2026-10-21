@@ -20,10 +20,9 @@ use crate::test_support::scenario::text_of;
 /// closing reply.
 const INFER_THEN_LOOP: &str = "tools.offer('tools/echo')\n\
     local first = models.infer('first')\n\
-    local msgs = messages.new()\n\
-    msgs:user('second')\n\
-    models.loop(msgs)\n\
-    return first .. '|' .. msgs[#msgs].content";
+    messages:user('second')\n\
+    models.loop()\n\
+    return first .. '|' .. messages[#messages].content";
 
 /// The round numbered `id`, dispatched with `origin`.
 fn round(id: u64, origin: ReplyOrigin) -> Round {

@@ -1,22 +1,16 @@
 //! The chat request parser: the handle a handle's `loop` names and the
-//! author's `messages.new()` list, plus the per-record validation the
-//! list's builders run as they add a record.
+//! section's list, plus the per-record validation the list's builders run
+//! as they add a record.
 
 use mlua::Value;
 use runvil_model_client::client::Role;
 
-use crate::Error;
 use crate::messages::MessageList;
 use crate::protocol::{
     ContentPart, MessageContent, MessageRecord, NonEmpty, RecordRole, Request, ToolCallRecord,
 };
 
 use super::{FieldFailure, call_handle};
-
-/// The refusal for a `messages` value that is not a `messages.new()`
-/// list. The chat parse and the loop's argument check share it.
-pub(crate) const NOT_A_LIST: &str = "models.loop needs a messages.new() list; build one with \
-                                     messages.new() and :user, :append, or :replace";
 
 /// The message roles the chat protocol accepts, comma-separated.
 fn chat_roles() -> String {
@@ -31,32 +25,26 @@ fn chat_roles() -> String {
 /// contract: text parts and data-URI image parts).
 const CHAT_PART_TYPES: [&str; 2] = ["text", "image_url"];
 
-/// Frames one chat author-argument failure as the call's error.
-fn chat_error(message: impl Into<String>) -> FieldFailure {
-    FieldFailure::Call(Error::Lua(message.into()))
-}
-
 /// Parses a `chat` request: the optional `handle`, which a handle's
-/// `loop` sets from its receiver, and the `messages` list, which must be a
-/// `messages.new()` list.
+/// `loop` sets from its receiver, and the `messages` list, which the loop
+/// sets to the section's list.
 ///
 /// The list validated each record as it added it, so the parse checks only
-/// that `messages` is such a list and clones its handle; the driver
-/// projects the records without re-checking them. An empty list parses: the
-/// driver refuses it at dispatch. Every author-argument failure is the
-/// call's error, raised at the `models.loop` call site so a program `pcall`
-/// catches it. The handle is checked first.
+/// that `messages` is a list and clones its handle; the driver projects the
+/// records without re-checking them. An empty list parses: the driver
+/// refuses it at dispatch. Only the Engine builds a chat request, so a
+/// `messages` field that is not a list is a malformed yield. A handle
+/// failure is the call's error, raised at the `models.loop` call site so a
+/// program `pcall` catches it. The handle is checked first.
 pub(super) fn parse_chat(table: &mlua::Table) -> std::result::Result<Request, FieldFailure> {
     let binding = call_handle(table, "models.loop")?;
     let list = match table.raw_get::<Value>("messages") {
         Ok(Value::UserData(userdata)) => userdata
             .borrow::<MessageList>()
             .map(|list| MessageList::clone(&list))
-            .ok(),
-        Ok(_) => None,
-        Err(_) => return Err(FieldFailure::Malformed),
+            .map_err(|_| FieldFailure::Malformed)?,
+        Ok(_) | Err(_) => return Err(FieldFailure::Malformed),
     };
-    let list = list.ok_or_else(|| chat_error(NOT_A_LIST))?;
     Ok(Request::Chat { list, binding })
 }
 

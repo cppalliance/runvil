@@ -1,5 +1,5 @@
 //! Benchmarks for the active unified-surface leaf paths in the Lua boundary:
-//! `messages.new()` builder construction and per-dispatch projection.
+//! building the section's `messages` list and per-dispatch projection.
 //!
 //! Run with `cargo bench -p runvil-lua --features test-support`.
 
@@ -17,7 +17,7 @@
 use std::num::NonZeroU32;
 use std::sync::{Arc, Mutex};
 
-use criterion::{Criterion, criterion_group, criterion_main};
+use criterion::{BatchSize, Criterion, criterion_group, criterion_main};
 use runvil_lua::{
     LuaProgram, MessageContent, MessageRecord, RecordRole, SectionVm, ToolCallRecord, ToolSet,
     project_messages,
@@ -36,8 +36,8 @@ fn emitter() -> Emitter {
     Emitter::root(EventSink::default(), "bench", DebugMode::Off)
 }
 
-/// A section VM with Engine values injected, so the `messages` namespace is
-/// installed as the executor installs it.
+/// A section VM with Engine values injected, so the section's `messages`
+/// list is installed as the executor installs it.
 fn builder_vm() -> SectionVm {
     SectionVm::new_for_section(
         &GuardNonce::from_seed(&RunSeed::from_bytes([1; 32])),
@@ -56,20 +56,20 @@ fn builder_vm() -> SectionVm {
                 .expect("the stock backend acquires"),
         ),
     )
-    .expect("value injection installs the messages namespace")
+    .expect("value injection installs the messages list")
 }
 
-/// Builds one message list through the Rust-backed `messages.new()` list:
-/// the chainable builder calls, each validating the record it adds.
+/// Builds one conversation in the section's Rust-backed `messages` list:
+/// the chainable builder calls, each validating the record it adds. Each
+/// iteration runs on a fresh VM, built and dropped outside the measured
+/// time, so every run starts from an empty list.
 fn message_building(c: &mut Criterion) {
-    let vm = builder_vm();
     let program = LuaProgram::compile(
-        "local msgs = messages.new()\n\
-         msgs:system('you are careful')\n\
-         msgs:user('summarize this')\n\
-         msgs:assistant('a summary')\n\
-         msgs:user('now shorter')\n\
-         return #msgs",
+        "messages:system('you are careful')\n\
+         messages:user('summarize this')\n\
+         messages:assistant('a summary')\n\
+         messages:user('now shorter')\n\
+         return #messages",
         "bench",
         NonZeroU32::MIN,
         &emitter(),
@@ -78,10 +78,15 @@ fn message_building(c: &mut Criterion) {
     .expect("the builder chunk compiles");
     let emitter = emitter();
     c.bench_function("message_building", |b| {
-        b.iter(|| {
-            vm.run_chunk(&program, &emitter, SECTION)
-                .expect("the builder chunk runs");
-        });
+        b.iter_batched(
+            builder_vm,
+            |vm| {
+                vm.run_chunk(&program, &emitter, SECTION)
+                    .expect("the builder chunk runs");
+                vm
+            },
+            BatchSize::SmallInput,
+        );
     });
 }
 

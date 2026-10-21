@@ -76,8 +76,18 @@ fn lua_type_name_is_luas_type_with_an_integer_named_integer() {
     }
 }
 
+/// Installs the `_G` guard on `lua` and an empty list in its `messages`
+/// slot, as a section VM's injection does, and returns that list.
+fn install_section_list(lua: &Lua) -> MessageList {
+    crate::globals::install(lua).unwrap();
+    let list = MessageList::default();
+    crate::messages::install_messages(lua, &list).unwrap();
+    list
+}
+
 /// `loop_begin` over a new flag on `lua`, capped at `max_rounds`, with an
-/// empty `compactors` table, and that flag.
+/// empty `compactors` table, and that flag. The guard and the section's
+/// list must already be installed.
 fn begin_with_flag(lua: &Lua, max_rounds: usize) -> (Function, Arc<AtomicBool>) {
     let running = Arc::new(AtomicBool::new(false));
     let compactors = lua.create_table().unwrap();
@@ -89,52 +99,82 @@ fn begin_with_flag(lua: &Lua, max_rounds: usize) -> (Function, Arc<AtomicBool>) 
 #[test]
 fn both_entries_check_their_arguments_in_order_with_the_shims_texts() {
     let lua = Lua::new();
+    install_section_list(&lua);
     let (begin, _) = begin_with_flag(&lua, 2);
-    let list = lua.create_userdata(MessageList::default()).unwrap();
     let outcomes: Vec<String> = lua
         .load(
-            "local begin, h, list, null = ...
+            "local begin, h, null = ...
              local function probe(...)
                local step, tag, value = begin(...)
                if step then step(false, 'ended') end
                return type(step) .. '|' .. tag .. '|' .. tostring(value.op or value)
              end
              return {
-               probe(false, h, list), probe(false, list, nil, nil), probe(false, list, 5, nil),
-               probe(false, 1, 5), probe(false, 1, null), probe(false, 1), probe(false, list),
-               probe(true, list), probe(true, h, list, nil, nil), probe(true, h, 1, 1.5),
-               probe(true, h), probe(true, h, list, nil),
+               probe(false, h), probe(false, h, nil), probe(false, nil, nil),
+               probe(false, 5, nil), probe(false, 5), probe(false, null), probe(false),
+               probe(false, nil), probe(true), probe(true, 5), probe(true, h, nil, nil),
+               probe(true, h, 1.5, nil), probe(true, h, 1.5), probe(true, h),
+               probe(true, h, nil),
              }",
         )
-        .call((begin, handle(&lua), list, Value::NULL))
+        .call((begin, handle(&lua), Value::NULL))
         .unwrap();
-    let not_a_list = "nil|raise|models.loop needs a messages.new() list; build one with \
-                      messages.new() and :user, :append, or :replace";
+    let handle_first = "nil|raise|models.loop takes (compactor?); call handle:loop(compactor?) \
+                        to run on a model handle";
+    let loop_arity = "nil|raise|models.loop takes (compactor?)";
+    let no_receiver = "nil|raise|call loop on a model handle with a colon: handle:loop(compactor?)";
+    let method_arity = "nil|raise|handle:loop takes (compactor?)";
     let started = "function|yield|chat";
     assert_eq!(
         outcomes,
         [
-            "nil|raise|models.loop takes (messages, compactor?); call \
-             handle:loop(messages, compactor?) to run on a model handle",
-            "nil|raise|models.loop takes (messages, compactor?)",
-            "nil|raise|models.loop takes (messages, compactor?)",
+            handle_first,
+            handle_first,
+            loop_arity,
+            loop_arity,
             "nil|raise|compactor must be a function, got integer",
             "nil|raise|compactor must be a function, got userdata",
-            not_a_list,
             started,
-            "nil|raise|call loop on a model handle with a colon: \
-             handle:loop(messages, compactor?)",
-            "nil|raise|handle:loop takes (messages, compactor?)",
+            started,
+            no_receiver,
+            no_receiver,
+            method_arity,
+            method_arity,
             "nil|raise|compactor must be a function, got number",
-            not_a_list,
+            started,
             started,
         ]
     );
 }
 
 #[test]
+fn every_started_loop_yields_the_sections_one_list() {
+    let lua = Lua::new();
+    let list = install_section_list(&lua);
+    let (begin, _) = begin_with_flag(&lua, 2);
+    lua.load("messages:user('u')").exec().unwrap();
+    let (sent, served): (Value, Value) = lua
+        .load(
+            "local begin, h = ...
+             local function messages_sent(...)
+               local step, _, request = begin(...)
+               step(false, 'ended')
+               return request.messages
+             end
+             return messages_sent(false), messages_sent(true, h)",
+        )
+        .call((begin, handle(&lua)))
+        .unwrap();
+    let global: Value = lua.globals().get("messages").unwrap();
+    assert_eq!(sent, global);
+    assert_eq!(served, global);
+    assert_eq!(list.to_records(), vec![crate::tests::user("u")]);
+}
+
+#[test]
 fn a_running_loop_refuses_another_until_its_step_ends_or_fails() {
     let lua = Lua::new();
+    install_section_list(&lua);
     let (begin, running) = begin_with_flag(&lua, 2);
     let capped = loop_begin(
         &lua,
@@ -148,10 +188,9 @@ fn a_running_loop_refuses_another_until_its_step_ends_or_fails() {
     let is_running = lua
         .create_function(move |_, ()| Ok(flag.load(Ordering::Relaxed)))
         .unwrap();
-    let list = lua.create_userdata(MessageList::default()).unwrap();
     let seen: String = lua
         .load(
-            "local begin, capped, running, list, h = ...
+            "local begin, capped, running, h = ...
              local seen = {}
              local function note(label) seen[#seen + 1] = label .. '=' .. tostring(running()) end
              local function refusal(...)
@@ -159,19 +198,19 @@ fn a_running_loop_refuses_another_until_its_step_ends_or_fails() {
                return type(refused) .. '|' .. tag .. '|' .. tostring(err)
              end
              note('idle')
-             local step = begin(false, list)
+             local step = begin(false)
              note('started')
-             note('loop ' .. refusal(false, list))
-             note('method ' .. refusal(true, h, list))
+             note('loop ' .. refusal(false))
+             note('method ' .. refusal(true, h))
              note(step(false, 'ended'))
-             local _, exhausted = capped(false, list)
+             local _, exhausted = capped(false)
              note('capped ' .. exhausted)
-             local failing = begin(false, list)
+             local failing = begin(false)
              note('restarted')
              note(tostring(pcall(failing, true, 'not a round')))
              return table.concat(seen, ',')",
         )
-        .call((begin, capped, is_running, list, handle(&lua)))
+        .call((begin, capped, is_running, handle(&lua)))
         .unwrap();
     let refused = format!("nil|raise|{LOOP_RUNNING}=true");
     assert_eq!(

@@ -79,11 +79,10 @@ fn tool_messages(effect: &Effect) -> Vec<String> {
 fn a_rounds_catalog_calls_are_issued_in_one_step_and_append_in_call_order() {
     let md = one_section(
         "tools.offer('tools/echo')\n\
-         local msgs = messages.new()\n\
-         msgs:user('echo twice')\n\
-         models.loop(msgs)\n\
-         return msgs[3].tool_call_id .. '=' .. msgs[3].content \
-         .. '|' .. msgs[4].tool_call_id .. '=' .. msgs[4].content",
+         messages:user('echo twice')\n\
+         models.loop()\n\
+         return messages[3].tool_call_id .. '=' .. messages[3].content \
+         .. '|' .. messages[4].tool_call_id .. '=' .. messages[4].content",
     );
     let mut run = loop_scenario(md).offer("echo", echo_tool()).into_run();
     let mut events = Vec::new();
@@ -152,12 +151,11 @@ fn local_calls_run_alone_between_their_neighbors() {
          tools.offer_local('grab', 'Local grab', { value = 'string' }, function(args)\n\
            return 'grabbed ' .. args.value\n\
          end)\n\
-         local msgs = messages.new()\n\
-         msgs:user('use them all')\n\
-         models.loop(msgs)\n\
+         messages:user('use them all')\n\
+         models.loop()\n\
          local ids = {}\n\
-         for i = 3, 6 do ids[#ids + 1] = msgs[i].tool_call_id end\n\
-         return table.concat(ids, ',') .. '|' .. msgs[4].content",
+         for i = 3, 6 do ids[#ids + 1] = messages[i].tool_call_id end\n\
+         return table.concat(ids, ',') .. '|' .. messages[4].content",
     );
     let mut run = loop_scenario(md).offer("echo", echo_tool()).into_run();
     let (round, _) = only_effect(run.step());
@@ -202,10 +200,9 @@ fn local_calls_run_alone_between_their_neighbors() {
 fn a_call_the_round_cannot_bind_stops_the_batch_and_raises_once_the_issued_calls_land() {
     let md = one_section(
         "packs.offer('tools')\n\
-         local msgs = messages.new()\n\
-         msgs:user('asked')\n\
-         local ok, err = pcall(models.loop, msgs)\n\
-         return tostring(ok) .. ':' .. err.kind .. '|' .. #msgs",
+         messages:user('asked')\n\
+         local ok, err = pcall(models.loop)\n\
+         return tostring(ok) .. ':' .. err.kind .. '|' .. #messages",
     );
     let mut run = loop_scenario(md).offer("echo", echo_tool()).into_run();
     let (round, _) = only_effect(run.step());
@@ -248,9 +245,8 @@ fn cancelling_a_task_parked_on_a_batch_orphans_every_call() {
               return 'cancelled'\n```\n\n\
               ## Child\n\n```lua\n\
               tools.offer('tools/echo')\n\
-              local msgs = messages.new()\n\
-              msgs:user('go')\n\
-              models.loop(msgs)\n\
+              messages:user('go')\n\
+              models.loop()\n\
               return 'child done'\n```\n";
     let mut run = loop_scenario(md).offer("echo", echo_tool()).into_run();
     let (rounds, _) = pending(run.step());

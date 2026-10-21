@@ -175,10 +175,9 @@ fn tool_calls_count_increments_even_when_tool_errors() {
     ]);
     let source = one_section(
         "tools.offer('tools/failing')
-         local msgs = messages.new()
-         msgs:user('ask the model')
-         models.loop(msgs)
-         return msgs[#msgs].content .. '|' .. tostring(tools.calls['tools/failing'])",
+         messages:user('ask the model')
+         models.loop()
+         return messages[#messages].content .. '|' .. tostring(tools.calls['tools/failing'])",
     );
     let trace = loop_scenario(source)
         .offer("echo", failing_tool())
@@ -203,9 +202,8 @@ fn a_model_call_and_a_script_call_count_under_the_id_and_a_local_tool_under_its_
     let source = one_section(
         "tools.offer('tools/echo')
          tools.offer_local('grab', 'Grab a value', { value = 'string' }, function(args) return 'got ' .. args.value end)
-         local msgs = messages.new()
-         msgs:user('ask the model')
-         models.loop(msgs)
+         messages:user('ask the model')
+         models.loop()
          tools.call('tools/echo', { value = 'script' })
          local ok = pcall(function() return tools.calls.echo end)
          return tostring(tools.calls['tools/echo']) .. '|' .. tostring(tools.calls.grab) .. '|' .. tostring(ok)",

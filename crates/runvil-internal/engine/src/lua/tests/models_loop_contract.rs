@@ -32,12 +32,11 @@ fn an_empty_answer_with_no_empty_detail_raises_the_fallback_message() {
         let vm = scheduler_vm(&test_models(), None);
         let (thread, yielded) = start(
             &vm,
-            "local msgs = messages.new()\n\
-             msgs:user('hi')\n\
-             local ok, err = pcall(models.loop, msgs)\n\
+            "messages:user('hi')\n\
+             local ok, err = pcall(models.loop)\n\
              assert(not ok, 'an empty round raises')\n\
              return err.kind .. '|' .. tostring(err) .. '|' .. tostring(err.finish_reason) \
-             .. '|' .. #msgs",
+             .. '|' .. #messages",
         );
         assert!(
             matches!(parse_request(&vm, yielded), Request::Chat { .. }),

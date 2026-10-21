@@ -68,10 +68,9 @@ const LOOP_PROMPT: &str = "---\nname: bench_loop\ndescription: d\nrunvil: 0\nmod
     ```\n\n\
     ## Only\n\n\
     ```lua\n\
-    local msgs = messages.new()\n\
-    msgs:user('hi')\n\
-    models.loop(msgs)\n\
-    return msgs[#msgs].content\n\
+    messages:user('hi')\n\
+    models.loop()\n\
+    return messages[#messages].content\n\
     ```\n";
 
 /// Parses the loop prompt once for the whole benchmark.

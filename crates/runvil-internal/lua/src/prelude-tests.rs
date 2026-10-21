@@ -313,11 +313,11 @@ fn ui_and_item_collide_on_a_vm_that_binds_neither() {
 }
 
 #[test]
-fn argv_and_prose_collide_though_the_g_metatable_serves_them() {
+fn argv_prose_and_messages_collide_though_the_g_metatable_serves_them() {
     let vm = section_vm();
     vm.install_lazy_prose(|_| Ok("the block's prose".to_owned()))
         .expect("the prose guard installs");
-    for name in ["argv", "prose"] {
+    for name in ["argv", "prose", "messages"] {
         let raw: Value = vm.lua().globals().raw_get(name).expect("a raw read");
         assert!(
             raw.is_nil(),

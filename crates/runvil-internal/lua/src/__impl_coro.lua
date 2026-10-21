@@ -20,7 +20,8 @@
 -- protected call below raises it again instead of returning it,
 -- `is_model_handle(value)` reports whether a value is a model handle, and
 -- `loop_begin(entry, ...)` starts one `models.loop` call in Rust over the
--- run's round cap and the section's `compactors` table, returning the
+-- run's round cap, the section's `compactors` table, and the section's
+-- `messages` list, returning the
 -- call's step function and its first action. The `tasks` namespace and
 -- the `fanout` shim live in their own chunks (`__impl_tasks.lua`,
 -- `__impl_fanout.lua`), installed by the Engine right after this one over
@@ -244,9 +245,10 @@ local function drive(step, action, a, b)
   end
 end
 
--- models.loop(messages, compactor?) runs on the section's current model,
--- and a model handle's `loop`, as `h:loop(messages, compactor?)`, runs
--- every round on the handle's frozen binding. The Engine installs the
+-- models.loop(compactor?) runs the section's `messages` list on the
+-- section's current model, and a model handle's `loop`, as
+-- `h:loop(compactor?)`, runs every round on the handle's frozen binding.
+-- The Engine installs the
 -- first as models.loop. Each entry names itself to `loop_begin`, so the
 -- argument checks know the form without inspecting the arguments.
 local function models_loop(...)

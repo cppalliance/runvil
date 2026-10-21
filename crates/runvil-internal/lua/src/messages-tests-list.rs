@@ -57,15 +57,15 @@ fn request(list: &MessageList) -> Vec<Message> {
 
 #[test]
 fn each_builder_chains_and_appends_its_record() {
-    let vm = TestVm::new().messages().build();
+    let vm = TestVm::new().build();
     let same: bool = vm.eval(
-        "return msgs\
+        "return messages\
          :system('be terse')\
          :user('hi')\
          :assistant('working', { { id = 'call_1', name = 'echo', arguments = { value = 'hi' } } })\
          :tool('echoed', 'call_1')\
          :assistant('done')\
-         :append({ role = 'user', content = 'thanks' }) == msgs",
+         :append({ role = 'user', content = 'thanks' }) == messages",
     );
     assert!(same, "every builder must return the list it was called on");
     assert_eq!(
@@ -109,15 +109,15 @@ fn push_refuses_a_late_system_record_as_a_typed_edit_error_naming_its_position()
 /// Fills the list with `u1 a1 u2 a2`.
 #[track_caller]
 fn four(vm: &BuiltVm) {
-    vm.exec("msgs:user('u1'):assistant('a1'):user('u2'):assistant('a2')");
+    vm.exec("messages:user('u1'):assistant('a1'):user('u2'):assistant('a2')");
 }
 
 #[test]
 fn replace_with_no_records_deletes_the_range() {
     use Role::{Assistant, User};
-    let vm = TestVm::new().messages().build();
+    let vm = TestVm::new().build();
     four(&vm);
-    vm.exec("msgs:replace(2, 3)");
+    vm.exec("messages:replace(2, 3)");
     assert_eq!(
         texts(vm.messages()),
         expect(&[(User, "u1"), (Assistant, "a2")])
@@ -127,11 +127,11 @@ fn replace_with_no_records_deletes_the_range() {
 #[test]
 fn replace_with_first_one_past_last_inserts_before_first() {
     use Role::{Assistant, System, User};
-    let vm = TestVm::new().messages().build();
+    let vm = TestVm::new().build();
     four(&vm);
-    vm.exec("msgs:replace(3, 2, { role = 'user', content = 'mid' })");
-    vm.exec("msgs:replace(1, 0, { role = 'system', content = 'front' })");
-    vm.exec("msgs:replace(#msgs + 1, #msgs, { role = 'user', content = 'end' })");
+    vm.exec("messages:replace(3, 2, { role = 'user', content = 'mid' })");
+    vm.exec("messages:replace(1, 0, { role = 'system', content = 'front' })");
+    vm.exec("messages:replace(#messages + 1, #messages, { role = 'user', content = 'end' })");
     assert_eq!(
         texts(vm.messages()),
         expect(&[
@@ -149,10 +149,10 @@ fn replace_with_first_one_past_last_inserts_before_first() {
 #[test]
 fn replace_over_the_whole_list_swaps_every_record() {
     use Role::{System, User};
-    let vm = TestVm::new().messages().build();
+    let vm = TestVm::new().build();
     four(&vm);
     vm.exec(
-        "msgs:replace(1, #msgs, { role = 'system', content = 's' }, \
+        "messages:replace(1, #messages, { role = 'system', content = 's' }, \
          { role = 'user', content = 'summary' })",
     );
     assert_eq!(
@@ -163,16 +163,16 @@ fn replace_over_the_whole_list_swaps_every_record() {
 
 #[test]
 fn replace_out_of_bounds_is_refused_naming_the_bounds() {
-    let vm = TestVm::new().messages().build();
+    let vm = TestVm::new().build();
     let list = vm.messages();
     four(&vm);
     let before = list.to_records();
     for (call, range) in [
-        ("msgs:replace(0, 0)", "replace(0, 0)"),
-        ("msgs:replace(3, 1)", "replace(3, 1)"),
-        ("msgs:replace(2, 5)", "replace(2, 5)"),
-        ("msgs:replace(6, 5)", "replace(6, 5)"),
-        ("msgs:replace(-1, 2)", "replace(-1, 2)"),
+        ("messages:replace(0, 0)", "replace(0, 0)"),
+        ("messages:replace(3, 1)", "replace(3, 1)"),
+        ("messages:replace(2, 5)", "replace(2, 5)"),
+        ("messages:replace(6, 5)", "replace(6, 5)"),
+        ("messages:replace(-1, 2)", "replace(-1, 2)"),
     ] {
         assert_eq!(
             refusal(&vm, call),
@@ -192,20 +192,20 @@ fn replace_out_of_bounds_is_refused_naming_the_bounds() {
 
 #[test]
 fn replace_takes_integral_floats_and_refuses_other_bounds() {
-    let vm = TestVm::new().messages().build();
+    let vm = TestVm::new().build();
     let list = vm.messages();
     four(&vm);
     let before = list.to_records();
     assert_eq!(
-        refusal(&vm, "msgs:replace(1.5, 2)"),
+        refusal(&vm, "messages:replace(1.5, 2)"),
         "replace first must be an integer, got 1.5"
     );
     assert_eq!(
-        refusal(&vm, "msgs:replace(1, '2')"),
+        refusal(&vm, "messages:replace(1, '2')"),
         "replace last must be an integer, got string"
     );
     assert_eq!(
-        refusal(&vm, "msgs:replace(1)"),
+        refusal(&vm, "messages:replace(1)"),
         "replace last must be an integer, got nil"
     );
     assert_eq!(
@@ -213,15 +213,15 @@ fn replace_takes_integral_floats_and_refuses_other_bounds() {
         before,
         "a refused replace leaves the list unchanged"
     );
-    vm.exec("msgs:replace(2.0, 4.0)");
+    vm.exec("messages:replace(2.0, 4.0)");
     assert_eq!(list.to_records(), vec![user("u1")]);
 }
 
 #[test]
 fn a_system_record_after_a_non_system_record_is_refused_by_every_edit() {
-    let vm = TestVm::new().messages().build();
+    let vm = TestVm::new().build();
     let list = vm.messages();
-    vm.exec("msgs:system('s1'):system('s2'):user('u')");
+    vm.exec("messages:system('s1'):system('s2'):user('u')");
     let before = list.to_records();
     let late = |index: usize| {
         format!(
@@ -230,22 +230,28 @@ fn a_system_record_after_a_non_system_record_is_refused_by_every_edit() {
              replace(first, last, records...)"
         )
     };
-    assert_eq!(refusal(&vm, "msgs:system('late')"), late(4));
+    assert_eq!(refusal(&vm, "messages:system('late')"), late(4));
     assert_eq!(
-        refusal(&vm, "msgs:append({ role = 'system', content = 'late' })"),
+        refusal(
+            &vm,
+            "messages:append({ role = 'system', content = 'late' })"
+        ),
         late(4)
     );
     assert_eq!(
         refusal(
             &vm,
-            "msgs:replace(4, 3, { role = 'system', content = 'late' })"
+            "messages:replace(4, 3, { role = 'system', content = 'late' })"
         ),
         late(4)
     );
     // Replacing the first system record with a user record leaves the
     // second one behind a non-system record.
     assert_eq!(
-        refusal(&vm, "msgs:replace(1, 1, { role = 'user', content = 'u0' })"),
+        refusal(
+            &vm,
+            "messages:replace(1, 1, { role = 'user', content = 'u0' })"
+        ),
         late(2)
     );
     assert_eq!(
@@ -254,7 +260,7 @@ fn a_system_record_after_a_non_system_record_is_refused_by_every_edit() {
         "a refused edit leaves the list unchanged"
     );
     vm.exec(
-        "msgs:replace(1, 2, { role = 'system', content = 'one' }, \
+        "messages:replace(1, 2, { role = 'system', content = 'one' }, \
          { role = 'system', content = 'two' }, { role = 'system', content = 'three' })",
     );
     assert_eq!(
@@ -266,34 +272,34 @@ fn a_system_record_after_a_non_system_record_is_refused_by_every_edit() {
 
 #[test]
 fn a_record_that_breaks_a_per_record_rule_is_refused_at_its_position() {
-    let vm = TestVm::new().messages().build();
+    let vm = TestVm::new().build();
     let list = vm.messages();
     assert_eq!(
-        refusal(&vm, "msgs:user()"),
+        refusal(&vm, "messages:user()"),
         "messages[1] content must be a string or a non-empty array of content parts"
     );
-    vm.exec("msgs:user('u')");
+    vm.exec("messages:user('u')");
     let before = list.to_records();
     assert_eq!(
-        refusal(&vm, "msgs:tool('result')"),
+        refusal(&vm, "messages:tool('result')"),
         "messages[2] is a tool message and must set a string tool_call_id"
     );
     assert_eq!(
-        refusal(&vm, "msgs:assistant('a', { { name = 'echo' } })"),
+        refusal(&vm, "messages:assistant('a', { { name = 'echo' } })"),
         "messages[2] tool_calls[1] must set a string id"
     );
     assert_eq!(
-        refusal(&vm, "msgs:append({ role = 'robot', content = 'beep' })"),
+        refusal(&vm, "messages:append({ role = 'robot', content = 'beep' })"),
         "messages[2] role \"robot\" is unknown; known roles: system, user, assistant, tool"
     );
     assert_eq!(
-        refusal(&vm, "msgs:append('hello')"),
+        refusal(&vm, "messages:append('hello')"),
         "messages[2] must be a message table"
     );
     assert_eq!(
         refusal(
             &vm,
-            "msgs:replace(1, 1, { role = 'user', content = 'ok' }, { role = 'user' })"
+            "messages:replace(1, 1, { role = 'user', content = 'ok' }, { role = 'user' })"
         ),
         "messages[2] content must be a string or a non-empty array of content parts"
     );
@@ -306,19 +312,22 @@ fn a_record_that_breaks_a_per_record_rule_is_refused_at_its_position() {
 
 #[test]
 fn a_value_that_cannot_convert_to_json_is_refused_naming_where_it_was_given() {
-    let vm = TestVm::new().messages().build();
+    let vm = TestVm::new().build();
     let list = vm.messages();
-    vm.exec("msgs:user('u')");
+    vm.exec("messages:user('u')");
     let before = list.to_records();
     let unsupported = "unsupported value type `function`";
     for (call, subject) in [
-        ("msgs:system(tostring)", "messages[2] content"),
-        ("msgs:user({ tostring })", "messages[2] content"),
+        ("messages:system(tostring)", "messages[2] content"),
+        ("messages:user({ tostring })", "messages[2] content"),
         (
-            "msgs:assistant('a', { { id = 'call_1', name = 'echo', arguments = tostring } })",
+            "messages:assistant('a', { { id = 'call_1', name = 'echo', arguments = tostring } })",
             "messages[2] tool_calls",
         ),
-        ("msgs:tool('result', tostring)", "messages[2] tool_call_id"),
+        (
+            "messages:tool('result', tostring)",
+            "messages[2] tool_call_id",
+        ),
     ] {
         assert_eq!(
             refusal(&vm, call),
@@ -327,10 +336,10 @@ fn a_value_that_cannot_convert_to_json_is_refused_naming_where_it_was_given() {
         );
     }
     for (call, index) in [
-        ("msgs:append(tostring)", 2),
-        ("msgs:append({ role = 'user', content = tostring })", 2),
+        ("messages:append(tostring)", 2),
+        ("messages:append({ role = 'user', content = tostring })", 2),
         (
-            "msgs:replace(1, 1, { role = 'user', content = 'ok' }, tostring)",
+            "messages:replace(1, 1, { role = 'user', content = 'ok' }, tostring)",
             2,
         ),
     ] {
@@ -349,25 +358,25 @@ fn a_value_that_cannot_convert_to_json_is_refused_naming_where_it_was_given() {
 
 #[test]
 fn append_stores_a_record_without_its_extra_fields() {
-    let vm = TestVm::new().messages().build();
-    vm.exec("msgs:append({ role = 'user', content = 'raw', extra = 1, secret = 'key' })");
+    let vm = TestVm::new().build();
+    vm.exec("messages:append({ role = 'user', content = 'raw', extra = 1, secret = 'key' })");
     assert_eq!(vm.messages().to_records(), vec![user("raw")]);
 }
 
 #[test]
 fn index_assignment_is_refused_and_len_counts_the_records() {
-    let vm = TestVm::new().messages().build();
-    let empty: usize = vm.eval("return #msgs");
+    let vm = TestVm::new().build();
+    let empty: usize = vm.eval("return #messages");
     assert_eq!(empty, 0);
-    vm.exec("msgs:user('u'):assistant('a')");
-    let len: usize = vm.eval("return #msgs");
+    vm.exec("messages:user('u'):assistant('a')");
+    let len: usize = vm.eval("return #messages");
     assert_eq!(len, 2);
-    let refused = "a messages.new() list cannot be assigned to; add records with \
-                   append(record) and change them with replace(first, last, records...)";
+    let refused = "messages cannot be assigned to by index; add records with append(record) \
+                   and change them with replace(first, last, records...)";
     for assignment in [
-        "msgs[1] = { role = 'user', content = 'x' }",
-        "msgs[3] = { role = 'user', content = 'x' }",
-        "msgs.extra = 1",
+        "messages[1] = { role = 'user', content = 'x' }",
+        "messages[3] = { role = 'user', content = 'x' }",
+        "messages.extra = 1",
     ] {
         assert_eq!(refusal(&vm, assignment), refused, "{assignment}");
     }

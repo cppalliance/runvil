@@ -1,18 +1,14 @@
 //! Yield parsing for the `chat` request the `models.loop` shim yields: the
-//! handle and the `messages.new()` list, with every author-argument
-//! failure as the call's own answer. The per-record rules run as the list
-//! adds a record, so their tests sit with the list.
+//! handle, with every handle failure as the call's own answer, and the
+//! section's list, which only the Engine sets. The per-record rules run as
+//! the list adds a record, so their tests sit with the list.
 
 use mlua::IntoLua;
 
 use super::*;
 use crate::{MessageList, NonEmpty, RecordRole};
 
-/// The refusal for a `messages` value that is not a `messages.new()` list.
-const NOT_A_LIST: &str = "models.loop needs a messages.new() list; build one with \
-                          messages.new() and :user, :append, or :replace";
-
-/// A `messages.new()` list holding the records of the Lua array `records`.
+/// A list holding the records of the Lua array `records`.
 fn record_list(lua: &Lua, records: &str) -> AnyUserData {
     let list = lua
         .create_userdata(MessageList::default())
@@ -25,8 +21,8 @@ fn record_list(lua: &Lua, records: &str) -> AnyUserData {
     list
 }
 
-/// A `chat` request over a `messages.new()` list holding the records of
-/// the Lua array `records`, as the loop shim yields it.
+/// A `chat` request over a list holding the records of the Lua array
+/// `records`, as the loop shim yields it.
 fn chat_request(lua: &Lua, records: &str) -> mlua::Table {
     chat_request_with_handle(lua, records, Value::Nil)
 }
@@ -170,10 +166,11 @@ fn correlated_tool_results_hold_the_matching_call_ids() {
 }
 
 #[test]
-fn messages_that_are_not_a_list_are_the_calls_error() {
+fn messages_that_are_not_a_list_are_a_malformed_yield() {
     let lua = Lua::new();
-    // Absent, a non-table, a hand-written array, an empty table, and a
-    // userdata of another type are all refused with the list error.
+    // Only the Engine builds a chat request, so absent, a non-table, a
+    // hand-written array, an empty table, and a userdata of another type
+    // are all malformed.
     for source in [
         "{ op = 'chat' }",
         "{ op = 'chat', messages = 42 }",
@@ -181,14 +178,14 @@ fn messages_that_are_not_a_list_are_the_calls_error() {
         "{ op = 'chat', messages = {} }",
     ] {
         let table = lua_table(&lua, source);
-        expect_chat_call_error(Request::from_yield(&lua, &Value::Table(table)), NOT_A_LIST);
+        assert_direct_yield(Request::from_yield(&lua, &Value::Table(table)));
     }
     let other = lua_table_with(
         &lua,
         "local messages = ...\nreturn { op = 'chat', messages = messages }",
         handle_userdata(&lua),
     );
-    expect_chat_call_error(Request::from_yield(&lua, &Value::Table(other)), NOT_A_LIST);
+    assert_direct_yield(Request::from_yield(&lua, &Value::Table(other)));
 }
 
 #[test]

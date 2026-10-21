@@ -1,11 +1,11 @@
-//! Tests for the `messages.new()` list and its parse through the protocol.
+//! Tests for the section's `messages` list and its parse through the
+//! protocol.
 
-use mlua::{AnyUserData, Lua, LuaSerdeExt, Value};
+use mlua::{Lua, LuaSerdeExt, Value};
 use serde_json::json;
 
-use super::MessageList;
 use crate::Error;
-use crate::protocol::{Answer, Request, YieldParse};
+use crate::protocol::{Request, YieldParse};
 use crate::test_vm::TestVm;
 use crate::tests::{system, user};
 
@@ -28,44 +28,34 @@ fn chat_parse(lua: &Lua, messages: Value) -> YieldParse {
     Request::from_yield(lua, &Value::Table(request))
 }
 
-/// The call error a chat parse answered with.
-fn chat_error(parse: YieldParse) -> String {
-    match parse {
-        YieldParse::Call(Answer::Chat(Err(Error::Lua(message)))) => message,
-        other => panic!("expected the chat call error, got {other:?}"),
-    }
+#[test]
+fn messages_is_the_vms_one_empty_list_and_lua_reaches_no_other() {
+    let vm = TestVm::new().build();
+    let (kind, len, first_nil, same, new_nil): (String, i64, bool, bool, bool) = vm.eval(
+        "local first = messages\n\
+         return type(messages), #messages, messages[1] == nil, first == messages,\n\
+           messages['new'] == nil",
+    );
+    assert_eq!((kind.as_str(), len), ("userdata", 0));
+    assert!(first_nil && same && new_nil);
+    vm.exec("messages:user('u')");
+    assert_eq!(vm.messages().to_records(), vec![user("u")]);
 }
 
 #[test]
-fn new_returns_an_empty_list() {
+fn a_chat_request_whose_messages_is_not_a_list_is_a_malformed_yield() {
     let vm = TestVm::new().build();
-    let (kind, len, first_nil): (String, i64, bool) =
-        vm.eval("local l = messages.new(); return type(l), #l, l[1] == nil");
-    assert_eq!(kind, "userdata");
-    assert_eq!(len, 0);
-    assert!(first_nil);
-}
-
-#[test]
-fn each_new_call_returns_a_separate_list() {
-    let vm = TestVm::new().build();
-    let (first, second): (usize, usize) =
-        vm.eval("local a, b = messages.new(), messages.new(); a:user('x'); return #a, #b");
-    assert_eq!((first, second), (1, 0));
-}
-
-#[test]
-fn the_chat_parse_refuses_a_plain_table_with_the_list_error() {
-    let vm = TestVm::new().build();
-    let refusal = "models.loop needs a messages.new() list; build one with \
-                   messages.new() and :user, :append, or :replace";
+    vm.exec("messages:user('u')");
     for source in [
-        "{ { role = 'system', content = 'be terse' }, { role = 'user', content = 'hi' } }",
-        "{}",
+        "return { { role = 'system', content = 'be terse' }, { role = 'user', content = 'hi' } }",
+        "return {}",
+        "return 'messages'",
+        "return nil",
+        "return messages[1]",
     ] {
-        assert_eq!(
-            chat_error(chat_parse(vm.lua(), vm.eval(source))),
-            refusal,
+        let messages = vm.eval(source);
+        assert!(
+            matches!(chat_parse(vm.lua(), messages), YieldParse::Malformed(_)),
             "{source}"
         );
     }
@@ -75,7 +65,7 @@ fn the_chat_parse_refuses_a_plain_table_with_the_list_error() {
 fn a_non_empty_list_parses_to_a_chat_request_holding_that_list() {
     let vm = TestVm::new().build();
     let lua = vm.lua();
-    let built = vm.eval("msgs = messages.new():system('be terse'):user('hi') return msgs");
+    let built = vm.eval("messages:system('be terse'):user('hi') return messages");
     let list = match chat_parse(lua, built) {
         YieldParse::Request(Request::Chat { list, binding }) => {
             assert!(binding.is_none(), "a round without a handle has no binding");
@@ -83,22 +73,13 @@ fn a_non_empty_list_parses_to_a_chat_request_holding_that_list() {
         }
         other => panic!("expected a chat request, got {other:?}"),
     };
-    let held = lua
-        .globals()
-        .get::<AnyUserData>("msgs")
-        .expect("msgs is the list userdata")
-        .borrow::<MessageList>()
-        .expect("msgs is a MessageList")
-        .to_records();
-    assert_eq!(list.to_records(), held);
+    assert_eq!(list.to_records(), vm.messages().to_records());
     assert_eq!(list.to_records(), vec![system("be terse"), user("hi")]);
-    lua.load("msgs:user('more')")
-        .exec()
-        .expect("test source runs");
+    vm.exec("messages:user('more')");
     assert_eq!(
         list.to_records().len(),
         3,
-        "the request holds the author's list, not a copy"
+        "the request holds the section's list, not a copy"
     );
 }
 
@@ -106,7 +87,7 @@ fn a_non_empty_list_parses_to_a_chat_request_holding_that_list() {
 fn a_list_or_a_record_view_is_refused_by_the_var_and_prose_guards() {
     let vm = TestVm::new().build();
     vm.install_lazy_prose(|state| {
-        let refusals = ["msgs", "record"].map(|name| match (state.globals)(name) {
+        let refusals = ["messages", "record"].map(|name| match (state.globals)(name) {
             Err(Error::Lua(message)) => message,
             other => format!("{name} was not refused: {other:?}"),
         });
@@ -114,11 +95,11 @@ fn a_list_or_a_record_view_is_refused_by_the_var_and_prose_guards() {
     })
     .expect("the prose guard installs");
     let (writes, prose): (String, String) = vm.eval(
-        "msgs = messages.new():user('u')\n\
-         record = msgs[1]\n\
+        "messages:user('u')\n\
+         record = messages[1]\n\
          local out = {}\n\
          for _, write in ipairs({\n\
-           function() var.list = msgs end,\n\
+           function() var.list = messages end,\n\
            function() var.record = record end,\n\
          }) do\n\
            local ok, err = pcall(write)\n\
@@ -132,7 +113,7 @@ fn a_list_or_a_record_view_is_refused_by_the_var_and_prose_guards() {
     );
     assert_eq!(
         prose,
-        "global `msgs` is a userdata; bare globals in prose must be JSON data|\
+        "global `messages` is a userdata; bare globals in prose must be JSON data|\
          global `record` is a userdata; bare globals in prose must be JSON data"
     );
 }
@@ -141,8 +122,8 @@ fn a_list_or_a_record_view_is_refused_by_the_var_and_prose_guards() {
 fn the_list_runs_under_the_hardened_section_sandbox() {
     let vm = TestVm::new().build();
     let views: Value = vm.eval(
-        "local msgs = messages.new():system('s'):user('u')\n\
-         return { msgs[1], msgs[2] }",
+        "messages:system('s'):user('u')\n\
+         return { messages[1], messages[2] }",
     );
     let json: serde_json::Value = vm
         .lua()

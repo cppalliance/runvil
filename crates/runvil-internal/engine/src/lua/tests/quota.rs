@@ -70,7 +70,7 @@ fn a_models_loop_round_costs_the_trampoline_a_few_lua_instructions_per_yield() {
     let vm = scheduler_vm_with_tools(&test_models(), &test_tools(), None);
     let function = vm
         .lua()
-        .load("local msgs = messages.new()\nmsgs:user('hi')\nmodels.loop(msgs)\nreturn #msgs")
+        .load("messages:user('hi')\nmodels.loop()\nreturn #messages")
         .into_function()
         .expect("the loop block compiles");
     let thread = vm

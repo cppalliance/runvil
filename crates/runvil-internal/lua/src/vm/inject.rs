@@ -1,6 +1,7 @@
 //! Engine injection: the one step that turns an uninjected section VM into
-//! an injected one, installing `args`, `argv`, `sys`, `var`, and the
-//! `tools`, `packs`, `models`, `messages`, and `compactors` tables.
+//! an injected one, installing `args`, `argv`, `sys`, `var`, the `tools`,
+//! `packs`, `models`, and `compactors` tables, and the VM's `messages`
+//! list.
 
 use std::sync::Arc;
 
@@ -147,7 +148,7 @@ impl SectionVm<Uninjected> {
             &self.model_runtime,
             self.raw_model_ids,
         )?;
-        install_messages(&self.lua, &globals)?;
+        install_messages(&self.lua, &self.messages)?;
         install_compactors(&self.lua, &globals)
     }
 
@@ -171,6 +172,7 @@ impl SectionVm<Uninjected> {
             local_tools,
             instruction_budget,
             raw_model_ids,
+            messages,
             state: Uninjected,
         } = self;
         SectionVm {
@@ -191,6 +193,7 @@ impl SectionVm<Uninjected> {
             local_tools,
             instruction_budget,
             raw_model_ids,
+            messages,
             state: Injected { access },
         }
     }

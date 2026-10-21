@@ -63,8 +63,8 @@ const MAIN_JOINS: &str = "## Main\n\n```lua\n\
 /// message, `user`, and returns `result`.
 fn looping(section: &str, user: &str, result: &str) -> String {
     format!(
-        "## {section}\n\n```lua\ntools.offer('{TOOL}')\nlocal msgs = messages.new()\n\
-         msgs:user('{user}')\nmodels.loop(msgs)\nreturn '{result}'\n```\n\n"
+        "## {section}\n\n```lua\ntools.offer('{TOOL}')\n\
+         messages:user('{user}')\nmodels.loop()\nreturn '{result}'\n```\n\n"
     )
 }
 

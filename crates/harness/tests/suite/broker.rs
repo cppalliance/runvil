@@ -29,10 +29,9 @@ const INFERS_THEN_CHATS: &str = "---\nname: rounds\ndescription: infers then cha
     # Rounds\n\n```lua\nmodels.default('writer')\n```\n\n\
     ## Only\n\n```lua\n\
     local inferred = models.infer('infer round')\n\
-    local msgs = messages.new()\n\
-    msgs:user('chat round')\n\
-    models.loop(msgs)\n\
-    return inferred .. '|' .. msgs[#msgs].content\n\
+    messages:user('chat round')\n\
+    models.loop()\n\
+    return inferred .. '|' .. messages[#messages].content\n\
     ```\n";
 
 /// Lists its catalog, notes each round it serves, and replies

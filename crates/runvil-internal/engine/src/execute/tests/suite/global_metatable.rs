@@ -1,8 +1,8 @@
 //! An author's own metatable on `_G`: it keeps working for every other
 //! global (defaults, strict errors, write hooks) in the H1 pass and in
 //! later sections, set by a required library and across fences, while
-//! `argv` and `prose` stay guarded whatever author code does to `_G`'s
-//! metatable.
+//! `argv`, `prose`, and `messages` stay guarded whatever author code does
+//! to `_G`'s metatable.
 
 use runvil_parser::test_support::PromptSource;
 
@@ -65,7 +65,7 @@ fn a_library_defaults_metatable_works_beside_frozen_argv_and_read_only_prose() {
 }
 
 #[test]
-fn a_strict_metatable_raises_its_own_error_while_the_guard_serves_argv_and_prose() {
+fn a_strict_metatable_raises_its_own_error_while_the_guard_serves_argv_prose_and_messages() {
     let source = query_source()
         .h1(
             "
@@ -86,6 +86,7 @@ fn a_strict_metatable_raises_its_own_error_while_the_guard_serves_argv_and_prose
             assert(err:find(']:2: undefined global undefined_here', 1, true), 'the error names the reading line: ' .. err)
             assert(argv.query == 'x', 'the guard serves argv, not the strict handler')
             assert(prose == 'Hi.', 'the guard serves prose, not the strict handler')
+            assert(#messages == 0, 'the guard serves messages, not the strict handler')
             return 'strict'
             ```",
         )

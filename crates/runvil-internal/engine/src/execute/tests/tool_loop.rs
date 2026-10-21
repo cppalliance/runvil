@@ -63,13 +63,12 @@ fn tool_loop_exhaustion_is_readable_at_the_call_site_after_whole_exchanges() {
     let source = capped(
         2,
         "tools.offer('tools/echo')
-         local msgs = messages.new()
-         msgs:user('loop forever')
-         local ok, err = pcall(models.loop, msgs)
+         messages:user('loop forever')
+         local ok, err = pcall(models.loop)
          assert(not ok, 'the cap raises')
-         assert(#msgs == 5, 'two whole exchanges were appended before the cap')
-         assert(msgs[2].tool_calls[1].id == 'call_0' and msgs[3].tool_call_id == 'call_0')
-         assert(msgs[4].tool_calls[1].id == 'call_1' and msgs[5].tool_call_id == 'call_1')
+         assert(#messages == 5, 'two whole exchanges were appended before the cap')
+         assert(messages[2].tool_calls[1].id == 'call_0' and messages[3].tool_call_id == 'call_0')
+         assert(messages[4].tool_calls[1].id == 'call_1' and messages[5].tool_call_id == 'call_1')
          return err.kind .. '|' .. tostring(err)",
     );
     let trace = loop_scenario(source)
@@ -158,11 +157,10 @@ fn a_failing_tool_becomes_an_untrusted_error_result_and_the_loop_continues() {
     ]);
     let source = one_section(
         "tools.offer('tools/failing')
-         local msgs = messages.new()
-         msgs:user('ask the model')
-         models.loop(msgs)
-         assert(msgs[3].role == 'tool' and msgs[3].tool_call_id == 'call_x', 'the failure is the call record')
-         return msgs[3].content .. '|' .. msgs[4].content",
+         messages:user('ask the model')
+         models.loop()
+         assert(messages[3].role == 'tool' and messages[3].tool_call_id == 'call_x', 'the failure is the call record')
+         return messages[3].content .. '|' .. messages[4].content",
     );
     let trace = loop_scenario(source)
         .offer("echo", failing_tool())
@@ -237,9 +235,8 @@ fn a_failing_model_turn_is_reported_before_the_error_propagates() {
         "private backend response",
     )]);
     let source = one_section(
-        "local msgs = messages.new()
-         msgs:user('private model input')
-         models.loop(msgs)
+        "messages:user('private model input')
+         models.loop()
          return 'unreachable'",
     );
     let trace = loop_scenario(source).chat(&gateway).run();

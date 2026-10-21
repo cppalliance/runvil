@@ -40,7 +40,7 @@ fn projection_error(records: &[MessageRecord]) -> String {
     }
 }
 
-/// Builds a `messages.new()` list from a Lua-authored record array and
+/// Builds a list from a Lua-authored record array and
 /// parses it through the chat protocol boundary, as a `models.loop`
 /// round's yield would, so the projection sees the same records dispatch
 /// sees.

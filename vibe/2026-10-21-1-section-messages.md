@@ -694,7 +694,7 @@ Commit and rules:
 
 <step-2>
 
-### Step 2: Inject one `messages` list per section VM
+### Step 2: Inject one `messages` list per section VM [completed]
 
 - Component: Section conversation
 - Tests: run in PowerShell from `c:\Users\Vinnie\cursor\runvil`, in this order:

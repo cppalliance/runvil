@@ -1,11 +1,11 @@
 //! The per-dispatch context projection: cross-record validation and
 //! provider-shape healing over a validated message list.
 //!
-//! A `messages.new()` list validates each record's own fields once, as it
-//! adds the record, and the protocol parse ([`crate::protocol`]) checks only
-//! that a round names a non-empty list. Everything that is a property of
+//! The section's `messages` list validates each record's own fields once,
+//! as it adds the record, and the protocol parse ([`crate::protocol`])
+//! checks only that a round names a list. Everything that is a property of
 //! the list rather than of one record sits here and runs immediately before
-//! dispatch, on every model call, over whichever records the author's list
+//! dispatch, on every model call, over whichever records the section's list
 //! holds at that moment:
 //!
 //! - `tool_calls` belong to assistant records (a record holds a

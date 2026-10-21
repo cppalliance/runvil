@@ -103,10 +103,9 @@ fn grab_block(setup: &str, handler: &str) -> String {
          tools.offer_local('grab', 'Grab a value', {{ value = 'string' }}, function(args)\n\
            {handler}\n\
          end)\n\
-         local msgs = messages.new()\n\
-         msgs:user('Use the tools.')\n\
-         models.loop(msgs)\n\
-         return msgs[#msgs].content"
+         messages:user('Use the tools.')\n\
+         models.loop()\n\
+         return messages[#messages].content"
     )
 }
 
@@ -120,16 +119,15 @@ const OFFER_ECHO: &str = "tools.offer('tools/echo')\n";
 const LOOP_RUNNING: &str = "a loop or a compactor is already running in this section; \
                             ask a side question with models.infer(prompt)";
 
-/// Lua text defining `run_loop(text, compactor)`, which runs `models.loop`
-/// under `compactor` over a list holding the one user message `text` and
-/// returns the last record's text, followed by `body`.
+/// Lua text defining `run_loop(text, compactor)`, which appends the user
+/// message `text` to the section's list, runs `models.loop` under
+/// `compactor`, and returns the last record's text, followed by `body`.
 fn with_run_loop(body: &str) -> String {
     format!(
         "local function run_loop(text, compactor)\n\
-           local msgs = messages.new()\n\
-           msgs:user(text)\n\
-           models.loop(msgs, compactor)\n\
-           return msgs[#msgs].content\n\
+           messages:user(text)\n\
+           models.loop(compactor)\n\
+           return messages[#messages].content\n\
          end\n\
          {body}"
     )
@@ -182,7 +180,7 @@ fn a_handlers_loop_during_a_loop_raises_loop_running_as_a_lua_error() {
     let source = one_section(&with_run_loop(
         "local refusal\n\
          tools.offer_local('grab', 'Grab a value', { value = 'string' }, function()\n\
-           local ok, err = pcall(run_loop, 'inner')\n\
+           local ok, err = pcall(models.loop)\n\
            refusal = tostring(ok) .. '|' .. err.kind .. '|' .. tostring(err)\n\
            return 'refused'\n\
          end)\n\
@@ -206,7 +204,7 @@ fn an_overflow_compactors_loop_raises_loop_running() {
     let gateway = ScriptedChat::new(vec![text("unreachable")]);
     let source = one_section(&with_run_loop(
         "local ok, err = pcall(run_loop, string.rep('x', 100000), function()\n\
-           run_loop('inner')\n\
+           models.loop()\n\
          end)\n\
          return tostring(ok) .. '|' .. err.kind .. '|' .. tostring(err)",
     ));
@@ -232,13 +230,15 @@ fn a_loop_after_an_earlier_loop_returned_runs_normally() {
 
 #[test]
 fn a_loop_after_an_earlier_loop_raised_under_pcall_runs_normally() {
+    // The section's list is still empty at the first loop, so its round is
+    // refused and the loop raises without leaving a record behind.
     let gateway = ScriptedChat::new(vec![text("after")]);
     let source = one_section(&with_run_loop(
-        "local ok, err = pcall(run_loop, string.rep('x', 100000))\n\
+        "local ok, err = pcall(models.loop)\n\
          return tostring(ok) .. '|' .. err.kind .. '|' .. run_loop('small')",
     ));
     let trace = loop_scenario(source).chat(&gateway).run();
-    assert_eq!(trace.text(), "false|context_exhausted|after");
+    assert_eq!(trace.text(), "false|lua|after");
     assert_eq!(
         gateway.call_count(),
         1,

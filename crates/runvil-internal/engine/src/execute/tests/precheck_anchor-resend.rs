@@ -16,15 +16,14 @@ fn a_refused_send_writes_no_record_and_the_resend_extends_the_last_issued_round(
     // 512-token reserve refuse the second request before it leaves. The
     // author swaps that message for a short one and sends again, which
     // fits.
-    let section = "local msgs = messages.new()\n\
-         msgs:user('xxxxx')\n\
-         models.loop(msgs)\n\
-         msgs:user(string.rep('y', 400))\n\
-         local ok, err = pcall(models.loop, msgs)\n\
+    let section = "messages:user('xxxxx')\n\
+         models.loop()\n\
+         messages:user(string.rep('y', 400))\n\
+         local ok, err = pcall(models.loop)\n\
          assert(not ok and err.reason == 'precheck', 'the precheck refuses the send')\n\
-         msgs:replace(#msgs, #msgs, { role = 'user', content = 'zz' })\n\
-         models.loop(msgs)\n\
-         return msgs[#msgs].content";
+         messages:replace(#messages, #messages, { role = 'user', content = 'zz' })\n\
+         models.loop()\n\
+         return messages[#messages].content";
     let gateway = ScriptedChat::new(vec![reply_with_usage("ok", 3400, 100, None), text("done")]);
     let rig = Rig::run(loop_scenario(one_section(section)).chat(&gateway));
     assert_eq!(

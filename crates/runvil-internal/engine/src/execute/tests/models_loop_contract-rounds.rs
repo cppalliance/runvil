@@ -112,11 +112,10 @@ fn a_failing_bound_tool_counts_toward_the_clean_exit() {
     ]);
     let source = one_section(
         "tools.offer('tools/failing')
-         local msgs = messages.new()
-         msgs:user('try the tool')
-         local result = models.loop(msgs)
-         return tostring(result) .. '|' .. #msgs .. '|' .. msgs[3].role \
-         .. '|' .. msgs[4].role .. ':' .. msgs[4].content",
+         messages:user('try the tool')
+         local result = models.loop()
+         return tostring(result) .. '|' .. #messages .. '|' .. messages[3].role \
+         .. '|' .. messages[4].role .. ':' .. messages[4].content",
     );
     let trace = loop_scenario(source)
         .offer("fail", failing_tool())
@@ -143,13 +142,12 @@ fn the_clean_exit_counts_only_the_calls_of_its_own_loop_call() {
     ]);
     let source = one_section(
         "tools.offer('tools/echo')
-         local msgs = messages.new()
-         msgs:user('first')
-         models.loop(msgs)
-         msgs:user('second')
-         local ok, err = pcall(models.loop, msgs)
+         messages:user('first')
+         models.loop()
+         messages:user('second')
+         local ok, err = pcall(models.loop)
          return tostring(ok) .. '|' .. err.kind .. '|' .. tostring(err.finish_reason) \
-         .. '|' .. #msgs .. '|' .. msgs[3].role",
+         .. '|' .. #messages .. '|' .. messages[3].role",
     );
     let trace = loop_scenario(source)
         .offer("echo", echo_tool())
@@ -175,11 +173,10 @@ fn a_handler_raising_mid_batch_leaves_the_list_untouched_and_raises_its_own_tabl
            if count == 2 then error(own) end
            return 'grabbed ' .. args.value
          end)
-         local msgs = messages.new()
-         msgs:user('grab twice')
-         local ok, err = pcall(models.loop, msgs)
+         messages:user('grab twice')
+         local ok, err = pcall(models.loop)
          return tostring(ok) .. '|' .. tostring(err == own) .. '|' .. count \
-         .. '|' .. #msgs .. '|' .. msgs[1].role",
+         .. '|' .. #messages .. '|' .. messages[1].role",
     );
     let trace = loop_scenario(source).chat(&gateway).run();
     assert_eq!(trace.text(), "false|true|2|1|user");
@@ -202,10 +199,9 @@ fn a_handler_raising_mid_batch_leaves_the_list_untouched_and_raises_its_own_tabl
 fn a_dropped_model_issued_call_raises_cancelled_at_the_loop_call_site() {
     let source = one_section(
         "tools.offer('tools/echo')
-         local msgs = messages.new()
-         msgs:user('asked')
-         local ok, err = pcall(models.loop, msgs)
-         return tostring(ok) .. ':' .. err.kind .. '|' .. #msgs .. '|' .. msgs[1].role",
+         messages:user('asked')
+         local ok, err = pcall(models.loop)
+         return tostring(ok) .. ':' .. err.kind .. '|' .. #messages .. '|' .. messages[1].role",
     );
     let mut run = loop_scenario(source).offer("echo", echo_tool()).into_run();
     let (round, effect) = only_effect(run.step());
@@ -244,10 +240,9 @@ fn a_local_tools_first_return_value_is_its_text_and_nil_is_empty() {
         "tools.offer_local('none', 'Returns nothing', {}, function() end)
          tools.offer_local('num', 'Returns a number', {}, function() return 42 end)
          tools.offer_local('two', 'Returns two values', {}, function() return 'first', 'second' end)
-         local msgs = messages.new()
-         msgs:user('call all three')
-         models.loop(msgs)
-         return '[' .. msgs[3].content .. ']|' .. msgs[4].content .. '|' .. msgs[5].content",
+         messages:user('call all three')
+         models.loop()
+         return '[' .. messages[3].content .. ']|' .. messages[4].content .. '|' .. messages[5].content",
     );
     let trace = loop_scenario(source).chat(&gateway).run();
     assert_eq!(trace.text(), "[]|42|first");
@@ -266,9 +261,8 @@ fn a_local_tool_cancelled_mid_handler_reports_no_failed_tool_call() {
         "tools.offer_local('grab', 'Grab a value', { value = 'string' }, function(args)
            while true do end
          end)
-         local msgs = messages.new()
-         msgs:user('Use the tool.')
-         models.loop(msgs)
+         messages:user('Use the tool.')
+         models.loop()
          return 'unreachable'",
     );
     let mut driving = loop_scenario(source).chat(&gateway).start();
@@ -302,10 +296,9 @@ fn the_scheduler_reports_the_whole_trace_of_a_bound_round_a_local_round_and_a_re
          tools.offer_local('grab', 'Local grab', { value = 'string' }, function(args)
            return 'grabbed ' .. args.value
          end)
-         local msgs = messages.new()
-         msgs:user('use both tools')
-         models.loop(msgs)
-         return msgs[#msgs].content",
+         messages:user('use both tools')
+         models.loop()
+         return messages[#messages].content",
     );
     let trace = loop_scenario(source.build())
         .offer("echo", echo_tool())

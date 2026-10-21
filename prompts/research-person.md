@@ -37,8 +37,7 @@ Do this:
 Cover, when known: who the person is and why they are notable, their background, their major work or contributions, and any widely reported recent developments. State plainly when something is uncertain or could not be verified.
 
 ```lua
-local msgs = messages.new()
-msgs:user(prose)
-models.loop(msgs)
-return msgs[#msgs].content
+messages:user(prose)
+models.loop()
+return messages[#messages].content
 ```

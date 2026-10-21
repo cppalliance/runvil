@@ -131,13 +131,12 @@ fn a_dropped_chat_or_tool_call_resumes_a_pcall_with_the_cancelled_error_and_the_
 #[test]
 fn a_dropped_loop_round_resumes_a_pcall_with_the_cancelled_error_and_the_run_continues() {
     let mut run = bound_run(
-        "local msgs = messages.new()\n\
-         msgs:user('asked')\n\
-         local loop_ok, loop_err = pcall(models.loop, msgs)\n\
-         local after_drop = #msgs\n\
-         models.loop(msgs)\n\
+        "messages:user('asked')\n\
+         local loop_ok, loop_err = pcall(models.loop)\n\
+         local after_drop = #messages\n\
+         models.loop()\n\
          return tostring(loop_ok) .. ':' .. loop_err.kind .. '|' .. after_drop \
-         .. '|' .. #msgs .. ':' .. msgs[#msgs].content",
+         .. '|' .. #messages .. ':' .. messages[#messages].content",
     );
     let (id, effect) = only_effect(run.step());
     assert!(
@@ -201,7 +200,7 @@ fn a_dropped_loop_round_resumes_a_pcall_with_the_cancelled_error_and_the_run_con
 fn an_uncaught_dropped_chat_or_tool_call_ends_the_run_cancelled() {
     for body in [
         "return models.infer('dropped')",
-        "local msgs = messages.new()\nmsgs:user('dropped')\nreturn models.loop(msgs)",
+        "messages:user('dropped')\nreturn models.loop()",
         "return tools.call('tools/echo', { value = 'dropped' })",
     ] {
         let mut run = bound_run(body);

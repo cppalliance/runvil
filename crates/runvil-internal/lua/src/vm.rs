@@ -35,6 +35,7 @@ use crate::error::{Error, Result};
 use crate::handles::ToolSet;
 use crate::hardening::{InstructionBudget, harden, install_instruction_budget};
 use crate::iteration::install_deterministic_iteration;
+use crate::messages::MessageList;
 use crate::models::{ModelRuntime, RawModelIds};
 use crate::program::LuaProgram;
 use crate::scope::ToolRuntime;
@@ -162,6 +163,8 @@ pub struct SectionVm<S = Injected> {
     /// by [`allow_raw_model_ids`](SectionVm::allow_raw_model_ids) before
     /// Engine injection; refused everywhere else.
     raw_model_ids: RawModelIds,
+    /// The section's one conversation, served as the `messages` global.
+    messages: MessageList,
     /// The lifecycle stage: [`Uninjected`] or [`Injected`].
     state: S,
 }
@@ -280,6 +283,7 @@ impl SectionVm<Uninjected> {
             local_tools: LocalTools::default(),
             instruction_budget: InstructionBudget::default(),
             raw_model_ids: RawModelIds::Refused,
+            messages: MessageList::default(),
             state: Uninjected,
         };
         if let Err(error) = harden(&vm.lua) {
@@ -387,6 +391,13 @@ impl<S> SectionVm<S> {
     #[must_use]
     pub fn model_runtime(&self) -> &Arc<Mutex<ModelRuntime>> {
         &self.model_runtime
+    }
+
+    /// The section's one conversation, which the `messages` global holds
+    /// from Engine injection until the VM drops.
+    #[must_use]
+    pub fn messages(&self) -> &MessageList {
+        &self.messages
     }
 
     /// Destroys this section VM at an explicit observed lifecycle boundary.

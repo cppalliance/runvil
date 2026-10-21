@@ -1,5 +1,5 @@
-//! A run log's Chat records rebuild every request a `messages.new()` list
-//! sent: walking the records in log order, the first `keep` messages of
+//! A run log's Chat records rebuild every request a section's `messages`
+//! list sent: walking the records in log order, the first `keep` messages of
 //! the request rebuilt for `after`, then the record's own messages, equal
 //! the wire messages on that round's live effect. Each case edits the list
 //! between sends in a way that changes what the log must hold.
@@ -127,10 +127,9 @@ fn assistant(content: &str) -> Value {
 #[test]
 fn a_tool_round_logs_only_the_call_and_its_result() {
     let (scenario, log) = echo_rounds(
-        "local msgs = messages.new()\n\
-         msgs:user('hello')\n\
-         models.loop(msgs)\n\
-         return msgs[#msgs].content",
+        "messages:user('hello')\n\
+         models.loop()\n\
+         return messages[#messages].content",
         vec![
             chat_answer(&calls(&[("call_1", "echo", r#"{"value":"hi"}"#)])),
             chat_answer(&text("done")),
@@ -151,16 +150,15 @@ fn a_tool_round_logs_only_the_call_and_its_result() {
 #[test]
 fn a_compaction_keeps_only_the_messages_before_the_first_change() {
     let (scenario, log) = echo_rounds(
-        "local msgs = messages.new()\n\
-         msgs:system('be brief')\n\
-         msgs:user('one')\n\
-         models.loop(msgs)\n\
-         msgs:user('two')\n\
-         models.loop(msgs)\n\
-         msgs:replace(2, 4, { role = 'user', content = 'one and two' })\n\
-         msgs:user('three')\n\
-         models.loop(msgs)\n\
-         return msgs[#msgs].content",
+        "messages:system('be brief')\n\
+         messages:user('one')\n\
+         models.loop()\n\
+         messages:user('two')\n\
+         models.loop()\n\
+         messages:replace(2, 4, { role = 'user', content = 'one and two' })\n\
+         messages:user('three')\n\
+         models.loop()\n\
+         return messages[#messages].content",
         vec![
             chat_answer(&text("a1")),
             chat_answer(&text("a2")),
@@ -194,14 +192,13 @@ fn a_compaction_keeps_only_the_messages_before_the_first_change() {
 #[test]
 fn an_add_then_a_remove_between_two_sends_adds_nothing_to_the_log() {
     let (scenario, log) = echo_rounds(
-        "local msgs = messages.new()\n\
-         msgs:user('one')\n\
-         models.loop(msgs)\n\
-         msgs:user('two')\n\
-         msgs:user('scratch')\n\
-         msgs:replace(#msgs, #msgs)\n\
-         models.loop(msgs)\n\
-         return msgs[#msgs].content",
+        "messages:user('one')\n\
+         models.loop()\n\
+         messages:user('two')\n\
+         messages:user('scratch')\n\
+         messages:replace(#messages, #messages)\n\
+         models.loop()\n\
+         return messages[#messages].content",
         vec![chat_answer(&text("a1")), chat_answer(&text("a2"))],
     );
     let trace = scenario.run();
@@ -223,12 +220,11 @@ fn an_add_then_a_remove_between_two_sends_adds_nothing_to_the_log() {
 fn a_resend_with_no_changes_logs_no_messages_and_keeps_the_whole_request() {
     let failure = CompletionError::new(CompletionErrorKind::MalformedResponse, "garbled reply");
     let (scenario, log) = echo_rounds(
-        "local msgs = messages.new()\n\
-         msgs:user('one')\n\
-         assert(not pcall(models.loop, msgs), 'the first round fails')\n\
-         assert(#msgs == 1, 'a failed round adds no record')\n\
-         models.loop(msgs)\n\
-         return msgs[#msgs].content",
+        "messages:user('one')\n\
+         assert(not pcall(models.loop), 'the first round fails')\n\
+         assert(#messages == 1, 'a failed round adds no record')\n\
+         models.loop()\n\
+         return messages[#messages].content",
         vec![EffectAnswer::Chat(Err(failure)), chat_answer(&text("a1"))],
     );
     let trace = scenario.run();
@@ -242,17 +238,16 @@ fn a_resend_with_no_changes_logs_no_messages_and_keeps_the_whole_request() {
 #[test]
 fn re_inserting_an_identical_record_adds_nothing_to_the_log() {
     let (scenario, log) = echo_rounds(
-        "local msgs = messages.new()\n\
-         msgs:user('one')\n\
-         models.loop(msgs)\n\
-         msgs:user('two')\n\
-         models.loop(msgs)\n\
-         local first = msgs[1]\n\
-         msgs:replace(1, 1)\n\
-         msgs:replace(1, 0, first)\n\
-         msgs:user('three')\n\
-         models.loop(msgs)\n\
-         return msgs[#msgs].content",
+        "messages:user('one')\n\
+         models.loop()\n\
+         messages:user('two')\n\
+         models.loop()\n\
+         local first = messages[1]\n\
+         messages:replace(1, 1)\n\
+         messages:replace(1, 0, first)\n\
+         messages:user('three')\n\
+         models.loop()\n\
+         return messages[#messages].content",
         vec![
             chat_answer(&text("a1")),
             chat_answer(&text("a2")),
@@ -277,12 +272,11 @@ fn re_inserting_an_identical_record_adds_nothing_to_the_log() {
 #[test]
 fn removing_the_terminal_reply_and_resending_repeats_the_request_it_answered() {
     let (scenario, log) = echo_rounds(
-        "local msgs = messages.new()\n\
-         msgs:user('hello')\n\
-         models.loop(msgs)\n\
-         msgs:replace(#msgs, #msgs)\n\
-         models.loop(msgs)\n\
-         return msgs[#msgs].content",
+        "messages:user('hello')\n\
+         models.loop()\n\
+         messages:replace(#messages, #messages)\n\
+         models.loop()\n\
+         return messages[#messages].content",
         vec![
             chat_answer(&calls(&[("call_1", "echo", r#"{"value":"hi"}"#)])),
             chat_answer(&text("first")),

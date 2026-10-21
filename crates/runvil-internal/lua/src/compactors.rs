@@ -287,8 +287,8 @@ fn message_chars(message: &Message) -> u64 {
 /// downcastable rather than flattened to text; the loop shim, which invokes
 /// the selected compactor on an overflow round, normalizes that raise into
 /// the structured error table before re-raising it, so the kind reaches
-/// author code and the Engine alike. The namespace installs with the Engine
-/// globals during Engine injection, beside `messages`.
+/// author code and the Engine alike. The namespace installs during Engine
+/// injection, right after the section's `messages` list.
 ///
 /// # Errors
 /// Returns [`Error::Lua`] if the function or the global install fails.

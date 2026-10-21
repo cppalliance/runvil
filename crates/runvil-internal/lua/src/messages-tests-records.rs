@@ -8,12 +8,12 @@ use crate::test_vm::TestVm;
 /// fresh list, then returns the refusal of the last one.
 #[track_caller]
 fn refused_append(records: &str) -> String {
-    let vm = TestVm::new().messages().build();
+    let vm = TestVm::new().build();
     vm.exec(&format!(
         "records = {records}\n\
-             for i = 1, #records - 1 do msgs:append(records[i]) end"
+             for i = 1, #records - 1 do messages:append(records[i]) end"
     ));
-    refusal(&vm, "msgs:append(records[#records])")
+    refusal(&vm, "messages:append(records[#records])")
 }
 
 fn assert_refusals(cases: &[(&str, &str)]) {
