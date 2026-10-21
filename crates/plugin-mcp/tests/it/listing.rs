@@ -3,11 +3,11 @@
 
 use std::time::Duration;
 
-use runvil_plugin::ToolErrorKind;
+use runvil_plugin::{OutputTrust, ToolErrorKind};
 use serde_json::{Value, json};
 
 use crate::fixture::Fixture;
-use crate::support::{SECRET, Silent, invoke, list, pack_over, ready, remote};
+use crate::support::{SECRET, Silent, invoke, invoke_as_script, list, pack_over, ready, remote};
 
 /// The fixture's tools as the listing with no arguments shows them.
 fn named_tools() -> Value {
@@ -70,6 +70,20 @@ async fn the_listing_shows_each_server_by_its_own_name_with_the_tools_it_lists()
         list(&pack, json!({})).await,
         json!({ "namespaces": [{ "namespace": "GitHub", "status": "ready", "tools": named_tools() }] })
     );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_script_listing_is_trusted_json_equal_to_the_models() {
+    let fixture = Fixture::start().await;
+    let pack = pack_over(json!({ "GitHub": remote(&fixture, &json!({})) }));
+    ready(&pack, "GitHub").await;
+
+    let output = invoke_as_script(&pack, "get_dynamic_tools", Value::Null)
+        .await
+        .expect("the listing answers");
+    assert_eq!(output.trust(), OutputTrust::Trusted);
+    let listing: Value = serde_json::from_str(output.text()).expect("the listing is JSON");
+    assert_eq!(listing, list(&pack, json!({})).await);
 }
 
 #[tokio::test(flavor = "multi_thread")]

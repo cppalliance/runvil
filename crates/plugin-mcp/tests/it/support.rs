@@ -8,7 +8,7 @@ use std::time::Duration;
 use runvil_plugin::testing::TestCall;
 use runvil_plugin::{
     HostServices, OutputTrust, Pack, PackId, PackInfo, PackRegistry, ServiceKey, TOKIO_RUNTIME,
-    ToolError, ToolId,
+    ToolCaller, ToolError, ToolId, ToolOutput,
 };
 use serde_json::{Map, Value, json};
 use tokio::net::TcpListener;
@@ -64,21 +64,35 @@ pub(crate) fn remote(fixture: &Fixture, headers: &Value) -> Value {
     json!({ "url": fixture.url, "headers": headers })
 }
 
-/// Calls the Pack's tool `mcp/<tool>` with `args` and returns its text,
-/// checking that the output is untrusted.
+fn tool_call(tool: &str) -> TestCall {
+    TestCall::new(ToolId::parse(&format!("mcp/{tool}")).expect("a tool id parses"))
+}
+
+/// Calls the Pack's tool `mcp/<tool>` with `args` from a model round and
+/// returns its text, checking that the output is untrusted.
 pub(crate) async fn invoke(
     pack: &Arc<dyn Pack>,
     tool: &str,
     args: Value,
 ) -> Result<String, ToolError> {
-    let test = TestCall::new(ToolId::parse(&format!("mcp/{tool}")).expect("a tool id parses"));
+    let test = tool_call(tool).with_caller(ToolCaller::Model);
     let output = pack.call(test.context(), args).await?;
     assert_eq!(
         output.trust(),
         OutputTrust::Untrusted,
-        "every output is untrusted"
+        "output to a model round is untrusted"
     );
     Ok(output.text().to_owned())
+}
+
+/// Calls the Pack's tool `mcp/<tool>` with `args` from the section's own
+/// script and returns the whole output.
+pub(crate) async fn invoke_as_script(
+    pack: &Arc<dyn Pack>,
+    tool: &str,
+    args: Value,
+) -> Result<ToolOutput, ToolError> {
+    pack.call(tool_call(tool).context(), args).await
 }
 
 /// The JSON `get_dynamic_tools` answers for `args`.

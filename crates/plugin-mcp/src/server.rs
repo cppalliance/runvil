@@ -8,7 +8,7 @@ use rmcp::model::{
     RequestId, Tool,
 };
 use rmcp::service::{Peer, PeerRequestOptions, RoleClient};
-use runvil_plugin::{ToolError, ToolErrorKind, ToolOutput};
+use runvil_plugin::{ToolError, ToolErrorKind};
 use serde_json::Value;
 use tokio::runtime::Handle;
 use tokio::sync::watch;
@@ -96,7 +96,7 @@ impl Drop for Server {
 }
 
 /// A spawned call, aborted when the call awaiting it is dropped.
-struct AbortOnDrop(JoinHandle<Result<ToolOutput, ToolError>>);
+struct AbortOnDrop(JoinHandle<Result<String, ToolError>>);
 
 impl Drop for AbortOnDrop {
     fn drop(&mut self) {
@@ -125,14 +125,14 @@ impl Drop for CancelOnDrop {
     }
 }
 
-/// Sends one `tools/call` and renders the answer. It runs on the Host's
+/// Sends one `tools/call` and renders the answer as text. It runs on the Host's
 /// runtime, so dropping the awaiting call aborts it and fires the guard.
 async fn send(
     peer: Peer<RoleClient>,
     name: String,
     arguments: JsonObject,
     runtime: Handle,
-) -> Result<ToolOutput, ToolError> {
+) -> Result<String, ToolError> {
     let request = ClientRequest::CallToolRequest(CallToolRequest::new(
         CallToolRequestParams::new(name).with_arguments(arguments),
     ));
@@ -157,7 +157,7 @@ pub(crate) async fn call(
     peer: Peer<RoleClient>,
     name: String,
     arguments: JsonObject,
-) -> Result<ToolOutput, ToolError> {
+) -> Result<String, ToolError> {
     let mut task = AbortOnDrop(runtime.spawn(send(peer, name, arguments, runtime.clone())));
     match (&mut task.0).await {
         Ok(outcome) => outcome,

@@ -5,11 +5,11 @@
 use std::time::Duration;
 
 use runvil_plugin::testing::TestCall;
-use runvil_plugin::{ToolErrorKind, ToolId};
+use runvil_plugin::{OutputTrust, ToolErrorKind, ToolId};
 use serde_json::json;
 
 use crate::fixture::Fixture;
-use crate::support::{Silent, call, invoke, pack_over, ready, remote, settled};
+use crate::support::{Silent, call, invoke, invoke_as_script, pack_over, ready, remote, settled};
 
 #[tokio::test(flavor = "multi_thread")]
 async fn a_call_sends_the_tools_own_name_and_returns_untrusted_text() {
@@ -21,6 +21,40 @@ async fn a_call_sends_the_tools_own_name_and_returns_untrusted_text() {
         .await
         .expect("succeeds");
     assert_eq!(text, r#"echo: {"q":"hello"}"#);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_script_call_returns_the_servers_text_trusted_without_the_envelope() {
+    let fixture = Fixture::start().await;
+    let pack = pack_over(json!({ "GitHub": remote(&fixture, &json!({})) }));
+    ready(&pack, "GitHub").await;
+
+    let output = invoke_as_script(
+        &pack,
+        "call_dynamic_tool",
+        json!({ "namespace": "GitHub", "toolName": "Echo", "arguments": { "q": "hello" } }),
+    )
+    .await
+    .expect("succeeds");
+    assert_eq!(output.trust(), OutputTrust::Trusted);
+    assert_eq!(output.text(), r#"echo: {"q":"hello"}"#);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_script_calls_is_error_result_is_the_same_backend_error_as_a_models() {
+    let fixture = Fixture::start().await;
+    let pack = pack_over(json!({ "GitHub": remote(&fixture, &json!({})) }));
+    ready(&pack, "GitHub").await;
+
+    let error = invoke_as_script(
+        &pack,
+        "call_dynamic_tool",
+        json!({ "namespace": "GitHub", "toolName": "fail", "arguments": {} }),
+    )
+    .await
+    .expect_err("isError fails");
+    assert_eq!(error.kind(), ToolErrorKind::Backend);
+    assert_eq!(error.to_string(), "it failed");
 }
 
 #[tokio::test(flavor = "multi_thread")]

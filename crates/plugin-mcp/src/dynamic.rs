@@ -7,7 +7,8 @@ use std::collections::BTreeMap;
 use rmcp::model::JsonObject;
 use rmcp::service::{Peer, RoleClient};
 use runvil_plugin::{
-    Pack, PackFuture, PackId, ToolContext, ToolError, ToolErrorKind, ToolId, ToolInfo, ToolOutput,
+    Pack, PackFuture, PackId, ToolCaller, ToolContext, ToolError, ToolErrorKind, ToolId, ToolInfo,
+    ToolOutput,
 };
 use serde_json::{Map, Value, json};
 use tokio::runtime::Handle;
@@ -68,6 +69,16 @@ pub(crate) struct Mcp {
     call: ToolInfo,
     namespaces: BTreeMap<String, Namespace>,
     runtime: Handle,
+}
+
+/// Marks `text` by who called: the section's own script receives it
+/// trusted, and every other caller, a model round included, untrusted,
+/// because the text comes from the servers.
+fn marked(caller: ToolCaller, text: String) -> ToolOutput {
+    match caller {
+        ToolCaller::Script => ToolOutput::trusted(text),
+        _ => ToolOutput::untrusted(text),
+    }
 }
 
 fn invalid(text: impl Into<String>) -> ToolError {
@@ -265,9 +276,9 @@ impl Mcp {
         })
     }
 
-    /// Performs `call_dynamic_tool`. Every argument is checked before
-    /// anything is sent.
-    async fn call_tool(&self, args: Value) -> Result<ToolOutput, ToolError> {
+    /// Performs `call_dynamic_tool` and returns the result's text. Every
+    /// argument is checked before anything is sent.
+    async fn call_tool(&self, args: Value) -> Result<String, ToolError> {
         let mut members = members(
             args,
             "call_dynamic_tool takes a JSON object with the strings `namespace` and `toolName` \
@@ -303,10 +314,11 @@ impl Pack for Mcp {
     ) -> PackFuture<'a, Result<ToolOutput, ToolError>> {
         Box::pin(async move {
             let tool = cx.tool();
+            let caller = cx.origin().caller;
             if *tool == self.get.id {
-                self.list(args).map(ToolOutput::untrusted)
+                self.list(args).map(|text| marked(caller, text))
             } else if *tool == self.call.id {
-                self.call_tool(args).await
+                self.call_tool(args).await.map(|text| marked(caller, text))
             } else {
                 Err(ToolError::message(format!("MCP has no tool {tool}")))
             }
