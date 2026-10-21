@@ -145,19 +145,20 @@ fn a_facade_directory_without_a_manifest_is_reported() {
 }
 
 #[test]
-fn the_harness_crates_are_the_two_container_crates_and_the_facade() {
+fn the_harness_crates_are_the_three_container_crates_and_the_facade() {
     let root = crate::product::test_support::workspace_root();
     let internal = root.join("crates").join("harness-internal");
     let covered = harness_crates(&internal, &root.join("crates").join("harness"));
     let expected = [
         internal.join("plugin-loader"),
         internal.join("runner"),
+        internal.join("test-plugin"),
         root.join("crates").join("harness"),
     ];
     assert_eq!(
         covered.len(),
         expected.len(),
-        "the harness container holds two crates beside the facade; covered: {covered:?}"
+        "the harness container holds three crates beside the facade; covered: {covered:?}"
     );
     for dir in &expected {
         assert!(

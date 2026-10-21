@@ -1,5 +1,5 @@
 //! The unsafe allowlist over this workspace, plus fixtures that each way of
-//! relaxing `unsafe_code` outside the five owned crates fails at its line,
+//! relaxing `unsafe_code` outside the six owned crates fails at its line,
 //! text that only spells the attribute passes, and an empty scan fails.
 
 use std::path::Path;
@@ -39,7 +39,7 @@ fn the_workspace_relaxes_unsafe_code_only_in_its_owned_crates() {
 }
 
 #[test]
-fn the_five_owned_crates_may_relax_unsafe_code_and_text_that_spells_it_passes() {
+fn the_six_owned_crates_may_relax_unsafe_code_and_text_that_spells_it_passes() {
     let root = tempfile::TempDir::new().expect("tempdir");
     for dir in [
         "gateway/app",
@@ -47,6 +47,7 @@ fn the_five_owned_crates_may_relax_unsafe_code_and_text_that_spells_it_passes() 
         "gateway-api-discovery",
         "workshop/desktop",
         "harness-internal/plugin-loader",
+        "harness-internal/test-plugin",
     ] {
         write_crate(root.path(), dir, &[("lib.rs", RELAXES)]);
     }

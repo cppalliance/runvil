@@ -2659,6 +2659,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "harness-test-plugin"
+version = "0.3.0"
+
+[[package]]
 name = "hashbrown"
 version = "0.12.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"

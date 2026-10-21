@@ -9,7 +9,7 @@
 //! examples drive runs on tokio, as a real Host does.
 //!
 //! The check reads declared dependencies, not the resolved graph. It binds
-//! the facade and both crates in the container, the set its workspace test
+//! the facade and every crate in the container, the set its workspace test
 //! pins.
 
 use std::fs;

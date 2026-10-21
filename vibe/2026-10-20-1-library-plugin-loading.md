@@ -1279,7 +1279,7 @@ Commit this step alone, with the shape from the Execution Instructions (imperati
 
 <step-5>
 
-### Step 5: Add the fixture library
+### Step 5: Add the fixture library [completed]
 
 - Component: Plugin loader
 - Tests:
