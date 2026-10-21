@@ -5,14 +5,15 @@
 //! keeps its identity for the section's whole life and an assignment of
 //! the global raises [`ASSIGNMENT_REFUSAL`]. Its chainable
 //! `system`/`user`/`assistant`/`tool`/`append` builders and `replace` are
-//! colon methods. Each edit validates its records as it adds them, keeps
-//! the system records leading the list, and drops fields a record does
-//! not hold, so a refused edit raises at the author's call and leaves the
-//! list unchanged. `#messages` counts the records, `messages[i]`, `pairs`,
-//! and `ipairs` read them as read-only views with metamethods only, and
-//! assignment by index is refused. `pairs` stops at the record count it
-//! started with, as the sandbox `pairs` does for a table, while `ipairs`
-//! reads the live list.
+//! colon methods, and each builder takes an optional last `meta`, which
+//! the projection never sends. Each edit validates its records as it adds
+//! them, keeps the system records leading the list, and drops fields a
+//! record does not hold, so a refused edit raises at the author's call and
+//! leaves the list unchanged. `#messages` counts the records,
+//! `messages[i]`, `pairs`, and `ipairs` read them as read-only views with
+//! metamethods only, and assignment by index is refused. `pairs` stops at
+//! the record count it started with, as the sandbox `pairs` does for a
+//! table, while `ipairs` reads the live list.
 //!
 //! Author edits validate the records they add. Records the Engine adds by
 //! calling [`MessageList::push`] itself - the loop's state machine - are
@@ -371,32 +372,41 @@ fn next_record(
 
 impl UserData for MessageList {
     fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
-        methods.add_function("system", |lua, (this, content): (AnyUserData, Value)| {
-            build(lua, this, Role::System, [("content", content)])
-        });
-        methods.add_function("user", |lua, (this, content): (AnyUserData, Value)| {
-            build(lua, this, Role::User, [("content", content)])
-        });
+        for (name, role) in [("system", Role::System), ("user", Role::User)] {
+            methods.add_function(
+                name,
+                move |lua, (this, content, meta): (AnyUserData, Value, Value)| {
+                    build(lua, this, role, [("content", content), ("meta", meta)])
+                },
+            );
+        }
         methods.add_function(
             "assistant",
-            |lua, (this, content, tool_calls): (AnyUserData, Value, Option<Value>)| {
-                let tool_calls = tool_calls.unwrap_or(Value::Nil);
+            |lua, (this, content, tool_calls, meta): (AnyUserData, Value, Value, Value)| {
                 build(
                     lua,
                     this,
                     Role::Assistant,
-                    [("content", content), ("tool_calls", tool_calls)],
+                    [
+                        ("content", content),
+                        ("tool_calls", tool_calls),
+                        ("meta", meta),
+                    ],
                 )
             },
         );
         methods.add_function(
             "tool",
-            |lua, (this, content, tool_call_id): (AnyUserData, Value, Value)| {
+            |lua, (this, content, tool_call_id, meta): (AnyUserData, Value, Value, Value)| {
                 build(
                     lua,
                     this,
                     Role::Tool,
-                    [("content", content), ("tool_call_id", tool_call_id)],
+                    [
+                        ("content", content),
+                        ("tool_call_id", tool_call_id),
+                        ("meta", meta),
+                    ],
                 )
             },
         );

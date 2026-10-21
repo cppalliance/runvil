@@ -6,6 +6,7 @@ use mlua::Value;
 use runvil_model_client::client::Role;
 
 use crate::messages::MessageList;
+use crate::protocol::record::MAX_RECORD_META_BYTES;
 use crate::protocol::{
     ContentPart, MessageContent, MessageRecord, NonEmpty, RecordRole, Request, ToolCallRecord,
 };
@@ -56,8 +57,10 @@ pub(super) fn parse_chat(table: &mlua::Table) -> std::result::Result<Request, Fi
 /// content-parts array with known part types and payloads; a
 /// `tool_call_id` a string, required on tool records and refused on every
 /// other; a present `tool_calls` an array of normalized
-/// `{id, name, arguments}` records. Fields beyond the four a record holds
-/// (`role`, `content`, `tool_call_id`, `tool_calls`) are dropped.
+/// `{id, name, arguments}` records; a `meta` of any JSON value, none when
+/// null, at most [`MAX_RECORD_META_BYTES`] as compact JSON. Fields beyond
+/// the five a record holds (`role`, `content`, `tool_call_id`,
+/// `tool_calls`, `meta`) are dropped.
 /// Cross-record checks - unique call IDs, complete call-result pairing,
 /// provider-required alternation - belong to the per-dispatch projection
 /// ([`crate::projection`]).
@@ -144,10 +147,24 @@ fn parse_message(
             return Err(format!("messages[{index}] tool_calls must be an array"));
         }
     };
+    let meta = match entry.get("meta") {
+        None | Some(serde_json::Value::Null) => None,
+        Some(meta) => {
+            let size = meta.to_string().len();
+            if size > MAX_RECORD_META_BYTES {
+                return Err(format!(
+                    "messages[{index}] meta is {size} bytes as JSON; the limit is \
+                     {MAX_RECORD_META_BYTES} bytes"
+                ));
+            }
+            Some(meta.clone())
+        }
+    };
     Ok(MessageRecord {
         role,
         content,
         tool_calls,
+        meta,
     })
 }
 

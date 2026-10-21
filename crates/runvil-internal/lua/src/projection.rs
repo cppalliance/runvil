@@ -20,9 +20,8 @@
 //!   consecutive text-only assistant records - streaming fragments an author
 //!   appended as they arrived - coalesce into one assistant result.
 //! - Metadata is stripped: the wire message holds exactly `role`,
-//!   `content`, `tool_call_id`, and `tool_calls`, so anything an author
-//!   record held beyond the contract (a copied credential, say) can never
-//!   reach the provider.
+//!   `content`, `tool_call_id`, and `tool_calls`, so a record's `meta`
+//!   (a copied credential, say) can never reach the provider.
 //!
 //! The output is the OpenAI wire shape the gateway speaks: replayed
 //! assistant `tool_calls` render as the function-call
@@ -178,6 +177,7 @@ fn project(messages: &[MessageRecord]) -> Vec<Message> {
                     .join("\n\n"),
             ),
             tool_calls: Vec::new(),
+            meta: None,
         }),
     }
     for record in &messages[system_len..] {

@@ -1,9 +1,13 @@
 //! The message-record vocabulary a chat request is built from: one
-//! validated record, its role, its content, and the tool calls it holds.
+//! validated record, its role, its content, the tool calls it holds, and
+//! the metadata the projection never sends.
 
 use runvil_model_client::client::Role;
 
 use super::non_empty::NonEmpty;
+
+/// The most bytes a record's `meta` may take as compact JSON.
+pub(crate) const MAX_RECORD_META_BYTES: usize = 8 * 1024;
 
 /// One content part of a multimodal message: visible text or a data-URI
 /// image reference.
@@ -90,12 +94,14 @@ pub struct MessageRecord {
     /// The normalized tool calls the record holds; empty unless an
     /// assistant turn requested tools.
     pub tool_calls: Vec<ToolCallRecord>,
+    /// Metadata the projection never sends; `None` when absent or JSON null.
+    pub meta: Option<serde_json::Value>,
 }
 
 impl MessageRecord {
-    /// The record's JSON form: `role`, `content`, and `tool_calls` and
-    /// `tool_call_id` when present, in the shapes the chat parse accepts,
-    /// so the parse turns it back into an equal record.
+    /// The record's JSON form: `role`, `content`, and `tool_calls`,
+    /// `tool_call_id`, and `meta` when present, in the shapes the chat
+    /// parse accepts, so the parse turns it back into an equal record.
     #[must_use]
     pub(crate) fn to_json(&self) -> serde_json::Value {
         let mut entry = serde_json::Map::new();
@@ -106,6 +112,9 @@ impl MessageRecord {
         }
         if let Some(id) = self.role.tool_call_id() {
             entry.insert("tool_call_id".to_owned(), id.into());
+        }
+        if let Some(meta) = &self.meta {
+            entry.insert("meta".to_owned(), meta.clone());
         }
         serde_json::Value::Object(entry)
     }

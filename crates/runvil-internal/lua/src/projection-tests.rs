@@ -107,6 +107,7 @@ fn a_single_leading_system_message_passes_through_verbatim() {
             vec![ContentPart::ImageUrl("data:image/png;base64,AA".to_owned())],
         )),
         tool_calls: Vec::new(),
+        meta: None,
     };
     let records = vec![parts, user("hi")];
     assert_eq!(
@@ -325,10 +326,11 @@ fn metadata_beyond_the_contract_is_stripped_from_the_wire() {
     let records = lua_parse(
         &lua,
         r#"{
-            { role = "user", content = "hi", name = "bob", weight = 3 },
+            { role = "user", content = "hi", name = "bob", weight = 3, meta = { secret = "x" } },
             { role = "assistant", content = "hello", extra = { nested = true } },
         }"#,
     );
+    assert_eq!(records[0].meta, Some(json!({ "secret": "x" })));
     assert_eq!(
         wire(&records),
         json!([

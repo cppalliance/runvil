@@ -265,6 +265,7 @@ pub(crate) fn text(role: RecordRole, content: &str) -> MessageRecord {
         role,
         content: MessageContent::Text(content.to_owned()),
         tool_calls: Vec::new(),
+        meta: None,
     }
 }
 

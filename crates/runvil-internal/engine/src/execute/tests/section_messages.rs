@@ -2,7 +2,8 @@
 //! empty list with its VM, which keeps its identity for the section's
 //! whole life, is shared with the libraries the section requires, and
 //! cannot be reassigned or written through. Both loop entries run over it
-//! and take only `(compactor?)`.
+//! and take only `(compactor?)`. A record's `meta` stays in the list and
+//! reaches tools, but never the model.
 
 use runvil_parser::test_support::PromptSource;
 
@@ -194,6 +195,39 @@ fn assigning_the_global_by_index_or_through_a_view_raises_its_own_refusal() {
     assert_eq!(
         lines[4], "1:kept",
         "the list still reads after the refusals"
+    );
+}
+
+#[test]
+fn meta_reaches_a_tool_through_a_view_but_never_the_model() {
+    let source = PromptSource::new().section(
+        "Only",
+        "tools.offer_local('probe', 'Read a record', {}, function(args)
+           return args.record.meta.hint
+         end)
+         messages:system('be terse', { hint = 'system' })
+           :user('look', { hint = 'user' })
+           :assistant('', { { id = 'call_1', name = 'probe' } }, { hint = 'assistant' })
+           :tool('probed', 'call_1', { hint = 'tool' })
+           :append({ role = 'user', content = 'go on', meta = { hint = 'append' } })
+         local probed = tools.call('probe', { record = messages[5] })
+         models.loop()
+         local last = messages[#messages]
+         return table.concat({ probed, #messages, last.content, tostring(last.meta) }, '|')",
+    );
+    let (out, gateway) = run(&source, vec![text("done")]);
+    assert_eq!(
+        out, "append|6|done|nil",
+        "the tool reads the view's meta, and the loop's record holds none"
+    );
+    let requests = gateway.requests();
+    assert_eq!(requests.len(), 1, "one round runs");
+    let sent = requests[0].messages_json();
+    assert_eq!(sent.as_array().map(Vec::len), Some(5), "{sent}");
+    let wire = sent.to_string();
+    assert!(
+        !wire.contains("meta") && !wire.contains("hint"),
+        "no meta reaches the model: {wire}"
     );
 }
 

@@ -359,12 +359,13 @@ impl<V: Clone> Machine<V> {
     }
 }
 
-/// A record of `role` holding the plain text `content`.
+/// A record of `role` holding the plain text `content` and no `meta`.
 fn text_record(role: RecordRole, content: String) -> MessageRecord {
     MessageRecord {
         role,
         content: MessageContent::Text(content),
         tool_calls: Vec::new(),
+        meta: None,
     }
 }
 

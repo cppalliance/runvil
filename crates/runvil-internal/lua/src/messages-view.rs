@@ -13,7 +13,7 @@ use super::refusal;
 use crate::protocol::MessageRecord;
 
 /// The fields a view reads, in the order `pairs` visits them.
-const FIELDS: [&str; 4] = ["role", "content", "tool_calls", "tool_call_id"];
+const FIELDS: [&str; 5] = ["role", "content", "tool_calls", "tool_call_id", "meta"];
 
 /// A read-only view of one record, which `messages[i]` and iteration
 /// return.
@@ -57,6 +57,10 @@ fn field(lua: &Lua, record: &MessageRecord, name: &str) -> mlua::Result<Value> {
         },
         "tool_call_id" => match record.role.tool_call_id() {
             Some(id) => lua.to_value(id),
+            None => Ok(Value::Nil),
+        },
+        "meta" => match &record.meta {
+            Some(meta) => lua.to_value(meta),
             None => Ok(Value::Nil),
         },
         _ => Ok(Value::Nil),

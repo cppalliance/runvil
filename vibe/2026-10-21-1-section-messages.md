@@ -888,7 +888,7 @@ Commit and rules:
 
 <step-4>
 
-### Step 4: Let records hold metadata the model never sees
+### Step 4: Let records hold metadata the model never sees [completed]
 
 - Component: Record metadata
 - Tests: run in PowerShell from `c:\Users\Vinnie\cursor\runvil`, in this order:

@@ -12,8 +12,8 @@ use crate::test_vm::{BuiltVm, TestVm};
 use crate::tests::{assistant, system, tool_result, user};
 
 /// One record table of each shape, held in the global `shapes` and
-/// appended to `messages` in order: plain text, content parts, tool calls,
-/// and a tool result.
+/// appended to `messages` in order: plain text, content parts, tool calls
+/// with a string `meta`, and a tool result with a table `meta`.
 #[track_caller]
 fn shapes(vm: &BuiltVm) {
     vm.exec(
@@ -22,9 +22,10 @@ fn shapes(vm: &BuiltVm) {
            { role = 'user', content = { \
              { type = 'text', text = 'look' }, \
              { type = 'image_url', image_url = { url = 'data:image/png;base64,AA==' } } } }, \
-           { role = 'assistant', content = 'working', \
+           { role = 'assistant', content = 'working', meta = 'plan', \
              tool_calls = { { id = 'call_1', name = 'echo', arguments = { value = 'hi' } } } }, \
-           { role = 'tool', content = 'echoed: hi', tool_call_id = 'call_1' } } \
+           { role = 'tool', content = 'echoed: hi', tool_call_id = 'call_1', \
+             meta = { source = 'echo', score = 1 } } } \
          for _, record in ipairs(shapes) do messages:append(record) end",
     );
 }
@@ -61,9 +62,13 @@ fn to_json_round_trips_every_record_shape_through_parse_record() {
                 name: "echo".to_owned(),
                 arguments: json!({ "value": "hi" }),
             }],
+            meta: Some(json!("plan")),
             ..assistant("working")
         },
-        tool_result("call_1", "echoed: hi"),
+        MessageRecord {
+            meta: Some(json!({ "source": "echo", "score": 1 })),
+            ..tool_result("call_1", "echoed: hi")
+        },
     ];
     assert_eq!(
         records
@@ -76,12 +81,17 @@ fn to_json_round_trips_every_record_shape_through_parse_record() {
                 { "type": "text", "text": "look" },
                 { "type": "image_url", "image_url": { "url": "data:image/png;base64,AA==" } },
             ] }),
-            json!({ "role": "assistant", "content": "working", "tool_calls": [
+            json!({ "role": "assistant", "content": "working", "meta": "plan", "tool_calls": [
                 { "id": "call_1", "name": "echo", "arguments": { "value": "hi" } },
             ] }),
-            json!({ "role": "tool", "content": "echoed: hi", "tool_call_id": "call_1" }),
+            json!({
+                "role": "tool",
+                "content": "echoed: hi",
+                "tool_call_id": "call_1",
+                "meta": { "source": "echo", "score": 1 },
+            }),
         ],
-        "absent tool_calls and tool_call_id stay out of the JSON form"
+        "absent tool_calls, tool_call_id, and meta stay out of the JSON form"
     );
     for (position, record) in records.iter().enumerate() {
         assert_eq!(
@@ -101,7 +111,7 @@ fn each_view_field_reads_like_the_record_table_and_a_view_is_userdata() {
             read(&vm, &format!("type(messages[{index}])")),
             Some(json!("userdata"))
         );
-        for field in ["role", "content", "tool_calls", "tool_call_id"] {
+        for field in ["role", "content", "tool_calls", "tool_call_id", "meta"] {
             assert_eq!(
                 read(&vm, &format!("messages[{index}].{field}")),
                 read(&vm, &format!("shapes[{index}].{field}")),
@@ -138,7 +148,14 @@ fn assigning_any_view_field_raises_the_read_only_error() {
     let vm = TestVm::new().build();
     shapes(&vm);
     let before = vm.messages().to_records();
-    for field in ["role", "content", "tool_calls", "tool_call_id", "extra"] {
+    for field in [
+        "role",
+        "content",
+        "tool_calls",
+        "tool_call_id",
+        "meta",
+        "extra",
+    ] {
         assert_eq!(
             refusal(&vm, &format!("messages[3].{field} = 'x'")),
             "records read from messages are read-only; change messages with \
@@ -169,9 +186,47 @@ fn pairs_over_a_view_visits_its_present_fields_in_order() {
         [
             "role:string content:string",
             "role:string content:table",
-            "role:string content:string tool_calls:table",
-            "role:string content:string tool_call_id:string",
+            "role:string content:string tool_calls:table meta:string",
+            "role:string content:string tool_call_id:string meta:table",
         ]
+    );
+}
+
+#[test]
+fn each_builders_last_argument_and_an_appended_meta_field_set_the_records_meta() {
+    let vm = TestVm::new().build();
+    vm.exec(
+        "messages:system('s', { n = 1 })\
+         :user('u', { n = 2 })\
+         :assistant('a', { { id = 'call_1', name = 'echo' } }, { n = 3 })\
+         :tool('r', 'call_1', { n = 4 })\
+         :assistant('done', nil, { n = 5 })\
+         :append({ role = 'user', content = 'more', meta = { n = 6 } })\
+         :user('plain')",
+    );
+    let expected: Vec<Option<Json>> = (1..=6)
+        .map(|n| Some(json!({ "n": n })))
+        .chain([None])
+        .collect();
+    let held: Vec<Option<Json>> = vm
+        .messages()
+        .to_records()
+        .into_iter()
+        .map(|record| record.meta)
+        .collect();
+    assert_eq!(held, expected);
+    for (position, meta) in expected.iter().enumerate() {
+        let index = position + 1;
+        assert_eq!(
+            read(&vm, &format!("messages[{index}].meta")).as_ref(),
+            meta.as_ref(),
+            "messages[{index}].meta"
+        );
+    }
+    assert_eq!(
+        refusal(&vm, "messages:assistant('x', { n = 8 })"),
+        "messages[8] tool_calls must be an array",
+        "a table in assistant's second place is its tool calls"
     );
 }
 
@@ -198,8 +253,8 @@ fn writing_into_a_views_nested_tables_leaves_the_record_unchanged() {
     let vm = TestVm::new().build();
     shapes(&vm);
     let before = vm.messages().to_records();
-    let (content, tool_calls): (Value, Value) = vm.eval(
-        "local parts_view, calls_view = messages[2], messages[3] \
+    let (content, tool_calls, meta): (Value, Value, Value) = vm.eval(
+        "local parts_view, calls_view, result_view = messages[2], messages[3], messages[4] \
          local parts = parts_view.content \
          parts[1].text = 'changed' \
          parts[3] = { type = 'text', text = 'more' } \
@@ -207,7 +262,10 @@ fn writing_into_a_views_nested_tables_leaves_the_record_unchanged() {
          calls[1].id = 'call_9' \
          calls[1].arguments.value = 'changed' \
          calls[2] = calls[1] \
-         return parts_view.content, calls_view.tool_calls",
+         local meta = result_view.meta \
+         meta.source = 'changed' \
+         meta.extra = true \
+         return parts_view.content, calls_view.tool_calls, result_view.meta",
     );
     assert_eq!(vm.messages().to_records(), before);
     let converted = |value: Value| -> Json {
@@ -224,6 +282,11 @@ fn writing_into_a_views_nested_tables_leaves_the_record_unchanged() {
         Some(converted(tool_calls)),
         read(&vm, "shapes[3].tool_calls"),
         "the same view reads its original tool calls again"
+    );
+    assert_eq!(
+        Some(converted(meta)),
+        read(&vm, "shapes[4].meta"),
+        "the same view reads its original meta again"
     );
 }
 

@@ -97,6 +97,7 @@ fn projection(c: &mut Criterion) {
         role,
         content: MessageContent::Text(body.to_owned()),
         tool_calls: Vec::new(),
+        meta: None,
     };
     let messages = vec![
         text(RecordRole::System, "you are careful"),
