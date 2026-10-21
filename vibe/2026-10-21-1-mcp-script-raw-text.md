@@ -4,10 +4,10 @@ overview: "plugin-mcp marks its output by caller: a call the section's Lua makes
 todos:
   - id: s1-test-call-caller
     content: "S1: add TestCall::with_caller to runvil-plugin's test support, with a test that a call built with ToolCaller::Model lends a model origin"
-    status: pending
+    status: completed
   - id: s2-mcp-trust-by-caller
     content: "S2: plugin-mcp returns trusted output to ToolCaller::Script and untrusted output to every other caller, for both get_dynamic_tools and call_dynamic_tool; update the crate docs and tests"
-    status: pending
+    status: completed
 isProject: false
 ---
 
