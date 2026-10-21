@@ -502,10 +502,10 @@ function mountPanelPending(root: HTMLElement, win: BootWindow): () => void {
 }
 
 /**
- * Mounts the shared chrome - skip link, the tab bar's header strip, then
- * the desk layout: the tab bar's nav column beside a content column of
- * the optional banner and the `<main>` region - followed by the fixed
- * overlays, and returns the main element.
+ * Mounts the shared chrome - skip link, the tab bar's header strip with
+ * the nav, then the desk layout: a content column of the optional banner
+ * and the `<main>` region - followed by the fixed overlays, and returns
+ * the main element.
  */
 function mountChrome(
   root: HTMLElement,
@@ -538,7 +538,7 @@ function mountChrome(
   content.append(main);
   const layout = document.createElement("div");
   layout.className = "desk-layout";
-  layout.append(tabBar.nav, content);
+  layout.append(content);
   root.replaceChildren(skip, tabBar.element, layout, ...fixed);
   return main;
 }

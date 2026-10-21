@@ -1,10 +1,9 @@
 // The tab bar: a slim header strip with the medallion (standalone only),
-// the profile switcher, and the right cluster holding the connection dot
-// [Adapted: llama-swap] plus the container the Apply/Revert pair mounts
-// into; and, as its own element, Cursor's settings nav - seven icon+label
-// links in three groups, set in a sticky left column that drops its labels
-// and becomes a 40px icon column in a narrow window. The caller mounts the
-// strip above the desk and the nav beside the content.
+// the profile switcher, the primary nav - seven icon+label links in three
+// groups, in a row that drops its labels in a narrow window - and the
+// right cluster holding the connection dot [Adapted: llama-swap] plus the
+// container the Apply/Revert pair mounts into. The caller mounts the strip
+// above the desk.
 
 import {
   Cloud,
@@ -66,10 +65,8 @@ export interface TabBarOptions {
 
 /** The mounted tab bar and its live-update handles. */
 export interface TabBar {
-  /** The `<header class="tab-bar">` strip: medallion, profile switcher, actions. */
+  /** The `<header class="tab-bar">` strip: medallion, profile switcher, nav, actions. */
   element: HTMLElement;
-  /** The `<nav class="tab-nav">` column of grouped links, mounted beside the content. */
-  nav: HTMLElement;
   /** Moves `aria-current` (and the selected fill) to `view`. */
   setActivePage(view: PageId | null): void;
   /** Recolors the connection dot from the latest API outcome. */
@@ -110,8 +107,8 @@ export function createTabBar(options: TabBarOptions): TabBar {
       const tab = document.createElement("a");
       tab.className = "tab";
       tab.href = href;
-      // The label is the link's name; the column hides it, so a tooltip
-      // keeps the icon-only column readable.
+      // The label is the link's name; a narrow window hides it, so a
+      // tooltip keeps the icon-only row readable.
       tab.title = label;
       const svg = lucideElement(icon, {
         "aria-hidden": "true",
@@ -126,6 +123,7 @@ export function createTabBar(options: TabBarOptions): TabBar {
       tabByPage.set(view, tab);
     }
   });
+  element.append(nav);
 
   const actions = document.createElement("div");
   actions.className = "tab-actions";
@@ -147,7 +145,6 @@ export function createTabBar(options: TabBarOptions): TabBar {
 
   return {
     element,
-    nav,
     setPendingCount(count: number): void {
       if (count <= 0) {
         pending.replaceChildren();
