@@ -27,8 +27,7 @@
 	}
 
 	/* Tab bar: a slim header strip on the chrome surface holding the
-	   medallion, the profile switcher, and the right cluster. The nav
-	   it used to carry is its own column below. */
+	   medallion, the profile switcher, the nav, and the right cluster. */
 	.tab-bar {
 		display: flex;
 		align-items: center;
@@ -39,11 +38,9 @@
 		border-bottom: 1px solid var(--border);
 	}
 
-	/* The desk: the nav column and the content column, 48px apart. */
+	/* The desk: the content column under the header strip. */
 	.desk-layout {
 		display: flex;
-		align-items: flex-start;
-		gap: 48px;
 		padding: var(--space-4) var(--space-4) 0;
 	}
 	.desk-content {
@@ -52,20 +49,25 @@
 		padding-block-end: var(--space-4);
 	}
 
-	/* Settings nav [Cursor]: a sticky column of cells, 12px text and 12px
-	   icons, a 6% fill for the hovered and the selected cell, and a hairline
-	   between groups. A narrow window keeps only the icons. */
+	/* Primary nav [Cursor cells]: a row of cells in the header strip, 12px
+	   text and 12px icons, a 6% fill for the hovered and the selected cell,
+	   and a hairline between groups. Under 1024px the strip cannot hold the
+	   switcher, all seven labels, and the Apply/Revert pair, so the nav
+	   takes its own full-width row below them. If even that row runs out of
+	   room it scrolls sideways under a thin scrollbar, with the focus ring
+	   inset so the scroller never clips it. A narrow window keeps only the
+	   icons. */
 	.tab-nav {
-		position: sticky;
-		inset-block-start: var(--space-4);
-		flex: none;
-		width: clamp(100px, 25%, 200px);
 		display: flex;
-		flex-direction: column;
+		align-items: center;
 		gap: var(--space-1);
+		min-width: 0;
+		overflow-x: auto;
+		scrollbar-width: thin;
 	}
 	.tab {
 		display: flex;
+		flex: none;
 		align-items: center;
 		gap: var(--space-1-5);
 		padding: 4px 6px;
@@ -74,8 +76,12 @@
 		font-size: var(--font-size-sm);
 		font-weight: 400;
 		line-height: var(--line-height-sm);
+		white-space: nowrap;
 		text-decoration: none;
 		cursor: pointer;
+	}
+	.tab:focus-visible {
+		outline-offset: -2px;
 	}
 	.tab svg {
 		flex: none;
@@ -88,13 +94,22 @@
 		color: var(--cursor-text-primary);
 	}
 	.tab-divider {
-		margin-block: var(--space-1);
-		border-top: 1px solid var(--cursor-stroke-tertiary);
+		flex: none;
+		align-self: stretch;
+		margin: var(--space-1);
+		border-left: 1px solid var(--cursor-stroke-tertiary);
+	}
+	@media (max-width: 1023.98px) {
+		.tab-bar {
+			flex-wrap: wrap;
+		}
+		.tab-nav {
+			order: 1;
+			flex-basis: 100%;
+			padding-block-end: var(--space-1-5);
+		}
 	}
 	@media (max-width: 709.98px) {
-		.tab-nav {
-			width: 40px;
-		}
 		.tab {
 			justify-content: center;
 		}
@@ -108,7 +123,7 @@
 		}
 	}
 
-	/* View content beside the nav; the layout owns the padding. */
+	/* View content; the layout owns the padding. */
 	.desk {
 		padding: 0;
 	}
