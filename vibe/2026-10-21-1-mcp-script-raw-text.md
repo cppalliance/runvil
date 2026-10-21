@@ -131,7 +131,7 @@ isProject: false
 
 <step-2>
 
-### Step 2: plugin-mcp marks output by caller for both tools
+### Step 2: plugin-mcp marks output by caller for both tools [completed]
 
 - Component: none
 - Tests: `cargo nextest run --locked -p plugin-mcp --all-features`; exit checks: `cargo fmt --all --check`; `CARGO_BUILD_WARNINGS=deny cargo clippy --workspace --exclude workshop --exclude workshop-server --exclude workshop-server-api --all-targets --all-features`; `CARGO_BUILD_WARNINGS=deny cargo clippy -p workshop -p workshop-server -p workshop-server-api --all-targets`; `cargo nextest run --locked --workspace --exclude workshop --exclude workshop-server --exclude workshop-server-api --all-features`; `cargo nextest run --locked -p workshop -p workshop-server -p workshop-server-api`; `RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps --all-features --exclude workshop --exclude workshop-server --exclude workshop-server-api`; `RUSTDOCFLAGS="-D warnings" cargo doc -p runvil --no-deps`; `cargo test -p build-xtask`; `node --test crates/workshop/ui/test/docs-claims.mjs`

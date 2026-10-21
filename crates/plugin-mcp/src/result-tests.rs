@@ -1,10 +1,10 @@
-//! Tests for how an MCP answer becomes tool output or a tool error.
+//! Tests for how an MCP answer becomes text or a tool error.
 
 use std::time::Duration;
 
 use rmcp::ServiceError;
 use rmcp::model::{CallToolResult, ServerResult};
-use runvil_plugin::{OutputTrust, ToolErrorKind};
+use runvil_plugin::ToolErrorKind;
 use serde_json::{Value, json};
 
 use super::{output, render, service_error};
@@ -14,9 +14,7 @@ fn result(value: Value) -> CallToolResult {
 }
 
 fn text_of(value: Value) -> String {
-    let output = render(&result(value)).expect("a success renders");
-    assert_eq!(output.trust(), OutputTrust::Untrusted);
-    output.text().to_owned()
+    render(&result(value)).expect("a success renders")
 }
 
 #[test]
@@ -83,7 +81,7 @@ fn content_blocks_win_over_structured_content() {
 }
 
 #[test]
-fn a_result_with_nothing_is_empty_untrusted_text() {
+fn a_result_with_nothing_is_empty_text() {
     assert_eq!(text_of(json!({ "content": [] })), "");
 }
 
@@ -165,8 +163,7 @@ fn a_failed_request_maps_through_output_and_a_good_one_renders() {
         json!({ "content": [{ "type": "text", "text": "fine" }] }),
     ))))
     .expect("renders");
-    assert_eq!(good.text(), "fine");
-    assert_eq!(good.trust(), OutputTrust::Untrusted);
+    assert_eq!(good, "fine");
 }
 
 #[test]

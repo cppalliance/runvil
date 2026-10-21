@@ -1,8 +1,8 @@
-//! Turns an MCP answer into tool output or a tool error.
+//! Turns an MCP answer into text or a tool error.
 
 use rmcp::ServiceError;
 use rmcp::model::{CallToolResult, ContentBlock, ResourceContents, ServerResult};
-use runvil_plugin::{ToolError, ToolErrorKind, ToolOutput};
+use runvil_plugin::{ToolError, ToolErrorKind};
 
 /// What a content block this change does not know becomes. rmcp's content
 /// types are `#[non_exhaustive]`, so a new kind reaches this text.
@@ -41,10 +41,8 @@ pub(crate) fn service_error(error: &ServiceError) -> ToolError {
     ToolError::message(text).with_kind(kind)
 }
 
-/// Maps the answer to a `tools/call` request.
-pub(crate) fn output(
-    response: Result<ServerResult, ServiceError>,
-) -> Result<ToolOutput, ToolError> {
+/// Maps the answer to a `tools/call` request to its text.
+pub(crate) fn output(response: Result<ServerResult, ServiceError>) -> Result<String, ToolError> {
     match response.map_err(|e| service_error(&e))? {
         ServerResult::CallToolResult(result) => render(&result),
         _ => Err(ToolError::message(
@@ -56,7 +54,7 @@ pub(crate) fn output(
 
 /// Joins a result's text. An `is_error` result becomes a backend error that
 /// carries the server's text.
-pub(crate) fn render(result: &CallToolResult) -> Result<ToolOutput, ToolError> {
+pub(crate) fn render(result: &CallToolResult) -> Result<String, ToolError> {
     let text = text_of(result);
     if result.is_error == Some(true) {
         let message = if text.is_empty() {
@@ -66,7 +64,7 @@ pub(crate) fn render(result: &CallToolResult) -> Result<ToolOutput, ToolError> {
         };
         return Err(ToolError::message(message).with_kind(ToolErrorKind::Backend));
     }
-    Ok(ToolOutput::untrusted(text))
+    Ok(text)
 }
 
 /// The text blocks, embedded text resources, and placeholders, joined with

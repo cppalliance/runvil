@@ -23,6 +23,10 @@
 //!   an optional object `arguments`, which defaults to `{}`, and calls that
 //!   server's tool.
 //!
+//! Both tools answer a model round with untrusted text, and the section's
+//! own script with trusted text, so the script receives the server's text
+//! without the envelope.
+//!
 //! A namespace is the server's name exactly as the configuration writes
 //! it, and a tool's name is the one its server lists. Both must match
 //! exactly. A server's status is `ready`, `loading` while it is still
@@ -79,8 +83,10 @@
 //! - May depend on: `runvil-plugin`, `shared-*` crates, and outside
 //!   libraries. `cargo test -p build-xtask` enforces the Plugin family's
 //!   allow-list. Only [`install`] is public.
-//! - Every output is untrusted, because descriptions, schemas, and results
-//!   all come from the servers.
+//! - Output to a model round is untrusted, because descriptions, schemas,
+//!   and results all come from the servers, and output to the section's
+//!   own script is trusted, so the script receives the server's text
+//!   without the envelope.
 //! - No reason, log line, `Debug` output, or error names an `env` or
 //!   `headers` value. They may name keys.
 //! - It runs on the Host's runtime, read through the contract's
