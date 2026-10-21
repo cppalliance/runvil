@@ -18,17 +18,19 @@
 -- run's cancel flag is set: a failure caught under cancellation is the
 -- instruction hook's abort, which must unwind to the block guard, so every
 -- protected call below raises it again instead of returning it,
--- `is_model_handle(value)` reports whether a value is a model handle, and
+-- `is_model_handle(value)` reports whether a value is a model handle,
 -- `loop_begin(entry, ...)` starts one `models.loop` call in Rust over the
 -- run's round cap, the section's `compactors` table, and the section's
 -- `messages` list, returning the
--- call's step function and its first action. The `tasks` namespace and
+-- call's step function and its first action, and `compact_begin(...)`
+-- starts one `models.compact` call over the same list the same way. The
+-- `tasks` namespace and
 -- the `fanout` shim live in their own chunks (`__impl_tasks.lua`,
 -- `__impl_fanout.lua`), installed by the Engine right after this one over
 -- the failure helpers this chunk returns.
 local yield, var_snapshot, models, tools, error_value, stash_failure,
   normalize_failure, enter_local_handler, leave_local_handler,
-  cancel_requested, is_model_handle, loop_begin = ...
+  cancel_requested, is_model_handle, loop_begin, compact_begin = ...
 
 -- The base library's pcall and xpcall, captured before the replacements
 -- below are installed over the globals: the block guard needs the raw
@@ -259,6 +261,13 @@ local function handle_loop(...)
   return drive(loop_begin(true, ...))
 end
 
+-- models.compact(compactor, reason) runs `compactor(reason)` once over the
+-- section's `messages` list, outside any loop. The Engine installs it
+-- beside models.loop.
+local function models_compact(...)
+  return drive(compact_begin(...))
+end
+
 -- store.*: every store operation is a leaf yield, answered by the driver
 -- against the sync VFS uniformly for all backends - no inline fast path,
 -- so interleaving behavior never depends on which backend serves the
@@ -344,6 +353,7 @@ return {
   -- error shape this prelude defines.
   helpers = { raise = raise, fail = fail, engine_type = engine_type },
   loop = models_loop,
+  compact = models_compact,
   -- The fields a model handle reads, through the registry stash.
   handle_methods = { infer = handle_infer, loop = handle_loop },
   model_tool_call = tools_call_as_model,

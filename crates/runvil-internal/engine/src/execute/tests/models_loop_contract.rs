@@ -200,17 +200,17 @@ fn the_compactor_gets_only_the_reason_and_may_suspend_before_raising() {
 }
 
 #[test]
-fn a_returning_compactor_raises_the_exact_deferred_replacement_text() {
+fn a_returning_compactor_that_shrank_nothing_raises_the_exact_exhaustion_text() {
     let (trace, rounds) = run_overflowing(one_section(
         "messages:user('a small prompt')
          local ok, err = pcall(models.loop, function() return 'summary' end)
-         assert(not ok, 'a returning compactor raises')
+         assert(not ok, 'a compactor that shrank nothing raises')
          return err.kind .. '|' .. tostring(err) .. '|' .. #messages",
     ));
     assert_eq!(
         trace.text(),
-        "lua|the selected compactor returned without raising: replacement compactors are \
-         deferred; compactors.fail is the only shipped policy|1"
+        "context_exhausted|context exhausted: the provider rejected the request as exceeding \
+         the model's context window|1"
     );
     assert_eq!(rounds, 1, "the one round left and overflowed");
 }

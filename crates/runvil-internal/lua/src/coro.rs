@@ -69,6 +69,10 @@ const FANOUT_SOURCE: &str = include_str!("__impl_fanout.lua");
 /// the section setup can install it as `models.loop`.
 const LOOP_REGISTRY: &str = "runvil.impl_coro.loop";
 
+/// The registry key for the shim's `compact`, stashed by the prelude
+/// install so the section setup can install it as `models.compact`.
+const COMPACT_REGISTRY: &str = "runvil.impl_coro.compact";
+
 /// The registry key for the shim's model-handle methods, `infer` and
 /// `loop`, stashed by the prelude install for [`handle_method`].
 const HANDLE_METHODS_REGISTRY: &str = "runvil.impl_coro.handle_methods";
@@ -130,13 +134,14 @@ static FANOUT_PROGRAM: LazyLock<std::result::Result<LuaProgram, SharedSource>> =
 /// helpers, and installed as the `tasks` global; `fanout` is a third, run
 /// over the same captures plus the collection enumerator and the item
 /// renderer, and installed on the `tasks` table as `tasks.fanout`. The
-/// `models.loop` shim is stashed in the registry for
-/// [`install_section_loop_shim`], and the chunk's `handle_methods` table, a
-/// model handle's `infer` and `loop`, for [`handle_method`].
+/// `models.loop` and `models.compact` shims are stashed in the registry
+/// for [`install_section_loop_shim`], and the chunk's `handle_methods`
+/// table, a model handle's `infer` and `loop`, for [`handle_method`].
 /// `max_tool_iterations`, the run's resolved round cap, the `compactors`
 /// table, and `loop_running`, the VM's flag that refuses a loop started
 /// while one runs, go to [`loop_begin`](crate::models_loop::loop_begin),
-/// which runs the loop's rules behind the shim's trampoline.
+/// which runs the loop's rules behind the shim's trampoline, and the flag
+/// also goes to [`compact_begin`](crate::models_loop::compact_begin).
 ///
 /// Three further captures give the chunk the structured error shape:
 /// `error_value(kind, fields)` builds the `{ kind, message, ... }` table
@@ -155,8 +160,9 @@ static FANOUT_PROGRAM: LazyLock<std::result::Result<LuaProgram, SharedSource>> =
 /// raise a failure caught under cancellation again instead of returning
 /// it, and the hook's abort always reaches the block guard. Next,
 /// `is_model_handle` reports whether a value is a model handle, so the
-/// `infer` entries check their receiver before any yield, and the last,
-/// `loop_begin`, starts each loop call for the trampoline.
+/// `infer` entries check their receiver before any yield, and the last
+/// two, `loop_begin` and `compact_begin`, start each loop and compaction
+/// call for the trampoline.
 ///
 /// # Errors
 /// Returns [`Error::Lua`] if the coroutine library, the shim chunk, or any
@@ -197,6 +203,7 @@ pub(crate) fn install_shim_prelude(
         loop_running,
         instruction_budget,
     )?;
+    let compact_begin = crate::models_loop::compact_begin(lua, loop_running, instruction_budget)?;
     let program = SHIM_PROGRAM.as_ref().map_err(Error::shared)?;
     let shims: Table = program
         .load(lua)?
@@ -213,6 +220,7 @@ pub(crate) fn install_shim_prelude(
             cancel_requested,
             is_model_handle,
             loop_begin,
+            compact_begin,
         ))
         .map_err(Error::lua)?;
     let guard: Function = shims.raw_get("guard").map_err(Error::lua)?;
@@ -271,13 +279,15 @@ pub(crate) fn install_shim_prelude(
     Ok(())
 }
 
-/// Stashes the shim chunk's `loop`, `handle_methods`, `model_tool_call`,
-/// and `store` under their registry keys, for the installs and the handle
-/// getters that read them after the prelude.
+/// Stashes the shim chunk's `loop`, `compact`, `handle_methods`,
+/// `model_tool_call`, and `store` under their registry keys, for the
+/// installs and the handle getters that read them after the prelude.
 fn stash_shims(lua: &Lua, shims: &Table) -> Result<()> {
-    let models_loop: Function = shims.raw_get("loop").map_err(Error::lua)?;
-    lua.set_named_registry_value(LOOP_REGISTRY, models_loop)
-        .map_err(Error::lua)?;
+    for (field, key) in [("loop", LOOP_REGISTRY), ("compact", COMPACT_REGISTRY)] {
+        let entry: Function = shims.raw_get(field).map_err(Error::lua)?;
+        lua.set_named_registry_value(key, entry)
+            .map_err(Error::lua)?;
+    }
     let handle_methods: Table = shims.raw_get("handle_methods").map_err(Error::lua)?;
     lua.set_named_registry_value(HANDLE_METHODS_REGISTRY, handle_methods)
         .map_err(Error::lua)?;
@@ -325,8 +335,9 @@ pub(crate) fn block_guard(lua: &Lua) -> Result<Function> {
     lua.named_registry_value(GUARD_REGISTRY).map_err(Error::lua)
 }
 
-/// Installs the `models.loop` yield shim on a VM whose shim prelude
-/// already ran (`install_shim_prelude` stashed the shim in the registry).
+/// Installs the `models.loop` and `models.compact` yield shims on a VM
+/// whose shim prelude already ran (`install_shim_prelude` stashed the
+/// shims in the registry).
 ///
 /// The executor's section setup is the only caller.
 ///
@@ -334,11 +345,12 @@ pub(crate) fn block_guard(lua: &Lua) -> Result<Function> {
 /// Returns [`Error::Lua`] if the shim prelude was never installed on this
 /// VM, the `models` table is absent, or the install fails.
 pub fn install_section_loop_shim(lua: &Lua) -> Result<()> {
-    let models_loop: Function = lua
-        .named_registry_value(LOOP_REGISTRY)
-        .map_err(Error::lua)?;
     let models: Table = lua.globals().raw_get("models").map_err(Error::lua)?;
-    models.raw_set("loop", models_loop).map_err(Error::lua)
+    for (name, key) in [("loop", LOOP_REGISTRY), ("compact", COMPACT_REGISTRY)] {
+        let entry: Function = lua.named_registry_value(key).map_err(Error::lua)?;
+        models.raw_set(name, entry).map_err(Error::lua)?;
+    }
+    Ok(())
 }
 
 /// The shim's `name` method for a model handle, `infer` or `loop`, from

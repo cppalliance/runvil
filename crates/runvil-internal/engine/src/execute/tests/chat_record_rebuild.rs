@@ -270,6 +270,71 @@ fn re_inserting_an_identical_record_adds_nothing_to_the_log() {
 }
 
 #[test]
+fn a_run_that_compacted_after_an_overflow_rebuilds_every_request_from_its_records() {
+    let overflow = CompletionError::context_overflow(Some(5000), Some(4096), "too large");
+    let (scenario, log) = echo_rounds(
+        "messages:system('be brief')\n\
+         messages:user('one')\n\
+         models.loop()\n\
+         messages:user('two')\n\
+         models.loop(function(reason)\n\
+           local summary = models.infer('Summarize: ' .. messages[2].content)\n\
+           messages:replace(2, 3, { role = 'user', content = 'Summary: ' .. summary })\n\
+         end)\n\
+         return messages[#messages].content",
+        vec![
+            chat_answer(&text("a1")),
+            EffectAnswer::Chat(Err(overflow)),
+            chat_answer(&text("s1")),
+            chat_answer(&text("a2")),
+        ],
+    );
+    let trace = scenario.run();
+    let sent = log.take();
+    assert_eq!(trace.text(), "a2");
+    assert_rebuilds(&trace, &sent);
+    assert_eq!(
+        sent.len(),
+        4,
+        "the first round, the overflowed one, the summary, and the retry"
+    );
+    assert_eq!(
+        sent[3].shape(),
+        (Some(RoundId::new(1)), 1, &[user("Summary: s1\n\ntwo")][..]),
+        "the retry logs the compacted suffix once"
+    );
+}
+
+#[test]
+fn a_replacement_inside_a_compactor_that_differs_only_in_meta_adds_nothing_to_the_log() {
+    let (scenario, log) = echo_rounds(
+        "messages:user('one')\n\
+         models.loop()\n\
+         models.compact(function()\n\
+           messages:replace(1, 1, { role = 'user', content = 'one', meta = { note = 'tagged' } })\n\
+         end, 'tag the first record')\n\
+         local tagged = messages[1].meta.note\n\
+         messages:user('two')\n\
+         models.loop()\n\
+         return tagged .. '|' .. messages[#messages].content",
+        vec![chat_answer(&text("a1")), chat_answer(&text("a2"))],
+    );
+    let trace = scenario.run();
+    let sent = log.take();
+    assert_eq!(trace.text(), "tagged|a2");
+    assert_rebuilds(&trace, &sent);
+    assert_eq!(
+        sent[1].shape(),
+        (
+            Some(RoundId::new(0)),
+            1,
+            &[assistant("a1"), user("two")][..]
+        ),
+        "the record that gained meta is kept, not logged"
+    );
+}
+
+#[test]
 fn removing_the_terminal_reply_and_resending_repeats_the_request_it_answered() {
     let (scenario, log) = echo_rounds(
         "messages:user('hello')\n\

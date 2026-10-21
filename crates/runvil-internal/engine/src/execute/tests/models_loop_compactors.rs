@@ -1,9 +1,10 @@
 //! Tests for `models.loop`'s compactor argument: the omitted-compactor
 //! default, `compactors.fail` invocation with the overflow reason or a
 //! caller's own, typed context exhaustion raised at the call site, the non-function
-//! compactor's argument error, and an author compactor that returns or
-//! raises its own failure. The loop's round mechanics sit in
-//! `models_loop`; its exit rules in `exit_rules`.
+//! compactor's argument error, and an author compactor that returns without
+//! shrinking the list or raises its own failure. The loop's round mechanics
+//! sit in `models_loop`; its exit rules in `exit_rules`; compaction that
+//! succeeds in `compaction`.
 
 use runvil_parser::test_support::one_section;
 
@@ -144,10 +145,9 @@ fn a_non_function_compactor_is_the_calls_error_in_the_engines_type_names() {
 }
 
 #[test]
-fn a_compactor_that_returns_is_the_deferred_replacement_error() {
-    // A compactor that returns a replacement instead of raising is refused:
-    // the loop raises a `lua`-kind error naming the one shipped policy, and
-    // appends nothing.
+fn a_compactor_that_returns_without_shrinking_the_list_raises_context_exhaustion() {
+    // A compactor's return value is ignored: what counts is the list it
+    // leaves, and an unchanged list did not shrink.
     let rounds = Arc::new(AtomicUsize::new(0));
     let source = one_section(
         "messages:user('a small prompt')
@@ -156,25 +156,17 @@ fn a_compactor_that_returns_is_the_deferred_replacement_error() {
            seen = reason
            return { role = 'user', content = 'summary' }
          end)
-         assert(not ok, 'a returning compactor raises')
+         assert(not ok, 'a compactor that shrank nothing raises')
          assert(seen == 'provider', 'the compactor ran with the reason tag')
          assert(#messages == 1, 'the refused round appends nothing')
-         return err.kind .. '|' .. tostring(err)",
+         return err.kind .. '|' .. err.reason",
     );
     let trace = loop_scenario(source).chat_with(overflowing(&rounds)).run();
-    let (kind, message) = trace
-        .text()
-        .split_once('|')
-        .expect("the section returns kind|message");
-    assert_eq!(kind, "lua");
-    assert!(
-        message.contains("deferred") && message.contains("compactors.fail"),
-        "a returned replacement names the deferred framework, got: {message}"
-    );
+    assert_eq!(trace.text(), "context_exhausted|provider");
     assert_eq!(
         rounds.load(Ordering::SeqCst),
         1,
-        "the request left and was rejected"
+        "the request left and was rejected, and nothing was retried"
     );
 }
 

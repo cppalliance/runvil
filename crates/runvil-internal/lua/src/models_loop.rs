@@ -1,11 +1,15 @@
-//! The rules of `models.loop`, run in Rust behind the loop shim.
+//! The rules of `models.loop` and `models.compact`, run in Rust behind the
+//! loop shim.
 //!
 //! `models.loop` and a model handle's `loop` are one-line entries over a
 //! Lua trampoline in `__impl_coro.lua` over `loop_begin`, which this
 //! module builds, and the step closure each call returns, which owns that
-//! call's machine. A Rust function called from Lua cannot yield, and
-//! cannot call a Lua function that may yield, so each step returns to the
-//! trampoline with one action, named by its tag: `"yield"` a request and
+//! call's machine. `models.compact` is a third entry over the same
+//! trampoline and `compact_begin`, whose step settles one compactor call
+//! the way an overflowed round's is settled. A Rust function called from
+//! Lua cannot yield, and cannot call a Lua function that may yield, so
+//! each step returns to the trampoline with one action, named by its tag:
+//! `"yield"` a request and
 //! pass every resume value back; call a `"handler"` between
 //! `enter_local_handler()` and `leave_local_handler()`, or the
 //! `"compactor"`, under the raw `pcall` and pass `ok` and the first
@@ -28,7 +32,7 @@ use crate::protocol::ChatResult;
 
 mod machine;
 
-use machine::{Input, Machine, Phase, Then, raised};
+use machine::{Input, Machine, Phase, Then, raised, settle};
 
 /// `models.loop`'s refusal of a model handle in the compactor's place.
 const HANDLE_FIRST: &str = "models.loop takes (compactor?); \
@@ -43,11 +47,20 @@ const NO_RECEIVER: &str = "call loop on a model handle with a colon: handle:loop
 /// A handle's `loop` past its receiver and one argument.
 const METHOD_ARITY: &str = "handle:loop takes (compactor?)";
 
-/// Either entry called while a loop runs in the same section.
+/// Either entry called while a loop or a compactor runs in the same
+/// section.
 const LOOP_RUNNING: &str = "a loop or a compactor is already running in this section; \
                             ask a side question with models.infer(prompt)";
 
-/// Builds `loop_begin`, the shim chunk's last argument.
+/// `models.compact`'s refusal past two arguments.
+const COMPACT_ARITY: &str = "models.compact takes (compactor, reason)";
+
+/// `models.compact` called while a loop or a compactor runs in the same
+/// section.
+const COMPACT_RUNNING: &str =
+    "models.compact cannot start while a loop or a compactor is running in this section";
+
+/// Builds `loop_begin`, the shim chunk's argument before `compact_begin`.
 ///
 /// `loop_begin(entry, ...)` takes `false` for `models.loop` or `true` for
 /// a handle's `loop`, then that entry's arguments, and returns the
@@ -96,12 +109,15 @@ pub(crate) fn loop_begin(
 
 /// `loop_begin`'s body: the entry flag, then that entry's argument checks
 /// in Functional Specification's order, then the refusal while `running`
-/// is set, then the machine over the section's list and its step closure,
+/// or the list's `compacting` flag is set, then the machine over the
+/// section's list and its step closure,
 /// whose body is `act(lua, machine.step(read_input(lua, machine.phase(),
 /// values, &budget)?))`, then the first action. `running` is set only once
 /// nothing here can fail and the first action leaves the machine running;
 /// the step clears it when the machine is done, before it builds that
-/// action, and whenever it fails.
+/// action, and whenever it fails. A failed step also clears the list's
+/// `compacting` flag, which an overflow sets before the step builds the
+/// compactor's action.
 fn begin(
     lua: &Lua,
     args: MultiValue,
@@ -147,10 +163,11 @@ fn begin(
     };
     let messages = crate::globals::messages(lua).map_err(mlua::Error::external)?;
     let list = MessageList::clone(&*messages.borrow::<MessageList>()?);
-    if running.load(Ordering::Relaxed) {
+    if running.load(Ordering::Relaxed) || list.compacting() {
         return refuse(lua, LOOP_RUNNING);
     }
     let messages = Value::UserData(messages);
+    let flagged = list.clone();
     let (mut machine, first) = Machine::begin(max_rounds, list, messages, handle, compactor);
     let started = !matches!(machine.phase(), Phase::Done);
     let budget = budget.clone();
@@ -158,12 +175,13 @@ fn begin(
     let step = lua.create_function_mut(move |lua, values: MultiValue| {
         let then =
             read_input(lua, machine.phase(), values, &budget).map(|input| machine.step(input));
-        if then.is_err() || matches!(machine.phase(), Phase::Done) {
+        if matches!(machine.phase(), Phase::Done) {
             cleared.store(false, Ordering::Relaxed);
         }
-        let action = act(lua, then?);
+        let action = then.and_then(|then| act(lua, then));
         if action.is_err() {
             cleared.store(false, Ordering::Relaxed);
+            flagged.set_compacting(false);
         }
         action
     })?;
@@ -172,6 +190,80 @@ fn begin(
     if started {
         running.store(true, Ordering::Relaxed);
     }
+    Ok(action)
+}
+
+/// Builds `compact_begin`, the shim chunk's argument after `loop_begin`.
+///
+/// `compact_begin(compactor, reason)` checks its arity, then the
+/// compactor, then the reason, refuses while `loop_running` or the
+/// section list's `compacting` flag is set, snapshots the list, and sets
+/// that flag. It returns the step closure followed by the `"compactor"`
+/// action with the compactor and the reason; or `nil`, `"raise"`, and the
+/// refusal. The step takes the compactor's raw `pcall` outcome, settles it
+/// as an overflowed round's is settled but under the structural rules
+/// only, and returns the `"return"` or `"raise"` action. `budget` is the
+/// VM's instruction budget, whose cancel flag the step reads.
+///
+/// # Errors
+/// Returns [`Error::Lua`] if the function cannot be created.
+pub(crate) fn compact_begin(
+    lua: &Lua,
+    loop_running: &Arc<AtomicBool>,
+    budget: &InstructionBudget,
+) -> Result<Function> {
+    let running = Arc::clone(loop_running);
+    let budget = budget.clone();
+    lua.create_function(move |lua, args: MultiValue| compact(lua, args, &running, &budget))
+        .map_err(Error::lua)
+}
+
+/// `compact_begin`'s body. The flag is set only once nothing here can
+/// fail, and the step clears it before it builds its action.
+fn compact(
+    lua: &Lua,
+    args: MultiValue,
+    running: &AtomicBool,
+    budget: &InstructionBudget,
+) -> mlua::Result<MultiValue> {
+    let args: Vec<Value> = args.into_iter().collect();
+    if args.len() > 2 {
+        return refuse(lua, COMPACT_ARITY);
+    }
+    let mut args = args.into_iter();
+    let compactor = args.next().unwrap_or(Value::Nil);
+    let reason = args.next().unwrap_or(Value::Nil);
+    for (name, value, wanted) in [
+        ("compactor", &compactor, "function"),
+        ("reason", &reason, "string"),
+    ] {
+        if value.type_name() != wanted {
+            let message = format!("{name} must be a {wanted}, got {}", lua_type_name(value));
+            return refuse(lua, &message);
+        }
+    }
+    let messages = crate::globals::messages(lua).map_err(mlua::Error::external)?;
+    let list = MessageList::clone(&*messages.borrow::<MessageList>()?);
+    if running.load(Ordering::Relaxed) || list.compacting() {
+        return refuse(lua, COMPACT_RUNNING);
+    }
+    let mut snapshot = Some(list.snapshot());
+    let budget = budget.clone();
+    let compacted = list.clone();
+    let step = lua.create_function_mut(move |lua, (ok, value): (Value, Value)| {
+        let Some(snapshot) = snapshot.take() else {
+            return Err(malformed(
+                "the models.compact step ran after its compaction ended",
+            ));
+        };
+        let outcome = if truthy(&ok) { Ok(value) } else { Err(value) };
+        let then = settle(&compacted, snapshot, outcome, budget.is_cancelled(), None)
+            .map_or_else(|refusal| refusal, |_| Then::Return);
+        act(lua, then)
+    })?;
+    let tag = Value::String(lua.create_string("compactor")?);
+    let action = MultiValue::from_vec(vec![Value::Function(step), tag, compactor, reason]);
+    list.set_compacting(true);
     Ok(action)
 }
 
@@ -199,7 +291,7 @@ fn read_input(
     let ok = truthy(&next());
     let value = next();
     match phase {
-        Phase::Compacting | Phase::Handling => Ok(Input::Called {
+        Phase::Compacting(_) | Phase::Handling => Ok(Input::Called {
             outcome: if ok { Ok(value) } else { Err(value) },
             cancelled: budget.is_cancelled(),
         }),

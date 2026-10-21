@@ -1007,7 +1007,7 @@ Commit and rules:
 
 <step-6>
 
-### Step 6: Compact in place, on overflow or on demand
+### Step 6: Compact in place, on overflow or on demand [completed]
 
 - Component: Compaction
 - Tests: run in PowerShell from `c:\Users\Vinnie\cursor\runvil`, in this order:

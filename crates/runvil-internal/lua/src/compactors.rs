@@ -1,20 +1,23 @@
-//! The minimum compactor surface: overflow reasons, the one shipped policy,
-//! and the pre-dispatch precheck.
+//! The compactor surface: overflow reasons, the shipped policies, and the
+//! pre-dispatch precheck.
 //!
 //! A model request can fail to fit the model's context window twice: the
 //! pre-dispatch [`precheck`] can count the projected conversation, plus the
 //! room kept for the reply, past the window before anything leaves, and the
 //! broker can report the request
 //! as too large (a `ContextOverflow` failure, which the `chat` arm turns
-//! into the provider overflow). Either path invokes the
-//! selected [`Compactor`] with the [`OverflowReason`]. `compactors.fail` is
-//! the only shipped policy and the omitted-compactor default; it always
-//! raises typed context exhaustion ([`Error::ContextExhausted`]).
+//! into the provider overflow). Either path calls the selected compactor
+//! with the [`OverflowReason`]'s tag, and the compactor edits the section's
+//! `messages` list in place; the loop then checks that the list shrank and
+//! retries the round. The shipped [`Compactor`] policies are
+//! `compactors.fail`, the omitted-compactor default, which always raises
+//! typed context exhaustion ([`Error::ContextExhausted`]), and
+//! `compactors.clear`, which removes every record.
 //!
 //! The surface sits in this crate for the same reason the projection does:
 //! it owns the message records, the `chat` arm's precheck and overflow
-//! classification depend on it, and the loop shim's compactor invocation
-//! runs in Lua over the `compactors` global installed here.
+//! classification depend on it, and the loop's compactor call runs in Lua
+//! over the `compactors` global installed here.
 
 use std::borrow::Cow;
 use std::num::NonZeroU32;
@@ -26,6 +29,7 @@ use runvil_types::metrics::Usage;
 use serde_json::Value;
 
 use crate::error::{Error, Result};
+use crate::messages::MessageList;
 
 /// Why a request cannot fit the model's context window.
 ///
@@ -96,26 +100,37 @@ pub fn exhaustion_detail(reason: &str) -> Cow<'_, str> {
     }
 }
 
-/// The compactor policies the active surface ships.
+/// The compactor policies the `compactors` global ships.
 ///
-/// `Fail` is the only policy and the omitted-compactor default: invoked
-/// with the overflow reason, it always raises typed context exhaustion.
+/// `Fail` is the omitted-compactor default: invoked with any reason, it
+/// always raises typed context exhaustion. `Clear` removes every record,
+/// so a section can start its conversation over without leaving.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Compactor {
     /// `compactors.fail`: always raises [`Error::ContextExhausted`].
     #[default]
     Fail,
+    /// `compactors.clear`: removes every record from the list, leaving its
+    /// last send and its rendered tool list.
+    Clear,
 }
 
 impl Compactor {
-    /// Invokes the policy on one overflow. The only shipped policy always
-    /// fails, so the invocation is the typed exhaustion error itself.
-    #[must_use]
-    pub fn invoke(self, reason: OverflowReason) -> Error {
+    /// Invokes the policy on `list` with `reason`, an overflow's tag or a
+    /// caller's own.
+    ///
+    /// # Errors
+    /// `Fail` always returns [`Error::ContextExhausted`] holding `reason`;
+    /// `Clear` never fails.
+    pub fn invoke(self, list: &MessageList, reason: &str) -> Result<()> {
         match self {
-            Compactor::Fail => Error::ContextExhausted {
-                reason: reason.tag().to_owned(),
-            },
+            Compactor::Fail => Err(Error::ContextExhausted {
+                reason: reason.to_owned(),
+            }),
+            Compactor::Clear => {
+                list.clear();
+                Ok(())
+            }
         }
     }
 }
@@ -239,8 +254,9 @@ pub fn precheck(
 }
 
 /// The request's estimated prompt tokens: text characters over
-/// [`CHARS_PER_TOKEN`], plus per-message framing overhead.
-fn estimate_tokens(messages: &[Message]) -> u64 {
+/// [`CHARS_PER_TOKEN`], plus per-message framing overhead. A compaction
+/// after an overflow must bring this below the estimate it started from.
+pub(crate) fn estimate_tokens(messages: &[Message]) -> u64 {
     let chars: u64 = messages.iter().map(message_chars).sum();
     chars / CHARS_PER_TOKEN + MESSAGE_OVERHEAD_TOKENS * messages.len() as u64
 }
@@ -263,28 +279,33 @@ fn message_chars(message: &Message) -> u64 {
     content + calls
 }
 
-/// Installs the `compactors` global holding the shipped policies.
+/// Installs the `compactors` global holding the shipped policies over the
+/// section's `list`.
 ///
-/// `compactors.fail` is a Rust-backed function: invoked with any reason
-/// string, the overflow's tag or the caller's own, it raises typed context
-/// exhaustion holding that reason as an external error, so
+/// Each policy is a Rust-backed function taking one reason string, the
+/// overflow's tag or the caller's own. `compactors.fail` raises typed
+/// context exhaustion holding that reason as an external error, so
 /// the [`Error::ContextExhausted`] value crosses the Lua boundary
-/// downcastable rather than flattened to text; the loop shim, which invokes
-/// the selected compactor on an overflow round, normalizes that raise into
+/// downcastable rather than flattened to text; the loop, which calls the
+/// selected compactor on an overflow round, normalizes that raise into
 /// the structured error table before re-raising it, so the kind reaches
-/// author code and the Engine alike. The namespace installs during Engine
-/// injection, right after the section's `messages` list.
+/// author code and the Engine alike. `compactors.clear` empties `list`.
+/// The namespace installs during Engine injection, right after the
+/// section's `messages` list.
 ///
 /// # Errors
-/// Returns [`Error::Lua`] if the function or the global install fails.
-pub(crate) fn install_compactors(lua: &Lua, globals: &Table) -> Result<()> {
-    let fail: Function = lua
-        .create_function(|_lua, reason: String| {
-            Err::<(), _>(mlua::Error::external(Error::ContextExhausted { reason }))
-        })
-        .map_err(Error::lua)?;
+/// Returns [`Error::Lua`] if a function or the global install fails.
+pub(crate) fn install_compactors(lua: &Lua, globals: &Table, list: &MessageList) -> Result<()> {
     let compactors = lua.create_table().map_err(Error::lua)?;
-    compactors.raw_set("fail", fail).map_err(Error::lua)?;
+    for (name, policy) in [("fail", Compactor::Fail), ("clear", Compactor::Clear)] {
+        let list = list.clone();
+        let function: Function = lua
+            .create_function(move |_lua, reason: String| {
+                policy.invoke(&list, &reason).map_err(mlua::Error::external)
+            })
+            .map_err(Error::lua)?;
+        compactors.raw_set(name, function).map_err(Error::lua)?;
+    }
     globals
         .raw_set("compactors", compactors)
         .map_err(Error::lua)

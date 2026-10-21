@@ -156,7 +156,7 @@ impl SectionVm<Uninjected> {
             self.raw_model_ids,
         )?;
         install_messages(&self.lua, &self.messages)?;
-        install_compactors(&self.lua, &globals)
+        install_compactors(&self.lua, &globals, &self.messages)
     }
 
     /// The same VM at the injected stage, holding `access`.

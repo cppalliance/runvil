@@ -1,10 +1,12 @@
 //! Tests for the `compactors` namespace and the context-window precheck.
 
+use std::collections::BTreeMap;
 use std::num::NonZeroU32;
 
 use mlua::Lua;
 use runvil_model_client::client::{Message, Role};
 use runvil_model_client::detail::message_from_validated_parts;
+use runvil_types::ids::RoundId;
 use runvil_types::metrics::Usage;
 use serde_json::{Value, json};
 
@@ -13,12 +15,27 @@ use super::{
     precheck,
 };
 use crate::Error;
+use crate::messages::MessageList;
+use crate::scope::RenderedTools;
+use crate::tests::user;
 
-fn lua_with_compactors() -> Lua {
+/// A fresh VM whose `compactors` global runs over `list`.
+fn lua_with_compactors_over(list: &MessageList) -> Lua {
     let lua = Lua::new();
     let globals = lua.globals();
-    install_compactors(&lua, &globals).expect("compactors install cannot fail on a fresh VM");
+    install_compactors(&lua, &globals, list).expect("compactors install cannot fail on a fresh VM");
     lua
+}
+
+fn lua_with_compactors() -> Lua {
+    lua_with_compactors_over(&MessageList::default())
+}
+
+/// The error the fail policy returns for `reason`.
+fn fail_invoked(reason: OverflowReason) -> Error {
+    Compactor::Fail
+        .invoke(&MessageList::default(), reason.tag())
+        .expect_err("the fail policy always fails")
 }
 
 /// Extracts the typed crate error a `compactors.fail` raise brought across
@@ -57,7 +74,7 @@ fn the_omitted_compactor_defaults_to_fail() {
     }
     assert_eq!(Compactor::default(), Compactor::Fail);
     assert_eq!(resolve(None), Compactor::Fail);
-    let error = Compactor::Fail.invoke(OverflowReason::Provider);
+    let error = fail_invoked(OverflowReason::Provider);
     assert!(
         matches!(&error, Error::ContextExhausted { reason } if reason == "provider"),
         "the default policy must raise typed context exhaustion, got {error:?}"
@@ -67,7 +84,7 @@ fn the_omitted_compactor_defaults_to_fail() {
 #[test]
 fn fail_invocation_raises_typed_exhaustion_holding_the_reason() {
     for reason in [OverflowReason::Precheck, OverflowReason::Provider] {
-        let error = Compactor::Fail.invoke(reason);
+        let error = fail_invoked(reason);
         match error {
             Error::ContextExhausted { reason: raised } => {
                 assert_eq!(
@@ -79,8 +96,8 @@ fn fail_invocation_raises_typed_exhaustion_holding_the_reason() {
             other => panic!("expected ContextExhausted, got {other:?}"),
         }
     }
-    let precheck = Compactor::Fail.invoke(OverflowReason::Precheck).to_string();
-    let provider = Compactor::Fail.invoke(OverflowReason::Provider).to_string();
+    let precheck = fail_invoked(OverflowReason::Precheck).to_string();
+    let provider = fail_invoked(OverflowReason::Provider).to_string();
     assert_ne!(
         precheck, provider,
         "the two reasons must render distinct diagnostics"
@@ -150,13 +167,39 @@ fn an_overflow_reason_is_a_standard_error_whose_text_is_its_display() {
 #[test]
 fn the_fail_policy_invokes_as_typed_exhaustion_for_either_reason() {
     for reason in [OverflowReason::Precheck, OverflowReason::Provider] {
-        match Compactor::Fail.invoke(reason) {
+        match fail_invoked(reason) {
             Error::ContextExhausted { reason: raised } => {
                 assert_eq!(raised, reason.tag(), "the policy holds the invoking reason");
             }
             other => panic!("expected ContextExhausted, got {other:?}"),
         }
     }
+}
+
+#[test]
+fn compactors_clear_removes_every_record_and_keeps_the_send_and_the_rendered_tools() {
+    let list = MessageList::default();
+    list.push(user("one")).unwrap();
+    list.attach_rendered_tools(RenderedTools {
+        schemas: Vec::new(),
+        dispatch: BTreeMap::new(),
+    });
+    let sent = [Message::user("one")];
+    let _ = list.commit(RoundId::new(0), &sent);
+    let lua = lua_with_compactors_over(&list);
+    lua.load("compactors.clear('manual')").exec().unwrap();
+    assert!(list.to_records().is_empty(), "every record is gone");
+    assert!(list.rendered(), "the rendered tool list stays attached");
+    assert_eq!(
+        list.commit(RoundId::new(1), &sent),
+        (Some(RoundId::new(0)), 1),
+        "the last send stays, so the next send still compares with it"
+    );
+    list.push(user("two")).unwrap();
+    Compactor::Clear
+        .invoke(&list, "precheck")
+        .expect("the clear policy succeeds");
+    assert!(list.to_records().is_empty());
 }
 
 fn window(tokens: u32) -> NonZeroU32 {

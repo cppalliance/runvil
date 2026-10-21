@@ -24,7 +24,10 @@
 //! The list also holds the section's rendered tool list, which the Engine
 //! attaches at the first loop round that builds its tools, so it lasts
 //! exactly as long as the section. Once one is attached, every offer
-//! function raises.
+//! function raises. A compaction edits the list in place and keeps a
+//! snapshot of its records to put back if the compaction fails; neither
+//! the snapshot nor `compactors.clear` touches the last send or the
+//! rendered tool list.
 
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
@@ -39,8 +42,12 @@ use crate::error::{Error, Result};
 use crate::protocol::{MessageRecord, RecordRole, parse_record};
 use crate::scope::RenderedTools;
 
+#[path = "messages-snapshot.rs"]
+mod snapshot;
 #[path = "messages-view.rs"]
 mod view;
+
+pub(crate) use snapshot::Snapshot;
 
 /// The refusal of an assignment of the `messages` global.
 pub(crate) const ASSIGNMENT_REFUSAL: &str = "messages is the section's conversation and cannot \
@@ -101,6 +108,8 @@ struct ListState {
     last: Option<(RoundId, Vec<Message>)>,
     /// Attached at the first successful build and never detached.
     rendered: Option<RenderedTools>,
+    /// Set while a compactor runs over the list.
+    compacting: bool,
 }
 
 impl MessageList {

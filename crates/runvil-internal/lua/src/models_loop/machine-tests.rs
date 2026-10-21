@@ -9,6 +9,9 @@ use crate::messages::MessageList;
 use crate::models_loop::tests::{echo_call, round};
 use crate::protocol::{ChatOutcome, ChatResult, MessageContent, MessageRecord};
 
+#[path = "machine-tests-compaction.rs"]
+mod compaction;
+
 type V = &'static str;
 
 /// One step as a line: the action and the values it names.
@@ -376,8 +379,8 @@ fn cancellation_raises_a_failed_handler_or_compactor_raw_and_a_return_still_wins
         (
             Ok("returned"),
             true,
-            "new lua|the selected compactor returned without raising: replacement \
-             compactors are deferred; compactors.fail is the only shipped policy",
+            "new context_exhausted|context exhausted: the provider rejected the request as \
+             exceeding the model's context window",
         ),
     ];
     for (outcome, cancelled, expected) in cases {

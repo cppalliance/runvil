@@ -222,6 +222,51 @@ fn a_running_loop_refuses_another_until_its_step_ends_or_fails() {
     );
 }
 
+/// Raises the heap limit from the live heap until the overflow's step
+/// succeeds. A step that fails on its own clears `loop_running`, and must
+/// clear `compacting` too. A compactor return the step takes as
+/// `(true, value)` is read only after an overflow was judged, so it shows
+/// the failure came after the machine set `compacting`.
+#[test]
+fn a_step_failing_on_a_full_heap_after_an_overflow_leaves_no_flag_set() {
+    let lua = Lua::new();
+    let list = install_section_list(&lua);
+    lua.load("messages:user('u')").exec().unwrap();
+    let (begin, running) = begin_with_flag(&lua, 2);
+    let mut judged = false;
+    for headroom in (0..64 * 1024).step_by(8) {
+        let (step, _, _): (Function, Value, Value) = begin.call(false).unwrap();
+        let overflowed = ChatResult {
+            outcome: ChatOutcome::Overflow(OverflowReason::Precheck),
+            ..round()
+        };
+        let (envelope, _) = Answer::<Error>::Chat(Ok(Box::new(overflowed)))
+            .into_envelope(&lua)
+            .unwrap();
+        lua.gc_collect().unwrap();
+        lua.set_memory_limit(lua.used_memory() + headroom).unwrap();
+        let stepped = step.call::<MultiValue>(envelope);
+        lua.set_memory_limit(0).unwrap();
+        let failed = stepped.is_err() && !running.load(Ordering::Relaxed);
+        if failed {
+            assert!(
+                !list.compacting(),
+                "a step that failed with {headroom} bytes of headroom left the list compacting"
+            );
+        }
+        let returned = step.call::<MultiValue>((true, "returned")).is_ok();
+        judged |= failed && returned;
+        assert!(!running.load(Ordering::Relaxed) && !list.compacting());
+        if stepped.is_ok() {
+            break;
+        }
+    }
+    assert!(
+        judged,
+        "no headroom failed the step after it judged the overflow"
+    );
+}
+
 #[test]
 fn envelope_failure_keeps_an_error_table_and_wraps_anything_else() {
     let lua = Lua::new();

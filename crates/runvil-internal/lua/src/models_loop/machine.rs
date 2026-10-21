@@ -1,9 +1,9 @@
 //! The rules of `models.loop` over typed inputs, with no Lua VM: the
 //! round cap, the order a round's answer is judged in, the batch rule, a
-//! local tool's report and re-raise, and the compactor's rules. The
-//! machine pushes every record onto the list itself, and every Lua value
-//! it only passes along is an opaque `V`, so the unit tests run over a
-//! plain `MessageList` with any `V`.
+//! local tool's report and re-raise, and compaction after an overflow.
+//! The machine pushes every record onto the list itself, and every Lua
+//! value it only passes along is an opaque `V`, so the unit tests run over
+//! a plain `MessageList` with any `V`.
 //!
 //! The batch rule: every call a round left unanswered goes out as one
 //! `tool_calls` request, even a lone one, and a call goes out alone as a
@@ -11,14 +11,22 @@
 //! it. The scheduler decides which calls run together, so a call's route
 //! never depends on how many calls share its round. The round's records
 //! append only once every call has its result, in the model's order.
+//!
+//! Compaction: an overflowed round snapshots the list's records, flags the
+//! list as compacting, and calls the compactor, which edits the list in
+//! place. A kept compaction retries the round without counting it, and a
+//! round compacts at most once, so a retry that overflows again puts the
+//! snapshot back and raises `context_exhausted`.
 
 use std::collections::BTreeMap;
 
 use runvil_types::metrics::ToolCallEvent;
 
-use crate::compactors::OverflowReason;
-use crate::error_value::{ErrorField, ErrorKind, Raised};
-use crate::messages::MessageList;
+use crate::compactors::{OverflowReason, estimate_tokens};
+use crate::error::Error;
+use crate::error_value::{ErrorField, ErrorKind, ErrorValue, Raised};
+use crate::messages::{MessageList, Snapshot};
+use crate::projection::project_messages;
 use crate::protocol::{
     ChatOutcome, ChatResult, MessageContent, MessageRecord, RecordRole, ToolCallRecord,
 };
@@ -29,11 +37,6 @@ const EMPTY_MODEL_REPLY: &str = "empty model reply";
 
 /// The message the round cap raises.
 const NOT_CONVERGED: &str = "tool-call loop did not converge";
-
-/// The message raised for a compactor that returns instead of raising.
-const COMPACTOR_RETURNED: &str = "the selected compactor returned without raising: replacement \
-                                  compactors are deferred; compactors.fail is the only shipped \
-                                  policy";
 
 /// The message raised for an input the machine's phase does not await.
 const UNEXPECTED_INPUT: &str =
@@ -66,6 +69,9 @@ pub(super) struct Machine<V> {
     calls: Vec<ToolCallEvent>,
     /// The current batch's results so far, one per answered call.
     results: Vec<String>,
+    /// The records from before this round's compaction, held until the
+    /// retried round's answer arrives. Set means the round has compacted.
+    snapshot: Option<Snapshot>,
     /// What the machine waits on.
     phase: Phase<V>,
 }
@@ -76,8 +82,9 @@ pub(super) struct Machine<V> {
 pub(super) enum Phase<V> {
     /// The `chat` answer: `(ok, round)`.
     Chatting,
-    /// The compactor's raw `pcall`: `(ok, value)`.
-    Compacting,
+    /// The compactor's raw `pcall` after an overflow for this reason:
+    /// `(ok, value)`.
+    Compacting(OverflowReason),
     /// The `tool_calls` answer for the batch's unanswered calls:
     /// `(ok, texts)`.
     Batching,
@@ -174,6 +181,7 @@ impl<V: Clone> Machine<V> {
             turn: 0,
             calls: Vec::new(),
             results: Vec::new(),
+            snapshot: None,
             phase: Phase::Done,
         };
         let first = machine.next_round();
@@ -192,12 +200,26 @@ impl<V: Clone> Machine<V> {
     /// error.
     pub(super) fn step(&mut self, input: Input<V>) -> Then<V> {
         match (std::mem::replace(&mut self.phase, Phase::Done), input) {
-            (Phase::Chatting, Input::Answered(Ok(round))) => self.judge(*round),
-            (Phase::Compacting, Input::Called { outcome, cancelled }) => match outcome {
-                Ok(_) => Then::RaiseNew(raised(ErrorKind::Lua, COMPACTOR_RETURNED)),
-                Err(failure) if cancelled => Then::Raise(failure),
-                Err(failure) => Then::RaiseNormalized(failure),
-            },
+            (Phase::Chatting, Input::Answered(answer)) => {
+                let compacted = self.snapshot.take();
+                match answer {
+                    Ok(round) => self.judge(*round, compacted),
+                    Err(failure) => Then::Raise(failure),
+                }
+            }
+            (Phase::Compacting(reason), Input::Called { outcome, cancelled }) => {
+                let Some(snapshot) = self.snapshot.take() else {
+                    self.list.set_compacting(false);
+                    return Then::RaiseNew(raised(ErrorKind::Internal, UNEXPECTED_INPUT));
+                };
+                match settle(&self.list, snapshot, outcome, cancelled, Some(reason)) {
+                    Ok(snapshot) => {
+                        self.snapshot = Some(snapshot);
+                        self.chat()
+                    }
+                    Err(refusal) => refusal,
+                }
+            }
             (Phase::Batching, Input::Batched(Ok(texts))) => self.take_batch(texts),
             (Phase::Calling, Input::Dispatched(Ok(text)))
             | (Phase::Reporting(None), Input::Reported(Ok(text))) => {
@@ -220,7 +242,6 @@ impl<V: Clone> Machine<V> {
                 }
             },
             (Phase::Reporting(Some(failure)), Input::Reported(_))
-            | (Phase::Chatting, Input::Answered(Err(failure)))
             | (Phase::Batching, Input::Batched(Err(failure)))
             | (Phase::Calling, Input::Dispatched(Err(failure)))
             | (Phase::Reporting(None), Input::Reported(Err(failure))) => Then::Raise(failure),
@@ -235,6 +256,12 @@ impl<V: Clone> Machine<V> {
             return Then::RaiseNew(raised(ErrorKind::ToolLoopExhausted, NOT_CONVERGED));
         }
         self.rounds += 1;
+        self.chat()
+    }
+
+    /// Sends the list in a `chat` without counting a round: a new round's
+    /// send, or a compacted round's retry.
+    fn chat(&mut self) -> Then<V> {
         self.phase = Phase::Chatting;
         Then::Chat {
             messages: self.messages.clone(),
@@ -242,19 +269,14 @@ impl<V: Clone> Machine<V> {
         }
     }
 
-    /// Judges a round's answer: an overflow goes to the compactor, tool
-    /// calls start a batch, a reply is appended and the loop returns, an
-    /// empty reply that finished with `stop` after an answered call is the
-    /// clean exit, and anything else raises `empty_model_reply`.
-    fn judge(&mut self, round: ChatResult) -> Then<V> {
+    /// Judges a round's answer: an overflow goes to [`Machine::overflow`]
+    /// with the snapshot a compacted round holds, tool calls start a
+    /// batch, a reply is appended and the loop returns, an empty reply
+    /// that finished with `stop` after an answered call is the clean exit,
+    /// and anything else raises `empty_model_reply`.
+    fn judge(&mut self, round: ChatResult, compacted: Option<Snapshot>) -> Then<V> {
         let detail = match round.outcome {
-            ChatOutcome::Overflow(reason) => {
-                self.phase = Phase::Compacting;
-                return Then::Compact {
-                    compactor: self.compactor.clone(),
-                    reason,
-                };
-            }
+            ChatOutcome::Overflow(reason) => return self.overflow(reason, compacted),
             ChatOutcome::ToolCalls(calls) => {
                 self.turn = round.turn;
                 self.calls = calls;
@@ -282,6 +304,24 @@ impl<V: Clone> Machine<V> {
                 .insert("finish_reason".to_owned(), ErrorField::String(reason));
         }
         Then::RaiseNew(empty)
+    }
+
+    /// Starts the round's compaction: snapshots the records, flags the
+    /// list as compacting, and calls the compactor with `reason`. A round
+    /// that already compacted puts its snapshot back and raises
+    /// `context_exhausted` instead.
+    fn overflow(&mut self, reason: OverflowReason, compacted: Option<Snapshot>) -> Then<V> {
+        if let Some(snapshot) = compacted {
+            self.list.restore(snapshot);
+            return Then::RaiseNew(exhausted(reason));
+        }
+        self.snapshot = Some(self.list.snapshot());
+        self.list.set_compacting(true);
+        self.phase = Phase::Compacting(reason);
+        Then::Compact {
+            compactor: self.compactor.clone(),
+            reason,
+        }
     }
 
     /// Takes a batch answer's texts, one per call the scheduler issued.
@@ -356,6 +396,70 @@ impl<V: Clone> Machine<V> {
             }
         }
         next(self)
+    }
+}
+
+/// Settles a compactor's raw `pcall` outcome over `list`, which held
+/// `snapshot` when the compactor started, and clears the list's
+/// `compacting` flag. A raise passes on, raw under cancellation and else
+/// normalized. A return is checked against the projection's structural
+/// rules, and after an `overflow` against the shrink rule: the projected
+/// estimate must fall below the snapshot's. A raise or a broken rule puts
+/// the snapshot back; a kept compaction hands the snapshot back.
+pub(super) fn settle<V>(
+    list: &MessageList,
+    snapshot: Snapshot,
+    outcome: std::result::Result<V, V>,
+    cancelled: bool,
+    overflow: Option<OverflowReason>,
+) -> std::result::Result<Snapshot, Then<V>> {
+    list.set_compacting(false);
+    let refusal = match outcome {
+        Err(failure) if cancelled => Then::Raise(failure),
+        Err(failure) => Then::RaiseNormalized(failure),
+        Ok(_) => match check(list, &snapshot, overflow) {
+            Ok(()) => return Ok(snapshot),
+            Err(refused) => Then::RaiseNew(refused),
+        },
+    };
+    list.restore(snapshot);
+    Err(refusal)
+}
+
+/// Checks a compacted `list` against the rules [`settle`] names: the
+/// projection's refusal for a broken structural rule, and
+/// `context_exhausted` for `overflow` when the list did not shrink.
+fn check(
+    list: &MessageList,
+    snapshot: &Snapshot,
+    overflow: Option<OverflowReason>,
+) -> std::result::Result<(), Raised> {
+    let projected = project_messages(&list.to_records())
+        .map_err(|refused| raised(refused.kind(), &refused.to_string()))?;
+    let Some(reason) = overflow else {
+        return Ok(());
+    };
+    // The overflowed round projected these records, so this projection
+    // cannot fail.
+    let before =
+        project_messages(&snapshot.to_records()).map_or(u64::MAX, |sent| estimate_tokens(&sent));
+    if estimate_tokens(&projected) < before {
+        Ok(())
+    } else {
+        Err(exhausted(reason))
+    }
+}
+
+/// A new `context_exhausted` error for `reason`, as `compactors.fail`
+/// raises it.
+fn exhausted(reason: OverflowReason) -> Raised {
+    let error = Error::ContextExhausted {
+        reason: reason.tag().to_owned(),
+    };
+    Raised {
+        kind: error.kind(),
+        message: error.to_string(),
+        fields: error.fields().into_iter().collect(),
     }
 }
 
