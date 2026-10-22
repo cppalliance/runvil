@@ -289,10 +289,12 @@ fn message_chars(message: &Message) -> u64 {
 /// overflow's tag or the caller's own. `compactors.fail` raises typed
 /// context exhaustion holding that reason as an external error, so
 /// the [`Error::ContextExhausted`] value crosses the Lua boundary
-/// downcastable rather than flattened to text; the loop, which calls the
+/// downcastable rather than flattened to text. The loop, which calls the
 /// selected compactor on an overflow round, normalizes that raise into
 /// the structured error table before re-raising it, so the kind reaches
-/// author code and the Engine alike. `compactors.clear` empties `list`,
+/// author code and the Engine alike; a direct call the block does not
+/// catch keeps the kind through the block's failure mapping, so the run
+/// ends as context exhaustion either way. `compactors.clear` empties `list`,
 /// and only while a compactor runs over it.
 /// The namespace installs during Engine injection, right after the
 /// section's `messages` list.

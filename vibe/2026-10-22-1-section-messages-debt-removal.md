@@ -301,7 +301,7 @@ Each component is one piece built as one sequential step: the piece's code and i
 
 <step-2>
 
-### Step 2: End the run as context exhaustion on an uncaught direct compactors.fail
+### Step 2: End the run as context exhaustion on an uncaught direct compactors.fail [completed]
 
 - Component: `Direct fail classification`
 - Tests (run from `c:\Users\Vinnie\cursor\runvil` in PowerShell):

@@ -185,8 +185,11 @@ impl LuaProgram {
     /// its VM.
     ///
     /// An Engine quota refusal, recognized by its typed value, returns
-    /// [`Error::LuaQuota`]. All remaining
-    /// failures return [`Error::LuaRuntime`] with each chunk-relative line
+    /// [`Error::LuaQuota`], and a typed context exhaustion, such as an
+    /// uncaught direct `compactors.fail` call's, returns
+    /// [`Error::ContextExhausted`] with its reason. All remaining failures,
+    /// other typed external errors included, return
+    /// [`Error::LuaRuntime`] with each chunk-relative line
     /// rewritten to an absolute prompt-source line by the program that owns
     /// that chunk, this one first when two share a chunk name. Nested errors
     /// from other chunks (for example a fanout arm) are left unchanged.
@@ -197,6 +200,11 @@ impl LuaProgram {
         if let Some(QuotaExceeded(resource)) = error.downcast_ref::<QuotaExceeded>() {
             return Error::LuaQuota {
                 resource: *resource,
+            };
+        }
+        if let Some(Error::ContextExhausted { reason }) = error.downcast_ref::<Error>() {
+            return Error::ContextExhausted {
+                reason: reason.clone(),
             };
         }
         let raw = error.to_string();

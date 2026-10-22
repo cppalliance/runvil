@@ -1,6 +1,7 @@
 //! Tests for `models.loop`'s compactor argument: the omitted-compactor
 //! default, `compactors.fail` invocation with the overflow reason or a
-//! caller's own, typed context exhaustion raised at the call site, the non-function
+//! caller's own, an uncaught direct `compactors.fail` call in a block,
+//! typed context exhaustion raised at the call site, the non-function
 //! compactor's argument error, and an author compactor that returns without
 //! shrinking the list or raises its own failure. The loop's round mechanics
 //! sit in `models_loop`; its exit rules in `exit_rules`; a compaction's
@@ -99,6 +100,28 @@ fn an_uncaught_compactors_fail_with_a_callers_reason_ends_the_run_as_context_exh
         0,
         "the precheck fires before any request leaves"
     );
+}
+
+#[test]
+fn an_uncaught_direct_compactors_fail_ends_the_run_as_context_exhausted() {
+    let gateway = ScriptedChat::new(vec![text("unreachable")]);
+    let source = one_section(
+        "compactors.fail('manual')
+         return 'unreachable'",
+    );
+    let trace = loop_scenario(source).chat(&gateway).run();
+    let error = trace.error();
+    assert_eq!(error.kind(), RunErrorKind::ContextExhausted, "{error}");
+    assert!(
+        error.to_string().contains("manual"),
+        "the run's message holds the caller's reason, got: {error}"
+    );
+    assert!(
+        matches!(error.inner(), Error::ContextExhausted { reason, .. } if reason == "manual"),
+        "the reason survives as given, got {:?}",
+        error.inner()
+    );
+    assert_eq!(gateway.call_count(), 0, "no request leaves");
 }
 
 #[test]

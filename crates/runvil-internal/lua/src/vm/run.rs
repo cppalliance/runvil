@@ -180,8 +180,10 @@ impl SectionVm {
     /// error, and any other structured error table the guard stashed is
     /// kept as [`Error::Raised`], except a `lua`-kind table, whose mapped
     /// runtime error keeps the same message with its source and the
-    /// mapped prompt line. The stash is taken on every failure so it never
-    /// goes stale.
+    /// mapped prompt line. A raise that is no error table keeps its
+    /// mapping, so an uncaught direct `compactors.fail` call is
+    /// [`Error::ContextExhausted`]. The stash is taken on every failure so
+    /// it never goes stale.
     fn block_failure<E: From<Error>>(
         &self,
         program: &LuaProgram,
