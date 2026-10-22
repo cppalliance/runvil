@@ -62,7 +62,7 @@ fn each_broken_rule_raises_its_error_and_restores_the_records() {
             "messages:replace(5, 5, { role = 'user', content = 'short' })
              messages:append({ role = 'system', content = 'late' })",
             "lua|messages[6] is a system message after a non-system message; system messages \
-             lead the list, so change the leading block with replace(first, last, records...)",
+             lead the list, and only a compactor can change the leading block",
         ),
         (
             "a non-text composed system block",

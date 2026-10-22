@@ -50,6 +50,7 @@ fn a_replace_in_the_middle_keeps_the_messages_before_the_first_change() {
         "messages:system('s'):user('u1'):assistant('a1'):user('u2'):assistant('a2'):user('u3')",
     );
     let _ = list.commit(RoundId::new(0), &request(list));
+    list.set_compacting(true);
     vm.exec("messages:replace(4, 4, { role = 'user', content = 'changed' })");
     assert_eq!(
         list.commit(RoundId::new(1), &request(list)),
@@ -63,6 +64,7 @@ fn a_system_edit_keeps_nothing() {
     let list = vm.messages();
     vm.exec("messages:system('s'):user('u1'):assistant('a1'):user('u2')");
     let _ = list.commit(RoundId::new(0), &request(list));
+    list.set_compacting(true);
     vm.exec("messages:replace(1, 1, { role = 'system', content = 'other' })");
     assert_eq!(
         list.commit(RoundId::new(1), &request(list)),
@@ -78,6 +80,7 @@ fn removing_the_terminal_reply_keeps_all_but_the_last_message() {
     let sent = request(list);
     assert_eq!(sent.len(), 3);
     let _ = list.commit(RoundId::new(0), &sent);
+    list.set_compacting(true);
     vm.exec("messages:replace(#messages, #messages)");
     assert_eq!(
         list.commit(RoundId::new(1), &request(list)),

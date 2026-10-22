@@ -100,8 +100,8 @@ impl UserData for RecordView {
             MetaMethod::NewIndex,
             |_, _, _: (Value, Value)| -> mlua::Result<()> {
                 Err(refusal(
-                    "records read from messages are read-only; change messages with \
-                     replace(first, last, records...)"
+                    "records read from messages are read-only; rewrite history with \
+                     models.compact(compactor, reason)"
                         .to_owned(),
                 ))
             },

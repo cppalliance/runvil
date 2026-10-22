@@ -12,7 +12,8 @@
 //! retries the round. The shipped [`Compactor`] policies are
 //! `compactors.fail`, the omitted-compactor default, which always raises
 //! typed context exhaustion ([`Error::ContextExhausted`]), and
-//! `compactors.clear`, which removes every record.
+//! `compactors.clear`, which removes every record and works only inside a
+//! compactor.
 //!
 //! The surface sits in this crate for the same reason the projection does:
 //! it owns the message records, the `chat` arm's precheck and overflow
@@ -104,14 +105,16 @@ pub fn exhaustion_detail(reason: &str) -> Cow<'_, str> {
 ///
 /// `Fail` is the omitted-compactor default: invoked with any reason, it
 /// always raises typed context exhaustion. `Clear` removes every record,
-/// so a section can start its conversation over without leaving.
+/// so a section can start its conversation over without leaving, and
+/// refuses unless a compactor is running over the list.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Compactor {
     /// `compactors.fail`: always raises [`Error::ContextExhausted`].
     #[default]
     Fail,
     /// `compactors.clear`: removes every record from the list, leaving its
-    /// last send and its rendered tool list.
+    /// last send and its rendered tool list. It works only inside a
+    /// compactor.
     Clear,
 }
 
@@ -121,12 +124,18 @@ impl Compactor {
     ///
     /// # Errors
     /// `Fail` always returns [`Error::ContextExhausted`] holding `reason`;
-    /// `Clear` never fails.
+    /// `Clear` returns [`Error::Lua`] when no compactor is running over
+    /// `list`, and leaves it unchanged.
     pub fn invoke(self, list: &MessageList, reason: &str) -> Result<()> {
         match self {
             Compactor::Fail => Err(Error::ContextExhausted {
                 reason: reason.to_owned(),
             }),
+            Compactor::Clear if !list.compacting() => Err(Error::Lua(
+                "compactors.clear works only inside a compactor; empty messages with \
+                 models.compact(compactors.clear, reason)"
+                    .to_owned(),
+            )),
             Compactor::Clear => {
                 list.clear();
                 Ok(())
@@ -289,7 +298,8 @@ fn message_chars(message: &Message) -> u64 {
 /// downcastable rather than flattened to text; the loop, which calls the
 /// selected compactor on an overflow round, normalizes that raise into
 /// the structured error table before re-raising it, so the kind reaches
-/// author code and the Engine alike. `compactors.clear` empties `list`.
+/// author code and the Engine alike. `compactors.clear` empties `list`,
+/// and only while a compactor runs over it.
 /// The namespace installs during Engine injection, right after the
 /// section's `messages` list.
 ///

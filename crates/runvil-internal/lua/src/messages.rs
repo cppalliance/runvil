@@ -5,8 +5,9 @@
 //! keeps its identity for the section's whole life and an assignment of
 //! the global raises [`ASSIGNMENT_REFUSAL`]. Its chainable
 //! `system`/`user`/`assistant`/`tool`/`append` builders and `replace` are
-//! colon methods, and each builder takes an optional last `meta`, which
-//! the projection never sends. Each edit validates its records as it adds
+//! colon methods, and `replace` works only while a compactor runs. Each
+//! builder takes an optional last `meta`, which the projection never
+//! sends. Each edit validates its records as it adds
 //! them, keeps the system records leading the list, and drops fields a
 //! record does not hold, so a refused edit raises at the author's call and
 //! leaves the list unchanged. `#messages` counts the records,
@@ -51,8 +52,9 @@ pub(crate) use snapshot::Snapshot;
 
 /// The refusal of an assignment of the `messages` global.
 pub(crate) const ASSIGNMENT_REFUSAL: &str = "messages is the section's conversation and cannot \
-                                             be reassigned; change it with append(record) or \
-                                             replace(first, last, records...)";
+                                             be reassigned; add records with append(record), \
+                                             or rewrite history with \
+                                             models.compact(compactor, reason)";
 
 /// Installs `list` as the `messages` global, served from the guard's slot.
 ///
@@ -77,7 +79,7 @@ pub enum ListEditError {
     /// non-system record.
     #[error(
         "messages[{index}] is a system message after a non-system message; system messages \
-         lead the list, so change the leading block with replace(first, last, records...)"
+         lead the list, and only a compactor can change the leading block"
     )]
     LateSystem {
         /// The late record's 1-based position.
@@ -389,36 +391,22 @@ impl UserData for MessageList {
                 },
             );
         }
-        methods.add_function(
-            "assistant",
-            |lua, (this, content, tool_calls, meta): (AnyUserData, Value, Value, Value)| {
-                build(
-                    lua,
-                    this,
-                    Role::Assistant,
-                    [
-                        ("content", content),
-                        ("tool_calls", tool_calls),
-                        ("meta", meta),
-                    ],
-                )
-            },
-        );
-        methods.add_function(
-            "tool",
-            |lua, (this, content, tool_call_id, meta): (AnyUserData, Value, Value, Value)| {
-                build(
-                    lua,
-                    this,
-                    Role::Tool,
-                    [
-                        ("content", content),
-                        ("tool_call_id", tool_call_id),
-                        ("meta", meta),
-                    ],
-                )
-            },
-        );
+        for (name, role, field) in [
+            ("assistant", Role::Assistant, "tool_calls"),
+            ("tool", Role::Tool, "tool_call_id"),
+        ] {
+            methods.add_function(
+                name,
+                move |lua, (this, content, value, meta): (AnyUserData, Value, Value, Value)| {
+                    build(
+                        lua,
+                        this,
+                        role,
+                        [("content", content), (field, value), ("meta", meta)],
+                    )
+                },
+            );
+        }
         methods.add_function("append", |lua, (this, record): (AnyUserData, Value)| {
             let list = handle(&this)?;
             let index = list.len() + 1;
@@ -429,6 +417,13 @@ impl UserData for MessageList {
             "replace",
             |lua, (this, first, last, records): (AnyUserData, Value, Value, Variadic<Value>)| {
                 let target = handle(&this)?;
+                if !target.compacting() {
+                    return Err(refusal(
+                        "replace works only inside a compactor; rewrite history with \
+                         models.compact(compactor, reason)"
+                            .to_owned(),
+                    ));
+                }
                 let first = bound("first", &first)?;
                 let last = bound("last", &last)?;
                 let len = target.len();
@@ -473,8 +468,8 @@ impl UserData for MessageList {
             MetaMethod::NewIndex,
             |_, _, _: (Value, Value)| -> mlua::Result<()> {
                 Err(refusal(
-                    "messages cannot be assigned to by index; add records with append(record) \
-                     and change them with replace(first, last, records...)"
+                    "messages cannot be assigned to by index; add records with append(record), \
+                     or rewrite history with models.compact(compactor, reason)"
                         .to_owned(),
                 ))
             },

@@ -14,14 +14,16 @@ fn a_refused_send_writes_no_record_and_the_resend_extends_the_last_issued_round(
     // The loop models' 4096-token window holds the first round, which
     // anchors at 3500 tokens, so 400 characters of new text and the
     // 512-token reserve refuse the second request before it leaves. The
-    // author swaps that message for a short one and sends again, which
-    // fits.
+    // author compacts, swapping that message for a short one, and sends
+    // again, which fits.
     let section = "messages:user('xxxxx')\n\
          models.loop()\n\
          messages:user(string.rep('y', 400))\n\
          local ok, err = pcall(models.loop)\n\
          assert(not ok and err.reason == 'precheck', 'the precheck refuses the send')\n\
-         messages:replace(#messages, #messages, { role = 'user', content = 'zz' })\n\
+         models.compact(function(reason)\n\
+           messages:replace(#messages, #messages, { role = 'user', content = 'zz' })\n\
+         end, 'test')\n\
          models.loop()\n\
          return messages[#messages].content";
     let gateway = ScriptedChat::new(vec![reply_with_usage("ok", 3400, 100, None), text("done")]);

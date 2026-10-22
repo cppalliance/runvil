@@ -155,7 +155,9 @@ fn a_compaction_keeps_only_the_messages_before_the_first_change() {
          models.loop()\n\
          messages:user('two')\n\
          models.loop()\n\
-         messages:replace(2, 4, { role = 'user', content = 'one and two' })\n\
+         models.compact(function(reason)\n\
+           messages:replace(2, 4, { role = 'user', content = 'one and two' })\n\
+         end, 'test')\n\
          messages:user('three')\n\
          models.loop()\n\
          return messages[#messages].content",
@@ -196,7 +198,9 @@ fn an_add_then_a_remove_between_two_sends_adds_nothing_to_the_log() {
          models.loop()\n\
          messages:user('two')\n\
          messages:user('scratch')\n\
-         messages:replace(#messages, #messages)\n\
+         models.compact(function(reason)\n\
+           messages:replace(#messages, #messages)\n\
+         end, 'test')\n\
          models.loop()\n\
          return messages[#messages].content",
         vec![chat_answer(&text("a1")), chat_answer(&text("a2"))],
@@ -242,9 +246,11 @@ fn re_inserting_an_identical_record_adds_nothing_to_the_log() {
          models.loop()\n\
          messages:user('two')\n\
          models.loop()\n\
-         local first = messages[1]\n\
-         messages:replace(1, 1)\n\
-         messages:replace(1, 0, first)\n\
+         models.compact(function(reason)\n\
+           local first = messages[1]\n\
+           messages:replace(1, 1)\n\
+           messages:replace(1, 0, first)\n\
+         end, 'test')\n\
          messages:user('three')\n\
          models.loop()\n\
          return messages[#messages].content",
@@ -339,7 +345,9 @@ fn removing_the_terminal_reply_and_resending_repeats_the_request_it_answered() {
     let (scenario, log) = echo_rounds(
         "messages:user('hello')\n\
          models.loop()\n\
-         messages:replace(#messages, #messages)\n\
+         models.compact(function(reason)\n\
+           messages:replace(#messages, #messages)\n\
+         end, 'test')\n\
          models.loop()\n\
          return messages[#messages].content",
         vec![

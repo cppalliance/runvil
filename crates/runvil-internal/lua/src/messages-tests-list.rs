@@ -112,10 +112,46 @@ fn four(vm: &BuiltVm) {
     vm.exec("messages:user('u1'):assistant('a1'):user('u2'):assistant('a2')");
 }
 
+/// A test VM whose list reads as compacting, so its Lua `replace` runs
+/// as a compactor's would.
+fn compacting() -> BuiltVm {
+    let vm = TestVm::new().build();
+    vm.messages().set_compacting(true);
+    vm
+}
+
+#[test]
+fn replace_raises_outside_a_compactor_before_it_reads_its_arguments() {
+    let vm = TestVm::new().build();
+    let list = vm.messages();
+    four(&vm);
+    let before = list.to_records();
+    let outside = "replace works only inside a compactor; rewrite history with \
+                   models.compact(compactor, reason)";
+    for call in [
+        "messages:replace(2, 3)",
+        "messages:replace(1, 0, { role = 'user', content = 'u0' })",
+        "messages:replace(0, 9)",
+        "messages:replace(1.5, 'x', 'not a record')",
+    ] {
+        assert_eq!(refusal(&vm, call), outside, "{call}");
+    }
+    assert_eq!(
+        list.to_records(),
+        before,
+        "a refused replace leaves the list unchanged"
+    );
+    list.set_compacting(true);
+    vm.exec("messages:replace(2, 3)");
+    list.set_compacting(false);
+    assert_eq!(refusal(&vm, "messages:replace(1, 1)"), outside);
+    assert_eq!(list.to_records(), vec![user("u1"), assistant("a2")]);
+}
+
 #[test]
 fn replace_with_no_records_deletes_the_range() {
     use Role::{Assistant, User};
-    let vm = TestVm::new().build();
+    let vm = compacting();
     four(&vm);
     vm.exec("messages:replace(2, 3)");
     assert_eq!(
@@ -127,7 +163,7 @@ fn replace_with_no_records_deletes_the_range() {
 #[test]
 fn replace_with_first_one_past_last_inserts_before_first() {
     use Role::{Assistant, System, User};
-    let vm = TestVm::new().build();
+    let vm = compacting();
     four(&vm);
     vm.exec("messages:replace(3, 2, { role = 'user', content = 'mid' })");
     vm.exec("messages:replace(1, 0, { role = 'system', content = 'front' })");
@@ -149,7 +185,7 @@ fn replace_with_first_one_past_last_inserts_before_first() {
 #[test]
 fn replace_over_the_whole_list_swaps_every_record() {
     use Role::{System, User};
-    let vm = TestVm::new().build();
+    let vm = compacting();
     four(&vm);
     vm.exec(
         "messages:replace(1, #messages, { role = 'system', content = 's' }, \
@@ -163,7 +199,7 @@ fn replace_over_the_whole_list_swaps_every_record() {
 
 #[test]
 fn replace_out_of_bounds_is_refused_naming_the_bounds() {
-    let vm = TestVm::new().build();
+    let vm = compacting();
     let list = vm.messages();
     four(&vm);
     let before = list.to_records();
@@ -192,7 +228,7 @@ fn replace_out_of_bounds_is_refused_naming_the_bounds() {
 
 #[test]
 fn replace_takes_integral_floats_and_refuses_other_bounds() {
-    let vm = TestVm::new().build();
+    let vm = compacting();
     let list = vm.messages();
     four(&vm);
     let before = list.to_records();
@@ -219,15 +255,14 @@ fn replace_takes_integral_floats_and_refuses_other_bounds() {
 
 #[test]
 fn a_system_record_after_a_non_system_record_is_refused_by_every_edit() {
-    let vm = TestVm::new().build();
+    let vm = compacting();
     let list = vm.messages();
     vm.exec("messages:system('s1'):system('s2'):user('u')");
     let before = list.to_records();
     let late = |index: usize| {
         format!(
             "messages[{index}] is a system message after a non-system message; \
-             system messages lead the list, so change the leading block with \
-             replace(first, last, records...)"
+             system messages lead the list, and only a compactor can change the leading block"
         )
     };
     assert_eq!(refusal(&vm, "messages:system('late')"), late(4));
@@ -272,7 +307,7 @@ fn a_system_record_after_a_non_system_record_is_refused_by_every_edit() {
 
 #[test]
 fn a_record_that_breaks_a_per_record_rule_is_refused_at_its_position() {
-    let vm = TestVm::new().build();
+    let vm = compacting();
     let list = vm.messages();
     assert_eq!(
         refusal(&vm, "messages:user()"),
@@ -312,7 +347,7 @@ fn a_record_that_breaks_a_per_record_rule_is_refused_at_its_position() {
 
 #[test]
 fn a_value_that_cannot_convert_to_json_is_refused_naming_where_it_was_given() {
-    let vm = TestVm::new().build();
+    let vm = compacting();
     let list = vm.messages();
     vm.exec("messages:user('u')");
     let before = list.to_records();
@@ -371,8 +406,8 @@ fn index_assignment_is_refused_and_len_counts_the_records() {
     vm.exec("messages:user('u'):assistant('a')");
     let len: usize = vm.eval("return #messages");
     assert_eq!(len, 2);
-    let refused = "messages cannot be assigned to by index; add records with append(record) \
-                   and change them with replace(first, last, records...)";
+    let refused = "messages cannot be assigned to by index; add records with append(record), \
+                   or rewrite history with models.compact(compactor, reason)";
     for assignment in [
         "messages[1] = { role = 'user', content = 'x' }",
         "messages[3] = { role = 'user', content = 'x' }",

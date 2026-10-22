@@ -1,7 +1,8 @@
 //! The section's one `messages` list: every section entry gets a fresh,
 //! empty list with its VM, which keeps its identity for the section's
 //! whole life, is shared with the libraries the section requires, and
-//! cannot be reassigned or written through. Both loop entries run over it
+//! cannot be reassigned or written through. Only a compactor can rewrite
+//! it with `replace` or `compactors.clear`. Both loop entries run over it
 //! and take only `(compactor?)`. A record's `meta` stays in the list and
 //! reaches tools, but never the model.
 
@@ -12,15 +13,25 @@ use super::*;
 
 /// The refusal of an assignment of the `messages` global.
 const GLOBAL_REFUSAL: &str = "messages is the section's conversation and cannot be reassigned; \
-                              change it with append(record) or replace(first, last, records...)";
+                              add records with append(record), or rewrite history with \
+                              models.compact(compactor, reason)";
 
 /// The refusal of an assignment by index.
 const INDEX_REFUSAL: &str = "messages cannot be assigned to by index; add records with \
-                             append(record) and change them with replace(first, last, records...)";
+                             append(record), or rewrite history with \
+                             models.compact(compactor, reason)";
 
 /// The refusal of a write to a record view.
-const VIEW_REFUSAL: &str = "records read from messages are read-only; change messages with \
-                            replace(first, last, records...)";
+const VIEW_REFUSAL: &str = "records read from messages are read-only; rewrite history with \
+                            models.compact(compactor, reason)";
+
+/// The refusal of `replace` outside a compactor.
+const REPLACE_REFUSAL: &str = "replace works only inside a compactor; rewrite history with \
+                               models.compact(compactor, reason)";
+
+/// The refusal of `compactors.clear` outside a compactor.
+const CLEAR_REFUSAL: &str = "compactors.clear works only inside a compactor; empty messages with \
+                             models.compact(compactors.clear, reason)";
 
 /// The refusal of a loop started while another runs in the section.
 const LOOP_RUNNING: &str = "a loop or a compactor is already running in this section; \
@@ -195,6 +206,73 @@ fn assigning_the_global_by_index_or_through_a_view_raises_its_own_refusal() {
     assert_eq!(
         lines[4], "1:kept",
         "the list still reads after the refusals"
+    );
+}
+
+#[test]
+fn replace_and_compactors_clear_raise_outside_a_compactor_before_and_after_one_runs() {
+    let source = PromptSource::new().section(
+        "Only",
+        "messages:user('kept')
+         local out = {}
+         local function try(edit)
+           local ok, err = pcall(edit)
+           out[#out + 1] = tostring(ok) .. ':' .. err.kind .. ':' .. tostring(err)
+         end
+         local function both()
+           try(function() messages:replace(#messages, #messages) end)
+           try(function() compactors.clear('manual') end)
+         end
+         both()
+         models.compact(function() end, 'noop')
+         both()
+         models.loop()
+         both()
+         out[#out + 1] = #messages .. ':' .. messages[1].content
+         return table.concat(out, '\\n')",
+    );
+    let (out, gateway) = run(&source, vec![text("reply")]);
+    assert_eq!(gateway.call_count(), 1, "only the loop's round runs");
+    let lines: Vec<&str> = out.lines().collect();
+    assert_eq!(lines.len(), 7, "{out}");
+    for (line, refusal) in lines.iter().zip([REPLACE_REFUSAL, CLEAR_REFUSAL].repeat(3)) {
+        assert!(
+            line.starts_with("false:lua:") && line.contains(refusal),
+            "expected the lua-kind refusal {refusal:?}, got {line:?}"
+        );
+    }
+    assert_eq!(lines[6], "2:kept", "no refused edit changed the list");
+}
+
+#[test]
+fn replace_and_compactors_clear_work_inside_an_overflow_compactor_and_inside_models_compact() {
+    let source = PromptSource::new().section(
+        "Only",
+        "messages:user(string.rep('x', 100000))
+         models.loop(function(reason)
+           messages:replace(1, 1, { role = 'user', content = 'short' })
+         end)
+         local out = { #messages .. ':' .. messages[1].content }
+         messages:user(string.rep('y', 100000))
+         models.loop(function(reason)
+           compactors.clear(reason)
+           messages:user('fresh')
+         end)
+         out[#out + 1] = #messages .. ':' .. messages[1].content
+         models.compact(function(reason)
+           messages:replace(#messages, #messages)
+         end, 'drop the reply')
+         out[#out + 1] = #messages .. ':' .. messages[1].content
+         models.compact(compactors.clear, 'start over')
+         out[#out + 1] = #messages
+         return table.concat(out, '|')",
+    );
+    let (out, gateway) = run(&source, vec![text("a1"), text("a2")]);
+    assert_eq!(out, "2:short|2:fresh|1:fresh|0");
+    assert_eq!(
+        user_texts(&gateway),
+        [vec!["short".to_owned()], vec!["fresh".to_owned()]],
+        "each retried round sends the list its compactor left"
     );
 }
 

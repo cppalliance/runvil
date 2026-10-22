@@ -86,7 +86,9 @@ fn models_loop_appends_the_terminal_assistant_record_and_returns_nil() {
          assert(#messages == 2, 'the loop appended exactly the terminal record')
          assert(messages[2].role == 'assistant', 'the terminal record is an assistant message')
          assert(messages[2].content == 'final answer', 'the terminal record holds the reply text')
-         messages:replace(#messages, #messages)
+         models.compact(function(reason)
+           messages:replace(#messages, #messages)
+         end, 'test')
          assert(#messages == 1, 'explicit terminal removal shrinks the list')
          return 'ok'",
     );

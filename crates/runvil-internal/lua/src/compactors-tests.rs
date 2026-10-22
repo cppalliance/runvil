@@ -187,6 +187,7 @@ fn compactors_clear_removes_every_record_and_keeps_the_send_and_the_rendered_too
     let sent = [Message::user("one")];
     let _ = list.commit(RoundId::new(0), &sent);
     let lua = lua_with_compactors_over(&list);
+    list.set_compacting(true);
     lua.load("compactors.clear('manual')").exec().unwrap();
     assert!(list.to_records().is_empty(), "every record is gone");
     assert!(list.rendered(), "the rendered tool list stays attached");
@@ -200,6 +201,29 @@ fn compactors_clear_removes_every_record_and_keeps_the_send_and_the_rendered_too
         .invoke(&list, "precheck")
         .expect("the clear policy succeeds");
     assert!(list.to_records().is_empty());
+}
+
+#[test]
+fn compactors_clear_raises_outside_a_compactor_and_leaves_the_records() {
+    let outside = "compactors.clear works only inside a compactor; empty messages with \
+                   models.compact(compactors.clear, reason)";
+    let list = MessageList::default();
+    list.push(user("one")).unwrap();
+    let lua = lua_with_compactors_over(&list);
+    let error = lua
+        .load("compactors.clear('manual')")
+        .exec()
+        .expect_err("compactors.clear refuses outside a compactor");
+    assert!(
+        matches!(raised_crate_error_ref(&error), Error::Lua(message) if message == outside),
+        "the Lua raise holds the lua-kind refusal: {error:?}"
+    );
+    let refused = Compactor::Clear.invoke(&list, "precheck");
+    assert!(
+        matches!(&refused, Err(Error::Lua(message)) if message == outside),
+        "the policy refuses the same way from Rust: {refused:?}"
+    );
+    assert_eq!(list.to_records(), vec![user("one")], "no record is removed");
 }
 
 fn window(tokens: u32) -> NonZeroU32 {

@@ -23,8 +23,8 @@ const PROSE_REFUSAL: &str = "prose is read-only: assign to `var` or a section gl
 
 /// The refusal line of an assignment to `messages`.
 const MESSAGES_REFUSAL: &str = "messages is the section's conversation and cannot be \
-                                reassigned; change it with append(record) or \
-                                replace(first, last, records...)";
+                                reassigned; add records with append(record), or rewrite \
+                                history with models.compact(compactor, reason)";
 
 /// The text every test VM's `prose` renders.
 const PROSE: &str = "the block's prose";

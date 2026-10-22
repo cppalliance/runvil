@@ -158,8 +158,8 @@ fn assigning_any_view_field_raises_the_read_only_error() {
     ] {
         assert_eq!(
             refusal(&vm, &format!("messages[3].{field} = 'x'")),
-            "records read from messages are read-only; change messages with \
-             replace(first, last, records...)",
+            "records read from messages are read-only; rewrite history with \
+             models.compact(compactor, reason)",
             "{field}"
         );
     }
@@ -329,6 +329,7 @@ fn a_pairs_loop_that_appends_ends_after_the_records_it_started_with() {
 #[test]
 fn a_pairs_loop_stops_early_when_the_list_shrinks_below_its_next_index() {
     let vm = TestVm::new().build();
+    vm.messages().set_compacting(true);
     vm.exec("messages:user('u1'):assistant('a1'):user('u2')");
     let seen: String = vm.eval(
         "local seen = {} \
@@ -345,6 +346,7 @@ fn a_pairs_loop_stops_early_when_the_list_shrinks_below_its_next_index() {
 fn pairs_keeps_its_starting_length_while_ipairs_reads_the_live_list() {
     let walk = |iterate: &str| -> String {
         let vm = TestVm::new().build();
+        vm.messages().set_compacting(true);
         vm.exec("messages:user('u1'):assistant('a1'):user('u2')");
         vm.eval(&format!(
             "local seen = {{}} \

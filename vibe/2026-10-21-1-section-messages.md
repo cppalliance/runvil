@@ -1135,7 +1135,7 @@ Commit and rules:
 
 <step-7>
 
-### Step 7: Allow `replace` and `compactors.clear` only inside a compactor
+### Step 7: Allow `replace` and `compactors.clear` only inside a compactor [completed]
 
 - Component: Compaction
 - Tests: run in PowerShell from `c:\Users\Vinnie\cursor\runvil`, in this order:

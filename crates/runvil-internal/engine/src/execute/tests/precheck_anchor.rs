@@ -166,7 +166,9 @@ fn a_merged_history_falls_back_to_the_estimate() {
     // list the anchor measured, so the full estimate applies.
     let section = "messages:user(string.rep('x', 11000))\n\
          models.loop()\n\
-         messages:replace(#messages, #messages)\n\
+         models.compact(function(reason)\n\
+           messages:replace(#messages, #messages)\n\
+         end, 'test')\n\
          messages:user(string.rep('y', 4000))\n\
          local ok, err = pcall(models.loop)\n\
          if ok then return 'sent' end\n\
