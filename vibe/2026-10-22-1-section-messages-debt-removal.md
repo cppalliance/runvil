@@ -4,19 +4,19 @@ overview: "Debt collected on runvil's section-messages work (upstream/master aca
 todos:
   - id: remove-overflow-items
     content: "runvil: delete OverflowReason::ALL and the unused std::error::Error impl, iterate the local two-reason array in the exhaustion_detail test, drop the impl's test, rewrite the OverflowReason type doc, and fix the 'only shipped policy' comment (D1-1, D1-21, C-1, D1-22)"
-    status: pending
+    status: completed
   - id: direct-fail-kind
     content: "runvil: classify a downcast Error::ContextExhausted in map_runtime_error_among so an uncaught direct compactors.fail ends the run as ContextExhausted; add the failing-first Engine test; update the program.rs, run.rs, and compactors.rs docs (M-1)"
-    status: pending
+    status: completed
   - id: chat-compactor
     content: "runvil: give chat.md a summarizing compactor with a bounded summary input, update its prose and the models_loop-author-shapes.rs copy, add the Engine recovery test and the Workshop chat-gate overflow test (D1-20)"
-    status: pending
+    status: completed
   - id: guide-update
     content: "runvil-docs: drop the direct-call workaround and update the run-error-kind passages (M-1), and show the chat agent's compactor (D1-20); run the guide checks and the site build"
-    status: pending
+    status: completed
   - id: verify
     content: Run each item's focused checks and the runvil exit gates after each runvil commit, and the guide checks after the runvil-docs commit
-    status: pending
+    status: completed
 isProject: false
 ---
 
@@ -380,7 +380,7 @@ Each component is one piece built as one sequential step: the piece's code and i
 
 <step-4>
 
-### Step 4: Document the direct compactors.fail run error and the chat agent's compactor
+### Step 4: Document the direct compactors.fail run error and the chat agent's compactor [completed]
 
 - Component: `Language guide`
 - Tests (run in PowerShell):
