@@ -47,6 +47,17 @@ fn safe_stdlib_present() {
 }
 
 #[test]
+fn the_utf8_library_counts_cuts_and_encodes_code_points() {
+    let out = run(
+        "return utf8.len('café') .. '|' .. ('café'):sub(1, utf8.offset('café', 0, 5) - 1) \
+         .. '|' .. utf8.char(233)",
+        "",
+    )
+    .unwrap();
+    assert_eq!(out.returned.as_deref(), Some("4|caf|é"));
+}
+
+#[test]
 fn dangerous_globals_absent() {
     let out = run(
             "return tostring(io) .. ',' .. tostring(os) .. ',' .. tostring(require) .. ',' .. tostring(load) .. ',' .. tostring(package)",

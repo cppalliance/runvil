@@ -3,7 +3,7 @@
 //!
 //! A prelude runs once per VM as a main chunk whose `...` is its Pack's
 //! local name, in an environment table of its own. That table's metatable `__index` is a lookup table of the base
-//! functions that survive hardening, the `string`, `table`, and `math`
+//! functions that survive hardening, the `string`, `table`, `math`, and `utf8`
 //! libraries, `tools`, `store`, `untrusted`, `json`, and a view of `var` that is
 //! read-only at every depth, each read from `_G` when the prelude installs. Reading them then means
 //! `pcall` and `xpcall` are the coroutine shim's normalized versions and
@@ -29,7 +29,7 @@ use crate::error::{Error, Result};
 use crate::proxy::{key_path, key_text, read_only_proxy};
 
 /// The `_G` names a prelude's environment reads, as bound when it installs.
-const VISIBLE_GLOBALS: [&str; 20] = [
+const VISIBLE_GLOBALS: [&str; 21] = [
     "assert",
     "error",
     "getmetatable",
@@ -46,6 +46,7 @@ const VISIBLE_GLOBALS: [&str; 20] = [
     "string",
     "table",
     "math",
+    "utf8",
     "tools",
     "store",
     "untrusted",
@@ -103,8 +104,8 @@ pub fn install_preludes(lua: &Lua, preludes: &[Prelude]) -> Result<()> {
 
 /// Builds one prelude's environment. Each prelude gets its own
 /// environment and lookup table, so no prelude sees another prelude's
-/// globals, and the `string`, `table`, `math`, `tools`, `store`, and `json`
-/// tables it reads through that lookup are shared with the rest of the VM.
+/// globals, and the `string`, `table`, `math`, `utf8`, `tools`, `store`, and
+/// `json` tables it reads through that lookup are shared with the rest of the VM.
 fn environment(lua: &Lua, globals: &Table) -> Result<Table> {
     let lookup = lua.create_table().map_err(Error::lua)?;
     for name in VISIBLE_GLOBALS {

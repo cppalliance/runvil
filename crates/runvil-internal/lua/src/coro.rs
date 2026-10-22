@@ -123,7 +123,7 @@ static FANOUT_PROGRAM: LazyLock<std::result::Result<LuaProgram, SharedSource>> =
 ///
 /// Scheduler-mode VMs load the coroutine standard library for the shim's
 /// `yield` capture (a VM without the shims keeps exactly
-/// `STRING | TABLE | MATH`); the `coroutine` global is stripped again
+/// `STRING | TABLE | MATH | UTF8`); the `coroutine` global is stripped again
 /// before returning, so author code cannot yield directly and a hand-rolled
 /// yield fails the driver's strict validation. The `models` and `tools`
 /// tables are passed to the shim chunk as arguments, so the chunk never

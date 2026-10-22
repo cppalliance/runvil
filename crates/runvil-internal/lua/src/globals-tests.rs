@@ -95,7 +95,7 @@ fn assert_guards_hold(vm: &BuiltVm, after: &str) {
 /// under the same chunk name, the base functions untouched.
 fn stock_eval(source: &str) -> String {
     let lua = Lua::new_with(
-        StdLib::STRING | StdLib::TABLE | StdLib::MATH,
+        StdLib::STRING | StdLib::TABLE | StdLib::MATH | StdLib::UTF8,
         LuaOptions::default(),
     )
     .expect("a stock VM builds");
@@ -428,6 +428,7 @@ fn the_compiler_refuses_each_reserved_keyword_as_a_name_and_takes_every_other_en
 fn reserved_name_classifies_whole_case_sensitive_names_only() {
     assert_eq!(reserved_name("store"), Some(Reserved::EngineGlobal));
     assert_eq!(reserved_name("pairs"), Some(Reserved::LuaGlobal));
+    assert_eq!(reserved_name("utf8"), Some(Reserved::LuaGlobal));
     assert_eq!(reserved_name("end"), Some(Reserved::LuaKeyword));
     for name in ["Store", "stores", "input", "search", ""] {
         assert_eq!(reserved_name(name), None, "{name:?} is not reserved");

@@ -1,7 +1,7 @@
 //! Sandboxed Lua execution for a section's Lua block.
 //!
 //! A section's Lua chunk runs in a fresh, restricted `mlua` VM: only the
-//! `string`, `table`, and `math` standard libraries plus the safe base
+//! `string`, `table`, `math`, and `utf8` standard libraries plus the safe base
 //! functions are available; the raw input `args` string and the runtime `sys`
 //! table are exposed; a writable `var` table is provided for the block to
 //! populate; an always-on `store` table gives the block the run's virtual

@@ -15,7 +15,7 @@ function probe_hidden()
 end
 function probe_visible()
   return type(tools.call) .. ',' .. type(store) .. ',' .. type(untrusted) .. ','
-    .. type(string.format)
+    .. type(string.format) .. ',' .. type(utf8)
 end
 function probe_var()
   local ok, err = pcall(function() var.mode = 'slow' end)
@@ -44,7 +44,7 @@ end";
     let hidden: String = vm.eval("return probe_hidden()");
     assert_eq!(hidden, "nil,nil,nil,nil,nil");
     let visible: String = vm.eval("return probe_visible()");
-    assert_eq!(visible, "function,table,function,function");
+    assert_eq!(visible, "function,table,function,function,table");
     let (mode, ok, kind, message): (String, bool, String, String) = vm.eval("return probe_var()");
     assert_eq!(mode, "fast", "var reads through the view");
     assert!(!ok, "a write to var raises");

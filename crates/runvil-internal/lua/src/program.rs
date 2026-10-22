@@ -17,7 +17,7 @@ enum CompilerError {
 /// Compiles a named chunk in the fixed temporary VM and keeps debug info.
 fn compile_chunk(source: &str, chunk_name: &str) -> std::result::Result<Vec<u8>, CompilerError> {
     let lua = Lua::new_with(
-        StdLib::STRING | StdLib::TABLE | StdLib::MATH,
+        StdLib::STRING | StdLib::TABLE | StdLib::MATH | StdLib::UTF8,
         LuaOptions::default(),
     )
     .map_err(CompilerError::Vm)?;

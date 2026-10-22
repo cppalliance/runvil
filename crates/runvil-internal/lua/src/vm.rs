@@ -255,7 +255,7 @@ impl SectionVm<Uninjected> {
     /// Returns [`Error::LuaRuntime`] if the VM cannot be built or hardened.
     pub fn new(nonce: &GuardNonce, emitter: &Emitter, section: &str) -> Result<Self> {
         let lua = Lua::new_with(
-            StdLib::STRING | StdLib::TABLE | StdLib::MATH,
+            StdLib::STRING | StdLib::TABLE | StdLib::MATH | StdLib::UTF8,
             LuaOptions::default(),
         )
         .map_err(Error::lua)?;
