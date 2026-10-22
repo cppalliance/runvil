@@ -4,46 +4,46 @@ overview: "Give each section exactly one conversation: the Engine creates `messa
 todos:
   - id: record-plan
     content: Write vibe/2026-10-21-N-section-messages.md and vibe/ACTIVE (land with commit 1)
-    status: pending
+    status: completed
   - id: nested-loop
     content: "Commit 1: loop_running on SectionVm and the LOOP_RUNNING refusal, set only once begin cannot fail and cleared at Done or on a step error; nested-loop and flag tests"
-    status: pending
+    status: completed
   - id: inject-list
     content: "Commit 2 code: one MessageList per SectionVm served from the _G guard slot, no constructor, models.loop(compactor?), NOT_A_LIST and is_list removed, refusal texts, doc comments, chat.md and research-person.md"
-    status: pending
+    status: completed
   - id: migrate-tests
     content: "Commit 2 tests: mechanical rewrite of 53 files and the shared helpers, the test-prompt copies, the test_vm.rs builder flag, and the listed non-mechanical rewrites"
-    status: pending
+    status: completed
   - id: acceptance-tests
     content: "Commit 2: section_messages.rs lifecycle and assignment tests, plus guard checks in globals-tests.rs, prelude-tests.rs, and suite/global_metatable.rs"
-    status: pending
+    status: completed
   - id: render-once
     content: "Commit 3: RenderedTools attached to messages at the first successful build and reused byte for byte; MessageList::rendered() gates the three offer functions; DispatchTarget replaced by Option<ToolId>; two tests rewritten"
-    status: pending
+    status: completed
   - id: record-meta
     content: "Commit 4: MessageRecord.meta (JSON, at most 8 KB, json.null meaning none) through the builders, append, replace, and views, never projected; six literals gain meta: None"
-    status: pending
+    status: completed
   - id: context-reason
     content: "Commit 5: compactors.fail takes any reason; the context_exhausted reason becomes a string in the Lua and Engine error types, and from_raised keeps any reason"
-    status: pending
+    status: completed
   - id: compaction
     content: "Commit 6: in-place compaction with snapshot, restore, clear, and the compacting flag; validation; an uncounted retry, once per round; models.compact and compactors.clear; COMPACTOR_RETURNED removed"
-    status: pending
+    status: completed
   - id: replace-gate
     content: "Commit 7: replace and compactors.clear work only while a compactor runs; move the 32 Lua replace calls; reword four refusals"
-    status: pending
+    status: completed
   - id: verify
     content: Run the Exit criteria gates after each of the eight runvil commits, the completeness searches after commits 2, 3, 6, and 7, and the docs sweep in commit 8
-    status: pending
+    status: completed
   - id: docs-runvil
     content: "Commit 8: sweep the runvil prose docs against the finished code; full gates"
-    status: pending
+    status: completed
   - id: docs-guide
     content: "runvil-docs commit: rewrite the language guide for messages, the rendered tool list, meta, and compaction; keep inbound anchors and run the anchor check; build the site"
-    status: pending
+    status: completed
   - id: close
     content: "Mark todos complete, remove vibe/ACTIVE, commit Close plan: section-messages; push nothing"
-    status: pending
+    status: completed
 isProject: false
 ---
 
@@ -1250,7 +1250,7 @@ Commit and rules:
 
 <step-9>
 
-### Step 9: Rewrite the language guide for the section's conversation
+### Step 9: Rewrite the language guide for the section's conversation [completed]
 
 - Component: Documentation
 - Tests: run in PowerShell, in this order:
