@@ -363,7 +363,7 @@ fn a_raised_store_error_renders_an_integer_count_and_the_message() {
     let fields = error.fields();
     assert!(fields.contains(&("count".to_owned(), crate::ErrorField::Integer(3),)));
     let lua = mlua::Lua::new();
-    let table = crate::error_table(&lua, &error).expect("the table builds");
+    let table = crate::error_value::error_table(&lua, &error).expect("the table builds");
     let raised = crate::error_value::raised_from(&lua, &Value::Table(table))
         .expect("the table reads back")
         .expect("the table is a structured error table");

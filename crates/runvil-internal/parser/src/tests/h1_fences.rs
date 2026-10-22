@@ -56,7 +56,6 @@ fn h1_plain_lua_and_prose_are_live_blocks() {
         &prompt.h1_blocks[2],
         Block::Lua(program) if program.source() == "store.write('done', reply)"
     ));
-    assert_eq!(prompt.description_text, "Plan {{ args }}.");
 }
 
 #[test]
@@ -119,7 +118,15 @@ fn label_near_misses_inside_longer_fences_remain_prose() {
     let src = "---\nname: x\ndescription: d\n---\n\n# T\n\n````markdown\n```lua extra\nreturn 1\n```\n````\n\nIntro.\n\n## S\n\n````markdown\n```lua extra\nreturn 2\n```\n````\n";
     let prompt = parse_ok(src);
 
-    assert!(prompt.description_text.contains("```lua extra"));
+    assert!(
+        prompt
+            .h1_blocks
+            .iter()
+            .all(|block| matches!(block, Block::Prose { .. }))
+    );
+    assert!(prompt.h1_blocks.iter().any(
+        |block| matches!(block, Block::Prose { text } if text.as_str().contains("```lua extra"))
+    ));
     assert!(prompt.sections[0].prologue().is_none());
     assert!(prompt.sections[0].prose().contains("```lua extra"));
 }

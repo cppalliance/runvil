@@ -60,7 +60,7 @@ impl OverflowReason {
     /// The invocation tag the compactor callback receives, also the
     /// `reason` field of a `context_exhausted` error table.
     #[must_use]
-    pub fn tag(self) -> &'static str {
+    pub(crate) fn tag(self) -> &'static str {
         match self {
             OverflowReason::Precheck => "precheck",
             OverflowReason::Provider => "provider",
@@ -85,7 +85,7 @@ impl std::fmt::Display for OverflowReason {
 /// An overflow tag's description, or any other reason as given.
 ///
 /// This is the detail a context exhaustion's message shows: an exact
-/// [`OverflowReason::tag`] reads as that overflow's [`Display`](std::fmt::Display),
+/// `OverflowReason::tag` reads as that overflow's [`Display`](std::fmt::Display),
 /// and a caller's own reason reads as itself.
 #[must_use]
 pub fn exhaustion_detail(reason: &str) -> Cow<'_, str> {
@@ -102,7 +102,7 @@ pub fn exhaustion_detail(reason: &str) -> Cow<'_, str> {
 /// so a section can start its conversation over without leaving, and
 /// refuses unless a compactor is running over the list.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum Compactor {
+pub(crate) enum Compactor {
     /// `compactors.fail`: always raises [`Error::ContextExhausted`].
     #[default]
     Fail,
@@ -120,7 +120,7 @@ impl Compactor {
     /// `Fail` always returns [`Error::ContextExhausted`] holding `reason`;
     /// `Clear` returns [`Error::Lua`] when no compactor is running over
     /// `list`, and leaves it unchanged.
-    pub fn invoke(self, list: &MessageList, reason: &str) -> Result<()> {
+    pub(crate) fn invoke(self, list: &MessageList, reason: &str) -> Result<()> {
         match self {
             Compactor::Fail => Err(Error::ContextExhausted {
                 reason: reason.to_owned(),

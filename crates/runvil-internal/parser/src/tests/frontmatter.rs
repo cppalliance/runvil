@@ -1,5 +1,5 @@
 //! Frontmatter tests: required keys and delimiters, the tool-loop cap,
-//! version detection, and declared files.
+//! the `runvil:` key, and declared files.
 
 use super::*;
 
@@ -81,42 +81,6 @@ fn max_tool_iterations_resolve_uses_default_only_when_absent() {
 }
 
 #[test]
-fn detection_reads_runvil_major() {
-    let src = "---\nname: x\ndescription: d\nrunvil: 0\n---\n\n## S\n\np\n";
-    assert_eq!(runvil_version(src), Some(0));
-}
-
-#[test]
-fn detection_needs_only_the_runvil_key() {
-    // No name or description, but the key is present.
-    let src = "---\nrunvil: 2\n---\n\n## S\n\np\n";
-    assert_eq!(runvil_version(src), Some(2));
-}
-
-#[test]
-fn detection_absent_key_is_none() {
-    let src = "---\nname: x\ndescription: d\n---\n\n## S\n\np\n";
-    assert_eq!(runvil_version(src), None);
-}
-
-#[test]
-fn detection_no_frontmatter_is_none() {
-    let src = "# Just a title\n\nPlain prose with no frontmatter block at all.\n";
-    assert_eq!(runvil_version(src), None);
-}
-
-#[test]
-fn detection_malformed_frontmatter_is_none() {
-    // Opening delimiter but never closed.
-    let unclosed = "---\nrunvil: 0\nname: x\n\n## S\n\np\n";
-    assert_eq!(runvil_version(unclosed), None);
-
-    // Closed, but not valid YAML.
-    let bad_yaml = "---\nrunvil: 0\n  : : oops\n---\n\n## S\n\np\n";
-    assert_eq!(runvil_version(bad_yaml), None);
-}
-
-#[test]
 fn frontmatter_exposes_runvil_field() {
     let with = "---\nname: x\ndescription: d\nrunvil: 0\n---\n\n# T\n\n## S\n\np\n";
     assert_eq!(parse_ok(with).frontmatter.runvil, Some(0));
@@ -152,9 +116,8 @@ fn frontmatter_without_input_output_still_parses() {
 
 #[test]
 fn runvil_zero_is_accepted() {
-    // `runvil: 0` is the active Engine major: it parses, is exposed on
-    // the frontmatter, and is reported by version detection.
+    // `runvil: 0` is the active Engine major: it parses and is exposed on
+    // the frontmatter.
     let src = "---\nname: x\ndescription: d\nrunvil: 0\n---\n\n# T\n\n## S\n\np\n";
     assert_eq!(parse_ok(src).frontmatter().runvil(), Some(0));
-    assert_eq!(runvil_version(src), Some(0));
 }

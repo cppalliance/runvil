@@ -216,7 +216,7 @@ impl ToolSet {
     /// Returns every installed Pack the caller reports, with the reason,
     /// written for the model, when it cannot serve the run.
     #[must_use]
-    pub fn roster(&self) -> &BTreeMap<PackId, Option<String>> {
+    pub(crate) fn roster(&self) -> &BTreeMap<PackId, Option<String>> {
         &self.roster
     }
 

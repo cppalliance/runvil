@@ -44,9 +44,9 @@ pub use contract::{
 };
 use error::Result;
 pub use error::{Error, ParseError, ParseErrorKind};
-pub use frontmatter::{
-    FileDecl, Frontmatter, MAX_TOOL_ITERATIONS, MaxToolIterations, runvil_version,
-};
+#[cfg(test)]
+use frontmatter::MAX_TOOL_ITERATIONS;
+pub use frontmatter::{FileDecl, Frontmatter, MaxToolIterations};
 pub use prompt::{Block, Prompt, Section};
 
 #[cfg(test)]

@@ -43,9 +43,7 @@ pub use path::{VfsPath, VfsPathBuf};
 pub use real::{RealBackend, Writability};
 pub use router::VfsRefBuilder;
 pub use stat::{Entry, FileType, Stat};
-pub use traits::{
-    AcquireContext, AllowAll, Depth, ExecId, GlobKind, Op, Policy, Verdict, Vfs, VfsAccess,
-};
+pub use traits::{AcquireContext, AllowAll, ExecId, Op, Policy, Verdict, Vfs, VfsAccess};
 
 /// The default handle has one mount: an in-memory store at `/`.
 ///
@@ -98,7 +96,7 @@ pub struct ModePolicy {
     mode: Arc<Mutex<Mode>>,
 }
 
-/// A handle that reads and changes the mode of a `ModePolicy`.
+/// A handle that changes the mode of a `ModePolicy`.
 ///
 /// Clones share one mode with each other and with the policy.
 #[derive(Debug, Clone)]
@@ -115,8 +113,8 @@ impl ModePolicy {
         }
     }
 
-    /// Returns a handle that reads and changes this policy's mode. A
-    /// change made mid-run takes effect on the next operation.
+    /// Returns a handle that changes this policy's mode. A change made
+    /// mid-run takes effect on the next operation.
     #[must_use]
     pub fn handle(&self) -> ModeHandle {
         ModeHandle {
@@ -129,12 +127,6 @@ impl ModeHandle {
     /// Sets the current mode.
     pub fn set(&self, mode: Mode) {
         *lock(&self.mode) = mode;
-    }
-
-    /// Returns the current mode.
-    #[must_use]
-    pub fn mode(&self) -> Mode {
-        *lock(&self.mode)
     }
 }
 

@@ -171,7 +171,7 @@ impl TaskPhase {
     /// The tag `tasks.status` reports: `running`, `done`, `cancelled`, or
     /// `abandoned`.
     #[must_use]
-    pub fn tag(self) -> &'static str {
+    pub(crate) fn tag(self) -> &'static str {
         match self {
             TaskPhase::Running => "running",
             TaskPhase::Done => "done",
@@ -203,7 +203,7 @@ impl Blocked {
     /// The tag `tasks.status` reports: `chat`, `tool_call`, `store`,
     /// `tasks`, `call`, or `queued`.
     #[must_use]
-    pub fn tag(self) -> &'static str {
+    pub(crate) fn tag(self) -> &'static str {
         match self {
             Blocked::Chat => "chat",
             Blocked::ToolCall => "tool_call",

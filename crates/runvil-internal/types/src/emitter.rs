@@ -211,8 +211,9 @@ impl Emitter {
     }
 
     /// The caller-chosen run identifier stamped on every event.
+    #[cfg(test)]
     #[must_use]
-    pub fn execution(&self) -> &str {
+    pub(crate) fn execution(&self) -> &str {
         &self.execution
     }
 

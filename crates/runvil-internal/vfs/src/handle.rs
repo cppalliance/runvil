@@ -110,7 +110,7 @@ impl VfsRef {
     /// through an `Arc`. When the caller changes that state during a run,
     /// the next operation sees the change.
     #[must_use]
-    pub fn with_policy(
+    pub(crate) fn with_policy(
         backend: impl Vfs + 'static,
         policy: impl Policy + Sync + 'static,
     ) -> VfsRef {

@@ -11,6 +11,6 @@ mod policy;
 #[cfg(test)]
 mod tests;
 
-pub use backend::{Depth, GlobKind, Vfs, VfsAccess};
+pub use backend::{Vfs, VfsAccess};
 pub use identity::{AcquireContext, ExecId};
 pub use policy::{AllowAll, Op, Policy, Verdict};

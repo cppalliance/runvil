@@ -123,8 +123,9 @@ impl Section {
     /// [`items`](Self::items) - i.e. it had no Lua blocks and every nonblank
     /// prose line was a valid list item. Ordinary prose (even prose that
     /// happens to contain a single bullet line) is not list-only.
+    #[cfg(test)]
     #[must_use]
-    pub fn is_list_only(&self) -> bool {
+    pub(crate) fn is_list_only(&self) -> bool {
         !self.items.is_empty()
     }
 }
@@ -139,8 +140,6 @@ pub struct Prompt {
     pub(crate) title: String,
     /// Ordered live Lua and prose blocks from the H1.
     pub(crate) h1_blocks: Vec<Block>,
-    /// Human-readable prose from the H1.
-    pub(crate) description_text: String,
     /// Top-level sections (H2s) in file order.
     pub(crate) sections: Vec<Section>,
 }
@@ -177,17 +176,5 @@ impl Prompt {
     #[must_use]
     pub(crate) fn entry(&self) -> Option<&Section> {
         self.sections.first()
-    }
-
-    /// Removes every prose block under the prompt's H1 heading, keeping only
-    /// its compiled Lua blocks.
-    ///
-    /// The description text taken from that prose is cleared too. The rest of
-    /// the prompt tree stays as it is. Use this to run the H1's Lua while
-    /// withholding its prose from a model.
-    pub fn strip_h1_prose(&mut self) {
-        self.h1_blocks
-            .retain(|block| matches!(block, Block::Lua(_)));
-        self.description_text.clear();
     }
 }

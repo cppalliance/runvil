@@ -10,7 +10,7 @@ use runvil_types::event::lifecycle::{self, Lifecycle};
 use runvil_vfs::{Access, VfsError};
 
 use super::{read_store, read_store_numbered};
-use crate::SharedSource;
+use crate::error::SharedSource;
 use crate::error::{Error, Result};
 use crate::program::LuaProgram;
 use crate::protocol::VfsOp;

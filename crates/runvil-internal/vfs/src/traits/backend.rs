@@ -1,43 +1,10 @@
 //! The backend traits: [`Vfs`], one backend behind the virtual namespace,
-//! and [`VfsAccess`], one identity's session with it, plus the enums the
-//! session's enum-taking operations take.
+//! and [`VfsAccess`], one identity's session with it.
 
 use super::identity::{AcquireContext, ExecId};
 use crate::error::VfsError;
 use crate::path::{VfsPath, VfsPathBuf, canonicalize_absolute};
 use crate::stat::{Entry, FileType, Stat};
-
-/// How far a removal or a directory creation reaches.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-#[non_exhaustive]
-pub enum Depth {
-    /// Only the named path: a removal refuses a directory that still has
-    /// entries, and a creation refuses a missing parent directory.
-    One,
-    /// The named path and every path it needs: a removal takes the whole
-    /// subtree, and a creation makes every missing parent directory.
-    Recursive,
-}
-
-impl Depth {
-    /// The `recursive` flag of the `bool` forms.
-    pub(crate) fn recursive(self) -> bool {
-        match self {
-            Depth::One => false,
-            Depth::Recursive => true,
-        }
-    }
-}
-
-/// Which matches of a glob pattern to keep.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-#[non_exhaustive]
-pub enum GlobKind {
-    /// Only the matches that are files.
-    FilesOnly,
-    /// Only the matches that are directories.
-    DirsOnly,
-}
 
 /// A storage backend behind the virtual filesystem.
 ///
@@ -148,20 +115,6 @@ pub trait VfsAccess: Send {
     /// error when the removal fails.
     fn remove(&mut self, path: &VfsPath, recursive: bool) -> Result<(), VfsError>;
 
-    /// Removes the file, link, or directory at `path`, reaching as far as
-    /// `depth`.
-    ///
-    /// The default calls [`VfsAccess::remove`] with `recursive` set for
-    /// [`Depth::Recursive`].
-    ///
-    /// # Errors
-    ///
-    /// Returns an error under the same conditions as
-    /// [`VfsAccess::remove`].
-    fn remove_with(&mut self, path: &VfsPath, depth: Depth) -> Result<(), VfsError> {
-        self.remove(path, depth.recursive())
-    }
-
     /// Reports whether `path` exists.
     ///
     /// A confirmed absence returns `Ok(false)`, and a backend failure
@@ -207,23 +160,6 @@ pub trait VfsAccess: Send {
         Ok(kept)
     }
 
-    /// Returns the stored paths matching `pattern` that `kind` keeps,
-    /// sorted.
-    ///
-    /// The default calls [`VfsAccess::glob_kind`], with `dirs_only` clear
-    /// for [`GlobKind::FilesOnly`] and set for [`GlobKind::DirsOnly`].
-    ///
-    /// # Errors
-    ///
-    /// Returns an error under the same conditions as
-    /// [`VfsAccess::glob_kind`].
-    fn glob_with(&self, pattern: &str, kind: GlobKind) -> Result<Vec<String>, VfsError> {
-        match kind {
-            GlobKind::FilesOnly => self.glob_kind(pattern, false),
-            GlobKind::DirsOnly => self.glob_kind(pattern, true),
-        }
-    }
-
     /// Lists the directory at `path`.
     ///
     /// # Errors
@@ -246,19 +182,6 @@ pub trait VfsAccess: Send {
     ///
     /// Returns an error when creating the directory fails.
     fn mkdir(&mut self, path: &VfsPath, recursive: bool) -> Result<(), VfsError>;
-
-    /// Creates the directory at `path`, making missing parents when
-    /// `depth` is [`Depth::Recursive`].
-    ///
-    /// The default calls [`VfsAccess::mkdir`].
-    ///
-    /// # Errors
-    ///
-    /// Returns an error under the same conditions as
-    /// [`VfsAccess::mkdir`].
-    fn mkdir_with(&mut self, path: &VfsPath, depth: Depth) -> Result<(), VfsError> {
-        self.mkdir(path, depth.recursive())
-    }
 
     /// Renames or moves `from` to `to`, atomically where the backend
     /// allows.

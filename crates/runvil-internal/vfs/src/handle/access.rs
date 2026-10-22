@@ -183,41 +183,6 @@ impl Access {
         sink(OpEvent { op, path, origin });
     }
 
-    /// Reads the file and resolves one line range while its contents
-    /// remain live.
-    pub(super) fn with_line_range(
-        &self,
-        path: &str,
-        start: usize,
-        end: Option<usize>,
-        render: impl FnOnce(&[&str], usize) -> String,
-    ) -> Result<String, VfsError> {
-        // The store view validates the path before the bounds, in the
-        // store contract's order.
-        if self.store_root.is_some() {
-            validate_store_path(path)?;
-        }
-        if start < 1 {
-            return Err(VfsError::InvalidRange {
-                path: path.to_owned(),
-                reason: "start is below 1",
-            });
-        }
-        let contents = self.read_string(path)?;
-        let lines: Vec<&str> = contents.lines().collect();
-        if start > lines.len() {
-            return Ok(String::new());
-        }
-        let end = end.unwrap_or(lines.len()).min(lines.len());
-        if end < start {
-            return Err(VfsError::InvalidRange {
-                path: path.to_owned(),
-                reason: "end is before start",
-            });
-        }
-        Ok(render(&lines[start - 1..end], start))
-    }
-
     /// Poison-safe lock on the backend's access object, held per call.
     pub(super) fn inner(&self) -> MutexGuard<'_, Box<dyn VfsAccess>> {
         self.inner.lock().unwrap_or_else(PoisonError::into_inner)

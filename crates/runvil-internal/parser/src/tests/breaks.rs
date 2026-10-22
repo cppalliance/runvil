@@ -78,11 +78,10 @@ fn a_break_resets_list_item_capture() {
 #[test]
 fn h1_break_resets_prose_and_lua_fence_below_stays_live() {
     // The H1 follows the same reset rule: Markdown above the break is
-    // commentary excluded from the description, and a `lua` fence below
+    // commentary that leaves an empty prose block, and a `lua` fence below
     // the break is live because a break makes nothing reader-only.
     let h1 = "Description above.\n\n---\n\n```lua\nlocal live = 1\n```\n\nBelow prose.";
     let prompt = parse_ok(&PromptSource::new().h1_prose(h1).prose("S", "p").build());
-    assert_eq!(prompt.description_text, "Below prose.");
     assert!(matches!(
         prompt.h1_blocks.as_slice(),
         [Block::Prose { text: above }, Block::Lua(program), Block::Prose { text: below }]

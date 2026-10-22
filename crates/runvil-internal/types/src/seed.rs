@@ -2,7 +2,7 @@
 //!
 //! The caller draws a run's [`RunSeed`] from a CSPRNG for a live run and
 //! passes the recorded one back for a replay. Every value derived from the
-//! seed goes through [`derive()`] under its own `runvil.<purpose>.v1`
+//! seed goes through `derive()` under its own `runvil.<purpose>.v1`
 //! tag: the guard nonce
 //! ([`GuardNonce::from_seed`](crate::untrusted::GuardNonce::from_seed)) and
 //! the run id ([`RunUid`]). Each derivation is one-way, so a derived value
@@ -77,7 +77,7 @@ impl<'de> Deserialize<'de> for RunSeed {
 /// derivation is part of the run's replay contract and never changes
 /// silently.
 #[must_use]
-pub fn derive(domain: &[u8], seed: &RunSeed) -> [u8; 32] {
+pub(crate) fn derive(domain: &[u8], seed: &RunSeed) -> [u8; 32] {
     let digest = Sha256::new()
         .chain_update(domain)
         .chain_update(seed.0)

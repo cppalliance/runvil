@@ -70,7 +70,7 @@ impl GuardNonce {
     /// its envelopes byte for byte. A run has one nonce, shared by every
     /// envelope the run wraps.
     ///
-    /// The nonce is the first 16 bytes of [`derive()`] under the ASCII tag
+    /// The nonce is the first 16 bytes of `derive()` under the ASCII tag
     /// `runvil.guard-nonce.v1`, rendered as 32 lowercase hex digits.
     /// The derivation is part of the run's replay contract and never
     /// changes silently. It is one-way: the nonce appears in every envelope

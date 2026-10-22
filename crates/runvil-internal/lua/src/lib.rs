@@ -112,7 +112,7 @@ mod tests;
 pub use crate::argv::Argv;
 pub use crate::collection::render_item;
 pub use crate::compactors::{
-    Compactor, OverflowReason, UsageAnchor, exhaustion_detail, output_reserve, precheck,
+    OverflowReason, UsageAnchor, exhaustion_detail, output_reserve, precheck,
 };
 pub use crate::coro::{install_section_loop_shim, install_store_shims};
 pub use crate::dispatch::{
@@ -121,17 +121,16 @@ pub use crate::dispatch::{
 pub use crate::engine_globals::{
     install_ui, run_store_op, store_error_message, store_probe_message,
 };
-pub use crate::error::{Error, QuotaResource, SharedSource};
+pub use crate::error::{Error, QuotaResource};
 pub use crate::error_value::{
-    ErrorField, ErrorKind, ErrorValue, ParseErrorKindError, Raised, error_table,
-    store_error_value_fields,
+    ErrorField, ErrorKind, ErrorValue, ParseErrorKindError, Raised, store_error_value_fields,
 };
 pub use crate::globals::{RESERVED_NAMES, Reserved, reserved_name};
 pub use crate::handles::{
     Library, LibraryBlock, LibraryKey, LuaBlockResult, SectionText, ToolBinding, ToolOutputKind,
     ToolSet,
 };
-pub use crate::messages::{ListEditError, MessageList};
+pub use crate::messages::MessageList;
 pub use crate::models::ModelRuntime;
 pub use crate::prelude::install_preludes;
 pub use crate::program::LuaProgram;

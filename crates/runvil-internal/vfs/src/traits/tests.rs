@@ -1,4 +1,4 @@
-use super::{AllowAll, Depth, GlobKind, Op, Policy, Verdict, Vfs, VfsAccess};
+use super::{AllowAll, Op, Policy, Verdict, Vfs, VfsAccess};
 use crate::error::VfsError;
 use crate::test_support::{TestFs, context, path};
 
@@ -120,48 +120,24 @@ fn the_default_str_replace_reports_non_utf8_text() -> Result<(), VfsError> {
 }
 
 #[test]
-fn the_depth_siblings_delegate_to_the_bool_forms() -> Result<(), VfsError> {
-    let mut backend = stub(&[("/d/a.txt", "x")])?;
-    assert_eq!(
-        backend.remove_with(&path("/d")?, Depth::One),
-        Err(VfsError::DirectoryNotEmpty {
-            path: "/d".to_owned(),
-        })
-    );
-    backend.remove_with(&path("/d")?, Depth::Recursive)?;
-    assert!(!backend.exists(&path("/d")?)?);
-    assert_eq!(
-        backend.mkdir_with(&path("/p/q")?, Depth::One),
-        Err(VfsError::NotFound {
-            path: "/p/q".to_owned(),
-        })
-    );
-    backend.mkdir_with(&path("/p/q")?, Depth::Recursive)?;
-    assert!(backend.exists(&path("/p")?)?);
-    Ok(())
-}
-
-#[test]
-fn the_glob_kind_sibling_keeps_only_files_or_only_directories() -> Result<(), VfsError> {
+fn the_default_glob_kind_keeps_only_files_or_only_directories() -> Result<(), VfsError> {
     let backend = stub(&[("/d/a.txt", "x")])?;
     assert_eq!(
-        backend.glob_with("/d*", GlobKind::FilesOnly)?,
+        backend.glob_kind("/d*", false)?,
         Vec::<String>::new(),
-        "a directory is dropped under FilesOnly"
+        "a directory is dropped when files are wanted"
     );
     assert_eq!(
-        backend.glob_with("/d/*", GlobKind::FilesOnly)?,
+        backend.glob_kind("/d/*", false)?,
         ["/d/a.txt".to_owned()],
-        "a file matches under FilesOnly"
+        "a file matches when files are wanted"
     );
     assert_eq!(
-        backend.glob_with("/d/*", GlobKind::DirsOnly)?,
-        Vec::<String>::new()
+        backend.glob_kind("/d/*", true)?,
+        Vec::<String>::new(),
+        "a file is dropped when directories are wanted"
     );
-    assert_eq!(
-        backend.glob_with("/d*", GlobKind::DirsOnly)?,
-        ["/d".to_owned()]
-    );
+    assert_eq!(backend.glob_kind("/d*", true)?, ["/d".to_owned()]);
     Ok(())
 }
 

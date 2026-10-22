@@ -15,7 +15,6 @@
 #[non_exhaustive] pub enum runvil::model::Role
 #[non_exhaustive] pub enum runvil::model::TemperatureError
 #[non_exhaustive] pub enum runvil::model::ThinkingMode
-#[non_exhaustive] pub enum runvil::packs::GlobalNameErrorKind
 #[non_exhaustive] pub enum runvil::packs::PackIdErrorKind
 #[non_exhaustive] pub enum runvil::prompt::ArgType
 #[non_exhaustive] pub enum runvil::prompt::ModelKeyword
@@ -24,9 +23,7 @@
 #[non_exhaustive] pub enum runvil::tools::ToolCatalogErrorKind
 #[non_exhaustive] pub enum runvil::tools::ToolErrorKind
 #[non_exhaustive] pub enum runvil::tools::ToolIdErrorKind
-#[non_exhaustive] pub enum runvil::vfs::Depth
 #[non_exhaustive] pub enum runvil::vfs::FileType
-#[non_exhaustive] pub enum runvil::vfs::GlobKind
 #[non_exhaustive] pub enum runvil::vfs::Mode
 #[non_exhaustive] pub enum runvil::vfs::Op
 #[non_exhaustive] pub enum runvil::vfs::PathReason
@@ -107,7 +104,6 @@ auto runvil::RunErrorKind: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::RunLimits: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::RunResult: Freeze, !RefUnwindSafe, Send, Sync, Unpin, !UnwindSafe
 auto runvil::RunSeed: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
-auto runvil::RunUid: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::SourceLocation: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::Step: Freeze, !RefUnwindSafe, Send, Sync, Unpin, !UnwindSafe
 auto runvil::UnavailablePack: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
@@ -166,7 +162,6 @@ auto runvil::model::ToolCall: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSa
 auto runvil::model::ToolSchema: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::packs::GlobalName: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::packs::GlobalNameError: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
-auto runvil::packs::GlobalNameErrorKind: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::packs::PackId: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::packs::PackIdError: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::packs::PackIdErrorKind: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
@@ -198,11 +193,9 @@ auto runvil::tools::ToolOutput: Freeze, RefUnwindSafe, Send, Sync, Unpin, Unwind
 auto runvil::vfs::Access: !Freeze, !RefUnwindSafe, Send, Sync, Unpin, !UnwindSafe
 auto runvil::vfs::AcquireContext: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::vfs::AllowAll: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
-auto runvil::vfs::Depth: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::vfs::Entry: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::vfs::ExecId: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::vfs::FileType: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
-auto runvil::vfs::GlobKind: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::vfs::MemoryBackend: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::vfs::Mode: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::vfs::ModeHandle: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
@@ -236,7 +229,6 @@ derives runvil::RunErrorKind: Clone, Copy, Debug, Eq, Hash, PartialEq
 derives runvil::RunLimits: Clone, Copy, Debug, Default, Eq, Hash, PartialEq
 derives runvil::RunResult: Debug
 derives runvil::RunSeed: Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize
-derives runvil::RunUid: Clone, Copy, Debug, Eq, Hash, PartialEq
 derives runvil::SourceLocation: Clone, Debug, Eq, PartialEq
 derives runvil::Step: Debug
 derives runvil::UnavailablePack: Clone, Debug, Eq, PartialEq
@@ -295,7 +287,6 @@ derives runvil::model::ToolCall: Clone, Debug, Eq, PartialEq
 derives runvil::model::ToolSchema: Clone, Debug, Eq, PartialEq, Serialize
 derives runvil::packs::GlobalName: Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd
 derives runvil::packs::GlobalNameError: Clone, Debug, Eq, PartialEq
-derives runvil::packs::GlobalNameErrorKind: Clone, Copy, Debug, Eq, PartialEq
 derives runvil::packs::PackId: Clone, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize
 derives runvil::packs::PackIdError: Clone, Debug, Eq, PartialEq
 derives runvil::packs::PackIdErrorKind: Clone, Copy, Debug, Eq, PartialEq
@@ -327,11 +318,9 @@ derives runvil::tools::ToolOutput: Clone, Debug, Eq, PartialEq
 derives runvil::vfs::Access: Debug
 derives runvil::vfs::AcquireContext: Clone, Debug
 derives runvil::vfs::AllowAll: Clone, Copy, Debug, Default, Eq, Hash, PartialEq
-derives runvil::vfs::Depth: Clone, Copy, Debug, Eq, Hash, PartialEq
 derives runvil::vfs::Entry: Clone, Debug, Eq, Hash, PartialEq
 derives runvil::vfs::ExecId: Clone, Copy, Debug, Eq, Hash, PartialEq
 derives runvil::vfs::FileType: Clone, Copy, Debug, Eq, Hash, PartialEq
-derives runvil::vfs::GlobKind: Clone, Copy, Debug, Eq, Hash, PartialEq
 derives runvil::vfs::MemoryBackend: Clone, Debug, Default
 derives runvil::vfs::Mode: Clone, Copy, Debug, Eq, PartialEq
 derives runvil::vfs::ModeHandle: Clone, Debug
@@ -375,7 +364,6 @@ impl core::error::Error for runvil::vfs::VfsError
 impl core::fmt::Display for runvil::ParseError
 impl core::fmt::Display for runvil::RunError
 impl core::fmt::Display for runvil::RunSeed
-impl core::fmt::Display for runvil::RunUid
 impl core::fmt::Display for runvil::effect::EffectId
 impl core::fmt::Display for runvil::ids::ChainId
 impl core::fmt::Display for runvil::ids::ParseIdError
@@ -468,7 +456,6 @@ pub fn runvil::ParseError::name(&self) -> core::option::Option<&str>
 pub fn runvil::ParseError::span(&self) -> core::option::Option<core::ops::range::Range<usize>>
 pub fn runvil::Prompt::frontmatter(&self) -> &runvil::prompt::Frontmatter
 pub fn runvil::Prompt::parse(input: &str, execution: &str) -> (core::result::Result<runvil::Prompt, runvil::ParseError>, alloc::vec::Vec<runvil::event::Event>)
-pub fn runvil::Prompt::strip_h1_prose(&mut self)
 pub fn runvil::Prompt::title(&self) -> &str
 pub fn runvil::Requirements::is_satisfied(&self) -> bool
 pub fn runvil::Requirements::merge(&mut self, other: runvil::Requirements)
@@ -481,15 +468,11 @@ pub fn runvil::Run::new(prompt: alloc::sync::Arc<runvil::Prompt>, args: &str, ct
 pub fn runvil::Run::resume(&mut self, id: runvil::effect::EffectId, answer: runvil::effect::EffectAnswer)
 pub fn runvil::Run::step(&mut self) -> runvil::Step
 pub fn runvil::RunContext::cancel(self, handle: runvil::cancel::CancelHandle) -> runvil::RunContext
-pub fn runvil::RunContext::cancel_handle(&self) -> runvil::cancel::CancelHandle
 pub fn runvil::RunContext::catalog(&self) -> &runvil::tools::ToolCatalog
-pub fn runvil::RunContext::current_model(&self) -> core::option::Option<&runvil::model::ModelInfo>
-pub fn runvil::RunContext::depth(&self) -> u32
 pub fn runvil::RunContext::flags(self, flags: runvil::replay::Flags) -> runvil::RunContext
 pub fn runvil::RunContext::limits(self, limits: runvil::RunLimits) -> runvil::RunContext
 pub fn runvil::RunContext::model(self, model: runvil::model::ModelInfo) -> runvil::RunContext
 pub fn runvil::RunContext::model_bindings(&self) -> &runvil::model::ModelBindings
-pub fn runvil::RunContext::name(&self) -> &str
 pub fn runvil::RunContext::new(name: impl core::convert::Into<alloc::string::String>, seed: runvil::RunSeed, started_at: runvil::timestamp::Timestamp) -> runvil::RunContext
 pub fn runvil::RunContext::packs(self, usable: alloc::vec::Vec<runvil::packs::PackId>, unavailable: alloc::vec::Vec<runvil::UnavailablePack>) -> runvil::RunContext
 pub fn runvil::RunContext::preludes(self, preludes: alloc::vec::Vec<runvil::packs::Prelude>) -> runvil::RunContext
@@ -501,7 +484,6 @@ pub fn runvil::RunContext::seed(&self) -> runvil::RunSeed
 pub fn runvil::RunContext::started_at(&self) -> runvil::timestamp::Timestamp
 pub fn runvil::RunContext::tools(self, tools: runvil::tools::ToolCatalog) -> runvil::RunContext
 pub fn runvil::RunContext::ui(self, snapshot: serde_json::value::Value) -> runvil::RunContext
-pub fn runvil::RunContext::uid(&self) -> runvil::RunUid
 pub fn runvil::RunContext::vfs(self, vfs: runvil::vfs::VfsRef) -> runvil::RunContext
 pub fn runvil::RunContext::vfs_handle(&self) -> &runvil::vfs::VfsRef
 pub fn runvil::RunError::cause(&self) -> core::option::Option<&dyn core::error::Error + core::marker::Send + core::marker::Sync + 'static>
@@ -509,10 +491,7 @@ pub fn runvil::RunError::is_cancelled(&self) -> bool
 pub fn runvil::RunError::is_retryable(&self) -> bool
 pub fn runvil::RunError::kind(&self) -> runvil::RunErrorKind
 pub fn runvil::RunError::location(&self) -> core::option::Option<runvil::SourceLocation>
-pub fn runvil::RunLimits::concurrency(&self) -> core::num::nonzero::NonZeroUsize
 pub fn runvil::RunLimits::lua_log_events(self, value: core::num::nonzero::NonZeroU32) -> runvil::RunLimits
-pub fn runvil::RunLimits::lua_logs(&self) -> core::num::nonzero::NonZeroU32
-pub fn runvil::RunLimits::lua_memory(&self) -> core::num::nonzero::NonZeroUsize
 pub fn runvil::RunLimits::lua_memory_bytes(self, value: core::num::nonzero::NonZeroUsize) -> runvil::RunLimits
 pub fn runvil::RunLimits::max_concurrency(self, value: core::num::nonzero::NonZeroUsize) -> runvil::RunLimits
 pub fn runvil::RunLimits::max_response_bytes(self, value: core::num::nonzero::NonZeroU64) -> runvil::RunLimits
@@ -521,12 +500,6 @@ pub fn runvil::RunLimits::new() -> runvil::RunLimits
 pub fn runvil::RunLimits::request_timeout(self, value: core::time::Duration) -> runvil::RunLimits
 pub fn runvil::RunLimits::response_bytes(&self) -> core::num::nonzero::NonZeroU64
 pub fn runvil::RunLimits::timeout(&self) -> core::time::Duration
-pub fn runvil::RunLimits::tool_iterations(&self) -> core::num::nonzero::NonZeroU32
-pub fn runvil::RunUid::from_seed(seed: &runvil::RunSeed) -> runvil::RunUid
-pub fn runvil::SourceLocation::new(path: impl core::convert::Into<alloc::string::String>) -> runvil::SourceLocation
-pub fn runvil::SourceLocation::with_column(self, column: core::option::Option<u32>) -> runvil::SourceLocation
-pub fn runvil::SourceLocation::with_line(self, line: core::option::Option<u32>) -> runvil::SourceLocation
-pub fn runvil::SourceLocation::with_span(self, span: core::option::Option<core::ops::range::Range<usize>>) -> runvil::SourceLocation
 pub fn runvil::UnavailablePack::new(pack: runvil::packs::PackId, reason: impl core::convert::Into<alloc::string::String>) -> runvil::UnavailablePack
 pub fn runvil::cancel::CancelHandle::cancel(&self)
 pub fn runvil::cancel::CancelHandle::cancelled(&self) -> runvil::cancel::Cancelled
@@ -539,9 +512,7 @@ pub fn runvil::effect::ChatAnswerRecord::with_reply(self, reply: core::option::O
 pub fn runvil::effect::ChatAnswerRecord::with_tool_calls(self, tool_calls: alloc::vec::Vec<alloc::string::String>) -> runvil::effect::ChatAnswerRecord
 pub fn runvil::effect::Effect::record(&self) -> runvil::effect::EffectRecord
 pub fn runvil::effect::EffectAnswer::record(&self) -> runvil::effect::AnswerRecord
-pub fn runvil::effect::FailureRecord::new(kind: impl core::convert::Into<alloc::string::String>, message: impl core::convert::Into<alloc::string::String>) -> runvil::effect::FailureRecord
 pub fn runvil::effect::Round::new(id: runvil::ids::RoundId, origin: runvil::event::ReplyOrigin) -> runvil::effect::Round
-pub fn runvil::effect::ToolAnswerRecord::new(text: impl core::convert::Into<alloc::string::String>, trust: runvil::tools::OutputTrust) -> runvil::effect::ToolAnswerRecord
 pub fn runvil::effect::ToolCallOrigin::new(execution: impl core::convert::Into<alloc::string::String>, section: impl core::convert::Into<alloc::string::String>, caller: runvil::effect::ToolCaller) -> runvil::effect::ToolCallOrigin
 pub fn runvil::event::Event::execution(&self) -> &str
 pub fn runvil::event::Event::provenance(&self) -> &runvil::ids::Provenance
@@ -635,13 +606,11 @@ pub fn runvil::model::ModelBindings::role_id(&self, label: &str) -> core::option
 pub fn runvil::model::ModelCatalog::contains(&self, id: &runvil::model::ModelId) -> bool
 pub fn runvil::model::ModelCatalog::empty() -> Self
 pub fn runvil::model::ModelCatalog::get(&self, id: &runvil::model::ModelId) -> core::option::Option<&runvil::model::ModelInfo>
-pub fn runvil::model::ModelCatalog::is_empty(&self) -> bool
 pub fn runvil::model::ModelCatalog::models(&self) -> &[runvil::model::ModelInfo]
 pub fn runvil::model::ModelCatalog::new(models: impl core::iter::traits::collect::IntoIterator<Item = runvil::model::ModelInfo>) -> core::result::Result<runvil::model::ModelCatalog, runvil::model::ModelCatalogError>
 pub fn runvil::model::ModelId::gateway(name: impl core::convert::Into<alloc::string::String>) -> core::result::Result<runvil::model::ModelId, runvil::model::ModelIdError>
 pub fn runvil::model::ModelId::name(&self) -> &str
 pub fn runvil::model::ModelId::new(server: impl core::convert::Into<alloc::string::String>, name: impl core::convert::Into<alloc::string::String>) -> core::result::Result<runvil::model::ModelId, runvil::model::ModelIdError>
-pub fn runvil::model::ModelId::server(&self) -> &str
 pub fn runvil::model::ModelInfo::context(&self) -> core::num::nonzero::NonZeroU32
 pub fn runvil::model::ModelInfo::description(&self) -> &str
 pub fn runvil::model::ModelInfo::id(&self) -> &runvil::model::ModelId
@@ -672,7 +641,6 @@ pub fn runvil::model::ToolSchema::description(&self) -> &str
 pub fn runvil::model::ToolSchema::name(&self) -> &str
 pub fn runvil::model::ToolSchema::parameters(&self) -> &serde_json::value::Value
 pub fn runvil::packs::GlobalName::parse(s: &str) -> core::result::Result<runvil::packs::GlobalName, runvil::packs::GlobalNameError>
-pub fn runvil::packs::GlobalNameError::kind(&self) -> runvil::packs::GlobalNameErrorKind
 pub fn runvil::packs::PackId::contains(&self, tool: &runvil::tools::ToolId) -> bool
 pub fn runvil::packs::PackId::parse(name: &str) -> core::result::Result<runvil::packs::PackId, runvil::packs::PackIdError>
 pub fn runvil::packs::PackIdError::kind(&self) -> runvil::packs::PackIdErrorKind
@@ -725,7 +693,6 @@ pub fn runvil::tools::ToolErrorKind::tag(self) -> &'static str
 pub fn runvil::tools::ToolId::name(&self) -> &str
 pub fn runvil::tools::ToolId::pack(&self) -> runvil::packs::PackId
 pub fn runvil::tools::ToolId::parse(id: &str) -> core::result::Result<runvil::tools::ToolId, runvil::tools::ToolIdError>
-pub fn runvil::tools::ToolIdError::field(&self) -> &str
 pub fn runvil::tools::ToolIdError::kind(&self) -> runvil::tools::ToolIdErrorKind
 pub fn runvil::tools::ToolInfo::new(id: runvil::tools::ToolId, description: impl core::convert::Into<alloc::string::String>, parameters_schema: serde_json::value::Value) -> runvil::tools::ToolInfo
 pub fn runvil::tools::ToolInfo::structured(self, structured: bool) -> runvil::tools::ToolInfo
@@ -741,13 +708,9 @@ pub fn runvil::vfs::Access::exists(&self, path: &str) -> core::result::Result<bo
 pub fn runvil::vfs::Access::glob(&self, pattern: &str) -> core::result::Result<alloc::vec::Vec<alloc::string::String>, runvil::vfs::VfsError>
 pub fn runvil::vfs::Access::list(&self, path: &str) -> core::result::Result<alloc::vec::Vec<runvil::vfs::Entry>, runvil::vfs::VfsError>
 pub fn runvil::vfs::Access::mkdir(&self, path: &str, recursive: bool) -> core::result::Result<(), runvil::vfs::VfsError>
-pub fn runvil::vfs::Access::mkdir_with(&self, path: &str, depth: runvil::vfs::Depth) -> core::result::Result<(), runvil::vfs::VfsError>
 pub fn runvil::vfs::Access::read(&self, path: &str) -> core::result::Result<alloc::vec::Vec<u8>, runvil::vfs::VfsError>
-pub fn runvil::vfs::Access::read_range(&self, path: &str, start: usize, end: core::option::Option<usize>) -> core::result::Result<alloc::string::String, runvil::vfs::VfsError>
-pub fn runvil::vfs::Access::read_range_numbered(&self, path: &str, start: usize, end: core::option::Option<usize>) -> core::result::Result<alloc::string::String, runvil::vfs::VfsError>
 pub fn runvil::vfs::Access::read_string(&self, path: &str) -> core::result::Result<alloc::string::String, runvil::vfs::VfsError>
 pub fn runvil::vfs::Access::remove(&self, path: &str, recursive: bool) -> core::result::Result<bool, runvil::vfs::VfsError>
-pub fn runvil::vfs::Access::remove_with(&self, path: &str, depth: runvil::vfs::Depth) -> core::result::Result<bool, runvil::vfs::VfsError>
 pub fn runvil::vfs::Access::rename(&self, from: &str, to: &str) -> core::result::Result<(), runvil::vfs::VfsError>
 pub fn runvil::vfs::Access::stat(&self, path: &str) -> core::result::Result<runvil::vfs::Stat, runvil::vfs::VfsError>
 pub fn runvil::vfs::Access::str_replace(&self, path: &str, old: &str, new: &str) -> core::result::Result<(), runvil::vfs::VfsError>
@@ -756,7 +719,6 @@ pub fn runvil::vfs::AcquireContext::id(&self) -> runvil::vfs::ExecId
 pub fn runvil::vfs::Entry::new(name: impl core::convert::Into<alloc::string::String>, stat: runvil::vfs::Stat) -> runvil::vfs::Entry
 pub fn runvil::vfs::Entry::with_description(self, description: core::option::Option<alloc::string::String>) -> runvil::vfs::Entry
 pub fn runvil::vfs::MemoryBackend::new() -> runvil::vfs::MemoryBackend
-pub fn runvil::vfs::ModeHandle::mode(&self) -> runvil::vfs::Mode
 pub fn runvil::vfs::ModeHandle::set(&self, mode: runvil::vfs::Mode)
 pub fn runvil::vfs::ModePolicy::handle(&self) -> runvil::vfs::ModeHandle
 pub fn runvil::vfs::ModePolicy::new(mode: runvil::vfs::Mode) -> runvil::vfs::ModePolicy
@@ -771,7 +733,6 @@ pub fn runvil::vfs::PathReason::tag(self) -> &'static str
 pub fn runvil::vfs::Policy::check(&self, op: runvil::vfs::Op, path: &runvil::vfs::VfsPath) -> runvil::vfs::Verdict
 pub fn runvil::vfs::RealBackend::identity() -> runvil::vfs::RealBackend
 pub fn runvil::vfs::RealBackend::rooted(dir: impl core::convert::AsRef<std::path::Path>) -> core::result::Result<runvil::vfs::RealBackend, runvil::vfs::VfsError>
-pub fn runvil::vfs::RealBackend::with_read_only(self, read_only: bool) -> runvil::vfs::RealBackend
 pub fn runvil::vfs::RealBackend::with_writability(self, writability: runvil::vfs::Writability) -> runvil::vfs::RealBackend
 pub fn runvil::vfs::Stat::new(file_type: runvil::vfs::FileType, size: u64) -> runvil::vfs::Stat
 pub fn runvil::vfs::Stat::with_created(self, created: core::option::Option<std::time::SystemTime>) -> runvil::vfs::Stat
@@ -787,15 +748,12 @@ pub fn runvil::vfs::VfsAccess::copy(&mut self, from: &runvil::vfs::VfsPath, to: 
 pub fn runvil::vfs::VfsAccess::exists(&self, path: &runvil::vfs::VfsPath) -> core::result::Result<bool, runvil::vfs::VfsError>
 pub fn runvil::vfs::VfsAccess::glob(&self, pattern: &str) -> core::result::Result<alloc::vec::Vec<alloc::string::String>, runvil::vfs::VfsError>
 pub fn runvil::vfs::VfsAccess::glob_kind(&self, pattern: &str, dirs_only: bool) -> core::result::Result<alloc::vec::Vec<alloc::string::String>, runvil::vfs::VfsError> { .. }
-pub fn runvil::vfs::VfsAccess::glob_with(&self, pattern: &str, kind: runvil::vfs::GlobKind) -> core::result::Result<alloc::vec::Vec<alloc::string::String>, runvil::vfs::VfsError> { .. }
 pub fn runvil::vfs::VfsAccess::list(&self, path: &runvil::vfs::VfsPath) -> core::result::Result<alloc::vec::Vec<runvil::vfs::Entry>, runvil::vfs::VfsError>
 pub fn runvil::vfs::VfsAccess::mkdir(&mut self, path: &runvil::vfs::VfsPath, recursive: bool) -> core::result::Result<(), runvil::vfs::VfsError>
-pub fn runvil::vfs::VfsAccess::mkdir_with(&mut self, path: &runvil::vfs::VfsPath, depth: runvil::vfs::Depth) -> core::result::Result<(), runvil::vfs::VfsError> { .. }
 pub fn runvil::vfs::VfsAccess::read(&self, path: &runvil::vfs::VfsPath) -> core::result::Result<alloc::vec::Vec<u8>, runvil::vfs::VfsError>
 pub fn runvil::vfs::VfsAccess::read_link(&self, path: &runvil::vfs::VfsPath) -> core::result::Result<runvil::vfs::VfsPathBuf, runvil::vfs::VfsError> { .. }
 pub fn runvil::vfs::VfsAccess::read_range(&self, path: &runvil::vfs::VfsPath, offset: u64, len: u64) -> core::result::Result<alloc::vec::Vec<u8>, runvil::vfs::VfsError> { .. }
 pub fn runvil::vfs::VfsAccess::remove(&mut self, path: &runvil::vfs::VfsPath, recursive: bool) -> core::result::Result<(), runvil::vfs::VfsError>
-pub fn runvil::vfs::VfsAccess::remove_with(&mut self, path: &runvil::vfs::VfsPath, depth: runvil::vfs::Depth) -> core::result::Result<(), runvil::vfs::VfsError> { .. }
 pub fn runvil::vfs::VfsAccess::rename(&mut self, from: &runvil::vfs::VfsPath, to: &runvil::vfs::VfsPath) -> core::result::Result<(), runvil::vfs::VfsError>
 pub fn runvil::vfs::VfsAccess::stat(&self, path: &runvil::vfs::VfsPath) -> core::result::Result<runvil::vfs::Stat, runvil::vfs::VfsError>
 pub fn runvil::vfs::VfsAccess::str_replace(&mut self, path: &runvil::vfs::VfsPath, old: &str, new: &str) -> core::result::Result<(), runvil::vfs::VfsError> { .. }
@@ -810,7 +768,6 @@ pub fn runvil::vfs::VfsRef::acquire_store(&self, origin: runvil::vfs::Origin) ->
 pub fn runvil::vfs::VfsRef::builder() -> runvil::vfs::VfsRefBuilder
 pub fn runvil::vfs::VfsRef::new(backend: impl runvil::vfs::Vfs + 'static) -> runvil::vfs::VfsRef
 pub fn runvil::vfs::VfsRef::overlay(&self, prefix: &str, backend: impl runvil::vfs::Vfs + 'static) -> runvil::vfs::VfsRef
-pub fn runvil::vfs::VfsRef::with_policy(backend: impl runvil::vfs::Vfs + 'static, policy: impl runvil::vfs::Policy + core::marker::Sync + 'static) -> runvil::vfs::VfsRef
 pub fn runvil::vfs::VfsRefBuilder::build(self) -> runvil::vfs::VfsRef
 pub fn runvil::vfs::VfsRefBuilder::mount(self, prefix: &str, backend: impl runvil::vfs::Vfs + 'static) -> runvil::vfs::VfsRefBuilder
 pub fn runvil::vfs::VfsRefBuilder::on_op(self, sink: impl core::ops::function::Fn(runvil::vfs::OpEvent<'_>) + core::marker::Send + core::marker::Sync + 'static) -> runvil::vfs::VfsRefBuilder
@@ -1322,9 +1279,6 @@ pub runvil::model::TemperatureError::OutOfRange::value: f64
 pub runvil::model::ThinkingMode::Always
 pub runvil::model::ThinkingMode::Never
 pub runvil::model::ThinkingMode::Switchable
-pub runvil::packs::GlobalNameErrorKind::Charset
-pub runvil::packs::GlobalNameErrorKind::Control
-pub runvil::packs::GlobalNameErrorKind::Empty
 pub runvil::packs::PackIdErrorKind::Charset
 pub runvil::packs::PackIdErrorKind::Control
 pub runvil::packs::PackIdErrorKind::Empty
@@ -1358,8 +1312,6 @@ pub runvil::tools::ToolInfo::id: runvil::tools::ToolId
 pub runvil::tools::ToolInfo::parameters_schema: serde_json::value::Value
 pub runvil::tools::ToolInfo::structured_output: bool
 pub runvil::tools::ToolInfo::survives_stop: bool
-pub runvil::vfs::Depth::One
-pub runvil::vfs::Depth::Recursive
 pub runvil::vfs::Entry::description: core::option::Option<alloc::string::String>
 pub runvil::vfs::Entry::name: alloc::string::String
 pub runvil::vfs::Entry::stat: runvil::vfs::Stat
@@ -1370,8 +1322,6 @@ pub runvil::vfs::FileType::Fifo
 pub runvil::vfs::FileType::File
 pub runvil::vfs::FileType::Socket
 pub runvil::vfs::FileType::Symlink
-pub runvil::vfs::GlobKind::DirsOnly
-pub runvil::vfs::GlobKind::FilesOnly
 pub runvil::vfs::Mode::Agent
 pub runvil::vfs::Mode::Ask
 pub runvil::vfs::Mode::Plan
@@ -1503,7 +1453,6 @@ pub runvil::vfs::Writability::ReadOnly
 pub runvil::vfs::Writability::ReadWrite
 pub struct runvil::Run { /* private fields */ }
 pub struct runvil::RunSeed(/* private fields */)
-pub struct runvil::RunUid(/* private fields */)
 pub struct runvil::cancel::CancelHandle { /* private fields */ }
 pub struct runvil::cancel::Cancelled { /* private fields */ }
 pub struct runvil::effect::EffectId(/* private fields */)
@@ -1537,4 +1486,3 @@ pub struct runvil::vfs::VfsRefBuilder { /* private fields */ }
 pub trait runvil::vfs::Policy: core::marker::Send
 pub trait runvil::vfs::Vfs: core::marker::Send
 pub trait runvil::vfs::VfsAccess: core::marker::Send
-pub type runvil::vfs::OpSink = alloc::sync::Arc<dyn core::ops::function::Fn(runvil::vfs::OpEvent<'_>) + core::marker::Send + core::marker::Sync>

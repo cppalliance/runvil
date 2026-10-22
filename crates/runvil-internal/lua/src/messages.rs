@@ -74,7 +74,7 @@ pub struct MessageList(Arc<Mutex<ListState>>);
 
 /// Why a [`MessageList`] refused an edit, which leaves the list unchanged.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
-pub enum ListEditError {
+pub(crate) enum ListEditError {
     /// A system record at the 1-based `index` would sit behind a
     /// non-system record.
     #[error(
@@ -207,7 +207,7 @@ impl MessageList {
 
     /// Whether a rendered tool list is attached; no list means false.
     #[must_use]
-    pub fn rendered(&self) -> bool {
+    pub(crate) fn rendered(&self) -> bool {
         self.state().rendered.is_some()
     }
 

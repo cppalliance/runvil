@@ -21,7 +21,7 @@ use mlua::{AnyUserData, Function, Lua, Value};
 use runvil_types::emitter::{Emitter, LibraryLoad};
 use serde_json::Value as Json;
 
-use crate::SharedSource;
+use crate::error::SharedSource;
 use crate::error::{Error, Result};
 use crate::error_value::install_error_value;
 use crate::handles::{Library, LibraryKey};

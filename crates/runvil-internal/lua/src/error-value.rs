@@ -81,7 +81,7 @@ pub enum ErrorKind {
 
 impl ErrorKind {
     /// Every kind, in declaration order.
-    pub const ALL: &'static [ErrorKind] = &[
+    pub(crate) const ALL: &'static [ErrorKind] = &[
         ErrorKind::ToolLoopExhausted,
         ErrorKind::ContextExhausted,
         ErrorKind::EmptyModelReply,
@@ -99,7 +99,7 @@ impl ErrorKind {
 
     /// Returns the `kind` string the Lua table holds.
     #[must_use]
-    pub fn tag(self) -> &'static str {
+    pub(crate) fn tag(self) -> &'static str {
         match self {
             ErrorKind::ToolLoopExhausted => "tool_loop_exhausted",
             ErrorKind::ContextExhausted => "context_exhausted",
@@ -119,7 +119,7 @@ impl ErrorKind {
 
     /// Parses a `kind` string; `None` for a tag outside the vocabulary.
     #[must_use]
-    pub fn from_tag(tag: &str) -> Option<ErrorKind> {
+    pub(crate) fn from_tag(tag: &str) -> Option<ErrorKind> {
         match tag {
             "tool_loop_exhausted" => Some(ErrorKind::ToolLoopExhausted),
             "context_exhausted" => Some(ErrorKind::ContextExhausted),
@@ -148,7 +148,7 @@ impl std::fmt::Display for ErrorKind {
 impl FromStr for ErrorKind {
     type Err = ParseErrorKindError;
 
-    /// Parses a kind from its exact tag, as [`ErrorKind::from_tag`] does.
+    /// Parses a kind from its exact tag, as `ErrorKind::from_tag` does.
     fn from_str(tag: &str) -> Result<ErrorKind, ParseErrorKindError> {
         ErrorKind::from_tag(tag).ok_or_else(|| ParseErrorKindError {
             input: tag.to_owned(),
@@ -169,8 +169,9 @@ pub struct ParseErrorKindError {
 
 impl ParseErrorKindError {
     /// Returns the rejected text.
+    #[cfg(test)]
     #[must_use]
-    pub fn input(&self) -> &str {
+    pub(crate) fn input(&self) -> &str {
         &self.input
     }
 }
@@ -266,7 +267,7 @@ impl ErrorValue for Error {
 ///
 /// This is the shape a block coroutine's failure takes when the raised
 /// value was an error table (built by the shim's `raise` or by
-/// [`error_table`]) and no retained typed error was substituted for it -
+/// `error_table`) and no retained typed error was substituted for it -
 /// the case for a Lua-side raise. The executor maps it back onto its own
 /// internal type by kind.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -334,7 +335,7 @@ fn finish_table(lua: &Lua, kind: ErrorKind, fields: Table) -> mlua::Result<Table
 ///
 /// # Errors
 /// Returns an `mlua` error if the table cannot be created on `lua`.
-pub fn error_table(lua: &Lua, error: &impl ErrorValue) -> mlua::Result<Table> {
+pub(crate) fn error_table(lua: &Lua, error: &impl ErrorValue) -> mlua::Result<Table> {
     let table = lua.create_table()?;
     table.raw_set("message", error.to_string())?;
     for (name, value) in error.fields() {

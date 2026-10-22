@@ -45,8 +45,8 @@ use super::requirements::{Requirements, UnavailablePack};
 /// CSPRNG and read the start time from its own clock. The caller records both
 /// values, and a replay passes back the recorded ones. Given the same
 /// inputs and the same answers, a run reproduces its run id, nonces,
-/// `sys.when`, effects, and events. The `Debug` form shows the run id
-/// ([`uid`](RunContext::uid)) and never the seed.
+/// `sys.when`, effects, and events. The `Debug` form shows the run id and
+/// never the seed.
 #[non_exhaustive]
 pub struct RunContext {
     /// Run identity, stamped on every report and event.
@@ -65,9 +65,6 @@ pub struct RunContext {
     /// count, so the run's root task continues the sequence and
     /// `(task, seq)` is unique across the parse/run boundary.
     pub(super) provenance_start: u32,
-    /// Model-orchestrated prompt-tool nesting depth: 0 for a root run.
-    /// Nothing increments it, so it is always 0.
-    depth: u32,
     /// Whether the run reports each model round's raw request and response
     /// bodies as `Request` and `Response` events. Off by default: the
     /// bodies already travel in the `Chat` effect and its answer, and the
@@ -134,7 +131,6 @@ impl RunContext {
             flags: Flags::EMPTY,
             started_at,
             provenance_start: 0,
-            depth: 0,
             report_debug: DebugMode::Off,
             cancel: CancelHandle::new(),
             limits: RunLimits::new(),
@@ -345,22 +341,6 @@ impl RunContext {
         &self.vfs
     }
 
-    /// Returns the run's current model, or `None` by default.
-    #[must_use]
-    pub fn current_model(&self) -> Option<&ModelInfo> {
-        self.model.as_ref()
-    }
-
-    /// Returns the run's cancel flag.
-    ///
-    /// The caller watches this flag, so one cancel reaches the run and the
-    /// effects the caller has in flight. Replace the flag with
-    /// [`cancel`](RunContext::cancel).
-    #[must_use]
-    pub fn cancel_handle(&self) -> CancelHandle {
-        self.cancel.clone()
-    }
-
     /// Returns the run's model bindings, which map each declared role to a
     /// concrete model.
     ///
@@ -387,13 +367,6 @@ impl RunContext {
         &self.tools
     }
 
-    /// Returns the run's name, which identifies the run on every report and
-    /// event.
-    #[must_use]
-    pub fn name(&self) -> &str {
-        &self.name
-    }
-
     /// Returns the run's seed, as the caller supplied it.
     #[must_use]
     pub fn seed(&self) -> RunSeed {
@@ -406,7 +379,7 @@ impl RunContext {
     /// without revealing the seed or the nonce. A replay under the recorded
     /// seed has the same id.
     #[must_use]
-    pub fn uid(&self) -> RunUid {
+    pub(crate) fn uid(&self) -> RunUid {
         RunUid::from_seed(&self.seed)
     }
 
@@ -422,15 +395,6 @@ impl RunContext {
     pub fn started_at(&self) -> Timestamp {
         self.started_at
     }
-
-    /// Returns how many model-orchestrated prompt tools this run is nested
-    /// inside.
-    ///
-    /// The depth is 0 for a root run.
-    #[must_use]
-    pub fn depth(&self) -> u32 {
-        self.depth
-    }
 }
 
 impl fmt::Debug for RunContext {
@@ -442,7 +406,6 @@ impl fmt::Debug for RunContext {
             .field("flags", &self.flags)
             .field("started_at", &self.started_at)
             .field("provenance_start", &self.provenance_start)
-            .field("depth", &self.depth)
             .field("report_debug", &self.report_debug)
             .field("cancel", &self.cancel)
             .field("limits", &self.limits)

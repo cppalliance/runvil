@@ -61,8 +61,7 @@ pub enum RunErrorKind {
 /// The error's [`RunErrorKind`] says which of the two it is, and the
 /// extension of `path` says so too. Use the kind to branch in code, the
 /// error message to show a reader, and the location to navigate to the
-/// fault. Build one with [`new`](SourceLocation::new) and the `with_`
-/// methods.
+/// fault. Only the Engine builds one.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct SourceLocation {
@@ -93,7 +92,7 @@ pub struct SourceLocation {
 impl SourceLocation {
     /// Builds a location in `path` with no line, column, or span.
     #[must_use]
-    pub fn new(path: impl Into<String>) -> SourceLocation {
+    pub(crate) fn new(path: impl Into<String>) -> SourceLocation {
         SourceLocation {
             path: path.into(),
             line: None,
@@ -104,21 +103,21 @@ impl SourceLocation {
 
     /// Sets the 1-based line.
     #[must_use]
-    pub fn with_line(mut self, line: Option<u32>) -> SourceLocation {
+    pub(crate) fn with_line(mut self, line: Option<u32>) -> SourceLocation {
         self.line = line;
         self
     }
 
     /// Sets the 1-based column.
     #[must_use]
-    pub fn with_column(mut self, column: Option<u32>) -> SourceLocation {
+    pub(crate) fn with_column(mut self, column: Option<u32>) -> SourceLocation {
         self.column = column;
         self
     }
 
     /// Sets the byte span of the offending region in the document body.
     #[must_use]
-    pub fn with_span(mut self, span: Option<Range<usize>>) -> SourceLocation {
+    pub(crate) fn with_span(mut self, span: Option<Range<usize>>) -> SourceLocation {
         self.span = span;
         self
     }

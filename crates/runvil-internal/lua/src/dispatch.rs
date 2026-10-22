@@ -65,16 +65,18 @@ pub struct ToolDispatch {
 impl ToolDispatch {
     /// The final content: trusted output verbatim, anything else
     /// nonce-wrapped.
+    #[cfg(test)]
     #[must_use]
-    pub fn content(&self) -> &str {
+    pub(crate) fn content(&self) -> &str {
         &self.content
     }
 
     /// The content's trust marking: [`OutputTrust::Trusted`]
     /// for verbatim output, [`OutputTrust::Untrusted`] for the
     /// nonce-wrapped envelope.
+    #[cfg(test)]
     #[must_use]
-    pub fn trust(&self) -> OutputTrust {
+    pub(crate) fn trust(&self) -> OutputTrust {
         self.trust
     }
 

@@ -29,25 +29,6 @@ impl SectionVm {
         var_to_json(&self.lua)
     }
 
-    /// Reads a bare global for prose substitution: `None` when the global is
-    /// unset, its JSON form when set.
-    ///
-    /// # Errors
-    /// Returns [`Error::Lua`] when the global is a function, userdata, or
-    /// thread (bare globals in prose must be data), or when its value cannot
-    /// be represented as JSON.
-    pub fn global_json(&self, name: &str) -> Result<Option<Json>> {
-        let value: Value = self.lua.globals().get(name).map_err(Error::lua)?;
-        match value {
-            Value::Nil => Ok(None),
-            Value::Function(_) | Value::UserData(_) | Value::Thread(_) => Err(Error::Lua(format!(
-                "global `{name}` is a {}; bare globals in prose must be JSON data",
-                value.type_name()
-            ))),
-            other => Ok(Some(self.lua.from_value(other).map_err(Error::lua)?)),
-        }
-    }
-
     /// Reads the `argv` global back as JSON at the H1 freeze: `None` when
     /// nil, its JSON form otherwise. Call this on the H1 VM only - a frozen
     /// section's `argv` sits behind the guard proxy, which is not the

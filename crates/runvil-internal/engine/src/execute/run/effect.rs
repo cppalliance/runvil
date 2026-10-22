@@ -391,7 +391,7 @@ impl FailureRecord {
     /// Builds the record of a failure of kind `kind` with `message` as its
     /// display text.
     #[must_use]
-    pub fn new(kind: impl Into<String>, message: impl Into<String>) -> FailureRecord {
+    pub(crate) fn new(kind: impl Into<String>, message: impl Into<String>) -> FailureRecord {
         FailureRecord {
             kind: kind.into(),
             message: message.into(),
@@ -485,7 +485,7 @@ pub struct ToolAnswerRecord {
 impl ToolAnswerRecord {
     /// Builds the record of an output of `text` at `trust`.
     #[must_use]
-    pub fn new(text: impl Into<String>, trust: OutputTrust) -> ToolAnswerRecord {
+    pub(crate) fn new(text: impl Into<String>, trust: OutputTrust) -> ToolAnswerRecord {
         ToolAnswerRecord {
             text: text.into(),
             trust,

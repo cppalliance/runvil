@@ -118,14 +118,14 @@ impl RunLimits {
 
     /// Returns the default maximum number of tool iterations per section.
     #[must_use]
-    pub fn tool_iterations(&self) -> NonZeroU32 {
+    pub(crate) fn tool_iterations(&self) -> NonZeroU32 {
         self.max_tool_iterations
     }
 
     /// Returns the run's concurrency ceiling: the most tasks the
     /// scheduler admits at once across the whole run.
     #[must_use]
-    pub fn concurrency(&self) -> NonZeroUsize {
+    pub(crate) fn concurrency(&self) -> NonZeroUsize {
         self.concurrency
     }
 
@@ -137,14 +137,14 @@ impl RunLimits {
 
     /// Returns the memory ceiling for each Lua virtual machine, in bytes.
     #[must_use]
-    pub fn lua_memory(&self) -> NonZeroUsize {
+    pub(crate) fn lua_memory(&self) -> NonZeroUsize {
         self.lua_memory_bytes
     }
 
     /// Returns the maximum number of `log` events that a prompt's Lua code
     /// can record in each Lua virtual machine.
     #[must_use]
-    pub fn lua_logs(&self) -> NonZeroU32 {
+    pub(crate) fn lua_logs(&self) -> NonZeroU32 {
         self.lua_log_events
     }
 

@@ -41,7 +41,7 @@ pub(super) fn split_h1(
     title: &str,
     content_abs_line: u32,
     emitter: &Emitter,
-) -> Result<(Vec<Block>, String)> {
+) -> Result<Vec<Block>> {
     let raw_blocks = split_section_blocks(content, title)?;
     let mut blocks = Vec::with_capacity(raw_blocks.len());
     for raw in raw_blocks {
@@ -71,15 +71,7 @@ pub(super) fn split_h1(
     ) {
         blocks.clear();
     }
-    let description_text = blocks
-        .iter()
-        .filter_map(|block| match block {
-            Block::Prose { text, .. } if !text.as_str().is_empty() => Some(text.as_str()),
-            _ => None,
-        })
-        .collect::<Vec<_>>()
-        .join("\n\n");
-    Ok((blocks, description_text))
+    Ok(blocks)
 }
 
 /// Removes complete leading lines that contain only whitespace.

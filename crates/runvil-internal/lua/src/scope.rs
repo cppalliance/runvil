@@ -25,7 +25,7 @@ pub struct ToolCallCounts {
 impl ToolCallCounts {
     /// Creates a counts map pre-seeded with 0 for every name.
     #[must_use]
-    pub fn new(names: impl IntoIterator<Item = String>) -> Self {
+    pub(crate) fn new(names: impl IntoIterator<Item = String>) -> Self {
         let map: BTreeMap<String, u64> = names.into_iter().map(|name| (name, 0)).collect();
         Self {
             inner: Arc::new(Mutex::new(map)),
@@ -69,7 +69,7 @@ impl ToolCallCounts {
     ///
     /// # Errors
     /// Returns [`Error::Internal`] if the mutex is poisoned.
-    pub fn get(&self, name: &str) -> Result<Option<u64>> {
+    pub(crate) fn get(&self, name: &str) -> Result<Option<u64>> {
         Ok(self.lock()?.get(name).copied())
     }
 
@@ -77,7 +77,7 @@ impl ToolCallCounts {
     ///
     /// # Errors
     /// Returns [`Error::Internal`] if the mutex is poisoned.
-    pub fn names(&self) -> Result<Vec<String>> {
+    pub(crate) fn names(&self) -> Result<Vec<String>> {
         Ok(self.lock()?.keys().cloned().collect())
     }
 }

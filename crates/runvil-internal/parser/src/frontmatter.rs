@@ -81,12 +81,12 @@ pub struct Frontmatter {
 }
 
 /// The largest explicit `max_tool_iterations` a prompt may declare.
-pub const MAX_TOOL_ITERATIONS: u32 = 1000;
+pub(crate) const MAX_TOOL_ITERATIONS: u32 = 1000;
 
 /// A frontmatter tool-loop cap: absent or a positive, bounded count.
 ///
 /// An omitted cap leaves the runtime's own default in force. Deserialization
-/// rejects `0`, negatives, and values above [`MAX_TOOL_ITERATIONS`], so no
+/// rejects `0`, negatives, and values above `MAX_TOOL_ITERATIONS`, so no
 /// invalid cap can reach execution.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 #[non_exhaustive]
@@ -110,7 +110,7 @@ impl MaxToolIterations {
 
     /// Returns the explicit limit when one was declared.
     #[must_use]
-    pub fn limit(self) -> Option<NonZeroU32> {
+    pub(crate) fn limit(self) -> Option<NonZeroU32> {
         match self {
             MaxToolIterations::Default => None,
             MaxToolIterations::Limit(limit) => Some(limit),
@@ -254,27 +254,4 @@ pub(crate) fn split_frontmatter(input: &str) -> Result<(String, String, u32)> {
     }
     let body = lines.collect::<Vec<_>>().join("\n");
     Ok((yaml, body, line_count))
-}
-
-/// Reports the runvil Engine major declared in `source`'s frontmatter.
-///
-/// Returns `Some(major)` when `source` opens with a YAML frontmatter block that
-/// declares a `runvil:` key, and `None` otherwise. The check is lenient by
-/// design and never errors or panics: a source with no frontmatter block,
-/// malformed or unclosed frontmatter, or a frontmatter that simply omits the
-/// key all read as `None` ("not a runvil prompt"). No other frontmatter
-/// field is required for detection.
-#[must_use]
-pub fn runvil_version(source: &str) -> Option<u32> {
-    /// Reads only the `runvil` key, ignoring every other field so
-    /// detection does not depend on a complete, valid [`Frontmatter`].
-    #[derive(serde::Deserialize)]
-    struct Probe {
-        #[serde(default)]
-        runvil: Option<u32>,
-    }
-
-    let (yaml, _body, _lines) = split_frontmatter(source).ok()?;
-    let probe: Probe = serde_yaml_ng::from_str(&yaml).ok()?;
-    probe.runvil
 }

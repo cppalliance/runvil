@@ -31,7 +31,10 @@ fn preface_before_h1_is_ignored() {
     let src = "---\nname: x\ndescription: d\n---\n\nIgnored preface.\n\n```text\nalso ignored\n```\n\n# T\n\nDescription.\n\n## S\n\np\n";
     let prompt = parse_ok(src);
     assert_eq!(prompt.title, "T");
-    assert_eq!(prompt.description_text, "Description.");
+    assert!(matches!(
+        prompt.h1_blocks.as_slice(),
+        [Block::Prose { text }] if text == "Description."
+    ));
     assert_eq!(prompt.entry().expect("has sections").name, "S");
 }
 

@@ -116,7 +116,7 @@ impl Error {
     /// The failure's `Display` already holds the cause's text. Every other
     /// failure returns `None`.
     #[must_use]
-    pub fn cause(&self) -> Option<&(dyn std::error::Error + Send + Sync + 'static)> {
+    pub(crate) fn cause(&self) -> Option<&(dyn std::error::Error + Send + Sync + 'static)> {
         match self {
             Error::ParseFrontmatter { cause, .. } => Some(cause.as_ref()),
             Error::Lua(lua) => lua.cause(),

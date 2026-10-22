@@ -29,8 +29,9 @@ pub struct InjectFailure {
 
 impl InjectFailure {
     /// Why the injection failed.
+    #[cfg(test)]
     #[must_use]
-    pub fn error(&self) -> &Error {
+    pub(crate) fn error(&self) -> &Error {
         &self.error
     }
 

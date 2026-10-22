@@ -32,7 +32,7 @@ type BoxedSource = Box<dyn std::error::Error + Send + Sync>;
 /// globals chunk, and the store shims) are the callers, through
 /// `detail::shared_source_new`.
 #[derive(Debug, Clone)]
-pub struct SharedSource(pub(crate) std::sync::Arc<dyn std::error::Error + Send + Sync>);
+pub(crate) struct SharedSource(pub(crate) std::sync::Arc<dyn std::error::Error + Send + Sync>);
 
 impl std::fmt::Display for SharedSource {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

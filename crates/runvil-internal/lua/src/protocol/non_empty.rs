@@ -10,8 +10,9 @@ pub struct NonEmpty<T>(Vec<T>);
 
 impl<T> NonEmpty<T> {
     /// The sequence of `first` followed by `rest`.
+    #[cfg(test)]
     #[must_use]
-    pub fn new(first: T, rest: Vec<T>) -> Self {
+    pub(crate) fn new(first: T, rest: Vec<T>) -> Self {
         let mut items = Vec::with_capacity(rest.len() + 1);
         items.push(first);
         items.extend(rest);
@@ -20,7 +21,7 @@ impl<T> NonEmpty<T> {
 
     /// `items` as a non-empty sequence, or `None` when it holds nothing.
     #[must_use]
-    pub fn from_vec(items: Vec<T>) -> Option<Self> {
+    pub(crate) fn from_vec(items: Vec<T>) -> Option<Self> {
         if items.is_empty() {
             None
         } else {
@@ -36,7 +37,7 @@ impl<T> NonEmpty<T> {
 
     /// The sequence of `items` followed by this one's elements.
     #[must_use]
-    pub fn preceded_by(mut self, mut items: Vec<T>) -> Self {
+    pub(crate) fn preceded_by(mut self, mut items: Vec<T>) -> Self {
         items.append(&mut self.0);
         Self(items)
     }

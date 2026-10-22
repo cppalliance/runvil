@@ -64,7 +64,7 @@ pub enum RecordRole {
 impl RecordRole {
     /// The wire role.
     #[must_use]
-    pub fn kind(&self) -> Role {
+    pub(crate) fn kind(&self) -> Role {
         match self {
             RecordRole::System => Role::System,
             RecordRole::User => Role::User,
@@ -75,7 +75,7 @@ impl RecordRole {
 
     /// The call ID a tool result answers; `None` for every other role.
     #[must_use]
-    pub fn tool_call_id(&self) -> Option<&str> {
+    pub(crate) fn tool_call_id(&self) -> Option<&str> {
         match self {
             RecordRole::Tool { tool_call_id } => Some(tool_call_id),
             RecordRole::System | RecordRole::User | RecordRole::Assistant => None,

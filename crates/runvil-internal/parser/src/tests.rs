@@ -201,7 +201,6 @@ fn parses_multi_section_with_all_features() {
             text: BodyText::from_owned("Human-readable intro text.".to_owned()),
         }]
     );
-    assert_eq!(p.description_text, "Human-readable intro text.");
 
     assert_eq!(p.sections.len(), 2);
     let first = &p.sections[0];

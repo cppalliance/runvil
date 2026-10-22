@@ -29,8 +29,8 @@ use std::sync::{Arc, LazyLock};
 
 use mlua::{Function, Lua, StdLib, Table, Value};
 
-use crate::SharedSource;
 use crate::engine_globals::route_store_to_shims;
+use crate::error::SharedSource;
 use crate::error::{Error, Result};
 use crate::error_value::{install_error_value, install_normalize_failure};
 use crate::hardening::InstructionBudget;

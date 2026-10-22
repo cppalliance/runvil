@@ -1,6 +1,6 @@
 //! The constructor the compiled-program statics wrap their failure with.
 
-use crate::SharedSource;
+use crate::error::SharedSource;
 
 /// Wraps a concrete error as a shareable cause.
 #[must_use]

@@ -39,7 +39,7 @@ use std::sync::LazyLock;
 
 use mlua::{AnyUserData, Function, Lua, Table, Value};
 
-use crate::SharedSource;
+use crate::error::SharedSource;
 use crate::error::{Error, Result};
 use crate::program::LuaProgram;
 

@@ -27,7 +27,6 @@ pub use runvil_parser::ParseError;
 pub use runvil_parser::ParseErrorKind;
 pub use runvil_parser::Prompt;
 pub use runvil_types::seed::RunSeed;
-pub use runvil_types::seed::RunUid;
 
 pub mod effect {
     //! The outside work a run asks for, the answers it takes back, and the
@@ -120,7 +119,6 @@ pub mod packs {
 
     pub use runvil_types::names::GlobalName;
     pub use runvil_types::names::GlobalNameError;
-    pub use runvil_types::names::GlobalNameErrorKind;
     pub use runvil_types::packs::PackId;
     pub use runvil_types::packs::PackIdError;
     pub use runvil_types::packs::PackIdErrorKind;
@@ -154,18 +152,15 @@ pub mod vfs {
     pub use runvil_vfs::Access;
     pub use runvil_vfs::AcquireContext;
     pub use runvil_vfs::AllowAll;
-    pub use runvil_vfs::Depth;
     pub use runvil_vfs::Entry;
     pub use runvil_vfs::ExecId;
     pub use runvil_vfs::FileType;
-    pub use runvil_vfs::GlobKind;
     pub use runvil_vfs::MemoryBackend;
     pub use runvil_vfs::Mode;
     pub use runvil_vfs::ModeHandle;
     pub use runvil_vfs::ModePolicy;
     pub use runvil_vfs::Op;
     pub use runvil_vfs::OpEvent;
-    pub use runvil_vfs::OpSink;
     pub use runvil_vfs::Origin;
     pub use runvil_vfs::ParsePathReasonError;
     pub use runvil_vfs::PathReason;

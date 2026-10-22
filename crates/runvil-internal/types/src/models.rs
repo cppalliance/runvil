@@ -80,7 +80,7 @@ impl ModelId {
 
     /// Returns the server namespace.
     #[must_use]
-    pub fn server(&self) -> &str {
+    pub(crate) fn server(&self) -> &str {
         &self.server
     }
 
@@ -270,12 +270,6 @@ impl ModelCatalog {
     #[must_use]
     pub fn models(&self) -> &[ModelInfo] {
         &self.models
-    }
-
-    /// Returns whether the catalog is empty.
-    #[must_use]
-    pub fn is_empty(&self) -> bool {
-        self.models.is_empty()
     }
 
     /// Looks up a model info by stable identity.

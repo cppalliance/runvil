@@ -151,13 +151,13 @@ impl RealBackend {
     ///
     /// The flag is a property of the mount, separate from any policy.
     #[must_use]
-    pub fn with_read_only(mut self, read_only: bool) -> RealBackend {
+    pub(crate) fn with_read_only(mut self, read_only: bool) -> RealBackend {
         self.read_only = read_only;
         self
     }
 
-    /// Sets whether the backend accepts mutations, as
-    /// [`RealBackend::with_read_only`] does.
+    /// Sets whether the backend accepts mutations. [`Writability::ReadOnly`]
+    /// rejects all of them.
     #[must_use]
     pub fn with_writability(self, writability: Writability) -> RealBackend {
         self.with_read_only(match writability {

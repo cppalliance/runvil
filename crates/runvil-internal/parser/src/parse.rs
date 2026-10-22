@@ -168,8 +168,7 @@ impl Prompt {
             };
             return Err(Error::parse_at(ParseErrorKind::Fence, line, message));
         }
-        let (h1_blocks, description_text) =
-            fence::split_h1(shared, h1.content, &title, h1_content_abs_line, emitter)?;
+        let h1_blocks = fence::split_h1(shared, h1.content, &title, h1_content_abs_line, emitter)?;
 
         // Everything before the H1 is preface and has no prompt semantics.
         // Sections are headings after the H1 at level 2 or deeper.
@@ -192,7 +191,6 @@ impl Prompt {
             frontmatter,
             title,
             h1_blocks,
-            description_text,
             sections,
         })
     }

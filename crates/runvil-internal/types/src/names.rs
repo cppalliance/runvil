@@ -42,12 +42,9 @@ impl GlobalName {
     ///
     /// Returns [`GlobalNameError`] when:
     ///
-    /// - a segment is empty, including the whole string being empty
-    ///   ([`GlobalNameErrorKind::Empty`]);
-    /// - a segment contains a control byte
-    ///   ([`GlobalNameErrorKind::Control`]);
-    /// - a segment contains any other character outside the set
-    ///   ([`GlobalNameErrorKind::Charset`]).
+    /// - a segment is empty, including the whole string being empty;
+    /// - a segment contains a control byte;
+    /// - a segment contains any other character outside the set.
     pub fn parse(s: &str) -> Result<GlobalName, GlobalNameError> {
         let segments: Vec<&str> = s.split('/').collect();
         for segment in &segments {
@@ -166,7 +163,7 @@ pub struct GlobalNameError {
 impl GlobalNameError {
     /// Returns the stable classification of this error.
     #[must_use]
-    pub fn kind(&self) -> GlobalNameErrorKind {
+    pub(crate) fn kind(&self) -> GlobalNameErrorKind {
         self.kind
     }
 }

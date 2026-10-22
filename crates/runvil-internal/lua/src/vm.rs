@@ -253,7 +253,7 @@ impl SectionVm<Uninjected> {
     ///
     /// # Errors
     /// Returns [`Error::LuaRuntime`] if the VM cannot be built or hardened.
-    pub fn new(nonce: &GuardNonce, emitter: &Emitter, section: &str) -> Result<Self> {
+    pub(crate) fn new(nonce: &GuardNonce, emitter: &Emitter, section: &str) -> Result<Self> {
         let lua = Lua::new_with(
             StdLib::STRING | StdLib::TABLE | StdLib::MATH | StdLib::UTF8,
             LuaOptions::default(),
@@ -344,7 +344,7 @@ impl SectionVm<Uninjected> {
     /// budget (`lua_log_events`). Called by the executor right after
     /// construction, ahead of the Pack preludes and every block, so they
     /// already spend the caller's run limits rather than only the safe
-    /// non-env defaults installed in [`SectionVm::new`].
+    /// non-env defaults installed in `SectionVm::new`.
     ///
     /// # Errors
     /// Returns [`Error::LuaRuntime`] if the underlying VM rejects the memory
@@ -397,8 +397,9 @@ impl<S> SectionVm<S> {
 
     /// The section's one conversation, which the `messages` global holds
     /// from Engine injection until the VM drops.
+    #[cfg(test)]
     #[must_use]
-    pub fn messages(&self) -> &MessageList {
+    pub(crate) fn messages(&self) -> &MessageList {
         &self.messages
     }
 

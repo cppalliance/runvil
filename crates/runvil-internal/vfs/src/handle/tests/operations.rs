@@ -1,8 +1,7 @@
 //! Tests for the capability's file operations: reads and writes through
-//! the handle, the empty-anchor refusal, line ranges, and UTF-8 reads.
+//! the handle, the empty-anchor refusal, and UTF-8 reads.
 
 use super::*;
-use crate::traits::Depth;
 
 #[test]
 fn an_access_reads_and_writes_through_the_handle() -> Result<(), VfsError> {
@@ -62,63 +61,6 @@ fn an_empty_anchor_on_a_non_empty_file_is_refused_and_leaves_it_unchanged() -> R
 }
 
 #[test]
-fn read_range_slices_lines_one_based_and_inclusive() -> Result<(), VfsError> {
-    let access = access(&handle(TestFs::seeded(&[("/f.txt", "one\ntwo\nthree\n")])))?;
-    assert_eq!(access.read_range("/f.txt", 2, None)?, "two\nthree");
-    assert_eq!(access.read_range("/f.txt", 2, Some(99))?, "two\nthree");
-    assert_eq!(access.read_range("/f.txt", 99, None)?, "");
-    assert_eq!(access.read_range("/f.txt", 1, Some(1))?, "one");
-    Ok(())
-}
-
-#[test]
-fn read_range_rejects_invalid_bounds() -> Result<(), VfsError> {
-    let access = access(&handle(TestFs::seeded(&[("/f.txt", "one\ntwo\n")])))?;
-    assert_eq!(
-        access.read_range("/f.txt", 0, None),
-        Err(VfsError::InvalidRange {
-            path: "/f.txt".to_owned(),
-            reason: "start is below 1",
-        })
-    );
-    assert_eq!(
-        access.read_range("/f.txt", 2, Some(1)),
-        Err(VfsError::InvalidRange {
-            path: "/f.txt".to_owned(),
-            reason: "end is before start",
-        })
-    );
-    Ok(())
-}
-
-#[test]
-fn read_range_numbered_numbers_absolutely_from_start() -> Result<(), VfsError> {
-    let access = access(&handle(TestFs::seeded(&[("/f.txt", "one\ntwo\nthree\n")])))?;
-    assert_eq!(
-        access.read_range_numbered("/f.txt", 1, None)?,
-        "1| one\n2| two\n3| three"
-    );
-    assert_eq!(
-        access.read_range_numbered("/f.txt", 2, Some(3))?,
-        "2| two\n3| three"
-    );
-    assert_eq!(access.read_range_numbered("/f.txt", 99, None)?, "");
-    Ok(())
-}
-
-#[test]
-fn read_range_numbered_pads_to_the_widest_emitted_number() -> Result<(), VfsError> {
-    let lines: Vec<String> = (1..=10).map(|n| format!("line{n}")).collect();
-    let text = lines.join("\n");
-    let access = access(&handle(TestFs::seeded(&[("/f.txt", &text)])))?;
-    assert_eq!(
-        access.read_range_numbered("/f.txt", 9, Some(10))?,
-        " 9| line9\n10| line10"
-    );
-    Ok(())
-}
-
-#[test]
 fn read_string_rejects_non_utf8() -> Result<(), VfsError> {
     let access = access(&handle(TestFs::default()))?;
     access.write("/bin.dat", &[b'a', 0xff, 0xfe])?;
@@ -129,23 +71,6 @@ fn read_string_rejects_non_utf8() -> Result<(), VfsError> {
         }
         other => panic!("expected a UTF-8 failure, got {other:?}"),
     }
-    Ok(())
-}
-
-#[test]
-fn the_depth_siblings_remove_and_create_as_far_as_their_depth() -> Result<(), VfsError> {
-    let access = access(&handle(TestFs::seeded(&[("/d/a.txt", "a")])))?;
-    assert_eq!(
-        access.remove_with("/d", Depth::One),
-        Err(VfsError::DirectoryNotEmpty {
-            path: "/d".to_owned(),
-        })
-    );
-    assert!(access.remove_with("/d", Depth::Recursive)?);
-    assert!(!access.remove_with("/d", Depth::Recursive)?, "already gone");
-    assert!(access.mkdir_with("/p/q", Depth::One).is_err());
-    access.mkdir_with("/p/q", Depth::Recursive)?;
-    assert!(access.exists("/p")?);
     Ok(())
 }
 

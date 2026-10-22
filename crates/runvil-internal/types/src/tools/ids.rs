@@ -142,12 +142,6 @@ impl ToolIdError {
         self.kind
     }
 
-    /// Returns what was rejected: `id`, the tool id being parsed.
-    #[must_use]
-    pub fn field(&self) -> &str {
-        self.field
-    }
-
     /// Maps a global-name rejection onto the tool-id error vocabulary.
     fn from_global_name_kind(global_kind: GlobalNameErrorKind) -> ToolIdError {
         let (kind, reason) = match global_kind {

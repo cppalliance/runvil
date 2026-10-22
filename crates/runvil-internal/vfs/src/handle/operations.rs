@@ -7,7 +7,7 @@ use super::store_view::{strip_root, validate_store_path};
 use crate::error::{PathReason, VfsError};
 use crate::glob::validate_glob_pattern;
 use crate::stat::{Entry, Stat};
-use crate::traits::{Depth, Op};
+use crate::traits::Op;
 
 impl Access {
     /// Reads the bytes of the file at `path`, exactly as stored.
@@ -33,58 +33,6 @@ impl Access {
         String::from_utf8(bytes).map_err(|err| VfsError::NotUtf8 {
             path: path.to_owned(),
             valid_up_to: err.utf8_error().valid_up_to(),
-        })
-    }
-
-    /// Reads a range of lines from the file at `path` as text.
-    ///
-    /// Lines are numbered from 1, and the range runs from `start` to
-    /// `end` with both ends included. Each line drops its `"\n"` or
-    /// `"\r\n"` ending, and the lines are joined by `"\n"`, so the text
-    /// ends with the last line's own content. When `end` is `None`, the
-    /// range runs to the last line. An `end` past the last line is
-    /// lowered to the last line. A `start` past the last line returns the
-    /// empty string.
-    ///
-    /// # Errors
-    /// Returns an error when `start` is below 1 or `end` is before
-    /// `start`. It also returns an error under the same conditions as
-    /// `Access::read_string`, such as a missing file or contents that
-    /// are not UTF-8.
-    pub fn read_range(
-        &self,
-        path: &str,
-        start: usize,
-        end: Option<usize>,
-    ) -> Result<String, VfsError> {
-        self.with_line_range(path, start, end, |lines, _| lines.join("\n"))
-    }
-
-    /// Reads a range of lines from the file at `path`, each prefixed with
-    /// its line number.
-    ///
-    /// Each line keeps its number in the file, so the first line shown is
-    /// numbered `start`. The numbers are right-aligned to the width of
-    /// the largest number shown, and each is followed by `"| "`. The
-    /// range bounds behave as in [`Access::read_range`].
-    ///
-    /// # Errors
-    /// Returns an error under the same conditions as
-    /// [`Access::read_range`].
-    pub fn read_range_numbered(
-        &self,
-        path: &str,
-        start: usize,
-        end: Option<usize>,
-    ) -> Result<String, VfsError> {
-        self.with_line_range(path, start, end, |lines, first| {
-            let width = (first + lines.len() - 1).to_string().len();
-            lines
-                .iter()
-                .enumerate()
-                .map(|(index, line)| format!("{:>width$}| {}", first + index, line))
-                .collect::<Vec<_>>()
-                .join("\n")
         })
     }
 
@@ -169,19 +117,6 @@ impl Access {
             Err(VfsError::NotFound { .. }) => Ok(false),
             Err(err) => Err(err),
         }
-    }
-
-    /// Removes the file, link, or directory at `path`, reaching as far as
-    /// `depth`: [`Depth::Recursive`] also removes a directory that holds
-    /// entries, along with everything under it.
-    ///
-    /// It is [`Access::remove`] with `recursive` set for
-    /// [`Depth::Recursive`], and returns what that returns.
-    ///
-    /// # Errors
-    /// Returns an error under the same conditions as [`Access::remove`].
-    pub fn remove_with(&self, path: &str, depth: Depth) -> Result<bool, VfsError> {
-        self.remove(path, depth.recursive())
     }
 
     /// Reports whether anything exists at `path`.
@@ -308,15 +243,6 @@ impl Access {
         self.admit(Claims::claim_write, &path)?;
         self.fire(Op::Mkdir, &path);
         self.inner().mkdir(&path, recursive)
-    }
-
-    /// Creates the directory at `path`, also creating any missing parent
-    /// directories when `depth` is [`Depth::Recursive`].
-    ///
-    /// # Errors
-    /// Returns an error under the same conditions as [`Access::mkdir`].
-    pub fn mkdir_with(&self, path: &str, depth: Depth) -> Result<(), VfsError> {
-        self.mkdir(path, depth.recursive())
     }
 
     /// Renames or moves `from` to `to`.
