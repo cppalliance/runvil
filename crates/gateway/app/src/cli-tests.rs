@@ -366,3 +366,40 @@ fn the_help_text_lists_all_flags() {
         assert!(help.contains(flag), "the help names {flag}: {help}");
     }
 }
+
+#[test]
+fn preferred_port_parses_and_reaches_the_serve_options() {
+    let options = AppOptions::from_args(args(&["--preferred-port", "8081"])).expect("should parse");
+
+    assert_eq!(options.serve.preferred_port, Some(8081));
+}
+
+#[test]
+fn a_launch_has_no_preferred_port_by_default() {
+    let options = AppOptions::from_args(args(&[])).expect("the bare invocation should parse");
+
+    assert_eq!(options.serve.preferred_port, None);
+}
+
+#[test]
+fn preferred_port_requires_a_value() {
+    assert_eq!(error_kind(&["--preferred-port"]), ErrorKind::InvalidValue);
+}
+
+#[test]
+fn preferred_port_rejects_a_value_that_is_not_a_port() {
+    for value in ["http", "65536", "70000"] {
+        assert_eq!(
+            error_kind(&["--preferred-port", value]),
+            ErrorKind::ValueValidation,
+            "--preferred-port {value} is not a port"
+        );
+    }
+}
+
+#[test]
+fn the_help_text_hides_the_preferred_port_flag() {
+    let help = Cli::command().render_long_help().to_string();
+
+    assert!(!help.contains("--preferred-port"), "{help}");
+}

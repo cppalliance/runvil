@@ -6,8 +6,6 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, mpsc};
 use std::thread::JoinHandle;
 
-use tokio::net::TcpListener;
-
 use gateway_config::{Config, Secret};
 
 use super::{
@@ -224,7 +222,7 @@ fn serve_thread(
             return Ok(());
         }
     };
-    let bind = config.bind_addr();
+    let bind_addr = config.bind_addr();
     // Producers own their own log lines; the hub feeds the UIs only.
     let hub = Arc::new(gateway_progress::ProgressHub::new());
     let runtime = match tokio::runtime::Builder::new_multi_thread()
@@ -240,13 +238,14 @@ fn serve_thread(
     // The bind runs on this plain thread, apart from the serve future, so
     // the bound address is known before serving starts: the readiness
     // signal and the gateway discovery file both report the real port.
-    let listener = match runtime.block_on(TcpListener::bind(bind)) {
-        Ok(listener) => listener,
-        Err(error) => {
-            let _ = ready.send(Err(StartupError::bind(error)));
-            return Ok(());
-        }
-    };
+    let listener =
+        match super::bind::bind_listener(bind_addr, options.preferred_port, runtime.handle()) {
+            Ok(listener) => listener,
+            Err(error) => {
+                let _ = ready.send(Err(StartupError::bind(error)));
+                return Ok(());
+            }
+        };
     // The configured bind may specify port 0; the bound local_addr is the
     // real address the readiness signal must report.
     let address = match listener.local_addr() {

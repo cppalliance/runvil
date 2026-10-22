@@ -60,7 +60,8 @@ impl AppOptions {
                 // browser - so it wins over `--browser`.
                 serve: ServeOptions::new(config_path, cli.profile)
                     .with_browser(cli.browser && !cli.login)
-                    .with_supervised(cli.supervised),
+                    .with_supervised(cli.supervised)
+                    .with_preferred_port(cli.preferred_port),
                 tray: !cli.no_tray,
                 login: cli.login,
                 print_url: cli.print_url,
@@ -133,6 +134,11 @@ struct Cli {
     /// The launch is a supervised child; internal only
     #[arg(long, hide = true, conflicts_with = "print_url")]
     supervised: bool,
+
+    /// The port to bind when the config asks for any free port. Best-effort only,
+    /// if the specified port is not available it falls back to any free port.
+    #[arg(long, value_name = "PORT", hide = true)]
+    preferred_port: Option<u16>,
 }
 
 #[derive(Debug, Subcommand)]

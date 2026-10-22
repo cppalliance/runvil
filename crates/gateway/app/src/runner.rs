@@ -21,6 +21,7 @@ use gateway_config::{Config, ProfileName, Secret};
 use crate::api_error::StartupError;
 use crate::{AppState, ShutdownReason};
 
+mod bind;
 mod gateway;
 mod thread;
 
@@ -65,48 +66,54 @@ pub struct ServeOptions {
     /// profile's `.runvil` directory) and, when nothing is found,
     /// first-run generation into the profile location.
     pub config_path: Option<PathBuf>,
+
     /// Optional command-line profile override.
     pub profile: Option<ProfileName>,
+
     /// Directory the `gateway.json` gateway discovery file is written to after a
     /// successful bind; `None` uses the default run directory under the
     /// user profile's `.runvil` directory.
     pub run_dir: Option<PathBuf>,
+
     /// Opens the Settings handoff URL in the default browser once the
     /// listener is bound - the binary's `--browser`, used by the
     /// installer's first run. Embedders leave this `false`.
     pub browser: bool,
+
     /// Run the gateway as the child of a supervisor that handles restarting logic.
     /// `POST /admin/restart` is available.
     pub supervised: bool,
+
+    /// When running under a config that allows the gateway to bind to any free
+    /// port, it will prefer this one.
+    pub preferred_port: Option<u16>,
 }
 
 impl ServeOptions {
     /// Builds serve options from the config path and optional profile override.
     #[must_use]
-    pub fn new(
-        config_path: Option<PathBuf>,
-        profile: impl Into<Option<ProfileName>>,
-    ) -> ServeOptions {
-        ServeOptions {
+    pub fn new(config_path: Option<PathBuf>, profile: impl Into<Option<ProfileName>>) -> Self {
+        Self {
             config_path,
             profile: profile.into(),
             run_dir: None,
             browser: false,
             supervised: false,
+            preferred_port: None,
         }
     }
 
     /// Sets the gateway discovery file's run directory, for tests and portable
     /// installs; the default is the user profile's `.runvil/run`.
     #[must_use]
-    pub fn with_run_dir(mut self, run_dir: PathBuf) -> ServeOptions {
+    pub fn with_run_dir(mut self, run_dir: PathBuf) -> Self {
         self.run_dir = Some(run_dir);
         self
     }
 
     /// Sets whether to open the Settings page in the browser once bound.
     #[must_use]
-    pub fn with_browser(mut self, browser: bool) -> ServeOptions {
+    pub fn with_browser(mut self, browser: bool) -> Self {
         self.browser = browser;
         self
     }
@@ -114,8 +121,16 @@ impl ServeOptions {
     /// Sets whether this gateway runs with a supervisor which can relaunch it
     /// on a restart request.
     #[must_use]
-    pub fn with_supervised(mut self, supervised: bool) -> ServeOptions {
+    pub fn with_supervised(mut self, supervised: bool) -> Self {
         self.supervised = supervised;
+        self
+    }
+
+    /// Sets a preferred port to bind when the config asks for any free port.
+    /// Best-effort only, if the port is not available falls back to any free port.
+    #[must_use]
+    pub fn with_preferred_port(mut self, port: Option<u16>) -> Self {
+        self.preferred_port = port;
         self
     }
 }

@@ -8,9 +8,9 @@ todos:
   - id: restart-contract
     content: "Child side: --supervised flag, stdin-EOF watchdog, `RESTART_REQUESTED` exit code, Apply keeps .prev (first since boot wins), startup removes .prev, POST /admin/restart (restart only), restart_required on GET /admin/config-dirty"
     status: completed
-  - id: bind-hint
-    content: "--port-hint for a config that binds port 0; bind through TcpSocket with SO_REUSEADDR on Unix"
-    status: pending
+  - id: preferred-port
+    content: "--preferred-port for a config that binds port 0; bind through TcpSocket with SO_REUSEADDR on Unix"
+    status: completed
   - id: supervisor-headless
     content: "Supervisor mode: launch election, child spawn, exit-code loop, retries for restarts only (capped), .prev rollback, failure record; integration tests against the real binary"
     status: pending
@@ -64,7 +64,7 @@ What stays the same: the tray icon (it belongs to the gateway, so it disappears 
 flowchart TD
     Launch["runvil-gateway (bare, --login, --no-tray)"] --> Sup[supervisor]
     Desktop[workshop desktop supervisor] -->|"bare launch, unchanged"| Sup
-    Sup -->|"spawn --supervised --port-hint P, stdin pipe"| Child["serving gateway (tray unless --no-tray)"]
+    Sup -->|"spawn --supervised --preferred-port P, stdin pipe"| Child["serving gateway (tray unless --no-tray)"]
     Child -->|"exit 0"| SupExit[supervisor exits]
     Child -->|"exit RESTART_REQUESTED"| Restart[relaunch, roll back on failure]
     Child -->|"any other code, or first boot fails"| Exit[supervisor exits with the child's code]
@@ -84,7 +84,7 @@ sequenceDiagram
     C1-->>UI: 202
     C1->>C1: graceful shutdown, exit RESTART_REQUESTED
     S->>S: hold launch lock
-    S->>C2: spawn --supervised --port-hint P
+    S->>C2: spawn --supervised --preferred-port P
     alt C2 publishes a validated discovery file in time
         C2->>C2: remove .prev after publishing
         S->>S: release launch lock
@@ -152,17 +152,17 @@ Fixes the reproduced Secrets-then-Cloud-Models failure in Problem: validation of
 
 This step only adds the option; nothing passes it yet. Step 4's supervisor is its caller, giving each relaunched child the port the previous one bound.
 
-- `--port-hint PORT` (supervised only): when the config's bind port is 0, bind that port on the configured address; when that bind fails, fall back to port 0 and log it. A non-zero configured port ignores the hint.
-- `serve_thread` binds through `tokio::net::TcpSocket` with `set_reuseaddr(true)` on Unix so a port with connections in `TIME_WAIT` rebinds at once, matching the workshop server (`crates/workshop/server/src/serve.rs:346-357`). Windows keeps the default; `SO_REUSEADDR` there allows port stealing.
-- Tests: hint honored for port 0, ignored for a fixed port, fallback when the hinted port is held; rebind immediately after a served connection closes.
-- Commit: `Add a --port-hint option for a port-0 bind`
+- `--preferred-port PORT`, a clap argument in `cli.rs` independent of `--supervised` and hidden from `--help` like it (a public, revised form is a follow-up): when the config's bind port is 0, bind that port on the configured address; when that bind fails, fall back to port 0 and log it. A non-zero configured port ignores the preferred port.
+- `ServeOptions::preferred_port` (`with_preferred_port`) carries it to `serve_thread`, which binds through `runner/bind.rs`'s `bind_listener(addr, preferred_port, runtime)`, taking the runtime handle it registers the listener with. It binds through `tokio::net::TcpSocket` with `set_reuseaddr(true)` on Unix so a port with connections in `TIME_WAIT` rebinds at once, matching the workshop server (`crates/workshop/server/src/serve.rs:346-357`). Windows keeps the default; `SO_REUSEADDR` there allows port stealing.
+- Tests: the preferred port honored for port 0, ignored for a fixed port, fallback when the preferred port is held; rebind immediately after a served connection closes.
+- Commit: `Add a --preferred-port option for a port-0 bind`
 
 ## Step 4: Supervisor mode
 
 - New `src/supervisor.rs` + `src/supervisor/` (spawn, loop, rollback): entered for a bare launch, `--login`, and `--no-tray`. The supervisor has no tray and no window in any mode.
 - Start: `launch_or_attach` in the run directory. `Attach` hands off as `relaunch.rs` does today. `Launch(lock)` spawns the child and holds the lock until the child publishes.
 - `--print-url` launches stay single-process and unsupervised: a terminal-driven mode with no tray, where Restart to Apply falls back to today's Apply and banner.
-- Child spawn: `current_exe()` with `--supervised`; `--no-tray`, `--config`, and `--profile` passed through when the supervisor received them; `--browser` passed to the first child only, so the installer's first run still opens Settings and restarts never do; and `--port-hint` after the first boot (read from the discovery file). Stdin piped, stdout null, stderr piped and retained (last 64 lines) for the failure record. Windows adds `CREATE_NO_WINDOW` like `production_command` (`gateway/local/src/server-support.rs:102-106`).
+- Child spawn: `current_exe()` with `--supervised`; `--no-tray`, `--config`, and `--profile` passed through when the supervisor received them; `--browser` passed to the first child only, so the installer's first run still opens Settings and restarts never do; and `--preferred-port` after the first boot (read from the discovery file). Stdin piped, stdout null, stderr piped and retained (last 64 lines) for the failure record. Windows adds `CREATE_NO_WINDOW` like `production_command` (`gateway/local/src/server-support.rs:102-106`).
 - Loop on child exit:
   - 0: the supervisor exits 0.
   - `RESTART_REQUESTED`: take the launch lock and relaunch. A launch fails when the child exits or does not publish within 30 s. The first failure with `.prev` files present rolls back as in Decisions; every failure relaunches after a backoff from 250 ms doubling, at most 5 launches per restart. Success (the child, having published, has already removed `.prev`) releases the lock and resets the count.
@@ -204,6 +204,7 @@ This step only adds the option; nothing passes it yet. Step 4's supervisor is it
 - **Workshop profile switch.** `workshop_socket-menu.rs:228-248` restarts a sidecar with `request_shutdown`. With this plan that stops the whole supervisor, and the desktop's 5 s probe relaunches it, so it keeps working. A follow-up switches it to `POST /admin/restart`, which is faster and keeps the supervisor up; it touches workshop crates, so it is not part of this plan.
 - **Tray in the supervisor.** Only if the brief icon gap during a restart proves a problem (see the tray decision).
 - **Env-only Apply reloads the routing table.** Step 1 made a reload resolve `${VAR}` from the pending env file, but `capture_apply` reloads only when a `gateway.toml.next` exists: an Apply that changes `gateway.env` alone takes the inline path, so a new key for a remote endpoint waits for a restart, while the same key applied together with a config change works at once. Treating an env shadow as a reason to reload makes both cases live immediately for remote endpoints; `restart_required` stays true for an env shadow, because `HF_TOKEN` and the other direct readers of the process environment change only at boot. Matters only for unsupervised gateways and the moment between Apply and the restart in Restart to Apply.
+- **A public port option.** `--preferred-port` ships hidden, with the supervisor as its only caller. A revised form is meant to become a documented user-facing option; its shape is decided then, and unhiding it adds it to the docs.
 - **`PendingEnv` in `gateway-config`.** Moving the pending-env reader into the config crate would let `save_config_shadow` and `load_pending_config` build it themselves and drop the public `lookup` parameter and `VarLookupFn`, at the cost of a `dotenvy` dependency and reversing the dominion refactor's no-env-file rule for the config crate.
 
 ## Constraints
