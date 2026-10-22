@@ -3,12 +3,14 @@
 //! One `infer` shape only: a single direct, tool-free gateway round on a
 //! fresh conversation. `h:infer(prompt)` runs it with the handle's
 //! frozen binding; `models.infer(prompt)` resolves the section's
-//! current model and runs the same path. Neither form advertises tools, sets
-//! `reply`, or touches `sys`. A Lua block that needs tools uses `call`
-//! on a section. The scheduler's leaf dispatch issues the round as a
-//! `Chat` effect over one user message and no tools; when the answer
-//! arrives, [`accept_infer`] reports the round and renders its text, and
-//! the yielding chain resumes with the outcome.
+//! current model and runs the same path. Neither form sends tools, reads or
+//! changes the section's `messages`, sets `reply`, or touches `sys`, and
+//! both work inside a loop's tool handlers and compactors, where a loop
+//! raises. A Lua block that needs tools uses `call` on a section. The
+//! scheduler's leaf dispatch issues the round as a `Chat` effect over one
+//! user message and no tools; when the answer arrives, [`accept_infer`]
+//! reports the round and renders its text, and the yielding chain resumes
+//! with the outcome.
 
 use std::sync::atomic::AtomicU32;
 

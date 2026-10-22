@@ -3,7 +3,8 @@
 //! so a model-issued call to a local tool runs its handler inside the
 //! block coroutine - store calls included - and its trusted result is sent
 //! back to the model verbatim. `jump` is refused only while a handler
-//! runs, even through a saved reference.
+//! runs, even through a saved reference. The refusal of an offer once the
+//! section's tool list is rendered sits in `rendered_tools`.
 
 use runvil_parser::test_support::{one_section, prompt};
 

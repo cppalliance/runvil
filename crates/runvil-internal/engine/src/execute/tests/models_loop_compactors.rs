@@ -3,8 +3,9 @@
 //! caller's own, typed context exhaustion raised at the call site, the non-function
 //! compactor's argument error, and an author compactor that returns without
 //! shrinking the list or raises its own failure. The loop's round mechanics
-//! sit in `models_loop`; its exit rules in `exit_rules`; compaction that
-//! succeeds in `compaction`.
+//! sit in `models_loop`; its exit rules in `exit_rules`; a compaction's
+//! retry and restore in `compaction`; and `models.compact` in
+//! `models_compact`.
 
 use runvil_parser::test_support::one_section;
 

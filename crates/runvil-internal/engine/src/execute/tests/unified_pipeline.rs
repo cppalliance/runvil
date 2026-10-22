@@ -1,6 +1,7 @@
 //! One finite pipeline end to end through the unified prompt model: explicit
 //! lazy `prose`, `models.infer`, the Rust-backed `models.loop` with tool
-//! dispatch, the `messages` builders, and synchronous `call`, driven
+//! dispatch, the section's `messages` list and its builders, and
+//! synchronous `call`, driven
 //! through a run against a scripted gateway at `runvil: 0`.
 
 use runvil_parser::test_support::PromptSource;

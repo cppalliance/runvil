@@ -1197,7 +1197,7 @@ Commit and rules:
 
 <step-8>
 
-### Step 8: Bring the repository's prose docs in line
+### Step 8: Bring the repository's prose docs in line [completed]
 
 - Component: Documentation
 - Tests: run in PowerShell from `c:\Users\Vinnie\cursor\runvil`, in this order:

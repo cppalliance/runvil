@@ -3,14 +3,14 @@
 //!
 //! Dispatch first refuses an empty list. It then resolves the round's
 //! binding and the section's rendered tool list - built from the bound
-//! and local halves and attached to the list by the section's first
-//! round, then reused by every later round - copies the list's dispatch
+//! and local halves and attached to the list by the first round to reach
+//! the build, then reused by every later round - copies the list's dispatch
 //! map onto the chain as `advertised`, prechecks the projected
 //! conversation, with room kept for the reply, against the model's
 //! context window (counting from the provider's usage for the chain's
 //! last measured round when the request extends it), and issues the
 //! single gateway round as a `Chat` effect - the same effect a nested
-//! `infer` issues, over the author's conversation and the advertised
+//! `infer` issues, over the section's `messages` and the rendered
 //! schemas. The driver classifies the answered completion into the
 //! round's answer when it arrives ([`Scheduler::accept_chat`]), emitting
 //! the round's events - the turn

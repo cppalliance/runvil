@@ -185,7 +185,7 @@ pub enum Request {
     /// first refuses an empty list; the round sends the section's
     /// rendered tool list, which the dispatch arm renders from the
     /// section's tool scope, local Lua tools included, at the first round
-    /// and attaches to the list.
+    /// to reach the build and attaches to the list.
     Chat {
         /// The list the round sends, which may be empty, since the
         /// dispatch, not the parse, refuses an empty list. Its records

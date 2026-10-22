@@ -1,10 +1,12 @@
 //! The per-section Lua VM: its construction, the typestate that orders
-//! Engine injection before every later step, and the local tools it
-//! registers. Injection is in `inject`, the later installs in `install`,
-//! block coroutines in `run`, and state reads in `state`.
+//! Engine injection before every later step, the section's one
+//! `messages` list it creates, and the local tools it registers.
+//! Injection is in `inject`, the later installs in `install`, block
+//! coroutines in `run`, and state reads in `state`.
 //!
-//! A local tool registered with `tools.offer_local` runs inside the calling
-//! block's coroutine, never as an Engine function. The VM keeps only each
+//! A local tool, registered with `tools.offer_local` before the section's
+//! first loop round, runs inside the calling block's coroutine, never as
+//! an Engine function. The VM keeps only each
 //! tool's alias and schema; the handler sits in the VM's handler table. A
 //! call takes two yields: the shim's `tool_call`, which the scheduler
 //! answers with the handler itself, and the shim's `local_tool_done`

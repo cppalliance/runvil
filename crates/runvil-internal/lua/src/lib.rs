@@ -43,7 +43,14 @@
 //! `tools.offer` scopes a tool into a section by id or tool object. The
 //! `packs` table holds one object per Pack the run knows, whose
 //! `tools` lists that Pack's tool objects, and `packs.offer` scopes
-//! every tool of a Pack into a section.
+//! every tool of a Pack into a section. Offers work only before the
+//! section's first loop round, which renders the section's tool list;
+//! after that, every offer function raises.
+//!
+//! `messages` is the section's one conversation: a list the VM creates
+//! empty at each section entry and serves as a global that no assignment
+//! replaces. `models.loop` and a model handle's `loop` run over it, and a
+//! compactor rewrites it in place.
 //!
 //! Most of this crate's public items exist for `runvil-engine`'s
 //! executor, which drives the VM and the coroutine protocol; the facade

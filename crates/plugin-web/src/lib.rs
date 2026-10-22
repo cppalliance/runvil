@@ -10,9 +10,9 @@
 //!
 //! The Pack has no prelude, so declaring it, as in `uses: [web]`,
 //! only makes it required. A prompt reaches the tools by id from Lua,
-//! offering one to the model with `tools.offer("web/fetch")` or calling it
-//! with `tools.call("web/search", ...)`, whether or not it declares the
-//! Pack.
+//! offering one to the model with `tools.offer("web/fetch")` before the
+//! section's first loop round or calling it with
+//! `tools.call("web/search", ...)`, whether or not it declares the Pack.
 //!
 //! The Host provides two Host-wide services beside the Pack. Its
 //! [`SearchProvider`] goes under the key [`SEARCH_PROVIDER`], and the

@@ -4,8 +4,9 @@
 //! section calling `models.loop` through the scheduler against the mock
 //! gateway, so the shim's `chat` and `tool_call` rounds are exercised end
 //! to end. The scope gate's tests sit in the `scope_gate` child. The
-//! loop's exit rules sit in `exit_rules`; its append shapes, compactor
-//! paths, and handle calls in `models_loop`.
+//! loop's exit rules sit in `exit_rules`; its append shapes and handle
+//! calls in `models_loop`; its compactor paths in `models_loop_compactors`
+//! and `compaction`.
 
 use runvil_parser::test_support::{one_section, prompt};
 use runvil_types::event::Event;

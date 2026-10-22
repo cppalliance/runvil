@@ -57,9 +57,10 @@
 //!   so a prompt that passes a question fails loudly instead of losing
 //!   it.
 //! - The model can ask the operator only when the prompt's Lua opts in.
-//!   A section offers the ask tool with `packs.offer('user-input')` or
-//!   by its id with `tools.offer("user-input/ask")`, and the model sees it
-//!   as `user-input_ask`. Neither inserting nor declaring the Pack
+//!   A section offers the ask tool before its first loop round, with
+//!   `packs.offer('user-input')` or by its id with
+//!   `tools.offer("user-input/ask")`, and the model sees it as
+//!   `user-input_ask`. Neither inserting nor declaring the Pack
 //!   advertises anything to the model.
 //!
 //! ## Invariants

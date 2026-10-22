@@ -1,8 +1,9 @@
 //! Tests for the section-visible `models.loop`: the shim-driven model-tool
-//! loop over an author-owned message list. One terminal turn with no tools,
-//! repeated model-tool rounds with automatic assistant and tool-result
-//! appends, the nil return, explicit terminal removal, local and bound
-//! tools, the tool list the first loop fixes, explicit-handle calls on a
+//! loop over the section's `messages` list. One terminal turn with no
+//! tools, repeated model-tool rounds with automatic assistant and
+//! tool-result appends, the nil return, explicit terminal removal through
+//! `models.compact`, local and bound tools, the tool list the first loop
+//! round renders, explicit-handle calls on a
 //! frozen binding, and the atomic append of a tool-call batch. The shared
 //! loop fixtures (`loop_models`, `loop_scenario`, `catalog_scenario`,
 //! `LOOP_TO_TEXT`, and the `loop_events` filter) sit here for every

@@ -14,9 +14,9 @@ models:
 # Chat
 
 The built-in chat agent: a transparent pass-through between the operator
-and the selected model. The message list is an explicit Lua value retained
-across turns; the model is the dropdown's selection bound at run launch, so
-a selection change takes effect on the next run.
+and the selected model. The conversation is the section's `messages` list,
+retained across turns; the model is the dropdown's selection bound at run
+launch, so a selection change takes effect on the next run.
 
 ```lua
 models.default("chat")

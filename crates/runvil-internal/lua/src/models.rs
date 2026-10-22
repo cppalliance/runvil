@@ -5,8 +5,8 @@
 //! `models.use` records the section's selection with its optional sampling
 //! options, `models.default` parks the prompt-wide default, and `models.get`
 //! inspects a bound role without selecting it. The suspending
-//! `models.infer` and `models.loop` are coroutine shims added to this table
-//! afterward.
+//! `models.infer`, `models.loop`, and `models.compact` are coroutine shims
+//! added to this table afterward.
 
 use std::num::NonZeroU32;
 use std::sync::Arc;

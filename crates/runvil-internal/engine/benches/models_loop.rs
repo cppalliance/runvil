@@ -60,7 +60,7 @@ fn bench_catalog(context: u32) -> ModelCatalog {
     .expect("the bench catalog has a single unique model")
 }
 
-/// One section driving `models.loop` over a builder-made list.
+/// One section driving `models.loop` over its `messages` list.
 const LOOP_PROMPT: &str = "---\nname: bench_loop\ndescription: d\nrunvil: 0\nmodels:\n  writer: {}\n---\n\n\
     # Bench\n\n\
     ```lua\n\
