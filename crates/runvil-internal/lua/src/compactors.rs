@@ -34,9 +34,9 @@ use crate::messages::MessageList;
 
 /// Why a request cannot fit the model's context window.
 ///
-/// The reason is the whole active compactor contract: the invocation passes
-/// it to the selected policy, and `compactors.fail` raises it as typed
-/// context exhaustion.
+/// These are the two overflow tags the loop passes to a compactor, which
+/// [`exhaustion_detail`] turns into a description. A compactor may also
+/// receive a caller's own reason through `models.compact`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OverflowReason {
     /// The pre-dispatch estimate exceeds the model's context window; the
@@ -48,10 +48,6 @@ pub enum OverflowReason {
 }
 
 impl OverflowReason {
-    /// Every reason, in declaration order.
-    pub const ALL: &'static [OverflowReason] =
-        &[OverflowReason::Precheck, OverflowReason::Provider];
-
     /// Parses the invocation tag the compactor callback receives.
     pub(crate) fn from_tag(tag: &str) -> Option<OverflowReason> {
         match tag {
@@ -85,8 +81,6 @@ impl std::fmt::Display for OverflowReason {
         formatter.write_str(detail)
     }
 }
-
-impl std::error::Error for OverflowReason {}
 
 /// An overflow tag's description, or any other reason as given.
 ///

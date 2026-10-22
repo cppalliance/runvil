@@ -66,7 +66,7 @@ fn raised_reason(error: &mlua::Error) -> &str {
 #[test]
 fn the_omitted_compactor_defaults_to_fail() {
     // The optional compactor parameter's default: omitting it selects
-    // `compactors.fail`, the only shipped policy.
+    // `compactors.fail`.
     // Resolve through a call boundary, exactly as the loop's optional
     // compactor parameter resolves.
     fn resolve(selected: Option<Compactor>) -> Compactor {
@@ -150,18 +150,11 @@ fn the_exhaustion_message_details_an_overflow_tag_and_otherwise_gives_the_reason
 
 #[test]
 fn exhaustion_detail_is_an_overflow_tags_display_and_any_other_reason_itself() {
-    for reason in OverflowReason::ALL {
+    for reason in [OverflowReason::Precheck, OverflowReason::Provider] {
         assert_eq!(exhaustion_detail(reason.tag()), reason.to_string());
     }
     assert_eq!(exhaustion_detail("manual"), "manual");
     assert_eq!(exhaustion_detail("provider "), "provider ");
-}
-
-#[test]
-fn an_overflow_reason_is_a_standard_error_whose_text_is_its_display() {
-    let reason: &dyn std::error::Error = &OverflowReason::Provider;
-    assert_eq!(reason.to_string(), OverflowReason::Provider.to_string());
-    assert!(reason.source().is_none());
 }
 
 #[test]
