@@ -209,6 +209,7 @@ fn pair(role: &str, content: &str) -> (String, String) {
 }
 
 mod canonical_sequence;
+mod compaction;
 mod lifecycle;
 mod overload;
 mod protocol;

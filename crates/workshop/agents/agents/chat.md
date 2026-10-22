@@ -16,7 +16,9 @@ models:
 The built-in chat agent: a transparent pass-through between the operator
 and the selected model. The conversation is the section's `messages` list,
 retained across turns; the model is the dropdown's selection bound at run
-launch, so a selection change takes effect on the next run.
+launch, so a selection change takes effect on the next run. When the
+conversation outgrows the model's context window, older turns are
+summarized so the conversation continues.
 
 ```lua
 models.default("chat")
@@ -27,9 +29,36 @@ models.default("chat")
 ```lua
 packs.offer("web")
 tools.offer(tools.extras())
+local function compact(reason)
+  local first = 1
+  while messages[first] and messages[first].role == "system" do
+    first = first + 1
+  end
+  local cut, turns = first, 0
+  for i = #messages, first, -1 do
+    if messages[i].role == "user" then
+      turns = turns + 1
+      if turns == 2 then cut = i break end
+    end
+  end
+  if cut == first then return compactors.fail(reason) end
+  local lines, room = {}, 48000
+  for i = cut - 1, first, -1 do
+    local line = messages[i].role .. ": " .. json.encode(messages[i].content):sub(1, 1500)
+    if #line > room then break end
+    room = room - #line
+    table.insert(lines, 1, line)
+  end
+  local summary = models.infer("Summarize this conversation:\n" .. table.concat(lines, "\n"))
+  messages:replace(first, cut - 1, {
+    role = "user",
+    content = "Summary of the earlier conversation: " .. summary,
+    meta = { summary = true },
+  })
+end
 while true do
     local text = input.ask()
     messages:user(text)
-    pcall(function() return models.loop() end)
+    pcall(function() return models.loop(compact) end)
 end
 ```

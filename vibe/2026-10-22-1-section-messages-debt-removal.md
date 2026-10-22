@@ -336,7 +336,7 @@ Each component is one piece built as one sequential step: the piece's code and i
 
 <step-3>
 
-### Step 3: Summarize older chat turns when a turn overflows
+### Step 3: Summarize older chat turns when a turn overflows [completed]
 
 - Component: `Chat agent compaction`
 - Tests (run from `c:\Users\Vinnie\cursor\runvil` in PowerShell):
