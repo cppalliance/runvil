@@ -42,19 +42,11 @@ local function compact(reason)
     end
   end
   if cut == first then return compactors.fail(reason) end
-  local function excerpt(value)
-    local text = json.encode(value)
-    if #text <= 1500 then return text end
-    -- Cut before the character holding byte 1501, so no UTF-8 sequence splits.
-    local stop = 1501
-    while text:byte(stop) >= 0x80 and text:byte(stop) < 0xC0 do
-      stop = stop - 1
-    end
-    return text:sub(1, stop - 1)
-  end
   local lines, room = {}, 48000
   for i = cut - 1, first, -1 do
-    local line = messages[i].role .. ": " .. excerpt(messages[i].content)
+    local text = json.encode(messages[i].content)
+    if #text > 1500 then text = text:sub(1, utf8.offset(text, 0, 1501) - 1) end
+    local line = messages[i].role .. ": " .. text
     if #line > room then break end
     room = room - #line
     table.insert(lines, 1, line)
