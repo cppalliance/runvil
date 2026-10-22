@@ -35,7 +35,8 @@ fn the_research_person_shape_returns_the_last_reply() {
 
 /// The shipped chat agent's compactor: it keeps the system block and the
 /// last two user turns, and summarizes the rest into one user record from
-/// a capped excerpt of each record, newest first within a total budget.
+/// a capped excerpt of each record, cut on a character boundary, newest
+/// first within a total budget.
 /// With no record before the second-to-last user turn, it fails instead.
 const COMPACT: &str = r#"local function compact(reason)
   local first = 1
@@ -50,9 +51,19 @@ const COMPACT: &str = r#"local function compact(reason)
     end
   end
   if cut == first then return compactors.fail(reason) end
+  local function excerpt(value)
+    local text = json.encode(value)
+    if #text <= 1500 then return text end
+    -- Cut before the character holding byte 1501, so no UTF-8 sequence splits.
+    local stop = 1501
+    while text:byte(stop) >= 0x80 and text:byte(stop) < 0xC0 do
+      stop = stop - 1
+    end
+    return text:sub(1, stop - 1)
+  end
   local lines, room = {}, 48000
   for i = cut - 1, first, -1 do
-    local line = messages[i].role .. ": " .. json.encode(messages[i].content):sub(1, 1500)
+    local line = messages[i].role .. ": " .. excerpt(messages[i].content)
     if #line > room then break end
     room = room - #line
     table.insert(lines, 1, line)
@@ -120,6 +131,35 @@ fn the_chat_agent_shape_summarizes_older_turns_when_a_turn_overflows() {
         gateway.call_count(),
         4,
         "two turns, the summary, and the retried third turn"
+    );
+}
+
+#[test]
+fn the_chat_agent_shape_cuts_a_multibyte_excerpt_on_a_character_boundary() {
+    // The first turn's encoded content is a quote and 3,000 two-byte
+    // characters, so a 1,500-byte cut falls inside a character; the
+    // excerpt ends before it, at the quote and 749 whole characters.
+    let gateway = ScriptedChat::new(vec![text("a1"), text("a2"), text("summary"), text("a3")]);
+    let source = one_section(&format!(
+        "{}
+         return messages[#messages].content .. '|' .. tostring(messages[1].meta and messages[1].meta.summary)",
+        chat_turns("{ string.rep('é', 3000), 'q2', string.rep('y', 12000) }")
+    ));
+    let trace = loop_scenario(source).chat(&gateway).run();
+    assert_eq!(trace.text(), "a3|true");
+    let bodies = gateway.requests();
+    let prompts: Vec<&str> = bodies
+        .iter()
+        .flat_map(|body| &body.messages)
+        .map(crate::model::Message::content)
+        .filter(|content| content.starts_with("Summarize this conversation:"))
+        .collect();
+    let [prompt] = prompts[..] else {
+        panic!("expected one summary request, got {}", prompts.len());
+    };
+    assert!(
+        prompt.contains(&format!("user: \"{}\nassistant: ", "é".repeat(749))),
+        "the excerpt keeps whole characters up to the cap: {prompt:.80}"
     );
 }
 

@@ -152,8 +152,10 @@ async fn gate_context_overflow_summarizes_older_turns_and_later_turns_answer() {
 
     // The typed catalog's 200,000-token window keeps the precheck quiet,
     // so only the mock's message limit overflows: from turn 3 on, the
-    // uncompacted history carries more than four messages.
-    let long = "x".repeat(100_000);
+    // uncompacted history carries more than four messages. The long turn
+    // is two-byte characters, so its capped excerpt must end on a
+    // character boundary for the summary request to be valid UTF-8.
+    let long = "é".repeat(50_000);
     let inputs = [long.as_str(), "second", "third", "fourth"];
     let mut token = next_wait_token(&mut socket).await;
     for (index, input) in inputs.into_iter().enumerate() {

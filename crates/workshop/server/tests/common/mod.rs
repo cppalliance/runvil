@@ -206,7 +206,11 @@ pub(crate) fn sse_chunk(
 pub(crate) fn echo_stream(model: &str, text: &str) -> Response {
     let null = serde_json::Value::Null;
     let reply = format!("echo:{text}");
-    let (first, second) = reply.split_at(reply.len() / 2);
+    let mut middle = reply.len() / 2;
+    while !reply.is_char_boundary(middle) {
+        middle -= 1;
+    }
+    let (first, second) = reply.split_at(middle);
     let mut sse = String::new();
     for event in [
         sse_chunk(model, &json!({ "role": "assistant" }), &null),
