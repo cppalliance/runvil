@@ -1,9 +1,9 @@
 //! Tests for the turn a model-issued tool result reports: every result in
 //! a batch carries the turn of the round that requested the batch, even
-//! when an earlier local handler in that batch runs model rounds of its
+//! when an earlier adhoc handler in that batch runs model rounds of its
 //! own - through `models.infer` or a `call` into a section that runs one -
 //! and advances the chain's turn counter before the later calls dispatch.
-//! Bound tools and local tools both report the requesting round's turn.
+//! Bound tools and adhoc tools both report the requesting round's turn.
 //! A handler or a compactor cannot start its own loop while a loop runs in
 //! the section; once no loop runs, the next one starts normally.
 

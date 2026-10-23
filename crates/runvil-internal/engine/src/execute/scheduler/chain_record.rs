@@ -267,7 +267,7 @@ pub(super) struct Chain {
     /// `tasks.concurrency` lowers it, clamped to the parent's.
     pub(super) concurrency: NonZeroUsize,
     /// The tool scope the chain's last `chat` round advertised, keyed by
-    /// alias, each name's catalog tool or `None` for a local tool: a copy
+    /// alias, each name's catalog tool or `None` for an adhoc tool: a copy
     /// of the section's rendered tool list's map. The round's answer is
     /// checked against it, so a tool name the model invents or reaches for
     /// outside the scope fails as out of scope. `None` before the chain's

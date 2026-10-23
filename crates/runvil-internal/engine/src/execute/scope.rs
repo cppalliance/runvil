@@ -17,12 +17,12 @@ use crate::{Error, Result};
 /// Returns the schema-construction error of [`prepare_scoped_tools`].
 pub(super) fn prepare_effective_scope(
     bindings: &[ToolBinding],
-    local_schemas: &[ToolSchema],
+    adhoc_schemas: &[ToolSchema],
     emitter: &Emitter,
     section: &str,
 ) -> Result<RenderedTools> {
     emitter.report(section, lifecycle::TOOL_SCOPE_VALIDATION_STARTED);
-    let result = prepare_scoped_tools(bindings, local_schemas);
+    let result = prepare_scoped_tools(bindings, adhoc_schemas);
     emitter.report(
         section,
         if result.is_ok() {
@@ -36,14 +36,14 @@ pub(super) fn prepare_effective_scope(
 
 pub(super) fn prepare_scoped_tools(
     bindings: &[ToolBinding],
-    local_schemas: &[ToolSchema],
+    adhoc_schemas: &[ToolSchema],
 ) -> Result<RenderedTools> {
-    let mut schemas = Vec::with_capacity(bindings.len() + local_schemas.len());
+    let mut schemas = Vec::with_capacity(bindings.len() + adhoc_schemas.len());
     let mut dispatch = BTreeMap::new();
     for binding in bindings {
-        // A local alias may equal an offered tool's wire name; the local
+        // An adhoc alias may equal an offered tool's wire name; the adhoc
         // tool wins.
-        if local_schemas
+        if adhoc_schemas
             .iter()
             .any(|schema| schema.name() == binding.alias())
         {
@@ -64,10 +64,10 @@ pub(super) fn prepare_scoped_tools(
         schemas.push(schema);
         dispatch.insert(binding.alias().to_owned(), Some(binding.id().clone()));
     }
-    // Local tools are prompt-author Lua functions with no live implementation;
+    // Adhoc tools are prompt-author Lua functions with no live implementation;
     // the `tool_call` arm answers their calls on the section VM. The alias
     // was validated at `tools.offer_local` registration.
-    for schema in local_schemas {
+    for schema in adhoc_schemas {
         dispatch.insert(schema.name().to_owned(), None);
         schemas.push(schema.clone());
     }

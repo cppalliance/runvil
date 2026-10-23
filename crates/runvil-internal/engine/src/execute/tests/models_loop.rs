@@ -2,7 +2,7 @@
 //! loop over the section's `messages` list. One terminal turn with no
 //! tools, repeated model-tool rounds with automatic assistant and
 //! tool-result appends, the nil return, explicit terminal removal through
-//! `models.compact`, local and bound tools, the tool list the first loop
+//! `models.compact`, adhoc and bound tools, the tool list the first loop
 //! round renders, explicit-handle calls on a
 //! frozen binding, and the atomic append of a tool-call batch. The shared
 //! loop fixtures (`loop_models`, `loop_scenario`, `catalog_scenario`,
@@ -200,7 +200,7 @@ fn replayed_tool_calls_reach_the_chat_effect_in_the_openai_shape() {
 }
 
 #[test]
-fn models_loop_dispatches_local_and_bound_tools() {
+fn models_loop_dispatches_adhoc_and_bound_tools() {
     let gateway = ScriptedChat::new(vec![
         calls(&[("call_1", "grab", "{\"value\":\"x\"}")]),
         calls(&[("call_2", "echo", "{\"value\":\"y\"}")]),
@@ -214,8 +214,8 @@ fn models_loop_dispatches_local_and_bound_tools() {
          messages:user('use both tools')
          models.loop()
          assert(#messages == 6, 'both exchanges and the terminal record appended')
-         assert(messages[3].content == 'grabbed x', 'the local handler ran on the section VM')
-         assert(messages[3].tool_call_id == 'call_1', 'the local result correlates its call')
+         assert(messages[3].content == 'grabbed x', 'the adhoc handler ran on the section VM')
+         assert(messages[3].tool_call_id == 'call_1', 'the adhoc result correlates its call')
          assert(messages[5].content == 'echoed: y', 'the bound tool ran through dispatch')
          return 'ok'",
     );
@@ -228,7 +228,7 @@ fn models_loop_dispatches_local_and_bound_tools() {
     assert_eq!(
         bodies[0].tools.len(),
         2,
-        "both the local and the bound tool are advertised: {bodies:?}"
+        "both the adhoc and the bound tool are advertised: {bodies:?}"
     );
 }
 

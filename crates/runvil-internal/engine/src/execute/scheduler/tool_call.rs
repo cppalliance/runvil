@@ -1,10 +1,10 @@
 //! The `tool_call` arm: one dispatched tool call yielded by a section VM,
 //! script-initiated (`tools.call`) or model-issued (the loop shim, with the
-//! model's `call_id`), plus the `local_tool_done` arm that closes a local
+//! model's `call_id`), plus the `adhoc_tool_done` arm that closes an adhoc
 //! tool call.
 //!
 //! Each call's route is decided once, by `tool_route`, on the driver thread
-//! before any leaf work. A local Lua tool is answered with its handler;
+//! before any leaf work. An adhoc tool is answered with its handler;
 //! anything else is a catalog tool, which resolves against the run's
 //! offering (a model call by wire name, a script call by canonical id,
 //! which also reaches a catalog tool left out of the offering), has its
@@ -20,7 +20,7 @@
 //! The loop sends a round's unanswered calls together as one
 //! `tool_calls` request. The arm walks them in the model's order and
 //! issues each catalog call at once into a slot of the chain's batch,
-//! stopping at the first call whose route is a local tool. A call that
+//! stopping at the first call whose route is an adhoc tool. A call that
 //! fails to route or to prepare fills its slot with the error and stops
 //! the batch too. Each landed answer fills its call's slot, and the
 //! chain is answered once no slot is open: every text in call order, or
@@ -29,14 +29,14 @@
 //! an ordinary `tool_call`. The calls in flight run concurrently, each
 //! under its own forked identity.
 //!
-//! A local tool call is a two-yield handshake. The `tool_call` answer is
-//! [`ToolCallOutcome::Local`], which hands the shim the handler, and the
-//! frame opens a [`LocalCall`] for it. The shim runs the handler inside the
+//! An adhoc tool call is a two-yield handshake. The `tool_call` answer is
+//! [`ToolCallOutcome::Adhoc`], which hands the shim the handler, and the
+//! frame opens an [`AdhocCall`] for it. The shim runs the handler inside the
 //! chain's block coroutine, so the handler's own suspending calls are
-//! ordinary requests of this chain, then yields `local_tool_done`. That
+//! ordinary requests of this chain, then yields `adhoc_tool_done`. That
 //! arm closes the innermost open call and reports it: the succeeded or
 //! failed observation and, on success, the trusted `ToolResult` under the
-//! call id recorded at dispatch. A local call never issues leaf work of
+//! call id recorded at dispatch. An adhoc call never issues leaf work of
 //! its own.
 
 use std::sync::Arc;
@@ -46,9 +46,9 @@ use runvil_types::event::lifecycle;
 use runvil_types::tools::{OutputTrust, ToolId};
 use runvil_vfs::detail;
 
-use crate::execute::protocol::{Answer, LocalToolOutcome, ToolCallOutcome, ToolCallRecord};
+use crate::execute::protocol::{AdhocToolOutcome, Answer, ToolCallOutcome, ToolCallRecord};
 use crate::execute::run::{Effect, ToolCallOrigin, ToolCaller};
-use crate::execute::section_context::LocalCall;
+use crate::execute::section_context::AdhocCall;
 use crate::lua::{ScriptReport, ToolCallCounts, current_tool_bindings};
 use crate::{Error, Result};
 
@@ -56,7 +56,7 @@ use super::dispatch::unbound_tool_call;
 use super::{CallSite, ChainIndex, Continuation, Scheduler, ToolCallContinuation, prompt_origin};
 
 /// How one `tool_call` dispatch resolved: a bound call issued as an effect
-/// and parked on the pending table, or a local Lua tool's answer settled
+/// and parked on the pending table, or an adhoc tool's answer settled
 /// on the driver thread. A preparation failure returns `Err` instead.
 #[derive(Debug)]
 pub(super) enum ToolCallDispatch {
@@ -68,9 +68,9 @@ pub(super) enum ToolCallDispatch {
 /// a lone call and a batched one route alike.
 #[derive(Debug)]
 enum ToolRoute {
-    /// A local Lua tool of the chain's section VM, answered with its
+    /// An adhoc tool of the chain's section VM, answered with its
     /// handler.
-    Local,
+    Adhoc,
     /// A catalog tool, resolved against the run's offering and issued as
     /// an effect.
     Catalog,
@@ -78,7 +78,7 @@ enum ToolRoute {
 
 impl Scheduler {
     /// Dispatches a `tool_call` request. An issued bound call parks the
-    /// chain in the pending table; a local Lua tool's handler resumes the
+    /// chain in the pending table; an adhoc tool's handler resumes the
     /// chain on the spot; every preparation failure - an unbound alias,
     /// the counts install - is the call's answer, resumed
     /// into the caller so an author `pcall` catches it exactly as a tool
@@ -123,7 +123,7 @@ impl Scheduler {
         let mut batch = Vec::with_capacity(calls.len());
         for (slot, call) in calls.into_iter().enumerate() {
             let issued = match self.tool_route(id, &call.name) {
-                Ok(ToolRoute::Local) => break,
+                Ok(ToolRoute::Adhoc) => break,
                 Ok(ToolRoute::Catalog) => self.prepare_catalog_call(
                     id,
                     &call.name,
@@ -149,15 +149,15 @@ impl Scheduler {
     }
 
     /// Decides the route of the call named `alias`, the one decision a
-    /// lone call and a batch share. A local tool of the chain's section VM
+    /// lone call and a batch share. An adhoc tool of the chain's section VM
     /// wins over the catalog.
     fn tool_route(&self, id: ChainIndex, alias: &str) -> Result<ToolRoute> {
         if self.chains[id.index()]
             .frame()?
             .vm()?
-            .has_local_tool(alias)?
+            .has_adhoc_tool(alias)?
         {
-            return Ok(ToolRoute::Local);
+            return Ok(ToolRoute::Adhoc);
         }
         Ok(ToolRoute::Catalog)
     }
@@ -199,7 +199,7 @@ impl Scheduler {
             Answer::ToolCallResult(Ok(ToolCallOutcome::Plain(text))) => Ok(text),
             Answer::ToolCallResult(Err(error)) => Err(error),
             Answer::ToolCallResult(Ok(
-                ToolCallOutcome::Structured(_) | ToolCallOutcome::Local { .. },
+                ToolCallOutcome::Structured(_) | ToolCallOutcome::Adhoc { .. },
             ))
             | Answer::Infer(_)
             | Answer::Call(_)
@@ -244,13 +244,13 @@ impl Scheduler {
         self.answer_inline(id, Answer::ToolCallsResult(answer));
     }
 
-    /// The fallible half of tool-call dispatch, by the call's route: a
-    /// local tool (the one-time counts install, the attempt counted, then
+    /// The fallible half of tool-call dispatch, by the call's route: an
+    /// adhoc tool (the one-time counts install, the attempt counted, then
     /// the handler's answer), or a catalog tool, which
     /// `prepare_catalog_call` issues.
     ///
     /// Every report the call makes carries the turn of the model round
-    /// that requested it, so a local handler earlier in the same batch
+    /// that requested it, so an adhoc handler earlier in the same batch
     /// that runs model rounds cannot shift it. A script call, or a
     /// model-issued one yielded without a turn, reports the counter's
     /// value at dispatch.
@@ -262,7 +262,7 @@ impl Scheduler {
         site: CallSite,
     ) -> Result<ToolCallDispatch> {
         match self.tool_route(id, alias)? {
-            ToolRoute::Local => {
+            ToolRoute::Adhoc => {
                 let report = ScriptReport {
                     turn: self.call_turn(id, &site),
                 };
@@ -273,13 +273,13 @@ impl Scheduler {
                 counts.increment(alias)?;
                 self.chains[id.index()]
                     .frame_mut()?
-                    .push_local_call(LocalCall {
+                    .push_adhoc_call(AdhocCall {
                         alias: alias.to_owned(),
                         call_id: site.call_id().map(str::to_owned),
                         report,
                     });
                 Ok(ToolCallDispatch::Answered(Answer::ToolCallResult(Ok(
-                    ToolCallOutcome::Local {
+                    ToolCallOutcome::Adhoc {
                         alias: alias.to_owned(),
                         args,
                     },
@@ -379,8 +379,8 @@ impl Scheduler {
         Ok(())
     }
 
-    /// Dispatches a `local_tool_done` request: closes the chain's
-    /// innermost open local tool call and answers it. A returned text
+    /// Dispatches an `adhoc_tool_done` request: closes the chain's
+    /// innermost open adhoc tool call and answers it. A returned text
     /// reports `TOOL_CALL_SUCCEEDED` and a trusted `ToolResult` - the
     /// prompt author wrote the handler, so its output passes verbatim -
     /// under the call id (or none for a script call) and the turn recorded
@@ -391,20 +391,20 @@ impl Scheduler {
     ///
     /// # Errors
     /// Returns [`Error::Internal`] when the chain has no frame or no open
-    /// local call, which only a shim bug produces.
-    pub(super) fn dispatch_local_tool_done(
+    /// adhoc call, which only a shim bug produces.
+    pub(super) fn dispatch_adhoc_tool_done(
         &mut self,
         id: ChainIndex,
-        outcome: LocalToolOutcome,
+        outcome: AdhocToolOutcome,
     ) -> Result<()> {
         let chain = &mut self.chains[id.index()];
         let emitter = Arc::clone(chain.ctx.emitter());
         let section = chain.section_name().to_owned();
-        let call = chain.frame_mut()?.pop_local_call().ok_or(Error::internal(
-            "a local tool's completion closes the call that opened it",
+        let call = chain.frame_mut()?.pop_adhoc_call().ok_or(Error::internal(
+            "an adhoc tool's completion closes the call that opened it",
         ))?;
         let answer = match outcome {
-            LocalToolOutcome::Returned(text) => {
+            AdhocToolOutcome::Returned(text) => {
                 emitter.report(&section, lifecycle::TOOL_CALL_SUCCEEDED);
                 emitter.tool_result(
                     &section,
@@ -417,11 +417,11 @@ impl Scheduler {
                 );
                 Ok(ToolCallOutcome::Plain(text))
             }
-            LocalToolOutcome::BadReturn(error) => {
+            AdhocToolOutcome::BadReturn(error) => {
                 emitter.report(&section, lifecycle::TOOL_CALL_FAILED);
                 Err(Error::from(error))
             }
-            LocalToolOutcome::Raised => {
+            AdhocToolOutcome::Raised => {
                 emitter.report(&section, lifecycle::TOOL_CALL_FAILED);
                 Ok(ToolCallOutcome::Plain(String::new()))
             }

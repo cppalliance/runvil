@@ -137,7 +137,7 @@ pub use crate::program::LuaProgram;
 pub use crate::projection::project_messages;
 pub use crate::prose::ProseState;
 pub use crate::protocol::{
-    Answer, Blocked, ChatOutcome, ChatResult, ContentPart, LocalToolOutcome, MessageContent,
+    AdhocToolOutcome, Answer, Blocked, ChatOutcome, ChatResult, ContentPart, MessageContent,
     MessageRecord, NonEmpty, RecordRole, Request, SpawnVia, TaskDelivery, TaskPhase, TaskStatus,
     ToolCallOutcome, ToolCallRecord, VfsOp, VfsOutcome, YieldParse,
 };

@@ -15,7 +15,7 @@ use super::userdata::LuaToolHandle;
 /// Resolves one string or tool object to the name it stands for.
 ///
 /// This is the single decode behind the namespace's argument polymorphism:
-/// a string is the name verbatim (a tool id, or for `tools.call` a local
+/// a string is the name verbatim (a tool id, or for `tools.call` an adhoc
 /// alias), a tool object contributes its canonical id, and anything else
 /// is an argument error naming the accepted forms.
 ///

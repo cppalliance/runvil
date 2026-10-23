@@ -45,7 +45,7 @@ fn messages_is_the_vms_one_empty_list_and_lua_reaches_no_other() {
     assert_eq!(vm.messages().to_records(), vec![user("u")]);
 }
 
-/// A rendered tool list advertising each of `names` as a local tool.
+/// A rendered tool list advertising each of `names` as an adhoc tool.
 fn rendered(names: &[&str]) -> RenderedTools {
     RenderedTools {
         schemas: Vec::new(),

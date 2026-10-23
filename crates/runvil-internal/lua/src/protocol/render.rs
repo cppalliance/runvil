@@ -4,7 +4,7 @@
 use mlua::{Lua, LuaSerdeExt, MultiValue, Table, Value};
 
 use crate::error_value::{ErrorValue, error_table};
-use crate::tools::local_handler;
+use crate::tools::adhoc_handler;
 
 use super::answer::{Answer, TaskDelivery, TaskStatus, ToolCallOutcome, VfsOutcome};
 
@@ -141,11 +141,11 @@ impl<E: ErrorValue> Answer<E> {
                 vec![lua.to_value(&json)?]
             }
             // The result slot stays nil: the handler and its arguments ride
-            // after it, so the shim tells a local answer from a bound
+            // after it, so the shim tells an adhoc answer from a bound
             // result by the handler's presence.
-            Answer::ToolCallResult(Ok(ToolCallOutcome::Local { alias, args })) => vec![
+            Answer::ToolCallResult(Ok(ToolCallOutcome::Adhoc { alias, args })) => vec![
                 Value::Nil,
-                Value::Function(local_handler(lua, &alias)?),
+                Value::Function(adhoc_handler(lua, &alias)?),
                 lua.to_value(&args)?,
             ],
             Answer::ToolCallsResult(Ok(texts)) => {

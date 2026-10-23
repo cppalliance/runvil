@@ -139,7 +139,7 @@ impl SectionVm {
         install_shim_prelude(
             &self.lua,
             max_tool_iterations,
-            &self.local_handler_depth,
+            &self.adhoc_handler_depth,
             &self.loop_running,
             &self.instruction_budget,
         )
@@ -198,14 +198,14 @@ impl SectionVm {
 
     fn install_jump_global(&self, globals: &mlua::Table) -> Result<()> {
         let jump_slot = Arc::clone(&self.jump_slot);
-        let local_handler_depth = Arc::clone(&self.local_handler_depth);
+        let adhoc_handler_depth = Arc::clone(&self.adhoc_handler_depth);
         let library_load_depth = Arc::clone(&self.library_load_depth);
         let jump_fn = self
             .lua
             .create_function(move |_, target: Value| -> mlua::Result<()> {
-                if local_handler_depth.load(Ordering::Relaxed) > 0 {
+                if adhoc_handler_depth.load(Ordering::Relaxed) > 0 {
                     return Err(mlua::Error::external(
-                        "jump is unavailable inside a local tool handler: return a value from \
+                        "jump is unavailable inside an adhoc tool handler: return a value from \
                          the handler and call jump from the block after the tool call returns",
                     ));
                 }

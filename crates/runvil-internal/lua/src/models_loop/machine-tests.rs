@@ -311,7 +311,7 @@ fn a_failed_answer_raises_its_value_unchanged() {
     );
 }
 
-/// A machine waiting on a local call's handler, over `list`.
+/// A machine waiting on an adhoc call's handler, over `list`.
 fn handling(list: &MessageList) -> Machine<V> {
     let mut machine = chatting(2, list);
     machine.step(batch(&["c1"]));
@@ -319,16 +319,16 @@ fn handling(list: &MessageList) -> Machine<V> {
         show(&machine.step(batched(&[]))),
         r#"tool_call c1 echo {"id":"c1"}@7"#
     );
-    let local = Input::Local {
+    let adhoc = Input::Adhoc {
         handler: "handler",
         args: "args",
     };
-    assert_eq!(show(&machine.step(local)), "handle handler args");
+    assert_eq!(show(&machine.step(adhoc)), "handle handler args");
     machine
 }
 
 #[test]
-fn a_local_call_reports_its_outcome_then_raises_the_handlers_value_first() {
+fn an_adhoc_call_reports_its_outcome_then_raises_the_handlers_value_first() {
     let list = MessageList::default();
     let mut machine = handling(&list);
     assert_eq!(

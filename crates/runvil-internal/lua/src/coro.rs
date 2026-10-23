@@ -13,12 +13,12 @@
 //! frames as verbatim `file:line:` references with no `[string "..."]`
 //! wrapper, and the line mapper (`program.rs`) never touches them.
 //!
-//! A local tool call is a two-yield handshake inside the calling block
-//! coroutine. The `tools.call` shim yields `tool_call`; for a local alias
+//! An adhoc tool call is a two-yield handshake inside the calling block
+//! coroutine. The `tools.call` shim yields `tool_call`; for an adhoc alias
 //! the driver resumes it with the handler instead of a result. The shim
 //! calls the handler under a yield-safe `pcall` with `jump` refused, so
 //! the handler's own suspending calls are ordinary yields of the same
-//! coroutine, then yields `local_tool_done` with the outcome for the
+//! coroutine, then yields `adhoc_tool_done` with the outcome for the
 //! driver to report, and finally returns the text or raises.
 
 #[path = "coro-failure.rs"]
@@ -152,9 +152,9 @@ static FANOUT_PROGRAM: LazyLock<std::result::Result<LuaProgram, SharedSource>> =
 /// replacements, which run every caught value through that capture, are
 /// installed over the base library's globals here, so an Engine function that
 /// fails directly from Rust reaches author code in the one shape. The next
-/// two captures, `enter_local_handler` and `leave_local_handler`, count up
-/// and down on `local_handler_depth`, the counter the VM's `jump` reads, so
-/// `jump` refuses while a local tool's handler runs, whatever reference
+/// two captures, `enter_adhoc_handler` and `leave_adhoc_handler`, count up
+/// and down on `adhoc_handler_depth`, the counter the VM's `jump` reads, so
+/// `jump` refuses while an adhoc tool's handler runs, whatever reference
 /// the handler calls it through. Then `cancel_requested` reads the
 /// cancel flag of `instruction_budget`, so the chunk's protected calls
 /// raise a failure caught under cancellation again instead of returning
@@ -170,7 +170,7 @@ static FANOUT_PROGRAM: LazyLock<std::result::Result<LuaProgram, SharedSource>> =
 pub(crate) fn install_shim_prelude(
     lua: &Lua,
     max_tool_iterations: usize,
-    local_handler_depth: &Arc<AtomicU32>,
+    adhoc_handler_depth: &Arc<AtomicU32>,
     loop_running: &Arc<AtomicBool>,
     instruction_budget: &InstructionBudget,
 ) -> Result<()> {
@@ -187,8 +187,8 @@ pub(crate) fn install_shim_prelude(
     let error_value = install_error_value(lua).map_err(Error::lua)?;
     let stash_failure = stash_failure_capture(lua)?;
     let normalize_failure = install_normalize_failure(lua).map_err(Error::lua)?;
-    let (enter_local_handler, leave_local_handler) =
-        local_handler_captures(lua, local_handler_depth)?;
+    let (enter_adhoc_handler, leave_adhoc_handler) =
+        adhoc_handler_captures(lua, adhoc_handler_depth)?;
     let budget = instruction_budget.clone();
     let cancel_requested = lua
         .create_function(move |_, ()| Ok(budget.is_cancelled()))
@@ -215,8 +215,8 @@ pub(crate) fn install_shim_prelude(
             error_value,
             stash_failure,
             normalize_failure,
-            enter_local_handler,
-            leave_local_handler,
+            enter_adhoc_handler,
+            leave_adhoc_handler,
             cancel_requested,
             is_model_handle,
             loop_begin,
@@ -299,10 +299,10 @@ fn stash_shims(lua: &Lua, shims: &Table) -> Result<()> {
         .map_err(Error::lua)
 }
 
-/// Builds the prelude's `enter_local_handler()` and `leave_local_handler()`
+/// Builds the prelude's `enter_adhoc_handler()` and `leave_adhoc_handler()`
 /// captures over `depth`: one step up and one step down, so nested
 /// handlers balance.
-fn local_handler_captures(lua: &Lua, depth: &Arc<AtomicU32>) -> Result<(Function, Function)> {
+fn adhoc_handler_captures(lua: &Lua, depth: &Arc<AtomicU32>) -> Result<(Function, Function)> {
     let entered = Arc::clone(depth);
     let enter = lua
         .create_function(move |_, ()| {

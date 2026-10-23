@@ -1,6 +1,6 @@
 //! The rules of `models.loop` over typed inputs, with no Lua VM: the
-//! round cap, the order a round's answer is judged in, the batch rule, a
-//! local tool's report and re-raise, and compaction after an overflow.
+//! round cap, the order a round's answer is judged in, the batch rule, an
+//! adhoc tool's report and re-raise, and compaction after an overflow.
 //! The machine pushes every record onto the list itself, and every Lua
 //! value it only passes along is an opaque `V`, so the unit tests run over
 //! a plain `MessageList` with any `V`.
@@ -93,7 +93,7 @@ pub(super) enum Phase<V> {
     Calling,
     /// The handler's raw `pcall`: `(ok, value)`.
     Handling,
-    /// The `local_tool_done` answer: `(ok, text)`, with the handler's own
+    /// The `adhoc_tool_done` answer: `(ok, text)`, with the handler's own
     /// raised value when it raised.
     Reporting(Option<V>),
     /// The loop returned or raised.
@@ -111,15 +111,15 @@ pub(super) enum Input<V> {
     Batched(std::result::Result<Vec<String>, V>),
     /// A bound tool's text, or the value to raise.
     Dispatched(std::result::Result<String, V>),
-    /// A local tool's handler and its arguments table.
-    Local { handler: V, args: V },
+    /// An adhoc tool's handler and its arguments table.
+    Adhoc { handler: V, args: V },
     /// The compactor's or the handler's raw `pcall`: its first returned
     /// or raised value, and whether the run's cancel flag was set.
     Called {
         outcome: std::result::Result<V, V>,
         cancelled: bool,
     },
-    /// The `local_tool_done` answer: the call's text, or the value to
+    /// The `adhoc_tool_done` answer: the call's text, or the value to
     /// raise.
     Reported(std::result::Result<String, V>),
 }
@@ -145,8 +145,8 @@ pub(super) enum Then<V> {
     },
     /// Call the handler with its arguments table.
     Handle { handler: V, args: V },
-    /// Yield `{ op = "local_tool_done", ok = true, value = value }` when
-    /// the handler returned, or `{ op = "local_tool_done", ok = false }`
+    /// Yield `{ op = "adhoc_tool_done", ok = true, value = value }` when
+    /// the handler returned, or `{ op = "adhoc_tool_done", ok = false }`
     /// when it raised.
     Report(Option<V>),
     /// Return nil.
@@ -226,7 +226,7 @@ impl<V: Clone> Machine<V> {
                 self.results.push(text);
                 self.next_call()
             }
-            (Phase::Calling, Input::Local { handler, args }) => {
+            (Phase::Calling, Input::Adhoc { handler, args }) => {
                 self.phase = Phase::Handling;
                 Then::Handle { handler, args }
             }

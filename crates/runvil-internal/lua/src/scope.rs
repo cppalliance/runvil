@@ -12,7 +12,7 @@ use runvil_types::tools::ToolId;
 use crate::error::{Error, Result};
 
 /// Shared per-VM tool-call counts, seeded at 0 for every key the installer
-/// was given: a catalog tool's id, or a local tool's alias. A dispatch
+/// was given: a catalog tool's id, or an adhoc tool's alias. A dispatch
 /// seeds a missing key on demand through [`ensure`](Self::ensure).
 ///
 /// The executor increments a count when dispatch is attempted (even if the tool
@@ -98,12 +98,12 @@ pub struct ToolRuntime {
 pub struct RenderedTools {
     /// The schemas every round of the section sends.
     pub schemas: Vec<ToolSchema>,
-    /// Each advertised name's catalog tool, `None` for a local tool.
+    /// Each advertised name's catalog tool, `None` for an adhoc tool.
     ///
     /// Every round copies this map onto its chain: the round's answer is
     /// gated against its keys, and the reported batch names a catalog
     /// tool's id. The `tool_call` the loop then yields resolves each name
-    /// itself, a wire name against the run's offering and a local alias
+    /// itself, a wire name against the run's offering and an adhoc alias
     /// against the section VM's handlers.
     pub dispatch: BTreeMap<String, Option<ToolId>>,
 }

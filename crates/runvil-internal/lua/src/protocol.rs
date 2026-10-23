@@ -36,4 +36,4 @@ pub use parse::YieldParse;
 pub(crate) use parse::parse_record;
 pub use record::{ContentPart, MessageContent, MessageRecord, RecordRole, ToolCallRecord};
 pub(crate) use render::Retained;
-pub use request::{LocalToolOutcome, Request, SpawnVia, VfsOp};
+pub use request::{AdhocToolOutcome, Request, SpawnVia, VfsOp};

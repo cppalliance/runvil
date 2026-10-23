@@ -11,7 +11,7 @@
 //! each step returns to the trampoline with one action, named by its tag:
 //! `"yield"` a request and
 //! pass every resume value back; call a `"handler"` between
-//! `enter_local_handler()` and `leave_local_handler()`, or the
+//! `enter_adhoc_handler()` and `leave_adhoc_handler()`, or the
 //! `"compactor"`, under the raw `pcall` and pass `ok` and the first
 //! result back; `"raise"` a value with `error(value, 0)`; or `"return"`
 //! nil. This adapter reads the values the trampoline passes into the
@@ -304,7 +304,7 @@ fn read_input(
         Phase::Calling => {
             let handler = next();
             if ok && !handler.is_nil() {
-                return Ok(Input::Local {
+                return Ok(Input::Adhoc {
                     handler,
                     args: next(),
                 });
@@ -376,7 +376,7 @@ fn act(lua: &Lua, then: Then<Value>) -> mlua::Result<MultiValue> {
         Then::Report(returned) => {
             let ok = Value::Boolean(returned.is_some());
             let fields = [("ok", ok), ("value", returned.unwrap_or(Value::Nil))];
-            ("yield", vec![request(lua, "local_tool_done", fields)?])
+            ("yield", vec![request(lua, "adhoc_tool_done", fields)?])
         }
         Then::Return => ("return", Vec::new()),
         Then::Raise(value) => ("raise", vec![value]),

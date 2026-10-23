@@ -161,6 +161,7 @@ const STORE_SECTIONS: &str = "---\nname: t\ndescription: d\nrunvil: 0\n---\n\n\
 ## First\n\n```lua\nstore.write('state.txt', 'first')\n```\n\n\
 ## Second\n\n```lua\nstore.append('state.txt', '\\nsecond')\nreturn \"second\"\n```\n";
 
+mod adhoc_tools;
 mod batch_turn;
 mod chat_arm;
 mod chat_record_rebuild;
@@ -174,7 +175,6 @@ mod fanout_acceptance;
 mod full_id_calls;
 mod happens_before;
 mod live_infer;
-mod local_tools;
 mod model_and_reply;
 mod models_compact;
 mod models_loop;

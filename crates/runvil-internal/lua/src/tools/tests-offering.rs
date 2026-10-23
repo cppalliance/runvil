@@ -145,7 +145,7 @@ fn tools_get_reads_one_object_by_id_and_nil_for_anything_else() {
     assert_eq!(result.0, "gh/search");
     assert!(
         result.1 && result.2 && result.3 && result.4,
-        "a miss, a local alias, a malformed id, and a wire name all read nil: {result:?}"
+        "a miss, an adhoc alias, a malformed id, and a wire name all read nil: {result:?}"
     );
     assert!(
         result.5.contains("tools.get takes a tool id, got integer"),
@@ -155,7 +155,7 @@ fn tools_get_reads_one_object_by_id_and_nil_for_anything_else() {
 }
 
 #[test]
-fn offer_local_registers_a_local_tool_and_names_itself_in_its_errors() {
+fn offer_local_registers_an_adhoc_tool_and_names_itself_in_its_errors() {
     let vm = lua_over(offering_set());
     let errors: (String, String, String) = vm.eval(
         "tools.offer_local('gh_search', 'a local search', {}, function() return '' end)\n\
@@ -180,7 +180,7 @@ fn offer_local_registers_a_local_tool_and_names_itself_in_its_errors() {
     );
     assert!(
         errors.2.contains("invalid alias \"web/search\""),
-        "a local alias keeps the alias grammar: {}",
+        "an adhoc alias keeps the alias grammar: {}",
         errors.2
     );
 }
@@ -237,9 +237,9 @@ fn every_offer_function_raises_once_the_tool_list_is_rendered_before_any_other_c
     }
     assert_eq!(scoped(&vm), before, "no refused offer reaches the scope");
     assert!(
-        !vm.has_local_tool("other")
-            .expect("the local-tools registry reads"),
-        "no refused local offer registers"
+        !vm.has_adhoc_tool("other")
+            .expect("the adhoc-tools registry reads"),
+        "no refused adhoc offer registers"
     );
 }
 

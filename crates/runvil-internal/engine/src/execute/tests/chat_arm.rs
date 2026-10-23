@@ -143,7 +143,7 @@ fn a_tool_round_reports_the_batch_before_the_shim_dispatches_it() {
 }
 
 #[test]
-fn a_batch_names_the_tool_behind_a_bound_alias_and_none_behind_a_local_one() {
+fn a_batch_names_the_tool_behind_a_bound_alias_and_none_behind_an_adhoc_one() {
     let gateway = ScriptedChat::new(vec![
         calls(&[
             ("call_1", "grab", "{\"value\":\"x\"}"),
@@ -176,7 +176,7 @@ fn a_batch_names_the_tool_behind_a_bound_alias_and_none_behind_a_local_one() {
                         .map(|call| call.tool.as_ref().map(ToString::to_string))
                         .eq([None, Some("tools/echo".to_owned())])
         )),
-        "the bound alias names its tool and the local one names none: {events:?}"
+        "the bound alias names its tool and the adhoc one names none: {events:?}"
     );
 }
 

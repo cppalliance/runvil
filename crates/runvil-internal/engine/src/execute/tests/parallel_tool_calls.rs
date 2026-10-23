@@ -1,7 +1,7 @@
 //! A round's catalog tool calls run in parallel: the loop sends every
 //! unanswered call as one batch, the scheduler issues each catalog call in
 //! the same step and answers once every issued call has landed, and the
-//! records append in call order. A local tool stops the batch and runs
+//! records append in call order. An adhoc tool stops the batch and runs
 //! alone between its neighbors, a call that cannot be
 //! bound stops it and raises once the issued calls land, and a task
 //! cancelled while parked on a batch orphans every call in it and lists
@@ -145,7 +145,7 @@ fn a_rounds_catalog_calls_are_issued_in_one_step_and_append_in_call_order() {
 }
 
 #[test]
-fn local_calls_run_alone_between_their_neighbors() {
+fn adhoc_calls_run_alone_between_their_neighbors() {
     let md = one_section(
         "tools.offer('tools/echo')\n\
          tools.offer_local('grab', 'Local grab', { value = 'string' }, function(args)\n\
@@ -172,7 +172,7 @@ fn local_calls_run_alone_between_their_neighbors() {
     assert_eq!(
         call_value(&effect),
         "a",
-        "the batch stops before the local call"
+        "the batch stops before the adhoc call"
     );
     run.resume(first, tool_text("echoed a"));
     let (last, effect) = only_effect(run.step());

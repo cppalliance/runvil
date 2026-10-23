@@ -43,11 +43,11 @@ pub(super) struct TaskSeed {
     pub(super) index: Option<u64>,
 }
 
-/// One local tool call whose handler is running in the frame's block
+/// One adhoc tool call whose handler is running in the frame's block
 /// coroutine: opened when the `tool_call` is answered with the handler,
-/// closed by the shim's `local_tool_done`, which reports under it.
-pub(super) struct LocalCall {
-    /// The local tool's alias.
+/// closed by the shim's `adhoc_tool_done`, which reports under it.
+pub(super) struct AdhocCall {
+    /// The adhoc tool's alias.
     pub(super) alias: String,
     /// The model-issued call id, `None` for a script call.
     pub(super) call_id: Option<String>,
@@ -86,10 +86,10 @@ pub(super) struct SectionContext {
     /// The per-section tool-call counts, installed at the first
     /// script-initiated `tools.call`.
     counts: Option<ToolCallCounts>,
-    /// The local tool calls whose handlers are running, innermost last: a
-    /// handler that calls another local tool opens a nested entry, and
-    /// each `local_tool_done` closes the innermost.
-    local_calls: Vec<LocalCall>,
+    /// The adhoc tool calls whose handlers are running, innermost last: a
+    /// handler that calls another adhoc tool opens a nested entry, and
+    /// each `adhoc_tool_done` closes the innermost.
+    adhoc_calls: Vec<AdhocCall>,
     /// The frame's task-scoped event emitter: the chain's own, so every
     /// report the frame makes - the teardown boundary, the completion -
     /// is stamped with the chain's task.
@@ -214,14 +214,14 @@ impl SectionContext {
         Ok(counts.clone())
     }
 
-    /// Opens a local tool call whose handler the shim is about to run.
-    pub(super) fn push_local_call(&mut self, call: LocalCall) {
-        self.local_calls.push(call);
+    /// Opens an adhoc tool call whose handler the shim is about to run.
+    pub(super) fn push_adhoc_call(&mut self, call: AdhocCall) {
+        self.adhoc_calls.push(call);
     }
 
-    /// Closes the innermost open local tool call; `None` when none is open.
-    pub(super) fn pop_local_call(&mut self) -> Option<LocalCall> {
-        self.local_calls.pop()
+    /// Closes the innermost open adhoc tool call; `None` when none is open.
+    pub(super) fn pop_adhoc_call(&mut self) -> Option<AdhocCall> {
+        self.adhoc_calls.pop()
     }
 }
 

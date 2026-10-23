@@ -154,7 +154,7 @@ fn after_the_render_every_offer_function_raises_even_an_identical_one() {
             format!("lua:tools.offer_local: {FIXED}"),
         ],
         "a handler's offer during the loop, then an identical re-offer of a tool \
-         and of a Pack, and a repeated local alias"
+         and of a Pack, and a repeated adhoc alias"
     );
     assert_eq!(lines.len(), 5, "{lines:?}");
     assert!(
@@ -259,7 +259,7 @@ fn a_first_round_whose_tool_build_fails_renders_nothing() {
     assert_eq!(
         bodies[0].tool_names(),
         ["echo", "shape"],
-        "both offers after the failed build reach the next round, the local \
+        "both offers after the failed build reach the next round, the adhoc \
          tool in place of the unusable one"
     );
 }

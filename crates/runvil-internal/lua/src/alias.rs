@@ -5,7 +5,7 @@ use crate::error::{Error, Result};
 
 /// A prompt-local alias that passed the supported wire grammar.
 ///
-/// Local tool aliases and model labels share the one rule. An alias never
+/// Adhoc tool aliases and model labels share the one rule. An alias never
 /// contains `/`, so it never reads as a tool id.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Alias(String);

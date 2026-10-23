@@ -12,9 +12,9 @@
 -- block's raised value for the Engine before the guard re-raises it, and
 -- `normalize_failure` turns a Rust callback's raised failure (mlua's
 -- opaque userdata) into the error table, passing every other value
--- through unchanged, `enter_local_handler()` and `leave_local_handler()`
--- step the counter the Engine's `jump` reads, so `jump` refuses while a
--- local tool's handler runs, and `cancel_requested()` reports whether the
+-- through unchanged, `enter_adhoc_handler()` and `leave_adhoc_handler()`
+-- step the counter the Engine's `jump` reads, so `jump` refuses while an
+-- adhoc tool's handler runs, and `cancel_requested()` reports whether the
 -- run's cancel flag is set: a failure caught under cancellation is the
 -- instruction hook's abort, which must unwind to the block guard, so every
 -- protected call below raises it again instead of returning it,
@@ -29,7 +29,7 @@
 -- `__impl_fanout.lua`), installed by the Engine right after this one over
 -- the failure helpers this chunk returns.
 local yield, var_snapshot, models, tools, error_value, stash_failure,
-  normalize_failure, enter_local_handler, leave_local_handler,
+  normalize_failure, enter_adhoc_handler, leave_adhoc_handler,
   cancel_requested, is_model_handle, loop_begin, compact_begin = ...
 
 -- The base library's pcall and xpcall, captured before the replacements
@@ -157,22 +157,22 @@ local function call_section(target, input)
   return result
 end
 
--- Runs a local tool's handler inside this block coroutine, so every
+-- Runs an adhoc tool's handler inside this block coroutine, so every
 -- suspending call the handler makes is an ordinary yield of the chain.
 -- `jump` refuses while the handler runs; the raw pcall catches every
 -- failure, so the leave always follows the enter, and it keeps a Rust
 -- callback's failure in mlua's own form.
--- The `local_tool_done` yield carries the handler's first return value
+-- The `adhoc_tool_done` yield carries the handler's first return value
 -- (only when it returned) for the driver to report; afterward the
 -- handler's own failure is raised again unchanged, a rejected return
 -- raises the driver's error, and a returned value resumes as its text.
 -- A failure under cancellation is raised at once, with no yield.
-local function run_local_tool(handler, args)
-  enter_local_handler()
+local function run_adhoc_tool(handler, args)
+  enter_adhoc_handler()
   local ok, value = raw_pcall(handler, args)
-  leave_local_handler()
+  leave_adhoc_handler()
   if not ok and cancel_requested() then error(value, 0) end
-  local done = { op = "local_tool_done", ok = ok }
+  local done = { op = "adhoc_tool_done", ok = ok }
   if ok then done.value = value end
   local answered, result = yield(done)
   if not ok then error(value, 0) end
@@ -181,16 +181,16 @@ local function run_local_tool(handler, args)
 end
 
 -- One `tool_call` yield and its resume. A bound tool resumes as
--- `(ok, result)`; a local tool resumes as `(true, nil, handler, args)`,
+-- `(ok, result)`; an adhoc tool resumes as `(true, nil, handler, args)`,
 -- and the handler runs here.
 local function dispatch_tool(request)
   local ok, result, handler, args = yield(request)
   if not ok then fail(result) end
-  if handler ~= nil then return run_local_tool(handler, args) end
+  if handler ~= nil then return run_adhoc_tool(handler, args) end
   return result
 end
 
--- Suspending dispatch of a tool. The first argument is a tool id, a local
+-- Suspending dispatch of a tool. The first argument is a tool id, an adhoc
 -- tool's alias, or a tool object; the polymorphism decodes once, in the
 -- protocol parse. The driver resumes a bound tool's result by
 -- the binding's declared output kind: a plain binding's text as a string,
@@ -203,7 +203,7 @@ end
 -- attached to its tool call, and `turn` the turn of the round that
 -- requested it. The driver always resumes a bound tool with content (a
 -- tool's own failure becomes untrusted failure text) and fires ToolResult
--- under the id and that turn, however far a local handler earlier in the
+-- under the id and that turn, however far an adhoc handler earlier in the
 -- batch moved the counter. Only the test-only `tools.call_as_model` hook
 -- calls it now, since the loop builds its `tool_call` requests in Rust;
 -- authors never see it, and a hand-built yield including `call_id` or
@@ -223,7 +223,7 @@ end
 -- step returns. A Rust function called from Lua cannot yield, and cannot
 -- call a Lua function that may yield, so the step hands back what to do
 -- next instead of doing it: yield a request and pass every resume value
--- back; run a local tool's handler between the depth captures, or the
+-- back; run an adhoc tool's handler between the depth captures, or the
 -- compactor, under the raw pcall and pass `ok` and the first result back;
 -- raise a value at level 0; or return nil. The raw pcall keeps a Rust
 -- callback's failure in mlua's own form for the step to judge.
@@ -232,9 +232,9 @@ local function drive(step, action, a, b)
     if action == "yield" then
       action, a, b = step(yield(a))
     elseif action == "handler" then
-      enter_local_handler()
+      enter_adhoc_handler()
       local ok, value = raw_pcall(a, b)
-      leave_local_handler()
+      leave_adhoc_handler()
       action, a, b = step(ok, value)
     elseif action == "compactor" then
       local ok, failure = raw_pcall(a, b)

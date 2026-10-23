@@ -191,7 +191,7 @@ fn tool_calls_count_increments_even_when_tool_errors() {
 }
 
 #[test]
-fn a_model_call_and_a_script_call_count_under_the_id_and_a_local_tool_under_its_alias() {
+fn a_model_call_and_a_script_call_count_under_the_id_and_an_adhoc_tool_under_its_alias() {
     let gateway = ScriptedChat::new(vec![
         calls(&[
             ("call_1", "echo", r#"{"value":"model"}"#),
@@ -216,7 +216,7 @@ fn a_model_call_and_a_script_call_count_under_the_id_and_a_local_tool_under_its_
         trace.text(),
         "2|1|false",
         "the model's wire-name call and the script's id call count once each under \
-         the id, the local tool under its alias, and the wire name is no key"
+         the id, the adhoc tool under its alias, and the wire name is no key"
     );
 }
 

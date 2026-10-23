@@ -5,7 +5,7 @@
 //! lands. Every store operation is a leaf yield, handed to the caller
 //! uniformly for all backends - no inline fast path - so interleaving
 //! behavior never depends on which backend serves the mount.
-//! The `tool_call`, `tool_calls`, `local_tool_done`, `chat`, `spawn`,
+//! The `tool_call`, `tool_calls`, `adhoc_tool_done`, `chat`, `spawn`,
 //! `timer`, and task wait, inspection, note, concurrency, and cancel arms
 //! are defined in their own modules.
 
@@ -93,7 +93,7 @@ fn blocked_on(request: &Request) -> Option<Blocked> {
         | Request::Concurrency { .. }
         | Request::Note { .. }
         | Request::Cancel { .. }
-        | Request::LocalToolDone { .. } => None,
+        | Request::AdhocToolDone { .. } => None,
     }
 }
 
@@ -119,7 +119,7 @@ impl Scheduler {
     ///
     /// # Errors
     /// Returns the store arm's error when the chain's access capability is
-    /// gone, or the `local_tool_done` arm's error when no local tool call is
+    /// gone, or the `adhoc_tool_done` arm's error when no adhoc tool call is
     /// open.
     pub(super) fn dispatch(&mut self, id: ChainIndex, request: Request) -> Result<()> {
         self.chains[id.index()].blocked = blocked_on(&request);
@@ -195,7 +195,7 @@ impl Scheduler {
                 self.dispatch_tool_calls(id, calls, turn);
                 Ok(())
             }
-            Request::LocalToolDone { outcome } => self.dispatch_local_tool_done(id, outcome),
+            Request::AdhocToolDone { outcome } => self.dispatch_adhoc_tool_done(id, outcome),
             Request::Store { op } => self.dispatch_vfs(id, op),
             Request::Chat { list, binding } => {
                 self.dispatch_chat(id, &list, binding);

@@ -352,7 +352,7 @@ impl Emitter {
     }
 
     /// Reports the result of one dispatched tool call. `tool` is the bound
-    /// tool `alias` resolved to, or `None` for a Lua-local tool. The event
+    /// tool `alias` resolved to, or `None` for an adhoc tool. The event
     /// records `trust` as its `trusted` flag: `true` only for
     /// [`OutputTrust::Trusted`].
     #[expect(

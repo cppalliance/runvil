@@ -144,7 +144,7 @@ impl SectionContext {
             sys,
             item: seed.item,
             counts: None,
-            local_calls: Vec::new(),
+            adhoc_calls: Vec::new(),
             emitter: Arc::clone(ctx.emitter()),
             turns: Arc::clone(ctx.turns()),
         })
@@ -218,7 +218,7 @@ impl SectionContext {
             sys,
             item: None,
             counts: None,
-            local_calls: Vec::new(),
+            adhoc_calls: Vec::new(),
             emitter: Arc::clone(ctx.emitter()),
             turns: Arc::clone(ctx.turns()),
         })

@@ -4,7 +4,7 @@
 
 use super::*;
 use crate::program::map_chunk_line_to_absolute;
-use crate::vm::LocalTools;
+use crate::vm::AdhocTools;
 
 #[test]
 fn lua_program_retains_source_and_round_trips_bytecode() {
@@ -62,38 +62,38 @@ fn runtime_assert_failure_reports_chunk_name_and_line() {
 }
 
 #[test]
-fn local_tools_schema_and_membership_reads_fail_closed_on_poison() {
-    let local = LocalTools::default();
+fn adhoc_tools_schema_and_membership_reads_fail_closed_on_poison() {
+    let adhoc = AdhocTools::default();
     let schema = runvil_model_client::detail::tool_schema_new(
         "grab".to_owned(),
         "Grab a value".to_owned(),
         serde_json::json!({ "type": "object", "properties": {} }),
     )
     .expect("the schema builds");
-    local
+    adhoc
         .register(
             crate::alias::Alias::parse("grab".to_owned()).expect("a valid alias"),
             schema,
         )
         .expect("registration succeeds before the poison");
-    let handle = local.entries_handle();
+    let handle = adhoc.entries_handle();
     let poisoned = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         let _guard = handle.lock().expect("first lock is not poisoned");
-        panic!("poison the local tools registry");
+        panic!("poison the adhoc tools registry");
     }));
     assert!(poisoned.is_err(), "the panic must poison the registry");
 
-    let schemas = local
+    let schemas = adhoc
         .schemas()
         .expect_err("schema reads must fail on a poisoned registry");
-    let contains = local
+    let contains = adhoc
         .contains("anything")
         .expect_err("membership reads must fail on a poisoned registry");
     for error in [schemas, contains] {
         assert!(
             error
                 .to_string()
-                .contains("local tools registry was poisoned"),
+                .contains("adhoc tools registry was poisoned"),
             "the concrete poison error must surface: {error}"
         );
     }

@@ -227,7 +227,7 @@ impl ToolSet {
     }
 
     /// Returns the offered binding whose wire name or canonical id is
-    /// `name`, which matches at most one way because wire names and local
+    /// `name`, which matches at most one way because wire names and adhoc
     /// aliases never contain `/` and ids always do.
     #[must_use]
     pub fn offered_binding(&self, name: &str) -> Option<&ToolBinding> {

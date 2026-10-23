@@ -338,20 +338,20 @@ fn the_packs_table_is_installed_in_the_h1_vm() {
 }
 
 #[test]
-fn a_round_leaves_out_an_offered_binding_a_local_tool_shares_a_name_with() {
+fn a_round_leaves_out_an_offered_binding_an_adhoc_tool_shares_a_name_with() {
     let offered = crate::lua::ToolBinding::from_info("tools_echo", &echo_tool().info());
-    let local = tool_schema_new("tools_echo", "the local echo", json!({ "type": "object" }))
-        .expect("the local schema is valid");
-    let rendered = prepare_scoped_tools(&[offered], &[local]).expect("the round's scope builds");
+    let adhoc = tool_schema_new("tools_echo", "the adhoc echo", json!({ "type": "object" }))
+        .expect("the adhoc schema is valid");
+    let rendered = prepare_scoped_tools(&[offered], &[adhoc]).expect("the round's scope builds");
     assert_eq!(
         rendered.schemas.len(),
         1,
         "the model sees one tool under the name"
     );
-    assert_eq!(rendered.schemas[0].description(), "the local echo");
+    assert_eq!(rendered.schemas[0].description(), "the adhoc echo");
     assert!(
         matches!(rendered.dispatch.get("tools_echo"), Some(None)),
-        "the local tool answers the name: {:?}",
+        "the adhoc tool answers the name: {:?}",
         rendered.dispatch
     );
 }

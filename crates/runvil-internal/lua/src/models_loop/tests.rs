@@ -19,7 +19,7 @@ use crate::error_value::{ErrorField, ErrorKind, Raised, error_table, raised_from
 use crate::hardening::InstructionBudget;
 use crate::messages::MessageList;
 use crate::models::LuaModelHandle;
-use crate::protocol::{Answer, ChatOutcome, ChatResult, LocalToolOutcome, Request, YieldParse};
+use crate::protocol::{AdhocToolOutcome, Answer, ChatOutcome, ChatResult, Request, YieldParse};
 
 /// A requested call named `echo`, its arguments naming its id.
 pub(super) fn echo_call(id: &str) -> ToolCallEvent {
@@ -358,14 +358,14 @@ fn act_yields_each_request_as_the_protocol_parses_it() {
     assert_eq!(args, json!({ "id": "c1" }));
     let returned = Value::String(lua.create_string("text").unwrap());
     let outcome = |then| match parsed(&lua, then) {
-        Request::LocalToolDone { outcome } => outcome,
-        other => panic!("a local_tool_done request, got {other:?}"),
+        Request::AdhocToolDone { outcome } => outcome,
+        other => panic!("an adhoc_tool_done request, got {other:?}"),
     };
     let done = outcome(Then::Report(Some(returned)));
-    assert!(matches!(done, LocalToolOutcome::Returned(text) if text == "text"));
+    assert!(matches!(done, AdhocToolOutcome::Returned(text) if text == "text"));
     assert!(matches!(
         outcome(Then::Report(None)),
-        LocalToolOutcome::Raised
+        AdhocToolOutcome::Raised
     ));
     let list = Value::UserData(lua.create_userdata(MessageList::default()).unwrap());
     let receiver = handle(&lua);

@@ -1,7 +1,7 @@
-//! Local Lua tools: a handler runs inside the calling block coroutine
+//! Adhoc tools: a handler runs inside the calling block coroutine
 //! with no leaf work of its own and reports its trusted result under
 //! the model's call id or none; it uses the store, raises to a script
-//! caller that catches it, calls another local tool innermost first,
+//! caller that catches it, calls another adhoc tool innermost first,
 //! and dispatches a bound tool as one leaf request, whose failure
 //! raises kind `tool` in the handler and whose untrusted wrapper
 //! survives.
@@ -11,14 +11,14 @@ use runvil_parser::test_support::prompt;
 use super::*;
 use crate::execute::tests::fixtures::{echo_tool, failing_tool, untrusted_echo_tool};
 
-/// The `grab` local tool registration every local-tool test opens with.
-const ADD_LOCAL_GRAB: &str = "tools.offer_local('grab', 'Grab a value', { value = 'string' }, \
+/// The `grab` adhoc tool registration every adhoc-tool test opens with.
+const ADD_ADHOC_GRAB: &str = "tools.offer_local('grab', 'Grab a value', { value = 'string' }, \
      function(args) return 'got ' .. args.value end)\n";
 
 #[test]
-fn a_local_lua_tool_call_issues_no_leaf_work() {
+fn an_adhoc_tool_call_issues_no_leaf_work() {
     let source = one_section(&format!(
-        "{ADD_LOCAL_GRAB}\
+        "{ADD_ADHOC_GRAB}\
          local out = tools.call('grab', {{ value = 'hi' }})\n\
          return out .. '|' .. tostring(tools.calls.grab)"
     ));
@@ -31,27 +31,27 @@ fn a_local_lua_tool_call_issues_no_leaf_work() {
     assert_eq!(
         trace.effects().len(),
         0,
-        "a local tool call spawns no leaf request"
+        "an adhoc tool call spawns no leaf request"
     );
     let lines = tool_lines(&trace).lines();
     assert!(
         lines
             .iter()
             .any(|line| line == &format!("Only: {}", detail::TOOL_CALL_SUCCEEDED)),
-        "the local call is observed as a succeeded tool call: {lines:?}"
+        "the adhoc call is observed as a succeeded tool call: {lines:?}"
     );
     assert!(
         lines
             .iter()
             .any(|line| line == "Only: tool_result id= alias=grab trust=Trusted content=got hi"),
-        "a script-initiated local call reports its trusted result under no call id: {lines:?}"
+        "a script-initiated adhoc call reports its trusted result under no call id: {lines:?}"
     );
 }
 
 #[test]
-fn a_model_issued_local_tool_call_reports_under_its_call_id() {
+fn a_model_issued_adhoc_tool_call_reports_under_its_call_id() {
     let source = one_section(&format!(
-        "{ADD_LOCAL_GRAB}\
+        "{ADD_ADHOC_GRAB}\
          return tools.call_as_model('call_7', 'grab', {{ value = 'hi' }})"
     ));
     let trace = arm_scenario(source).run();
@@ -59,7 +59,7 @@ fn a_model_issued_local_tool_call_reports_under_its_call_id() {
     assert_eq!(
         trace.effects().len(),
         0,
-        "a model-issued local call spawns no leaf request"
+        "a model-issued adhoc call spawns no leaf request"
     );
     let lines = tool_lines(&trace).lines();
     assert!(
@@ -72,7 +72,7 @@ fn a_model_issued_local_tool_call_reports_under_its_call_id() {
 }
 
 #[test]
-fn a_script_called_local_handler_uses_the_store() {
+fn a_script_called_adhoc_handler_uses_the_store() {
     let source = one_section(
         "tools.offer_local('grab', 'Grab a value', { value = 'string' }, function(args)
            store.write('grab.txt', 'kept ' .. args.value)
@@ -117,7 +117,7 @@ fn a_script_caller_catches_the_handlers_own_error_and_jump_is_restored() {
 }
 
 #[test]
-fn a_nested_local_call_reports_both_results_innermost_first() {
+fn a_nested_adhoc_call_reports_both_results_innermost_first() {
     let source = one_section(
         "tools.offer_local('inner', 'Inner', { value = 'string' }, function(args)
            return 'inner ' .. args.value
@@ -155,12 +155,12 @@ fn a_handler_dispatches_a_bound_tool_as_one_leaf_request() {
     assert_eq!(
         trace.effects().len(),
         1,
-        "the echo call is the one leaf request; the local call issues none"
+        "the echo call is the one leaf request; the adhoc call issues none"
     );
 }
 
 #[test]
-fn a_bound_failure_inside_a_model_issued_local_call_raises_kind_tool_in_the_handler() {
+fn a_bound_failure_inside_a_model_issued_adhoc_call_raises_kind_tool_in_the_handler() {
     let source = one_section(
         "tools.offer('tools/failing')
          tools.offer_local('grab', 'Grab a value', {}, function()
@@ -179,7 +179,7 @@ fn a_bound_failure_inside_a_model_issued_local_call_raises_kind_tool_in_the_hand
     assert_eq!(
         tool_result_lines(&tool_lines(&trace)),
         vec!["Only: tool_result id=call_1 alias=grab trust=Trusted content=tool".to_owned()],
-        "the inner failure fires no ToolResult; only the local call reports under call_1"
+        "the inner failure fires no ToolResult; only the adhoc call reports under call_1"
     );
 }
 

@@ -1,5 +1,5 @@
 //! Yield-to-request parsing for the leaf and structural requests (`infer`,
-//! `call`, `tool_calls`, `local_tool_done`), and the malformed-yield
+//! `call`, `tool_calls`, `adhoc_tool_done`), and the malformed-yield
 //! rejections shared by every op. The `tool_call` request is in
 //! `parse_tool_call` and the task-operation requests (`spawn`, `timer`,
 //! `concurrency`) are in `parse_tasks`.
@@ -117,35 +117,35 @@ fn a_tool_calls_yield_missing_its_turn_a_table_per_call_or_a_call_id_is_a_malfor
     }
 }
 
-/// Parses a `local_tool_done` yield with `ok = true` and `value` set to
+/// Parses an `adhoc_tool_done` yield with `ok = true` and `value` set to
 /// what `source` evaluates to, returning the outcome.
-fn local_tool_done_returning(lua: &Lua, source: &str) -> LocalToolOutcome {
+fn adhoc_tool_done_returning(lua: &Lua, source: &str) -> AdhocToolOutcome {
     let table = lua_table(
         lua,
-        &format!("{{ op = 'local_tool_done', ok = true, value = {source} }}"),
+        &format!("{{ op = 'adhoc_tool_done', ok = true, value = {source} }}"),
     );
     match expect_request(Request::from_yield(lua, &Value::Table(table))) {
-        Request::LocalToolDone { outcome } => outcome,
-        other => panic!("expected a local_tool_done request, got {other:?}"),
+        Request::AdhocToolDone { outcome } => outcome,
+        other => panic!("expected an adhoc_tool_done request, got {other:?}"),
     }
 }
 
 #[test]
-fn a_local_tool_done_return_becomes_its_scalar_text() {
+fn an_adhoc_tool_done_return_becomes_its_scalar_text() {
     let lua = Lua::new();
     for (source, expected) in [("'hi'", "hi"), ("42", "42"), ("true", "true"), ("nil", "")] {
-        match local_tool_done_returning(&lua, source) {
-            LocalToolOutcome::Returned(text) => assert_eq!(text, expected, "{source}"),
+        match adhoc_tool_done_returning(&lua, source) {
+            AdhocToolOutcome::Returned(text) => assert_eq!(text, expected, "{source}"),
             other => panic!("{source} must return its text, got {other:?}"),
         }
     }
 }
 
 #[test]
-fn a_local_tool_done_table_return_is_a_bad_return() {
+fn an_adhoc_tool_done_table_return_is_a_bad_return() {
     let lua = Lua::new();
-    match local_tool_done_returning(&lua, "{ 1, 2 }") {
-        LocalToolOutcome::BadReturn(Error::Lua(message)) => {
+    match adhoc_tool_done_returning(&lua, "{ 1, 2 }") {
+        AdhocToolOutcome::BadReturn(Error::Lua(message)) => {
             assert_eq!(message, "cannot return a table as a result");
         }
         other => panic!("a table return must be rejected, got {other:?}"),
@@ -153,26 +153,26 @@ fn a_local_tool_done_table_return_is_a_bad_return() {
 }
 
 #[test]
-fn a_local_tool_done_with_ok_false_is_raised() {
+fn an_adhoc_tool_done_with_ok_false_is_raised() {
     let lua = Lua::new();
     let table = lua_table(
         &lua,
-        "{ op = 'local_tool_done', ok = false, value = 'ignored' }",
+        "{ op = 'adhoc_tool_done', ok = false, value = 'ignored' }",
     );
     match expect_request(Request::from_yield(&lua, &Value::Table(table))) {
-        Request::LocalToolDone {
-            outcome: LocalToolOutcome::Raised,
+        Request::AdhocToolDone {
+            outcome: AdhocToolOutcome::Raised,
         } => {}
         other => panic!("expected a raised outcome, got {other:?}"),
     }
 }
 
 #[test]
-fn a_local_tool_done_without_a_boolean_ok_is_a_malformed_yield() {
+fn an_adhoc_tool_done_without_a_boolean_ok_is_a_malformed_yield() {
     let lua = Lua::new();
     for source in [
-        "{ op = 'local_tool_done', value = 'hi' }",
-        "{ op = 'local_tool_done', ok = 1, value = 'hi' }",
+        "{ op = 'adhoc_tool_done', value = 'hi' }",
+        "{ op = 'adhoc_tool_done', ok = 1, value = 'hi' }",
     ] {
         let table = lua_table(&lua, source);
         assert_direct_yield(Request::from_yield(&lua, &Value::Table(table)));

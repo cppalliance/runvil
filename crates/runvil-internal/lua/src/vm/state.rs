@@ -1,5 +1,5 @@
 //! Section VM state reads: `var`, bare globals, `argv`, the tool call
-//! counts, the local tools, and the section's effective tool and model
+//! counts, the adhoc tools, and the section's effective tool and model
 //! bindings.
 
 use std::borrow::Cow;
@@ -83,20 +83,20 @@ impl SectionVm {
         install_tool_call_counts_impl(&self.lua, &self.bound_tools, bindings)
     }
 
-    /// Returns the schemas of every registered local tool.
+    /// Returns the schemas of every registered adhoc tool.
     ///
     /// # Errors
-    /// Returns [`Error::Internal`] if the local-tools registry was poisoned.
-    pub fn local_tool_schemas(&self) -> Result<Vec<ToolSchema>> {
-        self.local_tools.schemas()
+    /// Returns [`Error::Internal`] if the adhoc-tools registry was poisoned.
+    pub fn adhoc_tool_schemas(&self) -> Result<Vec<ToolSchema>> {
+        self.adhoc_tools.schemas()
     }
 
-    /// Returns whether `alias` names a registered local tool.
+    /// Returns whether `alias` names a registered adhoc tool.
     ///
     /// # Errors
-    /// Returns [`Error::Internal`] if the local-tools registry was poisoned.
-    pub fn has_local_tool(&self, alias: &str) -> Result<bool> {
-        self.local_tools.contains(alias)
+    /// Returns [`Error::Internal`] if the adhoc-tools registry was poisoned.
+    pub fn has_adhoc_tool(&self, alias: &str) -> Result<bool> {
+        self.adhoc_tools.contains(alias)
     }
 
     /// How many of this VM's instruction-hook firings have counted.

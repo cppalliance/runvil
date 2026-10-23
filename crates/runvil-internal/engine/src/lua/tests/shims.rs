@@ -1,6 +1,6 @@
 //! The yield shims installed on a scheduler-mode section VM produce
 //! well-formed protocol requests: `models.infer`, `call`, `tasks.fanout`, and
-//! `tools.call` in their id and tool-object forms, the local tool
+//! `tools.call` in their id and tool-object forms, the adhoc tool
 //! handshake, the loop's batch and its requesting turn, a model handle's
 //! `infer` method, and the `infer` and `loop` methods a model handle
 //! carries.
@@ -9,7 +9,7 @@ use runvil_types::metrics::ToolCallEvent;
 use serde_json::json;
 
 use crate::execute::protocol::{
-    Answer, ChatOutcome, ChatResult, LocalToolOutcome, Request, SpawnVia, ToolCallOutcome, VfsOp,
+    AdhocToolOutcome, Answer, ChatOutcome, ChatResult, Request, SpawnVia, ToolCallOutcome, VfsOp,
     VfsOutcome, YieldParse,
 };
 use crate::model::ModelSet;
@@ -181,10 +181,10 @@ fn tools_call_yields_a_well_formed_request() {
 }
 
 #[test]
-fn a_local_tool_handler_runs_inside_the_block_coroutine() {
+fn an_adhoc_tool_handler_runs_inside_the_block_coroutine() {
     // The two-yield handshake end to end: the `tool_call` yield, the
-    // `Local` answer handing over the handler, the handler's own `store`
-    // yield from inside the same coroutine, the `local_tool_done` yield
+    // `Adhoc` answer handing over the handler, the handler's own `store`
+    // yield from inside the same coroutine, the `adhoc_tool_done` yield
     // carrying its return, and the block's return with the answered text.
     // `jump` is refused while the handler runs and back afterward.
     let vm = scheduler_vm(&ModelSet::default(), None);
@@ -194,7 +194,7 @@ fn a_local_tool_handler_runs_inside_the_block_coroutine() {
          tools.offer_local('grab', 'Grab a value', { value = 'string' }, function(args)\n\
            local ok, err = pcall(jump, '## Other')\n\
            withheld = not ok\n\
-             and tostring(err):find('jump is unavailable inside a local tool handler', 1, true) ~= nil\n\
+             and tostring(err):find('jump is unavailable inside an adhoc tool handler', 1, true) ~= nil\n\
            store.write('grab.txt', args.value)\n\
            return 'stored ' .. args.value\n\
          end)\n\
@@ -211,7 +211,7 @@ fn a_local_tool_handler_runs_inside_the_block_coroutine() {
     let yielded = resume_with(
         &vm,
         &thread,
-        Answer::ToolCallResult(Ok(ToolCallOutcome::Local {
+        Answer::ToolCallResult(Ok(ToolCallOutcome::Adhoc {
             alias: "grab".to_owned(),
             args: json!({ "value": "hi" }),
         })),
@@ -227,8 +227,8 @@ fn a_local_tool_handler_runs_inside_the_block_coroutine() {
     }
     let yielded = resume_with(&vm, &thread, Answer::Store(Ok(VfsOutcome::Unit)));
     match parse_request(&vm, yielded) {
-        Request::LocalToolDone {
-            outcome: LocalToolOutcome::Returned(text),
+        Request::AdhocToolDone {
+            outcome: AdhocToolOutcome::Returned(text),
         } => assert_eq!(text, "stored hi"),
         other => panic!("the handler's return is reported, got {other:?}"),
     }
@@ -315,7 +315,7 @@ fn tools_call_accepts_a_tool_object_in_place_of_the_id() {
 
 #[test]
 fn tools_call_rejects_a_first_argument_that_is_neither_a_string_nor_a_tool() {
-    // The polymorphism is a string (a tool id or a local alias) or a tool
+    // The polymorphism is a string (a tool id or an adhoc alias) or a tool
     // object; anything else is the call's own error at the protocol
     // boundary, so an author pcall catches it at the call site.
     let vm = scheduler_vm(&ModelSet::default(), None);

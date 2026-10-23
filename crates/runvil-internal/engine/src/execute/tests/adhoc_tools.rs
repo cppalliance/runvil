@@ -1,6 +1,6 @@
 //! Tests for `tools.offer_local`: the registration rules run end to end, and
-//! the `models.loop` shim's local-tool rounds are driven at prompt level,
-//! so a model-issued call to a local tool runs its handler inside the
+//! the `models.loop` shim's adhoc-tool rounds are driven at prompt level,
+//! so a model-issued call to an adhoc tool runs its handler inside the
 //! block coroutine - store calls included - and its trusted result is sent
 //! back to the model verbatim. `jump` is refused only while a handler
 //! runs, even through a saved reference. The refusal of an offer once the
@@ -14,7 +14,7 @@ use super::models_loop::loop_scenario;
 use super::tool_call_arm::{ToolRecorder, tool_result_lines};
 use super::*;
 
-/// The `grab` local tool registration the loop tests open with, followed
+/// The `grab` adhoc tool registration the loop tests open with, followed
 /// by one loop over a single user message; `handler` is the Lua body of
 /// the handler function, given `args`.
 fn grab_loop(handler: &str) -> String {
@@ -33,7 +33,7 @@ fn grab_loop(handler: &str) -> String {
 const OTHER: (&str, &str) = ("Other", "return 'jumped'");
 
 #[test]
-fn local_tool_handler_result_returns_to_the_model() {
+fn adhoc_tool_handler_result_returns_to_the_model() {
     let gateway = ScriptedChat::new(vec![
         calls(&[("call_1", "grab", "{\"value\":\"hi\"}")]),
         text("final answer"),
@@ -60,7 +60,7 @@ fn local_tool_handler_result_returns_to_the_model() {
 }
 
 #[test]
-fn local_tool_multiple_calls_in_one_response_all_run() {
+fn adhoc_tool_multiple_calls_in_one_response_all_run() {
     let gateway = ScriptedChat::new(vec![
         calls(&[
             ("c1", "grab", "{\"value\":\"a\"}"),
@@ -98,7 +98,7 @@ fn local_tool_multiple_calls_in_one_response_all_run() {
 }
 
 #[test]
-fn local_tool_handler_error_surfaces_as_a_tool_failure() {
+fn adhoc_tool_handler_error_surfaces_as_a_tool_failure() {
     let gateway = ScriptedChat::new(vec![
         calls(&[("call_1", "grab", "{\"value\":\"hi\"}")]),
         text("unreachable"),
@@ -130,7 +130,7 @@ fn local_tool_handler_error_surfaces_as_a_tool_failure() {
 }
 
 #[test]
-fn cancel_during_a_looping_local_tool_handler_returns_promptly() {
+fn cancel_during_a_looping_adhoc_tool_handler_returns_promptly() {
     // The round's answer hands the model's call to the looping handler in
     // the next step. A cancel landing before that step starts ends the run
     // the same way, and a hang fails through nextest's timeout.
@@ -190,8 +190,8 @@ fn a_handler_that_calls_jump_fails_the_run() {
     );
 }
 
-/// The start of the message `jump` fails with inside a local tool handler.
-const JUMP_REFUSAL: &str = "jump is unavailable inside a local tool handler";
+/// The start of the message `jump` fails with inside an adhoc tool handler.
+const JUMP_REFUSAL: &str = "jump is unavailable inside an adhoc tool handler";
 
 /// The `grab` registration whose handler calls a `jump` reference the
 /// block saved before registering it.
@@ -310,7 +310,7 @@ fn a_handler_returning_a_table_raises_and_is_observed_as_a_failure() {
 }
 
 #[test]
-fn a_local_tool_may_take_an_offered_wire_name_and_wins_in_scope() {
+fn an_adhoc_tool_may_take_an_offered_wire_name_and_wins_in_scope() {
     let gateway = ScriptedChat::new(vec![
         calls(&[("call_1", "tools_concrete", "{}")]),
         text("final answer"),
@@ -344,7 +344,7 @@ fn a_local_tool_may_take_an_offered_wire_name_and_wins_in_scope() {
 }
 
 #[test]
-fn local_tool_alias_cannot_be_registered_twice() {
+fn adhoc_tool_alias_cannot_be_registered_twice() {
     let source = one_section(
         "tools.offer_local('grab', 'First grab', {}, function() return 'first' end)
          tools.offer_local('grab', 'Second grab', {}, function() return 'second' end)",
@@ -353,6 +353,6 @@ fn local_tool_alias_cannot_be_registered_twice() {
     let error = trace.error();
     assert!(
         error.to_string().contains("is already registered"),
-        "the error must identify the duplicate local alias: {error}"
+        "the error must identify the duplicate adhoc alias: {error}"
     );
 }

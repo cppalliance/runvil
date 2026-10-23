@@ -1,15 +1,15 @@
 //! Tests for the scheduler's `tool_call` arm: the model-issued form
 //! (`call_id: Some`), which always resumes with content and reports its
 //! `ToolResult` under the model's call id; the script form (`call_id:
-//! None`), which keeps the raise-at-call-site behavior; local Lua tools,
+//! None`), which keeps the raise-at-call-site behavior; adhoc tools,
 //! whose handlers run inside the calling block coroutine - store calls,
-//! nested local calls, and bound calls included - with no leaf work of
+//! nested adhoc calls, and bound calls included - with no leaf work of
 //! their own.
 //! The fixtures reach the
 //! model-issued form through the test-only `tools.call_as_model` install
 //! (`Scenario::raw_shims`); in production only the loop shim yields
 //! a `call_id`.
-//! The local Lua tool cases sit in `local_handlers`.
+//! The adhoc tool cases sit in `adhoc_handlers`.
 
 use runvil_parser::test_support::one_section;
 
@@ -173,5 +173,5 @@ pub(super) fn tool_result_lines(recorder: &ToolRecorder) -> Vec<String> {
         .collect()
 }
 
-#[path = "tool_call_arm-local-handlers.rs"]
-mod local_handlers;
+#[path = "tool_call_arm-adhoc-handlers.rs"]
+mod adhoc_handlers;

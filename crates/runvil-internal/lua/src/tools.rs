@@ -9,10 +9,10 @@
 //! the tool objects of the declared Packs and of every other Pack,
 //! `get` reads one by id, `offer` scopes tools into the section,
 //! `offer_local` registers a prompt-author Lua function as a tool, `call`
-//! dispatches a catalog or local tool (installed by the coroutine shim
+//! dispatches a catalog or adhoc tool (installed by the coroutine shim
 //! prelude, since dispatch suspends), and `calls` is the read-only
 //! dispatch counter surface, keyed by id for a catalog tool and by alias
-//! for a local one. Offering an id the run cannot offer is a
+//! for an adhoc one. Offering an id the run cannot offer is a
 //! hard error, and so is every offer once the section's first loop round
 //! rendered its tool list. The installation logic sits here, out of the
 //! VM driver; the VM only calls the installers in setup order.
@@ -28,7 +28,7 @@ use crate::error::{Error, Result};
 use crate::handles::{ToolBinding, ToolSet};
 use crate::messages::MessageList;
 use crate::scope::{ToolCallCounts, ToolRuntime};
-use crate::vm::LocalTools;
+use crate::vm::AdhocTools;
 
 mod decode;
 mod objects;
@@ -40,11 +40,11 @@ use decode::{collect_offer_entries, local_params_schema};
 pub(crate) use objects::tool_object;
 use objects::{install_tool_lists, install_tool_objects};
 
-/// The registry key of the VM's local-tool handler table:
+/// The registry key of the VM's adhoc-tool handler table:
 /// `tools.offer_local` writes each handler under its alias, and the
-/// scheduler's `Local` answer reads it back to hand the function to the
+/// scheduler's `Adhoc` answer reads it back to hand the function to the
 /// shim.
-const LOCAL_HANDLERS_REGISTRY: &str = "runvil.tools.local_handlers";
+const ADHOC_HANDLERS_REGISTRY: &str = "runvil.tools.adhoc_handlers";
 
 /// The refusal of an offer function once the section's tool list is
 /// rendered, after the calling function's name.
@@ -66,10 +66,10 @@ pub(crate) fn refuse_after_render(call: &str, list: &MessageList) -> mlua::Resul
 ///
 /// # Errors
 /// Returns an internal-invariant error when the table is absent or holds no
-/// function under `alias`: the scheduler answers `Local` only for an alias
+/// function under `alias`: the scheduler answers `Adhoc` only for an alias
 /// the VM reports as registered.
-pub(crate) fn local_handler(lua: &Lua, alias: &str) -> mlua::Result<Function> {
-    let handlers: Option<Table> = lua.named_registry_value(LOCAL_HANDLERS_REGISTRY)?;
+pub(crate) fn adhoc_handler(lua: &Lua, alias: &str) -> mlua::Result<Function> {
+    let handlers: Option<Table> = lua.named_registry_value(ADHOC_HANDLERS_REGISTRY)?;
     let handler = match handlers {
         Some(handlers) => handlers.raw_get::<Value>(alias)?,
         None => Value::Nil,
@@ -77,7 +77,7 @@ pub(crate) fn local_handler(lua: &Lua, alias: &str) -> mlua::Result<Function> {
     match handler {
         Value::Function(handler) => Ok(handler),
         _ => Err(mlua::Error::external(Error::Internal(
-            "a local tool answer names a registered handler".into(),
+            "an adhoc tool answer names a registered handler".into(),
         ))),
     }
 }
@@ -165,7 +165,7 @@ pub(crate) fn install_tool_call_counts(
 
 /// Resolves each of `call`'s entries to its offered binding's wire name,
 /// checking every entry before the caller records any: an entry must parse
-/// as a tool id, so a wire name, a malformed id, or a local alias is
+/// as a tool id, so a wire name, a malformed id, or an adhoc alias is
 /// refused as an id the run does not offer.
 fn resolve_entries(call: &str, set: &ToolSet, entries: Vec<String>) -> mlua::Result<Vec<String>> {
     entries
@@ -185,7 +185,7 @@ fn resolve_entries(call: &str, set: &ToolSet, entries: Vec<String>) -> mlua::Res
         .collect()
 }
 
-/// Installs the tool scoping and local-tool APIs into one section VM (H1
+/// Installs the tool scoping and adhoc-tool APIs into one section VM (H1
 /// included: there is one install path for every section).
 ///
 /// The coroutine shim prelude installs the suspending `tools.call` on this
@@ -201,14 +201,14 @@ pub(crate) fn install_tools(
     globals: &Table,
     set: &Arc<ToolSet>,
     runtime: &Arc<Mutex<ToolRuntime>>,
-    local_tools: &LocalTools,
+    adhoc_tools: &AdhocTools,
     list: &MessageList,
 ) -> Result<()> {
     let tools = lua.create_table().map_err(Error::lua)?;
     install_tool_objects(lua, set)?;
     install_offer(lua, &tools, set, runtime, list)?;
     install_tool_lists(lua, &tools, set)?;
-    install_offer_local(lua, &tools, local_tools, list)?;
+    install_offer_local(lua, &tools, adhoc_tools, list)?;
 
     globals.raw_set("tools", tools).map_err(Error::lua)
 }
@@ -245,24 +245,24 @@ fn install_offer(
 }
 
 /// Installs `tools.offer_local(alias, description, params, handler)` over
-/// a fresh handler table: the alias and schema register on `local_tools`
+/// a fresh handler table: the alias and schema register on `adhoc_tools`
 /// for membership and advertising, and the handler is written under the
-/// alias for the scheduler's `Local` answer to read back. An alias may
-/// equal an offered tool's wire name; the local tool wins in scope. The
+/// alias for the scheduler's `Adhoc` answer to read back. An alias may
+/// equal an offered tool's wire name; the adhoc tool wins in scope. The
 /// arguments convert after the rendered-list check, so that refusal comes
 /// first.
 fn install_offer_local(
     lua: &Lua,
     tools: &Table,
-    local_tools: &LocalTools,
+    adhoc_tools: &AdhocTools,
     list: &MessageList,
 ) -> Result<()> {
     lua.set_named_registry_value(
-        LOCAL_HANDLERS_REGISTRY,
+        ADHOC_HANDLERS_REGISTRY,
         lua.create_table().map_err(Error::lua)?,
     )
     .map_err(Error::lua)?;
-    let local = local_tools.clone();
+    let adhoc = adhoc_tools.clone();
     let list = list.clone();
     let offer_local = lua
         .create_function(move |lua, args: MultiValue| {
@@ -270,7 +270,7 @@ fn install_offer_local(
             let (alias, description, params, handler) =
                 <(String, String, Table, Function)>::from_lua_args(args, 1, None, lua)?;
             let alias = Alias::parse(alias).map_err(mlua::Error::external)?;
-            if local
+            if adhoc
                 .contains(alias.as_str())
                 .map_err(mlua::Error::external)?
             {
@@ -282,9 +282,9 @@ fn install_offer_local(
             let parameters = local_params_schema(&params)?;
             let schema = tool_schema_new(alias.as_str(), description, parameters)
                 .map_err(mlua::Error::external)?;
-            let handlers: Table = lua.named_registry_value(LOCAL_HANDLERS_REGISTRY)?;
+            let handlers: Table = lua.named_registry_value(ADHOC_HANDLERS_REGISTRY)?;
             handlers.raw_set(alias.as_str(), handler)?;
-            local
+            adhoc
                 .register(alias, schema)
                 .map_err(mlua::Error::external)?;
             Ok(())

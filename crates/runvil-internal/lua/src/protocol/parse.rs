@@ -20,7 +20,7 @@ use tasks::{
     parse_cancel, parse_concurrency, parse_join_any, parse_note, parse_ready, parse_spawn,
     parse_status, parse_timer,
 };
-use tools::{parse_local_tool_done, parse_tool_call, parse_tool_calls};
+use tools::{parse_adhoc_tool_done, parse_tool_call, parse_tool_calls};
 
 use crate::error::{Error, Result};
 use crate::handles::resolve_section_target;
@@ -233,7 +233,7 @@ impl Request {
             "tool_calls" => classify(parse_tool_calls(lua, table), |error| {
                 Answer::ToolCallsResult(Err(error))
             }),
-            "local_tool_done" => match parse_local_tool_done(table) {
+            "adhoc_tool_done" => match parse_adhoc_tool_done(table) {
                 Some(request) => YieldParse::Request(request),
                 None => YieldParse::Malformed(direct_yield_error()),
             },

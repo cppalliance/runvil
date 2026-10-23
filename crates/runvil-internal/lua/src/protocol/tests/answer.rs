@@ -160,16 +160,16 @@ fn an_ok_structured_tool_call_answer_round_trips_as_a_table() {
     assert_eq!(images_len, 0);
 }
 
-/// A fresh VM with the `tools` namespace installed and one local tool,
+/// A fresh VM with the `tools` namespace installed and one adhoc tool,
 /// `grab`, registered through `tools.offer_local`.
-fn lua_with_local_grab() -> Lua {
+fn lua_with_adhoc_grab() -> Lua {
     let lua = Lua::new();
     crate::tools::install_tools(
         &lua,
         &lua.globals(),
         &std::sync::Arc::new(crate::ToolSet::default()),
         &std::sync::Arc::new(std::sync::Mutex::new(crate::ToolRuntime::default())),
-        &crate::vm::LocalTools::default(),
+        &crate::vm::AdhocTools::default(),
         &crate::MessageList::default(),
     )
     .expect("the tools install cannot fail on a fresh VM");
@@ -178,14 +178,14 @@ fn lua_with_local_grab() -> Lua {
          function(args) return 'got ' .. args.value end)",
     )
     .exec()
-    .expect("the local tool registers");
+    .expect("the adhoc tool registers");
     lua
 }
 
 #[test]
-fn a_local_tool_call_answer_resumes_with_its_handler_and_args() {
-    let lua = lua_with_local_grab();
-    let (envelope, retained) = Answer::<Error>::ToolCallResult(Ok(ToolCallOutcome::Local {
+fn an_adhoc_tool_call_answer_resumes_with_its_handler_and_args() {
+    let lua = lua_with_adhoc_grab();
+    let (envelope, retained) = Answer::<Error>::ToolCallResult(Ok(ToolCallOutcome::Adhoc {
         alias: "grab".to_owned(),
         args: json!({ "value": "hi" }),
     }))
@@ -202,16 +202,16 @@ fn a_local_tool_call_answer_resumes_with_its_handler_and_args() {
     assert!(ok);
     assert!(
         result_is_nil,
-        "the result slot stays nil for a local answer"
+        "the result slot stays nil for an adhoc answer"
     );
     assert!(handler_is_fn, "the handler resumes as a function");
     assert_eq!(called, "got hi", "the registered handler runs on the args");
 }
 
 #[test]
-fn a_local_tool_call_answer_for_an_unregistered_alias_is_an_error() {
-    let lua = lua_with_local_grab();
-    let error = Answer::<Error>::ToolCallResult(Ok(ToolCallOutcome::Local {
+fn an_adhoc_tool_call_answer_for_an_unregistered_alias_is_an_error() {
+    let lua = lua_with_adhoc_grab();
+    let error = Answer::<Error>::ToolCallResult(Ok(ToolCallOutcome::Adhoc {
         alias: "missing".to_owned(),
         args: json!({}),
     }))
@@ -220,7 +220,7 @@ fn a_local_tool_call_answer_for_an_unregistered_alias_is_an_error() {
     assert!(
         error
             .to_string()
-            .contains("a local tool answer names a registered handler"),
+            .contains("an adhoc tool answer names a registered handler"),
         "the error names the broken invariant: {error}"
     );
 }

@@ -3,7 +3,7 @@
 //!
 //! Dispatch first refuses an empty list. It then resolves the round's
 //! binding and the section's rendered tool list - built from the bound
-//! and local halves and attached to the list by the first round to reach
+//! and adhoc halves and attached to the list by the first round to reach
 //! the build, then reused by every later round - copies the list's dispatch
 //! map onto the chain as `advertised`, prechecks the projected
 //! conversation, with room kept for the reply, against the model's
@@ -124,14 +124,14 @@ impl Scheduler {
         let handles = frame.reporting_handles();
         let emitter = handles.emitter;
         // The section's first round renders the effective bindings plus
-        // every local Lua tool, and every offer raises after that, so each
+        // every adhoc tool, and every offer raises after that, so each
         // later round sends the same list.
         let rendered = if let Some(rendered) = list.rendered_tools() {
             rendered
         } else {
             let bound = current_tool_bindings(chain.ctx.tool_set(), vm.tool_runtime())?;
-            let locals = vm.local_tool_schemas()?;
-            let rendered = prepare_effective_scope(&bound, &locals, emitter.as_ref(), &section)?;
+            let adhoc = vm.adhoc_tool_schemas()?;
+            let rendered = prepare_effective_scope(&bound, &adhoc, emitter.as_ref(), &section)?;
             list.attach_rendered_tools(rendered.clone());
             rendered
         };

@@ -1,6 +1,6 @@
 //! Contract tests for `models.loop`'s rounds: the clean exit's call
 //! count, the batch rule under a raising handler, a dropped model-issued
-//! call, a local tool's return and its cancellation, and the full trace a
+//! call, an adhoc tool's return and its cancellation, and the full trace a
 //! run reports for the loop.
 
 use runvil_parser::test_support::{PromptSource, one_section};
@@ -227,7 +227,7 @@ fn a_dropped_model_issued_call_raises_cancelled_at_the_loop_call_site() {
 }
 
 #[test]
-fn a_local_tools_first_return_value_is_its_text_and_nil_is_empty() {
+fn an_adhoc_tools_first_return_value_is_its_text_and_nil_is_empty() {
     let gateway = ScriptedChat::new(vec![
         calls(&[
             ("c1", "none", "{}"),
@@ -249,7 +249,7 @@ fn a_local_tools_first_return_value_is_its_text_and_nil_is_empty() {
 }
 
 #[test]
-fn a_local_tool_cancelled_mid_handler_reports_no_failed_tool_call() {
+fn an_adhoc_tool_cancelled_mid_handler_reports_no_failed_tool_call() {
     // The cancel lands between steps once the first round is answered, so
     // the step that hands the model's call to the looping handler runs
     // with the flag already set.
@@ -284,7 +284,7 @@ fn a_local_tool_cancelled_mid_handler_reports_no_failed_tool_call() {
 }
 
 #[test]
-fn the_scheduler_reports_the_whole_trace_of_a_bound_round_a_local_round_and_a_reply() {
+fn the_scheduler_reports_the_whole_trace_of_a_bound_round_an_adhoc_round_and_a_reply() {
     let gateway = ScriptedChat::new(vec![
         calls(&[("call_1", "echo", "{\"value\":\"a\"}")]),
         calls(&[("call_2", "grab", "{\"value\":\"b\"}")]),

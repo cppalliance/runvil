@@ -140,7 +140,7 @@ fn a_script_call_advertises_nothing_until_the_tool_is_offered() {
 }
 
 #[test]
-fn a_script_call_by_wire_name_or_local_looking_name_is_unbound() {
+fn a_script_call_by_wire_name_or_adhoc_looking_name_is_unbound() {
     let source = one_section(
         "local wire_ok, wire_err = pcall(tools.call, 'tools_echo', {})\n\
          local bare_ok, bare_err = pcall(tools.call, 'echo', {})\n\

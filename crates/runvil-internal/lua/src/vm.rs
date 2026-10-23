@@ -1,15 +1,15 @@
 //! The per-section Lua VM: its construction, the typestate that orders
 //! Engine injection before every later step, the section's one
-//! `messages` list it creates, and the local tools it registers.
+//! `messages` list it creates, and the adhoc tools it registers.
 //! Injection is in `inject`, the later installs in `install`, block
 //! coroutines in `run`, and state reads in `state`.
 //!
-//! A local tool, registered with `tools.offer_local` before the section's
+//! An adhoc tool, registered with `tools.offer_local` before the section's
 //! first loop round, runs inside the calling block's coroutine, never as
 //! an Engine function. The VM keeps only each
 //! tool's alias and schema; the handler sits in the VM's handler table. A
 //! call takes two yields: the shim's `tool_call`, which the scheduler
-//! answers with the handler itself, and the shim's `local_tool_done`
+//! answers with the handler itself, and the shim's `adhoc_tool_done`
 //! after the handler ran, which carries its result for the scheduler to
 //! report. Every suspending call the handler makes in between is an
 //! ordinary yield of the same coroutine.
@@ -128,9 +128,9 @@ pub struct SectionVm<S = Injected> {
     model_runtime: Arc<Mutex<ModelRuntime>>,
     /// Set by Lua `jump` before it aborts the current chunk.
     jump_slot: Arc<Mutex<Option<String>>>,
-    /// How many local tool handlers are running on this VM; `jump` refuses
+    /// How many adhoc tool handlers are running on this VM; `jump` refuses
     /// while it is above zero.
-    local_handler_depth: Arc<AtomicU32>,
+    adhoc_handler_depth: Arc<AtomicU32>,
     /// Set while a `models.loop` or `handle:loop` runs on this VM.
     loop_running: Arc<AtomicBool>,
     /// How many libraries `require` is loading on this VM; `jump` refuses
@@ -153,9 +153,9 @@ pub struct SectionVm<S = Injected> {
     /// Remaining cumulative `log()` message bytes this VM may emit. Bounds total
     /// log volume even when each event is under the per-event ceilings.
     log_byte_budget: Arc<AtomicUsize>,
-    /// Local tools registered by Lua code: alias and schema, for
+    /// Adhoc tools registered by Lua code: alias and schema, for
     /// membership and advertising.
-    local_tools: LocalTools,
+    adhoc_tools: AdhocTools,
     /// The VM's instruction-budget counter, shared with every block
     /// coroutine's hook (hooks are per-coroutine in PUC Lua).
     instruction_budget: InstructionBudget,
@@ -171,7 +171,7 @@ pub struct SectionVm<S = Injected> {
     state: S,
 }
 
-/// Local tool registrations owned by a section VM.
+/// Adhoc tool registrations owned by a section VM.
 ///
 /// Each entry holds the tool alias and its prebuilt schema, which serve
 /// membership and advertising. The handler function itself lives in the
@@ -180,11 +180,11 @@ pub struct SectionVm<S = Injected> {
 /// `tools.offer_local` Lua callback, which must be `Send`, hence the `Mutex`;
 /// the VM is single-threaded, so the lock never contends.
 #[derive(Debug, Default, Clone)]
-pub(crate) struct LocalTools {
+pub(crate) struct AdhocTools {
     entries: Arc<Mutex<Vec<(Alias, ToolSchema)>>>,
 }
 
-impl LocalTools {
+impl AdhocTools {
     /// Locks the registry.
     ///
     /// # Errors
@@ -192,10 +192,10 @@ impl LocalTools {
     fn entries(&self) -> Result<std::sync::MutexGuard<'_, Vec<(Alias, ToolSchema)>>> {
         self.entries
             .lock()
-            .map_err(|_| Error::Internal("local tools registry was poisoned".into()))
+            .map_err(|_| Error::Internal("adhoc tools registry was poisoned".into()))
     }
 
-    /// Registers a local tool: alias and prebuilt schema.
+    /// Registers an adhoc tool: alias and prebuilt schema.
     ///
     /// # Errors
     /// Returns [`Error::Internal`] if the entries lock was poisoned.
@@ -204,7 +204,7 @@ impl LocalTools {
         Ok(())
     }
 
-    /// Returns the schemas of every registered local tool.
+    /// Returns the schemas of every registered adhoc tool.
     ///
     /// # Errors
     /// Returns [`Error::Internal`] if the entries lock was poisoned.
@@ -216,7 +216,7 @@ impl LocalTools {
             .collect())
     }
 
-    /// Returns whether `alias` names a registered local tool.
+    /// Returns whether `alias` names a registered adhoc tool.
     ///
     /// # Errors
     /// Returns [`Error::Internal`] if the entries lock was poisoned.
@@ -274,7 +274,7 @@ impl SectionVm<Uninjected> {
             tool_runtime: Arc::new(Mutex::new(ToolRuntime::default())),
             model_runtime: Arc::new(Mutex::new(ModelRuntime::new())),
             jump_slot: Arc::new(Mutex::new(None)),
-            local_handler_depth: Arc::new(AtomicU32::new(0)),
+            adhoc_handler_depth: Arc::new(AtomicU32::new(0)),
             loop_running: Arc::new(AtomicBool::new(false)),
             library_load_depth: Arc::new(AtomicU32::new(0)),
             library_programs: Arc::new(Mutex::new(Vec::new())),
@@ -282,7 +282,7 @@ impl SectionVm<Uninjected> {
             store_conflicts: Arc::new(Mutex::new(None)),
             log_budget: Arc::new(AtomicU32::new(DEFAULT_LUA_LOG_EVENTS)),
             log_byte_budget: Arc::new(AtomicUsize::new(log_byte_budget(DEFAULT_LUA_LOG_EVENTS))),
-            local_tools: LocalTools::default(),
+            adhoc_tools: AdhocTools::default(),
             instruction_budget: InstructionBudget::default(),
             raw_model_ids: RawModelIds::Refused,
             messages: MessageList::default(),

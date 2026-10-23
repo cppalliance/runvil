@@ -1,6 +1,6 @@
 //! Tests for the `Chat` arm's tool scope from a section VM: every round
 //! sends the section's rendered tool list, its effective scope plus every
-//! local Lua tool at the first round.
+//! adhoc tool at the first round.
 
 use runvil_parser::test_support::one_section;
 
@@ -9,7 +9,7 @@ use super::models_loop::loop_scenario;
 use super::*;
 
 #[test]
-fn a_round_advertises_the_section_scope_with_local_tools() {
+fn a_round_advertises_the_section_scope_with_adhoc_tools() {
     let gateway = ScriptedChat::new(vec![
         calls(&[("call_1", "grab", "{\"value\":\"x\"}")]),
         text("done"),
@@ -19,10 +19,10 @@ fn a_round_advertises_the_section_scope_with_local_tools() {
          tools.offer_local('grab', 'Local grab', { value = 'string' }, function(args)
            return 'grabbed ' .. args.value
          end)
-         messages:user('use the local tool')
+         messages:user('use the adhoc tool')
          models.loop()
-         assert(messages[2].tool_calls[1].name == 'grab', 'a local tool is in the advertised scope')
-         assert(messages[3].role == 'tool', 'the shim dispatched the local tool')
+         assert(messages[2].tool_calls[1].name == 'grab', 'an adhoc tool is in the advertised scope')
+         assert(messages[3].role == 'tool', 'the shim dispatched the adhoc tool')
          return 'ok'",
     );
     let trace = loop_scenario(source)
@@ -34,6 +34,6 @@ fn a_round_advertises_the_section_scope_with_local_tools() {
     assert_eq!(
         body.tool_names(),
         ["echo", "grab"],
-        "the bound scope then the local tools: {body:?}"
+        "the bound scope then the adhoc tools: {body:?}"
     );
 }

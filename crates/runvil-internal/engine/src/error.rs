@@ -269,7 +269,7 @@ pub(crate) enum Error {
         in_scope: Vec<String>,
     },
 
-    /// A `tools.call` named no local tool and no tool in the run's catalog.
+    /// A `tools.call` named no adhoc tool and no tool in the run's catalog.
     ///
     /// Script-initiated dispatch resolves a canonical id against the run's
     /// whole catalog, not the section's advertised scope - the scope shapes

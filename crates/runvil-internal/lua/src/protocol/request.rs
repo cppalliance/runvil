@@ -2,11 +2,11 @@
 //! yield and the store operations they hold. The message-record types the
 //! chat request is built from are in `record`.
 //!
-//! A local tool call spans two requests. The first is the ordinary
+//! An adhoc tool call spans two requests. The first is the ordinary
 //! [`Request::ToolCall`], which the scheduler answers with the handler.
 //! The shim runs the handler inside the calling coroutine, so any
 //! suspending call the handler makes is a request of its own, and then
-//! yields [`Request::LocalToolDone`] with how the handler ended, so the
+//! yields [`Request::AdhocToolDone`] with how the handler ended, so the
 //! scheduler can report the call and answer it.
 
 use std::num::NonZeroU64;
@@ -139,7 +139,7 @@ pub enum Request {
     /// `tools.call(alias_or_tool, args)`: suspending dispatch of a bound
     /// tool through the shared dispatch function.
     ToolCall {
-        /// The author-supplied prompt-local tool alias.
+        /// The author-supplied tool alias, local to the prompt.
         alias: String,
         /// The author-supplied JSON arguments; an absent or nil `args`
         /// parses as the empty object.
@@ -161,7 +161,7 @@ pub enum Request {
     },
     /// The unanswered calls of one model round, yielded by the loop's
     /// step: the scheduler issues every catalog call up to the first call
-    /// that must run alone (a local tool) and answers
+    /// that must run alone (an adhoc tool) and answers
     /// once each issued call has landed, with one text per issued call in
     /// call order. The loop sends the call it stopped at as an ordinary
     /// [`Request::ToolCall`]. Shim-produced in every field, so a wrong
@@ -172,19 +172,19 @@ pub enum Request {
         /// The turn of the chat round that requested the calls.
         turn: u32,
     },
-    /// The second yield of a local tool call: the shim ran the handler the
+    /// The second yield of an adhoc tool call: the shim ran the handler the
     /// `tool_call` answer handed it and reports how the handler ended.
     /// Shim-produced in every field, so a wrong shape is a malformed
     /// yield, never an error at the author's call site.
-    LocalToolDone {
+    AdhocToolDone {
         /// How the handler ended.
-        outcome: LocalToolOutcome,
+        outcome: AdhocToolOutcome,
     },
     /// One stateless tool-capable model round over the section's list,
     /// yielded by the `models.loop` shim once per round. The dispatch arm
     /// first refuses an empty list; the round sends the section's
     /// rendered tool list, which the dispatch arm renders from the
-    /// section's tool scope, local Lua tools included, at the first round
+    /// section's tool scope, adhoc tools included, at the first round
     /// to reach the build and attaches to the list.
     Chat {
         /// The list the round sends, which may be empty, since the
@@ -208,10 +208,10 @@ pub enum Request {
     },
 }
 
-/// How a local tool's handler ended, as its `local_tool_done` yield
+/// How an adhoc tool's handler ended, as its `adhoc_tool_done` yield
 /// reports it.
 #[derive(Debug)]
-pub enum LocalToolOutcome {
+pub enum AdhocToolOutcome {
     /// The handler returned: its first return value as text under the
     /// scalar-return rule, `""` for nil.
     Returned(String),

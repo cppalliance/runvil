@@ -1,9 +1,9 @@
 //! The tool request parsers: a `tools.call`, the loop's batched
-//! `tool_calls`, and a local tool's `local_tool_done`.
+//! `tool_calls`, and an adhoc tool's `adhoc_tool_done`.
 
 use mlua::{Lua, LuaSerdeExt, MultiValue, Value};
 
-use crate::protocol::{LocalToolOutcome, Request, ToolCallRecord};
+use crate::protocol::{AdhocToolOutcome, Request, ToolCallRecord};
 use crate::tools::tool_name;
 use crate::vm::scalar_return;
 
@@ -125,22 +125,22 @@ pub(super) fn parse_tool_calls(
     Ok(Request::ToolCalls { calls, turn })
 }
 
-/// Parses a `local_tool_done` request: the shim-produced `ok` flag and,
+/// Parses an `adhoc_tool_done` request: the shim-produced `ok` flag and,
 /// when the handler returned, its first return value as `value`. A
 /// returned value takes the scalar-return rule a block's return takes, so
-/// nil reads as `""` and a table is a [`LocalToolOutcome::BadReturn`].
+/// nil reads as `""` and a table is an [`AdhocToolOutcome::BadReturn`].
 /// `None` for a missing or non-boolean `ok`.
-pub(super) fn parse_local_tool_done(table: &mlua::Table) -> Option<Request> {
+pub(super) fn parse_adhoc_tool_done(table: &mlua::Table) -> Option<Request> {
     let outcome = match table.raw_get::<Value>("ok").ok()? {
         Value::Boolean(true) => {
             let value = table.raw_get::<Value>("value").ok()?;
             match scalar_return(MultiValue::from_vec(vec![value])) {
-                Ok(text) => LocalToolOutcome::Returned(text.unwrap_or_default()),
-                Err(error) => LocalToolOutcome::BadReturn(error),
+                Ok(text) => AdhocToolOutcome::Returned(text.unwrap_or_default()),
+                Err(error) => AdhocToolOutcome::BadReturn(error),
             }
         }
-        Value::Boolean(false) => LocalToolOutcome::Raised,
+        Value::Boolean(false) => AdhocToolOutcome::Raised,
         _ => return None,
     };
-    Some(Request::LocalToolDone { outcome })
+    Some(Request::AdhocToolDone { outcome })
 }

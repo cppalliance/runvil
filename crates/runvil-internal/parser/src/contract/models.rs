@@ -84,7 +84,7 @@ impl ModelRole {
 /// keyed by label.
 ///
 /// A label is a name local to the prompt. It follows the same grammar as
-/// a local tool alias: `[A-Za-z][A-Za-z0-9_-]{0,63}`.
+/// an adhoc tool alias: `[A-Za-z][A-Za-z0-9_-]{0,63}`.
 ///
 /// A script reaches a role's model handle with `models.get(label)`. A label
 /// is never a Lua global, so it may be a reserved name.
