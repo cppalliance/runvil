@@ -22,7 +22,7 @@ use crate::tools::ToolCatalog;
 
 use super::bindings::ModelBindings;
 use super::fill;
-use super::requirements::{Requirements, UnavailablePack};
+use super::requirements::{Requirements, UnavailablePack, UsablePack};
 
 /// The inputs for one run of a prompt.
 ///
@@ -103,6 +103,10 @@ pub struct RunContext {
     /// it can't. Set with [`packs`](RunContext::packs). Empty by
     /// default.
     pub(super) roster: BTreeMap<PackId, Option<String>>,
+    /// The vendor the caller reports for each Pack of the roster that
+    /// can serve, by name. Set with [`packs`](RunContext::packs). Empty
+    /// by default.
+    pub(super) vendors: BTreeMap<PackId, String>,
     /// The run's Pack preludes, in declaration order. Set with
     /// [`preludes`](RunContext::preludes); every section VM installs each
     /// one before `require`. Empty by default.
@@ -140,6 +144,7 @@ impl RunContext {
             model_bindings: ModelBindings::default(),
             tools: ToolCatalog::default(),
             roster: BTreeMap::new(),
+            vendors: BTreeMap::new(),
             preludes: Vec::new(),
         }
     }
@@ -260,19 +265,32 @@ impl RunContext {
     }
 
     /// Sets the run's roster: every installed Pack that can serve the run,
-    /// declared by the prompt or not, and every one that can't, with the
-    /// reason.
+    /// declared by the prompt or not, with its vendor, and every one that
+    /// can't, with the reason.
     ///
     /// Each usable Pack gets an object in the run's Lua, with or without
     /// tools. An unavailable one gets none, and offering it raises its
     /// reason. A name in both lists counts as unavailable. Without a roster,
     /// the run's Lua sees the declared Packs and the Packs with a tool
     /// in the catalog.
+    ///
+    /// The caller reports each usable Pack's vendor, as it picked the
+    /// Pack. Every tool-call and tool-result event for a catalog tool of
+    /// that Pack records the vendor, and a run given no roster records
+    /// none.
     #[must_use]
-    pub fn packs(mut self, usable: Vec<PackId>, unavailable: Vec<UnavailablePack>) -> RunContext {
+    pub fn packs(
+        mut self,
+        usable: Vec<UsablePack>,
+        unavailable: Vec<UnavailablePack>,
+    ) -> RunContext {
+        self.vendors = usable
+            .iter()
+            .map(|entry| (entry.pack.clone(), entry.vendor.clone()))
+            .collect();
         self.roster = usable
             .into_iter()
-            .map(|pack| (pack, None))
+            .map(|entry| (entry.pack, None))
             .chain(
                 unavailable
                     .into_iter()
@@ -322,11 +340,18 @@ impl RunContext {
     /// so `prepare` skips them. When the context's current model is
     /// `None`, `prepare` skips the fill and the checks, and the model
     /// bindings stay empty.
+    ///
+    /// `prepare` also sets [`Requirements::reserved_adhoc`] when a tool of
+    /// the catalog or a Pack of the roster, usable or not, has the Pack
+    /// id `adhoc`, which holds a section's own tools.
     #[must_use]
     pub fn prepare(mut self, prompt: &Prompt) -> (RunContext, Requirements) {
         let mut requirements = Requirements::default();
         self.model_bindings =
             fill::fill_model_bindings(prompt, self.model.as_ref(), &mut requirements);
+        let adhoc = |pack: &PackId| pack.to_string() == "adhoc";
+        requirements.reserved_adhoc = self.tools.tools().iter().any(|tool| adhoc(&tool.id.pack()))
+            || self.roster.keys().any(adhoc);
         (self, requirements)
     }
 
@@ -415,6 +440,7 @@ impl fmt::Debug for RunContext {
             .field("model_bindings", &self.model_bindings)
             .field("tools", &self.tools)
             .field("roster", &self.roster)
+            .field("vendors", &self.vendors)
             .field(
                 "preludes",
                 &self.preludes.iter().map(Prelude::pack).collect::<Vec<_>>(),

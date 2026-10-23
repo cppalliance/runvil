@@ -113,6 +113,19 @@ fn add_refuses_a_third_party_pack_taking_the_builtins_pack_id() {
 }
 
 #[test]
+fn add_refuses_a_pack_taking_the_adhoc_pack_id_from_any_vendor() {
+    for fqn in ["acme/adhoc", "runvil/adhoc"] {
+        let mut packs = PackRegistry::new();
+        let refused = packs.insert(fixture(fqn), Value::Null);
+        assert_eq!(refused, Err(InstallError::AdhocPackId { fqn }), "{fqn}");
+        assert!(
+            !packs.list().any(|(info, _)| info.fqn == fqn),
+            "the refused {fqn} is not in the registry"
+        );
+    }
+}
+
+#[test]
 fn add_accepts_a_pack_whose_id_another_vendor_has() {
     let mut packs = PackRegistry::new();
     packs.insert(fixture("runvil/web"), Value::Null).unwrap();
@@ -185,6 +198,7 @@ fn the_registry_refusals_name_the_pack() {
             fqn: "acme/subagents",
             name: name("subagents"),
         },
+        InstallError::AdhocPackId { fqn: "acme/adhoc" },
     ];
     let messages: Vec<String> = refusals.iter().map(ToString::to_string).collect();
     assert_eq!(
@@ -194,6 +208,8 @@ fn the_registry_refusals_name_the_pack() {
             "Pack `acme/web` is already in the registry",
             "Pack `acme/subagents` cannot take the Pack id subagents, \
              which the built-in runvil/subagents reserves",
+            "Pack `acme/adhoc` cannot take the Pack id adhoc, \
+             which holds a section's own tools",
         ]
     );
 }

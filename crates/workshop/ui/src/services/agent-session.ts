@@ -46,7 +46,7 @@ export interface AgentSessionWire {
   cancelTurn(): boolean;
 }
 
-/** One call of a tool-call batch: its id, name, rendered arguments, and bound tool. */
+/** One call of a tool-call batch: its id, name, rendered arguments, bound tool, and vendor. */
 export interface ToolCallRow {
   readonly id: string;
   readonly name: string;
@@ -59,6 +59,13 @@ export interface ToolCallRow {
    * generic tool.
    */
   readonly tool: string | null;
+  /**
+   * The vendor of the Pack that answers `tool` (`runvil`), or null for an
+   * adhoc tool or an entry the wire did not stamp. `vendor/tool` is the
+   * vendor-qualified name (`runvil/web/search`), and a call without a
+   * vendor is never special.
+   */
+  readonly vendor: string | null;
 }
 
 /** Text the operator sent, as the durable `user_message` event recorded it. */
@@ -171,9 +178,10 @@ function parseToolCalls(content: string): readonly ToolCallRow[] {
       id: typeof record.id === "string" ? record.id : "",
       name: typeof record.name === "string" ? record.name : "",
       args: "arguments" in record ? JSON.stringify(record.arguments) : "",
-      // A tool id is never empty, so an empty string is as malformed as a
-      // number: both read as the generic tool.
+      // A tool id or vendor is never empty, so an empty string is as
+      // malformed as a number: both read as absent.
       tool: typeof record.tool === "string" && record.tool !== "" ? record.tool : null,
+      vendor: typeof record.vendor === "string" && record.vendor !== "" ? record.vendor : null,
     });
   }
   return rows;

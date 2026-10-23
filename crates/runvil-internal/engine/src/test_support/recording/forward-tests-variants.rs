@@ -286,6 +286,7 @@ fn one_of_every_event_variant() -> Vec<(Event, Seam)> {
                 tool_call_id: "call_1".to_owned(),
                 alias: "search".to_owned(),
                 tool: None,
+                vendor: None,
                 content: "found".to_owned(),
                 trusted: false,
             },

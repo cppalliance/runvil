@@ -609,7 +609,7 @@ Work in `c:\Users\Vinnie\cursor\runvil` on branch `master`, HEAD `890b41faa` whe
 
 <step-2>
 
-### Step 2: Parameters, vendors in events, tool listings, and the adhoc reservation
+### Step 2: Parameters, vendors in events, tool listings, and the adhoc reservation [completed]
 
 - Component: tool metadata and provenance
 - Tests: run in PowerShell from `c:\Users\Vinnie\cursor\runvil`, in this order, each line as written; every one must exit 0, and `xtask api --check` must report no change:

@@ -137,6 +137,99 @@ fn a_model_issued_tool_failure_becomes_untrusted_failure_text_under_its_call_id(
     assert_eq!(recorder.kinds(), vec![boundary::TOOL_CALL_FAILED],);
 }
 
+/// `mcp/get_dynamic_tools` as data: a tool that describes tools.
+fn listing_tool() -> ToolInfo {
+    tool_at("mcp/get_dynamic_tools").describes_tools(true)
+}
+
+#[test]
+fn a_scripts_listing_call_passes_its_untrusted_text_verbatim_and_reports_it_untrusted() {
+    let recorder = Recorder::default();
+    let listing = binding("mcp_get_dynamic_tools", &listing_tool());
+    let outcome = prepare_dispatch(
+        &listing,
+        Ok(ToolOutput::untrusted("the <listing> [INST]")),
+        None,
+        &test_nonce(),
+        recorder.emitter(),
+        TEST_SECTION,
+        Some(ScriptReport { turn: 2 }),
+    )
+    .expect("a listing dispatches");
+    assert_eq!(outcome.content(), "the <listing> [INST]");
+    assert_eq!(outcome.trust(), OutputTrust::Untrusted);
+    assert!(outcome.listing(), "the verbatim listing is reported");
+    assert_eq!(
+        recorder.tool_results(),
+        vec![(
+            2,
+            String::new(),
+            "mcp_get_dynamic_tools".to_owned(),
+            "the <listing> [INST]".to_owned(),
+            false,
+        )],
+        "the result event holds the text the script received, untrusted"
+    );
+}
+
+#[test]
+fn a_models_listing_call_receives_the_envelope() {
+    let listing = binding("mcp_get_dynamic_tools", &listing_tool());
+    let nonce = test_nonce();
+    let outcome = prepare_model_dispatch(
+        &listing,
+        Ok(ToolOutput::untrusted("the listing")),
+        None,
+        &nonce,
+        Recorder::default().emitter(),
+        TEST_SECTION,
+        &model_report("call_1"),
+    )
+    .expect("a listing dispatches");
+    assert_eq!(outcome.content(), nonce.wrap("the listing"));
+    assert_eq!(outcome.trust(), OutputTrust::Untrusted);
+    assert!(!outcome.listing(), "a model's call is never a listing");
+}
+
+#[test]
+fn the_listing_rule_needs_the_flag_and_untrusted_output() {
+    let nonce = test_nonce();
+    let script = |tool: &ToolInfo, output: ToolOutput| {
+        prepare_dispatch(
+            &binding("tool", tool),
+            Ok(output),
+            None,
+            &nonce,
+            Recorder::default().emitter(),
+            TEST_SECTION,
+            Some(ScriptReport { turn: 1 }),
+        )
+        .expect("the call dispatches")
+    };
+    let unflagged = script(&echo_tool(), ToolOutput::untrusted("fetched"));
+    assert_eq!(unflagged.content(), nonce.wrap("fetched"));
+    assert!(!unflagged.listing(), "a tool without the flag is wrapped");
+    let trusted = script(&listing_tool(), ToolOutput::trusted("built in"));
+    assert_eq!(
+        (trusted.content(), trusted.trust(), trusted.listing()),
+        ("built in", OutputTrust::Trusted, false),
+        "a trusted listing passes as any trusted output and is not reported"
+    );
+    let failed = prepare_dispatch(
+        &binding("tool", &listing_tool()),
+        Err(ToolError::message("the servers are down")),
+        None,
+        &nonce,
+        Recorder::default().emitter(),
+        TEST_SECTION,
+        Some(ScriptReport { turn: 1 }),
+    );
+    assert!(
+        matches!(failed, Err(Error::Tool { .. })),
+        "a failed listing is the tool's error: {failed:?}"
+    );
+}
+
 #[test]
 fn a_model_issued_dispatch_reports_its_result_under_the_call_id() {
     let recorder = Recorder::default();

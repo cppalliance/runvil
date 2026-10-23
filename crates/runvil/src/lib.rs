@@ -23,6 +23,7 @@ pub use runvil_engine::SourceLocation;
 pub use runvil_engine::Step;
 pub use runvil_engine::UnavailablePack;
 pub use runvil_engine::UnmetRequirement;
+pub use runvil_engine::UsablePack;
 pub use runvil_parser::ParseError;
 pub use runvil_parser::ParseErrorKind;
 pub use runvil_parser::Prompt;

@@ -24,6 +24,7 @@ import type { ReasoningItem, ToolCallRow, TranscriptItem } from "../../../servic
 import {
   groupSummary,
   isToolLoading,
+  qualifiedTool,
   toolKind,
   toolLabel,
   type GroupSummary,
@@ -331,7 +332,7 @@ function draftTurn(turn: number, entries: readonly Entry[]): RowDraft[] {
           const draft: ToolDraft = {
             key: claim(call.id === "" ? `c:${turn}:${slot}` : `c:${turn}:${call.id}`, slot),
             call,
-            family: toolKind(call.tool),
+            family: toolKind(qualifiedTool(call)),
             result: null,
           };
           if (call.id !== "") {

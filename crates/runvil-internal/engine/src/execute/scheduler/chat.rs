@@ -29,15 +29,14 @@ use runvil_types::emitter::Emitter;
 use runvil_types::event::{ReplyOrigin, lifecycle};
 use runvil_types::ids::RoundId;
 use runvil_types::metrics::ToolCallEvent;
-use runvil_types::tools::ToolId;
 
 use crate::execute::protocol::{Answer, ChatOutcome, ChatResult};
 use crate::execute::run::Effect;
 use crate::execute::scope::prepare_effective_scope;
 use crate::execute::turn::{Served, advance_turn, report_model_turn};
 use crate::lua::{
-    MessageList, OverflowReason, current_tool_bindings, output_reserve, precheck, project_messages,
-    resolve_model_binding,
+    Advertised, MessageList, OverflowReason, current_tool_bindings, output_reserve, precheck,
+    project_messages, resolve_model_binding,
 };
 use crate::model::{Completion, CompletionErrorKind, CompletionResult, ModelBinding, ToolCall};
 use crate::{Error, Result};
@@ -338,14 +337,19 @@ impl ArrivedRound {
         served: &Served,
         turn: u32,
         calls: &[ToolCall],
-        advertised: &BTreeMap<String, Option<ToolId>>,
+        advertised: &BTreeMap<String, Option<Advertised>>,
         global_exists: impl Fn(&str) -> bool,
     ) -> Result<ChatResult> {
         let events: Vec<ToolCallEvent> = calls
             .iter()
             .map(|call| {
+                let (tool, vendor) = match advertised.get(call.name()).cloned().flatten() {
+                    Some(Advertised { id, vendor }) => (Some(id), vendor),
+                    None => (None, None),
+                };
                 ToolCallEvent::new(call.id(), call.name(), tool_call_arguments(call).clone())
-                    .with_tool(advertised.get(call.name()).cloned().flatten())
+                    .with_tool(tool)
+                    .with_vendor(vendor)
             })
             .collect();
         self.emitter

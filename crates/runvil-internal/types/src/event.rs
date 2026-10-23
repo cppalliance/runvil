@@ -406,6 +406,11 @@ events! {
             /// tool or an event logged before the field.
             #[serde(default, skip_serializing_if = "Option::is_none")]
             tool: Option<ToolId>,
+            /// The vendor of the Pack that answered `tool`, as the caller
+            /// reported it; `None` for an adhoc tool, a run given no
+            /// roster, or an event logged before the field.
+            #[serde(default, skip_serializing_if = "Option::is_none")]
+            vendor: Option<String>,
             /// The tool's output: untrusted unless `trusted`.
             content: String,
             /// Whether the dispatch treated the tool as trusted (its output

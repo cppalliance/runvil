@@ -93,6 +93,16 @@ pub struct ToolRuntime {
     pub packs: Vec<PackId>,
 }
 
+/// One advertised catalog tool: its id and its Pack's vendor.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Advertised {
+    /// The tool's id.
+    pub id: ToolId,
+    /// The vendor of the tool's Pack, as the caller reported it; `None`
+    /// when it reported none.
+    pub vendor: Option<String>,
+}
+
 /// The tool list a section's first loop round rendered.
 #[derive(Debug, Clone)]
 pub struct RenderedTools {
@@ -102,8 +112,8 @@ pub struct RenderedTools {
     ///
     /// Every round copies this map onto its chain: the round's answer is
     /// gated against its keys, and the reported batch names a catalog
-    /// tool's id. The `tool_call` the loop then yields resolves each name
-    /// itself, a wire name against the run's offering and an adhoc alias
-    /// against the section VM's handlers.
-    pub dispatch: BTreeMap<String, Option<ToolId>>,
+    /// tool's id and vendor. The `tool_call` the loop then yields resolves
+    /// each name itself, a wire name against the run's offering and an
+    /// adhoc alias against the section VM's handlers.
+    pub dispatch: BTreeMap<String, Option<Advertised>>,
 }

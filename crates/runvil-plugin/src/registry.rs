@@ -90,12 +90,16 @@ impl PackRegistry {
     /// Returns [`InstallError::InvalidFqn`] when the FQN is not a
     /// `vendor/name` pair of valid one-segment names,
     /// [`InstallError::DuplicatePack`] when the registry holds the FQN
-    /// already, as it holds each built-in's from the start, and
+    /// already, as it holds each built-in's from the start,
+    /// [`InstallError::AdhocPackId`] when the Pack id is `adhoc`, and
     /// [`InstallError::ReservedName`] when the Pack id is a built-in's.
     pub fn insert(&mut self, info: PackInfo, config: Value) -> Result<(), InstallError> {
         let id = pack_id(info.fqn).ok_or(InstallError::InvalidFqn { fqn: info.fqn })?;
         if self.entries.contains_key(info.fqn) {
             return Err(InstallError::DuplicatePack { fqn: info.fqn });
+        }
+        if id.to_string() == ADHOC {
+            return Err(InstallError::AdhocPackId { fqn: info.fqn });
         }
         if self.reserves(&id) {
             return Err(InstallError::ReservedName {
@@ -188,7 +192,17 @@ pub enum InstallError {
         /// The Pack id it would have taken.
         name: PackId,
     },
+    /// The inserted Pack's id is `adhoc`, which holds a section's own
+    /// tools, whatever the vendor.
+    #[error("Pack `{fqn}` cannot take the Pack id adhoc, which holds a section's own tools")]
+    AdhocPackId {
+        /// The FQN as its `PackInfo` spells it.
+        fqn: &'static str,
+    },
 }
+
+/// The Pack id of a section's own tools, which no Pack may take.
+const ADHOC: &str = "adhoc";
 
 /// The built-ins every registry holds from the start.
 ///

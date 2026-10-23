@@ -46,22 +46,27 @@ export interface TurnState {
 }
 
 /**
- * The family of a bound tool id (the wire's `namespace/name` string).
- * The ask tool is recognized by its name, `ask`, under any namespace;
- * the web tools are fixed ids.
- * A null tool is generic.
+ * The family of a vendor-qualified tool name (`vendor/tool`, such as
+ * `runvil/web/search`). Only the fixed names of runvil's ask, search,
+ * and fetch tools are special, so the same tool id from another vendor's
+ * Pack is generic. A null name, a call without a vendor, is generic.
  */
-export function toolKind(tool: string | null): ToolKind {
-  if (tool === "web/search") {
-    return "search";
+export function toolKind(qualified: string | null): ToolKind {
+  switch (qualified) {
+    case "runvil/web/search":
+      return "search";
+    case "runvil/web/fetch":
+      return "fetch";
+    case "runvil/user-input/ask":
+      return "ask";
+    default:
+      return "other";
   }
-  if (tool === "web/fetch") {
-    return "fetch";
-  }
-  if (tool !== null && tool.slice(tool.lastIndexOf("/") + 1) === "ask") {
-    return "ask";
-  }
-  return "other";
+}
+
+/** A call's vendor-qualified tool name, or null when the call names no vendor or no tool. */
+export function qualifiedTool(call: ToolCallRow): string | null {
+  return call.vendor === null || call.tool === null ? null : `${call.vendor}/${call.tool}`;
 }
 
 /**
@@ -100,13 +105,13 @@ function stringArg(args: string, key: string): string {
 }
 
 /**
- * The verb and details of one tool call. `web/search` and `web/fetch`
- * read their query and url arguments; the ask tool has no details; any
- * other tool reads `<call name> in <tool id namespace>`, with the call
- * name flagged for the verb's color.
+ * The verb and details of one tool call. runvil's `web/search` and
+ * `web/fetch` read their query and url arguments; runvil's ask tool has
+ * no details; any other tool reads `<call name> in <tool id namespace>`,
+ * with the call name flagged for the verb's color.
  */
 export function toolLabel(call: ToolCallRow, loading: boolean): ToolLabel {
-  switch (toolKind(call.tool)) {
+  switch (toolKind(qualifiedTool(call))) {
     case "search":
       return {
         action: loading ? "Searching web" : "Searched web",

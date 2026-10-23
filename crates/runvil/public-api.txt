@@ -45,6 +45,7 @@
 #[non_exhaustive] pub struct runvil::SourceLocation { .. }
 #[non_exhaustive] pub struct runvil::UnavailablePack { .. }
 #[non_exhaustive] pub struct runvil::UnmetRequirement { .. }
+#[non_exhaustive] pub struct runvil::UsablePack { .. }
 #[non_exhaustive] pub struct runvil::effect::ChatAnswerRecord { .. }
 #[non_exhaustive] pub struct runvil::effect::FailureRecord { .. }
 #[non_exhaustive] pub struct runvil::effect::Round { .. }
@@ -108,6 +109,7 @@ auto runvil::SourceLocation: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSaf
 auto runvil::Step: Freeze, !RefUnwindSafe, Send, Sync, Unpin, !UnwindSafe
 auto runvil::UnavailablePack: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::UnmetRequirement: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
+auto runvil::UsablePack: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::cancel::CancelHandle: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::cancel::Cancelled: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::effect::AnswerRecord: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
@@ -233,6 +235,7 @@ derives runvil::SourceLocation: Clone, Debug, Eq, PartialEq
 derives runvil::Step: Debug
 derives runvil::UnavailablePack: Clone, Debug, Eq, PartialEq
 derives runvil::UnmetRequirement: Clone, Debug, Eq, PartialEq
+derives runvil::UsablePack: Clone, Debug, Eq, PartialEq
 derives runvil::cancel::CancelHandle: Clone, Debug, Default
 derives runvil::cancel::Cancelled: Debug
 derives runvil::effect::AnswerRecord: Clone, Debug, Deserialize, PartialEq, Serialize
@@ -474,7 +477,7 @@ pub fn runvil::RunContext::limits(self, limits: runvil::RunLimits) -> runvil::Ru
 pub fn runvil::RunContext::model(self, model: runvil::model::ModelInfo) -> runvil::RunContext
 pub fn runvil::RunContext::model_bindings(&self) -> &runvil::model::ModelBindings
 pub fn runvil::RunContext::new(name: impl core::convert::Into<alloc::string::String>, seed: runvil::RunSeed, started_at: runvil::timestamp::Timestamp) -> runvil::RunContext
-pub fn runvil::RunContext::packs(self, usable: alloc::vec::Vec<runvil::packs::PackId>, unavailable: alloc::vec::Vec<runvil::UnavailablePack>) -> runvil::RunContext
+pub fn runvil::RunContext::packs(self, usable: alloc::vec::Vec<runvil::UsablePack>, unavailable: alloc::vec::Vec<runvil::UnavailablePack>) -> runvil::RunContext
 pub fn runvil::RunContext::preludes(self, preludes: alloc::vec::Vec<runvil::packs::Prelude>) -> runvil::RunContext
 pub fn runvil::RunContext::prepare(self, prompt: &runvil::Prompt) -> (runvil::RunContext, runvil::Requirements)
 pub fn runvil::RunContext::provenance_start(self, start: u32) -> runvil::RunContext
@@ -501,6 +504,7 @@ pub fn runvil::RunLimits::request_timeout(self, value: core::time::Duration) -> 
 pub fn runvil::RunLimits::response_bytes(&self) -> core::num::nonzero::NonZeroU64
 pub fn runvil::RunLimits::timeout(&self) -> core::time::Duration
 pub fn runvil::UnavailablePack::new(pack: runvil::packs::PackId, reason: impl core::convert::Into<alloc::string::String>) -> runvil::UnavailablePack
+pub fn runvil::UsablePack::new(pack: runvil::packs::PackId, vendor: impl core::convert::Into<alloc::string::String>) -> runvil::UsablePack
 pub fn runvil::cancel::CancelHandle::cancel(&self)
 pub fn runvil::cancel::CancelHandle::cancelled(&self) -> runvil::cancel::Cancelled
 pub fn runvil::cancel::CancelHandle::child(&self) -> runvil::cancel::CancelHandle
@@ -536,6 +540,7 @@ pub fn runvil::metrics::LlamaTimings::with_draft_n(self, draft_n: u32) -> runvil
 pub fn runvil::metrics::LlamaTimings::with_draft_n_accepted(self, draft_n_accepted: u32) -> runvil::metrics::LlamaTimings
 pub fn runvil::metrics::ToolCallEvent::new(id: impl core::convert::Into<alloc::string::String>, name: impl core::convert::Into<alloc::string::String>, arguments: serde_json::value::Value) -> runvil::metrics::ToolCallEvent
 pub fn runvil::metrics::ToolCallEvent::with_tool(self, tool: core::option::Option<runvil::tools::ToolId>) -> runvil::metrics::ToolCallEvent
+pub fn runvil::metrics::ToolCallEvent::with_vendor(self, vendor: core::option::Option<alloc::string::String>) -> runvil::metrics::ToolCallEvent
 pub fn runvil::metrics::Usage::new(prompt_tokens: u32, completion_tokens: u32, total_tokens: u32) -> runvil::metrics::Usage
 pub fn runvil::metrics::Usage::with_cached_tokens(self, cached_tokens: core::option::Option<u32>) -> runvil::metrics::Usage
 pub fn runvil::metrics::Usage::with_reasoning_tokens(self, reasoning_tokens: core::option::Option<u32>) -> runvil::metrics::Usage
@@ -694,6 +699,7 @@ pub fn runvil::tools::ToolId::name(&self) -> &str
 pub fn runvil::tools::ToolId::pack(&self) -> runvil::packs::PackId
 pub fn runvil::tools::ToolId::parse(id: &str) -> core::result::Result<runvil::tools::ToolId, runvil::tools::ToolIdError>
 pub fn runvil::tools::ToolIdError::kind(&self) -> runvil::tools::ToolIdErrorKind
+pub fn runvil::tools::ToolInfo::describes_tools(self, describes: bool) -> runvil::tools::ToolInfo
 pub fn runvil::tools::ToolInfo::new(id: runvil::tools::ToolId, description: impl core::convert::Into<alloc::string::String>, parameters_schema: serde_json::value::Value) -> runvil::tools::ToolInfo
 pub fn runvil::tools::ToolInfo::structured(self, structured: bool) -> runvil::tools::ToolInfo
 pub fn runvil::tools::ToolInfo::survives_stop(self, survives: bool) -> runvil::tools::ToolInfo
@@ -798,6 +804,7 @@ pub runvil::RequirementCheck::ContextMinimum
 pub runvil::RequirementCheck::HardKeyword
 pub runvil::Requirements::missing_required: alloc::vec::Vec<runvil::packs::PackId>
 pub runvil::Requirements::missing_services: alloc::vec::Vec<runvil::MissingService>
+pub runvil::Requirements::reserved_adhoc: bool
 pub runvil::Requirements::unavailable: alloc::vec::Vec<runvil::UnavailablePack>
 pub runvil::Requirements::unmet_requirements: alloc::vec::Vec<runvil::UnmetRequirement>
 pub runvil::RunErrorKind::Binding
@@ -836,6 +843,8 @@ pub runvil::UnmetRequirement::actual: alloc::string::String
 pub runvil::UnmetRequirement::check: runvil::RequirementCheck
 pub runvil::UnmetRequirement::required: alloc::string::String
 pub runvil::UnmetRequirement::role: alloc::string::String
+pub runvil::UsablePack::pack: runvil::packs::PackId
+pub runvil::UsablePack::vendor: alloc::string::String
 pub runvil::effect::AnswerRecord::Chat(..)
 pub runvil::effect::AnswerRecord::Chat::0: core::result::Result<runvil::effect::ChatAnswerRecord, runvil::effect::FailureRecord>
 pub runvil::effect::AnswerRecord::Dropped
@@ -1134,6 +1143,7 @@ pub runvil::event::Event::ToolResult::tool: core::option::Option<runvil::tools::
 pub runvil::event::Event::ToolResult::tool_call_id: alloc::string::String
 pub runvil::event::Event::ToolResult::trusted: bool
 pub runvil::event::Event::ToolResult::turn: u32
+pub runvil::event::Event::ToolResult::vendor: core::option::Option<alloc::string::String>
 pub runvil::event::Event::ToolScopeValidationFailed { .. }
 pub runvil::event::Event::ToolScopeValidationFailed::execution: alloc::string::String
 pub runvil::event::Event::ToolScopeValidationFailed::provenance: runvil::ids::Provenance
@@ -1238,6 +1248,7 @@ pub runvil::metrics::ToolCallEvent::arguments: serde_json::value::Value
 pub runvil::metrics::ToolCallEvent::id: alloc::string::String
 pub runvil::metrics::ToolCallEvent::name: alloc::string::String
 pub runvil::metrics::ToolCallEvent::tool: core::option::Option<runvil::tools::ToolId>
+pub runvil::metrics::ToolCallEvent::vendor: core::option::Option<alloc::string::String>
 pub runvil::metrics::Usage::cached_tokens: core::option::Option<u32>
 pub runvil::metrics::Usage::completion_tokens: u32
 pub runvil::metrics::Usage::prompt_tokens: u32
@@ -1307,6 +1318,7 @@ pub runvil::tools::ToolIdErrorKind::Charset
 pub runvil::tools::ToolIdErrorKind::Control
 pub runvil::tools::ToolIdErrorKind::Empty
 pub runvil::tools::ToolIdErrorKind::SegmentCount
+pub runvil::tools::ToolInfo::describes_tools: bool
 pub runvil::tools::ToolInfo::description: alloc::string::String
 pub runvil::tools::ToolInfo::id: runvil::tools::ToolId
 pub runvil::tools::ToolInfo::parameters_schema: serde_json::value::Value

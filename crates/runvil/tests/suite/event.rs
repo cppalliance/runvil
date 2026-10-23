@@ -2,7 +2,9 @@
 
 use std::collections::HashSet;
 
+use runvil::UsablePack;
 use runvil::event::{DebugMode, Event};
+use runvil::packs::PackId;
 use serde_json::Value;
 
 use super::support::{Scenario, TestResult, note, prompt, shout, text};
@@ -47,7 +49,10 @@ fn every_event_round_trips_as_a_json_line_and_no_two_share_a_provenance() -> Tes
 #[test]
 fn content_events_pair_each_tool_result_with_its_caller_into_a_transcript() -> TestResult {
     let (source, scenario) = shouting();
-    let trace = scenario.run(&source)?;
+    let example = PackId::parse("example")?;
+    let trace = scenario
+        .context(move |ctx| ctx.packs(vec![UsablePack::new(example.clone(), "acme")], vec![]))
+        .run(&source)?;
     assert_eq!(trace.text()?, "HI THERE");
 
     let (mut asked, mut transcript) = (HashSet::new(), Vec::new());
@@ -64,6 +69,7 @@ fn content_events_pair_each_tool_result_with_its_caller_into_a_transcript() -> T
                 tool_call_id,
                 alias,
                 tool,
+                vendor,
                 content,
                 ..
             } => {
@@ -72,9 +78,11 @@ fn content_events_pair_each_tool_result_with_its_caller_into_a_transcript() -> T
                 } else {
                     "script"
                 };
-                let tool = tool
-                    .as_ref()
-                    .map_or("no tool".to_owned(), ToString::to_string);
+                let tool = match (vendor, tool) {
+                    (Some(vendor), Some(tool)) => format!("{vendor}/{tool}"),
+                    (None, Some(tool)) => tool.to_string(),
+                    (_, None) => "no tool".to_owned(),
+                };
                 transcript.push(format!("{alias} ({tool}) for the {caller}: {content}"));
             }
             _ => {}
@@ -84,9 +92,9 @@ fn content_events_pair_each_tool_result_with_its_caller_into_a_transcript() -> T
         transcript,
         [
             "Infer reply: hi there",
-            "example_text_shout (example/text/shout) for the script: HI THERE"
+            "example_text_shout (acme/example/text/shout) for the script: HI THERE"
         ],
-        "a tool's result names its wire name and the tool it resolved to"
+        "a tool's result names its wire name and the vendor-qualified tool it resolved to"
     );
     Ok(())
 }

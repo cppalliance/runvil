@@ -12,7 +12,7 @@ use runvil_types::tools::ToolId;
 
 use crate::Result;
 use crate::execute::walk_target::SlicePath;
-use crate::lua::ToolSet;
+use crate::lua::{Advertised, ToolSet};
 
 use super::chain::ChainStart;
 use super::chain_record::{Admission, CallDepth, ChainKind, SectionIndex};
@@ -62,7 +62,13 @@ impl Scheduler {
             .advertised
             .as_mut()
             .expect("the chain advertised a round")
-            .insert(name.to_owned(), Some(tool));
+            .insert(
+                name.to_owned(),
+                Some(Advertised {
+                    id: tool,
+                    vendor: None,
+                }),
+            );
     }
 
     /// The state of one task's slot, or `None` when no task with that id

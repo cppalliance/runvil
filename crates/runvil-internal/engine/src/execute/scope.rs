@@ -6,7 +6,7 @@ use runvil_model_client::detail;
 use runvil_types::emitter::Emitter;
 use runvil_types::event::lifecycle;
 
-use crate::lua::{RenderedTools, ToolBinding};
+use crate::lua::{Advertised, RenderedTools, ToolBinding};
 use crate::model::ToolSchema;
 use crate::{Error, Result};
 
@@ -62,7 +62,13 @@ pub(super) fn prepare_scoped_tools(
             source: Box::new(error),
         })?;
         schemas.push(schema);
-        dispatch.insert(binding.alias().to_owned(), Some(binding.id().clone()));
+        dispatch.insert(
+            binding.alias().to_owned(),
+            Some(Advertised {
+                id: binding.id().clone(),
+                vendor: binding.vendor().map(str::to_owned),
+            }),
+        );
     }
     // Adhoc tools are prompt-author Lua functions with no live implementation;
     // the `tool_call` arm answers their calls on the section VM. The alias

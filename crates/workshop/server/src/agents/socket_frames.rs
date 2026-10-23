@@ -5,12 +5,11 @@
 
 use axum::extract::ws::WebSocket;
 use runvil::event::Event;
-use runvil::tools::ToolId;
 use workshop_agents::{Delta, DeltaKind, SessionEvent, WaitFrame};
 use workshop_protocol::InputFrame;
 
 use super::socket::Attached;
-use crate::agents::wire::{AgentDeltaFrame, AgentDeltaKind, AgentEventFrame};
+use crate::agents::wire::{AgentDeltaFrame, AgentDeltaKind, AgentEventFrame, AskTool};
 use crate::websocket::send_frame;
 
 /// Renders a conversation's wait frame as the protocol's input frame: the
@@ -74,7 +73,7 @@ pub(super) async fn frame_entry(
 fn advance(
     cursor: &mut u64,
     framed: &mut u64,
-    ask: Option<&ToolId>,
+    ask: Option<&AskTool>,
     entry: &SessionEvent,
 ) -> Option<AgentEventFrame> {
     if entry.index < *cursor {

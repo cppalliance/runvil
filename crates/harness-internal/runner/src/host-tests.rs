@@ -9,7 +9,7 @@ use std::sync::{Arc, Mutex};
 
 use runvil::effect::{ToolCallOrigin, ToolCaller};
 use runvil::vfs::{Origin, VfsRef};
-use runvil::{MissingService, Prompt, Requirements, UnavailablePack};
+use runvil::{MissingService, Prompt, Requirements, UnavailablePack, UsablePack};
 use runvil_plugin::{
     HostServices, Pack, PackFuture, PackId, PackInfo, PackRegistry, ServiceId, ServiceKey,
     ToolContext, ToolError, ToolId, ToolInfo, ToolOutput,
@@ -191,7 +191,33 @@ fn catalog_ids(host: &HostContext, services: HostServices, prompt: &Prompt) -> V
 fn usable(host: &HostContext, prompt: &Prompt) -> Vec<String> {
     let (run, _requirements) = begin(host, HostServices::new(), BTreeMap::new(), prompt);
     let (usable, _unavailable) = run.roster();
-    usable.iter().map(ToString::to_string).collect()
+    usable.iter().map(|entry| entry.pack.to_string()).collect()
+}
+
+#[test]
+fn the_roster_hands_each_usable_pack_with_the_vendor_the_run_picked() {
+    let host = host(&[
+        (info("runvil/kit"), offering(&["kit/a"])),
+        (info("acme/kit"), offering(&["kit/b"])),
+        (info("runvil/web"), offering(&["web/fetch"])),
+        (info("acme/poop"), Value::Null),
+    ]);
+    let (run, _requirements) = begin(
+        &host,
+        HostServices::new(),
+        BTreeMap::new(),
+        &prompt("uses:\n  - acme/kit\n"),
+    );
+    let (usable, _unavailable) = run.roster();
+    assert_eq!(
+        usable,
+        [
+            UsablePack::new(name("kit"), "acme"),
+            UsablePack::new(name("subagents"), "runvil"),
+            UsablePack::new(name("web"), "runvil"),
+        ],
+        "the declared acme/kit reports acme, and every undeclared Pack reports runvil"
+    );
 }
 
 #[test]
@@ -328,7 +354,7 @@ fn the_roster_lists_the_builtin_stub_as_usable_and_each_pack_that_cannot_serve_w
     let (usable, unavailable) = run.roster();
     assert_eq!(
         usable,
-        [name("subagents")],
+        [UsablePack::new(name("subagents"), "runvil")],
         "the undeclared stub with no tools is on the roster"
     );
     assert_eq!(

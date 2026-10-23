@@ -49,7 +49,7 @@ fn a_constructor_leaves_every_optional_field_at_its_default() {
     let client = ClientTiming::new(41.5);
     assert_eq!((client.ttft_ms, client.mean_itl_ms), (None, None));
     let call = ToolCallEvent::new("call_1", "fetch", json!({}));
-    assert_eq!(call.tool, None);
+    assert_eq!((call.tool, call.vendor), (None, None));
 }
 
 #[test]
@@ -71,7 +71,8 @@ fn every_vocabulary_type_round_trips_through_serde() {
             json!({ "path": "notes.txt", "lines": 3 }),
         ),
         ToolCallEvent::new("call_1", "fetch", json!({}))
-            .with_tool(Some(ToolId::parse("web/fetch").expect("a valid tool id"))),
+            .with_tool(Some(ToolId::parse("web/fetch").expect("a valid tool id")))
+            .with_vendor(Some("runvil".to_owned())),
     ] {
         assert_eq!(round_trip(&call), call);
     }
@@ -79,11 +80,11 @@ fn every_vocabulary_type_round_trips_through_serde() {
 
 #[test]
 fn a_tool_call_without_a_bound_tool_keeps_its_logged_shape() {
-    // A call logged before the field existed reads back with no tool,
-    // and a call with none writes the same line it always did.
+    // A call logged without `tool` or `vendor` reads back with neither,
+    // and a call with neither writes that same line.
     let line = r#"{"id":"call_1","name":"fetch","arguments":{}}"#;
     let call: ToolCallEvent = serde_json::from_str(line).expect("an older call deserializes");
-    assert_eq!(call.tool, None);
+    assert_eq!((&call.tool, &call.vendor), (&None, &None));
     assert_wire(&call, line);
 }
 

@@ -2,7 +2,8 @@
 //! against its exact JSON, the inbound requests against their variants
 //! and refusals, and both directions against the shared fixture the SPA
 //! suite (`crates/workshop/ui/test/agent-wire-fixtures.mjs`) asserts, so a
-//! wire drift on either side fails that side's fixture test.
+//! wire drift on either side fails that side's fixture test. How a
+//! script's ask result frames sits in the `ask` child module.
 
 use std::path::Path;
 
@@ -13,6 +14,9 @@ use runvil::tools::ToolId;
 use workshop_protocol::{InputFrame, InputResponse};
 
 use super::*;
+
+#[path = "wire-tests-ask.rs"]
+mod ask;
 
 /// Parses the shared fixture into one object keyed by case name.
 fn agent_fixture() -> serde_json::Value {
@@ -31,16 +35,27 @@ fn provenance() -> Provenance {
 /// The ask tool's fixed id, under the user-input Pack's id.
 const ASK_TOOL: &str = "user-input/ask";
 
-/// The ask tool's id, which Workshop recognizes a script's ask by.
-fn ask() -> ToolId {
+/// The vendor of the Pack whose ask Workshop recognizes.
+const RUNVIL: Option<&str> = Some("runvil");
+
+fn ask_id() -> ToolId {
     ToolId::parse(ASK_TOOL).expect("the ask tool id parses")
+}
+
+/// The ask tool's vendor and id, which Workshop recognizes a script's
+/// ask by.
+fn ask() -> AskTool {
+    AskTool {
+        vendor: "runvil".to_owned(),
+        id: ask_id(),
+    }
 }
 
 /// The operator's message in the `chat` section, as a script's ask
 /// result: the fixture's `agent_event_minimal` entry as the Engine event
 /// it projects from.
 fn operator_message(text: &str) -> Event {
-    tool_result("", "ask", Some(ask()), text)
+    tool_result("", "ask", Some(ask_id()), RUNVIL, text)
 }
 
 /// The fixture's `agent_event_stamped` entry as the Engine event it
@@ -208,6 +223,7 @@ fn an_agent_event_frame_keeps_the_model_on_thinking_and_the_call_id_on_tool_resu
         tool_call_id: "call_7".to_owned(),
         alias: "read_file".to_owned(),
         tool: None,
+        vendor: None,
         content: "the file's text".to_owned(),
         trusted: false,
     };
@@ -225,8 +241,14 @@ fn an_agent_event_frame_keeps_the_model_on_thinking_and_the_call_id_on_tool_resu
 
 /// A trusted tool result in the `chat` section on turn 2, answering
 /// `tool_call_id` (empty for a script's call) under `alias`, bound to
-/// `tool`.
-fn tool_result(tool_call_id: &str, alias: &str, tool: Option<ToolId>, content: &str) -> Event {
+/// `tool` of a Pack from `vendor`.
+fn tool_result(
+    tool_call_id: &str,
+    alias: &str,
+    tool: Option<ToolId>,
+    vendor: Option<&str>,
+    content: &str,
+) -> Event {
     Event::ToolResult {
         execution: "run".to_owned(),
         section: "chat".to_owned(),
@@ -235,67 +257,10 @@ fn tool_result(tool_call_id: &str, alias: &str, tool: Option<ToolId>, content: &
         tool_call_id: tool_call_id.to_owned(),
         alias: alias.to_owned(),
         tool,
+        vendor: vendor.map(str::to_owned),
         content: content.to_owned(),
         trusted: true,
     }
-}
-
-/// The wire kind `event` frames as under the ask tool id `ask`.
-fn kind_under(event: &Event, ask: Option<&ToolId>) -> serde_json::Value {
-    wire(&AgentEventFrame::new(0, None, event, ask).expect("a tool result frames"))["event"]["kind"]
-        .clone()
-}
-
-#[test]
-fn a_script_side_ask_result_frames_as_the_operators_message() {
-    let ask = ask();
-    let result = tool_result("", "ask", Some(ask.clone()), "two words");
-    let frame = wire(
-        &AgentEventFrame::new(7, None, &result, Some(&ask)).expect("a script-side ask frames"),
-    );
-    assert_eq!(
-        frame["event"],
-        serde_json::json!({
-            "kind": "user_message", "section": "chat", "turn": 0, "content": "two words",
-        }),
-        "a script's ask result is the operator's message, framed on turn 0 without a tool-call id"
-    );
-}
-
-#[test]
-fn a_scripts_ask_is_recognized_by_its_tool_whatever_its_alias() {
-    let ask = ask();
-    let renamed = tool_result("", "question", Some(ask.clone()), "hi");
-    assert_eq!(kind_under(&renamed, Some(&ask)), "user_message");
-    let unbound = tool_result("", ASK_TOOL, None, "hi");
-    let elsewhere = ToolId::parse("asker/ask").expect("a valid tool id");
-    let fetch = ToolId::parse("web/fetch").expect("a valid tool id");
-    let other = tool_result("", "fetch", Some(fetch), "the page");
-    for (event, ask, why) in [
-        (&unbound, Some(&ask), "a result with no tool is not the ask"),
-        (&renamed, Some(&elsewhere), "another tool id is not the ask"),
-        (&renamed, None, "a Host without the ask frames none"),
-        (&other, Some(&ask), "only the ask is the operator's message"),
-    ] {
-        assert_eq!(kind_under(event, ask), "tool_call_update", "{why}");
-    }
-}
-
-#[test]
-fn a_model_issued_ask_result_stays_a_tool_call_update() {
-    let ask = ask();
-    let result = tool_result("call_9", "ask", Some(ask.clone()), "two words");
-    let frame = wire(
-        &AgentEventFrame::new(8, None, &result, Some(&ask)).expect("a model-issued ask frames"),
-    );
-    assert_eq!(
-        frame["event"],
-        serde_json::json!({
-            "kind": "tool_call_update", "section": "chat", "turn": 2,
-            "content": "two words", "tool_call_id": "call_9",
-        }),
-        "a model's ask answers the model's own tool call, so it stays a tool call update"
-    );
 }
 
 #[test]

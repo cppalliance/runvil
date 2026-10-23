@@ -125,6 +125,11 @@ pub(crate) enum PackListError {
     /// The list names this Pack more than once.
     #[error("invalid frontmatter: Pack id {0} is declared more than once under uses")]
     Duplicate(PackId),
+    /// The list names the Pack id `adhoc`, from any vendor.
+    #[error(
+        "invalid frontmatter: adhoc holds a section's own tools and is never declared under uses"
+    )]
+    Adhoc,
 }
 
 /// Refuses a `uses:` list that names one Pack id twice, whatever the
@@ -136,5 +141,15 @@ pub(crate) fn check_distinct_packs(packs: &[PackRef]) -> Result<(), PackListErro
     match packs.iter().find(|pack| !seen.insert(pack.id())) {
         Some(pack) => Err(PackListError::Duplicate(pack.id().clone())),
         None => Ok(()),
+    }
+}
+
+/// Refuses a `uses:` list that names the Pack id `adhoc`, whatever the
+/// vendor, because `adhoc` holds a section's own tools.
+pub(crate) fn check_no_adhoc_pack(packs: &[PackRef]) -> Result<(), PackListError> {
+    if packs.iter().any(|pack| pack.id().to_string() == "adhoc") {
+        Err(PackListError::Adhoc)
+    } else {
+        Ok(())
     }
 }

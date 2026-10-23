@@ -16,8 +16,8 @@ use crate::tools::ToolId;
 
 /// Records one tool call the model requested.
 ///
-/// It holds the call's id, name, and raw arguments, and the bound tool the
-/// name resolved to.
+/// It holds the call's id, name, and raw arguments, the bound tool the
+/// name resolved to, and the vendor of the Pack that answers it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct ToolCallEvent {
@@ -32,11 +32,18 @@ pub struct ToolCallEvent {
     /// name outside the round's scope.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tool: Option<ToolId>,
+    /// The vendor of the Pack that answers `tool`, as the caller reported
+    /// it, such as `runvil`; `None` for an adhoc tool, a name outside the
+    /// round's scope, or a run given no roster. A vendor is one segment,
+    /// so `vendor/tool` is the vendor-qualified name, such as
+    /// `runvil/user-input/ask`, and only when `vendor` is present.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub vendor: Option<String>,
 }
 
 impl ToolCallEvent {
     /// Builds the record of call `id` to `name` with `arguments`, bound to
-    /// no tool.
+    /// no tool and naming no vendor.
     #[must_use]
     pub fn new(
         id: impl Into<String>,
@@ -48,6 +55,7 @@ impl ToolCallEvent {
             name: name.into(),
             arguments,
             tool: None,
+            vendor: None,
         }
     }
 
@@ -55,6 +63,13 @@ impl ToolCallEvent {
     #[must_use]
     pub fn with_tool(mut self, tool: Option<ToolId>) -> ToolCallEvent {
         self.tool = tool;
+        self
+    }
+
+    /// Sets the vendor of the Pack that answers the bound tool.
+    #[must_use]
+    pub fn with_vendor(mut self, vendor: Option<String>) -> ToolCallEvent {
+        self.vendor = vendor;
         self
     }
 }

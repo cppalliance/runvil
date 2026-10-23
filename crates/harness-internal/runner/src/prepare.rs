@@ -357,8 +357,8 @@ pub(crate) async fn prepare_noting_cancel(
     })
 }
 
-/// Sets `snapshot`'s catalog, roster, and declared preludes on `ctx`, then
-/// prepares it for `prompt`.
+/// Sets `snapshot`'s catalog, roster with each usable Pack's vendor, and
+/// declared preludes on `ctx`, then prepares it for `prompt`.
 fn prepare_from_snapshot(
     ctx: RunContext,
     snapshot: &HostRunContext,

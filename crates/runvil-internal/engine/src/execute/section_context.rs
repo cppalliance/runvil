@@ -55,6 +55,10 @@ pub(super) struct AdhocCall {
     /// model turn the call was made in even when the handler runs model
     /// rounds of its own.
     pub(super) report: ScriptReport,
+    /// Whether the handler's own `tools.call` received a listing while
+    /// this call was the frame's innermost open one, so its result is
+    /// wrapped and reported untrusted.
+    pub(super) listing: bool,
 }
 
 /// One section entry's owned frame within a run.
@@ -222,6 +226,14 @@ impl SectionContext {
     /// Closes the innermost open adhoc tool call; `None` when none is open.
     pub(super) fn pop_adhoc_call(&mut self) -> Option<AdhocCall> {
         self.adhoc_calls.pop()
+    }
+
+    /// Marks the innermost open adhoc tool call as having received a
+    /// listing; a frame with no open call marks nothing.
+    pub(super) fn mark_listing(&mut self) {
+        if let Some(call) = self.adhoc_calls.last_mut() {
+            call.listing = true;
+        }
     }
 }
 

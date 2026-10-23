@@ -57,14 +57,14 @@ function check(name, condition) {
   if (!condition) failures.push(name);
 }
 
-/** A tool step the way the model builds one. */
-function step({ name, tool, args = {}, result = null, loading = false }) {
-  const call = { id: "c1", name, tool, args: args === "" ? "" : JSON.stringify(args) };
+/** A tool step the way the model builds one, for a tool of a Pack from `vendor`. */
+function step({ name, tool, vendor = "runvil", args = {}, result = null, loading = false }) {
+  const call = { id: "c1", name, tool, vendor, args: args === "" ? "" : JSON.stringify(args) };
   return {
     step: "tool",
     key: "c:0:c1",
     call,
-    toolKind: toolKind(tool),
+    toolKind: toolKind(`${vendor}/${tool}`),
     result,
     loading,
     label: toolLabel(call, loading),

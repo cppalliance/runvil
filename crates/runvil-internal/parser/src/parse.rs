@@ -98,11 +98,13 @@ impl Prompt {
                 column,
             }
         })?;
-        contract::check_distinct_packs(frontmatter.uses()).map_err(|refusal| match refusal {
-            PackListError::Duplicate(_) => {
-                Error::parse(ParseErrorKind::Frontmatter, refusal.to_string())
-            }
-        })?;
+        contract::check_distinct_packs(frontmatter.uses())
+            .and_then(|()| contract::check_no_adhoc_pack(frontmatter.uses()))
+            .map_err(|refusal| match refusal {
+                PackListError::Duplicate(_) | PackListError::Adhoc => {
+                    Error::parse(ParseErrorKind::Frontmatter, refusal.to_string())
+                }
+            })?;
         // Everything past the frontmatter postdates the prompt's name, so a
         // failure from here on is stamped with it (and its span's position).
         let name = frontmatter.name().to_owned();

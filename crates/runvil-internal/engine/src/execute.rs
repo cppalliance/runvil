@@ -59,7 +59,7 @@ pub use bindings::ModelBindings;
 pub use config::{RunContext, RunLimits};
 pub use error::{RunError, RunErrorKind, SourceLocation};
 pub use requirements::{
-    MissingService, RequirementCheck, Requirements, UnavailablePack, UnmetRequirement,
+    MissingService, RequirementCheck, Requirements, UnavailablePack, UnmetRequirement, UsablePack,
 };
 pub use run::{
     AnswerRecord, ChatAnswerRecord, Effect, EffectAnswer, EffectId, EffectRecord, FailureRecord,

@@ -10,7 +10,7 @@ use workshop_agents::{Delta, SessionEvent, WaitFrame};
 use workshop_protocol::InputFrame;
 
 use super::{advance, delta_frame, input_frame};
-use crate::agents::wire::{AgentDeltaFrame, AgentDeltaKind, AgentEventFrame};
+use crate::agents::wire::{AgentDeltaFrame, AgentDeltaKind, AgentEventFrame, AskTool};
 
 #[test]
 fn input_frames_map_conversation_waits_to_wire_shapes() {
@@ -75,14 +75,19 @@ fn provenance() -> Provenance {
 /// The ask tool's fixed id, under the user-input Pack's id.
 const ASK_TOOL: &str = "user-input/ask";
 
-/// The ask tool's id, which a script's ask result is recognized by.
-fn ask() -> ToolId {
-    ToolId::parse(ASK_TOOL).expect("the ask tool id parses")
+/// The ask tool's vendor and id, which a script's ask result is
+/// recognized by.
+fn ask() -> AskTool {
+    AskTool {
+        vendor: "runvil".to_owned(),
+        id: ToolId::parse(ASK_TOOL).expect("the ask tool id parses"),
+    }
 }
 
 /// The operator's message as a script's ask result, which has a wire
 /// shape.
 fn operator_message(text: &str) -> Event {
+    let ask = ask();
     Event::ToolResult {
         execution: "run".to_owned(),
         section: "chat".to_owned(),
@@ -90,7 +95,8 @@ fn operator_message(text: &str) -> Event {
         turn: 0,
         tool_call_id: String::new(),
         alias: ASK_TOOL.to_owned(),
-        tool: Some(ask()),
+        tool: Some(ask.id),
+        vendor: Some(ask.vendor),
         content: text.to_owned(),
         trusted: true,
     }

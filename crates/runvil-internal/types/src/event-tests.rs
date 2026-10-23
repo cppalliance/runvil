@@ -230,7 +230,8 @@ fn content_samples() -> Vec<Event> {
             model: "llama-3".to_owned(),
             calls: vec![
                 ToolCallEvent::new("call_1", "read_file", json!({ "path": "notes.txt" }))
-                    .with_tool(Some(read_tool())),
+                    .with_tool(Some(read_tool()))
+                    .with_vendor(Some("acme".to_owned())),
             ],
         },
         Event::ToolResult {
@@ -241,6 +242,7 @@ fn content_samples() -> Vec<Event> {
             tool_call_id: "call_1".to_owned(),
             alias: "read_file".to_owned(),
             tool: Some(read_tool()),
+            vendor: Some("acme".to_owned()),
             content: "file contents".to_owned(),
             trusted: false,
         },
@@ -356,11 +358,18 @@ fn a_reply_without_origin_reads_back_as_chat() {
 
 #[test]
 fn a_tool_result_without_a_bound_tool_keeps_its_logged_shape() {
-    // A result logged before `tool` existed reads back with none, and a
-    // result with none writes the line it always did.
+    // A result logged without `tool` or `vendor` reads back with neither,
+    // and a result with neither writes that same line.
     let line = r#"{"kind":"tool_result","execution":"run-1","section":"Gather","provenance":{"task":"0","seq":5},"turn":2,"tool_call_id":"","alias":"ask","content":"hi","trusted":true}"#;
     let event: Event = serde_json::from_str(line).expect("an older tool result parses");
-    assert!(matches!(&event, Event::ToolResult { tool: None, .. }));
+    assert!(matches!(
+        &event,
+        Event::ToolResult {
+            tool: None,
+            vendor: None,
+            ..
+        }
+    ));
     assert_wire(&event, line);
 }
 

@@ -35,9 +35,10 @@
 //! chain's block coroutine, so the handler's own suspending calls are
 //! ordinary requests of this chain, then yields `adhoc_tool_done`. That
 //! arm closes the innermost open call and reports it: the succeeded or
-//! failed observation and, on success, the trusted `ToolResult` under the
-//! call id recorded at dispatch. An adhoc call never issues leaf work of
-//! its own.
+//! failed observation and, on success, the `ToolResult` under the call id
+//! recorded at dispatch, trusted unless the handler fetched a listing
+//! while the call was open. An adhoc call never issues leaf work of its
+//! own.
 
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
@@ -277,6 +278,7 @@ impl Scheduler {
                         alias: alias.to_owned(),
                         call_id: site.call_id().map(str::to_owned),
                         report,
+                        listing: false,
                     });
                 Ok(ToolCallDispatch::Answered(Answer::ToolCallResult(Ok(
                     ToolCallOutcome::Adhoc {
@@ -384,10 +386,12 @@ impl Scheduler {
     /// reports `TOOL_CALL_SUCCEEDED` and a trusted `ToolResult` - the
     /// prompt author wrote the handler, so its output passes verbatim -
     /// under the call id (or none for a script call) and the turn recorded
-    /// at dispatch, then resumes as the text. A rejected return reports
-    /// `TOOL_CALL_FAILED` and resumes as its error. A raise reports
-    /// `TOOL_CALL_FAILED` and resumes empty: the shim raises the handler's
-    /// own value in its place.
+    /// at dispatch, then resumes as the text. A call marked as having
+    /// fetched a listing while it was open instead returns its text
+    /// wrapped with the run's nonce and reports it untrusted. A rejected
+    /// return reports `TOOL_CALL_FAILED` and resumes as its error. A raise
+    /// reports `TOOL_CALL_FAILED` and resumes empty: the shim raises the
+    /// handler's own value in its place.
     ///
     /// # Errors
     /// Returns [`Error::Internal`] when the chain has no frame or no open
@@ -406,14 +410,20 @@ impl Scheduler {
         let answer = match outcome {
             AdhocToolOutcome::Returned(text) => {
                 emitter.report(&section, lifecycle::TOOL_CALL_SUCCEEDED);
+                let (text, trust) = if call.listing {
+                    (chain.ctx.nonce().wrap(&text), OutputTrust::Untrusted)
+                } else {
+                    (text, OutputTrust::Trusted)
+                };
                 emitter.tool_result(
                     &section,
                     call.report.turn,
                     call.call_id.as_deref().unwrap_or(""),
                     &call.alias,
                     None,
+                    None,
                     &text,
-                    OutputTrust::Trusted,
+                    trust,
                 );
                 Ok(ToolCallOutcome::Plain(text))
             }

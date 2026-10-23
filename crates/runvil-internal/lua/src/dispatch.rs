@@ -52,32 +52,41 @@ pub struct ModelReport {
 }
 
 /// The resolved outcome of one dispatched tool call: the final content -
-/// nonce-wrapped when untrusted - beside its trust marking. A model
-/// tool-loop dispatch reports the pair through the `ToolResult` event
-/// itself; a script-initiated dispatch reads only the content, its report
-/// already fired inside [`prepare_dispatch`].
+/// nonce-wrapped when untrusted, except a script's listing - beside its
+/// trust marking. A model tool-loop dispatch reports the pair through the
+/// `ToolResult` event itself; a script-initiated dispatch reads only the
+/// content, its report already fired inside [`prepare_dispatch`].
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ToolDispatch {
     content: String,
     trust: OutputTrust,
+    listing: bool,
 }
 
 impl ToolDispatch {
-    /// The final content: trusted output verbatim, anything else
-    /// nonce-wrapped.
+    /// The final content: trusted output and a script's listing verbatim,
+    /// anything else nonce-wrapped.
     #[cfg(test)]
     #[must_use]
     pub(crate) fn content(&self) -> &str {
         &self.content
     }
 
-    /// The content's trust marking: [`OutputTrust::Trusted`]
-    /// for verbatim output, [`OutputTrust::Untrusted`] for the
-    /// nonce-wrapped envelope.
+    /// The content's trust marking: [`OutputTrust::Trusted`] for trusted
+    /// output, [`OutputTrust::Untrusted`] for the nonce-wrapped envelope
+    /// and for a script's listing.
     #[cfg(test)]
     #[must_use]
     pub(crate) fn trust(&self) -> OutputTrust {
         self.trust
+    }
+
+    /// Whether the content is untrusted text passed verbatim: a script's
+    /// call to a tool that describes tools, answered with untrusted
+    /// output. Trusted output from such a tool is not a listing.
+    #[must_use]
+    pub fn listing(&self) -> bool {
+        self.listing
     }
 
     /// Dissolves the outcome into its content.
@@ -94,11 +103,14 @@ impl ToolDispatch {
 /// executor that counted the attempt at dispatch passes `None`), the
 /// succeeded/failed observation,
 /// then the trust rule - a trusted output passes verbatim, anything else is
-/// nonce-wrapped before it can reach a model turn or a calling script. A
-/// script-initiated call (`script` is `Some`) also fires
-/// the `ToolResult` event with the final content; a model-loop call
-/// fires no content event here: the loop reports the returned
-/// [`ToolDispatch`] under the model-issued call id.
+/// nonce-wrapped before it can reach a model turn or a calling script,
+/// except that a script-initiated call to a binding that describes tools
+/// receives its untrusted output verbatim, still marked untrusted, as a
+/// listing the script reads. A script-initiated call (`script` is `Some`)
+/// also fires the `ToolResult` event with the final content and the
+/// binding's vendor; a model-loop call fires no content event here: the
+/// loop reports the returned [`ToolDispatch`] under the model-issued call
+/// id.
 ///
 /// `call_result` is the tool's own answer, however the caller obtained it.
 /// Nothing here awaits: the Harness performs the call, and the Engine
@@ -130,17 +142,24 @@ pub fn prepare_dispatch(
     );
     let output = call_result.map_err(Error::tool)?;
     // Trust travels with the output: an untrusted result is nonce-wrapped
-    // before it can reach the next model turn or the calling script. Every
-    // wrap in the run shares the run's nonce, so identical content yields a
-    // byte-identical envelope and KV-cache prefixes stay shared across
-    // rounds and fanout arms; the `<`-escaping is what actually blocks a
-    // forged close tag, so the reuse costs nothing.
-    let (content, trust) = match output.trust() {
-        OutputTrust::Trusted => (output.text().to_owned(), OutputTrust::Trusted),
+    // before it can reach the next model turn or the calling script, except
+    // a listing a script reads, which passes verbatim. Its `listing` flag
+    // lets the Engine mark the innermost open adhoc call, whose result is
+    // then wrapped before a model reads it; the untrusted marking keeps
+    // this call's result event `trusted` false. Every wrap in the run
+    // shares the run's nonce, so identical content yields a byte-identical
+    // envelope and KV-cache prefixes stay shared across rounds and fanout
+    // arms; the `<`-escaping is what actually blocks a forged close tag, so
+    // the reuse costs nothing.
+    let (content, trust, listing) = match output.trust() {
+        OutputTrust::Trusted => (output.text().to_owned(), OutputTrust::Trusted, false),
+        OutputTrust::Untrusted if script.is_some() && binding.describes_tools() => {
+            (output.text().to_owned(), OutputTrust::Untrusted, true)
+        }
         // `OutputTrust` is `#[non_exhaustive]` in the contract crate: an
         // unknown future variant takes the safe path and is nonce-wrapped
         // as untrusted.
-        _ => (nonce.wrap(output.text()), OutputTrust::Untrusted),
+        _ => (nonce.wrap(output.text()), OutputTrust::Untrusted, false),
     };
     if let Some(report) = script {
         emitter.tool_result(
@@ -149,11 +168,16 @@ pub fn prepare_dispatch(
             "",
             binding.alias(),
             Some(binding.id()),
+            binding.vendor(),
             &content,
             trust,
         );
     }
-    Ok(ToolDispatch { content, trust })
+    Ok(ToolDispatch {
+        content,
+        trust,
+        listing,
+    })
 }
 
 /// Applies the model-issued dispatch rules to one bound tool call's answer:
@@ -185,6 +209,7 @@ pub fn prepare_model_dispatch(
             Err(Error::Tool { message, .. }) => ToolDispatch {
                 content: nonce.wrap(&message),
                 trust: OutputTrust::Untrusted,
+                listing: false,
             },
             Err(error) => return Err(error),
         };
@@ -194,6 +219,7 @@ pub fn prepare_model_dispatch(
         &report.call_id,
         binding.alias(),
         Some(binding.id()),
+        binding.vendor(),
         &outcome.content,
         outcome.trust,
     );

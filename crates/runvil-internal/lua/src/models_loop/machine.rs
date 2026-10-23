@@ -137,7 +137,7 @@ pub(super) enum Then<V> {
     },
     /// Yield `{ op = "tool_call", alias = call.name, args = call.arguments,
     /// call_id = call.id, turn = turn }`.
-    ToolCall { call: ToolCallEvent, turn: u32 },
+    ToolCall { call: Box<ToolCallEvent>, turn: u32 },
     /// Call the compactor with the reason's tag.
     Compact {
         compactor: V,
@@ -338,7 +338,7 @@ impl<V: Clone> Machine<V> {
             Some(call) if short => {
                 self.phase = Phase::Calling;
                 Then::ToolCall {
-                    call: call.clone(),
+                    call: Box::new(call.clone()),
                     turn: self.turn,
                 }
             }

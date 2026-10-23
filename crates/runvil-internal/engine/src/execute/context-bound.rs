@@ -16,9 +16,9 @@ use super::super::config::RunContext;
 
 /// Builds the run's shared tool set: the frontmatter's declared Packs,
 /// the `roster` moved out of the context, and every catalog tool the run
-/// can offer bound with the tool's info (its schema,
-/// description, and output kind), so run-time execution never consults the
-/// catalog again and never holds an implementation.
+/// can offer bound with the tool's info (its schema, description, output
+/// kind, and listing flag) and its Pack's vendor, so run-time execution
+/// never consults the catalog again and never holds an implementation.
 pub(super) fn bound_tool_set(
     prompt: &Prompt,
     ctx: &RunContext,
@@ -51,10 +51,16 @@ fn offered_bindings(ctx: &RunContext) -> Vec<ToolBinding> {
             tracing::warn!(tool = %tool.id, %name, %reason, "a tool is left out of the offering");
             continue;
         }
-        offered.push(ToolBinding::from_info(&name, tool));
+        offered.push(catalog_binding(ctx, &name, tool));
         taken.insert(name);
     }
     offered
+}
+
+/// Binds `tool` under `alias`, stamped with the vendor the caller
+/// reported for its Pack, if any.
+fn catalog_binding(ctx: &RunContext, alias: &str, tool: &ToolInfo) -> ToolBinding {
+    ToolBinding::from_info(alias, tool).with_vendor(ctx.vendors.get(&tool.id.pack()).cloned())
 }
 
 /// Why `tool` can't be offered under `name`: no model round could
@@ -84,7 +90,7 @@ pub(super) fn catalog_bindings(ctx: &RunContext) -> BTreeMap<String, ToolBinding
         .iter()
         .map(|tool| {
             let id = tool.id.to_string();
-            let binding = ToolBinding::from_info(&id, tool);
+            let binding = catalog_binding(ctx, &id, tool);
             (id, binding)
         })
         .collect()

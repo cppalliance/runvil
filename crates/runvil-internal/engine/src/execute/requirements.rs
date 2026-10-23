@@ -39,26 +39,35 @@ pub struct Requirements {
     ///
     /// The caller adds these. The run fails until the Pack can serve.
     pub unavailable: Vec<UnavailablePack>,
+    /// Whether the run's tool catalog or Pack roster names the Pack id
+    /// `adhoc`, which holds a section's own tools.
+    ///
+    /// [`RunContext::prepare`](super::RunContext::prepare) sets it. The run
+    /// fails while it is set.
+    pub reserved_adhoc: bool,
 }
 
 impl Requirements {
     /// Returns whether the report lets the run proceed.
     ///
-    /// That holds when every model requirement is met and every required
-    /// Pack is present, can serve, and has the services it needs.
+    /// That holds when every model requirement is met, every required
+    /// Pack is present, can serve, and has the services it needs, and no
+    /// Pack takes the Pack id `adhoc`.
     #[must_use]
     pub fn is_satisfied(&self) -> bool {
         self.unmet_requirements.is_empty()
             && self.missing_required.is_empty()
             && self.missing_services.is_empty()
             && self.unavailable.is_empty()
+            && !self.reserved_adhoc
     }
 
     /// Adds the entries of `other` to this report.
     ///
     /// Use it to combine the caller's Pack report with the report
     /// from `RunContext::prepare`, so that one refusal names every gap.
-    /// The merge skips an entry the report already holds.
+    /// The merge skips an entry the report already holds, and keeps
+    /// `reserved_adhoc` set when either report sets it.
     ///
     /// The merge drops the `missing_required` entry of a Pack that
     /// lacks a service or is unavailable: the service or unavailable entry
@@ -67,6 +76,7 @@ impl Requirements {
         push_new(&mut self.missing_required, other.missing_required);
         push_new(&mut self.missing_services, other.missing_services);
         push_new(&mut self.unavailable, other.unavailable);
+        self.reserved_adhoc |= other.reserved_adhoc;
         let (services, unavailable) = (&self.missing_services, &self.unavailable);
         self.missing_required.retain(|id| {
             !services.iter().any(|missing| missing.pack == *id)
@@ -120,6 +130,12 @@ impl Requirements {
                 entry.pack, entry.reason
             );
         }
+        if self.reserved_adhoc {
+            notice.push_str(
+                "\n- the run's tool catalog or Pack roster names the Pack id adhoc, \
+                 which holds a section's own tools",
+            );
+        }
         for unmet in &self.unmet_requirements {
             let _ = match unmet.check {
                 RequirementCheck::ContextMinimum => write!(
@@ -145,6 +161,36 @@ fn push_new<T: PartialEq>(entries: &mut Vec<T>, incoming: Vec<T>) {
     for entry in incoming {
         if !entries.contains(&entry) {
             entries.push(entry);
+        }
+    }
+}
+
+/// An installed Pack that can serve the run, and its vendor.
+///
+/// The run's roster, set with
+/// [`RunContext::packs`](super::RunContext::packs), lists every one the
+/// run holds. The caller reports each Pack's vendor as it picked the
+/// Pack, and every tool-call and tool-result event for one of the Pack's
+/// tools records it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct UsablePack {
+    /// The installed Pack.
+    pub pack: PackId,
+    /// The vendor the caller picked the Pack from, such as `runvil` or
+    /// `acme`.
+    pub vendor: String,
+}
+
+impl UsablePack {
+    /// Creates an entry stating that `pack`, from `vendor`, can serve.
+    ///
+    /// Only the caller builds these, for its roster.
+    #[must_use]
+    pub fn new(pack: PackId, vendor: impl Into<String>) -> UsablePack {
+        UsablePack {
+            pack,
+            vendor: vendor.into(),
         }
     }
 }

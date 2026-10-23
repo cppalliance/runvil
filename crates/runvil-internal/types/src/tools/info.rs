@@ -9,8 +9,9 @@ use super::ids::ToolId;
 /// A tool described as data.
 ///
 /// A `ToolInfo` holds the tool's stable id, the description the model
-/// reads, its parameter schema, whether its output is structured, and
-/// whether a stop leaves its calls running.
+/// reads, its parameter schema, whether its output is structured,
+/// whether a stop leaves its calls running, and whether its output lists
+/// tools.
 ///
 /// The caller collects the `ToolInfo` values of every Pack it can serve
 /// into a [`ToolCatalog`](super::ToolCatalog). The implementations stay with
@@ -40,10 +41,19 @@ pub struct ToolInfo {
     /// `false`.
     #[serde(default)]
     pub survives_stop: bool,
+    /// Whether the tool's output lists tools, such as the tools of the
+    /// servers a Pack reaches. A script that calls such a tool receives
+    /// its untrusted output as plain text, so the script can read the
+    /// listing, while a model's call still receives the untrusted
+    /// envelope. A `ToolInfo` serialized without the field reads as
+    /// `false`.
+    #[serde(default)]
+    pub describes_tools: bool,
 }
 
 impl ToolInfo {
-    /// Builds a `ToolInfo` with plain-text output that a stop reaches.
+    /// Builds a `ToolInfo` with plain-text output that a stop reaches and
+    /// that lists no tools.
     #[must_use]
     pub fn new(id: ToolId, description: impl Into<String>, parameters_schema: Value) -> ToolInfo {
         ToolInfo {
@@ -52,6 +62,7 @@ impl ToolInfo {
             parameters_schema,
             structured_output: false,
             survives_stop: false,
+            describes_tools: false,
         }
     }
 
@@ -68,6 +79,14 @@ impl ToolInfo {
     #[must_use]
     pub fn survives_stop(mut self, survives: bool) -> ToolInfo {
         self.survives_stop = survives;
+        self
+    }
+
+    /// Sets whether the tool's output lists tools (`true`) or not
+    /// (`false`).
+    #[must_use]
+    pub fn describes_tools(mut self, describes: bool) -> ToolInfo {
+        self.describes_tools = describes;
         self
     }
 }

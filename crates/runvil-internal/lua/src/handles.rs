@@ -25,8 +25,8 @@ pub enum ToolOutputKind {
 }
 
 /// One catalog tool bound under the name a model sees, holding the tool's
-/// data - its schema, description, and output kind - and never its
-/// implementation.
+/// data - its schema, description, output kind, whether it lists tools,
+/// and its Pack's vendor - and never its implementation.
 ///
 /// Run-time execution (schema preparation, script dispatch) reads the
 /// binding alone; a call is issued as an effect naming the identity, and
@@ -46,12 +46,18 @@ pub struct ToolBinding {
     /// How a script-initiated `tools.call` resumes this binding's output;
     /// the model tool loop ignores it.
     output_kind: ToolOutputKind,
+    /// Whether the tool's output lists tools, which a script's call
+    /// receives as plain text.
+    describes_tools: bool,
+    /// The vendor of the tool's Pack, as the caller reported it.
+    vendor: Option<String>,
 }
 
 impl ToolBinding {
     /// Binds `alias` to the tool `info` describes: the description is the
-    /// tool's own, and the output kind follows the tool info's
-    /// structured-output flag.
+    /// tool's own, the output kind follows the tool info's
+    /// structured-output flag, and the listing flag is the tool info's.
+    /// The binding names no vendor.
     #[must_use]
     pub fn from_info(alias: &str, info: &ToolInfo) -> Self {
         Self {
@@ -64,7 +70,16 @@ impl ToolBinding {
             } else {
                 ToolOutputKind::Plain
             },
+            describes_tools: info.describes_tools,
+            vendor: None,
         }
+    }
+
+    /// Sets the vendor of the tool's Pack, as the caller reported it.
+    #[must_use]
+    pub fn with_vendor(mut self, vendor: Option<String>) -> Self {
+        self.vendor = vendor;
+        self
     }
 
     /// Returns the model-facing name.
@@ -96,6 +111,19 @@ impl ToolBinding {
     #[must_use]
     pub fn output_kind(&self) -> ToolOutputKind {
         self.output_kind
+    }
+
+    /// Returns whether the tool's output lists tools.
+    #[must_use]
+    pub fn describes_tools(&self) -> bool {
+        self.describes_tools
+    }
+
+    /// Returns the vendor of the tool's Pack, as the caller reported it
+    /// for the run, or `None` when it reported none.
+    #[must_use]
+    pub fn vendor(&self) -> Option<&str> {
+        self.vendor.as_deref()
     }
 }
 

@@ -28,7 +28,6 @@ use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::http::HeaderMap;
 use axum::response::Response;
 use harness::display_chain;
-use runvil::tools::ToolId;
 use tokio::sync::broadcast;
 use tokio::sync::broadcast::error::RecvError;
 
@@ -39,7 +38,9 @@ use workshop_support::recv_or_pending;
 use super::LaunchRefusal;
 use super::socket_frames::{delta_frame, drain_events, frame_entry, input_frame};
 use super::state::SessionsState;
-use crate::agents::wire::{AgentSessionFrame, AgentsFrame, RequestRefusal, SessionRequest};
+use crate::agents::wire::{
+    AgentSessionFrame, AgentsFrame, AskTool, RequestRefusal, SessionRequest,
+};
 use crate::websocket::{cross_site_refusal, send_error, send_frame};
 
 /// Upgrades a `GET /agents/ws` request to an agent-session socket. A
@@ -57,14 +58,14 @@ pub(super) async fn upgrade(
 }
 
 /// The attachment state of one socket: the conversation it serves, the
-/// ask tool's id, and the per-client cursors deriving durable-frame
-/// indices.
+/// ask tool's vendor and id, and the per-client cursors deriving
+/// durable-frame indices.
 pub(super) struct Attached {
     /// The conversation this socket serves.
     pub(super) conversation: Conversation,
-    /// The ask tool's id, which a script's ask result is recognized by;
-    /// `None` when the launcher has no ask tool.
-    pub(super) ask: Option<ToolId>,
+    /// The ask tool's vendor and id, which a script's ask result is
+    /// recognized by; `None` when the launcher has no ask tool.
+    pub(super) ask: Option<AskTool>,
     /// The next transcript index to consider; everything below it has
     /// been read (framed or skipped) for this client already.
     pub(super) cursor: u64,
@@ -411,7 +412,7 @@ fn refusal_text(refusal: &LaunchRefusal) -> String {
 /// `false` return means the client is gone.
 async fn attach(
     conversation: Conversation,
-    ask: Option<ToolId>,
+    ask: Option<AskTool>,
     attached: &mut Option<Attached>,
     (events_rx, deltas_rx, input_rx, errors_rx): Subscriptions<'_>,
     socket: &mut WebSocket,

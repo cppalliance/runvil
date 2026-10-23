@@ -184,15 +184,16 @@ impl Scheduler {
     /// `ToolResult` report - under the model's call id when the model
     /// issued the call (a tool's own failure then resumes as untrusted
     /// failure text), else as a script call classified by the binding's
-    /// declared output kind. The counts were taken at dispatch, so the
-    /// body is handed `None` for them.
+    /// declared output kind. A script call that receives a listing marks
+    /// the chain's frame's innermost open adhoc call. The counts were
+    /// taken at dispatch, so the body is handed `None` for them.
     fn accept_tool_call(
-        &self,
+        &mut self,
         chain: ChainIndex,
         call: &ToolCallContinuation,
         result: std::result::Result<ToolOutput, ToolError>,
     ) -> Result<ToolCallOutcome> {
-        let chain = &self.chains[chain.index()];
+        let chain = &mut self.chains[chain.index()];
         // The shared dispatch body reports through this chain's emitter, so
         // its reports land in the buffer under this chain's task.
         let emitter = chain.ctx.emitter();
@@ -228,12 +229,17 @@ impl Scheduler {
                 section,
                 Some(call.report),
             ) {
-                Ok(outcome) => ToolCallOutcome::from_dispatch(
-                    call.binding.output_kind(),
-                    call.binding.alias(),
-                    outcome.into_content(),
-                )
-                .map_err(Error::from),
+                Ok(outcome) => {
+                    if outcome.listing() {
+                        chain.frame_mut()?.mark_listing();
+                    }
+                    ToolCallOutcome::from_dispatch(
+                        call.binding.output_kind(),
+                        call.binding.alias(),
+                        outcome.into_content(),
+                    )
+                    .map_err(Error::from)
+                }
                 Err(error) => Err(Error::from(error)),
             },
         }

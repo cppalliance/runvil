@@ -134,6 +134,24 @@ fn a_pack_id_declared_twice_is_refused() {
 }
 
 #[test]
+fn the_adhoc_pack_id_is_refused_from_any_vendor() {
+    for entries in ["[adhoc]", "[acme/adhoc]", "[web, runvil/adhoc]"] {
+        let error = parse_err(&prompt(&format!("uses: {entries}"), &[]));
+        assert_eq!(
+            error.kind(),
+            ParseErrorKind::Frontmatter,
+            "{entries}: {error}"
+        );
+        assert_eq!(
+            error.to_string(),
+            "invalid frontmatter: adhoc holds a section's own tools and is never declared \
+             under uses",
+            "{entries}"
+        );
+    }
+}
+
+#[test]
 fn a_list_of_distinct_pack_ids_still_parses() {
     let prompt = parse_ok(&prompt("uses: [web, web2, web-search, acme/poop]", &[]));
     assert_eq!(prompt.frontmatter().uses().len(), 4);

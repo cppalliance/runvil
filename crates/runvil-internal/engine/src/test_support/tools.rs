@@ -24,6 +24,7 @@ pub(crate) struct FnTool {
     description: String,
     schema: serde_json::Value,
     structured: bool,
+    describes_tools: bool,
     handler: Arc<FnToolHandler>,
 }
 
@@ -42,6 +43,7 @@ impl FnTool {
             description: String::new(),
             schema,
             structured: false,
+            describes_tools: false,
             handler: Arc::new(handler),
         }
     }
@@ -59,6 +61,13 @@ impl FnTool {
         self
     }
 
+    /// Marks the tool as one whose output lists tools, so a script's call
+    /// receives its untrusted output as plain text.
+    pub(crate) fn describes_tools(mut self) -> FnTool {
+        self.describes_tools = true;
+        self
+    }
+
     /// The tool's stable identity: the catalog key and what a `ToolCall`
     /// effect names.
     pub(crate) fn id(&self) -> ToolId {
@@ -68,7 +77,9 @@ impl FnTool {
     /// The tool as data: the tool info the Engine binds and advertises,
     /// what a scenario installs in the run's catalog.
     pub(crate) fn info(&self) -> ToolInfo {
-        ToolInfo::new(self.id(), &self.description, self.schema.clone()).structured(self.structured)
+        ToolInfo::new(self.id(), &self.description, self.schema.clone())
+            .structured(self.structured)
+            .describes_tools(self.describes_tools)
     }
 
     /// Answers one call with `args` at once.

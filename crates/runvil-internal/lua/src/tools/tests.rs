@@ -12,6 +12,8 @@ use crate::{ToolBinding, ToolSet};
 
 #[path = "tests-offering.rs"]
 mod offering;
+#[path = "tests-parameters.rs"]
+mod parameters;
 
 /// A userdata that is not a Tool object, for the foreign-userdata rejection.
 struct Foreign;

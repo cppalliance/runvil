@@ -339,7 +339,7 @@ fn parsed(lua: &Lua, then: Then<Value>) -> Request {
 fn act_yields_each_request_as_the_protocol_parses_it() {
     let lua = Lua::new();
     let tool_call = Then::ToolCall {
-        call: echo_call("c1"),
+        call: Box::new(echo_call("c1")),
         turn: 7,
     };
     let Request::ToolCall {

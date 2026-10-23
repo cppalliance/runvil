@@ -217,14 +217,24 @@ struct AgentEvent {
     metrics: Option<CallMetrics>,
 }
 
+/// The ask tool a script's result is recognized by: the vendor of the
+/// Pack that answers it and its id.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(super) struct AskTool {
+    /// The vendor of the ask tool's Pack, `runvil`.
+    pub(super) vendor: String,
+    /// The ask tool's id, `user-input/ask`.
+    pub(super) id: ToolId,
+}
+
 impl AgentEvent {
     /// Projects one Engine event onto the wire shape, or `None` for a
     /// variant the transcript does not render (lifecycle, task, and debug
-    /// events). A script's call to the ask tool, whose id is `ask`, frames
-    /// as the operator's `user_message`, because its result is the text
-    /// the operator typed.
+    /// events). A script's call to the ask tool `ask`, matched by both its
+    /// vendor and its id, frames as the operator's `user_message`, because
+    /// its result is the text the operator typed.
     #[must_use]
-    fn from_event(event: &Event, ask: Option<&ToolId>) -> Option<Self> {
+    fn from_event(event: &Event, ask: Option<&AskTool>) -> Option<Self> {
         let base = |kind: AgentEventKind, turn: u32, content: String| AgentEvent {
             kind,
             section: event.section().to_owned(),
@@ -270,9 +280,12 @@ impl AgentEvent {
             Event::ToolResult {
                 tool_call_id,
                 tool: Some(tool),
+                vendor: Some(vendor),
                 content,
                 ..
-            } if tool_call_id.is_empty() && ask == Some(tool) => {
+            } if tool_call_id.is_empty()
+                && ask.is_some_and(|ask| ask.id == *tool && ask.vendor == *vendor) =>
+            {
                 base(AgentEventKind::UserInput, 0, content.clone())
             }
             Event::ToolResult {
@@ -323,13 +336,13 @@ pub(super) struct AgentEventFrame {
 impl AgentEventFrame {
     /// Builds the frame for the entry at `index`, or `None` when `event`
     /// is a variant the transcript does not render. `ask` is the ask
-    /// tool's id, which a script's ask result is recognized by.
+    /// tool's vendor and id, which a script's ask result is recognized by.
     #[must_use]
     pub(super) fn new(
         index: u64,
         reply: Option<u64>,
         event: &Event,
-        ask: Option<&ToolId>,
+        ask: Option<&AskTool>,
     ) -> Option<Self> {
         Some(Self {
             kind: "agent_event",

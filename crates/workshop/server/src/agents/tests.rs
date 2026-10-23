@@ -1,7 +1,7 @@
 //! The agent conversations' Harness setup: after the server calls the
 //! three Plugins and builds its Host, every run holds the `web`,
-//! `user-input`, `subagents`, and `mcp` Packs, and the ask id is the
-//! fixed `user-input/ask`. A prompt declaring `web` or the built-in
+//! `user-input`, `subagents`, and `mcp` Packs, and the ask is the fixed
+//! `user-input/ask` of vendor `runvil`. A prompt declaring `web` or the built-in
 //! `subagents` prepares over the server's built Packs, a Host without the
 //! search provider builds web as unavailable and refuses the prompt
 //! naming that service, and outside a runtime the services leave the
@@ -30,6 +30,7 @@ use serde_json::json;
 use workshop_agents::{Conversations, SessionState, TokioTimer};
 use workshop_registry::Registry;
 
+use super::wire::AskTool;
 use super::{host_context, read_mcp_servers, services, with_plugins};
 
 /// The runtime's key, built from the Plugin contract's name as any Host
@@ -171,12 +172,15 @@ async fn a_host_without_the_search_provider_refuses_a_prompt_requiring_web() {
 }
 
 #[test]
-fn the_ask_id_is_the_fixed_user_input_ask_tool() {
+fn the_ask_is_the_runvil_vendors_fixed_user_input_ask_tool() {
     let (_host, ask) = host_context(&Registry::new(), None);
     assert_eq!(
         ask,
-        Some(ToolId::parse("user-input/ask").expect("the id parses")),
-        "the user-input Plugin added its Pack, whose Pack id is user-input"
+        Some(AskTool {
+            vendor: "runvil".to_owned(),
+            id: ToolId::parse("user-input/ask").expect("the id parses"),
+        }),
+        "the user-input Plugin added runvil/user-input, whose Pack id is user-input"
     );
 }
 

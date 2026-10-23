@@ -161,7 +161,8 @@ impl Mcp {
                     }
                 }
             }),
-        );
+        )
+        .describes_tools(true);
         let call = ToolInfo::new(
             id(CALL)?,
             CALL_DESCRIPTION,
@@ -325,3 +326,7 @@ impl Pack for Mcp {
         })
     }
 }
+
+#[cfg(test)]
+#[path = "dynamic-tests.rs"]
+mod tests;

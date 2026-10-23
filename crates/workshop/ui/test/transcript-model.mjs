@@ -60,7 +60,14 @@ const thought = (text, n, { pending = false, startedAt = 0, endedAt = null } = {
 });
 // A thought that ran `ms` milliseconds and settled.
 const thoughtFor = (text, n, ms) => thought(text, n, { startedAt: 1000, endedAt: 1000 + ms });
-const call = (id, name, tool, args = {}) => ({ id, name, tool, args: JSON.stringify(args) });
+// A call to `tool` of a Pack from `vendor`; a bound tool's vendor is runvil unless named.
+const call = (id, name, tool, args = {}, vendor = tool === null ? null : "runvil") => ({
+  id,
+  name,
+  tool,
+  vendor,
+  args: JSON.stringify(args),
+});
 const batch = (...calls) => ({ kind: "tool-call", calls, text: "", model: null });
 const result = (id, text = "ok") => ({ kind: "tool-result", toolCallId: id, text });
 const failure = (message) => ({ kind: "error", message, title: null });
@@ -274,6 +281,28 @@ const keysOf = (model, turn = 0) => rowsOf(model, turn).map((row) => row.key);
     "thought",
     "tool",
   ]);
+
+  const foreign = buildTranscript(
+    [
+      user("q"),
+      batch(
+        call("c1", "ask", "user-input/ask", {}, "acme"),
+        call("c2", "ask", "runvil/user-input/ask", {}, null),
+        call("c3", "ask", "adhoc/ask", {}, null),
+      ),
+    ],
+    false,
+    false,
+  );
+  same("an ask from another vendor, without a vendor, or adhoc groups as ordinary tools", kindsOf(foreign), [
+    "human",
+    "group",
+  ]);
+  same(
+    "each such ask is an ordinary tool step",
+    rowsOf(foreign)[1].steps.map((step) => step.toolKind),
+    ["other", "other", "other"],
+  );
 }
 
 // --- Keys: stable across pending and durable, unique within a turn ----------------
@@ -394,13 +423,35 @@ const keysOf = (model, turn = 0) => rowsOf(model, turn).map((row) => row.key);
 // --- Tool verbs and details ------------------------------------------------------------
 
 {
-  same("tool kinds", [toolKind("web/search"), toolKind("web/fetch"), toolKind("user-input/ask"), toolKind("fs/read"), toolKind(null)], [
-    "search",
-    "fetch",
-    "ask",
-    "other",
-    "other",
-  ]);
+  same(
+    "tool kinds of vendor-qualified names",
+    [
+      "runvil/web/search",
+      "runvil/web/fetch",
+      "runvil/user-input/ask",
+      "runvil/fs/read",
+      "acme/user-input/ask",
+      "acme/web/search",
+      "adhoc/ask",
+      null,
+    ].map(toolKind),
+    ["search", "fetch", "ask", "other", "other", "other", "other", "other"],
+  );
+  same(
+    "a call is special only under the runvil vendor",
+    [
+      call("a", "ask", "user-input/ask", {}, "acme"),
+      call("a", "search", "web/search", { query: "q" }, "acme"),
+      call("a", "ask", "runvil/user-input/ask", {}, null),
+      call("a", "ask", "adhoc/ask", {}, null),
+    ].map((row) => toolLabel(row, false)),
+    [
+      { action: "Ran", details: "ask in user-input", callName: "ask" },
+      { action: "Ran", details: "search in web", callName: "search" },
+      { action: "Ran", details: "ask in runvil", callName: "ask" },
+      { action: "Ran", details: "ask in adhoc", callName: "ask" },
+    ],
+  );
   same("web/search running", toolLabel(search("a", "rust async"), true), {
     action: "Searching web",
     details: "rust async",
@@ -435,10 +486,10 @@ const keysOf = (model, turn = 0) => rowsOf(model, turn).map((row) => row.key);
   same(
     "malformed or missing arguments give empty details",
     [
-      toolLabel({ id: "a", name: "search", tool: "web/search", args: "not json" }, false).details,
-      toolLabel({ id: "a", name: "search", tool: "web/search", args: "" }, false).details,
-      toolLabel({ id: "a", name: "search", tool: "web/search", args: '{"query": 5}' }, false).details,
-      toolLabel({ id: "a", name: "fetch", tool: "web/fetch", args: "[]" }, false).details,
+      toolLabel({ id: "a", name: "search", tool: "web/search", vendor: "runvil", args: "not json" }, false).details,
+      toolLabel({ id: "a", name: "search", tool: "web/search", vendor: "runvil", args: "" }, false).details,
+      toolLabel({ id: "a", name: "search", tool: "web/search", vendor: "runvil", args: '{"query": 5}' }, false).details,
+      toolLabel({ id: "a", name: "fetch", tool: "web/fetch", vendor: "runvil", args: "[]" }, false).details,
     ],
     ["", "", "", ""],
   );

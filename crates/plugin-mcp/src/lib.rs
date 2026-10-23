@@ -15,8 +15,10 @@
 //! Cursor's `GetDynamicTools` and `CallDynamicTool`:
 //!
 //! - `get_dynamic_tools` takes the optional strings `namespace` and
-//!   `toolName` and answers JSON text, which a script reads with
-//!   `json.decode`. With no arguments it lists each server's namespace,
+//!   `toolName` and answers JSON text. It describes tools, so a script's
+//!   call receives the text as the servers wrote it and reads it with
+//!   `json.decode`, while a model's call receives it in the untrusted
+//!   envelope. With no arguments it lists each server's namespace,
 //!   status, and tool names, in name order; with `namespace`, that
 //!   server's tools with their input schemas; with both, one tool.
 //! - `call_dynamic_tool` takes the strings `namespace` and `toolName` and

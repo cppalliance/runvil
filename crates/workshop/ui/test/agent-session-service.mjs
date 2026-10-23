@@ -150,7 +150,7 @@ await assertNoLeaks(lifecycle, () => {
     check(
       "the tool-call batch parses into one row per call",
       isDeepStrictEqual(service.items[3].calls, [
-        { id: "call_1", name: "read", args: '{"path":"a"}', tool: null },
+        { id: "call_1", name: "read", args: '{"path":"a"}', tool: null, vendor: null },
       ]),
     );
     check(
@@ -555,7 +555,7 @@ await assertNoLeaks(lifecycle, () => {
     const service = new AgentSessionService(wire);
     wire.fire.session("s1");
     wire.fire.event("user_message", "first turn");
-    wire.fire.event("tool_call", '[{"id":"c1","name":"ask","arguments":{},"tool":"user-input/ask"}]', {
+    wire.fire.event("tool_call", '[{"id":"c1","name":"ask","arguments":{},"tool":"user-input/ask","vendor":"runvil"}]', {
       reply: 0,
     });
     wire.fire.inputRequired("tok1");
@@ -604,8 +604,8 @@ await assertNoLeaks(lifecycle, () => {
     wire.fire.event(
       "tool_call",
       JSON.stringify([
-        { id: "c1", name: "ask", arguments: {}, tool: "user-input/ask" },
-        { id: "c2", name: "fetch", arguments: {}, tool: "web/fetch" },
+        { id: "c1", name: "ask", arguments: {}, tool: "user-input/ask", vendor: "runvil" },
+        { id: "c2", name: "fetch", arguments: {}, tool: "web/fetch", vendor: "runvil" },
       ]),
       { reply: 0 },
     );
@@ -640,7 +640,7 @@ await assertNoLeaks(lifecycle, () => {
     service.dispose();
   }
 
-  // --- ToolCallRow.tool: the batch entry's tool string, or null ---------------
+  // --- ToolCallRow.tool and vendor: the batch entry's strings, or null --------
 
   {
     const wire = makeWire();
@@ -648,11 +648,12 @@ await assertNoLeaks(lifecycle, () => {
     wire.fire.event(
       "tool_call",
       JSON.stringify([
-        { id: "a", name: "search", arguments: { query: "x" }, tool: "web/search" },
+        { id: "a", name: "search", arguments: { query: "x" }, tool: "web/search", vendor: "runvil" },
         { id: "b", name: "local", arguments: {} },
-        { id: "c", name: "odd", arguments: {}, tool: 5 },
-        { id: "d", name: "empty", arguments: {}, tool: "" },
-        { id: "e", name: "nul", arguments: {}, tool: null },
+        { id: "c", name: "odd", arguments: {}, tool: 5, vendor: 5 },
+        { id: "d", name: "empty", arguments: {}, tool: "", vendor: "" },
+        { id: "e", name: "nul", arguments: {}, tool: null, vendor: null },
+        { id: "f", name: "bare", arguments: {}, tool: "runvil/user-input/ask" },
       ]),
       { reply: 0 },
     );
@@ -660,7 +661,14 @@ await assertNoLeaks(lifecycle, () => {
       "a batch entry's tool string parses onto its row",
       isDeepStrictEqual(
         service.items[0].calls.map((row) => row.tool),
-        ["web/search", null, null, null, null],
+        ["web/search", null, null, null, null, "runvil/user-input/ask"],
+      ),
+    );
+    check(
+      "a batch entry's vendor string parses onto its row",
+      isDeepStrictEqual(
+        service.items[0].calls.map((row) => row.vendor),
+        ["runvil", null, null, null, null, null],
       ),
     );
     wire.fire.event("tool_call", "[1, null, [], \"x\"]", { reply: 1 });

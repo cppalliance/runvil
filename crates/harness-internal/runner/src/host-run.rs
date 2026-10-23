@@ -18,7 +18,7 @@ use runvil::effect::ToolCallOrigin;
 use runvil::packs::Prelude;
 use runvil::tools::{ToolCatalog, ToolError, ToolErrorKind, ToolId, ToolInfo, ToolOutput};
 use runvil::vfs::Access;
-use runvil::{MissingService, Prompt, Requirements, UnavailablePack};
+use runvil::{MissingService, Prompt, Requirements, UnavailablePack, UsablePack};
 use runvil_plugin::{HostServices, Pack, PackId, PackInfo, ServiceId, ToolContext};
 use serde_json::Value;
 
@@ -107,15 +107,21 @@ impl HostRunContext {
         self.catalog.clone()
     }
 
-    /// The run's roster: the ids of its usable Packs, with or without
-    /// tools, and an entry with the reason for each one that can't serve,
-    /// both in id order.
-    pub(crate) fn roster(&self) -> (Vec<PackId>, Vec<UnavailablePack>) {
+    /// The run's roster: each of its usable Packs, with or without tools,
+    /// with the vendor of its FQN, and an entry with the reason for each
+    /// one that can't serve, both in id order.
+    pub(crate) fn roster(&self) -> (Vec<UsablePack>, Vec<UnavailablePack>) {
         let mut usable = Vec::new();
         let mut unavailable = Vec::new();
         for (name, pack) in &self.packs {
             match pack {
-                PackState::Usable { .. } => usable.push(name.clone()),
+                PackState::Usable { info, .. } => {
+                    let vendor = info
+                        .fqn
+                        .split_once('/')
+                        .map_or(info.fqn, |(vendor, _)| vendor);
+                    usable.push(UsablePack::new(name.clone(), vendor));
+                }
                 PackState::Unavailable(reason) => {
                     unavailable.push(UnavailablePack::new(name.clone(), reason.clone()));
                 }

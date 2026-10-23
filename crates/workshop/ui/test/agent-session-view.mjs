@@ -1351,8 +1351,8 @@ await assertNoLeaks(lifecycle, async () => {
     wire.fire.event(
       "tool_call",
       JSON.stringify([
-        { id: "c1", name: "ask", arguments: {}, tool: "user-input/ask" },
-        { id: "c2", name: "fetch", arguments: {}, tool: "web/fetch" },
+        { id: "c1", name: "ask", arguments: {}, tool: "user-input/ask", vendor: "runvil" },
+        { id: "c2", name: "fetch", arguments: {}, tool: "web/fetch", vendor: "runvil" },
       ]),
       { reply: 0 },
     );

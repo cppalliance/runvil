@@ -65,6 +65,7 @@ use broker::{RunBroker, WorkshopBroker};
 use gateway::usable_gateway;
 use search::GatewaySearchProvider;
 pub(crate) use state::{SessionsState, register};
+use wire::AskTool;
 
 /// The directory under the server's state directory the run log sits in:
 /// the `runs.db` every conversation's run is recorded in.
@@ -75,9 +76,9 @@ const HARNESS_STATE_DIR: &str = "harness";
 const RUNTIME: ServiceKey<tokio::runtime::Handle> = ServiceKey::new(runvil_plugin::TOKIO_RUNTIME);
 
 /// The server's built Packs over its Host-wide [`services`], beside the
-/// ask tool's id. `mcp` is the `[agents] mcp` setting: the mcp Pack is
-/// built over the servers of the file it names.
-fn host_context(registry: &Registry, mcp: Option<&Path>) -> (HostContext, Option<ToolId>) {
+/// ask tool's vendor and id. `mcp` is the `[agents] mcp` setting: the mcp
+/// Pack is built over the servers of the file it names.
+fn host_context(registry: &Registry, mcp: Option<&Path>) -> (HostContext, Option<AskTool>) {
     with_plugins(services(registry), read_mcp_servers(mcp))
 }
 
@@ -140,9 +141,10 @@ fn read_mcp_servers(setting: Option<&Path>) -> Value {
 /// Plugins of the Packs agents may declare: `web`, `user-input`, so they
 /// can ask the operator, and `mcp`, with the `servers` object as its
 /// configuration. Building the Host builds those Packs and the built-in
-/// `subagents`. The ask tool's id is the fixed `user-input/ask`, and
-/// `None` only if the user-input Plugin was refused.
-fn with_plugins(services: HostServices, servers: Value) -> (HostContext, Option<ToolId>) {
+/// `subagents`. The ask tool is the fixed `user-input/ask` of the
+/// `runvil/user-input` Pack, so its vendor is `runvil`, and `None` only if
+/// the user-input Plugin was refused.
+fn with_plugins(services: HostServices, servers: Value) -> (HostContext, Option<AskTool>) {
     let mut packs = PackRegistry::new();
     if let Err(error) = plugin_web::install(&mut packs, Value::Null) {
         tracing::warn!(%error, "the web Plugin inserted no Pack");
@@ -150,7 +152,11 @@ fn with_plugins(services: HostServices, servers: Value) -> (HostContext, Option<
     let ask = match plugin_user_input::install(&mut packs, Value::Null) {
         Ok(()) => ToolId::parse(&format!("user-input/{}", plugin_user_input::ASK))
             .inspect_err(|error| tracing::warn!(%error, "the ask tool's id does not parse"))
-            .ok(),
+            .ok()
+            .map(|id| AskTool {
+                vendor: "runvil".to_owned(),
+                id,
+            }),
         Err(error) => {
             tracing::warn!(%error, "the user-input Plugin inserted no Pack");
             None
@@ -213,10 +219,10 @@ struct Inner {
     broker: WorkshopBroker,
     /// The built Packs every run takes its snapshot of.
     host: Arc<HostContext>,
-    /// The ask tool's id, `user-input/ask`, which a script's ask result
-    /// is recognized by; `None` only if the user-input Plugin was
-    /// refused.
-    ask: Option<ToolId>,
+    /// The ask tool, `user-input/ask` of vendor `runvil`, which a
+    /// script's ask result is recognized by; `None` only if the
+    /// user-input Plugin was refused.
+    ask: Option<AskTool>,
     /// The running conversations.
     conversations: Conversations,
 }
@@ -341,8 +347,9 @@ impl AgentSessions {
         )
     }
 
-    /// The ask tool's id, which a socket frames a script's ask result by.
-    fn ask(&self) -> Option<ToolId> {
+    /// The ask tool's vendor and id, which a socket frames a script's ask
+    /// result by.
+    fn ask(&self) -> Option<AskTool> {
         self.inner.ask.clone()
     }
 

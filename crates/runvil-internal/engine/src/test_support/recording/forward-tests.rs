@@ -243,6 +243,7 @@ fn a_tool_result_forwards_its_coordinates_and_trust_to_the_observer() {
         tool_call_id: "call_1".to_owned(),
         alias: "search".to_owned(),
         tool: None,
+        vendor: None,
         content: "found".to_owned(),
         trusted,
     };
