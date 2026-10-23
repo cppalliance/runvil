@@ -91,10 +91,13 @@ tracing-subscriber = { workspace = true, features = ["env-filter"] }
 # First-run STT gating reads the installer's registry choice (src/boot.rs):
 # RegOpenKeyExW + RegQueryValueExW. The Windows tray backend (src/tray/) adds
 # the Run-key write shim and the hidden-window message loop; main() adds the
-# PerMonitorV2 DPI-awareness call.
+# PerMonitorV2 DPI-awareness call. Win32_Graphics_Gdi gates the message
+# window's RegisterClassW and WNDCLASSW; it must be declared here rather than
+# arrive by feature unification from tray-icon's copy of windows-sys.
 [target.'cfg(target_os = "windows")'.dependencies]
 windows-sys = { workspace = true, features = [
     "Win32_Foundation",
+    "Win32_Graphics_Gdi",
     "Win32_System_LibraryLoader",
     "Win32_System_Registry",
     "Win32_UI_HiDpi",
