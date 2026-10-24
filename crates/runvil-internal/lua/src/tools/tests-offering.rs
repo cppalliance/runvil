@@ -5,7 +5,8 @@
 use std::collections::BTreeMap;
 
 use crate::RenderedTools;
-use crate::test_vm::{lua_over, offer_set, offers, raised, scoped};
+use crate::handles::ToolSet;
+use crate::test_vm::{lua_over, offer_set, offers, raised, scoped, tool_at};
 
 /// The adhoc tool `grab` the forms below offer as an object.
 const GRAB: &str =
@@ -117,6 +118,30 @@ fn a_string_with_a_slash_is_a_tool_id_and_one_without_is_a_pack_id() {
             "an invalid id takes the message of an unknown one of its shape: {call}: {error}"
         );
     }
+}
+
+#[test]
+fn a_catalog_tool_object_under_the_adhoc_pack_is_refused_as_an_unknown_tool() {
+    let catalog_adhoc = crate::ToolBinding::from_info("adhoc_x", &tool_at("adhoc/x"));
+    let vm = lua_over(ToolSet::new(
+        Vec::new(),
+        BTreeMap::new(),
+        vec![catalog_adhoc],
+    ));
+    let error: String = vm.eval(
+        "local ok, err = pcall(tools.offer, tools.get('adhoc/x'))\n\
+         assert(not ok, 'offering the catalog adhoc/x object raises')\n\
+         return tostring(err)",
+    );
+    assert!(
+        error.contains("tools.offer: \"adhoc/x\" is not a tool in this run"),
+        "the object takes the string form's message: {error}"
+    );
+    assert!(offers(&vm).is_empty(), "the refused offer records nothing");
+    assert!(
+        scoped(&vm).is_empty(),
+        "the scope resolves without an adhoc/x binding"
+    );
 }
 
 #[test]

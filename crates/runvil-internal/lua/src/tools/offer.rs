@@ -102,7 +102,8 @@ impl Offering {
     }
 
     /// Reads one entry, at `index` of an array or alone, as the tool or
-    /// Pack it names.
+    /// Pack it names. A tool object under the `adhoc` Pack must be a
+    /// defined adhoc tool, since only those have a binding to render.
     fn target(
         &self,
         lua: &Lua,
@@ -114,7 +115,11 @@ impl Offering {
             Value::String(text) => self.named(lua, verb, &text.to_string_lossy()),
             Value::UserData(object) => {
                 if let Ok(tool) = object.borrow::<LuaToolHandle>() {
-                    return Ok(OfferTarget::Tool(tool.id().clone()));
+                    let id = tool.id();
+                    if is_adhoc(&id.pack()) {
+                        return self.named(lua, verb, &id.to_string());
+                    }
+                    return Ok(OfferTarget::Tool(id.clone()));
                 }
                 if let Ok(pack) = object.borrow::<LuaPackHandle>() {
                     return Ok(OfferTarget::Pack(pack.name().clone()));

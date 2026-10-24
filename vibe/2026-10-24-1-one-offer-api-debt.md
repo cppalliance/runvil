@@ -329,7 +329,7 @@ isProject: false
 
 <step-3>
 
-### Step 3: Refuse offered adhoc objects that no adhoc tool holds
+### Step 3: Refuse offered adhoc objects that no adhoc tool holds [completed]
 
 - Component: Offer decoder
 - Tests: run each in PowerShell from `c:\Users\Vinnie\cursor\runvil` as written; each exits 0.
