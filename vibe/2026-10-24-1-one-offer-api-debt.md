@@ -4,28 +4,28 @@ overview: "Remove the two debts the one-offer-API run (runvil 890b41faa..8c0d7e4
 todos:
   - id: offer-bound
     content: "D1-1: refuse an offer array whose #t exceeds HELD_KEY_LIMIT before allocating, with fail-first tests in a new tools/tests-offer-limits.rs"
-    status: pending
+    status: completed
   - id: rendered-seeding
     content: "D1-2: once a section is rendered, seed tools.calls from the rendered list's ids; counts take ids; fix the false doc invariant; engine regression test"
-    status: pending
+    status: completed
   - id: adhoc-atomic
     content: "D1-10: tools.adhoc writes the handler and tool object first and registers last, clearing both if registering fails; fault-injection test"
-    status: pending
+    status: completed
   - id: adhoc-object-offer
     content: "D1-7: offering a tool object under the adhoc Pack that no adhoc tool holds raises the unknown-tool error at the offer line instead of an internal error at render"
-    status: pending
+    status: completed
   - id: config-ui-pretest
     content: "F-1: add a pretest build script to crates/gateway/config-ui/ui/package.json; prove npm test passes with dist/ deleted"
-    status: pending
+    status: completed
   - id: config-ui-notes
     content: "F-2: correct the three stale 'debug cargo build' notes in the config UI tests"
-    status: pending
+    status: completed
   - id: docs-offer-limit
     content: "D1-1 docs: one runvil-docs commit adding the new refusal to 12-tools.md and a limits row to 17-quick-reference.md"
-    status: pending
+    status: completed
   - id: verify
     content: Run the focused, workspace, clippy, fmt, API, docs-claims, config UI, and runvil-docs checks in the Testing Plan
-    status: pending
+    status: completed
 isProject: false
 ---
 
@@ -423,7 +423,7 @@ isProject: false
 
 <step-6>
 
-### Step 6: Document the offer array limit
+### Step 6: Document the offer array limit [completed]
 
 - Component: Offer limit docs
 - Tests: run each in PowerShell as written; each exits 0.
