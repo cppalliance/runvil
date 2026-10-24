@@ -689,7 +689,7 @@ Every piece works against step 1's code: adhoc tools are still defined with `too
 
 <step-3>
 
-### Step 3: One offer API and adhoc tools
+### Step 3: One offer API and adhoc tools [completed]
 
 - Component: offer API
 - Tests: run in PowerShell from `c:\Users\Vinnie\cursor\runvil`, in this order, each line as written. Every `cargo`, `npm`, and `node` line must exit 0, and `xtask api --check` must report no change. The first three `rg` lines must print nothing (`rg` then exits 1). The fourth `rg` line may print only lines where a test shows `tools.call` with a string that has no slash raising. The fifth `rg` line must print only Lua `local` variable declarations (such as `local tool =`, `local tools =`, `local tool_ok`, `local tools_list`). The two `git diff` lines print added lines to read: each must describe current behavior, with no word about an old form, a rename, or a migration.

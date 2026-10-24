@@ -94,15 +94,15 @@ impl Turns {
     }
 }
 
-/// The block every test here runs: registers `grab` with `handler` as its
+/// The block every test here runs: defines and offers `grab` with `handler` as its
 /// body, then one loop over a single user message, returning the final
 /// record's text. `setup` runs first.
 fn grab_block(setup: &str, handler: &str) -> String {
     format!(
         "{setup}\
-         tools.offer_local('grab', 'Grab a value', {{ value = 'string' }}, function(args)\n\
+         tools.offer(tools.adhoc({{ name = 'grab', description = 'Grab a value', parameters = {{ value = 'string' }} }}, function(args)\n\
            {handler}\n\
-         end)\n\
+         end))\n\
          messages:user('Use the tools.')\n\
          models.loop()\n\
          return messages[#messages].content"
@@ -179,11 +179,11 @@ fn a_handlers_loop_during_a_loop_raises_loop_running_as_a_lua_error() {
     ]);
     let source = one_section(&with_run_loop(
         "local refusal\n\
-         tools.offer_local('grab', 'Grab a value', { value = 'string' }, function()\n\
+         tools.offer(tools.adhoc({ name = 'grab', description = 'Grab a value', parameters = { value = 'string' } }, function()\n\
            local ok, err = pcall(models.loop)\n\
            refusal = tostring(ok) .. '|' .. err.kind .. '|' .. tostring(err)\n\
            return 'refused'\n\
-         end)\n\
+         end))\n\
          local final = run_loop('Use the tools.')\n\
          return refusal .. '|' .. final",
     ));
@@ -250,10 +250,10 @@ fn a_loop_after_an_earlier_loop_raised_under_pcall_runs_normally() {
 fn a_handlers_loop_runs_normally_when_tools_call_reaches_it_outside_any_loop() {
     let gateway = ScriptedChat::new(vec![text("inner reply")]);
     let source = one_section(&with_run_loop(
-        "tools.offer_local('grab', 'Grab a value', { value = 'string' }, function(args)\n\
+        "tools.offer(tools.adhoc({ name = 'grab', description = 'Grab a value', parameters = { value = 'string' } }, function(args)\n\
            return run_loop(args.value)\n\
-         end)\n\
-         return tools.call('grab', { value = 'inner' })",
+         end))\n\
+         return tools.call('adhoc/grab', { value = 'inner' })",
     ));
     let trace = loop_scenario(source).chat(&gateway).run();
     assert_eq!(trace.text(), "inner reply");

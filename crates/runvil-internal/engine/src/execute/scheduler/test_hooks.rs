@@ -64,10 +64,10 @@ impl Scheduler {
             .expect("the chain advertised a round")
             .insert(
                 name.to_owned(),
-                Some(Advertised {
+                Advertised {
                     id: tool,
                     vendor: None,
-                }),
+                },
             );
     }
 

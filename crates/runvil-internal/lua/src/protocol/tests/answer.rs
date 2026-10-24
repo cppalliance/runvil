@@ -161,7 +161,7 @@ fn an_ok_structured_tool_call_answer_round_trips_as_a_table() {
 }
 
 /// A fresh VM with the `tools` namespace installed and one adhoc tool,
-/// `grab`, registered through `tools.offer_local`.
+/// `grab`, defined through `tools.adhoc`.
 fn lua_with_adhoc_grab() -> Lua {
     let lua = Lua::new();
     crate::tools::install_tools(
@@ -174,8 +174,8 @@ fn lua_with_adhoc_grab() -> Lua {
     )
     .expect("the tools install cannot fail on a fresh VM");
     lua.load(
-        "tools.offer_local('grab', 'Grab a value', { value = 'string' }, \
-         function(args) return 'got ' .. args.value end)",
+        "tools.adhoc({ name = 'grab', description = 'Grab a value', \
+           parameters = { value = 'string' } }, function(args) return 'got ' .. args.value end)",
     )
     .exec()
     .expect("the adhoc tool registers");

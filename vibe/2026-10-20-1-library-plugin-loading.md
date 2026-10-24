@@ -981,9 +981,7 @@ The loader's unit tests drive the whole contract with fake entry points inserted
     - make `packs.offer('subagents')` show the four task tools, rendered for the section's model
     - `uses: subagents` means "required"
     - Revisit as its own plan.
-  - **Offering only Packs.**
-    - Remove `tools.offer` by id or tool object, and the lists that feed it: `tools.required()` and `tools.extras()`.
-    - Keep `tools.call`, `tools.offer_local`, and the `tools.calls` counters.
+  - **Filtered Pack offers.**
     - Add filtered views of a Pack's tools by hints such as `readOnlyHint`, which needs annotations on `ToolInfo`.
     - Revisit as its own plan.
   - **A config per Plugin,** passed in `RV_PLUGIN_LOAD`'s arguments. Revisit with `insert_pack`.

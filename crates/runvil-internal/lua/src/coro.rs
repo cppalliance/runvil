@@ -14,7 +14,7 @@
 //! wrapper, and the line mapper (`program.rs`) never touches them.
 //!
 //! An adhoc tool call is a two-yield handshake inside the calling block
-//! coroutine. The `tools.call` shim yields `tool_call`; for an adhoc alias
+//! coroutine. The `tools.call` shim yields `tool_call`; for an adhoc tool
 //! the driver resumes it with the handler instead of a result. The shim
 //! calls the handler under a yield-safe `pcall` with `jump` refused, so
 //! the handler's own suspending calls are ordinary yields of the same

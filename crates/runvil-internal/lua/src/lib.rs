@@ -37,15 +37,13 @@
 //! raw-set into `_G`. The `input` table that `user-input` defines is one:
 //! `input.ask()` is an ordinary tool call to that Pack's ask tool.
 //!
-//! The `tools` table names every catalog tool the run can offer by its
-//! canonical id: `tools.required()` and `tools.extras()` list the tool
-//! objects of the declared Packs and of every other Pack, and
-//! `tools.offer` scopes a tool into a section by id or tool object. The
-//! `packs` table holds one object per Pack the run knows, whose
-//! `tools` lists that Pack's tool objects, and `packs.offer` scopes
-//! every tool of a Pack into a section. Offers work only before the
-//! section's first loop round, which renders the section's tool list;
-//! after that, every offer function raises.
+//! The `tools` table names every tool by its id: `tools.get` reads a tool
+//! object, `tools.packs` holds one object per Pack the run knows, the
+//! adhoc Pack included, whose `tools` lists that Pack's tool objects, and
+//! `tools.adhoc` defines a Lua function as a tool of the adhoc Pack.
+//! `tools.offer` and `tools.offer_dynamic` remember tools and Packs, by
+//! id or object, for the section's rendered and dynamic lists, which the
+//! section's first loop round builds; after that, every offer raises.
 //!
 //! `messages` is the section's one conversation: a list the VM creates
 //! empty at each section entry and serves as a global that no assignment
@@ -141,9 +139,11 @@ pub use crate::protocol::{
     MessageRecord, NonEmpty, RecordRole, Request, SpawnVia, TaskDelivery, TaskPhase, TaskStatus,
     ToolCallOutcome, ToolCallRecord, VfsOp, VfsOutcome, YieldParse,
 };
-pub use crate::scope::{Advertised, RenderedTools, ToolCallCounts, ToolRuntime};
+pub use crate::scope::{
+    Advertised, Offer, OfferMode, OfferTarget, RenderedTools, ToolCallCounts, ToolRuntime,
+};
 pub use crate::sys::enrich_sys_model;
 pub use crate::vm::{
-    CoroStep, InjectFailure, Injected, SectionVm, Uninjected, current_tool_bindings,
-    resolve_model_binding,
+    AdhocTools, CoroStep, InjectFailure, Injected, SectionVm, Uninjected, current_dynamic_tools,
+    current_tool_bindings, resolve_model_binding,
 };

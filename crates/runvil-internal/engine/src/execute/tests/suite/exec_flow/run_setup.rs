@@ -114,7 +114,7 @@ fn offering_a_tool_its_present_pack_does_not_offer_fails_the_section() {
     assert!(
         error
             .to_string()
-            .contains("tools.offer: \"tools/search\" is not a catalog tool in this run"),
+            .contains("tools.offer: \"tools/search\" is not a tool in this run"),
         "the failure names the id: {error}"
     );
 }

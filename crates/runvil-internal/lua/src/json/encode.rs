@@ -32,10 +32,22 @@ const DEPTH_LIMIT: usize = 127;
 pub(super) fn encode(lua: &Lua, (value, options): (Value, Value)) -> mlua::Result<LuaString> {
     const FUNCTION: &str = "json.encode";
     let debug = debug_option(&options, FUNCTION)?;
-    let json = Encoder::new(lua, FUNCTION, debug).value(&value, 1)?;
+    let json = to_json(lua, FUNCTION, debug, &value)?;
     let text =
         serde_json::to_string(&json).map_err(|error| refusal(format!("{FUNCTION}: {error}")))?;
     lua.create_string(text)
+}
+
+/// The JSON value `value` converts to under the `json.encode` rules, in
+/// debug mode when `debug` is set. Every refusal reads `<prefix>: ` and
+/// then the reason, which names the failing path from `value`.
+pub(crate) fn to_json(
+    lua: &Lua,
+    prefix: &'static str,
+    debug: bool,
+    value: &Value,
+) -> mlua::Result<Json> {
+    Encoder::new(lua, prefix, debug).value(value, 1)
 }
 
 /// `json.encode_lines(list [, options])`: each item of `list` encoded by

@@ -2,8 +2,8 @@
 //! section VM.
 //!
 //! Dispatch first refuses an empty list. It then resolves the round's
-//! binding and the section's rendered tool list - built from the bound
-//! and adhoc halves and attached to the list by the first round to reach
+//! binding and the section's rendered tool list - built from the
+//! section's offers and attached to the list by the first round to reach
 //! the build, then reused by every later round - copies the list's dispatch
 //! map onto the chain as `advertised`, prechecks the projected
 //! conversation, with room kept for the reply, against the model's
@@ -35,8 +35,8 @@ use crate::execute::run::Effect;
 use crate::execute::scope::prepare_effective_scope;
 use crate::execute::turn::{Served, advance_turn, report_model_turn};
 use crate::lua::{
-    Advertised, MessageList, OverflowReason, current_tool_bindings, output_reserve, precheck,
-    project_messages, resolve_model_binding,
+    Advertised, MessageList, OverflowReason, current_dynamic_tools, current_tool_bindings,
+    output_reserve, precheck, project_messages, resolve_model_binding,
 };
 use crate::model::{Completion, CompletionErrorKind, CompletionResult, ModelBinding, ToolCall};
 use crate::{Error, Result};
@@ -122,15 +122,16 @@ impl Scheduler {
         };
         let handles = frame.reporting_handles();
         let emitter = handles.emitter;
-        // The section's first round renders the effective bindings plus
-        // every adhoc tool, and every offer raises after that, so each
+        // The section's first round renders its static offers and records
+        // its dynamic ones, and every offer raises after that, so each
         // later round sends the same list.
         let rendered = if let Some(rendered) = list.rendered_tools() {
             rendered
         } else {
-            let bound = current_tool_bindings(chain.ctx.tool_set(), vm.tool_runtime())?;
-            let adhoc = vm.adhoc_tool_schemas()?;
-            let rendered = prepare_effective_scope(&bound, &adhoc, emitter.as_ref(), &section)?;
+            let (set, runtime, adhoc) = (chain.ctx.tool_set(), vm.tool_runtime(), vm.adhoc_tools());
+            let bound = current_tool_bindings(set, runtime, adhoc)?;
+            let mut rendered = prepare_effective_scope(&bound, emitter.as_ref(), &section)?;
+            rendered.dynamic = current_dynamic_tools(set, runtime, adhoc, &bound)?;
             list.attach_rendered_tools(rendered.clone());
             rendered
         };
@@ -337,13 +338,13 @@ impl ArrivedRound {
         served: &Served,
         turn: u32,
         calls: &[ToolCall],
-        advertised: &BTreeMap<String, Option<Advertised>>,
+        advertised: &BTreeMap<String, Advertised>,
         global_exists: impl Fn(&str) -> bool,
     ) -> Result<ChatResult> {
         let events: Vec<ToolCallEvent> = calls
             .iter()
             .map(|call| {
-                let (tool, vendor) = match advertised.get(call.name()).cloned().flatten() {
+                let (tool, vendor) = match advertised.get(call.name()).cloned() {
                     Some(Advertised { id, vendor }) => (Some(id), vendor),
                     None => (None, None),
                 };

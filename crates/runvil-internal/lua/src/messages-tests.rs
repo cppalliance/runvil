@@ -4,13 +4,14 @@
 use std::collections::BTreeMap;
 
 use mlua::{Lua, LuaSerdeExt, Value};
+use runvil_types::tools::ToolId;
 use serde_json::json;
 
 use super::MessageList;
 use crate::protocol::{Request, YieldParse};
 use crate::test_vm::TestVm;
 use crate::tests::{system, user};
-use crate::{Error, RenderedTools};
+use crate::{Advertised, Error, RenderedTools};
 
 #[path = "messages-tests-list.rs"]
 mod list;
@@ -45,14 +46,23 @@ fn messages_is_the_vms_one_empty_list_and_lua_reaches_no_other() {
     assert_eq!(vm.messages().to_records(), vec![user("u")]);
 }
 
+/// The advertised entry of the adhoc tool named `name`.
+fn adhoc(name: &str) -> Advertised {
+    Advertised {
+        id: ToolId::parse(&format!("adhoc/{name}")).expect("a fixture adhoc id is a tool id"),
+        vendor: None,
+    }
+}
+
 /// A rendered tool list advertising each of `names` as an adhoc tool.
 fn rendered(names: &[&str]) -> RenderedTools {
     RenderedTools {
         schemas: Vec::new(),
         dispatch: names
             .iter()
-            .map(|name| ((*name).to_owned(), None))
+            .map(|name| ((*name).to_owned(), adhoc(name)))
             .collect(),
+        dynamic: Vec::new(),
     }
 }
 
@@ -69,9 +79,15 @@ fn a_list_is_rendered_only_once_a_tool_list_is_attached_and_keeps_the_first() {
         .expect("the list holds a rendered tool list");
     assert_eq!(
         kept.dispatch,
-        BTreeMap::from([("first".to_owned(), None)]),
+        BTreeMap::from([("first".to_owned(), adhoc("first"))]),
         "the first attached list stays"
     );
+    assert_eq!(
+        list.rendered_target("first"),
+        Some(adhoc("first")),
+        "the attached list's entry reads by wire name"
+    );
+    assert_eq!(list.rendered_target("second"), None);
 }
 
 #[test]

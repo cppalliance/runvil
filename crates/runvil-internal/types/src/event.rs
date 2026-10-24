@@ -402,8 +402,8 @@ events! {
             tool_call_id: String,
             /// The alias the call named.
             alias: String,
-            /// The bound tool `alias` resolved to; `None` for an adhoc
-            /// tool or an event logged before the field.
+            /// The tool `alias` resolved to; `None` for an event logged
+            /// before the field.
             #[serde(default, skip_serializing_if = "Option::is_none")]
             tool: Option<ToolId>,
             /// The vendor of the Pack that answered `tool`, as the caller

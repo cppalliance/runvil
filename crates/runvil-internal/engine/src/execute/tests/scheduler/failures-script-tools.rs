@@ -50,11 +50,11 @@ fn a_script_tools_call_with_an_unbound_name_lists_the_offered_ids() {
     let md = "---\nname: t\ndescription: d\nrunvil: 0\n---\n\n\
         # ToolCall\n\n\
         ## Only\n\n\
-        ```lua\ntools.offer('tools/echo')\nreturn tools.call('missing', {})\n```\n";
+        ```lua\ntools.offer('tools/echo')\nreturn tools.call('tools/missing', {})\n```\n";
     let trace = scheduler_scenario(md).offer("echo", echo_tool()).run();
     match trace.error().inner() {
         Error::UnboundToolCall { name, ids } => {
-            assert_eq!(name, "missing");
+            assert_eq!(name, "tools/missing");
             assert_eq!(ids, &["tools/echo".to_owned()]);
         }
         other => panic!("expected the typed unbound-tool error, got {other:?}"),

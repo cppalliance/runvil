@@ -1,10 +1,12 @@
-//! Tests for `tools.offer_local`: the registration rules run end to end, and
-//! the `models.loop` shim's adhoc-tool rounds are driven at prompt level,
-//! so a model-issued call to an adhoc tool runs its handler inside the
-//! block coroutine - store calls included - and its trusted result is sent
-//! back to the model verbatim. `jump` is refused only while a handler
-//! runs, even through a saved reference. The refusal of an offer once the
-//! section's tool list is rendered sits in `rendered_tools`.
+//! Tests for adhoc tools defined with `tools.adhoc` and offered with
+//! `tools.offer`: the definition rules run end to end, and the
+//! `models.loop` shim's adhoc-tool rounds are driven at prompt level, so a
+//! model-issued call to an adhoc tool runs its handler inside the block
+//! coroutine - store calls included - and its trusted result is sent back
+//! to the model verbatim. `jump` is refused only while a handler runs,
+//! even through a saved reference. An adhoc tool answers a model's call
+//! only when offered. The refusal of an offer once the section's tool list
+//! is rendered sits in `rendered_tools`.
 
 use runvil_parser::test_support::{one_section, prompt};
 
@@ -14,14 +16,14 @@ use super::models_loop::loop_scenario;
 use super::tool_call_arm::{ToolRecorder, tool_result_lines};
 use super::*;
 
-/// The `grab` adhoc tool registration the loop tests open with, followed
-/// by one loop over a single user message; `handler` is the Lua body of
-/// the handler function, given `args`.
+/// The `grab` adhoc tool definition and offer the loop tests open with,
+/// followed by one loop over a single user message; `handler` is the Lua
+/// body of the handler function, given `args`.
 fn grab_loop(handler: &str) -> String {
     one_section(&format!(
-        "tools.offer_local('grab', 'Grab a value', {{ value = 'string' }}, function(args)
+        "tools.offer(tools.adhoc({{ name = 'grab', description = 'Grab a value', parameters = {{ value = 'string' }} }}, function(args)
            {handler}
-         end)
+         end))
          messages:user('Use the tool.')
          models.loop()
          return messages[#messages].content"
@@ -70,10 +72,10 @@ fn adhoc_tool_multiple_calls_in_one_response_all_run() {
     ]);
     let source = one_section(
         "local calls = {}
-         tools.offer_local('grab', 'Grab a value', { value = 'string' }, function(args)
+         tools.offer(tools.adhoc({ name = 'grab', description = 'Grab a value', parameters = { value = 'string' } }, function(args)
            calls[#calls + 1] = args.value
            return 'ok ' .. args.value
-         end)
+         end))
          messages:user('Use the tool.')
          models.loop()
          return table.concat(calls, ',') .. '|' .. messages[#messages].content",
@@ -174,9 +176,9 @@ fn a_handler_that_calls_jump_fails_the_run() {
         calls(&[("call_1", "grab", "{\"value\":\"hi\"}")]),
         text("unreachable"),
     ]);
-    let only = "tools.offer_local('grab', 'Grab a value', { value = 'string' }, function(args)
+    let only = "tools.offer(tools.adhoc({ name = 'grab', description = 'Grab a value', parameters = { value = 'string' } }, function(args)
                   jump('## Other')
-                end)
+                end))
                 messages:user('Use the tool.')
                 models.loop()
                 return 'no jump'";
@@ -193,17 +195,17 @@ fn a_handler_that_calls_jump_fails_the_run() {
 /// The start of the message `jump` fails with inside an adhoc tool handler.
 const JUMP_REFUSAL: &str = "jump is unavailable inside an adhoc tool handler";
 
-/// The `grab` registration whose handler calls a `jump` reference the
-/// block saved before registering it.
+/// The `grab` definition whose handler calls a `jump` reference the
+/// block saved before defining it.
 const SAVED_JUMP_GRAB: &str = "local j = jump\n\
-     tools.offer_local('grab', 'Grab a value', { value = 'string' }, function(args)\n\
+     tools.offer(tools.adhoc({ name = 'grab', description = 'Grab a value', parameters = { value = 'string' } }, function(args)\n\
        j('## Other')\n\
-     end)\n";
+     end))\n";
 
 #[test]
 fn a_saved_jump_reference_is_refused_in_a_handler_the_script_calls() {
     let only = format!(
-        "{SAVED_JUMP_GRAB}tools.call('grab', {{ value = 'hi' }})\n\
+        "{SAVED_JUMP_GRAB}tools.call('adhoc/grab', {{ value = 'hi' }})\n\
          return 'no jump'"
     );
     let trace = loop_scenario(prompt("", &[("Only", &only), OTHER])).run();
@@ -238,7 +240,7 @@ fn a_saved_jump_reference_is_refused_in_a_handler_the_model_calls() {
 #[test]
 fn a_caller_that_catches_the_jump_refusal_continues_the_block() {
     let only = format!(
-        "{SAVED_JUMP_GRAB}local ok, err = pcall(tools.call, 'grab', {{ value = 'hi' }})\n\
+        "{SAVED_JUMP_GRAB}local ok, err = pcall(tools.call, 'adhoc/grab', {{ value = 'hi' }})\n\
          assert(not ok, 'the refusal reaches the call site')\n\
          assert(tostring(err):find('{JUMP_REFUSAL}', 1, true), tostring(err))\n\
          return 'no jump'"
@@ -250,15 +252,15 @@ fn a_caller_that_catches_the_jump_refusal_continues_the_block() {
 #[test]
 fn jump_stays_refused_in_an_outer_handler_after_an_inner_one_returns() {
     let only = format!(
-        "tools.offer_local('inner', 'Inner', {{}}, function() return 'inner' end)
-         tools.offer_local('outer', 'Outer', {{}}, function()
-           local inner = tools.call('inner', {{}})
+        "tools.offer(tools.adhoc({{ name = 'inner', description = 'Inner' }}, function() return 'inner' end))
+         tools.offer(tools.adhoc({{ name = 'outer', description = 'Outer' }}, function()
+           local inner = tools.call('adhoc/inner', {{}})
            local ok, err = pcall(jump, '## Other')
            assert(not ok, 'jump is still refused in the outer handler')
            assert(tostring(err):find('{JUMP_REFUSAL}', 1, true), tostring(err))
            return inner
-         end)
-         assert(tools.call('outer', {{}}) == 'inner', 'the outer handler returns')
+         end))
+         assert(tools.call('adhoc/outer', {{}}) == 'inner', 'the outer handler returns')
          jump('## Other')"
     );
     let trace = loop_scenario(prompt("", &[("Only", &only), OTHER])).run();
@@ -271,9 +273,9 @@ fn jump_works_in_the_same_block_after_the_loop_returns() {
         calls(&[("call_1", "grab", "{\"value\":\"hi\"}")]),
         text("final answer"),
     ]);
-    let only = "tools.offer_local('grab', 'Grab a value', { value = 'string' }, function(args)
+    let only = "tools.offer(tools.adhoc({ name = 'grab', description = 'Grab a value', parameters = { value = 'string' } }, function(args)
                   return 'got ' .. args.value
-                end)
+                end))
                 messages:user('Use the tool.')
                 models.loop()
                 jump('## Other')";
@@ -310,6 +312,36 @@ fn a_handler_returning_a_table_raises_and_is_observed_as_a_failure() {
 }
 
 #[test]
+fn a_model_call_to_an_offered_catalog_name_never_reaches_an_unoffered_adhoc_tool_of_that_name() {
+    let gateway = ScriptedChat::new(vec![
+        calls(&[("call_1", "tools_concrete", "{}")]),
+        text("final answer"),
+    ]);
+    let (tool, called) = scoped_tool("concrete", "Concrete description.");
+    let source = one_section(
+        "tools.adhoc({ name = 'tools_concrete', description = 'Local concrete' }, function() return 'local' end)
+         tools.offer('tools/concrete')
+         messages:user('Use the tool.')
+         models.loop()
+         return messages[#messages].content",
+    );
+    let trace = loop_scenario(source)
+        .offer("tools_concrete", tool)
+        .chat(&gateway)
+        .run();
+    assert_eq!(trace.text(), "final answer");
+    let bodies = gateway.requests();
+    assert_eq!(bodies[0].tools.len(), 1);
+    assert_eq!(bodies[0].tools[0].description(), "Concrete description.");
+    assert_eq!(
+        called.load(Ordering::SeqCst),
+        1,
+        "the catalog tool answers the model's call"
+    );
+    assert_ne!(last_tool_turn_content(&bodies), "local");
+}
+
+#[test]
 fn an_adhoc_tool_may_take_an_offered_wire_name_and_wins_in_scope() {
     let gateway = ScriptedChat::new(vec![
         calls(&[("call_1", "tools_concrete", "{}")]),
@@ -318,7 +350,7 @@ fn an_adhoc_tool_may_take_an_offered_wire_name_and_wins_in_scope() {
     let (tool, called) = scoped_tool("concrete", "Concrete description.");
     let source = one_section(
         "tools.offer('tools/concrete')
-         tools.offer_local('tools_concrete', 'Local concrete', {}, function() return 'local' end)
+         tools.offer(tools.adhoc({ name = 'tools_concrete', description = 'Local concrete' }, function() return 'local' end))
          messages:user('Use the tool.')
          models.loop()
          return messages[#messages].content",
@@ -344,15 +376,20 @@ fn an_adhoc_tool_may_take_an_offered_wire_name_and_wins_in_scope() {
 }
 
 #[test]
-fn adhoc_tool_alias_cannot_be_registered_twice() {
+fn an_adhoc_tool_name_cannot_be_defined_twice() {
     let source = one_section(
-        "tools.offer_local('grab', 'First grab', {}, function() return 'first' end)
-         tools.offer_local('grab', 'Second grab', {}, function() return 'second' end)",
+        "tools.offer(tools.adhoc({ name = 'grab', description = 'First grab' }, function() return 'first' end))
+         tools.offer(tools.adhoc({ name = 'grab', description = 'Second grab' }, function() return 'second' end))",
     );
     let trace = Scenario::new(source).run();
     let error = trace.error();
     assert!(
-        error.to_string().contains("is already registered"),
-        "the error must identify the duplicate adhoc alias: {error}"
+        error
+            .to_string()
+            .contains("tools.adhoc name \"grab\" is already registered"),
+        "the error must identify the duplicate adhoc name: {error}"
     );
 }
+
+#[path = "adhoc_tools-wrappers.rs"]
+mod wrappers;

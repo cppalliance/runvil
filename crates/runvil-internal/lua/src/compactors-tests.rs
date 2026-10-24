@@ -176,6 +176,7 @@ fn compactors_clear_removes_every_record_and_keeps_the_send_and_the_rendered_too
     list.attach_rendered_tools(RenderedTools {
         schemas: Vec::new(),
         dispatch: BTreeMap::new(),
+        dynamic: Vec::new(),
     });
     let sent = [Message::user("one")];
     let _ = list.commit(RoundId::new(0), &sent);

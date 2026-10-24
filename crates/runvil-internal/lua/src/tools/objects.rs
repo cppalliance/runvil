@@ -1,24 +1,23 @@
-//! Tool objects: one frozen [`LuaToolHandle`] per offered tool, built once
-//! per VM, and `tools.required`, `tools.extras`, and `tools.get` over them.
+//! Tool objects: one frozen [`LuaToolHandle`] per offered catalog tool,
+//! built once per VM, one per adhoc tool, added as `tools.adhoc` defines
+//! it, and `tools.get` over them.
 //!
-//! Every list hands out the same userdata for a tool, so a tool read
-//! through any of them compares `==` to the same tool read through
-//! another, while each list call builds a fresh array.
-
-use std::sync::Arc;
+//! Every read hands out the same userdata for a tool, so a tool read
+//! through `tools.get` compares `==` to the same tool read through a
+//! Pack's `tools`, while each `tools` read builds a fresh array.
 
 use mlua::{AnyUserData, Lua, Table, Value};
 
 use super::userdata::LuaToolHandle;
 use crate::error::{Error, Result};
-use crate::handles::ToolSet;
+use crate::handles::{ToolBinding, ToolSet};
 
-/// The registry key of the VM's tool-object table: one object per offered
-/// tool, keyed by id, built when `install_tools` runs.
+/// The registry key of the VM's tool-object table: one object per tool,
+/// keyed by id.
 const TOOL_OBJECTS_REGISTRY: &str = "runvil.tools.objects";
 
-/// The VM's tool object for the catalog id `id`, or `None` when the run
-/// cannot offer that tool.
+/// The VM's tool object for the id `id`, or `None` when the run cannot
+/// offer that tool and no adhoc tool holds that id.
 ///
 /// # Errors
 /// Returns an `mlua` error when the registry cannot be read.
@@ -52,32 +51,22 @@ pub(super) fn install_tool_objects(lua: &Lua, set: &ToolSet) -> Result<()> {
         .map_err(Error::lua)
 }
 
-/// Installs `tools.required()` and `tools.extras()`, the offered tools
-/// whose Pack the frontmatter declares and every other one, and
-/// `tools.get(id)`.
+/// Adds the tool object of the adhoc tool `binding` binds and returns it.
 ///
 /// # Errors
-/// Returns [`Error::Lua`] if a function cannot be created or installed.
-pub(super) fn install_tool_lists(lua: &Lua, tools: &Table, set: &Arc<ToolSet>) -> Result<()> {
-    for (name, required) in [("required", true), ("extras", false)] {
-        let set = Arc::clone(set);
-        let list = lua
-            .create_function(move |lua, ()| {
-                let objects = lua.create_table()?;
-                for binding in set
-                    .offered()
-                    .iter()
-                    .filter(|binding| set.declared().contains(&binding.id().pack()) == required)
-                {
-                    if let Some(object) = tool_object(lua, &binding.id().to_string())? {
-                        objects.raw_push(object)?;
-                    }
-                }
-                Ok(objects)
-            })
-            .map_err(Error::lua)?;
-        tools.set(name, list).map_err(Error::lua)?;
-    }
+/// Returns an `mlua` error when the object cannot be created or stored.
+pub(super) fn insert_tool_object(lua: &Lua, binding: &ToolBinding) -> mlua::Result<AnyUserData> {
+    let objects: Table = lua.named_registry_value(TOOL_OBJECTS_REGISTRY)?;
+    let object = lua.create_userdata(LuaToolHandle::from_binding(binding))?;
+    objects.raw_set(binding.id().to_string(), object.clone())?;
+    Ok(object)
+}
+
+/// Installs `tools.get(id)`.
+///
+/// # Errors
+/// Returns [`Error::Lua`] if the function cannot be created or installed.
+pub(super) fn install_tool_get(lua: &Lua, tools: &Table) -> Result<()> {
     let get = lua
         .create_function(|lua, id: Value| match id {
             Value::String(id) => tool_object(lua, &id.to_str()?),

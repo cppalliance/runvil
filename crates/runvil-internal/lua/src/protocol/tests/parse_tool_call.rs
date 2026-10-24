@@ -10,7 +10,7 @@ fn tool_call_parses_alias_and_args() {
     let lua = Lua::new();
     let table = lua_table(
         &lua,
-        "{ op = 'tool_call', alias = 'echo', args = { value = 'hi' } }",
+        "{ op = 'tool_call', alias = 'tools/echo', args = { value = 'hi' } }",
     );
     let request = expect_request(Request::from_yield(&lua, &Value::Table(table)));
     match request {
@@ -20,7 +20,7 @@ fn tool_call_parses_alias_and_args() {
             call_id,
             turn,
         } => {
-            assert_eq!(alias, "echo");
+            assert_eq!(alias, "tools/echo");
             assert_eq!(args, json!({ "value": "hi" }));
             assert_eq!(call_id, None, "a script call omits the call id");
             assert_eq!(turn, None, "a script call omits the turn");
@@ -111,7 +111,7 @@ fn a_turn_outside_u32_or_not_an_integer_is_a_malformed_yield() {
 #[test]
 fn tool_call_without_args_parses_the_empty_object() {
     let lua = Lua::new();
-    let table = lua_table(&lua, "{ op = 'tool_call', alias = 'echo' }");
+    let table = lua_table(&lua, "{ op = 'tool_call', alias = 'tools/echo' }");
     let request = expect_request(Request::from_yield(&lua, &Value::Table(table)));
     match request {
         Request::ToolCall { args, .. } => assert_eq!(args, json!({})),
@@ -122,8 +122,8 @@ fn tool_call_without_args_parses_the_empty_object() {
 #[test]
 fn a_marked_empty_list_in_the_args_parses_to_an_empty_array() {
     let vm = crate::test_vm::TestVm::new().build();
-    let table: mlua::Table =
-        vm.eval("return { op = 'tool_call', alias = 'echo', args = { items = json.array() } }");
+    let table: mlua::Table = vm
+        .eval("return { op = 'tool_call', alias = 'tools/echo', args = { items = json.array() } }");
     match expect_request(Request::from_yield(vm.lua(), &Value::Table(table))) {
         Request::ToolCall { args, .. } => assert_eq!(args, json!({ "items": [] })),
         other => panic!("expected a tool_call request, got {other:?}"),
@@ -159,7 +159,7 @@ fn a_tool_call_with_a_non_alias_alias_is_the_calls_error() {
         YieldParse::Call(Answer::ToolCallResult(Err(Error::Lua(message)))) => {
             assert_eq!(
                 message,
-                "tools.call takes a tool id, a local alias, or a tool object, got integer"
+                "tools.call takes a tool id or a tool object, got integer"
             );
         }
         other => panic!("expected the alias call error, got {other:?}"),
@@ -167,9 +167,26 @@ fn a_tool_call_with_a_non_alias_alias_is_the_calls_error() {
 }
 
 #[test]
+fn a_script_call_naming_a_string_without_a_slash_is_the_calls_error() {
+    // A model-issued call names its tool by wire name; a script names it
+    // by id, so a bare name is refused before any resolution.
+    let lua = Lua::new();
+    let table = lua_table(&lua, "{ op = 'tool_call', alias = 'grab' }");
+    match Request::from_yield(&lua, &Value::Table(table)) {
+        YieldParse::Call(Answer::ToolCallResult(Err(Error::Lua(message)))) => {
+            assert_eq!(message, "tools.call: \"grab\" is not a tool id");
+        }
+        other => panic!("expected the id call error, got {other:?}"),
+    }
+}
+
+#[test]
 fn a_tool_call_with_a_non_table_args_is_the_calls_error() {
     let lua = Lua::new();
-    let table = lua_table(&lua, "{ op = 'tool_call', alias = 'echo', args = 42 }");
+    let table = lua_table(
+        &lua,
+        "{ op = 'tool_call', alias = 'tools/echo', args = 42 }",
+    );
     match Request::from_yield(&lua, &Value::Table(table)) {
         YieldParse::Call(Answer::ToolCallResult(Err(Error::Lua(message)))) => {
             assert_eq!(message, "args must be a table, got integer");
@@ -183,7 +200,7 @@ fn a_tool_call_with_an_unrepresentable_args_table_is_the_calls_error() {
     let lua = Lua::new();
     let table = lua_table(
         &lua,
-        "{ op = 'tool_call', alias = 'echo', args = { f = function() end } }",
+        "{ op = 'tool_call', alias = 'tools/echo', args = { f = function() end } }",
     );
     let args: Value = table
         .raw_get("args")

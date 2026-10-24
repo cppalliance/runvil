@@ -1,4 +1,4 @@
-//! Tests for `packs.offer` across section entries: an offered Pack's
+//! Tests for a Pack offered by id across section entries: an offered Pack's
 //! tools reach the rounds of the section entry that offered it, through
 //! `require` too, and no other entry's.
 
@@ -26,12 +26,12 @@ fn an_offered_pack_reaches_only_the_rounds_of_the_section_entry_that_offered_it(
     let source = format!(
         "---\nname: t\ndescription: d\nrunvil: 0\n---\n\n\
          # Packs\n\n\
-         ```lua\npacks.offer('kit')\n{h1}```\n\n\
+         ```lua\ntools.offer('kit')\n{h1}```\n\n\
          ## A\n\n\
          ```lua\n\
          tools.offer('kit/a')\n\
          require '## offers'\n\
-         packs.offer('kit')\n\
+         tools.offer('kit')\n\
          {a}\
          call('## Called')\n\
          tasks.join({{ tasks.spawn('## Worker') }})\n\
@@ -39,7 +39,7 @@ fn an_offered_pack_reaches_only_the_rounds_of_the_section_entry_that_offered_it(
          ## B\n\n\
          ```lua\n{b}return 'ok'\n```\n\n\
          ## offers\n\n\
-         ```lua\npacks.offer('web')\n```\n\n\
+         ```lua\ntools.offer('web')\n```\n\n\
          ## Called\n\n\
          ```lua\n{called}return 'called'\n```\n\n\
          ## Worker\n\n\

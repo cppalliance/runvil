@@ -58,7 +58,7 @@
 //!   it.
 //! - The model can ask the operator only when the prompt's Lua opts in.
 //!   A section offers the ask tool before its first loop round, with
-//!   `packs.offer('user-input')` or by its id with
+//!   the Pack, `tools.offer("user-input")`, or by its id with
 //!   `tools.offer("user-input/ask")`, and the model sees it as
 //!   `user-input_ask`. Neither inserting nor declaring the Pack
 //!   advertises anything to the model.

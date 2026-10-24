@@ -148,9 +148,9 @@ fn a_script_call_to_a_tool_without_the_flag_stays_wrapped() {
 fn a_model_call_and_a_model_call_to_an_adhoc_wrapper_receive_the_same_envelope() {
     let (trace, gateway) = looped(
         "tools.offer('tools/listing')
-         tools.offer_local('wrap', 'List the tools', {}, function()
+         tools.offer(tools.adhoc({ name = 'wrap', description = 'List the tools' }, function()
            return tools.call('tools/listing', {})
-         end)",
+         end))",
         &[&[("call_1", "tools_listing", "{}"), ("call_2", "wrap", "{}")]],
     );
     let envelope = nonce().wrap(LISTING);
@@ -172,9 +172,9 @@ fn a_model_call_and_a_model_call_to_an_adhoc_wrapper_receive_the_same_envelope()
 #[test]
 fn an_adhoc_function_returning_its_own_text_around_a_listing_returns_untrusted() {
     let (trace, gateway) = looped(
-        "tools.offer_local('wrap', 'List the tools', {}, function()
+        "tools.offer(tools.adhoc({ name = 'wrap', description = 'List the tools' }, function()
            return 'tools: ' .. tools.call('tools/listing', {})
-         end)",
+         end))",
         &[&[("call_1", "wrap", "{}")]],
     );
     let envelope = nonce().wrap(&format!("tools: {LISTING}"));
@@ -193,7 +193,7 @@ fn an_adhoc_function_returning_its_own_text_around_a_listing_returns_untrusted()
 fn a_listing_kept_from_outside_the_adhoc_call_comes_back_unwrapped_and_trusted() {
     let (trace, gateway) = looped(
         "local kept = tools.call('tools/listing', {})
-         tools.offer_local('kept', 'The kept listing', {}, function() return kept end)",
+         tools.offer(tools.adhoc({ name = 'kept', description = 'The kept listing' }, function() return kept end))",
         &[&[("call_1", "kept", "{}")]],
     );
     assert_eq!(tool_turns(&gateway.requests()), [LISTING.to_owned()]);
@@ -207,13 +207,13 @@ fn a_listing_kept_from_outside_the_adhoc_call_comes_back_unwrapped_and_trusted()
 #[test]
 fn a_failed_listing_call_and_a_trusted_listing_mark_nothing() {
     let (trace, gateway) = looped(
-        "tools.offer_local('failed', 'A failed listing', {}, function()
+        "tools.offer(tools.adhoc({ name = 'failed', description = 'A failed listing' }, function()
            local ok = pcall(tools.call, 'tools/failing_listing', {})
            return 'listed ' .. tostring(ok)
-         end)
-         tools.offer_local('trusted', 'A trusted listing', {}, function()
+         end))
+         tools.offer(tools.adhoc({ name = 'trusted', description = 'A trusted listing' }, function()
            return tools.call('tools/trusted_listing', {})
-         end)",
+         end))",
         &[
             &[("call_1", "failed", "{}")],
             &[("call_2", "trusted", "{}")],

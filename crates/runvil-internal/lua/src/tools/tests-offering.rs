@@ -1,35 +1,275 @@
-//! Tests for the id-keyed `tools` namespace: tool objects, `tools.offer`
-//! over ids and tool objects, the `required` and `extras` lists,
-//! `tools.get`, and `tools.offer_local`.
+//! Tests for the offer verbs, `tools.offer` and `tools.offer_dynamic`:
+//! every accepted form, the string-shape rule, each refusal, the
+//! rendered-list refusal first, and the `tools` table they sit on.
 
 use std::collections::BTreeMap;
 
-use mlua::{Lua, Value, Variadic};
-use runvil_types::packs::PackId;
+use crate::RenderedTools;
+use crate::test_vm::{lua_over, offer_set, offers, raised, scoped};
 
-use crate::handles::ToolSet;
-use crate::test_vm::{lua_over, scoped, tool_at};
-use crate::tools::decode::collect_offer_entries;
-use crate::{RenderedTools, ToolBinding};
+/// The adhoc tool `grab` the forms below offer as an object.
+const GRAB: &str =
+    "local grab = tools.adhoc({ name = 'grab', description = 'Grab a value' }, function() end)\n";
 
-/// A set declaring the Pack `web` and offering its two tools beside the
-/// two of the undeclared Pack `gh`, in id order, under their wire names.
-fn offering_set() -> ToolSet {
-    ToolSet::new(
-        vec![PackId::parse("web").expect("`web` is a valid Pack id")],
-        std::collections::BTreeMap::new(),
-        vec![
-            ToolBinding::from_info("gh_issues_list", &tool_at("gh/issues.list")),
-            ToolBinding::from_info("gh_search", &tool_at("gh/search")),
-            ToolBinding::from_info("web_fetch", &tool_at("web/fetch")),
-            ToolBinding::from_info("web_search", &tool_at("web/search")),
-        ],
+/// Every accepted form, each line through `verb`.
+fn forms(verb: &str) -> String {
+    format!(
+        "{GRAB}\
+         assert(select('#', {verb}('web/search')) == 0, 'the verb returns nothing')\n\
+         {verb}('web')\n\
+         {verb}(grab)\n\
+         {verb}(tools.packs.get('web'))\n\
+         {verb}(tools.get('web/search').pack)\n\
+         {verb}({{ 'web/search', grab, 'subagents', tools.packs.get('user-input') }})\n\
+         {verb}(tools.packs.get('web').tools)\n\
+         {verb}(tools.packs.get('adhoc'))\n\
+         {verb}(tools.packs.extras())\n\
+         {verb}(tools.packs)\n\
+         {verb}()\n\
+         {verb}({{}})"
     )
 }
 
 #[test]
+fn every_accepted_form_records_each_target_once_in_call_order_under_its_verbs_mode() {
+    for (verb, mode) in [
+        ("tools.offer", "static"),
+        ("tools.offer_dynamic", "dynamic"),
+    ] {
+        let vm = lua_over(offer_set());
+        vm.exec(&forms(verb));
+        let expected: Vec<String> = [
+            "web/search",
+            "web",
+            "adhoc/grab",
+            "subagents",
+            "user-input",
+            "web/fetch",
+            "adhoc",
+            "gh",
+        ]
+        .iter()
+        .map(|target| format!("{mode}:{target}"))
+        .collect();
+        assert_eq!(
+            offers(&vm),
+            expected,
+            "{verb}: ids, Packs, objects, and arrays record their targets, an equal \
+             offer is skipped, and no argument or an empty array records nothing"
+        );
+    }
+}
+
+#[test]
+fn the_two_verbs_record_separately_so_the_same_target_takes_both_modes() {
+    let vm = lua_over(offer_set());
+    vm.exec(
+        "tools.offer('web')\n\
+         tools.offer_dynamic('web')\n\
+         tools.offer('web')",
+    );
+    assert_eq!(offers(&vm), ["static:web", "dynamic:web"]);
+}
+
+#[test]
+fn a_string_with_a_slash_is_a_tool_id_and_one_without_is_a_pack_id() {
+    let vm = lua_over(offer_set());
+    vm.exec(
+        "tools.adhoc({ name = 'Shout', description = 'Uppercase text' }, function() end)\n\
+         tools.offer('web/search')\n\
+         tools.offer('gh')\n\
+         tools.offer('adhoc/shout')\n\
+         tools.offer('adhoc')",
+    );
+    assert_eq!(
+        offers(&vm),
+        [
+            "static:web/search",
+            "static:gh",
+            "static:adhoc/shout",
+            "static:adhoc"
+        ]
+    );
+    let pack = |name: &str| {
+        format!(
+            "tools.offer: no Pack named \"{name}\" in this run; declare it under uses: to \
+             require it, or offer it only when tools.packs.get(\"{name}\") returns it"
+        )
+    };
+    for (call, expected) in [
+        ("tools.offer('Web')", pack("Web")),
+        (
+            "tools.offer('Shout')",
+            format!("{} (did you mean 'adhoc/shout'?)", pack("Shout")),
+        ),
+        (
+            "tools.offer('web//x')",
+            "tools.offer: \"web//x\" is not a tool in this run".to_owned(),
+        ),
+        (
+            "tools.offer('adhoc/other')",
+            "tools.offer: \"adhoc/other\" is not a tool in this run".to_owned(),
+        ),
+    ] {
+        let error = raised(&vm, call);
+        assert!(
+            error.contains(&expected),
+            "an invalid id takes the message of an unknown one of its shape: {call}: {error}"
+        );
+    }
+}
+
+#[test]
+fn each_refusal_names_its_verb_and_a_refused_call_records_nothing() {
+    for verb in ["tools.offer", "tools.offer_dynamic"] {
+        let vm = lua_over(offer_set());
+        let unknown_pack = |name: &str| {
+            format!(
+                "{verb}: no Pack named \"{name}\" in this run; declare it under uses: to \
+                 require it, or offer it only when tools.packs.get(\"{name}\") returns it"
+            )
+        };
+        let shape = format!(
+            "{verb} takes tool ids, Pack ids, tool objects, Pack objects, or an array of them, got"
+        );
+        let entry = format!(
+            "{verb} takes tool ids, Pack ids, tool objects, or Pack objects in an array, got"
+        );
+        let unavailable =
+            format!("{verb}: the mcp Pack is unavailable in this run: the mcp server is down");
+        for (call, expected) in [
+            ("'wbe'", unknown_pack("wbe")),
+            (
+                "'web_search'",
+                format!(
+                    "{} (did you mean 'web/search'?)",
+                    unknown_pack("web_search")
+                ),
+            ),
+            (
+                "'web/serch'",
+                format!("{verb}: \"web/serch\" is not a tool in this run"),
+            ),
+            ("'mcp'", unavailable.clone()),
+            (
+                "'web/search', 'web/fetch'",
+                format!("{verb} takes one tool or Pack, or an array of them, got extra string"),
+            ),
+            ("42", format!("{shape} integer")),
+            ("nil", format!("{shape} nil")),
+            ("tools.get('web/serch')", format!("{shape} nil")),
+            ("messages", format!("{shape} userdata")),
+            (
+                "{ 'web', nil, 'mcp' }",
+                format!("{verb} takes an array, got a table with the key 3"),
+            ),
+            (
+                "setmetatable({ 'web' }, { __len = function() return 2 end })",
+                format!("{entry} nil at index 2"),
+            ),
+            ("{ { 'web' } }", format!("{entry} table at index 1")),
+            ("{ 'web', 42 }", format!("{entry} integer at index 2")),
+            (
+                "{ name = 'web' }",
+                format!("{verb} takes an array, got a table with the key name"),
+            ),
+            (
+                "setmetatable({ 'web' }, { __len = function() return 0 end })",
+                format!("{verb} takes an array, got a table with the key 1"),
+            ),
+            ("{ 'web', 'mcp' }", unavailable.clone()),
+            ("{ 'web/search', 'wbe' }", unknown_pack("wbe")),
+        ] {
+            let error = raised(&vm, &format!("{verb}({call})"));
+            assert!(error.contains(&expected), "{verb}({call}): {error}");
+        }
+        assert!(
+            offers(&vm).is_empty(),
+            "{verb}: a refused call records no entry, its valid ones included"
+        );
+    }
+}
+
+#[test]
+fn an_array_is_read_through_its_metamethods() {
+    let vm = lua_over(offer_set());
+    vm.exec(
+        "local entries = { 'gh', 'web/fetch' }\n\
+         tools.offer(setmetatable({}, {\n\
+           __len = function() return #entries end,\n\
+           __index = function(_, i) return entries[i] end,\n\
+         }))",
+    );
+    assert_eq!(offers(&vm), ["static:gh", "static:web/fetch"]);
+}
+
+#[test]
+fn the_render_refusal_comes_before_every_other_check_and_defining_still_works() {
+    let vm = lua_over(offer_set());
+    vm.exec("tools.offer('web/search')");
+    vm.messages().attach_rendered_tools(RenderedTools {
+        schemas: Vec::new(),
+        dispatch: BTreeMap::new(),
+        dynamic: Vec::new(),
+    });
+    for verb in ["tools.offer", "tools.offer_dynamic"] {
+        for args in ["'gh'", "'web/search'", "'wbe'", "42", "", "'web', 'gh'"] {
+            let error = raised(&vm, &format!("{verb}({args})"));
+            assert!(
+                error.contains(&format!(
+                    "{verb}: the section's tool list is fixed at its first models.loop \
+                     round; make every offer before the first loop, or offer in another section"
+                )),
+                "{verb}({args}) raises the fixed-list refusal first: {error}"
+            );
+        }
+    }
+    let defined: bool = vm.eval(
+        "local late = tools.adhoc({ name = 'late', description = 'Late' }, function() end)\n\
+         return tools.get('adhoc/late') == late",
+    );
+    assert!(defined, "defining an adhoc tool works after the render");
+    assert_eq!(
+        offers(&vm),
+        ["static:web/search"],
+        "no refused offer records"
+    );
+}
+
+#[test]
+fn offering_every_pack_or_the_extras_offers_their_tools() {
+    let every = lua_over(offer_set());
+    every.exec(
+        "tools.adhoc({ name = 'grab', description = 'Grab a value' }, function() end)\n\
+         tools.offer(tools.packs)",
+    );
+    assert_eq!(
+        scoped(&every),
+        [
+            "grab",
+            "gh_issues_list",
+            "gh_search",
+            "user-input_ask",
+            "web_fetch",
+            "web_search"
+        ],
+        "every Pack, the adhoc Pack included, in name order"
+    );
+    let extras = lua_over(offer_set());
+    extras.exec(
+        "tools.adhoc({ name = 'grab', description = 'Grab a value' }, function() end)\n\
+         tools.offer(tools.packs.extras())",
+    );
+    assert_eq!(
+        scoped(&extras),
+        ["gh_issues_list", "gh_search"],
+        "only the undeclared Packs, never the adhoc Pack"
+    );
+}
+
+#[test]
 fn a_tool_object_reads_its_id_and_catalog_description_and_refuses_assignment() {
-    let vm = lua_over(offering_set());
+    let vm = lua_over(offer_set());
     let result: (String, String, bool, String) = vm.eval(
         "local tool = tools.get('gh/search')\n\
          tools.offer(tool)\n\
@@ -52,200 +292,33 @@ fn a_tool_object_reads_its_id_and_catalog_description_and_refuses_assignment() {
 }
 
 #[test]
-fn offer_decodes_ids_tool_objects_and_arrays_into_wire_names() {
-    let vm = lua_over(offering_set());
-    vm.exec(
-        "tools.offer('web/search')\n\
-         tools.offer(tools.get('gh/search'))\n\
-         tools.offer({ 'gh/issues.list', tools.get('web/fetch'), 'web/search' })\n\
-         tools.offer()",
-    );
-    assert_eq!(
-        scoped(&vm),
-        ["web_search", "gh_search", "gh_issues_list", "web_fetch"],
-        "each tool enters the scope once, under its wire name, in first-offer order"
-    );
-}
-
-#[test]
-fn offer_records_nothing_when_any_entry_is_not_a_catalog_tool() {
-    for bad in ["gh/missing", "Not An Id", "gh_search", "helper"] {
-        let vm = lua_over(offering_set());
-        vm.exec("tools.offer_local('helper', 'a local helper', {}, function() return '' end)");
-        let error: String = vm.eval(&format!(
-            "local ok, err = pcall(tools.offer, {{ 'web/search', {bad:?} }})\n\
-             assert(not ok, 'the bad entry is refused')\n\
-             return tostring(err)"
-        ));
-        assert!(
-            error.contains(&format!(
-                "tools.offer: {bad:?} is not a catalog tool in this run"
-            )),
-            "tools.offer names {bad:?}: {error}"
-        );
-        assert!(
-            scoped(&vm).is_empty(),
-            "a refused call records no entry, the valid one included ({bad:?})"
-        );
-    }
-}
-
-#[test]
-fn offering_a_tool_object_matches_offering_its_id() {
-    let by_object = lua_over(offering_set());
-    by_object.exec("tools.offer(tools.get('gh/search'))");
-    let by_id = lua_over(offering_set());
-    by_id.exec("tools.offer('gh/search')");
-    assert_eq!(scoped(&by_object), scoped(&by_id));
-    assert_eq!(scoped(&by_id), ["gh_search"]);
-}
-
-#[test]
-fn required_and_extras_split_the_offering_by_declared_pack_and_share_objects() {
-    let vm = lua_over(offering_set());
-    let result: (String, String, bool, bool, bool, bool) = vm.eval(
-        "local function ids(list)\n\
-           local out = {}\n\
-           for i, tool in ipairs(list) do out[i] = tool.id end\n\
-           return table.concat(out, ',')\n\
-         end\n\
-         local required, extras = tools.required(), tools.extras()\n\
-         return ids(required), ids(extras), \
-           required[1] == tools.get('web/fetch'), \
-           extras[2] == tools.get('gh/search'), \
-           tools.required() ~= required, \
-           tools.required()[2] == required[2]",
-    );
-    assert_eq!(
-        result,
-        (
-            "web/fetch,web/search".to_owned(),
-            "gh/issues.list,gh/search".to_owned(),
-            true,
-            true,
-            true,
-            true,
-        ),
-        "a declared Pack's tools are required, the rest extras, both in id \
-         order, every list a fresh array of the same shared objects"
-    );
-}
-
-#[test]
 fn tools_get_reads_one_object_by_id_and_nil_for_anything_else() {
-    let vm = lua_over(offering_set());
-    let result: (String, bool, bool, bool, bool, String) = vm.eval(
-        "tools.offer_local('helper', 'a local helper', {}, function() return '' end)\n\
+    let vm = lua_over(offer_set());
+    let result: (String, bool, bool, bool, bool, bool, String) = vm.eval(
+        "local helper = tools.adhoc({ name = 'helper', description = 'A helper' }, function() end)\n\
          local ok, err = pcall(tools.get, 42)\n\
          assert(not ok, 'a non-string is refused')\n\
-         return tools.get('gh/search').id, tools.get('gh/missing') == nil, \
-           tools.get('helper') == nil, tools.get('Not An Id') == nil, \
-           tools.get('gh_search') == nil, tostring(err)",
+         return tools.get('gh/search').id, tools.get('adhoc/helper') == helper, \
+           tools.get('gh/missing') == nil, tools.get('helper') == nil, \
+           tools.get('Not An Id') == nil, tools.get('gh_search') == nil, tostring(err)",
     );
     assert_eq!(result.0, "gh/search");
+    assert!(result.1, "an adhoc tool reads by its id");
     assert!(
-        result.1 && result.2 && result.3 && result.4,
-        "a miss, an adhoc alias, a malformed id, and a wire name all read nil: {result:?}"
+        result.2 && result.3 && result.4 && result.5,
+        "a miss, an adhoc tool's wire name, a malformed id, and a catalog wire name \
+         all read nil: {result:?}"
     );
     assert!(
-        result.5.contains("tools.get takes a tool id, got integer"),
+        result.6.contains("tools.get takes a tool id, got integer"),
         "the refusal names the type: {}",
-        result.5
+        result.6
     );
 }
 
 #[test]
-fn offer_local_registers_an_adhoc_tool_and_names_itself_in_its_errors() {
-    let vm = lua_over(offering_set());
-    let errors: (String, String, String) = vm.eval(
-        "tools.offer_local('gh_search', 'a local search', {}, function() return '' end)\n\
-         local _, duplicate = pcall(tools.offer_local, 'gh_search', 'again', {}, function() end)\n\
-         local _, param = pcall(tools.offer_local, 'other', 'x', { p = 'table' }, function() end)\n\
-         local _, alias = pcall(tools.offer_local, 'web/search', 'x', {}, function() end)\n\
-         return tostring(duplicate), tostring(param), tostring(alias)",
-    );
-    assert!(
-        errors
-            .0
-            .contains("tools.offer_local alias \"gh_search\" is already registered"),
-        "{}",
-        errors.0
-    );
-    assert!(
-        errors
-            .1
-            .contains("tools.offer_local param \"p\" has unsupported type \"table\""),
-        "{}",
-        errors.1
-    );
-    assert!(
-        errors.2.contains("invalid alias \"web/search\""),
-        "an adhoc alias keeps the alias grammar: {}",
-        errors.2
-    );
-}
-
-#[test]
-fn every_offer_function_raises_once_the_tool_list_is_rendered_before_any_other_check() {
-    let vm = lua_over(offering_set());
-    vm.exec(
-        "tools.offer('web/search')\n\
-         packs.offer('web')\n\
-         tools.offer_local('helper', 'a local helper', {}, function() return '' end)",
-    );
-    let before = scoped(&vm);
-    vm.messages().attach_rendered_tools(RenderedTools {
-        schemas: Vec::new(),
-        dispatch: BTreeMap::new(),
-    });
-    let refusals: Vec<String> = vm.eval(
-        "local out = {}\n\
-         for _, offer in ipairs({\n\
-           function() tools.offer('gh/search') end,\n\
-           function() tools.offer('web/search') end,\n\
-           function() tools.offer('gh/missing') end,\n\
-           function() packs.offer('web') end,\n\
-           function() packs.offer('nope') end,\n\
-           function() tools.offer_local('other', 'x', {}, function() return '' end) end,\n\
-           function() tools.offer_local('helper', 'again', {}, function() return '' end) end,\n\
-           function() tools.offer_local() end,\n\
-         }) do\n\
-           local ok, err = pcall(offer)\n\
-           out[#out + 1] = ok and 'accepted' or tostring(err)\n\
-         end\n\
-         return out",
-    );
-    let fixed = "the section's tool list is fixed at its first models.loop round; make every \
-                 offer before the first loop, or offer in another section";
-    let calls = [
-        "tools.offer",
-        "tools.offer",
-        "tools.offer",
-        "packs.offer",
-        "packs.offer",
-        "tools.offer_local",
-        "tools.offer_local",
-        "tools.offer_local",
-    ];
-    assert_eq!(refusals.len(), calls.len(), "{refusals:?}");
-    for (refusal, call) in refusals.iter().zip(calls) {
-        assert!(
-            refusal.contains(&format!("{call}: {fixed}")),
-            "a new, a repeated, and an unknown entry, and a missing argument, all \
-             raise the fixed-list refusal first: {refusal}"
-        );
-    }
-    assert_eq!(scoped(&vm), before, "no refused offer reaches the scope");
-    assert!(
-        !vm.has_adhoc_tool("other")
-            .expect("the adhoc-tools registry reads"),
-        "no refused adhoc offer registers"
-    );
-}
-
-#[test]
-fn the_tools_namespace_holds_exactly_its_five_functions() {
-    let vm = lua_over(offering_set());
+fn the_tools_table_holds_exactly_its_api() {
+    let vm = lua_over(offer_set());
     let keys: String = vm.eval(
         "local keys = {}\n\
          for key, value in pairs(tools) do keys[#keys + 1] = key .. ':' .. type(value) end\n\
@@ -253,43 +326,7 @@ fn the_tools_namespace_holds_exactly_its_five_functions() {
          return table.concat(keys, ',')",
     );
     assert_eq!(
-        keys, "extras:function,get:function,offer:function,offer_local:function,required:function",
-        "the tools table holds exactly the namespace's functions"
+        keys, "adhoc:function,get:function,offer:function,offer_dynamic:function,packs:table",
+        "the tools table holds exactly the namespace's members before the shim installs call"
     );
-}
-
-#[test]
-fn tools_entries_name_the_calling_function_in_every_shape_error() {
-    let lua = Lua::new();
-    let string = |text: &str| {
-        Value::String(
-            lua.create_string(text)
-                .expect("a fresh VM creates a short string"),
-        )
-    };
-    let array = lua
-        .create_sequence_from(vec![string("web/search")])
-        .expect("a fresh VM creates the offer array");
-    for (args, fragment) in [
-        (
-            vec![Value::Integer(42)],
-            "tools.offer takes tool ids, tool objects, or arrays of them, got integer",
-        ),
-        (
-            vec![string("web/search"), string("x")],
-            "tools.offer takes one tool or a list of them, got extra string",
-        ),
-        (
-            vec![Value::Table(array), string("x")],
-            "tools.offer takes one tool or a list of them, got extra string",
-        ),
-        (
-            vec![string("web/search"), Value::Integer(42)],
-            "tools.offer takes one tool or a list of them, got extra integer",
-        ),
-    ] {
-        let error = collect_offer_entries("tools.offer", Variadic::from_iter(args))
-            .expect_err("the shape is refused");
-        assert!(error.to_string().contains(fragment), "{fragment}: {error}");
-    }
 }

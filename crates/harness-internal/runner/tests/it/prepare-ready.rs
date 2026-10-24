@@ -73,7 +73,10 @@ const DECLARES_SLOW: &str = "---\nname: declares-slow\ndescription: d\nrunvil: 0
 /// A Pack-free prompt returning how many undeclared tools the run
 /// offers.
 const COUNTS_OFFERED: &str = "---\nname: counts\ndescription: d\nrunvil: 0\n---\n\n\
-    # Title\n\n## Only\n\n```lua\nreturn #tools.extras() .. ' offered'\n```\n";
+    # Title\n\n## Only\n\n```lua\n\
+    local count = 0\n\
+    for _, pack in ipairs(tools.packs.extras()) do count = count + #pack.tools end\n\
+    return count .. ' offered'\n```\n";
 
 /// A Pack whose tools wait on the test's [`Startup`].
 struct Starting {
@@ -306,7 +309,7 @@ async fn an_undeclared_pack_whose_ready_fails_leaves_the_run_going_without_its_t
 #[tokio::test]
 async fn an_undeclared_pack_whose_ready_fails_raises_its_reason_when_the_prompt_offers_it() {
     let offers_slow = "---\nname: offers-slow\ndescription: d\nrunvil: 0\n---\n\n\
-        # Title\n\n## Only\n\n```lua\npacks.offer('slow')\nreturn 'offered'\n```\n";
+        # Title\n\n## Only\n\n```lua\ntools.offer('slow')\nreturn 'offered'\n```\n";
     let (host, _moves, _startup) = slow_host(Phase::Failed("the fixture server is down"));
     let outcome = drive_over(offers_slow, host).await;
     let RunOutcome::Failed { message, .. } = &outcome else {
@@ -314,7 +317,7 @@ async fn an_undeclared_pack_whose_ready_fails_raises_its_reason_when_the_prompt_
     };
     assert!(
         message.contains(
-            "packs.offer: the slow Pack is unavailable in this run: \
+            "tools.offer: the slow Pack is unavailable in this run: \
              the fixture server is down"
         ),
         "the failure names the Pack and its ready failure: {message}"
@@ -344,8 +347,8 @@ async fn an_undeclared_third_party_pack_that_never_gets_ready_holds_no_run_up() 
 async fn an_undeclared_builtin_with_no_tools_has_an_object_the_prompt_can_offer() {
     let reads_stub = "---\nname: reads-stub\ndescription: d\nrunvil: 0\n---\n\n\
         # Title\n\n## Only\n\n```lua\n\
-        local stub = packs.get('subagents')\n\
-        packs.offer('subagents')\n\
+        local stub = tools.packs.get('subagents')\n\
+        tools.offer('subagents')\n\
         return stub.name .. ':' .. #stub.tools\n```\n";
     let host = HostContext::new(registry(&[]), HostServices::new());
     assert_eq!(

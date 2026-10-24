@@ -54,7 +54,8 @@ fn section_scope_keeps_each_tool_at_its_first_offer() {
     let vm = TestVm::new().tools(bindings).build();
     run_scalar(&vm, &prologue, &null_emitter(), "Section").expect("section offers must record");
     let (bindings, runtime) = vm.tool_bag_handles();
-    let scope = current_tool_bindings(&bindings, &runtime).expect("tool scope must snapshot");
+    let scope = current_tool_bindings(&bindings, &runtime, vm.adhoc_tools())
+        .expect("tool scope must snapshot");
 
     assert_eq!(
         scope.iter().map(ToolBinding::alias).collect::<Vec<_>>(),
@@ -75,7 +76,8 @@ fn tools_offer_accepts_tool_objects_and_arrays() {
     run_scalar(&vm, &prologue, &null_emitter(), "Section")
         .expect("tools.offer must accept tool objects, ids, and arrays");
     let (bindings, runtime) = vm.tool_bag_handles();
-    let scope = current_tool_bindings(&bindings, &runtime).expect("tool scope must snapshot");
+    let scope = current_tool_bindings(&bindings, &runtime, vm.adhoc_tools())
+        .expect("tool scope must snapshot");
 
     assert_eq!(
         scope.iter().map(ToolBinding::alias).collect::<Vec<_>>(),
@@ -97,7 +99,8 @@ fn empty_offer_is_a_no_op_and_failed_bulk_offer_is_atomic() {
     run_scalar(&vm, &prologue, &null_emitter(), "Section")
         .expect("caught failed offer must not poison recording");
     let (bindings, runtime) = vm.tool_bag_handles();
-    let scope = current_tool_bindings(&bindings, &runtime).expect("tool scope must snapshot");
+    let scope = current_tool_bindings(&bindings, &runtime, vm.adhoc_tools())
+        .expect("tool scope must snapshot");
 
     assert_eq!(
         scope.iter().map(ToolBinding::alias).collect::<Vec<_>>(),
@@ -110,7 +113,7 @@ fn empty_offer_is_a_no_op_and_failed_bulk_offer_is_atomic() {
 fn offer_rejects_a_second_argument_and_records_nothing() {
     let bindings = fixture_set(&[("search", "search the web")]);
     let prologue = program(
-        "local extra = 'tools.offer takes one tool or a list of them, got extra string'; \
+        "local extra = 'tools.offer takes one tool or Pack, or an array of them, got extra string'; \
          local ok, err = pcall(tools.offer, 'fixtures/search', 'a description'); \
          if ok or not string.find(tostring(err), extra, 1, true) then \
              error('a second argument to a single offer must fail loudly: ' .. tostring(err)) \
@@ -125,7 +128,8 @@ fn offer_rejects_a_second_argument_and_records_nothing() {
     run_scalar(&vm, &prologue, &null_emitter(), "Section")
         .expect("refused offers must not poison recording");
     let (bindings, runtime) = vm.tool_bag_handles();
-    let scope = current_tool_bindings(&bindings, &runtime).expect("tool scope must snapshot");
+    let scope = current_tool_bindings(&bindings, &runtime, vm.adhoc_tools())
+        .expect("tool scope must snapshot");
 
     assert_eq!(
         scope.iter().map(ToolBinding::alias).collect::<Vec<_>>(),
@@ -150,7 +154,7 @@ fn an_unknown_id_fails_before_scope_closure() {
     assert!(
         error
             .to_string()
-            .contains("tools.offer: \"fixtures/missing\" is not a catalog tool in this run"),
+            .contains("tools.offer: \"fixtures/missing\" is not a tool in this run"),
         "the error names the id: {error}"
     );
     vm.teardown();
@@ -189,7 +193,7 @@ fn offer_over_an_empty_offering_fails_in_a_chunk() {
     assert!(
         error
             .to_string()
-            .contains("tools.offer: \"web/search\" is not a catalog tool in this run"),
+            .contains("tools.offer: \"web/search\" is not a tool in this run"),
         "the error must name the id: {error}"
     );
 }
@@ -205,9 +209,7 @@ fn offer_over_an_empty_offering_fails_in_a_prologue() {
     )
     .expect_err("an unoffered id must fail loudly");
     assert!(
-        error
-            .to_string()
-            .contains("is not a catalog tool in this run"),
+        error.to_string().contains("is not a tool in this run"),
         "the error must report the missing tool: {error}"
     );
     vm.teardown();
@@ -217,7 +219,8 @@ fn offer_over_an_empty_offering_fails_in_a_prologue() {
 fn a_section_vm_over_an_empty_offering_snapshots_to_an_empty_scope() {
     let vm = TestVm::new().build();
     let (bindings, runtime) = vm.tool_bag_handles();
-    let scope = current_tool_bindings(&bindings, &runtime).expect("an empty scope must snapshot");
+    let scope = current_tool_bindings(&bindings, &runtime, vm.adhoc_tools())
+        .expect("an empty scope must snapshot");
     assert!(scope.is_empty());
     vm.teardown();
 }

@@ -1,14 +1,14 @@
-//! The tool object: one catalog tool as Lua sees it.
+//! The tool object: one tool as Lua sees it.
 //!
-//! Presentation only: the userdata exposes an offered tool's `id`, its
-//! catalog `description`, its `parameters` schema, and its `pack`, the
-//! Pack object `packs.get` returns, and stands for its id wherever
+//! Presentation only: the userdata exposes a tool's `id`, its
+//! `description`, its `parameters` schema, and its `pack`, the Pack
+//! object `tools.packs.get` returns, and stands for its id wherever
 //! `tools.offer` and `tools.call` take a tool. The object is frozen and
-//! methodless, so `description` is always the catalog text, and each
-//! `parameters` read is a fresh table of the schema as declared. Neither
-//! is ever in the untrusted envelope. Unlike a model handle, which
-//! carries `infer` and `loop`, it is invoked only through
-//! `tools.call(tool, arguments)`.
+//! methodless, so `description` is always the text the Pack or the
+//! `tools.adhoc` attrs declared, and each `parameters` read is a fresh
+//! table of the schema as declared. Neither is ever in the untrusted
+//! envelope. Unlike a model handle, which carries `infer` and `loop`, it
+//! is invoked only through `tools.call(tool, arguments)`.
 
 use mlua::{LuaSerdeExt, MetaMethod, UserData, UserDataFields, UserDataMethods, Value};
 use runvil_types::tools::ToolId;
@@ -17,8 +17,8 @@ use serde_json::Value as Json;
 use crate::handles::ToolBinding;
 use crate::packs::pack_object;
 
-/// One catalog tool as Lua sees it: `id`, `description`, `parameters`,
-/// and `pack`, all read-only.
+/// One tool as Lua sees it: `id`, `description`, `parameters`, and
+/// `pack`, all read-only.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct LuaToolHandle {
     id: ToolId,
@@ -27,9 +27,8 @@ pub(crate) struct LuaToolHandle {
 }
 
 impl LuaToolHandle {
-    /// Builds the object for an offered tool from its binding: the id,
-    /// the catalog description, never the binding's override, and the
-    /// parameter schema.
+    /// Builds the object for a tool from its binding: the id, the
+    /// declared description, and the parameter schema.
     #[must_use]
     pub(crate) fn from_binding(binding: &ToolBinding) -> Self {
         Self {

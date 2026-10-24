@@ -266,12 +266,13 @@ pub(super) struct Chain {
     /// `tasks.concurrency` lowers it, clamped to the parent's.
     pub(super) concurrency: NonZeroUsize,
     /// The tool scope the chain's last `chat` round advertised, keyed by
-    /// alias, each name's catalog tool and vendor or `None` for an adhoc
-    /// tool: a copy of the section's rendered tool list's map. The round's
-    /// answer is checked against it, so a tool name the model invents or
-    /// reaches for outside the scope fails as out of scope. `None` before
-    /// the chain's first round.
-    pub(super) advertised: Option<BTreeMap<String, Option<Advertised>>>,
+    /// wire name, each name's tool id and vendor: a copy of the section's
+    /// rendered tool list's map. The round's answer is checked against it,
+    /// so a tool name the model invents or reaches for outside the scope
+    /// fails as out of scope, and each requested call's event is stamped
+    /// from it. It never routes a call. `None` before the chain's first
+    /// round.
+    pub(super) advertised: Option<BTreeMap<String, Advertised>>,
     /// The provider's token counts for the chain's `chat` rounds, which the
     /// next round's context precheck counts from.
     pub(super) anchor: ChatAnchor,

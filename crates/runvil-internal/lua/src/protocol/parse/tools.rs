@@ -4,7 +4,7 @@
 use mlua::{Lua, LuaSerdeExt, MultiValue, Value};
 
 use crate::protocol::{AdhocToolOutcome, Request, ToolCallRecord};
-use crate::tools::tool_name;
+use crate::tools::{model_tool_name, tool_name};
 use crate::vm::scalar_return;
 
 use super::{FieldFailure, call_error, shim_optional_string, shim_optional_u32};
@@ -37,26 +37,36 @@ pub(super) fn parse_tool_call(
     })
 }
 
-/// Reads a `tool_call` table: the author-supplied `alias` (a string or a
-/// Tool object, decoded through the one alias-or-Tool polymorphism) and
-/// `args`, plus the shim-produced optional `call_id` and `turn`.
+/// Reads a `tool_call` table: the `alias` naming the tool and the
+/// author-supplied `args`, plus the shim-produced optional `call_id` and
+/// `turn`.
 ///
-/// An absent or nil `args` parses as the empty object (the empty-argument
-/// call every tool accepts). A non-table or JSON-unrepresentable `args` is
-/// the call's error, framed as the other author-argument failures are,
-/// so an author `pcall` catches it at the call site. `call_id` is set only
-/// by the loop shim for a model-issued call, so a present non-string is a
-/// malformed yield rather than a call error; `turn`, set by the same shim,
-/// is likewise malformed unless it is an integer within `u32` range.
+/// A script call, with no `call_id`, names its tool by id or tool object,
+/// decoded through the one id-or-tool polymorphism; a model-issued call
+/// names it by the wire name the model sent. An absent or nil `args`
+/// parses as the empty object (the empty-argument call every tool
+/// accepts). A wrong `alias` for a script call, or a non-table or
+/// JSON-unrepresentable `args`, is the call's error, framed as the other
+/// author-argument failures are, so an author `pcall` catches it at the
+/// call site. `call_id` is set only by the loop shim for a model-issued
+/// call, so a present non-string is a malformed yield rather than a call
+/// error; `turn`, set by the same shim, is likewise malformed unless it is
+/// an integer within `u32` range.
 fn read_tool_call(
     lua: &Lua,
     table: &mlua::Table,
 ) -> std::result::Result<ToolCallFields, FieldFailure> {
+    let call_id = shim_optional_string(table, "call_id")?;
+    let decode = if call_id.is_some() {
+        model_tool_name
+    } else {
+        tool_name
+    };
     let alias = match table.raw_get::<Value>("alias") {
         // Flatten to the call-error string so the answer frames exactly as
         // the other author-argument failures (`Error::Lua`, not a runtime
         // wrapper).
-        Ok(value) => tool_name(&value).map_err(|error| call_error(error.to_string()))?,
+        Ok(value) => decode(&value).map_err(|error| call_error(error.to_string()))?,
         Err(_) => return Err(FieldFailure::Malformed),
     };
     let args = match table.raw_get::<Value>("args") {
@@ -77,7 +87,6 @@ fn read_tool_call(
         }
         Err(_) => return Err(FieldFailure::Malformed),
     };
-    let call_id = shim_optional_string(table, "call_id")?;
     let turn = shim_optional_u32(table, "turn")?;
     Ok(ToolCallFields {
         alias,
@@ -106,6 +115,9 @@ pub(super) fn parse_tool_calls(
             let Ok(Value::Table(entry)) = entries.raw_get::<Value>(index) else {
                 return Err(FieldFailure::Malformed);
             };
+            if shim_optional_string(&entry, "call_id")?.is_none() {
+                return Err(FieldFailure::Malformed);
+            }
             let ToolCallFields {
                 alias,
                 args,

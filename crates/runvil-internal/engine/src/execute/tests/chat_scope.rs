@@ -16,9 +16,9 @@ fn a_round_advertises_the_section_scope_with_adhoc_tools() {
     ]);
     let source = one_section(
         "tools.offer('tools/echo')
-         tools.offer_local('grab', 'Local grab', { value = 'string' }, function(args)
+         tools.offer(tools.adhoc({ name = 'grab', description = 'Local grab', parameters = { value = 'string' } }, function(args)
            return 'grabbed ' .. args.value
-         end)
+         end))
          messages:user('use the adhoc tool')
          models.loop()
          assert(messages[2].tool_calls[1].name == 'grab', 'an adhoc tool is in the advertised scope')

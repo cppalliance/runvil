@@ -191,19 +191,19 @@ fn an_adhoc_tool_handler_runs_inside_the_block_coroutine() {
     let (thread, yielded) = start(
         &vm,
         "local withheld\n\
-         tools.offer_local('grab', 'Grab a value', { value = 'string' }, function(args)\n\
+         tools.offer(tools.adhoc({ name = 'grab', description = 'Grab a value', parameters = { value = 'string' } }, function(args)\n\
            local ok, err = pcall(jump, '## Other')\n\
            withheld = not ok\n\
              and tostring(err):find('jump is unavailable inside an adhoc tool handler', 1, true) ~= nil\n\
            store.write('grab.txt', args.value)\n\
            return 'stored ' .. args.value\n\
-         end)\n\
-         local out = tools.call('grab', { value = 'hi' })\n\
+         end))\n\
+         local out = tools.call('adhoc/grab', { value = 'hi' })\n\
          return out .. '|' .. tostring(withheld) .. '|' .. tostring(jump ~= nil)",
     );
     match parse_request(&vm, yielded) {
         Request::ToolCall { alias, call_id, .. } => {
-            assert_eq!(alias, "grab");
+            assert_eq!(alias, "adhoc/grab");
             assert_eq!(call_id, None);
         }
         other => panic!("the block's first yield is the tool call, got {other:?}"),
@@ -315,9 +315,9 @@ fn tools_call_accepts_a_tool_object_in_place_of_the_id() {
 
 #[test]
 fn tools_call_rejects_a_first_argument_that_is_neither_a_string_nor_a_tool() {
-    // The polymorphism is a string (a tool id or an adhoc alias) or a tool
-    // object; anything else is the call's own error at the protocol
-    // boundary, so an author pcall catches it at the call site.
+    // The polymorphism is a tool id or a tool object; anything else is the
+    // call's own error at the protocol boundary, so an author pcall
+    // catches it at the call site.
     let vm = scheduler_vm(&ModelSet::default(), None);
     let (_thread, yielded) = start(&vm, "return tools.call(42, {})");
     let value = yielded.into_iter().next().expect("one yielded value");
@@ -325,7 +325,7 @@ fn tools_call_rejects_a_first_argument_that_is_neither_a_string_nor_a_tool() {
         YieldParse::Call(answer) => {
             let message = format!("{answer:?}");
             assert!(
-                message.contains("tools.call takes a tool id, a local alias, or a tool object"),
+                message.contains("tools.call takes a tool id or a tool object, got integer"),
                 "the rejection names the expected forms: {message}"
             );
         }

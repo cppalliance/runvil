@@ -351,11 +351,11 @@ impl Emitter {
         });
     }
 
-    /// Reports the result of one dispatched tool call. `tool` is the bound
-    /// tool `alias` resolved to, or `None` for an adhoc tool, and `vendor`
-    /// the vendor of the Pack that answered it, or `None` when the caller
-    /// reported none. The event records `trust` as its `trusted` flag:
-    /// `true` only for [`OutputTrust::Trusted`].
+    /// Reports the result of one dispatched tool call. `tool` is the tool
+    /// `alias` resolved to, and `vendor` the vendor of the Pack that
+    /// answered it, or `None` for an adhoc tool or when the caller reported
+    /// none. The event records `trust` as its `trusted` flag: `true` only
+    /// for [`OutputTrust::Trusted`].
     #[expect(
         clippy::too_many_arguments,
         reason = "the result report names its full run coordinates, including the alias, the tool it resolved to, and its vendor, in one call"

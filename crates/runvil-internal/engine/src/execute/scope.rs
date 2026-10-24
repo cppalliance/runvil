@@ -7,22 +7,22 @@ use runvil_types::emitter::Emitter;
 use runvil_types::event::lifecycle;
 
 use crate::lua::{Advertised, RenderedTools, ToolBinding};
-use crate::model::ToolSchema;
 use crate::{Error, Result};
 
-/// Builds the section's rendered tool list under the validation boundary
-/// pair, reported through the chain's `emitter` under `section`.
+/// Builds the section's rendered tool list from its static bindings,
+/// adhoc tools included, under the validation boundary pair, reported
+/// through the chain's `emitter` under `section`. The dynamic list is left
+/// empty for the caller to fill.
 ///
 /// # Errors
 /// Returns the schema-construction error of [`prepare_scoped_tools`].
 pub(super) fn prepare_effective_scope(
     bindings: &[ToolBinding],
-    adhoc_schemas: &[ToolSchema],
     emitter: &Emitter,
     section: &str,
 ) -> Result<RenderedTools> {
     emitter.report(section, lifecycle::TOOL_SCOPE_VALIDATION_STARTED);
-    let result = prepare_scoped_tools(bindings, adhoc_schemas);
+    let result = prepare_scoped_tools(bindings);
     emitter.report(
         section,
         if result.is_ok() {
@@ -34,21 +34,10 @@ pub(super) fn prepare_effective_scope(
     result
 }
 
-pub(super) fn prepare_scoped_tools(
-    bindings: &[ToolBinding],
-    adhoc_schemas: &[ToolSchema],
-) -> Result<RenderedTools> {
-    let mut schemas = Vec::with_capacity(bindings.len() + adhoc_schemas.len());
+pub(super) fn prepare_scoped_tools(bindings: &[ToolBinding]) -> Result<RenderedTools> {
+    let mut schemas = Vec::with_capacity(bindings.len());
     let mut dispatch = BTreeMap::new();
     for binding in bindings {
-        // An adhoc alias may equal an offered tool's wire name; the adhoc
-        // tool wins.
-        if adhoc_schemas
-            .iter()
-            .any(|schema| schema.name() == binding.alias())
-        {
-            continue;
-        }
         // Build every advertised schema through the validated constructor,
         // so an unusable wire name or a non-object JSON Schema is refused here
         // rather than sent to the model.
@@ -64,18 +53,15 @@ pub(super) fn prepare_scoped_tools(
         schemas.push(schema);
         dispatch.insert(
             binding.alias().to_owned(),
-            Some(Advertised {
+            Advertised {
                 id: binding.id().clone(),
                 vendor: binding.vendor().map(str::to_owned),
-            }),
+            },
         );
     }
-    // Adhoc tools are prompt-author Lua functions with no live implementation;
-    // the `tool_call` arm answers their calls on the section VM. The alias
-    // was validated at `tools.offer_local` registration.
-    for schema in adhoc_schemas {
-        dispatch.insert(schema.name().to_owned(), None);
-        schemas.push(schema.clone());
-    }
-    Ok(RenderedTools { schemas, dispatch })
+    Ok(RenderedTools {
+        schemas,
+        dispatch,
+        dynamic: Vec::new(),
+    })
 }

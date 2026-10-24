@@ -40,7 +40,7 @@ fn search_tool() -> ToolInfo {
 }
 
 /// A set declaring `web` and offering `web/search`.
-fn search_set() -> ToolSet {
+pub(super) fn search_set() -> ToolSet {
     ToolSet::new(
         vec![PackId::parse("web").expect("`web` is a valid Pack id")],
         BTreeMap::new(),
@@ -173,7 +173,7 @@ fn metadata_of_a_pack_whose_results_are_untrusted_never_takes_the_envelope() {
     let vm = lua_over(search_set());
     let (description, name, parameters): (String, String, Value) = vm.eval(
         "local tool = tools.get('web/search')\n\
-         return tool.description, packs.get('web').name, tool.parameters",
+         return tool.description, tools.packs.get('web').name, tool.parameters",
     );
     assert_eq!(description, search_tool().description);
     assert_eq!(name, "web");

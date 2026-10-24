@@ -109,7 +109,75 @@ pub(crate) fn echo_tool() -> ToolInfo {
     tool_at("tools/echo")
 }
 
-/// A test VM whose `tools` and `packs` tables are installed over `set`.
+/// The run the offer tests share: `web` (`web/fetch`, `web/search`) and
+/// `user-input` (`user-input/ask`) declared; `gh` (`gh/issues.list`,
+/// `gh/search`) offered but undeclared; `subagents`, with no tool, able to
+/// serve; and `mcp` unable to, because "the mcp server is down". Every
+/// tool is bound under its wire name.
+#[track_caller]
+pub(crate) fn offer_set() -> ToolSet {
+    let pack = |name: &str| {
+        runvil_types::packs::PackId::parse(name).expect("a fixture Pack id is a valid Pack id")
+    };
+    let bind = |id: &str| crate::ToolBinding::from_info(&id.replace(['/', '.'], "_"), &tool_at(id));
+    ToolSet::new(
+        vec![pack("web"), pack("user-input")],
+        [
+            (pack("gh"), None),
+            (pack("mcp"), Some("the mcp server is down".to_owned())),
+            (pack("subagents"), None),
+            (pack("user-input"), None),
+            (pack("web"), None),
+        ]
+        .into_iter()
+        .collect(),
+        vec![
+            bind("gh/issues.list"),
+            bind("gh/search"),
+            bind("user-input/ask"),
+            bind("web/fetch"),
+            bind("web/search"),
+        ],
+    )
+}
+
+/// The offers `vm` recorded, each as `<mode>:<tool or Pack id>`, the mode
+/// `static` or `dynamic`, in call order.
+#[track_caller]
+pub(crate) fn offers(vm: &SectionVm) -> Vec<String> {
+    vm.tool_runtime()
+        .lock()
+        .expect("the runtime mutex is not poisoned")
+        .offers
+        .iter()
+        .map(|offer| {
+            let mode = match offer.mode {
+                crate::OfferMode::Static => "static",
+                crate::OfferMode::Dynamic => "dynamic",
+            };
+            match &offer.target {
+                crate::OfferTarget::Tool(id) => format!("{mode}:{id}"),
+                crate::OfferTarget::Pack(pack) => format!("{mode}:{pack}"),
+            }
+        })
+        .collect()
+}
+
+/// What `source` raises on `vm`, as text, failing the test when it runs
+/// clean.
+#[track_caller]
+pub(crate) fn raised(vm: &SectionVm, source: &str) -> String {
+    vm.lua()
+        .load(format!(
+            "local ok, err = pcall(function() {source} end)\n\
+             assert(not ok, 'the chunk must raise')\n\
+             return tostring(err)"
+        ))
+        .eval()
+        .unwrap_or_else(|error| panic!("{source}: {error}"))
+}
+
+/// A test VM whose `tools` table is installed over `set`.
 #[track_caller]
 pub(crate) fn lua_over(set: ToolSet) -> BuiltVm {
     TestVm::new().tools(set).build()
@@ -119,10 +187,23 @@ pub(crate) fn lua_over(set: ToolSet) -> BuiltVm {
 #[track_caller]
 pub(crate) fn scoped(vm: &SectionVm) -> Vec<String> {
     let (set, runtime) = vm.tool_bag_handles();
-    crate::current_tool_bindings(&set, &runtime)
+    crate::current_tool_bindings(&set, &runtime, vm.adhoc_tools())
         .expect("the scope resolves")
         .iter()
         .map(|binding| binding.alias().to_owned())
+        .collect()
+}
+
+/// The ids of the dynamic list a round on `vm` would store, in order.
+#[track_caller]
+pub(crate) fn dynamic(vm: &SectionVm) -> Vec<String> {
+    let (set, runtime) = vm.tool_bag_handles();
+    let adhoc = vm.adhoc_tools();
+    let bound = crate::current_tool_bindings(&set, &runtime, adhoc).expect("the scope resolves");
+    crate::current_dynamic_tools(&set, &runtime, adhoc, &bound)
+        .expect("the dynamic list resolves")
+        .iter()
+        .map(ToString::to_string)
         .collect()
 }
 

@@ -54,11 +54,12 @@ pub enum ToolCallOutcome {
     /// A structured binding's parsed JSON output, resumed as a Lua table.
     Structured(serde_json::Value),
     /// An adhoc tool's call, resumed as `(true, nil, handler, args)`:
-    /// the handler registered under `alias` and a fresh table converted
-    /// from `args`, so the shim runs the handler inside the calling
-    /// coroutine and reports how it ended with an `adhoc_tool_done` yield.
+    /// the handler `tools.adhoc` registered under the wire name `alias`
+    /// and a fresh table converted from `args`, so the shim runs the
+    /// handler inside the calling coroutine and reports how it ended with
+    /// an `adhoc_tool_done` yield.
     Adhoc {
-        /// The adhoc tool's alias, naming its handler.
+        /// The adhoc tool's wire name, naming its handler.
         alias: String,
         /// The call's JSON arguments.
         args: serde_json::Value,

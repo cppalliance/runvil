@@ -280,15 +280,15 @@ fn replace_and_compactors_clear_work_inside_an_overflow_compactor_and_inside_mod
 fn meta_reaches_a_tool_through_a_view_but_never_the_model() {
     let source = PromptSource::new().section(
         "Only",
-        "tools.offer_local('probe', 'Read a record', {}, function(args)
+        "tools.offer(tools.adhoc({ name = 'probe', description = 'Read a record' }, function(args)
            return args.record.meta.hint
-         end)
+         end))
          messages:system('be terse', { hint = 'system' })
            :user('look', { hint = 'user' })
            :assistant('', { { id = 'call_1', name = 'probe' } }, { hint = 'assistant' })
            :tool('probed', 'call_1', { hint = 'tool' })
            :append({ role = 'user', content = 'go on', meta = { hint = 'append' } })
-         local probed = tools.call('probe', { record = messages[5] })
+         local probed = tools.call('adhoc/probe', { record = messages[5] })
          models.loop()
          local last = messages[#messages]
          return table.concat({ probed, #messages, last.content, tostring(last.meta) }, '|')",
@@ -319,7 +319,7 @@ fn both_loop_entries_take_only_a_compactor_and_check_it_before_a_running_loop() 
            local ok, err = pcall(call)
            refusals[#refusals + 1] = tostring(ok) .. ':' .. err.kind .. ':' .. tostring(err)
          end
-         tools.offer_local('probe', 'Probe the loop entries', { value = 'string' }, function()
+         tools.offer(tools.adhoc({ name = 'probe', description = 'Probe the loop entries', parameters = { value = 'string' } }, function()
            refuse(function() return models.loop(other) end)
            refuse(function() return models.loop(nil, nil) end)
            refuse(function() return models.loop(42) end)
@@ -329,7 +329,7 @@ fn both_loop_entries_take_only_a_compactor_and_check_it_before_a_running_loop() 
            refuse(function() return other:loop(42) end)
            refuse(function() return other:loop(compactors.fail) end)
            return 'probed'
-         end)
+         end))
          messages:user('probe the entries')
          models.loop()
          return table.concat(refusals, '\\n') .. '\\n' .. #messages",

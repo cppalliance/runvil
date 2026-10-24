@@ -1,7 +1,6 @@
 //! Engine injection: the one step that turns an uninjected section VM into
 //! an injected one, installing `args`, `argv`, `sys`, `var`, the `tools`,
-//! `packs`, `models`, and `compactors` tables, and the VM's `messages`
-//! list.
+//! `models`, and `compactors` tables, and the VM's `messages` list.
 
 use std::sync::Arc;
 
@@ -15,7 +14,6 @@ use crate::compactors::install_compactors;
 use crate::error::{Error, Result};
 use crate::messages::install_messages;
 use crate::models::install_models;
-use crate::packs::install_packs;
 use crate::sys::{guarded_var, seal_sys};
 use crate::tools::install_tools;
 
@@ -140,13 +138,6 @@ impl SectionVm<Uninjected> {
             &self.bound_tools,
             &self.tool_runtime,
             &self.adhoc_tools,
-            &self.messages,
-        )?;
-        install_packs(
-            &self.lua,
-            &globals,
-            &self.bound_tools,
-            &self.tool_runtime,
             &self.messages,
         )?;
         install_models(

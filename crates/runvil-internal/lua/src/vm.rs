@@ -1,19 +1,20 @@
 //! The per-section Lua VM: its construction, the typestate that orders
 //! Engine injection before every later step, the section's one
-//! `messages` list it creates, and the adhoc tools it registers.
+//! `messages` list it creates, and the adhoc tools it defines.
 //! Injection is in `inject`, the later installs in `install`, block
-//! coroutines in `run`, and state reads in `state`.
+//! coroutines in `run`, state reads in `state`, and the adhoc tools in
+//! `adhoc`.
 //!
-//! An adhoc tool, registered with `tools.offer_local` before the section's
-//! first loop round, runs inside the calling block's coroutine, never as
-//! an Engine function. The VM keeps only each
-//! tool's alias and schema; the handler sits in the VM's handler table. A
-//! call takes two yields: the shim's `tool_call`, which the scheduler
-//! answers with the handler itself, and the shim's `adhoc_tool_done`
-//! after the handler ran, which carries its result for the scheduler to
-//! report. Every suspending call the handler makes in between is an
-//! ordinary yield of the same coroutine.
+//! An adhoc tool, defined with `tools.adhoc`, runs inside the calling
+//! block's coroutine, never as an Engine function. The VM keeps each
+//! tool's binding; the handler sits in the VM's handler table. A call
+//! takes two yields: the shim's `tool_call`, which the scheduler answers
+//! with the handler itself, and the shim's `adhoc_tool_done` after the
+//! handler ran, which carries its result for the scheduler to report.
+//! Every suspending call the handler makes in between is an ordinary
+//! yield of the same coroutine.
 
+mod adhoc;
 mod inject;
 mod install;
 mod run;
@@ -23,7 +24,6 @@ use std::sync::atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
 use mlua::{Lua, LuaOptions, StdLib};
-use runvil_model_client::client::ToolSchema;
 use runvil_model_client::model::ModelSet;
 use runvil_types::emitter::Emitter;
 use runvil_types::event::lifecycle;
@@ -31,7 +31,6 @@ use runvil_types::untrusted::GuardNonce;
 use runvil_vfs::Access;
 use serde_json::Value as Json;
 
-use crate::alias::Alias;
 use crate::engine_globals::{LUA_LOG_CHARACTER_LIMIT, install_untrusted};
 use crate::error::{Error, Result};
 use crate::handles::ToolSet;
@@ -43,10 +42,11 @@ use crate::program::LuaProgram;
 use crate::scope::ToolRuntime;
 use crate::walk_budget::HeapCeiling;
 
+pub use adhoc::AdhocTools;
 pub use inject::InjectFailure;
 pub use run::CoroStep;
 pub(crate) use run::scalar_return;
-pub use state::{current_tool_bindings, resolve_model_binding};
+pub use state::{current_dynamic_tools, current_tool_bindings, resolve_model_binding};
 
 /// Default per-VM Lua heap ceiling, matching the executor's `RunLimits`.
 pub(crate) const DEFAULT_LUA_MEMORY_BYTES: usize = 64 * 1024 * 1024;
@@ -153,8 +153,7 @@ pub struct SectionVm<S = Injected> {
     /// Remaining cumulative `log()` message bytes this VM may emit. Bounds total
     /// log volume even when each event is under the per-event ceilings.
     log_byte_budget: Arc<AtomicUsize>,
-    /// Adhoc tools registered by Lua code: alias and schema, for
-    /// membership and advertising.
+    /// The adhoc tools `tools.adhoc` defined.
     adhoc_tools: AdhocTools,
     /// The VM's instruction-budget counter, shared with every block
     /// coroutine's hook (hooks are per-coroutine in PUC Lua).
@@ -169,68 +168,6 @@ pub struct SectionVm<S = Injected> {
     messages: MessageList,
     /// The lifecycle stage: [`Uninjected`] or [`Injected`].
     state: S,
-}
-
-/// Adhoc tool registrations owned by a section VM.
-///
-/// Each entry holds the tool alias and its prebuilt schema, which serve
-/// membership and advertising. The handler function itself lives in the
-/// VM's handler table, written by `tools.offer_local` and read back when the
-/// scheduler answers a call with it. The entries are shared with the
-/// `tools.offer_local` Lua callback, which must be `Send`, hence the `Mutex`;
-/// the VM is single-threaded, so the lock never contends.
-#[derive(Debug, Default, Clone)]
-pub(crate) struct AdhocTools {
-    entries: Arc<Mutex<Vec<(Alias, ToolSchema)>>>,
-}
-
-impl AdhocTools {
-    /// Locks the registry.
-    ///
-    /// # Errors
-    /// Returns [`Error::Internal`] if the entries lock was poisoned.
-    fn entries(&self) -> Result<std::sync::MutexGuard<'_, Vec<(Alias, ToolSchema)>>> {
-        self.entries
-            .lock()
-            .map_err(|_| Error::Internal("adhoc tools registry was poisoned".into()))
-    }
-
-    /// Registers an adhoc tool: alias and prebuilt schema.
-    ///
-    /// # Errors
-    /// Returns [`Error::Internal`] if the entries lock was poisoned.
-    pub(crate) fn register(&self, alias: Alias, schema: ToolSchema) -> Result<()> {
-        self.entries()?.push((alias, schema));
-        Ok(())
-    }
-
-    /// Returns the schemas of every registered adhoc tool.
-    ///
-    /// # Errors
-    /// Returns [`Error::Internal`] if the entries lock was poisoned.
-    pub(crate) fn schemas(&self) -> Result<Vec<ToolSchema>> {
-        Ok(self
-            .entries()?
-            .iter()
-            .map(|(_, schema)| schema.clone())
-            .collect())
-    }
-
-    /// Returns whether `alias` names a registered adhoc tool.
-    ///
-    /// # Errors
-    /// Returns [`Error::Internal`] if the entries lock was poisoned.
-    pub(crate) fn contains(&self, alias: &str) -> Result<bool> {
-        Ok(self
-            .entries()?
-            .iter()
-            .any(|(name, _)| name.as_str() == alias))
-    }
-
-    #[cfg(test)]
-    pub(crate) fn entries_handle(&self) -> Arc<Mutex<Vec<(Alias, ToolSchema)>>> {
-        Arc::clone(&self.entries)
-    }
 }
 
 impl SectionVm<Uninjected> {
@@ -382,11 +319,17 @@ impl<S> SectionVm<S> {
         self.instruction_budget.set_cancel(cancel);
     }
 
-    /// The section's tool-addition runtime: what `tools.offer` and
-    /// `packs.offer` recorded.
+    /// The section's offers: what `tools.offer` and `tools.offer_dynamic`
+    /// recorded.
     #[must_use]
     pub fn tool_runtime(&self) -> &Arc<Mutex<ToolRuntime>> {
         &self.tool_runtime
+    }
+
+    /// The adhoc tools `tools.adhoc` defined on this VM.
+    #[must_use]
+    pub fn adhoc_tools(&self) -> &AdhocTools {
+        &self.adhoc_tools
     }
 
     /// The section's model-selection runtime: what `models.use` recorded.

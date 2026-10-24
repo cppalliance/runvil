@@ -208,9 +208,9 @@ fn models_loop_dispatches_adhoc_and_bound_tools() {
     ]);
     let source = one_section(
         "tools.offer('tools/echo')
-         tools.offer_local('grab', 'Local grab', { value = 'string' }, function(args)
+         tools.offer(tools.adhoc({ name = 'grab', description = 'Local grab', parameters = { value = 'string' } }, function(args)
            return 'grabbed ' .. args.value
-         end)
+         end))
          messages:user('use both tools')
          models.loop()
          assert(#messages == 6, 'both exchanges and the terminal record appended')
@@ -303,14 +303,14 @@ fn the_author_list_never_shows_a_half_answered_tool_batch() {
     let source = one_section(
         "messages:user('grab twice')
          local seen = {}
-         tools.offer_local('grab', 'Local grab', { value = 'string' }, function(args)
+         tools.offer(tools.adhoc({ name = 'grab', description = 'Local grab', parameters = { value = 'string' } }, function(args)
            seen[#seen + 1] = #messages
            for _, m in ipairs(messages) do
              assert(m.tool_calls == nil, 'no assistant call record is visible mid-batch')
              assert(m.role ~= 'tool', 'no tool record is visible mid-batch')
            end
            return 'grabbed ' .. args.value
-         end)
+         end))
          models.loop()
          assert(#seen == 2, 'both calls in the batch ran')
          assert(seen[1] == 1 and seen[2] == 1, 'each handler saw only the user message')

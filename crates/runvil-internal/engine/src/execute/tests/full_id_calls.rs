@@ -140,17 +140,17 @@ fn a_script_call_advertises_nothing_until_the_tool_is_offered() {
 }
 
 #[test]
-fn a_script_call_by_wire_name_or_adhoc_looking_name_is_unbound() {
+fn a_script_call_naming_a_string_without_a_slash_raises_before_any_resolution() {
     let source = one_section(
         "local wire_ok, wire_err = pcall(tools.call, 'tools_echo', {})\n\
          local bare_ok, bare_err = pcall(tools.call, 'echo', {})\n\
-         assert(not wire_ok and not bare_ok, 'neither name is a catalog id')\n\
-         return wire_err.kind .. ':' .. wire_err.name .. '|' .. bare_err.kind .. ':' .. bare_err.name",
+         assert(not wire_ok and not bare_ok, 'neither name is a tool id')\n\
+         return wire_err.kind .. ':' .. tostring(wire_err) .. '|' .. tostring(bare_err)",
     );
     let rig = Rig::run(catalog_scenario(source).tool(echo_tool()));
     assert_eq!(
         rig.trace().text(),
-        "unbound_tool:tools_echo|unbound_tool:echo"
+        "lua:tools.call: \"tools_echo\" is not a tool id|tools.call: \"echo\" is not a tool id"
     );
     assert!(rig.issued().is_empty(), "nothing was issued");
 }

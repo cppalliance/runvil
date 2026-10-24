@@ -168,11 +168,11 @@ fn a_handler_raising_mid_batch_leaves_the_list_untouched_and_raises_its_own_tabl
     let source = one_section(
         "local own = { reason = 'mine' }
          local count = 0
-         tools.offer_local('grab', 'Local grab', { value = 'string' }, function(args)
+         tools.offer(tools.adhoc({ name = 'grab', description = 'Local grab', parameters = { value = 'string' } }, function(args)
            count = count + 1
            if count == 2 then error(own) end
            return 'grabbed ' .. args.value
-         end)
+         end))
          messages:user('grab twice')
          local ok, err = pcall(models.loop)
          return tostring(ok) .. '|' .. tostring(err == own) .. '|' .. count \
@@ -237,9 +237,9 @@ fn an_adhoc_tools_first_return_value_is_its_text_and_nil_is_empty() {
         text("done"),
     ]);
     let source = one_section(
-        "tools.offer_local('none', 'Returns nothing', {}, function() end)
-         tools.offer_local('num', 'Returns a number', {}, function() return 42 end)
-         tools.offer_local('two', 'Returns two values', {}, function() return 'first', 'second' end)
+        "tools.offer(tools.adhoc({ name = 'none', description = 'Returns nothing' }, function() end))
+         tools.offer(tools.adhoc({ name = 'num', description = 'Returns a number' }, function() return 42 end))
+         tools.offer(tools.adhoc({ name = 'two', description = 'Returns two values' }, function() return 'first', 'second' end))
          messages:user('call all three')
          models.loop()
          return '[' .. messages[3].content .. ']|' .. messages[4].content .. '|' .. messages[5].content",
@@ -258,9 +258,9 @@ fn an_adhoc_tool_cancelled_mid_handler_reports_no_failed_tool_call() {
         text("unreachable"),
     ]);
     let source = one_section(
-        "tools.offer_local('grab', 'Grab a value', { value = 'string' }, function(args)
+        "tools.offer(tools.adhoc({ name = 'grab', description = 'Grab a value', parameters = { value = 'string' } }, function(args)
            while true do end
-         end)
+         end))
          messages:user('Use the tool.')
          models.loop()
          return 'unreachable'",
@@ -293,9 +293,9 @@ fn the_scheduler_reports_the_whole_trace_of_a_bound_round_an_adhoc_round_and_a_r
     let source = PromptSource::new().title("Loop").section(
         "Only",
         "tools.offer('tools/echo')
-         tools.offer_local('grab', 'Local grab', { value = 'string' }, function(args)
+         tools.offer(tools.adhoc({ name = 'grab', description = 'Local grab', parameters = { value = 'string' } }, function(args)
            return 'grabbed ' .. args.value
-         end)
+         end))
          messages:user('use both tools')
          models.loop()
          return messages[#messages].content",

@@ -113,7 +113,7 @@ async fn every_run_holds_the_packs_the_three_plugins_add_and_the_builtin() {
         # Lists\n\n## Only\n\n```lua\n\
         local names = {}\n\
         for _, id in ipairs({ 'web', 'user-input', 'subagents', 'mcp' }) do\n\
-          names[#names + 1] = packs.get(id).name\n\
+          names[#names + 1] = tools.packs.get(id).name\n\
         end\n\
         return table.concat(names, ',')\n```\n";
     let (host, _ask) = host_context(&Registry::new(), None);

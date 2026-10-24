@@ -191,7 +191,7 @@ fn tool_calls_count_increments_even_when_tool_errors() {
 }
 
 #[test]
-fn a_model_call_and_a_script_call_count_under_the_id_and_an_adhoc_tool_under_its_alias() {
+fn a_model_call_a_script_call_and_an_adhoc_tool_each_count_under_the_id() {
     let gateway = ScriptedChat::new(vec![
         calls(&[
             ("call_1", "echo", r#"{"value":"model"}"#),
@@ -201,12 +201,12 @@ fn a_model_call_and_a_script_call_count_under_the_id_and_an_adhoc_tool_under_its
     ]);
     let source = one_section(
         "tools.offer('tools/echo')
-         tools.offer_local('grab', 'Grab a value', { value = 'string' }, function(args) return 'got ' .. args.value end)
+         tools.offer(tools.adhoc({ name = 'grab', description = 'Grab a value', parameters = { value = 'string' } }, function(args) return 'got ' .. args.value end))
          messages:user('ask the model')
          models.loop()
          tools.call('tools/echo', { value = 'script' })
-         local ok = pcall(function() return tools.calls.echo end)
-         return tostring(tools.calls['tools/echo']) .. '|' .. tostring(tools.calls.grab) .. '|' .. tostring(ok)",
+         local ok = pcall(function() return tools.calls['echo'] end)
+         return tostring(tools.calls['tools/echo']) .. '|' .. tostring(tools.calls['adhoc/grab']) .. '|' .. tostring(ok)",
     );
     let trace = loop_scenario(source)
         .offer("echo", echo_tool())
@@ -216,7 +216,7 @@ fn a_model_call_and_a_script_call_count_under_the_id_and_an_adhoc_tool_under_its
         trace.text(),
         "2|1|false",
         "the model's wire-name call and the script's id call count once each under \
-         the id, the adhoc tool under its alias, and the wire name is no key"
+         the id, the adhoc tool under its own id, and the wire name is no key"
     );
 }
 

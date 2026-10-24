@@ -27,8 +27,8 @@ models.default("chat")
 ## Conversation
 
 ```lua
-packs.offer("web")
-tools.offer(tools.extras())
+tools.offer("web")
+tools.offer(tools.packs.extras())
 local function compact(reason)
   local first = 1
   while messages[first] and messages[first].role == "system" do

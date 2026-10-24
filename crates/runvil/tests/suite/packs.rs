@@ -7,7 +7,7 @@ use super::support::{Scenario, TestResult, greeter};
 
 #[test]
 fn two_runs_whose_contexts_carry_different_rosters_each_see_their_own() -> TestResult {
-    let source = greeter("return tostring(packs.get('kit') ~= nil)");
+    let source = greeter("return tostring(tools.packs.get('kit') ~= nil)");
     let kit = PackId::parse("kit")?;
     let usable = {
         let kit = kit.clone();

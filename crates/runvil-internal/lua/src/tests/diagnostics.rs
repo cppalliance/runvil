@@ -62,19 +62,15 @@ fn runtime_assert_failure_reports_chunk_name_and_line() {
 }
 
 #[test]
-fn adhoc_tools_schema_and_membership_reads_fail_closed_on_poison() {
+fn adhoc_tools_list_and_lookup_reads_fail_closed_on_poison() {
     let adhoc = AdhocTools::default();
-    let schema = runvil_model_client::detail::tool_schema_new(
-        "grab".to_owned(),
-        "Grab a value".to_owned(),
+    let info = runvil_types::tools::ToolInfo::new(
+        runvil_types::tools::ToolId::parse("adhoc/grab").expect("a valid adhoc id"),
+        "Grab a value",
         serde_json::json!({ "type": "object", "properties": {} }),
-    )
-    .expect("the schema builds");
+    );
     adhoc
-        .register(
-            crate::alias::Alias::parse("grab".to_owned()).expect("a valid alias"),
-            schema,
-        )
+        .register("grab", &info)
         .expect("registration succeeds before the poison");
     let handle = adhoc.entries_handle();
     let poisoned = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
@@ -83,13 +79,13 @@ fn adhoc_tools_schema_and_membership_reads_fail_closed_on_poison() {
     }));
     assert!(poisoned.is_err(), "the panic must poison the registry");
 
-    let schemas = adhoc
-        .schemas()
-        .expect_err("schema reads must fail on a poisoned registry");
-    let contains = adhoc
-        .contains("anything")
-        .expect_err("membership reads must fail on a poisoned registry");
-    for error in [schemas, contains] {
+    let listed = adhoc
+        .bindings()
+        .expect_err("list reads must fail on a poisoned registry");
+    let looked_up = adhoc
+        .binding("adhoc/grab")
+        .expect_err("lookups must fail on a poisoned registry");
+    for error in [listed, looked_up] {
         assert!(
             error
                 .to_string()

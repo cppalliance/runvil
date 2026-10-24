@@ -1,20 +1,21 @@
 //! Section VM state reads: `var`, bare globals, `argv`, the tool call
-//! counts, the adhoc tools, and the section's effective tool and model
-//! bindings.
+//! counts, the rendered list's entries, and the section's effective tool
+//! and model bindings.
 
 use std::borrow::Cow;
 use std::sync::Mutex;
 
 use mlua::{LuaSerdeExt, Value};
-use runvil_model_client::client::ToolSchema;
 use runvil_model_client::model::{ModelBinding, ModelView};
+use runvil_types::tools::ToolId;
 use serde_json::Value as Json;
 
-use super::SectionVm;
+use super::{AdhocTools, SectionVm};
 use crate::error::{Error, Result};
 use crate::handles::{ToolBinding, ToolSet};
 use crate::models::ModelRuntime;
-use crate::scope::{ToolCallCounts, ToolRuntime};
+use crate::packs::is_adhoc;
+use crate::scope::{Advertised, OfferMode, OfferTarget, ToolCallCounts, ToolRuntime};
 use crate::sys::var_to_json;
 use crate::tools::install_tool_call_counts as install_tool_call_counts_impl;
 
@@ -80,23 +81,15 @@ impl SectionVm {
     /// # Errors
     /// Returns [`Error::LuaRuntime`] when installing the `tools.calls` index fails.
     pub fn install_tool_call_counts(&self, bindings: &[ToolBinding]) -> Result<ToolCallCounts> {
-        install_tool_call_counts_impl(&self.lua, &self.bound_tools, bindings)
+        install_tool_call_counts_impl(&self.lua, &self.bound_tools, &self.adhoc_tools, bindings)
     }
 
-    /// Returns the schemas of every registered adhoc tool.
-    ///
-    /// # Errors
-    /// Returns [`Error::Internal`] if the adhoc-tools registry was poisoned.
-    pub fn adhoc_tool_schemas(&self) -> Result<Vec<ToolSchema>> {
-        self.adhoc_tools.schemas()
-    }
-
-    /// Returns whether `alias` names a registered adhoc tool.
-    ///
-    /// # Errors
-    /// Returns [`Error::Internal`] if the adhoc-tools registry was poisoned.
-    pub fn has_adhoc_tool(&self, alias: &str) -> Result<bool> {
-        self.adhoc_tools.contains(alias)
+    /// Returns the tool the section's rendered list advertises under
+    /// `wire_name`, or `None` when no list is rendered or it has no such
+    /// name.
+    #[must_use]
+    pub fn rendered_target(&self, wire_name: &str) -> Option<Advertised> {
+        self.messages.rendered_target(wire_name)
     }
 
     /// How many of this VM's instruction-hook firings have counted.
@@ -106,47 +99,103 @@ impl SectionVm {
     }
 }
 
-/// Reads the section's effective tool bindings without mutating the tool
-/// runtime: the section's `tools.offer` tools in first-offer order, then
-/// every offered tool of each `packs.offer` Pack, Packs in
-/// first-offer order and each Pack's tools in id order. Each tool
-/// appears once, at its first place, resolved against the offering.
+/// Reads the section's static bindings without mutating the tool
+/// runtime: each static offer in call order, a tool adding itself and a
+/// Pack adding its tools in id order, each tool once, at its first place.
+/// Catalog ids resolve against the offering and adhoc ids against
+/// `adhoc`. Last, an offered catalog tool whose wire name an offered adhoc
+/// tool shares is dropped.
 ///
 /// The section's first loop round renders its tool list from these
-/// bindings. `tools.offer`, `packs.offer`, and `tools.offer_local` raise
-/// after that, so the bindings never change once the list is rendered.
+/// bindings. Every offer raises after that, so the bindings never change
+/// once the list is rendered.
 ///
 /// # Errors
-/// Returns [`Error::Internal`] if the tool runtime's mutex is poisoned or an
-/// offered wire name has no binding.
+/// Returns [`Error::Internal`] if the tool runtime's mutex or the adhoc
+/// tools are poisoned, or an offered id has no binding.
 pub fn current_tool_bindings(
-    bindings: &ToolSet,
+    set: &ToolSet,
     runtime: &Mutex<ToolRuntime>,
+    adhoc: &AdhocTools,
+) -> Result<Vec<ToolBinding>> {
+    let mut bindings: Vec<ToolBinding> = Vec::new();
+    for binding in expanded(set, runtime, adhoc, OfferMode::Static)? {
+        if !bindings.iter().any(|held| held.id() == binding.id()) {
+            bindings.push(binding);
+        }
+    }
+    let adhoc_names: Vec<String> = bindings
+        .iter()
+        .filter(|binding| is_adhoc(&binding.id().pack()))
+        .map(|binding| binding.alias().to_owned())
+        .collect();
+    bindings.retain(|binding| {
+        is_adhoc(&binding.id().pack()) || !adhoc_names.iter().any(|name| name == binding.alias())
+    });
+    Ok(bindings)
+}
+
+/// Reads the section's dynamic list without mutating the tool runtime:
+/// each tool the dynamic offers name, in offer order and once, unless
+/// `static_bindings` holds its id or its wire name.
+///
+/// # Errors
+/// Returns [`Error::Internal`] if the tool runtime's mutex or the adhoc
+/// tools are poisoned, or an offered id has no binding.
+pub fn current_dynamic_tools(
+    set: &ToolSet,
+    runtime: &Mutex<ToolRuntime>,
+    adhoc: &AdhocTools,
+    static_bindings: &[ToolBinding],
+) -> Result<Vec<ToolId>> {
+    let mut dynamic: Vec<ToolId> = Vec::new();
+    for binding in expanded(set, runtime, adhoc, OfferMode::Dynamic)? {
+        let in_static = static_bindings
+            .iter()
+            .any(|held| held.id() == binding.id() || held.alias() == binding.alias());
+        if !in_static && !dynamic.contains(binding.id()) {
+            dynamic.push(binding.id().clone());
+        }
+    }
+    Ok(dynamic)
+}
+
+/// Every binding the offers of `mode` name, in call order, with repeats:
+/// the one expansion both lists read, so they never disagree about what
+/// an offer names.
+fn expanded(
+    set: &ToolSet,
+    runtime: &Mutex<ToolRuntime>,
+    adhoc: &AdhocTools,
+    mode: OfferMode,
 ) -> Result<Vec<ToolBinding>> {
     let runtime = runtime
         .lock()
         .map_err(|_| Error::Internal("tool declaration runtime was poisoned".into()))?;
-    let pack_tools = runtime.packs.iter().flat_map(|pack| {
-        bindings
-            .offered()
-            .iter()
-            .filter(move |binding| binding.id().pack() == *pack)
-            .map(ToolBinding::alias)
-    });
-    let mut names: Vec<&str> = Vec::new();
-    for name in runtime.added.iter().map(String::as_str).chain(pack_tools) {
-        if !names.contains(&name) {
-            names.push(name);
+    let mut bindings = Vec::new();
+    for offer in runtime.offers.iter().filter(|offer| offer.mode == mode) {
+        match &offer.target {
+            OfferTarget::Tool(id) => {
+                let name = id.to_string();
+                let binding = if is_adhoc(&id.pack()) {
+                    adhoc.binding(&name)?
+                } else {
+                    set.offered_binding(&name).cloned()
+                };
+                bindings.push(binding.ok_or_else(|| {
+                    Error::Internal(Cow::Owned(format!("offered tool {name:?} has no binding")))
+                })?);
+            }
+            OfferTarget::Pack(pack) if is_adhoc(pack) => bindings.extend(adhoc.bindings()?),
+            OfferTarget::Pack(pack) => bindings.extend(
+                set.offered()
+                    .iter()
+                    .filter(|binding| binding.id().pack() == *pack)
+                    .cloned(),
+            ),
         }
     }
-    names
-        .into_iter()
-        .map(|name| {
-            bindings.offered_binding(name).cloned().ok_or_else(|| {
-                Error::Internal(Cow::Owned(format!("tool {name:?} has no offered binding")))
-            })
-        })
-        .collect()
+    Ok(bindings)
 }
 
 /// Reads the section's effective model binding through the run's model view

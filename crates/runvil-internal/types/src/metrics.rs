@@ -28,8 +28,8 @@ pub struct ToolCallEvent {
     pub name: String,
     /// The call arguments exactly as the model produced them.
     pub arguments: serde_json::Value,
-    /// The bound tool `name` resolved to; `None` for an adhoc tool or a
-    /// name outside the round's scope.
+    /// The tool `name` resolved to; `None` for a name outside the round's
+    /// scope.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tool: Option<ToolId>,
     /// The vendor of the Pack that answers `tool`, as the caller reported

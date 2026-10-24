@@ -4,13 +4,15 @@
 //! tool call.
 //!
 //! Each call's route is decided once, by `tool_route`, on the driver thread
-//! before any leaf work. An adhoc tool is answered with its handler;
-//! anything else is a catalog tool, which resolves against the run's
-//! offering (a model call by wire name, a script call by canonical id,
-//! which also reaches a catalog tool left out of the offering), has its
-//! attempt counted, and is issued as a `ToolCall` effect, carrying an
-//! identity forked from the chain's access, whose answer the driver applies
-//! through the shared dispatch body. The call's `CallSite` names who asked.
+//! before any leaf work, from the call's `CallSite`, which names who
+//! asked. A model call's wire name routes by the entry the current frame's
+//! section's rendered list holds for it, and a script call routes by id.
+//! An adhoc tool is answered with its handler; anything else is a catalog
+//! tool, which resolves against the run's offering (a model call by wire
+//! name, a script call by id, which also reaches a catalog tool left out
+//! of the offering), has its attempt counted, and is issued as a
+//! `ToolCall` effect, carrying an identity forked from the chain's access,
+//! whose answer the driver applies through the shared dispatch body.
 //! A model-issued call, alone or batched, always resumes a bound tool with
 //! content - a tool's own failure becomes untrusted failure text - and
 //! `ToolResult` fires under the id and the turn of the round that requested
@@ -31,26 +33,28 @@
 //!
 //! An adhoc tool call is a two-yield handshake. The `tool_call` answer is
 //! [`ToolCallOutcome::Adhoc`], which hands the shim the handler, and the
-//! frame opens an [`AdhocCall`] for it. The shim runs the handler inside the
+//! frame opens an [`AdhocCall`](crate::execute::section_context::AdhocCall)
+//! for it. The shim runs the handler inside the
 //! chain's block coroutine, so the handler's own suspending calls are
 //! ordinary requests of this chain, then yields `adhoc_tool_done`. That
 //! arm closes the innermost open call and reports it: the succeeded or
-//! failed observation and, on success, the `ToolResult` under the call id
-//! recorded at dispatch, trusted unless the handler fetched a listing
-//! while the call was open. An adhoc call never issues leaf work of its
-//! own.
+//! failed observation and, on success, the `ToolResult` under the tool's
+//! id and the call id recorded at dispatch, trusted unless the handler
+//! fetched a listing while the call was open. An adhoc call never issues
+//! leaf work of its own. The adhoc arm sits in the `adhoc` child.
+
+#[path = "tool_call-adhoc.rs"]
+mod adhoc;
 
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
 
-use runvil_types::event::lifecycle;
-use runvil_types::tools::{OutputTrust, ToolId};
+use runvil_types::tools::ToolId;
 use runvil_vfs::detail;
 
-use crate::execute::protocol::{AdhocToolOutcome, Answer, ToolCallOutcome, ToolCallRecord};
+use crate::execute::protocol::{Answer, ToolCallOutcome, ToolCallRecord};
 use crate::execute::run::{Effect, ToolCallOrigin, ToolCaller};
-use crate::execute::section_context::AdhocCall;
-use crate::lua::{ScriptReport, ToolCallCounts, current_tool_bindings};
+use crate::lua::{ScriptReport, ToolBinding, ToolCallCounts, current_tool_bindings};
 use crate::{Error, Result};
 
 use super::dispatch::unbound_tool_call;
@@ -71,7 +75,7 @@ pub(super) enum ToolCallDispatch {
 enum ToolRoute {
     /// An adhoc tool of the chain's section VM, answered with its
     /// handler.
-    Adhoc,
+    Adhoc(ToolBinding),
     /// A catalog tool, resolved against the run's offering and issued as
     /// an effect.
     Catalog,
@@ -123,18 +127,16 @@ impl Scheduler {
     ) {
         let mut batch = Vec::with_capacity(calls.len());
         for (slot, call) in calls.into_iter().enumerate() {
-            let issued = match self.tool_route(id, &call.name) {
-                Ok(ToolRoute::Adhoc) => break,
-                Ok(ToolRoute::Catalog) => self.prepare_catalog_call(
-                    id,
-                    &call.name,
-                    call.arguments,
-                    CallSite::Batch {
-                        call_id: call.id,
-                        turn,
-                        slot,
-                    },
-                ),
+            let site = CallSite::Batch {
+                call_id: call.id,
+                turn,
+                slot,
+            };
+            let issued = match self.tool_route(id, &call.name, &site) {
+                Ok(ToolRoute::Adhoc(_)) => break,
+                Ok(ToolRoute::Catalog) => {
+                    self.prepare_catalog_call(id, &call.name, call.arguments, site)
+                }
                 Err(error) => Err(error),
             };
             match issued {
@@ -149,18 +151,29 @@ impl Scheduler {
         self.answer_full_batch(id);
     }
 
-    /// Decides the route of the call named `alias`, the one decision a
-    /// lone call and a batch share. An adhoc tool of the chain's section VM
-    /// wins over the catalog.
-    fn tool_route(&self, id: ChainIndex, alias: &str) -> Result<ToolRoute> {
-        if self.chains[id.index()]
-            .frame()?
-            .vm()?
-            .has_adhoc_tool(alias)?
-        {
-            return Ok(ToolRoute::Adhoc);
-        }
-        Ok(ToolRoute::Catalog)
+    /// Decides the route of the call at `site` naming `name`, the one
+    /// decision a lone call and a batch share. A model call looks its wire
+    /// name up in the rendered list of the current frame's section, never
+    /// in the chain's advertised scope, which another section's rounds
+    /// overwrite while an adhoc tool's handler runs; with no rendered list
+    /// it routes as a catalog call. A script call routes by id. Either goes
+    /// to the adhoc tool the id names, when it is one.
+    fn tool_route(&self, id: ChainIndex, name: &str, site: &CallSite) -> Result<ToolRoute> {
+        let vm = self.chains[id.index()].frame()?.vm()?;
+        let target = if site.call_id().is_some() {
+            match vm.rendered_target(name) {
+                Some(advertised) => advertised.id.to_string(),
+                None => return Ok(ToolRoute::Catalog),
+            }
+        } else {
+            name.to_owned()
+        };
+        let adhoc = if target.contains('/') {
+            vm.adhoc_tools().binding(&target)?
+        } else {
+            None
+        };
+        Ok(adhoc.map_or(ToolRoute::Catalog, ToolRoute::Adhoc))
     }
 
     /// The turn every report of a call at `site` carries: the requesting
@@ -175,8 +188,9 @@ impl Scheduler {
     /// call installs.
     fn section_call_counts(&mut self, id: ChainIndex) -> Result<ToolCallCounts> {
         let chain = &mut self.chains[id.index()];
+        let vm = chain.frame()?.vm()?;
         let effective =
-            current_tool_bindings(chain.ctx.tool_set(), chain.frame()?.vm()?.tool_runtime())?;
+            current_tool_bindings(chain.ctx.tool_set(), vm.tool_runtime(), vm.adhoc_tools())?;
         let ctx = chain.ctx.clone();
         chain.frame_mut()?.script_call_counts(&ctx, &effective)
     }
@@ -262,31 +276,8 @@ impl Scheduler {
         args: serde_json::Value,
         site: CallSite,
     ) -> Result<ToolCallDispatch> {
-        match self.tool_route(id, alias)? {
-            ToolRoute::Adhoc => {
-                let report = ScriptReport {
-                    turn: self.call_turn(id, &site),
-                };
-                let counts = self.section_call_counts(id)?;
-                // The attempt counts at dispatch, before the handler runs, so
-                // a handler that then fails still counts.
-                counts.ensure(alias)?;
-                counts.increment(alias)?;
-                self.chains[id.index()]
-                    .frame_mut()?
-                    .push_adhoc_call(AdhocCall {
-                        alias: alias.to_owned(),
-                        call_id: site.call_id().map(str::to_owned),
-                        report,
-                        listing: false,
-                    });
-                Ok(ToolCallDispatch::Answered(Answer::ToolCallResult(Ok(
-                    ToolCallOutcome::Adhoc {
-                        alias: alias.to_owned(),
-                        args,
-                    },
-                ))))
-            }
+        match self.tool_route(id, alias, &site)? {
+            ToolRoute::Adhoc(binding) => self.prepare_adhoc_call(id, &binding, args, &site),
             ToolRoute::Catalog => {
                 self.prepare_catalog_call(id, alias, args, site)?;
                 Ok(ToolCallDispatch::Issued)
@@ -378,65 +369,6 @@ impl Scheduler {
             exec,
         });
         self.issue(id, effect, resume);
-        Ok(())
-    }
-
-    /// Dispatches an `adhoc_tool_done` request: closes the chain's
-    /// innermost open adhoc tool call and answers it. A returned text
-    /// reports `TOOL_CALL_SUCCEEDED` and a trusted `ToolResult` - the
-    /// prompt author wrote the handler, so its output passes verbatim -
-    /// under the call id (or none for a script call) and the turn recorded
-    /// at dispatch, then resumes as the text. A call marked as having
-    /// fetched a listing while it was open instead returns its text
-    /// wrapped with the run's nonce and reports it untrusted. A rejected
-    /// return reports `TOOL_CALL_FAILED` and resumes as its error. A raise
-    /// reports `TOOL_CALL_FAILED` and resumes empty: the shim raises the
-    /// handler's own value in its place.
-    ///
-    /// # Errors
-    /// Returns [`Error::Internal`] when the chain has no frame or no open
-    /// adhoc call, which only a shim bug produces.
-    pub(super) fn dispatch_adhoc_tool_done(
-        &mut self,
-        id: ChainIndex,
-        outcome: AdhocToolOutcome,
-    ) -> Result<()> {
-        let chain = &mut self.chains[id.index()];
-        let emitter = Arc::clone(chain.ctx.emitter());
-        let section = chain.section_name().to_owned();
-        let call = chain.frame_mut()?.pop_adhoc_call().ok_or(Error::internal(
-            "an adhoc tool's completion closes the call that opened it",
-        ))?;
-        let answer = match outcome {
-            AdhocToolOutcome::Returned(text) => {
-                emitter.report(&section, lifecycle::TOOL_CALL_SUCCEEDED);
-                let (text, trust) = if call.listing {
-                    (chain.ctx.nonce().wrap(&text), OutputTrust::Untrusted)
-                } else {
-                    (text, OutputTrust::Trusted)
-                };
-                emitter.tool_result(
-                    &section,
-                    call.report.turn,
-                    call.call_id.as_deref().unwrap_or(""),
-                    &call.alias,
-                    None,
-                    None,
-                    &text,
-                    trust,
-                );
-                Ok(ToolCallOutcome::Plain(text))
-            }
-            AdhocToolOutcome::BadReturn(error) => {
-                emitter.report(&section, lifecycle::TOOL_CALL_FAILED);
-                Err(Error::from(error))
-            }
-            AdhocToolOutcome::Raised => {
-                emitter.report(&section, lifecycle::TOOL_CALL_FAILED);
-                Ok(ToolCallOutcome::Plain(String::new()))
-            }
-        };
-        self.answer_inline(id, Answer::ToolCallResult(answer));
         Ok(())
     }
 }

@@ -53,9 +53,9 @@ export interface ToolCallRow {
   /** The call arguments as compact JSON, or "" when the call had none. */
   readonly args: string;
   /**
-   * The bound tool id the call resolved to, as the wire's one
-   * slash-separated string (`web/search`), or null for an adhoc tool
-   * or an entry the wire did not stamp. Views render a null tool as a
+   * The tool id the call resolved to, as the wire's one slash-separated
+   * string (`web/search`, or `adhoc/grab` for an adhoc tool), or null
+   * for an entry the wire did not stamp. Views render a null tool as a
    * generic tool.
    */
   readonly tool: string | null;

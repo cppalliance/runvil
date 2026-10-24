@@ -244,9 +244,9 @@ fn a_compaction_a_restore_and_a_clear_leave_the_rendered_tool_list_attached() {
          end, 'restore')
          local kept = #messages
          models.compact(compactors.clear, 'start over')
-         local offered, refusal = pcall(tools.offer_local, 'grab', 'Local grab', {}, function()
+         local offered, refusal = pcall(tools.offer, tools.adhoc({ name = 'grab', description = 'Local grab' }, function()
            return ''
-         end)
+         end))
          return table.concat({
            tostring(restored), kept, #messages, tostring(offered), tostring(refusal),
          }, '|')",
@@ -257,7 +257,7 @@ fn a_compaction_a_restore_and_a_clear_leave_the_rendered_tool_list_attached() {
         .run();
     assert_eq!(
         trace.text(),
-        format!("false|2|0|false|tools.offer_local: {FIXED}")
+        format!("false|2|0|false|tools.offer: {FIXED}")
     );
     let bodies = gateway.requests();
     assert_eq!(bodies.len(), 2, "the overflowed round and its retry");

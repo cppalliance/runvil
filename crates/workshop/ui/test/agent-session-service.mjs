@@ -649,26 +649,27 @@ await assertNoLeaks(lifecycle, () => {
       "tool_call",
       JSON.stringify([
         { id: "a", name: "search", arguments: { query: "x" }, tool: "web/search", vendor: "runvil" },
-        { id: "b", name: "local", arguments: {} },
+        { id: "b", name: "grab", arguments: {}, tool: "adhoc/grab" },
         { id: "c", name: "odd", arguments: {}, tool: 5, vendor: 5 },
         { id: "d", name: "empty", arguments: {}, tool: "", vendor: "" },
         { id: "e", name: "nul", arguments: {}, tool: null, vendor: null },
         { id: "f", name: "bare", arguments: {}, tool: "runvil/user-input/ask" },
+        { id: "g", name: "unstamped", arguments: {} },
       ]),
       { reply: 0 },
     );
     check(
-      "a batch entry's tool string parses onto its row",
+      "a batch entry's tool string parses onto its row, an adhoc id included",
       isDeepStrictEqual(
         service.items[0].calls.map((row) => row.tool),
-        ["web/search", null, null, null, null, "runvil/user-input/ask"],
+        ["web/search", "adhoc/grab", null, null, null, "runvil/user-input/ask", null],
       ),
     );
     check(
       "a batch entry's vendor string parses onto its row",
       isDeepStrictEqual(
         service.items[0].calls.map((row) => row.vendor),
-        ["runvil", null, null, null, null, null],
+        ["runvil", null, null, null, null, null, null],
       ),
     );
     wire.fire.event("tool_call", "[1, null, [], \"x\"]", { reply: 1 });

@@ -374,7 +374,7 @@ async fn an_undeclared_third_party_pack_is_not_in_the_run() {
     let undeclared = "---\nname: undeclared\ndescription: d\nrunvil: 0\n---\n\n\
         # Title\n\n## Only\n\n```lua\n\
         local ok = pcall(tools.call, 'tools/echo', { value = 'hi' })\n\
-        return tostring(ok) .. '|' .. tostring(packs.get('tools'))\n```\n";
+        return tostring(ok) .. '|' .. tostring(tools.packs.get('tools'))\n```\n";
     assert_eq!(
         completed(drive_over(undeclared, building(TOOLS)).await),
         "false|nil",
@@ -402,19 +402,20 @@ async fn a_bare_entry_another_vendor_answers_is_refused_naming_its_fqn() {
 }
 
 #[tokio::test]
-async fn the_lists_split_the_offering_by_declared_pack_and_a_script_calls_a_tool_object() {
+async fn the_packs_split_by_declaration_and_a_script_calls_an_extras_tool_object() {
     let offering = "---\nname: offering\ndescription: d\nrunvil: 0\n\
         uses:\n  - tests/tools\n---\n\n# Title\n\n## Only\n\n```lua\n\
-        local required, extras = tools.required(), tools.extras()\n\
-        local extra = extras[1]\n\
-        return #required .. ':' .. required[1].id .. '|' .. #extras .. ':' .. extra.id .. '|' .. \
-          tools.call(extra, { value = 'hi' })\n```\n";
+        local declared = tools.packs.get('tools')\n\
+        local extras = tools.packs.extras()\n\
+        local extra = extras[1].tools[1]\n\
+        return tostring(declared.required) .. ':' .. declared.tools[1].id .. '|' .. \
+          extras[1].name .. ':' .. extra.id .. '|' .. tools.call(extra, { value = 'hi' })\n```\n";
     let extra = echo_pack("runvil/extra", None);
     let host = HostContext::new(registry(&[TOOLS, extra]), HostServices::new());
     assert_eq!(
         completed(drive_over(offering, host).await),
-        "1:tools/echo|1:extra/echo|hi",
-        "the declared Pack's tool is required, the undeclared one's an extra, and its \
+        "true:tools/echo|extra:extra/echo|hi",
+        "the declared Pack is required, the undeclared one an extra, and its tool's \
          object reaches its Pack"
     );
 }

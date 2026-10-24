@@ -478,10 +478,15 @@ const keysOf = (model, turn = 0) => rowsOf(model, turn).map((row) => row.key);
     callName: "read",
   });
   same("a generic tool running", toolLabel(generic("a", "read", "fs/read"), true).action, "Running");
-  same("a call with no tool id shows its name alone", toolLabel(call("a", "lua_helper", null), false), {
+  same("an adhoc call names the call and the adhoc Pack", toolLabel(call("a", "grab", "adhoc/grab", {}, null), false), {
     action: "Ran",
-    details: "lua_helper",
-    callName: "lua_helper",
+    details: "grab in adhoc",
+    callName: "grab",
+  });
+  same("a call the wire did not stamp shows its name alone", toolLabel(call("a", "unstamped", null), false), {
+    action: "Ran",
+    details: "unstamped",
+    callName: "unstamped",
   });
   same(
     "malformed or missing arguments give empty details",

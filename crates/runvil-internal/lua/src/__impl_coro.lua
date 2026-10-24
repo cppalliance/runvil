@@ -190,13 +190,13 @@ local function dispatch_tool(request)
   return result
 end
 
--- Suspending dispatch of a tool. The first argument is a tool id, an adhoc
--- tool's alias, or a tool object; the polymorphism decodes once, in the
--- protocol parse. The driver resumes a bound tool's result by
--- the binding's declared output kind: a plain binding's text as a string,
--- a structured binding's JSON output as a table.
-local function tools_call(alias_or_tool, args)
-  return dispatch_tool({ op = "tool_call", alias = alias_or_tool, args = args })
+-- Suspending dispatch of a tool. The first argument is a tool id or a tool
+-- object; the polymorphism decodes once, in the protocol parse. The driver
+-- resumes a bound tool's result by the binding's declared output kind: a
+-- plain binding's text as a string, a structured binding's JSON output as
+-- a table.
+local function tools_call(id_or_tool, args)
+  return dispatch_tool({ op = "tool_call", alias = id_or_tool, args = args })
 end
 
 -- The model-issued form of the same dispatch: `call_id` is the id the model

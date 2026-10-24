@@ -148,9 +148,9 @@ fn a_rounds_catalog_calls_are_issued_in_one_step_and_append_in_call_order() {
 fn adhoc_calls_run_alone_between_their_neighbors() {
     let md = one_section(
         "tools.offer('tools/echo')\n\
-         tools.offer_local('grab', 'Local grab', { value = 'string' }, function(args)\n\
+         tools.offer(tools.adhoc({ name = 'grab', description = 'Local grab', parameters = { value = 'string' } }, function(args)\n\
            return 'grabbed ' .. args.value\n\
-         end)\n\
+         end))\n\
          messages:user('use them all')\n\
          models.loop()\n\
          local ids = {}\n\
@@ -199,7 +199,7 @@ fn adhoc_calls_run_alone_between_their_neighbors() {
 #[test]
 fn a_call_the_round_cannot_bind_stops_the_batch_and_raises_once_the_issued_calls_land() {
     let md = one_section(
-        "packs.offer('tools')\n\
+        "tools.offer('tools')\n\
          messages:user('asked')\n\
          local ok, err = pcall(models.loop)\n\
          return tostring(ok) .. ':' .. err.kind .. '|' .. #messages",

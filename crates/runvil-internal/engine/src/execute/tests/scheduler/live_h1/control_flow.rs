@@ -118,8 +118,8 @@ fn the_h1_decision_tool_idiom_runs_before_the_walk() {
     // The decision-tool idiom in H1: an adhoc tool with an enum parameter is
     // the verdict channel - the model's loop call lands in the Lua handler,
     // and the captured verdict drives the run's shape before the walk. This
-    // needs `tools.offer_local` and `models.loop` in H1, both section-only
-    // before the one-install-path consolidation.
+    // needs `tools.adhoc`, `tools.offer`, and `models.loop` in H1, which
+    // installs them on the one path every section takes.
     let gateway = ScriptedChat::new(vec![
         calls(&[("call_1", "decide", "{\"choice\":\"use_mcp\"}")]),
         text("decided"),
@@ -128,10 +128,10 @@ fn the_h1_decision_tool_idiom_runs_before_the_walk() {
         # Decide\n\n\
         ```lua\n\
         models.default('writer')\n\
-        tools.offer_local('decide', 'Record the verdict', { choice = 'string' }, function(args)\n\
+        tools.offer(tools.adhoc({ name = 'decide', description = 'Record the verdict', parameters = { choice = 'string' } }, function(args)\n\
           var.verdict = args.choice\n\
           return 'recorded'\n\
-        end)\n\
+        end))\n\
         messages:user('interpret the guidance')\n\
         models.loop()\n\
         ```\n\n\

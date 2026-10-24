@@ -1,6 +1,6 @@
 //! Tests for the offering: every catalog tool the run can offer, bound
-//! under its wire name, which `tools.offer` scopes by id or tool object, a
-//! model call resolves by wire name, and a script call resolves by id.
+//! under its wire name, which `tools.offer` scopes by id, Pack, or object,
+//! a model call resolves by wire name, and a script call resolves by id.
 
 use runvil_parser::test_support::{PromptSource, one_section, prompt};
 
@@ -11,7 +11,6 @@ use crate::execute::run::{EffectRecord, ToolCallOrigin, ToolCaller};
 use crate::execute::scope::prepare_scoped_tools;
 use crate::test_support::rig::Rig;
 use crate::test_support::scenario::EXECUTION;
-use runvil_model_client::detail::tool_schema_new;
 use runvil_types::packs::PackId;
 
 /// A catalog tool under any id, described by its id, echoing its `value`
@@ -141,7 +140,7 @@ fn a_script_offers_the_extras_and_the_model_calls_an_offered_tool_by_its_wire_na
         text("done"),
     ]);
     let source = one_section(
-        "tools.offer(tools.extras())\n\
+        "tools.offer(tools.packs.extras())\n\
          messages:user('go')\n\
          models.loop()\n\
          return 'ok'",
@@ -173,7 +172,8 @@ fn a_script_offers_the_extras_and_the_model_calls_an_offered_tool_by_its_wire_na
 }
 
 /// Every key on a section's `tools` table, sorted, each with its Lua type.
-const TOOLS_TABLE_KEYS: &str = "call:function,extras:function,get:function,offer:function,offer_local:function,required:function";
+const TOOLS_TABLE_KEYS: &str =
+    "adhoc:function,call:function,get:function,offer:function,offer_dynamic:function,packs:table";
 
 #[test]
 fn a_section_tools_table_holds_only_its_api_and_its_round_advertises_only_the_offered_tool() {
@@ -182,7 +182,7 @@ fn a_section_tools_table_holds_only_its_api_and_its_round_advertises_only_the_of
         "local keys = {}\n\
          for key, value in pairs(tools) do keys[#keys + 1] = key .. ':' .. type(value) end\n\
          table.sort(keys)\n\
-         tools.offer(tools.extras())\n\
+         tools.offer(tools.packs.extras())\n\
          messages:user('go')\n\
          models.loop()\n\
          return table.concat(keys, ',')",
@@ -211,7 +211,7 @@ fn a_section_tools_table_holds_only_its_api_and_its_round_advertises_only_the_of
 #[test]
 fn a_script_calls_an_offered_tool_by_its_object_and_by_its_id_without_offering_it() {
     let source = one_section(
-        "local tool = tools.extras()[1]\n\
+        "local tool = tools.packs.get('tools').tools[1]\n\
          return tools.call(tool, { value = 'a' }) .. '|' .. \
            tools.call('tools/echo', { value = 'b' }) .. '|' .. tool.id",
     );
@@ -264,7 +264,7 @@ fn a_script_offers_a_declared_packs_tools_and_the_model_calls_one_by_its_wire_na
         "uses: [tools]",
         &[(
             "Only",
-            "tools.offer(packs.get('tools').tools)\n\
+            "tools.offer(tools.packs.get('tools').tools)\n\
              messages:user('go')\n\
              models.loop()\n\
              return 'ok'",
@@ -293,8 +293,8 @@ fn a_script_offers_an_extra_packs_tools_after_checking_packs_get() {
         text("done"),
     ]);
     let source = one_section(
-        "assert(packs.get('missing') == nil, 'an unknown Pack reads nil')\n\
-         local gh = packs.get('gh')\n\
+        "assert(tools.packs.get('missing') == nil, 'an unknown Pack reads nil')\n\
+         local gh = tools.packs.get('gh')\n\
          if gh then tools.offer(gh.tools) end\n\
          messages:user('go')\n\
          models.loop()\n\
@@ -317,12 +317,14 @@ fn a_script_offers_an_extra_packs_tools_after_checking_packs_get() {
 }
 
 #[test]
-fn the_packs_table_is_installed_in_the_h1_vm() {
+fn the_pack_objects_and_the_adhoc_pack_are_installed_in_the_h1_vm() {
     let source = PromptSource::new()
         .front("uses: [tools]")
         .h1(
-            "return packs.required()[1].name .. '|' .. packs.extras()[1].name .. '|' .. \
-             tostring(tools.get('gh/search').pack == packs.get('gh'))",
+            "return tostring(tools.packs.get('tools').required) .. '|' .. \
+             tools.packs.extras()[1].name .. '|' .. \
+             tostring(tools.get('gh/search').pack == tools.packs.get('gh')) .. '|' .. \
+             #tools.packs.get('adhoc').tools",
         )
         .build();
     let rig = Rig::run(
@@ -332,28 +334,40 @@ fn the_packs_table_is_installed_in_the_h1_vm() {
     );
     assert_eq!(
         rig.trace().text(),
-        "tools|gh|true",
-        "the H1 pass reads the packs table"
+        "true|gh|true|0",
+        "the H1 pass reads the Pack objects, the empty adhoc Pack included"
     );
 }
 
 #[test]
-fn a_round_leaves_out_an_offered_binding_an_adhoc_tool_shares_a_name_with() {
-    let offered = crate::lua::ToolBinding::from_info("tools_echo", &echo_tool().info());
-    let adhoc = tool_schema_new("tools_echo", "the adhoc echo", json!({ "type": "object" }))
-        .expect("the adhoc schema is valid");
-    let rendered = prepare_scoped_tools(&[offered], &[adhoc]).expect("the round's scope builds");
+fn a_rendered_list_maps_every_wire_name_to_its_id_and_an_adhoc_tool_to_no_vendor() {
+    let offered = crate::lua::ToolBinding::from_info("tools_echo", &echo_tool().info())
+        .with_vendor(Some("runvil".to_owned()));
+    let info = runvil_types::tools::ToolInfo::new(
+        ToolId::parse("adhoc/grab").expect("valid id"),
+        "Grab a value",
+        json!({ "type": "object", "properties": {}, "required": [] }),
+    );
+    let adhoc = crate::lua::ToolBinding::from_info("grab", &info);
+    let rendered = prepare_scoped_tools(&[offered, adhoc]).expect("the round's scope builds");
+    let names: Vec<&str> = rendered
+        .schemas
+        .iter()
+        .map(crate::model::ToolSchema::name)
+        .collect();
+    assert_eq!(names, ["tools_echo", "grab"], "the bindings' order");
+    let entry = |name: &str| {
+        rendered
+            .dispatch
+            .get(name)
+            .map(|advertised| (advertised.id.to_string(), advertised.vendor.clone()))
+    };
     assert_eq!(
-        rendered.schemas.len(),
-        1,
-        "the model sees one tool under the name"
+        entry("tools_echo"),
+        Some(("tools/echo".to_owned(), Some("runvil".to_owned())))
     );
-    assert_eq!(rendered.schemas[0].description(), "the adhoc echo");
-    assert!(
-        matches!(rendered.dispatch.get("tools_echo"), Some(None)),
-        "the adhoc tool answers the name: {:?}",
-        rendered.dispatch
-    );
+    assert_eq!(entry("grab"), Some(("adhoc/grab".to_owned(), None)));
+    assert!(rendered.dynamic.is_empty());
 }
 
 #[path = "offering-packs.rs"]

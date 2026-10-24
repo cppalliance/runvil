@@ -425,7 +425,8 @@ fn a_chunk_sees_the_tools_table_and_no_tool_global_ever_installs() {
         Some("nil")
     );
     let (bindings, runtime) = vm.tool_bag_handles();
-    let scope = current_tool_bindings(&bindings, &runtime).expect("tool scope must snapshot");
+    let scope = current_tool_bindings(&bindings, &runtime, vm.adhoc_tools())
+        .expect("tool scope must snapshot");
     assert_eq!(
         scope.iter().map(ToolBinding::alias).collect::<Vec<_>>(),
         ["fixtures_search"],
@@ -460,7 +461,8 @@ fn functions_resolve_engine_globals_when_called_from_a_later_chunk() {
         Some("fixtures/search")
     );
     let (bindings, runtime) = vm.tool_bag_handles();
-    let scope = current_tool_bindings(&bindings, &runtime).expect("tool scope must snapshot");
+    let scope = current_tool_bindings(&bindings, &runtime, vm.adhoc_tools())
+        .expect("tool scope must snapshot");
     assert_eq!(
         scope.iter().map(ToolBinding::alias).collect::<Vec<_>>(),
         ["fixtures_search"]

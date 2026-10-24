@@ -4,23 +4,45 @@
 //! caller that catches it, calls another adhoc tool innermost first,
 //! and dispatches a bound tool as one leaf request, whose failure
 //! raises kind `tool` in the handler and whose untrusted wrapper
-//! survives.
+//! survives. A model-issued call routes by the section's rendered list,
+//! so those cases run one loop round first.
 
 use runvil_parser::test_support::prompt;
 
 use super::*;
 use crate::execute::tests::fixtures::{echo_tool, failing_tool, untrusted_echo_tool};
 
-/// The `grab` adhoc tool registration every adhoc-tool test opens with.
-const ADD_ADHOC_GRAB: &str = "tools.offer_local('grab', 'Grab a value', { value = 'string' }, \
-     function(args) return 'got ' .. args.value end)\n";
+/// The `grab` adhoc tool definition every adhoc-tool test opens with,
+/// offered to the section.
+const ADD_ADHOC_GRAB: &str = "tools.offer(tools.adhoc({ name = 'grab', description = 'Grab a \
+     value', parameters = { value = 'string' } }, function(args) return 'got ' .. args.value \
+     end))\n";
+
+/// One loop round the model answers with text, which renders the
+/// section's tool list so a model-issued call can route by it.
+const RENDER: &str = "messages:user('go')\nmodels.loop()\n";
+
+/// The arm scenario over `source` with one text round for [`RENDER`].
+fn rendered_scenario(source: impl Into<String>) -> (Scenario, ScriptedChat) {
+    let gateway = ScriptedChat::new(vec![text("rendered")]);
+    (arm_scenario(source), gateway)
+}
+
+/// How many tool-call effects `trace` issued.
+fn tool_call_effects(trace: &Trace) -> usize {
+    trace
+        .effects()
+        .iter()
+        .filter(|(effect, _)| matches!(effect, EffectRecord::ToolCall { .. }))
+        .count()
+}
 
 #[test]
 fn an_adhoc_tool_call_issues_no_leaf_work() {
     let source = one_section(&format!(
         "{ADD_ADHOC_GRAB}\
-         local out = tools.call('grab', {{ value = 'hi' }})\n\
-         return out .. '|' .. tostring(tools.calls.grab)"
+         local out = tools.call('adhoc/grab', {{ value = 'hi' }})\n\
+         return out .. '|' .. tostring(tools.calls['adhoc/grab'])"
     ));
     let trace = arm_scenario(source).run();
     assert_eq!(
@@ -49,15 +71,37 @@ fn an_adhoc_tool_call_issues_no_leaf_work() {
 }
 
 #[test]
+fn a_script_calls_an_unoffered_adhoc_tool_by_id_or_object_before_and_after_the_render() {
+    let (scenario, gateway) = rendered_scenario(one_section(&format!(
+        "local grab = tools.adhoc({{ name = 'grab', description = 'Grab a value', \
+           parameters = {{ value = 'string' }} }}, function(args) return 'got ' .. args.value end)\n\
+         local before = tools.call(grab, {{ value = 'a' }})\n\
+         {RENDER}\
+         local after = tools.call('adhoc/grab', {{ value = 'b' }})\n\
+         return before .. '|' .. after .. '|' .. tostring(tools.calls['adhoc/grab'])"
+    )));
+    let trace = scenario.chat(&gateway).run();
+    assert_eq!(
+        trace.text(),
+        "got a|got b|2",
+        "an adhoc tool needs no offer to be called, and the render leaves it callable"
+    );
+    assert!(
+        gateway.requests()[0].tools.is_empty(),
+        "an unoffered adhoc tool is never rendered"
+    );
+}
+
+#[test]
 fn a_model_issued_adhoc_tool_call_reports_under_its_call_id() {
-    let source = one_section(&format!(
-        "{ADD_ADHOC_GRAB}\
+    let (scenario, gateway) = rendered_scenario(one_section(&format!(
+        "{ADD_ADHOC_GRAB}{RENDER}\
          return tools.call_as_model('call_7', 'grab', {{ value = 'hi' }})"
-    ));
-    let trace = arm_scenario(source).run();
+    )));
+    let trace = scenario.chat(&gateway).run();
     assert_eq!(trace.text(), "got hi");
     assert_eq!(
-        trace.effects().len(),
+        tool_call_effects(&trace),
         0,
         "a model-issued adhoc call spawns no leaf request"
     );
@@ -74,11 +118,11 @@ fn a_model_issued_adhoc_tool_call_reports_under_its_call_id() {
 #[test]
 fn a_script_called_adhoc_handler_uses_the_store() {
     let source = one_section(
-        "tools.offer_local('grab', 'Grab a value', { value = 'string' }, function(args)
+        "tools.offer(tools.adhoc({ name = 'grab', description = 'Grab a value', parameters = { value = 'string' } }, function(args)
            store.write('grab.txt', 'kept ' .. args.value)
            return store.read('grab.txt')
-         end)
-         return tools.call('grab', { value = 'hi' })",
+         end))
+         return tools.call('adhoc/grab', { value = 'hi' })",
     );
     let trace = arm_scenario(source).run();
     assert_eq!(trace.text(), "kept hi");
@@ -91,8 +135,8 @@ fn a_script_called_adhoc_handler_uses_the_store() {
 #[test]
 fn a_script_caller_catches_the_handlers_own_error_and_jump_is_restored() {
     let only = "local raised = { kind = 'custom', message = 'handler exploded' }
-                tools.offer_local('grab', 'Grab a value', {}, function() error(raised) end)
-                local ok, err = pcall(tools.call, 'grab', {})
+                tools.offer(tools.adhoc({ name = 'grab', description = 'Grab a value' }, function() error(raised) end))
+                local ok, err = pcall(tools.call, 'adhoc/grab', {})
                 assert(not ok, 'the handler raise reaches the call site')
                 assert(err == raised and err.kind == 'custom', 'the caller catches the handler table')
                 jump('## Other')";
@@ -118,16 +162,16 @@ fn a_script_caller_catches_the_handlers_own_error_and_jump_is_restored() {
 
 #[test]
 fn a_nested_adhoc_call_reports_both_results_innermost_first() {
-    let source = one_section(
-        "tools.offer_local('inner', 'Inner', { value = 'string' }, function(args)
+    let (scenario, gateway) = rendered_scenario(one_section(&format!(
+        "tools.offer(tools.adhoc({{ name = 'inner', description = 'Inner', parameters = {{ value = 'string' }} }}, function(args)
            return 'inner ' .. args.value
-         end)
-         tools.offer_local('outer', 'Outer', { value = 'string' }, function(args)
-           return 'outer ' .. tools.call('inner', { value = args.value })
-         end)
-         return tools.call_as_model('call_1', 'outer', { value = 'hi' })",
-    );
-    let trace = arm_scenario(source).run();
+         end))
+         tools.offer(tools.adhoc({{ name = 'outer', description = 'Outer', parameters = {{ value = 'string' }} }}, function(args)
+           return 'outer ' .. tools.call('adhoc/inner', {{ value = args.value }})
+         end))
+         {RENDER}return tools.call_as_model('call_1', 'outer', {{ value = 'hi' }})",
+    )));
+    let trace = scenario.chat(&gateway).run();
     assert_eq!(trace.text(), "outer inner hi");
     assert_eq!(
         tool_result_lines(&tool_lines(&trace)),
@@ -144,11 +188,11 @@ fn a_nested_adhoc_call_reports_both_results_innermost_first() {
 fn a_handler_dispatches_a_bound_tool_as_one_leaf_request() {
     let source = one_section(
         "tools.offer('tools/echo')
-         tools.offer_local('grab', 'Grab a value', { value = 'string' }, function(args)
+         tools.offer(tools.adhoc({ name = 'grab', description = 'Grab a value', parameters = { value = 'string' } }, function(args)
            return tools.call('tools/echo', { value = args.value })
-         end)
-         local out = tools.call('grab', { value = 'hi' })
-         return out .. '|' .. tostring(tools.calls.grab) .. '|' .. tostring(tools.calls['tools/echo'])",
+         end))
+         local out = tools.call('adhoc/grab', { value = 'hi' })
+         return out .. '|' .. tostring(tools.calls['adhoc/grab']) .. '|' .. tostring(tools.calls['tools/echo'])",
     );
     let trace = arm_scenario(source).offer("echo", echo_tool()).run();
     assert_eq!(trace.text(), "echoed: hi|1|1", "both calls count once");
@@ -161,16 +205,16 @@ fn a_handler_dispatches_a_bound_tool_as_one_leaf_request() {
 
 #[test]
 fn a_bound_failure_inside_a_model_issued_adhoc_call_raises_kind_tool_in_the_handler() {
-    let source = one_section(
+    let (scenario, gateway) = rendered_scenario(one_section(&format!(
         "tools.offer('tools/failing')
-         tools.offer_local('grab', 'Grab a value', {}, function()
-           local ok, err = pcall(tools.call, 'tools/failing', {})
+         tools.offer(tools.adhoc({{ name = 'grab', description = 'Grab a value' }}, function()
+           local ok, err = pcall(tools.call, 'tools/failing', {{}})
            assert(not ok, 'the bound failure raises inside the handler')
            return err.kind
-         end)
-         return tools.call_as_model('call_1', 'grab', {})",
-    );
-    let trace = arm_scenario(source).offer("fail", failing_tool()).run();
+         end))
+         {RENDER}return tools.call_as_model('call_1', 'grab', {{}})",
+    )));
+    let trace = scenario.offer("fail", failing_tool()).chat(&gateway).run();
     assert_eq!(
         trace.text(),
         "tool",
@@ -187,11 +231,11 @@ fn a_bound_failure_inside_a_model_issued_adhoc_call_raises_kind_tool_in_the_hand
 fn a_handlers_text_stays_trusted_and_a_bound_tools_wrapper_survives() {
     let source = one_section(
         "tools.offer('tools/untrusted_echo')
-         tools.offer_local('plain', 'Plain', {}, function() return 'plain text' end)
-         tools.offer_local('grab', 'Grab a value', { value = 'string' }, function(args)
+         tools.offer(tools.adhoc({ name = 'plain', description = 'Plain' }, function() return 'plain text' end))
+         tools.offer(tools.adhoc({ name = 'grab', description = 'Grab a value', parameters = { value = 'string' } }, function(args)
            return tools.call('tools/untrusted_echo', { value = args.value })
-         end)
-         return tools.call('plain', {}) .. '||' .. tools.call('grab', { value = 'hi' })",
+         end))
+         return tools.call('adhoc/plain', {}) .. '||' .. tools.call('adhoc/grab', { value = 'hi' })",
     );
     let trace = arm_scenario(source)
         .offer("echo", untrusted_echo_tool())

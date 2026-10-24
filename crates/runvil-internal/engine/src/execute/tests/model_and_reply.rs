@@ -213,7 +213,7 @@ fn offer_over_an_empty_catalog_fails_the_run_loudly() {
     assert!(
         error
             .to_string()
-            .contains("tools.offer: \"web/search\" is not a catalog tool in this run"),
+            .contains("tools.offer: \"web/search\" is not a tool in this run"),
         "the error must report the missing tool: {error}"
     );
 }
@@ -230,7 +230,7 @@ fn offer_after_an_h1_helper_fails_the_run_loudly() {
     assert!(
         error
             .to_string()
-            .contains("tools.offer: \"web/search\" is not a catalog tool in this run"),
+            .contains("tools.offer: \"web/search\" is not a tool in this run"),
         "the error must report the missing tool: {error}"
     );
 }

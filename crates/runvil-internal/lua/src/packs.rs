@@ -1,50 +1,93 @@
-//! The `packs` table: one read-only object per Pack the run knows.
+//! Pack objects and `tools.packs`: one read-only object per Pack the run
+//! knows, and the adhoc Pack every section VM holds.
 //!
 //! A Pack the frontmatter declares and a Pack the roster lists as able
 //! to serve have an object even when they offer no tool, and every other
 //! Pack has one when it offers a tool. A Pack the roster lists as
-//! unable to serve has none, and offering it raises its reason. The objects
-//! are built once per VM, after the tool objects, so `packs.required()`,
-//! `packs.extras()`, `packs.get`, and a tool object's `pack` getter
-//! hand out the same userdata for a Pack, while each list call builds a
-//! fresh array. A Pack object's `tools` reads the shared tool objects,
-//! so it passes straight to `tools.offer`. `packs.offer` puts every tool
-//! of a Pack in the section's scope, recording the Pack's name rather
-//! than its tools' wire names, until the section's first loop round
-//! renders its tool list.
+//! unable to serve has none, and offering it raises its reason. The adhoc
+//! Pack, `adhoc`, has an object in every VM; its `tools` lists the adhoc
+//! tools defined so far. The objects are built once per VM, after the tool
+//! objects, so `tools.packs.get`, the integer keys of `tools.packs`,
+//! `tools.packs.extras()`, and a tool object's `pack` getter hand out the
+//! same userdata for a Pack, while each list read builds a fresh array. A
+//! Pack object's `tools` reads the shared tool objects, so it passes
+//! straight to `tools.offer`.
+//!
+//! `tools.packs` is an empty proxy with a protected metatable: integer
+//! keys, `#`, and `pairs` walk the Pack objects in name order, `get` and
+//! `extras` are its only other members, and every write raises.
 
 use std::collections::BTreeMap;
-use std::sync::{Arc, Mutex};
 
 use mlua::{
-    AnyUserData, Lua, MetaMethod, Table, UserData, UserDataFields, UserDataMethods, Value, Variadic,
+    AnyUserData, Lua, MetaMethod, MultiValue, Table, UserData, UserDataFields, UserDataMethods,
+    Value,
 };
 use runvil_types::packs::PackId;
 
 use crate::error::{Error, Result};
 use crate::handles::ToolSet;
-use crate::messages::MessageList;
-use crate::scope::ToolRuntime;
-use crate::tools::{refuse_after_render, tool_object};
+use crate::tools::tool_object;
+use crate::vm::AdhocTools;
+
+/// The id of the adhoc Pack, which holds every tool `tools.adhoc` defines.
+pub(crate) const ADHOC_PACK: &str = "adhoc";
 
 /// The registry key of the VM's Pack-object table, keyed by name.
 const PACK_OBJECTS_REGISTRY: &str = "runvil.packs.objects";
 
-/// One Pack as Lua sees it: `name`, and `tools`, which reads a fresh
-/// array of the Pack's tool objects in id order.
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// The label `getmetatable(tools.packs)` returns, which also protects the
+/// metatable from `setmetatable`.
+const PACKS_LABEL: &str = "tools.packs is read-only";
+
+/// Whether `pack` is the adhoc Pack.
+pub(crate) fn is_adhoc(pack: &PackId) -> bool {
+    pack.to_string() == ADHOC_PACK
+}
+
+/// Where a Pack object's `tools` come from.
+#[derive(Debug, Clone)]
+enum PackTools {
+    /// A catalog Pack's offered tools, by id, in id order.
+    Catalog(Vec<String>),
+    /// The VM's adhoc tools, read on each `tools` read.
+    Adhoc(AdhocTools),
+}
+
+/// One Pack as Lua sees it: `name`; `tools`, which reads a fresh array of
+/// the Pack's tool objects in id order; and `required`, whether the
+/// frontmatter declares it under `uses:`.
+#[derive(Debug, Clone)]
 pub(crate) struct LuaPackHandle {
     name: PackId,
-    /// The ids of the Pack's offered tools, in id order.
-    tools: Vec<String>,
+    required: bool,
+    tools: PackTools,
+}
+
+impl LuaPackHandle {
+    /// The Pack's id, which the object stands for.
+    #[must_use]
+    pub(crate) fn name(&self) -> &PackId {
+        &self.name
+    }
 }
 
 impl UserData for LuaPackHandle {
     fn add_fields<F: UserDataFields<Self>>(fields: &mut F) {
         fields.add_field_method_get("name", |_, this| Ok(this.name.to_string()));
+        fields.add_field_method_get("required", |_, this| Ok(this.required));
         fields.add_field_method_get("tools", |lua, this| {
+            let ids = match &this.tools {
+                PackTools::Catalog(ids) => ids.clone(),
+                PackTools::Adhoc(adhoc) => adhoc
+                    .bindings()
+                    .map_err(mlua::Error::external)?
+                    .iter()
+                    .map(|binding| binding.id().to_string())
+                    .collect(),
+            };
             let objects = lua.create_table()?;
-            for id in &this.tools {
+            for id in &ids {
                 if let Some(object) = tool_object(lua, id)? {
                     objects.raw_push(object)?;
                 }
@@ -65,7 +108,7 @@ impl UserData for LuaPackHandle {
     }
 }
 
-/// The VM's Pack object for `name`, read by `packs.get` and by a tool
+/// The VM's Pack object for `name`, read by `tools.packs` and by a tool
 /// object's `pack` getter, or `None` for a Pack the run does not know.
 ///
 /// # Errors
@@ -81,161 +124,146 @@ pub(crate) fn pack_object(lua: &Lua, name: &str) -> mlua::Result<Option<AnyUserD
     }
 }
 
-/// Builds one Pack object per declared Pack, per usable roster Pack,
-/// and per other Pack with offered tools, then installs
-/// `packs.required()`, the declared Packs, `packs.extras()`, the
-/// others, both in name order, `packs.get(name)`, and `packs.offer`,
-/// which records into the section's `runtime` until `list`, the section's
-/// conversation, holds a rendered tool list.
+/// The names of the VM's Pack objects, in name order: every one, and the
+/// extras, those the frontmatter does not declare, never the adhoc Pack.
+pub(crate) struct PackNames {
+    all: Vec<String>,
+    extras: Vec<String>,
+}
+
+/// Builds one Pack object per declared Pack, per usable roster Pack, per
+/// other Pack with offered tools, and the adhoc Pack over `adhoc`, and
+/// returns their names.
 ///
 /// # Errors
-/// Returns [`Error::LuaRuntime`] if an object or function cannot be created or installed.
-pub(crate) fn install_packs(
+/// Returns [`Error::LuaRuntime`] if an object cannot be created or stored.
+pub(crate) fn install_pack_objects(
     lua: &Lua,
-    globals: &Table,
-    set: &Arc<ToolSet>,
-    runtime: &Arc<Mutex<ToolRuntime>>,
-    list: &MessageList,
-) -> Result<()> {
+    set: &ToolSet,
+    adhoc: &AdhocTools,
+) -> Result<PackNames> {
     let objects = lua.create_table().map_err(Error::lua)?;
-    let (mut required, mut extras) = (Vec::new(), Vec::new());
-    for (name, tools) in pack_tools(set) {
+    let mut names = PackNames {
+        all: Vec::new(),
+        extras: Vec::new(),
+    };
+    for (name, tools) in pack_tools(set, adhoc) {
         let key = name.to_string();
-        if set.declared().contains(&name) {
-            required.push(key.clone());
-        } else {
-            extras.push(key.clone());
+        let required = set.declared().contains(&name);
+        if !required && !matches!(tools, PackTools::Adhoc(_)) {
+            names.extras.push(key.clone());
         }
+        names.all.push(key.clone());
         let object = lua
-            .create_userdata(LuaPackHandle { name, tools })
+            .create_userdata(LuaPackHandle {
+                name,
+                required,
+                tools,
+            })
             .map_err(Error::lua)?;
         objects.raw_set(key, object).map_err(Error::lua)?;
     }
     lua.set_named_registry_value(PACK_OBJECTS_REGISTRY, objects)
         .map_err(Error::lua)?;
+    Ok(names)
+}
 
-    let table = lua.create_table().map_err(Error::lua)?;
-    for (function, names) in [("required", required), ("extras", extras)] {
-        let list = lua
-            .create_function(move |lua, ()| {
-                let objects = lua.create_table()?;
-                for name in &names {
-                    if let Some(object) = pack_object(lua, name)? {
-                        objects.raw_push(object)?;
-                    }
-                }
-                Ok(objects)
-            })
-            .map_err(Error::lua)?;
-        table.set(function, list).map_err(Error::lua)?;
-    }
+/// Installs `tools.packs` on `tools` over the Pack objects `names` lists.
+///
+/// # Errors
+/// Returns [`Error::LuaRuntime`] if a function or table cannot be created
+/// or installed.
+pub(crate) fn install_pack_list(lua: &Lua, tools: &Table, names: PackNames) -> Result<()> {
+    let PackNames { all, extras } = names;
     let get = lua
         .create_function(|lua, name: Value| match name {
             Value::String(name) => pack_object(lua, &name.to_str()?),
             other => Err(mlua::Error::external(format!(
-                "packs.get takes a Pack id, got {}",
+                "tools.packs.get takes one Pack id, got {}",
                 other.type_name()
             ))),
         })
         .map_err(Error::lua)?;
-    table.set("get", get).map_err(Error::lua)?;
-    install_offer(lua, &table, set, runtime, list)?;
-    globals.raw_set("packs", table).map_err(Error::lua)
-}
+    let extras = lua
+        .create_function(move |lua, ()| pack_array(lua, &extras))
+        .map_err(Error::lua)?;
 
-/// Installs `packs.offer(pack)` and its array form: each Pack enters
-/// the section's scope once, by name, in first-offer order.
-fn install_offer(
-    lua: &Lua,
-    table: &Table,
-    set: &Arc<ToolSet>,
-    runtime: &Arc<Mutex<ToolRuntime>>,
-    list: &MessageList,
-) -> Result<()> {
-    let set = Arc::clone(set);
-    let state = Arc::clone(runtime);
-    let list = list.clone();
-    let offer = lua
-        .create_function(move |lua, args: Variadic<Value>| {
-            refuse_after_render("packs.offer", &list)?;
-            let names = pack_names(lua, &set, args)?;
-            let mut state = state
-                .lock()
-                .map_err(|_| mlua::Error::external("tool declaration runtime was poisoned"))?;
-            for name in names {
-                if !state.packs.contains(&name) {
-                    state.packs.push(name);
-                }
-            }
-            Ok(())
+    let meta = lua.create_table().map_err(Error::lua)?;
+    let indexed = all.clone();
+    let index = lua
+        .create_function(move |lua, (_, key): (Table, Value)| match key {
+            Value::String(name) if name == "get" => Ok(Value::Function(get.clone())),
+            Value::String(name) if name == "extras" => Ok(Value::Function(extras.clone())),
+            key => match position(&key).and_then(|index| indexed.get(index)) {
+                Some(name) => Ok(pack_object(lua, name)?.map_or(Value::Nil, Value::UserData)),
+                None => Ok(Value::Nil),
+            },
         })
         .map_err(Error::lua)?;
-    table.set("offer", offer).map_err(Error::lua)
-}
-
-/// Reads `packs.offer`'s one argument, a Pack id, a Pack object,
-/// or an array of either, as the names of Packs the run knows, checking
-/// every entry against `set`'s roster before returning any.
-fn pack_names(lua: &Lua, set: &ToolSet, args: Variadic<Value>) -> mlua::Result<Vec<PackId>> {
-    let mut args = args.into_iter();
-    let target = args.next().unwrap_or(Value::Nil);
-    if let Some(extra) = args.next() {
-        return Err(mlua::Error::external(format!(
-            "packs.offer takes one Pack or a list of them, got extra {}",
-            extra.type_name()
-        )));
-    }
-    match target {
-        Value::Table(list) => list
-            .sequence_values::<Value>()
-            .map(|entry| pack_name(lua, set, &entry?))
-            .collect(),
-        single => Ok(vec![pack_name(lua, set, &single)?]),
-    }
-}
-
-/// Reads one name or Pack object as the name of a Pack the run knows,
-/// raising the roster's reason for a Pack that can't serve the run.
-fn pack_name(lua: &Lua, set: &ToolSet, value: &Value) -> mlua::Result<PackId> {
-    let rejected = |found: String| {
-        mlua::Error::external(format!(
-            "packs.offer takes a Pack id, a Pack object, or a list of them, got {found}"
-        ))
-    };
-    match value {
-        Value::String(text) => {
-            let text = text.to_string_lossy();
-            let name = match PackId::parse(&text) {
-                Ok(name) => name,
-                Err(error) => return Err(rejected(format!("{text:?}: {error}"))),
+    meta.raw_set("__index", index).map_err(Error::lua)?;
+    let count = all.len();
+    let len = lua
+        .create_function(move |_, _: MultiValue| Ok(count))
+        .map_err(Error::lua)?;
+    meta.raw_set("__len", len).map_err(Error::lua)?;
+    let step = lua
+        .create_function(move |lua, (_, key): (Value, Value)| {
+            let next = match key {
+                Value::Nil => 0,
+                key => position(&key).map_or(all.len(), |index| index + 1),
             };
-            if let Some(Some(reason)) = set.roster().get(&name) {
-                return Err(mlua::Error::external(format!(
-                    "packs.offer: the {name} Pack is unavailable in this run: {reason}"
-                )));
+            match all.get(next) {
+                Some(name) => Ok((
+                    Value::Integer(i64::try_from(next + 1).unwrap_or(i64::MAX)),
+                    pack_object(lua, name)?.map_or(Value::Nil, Value::UserData),
+                )),
+                None => Ok((Value::Nil, Value::Nil)),
             }
-            if pack_object(lua, &text)?.is_none() {
-                return Err(mlua::Error::external(format!(
-                    "packs.offer: no Pack named {text:?} in this run; declare it under \
-                     uses: to require it, or offer it only when packs.get({text:?}) \
-                     returns it"
-                )));
-            }
-            Ok(name)
-        }
-        Value::UserData(object) => object
-            .borrow::<LuaPackHandle>()
-            .map(|handle| handle.name.clone())
-            .map_err(|_| rejected(value.type_name().to_owned())),
-        other => Err(rejected(other.type_name().to_owned())),
+        })
+        .map_err(Error::lua)?;
+    let pairs = lua
+        .create_function(move |_, proxy: Table| Ok((step.clone(), proxy, Value::Nil)))
+        .map_err(Error::lua)?;
+    meta.raw_set("__pairs", pairs).map_err(Error::lua)?;
+    let newindex = lua
+        .create_function(|_, _: MultiValue| -> mlua::Result<()> {
+            Err(mlua::Error::external(PACKS_LABEL))
+        })
+        .map_err(Error::lua)?;
+    meta.raw_set("__newindex", newindex).map_err(Error::lua)?;
+    meta.raw_set("__metatable", PACKS_LABEL)
+        .map_err(Error::lua)?;
+
+    let proxy = lua.create_table().map_err(Error::lua)?;
+    proxy.set_metatable(Some(meta)).map_err(Error::lua)?;
+    tools.raw_set("packs", proxy).map_err(Error::lua)
+}
+
+/// The 0-based position an integer key of `tools.packs` names, or `None`
+/// for any other key.
+fn position(key: &Value) -> Option<usize> {
+    match key {
+        Value::Integer(index) => usize::try_from(*index).ok()?.checked_sub(1),
+        _ => None,
     }
 }
 
-/// Each Pack the run knows, in id order, with the ids of its offered
-/// tools in the set's id order: every declared Pack, each roster Pack
-/// that can serve, with or without tools, and every other Pack that
-/// offers one.
-fn pack_tools(set: &ToolSet) -> BTreeMap<PackId, Vec<String>> {
+/// A fresh array of the Pack objects `names` lists, in order.
+fn pack_array(lua: &Lua, names: &[String]) -> mlua::Result<Table> {
+    let objects = lua.create_table()?;
+    for name in names {
+        if let Some(object) = pack_object(lua, name)? {
+            objects.raw_push(object)?;
+        }
+    }
+    Ok(objects)
+}
+
+/// Each Pack the run knows, in id order, with its tools: every declared
+/// Pack, each roster Pack that can serve, with or without tools, and every
+/// other Pack that offers one, each with its offered tools' ids in the
+/// set's id order, and the adhoc Pack over `adhoc`.
+fn pack_tools(set: &ToolSet, adhoc: &AdhocTools) -> BTreeMap<PackId, PackTools> {
     let usable = set
         .roster()
         .iter()
@@ -252,6 +280,13 @@ fn pack_tools(set: &ToolSet) -> BTreeMap<PackId, Vec<String>> {
             .entry(binding.id().pack())
             .or_default()
             .push(binding.id().to_string());
+    }
+    let mut packs: BTreeMap<PackId, PackTools> = packs
+        .into_iter()
+        .map(|(name, ids)| (name, PackTools::Catalog(ids)))
+        .collect();
+    if let Ok(name) = PackId::parse(ADHOC_PACK) {
+        packs.insert(name, PackTools::Adhoc(adhoc.clone()));
     }
     packs
 }

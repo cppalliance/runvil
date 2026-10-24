@@ -136,10 +136,11 @@ pub enum Request {
         /// The task to cancel.
         task: TaskId,
     },
-    /// `tools.call(alias_or_tool, args)`: suspending dispatch of a bound
-    /// tool through the shared dispatch function.
+    /// `tools.call(id_or_tool, args)`: suspending dispatch of a tool
+    /// through the shared dispatch function.
     ToolCall {
-        /// The author-supplied tool alias, local to the prompt.
+        /// The tool a script names by id, or the wire name a model-issued
+        /// call names.
         alias: String,
         /// The author-supplied JSON arguments; an absent or nil `args`
         /// parses as the empty object.
@@ -184,8 +185,8 @@ pub enum Request {
     /// yielded by the `models.loop` shim once per round. The dispatch arm
     /// first refuses an empty list; the round sends the section's
     /// rendered tool list, which the dispatch arm renders from the
-    /// section's tool scope, adhoc tools included, at the first round
-    /// to reach the build and attaches to the list.
+    /// section's offers at the first round to reach the build and
+    /// attaches to the list.
     Chat {
         /// The list the round sends, which may be empty, since the
         /// dispatch, not the parse, refuses an empty list. Its records

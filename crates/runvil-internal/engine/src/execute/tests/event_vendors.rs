@@ -14,9 +14,9 @@ use super::*;
 /// A section that offers `tools/echo` and an adhoc `grab`, lets the model
 /// call both in one batch, then calls `tools/echo` from the script.
 const BOTH_CALLERS: &str = "tools.offer('tools/echo')
-     tools.offer_local('grab', 'Local grab', { value = 'string' }, function(args)
+     tools.offer(tools.adhoc({ name = 'grab', description = 'Local grab', parameters = { value = 'string' } }, function(args)
        return 'grabbed ' .. args.value
-     end)
+     end))
      messages:user('use both tools')
      models.loop()
      return tools.call('tools/echo', { value = 'script' })";
@@ -101,6 +101,31 @@ fn a_catalog_call_records_the_vendor_the_caller_reported_and_an_adhoc_call_none(
         ],
         "the script's and the model's catalog results name acme, the adhoc result none"
     );
+}
+
+#[test]
+fn an_adhoc_calls_events_name_its_id() {
+    let trace = both_callers(|ctx| ctx);
+    let events = trace.events();
+    let requested = events.iter().find_map(|event| match event {
+        Event::AssistantToolCalls { calls, .. } => calls
+            .iter()
+            .find(|call| call.name == "grab")
+            .map(|call| call.tool.as_ref().map(ToString::to_string)),
+        _ => None,
+    });
+    let answered = events.iter().find_map(|event| match event {
+        Event::ToolResult {
+            tool_call_id, tool, ..
+        } if tool_call_id == "call_1" => Some(tool.as_ref().map(ToString::to_string)),
+        _ => None,
+    });
+    let id = Some(Some("adhoc/grab".to_owned()));
+    assert_eq!(
+        requested, id,
+        "the requested call names the adhoc tool's id"
+    );
+    assert_eq!(answered, id, "its result names the same id");
 }
 
 #[test]

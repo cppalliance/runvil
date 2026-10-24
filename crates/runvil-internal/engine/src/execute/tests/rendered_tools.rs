@@ -47,9 +47,9 @@ fn a_first_round_the_precheck_refuses_still_fixes_the_tool_list() {
          messages:user(string.rep('x', 20000))
          local ok, err = pcall(models.loop)
          assert(not ok and err.reason == 'precheck', 'the narrow window refuses the round')
-         local offered, refusal = pcall(tools.offer_local, 'grab', 'Local grab', {}, function()
+         local offered, refusal = pcall(tools.offer, tools.adhoc({ name = 'grab', description = 'Local grab' }, function()
            return ''
-         end)
+         end))
          assert(not offered, 'the refused round fixed the list')
          models.use('wide')
          models.loop()
@@ -60,7 +60,7 @@ fn a_first_round_the_precheck_refuses_still_fixes_the_tool_list() {
         .offer("echo", echo_tool())
         .chat(&gateway)
         .run();
-    assert_eq!(trace.text(), format!("lua:tools.offer_local: {FIXED}"));
+    assert_eq!(trace.text(), format!("lua:tools.offer: {FIXED}"));
     let bodies = gateway.requests();
     assert_eq!(bodies.len(), 1, "only the round on the wide model left");
     assert_eq!(
@@ -80,9 +80,9 @@ fn every_later_round_sends_the_same_tool_bytes_across_a_model_change() {
     ]);
     let source = one_section(
         "tools.offer('tools/echo')
-         tools.offer_local('grab', 'Local grab', { value = 'string' }, function(args)
+         tools.offer(tools.adhoc({ name = 'grab', description = 'Local grab', parameters = { value = 'string' } }, function(args)
            return 'grabbed ' .. args.value
-         end)
+         end))
          messages:user('one')
          models.loop()
          messages:user('two')
@@ -109,7 +109,7 @@ fn every_later_round_sends_the_same_tool_bytes_across_a_model_change() {
 }
 
 #[test]
-fn after_the_render_every_offer_function_raises_even_an_identical_one() {
+fn after_the_render_every_offer_raises_even_an_identical_one_while_defining_still_works() {
     let gateway = ScriptedChat::new(vec![calls(&[("call_1", "grab", "{}")]), text("done")]);
     let source = prompt(
         "uses: [tools]",
@@ -117,23 +117,25 @@ fn after_the_render_every_offer_function_raises_even_an_identical_one() {
             (
                 "Only",
                 "tools.offer('tools/echo')
-                 packs.offer('tools')
-                 tools.offer_local('grab', 'Local grab', {}, function()
+                 tools.offer('tools')
+                 tools.offer(tools.adhoc({ name = 'grab', description = 'Local grab' }, function()
                    local _, err = pcall(tools.offer, 'tools/echo')
                    return err.kind .. ':' .. tostring(err)
-                 end)
+                 end))
                  messages:user('go')
                  models.loop()
                  local out = { messages[3].content }
                  for _, offer in ipairs({
                    function() tools.offer('tools/echo') end,
-                   function() packs.offer('tools') end,
-                   function() tools.offer_local('grab', 'Again', {}, function() return '' end) end,
+                   function() tools.offer('tools') end,
+                   function() tools.offer(tools.adhoc({ name = 'late', description = 'Late' }, function() return '' end)) end,
+                   function() tools.offer_dynamic('tools') end,
                    function() require '## offers' end,
                  }) do
                    local _, err = pcall(offer)
                    out[#out + 1] = err.kind .. ':' .. tostring(err)
                  end
+                 out[#out + 1] = tostring(tools.get('adhoc/late') ~= nil)
                  return table.concat(out, '\\n')",
             ),
             ("offers", "tools.offer('tools/echo')"),
@@ -146,25 +148,54 @@ fn after_the_render_every_offer_function_raises_even_an_identical_one() {
     let lines: Vec<&str> = trace.text().lines().collect();
     let offer = format!("lua:tools.offer: {FIXED}");
     assert_eq!(
-        lines[..4],
+        lines[..5],
         [
             offer.clone(),
             offer.clone(),
-            format!("lua:packs.offer: {FIXED}"),
-            format!("lua:tools.offer_local: {FIXED}"),
+            offer.clone(),
+            offer.clone(),
+            format!("lua:tools.offer_dynamic: {FIXED}"),
         ],
         "a handler's offer during the loop, then an identical re-offer of a tool \
-         and of a Pack, and a repeated adhoc alias"
+         and of a Pack, an offer of a tool defined after the render, and a \
+         dynamic offer"
     );
-    assert_eq!(lines.len(), 5, "{lines:?}");
+    assert_eq!(lines.len(), 7, "{lines:?}");
     assert!(
-        lines[4].contains(&format!("tools.offer: {FIXED}")),
+        lines[5].contains(&format!("tools.offer: {FIXED}")),
         "an offer from a required library raises: {}",
-        lines[4]
+        lines[5]
     );
+    assert_eq!(lines[6], "true", "the tool defined after the render exists");
     let bodies = gateway.requests();
     assert_eq!(bodies[0].tool_names(), ["tools_echo", "grab"]);
     assert_eq!(tool_bytes(&bodies)[0], tool_bytes(&bodies)[1]);
+}
+
+#[test]
+fn dynamic_offers_leave_the_rendered_schemas_byte_for_byte_unchanged() {
+    let run = |dynamic: &str| {
+        let gateway = ScriptedChat::new(vec![text("done")]);
+        let source = one_section(&format!(
+            "{dynamic}tools.offer('tools/echo')
+             tools.offer(tools.adhoc({{ name = 'grab', description = 'Local grab' }}, function() return '' end))
+             messages:user('go')
+             models.loop()"
+        ));
+        loop_scenario(source)
+            .offer("echo", echo_tool())
+            .offer("shape", scalar_schema_tool())
+            .chat(&gateway)
+            .run();
+        tool_bytes(&gateway.requests())
+    };
+    let plain = run("");
+    assert_eq!(
+        run("tools.offer_dynamic('tools')\ntools.offer_dynamic(tools.packs)\n"),
+        plain,
+        "a dynamic offer, even of a tool no round could advertise, changes nothing \
+         the model sees"
+    );
 }
 
 #[test]
@@ -241,7 +272,7 @@ fn a_first_round_whose_tool_build_fails_renders_nothing() {
          local ok, err = pcall(models.loop)
          assert(not ok, 'the scalar schema fails the build')
          tools.offer('tools/echo')
-         tools.offer_local('shape', 'Local shape', {}, function() return '' end)
+         tools.offer(tools.adhoc({ name = 'shape', description = 'Local shape' }, function() return '' end))
          models.loop()
          return err.kind .. ':' .. tostring(err)",
     );

@@ -1,0 +1,113 @@
+//! The adhoc arm of the `tool_call` arm: a call routed to an adhoc tool,
+//! answered with its handler, and the `adhoc_tool_done` request that
+//! closes it.
+
+use std::sync::Arc;
+
+use runvil_types::event::lifecycle;
+use runvil_types::tools::OutputTrust;
+
+use crate::execute::protocol::{AdhocToolOutcome, Answer, ToolCallOutcome};
+use crate::execute::section_context::AdhocCall;
+use crate::lua::{ScriptReport, ToolBinding};
+use crate::{Error, Result};
+
+use super::super::{CallSite, ChainIndex, Scheduler};
+use super::ToolCallDispatch;
+
+impl Scheduler {
+    /// Answers a call routed to the adhoc tool `binding` binds: the
+    /// one-time counts install, the attempt counted under the tool's id,
+    /// the call opened on the frame, then the handler's answer.
+    pub(super) fn prepare_adhoc_call(
+        &mut self,
+        id: ChainIndex,
+        binding: &ToolBinding,
+        args: serde_json::Value,
+        site: &CallSite,
+    ) -> Result<ToolCallDispatch> {
+        let report = ScriptReport {
+            turn: self.call_turn(id, site),
+        };
+        let counts = self.section_call_counts(id)?;
+        // The attempt counts at dispatch, before the handler runs, so a
+        // handler that then fails still counts.
+        let counted = binding.id().to_string();
+        counts.ensure(&counted)?;
+        counts.increment(&counted)?;
+        self.chains[id.index()]
+            .frame_mut()?
+            .push_adhoc_call(AdhocCall {
+                tool: binding.id().clone(),
+                alias: binding.alias().to_owned(),
+                call_id: site.call_id().map(str::to_owned),
+                report,
+                listing: false,
+            });
+        Ok(ToolCallDispatch::Answered(Answer::ToolCallResult(Ok(
+            ToolCallOutcome::Adhoc {
+                alias: binding.alias().to_owned(),
+                args,
+            },
+        ))))
+    }
+
+    /// Dispatches an `adhoc_tool_done` request: closes the chain's
+    /// innermost open adhoc tool call and answers it. A returned text
+    /// reports `TOOL_CALL_SUCCEEDED` and a trusted `ToolResult` - the
+    /// prompt author wrote the handler, so its output passes verbatim -
+    /// under the tool's id, no vendor, the call id (or none for a script
+    /// call), and the turn recorded at dispatch, then resumes as the text.
+    /// A call marked as having fetched a listing while it was open instead
+    /// returns its text wrapped with the run's nonce and reports it
+    /// untrusted. A rejected return reports `TOOL_CALL_FAILED` and resumes
+    /// as its error. A raise reports `TOOL_CALL_FAILED` and resumes empty:
+    /// the shim raises the handler's own value in its place.
+    ///
+    /// # Errors
+    /// Returns [`Error::Internal`] when the chain has no frame or no open
+    /// adhoc call, which only a shim bug produces.
+    pub(in crate::execute::scheduler) fn dispatch_adhoc_tool_done(
+        &mut self,
+        id: ChainIndex,
+        outcome: AdhocToolOutcome,
+    ) -> Result<()> {
+        let chain = &mut self.chains[id.index()];
+        let emitter = Arc::clone(chain.ctx.emitter());
+        let section = chain.section_name().to_owned();
+        let call = chain.frame_mut()?.pop_adhoc_call().ok_or(Error::internal(
+            "an adhoc tool's completion closes the call that opened it",
+        ))?;
+        let answer = match outcome {
+            AdhocToolOutcome::Returned(text) => {
+                emitter.report(&section, lifecycle::TOOL_CALL_SUCCEEDED);
+                let (text, trust) = if call.listing {
+                    (chain.ctx.nonce().wrap(&text), OutputTrust::Untrusted)
+                } else {
+                    (text, OutputTrust::Trusted)
+                };
+                emitter.tool_result(
+                    &section,
+                    call.report.turn,
+                    call.call_id.as_deref().unwrap_or(""),
+                    &call.alias,
+                    Some(&call.tool),
+                    None,
+                    &text,
+                    trust,
+                );
+                Ok(ToolCallOutcome::Plain(text))
+            }
+            AdhocToolOutcome::BadReturn(error) => {
+                emitter.report(&section, lifecycle::TOOL_CALL_FAILED);
+                Err(Error::from(error))
+            }
+            AdhocToolOutcome::Raised => {
+                emitter.report(&section, lifecycle::TOOL_CALL_FAILED);
+                Ok(ToolCallOutcome::Plain(String::new()))
+            }
+        };
+        self.answer_inline(id, Answer::ToolCallResult(answer));
+        Ok(())
+    }
+}

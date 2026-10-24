@@ -41,7 +41,7 @@ use serde_json::{Map, Value as Json};
 
 use crate::error::{Error, Result};
 use crate::protocol::{MessageRecord, RecordRole, parse_record};
-use crate::scope::RenderedTools;
+use crate::scope::{Advertised, RenderedTools};
 
 #[path = "messages-snapshot.rs"]
 mod snapshot;
@@ -215,6 +215,14 @@ impl MessageList {
     #[must_use]
     pub fn rendered_tools(&self) -> Option<RenderedTools> {
         self.state().rendered.clone()
+    }
+
+    /// The attached rendered list's entry for `wire_name`, if a list is
+    /// attached and advertises that name.
+    #[must_use]
+    pub(crate) fn rendered_target(&self, wire_name: &str) -> Option<Advertised> {
+        let state = self.state();
+        state.rendered.as_ref()?.dispatch.get(wire_name).cloned()
     }
 
     /// Attaches `tools` as the section's rendered tool list. A list that

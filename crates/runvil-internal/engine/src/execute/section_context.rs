@@ -25,6 +25,7 @@ use std::sync::atomic::AtomicU32;
 
 use runvil_types::emitter::Emitter;
 use runvil_types::event::lifecycle;
+use runvil_types::tools::ToolId;
 
 use crate::lua::{ProseState, ScriptReport, SectionVm, ToolBinding, ToolCallCounts};
 use crate::{Error, Result, subst};
@@ -47,7 +48,9 @@ pub(super) struct TaskSeed {
 /// coroutine: opened when the `tool_call` is answered with the handler,
 /// closed by the shim's `adhoc_tool_done`, which reports under it.
 pub(super) struct AdhocCall {
-    /// The adhoc tool's alias.
+    /// The adhoc tool's id, which its result reports under.
+    pub(super) tool: ToolId,
+    /// The adhoc tool's wire name.
     pub(super) alias: String,
     /// The model-issued call id, `None` for a script call.
     pub(super) call_id: Option<String>,

@@ -143,7 +143,7 @@ fn a_tool_round_reports_the_batch_before_the_shim_dispatches_it() {
 }
 
 #[test]
-fn a_batch_names_the_tool_behind_a_bound_alias_and_none_behind_an_adhoc_one() {
+fn a_batch_names_the_tool_behind_each_wire_name_an_adhoc_one_included() {
     let gateway = ScriptedChat::new(vec![
         calls(&[
             ("call_1", "grab", "{\"value\":\"x\"}"),
@@ -153,9 +153,9 @@ fn a_batch_names_the_tool_behind_a_bound_alias_and_none_behind_an_adhoc_one() {
     ]);
     let source = one_section(
         "tools.offer('tools/echo')
-         tools.offer_local('grab', 'Local grab', { value = 'string' }, function(args)
+         tools.offer(tools.adhoc({ name = 'grab', description = 'Local grab', parameters = { value = 'string' } }, function(args)
            return 'grabbed ' .. args.value
-         end)
+         end))
          messages:user('use both tools')
          models.loop()
          return 'ok'",
@@ -174,9 +174,10 @@ fn a_batch_names_the_tool_behind_a_bound_alias_and_none_behind_an_adhoc_one() {
                     && calls
                         .iter()
                         .map(|call| call.tool.as_ref().map(ToString::to_string))
-                        .eq([None, Some("tools/echo".to_owned())])
+                        .eq([Some("adhoc/grab".to_owned()), Some("tools/echo".to_owned())])
+                    && calls.iter().all(|call| call.vendor.is_none())
         )),
-        "the bound alias names its tool and the adhoc one names none: {events:?}"
+        "each wire name names its tool, and neither call names a vendor: {events:?}"
     );
 }
 

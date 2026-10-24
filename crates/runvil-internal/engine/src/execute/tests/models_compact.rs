@@ -67,10 +67,10 @@ fn models_compact_refuses_while_a_loop_its_handler_or_a_compactor_runs() {
            local ok, err = pcall(models.compact, compactors.clear, label)
            seen[#seen + 1] = label .. ':' .. tostring(ok) .. ':' .. err.kind .. ':' .. tostring(err)
          end
-         tools.offer_local('probe', 'Probe models.compact', { value = 'string' }, function()
+         tools.offer(tools.adhoc({ name = 'probe', description = 'Probe models.compact', parameters = { value = 'string' } }, function()
            refuse('handler')
            return 'probed'
-         end)
+         end))
          messages:user('go')
          models.loop()
          messages:user(string.rep('x', 100000))
