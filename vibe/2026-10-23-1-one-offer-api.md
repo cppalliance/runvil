@@ -4,46 +4,46 @@ overview: One offer verb, tools.offer (plus a tools.offer_dynamic scaffold), tak
 todos:
   - id: adhoc-rename
     content: "Step 1: rename every local-tool identifier, string, comment, and file name to adhoc across runvil/crates, internal protocol names and the two local-tool test files included, except the tools.offer_local family that step 3 deletes; a pure rename that leaves the workspace passing"
-    status: pending
+    status: completed
   - id: tool-parameters
     content: "Step 2: tool.parameters on every tool object: LuaToolHandle keeps the schema; each read converts it with lua.to_value into a fresh table; tested for catalog tools"
-    status: pending
+    status: completed
   - id: event-vendor
     content: "Step 2: vendors in events: the Harness passes each usable Pack's vendor to RunContext::packs (UsablePack); catalog ToolBindings (with_vendor) and the rendered dispatch map (Advertised) hold it; ToolCallEvent and ToolResult gain vendor; the Workshop server and UI match runvil/user-input/ask, runvil/web/search, and runvil/web/fetch by vendor and id, and never treat a call without a vendor as special"
-    status: pending
+    status: completed
   - id: listing-trust
     content: "Step 2: tool listings reach scripts unwrapped: ToolInfo.describes_tools, set on mcp/get_dynamic_tools; prepare_dispatch passes a script's listing verbatim (still untrusted) and ToolDispatch::listing reports it, while a model's call stays wrapped; an adhoc call whose own function fetched a listing during that call returns wrapped and untrusted"
-    status: pending
+    status: completed
   - id: adhoc-reservation
     content: "Step 2: the adhoc Pack id is reserved: a new InstallError variant in the plugin registry, a new PackListError variant in the parser contract with its parse.rs arm, and a refusal in RunContext::prepare reported through Requirements"
-    status: pending
+    status: completed
   - id: adhoc-storage
     content: "Step 3: AdhocTools (in lua/src/vm/adhoc.rs) holds a ToolBinding (ToolBinding::from_info) and ToolInfo per adhoc tool, looked up by wire name and by id, and reaches the Engine through SectionVm::adhoc_tools; the tool-object registry gains an insert"
-    status: pending
+    status: completed
   - id: core-offers
     content: "Step 3: ordered offers: ToolRuntime holds one list of Offer {target, mode} with add_tool and add_pack; current_tool_bindings is one append-and-dedupe pass over static entries in call order, catalog and adhoc tools alike, Packs expanded at render, absorbing the merge and shadowing that prepare_scoped_tools does today; current_dynamic_tools fills RenderedTools.dynamic, which nothing reads"
-    status: pending
+    status: completed
   - id: offer-verb
     content: "Step 3: tools.offer and tools.offer_dynamic from one installer in lua/src/tools/offer.rs: ids by string shape, tool and Pack objects, strict arrays read through metamethods; explicit nil raises; render refusal first; every entry checked before any is recorded; specified errors; delete packs.offer and tools.offer_local"
-    status: pending
+    status: completed
   - id: packs-surface
     content: "Step 3: tools.packs proxy (integer index, #, ipairs, ordered pairs, get, extras, other keys nil, raising writes, protected metatable); Pack objects with required; always-present adhoc Pack; install_tools wiring; drop install_packs; RESERVED_NAMES 63 to 62; delete tools.required/extras (install_tool_get)"
-    status: pending
+    status: completed
   - id: adhoc-tools
     content: "Step 3: tools.adhoc(attrs, f): id adhoc/<name lowercased>, wire name = name, parameters in short form or as a JSON Schema object, validated when defined; registered not offered; allowed after render; collisions refused; tool_route takes the call site and routes model calls through the section's rendered list; calls, counts, and events by id; Workshop labels adhoc calls as <name> in adhoc"
-    status: pending
+    status: completed
   - id: lua-tests
     content: "Step 3: rewrite packs-tests.rs and update tools/tests-offering.rs and every other Lua crate test that uses an old form to the new surface"
-    status: pending
+    status: completed
   - id: engine-harness-tests
     content: "Step 3: update engine, harness runner, workshop server and UI, and runvil suite tests, every test step 2 wrote with tools.offer_local included, plus chat.md and the vibe note, to the new surface"
-    status: pending
+    status: completed
   - id: docs-site
     content: "Step 4: exactly one runvil-docs commit on master after step 3, not pushed: the new surface; the removal of tools.allow_tasks, the task built-ins, model tasks, and task origin; every other place where the guide or plans/build-language-guide.md disagrees with the code; fixed inbound links to renamed and deleted headings; and the dash scan, anchor check, error-string comparison with step 3's code, and site build"
-    status: pending
+    status: completed
   - id: verify
     content: "Each step's verification scope from the Execution Instructions: the survey's gates at steps 1 to 3, the removed-form, rename, and history-wording greps at step 3, and the docs greps, history-wording grep, anchor check, error-string comparison, site build, and commit checks at step 4"
-    status: pending
+    status: completed
 isProject: false
 ---
 
@@ -914,7 +914,7 @@ Work through the parts in order:
 
 <step-4>
 
-### Step 4: Docs
+### Step 4: Docs [completed]
 
 - Component: language guide
 - Tests: run in PowerShell, in this order, each line as written. The first eleven lines must print nothing (`rg` and `git grep` exit 1 when nothing matches, which passes). The twelfth compares every documented error string with step 3's product code and must print nothing, except a fragment that is a value the code fills in at run time, such as a Host's reason or a JSON encoder's reason, which the step's report then names. The thirteenth may print only lines that show `tools.call` with a string that has no slash raising. The fourteenth must print only Lua `local` variable declarations (such as `local tool =`, `local tools =`, `local tool_ok`, `local tools_list`). The fifteenth prints added lines to read: each must describe current behavior, with no word about an old form, a rename, or a migration. The sixteenth, the site build that stages `runvil-docs` through `RUNVIL_DOCS`, must exit 0. The last four check the commit and run once it exists, as the provisional `[WIP] Step 4:` commit or in its final form: the seventeenth must print exactly one line, the eighteenth must print nothing, the nineteenth must print `master`, and the twentieth must print nothing, because no remote branch holds the commit.
