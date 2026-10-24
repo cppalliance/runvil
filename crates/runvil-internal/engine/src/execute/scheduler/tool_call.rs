@@ -185,14 +185,22 @@ impl Scheduler {
     }
 
     /// The chain's section's tool-call counts, which the section's first
-    /// call installs.
+    /// call installs, seeded from its rendered list once there is one and
+    /// from its live scope before.
     fn section_call_counts(&mut self, id: ChainIndex) -> Result<ToolCallCounts> {
         let chain = &mut self.chains[id.index()];
         let vm = chain.frame()?.vm()?;
-        let effective =
-            current_tool_bindings(chain.ctx.tool_set(), vm.tool_runtime(), vm.adhoc_tools())?;
+        let ids = match vm.rendered_ids() {
+            Some(ids) => ids,
+            None => {
+                current_tool_bindings(chain.ctx.tool_set(), vm.tool_runtime(), vm.adhoc_tools())?
+                    .iter()
+                    .map(|binding| binding.id().clone())
+                    .collect()
+            }
+        };
         let ctx = chain.ctx.clone();
-        chain.frame_mut()?.script_call_counts(&ctx, &effective)
+        chain.frame_mut()?.script_call_counts(&ctx, &ids)
     }
 
     /// Fills `slot` of the batch the chain is parked on with a landed

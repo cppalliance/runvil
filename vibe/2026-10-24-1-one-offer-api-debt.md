@@ -384,7 +384,7 @@ isProject: false
 
 <step-5>
 
-### Step 5: Seed tool call counts from the rendered list
+### Step 5: Seed tool call counts from the rendered list [completed]
 
 - Component: Call-count seeding
 - Tests: run each in PowerShell from `c:\Users\Vinnie\cursor\runvil` as written and in this order, because the seventh clears the variables the fifth and sixth set; each exits 0.

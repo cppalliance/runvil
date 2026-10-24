@@ -221,6 +221,28 @@ fn a_model_call_a_script_call_and_an_adhoc_tool_each_count_under_the_id() {
 }
 
 #[test]
+fn an_adhoc_tool_defined_after_the_render_has_no_seeded_count() {
+    let gateway = ScriptedChat::new(vec![text("rendered")]);
+    let source = one_section(
+        "local grab = tools.adhoc({ name = 'grab', description = 'Grab' }, function() return 'got' end)
+         tools.offer(tools.packs.get('adhoc'))
+         messages:user('ask the model')
+         models.loop()
+         tools.adhoc({ name = 'late', description = 'Late' }, function() return 'late' end)
+         tools.call(grab, {})
+         local ok, err = pcall(function() return tools.calls['adhoc/late'] end)
+         assert(not ok, 'a tool the rendered list lacks reads no count')
+         local text = tostring(err)
+         assert(text:find('has no seeded count', 1, true), text)
+         assert(text:find('(an adhoc tool that was neither offered in this section nor called with tools.call)', 1, true), text)
+         assert(tools.calls['adhoc/grab'] == 1, 'grab counts once')
+         return 'ok'",
+    );
+    let trace = loop_scenario(source).chat(&gateway).run();
+    assert_eq!(trace.text(), "ok");
+}
+
+#[test]
 fn tool_calls_count_zero_for_uncalled_alias_fails_epilog_assert() {
     // The first script dispatch installs the counts seeded from the
     // effective scope, so an offered but uncalled tool reads as 0 and an

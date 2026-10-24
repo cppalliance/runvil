@@ -27,7 +27,7 @@ use runvil_types::emitter::Emitter;
 use runvil_types::event::lifecycle;
 use runvil_types::tools::ToolId;
 
-use crate::lua::{ProseState, ScriptReport, SectionVm, ToolBinding, ToolCallCounts};
+use crate::lua::{ProseState, ScriptReport, SectionVm, ToolCallCounts};
 use crate::{Error, Result, subst};
 
 use super::context::RunState;
@@ -190,8 +190,9 @@ impl SectionContext {
     /// The frame's tool-call counts for a script-initiated dispatch,
     /// running the same one-time scope install the first prose block
     /// performs (the counts and the Lua `tools.calls` table, the model
-    /// freeze, the `sys.model` enrichment), then seeding the id of any tool
-    /// the effective scope has gained since. The returned handle shares the
+    /// freeze, the `sys.model` enrichment), then seeding any of `ids` not
+    /// seeded yet. `ids` is the section's live scope before its first
+    /// render and its rendered list after. The returned handle shares the
     /// installed counts, so the dispatch task increments them off the
     /// driver thread.
     ///
@@ -201,7 +202,7 @@ impl SectionContext {
     pub(super) fn script_call_counts(
         &mut self,
         ctx: &RunState,
-        effective: &[ToolBinding],
+        ids: &[ToolId],
     ) -> Result<ToolCallCounts> {
         let Self {
             vm, sys, counts, ..
@@ -211,12 +212,12 @@ impl SectionContext {
                 "the section frame's VM lives until the frame's own drop",
             ));
         };
-        install_section_scope(vm, ctx, sys, counts, effective)?;
+        install_section_scope(vm, ctx, sys, counts, ids)?;
         let counts = counts
             .as_ref()
             .ok_or(Error::internal("the scope install seeds the counts"))?;
-        for binding in effective {
-            counts.ensure(&binding.id().to_string())?;
+        for id in ids {
+            counts.ensure(&id.to_string())?;
         }
         Ok(counts.clone())
     }
@@ -267,9 +268,10 @@ fn prose_renderer(
 /// Installs the section's one-time tool-call counts and model resolution,
 /// gated on the counts slot: the first consumer - the section's first
 /// script-initiated `tools.call` - performs the install, and every later
-/// call is a no-op. The counts install backs the Lua `tools.calls` table;
-/// the model resolution freezes the section's binding and enriches
-/// `sys.model`.
+/// call is a no-op. The counts install backs the Lua `tools.calls` table,
+/// seeded with `ids`: the section's live scope before its first render
+/// and its rendered list after. The model resolution freezes the
+/// section's binding and enriches `sys.model`.
 ///
 /// # Errors
 /// Returns the [`Error`] of the counts install, the model resolution, or
@@ -279,12 +281,12 @@ fn install_section_scope(
     ctx: &RunState,
     sys: &mut serde_json::Value,
     counts: &mut Option<ToolCallCounts>,
-    effective_bindings: &[ToolBinding],
+    ids: &[ToolId],
 ) -> Result<()> {
     if counts.is_some() {
         return Ok(());
     }
-    *counts = Some(vm.install_tool_call_counts(effective_bindings)?);
+    *counts = Some(vm.install_tool_call_counts(ids)?);
     let resolved_model = crate::lua::resolve_model_binding(ctx.models(), vm.model_runtime())?;
     if let Some(binding) = resolved_model.as_ref() {
         let current = vm.current_sys(sys)?;

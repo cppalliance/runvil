@@ -65,7 +65,7 @@ impl SectionVm {
     }
 
     /// Installs `tools.calls` as a read-only Lua table backed by a fresh
-    /// [`ToolCallCounts`] seeded with the ids of `bindings`. Each seeded key
+    /// [`ToolCallCounts`] seeded with `ids`. Each seeded key
     /// reads its live count; indexing an unseeded key is a hard error that
     /// names the bad key and lists the seeded set. When the key is the id
     /// of a tool the run offers but was never seeded - neither offered to
@@ -80,8 +80,8 @@ impl SectionVm {
     ///
     /// # Errors
     /// Returns [`Error::LuaRuntime`] when installing the `tools.calls` index fails.
-    pub fn install_tool_call_counts(&self, bindings: &[ToolBinding]) -> Result<ToolCallCounts> {
-        install_tool_call_counts_impl(&self.lua, &self.bound_tools, &self.adhoc_tools, bindings)
+    pub fn install_tool_call_counts(&self, ids: &[ToolId]) -> Result<ToolCallCounts> {
+        install_tool_call_counts_impl(&self.lua, &self.bound_tools, &self.adhoc_tools, ids)
     }
 
     /// Returns the tool the section's rendered list advertises under
@@ -90,6 +90,21 @@ impl SectionVm {
     #[must_use]
     pub fn rendered_target(&self, wire_name: &str) -> Option<Advertised> {
         self.messages.rendered_target(wire_name)
+    }
+
+    /// Returns the ids of the tools the section's rendered list
+    /// advertises, never its dynamic ones, or `None` when no list is
+    /// rendered.
+    #[must_use]
+    pub fn rendered_ids(&self) -> Option<Vec<ToolId>> {
+        let rendered = self.messages.rendered_tools()?;
+        Some(
+            rendered
+                .dispatch
+                .into_values()
+                .map(|advertised| advertised.id)
+                .collect(),
+        )
     }
 
     /// How many of this VM's instruction-hook firings have counted.
@@ -107,8 +122,9 @@ impl SectionVm {
 /// tool shares is dropped.
 ///
 /// The section's first loop round renders its tool list from these
-/// bindings. Every offer raises after that, so the bindings never change
-/// once the list is rendered.
+/// bindings. An offered adhoc Pack expands to the adhoc tools defined
+/// when this function runs, so after the render the Engine reads the
+/// rendered list instead.
 ///
 /// # Errors
 /// Returns [`Error::Internal`] if the tool runtime's mutex or the adhoc

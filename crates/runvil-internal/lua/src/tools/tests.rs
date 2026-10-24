@@ -229,7 +229,7 @@ fn tool_call_counts_seed_by_id_and_explain_an_unseeded_key() {
         ],
     ));
     let counts = vm
-        .install_tool_call_counts(&[echo])
+        .install_tool_call_counts(&[echo.id().clone()])
         .expect("the counts install");
     assert_eq!(
         counts

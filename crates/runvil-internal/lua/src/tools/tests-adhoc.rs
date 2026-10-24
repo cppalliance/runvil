@@ -296,10 +296,13 @@ fn an_offered_adhoc_tool_counts_from_zero_and_an_unoffered_one_from_its_first_ca
          tools.offer(grab)"
     ));
     let (set, runtime) = vm.tool_bag_handles();
-    let bound =
-        crate::current_tool_bindings(&set, &runtime, vm.adhoc_tools()).expect("the scope resolves");
+    let ids: Vec<_> = crate::current_tool_bindings(&set, &runtime, vm.adhoc_tools())
+        .expect("the scope resolves")
+        .iter()
+        .map(|binding| binding.id().clone())
+        .collect();
     let counts = vm
-        .install_tool_call_counts(&bound)
+        .install_tool_call_counts(&ids)
         .expect("the counts install");
     let offered: i64 = vm.eval("return tools.calls['adhoc/grab']");
     assert_eq!(offered, 0, "an offered adhoc tool is seeded");

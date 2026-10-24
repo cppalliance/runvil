@@ -155,7 +155,7 @@ fn install_lua_tool_calls(
 }
 
 /// Installs `tools.calls` as a read-only Lua table backed by a fresh
-/// [`ToolCallCounts`] seeded with the ids of `bindings`. Each seeded key
+/// [`ToolCallCounts`] seeded with `ids`. Each seeded key
 /// reads its live count; indexing an unseeded key is a hard error that
 /// names the bad key and lists the seeded set. When the key is the id of a
 /// catalog tool the run offers or of an adhoc tool `adhoc` holds that was
@@ -171,9 +171,9 @@ pub(crate) fn install_tool_call_counts(
     lua: &Lua,
     bound_tools: &ToolSet,
     adhoc: &AdhocTools,
-    bindings: &[ToolBinding],
+    ids: &[ToolId],
 ) -> Result<ToolCallCounts> {
-    let counts = ToolCallCounts::new(bindings.iter().map(|b| b.id().to_string()));
+    let counts = ToolCallCounts::new(ids.iter().map(ToString::to_string));
     let offered: Vec<String> = bound_tools
         .offered()
         .iter()
