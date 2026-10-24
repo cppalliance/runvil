@@ -2,8 +2,8 @@
 // and asserts the live desk's first paint: standalone with no stored
 // key, the auto-boot on #app must land on the key prompt - medallion,
 // title, labeled password input, and submit button - without touching
-// the network. Run after `npm run build` (a debug `cargo build` also
-// produces dist/).
+// the network. Run with `npm test`, whose `pretest` script builds dist/
+// first.
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import path from "node:path";

@@ -16,7 +16,7 @@ const CONFIG_URL = "http://127.0.0.1:8081/config/";
 
 let appModulePromise;
 
-/** Imports the built bundle once; run `npm run build` (or a debug `cargo build`) first. */
+/** Imports the built bundle once; `npm test` builds it first through the `pretest` script. */
 export function loadApp() {
   if (!appModulePromise) {
     // Module evaluation touches `document` (the #app auto-boot probe),

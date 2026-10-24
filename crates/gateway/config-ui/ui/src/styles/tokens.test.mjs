@@ -3,8 +3,8 @@
 // (shared-ui/tokens.css) and the cascade layer order, and
 // dist/index.html must link that stylesheet - a dropped import in
 // main.ts or a dropped <link> would ship an unstyled UI without any
-// build failure. Run after `npm run build` (a debug `cargo build` also
-// produces dist/).
+// build failure. Run with `npm test`, whose `pretest` script builds
+// dist/ first.
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
