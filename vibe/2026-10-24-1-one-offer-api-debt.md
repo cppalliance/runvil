@@ -300,7 +300,7 @@ isProject: false
 
 <step-2>
 
-### Step 2: Bound offer arrays at the held key limit
+### Step 2: Bound offer arrays at the held key limit [completed]
 
 - Component: Offer decoder
 - Tests: run each in PowerShell from `c:\Users\Vinnie\cursor\runvil` as written; each exits 0.

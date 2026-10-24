@@ -24,6 +24,7 @@ use crate::packs::{LuaPackHandle, is_adhoc, pack_object};
 use crate::proxy::key_text;
 use crate::scope::{OfferMode, OfferTarget, ToolRuntime};
 use crate::vm::AdhocTools;
+use crate::walk_budget::HELD_KEY_LIMIT;
 
 /// What an offer verb checks its entries against and records into: the
 /// run's tool set, the section's offers, the VM's adhoc tools, and the
@@ -178,10 +179,18 @@ impl Offering {
 }
 
 /// The entries of the array `table`: `#t` of them, honoring `__len`, each
-/// read through `__index`. A nil or a table in that range, or a raw key
+/// read through `__index`. A `#t` above [`HELD_KEY_LIMIT`] is refused
+/// before any entry is read, since each entry holds a Lua reference until
+/// the offer is recorded. A nil or a table in that range, or a raw key
 /// outside it, is refused.
 fn array(verb: &str, table: &Table) -> mlua::Result<Vec<Value>> {
-    let count = usize::try_from(table.len()?).unwrap_or(0);
+    let len = table.len()?;
+    let count = usize::try_from(len).unwrap_or(if len > 0 { usize::MAX } else { 0 });
+    if count > HELD_KEY_LIMIT {
+        return Err(mlua::Error::external(format!(
+            "{verb} takes an array of at most {HELD_KEY_LIMIT} entries, got {len}"
+        )));
+    }
     let mut entries = Vec::with_capacity(count);
     for index in 1..=count {
         let entry: Value = table.get(index)?;

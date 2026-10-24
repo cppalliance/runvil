@@ -13,6 +13,8 @@ use crate::{ToolBinding, ToolSet};
 
 #[path = "tests-adhoc.rs"]
 mod adhoc;
+#[path = "tests-offer-limits.rs"]
+mod offer_limits;
 #[path = "tests-offering.rs"]
 mod offering;
 #[path = "tests-parameters.rs"]
