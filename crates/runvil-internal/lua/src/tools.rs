@@ -43,7 +43,7 @@ pub(crate) use decode::{model_tool_name, tool_name};
 
 use decode::adhoc_params_schema;
 pub(crate) use objects::tool_object;
-use objects::{insert_tool_object, install_tool_get, install_tool_objects};
+use objects::{insert_tool_object, install_tool_get, install_tool_objects, remove_tool_object};
 use offer::{Offering, install_offer};
 
 /// The registry key of the VM's adhoc-tool handler table: `tools.adhoc`
@@ -222,11 +222,15 @@ pub(crate) fn install_tools(
     globals.raw_set("tools", tools).map_err(Error::lua)
 }
 
-/// Installs `tools.adhoc(attrs, f)` over a fresh handler table: the tool
-/// registers on `adhoc_tools` and in the tool-object registry, `f` is
+/// Installs `tools.adhoc(attrs, f)` over a fresh handler table: `f` is
 /// written under the tool's wire name for the scheduler's `Adhoc` answer
-/// to read back, and the tool object is returned. Defining offers
-/// nothing, and works before and after the section renders.
+/// to read back, the tool object is stored in the tool-object registry,
+/// the tool registers on `adhoc_tools`, and the tool object is returned.
+/// A definition is all or nothing: the tool registers last, and a failed
+/// registration clears the handler and the object, so a definition that
+/// fails at any point leaves no tool defined and the name free to define
+/// again. Defining offers nothing, and works before and after the section
+/// renders.
 fn install_adhoc(lua: &Lua, tools: &Table, adhoc_tools: &AdhocTools) -> Result<()> {
     lua.set_named_registry_value(
         ADHOC_HANDLERS_REGISTRY,
@@ -262,12 +266,17 @@ fn install_adhoc(lua: &Lua, tools: &Table, adhoc_tools: &AdhocTools) -> Result<(
                 )));
             }
             let (name, info) = adhoc_info(lua, &attrs, &adhoc)?;
-            let binding = adhoc
-                .register(&name, &info)
-                .map_err(mlua::Error::external)?;
+            let binding = ToolBinding::from_info(&name, &info);
             let handlers: Table = lua.named_registry_value(ADHOC_HANDLERS_REGISTRY)?;
-            handlers.raw_set(name, handler)?;
-            insert_tool_object(lua, &binding)
+            handlers.raw_set(name.as_str(), handler)?;
+            let object = insert_tool_object(lua, &binding)?;
+            let id = binding.id().to_string();
+            if let Err(error) = adhoc.register(binding) {
+                handlers.raw_set(name, Value::Nil)?;
+                remove_tool_object(lua, &id)?;
+                return Err(mlua::Error::external(error));
+            }
+            Ok(object)
         })
         .map_err(Error::lua)?;
     tools.set("adhoc", define).map_err(Error::lua)

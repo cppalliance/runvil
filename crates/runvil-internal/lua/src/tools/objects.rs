@@ -14,7 +14,7 @@ use crate::handles::{ToolBinding, ToolSet};
 
 /// The registry key of the VM's tool-object table: one object per tool,
 /// keyed by id.
-const TOOL_OBJECTS_REGISTRY: &str = "runvil.tools.objects";
+pub(super) const TOOL_OBJECTS_REGISTRY: &str = "runvil.tools.objects";
 
 /// The VM's tool object for the id `id`, or `None` when the run cannot
 /// offer that tool and no adhoc tool holds that id.
@@ -60,6 +60,16 @@ pub(super) fn insert_tool_object(lua: &Lua, binding: &ToolBinding) -> mlua::Resu
     let object = lua.create_userdata(LuaToolHandle::from_binding(binding))?;
     objects.raw_set(binding.id().to_string(), object.clone())?;
     Ok(object)
+}
+
+/// Clears the tool object stored under the id `id`.
+///
+/// # Errors
+/// Returns an `mlua` error when the tool-object table cannot be read or
+/// written.
+pub(super) fn remove_tool_object(lua: &Lua, id: &str) -> mlua::Result<()> {
+    let objects: Table = lua.named_registry_value(TOOL_OBJECTS_REGISTRY)?;
+    objects.raw_set(id, Value::Nil)
 }
 
 /// Installs `tools.get(id)`.

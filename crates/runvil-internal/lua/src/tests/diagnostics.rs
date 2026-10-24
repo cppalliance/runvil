@@ -70,7 +70,7 @@ fn adhoc_tools_list_and_lookup_reads_fail_closed_on_poison() {
         serde_json::json!({ "type": "object", "properties": {} }),
     );
     adhoc
-        .register("grab", &info)
+        .register(crate::ToolBinding::from_info("grab", &info))
         .expect("registration succeeds before the poison");
     let handle = adhoc.entries_handle();
     let poisoned = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {

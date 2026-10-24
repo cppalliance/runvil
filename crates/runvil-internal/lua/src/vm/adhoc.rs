@@ -3,8 +3,6 @@
 
 use std::sync::{Arc, Mutex, MutexGuard};
 
-use runvil_types::tools::ToolInfo;
-
 use crate::error::{Error, Result};
 use crate::handles::ToolBinding;
 
@@ -32,15 +30,13 @@ impl AdhocTools {
             .map_err(|_| Error::Internal("adhoc tools registry was poisoned".into()))
     }
 
-    /// Registers the tool `info` describes under the wire name `name` and
-    /// returns its binding.
+    /// Registers the adhoc tool `binding` binds.
     ///
     /// # Errors
     /// Returns [`Error::Internal`] if the entries lock was poisoned.
-    pub(crate) fn register(&self, name: &str, info: &ToolInfo) -> Result<ToolBinding> {
-        let binding = ToolBinding::from_info(name, info);
-        self.entries()?.push(binding.clone());
-        Ok(binding)
+    pub(crate) fn register(&self, binding: ToolBinding) -> Result<()> {
+        self.entries()?.push(binding);
+        Ok(())
     }
 
     /// Returns the binding of the adhoc tool whose id is `name` when it

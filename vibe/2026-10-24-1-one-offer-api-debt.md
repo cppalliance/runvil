@@ -354,7 +354,7 @@ isProject: false
 
 <step-4>
 
-### Step 4: Make tools.adhoc all or nothing
+### Step 4: Make tools.adhoc all or nothing [completed]
 
 - Component: Adhoc definition
 - Tests: run each in PowerShell from `c:\Users\Vinnie\cursor\runvil` as written; each exits 0.

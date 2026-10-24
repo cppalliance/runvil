@@ -1,10 +1,12 @@
 //! Tests for `tools.adhoc`: the tool object it returns, the id and wire
 //! name it gives, the schema it builds from `parameters`, its refusals,
-//! the adhoc Pack, and the counts an adhoc tool keys.
+//! a definition that fails partway, the adhoc Pack, and the counts an
+//! adhoc tool keys.
 
-use mlua::{LuaSerdeExt, Value};
+use mlua::{LuaSerdeExt, Table, Value};
 use serde_json::{Value as Json, json};
 
+use super::super::objects::TOOL_OBJECTS_REGISTRY;
 use super::parameters::search_set;
 use crate::Argv;
 use crate::test_vm::{TestVm, lua_over, offer_set, raised, scoped};
@@ -147,6 +149,39 @@ fn each_refusal_raises_on_the_defining_line() {
         .map(|binding| binding.id().to_string())
         .collect();
     assert_eq!(ids, ["adhoc/grab"], "no refused definition registers");
+}
+
+#[test]
+fn a_definition_whose_tool_object_cannot_be_stored_leaves_no_tool_behind() {
+    let vm = lua_over(offer_set());
+    let lua = vm.lua();
+    let objects: Table = lua
+        .named_registry_value(TOOL_OBJECTS_REGISTRY)
+        .expect("the tool-object table is installed");
+    lua.set_named_registry_value(TOOL_OBJECTS_REGISTRY, false)
+        .expect("the tool-object registry value is replaced");
+    let defined: bool = vm.eval(
+        "return (pcall(tools.adhoc, { name = 'x', description = 'y' }, \
+           function() return 'z' end))",
+    );
+    assert!(!defined, "the object insert fails the definition");
+    lua.set_named_registry_value(TOOL_OBJECTS_REGISTRY, objects)
+        .expect("the tool-object table is restored");
+    assert_eq!(
+        vm.adhoc_tools()
+            .binding("adhoc/x")
+            .expect("the adhoc tools read"),
+        None,
+        "a failed definition registers nothing"
+    );
+    let same: bool = vm.eval(
+        "local x = tools.adhoc({ name = 'x', description = 'y' }, function() return 'z' end)\n\
+         return x == tools.get('adhoc/x')",
+    );
+    assert!(
+        same,
+        "a second definition stores the object tools.get reads"
+    );
 }
 
 #[test]
