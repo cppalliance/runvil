@@ -18,18 +18,19 @@ use std::sync::Arc;
 use std::sync::mpsc;
 use std::thread;
 
+use runvil_lua::ToolOutputKind;
 use runvil_model_client::model::ModelInvocation;
 use runvil_types::event::Event;
 use runvil_types::seed::RunSeed;
 use runvil_types::timestamp::Timestamp;
-use runvil_types::tools::ToolCatalog;
+use runvil_types::tools::{ToolCatalog, ToolInfo};
 use runvil_vfs::VfsRef;
 
 use super::FnTool;
 use super::scripted_chat::ScriptedChat;
 use crate::Error;
 use crate::execute::{Effect, EffectAnswer, Run, RunContext, RunError, RunLimits, RunResult};
-use crate::lua::{ToolBinding, ToolSet};
+use crate::lua::ToolBinding;
 use crate::model::{CompletionErrorKind, ModelBinding, ModelId, ModelInfo, ModelSet, ThinkingMode};
 use crate::parser::Prompt;
 
@@ -128,8 +129,8 @@ pub(crate) struct Scenario {
     store: TestStore,
     /// The catalog's tools.
     tools: Vec<FnTool>,
-    /// The tools behind offered bindings, outside the catalog.
-    offered: Vec<FnTool>,
+    /// The catalog's tools with no implementation behind them.
+    listed: Vec<ToolInfo>,
     prefill: Prefill,
     chat: Option<Chat>,
     hold: Option<Matcher>,
@@ -152,7 +153,7 @@ impl Scenario {
             context: Box::new(|ctx| ctx),
             store: TestStore::new(),
             tools: Vec::new(),
-            offered: Vec::new(),
+            listed: Vec::new(),
             prefill: Prefill::default(),
             chat: None,
             hold: None,
@@ -237,25 +238,27 @@ impl Scenario {
         self
     }
 
-    /// Replaces the run's offering with `bindings` before the run starts,
-    /// in place of the one the catalog builds. A call to a binding with no
-    /// scenario tool behind it is refused.
+    /// Adds each tool of `bindings` to the run's catalog under the
+    /// binding's alias as its wire name, as [`offer`](Scenario::offer)
+    /// does, with no scenario tool behind it, so a call to it is refused.
     pub(crate) fn offering(mut self, bindings: Vec<ToolBinding>) -> Scenario {
-        self.prefill.offering = Some(bindings);
+        self.listed.extend(bindings.into_iter().map(|binding| {
+            ToolInfo::new(
+                binding.id().clone(),
+                binding.description(),
+                binding.schema().clone(),
+            )
+            .wire_name(binding.alias())
+            .structured(binding.output_kind() == ToolOutputKind::Structured)
+            .describes_tools(binding.describes_tools())
+        }));
         self
     }
 
-    /// Adds `tool` to the run's offering under the wire name `alias` and
-    /// answers its calls with it. The tool stays out of the catalog, and,
-    /// as with [`offering`](Scenario::offering), the offered tools replace
-    /// the offering the catalog builds.
+    /// Adds `tool` to the run's catalog under the wire name `alias` and
+    /// answers its calls with it.
     pub(crate) fn offer(mut self, alias: &str, tool: FnTool) -> Scenario {
-        let binding = ToolBinding::from_info(alias, &tool.info());
-        self.prefill
-            .offering
-            .get_or_insert_with(Vec::new)
-            .push(binding);
-        self.offered.push(tool);
+        self.tools.push(tool.wire_name(alias));
         self
     }
 
@@ -320,7 +323,9 @@ impl Scenario {
             None => (None, None),
         };
         let answers = Answers {
-            tools: (self.tools.into_iter().chain(self.offered))
+            tools: self
+                .tools
+                .into_iter()
                 .map(|tool| (tool.id(), tool))
                 .collect(),
             chat: self.chat,
@@ -364,8 +369,8 @@ impl Scenario {
 
     /// Parses the source, prepares the run, and hands it back unstarted,
     /// for a test that steps it and answers its effects by hand. The
-    /// scenario's tools still shape the catalog and the offering, but its
-    /// answers, holds, and canceller play no part.
+    /// scenario's tools still shape the catalog, but its answers, holds,
+    /// and canceller play no part.
     ///
     /// # Panics
     /// When the source fails to parse or the prepare refuses the run,
@@ -391,8 +396,9 @@ impl Scenario {
         };
         let mut ctx =
             RunContext::new(self.name.clone(), self.seed, TEST_STARTED_AT).vfs(self.store.vfs());
-        if !self.tools.is_empty() {
-            let catalog = ToolCatalog::new(self.tools.iter().map(FnTool::info))
+        if !self.tools.is_empty() || !self.listed.is_empty() {
+            let infos = self.tools.iter().map(FnTool::info);
+            let catalog = ToolCatalog::new(infos.chain(self.listed.iter().cloned()))
                 .expect("the scenario's tool ids differ");
             ctx = ctx.tools(catalog);
         }
@@ -414,12 +420,10 @@ impl Scenario {
 }
 
 /// What a scenario fills into its run's state before the run starts, in
-/// place of what the prepare, the live H1 pass, and the offering would
-/// leave there.
+/// place of what the prepare and the live H1 pass would leave there.
 #[derive(Default)]
 struct Prefill {
     models: Option<ModelSet>,
-    offering: Option<Vec<ToolBinding>>,
     raw_shims: bool,
 }
 
@@ -427,19 +431,12 @@ impl Prefill {
     /// Builds the run of `prompt` under `ctx` with the state filled in, or
     /// as [`Run::new`] builds it when there is nothing to fill.
     fn start(self, prompt: Arc<Prompt>, args: &str, ctx: RunContext) -> Run {
-        if self.models.is_none() && self.offering.is_none() && !self.raw_shims {
+        if self.models.is_none() && !self.raw_shims {
             return Run::new(prompt, args, ctx);
         }
         Run::new_for_test(prompt, args, ctx, |mut state| {
             if let Some(set) = self.models {
                 state = state.with_models_for_test(set);
-            }
-            if let Some(offered) = self.offering {
-                state = state.with_tool_set(ToolSet::new(
-                    Vec::new(),
-                    std::collections::BTreeMap::new(),
-                    offered,
-                ));
             }
             if self.raw_shims {
                 state.expose_raw_shims_for_test();

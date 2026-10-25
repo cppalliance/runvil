@@ -1,18 +1,17 @@
 //! Test-only hooks over the scheduler's private state: the seams the
 //! `execute::tests` suites drive the scheduler's edge paths through
-//! (overflow bounds, inline answers, and task slots) and the turn counter
-//! and tool set they read. Compiled only under test; nothing here exists
-//! in a shipped Engine.
+//! (overflow bounds and task slots) and the turn counter and tool set
+//! they read. Compiled only under test; nothing here exists in a shipped
+//! Engine.
 
 use std::num::NonZeroUsize;
 use std::sync::atomic::Ordering;
 
 use runvil_types::ids::{ChainId, TaskId};
-use runvil_types::tools::ToolId;
 
 use crate::Result;
 use crate::execute::walk_target::SlicePath;
-use crate::lua::{Advertised, ToolSet};
+use crate::lua::ToolSet;
 
 use super::chain::ChainStart;
 use super::chain_record::{Admission, CallDepth, ChainKind, SectionIndex};
@@ -53,32 +52,14 @@ impl Scheduler {
         }
     }
 
-    /// Adds `name`, bound to `tool`, to the scope the chain at arena index
-    /// `chain` advertised for its last round. Nothing changes the run's
-    /// offering, so no round advertises a name it cannot bind; this lets a
-    /// test answer the round with a call that binds to nothing.
-    pub(crate) fn advertise_for_test(&mut self, chain: u32, name: &str, tool: ToolId) {
-        self.chains[ChainIndex(chain).index()]
-            .advertised
-            .as_mut()
-            .expect("the chain advertised a round")
-            .insert(
-                name.to_owned(),
-                Advertised {
-                    id: tool,
-                    vendor: None,
-                },
-            );
-    }
-
     /// The state of one task's slot, or `None` when no task with that id
     /// was ever started, so a test can prove a chain's end moved its slot.
     pub(crate) fn task_state_for_test(&self, task: &TaskId) -> Option<TaskState> {
         self.tasks.get(task).map(|slot| slot.state)
     }
 
-    /// The run's tool set: its offering, built from the catalog unless a
-    /// test replaced it, and the Packs the prompt declares.
+    /// The run's tool set: the Packs the prompt declares, the roster, the
+    /// run catalog, and each Pack's vendor.
     pub(crate) fn tool_set_for_test(&self) -> &ToolSet {
         self.ctx.tool_set()
     }

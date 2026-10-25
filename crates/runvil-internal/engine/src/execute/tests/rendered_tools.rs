@@ -1,9 +1,8 @@
-//! Tests for the rendered tool list: the first loop round that builds its
-//! tools fixes the section's list, every later round sends it unchanged,
-//! and every offer after it raises. A round refused before the build, or
-//! whose build fails, renders nothing, one section's list never reaches
-//! another, and
-//! `models.infer` sends no tools either side of the render.
+//! Tests for the frozen sets: the first loop round that builds them fixes
+//! the section's tools, every later round sends the Static Set unchanged,
+//! and every offer after it raises. A round refused before the merge, or
+//! whose merge fails, freezes nothing, one section's sets never reach
+//! another, and `models.infer` sends no tools either side of the freeze.
 
 use runvil_parser::test_support::{one_section, prompt};
 
@@ -184,7 +183,6 @@ fn dynamic_offers_leave_the_rendered_schemas_byte_for_byte_unchanged() {
         ));
         loop_scenario(source)
             .offer("echo", echo_tool())
-            .offer("shape", scalar_schema_tool())
             .chat(&gateway)
             .run();
         tool_bytes(&gateway.requests())
@@ -193,8 +191,7 @@ fn dynamic_offers_leave_the_rendered_schemas_byte_for_byte_unchanged() {
     assert_eq!(
         run("tools.offer_dynamic('tools')\ntools.offer_dynamic(tools.packs)\n"),
         plain,
-        "a dynamic offer, even of a tool no round could advertise, changes nothing \
-         the model sees"
+        "a dynamic offer changes nothing the model sees"
     );
 }
 

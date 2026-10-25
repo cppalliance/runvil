@@ -37,6 +37,7 @@ impl runvil_lua::ErrorValue for Error {
             | Error::ParseStructured { .. }
             | Error::Completion(_)
             | Error::BindSchema { .. }
+            | Error::ToolMerge { .. }
             | Error::ModelRequired { .. }
             | Error::UnsupportedVersion(_)
             | Error::RequirementsUnmet { .. }
@@ -80,6 +81,7 @@ impl runvil_lua::ErrorValue for Error {
             | Error::LuaRuntime { .. }
             | Error::LuaCompile { .. }
             | Error::BindSchema { .. }
+            | Error::ToolMerge { .. }
             | Error::Substitution(_)
             | Error::ToolLoopExhausted
             | Error::ModelRequired { .. }

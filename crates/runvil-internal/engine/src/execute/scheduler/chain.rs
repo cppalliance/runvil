@@ -125,7 +125,6 @@ impl Scheduler {
             var: start.var,
             call_depth: start.call_depth,
             concurrency: start.concurrency,
-            advertised: None,
             anchor: ChatAnchor::default(),
         });
         Ok(id)

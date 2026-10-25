@@ -3,7 +3,6 @@
 //! arena holds one per chain it has started, indexed by
 //! [`ChainIndex`](super::ChainIndex).
 
-use std::collections::BTreeMap;
 use std::fmt;
 use std::num::NonZeroUsize;
 use std::sync::Arc;
@@ -18,7 +17,7 @@ use crate::execute::context::RunState;
 use crate::execute::protocol::{Answer, Blocked};
 use crate::execute::section_context::{SectionContext, TaskSeed};
 use crate::execute::walk_target::SlicePath;
-use crate::lua::{Advertised, UsageAnchor};
+use crate::lua::UsageAnchor;
 use crate::model::{Message, ModelId};
 use crate::parser::{Block, BodyText, Prompt, Section};
 use crate::{Error, Result};
@@ -265,14 +264,6 @@ pub(super) struct Chain {
     /// a spawned task and a call chain start with their parent's, and
     /// `tasks.concurrency` lowers it, clamped to the parent's.
     pub(super) concurrency: NonZeroUsize,
-    /// The tool scope the chain's last `chat` round advertised, keyed by
-    /// wire name, each name's tool id and vendor: a copy of the section's
-    /// rendered tool list's map. The round's answer is checked against it,
-    /// so a tool name the model invents or reaches for outside the scope
-    /// fails as out of scope, and each requested call's event is stamped
-    /// from it. It never routes a call. `None` before the chain's first
-    /// round.
-    pub(super) advertised: Option<BTreeMap<String, Advertised>>,
     /// The provider's token counts for the chain's `chat` rounds, which the
     /// next round's context precheck counts from.
     pub(super) anchor: ChatAnchor,

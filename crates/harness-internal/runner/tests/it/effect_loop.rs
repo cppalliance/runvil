@@ -166,7 +166,7 @@ async fn records_are_events_then_effects_then_answers_per_step() {
         payload(effect_positions[1]),
         json!({ "ToolCall": {
             "tool": "tests/runner/wait",
-            "alias": "tests_runner_wait",
+            "alias": "tests/runner/wait",
             "args": {},
             "origin": { "execution": "runner-test", "section": "Only", "caller": "script" }
         } })
@@ -239,7 +239,7 @@ async fn a_cancel_writes_one_dropped_answer_per_outstanding_effect() {
             json!({ "Timer": { "seconds": 30.0 } }),
             json!({ "ToolCall": {
                 "tool": "tests/runner/wait",
-                "alias": "tests_runner_wait",
+                "alias": "tests/runner/wait",
                 "args": {},
                 "origin": { "execution": "runner-test", "section": "Child", "caller": "script" }
             } }),

@@ -238,24 +238,15 @@ fn fixture_tool(name: &str) -> ToolInfo {
 }
 
 /// Builds a fixture tool set directly: each `(name, description)` pair is
-/// the offered tool `fixtures/<name>` under its wire name
-/// `fixtures_<name>`. This is the shape the run's offering arrives in; no
-/// Lua runs to produce it.
+/// the catalog tool `fixtures/<name>`, whose default wire name is
+/// `fixtures_<name>`. This is the shape the run catalog arrives in; no Lua
+/// runs to produce it.
 fn fixture_set(tools: &[(&str, &str)]) -> ToolSet {
-    ToolSet::new(
-        Vec::new(),
-        std::collections::BTreeMap::new(),
-        tools
-            .iter()
-            .map(|(name, description)| {
-                ToolBinding::for_test(
-                    &format!("fixtures_{name}"),
-                    description,
-                    &fixture_tool(name),
-                )
-            })
-            .collect(),
-    )
+    crate::test_vm::catalog_set(tools.iter().map(|(name, description)| {
+        let mut tool = fixture_tool(name);
+        (*description).clone_into(&mut tool.description);
+        tool
+    }))
 }
 
 /// A text record under `role`, with no tool calls.

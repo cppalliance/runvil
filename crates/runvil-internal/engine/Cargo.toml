@@ -17,9 +17,6 @@ serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
 mlua.workspace = true
-# Logs the tools the offering leaves out; the caller's subscriber decides
-# where a line goes, so the Engine still performs no I/O itself.
-tracing.workspace = true
 
 [features]
 # The Engine's own test driver, for `benches/models_loop.rs` alone, which

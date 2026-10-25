@@ -2,12 +2,10 @@
 //! unanswered call as one batch, the scheduler issues each catalog call in
 //! the same step and answers once every issued call has landed, and the
 //! records append in call order. An adhoc tool stops the batch and runs
-//! alone between its neighbors, a call that cannot be
-//! bound stops it and raises once the issued calls land, and a task
-//! cancelled while parked on a batch orphans every call in it and lists
-//! each in the step's `withdrawn`, which a decided run leaves empty. Each
-//! test steps a `Run` by hand, so it sees exactly what each step issued
-//! and withdrew.
+//! alone between its neighbors, and a task cancelled while parked on a
+//! batch orphans every call in it and lists each in the step's
+//! `withdrawn`, which a decided run leaves empty. Each test steps a `Run`
+//! by hand, so it sees exactly what each step issued and withdrew.
 
 use runvil_parser::test_support::one_section;
 use runvil_types::event::{Event, ReplyOrigin};
@@ -194,44 +192,6 @@ fn adhoc_calls_run_alone_between_their_neighbors() {
         other @ Step::Pending { .. } => panic!("the reply ends the section: {other:?}"),
     };
     assert_eq!(text_of(result), "c1,c2,c3,c4|grabbed b");
-}
-
-#[test]
-fn a_call_the_round_cannot_bind_stops_the_batch_and_raises_once_the_issued_calls_land() {
-    let md = one_section(
-        "tools.offer('tools')\n\
-         messages:user('asked')\n\
-         local ok, err = pcall(models.loop)\n\
-         return tostring(ok) .. ':' .. err.kind .. '|' .. #messages",
-    );
-    let mut run = loop_scenario(md).offer("echo", echo_tool()).into_run();
-    let (round, _) = only_effect(run.step());
-    // The read-only tool set can't make a round advertise a name it
-    // can't bind, so the test adds `nope` to the round's recorded scope:
-    // the answer passes the scope gate and the call binds to nothing.
-    run.scheduler_for_test().advertise_for_test(
-        0,
-        "nope",
-        runvil_types::tools::ToolId::parse("tools/nope").expect("a valid id"),
-    );
-    run.resume(
-        round,
-        calls_reply(&[
-            ("c1", "echo", json!({ "value": "one" })),
-            ("c2", "nope", json!({ "value": "two" })),
-            ("c3", "echo", json!({ "value": "three" })),
-        ]),
-    );
-    let (issued, effect) = only_effect(run.step());
-    assert_eq!(call_value(&effect), "one", "only c1 issues");
-    run.resume(issued, tool_text("first"));
-    let result = match run.step() {
-        Step::Done { result, .. } => result,
-        other @ Step::Pending { .. } => {
-            panic!("the caught raise ends the section, and c3 never issues: {other:?}")
-        }
-    };
-    assert_eq!(text_of(result), "false:unbound_tool|1");
 }
 
 #[test]

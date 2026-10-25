@@ -134,7 +134,7 @@ fn a_script_tools_call_issues_exactly_one_tool_call_effect() {
         rig.issued(),
         vec![EffectRecord::ToolCall {
             tool: ToolId::parse("tools/echo").expect("a valid id"),
-            alias: "echo".to_owned(),
+            alias: "tools/echo".to_owned(),
             args: json!({ "value": "hi" }),
             origin: origin("Only", ToolCaller::Script),
         }]

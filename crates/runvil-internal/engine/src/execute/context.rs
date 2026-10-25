@@ -18,7 +18,7 @@ use runvil_types::packs::{PackId, Prelude};
 use runvil_vfs::{Access, VfsRef};
 
 use crate::cancel::CancelHandle;
-use crate::lua::{ToolBinding, ToolSet};
+use crate::lua::ToolSet;
 use crate::model::{ModelSet, ModelView};
 use crate::parser::Prompt;
 use crate::untrusted::GuardNonce;
@@ -102,11 +102,6 @@ pub(crate) struct RunState {
     /// section VM (H1 included) among them, shares it with no lock and no
     /// copy.
     tool_set: Arc<ToolSet>,
-    /// Every tool in the prepared catalog, bound under its full id: the
-    /// fallback a script `tools.call` resolves when its id names no offered
-    /// tool. Kept apart from `tool_set`, the set section VMs scope from, so
-    /// a tool left out of the offering never enters a scope.
-    catalog_bindings: Arc<BTreeMap<String, ToolBinding>>,
     /// The run's model set as a read-only view: built from the prepared
     /// bindings at construction. The only writer is `models.default` (a
     /// prompt-wide fact) through the concrete handle the section VMs
@@ -137,12 +132,11 @@ impl RunState {
     /// Builds the context for one run of `prompt` over `ctx` and the inputs
     /// moved out of it. The turn counter is minted here (starting at zero),
     /// as are the run's shared tool and model sets - built from the catalog,
-    /// the roster, and the model bindings (only the bindings come from
-    /// [`RunContext::prepare`](super::RunContext::prepare), and they stay
-    /// empty on a caller-built context that skipped it) - and the full-id
-    /// bindings of `ctx`'s catalog; the nonce derives from `ctx`'s seed and
-    /// `when` renders `ctx`'s `started_at`, so two contexts over the same
-    /// inputs agree on both.
+    /// the roster, the vendors, and the model bindings (only the bindings
+    /// come from [`RunContext::prepare`](super::RunContext::prepare), and
+    /// they stay empty on a caller-built context that skipped it); the
+    /// nonce derives from `ctx`'s seed and `when` renders `ctx`'s
+    /// `started_at`, so two contexts over the same inputs agree on both.
     #[must_use]
     pub(super) fn new(
         prompt: Arc<Prompt>,
@@ -179,7 +173,6 @@ impl RunState {
             cancel: ctx.cancel.clone(),
             turns: Arc::new(AtomicU32::new(0)),
             tool_set,
-            catalog_bindings: Arc::new(bound::catalog_bindings(ctx)),
             models,
             model_set,
             when: Arc::from(ctx.started_at.to_rfc3339()),
@@ -208,16 +201,6 @@ impl RunState {
             .model_set
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner) = set;
-        self
-    }
-
-    /// Replaces the run's tool set with `set`, so a test can arm the run
-    /// with fixture bindings its catalog doesn't carry. Call it before the
-    /// run starts: every section VM shares the set it finds here.
-    #[cfg(test)]
-    #[must_use]
-    pub(crate) fn with_tool_set(mut self, set: ToolSet) -> Self {
-        self.tool_set = Arc::new(set);
         self
     }
 
@@ -298,13 +281,6 @@ impl RunState {
     /// constructs holds.
     pub(super) fn tool_set(&self) -> &Arc<ToolSet> {
         &self.tool_set
-    }
-
-    /// The binding for the catalog tool whose full id is `id`, the
-    /// fallback a script `tools.call` resolves when the id names no offered
-    /// tool.
-    pub(super) fn catalog_binding(&self, id: &str) -> Option<&ToolBinding> {
-        self.catalog_bindings.get(id)
     }
 
     /// The run's model set, read-only.
@@ -445,10 +421,6 @@ impl fmt::Debug for RunState {
             .field("cancel", &self.cancel)
             .field("turns", &self.turns)
             .field("tool_set", &self.tool_set)
-            .field(
-                "catalog_bindings",
-                &self.catalog_bindings.keys().collect::<Vec<_>>(),
-            )
             .field("models", &"<dyn ModelView>")
             .field("model_set", &self.model_set)
             .field("when", &self.when)

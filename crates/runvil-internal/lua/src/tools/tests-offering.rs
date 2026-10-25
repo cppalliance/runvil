@@ -2,11 +2,8 @@
 //! every accepted form, the string-shape rule, each refusal, the
 //! rendered-list refusal first, and the `tools` table they sit on.
 
-use std::collections::BTreeMap;
-
 use crate::RenderedTools;
-use crate::handles::ToolSet;
-use crate::test_vm::{lua_over, offer_set, offers, raised, scoped, tool_at};
+use crate::test_vm::{catalog_set, lua_over, offer_set, offers, raised, scoped, tool_at};
 
 /// The adhoc tool `grab` the forms below offer as an object.
 const GRAB: &str =
@@ -122,12 +119,7 @@ fn a_string_with_a_slash_is_a_tool_id_and_one_without_is_a_pack_id() {
 
 #[test]
 fn a_catalog_tool_object_under_the_adhoc_pack_is_refused_as_an_unknown_tool() {
-    let catalog_adhoc = crate::ToolBinding::from_info("adhoc_x", &tool_at("adhoc/x"));
-    let vm = lua_over(ToolSet::new(
-        Vec::new(),
-        BTreeMap::new(),
-        vec![catalog_adhoc],
-    ));
+    let vm = lua_over(catalog_set([tool_at("adhoc/x")]));
     let error: String = vm.eval(
         "local ok, err = pcall(tools.offer, tools.get('adhoc/x'))\n\
          assert(not ok, 'offering the catalog adhoc/x object raises')\n\
@@ -232,11 +224,8 @@ fn an_array_is_read_through_its_metamethods() {
 fn the_render_refusal_comes_before_every_other_check_and_defining_still_works() {
     let vm = lua_over(offer_set());
     vm.exec("tools.offer('web/search')");
-    vm.messages().attach_rendered_tools(RenderedTools {
-        schemas: Vec::new(),
-        dispatch: BTreeMap::new(),
-        dynamic: Vec::new(),
-    });
+    vm.messages()
+        .attach_rendered_tools(RenderedTools::default());
     for verb in ["tools.offer", "tools.offer_dynamic"] {
         for args in ["'gh'", "'web/search'", "'wbe'", "42", "", "'web', 'gh'"] {
             let error = raised(&vm, &format!("{verb}({args})"));

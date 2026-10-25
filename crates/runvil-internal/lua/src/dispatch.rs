@@ -107,10 +107,10 @@ impl ToolDispatch {
 /// except that a script-initiated call to a binding that describes tools
 /// receives its untrusted output verbatim, still marked untrusted, as a
 /// listing the script reads. A script-initiated call (`script` is `Some`)
-/// also fires the `ToolResult` event with the final content and the
-/// binding's vendor; a model-loop call fires no content event here: the
-/// loop reports the returned [`ToolDispatch`] under the model-issued call
-/// id.
+/// also fires the `ToolResult` event with the final content and `vendor`,
+/// the vendor of the tool's Pack; a model-loop call fires no content
+/// event here: the loop reports the returned [`ToolDispatch`] under the
+/// model-issued call id.
 ///
 /// `call_result` is the tool's own answer, however the caller obtained it.
 /// Nothing here awaits: the Harness performs the call, and the Engine
@@ -120,8 +120,13 @@ impl ToolDispatch {
 /// Returns [`Error::Tool`] when `call_result` is the tool's failure (its
 /// typed error retained as the cause), or the counts' own error when
 /// `binding`'s id was never seeded.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the dispatch body takes the call's answer beside every coordinate its report names, the tool's vendor included, in one call"
+)]
 pub fn prepare_dispatch(
     binding: &ToolBinding,
+    vendor: Option<&str>,
     call_result: std::result::Result<ToolOutput, ToolError>,
     counts: Option<&ToolCallCounts>,
     nonce: &GuardNonce,
@@ -168,7 +173,7 @@ pub fn prepare_dispatch(
             "",
             binding.alias(),
             Some(binding.id()),
-            binding.vendor(),
+            vendor,
             &content,
             trust,
         );
@@ -194,8 +199,13 @@ pub fn prepare_dispatch(
 ///
 /// # Errors
 /// Returns the counts' own error when `binding`'s id was never seeded.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the dispatch body takes the call's answer beside every coordinate its report names, the tool's vendor included, in one call"
+)]
 pub fn prepare_model_dispatch(
     binding: &ToolBinding,
+    vendor: Option<&str>,
     call_result: std::result::Result<ToolOutput, ToolError>,
     counts: Option<&ToolCallCounts>,
     nonce: &GuardNonce,
@@ -203,23 +213,31 @@ pub fn prepare_model_dispatch(
     section: &str,
     report: &ModelReport,
 ) -> Result<ToolDispatch> {
-    let outcome =
-        match prepare_dispatch(binding, call_result, counts, nonce, emitter, section, None) {
-            Ok(outcome) => outcome,
-            Err(Error::Tool { message, .. }) => ToolDispatch {
-                content: nonce.wrap(&message),
-                trust: OutputTrust::Untrusted,
-                listing: false,
-            },
-            Err(error) => return Err(error),
-        };
+    let outcome = match prepare_dispatch(
+        binding,
+        vendor,
+        call_result,
+        counts,
+        nonce,
+        emitter,
+        section,
+        None,
+    ) {
+        Ok(outcome) => outcome,
+        Err(Error::Tool { message, .. }) => ToolDispatch {
+            content: nonce.wrap(&message),
+            trust: OutputTrust::Untrusted,
+            listing: false,
+        },
+        Err(error) => return Err(error),
+    };
     emitter.tool_result(
         section,
         report.script.turn,
         &report.call_id,
         binding.alias(),
         Some(binding.id()),
-        binding.vendor(),
+        vendor,
         &outcome.content,
         outcome.trust,
     );

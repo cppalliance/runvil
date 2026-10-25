@@ -1,17 +1,15 @@
 //! Tests for the section's `messages` list and its parse through the
 //! protocol.
 
-use std::collections::BTreeMap;
-
 use mlua::{Lua, LuaSerdeExt, Value};
-use runvil_types::tools::ToolId;
+use runvil_types::tools::{ToolId, ToolInfo};
 use serde_json::json;
 
 use super::MessageList;
 use crate::protocol::{Request, YieldParse};
 use crate::test_vm::TestVm;
 use crate::tests::{system, user};
-use crate::{Advertised, Error, RenderedTools};
+use crate::{Error, RenderedTools, ToolBinding};
 
 #[path = "messages-tests-list.rs"]
 mod list;
@@ -46,46 +44,47 @@ fn messages_is_the_vms_one_empty_list_and_lua_reaches_no_other() {
     assert_eq!(vm.messages().to_records(), vec![user("u")]);
 }
 
-/// The advertised entry of the adhoc tool named `name`.
-fn adhoc(name: &str) -> Advertised {
-    Advertised {
-        id: ToolId::parse(&format!("adhoc/{name}")).expect("a fixture adhoc id is a tool id"),
-        vendor: None,
-    }
+/// The binding of the adhoc tool named `name`.
+fn adhoc(name: &str) -> ToolBinding {
+    let id = ToolId::parse(&format!("adhoc/{name}")).expect("a fixture adhoc id is a tool id");
+    ToolBinding::from_info(
+        name,
+        &ToolInfo::new(id, "fixture", json!({ "type": "object" })),
+    )
 }
 
-/// A rendered tool list advertising each of `names` as an adhoc tool.
-fn rendered(names: &[&str]) -> RenderedTools {
+/// Frozen sets holding each of `static_names` as an adhoc tool in the
+/// Static Set and each of `dynamic_names` in the Dynamic Set.
+fn rendered(static_names: &[&str], dynamic_names: &[&str]) -> RenderedTools {
     RenderedTools {
-        schemas: Vec::new(),
-        dispatch: names
-            .iter()
-            .map(|name| ((*name).to_owned(), adhoc(name)))
-            .collect(),
-        dynamic: Vec::new(),
+        static_set: static_names.iter().map(|name| adhoc(name)).collect(),
+        dynamic_set: dynamic_names.iter().map(|name| adhoc(name)).collect(),
     }
 }
 
 #[test]
-fn a_list_is_rendered_only_once_a_tool_list_is_attached_and_keeps_the_first() {
+fn a_list_is_rendered_only_once_sets_are_attached_and_keeps_the_first() {
     let list = MessageList::default();
-    assert!(!list.rendered(), "a fresh list holds no rendered tool list");
+    assert!(!list.rendered(), "a fresh list holds no frozen sets");
     assert!(list.rendered_tools().is_none());
-    list.clone().attach_rendered_tools(rendered(&["first"]));
-    assert!(list.rendered(), "a clone shares the attached list");
-    list.attach_rendered_tools(rendered(&["second"]));
-    let kept = list
-        .rendered_tools()
-        .expect("the list holds a rendered tool list");
+    list.clone()
+        .attach_rendered_tools(rendered(&["first"], &["later"]));
+    assert!(list.rendered(), "a clone shares the attached sets");
+    list.attach_rendered_tools(rendered(&["second"], &[]));
     assert_eq!(
-        kept.dispatch,
-        BTreeMap::from([("first".to_owned(), adhoc("first"))]),
-        "the first attached list stays"
+        *list.rendered_tools().expect("the list holds frozen sets"),
+        rendered(&["first"], &["later"]),
+        "the first attached sets stay"
     );
     assert_eq!(
         list.rendered_target("first"),
         Some(adhoc("first")),
-        "the attached list's entry reads by wire name"
+        "a Static Set binding reads by wire name"
+    );
+    assert_eq!(
+        list.rendered_target("later"),
+        None,
+        "a model never calls a Dynamic Set tool directly"
     );
     assert_eq!(list.rendered_target("second"), None);
 }

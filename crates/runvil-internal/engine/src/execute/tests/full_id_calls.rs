@@ -1,17 +1,18 @@
 //! Tests for script tool calls by canonical id: a script's `tools.call`
-//! names an offered tool by its id and records the tool's wire name, and
-//! reaches by id a catalog tool the run could not offer, recording the id.
+//! names any catalog tool by its id, one no round could advertise
+//! included, and its effect, record, and result name the tool by that id.
 //! A call binds no global and advertises nothing; a wire name is the
 //! model's alone, and a model-issued call never resolves an id.
 
 use runvil_parser::test_support::{one_section, prompt};
+use runvil_types::event::Event;
 
 use super::fixtures::{echo_tool, scoped_tool};
 use super::models_loop::catalog_scenario;
 use super::*;
-use crate::execute::run::{EffectRecord, ToolCallOrigin, ToolCaller};
+use crate::execute::run::{Effect, EffectAnswer, EffectRecord, Step, ToolCallOrigin, ToolCaller};
 use crate::test_support::rig::Rig;
-use crate::test_support::scenario::EXECUTION;
+use crate::test_support::scenario::{EXECUTION, only_effect, text_of};
 
 /// The echo fixture's full id.
 const ECHO_ID: &str = "tools/echo";
@@ -46,48 +47,60 @@ fn echo_and_concrete_sections(sections: &[(&str, &str)]) -> Scenario {
 }
 
 /// A catalog tool whose parameters are not a JSON object, a schema no
-/// model round can advertise, so the run cannot offer it; it echoes its
-/// `value` argument.
+/// model round can advertise, so a section that offers it fails; it
+/// echoes its `value` argument.
 #[track_caller]
 fn unofferable_tool() -> FnTool {
     let tool = FnTool::new("hidden/shape", json!("scalar"), |args| {
         let value = args["value"].as_str().unwrap_or_default();
         Ok(ToolOutput::trusted(format!("unoffered: {value}")))
     });
-    tool.description("A tool the run cannot offer.")
+    tool.description("A tool no round can advertise.")
 }
 
 #[test]
-fn a_script_call_by_id_records_the_offered_tools_wire_name() {
+fn a_script_calls_effect_record_and_result_name_the_tool_by_its_id() {
     let source = one_section("return tools.call('tools/echo', { value = 'hi' })");
-    let rig = Rig::run(catalog_scenario(source).tool(echo_tool()));
-    assert_eq!(rig.trace().text(), "echoed: hi");
+    let mut run = catalog_scenario(source).tool(echo_tool()).into_run();
+    let (id, effect) = only_effect(run.step());
+    let Effect::ToolCall { alias, .. } = &effect else {
+        panic!("the script's call is the one effect: {effect:?}");
+    };
+    assert_eq!(alias, ECHO_ID, "the effect names the id as its alias");
     assert_eq!(
-        rig.issued(),
-        vec![EffectRecord::ToolCall {
+        effect.record(),
+        EffectRecord::ToolCall {
             tool: echo_id(),
-            alias: ECHO_WIRE.to_owned(),
+            alias: ECHO_ID.to_owned(),
             args: json!({ "value": "hi" }),
             origin: script_origin(),
-        }]
+        }
     );
+    run.resume(
+        id,
+        EffectAnswer::ToolCall(Ok(ToolOutput::trusted("echoed: hi"))),
+    );
+    let Step::Done { result, events } = run.step() else {
+        panic!("the answered call ends the run");
+    };
+    assert_eq!(text_of(result), "echoed: hi");
+    let aliases: Vec<&str> = events
+        .iter()
+        .filter_map(|event| match event {
+            Event::ToolResult { alias, .. } => Some(alias.as_str()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(aliases, [ECHO_ID], "the result names the id as its alias");
 }
 
 #[test]
-fn a_script_reaches_a_catalog_tool_left_out_of_the_offering_by_id() {
+fn a_script_reaches_by_id_a_catalog_tool_no_round_could_advertise() {
     let source = one_section(
-        "assert(tools.get('hidden/shape') == nil, 'the tool is not offered')\n\
+        "assert(tools.get('hidden/shape') ~= nil, 'the tool is in the run catalog')\n\
          return tools.call('hidden/shape', { value = 'hi' })",
     );
-    let mut rig = Rig::start(catalog_scenario(source).tool(unofferable_tool()));
-    assert!(
-        rig.scheduler_for_test()
-            .tool_set_for_test()
-            .offered()
-            .is_empty(),
-        "a tool whose schema no round can advertise is left out of the offering"
-    );
-    let rig = rig.finish();
+    let rig = Rig::run(catalog_scenario(source).tool(unofferable_tool()));
     assert_eq!(rig.trace().text(), "unoffered: hi");
     assert_eq!(
         rig.issued(),
@@ -97,7 +110,7 @@ fn a_script_reaches_a_catalog_tool_left_out_of_the_offering_by_id() {
             args: json!({ "value": "hi" }),
             origin: script_origin(),
         }],
-        "the id stands as the alias of a tool the run could not offer"
+        "the id stands as the alias, as for every script call"
     );
 }
 
@@ -186,7 +199,7 @@ fn a_script_call_by_id_and_by_tool_object_issue_the_same_effect() {
     assert_eq!(rig.trace().text(), "echoed: hi|echoed: hi");
     let call = EffectRecord::ToolCall {
         tool: echo_id(),
-        alias: ECHO_WIRE.to_owned(),
+        alias: ECHO_ID.to_owned(),
         args: json!({ "value": "hi" }),
         origin: script_origin(),
     };
@@ -194,7 +207,7 @@ fn a_script_call_by_id_and_by_tool_object_issue_the_same_effect() {
 }
 
 #[test]
-fn a_name_that_is_no_catalog_id_is_unbound_and_lists_the_offered_ids() {
+fn a_name_that_is_no_catalog_id_is_unbound_and_lists_the_catalog_ids() {
     let rig = Rig::run(echo_and_concrete("return tools.call('tools/missing', {})"));
     let error = rig.trace().error().inner();
     match error {
@@ -203,7 +216,7 @@ fn a_name_that_is_no_catalog_id_is_unbound_and_lists_the_offered_ids() {
             assert_eq!(
                 ids,
                 &["tools/concrete".to_owned(), ECHO_ID.to_owned()],
-                "every offered tool's id is listed"
+                "every catalog tool's id is listed, in id order"
             );
         }
         other => panic!("expected the typed unbound-tool error, got {other:?}"),
@@ -212,7 +225,7 @@ fn a_name_that_is_no_catalog_id_is_unbound_and_lists_the_offered_ids() {
         error.to_string(),
         "tool \"tools/missing\" is not a tool in this run; \
          catalog tools: [\"tools/concrete\", \"tools/echo\"]",
-        "the message lists the offered ids"
+        "the message lists the catalog ids"
     );
     assert!(rig.issued().is_empty(), "nothing was issued");
 }

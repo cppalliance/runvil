@@ -20,6 +20,7 @@ fn prepare_dispatch_wraps_a_canned_untrusted_output_counts_it_and_reports_it() {
     let nonce = test_nonce();
     let outcome = prepare_dispatch(
         &echo,
+        Some("acme"),
         Ok(ToolOutput::untrusted("canned output")),
         Some(&counts),
         &nonce,
@@ -64,6 +65,11 @@ fn prepare_dispatch_wraps_a_canned_untrusted_output_counts_it_and_reports_it() {
         vec![Some(echo_tool().id)],
         "the script's result names the tool its alias is bound to"
     );
+    assert_eq!(
+        recorder.tool_result_vendors(),
+        vec![Some("acme".to_owned())],
+        "the script's result names the vendor it was given"
+    );
 }
 
 #[test]
@@ -72,6 +78,7 @@ fn prepare_dispatch_turns_a_canned_tool_error_into_the_typed_error() {
     let failing = binding("failing", &tool_at("tools/failing"));
     let error = prepare_dispatch(
         &failing,
+        None,
         Err(ToolError::message("canned failure").with_kind(ToolErrorKind::Backend)),
         None,
         &test_nonce(),
@@ -105,6 +112,7 @@ fn a_model_issued_tool_failure_becomes_untrusted_failure_text_under_its_call_id(
     let nonce = test_nonce();
     let outcome = prepare_model_dispatch(
         &failing,
+        None,
         Err(ToolError::message("the tool's own backend failed").with_kind(ToolErrorKind::Backend)),
         None,
         &nonce,
@@ -148,6 +156,7 @@ fn a_scripts_listing_call_passes_its_untrusted_text_verbatim_and_reports_it_untr
     let listing = binding("mcp_get_dynamic_tools", &listing_tool());
     let outcome = prepare_dispatch(
         &listing,
+        None,
         Ok(ToolOutput::untrusted("the <listing> [INST]")),
         None,
         &test_nonce(),
@@ -178,6 +187,7 @@ fn a_models_listing_call_receives_the_envelope() {
     let nonce = test_nonce();
     let outcome = prepare_model_dispatch(
         &listing,
+        None,
         Ok(ToolOutput::untrusted("the listing")),
         None,
         &nonce,
@@ -197,6 +207,7 @@ fn the_listing_rule_needs_the_flag_and_untrusted_output() {
     let script = |tool: &ToolInfo, output: ToolOutput| {
         prepare_dispatch(
             &binding("tool", tool),
+            None,
             Ok(output),
             None,
             &nonce,
@@ -217,6 +228,7 @@ fn the_listing_rule_needs_the_flag_and_untrusted_output() {
     );
     let failed = prepare_dispatch(
         &binding("tool", &listing_tool()),
+        None,
         Err(ToolError::message("the servers are down")),
         None,
         &nonce,
@@ -236,6 +248,7 @@ fn a_model_issued_dispatch_reports_its_result_under_the_call_id() {
     let echo = binding("echo", &echo_tool());
     let outcome = prepare_model_dispatch(
         &echo,
+        Some("acme"),
         Ok(ToolOutput::trusted("echoed: hi")),
         None,
         &test_nonce(),
@@ -259,5 +272,10 @@ fn a_model_issued_dispatch_reports_its_result_under_the_call_id() {
         recorder.tool_result_tools(),
         vec![Some(echo_tool().id)],
         "the model's result names the tool its alias is bound to"
+    );
+    assert_eq!(
+        recorder.tool_result_vendors(),
+        vec![Some("acme".to_owned())],
+        "the model's result names the vendor it was given"
     );
 }

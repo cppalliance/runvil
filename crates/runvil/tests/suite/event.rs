@@ -92,9 +92,10 @@ fn content_events_pair_each_tool_result_with_its_caller_into_a_transcript() -> T
         transcript,
         [
             "Infer reply: hi there",
-            "example_text_shout (acme/example/text/shout) for the script: HI THERE"
+            "example/text/shout (acme/example/text/shout) for the script: HI THERE"
         ],
-        "a tool's result names its wire name and the vendor-qualified tool it resolved to"
+        "a script's tool result names the id it called and the vendor-qualified tool it \
+         resolved to"
     );
     Ok(())
 }

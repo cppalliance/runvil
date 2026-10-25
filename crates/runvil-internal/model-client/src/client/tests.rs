@@ -226,28 +226,38 @@ fn with_model_replaces_the_served_model_name_and_keeps_the_rest() {
 
 #[test]
 fn a_tool_schema_reads_back_its_name_description_and_parameters() {
-    let schema = tool_schema_new("web.search", "Search the web.", json_object())
+    let schema = tool_schema_new("web_search", "Search the web.", json_object())
         .expect("a valid schema is accepted");
-    assert_eq!(schema.name(), "web.search");
+    assert_eq!(schema.name(), "web_search");
     assert_eq!(schema.description(), "Search the web.");
     assert_eq!(schema.parameters(), &json_object());
 }
 
 #[test]
 fn tool_schema_new_validates_wire_name_and_object_schema() {
-    // A valid name and object schema are accepted.
-    let schema =
-        tool_schema_new("web.search-1", "desc", json_object()).expect("a valid schema is accepted");
-    assert_eq!(schema.name, "web.search-1");
-    // An empty or malformed name is rejected.
-    assert!(matches!(
-        tool_schema_new("", "d", json_object()),
-        Err(ToolSchemaError::InvalidName { .. })
-    ));
-    assert!(matches!(
-        tool_schema_new("bad name", "d", json_object()),
-        Err(ToolSchemaError::InvalidName { .. })
-    ));
+    // A letter, then up to 63 letters, digits, `_`, or `-`, is accepted.
+    for name in ["a", "Web", "web_search-1", &format!("a{}", "z".repeat(63))] {
+        let schema = tool_schema_new(name, "desc", json_object()).expect("a valid schema");
+        assert_eq!(schema.name, name);
+    }
+    // An empty name, a leading non-letter, a `.`, a space, and a 65th
+    // character are rejected.
+    for name in [
+        "",
+        "1search",
+        "_search",
+        "web.search",
+        "bad name",
+        &format!("a{}", "z".repeat(64)),
+    ] {
+        assert!(
+            matches!(
+                tool_schema_new(name, "d", json_object()),
+                Err(ToolSchemaError::InvalidName { .. })
+            ),
+            "{name:?} must be refused"
+        );
+    }
     // A non-object JSON Schema is rejected.
     assert!(matches!(
         tool_schema_new("ok", "d", json!([1, 2, 3])),

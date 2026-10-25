@@ -46,7 +46,7 @@ pub use adhoc::AdhocTools;
 pub use inject::InjectFailure;
 pub use run::CoroStep;
 pub(crate) use run::scalar_return;
-pub use state::{current_dynamic_tools, current_tool_bindings, resolve_model_binding};
+pub use state::{current_dynamic_set, current_tool_bindings, resolve_model_binding};
 
 /// Default per-VM Lua heap ceiling, matching the executor's `RunLimits`.
 pub(crate) const DEFAULT_LUA_MEMORY_BYTES: usize = 64 * 1024 * 1024;
@@ -115,9 +115,9 @@ pub struct Injected {
 #[derive(Debug)]
 pub struct SectionVm<S = Injected> {
     lua: Lua,
-    /// The run's shared tool set: the declared Packs and the offering.
-    /// Shared with the run, not snapshotted; nothing writes it during a
-    /// run.
+    /// The run's shared tool set: the declared Packs, the roster, and the
+    /// run catalog. Shared with the run, not snapshotted; nothing writes
+    /// it during a run.
     pub(crate) bound_tools: Arc<ToolSet>,
     /// The run's shared model set: the frontmatter's filled roles plus the
     /// prompt-wide default. Shared for the same reason (`models.default`).
@@ -243,8 +243,8 @@ impl SectionVm<Uninjected> {
 
     /// Creates a section VM sharing the run's tool and model sets.
     ///
-    /// The sets are the run's own handles, not snapshots: the offering and
-    /// the filled roles back the validating `tools`/`models` tables that
+    /// The sets are the run's own handles, not snapshots: the run catalog
+    /// and the filled roles back the validating `tools`/`models` tables that
     /// [`inject_values_with_var`](Self::inject_values_with_var) installs,
     /// and the prompt-wide fact a section records (`models.default`) lands
     /// where every later section sees it. Nothing writes the tool set

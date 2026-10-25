@@ -31,12 +31,12 @@ impl MessageList {
         Snapshot(self.state().records.clone())
     }
 
-    /// Puts the records back; the send state and the rendered tool list stay.
+    /// Puts the records back; the send state and the frozen sets stay.
     pub(crate) fn restore(&self, snapshot: Snapshot) {
         self.state().records = snapshot.0;
     }
 
-    /// Removes every record; the send state and the rendered tool list stay.
+    /// Removes every record; the send state and the frozen sets stay.
     pub(crate) fn clear(&self) {
         self.state().records.clear();
     }

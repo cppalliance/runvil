@@ -191,10 +191,10 @@ impl SectionContext {
     /// running the same one-time scope install the first prose block
     /// performs (the counts and the Lua `tools.calls` table, the model
     /// freeze, the `sys.model` enrichment), then seeding any of `ids` not
-    /// seeded yet. `ids` is the section's live scope before its first
-    /// render and its rendered list after. The returned handle shares the
-    /// installed counts, so the dispatch task increments them off the
-    /// driver thread.
+    /// seeded yet. `ids` is the section's live static offers before it
+    /// freezes its sets and its Static Set after. The returned handle
+    /// shares the installed counts, so the dispatch task increments them
+    /// off the driver thread.
     ///
     /// # Errors
     /// Returns the [`Error`] of the scope install or the
@@ -269,8 +269,8 @@ fn prose_renderer(
 /// gated on the counts slot: the first consumer - the section's first
 /// script-initiated `tools.call` - performs the install, and every later
 /// call is a no-op. The counts install backs the Lua `tools.calls` table,
-/// seeded with `ids`: the section's live scope before its first render
-/// and its rendered list after. The model resolution freezes the
+/// seeded with `ids`: the section's live static offers before it freezes
+/// its sets and its Static Set after. The model resolution freezes the
 /// section's binding and enriches `sys.model`.
 ///
 /// # Errors

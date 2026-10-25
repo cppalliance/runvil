@@ -245,6 +245,17 @@ impl Recorder {
             })
             .collect()
     }
+
+    /// The vendor every `ToolResult` the emitter saw names, in order.
+    pub(crate) fn tool_result_vendors(&self) -> Vec<Option<String>> {
+        self.events()
+            .iter()
+            .filter_map(|event| match event {
+                Event::ToolResult { vendor, .. } => Some(vendor.clone()),
+                _ => None,
+            })
+            .collect()
+    }
 }
 
 /// An emitter whose events nobody reads: the silent stand-in a test passes

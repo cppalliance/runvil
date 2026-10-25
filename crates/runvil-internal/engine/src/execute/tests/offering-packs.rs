@@ -75,7 +75,7 @@ fn an_offered_pack_reaches_only_the_rounds_of_the_section_entry_that_offered_it(
     assert_eq!(
         by_section,
         vec![
-            ("A".to_owned(), names(&["kit_a", "web_fetch", "kit_b"])),
+            ("A".to_owned(), names(&["kit_a", "kit_b", "web_fetch"])),
             ("B".to_owned(), names(&[])),
             ("Called".to_owned(), names(&[])),
             ("Packs".to_owned(), names(&["kit_a", "kit_b"])),
@@ -83,5 +83,64 @@ fn an_offered_pack_reaches_only_the_rounds_of_the_section_entry_that_offered_it(
         ],
         "each section entry's round advertises only its own offers, \
          a required section's offers included"
+    );
+}
+
+#[test]
+fn two_sections_that_offer_one_pack_each_route_a_model_call_by_their_own_sets() {
+    let gateway = ScriptedChat::new(vec![
+        calls(&[("call_1", "kit_a", r#"{"value":"from a"}"#)]),
+        text("a done"),
+        calls(&[("call_2", "kit_a", r#"{"value":"from b"}"#)]),
+        text("b done"),
+    ]);
+    let source = prompt(
+        "",
+        &[
+            ("A", "tools.offer('kit')\nmessages:user('A')\nmodels.loop()"),
+            (
+                "B",
+                "tools.offer('kit')\n\
+                 tools.offer(tools.adhoc({ name = 'kit_a', description = 'Mine', \
+                   parameters = { value = 'string' } }, function(args) return 'adhoc ' .. args.value end))\n\
+                 messages:user('B')\n\
+                 models.loop()\n\
+                 return messages[3].content",
+            ),
+        ],
+    );
+    let rig = Rig::run(
+        catalog_scenario(source)
+            .tool(offered_tool("kit/a"))
+            .tool(offered_tool("kit/b"))
+            .chat(&gateway),
+    );
+    assert_eq!(
+        rig.trace().text(),
+        "adhoc from b",
+        "B's adhoc tool answers B's call"
+    );
+    let (advertised, calls) = rounds_and_calls(rig.issued());
+    let names =
+        |names: &[&str]| -> Vec<String> { names.iter().map(|name| (*name).to_owned()).collect() };
+    assert_eq!(
+        advertised,
+        vec![
+            names(&["kit_a", "kit_b"]),
+            names(&["kit_a", "kit_b"]),
+            names(&["kit_b", "kit_a"]),
+            names(&["kit_b", "kit_a"]),
+        ],
+        "each entry advertises its own sets"
+    );
+    assert_eq!(
+        calls,
+        vec![EffectRecord::ToolCall {
+            tool: ToolId::parse("kit/a").expect("valid id"),
+            alias: "kit_a".to_owned(),
+            args: json!({ "value": "from a" }),
+            origin: ToolCallOrigin::new(EXECUTION, "A", ToolCaller::Model),
+        }],
+        "only A's call reaches the catalog tool"
     );
 }

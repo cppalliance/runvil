@@ -11,7 +11,7 @@
 //! is invoked only through `tools.call(tool, arguments)`.
 
 use mlua::{LuaSerdeExt, MetaMethod, UserData, UserDataFields, UserDataMethods, Value};
-use runvil_types::tools::ToolId;
+use runvil_types::tools::{ToolId, ToolInfo};
 use serde_json::Value as Json;
 
 use crate::handles::ToolBinding;
@@ -27,7 +27,7 @@ pub(crate) struct LuaToolHandle {
 }
 
 impl LuaToolHandle {
-    /// Builds the object for a tool from its binding: the id, the
+    /// Builds the object for an adhoc tool from its binding: the id, the
     /// declared description, and the parameter schema.
     #[must_use]
     pub(crate) fn from_binding(binding: &ToolBinding) -> Self {
@@ -35,6 +35,17 @@ impl LuaToolHandle {
             id: binding.id().clone(),
             description: binding.description().to_owned(),
             parameters: binding.schema().clone(),
+        }
+    }
+
+    /// Builds the object for a catalog tool from its info: the id, the
+    /// declared description, and the parameter schema.
+    #[must_use]
+    pub(crate) fn from_info(info: &ToolInfo) -> Self {
+        Self {
+            id: info.id.clone(),
+            description: info.description.clone(),
+            parameters: info.parameters_schema.clone(),
         }
     }
 

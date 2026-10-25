@@ -1,6 +1,6 @@
-//! Tests for what the section's offers render: the static list in call
-//! order, Pack expansion at the render, adhoc shadowing among offered
-//! tools, and the dynamic list beside it.
+//! Tests for the tools the section's offers name, which the merge takes:
+//! the static offers in call order, Pack expansion at the freeze, offers
+//! deduped by id only, and the dynamic offers beside them.
 
 use crate::test_vm::{dynamic, lua_over, offer_set, scoped};
 
@@ -73,36 +73,27 @@ fn the_adhoc_pack_expands_at_the_render_while_its_tools_array_is_read_at_the_cal
 }
 
 #[test]
-fn an_offered_adhoc_tool_shadows_an_offered_catalog_tool_of_its_wire_name() {
-    let shadowed = lua_over(offer_set());
-    shadowed.exec(
+fn offers_that_share_a_wire_name_all_reach_the_merge_and_only_an_id_dedupes() {
+    let vm = lua_over(offer_set());
+    vm.exec(
         "tools.offer('web')\n\
-         tools.offer(tools.adhoc({ name = 'web_search', description = 'Mine' }, function() end))",
+         tools.offer(tools.adhoc({ name = 'web_search', description = 'Mine' }, function() end))\n\
+         tools.offer_dynamic('web')",
     );
-    assert_eq!(scoped(&shadowed), ["web_fetch", "web_search"]);
-    let (set, runtime) = shadowed.tool_bag_handles();
-    let bound = crate::current_tool_bindings(&set, &runtime, shadowed.adhoc_tools())
-        .expect("the scope resolves");
-    assert_eq!(
-        bound[1].id().to_string(),
-        "adhoc/web_search",
-        "the adhoc tool is rendered and the catalog tool dropped where it was offered"
-    );
-    let unoffered = lua_over(offer_set());
-    unoffered.exec(
-        "tools.adhoc({ name = 'web_search', description = 'Mine' }, function() end)\n\
-         tools.offer('web')",
-    );
-    let (set, runtime) = unoffered.tool_bag_handles();
-    let ids: Vec<String> = crate::current_tool_bindings(&set, &runtime, unoffered.adhoc_tools())
-        .expect("the scope resolves")
+    let (set, runtime) = vm.tool_bag_handles();
+    let ids: Vec<String> = crate::current_tool_bindings(&set, &runtime, vm.adhoc_tools())
+        .expect("the static offers resolve")
         .iter()
-        .map(|binding| binding.id().to_string())
+        .map(|tool| tool.id().to_string())
         .collect();
     assert_eq!(
         ids,
-        ["web/fetch", "web/search"],
-        "a defined but unoffered adhoc tool shadows nothing"
+        ["web/fetch", "web/search", "adhoc/web_search"],
+        "an adhoc tool beside a catalog tool of its wire name drops neither"
+    );
+    assert!(
+        dynamic(&vm).is_empty(),
+        "a dynamic offer of ids the static offers hold adds nothing"
     );
 }
 
@@ -136,21 +127,6 @@ fn the_dynamic_list_keeps_what_the_static_list_lacks_in_offer_order_once() {
     assert!(
         scoped(&vm).is_empty(),
         "dynamic offers never reach the static list"
-    );
-}
-
-#[test]
-fn a_catalog_tool_a_static_adhoc_tool_shadows_stays_out_of_the_dynamic_list() {
-    let vm = lua_over(offer_set());
-    vm.exec(
-        "tools.offer(tools.adhoc({ name = 'web_search', description = 'Mine' }, function() end))\n\
-         tools.offer_dynamic('web')",
-    );
-    assert_eq!(scoped(&vm), ["web_search"]);
-    assert_eq!(
-        dynamic(&vm),
-        ["web/fetch"],
-        "a tool whose wire name the static list holds is skipped"
     );
 }
 

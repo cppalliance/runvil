@@ -129,7 +129,7 @@ fn a_scripts_listing_call_returns_the_text_unwrapped_and_reports_it_untrusted() 
     );
     assert_eq!(
         results(&trace),
-        [result("", "tools_listing", LISTING, false)],
+        [result("", "tools/listing", LISTING, false)],
         "the result event holds the text the script received, untrusted"
     );
 }
@@ -162,7 +162,7 @@ fn a_model_call_and_a_model_call_to_an_adhoc_wrapper_receive_the_same_envelope()
     let results = results(&trace);
     for expected in [
         result("call_1", "tools_listing", &envelope, false),
-        result("", "tools_listing", LISTING, false),
+        result("", "tools/listing", LISTING, false),
         result("call_2", "wrap", &envelope, false),
     ] {
         assert!(results.contains(&expected), "{expected:?} in {results:?}");
@@ -226,7 +226,7 @@ fn a_failed_listing_call_and_a_trusted_listing_mark_nothing() {
     let results = results(&trace);
     for expected in [
         result("call_1", "failed", "listed false", true),
-        result("", "tools_trusted_listing", LISTING, true),
+        result("", "tools/trusted_listing", LISTING, true),
         result("call_2", "trusted", LISTING, true),
     ] {
         assert!(results.contains(&expected), "{expected:?} in {results:?}");

@@ -1,15 +1,15 @@
 //! Per-VM tool runtime state: call counts, the offers a section made, and
-//! the tool list its first loop round rendered from them.
+//! the frozen sets its first model call built from them.
 
 use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
 
-use runvil_model_client::client::ToolSchema;
 use runvil_types::packs::PackId;
-use runvil_types::tools::ToolId;
+use runvil_types::tools::{ToolId, ToolInfo};
 
 use crate::error::{Error, Result};
+use crate::handles::ToolBinding;
 
 /// Shared per-VM tool-call counts, keyed by tool id and seeded at 0 for
 /// every id the installer was given. A dispatch seeds a missing key on
@@ -92,22 +92,44 @@ pub enum OfferTarget {
     Pack(PackId),
 }
 
-/// Which list an offer feeds.
+/// Which set an offer feeds.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OfferMode {
-    /// The rendered list, which every round of the section sends.
+    /// The Static Set, which every round of the section sends.
     Static,
-    /// The dynamic list, stored beside the rendered list.
+    /// The Dynamic Set, frozen beside the Static Set.
     Dynamic,
 }
 
-/// One remembered offer: what it names and which list it feeds.
+/// One remembered offer: what it names and which set it feeds.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Offer {
     /// What the offer names.
     pub target: OfferTarget,
-    /// Which list the offer feeds.
+    /// Which set the offer feeds.
     pub mode: OfferMode,
+}
+
+/// One tool a section's offers name, as the merge takes it: a catalog
+/// tool as the run catalog describes it, or an adhoc tool under its
+/// binding.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum OfferedTool {
+    /// A catalog tool, as the run catalog describes it.
+    Catalog(ToolInfo),
+    /// An adhoc tool, bound under its name.
+    Adhoc(ToolBinding),
+}
+
+impl OfferedTool {
+    /// Returns the tool's id.
+    #[must_use]
+    pub fn id(&self) -> &ToolId {
+        match self {
+            OfferedTool::Catalog(info) => &info.id,
+            OfferedTool::Adhoc(binding) => binding.id(),
+        }
+    }
 }
 
 /// The offers one section VM made, in call order.
@@ -138,29 +160,28 @@ impl ToolRuntime {
     }
 }
 
-/// One advertised tool: its id and its Pack's vendor.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Advertised {
-    /// The tool's id.
-    pub id: ToolId,
-    /// The vendor of the tool's Pack, as the caller reported it; `None`
-    /// when it reported none, and for an adhoc tool.
-    pub vendor: Option<String>,
+/// The two sets a section entry froze at its first model call: the one
+/// record of what its model was shown. Each holds its tools' bindings
+/// under their wire names, in merge order, and no wire name appears twice
+/// across them.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct RenderedTools {
+    /// The Static Set: the tools every round of the section advertises,
+    /// in schema order.
+    pub static_set: Vec<ToolBinding>,
+    /// The Dynamic Set: the tools the section offered dynamically, which
+    /// no round advertises.
+    pub dynamic_set: Vec<ToolBinding>,
 }
 
-/// The tool list a section's first loop round rendered.
-#[derive(Debug, Clone)]
-pub struct RenderedTools {
-    /// The schemas every round of the section sends.
-    pub schemas: Vec<ToolSchema>,
-    /// Each advertised wire name's tool.
-    ///
-    /// Every round copies this map onto its chain: the round's answer is
-    /// gated against its keys, and the reported batch names each tool's
-    /// id and vendor. A model's call is routed by the entry under its wire
-    /// name.
-    pub dispatch: BTreeMap<String, Advertised>,
-    /// The tools the section's dynamic offers named that the rendered
-    /// list leaves out, in offer order.
-    pub dynamic: Vec<ToolId>,
+impl RenderedTools {
+    /// Returns the binding the Static Set holds under `wire_name`. A
+    /// Dynamic Set name finds nothing, because a model never calls a
+    /// Dynamic Set tool directly.
+    #[must_use]
+    pub fn static_binding(&self, wire_name: &str) -> Option<&ToolBinding> {
+        self.static_set
+            .iter()
+            .find(|binding| binding.alias() == wire_name)
+    }
 }

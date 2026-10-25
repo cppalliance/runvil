@@ -105,8 +105,8 @@ impl Scheduler {
         }
         // Every answer is applied here, on the caller's thread: the
         // round's events fire against the parked chain's own reporting
-        // handles, a chat round's tool calls are checked against the scope
-        // the chain advertised, a timer's firing wakes its waiter, and a
+        // handles, a chat round's tool calls are checked against its
+        // section's frozen sets, a timer's firing wakes its waiter, and a
         // fatal store conflict ends the run.
         if let Err(error) = self.apply_answer(id, answer) {
             self.end(Err(error));

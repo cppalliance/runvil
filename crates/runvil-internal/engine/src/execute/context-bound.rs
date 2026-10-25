@@ -1,24 +1,21 @@
 //! The run-scoped sets built from the prepared bindings, and the `argv`
 //! derivation: the pieces `RunState::new` assembles once per run.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 
-use runvil_model_client::detail;
 use runvil_parser::ModelKeyword;
 use runvil_types::packs::PackId;
-use runvil_types::tools::ToolInfo;
 
-use crate::lua::{ToolBinding, ToolSet};
+use crate::lua::ToolSet;
 use crate::model::{ModelBinding, ModelInvocation, ModelSet};
 use crate::parser::Prompt;
 
 use super::super::config::RunContext;
 
 /// Builds the run's shared tool set: the frontmatter's declared Packs,
-/// the `roster` moved out of the context, and every catalog tool the run
-/// can offer bound with the tool's info (its schema, description, output
-/// kind, and listing flag) and its Pack's vendor, so run-time execution
-/// never consults the catalog again and never holds an implementation.
+/// the `roster` moved out of the context, the run catalog, which shares
+/// the context's handle, and each Pack's vendor. Nothing is bound here:
+/// each section entry binds the tools it offers when it freezes its sets.
 pub(super) fn bound_tool_set(
     prompt: &Prompt,
     ctx: &RunContext,
@@ -32,68 +29,9 @@ pub(super) fn bound_tool_set(
             .map(|entry| entry.id().clone())
             .collect(),
         roster,
-        offered_bindings(ctx),
+        ctx.tools.clone(),
+        ctx.vendors.clone(),
     )
-}
-
-/// Binds the offering: every catalog tool, in tool id order, under its
-/// wire name, its id with `/` and `.` replaced by `_` (`web/fetch` becomes
-/// `web_fetch`). A tool whose name can't be offered is left out with a log
-/// line; a script still reaches it by id through the catalog bindings.
-fn offered_bindings(ctx: &RunContext) -> Vec<ToolBinding> {
-    let mut tools: Vec<&ToolInfo> = ctx.tools.tools().iter().collect();
-    tools.sort_unstable_by(|left, right| left.id.cmp(&right.id));
-    let mut taken = BTreeSet::new();
-    let mut offered = Vec::new();
-    for tool in tools {
-        let name = tool.id.to_string().replace(['/', '.'], "_");
-        if let Some(reason) = offer_refusal(&name, tool, &taken) {
-            tracing::warn!(tool = %tool.id, %name, %reason, "a tool is left out of the offering");
-            continue;
-        }
-        offered.push(catalog_binding(ctx, &name, tool));
-        taken.insert(name);
-    }
-    offered
-}
-
-/// Binds `tool` under `alias`, stamped with the vendor the caller
-/// reported for its Pack, if any.
-fn catalog_binding(ctx: &RunContext, alias: &str, tool: &ToolInfo) -> ToolBinding {
-    ToolBinding::from_info(alias, tool).with_vendor(ctx.vendors.get(&tool.id.pack()).cloned())
-}
-
-/// Why `tool` can't be offered under `name`: no model round could
-/// advertise it, or an earlier offered tool has it. `None` when it can be
-/// offered.
-fn offer_refusal(name: &str, tool: &ToolInfo, taken: &BTreeSet<String>) -> Option<String> {
-    if let Err(error) = detail::tool_schema_new(
-        name,
-        tool.description.as_str(),
-        tool.parameters_schema.clone(),
-    ) {
-        return Some(error.to_string());
-    }
-    if taken.contains(name) {
-        return Some("an earlier offered tool has the same name".to_owned());
-    }
-    None
-}
-
-/// Binds every tool in the prepared catalog under its full id, keyed by
-/// that id: what a script `tools.call` falls back to when the id names no
-/// offered tool. These bindings stay out of the tool set, so they never
-/// enter a section's scope and are never advertised.
-pub(super) fn catalog_bindings(ctx: &RunContext) -> BTreeMap<String, ToolBinding> {
-    ctx.tools
-        .tools()
-        .iter()
-        .map(|tool| {
-            let id = tool.id.to_string();
-            let binding = catalog_binding(ctx, &id, tool);
-            (id, binding)
-        })
-        .collect()
 }
 
 /// The keyword's stable kebab-case spelling, journaled onto the binding as

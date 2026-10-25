@@ -1,6 +1,7 @@
-//! Tests for the offering: every catalog tool the run can offer, bound
-//! under its wire name, which `tools.offer` scopes by id, Pack, or object,
-//! a model call resolves by wire name, and a script call resolves by id.
+//! Tests for offering catalog tools: the run catalog every section entry
+//! reads, which `tools.offer` offers by id, Pack, or object, a model call
+//! reaches by wire name in its section's frozen sets, and a script call
+//! reaches by id.
 
 use runvil_parser::test_support::{PromptSource, one_section, prompt};
 
@@ -8,7 +9,6 @@ use super::fixtures::echo_tool;
 use super::models_loop::catalog_scenario;
 use super::*;
 use crate::execute::run::{EffectRecord, ToolCallOrigin, ToolCaller};
-use crate::execute::scope::prepare_scoped_tools;
 use crate::test_support::rig::Rig;
 use crate::test_support::scenario::EXECUTION;
 use runvil_types::packs::PackId;
@@ -36,100 +36,64 @@ fn offered_tool(id: &str) -> FnTool {
     )
 }
 
-/// A tool whose parameters are not a JSON object, which no model round can
-/// advertise.
-#[track_caller]
-fn shapeless_tool(id: &str) -> FnTool {
-    tool_at(id, json!("scalar"))
-}
-
-/// The one-section prompt that declares the `tools` Pack and returns at
-/// once, prepared against a catalog of `tools`.
-fn declaring_tools(tools: Vec<FnTool>) -> Scenario {
-    let source = prompt("uses: [tools]", &[("Only", "return 'ok'")]);
-    tools
-        .into_iter()
-        .fold(catalog_scenario(source), Scenario::tool)
-}
-
-/// The offered bindings' names and ids, in the set's order.
-#[track_caller]
-fn offered(rig: &mut Rig) -> Vec<(String, String)> {
-    rig.scheduler_for_test()
-        .tool_set_for_test()
-        .offered()
-        .iter()
-        .map(|binding| (binding.alias().to_owned(), binding.id().to_string()))
-        .collect()
-}
-
-fn pair(name: &str, id: &str) -> (String, String) {
-    (name.to_owned(), id.to_owned())
-}
-
 #[test]
-fn the_offering_binds_every_catalog_tool_under_its_wire_name_in_id_order() {
-    let mut rig = Rig::start(declaring_tools(vec![
-        echo_tool(),
-        offered_tool("tools/concrete"),
-        offered_tool("gh/search"),
-        offered_tool("alpha/zed"),
-        offered_tool("gh/issues.list"),
-        offered_tool("alpha/fetch"),
-    ]));
-    assert_eq!(
-        offered(&mut rig),
-        vec![
-            pair("alpha_fetch", "alpha/fetch"),
-            pair("alpha_zed", "alpha/zed"),
-            pair("gh_issues_list", "gh/issues.list"),
-            pair("gh_search", "gh/search"),
-            pair("tools_concrete", "tools/concrete"),
-            pair("tools_echo", "tools/echo"),
-        ],
-        "a declared Pack's tools are offered beside every other Pack's"
+fn the_run_catalog_keeps_its_order_and_a_pack_offer_expands_in_id_order() {
+    let gateway = ScriptedChat::new(vec![text("done")]);
+    let source = prompt(
+        "uses: [tools]",
+        &[(
+            "Only",
+            "tools.offer('gh')\n\
+             tools.offer('alpha')\n\
+             messages:user('go')\n\
+             models.loop()\n\
+             return tools.get('alpha/fetch').description",
+        )],
+    );
+    let mut rig = Rig::start(
+        catalog_scenario(source)
+            .tool(echo_tool())
+            .tool(offered_tool("gh/search"))
+            .tool(offered_tool("alpha/zed"))
+            .tool(offered_tool("gh/issues.list"))
+            .tool(offered_tool("alpha/fetch"))
+            .chat(&gateway),
     );
     let set = rig.scheduler_for_test().tool_set_for_test();
+    let ids: Vec<String> = set
+        .catalog()
+        .tools()
+        .iter()
+        .map(|info| info.id.to_string())
+        .collect();
+    assert_eq!(
+        ids,
+        [
+            "tools/echo",
+            "gh/search",
+            "alpha/zed",
+            "gh/issues.list",
+            "alpha/fetch"
+        ],
+        "the run catalog keeps the order its tools were supplied in"
+    );
     assert_eq!(
         set.declared(),
         [PackId::parse("tools").expect("valid Pack")],
         "the set records the declared Packs"
     );
-    let fetch = set
-        .offered_binding("alpha_fetch")
-        .expect("the offered name resolves");
+    let rig = rig.finish();
     assert_eq!(
-        fetch.description(),
+        rig.trace().text(),
         "alpha/fetch",
-        "the binding holds the tool info's own text"
+        "a tool object holds the catalog's own text"
     );
+    let (advertised, _) = rounds_and_calls(rig.issued());
+    let names = ["gh_issues_list", "gh_search", "alpha_fetch", "alpha_zed"];
     assert_eq!(
-        set.offered_binding("alpha/fetch"),
-        Some(fetch),
-        "the canonical id finds the binding the wire name finds"
-    );
-}
-
-#[test]
-fn the_offering_leaves_out_a_name_that_is_unadvertisable_or_repeated() {
-    let mut rig = Rig::start(declaring_tools(vec![
-        echo_tool(),
-        offered_tool("gh/list"),
-        shapeless_tool("bad/shape"),
-        offered_tool("dup/a.b"),
-        offered_tool("dup/a/b"),
-        offered_tool("ok/fine"),
-    ]));
-    assert_eq!(
-        offered(&mut rig),
-        vec![
-            pair("dup_a_b", "dup/a/b"),
-            pair("gh_list", "gh/list"),
-            pair("ok_fine", "ok/fine"),
-            pair("tools_echo", "tools/echo"),
-        ],
-        "the schema no round can advertise and the later repeat are each \
-         left out"
+        advertised,
+        vec![names.map(str::to_owned).to_vec()],
+        "each Pack's tools sit together in id order, the Packs in offer order"
     );
 }
 
@@ -219,7 +183,7 @@ fn a_script_calls_an_offered_tool_by_its_object_and_by_its_id_without_offering_i
     assert_eq!(rig.trace().text(), "echoed: a|echoed: b|tools/echo");
     let call = |value: &str| EffectRecord::ToolCall {
         tool: ToolId::parse("tools/echo").expect("valid id"),
-        alias: "tools_echo".to_owned(),
+        alias: "tools/echo".to_owned(),
         args: json!({ "value": value }),
         origin: ToolCallOrigin::new(EXECUTION, "Only", ToolCaller::Script),
     };
@@ -339,36 +303,8 @@ fn the_pack_objects_and_the_adhoc_pack_are_installed_in_the_h1_vm() {
     );
 }
 
-#[test]
-fn a_rendered_list_maps_every_wire_name_to_its_id_and_an_adhoc_tool_to_no_vendor() {
-    let offered = crate::lua::ToolBinding::from_info("tools_echo", &echo_tool().info())
-        .with_vendor(Some("runvil".to_owned()));
-    let info = runvil_types::tools::ToolInfo::new(
-        ToolId::parse("adhoc/grab").expect("valid id"),
-        "Grab a value",
-        json!({ "type": "object", "properties": {}, "required": [] }),
-    );
-    let adhoc = crate::lua::ToolBinding::from_info("grab", &info);
-    let rendered = prepare_scoped_tools(&[offered, adhoc]).expect("the round's scope builds");
-    let names: Vec<&str> = rendered
-        .schemas
-        .iter()
-        .map(crate::model::ToolSchema::name)
-        .collect();
-    assert_eq!(names, ["tools_echo", "grab"], "the bindings' order");
-    let entry = |name: &str| {
-        rendered
-            .dispatch
-            .get(name)
-            .map(|advertised| (advertised.id.to_string(), advertised.vendor.clone()))
-    };
-    assert_eq!(
-        entry("tools_echo"),
-        Some(("tools/echo".to_owned(), Some("runvil".to_owned())))
-    );
-    assert_eq!(entry("grab"), Some(("adhoc/grab".to_owned(), None)));
-    assert!(rendered.dynamic.is_empty());
-}
-
 #[path = "offering-packs.rs"]
 mod packs;
+
+#[path = "offering-sets.rs"]
+mod sets;

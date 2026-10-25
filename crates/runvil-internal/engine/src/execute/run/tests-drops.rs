@@ -91,7 +91,7 @@ fn a_dropped_chat_or_tool_call_resumes_a_pcall_with_the_cancelled_error_and_the_
     assert!(
         matches!(
             &tool,
-            (EffectRecord::ToolCall { alias, .. }, AnswerRecord::Dropped) if alias == "tools_echo"
+            (EffectRecord::ToolCall { alias, .. }, AnswerRecord::Dropped) if alias == "tools/echo"
         ),
         "the record holds the call and its dropped answer: {tool:?}"
     );

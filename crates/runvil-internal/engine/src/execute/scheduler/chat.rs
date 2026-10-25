@@ -2,25 +2,22 @@
 //! section VM.
 //!
 //! Dispatch first refuses an empty list. It then resolves the round's
-//! binding and the section's rendered tool list - built from the
-//! section's offers and attached to the list by the first round to reach
-//! the build, then reused by every later round - copies the list's dispatch
-//! map onto the chain as `advertised`, prechecks the projected
-//! conversation, with room kept for the reply, against the model's
-//! context window (counting from the provider's usage for the chain's
-//! last measured round when the request extends it), and issues the
-//! single gateway round as a `Chat` effect - the same effect a nested
-//! `infer` issues, over the section's `messages` and the rendered
-//! schemas. The driver classifies the answered completion into the
-//! round's answer when it arrives ([`Scheduler::accept_chat`]), emitting
-//! the round's events - the turn
-//! advance, the debug capture pair, turn completed or failed or truncated,
-//! thinking, and the reply or the tool-call batch - through the chain's own
-//! task-scoped emitter, and rejecting a tool name outside the scope the
-//! chain advertised for that round. The shim that yielded the round emits
-//! nothing; the scheduler owns every event.
+//! binding and the section entry's frozen sets - merged from the section's
+//! offers and attached to the list by the first round to reach the merge,
+//! then reused by every later round - projects the Static Set's schemas,
+//! prechecks the projected conversation, with room kept for the reply,
+//! against the model's context window (counting from the provider's usage
+//! for the chain's last measured round when the request extends it), and
+//! issues the single gateway round as a `Chat` effect - the same effect a
+//! nested `infer` issues, over the section's `messages` and those schemas.
+//! The driver classifies the answered completion into the round's answer
+//! when it arrives ([`Scheduler::accept_chat`]), emitting the round's
+//! events - the turn advance, the debug capture pair, turn completed or
+//! failed or truncated, thinking, and the reply or the tool-call batch -
+//! through the chain's own task-scoped emitter, and rejecting a tool name
+//! outside the Static Set of the section the chain is parked in. The shim
+//! that yielded the round emits nothing; the scheduler owns every event.
 
-use std::collections::BTreeMap;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, Ordering};
 
@@ -32,11 +29,12 @@ use runvil_types::metrics::ToolCallEvent;
 
 use crate::execute::protocol::{Answer, ChatOutcome, ChatResult};
 use crate::execute::run::Effect;
-use crate::execute::scope::prepare_effective_scope;
+use crate::execute::scope::{offered_packs, prepare_effective_scope, tool_schema};
 use crate::execute::turn::{Served, advance_turn, report_model_turn};
 use crate::lua::{
-    Advertised, MessageList, OverflowReason, current_dynamic_tools, current_tool_bindings,
-    output_reserve, precheck, project_messages, resolve_model_binding,
+    MessageList, OverflowReason, RenderedTools, ToolBinding, ToolSet, current_dynamic_set,
+    current_tool_bindings, output_reserve, precheck, project_messages, resolve_model_binding,
+    wire_name_of,
 };
 use crate::model::{Completion, CompletionErrorKind, CompletionResult, ModelBinding, ToolCall};
 use crate::{Error, Result};
@@ -90,12 +88,12 @@ impl Scheduler {
 
     /// The fallible half of chat dispatch: the emptiness check, the
     /// binding (the handle whose `loop` ran, when one did, else the
-    /// section's current model), the section's rendered tool list with its
-    /// map copied onto the chain as `advertised`, the per-dispatch
-    /// projection, the context precheck, and the issued effect. The first
-    /// round to reach the build renders the list and attaches it before
-    /// the projection and the precheck, so a refused first round still
-    /// fixes it; a round refused earlier attaches nothing. The send is
+    /// section's current model), the section entry's frozen sets and the
+    /// Static Set's schemas, the per-dispatch projection, the context
+    /// precheck, and the issued effect. The first round to reach the merge
+    /// freezes the sets and attaches them before the projection and the
+    /// precheck, so a refused first round still fixes them; a round refused
+    /// earlier attaches nothing, and so does a failed merge. The send is
     /// recorded on the list only once the precheck passes, so a refused
     /// round leaves the list's last send in place.
     fn prepare_chat(
@@ -122,19 +120,31 @@ impl Scheduler {
         };
         let handles = frame.reporting_handles();
         let emitter = handles.emitter;
-        // The section's first round renders its static offers and records
-        // its dynamic ones, and every offer raises after that, so each
-        // later round sends the same list.
+        // The section entry's first round freezes its sets, and every offer
+        // raises after that, so each later round sends the same tools.
         let rendered = if let Some(rendered) = list.rendered_tools() {
             rendered
         } else {
             let (set, runtime, adhoc) = (chain.ctx.tool_set(), vm.tool_runtime(), vm.adhoc_tools());
-            let bound = current_tool_bindings(set, runtime, adhoc)?;
-            let mut rendered = prepare_effective_scope(&bound, emitter.as_ref(), &section)?;
-            rendered.dynamic = current_dynamic_tools(set, runtime, adhoc, &bound)?;
-            list.attach_rendered_tools(rendered.clone());
-            rendered
+            let static_tools = current_tool_bindings(set, runtime, adhoc)?;
+            let dynamic_tools = current_dynamic_set(set, runtime, adhoc, &static_tools)?;
+            let frozen = prepare_effective_scope(
+                &static_tools,
+                &dynamic_tools,
+                offered_packs(&static_tools, &dynamic_tools),
+                set.catalog(),
+                emitter.as_ref(),
+                &section,
+            )?;
+            list.attach_rendered_tools(frozen);
+            list.rendered_tools()
+                .ok_or(Error::internal("a list holds the sets attached to it"))?
         };
+        let tools = rendered
+            .static_set
+            .iter()
+            .map(tool_schema)
+            .collect::<Result<Vec<_>>>()?;
         // The projection failure reports a failed turn before its call-site
         // error resumes into Lua, the loop's precedent.
         let conversation = match project_messages(&messages) {
@@ -147,7 +157,6 @@ impl Scheduler {
         let context = binding.context();
         let reserve = output_reserve(context, binding.invocation().max_tokens);
         let chain = &mut self.chains[id.index()];
-        chain.advertised = Some(rendered.dispatch);
         // The pre-dispatch precheck: a request that leaves the reply no
         // room never leaves. The refusal is the round's answer - the
         // overflow flag - and is observed as a failed turn, exactly as the
@@ -172,7 +181,7 @@ impl Scheduler {
             messages: conversation,
             after,
             keep,
-            tools: rendered.schemas,
+            tools,
             round,
         };
         self.issue(id, effect, Continuation::Chat(round.id));
@@ -191,15 +200,17 @@ impl Scheduler {
     /// the debug capture pair and the completion observation, reports the
     /// thinking side channel, then the reply (with the truncation
     /// observation on a `length` finish) or the tool-call batch; a
-    /// requested tool outside the scope this chain advertised for the round
-    /// fails the call as out of scope after a failed-tool-call observation.
-    /// A round that reported usage becomes the chain's measurement for the
+    /// requested tool outside the Static Set of the section the chain is
+    /// parked in fails the call as out of scope after a failed-tool-call
+    /// observation. A chain has one parked round, and its frame's sets are
+    /// read before the round settles, so they are that round's sets. A
+    /// round that reported usage becomes the chain's measurement for the
     /// next dispatch's precheck to the same model, whatever the round's
     /// outcome; any other round only releases the messages it sent.
     ///
     /// # Errors
     /// Returns [`Error::Internal`] when the parked chain has lost its frame
-    /// or the scope it advertised for the round.
+    /// or its section's frozen sets.
     pub(super) fn accept_chat(
         &mut self,
         id: ChainIndex,
@@ -229,15 +240,18 @@ impl Scheduler {
         let result = match outcome {
             CompletionResult::Text(text) => Ok(ArrivedRound::text_reply(&served, text, turn)),
             CompletionResult::ToolCalls(calls) => {
-                // The scope is recorded before the round is spawned; its
+                // The sets are frozen before the round is issued; their
                 // absence is a scheduler fault, never an author-visible
                 // out-of-scope refusal.
-                let advertised = chain
-                    .advertised
-                    .as_ref()
-                    .ok_or(Error::internal("a parked chat round recorded its scope"))?;
-                let global_exists = |name: &str| chain.ctx.tool_set().wire_binding(name).is_some();
-                round.tool_calls(&served, turn, &calls, advertised, global_exists)
+                let vm = chain.frame()?.vm()?;
+                let frozen = vm.rendered_tools().ok_or(Error::internal(
+                    "a parked chat round's section holds its frozen sets",
+                ))?;
+                let scope = Scope {
+                    frozen: &frozen,
+                    tool_set: chain.ctx.tool_set(),
+                };
+                round.tool_calls(&served, turn, &calls, &scope)
             }
             // `CompletionResult` is `#[non_exhaustive]` across the crate
             // boundary: an outcome this build does not recognize can be
@@ -250,6 +264,26 @@ impl Scheduler {
             .and_then(|metrics| metrics.usage.as_ref());
         self.chains[id.index()].anchor.settle(usage);
         Ok(Answer::Chat(result.map(Box::new)))
+    }
+}
+
+/// What the scope gate reads for one arrived round: the frozen sets of
+/// the section the chain is parked in, and the run's tool set.
+struct Scope<'a> {
+    frozen: &'a RenderedTools,
+    tool_set: &'a ToolSet,
+}
+
+impl Scope<'_> {
+    /// Whether `name` is a catalog tool's wire name, whatever the section
+    /// offered. An adhoc tool's name never counts, because the error's
+    /// hint names a catalog tool.
+    fn global_exists(&self, name: &str) -> bool {
+        self.tool_set
+            .catalog()
+            .tools()
+            .iter()
+            .any(|info| wire_name_of(info) == name)
     }
 }
 
@@ -329,42 +363,48 @@ impl ArrivedRound {
     }
 
     /// Reports a tool-call batch and builds its answer, after the scope
-    /// gate: every requested name must be one the chain advertised for
-    /// this round, else the call fails as out of scope under a failed
-    /// tool-call observation. The batch resumes unexecuted; the shim
+    /// gate: every requested name must be one the Static Set holds, else
+    /// the call fails as out of scope under a failed tool-call
+    /// observation. Each call's event names the tool its name binds and
+    /// that tool's vendor. The batch resumes unexecuted; the shim
     /// dispatches each call.
     fn tool_calls(
         &self,
         served: &Served,
         turn: u32,
         calls: &[ToolCall],
-        advertised: &BTreeMap<String, Advertised>,
-        global_exists: impl Fn(&str) -> bool,
+        scope: &Scope<'_>,
     ) -> Result<ChatResult> {
         let events: Vec<ToolCallEvent> = calls
             .iter()
             .map(|call| {
-                let (tool, vendor) = match advertised.get(call.name()).cloned() {
-                    Some(Advertised { id, vendor }) => (Some(id), vendor),
-                    None => (None, None),
-                };
+                let tool = scope
+                    .frozen
+                    .static_binding(call.name())
+                    .map(ToolBinding::id);
+                let vendor = tool.and_then(|id| scope.tool_set.vendor_for(id));
                 ToolCallEvent::new(call.id(), call.name(), tool_call_arguments(call).clone())
-                    .with_tool(tool)
-                    .with_vendor(vendor)
+                    .with_tool(tool.cloned())
+                    .with_vendor(vendor.map(str::to_owned))
             })
             .collect();
         self.emitter
             .assistant_tool_calls(&self.section, turn, self.id, &served.model, &events);
         if let Some(rogue) = calls
             .iter()
-            .find(|call| !advertised.contains_key(call.name()))
+            .find(|call| scope.frozen.static_binding(call.name()).is_none())
         {
             self.emitter
                 .report(&self.section, lifecycle::TOOL_CALL_FAILED);
             return Err(Error::OutOfScopeToolCall {
                 name: rogue.name().to_owned(),
-                global_exists: global_exists(rogue.name()),
-                in_scope: advertised.keys().cloned().collect(),
+                global_exists: scope.global_exists(rogue.name()),
+                in_scope: scope
+                    .frozen
+                    .static_set
+                    .iter()
+                    .map(|binding| binding.alias().to_owned())
+                    .collect(),
             });
         }
         Ok(ChatResult {

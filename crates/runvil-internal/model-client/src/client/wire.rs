@@ -143,7 +143,7 @@ impl ToolSchema {
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 #[non_exhaustive]
 pub enum ToolSchemaError {
-    /// The wire name was empty or held a character outside `[A-Za-z0-9_.-]`.
+    /// The wire name did not match `[A-Za-z][A-Za-z0-9_-]{0,63}`.
     #[error("invalid tool wire name {name:?}: {reason}")]
     #[non_exhaustive]
     InvalidName {

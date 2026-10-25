@@ -107,8 +107,7 @@ pub(crate) enum Compactor {
     #[default]
     Fail,
     /// `compactors.clear`: removes every record from the list, leaving its
-    /// last send and its rendered tool list. It works only inside a
-    /// compactor.
+    /// last send and its frozen sets. It works only inside a compactor.
     Clear,
 }
 

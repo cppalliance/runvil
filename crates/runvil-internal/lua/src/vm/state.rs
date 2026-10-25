@@ -1,13 +1,13 @@
 //! Section VM state reads: `var`, bare globals, `argv`, the tool call
-//! counts, the rendered list's entries, and the section's effective tool
-//! and model bindings.
+//! counts, the frozen sets' entries, the section's offered tools, and its
+//! effective model binding.
 
 use std::borrow::Cow;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 use mlua::{LuaSerdeExt, Value};
 use runvil_model_client::model::{ModelBinding, ModelView};
-use runvil_types::tools::ToolId;
+use runvil_types::tools::{ToolId, ToolInfo};
 use serde_json::Value as Json;
 
 use super::{AdhocTools, SectionVm};
@@ -15,7 +15,9 @@ use crate::error::{Error, Result};
 use crate::handles::{ToolBinding, ToolSet};
 use crate::models::ModelRuntime;
 use crate::packs::is_adhoc;
-use crate::scope::{Advertised, OfferMode, OfferTarget, ToolCallCounts, ToolRuntime};
+use crate::scope::{
+    OfferMode, OfferTarget, OfferedTool, RenderedTools, ToolCallCounts, ToolRuntime,
+};
 use crate::sys::var_to_json;
 use crate::tools::install_tool_call_counts as install_tool_call_counts_impl;
 
@@ -68,8 +70,8 @@ impl SectionVm {
     /// [`ToolCallCounts`] seeded with `ids`. Each seeded key
     /// reads its live count; indexing an unseeded key is a hard error that
     /// names the bad key and lists the seeded set. When the key is the id
-    /// of a tool the run offers but was never seeded - neither offered to
-    /// the section nor dispatched by a script `tools.call` - the diagnostic
+    /// of a catalog tool that was never seeded - neither offered to the
+    /// section nor dispatched by a script `tools.call` - the diagnostic
     /// says so.
     ///
     /// The installation itself sits in the `tools` module; this method only
@@ -84,27 +86,33 @@ impl SectionVm {
         install_tool_call_counts_impl(&self.lua, &self.bound_tools, &self.adhoc_tools, ids)
     }
 
-    /// Returns the tool the section's rendered list advertises under
-    /// `wire_name`, or `None` when no list is rendered or it has no such
-    /// name.
+    /// Returns the binding the section's Static Set holds under
+    /// `wire_name`, or `None` when the section has not frozen its sets or
+    /// its Static Set does not hold that name.
     #[must_use]
-    pub fn rendered_target(&self, wire_name: &str) -> Option<Advertised> {
+    pub fn rendered_target(&self, wire_name: &str) -> Option<ToolBinding> {
         self.messages.rendered_target(wire_name)
     }
 
-    /// Returns the ids of the tools the section's rendered list
-    /// advertises, never its dynamic ones, or `None` when no list is
-    /// rendered.
+    /// Returns the ids of the Static Set's tools, or `None` when the
+    /// section has not frozen its sets.
     #[must_use]
     pub fn rendered_ids(&self) -> Option<Vec<ToolId>> {
         let rendered = self.messages.rendered_tools()?;
         Some(
             rendered
-                .dispatch
-                .into_values()
-                .map(|advertised| advertised.id)
+                .static_set
+                .iter()
+                .map(|binding| binding.id().clone())
                 .collect(),
         )
+    }
+
+    /// Returns the section's frozen sets, or `None` when it has not frozen
+    /// them.
+    #[must_use]
+    pub fn rendered_tools(&self) -> Option<Arc<RenderedTools>> {
+        self.messages.rendered_tools()
     }
 
     /// How many of this VM's instruction-hook firings have counted.
@@ -114,104 +122,101 @@ impl SectionVm {
     }
 }
 
-/// Reads the section's static bindings without mutating the tool
-/// runtime: each static offer in call order, a tool adding itself and a
-/// Pack adding its tools in id order, each tool once, at its first place.
-/// Catalog ids resolve against the offering and adhoc ids against
-/// `adhoc`. Last, an offered catalog tool whose wire name an offered adhoc
-/// tool shares is dropped.
+/// Reads the tools the section's static offers name without mutating the
+/// tool runtime: each static offer in call order, a tool adding itself
+/// and a Pack adding its tools in id order, each tool once, at its first
+/// place. Catalog ids resolve against the run catalog and adhoc ids
+/// against `adhoc`.
 ///
-/// The section's first loop round renders its tool list from these
-/// bindings. An offered adhoc Pack expands to the adhoc tools defined
-/// when this function runs, so after the render the Engine reads the
-/// rendered list instead.
+/// The section's first model call freezes its Static Set from these
+/// tools. An offered adhoc Pack expands to the adhoc tools defined when
+/// this function runs, so after the freeze the Engine reads the frozen
+/// sets instead.
 ///
 /// # Errors
 /// Returns [`Error::Internal`] if the tool runtime's mutex or the adhoc
-/// tools are poisoned, or an offered id has no binding.
+/// tools are poisoned, or an offered id names no tool.
 pub fn current_tool_bindings(
     set: &ToolSet,
     runtime: &Mutex<ToolRuntime>,
     adhoc: &AdhocTools,
-) -> Result<Vec<ToolBinding>> {
-    let mut bindings: Vec<ToolBinding> = Vec::new();
-    for binding in expanded(set, runtime, adhoc, OfferMode::Static)? {
-        if !bindings.iter().any(|held| held.id() == binding.id()) {
-            bindings.push(binding);
+) -> Result<Vec<OfferedTool>> {
+    let mut tools: Vec<OfferedTool> = Vec::new();
+    for tool in expanded(set, runtime, adhoc, OfferMode::Static)? {
+        if !tools.iter().any(|held| held.id() == tool.id()) {
+            tools.push(tool);
         }
     }
-    let adhoc_names: Vec<String> = bindings
-        .iter()
-        .filter(|binding| is_adhoc(&binding.id().pack()))
-        .map(|binding| binding.alias().to_owned())
-        .collect();
-    bindings.retain(|binding| {
-        is_adhoc(&binding.id().pack()) || !adhoc_names.iter().any(|name| name == binding.alias())
-    });
-    Ok(bindings)
+    Ok(tools)
 }
 
-/// Reads the section's dynamic list without mutating the tool runtime:
-/// each tool the dynamic offers name, in offer order and once, unless
-/// `static_bindings` holds its id or its wire name.
+/// Reads the tools the section's dynamic offers name without mutating
+/// the tool runtime: each tool once, in offer order, unless `static_tools`
+/// holds its id.
 ///
 /// # Errors
 /// Returns [`Error::Internal`] if the tool runtime's mutex or the adhoc
-/// tools are poisoned, or an offered id has no binding.
-pub fn current_dynamic_tools(
+/// tools are poisoned, or an offered id names no tool.
+pub fn current_dynamic_set(
     set: &ToolSet,
     runtime: &Mutex<ToolRuntime>,
     adhoc: &AdhocTools,
-    static_bindings: &[ToolBinding],
-) -> Result<Vec<ToolId>> {
-    let mut dynamic: Vec<ToolId> = Vec::new();
-    for binding in expanded(set, runtime, adhoc, OfferMode::Dynamic)? {
-        let in_static = static_bindings
+    static_tools: &[OfferedTool],
+) -> Result<Vec<OfferedTool>> {
+    let mut tools: Vec<OfferedTool> = Vec::new();
+    for tool in expanded(set, runtime, adhoc, OfferMode::Dynamic)? {
+        let held = static_tools
             .iter()
-            .any(|held| held.id() == binding.id() || held.alias() == binding.alias());
-        if !in_static && !dynamic.contains(binding.id()) {
-            dynamic.push(binding.id().clone());
+            .chain(&tools)
+            .any(|held| held.id() == tool.id());
+        if !held {
+            tools.push(tool);
         }
     }
-    Ok(dynamic)
+    Ok(tools)
 }
 
-/// Every binding the offers of `mode` name, in call order, with repeats:
-/// the one expansion both lists read, so they never disagree about what
+/// Every tool the offers of `mode` name, in call order, with repeats:
+/// the one expansion both sets read, so they never disagree about what
 /// an offer names.
 fn expanded(
     set: &ToolSet,
     runtime: &Mutex<ToolRuntime>,
     adhoc: &AdhocTools,
     mode: OfferMode,
-) -> Result<Vec<ToolBinding>> {
+) -> Result<Vec<OfferedTool>> {
     let runtime = runtime
         .lock()
         .map_err(|_| Error::Internal("tool declaration runtime was poisoned".into()))?;
-    let mut bindings = Vec::new();
+    let mut tools = Vec::new();
     for offer in runtime.offers.iter().filter(|offer| offer.mode == mode) {
         match &offer.target {
             OfferTarget::Tool(id) => {
-                let name = id.to_string();
-                let binding = if is_adhoc(&id.pack()) {
-                    adhoc.binding(&name)?
+                let tool = if is_adhoc(&id.pack()) {
+                    adhoc.binding(&id.to_string())?.map(OfferedTool::Adhoc)
                 } else {
-                    set.offered_binding(&name).cloned()
+                    set.catalog().get(id).cloned().map(OfferedTool::Catalog)
                 };
-                bindings.push(binding.ok_or_else(|| {
-                    Error::Internal(Cow::Owned(format!("offered tool {name:?} has no binding")))
+                tools.push(tool.ok_or_else(|| {
+                    Error::Internal(Cow::Owned(format!("offered tool {id} names no tool")))
                 })?);
             }
-            OfferTarget::Pack(pack) if is_adhoc(pack) => bindings.extend(adhoc.bindings()?),
-            OfferTarget::Pack(pack) => bindings.extend(
-                set.offered()
+            OfferTarget::Pack(pack) if is_adhoc(pack) => {
+                tools.extend(adhoc.bindings()?.into_iter().map(OfferedTool::Adhoc));
+            }
+            OfferTarget::Pack(pack) => {
+                let mut infos: Vec<&ToolInfo> = set
+                    .catalog()
+                    .tools()
                     .iter()
-                    .filter(|binding| binding.id().pack() == *pack)
-                    .cloned(),
-            ),
+                    .filter(|info| info.id.pack() == *pack)
+                    .collect();
+                infos.sort_by(|left, right| left.id.cmp(&right.id));
+                tools.extend(infos.into_iter().cloned().map(OfferedTool::Catalog));
+            }
         }
     }
-    Ok(bindings)
+    Ok(tools)
 }
 
 /// Reads the section's effective model binding through the run's model view

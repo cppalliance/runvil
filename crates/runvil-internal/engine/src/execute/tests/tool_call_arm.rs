@@ -8,7 +8,8 @@
 //! The fixtures reach the
 //! model-issued form through the test-only `tools.call_as_model` install
 //! (`Scenario::raw_shims`); in production only the loop shim yields
-//! a `call_id`.
+//! a `call_id`. A model-issued call resolves in the section's frozen
+//! sets, so those cases run one loop round first.
 //! The adhoc tool cases sit in `adhoc_handlers`.
 
 use runvil_parser::test_support::one_section;
@@ -78,13 +79,19 @@ fn tool_lines(trace: &Trace) -> ToolRecorder {
 
 #[test]
 fn a_failing_bound_tool_with_a_call_id_resumes_with_untrusted_failure_text() {
+    let gateway = ScriptedChat::new(vec![text("rendered")]);
     let source = one_section(
         "tools.offer('tools/failing')
+         messages:user('go')
+         models.loop()
          local out = tools.call_as_model('call_1', 'fail', {})
          assert(type(out) == 'string', 'a model-issued call always resumes with content')
          return out",
     );
-    let trace = arm_scenario(source).offer("fail", failing_tool()).run();
+    let trace = arm_scenario(source)
+        .offer("fail", failing_tool())
+        .chat(&gateway)
+        .run();
     let out = trace.text();
     assert!(
         out.contains("<untrusted_input_") && out.contains("</untrusted_input_"),

@@ -1,11 +1,12 @@
 //! Tool bindings, the shared tool set, and the per-binding output kind that
 //! shape how bound tools reach Lua, and the section text a prompt read sees.
 
+use std::borrow::Cow;
 use std::collections::BTreeMap;
 
 use mlua::Value;
 use runvil_types::packs::PackId;
-use runvil_types::tools::{ToolId, ToolInfo};
+use runvil_types::tools::{ToolCatalog, ToolId, ToolInfo};
 use serde_json::Value as Json;
 
 /// How a bound tool's output resumes into Lua at the `tools.call` boundary.
@@ -24,17 +25,17 @@ pub enum ToolOutputKind {
     Structured,
 }
 
-/// One catalog tool bound under the name a model sees, holding the tool's
-/// data - its schema, description, output kind, whether it lists tools,
-/// and its Pack's vendor - and never its implementation.
+/// One tool bound under the name its caller reaches it by, holding the
+/// tool's data - its schema, description, output kind, and whether it
+/// lists tools - and never its implementation.
 ///
 /// Run-time execution (schema preparation, script dispatch) reads the
 /// binding alone; a call is issued as an effect naming the identity, and
 /// performing it is the Harness's job.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ToolBinding {
-    /// The model-facing name: an offered tool's wire name, or the full id
-    /// of a catalog tool a script reaches without an offer.
+    /// The name the call reaches the tool by: its wire name in a section's
+    /// frozen sets, or the full id of a catalog tool a script calls.
     alias: String,
     /// The tool's own catalog description.
     description: String,
@@ -49,15 +50,12 @@ pub struct ToolBinding {
     /// Whether the tool's output lists tools, which a script's call
     /// receives as plain text.
     describes_tools: bool,
-    /// The vendor of the tool's Pack, as the caller reported it.
-    vendor: Option<String>,
 }
 
 impl ToolBinding {
     /// Binds `alias` to the tool `info` describes: the description is the
     /// tool's own, the output kind follows the tool info's
     /// structured-output flag, and the listing flag is the tool info's.
-    /// The binding names no vendor.
     #[must_use]
     pub fn from_info(alias: &str, info: &ToolInfo) -> Self {
         Self {
@@ -71,18 +69,10 @@ impl ToolBinding {
                 ToolOutputKind::Plain
             },
             describes_tools: info.describes_tools,
-            vendor: None,
         }
     }
 
-    /// Sets the vendor of the tool's Pack, as the caller reported it.
-    #[must_use]
-    pub fn with_vendor(mut self, vendor: Option<String>) -> Self {
-        self.vendor = vendor;
-        self
-    }
-
-    /// Returns the model-facing name.
+    /// Returns the name the call reaches the tool by.
     #[must_use]
     pub fn alias(&self) -> &str {
         &self.alias
@@ -118,12 +108,16 @@ impl ToolBinding {
     pub fn describes_tools(&self) -> bool {
         self.describes_tools
     }
+}
 
-    /// Returns the vendor of the tool's Pack, as the caller reported it
-    /// for the run, or `None` when it reported none.
-    #[must_use]
-    pub fn vendor(&self) -> Option<&str> {
-        self.vendor.as_deref()
+/// The name the model calls the tool `info` describes by: its `wire_name`
+/// when set, else its id with `/` and `.` turned into `_` (`web/fetch`
+/// gives `web_fetch`).
+#[must_use]
+pub fn wire_name_of(info: &ToolInfo) -> Cow<'_, str> {
+    match &info.wire_name {
+        Some(wire_name) => Cow::Borrowed(wire_name),
+        None => Cow::Owned(info.id.to_string().replace(['/', '.'], "_")),
     }
 }
 
@@ -203,10 +197,12 @@ pub struct LibraryBlock {
     pub prose: String,
 }
 
-/// The run's tool set: the declared Packs, the run's roster, and every
-/// catalog tool the run can offer. Nothing changes it during a run, so the
-/// run and every section VM share one `Arc<ToolSet>`.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+/// The run's tool set: the declared Packs, the run's roster, the run
+/// catalog, and each Pack's vendor. Nothing changes it during a run, so the
+/// run and every section VM share one `Arc<ToolSet>`. Nothing in it is
+/// bound: each section entry binds the tools it offers when it freezes its
+/// sets.
+#[derive(Debug, Clone, Default)]
 pub struct ToolSet {
     /// The Packs the frontmatter declares, in declaration order.
     declared: Vec<PackId>,
@@ -214,24 +210,28 @@ pub struct ToolSet {
     /// tools: no reason when it can serve the run, and the reason, written
     /// for the model, when it can't.
     roster: BTreeMap<PackId, Option<String>>,
-    /// Every catalog tool the run can offer, in id order, each bound under
-    /// its wire name.
-    offered: Vec<ToolBinding>,
+    /// The run catalog: every catalog tool's `ToolInfo` by id, the handle
+    /// the caller's context holds, which is what Lua sees.
+    catalog: ToolCatalog,
+    /// The vendor the caller reported for each Pack that can serve.
+    vendors: BTreeMap<PackId, String>,
 }
 
 impl ToolSet {
     /// Builds the run's tool set from the declared Packs in declaration
-    /// order, the roster, and the offering in tool id order.
+    /// order, the roster, the run catalog, and each Pack's vendor.
     #[must_use]
     pub fn new(
         declared: Vec<PackId>,
         roster: BTreeMap<PackId, Option<String>>,
-        offered: Vec<ToolBinding>,
+        catalog: ToolCatalog,
+        vendors: BTreeMap<PackId, String>,
     ) -> Self {
         Self {
             declared,
             roster,
-            offered,
+            catalog,
+            vendors,
         }
     }
 
@@ -248,31 +248,17 @@ impl ToolSet {
         &self.roster
     }
 
-    /// Returns the offering in tool id order.
+    /// Returns the run catalog.
     #[must_use]
-    pub fn offered(&self) -> &[ToolBinding] {
-        &self.offered
+    pub fn catalog(&self) -> &ToolCatalog {
+        &self.catalog
     }
 
-    /// Returns the offered binding whose wire name or canonical id is
-    /// `name`, which matches at most one way because wire names never
-    /// contain `/` and ids always do.
+    /// Returns the vendor the caller reported for the Pack the tool `id`
+    /// belongs to, or `None` when it reported none, as for an adhoc tool.
     #[must_use]
-    pub fn offered_binding(&self, name: &str) -> Option<&ToolBinding> {
-        if name.contains('/') {
-            let id = ToolId::parse(name).ok()?;
-            self.offered.iter().find(|binding| *binding.id() == id)
-        } else {
-            self.wire_binding(name)
-        }
-    }
-
-    /// Returns the offered binding whose wire name is `name`, never matching
-    /// a canonical id, because a model reaches tools only by the wire names
-    /// a round advertised.
-    #[must_use]
-    pub fn wire_binding(&self, name: &str) -> Option<&ToolBinding> {
-        self.offered.iter().find(|binding| binding.alias() == name)
+    pub fn vendor_for(&self, id: &ToolId) -> Option<&str> {
+        self.vendors.get(&id.pack()).map(String::as_str)
     }
 }
 

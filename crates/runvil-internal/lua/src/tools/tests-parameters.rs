@@ -6,7 +6,7 @@ use std::collections::BTreeMap;
 
 use mlua::{LuaSerdeExt, Value};
 use runvil_types::packs::PackId;
-use runvil_types::tools::{ToolId, ToolInfo, ToolOutput};
+use runvil_types::tools::{ToolCatalog, ToolId, ToolInfo, ToolOutput};
 use serde_json::{Value as Json, json};
 
 use crate::ToolBinding;
@@ -39,12 +39,13 @@ fn search_tool() -> ToolInfo {
     )
 }
 
-/// A set declaring `web` and offering `web/search`.
+/// A set declaring `web`, whose catalog holds `web/search`.
 pub(super) fn search_set() -> ToolSet {
     ToolSet::new(
         vec![PackId::parse("web").expect("`web` is a valid Pack id")],
         BTreeMap::new(),
-        vec![ToolBinding::from_info("web_search", &search_tool())],
+        ToolCatalog::new([search_tool()]).expect("one tool"),
+        BTreeMap::new(),
     )
 }
 
@@ -154,6 +155,7 @@ fn metadata_of_a_pack_whose_results_are_untrusted_never_takes_the_envelope() {
     let nonce = test_nonce();
     let result = prepare_dispatch(
         &ToolBinding::from_info("web_search", &search_tool()),
+        None,
         Ok(ToolOutput::untrusted("fetched page")),
         None,
         &nonce,

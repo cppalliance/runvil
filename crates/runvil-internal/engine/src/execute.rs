@@ -28,8 +28,8 @@
 //!   the live H1 pass, the walk, call chains, fanout, and the `chat` and
 //!   `tool_call` rounds that `models.loop` and a model handle's `loop`
 //!   yield over the section's `messages`.
-//! - `scope` - tool-scope validation and the build of a section's
-//!   rendered tool list, its schemas and dispatch map.
+//! - `scope` - the merge that builds and checks a section entry's frozen
+//!   sets, and the schemas a round projects from its Static Set.
 //! - `section_context` - the per-section `SectionContext` frame the
 //!   scheduler's chains construct, run, and tear down.
 //! - `section_vm` - the section VM setup half shared by the walk and the

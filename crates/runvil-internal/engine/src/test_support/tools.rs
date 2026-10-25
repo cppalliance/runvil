@@ -21,6 +21,7 @@ type FnToolHandler =
 #[derive(Clone)]
 pub(crate) struct FnTool {
     id: ToolId,
+    wire_name: Option<String>,
     description: String,
     schema: serde_json::Value,
     structured: bool,
@@ -40,6 +41,7 @@ impl FnTool {
         let id = ToolId::parse(id).unwrap_or_else(|error| panic!("tool id {id:?}: {error}"));
         FnTool {
             id,
+            wire_name: None,
             description: String::new(),
             schema,
             structured: false,
@@ -51,6 +53,13 @@ impl FnTool {
     /// Replaces the description the model reads.
     pub(crate) fn description(mut self, description: &str) -> FnTool {
         description.clone_into(&mut self.description);
+        self
+    }
+
+    /// Sets the name the model calls the tool by, in place of the default
+    /// its id gives.
+    pub(crate) fn wire_name(mut self, wire_name: &str) -> FnTool {
+        self.wire_name = Some(wire_name.to_owned());
         self
     }
 
@@ -77,9 +86,13 @@ impl FnTool {
     /// The tool as data: the tool info the Engine binds and advertises,
     /// what a scenario installs in the run's catalog.
     pub(crate) fn info(&self) -> ToolInfo {
-        ToolInfo::new(self.id(), &self.description, self.schema.clone())
+        let info = ToolInfo::new(self.id(), &self.description, self.schema.clone())
             .structured(self.structured)
-            .describes_tools(self.describes_tools)
+            .describes_tools(self.describes_tools);
+        match &self.wire_name {
+            Some(wire_name) => info.wire_name(wire_name),
+            None => info,
+        }
     }
 
     /// Answers one call with `args` at once.

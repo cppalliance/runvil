@@ -63,9 +63,9 @@ fn a_script_tools_call_with_an_unbound_name_lists_the_offered_ids() {
 
 #[test]
 fn a_script_tools_call_reaches_an_offered_tool_outside_the_section_scope() {
-    // A tool in the run's offering but never scoped into the section (no
-    // `tools.offer`) still dispatches for a script: the scope shapes what
-    // the model is offered, and the author's own code is not the model.
+    // A catalog tool the section never offered (no `tools.offer`) still
+    // dispatches for a script: the frozen sets shape what the model is
+    // offered, and the author's own code is not the model.
     // The count lands in the same shared map `tools.calls` reads.
     let md = "---\nname: t\ndescription: d\nrunvil: 0\n---\n\n\
         # ToolCall\n\n\

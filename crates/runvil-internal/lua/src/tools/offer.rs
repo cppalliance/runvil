@@ -18,7 +18,7 @@ use runvil_types::tools::ToolId;
 use super::refuse_after_render;
 use super::userdata::LuaToolHandle;
 use crate::error::{Error, Result};
-use crate::handles::ToolSet;
+use crate::handles::{ToolSet, wire_name_of};
 use crate::messages::MessageList;
 use crate::packs::{LuaPackHandle, is_adhoc, pack_object};
 use crate::proxy::key_text;
@@ -28,7 +28,7 @@ use crate::walk_budget::HELD_KEY_LIMIT;
 
 /// What an offer verb checks its entries against and records into: the
 /// run's tool set, the section's offers, the VM's adhoc tools, and the
-/// section's conversation, whose rendered list fixes the offers.
+/// section's conversation, whose frozen sets fix the offers.
 #[derive(Clone)]
 pub(super) struct Offering {
     pub(super) set: Arc<ToolSet>,
@@ -130,9 +130,9 @@ impl Offering {
         }
     }
 
-    /// Reads a string entry: with a `/`, the id of a tool in the offering
-    /// or a defined adhoc tool; without one, the id of a Pack with an
-    /// object.
+    /// Reads a string entry: with a `/`, the id of a tool in the run
+    /// catalog or a defined adhoc tool; without one, the id of a Pack with
+    /// an object.
     fn named(&self, lua: &Lua, verb: &str, name: &str) -> mlua::Result<OfferTarget> {
         if name.contains('/') {
             let known = match ToolId::parse(name) {
@@ -142,7 +142,7 @@ impl Offering {
                     .map_err(mlua::Error::external)?
                     .is_some()
                     .then_some(id),
-                Ok(id) => self.set.offered_binding(name).is_some().then_some(id),
+                Ok(id) => self.set.catalog().get(&id).is_some().then_some(id),
                 Err(_) => None,
             };
             return known.map(OfferTarget::Tool).ok_or_else(|| {
@@ -169,11 +169,17 @@ impl Offering {
         )))
     }
 
-    /// The id of the tool in the offering, or else the defined adhoc tool,
-    /// whose wire name is `name`.
+    /// The id of the catalog tool, or else the defined adhoc tool, whose
+    /// wire name is `name`.
     fn wire_named(&self, name: &str) -> mlua::Result<Option<ToolId>> {
-        if let Some(binding) = self.set.wire_binding(name) {
-            return Ok(Some(binding.id().clone()));
+        if let Some(info) = self
+            .set
+            .catalog()
+            .tools()
+            .iter()
+            .find(|info| wire_name_of(info) == name)
+        {
+            return Ok(Some(info.id.clone()));
         }
         Ok(self
             .adhoc
