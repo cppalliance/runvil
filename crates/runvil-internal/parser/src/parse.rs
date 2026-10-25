@@ -99,9 +99,9 @@ impl Prompt {
             }
         })?;
         contract::check_distinct_packs(frontmatter.uses())
-            .and_then(|()| contract::check_no_adhoc_pack(frontmatter.uses()))
+            .and_then(|()| contract::check_no_reserved_pack(frontmatter.uses()))
             .map_err(|refusal| match refusal {
-                PackListError::Duplicate(_) | PackListError::Adhoc => {
+                PackListError::Duplicate(_) | PackListError::Reserved(_) => {
                     Error::parse(ParseErrorKind::Frontmatter, refusal.to_string())
                 }
             })?;

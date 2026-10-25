@@ -26,6 +26,9 @@ todos:
   - id: render-harness
     content: Add ToolPerformer::render and have HostRunContext render each offered Pack once per non-empty set, move survives_stop onto Effect::ToolCall in place of ToolPerformer::survives_stop and drop it from the eight test doubles, and route every Harness call by its id's Pack, rewording the registry comment and the host-run.rs module doc that say a call reaches only a listed tool, with tests and docs
     status: pending
+  - id: fmt-debug
+    content: Spell the Debug trait as fmt::Debug in every Rust file, leaving every other std::fmt path as written, and add a build-xtask structural check that refuses the std::fmt::Debug spelling, with tests
+    status: pending
 isProject: false
 ---
 
@@ -280,6 +283,7 @@ The run keeps one Lua-facing catalog by id, and everything model-facing is built
     - **Static Set**: the tools a section renders into the model's tool list at its first model call. It is frozen after that.
     - **Dynamic Set**: the tools the model finds and calls through the Engine's two discovery tools.
   - Docs in the `runvil-docs` repository change as the work items list.
+  - The `Debug` trait is never spelled `std::fmt::Debug`: code names it `fmt::Debug` with `use std::fmt;` in scope, and every other `std::fmt::` path stays as written. A structural check, `crates/build-xtask/src/debug_spelling.rs`, run from `tidy::all_violations`, refuses the long spelling on any line of any `.rs` file in a workspace crate and names the file, the line, and the fix.
 - Data, persistence, failure, security, and privacy constraints:
   - The run log gains the render effect and its answer. `EffectRecord::Render` holds the binding's `alias`, as `EffectRecord::Chat` does, plus the section entry id and the offered ids. `AnswerRecord::Render` holds the full rendered `ToolInfo`, because `EffectRecord::Chat` keeps only tool names. Adhoc and discovery tools join later, inside the Engine, so the answer does not hold them.
   - JSON written before the new optional fields existed reads unchanged, and each new field is skipped when absent.
@@ -356,6 +360,7 @@ Each work item ships its tests in the same commit. Unit tests pin the new types 
   - Removing `ToolPerformer::survives_stop` removes it from the eight test doubles in `crates/harness-internal/runner/tests/it/` (`support.rs`, `performers.rs`, and `effect_loop-cap.rs`).
   - A render effect takes a provenance sequence number, so tests that pin later effect ids in runs with catalog offers may shift.
   - The test Plugin's check that verb 8 is unsupported (`crates/harness-internal/test-plugin/src/lib-tests.rs`) stays as it is, because verb 8 stays unsupported.
+  - No `.rs` file spells the `Debug` trait `std::fmt::Debug`: `git grep -n -F -e "std::fmt::Debug" -- "*.rs"` prints nothing, the debug-spelling check passes over the workspace, and its fixtures show a file with the long spelling reported at each line and a file with only `fmt::Debug` passing.
 - Exit criteria, after every work item:
   - `cargo nextest run --locked --workspace --exclude workshop --exclude workshop-server --exclude workshop-server-api --all-features`, and `cargo nextest run --locked -p workshop -p workshop-server -p workshop-server-api`.
   - `cargo clippy --workspace --exclude workshop --exclude workshop-server --exclude workshop-server-api --all-targets --all-features`, and `cargo clippy -p workshop -p workshop-server -p workshop-server-api --all-targets`, both with `CARGO_BUILD_WARNINGS=deny`, plus `cargo check -p gateway --no-default-features`.
@@ -414,6 +419,7 @@ Each work item ships its tests in the same commit. Unit tests pin the new types 
   - The Plugin entry-point work comes after this plan, with two cheap steps now: reserve the `RV_PACK_RENDER` number, and keep `render`'s inputs and outputs plain data. User: "should we do the entry point stuff now and make sure that the linked and DLL plugins follow the API or do it later?", then "I mean put the cheap steps in the plan".
   - Per-section bindings land first, then the discovery tools, so dynamic offers work before any render work, and the render is split so the Engine half lands with every Pack passing through. User, accepting the reorder: "yeah". In review, the resolve-once edit joins the section-bindings behavior commit, because both edits are `tool_call.rs` and the second lookup exists only while the run-start offering does. The Harness render and the routing became one item, because they edit the same three files and `ToolPerformer` should change once, and the reservation became free to land beside section-bindings. In a later review, render-hook moved ahead of section-bindings, because test support names tools through `ToolInfo.wire_name`.
   - Each work item lands as one commit, or as the separate commits it names, with its tests in the same commit, and docs changes in `runvil-docs` are commits in that repository. Settled while writing this plan.
+  - The `Debug` trait has one spelling, `fmt::Debug`, and every other `std::fmt::` path stays as written. The user asked that the code base not hold both `std::fmt::Debug` and `fmt::Debug`, and that the rule be enforced. No clippy lint can enforce it: both spellings resolve to the same trait, so `disallowed_types` cannot tell them apart, and `absolute_paths`, the only lint that reads spelling, flags every path of three or more segments. So a structural check in `build-xtask` reads the source text, and it runs under `cargo test -p build-xtask` and the workspace nextest run. A `macro_rules!` body, whose paths resolve at each call site, writes `::core::fmt::Debug`, which the check accepts; none names the trait today. It lands last, as its own step, because it is independent of the tool work. Settled while amending this plan.
 - Rejected alternatives:
   - Several run-wide copies of the catalog: `ToolSet.offered`, `RunState.catalog_bindings`, a `RunState` `ToolCatalog`, or a catalog entry that copies its Pack's vendor. Reason: once names move to the merge they hold the same thing, and vendors belong to Packs. `ToolSet` holds the one `ToolCatalog` handle instead. Revisit: closed.
   - Converting the catalog into a `BTreeMap<ToolId, ToolInfo>` on `ToolSet`. Reason: `ToolCatalog` is already an `Arc<[ToolInfo]>` with a by-id lookup, so the map only deep-clones every description and schema. Revisit if a catalog ever grows large enough for the scan to matter.
@@ -530,7 +536,8 @@ Components, in dependency order, each with its pieces:
 - Per-section tool sets (steps 2 to 4): each section entry names, checks, and freezes its own Static Set and Dynamic Set from the run catalog. It follows the render contract, whose `wire_name` it honors, and comes before discovery, which resolves calls in the frozen sets and joins the merge. Its pieces, the set terms, the section bindings, and their guide docs, are built in sequence: the bindings' code names use the terms, and the docs quote the rules and errors the bindings land.
 - Dynamic tool discovery (steps 5 to 7): the reserved Pack id `dynamic` and the `GetDynamicTools` and `CallDynamicTool` route. It follows the per-section tool sets, because the route reads the frozen sets and merge rule 4 adds its tools. Its pieces, the reservation, the route, and its guide docs, are built in sequence: the discovery tools live under the reserved id, and the docs quote the tools' text and refusals.
 - Tool stats (steps 8 and 9): `tools.stats` in place of `tools.calls`. It follows discovery, because `packs.dynamic` counts discovery calls and the `tools` view leaves their ids out, and comes before late rendering, whose model-only calls count under `packs`. Its pieces, the table and its guide docs, are built in sequence, because the docs quote the table's errors.
-- Late rendering (steps 10 to 13): call origins, the render effect, and the Harness render. It comes last, because the render feeds the merge, its model-only tools count through `tools.stats`, and a Pack ties a call to its render through the origin's entry id. Its pieces, caller origins, the render effect, the Harness render, and their guide docs, are built in sequence: the effect reads the entry id the origins add, the Harness performs the effect, and the docs describe what the Harness render lets a Pack do. The three code pieces also share `tool_call.rs`, `chat.rs`, `apply.rs`, and `pending.rs`, which rules out building them side by side.
+- Late rendering (steps 10 to 13): call origins, the render effect, and the Harness render. It follows the tool stats, because the render feeds the merge, its model-only tools count through `tools.stats`, and a Pack ties a call to its render through the origin's entry id. Its pieces, caller origins, the render effect, the Harness render, and their guide docs, are built in sequence: the effect reads the entry id the origins add, the Harness performs the effect, and the docs describe what the Harness render lets a Pack do. The three code pieces also share `tool_call.rs`, `chat.rs`, `apply.rs`, and `pending.rs`, which rules out building them side by side.
+- Debug trait spelling (step 14): the `fmt::Debug` spelling across the code base and the `build-xtask` check that keeps `std::fmt::Debug` out. It comes last because it is independent of the tool work and runs after every earlier step has touched its files, so the rewrite reads each file in its final form and no later step brings the long spelling back. One piece, the rewrite and the check together, because the check's live test fails until the rewrite is done.
 
 <step-1>
 
@@ -680,7 +687,7 @@ While iterating, run `cargo nextest run --locked -p runvil-model-client -p runvi
 
 <step-4>
 
-### Step 4: Document per-section tool sets
+### Step 4: Document per-section tool sets [completed]
 
 - Component: Per-section tool sets
 - Tests:
@@ -706,7 +713,7 @@ Terms: wherever `src/language/11-conversations.md`, `12-tools.md`, and `17-quick
 
 <step-5>
 
-### Step 5: Reserve the Pack id dynamic
+### Step 5: Reserve the Pack id dynamic [completed]
 
 - Component: Dynamic tool discovery
 - Tests:
@@ -838,6 +845,7 @@ Commit in `c:\Users\Vinnie\cursor\runvil-docs`. Read step 6's tool text, paramet
   - Mistakes come back to the model as text and the loop goes on: an unknown or Static Set `toolName`, a non-string `toolName` or `pattern`, a bad or overlong `pattern`, a missing `toolName`, a non-object `arguments`, and a direct call to a Dynamic Set tool by its wire name, whose text points to `CallDynamicTool`. A name outside both sets still fails the round.
   - The listing is untrusted tool output and is wrapped as such, while a refusal is Engine text.
   - A script's `tools.call('dynamic/call', ...)` fails as an unknown id, `tools.adhoc` refuses the names `GetDynamicTools` and `CallDynamicTool`, and a Pack tool with either wire name fails the section's first model call.
+- Update the reservation messages that `src/language/12-tools.md` and `src/language/04-how-a-prompt-runs.md` quote, which still name only `adhoc`, to the messages step 5 lands for both reserved ids (the registry, `uses:`, and the requirements notice); read them in runvil before quoting.
 - Leave counting to step 9, which documents `tools.stats`.
 
 </step-7>
@@ -1003,6 +1011,7 @@ Drivers and hand-stepped tests:
 
 - The exhaustive effect drivers fail to compile until they handle `Effect::Render`, and each answers it with the offered tools unchanged: the engine rigs `crates/runvil-internal/engine/src/test_support.rs` and `crates/runvil-internal/engine/src/test_support/scenario-driving.rs`, the facade's `crates/runvil/tests/suite/support/scenario.rs` and `crates/runvil/examples/greeter.rs`, and the Harness effect loop `crates/harness-internal/runner/src/effect_loop.rs`, whose arm stays a few lines until step 12 replaces it. `effect_loop.rs` is 481 lines, so split it the way `effect_loop-flight.rs` is split if the arm does not fit.
 - Drivers with catch-all arms still compile but would answer a render `Dropped` or panic, and tests that step a run by hand expect a Chat effect first. Since step 3 every test-support tool is in the catalog, so each such test reaches the render. Update every one that runs a section with catalog offers to expect the render effect first: `crates/harness-gateway-client/src/wire/request-tests.rs`, and in `crates/runvil-internal/engine/src/execute/tests/`, `rounds.rs`, `chat_record_rebuild.rs`, `parallel_tool_calls.rs`, `parallel_tool_calls-withdrawn.rs`, and `models_loop_contract-rounds.rs`. A render effect takes a provenance sequence number, so tests that pin later effect ids in runs with catalog offers may shift.
+- Update the `alias` doc comments on `Effect::ToolCall` and `EffectRecord::ToolCall`, wherever the record types now live, which still say a script call reports the tool's id only when the run could not offer the tool: since step 3 a model call reports its wire name and every script call reports its id.
 - Regenerate `crates/runvil/public-api.txt` with `Remove-Item Env:CARGO_BUILD_WARNINGS -ErrorAction SilentlyContinue; cargo +nightly-2026-09-05 xtask api --bless`.
 
 Tests to add:
@@ -1048,7 +1057,7 @@ While iterating, run `cargo nextest run --locked -p runvil-model-client -p runvi
 
 The Harness now answers the render effect by calling `Pack::render`, and each tool call holds the one flag the Harness reads, `survives_stop`, from the binding of the section that made it. A Harness Pack is a Pack the Harness serves, whose tools are in the run catalog. A model-only tool is one that appears only in a render's answer: Lua cannot see or call it, and `tools.stats` counts it only under its Pack.
 
-- `ToolPerformer` (`crates/harness-internal/runner/src/performers.rs`) gains `fn render(&self, entry: String, model: ModelInfo, offered: Vec<PackToolSets<ToolInfo>>) -> BoxFuture<Vec<PackToolSets<ToolInfo>>>`, whose default passes every tool through, and loses `survives_stop`; `call()` and `max_in_flight()` stay. Its futures are `'static`, so an override clones each `Arc<dyn Pack>` and owns its inputs.
+- `ToolPerformer` (`crates/harness-internal/runner/src/performers.rs`) gains `fn render(&self, entry: String, model: ModelInfo, offered: Vec<PackToolSets<ToolInfo>>) -> BoxFuture<Vec<PackToolSets<ToolInfo>>>`, whose default passes every tool through, and loses `survives_stop`; `call()` and `max_in_flight()` stay. Its futures are `'static`, so an override clones each `Arc<dyn Pack>` and owns its inputs. Reword `call`'s doc on `alias`, which still says the id stands in only when the run could not offer the tool: since step 3 a model call's alias is its wire name and a script call's is its id.
 - `HostRunContext` (`crates/harness-internal/runner/src/host-run.rs`) overrides `render`, calling each usable Pack's `render` once per non-empty set with a `RenderContext` that holds the section entry id and the round's `ModelInfo`, and answering every Pack asked, in the order asked.
 - The effect loop (`crates/harness-internal/runner/src/effect_loop.rs`) performs `Effect::Render` inside the effect's own future, in place of step 11's pass-through arm, passing `binding.render_info()` to the performer, so cancellation and a panic behave as for a tool call: a panicking `render` answers `Dropped`. `effect_loop.rs` is 481 lines, so keep the arm short or split the file the way `effect_loop-flight.rs` is split.
 - `ToolBinding` (`crates/runvil-internal/lua/src/handles.rs`) gains `survives_stop`, and `Effect::ToolCall` gains `survives_stop`, taken from the binding the call resolved to, which the effect loop reads when the call is issued. The merge sets the binding's flag per section: a catalog id keeps the catalog's `survives_stop`, and a model-only tool's is whatever that section's render returns. `EffectRecord::ToolCall` leaves the flag out, as `EffectRecord::Chat` leaves out the options it derives from the binding, because the run catalog and the render's `AnswerRecord` already give it.
@@ -1085,5 +1094,66 @@ Commit in `c:\Users\Vinnie\cursor\runvil-docs`.
 - In the counting section, say that Lua cannot get or call a tool only the model sees, and that `tools.stats.packs` counts its calls while `tools.stats.tools` leaves it out.
 
 </step-13>
+
+<step-14>
+
+### Step 14: Spell the Debug trait as fmt::Debug
+
+- Component: Debug trait spelling
+- Tests:
+  - `cargo nextest run --locked --workspace --exclude workshop --exclude workshop-server --exclude workshop-server-api --all-features`
+  - `cargo build --locked`
+  - `cargo nextest run --locked -p workshop -p workshop-server -p workshop-server-api`
+  - `$env:CARGO_BUILD_WARNINGS='deny'; cargo clippy --workspace --exclude workshop --exclude workshop-server --exclude workshop-server-api --all-targets --all-features`
+  - `$env:CARGO_BUILD_WARNINGS='deny'; cargo clippy -p workshop -p workshop-server -p workshop-server-api --all-targets`
+  - `cargo check -p gateway --no-default-features`
+  - `cargo fmt --all --check`
+  - `$env:RUSTDOCFLAGS='-D warnings'; cargo doc --workspace --no-deps --all-features --exclude workshop --exclude workshop-server --exclude workshop-server-api`
+  - `$env:RUSTDOCFLAGS='-D warnings'; cargo doc -p runvil --no-deps`
+  - `$env:RUSTDOCFLAGS='-D warnings'; cargo doc -p harness --no-deps`
+  - `$env:RUSTDOCFLAGS='-D warnings'; cargo doc --locked --no-deps --all-features -p runvil-engine --document-private-items`
+  - `Remove-Item Env:CARGO_BUILD_WARNINGS -ErrorAction SilentlyContinue; cargo +nightly-2026-09-05 xtask api --check`
+  - `cargo test -p build-xtask`
+  - `node --test crates/workshop/ui/test/docs-claims.mjs`
+  - `cargo deny check`
+  - `cargo +1.95 build --locked -p runvil -p runvil-engine -p runvil-lua -p runvil-parser -p runvil-types -p runvil-vfs -p runvil-model-client`
+  - `git grep -n -F -e "std::fmt::Debug" -- "*.rs"`, which prints nothing
+  - `git grep -n -E -e "std::fmt::\{[^}]*Debug[ ,}]" -- "*.rs"`, which prints nothing
+
+The code base names the `Debug` trait one way, `fmt::Debug`, with `fmt` in scope through `use std::fmt;`. Only the `Debug` trait changes: every other `std::fmt::` path, such as `Display`, `Formatter`, `Result`, `Write`, and the `DebugStruct` family of builders, stays exactly as written, so a rewritten impl reads `impl fmt::Debug for X` over a `fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result` signature. No clippy lint can enforce the rule, because both spellings resolve to the same trait, so a structural check in `build-xtask` does. The rewrite and the check land in one commit, because the check's live test fails until the rewrite is done.
+
+The rewrite, in place:
+
+- Before the first edit, rerun `git grep -n -F -e "std::fmt::Debug" -- "*.rs"`, because steps 5 to 13 may add or move lines. Before those steps it listed 38 lines in 31 files: 26 impl headers such as `impl std::fmt::Debug for Run`, the supertrait bound on `RevealLauncher` (`crates/gateway/app/src/admin/walled/reveal.rs`), the delegating call `std::fmt::Debug::fmt(&self.0, f)` in `crates/gateway/app/src/api_error.rs` and in `crates/gateway/config/src/api_error.rs`, the `&dyn std::fmt::Debug` parameter of two `tracing::field::Visit::record_debug` impls, five bounds on test helpers' type parameters, the `impl std::fmt::Debug + Send + Sync + 'static + use<>` return type of `wired_push` (`crates/workshop/server/src/agents/status-tests.rs`), and one string fixture. Rewrite each to `fmt::Debug` and leave the rest of the line as it is.
+- None of those files has `fmt` in scope, and none has a `use std::{...}` group to extend, so each takes its own `use std::fmt;` line beside its other `std` imports, or as its own group above the others when it has none, and `cargo fmt` orders it. Test files that glob-import their parent with `use super::*;` take their own import too. Where the cfg differs, the import follows it:
+  - `crates/gateway/app/src/commands.rs`: its one line is the `#[cfg(test)]` impl for `ExecutorOverride`, and the file's `std::fmt::Formatter` and `std::fmt::Result` paths stay as written, so the import is `#[cfg(test)] use std::fmt;`. An unconditional import is unused in a normal build, which `CARGO_BUILD_WARNINGS=deny` turns into an error.
+  - `crates/gateway/stt/whisper-ffi/src/lib.rs`: its line sits in the inline `#[cfg(test)] mod tests`, so the import goes in that module beside its `std` imports, not at the top of the file.
+- `crates/gateway/stt/api/src/test_fixtures/warnings.rs` keeps `use std::fmt::Write as _;` as it is and gains `use std::fmt;` on its own line, because folding the two into one group would rewrite the `Write` import.
+- The string fixture is `("pub use std::fmt::Debug;", 1)` in `a_re_export_rooted_outside_the_facade_dependencies_is_rejected` (`crates/build-xtask/src/facade_shape-tests.rs`), which pins that a re-export rooted at `std` is refused. It becomes `("pub use std::sync::Arc;", 1)`, which keeps that case and needs no import; `pub use fmt::Debug;` would only repeat the `pub use effect::Effect;` case beside it.
+- Three group imports bring the trait in as a bare `Debug`, a second spelling, and change too: `use std::fmt::{self, Debug};` in `crates/gateway/stt/engine/src/decoder.rs` becomes `use std::fmt;`, and `use std::fmt::{Debug, Display};` in `crates/runvil-internal/engine/src/test_support/seeded.rs` and `crates/runvil-internal/types/src/test_support.rs` becomes `use std::fmt::{self, Display};`. In those three files every bare `Debug` that names the trait (a bound, an impl header, a `dyn` type) becomes `fmt::Debug`, `Display` stays as it is, and `#[derive(Debug)]`, which names the derive macro, stays as written.
+- No line sits in a doc comment, an intra-doc link, or a `macro_rules!` body, but the rule and the check cover them. A doc comment writes `fmt::Debug`, and an intra-doc link to it resolves in the documented item's scope, so it needs `fmt` in scope as code does; the `cargo doc` gates fail a link that does not resolve. A `macro_rules!` body is no exception: a body that names the trait writes `fmt::Debug` like any other code, so its call sites need `fmt` in scope.
+- `crates/runvil/public-api.txt` does not change, because the listing names each trait impl by the resolved trait's name (`trait_name`, `crates/build-xtask/src/api/listing/compact.rs`), not by how the source spells it.
+
+The structural check:
+
+- A new module, `crates/build-xtask/src/debug_spelling.rs`, declared as `mod debug_spelling;` in `crates/build-xtask/src/main.rs` between `mod api;` and `mod doc_hidden;`, with its tests in the sibling `crates/build-xtask/src/debug_spelling-tests.rs`, wired as `#[cfg(test)] #[path = "debug_spelling-tests.rs"] mod tests;` the way `doc_hidden.rs` wires its tests. Its `//!` doc states the rule and why the check reads text. `pub(crate) fn debug_spelling_violations(root: &Path) -> Vec<String>` joins `all_violations` in `crates/build-xtask/src/tidy.rs` after `no_doctests_violations`, so `cargo test -p build-xtask`, `cargo xtask tidy`, and the workspace nextest run all enforce it, and `tidy.rs`'s module doc names it among the checks it runs. Both new files stay far under the 500-line ceiling, and `tidy.rs`, at 390 lines, gains about three.
+- What it scans: every `.rs` file in every workspace crate, the crates whose manifest the shared walk could not read included, sorted, through `crate::product::workspace_crates` and `crate::tidy::rust_files`, which skips `target`, as `no_doctests_violations` does. That is every tracked `.rs` file: when this step was written, all 1589 sat in a crate directory under `crates/`, and the walk found no untracked one. An unreadable file is reported, not skipped, and a scan that finds no `.rs` file fails with one violation saying it scanned nothing, as `unsafe_allowlist_violations` does, because a file that was never scanned cannot be shown clean.
+- What it refuses: each line that holds `std::fmt::Debug` as a whole path, found with `str::match_indices` and counted when neither the character before `std` nor the character after `Debug` is an identifier character (`[A-Za-z0-9_]`). So `::std::fmt::Debug` is refused, while `std::fmt::DebugStruct` and the other `Debug`-prefixed builders and every other `std::fmt::` path pass. It also refuses a `use std::fmt::{...}` group, on one line or across several, that lists `Debug` as an item, bare or renamed with `as`, reported at the line holding that item, because such a group brings in a bare `Debug`, a second spelling; every other item of a group, `DebugStruct` included, passes. A line that holds the path twice is one violation. Unlike `unsafe_allowlist`, which reads tokens so that a string never matches, this check reads source text, because the rule is about the spelling wherever it appears: code, comments, doc comments, string literals, and macro bodies alike, the same text the `git grep` above reads. `build-xtask` has no `regex` dependency and needs none.
+- Its own source never spells the path: the needle is `const DEBUG_PATH: &str = concat!("std::fmt", "::Debug");`, with a comment saying the split keeps this crate's source from spelling the path it refuses, and the module doc and the failure text describe the path without spelling it. The tests build every fixture that holds the long spelling from `DEBUG_PATH` with `format!`, including the builder case, written `{DEBUG_PATH}Struct`, which the `git grep` above would also match as plain text. Fixtures that list `Debug` in a `std::fmt::{...}` group are built with `format!` too, so the second `git grep` above stays empty.
+- Failure text, one violation per line, written for a model in the form `no_doctests` and `doc_hidden` use: `<path>:<line>: <RULE>: required <REQUIRED>, found`, then the trimmed source line in backticks. `<path>` is the workspace-relative path with `/` separators from `tidy::slash_path`, which becomes `pub(crate)`, so the text reads the same on every platform. `RULE` is `Debug trait spelled with its std path`. `REQUIRED` says to write `fmt::Debug` with `use std::fmt;` in scope, with each code name in backticks as the other checks write them. A group-import violation uses the same `RULE` and `REQUIRED`. An unreadable file reads `<path>: unreadable source: <error>`.
+
+Tests to add or update:
+
+- In `debug_spelling-tests.rs`, with a `write_crate` helper like the one in `unsafe_allowlist-tests.rs` and `workspace_root` from `crate::product::test_support`:
+  - The workspace passes: `debug_spelling_violations(&workspace_root())` is empty, and the failure message lists each violation on its own line.
+  - A fixture crate whose `lib.rs` holds the long spelling, built from `DEBUG_PATH`, as an impl header, a bound, a `dyn` parameter, a delegating `::fmt(` call, a `::`-rooted path, a doc comment, a string literal, and one line that holds it twice is reported once per line, at that line, and each violation names the file as `crates/<dir>/src/lib.rs:<line>` and the fix `fmt::Debug`.
+  - A fixture crate whose `lib.rs` holds only `fmt::Debug` with `use std::fmt;`, beside `std::fmt::Display`, `std::fmt::Formatter`, `std::fmt::Result`, `use std::fmt::Write as _;`, a `{DEBUG_PATH}Struct` builder path, and a `use std::fmt::{self, Display};` group, has no violation.
+  - A fixture crate whose `lib.rs` lists `Debug` in a one-line `std::fmt::{...}` group and, on its own line, in a group that spans several lines is reported once for each, at the line holding `Debug`, with the fix `fmt::Debug`.
+  - A crate whose manifest does not parse is still scanned, and a scan that finds no `.rs` file fails with one violation saying it scanned nothing.
+- `a_re_export_rooted_outside_the_facade_dependencies_is_rejected` keeps passing with `pub use std::sync::Arc;` as its `std`-rooted case.
+
+While iterating, run `cargo test -p build-xtask`, whose live test lists each line still to rewrite, then both clippy commands above, which report a missing `fmt` import and one a normal build leaves unused.
+
+</step-14>
 
 </execution-plan>

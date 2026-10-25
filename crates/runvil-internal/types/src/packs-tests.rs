@@ -1,6 +1,6 @@
 //! Tests for the Pack identity vocabulary.
 
-use super::{PackId, PackIdErrorKind};
+use super::{PackId, PackIdErrorKind, RESERVED_PACK_IDS};
 use crate::test_support::assert_wire;
 use crate::tools::ToolId;
 
@@ -65,6 +65,24 @@ fn pack_id_contains_exactly_the_tools_whose_first_segment_it_is() {
     // merely extends this one is not contained.
     let extended = ToolId::parse("web2/fetch").expect("a static valid id");
     assert!(!web.contains(&extended));
+}
+
+#[test]
+fn exactly_adhoc_and_dynamic_are_reserved_and_each_is_a_valid_pack_id() {
+    assert_eq!(RESERVED_PACK_IDS, ["adhoc", "dynamic"]);
+    for reserved in RESERVED_PACK_IDS {
+        let id = PackId::parse(reserved).expect("a reserved id is a valid Pack id");
+        assert!(id.is_reserved(), "{reserved}");
+    }
+    let search = ToolId::parse("dynamic/search").expect("a static valid id");
+    assert!(
+        search.pack().is_reserved(),
+        "a tool's Pack id is reserved as a parsed one is"
+    );
+    for free in ["web", "subagents", "adhoc2", "dynamics", "dyn", "x-adhoc"] {
+        let id = PackId::parse(free).expect("a static valid id");
+        assert!(!id.is_reserved(), "{free} is not reserved");
+    }
 }
 
 #[test]

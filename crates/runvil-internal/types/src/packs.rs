@@ -1,6 +1,7 @@
-//! The Pack identity vocabulary: [`PackId`] and its parse error,
-//! [`PackRef`], one entry of a prompt's `uses:` list, and [`Prelude`],
-//! the Lua source a declared Pack hands the Engine.
+//! The Pack identity vocabulary: [`PackId`] and its parse error, the
+//! [`RESERVED_PACK_IDS`] no Pack may take, [`PackRef`], one entry of a
+//! prompt's `uses:` list, and [`Prelude`], the Lua source a declared Pack
+//! hands the Engine.
 //!
 //! A Pack has a fully qualified name such as `runvil/web`, and its
 //! [`PackId`] is that name's second segment, `web`. Every tool it offers
@@ -21,6 +22,13 @@ use crate::tools::ToolId;
 #[cfg(test)]
 #[path = "packs-tests.rs"]
 mod tests;
+
+/// The Pack ids the Engine holds tools under itself, which no Pack of any
+/// vendor may take: `adhoc`, which holds a section's own tools, and
+/// `dynamic`, for the Engine's discovery tools.
+///
+/// They are strings because a [`PackId`] cannot be built in a const.
+pub const RESERVED_PACK_IDS: &[&str] = &["adhoc", "dynamic"];
 
 /// A Pack's id: one segment, the second segment of the Pack's fully
 /// qualified name, such as `web` for `runvil/web`.
@@ -73,6 +81,13 @@ impl PackId {
     #[must_use]
     pub fn contains(&self, tool: &ToolId) -> bool {
         tool.pack_segment() == self.0.first()
+    }
+
+    /// Returns whether this id is reserved, such as `adhoc`: the Engine
+    /// holds the tools under it itself, so no Pack may take it.
+    #[must_use]
+    pub fn is_reserved(&self) -> bool {
+        RESERVED_PACK_IDS.contains(&self.0.first())
     }
 }
 

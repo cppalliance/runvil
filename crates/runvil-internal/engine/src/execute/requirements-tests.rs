@@ -1,5 +1,5 @@
 //! Tests for the preflight report's missing services, unavailable
-//! Packs, and the reserved Pack id `adhoc`.
+//! Packs, and the reserved Pack ids `adhoc` and `dynamic`.
 
 use runvil_types::packs::PackId;
 use runvil_types::timestamp::Timestamp;
@@ -11,9 +11,14 @@ use crate::execute::{RunContext, RunErrorKind};
 use crate::parser::Prompt;
 use crate::test_support::scenario::TEST_SEED;
 
-/// The notice line of a run whose catalog or roster names `adhoc`.
-const RESERVED_ADHOC: &str = "- the run's tool catalog or Pack roster names the Pack id adhoc, \
-                              which holds a section's own tools";
+/// The notice line of a run whose catalog or roster names the reserved
+/// Pack id `reserved`.
+fn reserved_line(reserved: &str) -> String {
+    format!(
+        "- the run's tool catalog or Pack roster names the Pack id {reserved}, \
+         which the Engine reserves"
+    )
+}
 
 fn id(text: &str) -> PackId {
     PackId::parse(text).expect("a static valid id")
@@ -45,71 +50,120 @@ fn catalog(ids: &[&str]) -> ToolCatalog {
 }
 
 #[test]
-fn a_catalog_or_roster_naming_the_adhoc_pack_id_refuses_the_run_once() {
-    let contexts = [
-        (
-            "the catalog",
-            context().tools(catalog(&["web/fetch", "adhoc/grab"])),
-        ),
-        (
-            "the usable roster",
-            context().packs(vec![UsablePack::new(id("adhoc"), "acme")], Vec::new()),
-        ),
-        (
-            "the unavailable roster",
-            context().packs(
-                Vec::new(),
-                vec![UnavailablePack::new(id("adhoc"), "the server is down")],
+fn a_catalog_or_roster_naming_a_reserved_pack_id_refuses_the_run_naming_the_id_once() {
+    for reserved in ["adhoc", "dynamic"] {
+        let (grab, put) = (format!("{reserved}/grab"), format!("{reserved}/put"));
+        let contexts = [
+            (
+                "the catalog",
+                context().tools(catalog(&["web/fetch", &grab, &put])),
             ),
-        ),
-    ];
-    for (named_by, ctx) in contexts {
-        let (_, requirements) = ctx.prepare(&declares_nothing());
-        assert!(requirements.reserved_adhoc, "{named_by} names adhoc");
-        assert!(!requirements.is_satisfied(), "{named_by} names adhoc");
-        let refusal = requirements
-            .refusal()
-            .expect("a reserved Pack id refuses the run");
-        assert_eq!(
-            refusal.kind(),
-            RunErrorKind::RequirementsUnmet,
-            "{named_by}"
-        );
-        let notice = refusal.to_string();
-        assert_eq!(
-            notice.matches(RESERVED_ADHOC).count(),
-            1,
-            "{named_by}: the notice names the reservation once: {notice}"
-        );
+            (
+                "the usable roster",
+                context().packs(vec![UsablePack::new(id(reserved), "acme")], Vec::new()),
+            ),
+            (
+                "the unavailable roster",
+                context().packs(
+                    Vec::new(),
+                    vec![UnavailablePack::new(id(reserved), "the server is down")],
+                ),
+            ),
+        ];
+        for (named_by, ctx) in contexts {
+            let (_, requirements) = ctx.prepare(&declares_nothing());
+            assert_eq!(
+                requirements.reserved,
+                [id(reserved)],
+                "{named_by} names {reserved}"
+            );
+            assert!(!requirements.is_satisfied(), "{named_by} names {reserved}");
+            let refusal = requirements
+                .refusal()
+                .expect("a reserved Pack id refuses the run");
+            assert_eq!(
+                refusal.kind(),
+                RunErrorKind::RequirementsUnmet,
+                "{named_by}"
+            );
+            let notice = refusal.to_string();
+            assert_eq!(
+                notice.matches(&reserved_line(reserved)).count(),
+                1,
+                "{named_by}: the notice names {reserved} once: {notice}"
+            );
+        }
     }
 }
 
 #[test]
-fn a_context_naming_no_adhoc_pack_leaves_the_reservation_clear() {
-    let ctx = context().tools(catalog(&["web/fetch"])).packs(
-        vec![UsablePack::new(id("web"), "runvil")],
-        vec![UnavailablePack::new(id("mcp"), "the server is down")],
-    );
+fn a_context_naming_both_reserved_pack_ids_lists_them_sorted_each_once() {
+    let ctx = context()
+        .tools(catalog(&[
+            "dynamic/search",
+            "web/fetch",
+            "adhoc/grab",
+            "dynamic/call",
+        ]))
+        .packs(
+            vec![UsablePack::new(id("dynamic"), "acme")],
+            vec![UnavailablePack::new(id("adhoc"), "the server is down")],
+        );
     let (_, requirements) = ctx.prepare(&declares_nothing());
-    assert!(!requirements.reserved_adhoc);
+    assert_eq!(requirements.reserved, [id("adhoc"), id("dynamic")]);
+    assert_eq!(
+        requirements.notice(),
+        format!(
+            "the environment cannot satisfy this prompt:\n{}\n{}",
+            reserved_line("adhoc"),
+            reserved_line("dynamic")
+        )
+    );
+}
+
+#[test]
+fn a_context_naming_no_reserved_pack_id_leaves_the_reservations_empty() {
+    let ctx = context()
+        .tools(catalog(&["web/fetch", "dynamics/search", "adhoc2/grab"]))
+        .packs(
+            vec![UsablePack::new(id("web"), "runvil")],
+            vec![UnavailablePack::new(id("mcp"), "the server is down")],
+        );
+    let (_, requirements) = ctx.prepare(&declares_nothing());
+    assert!(requirements.reserved.is_empty(), "{requirements:?}");
     assert!(requirements.is_satisfied(), "{requirements:?}");
 }
 
 #[test]
-fn merge_keeps_a_set_reservation_from_either_side() {
-    let reserved = || Requirements {
-        reserved_adhoc: true,
+fn merge_keeps_the_union_of_both_reports_reserved_ids_sorted_each_once() {
+    let reserving = |ids: &[&str]| Requirements {
+        reserved: ids.iter().copied().map(id).collect(),
         ..Requirements::default()
     };
-    let mut kept = reserved();
+    let mut kept = reserving(&["dynamic"]);
     kept.merge(Requirements::default());
-    assert!(kept.reserved_adhoc, "merging a clear report keeps the flag");
-    let mut gained = Requirements::default();
-    gained.merge(reserved());
-    assert!(gained.reserved_adhoc, "merging a set report sets the flag");
     assert_eq!(
-        gained.notice(),
-        format!("the environment cannot satisfy this prompt:\n{RESERVED_ADHOC}")
+        kept.reserved,
+        [id("dynamic")],
+        "merging a clear report keeps the ids"
+    );
+    let mut gained = Requirements::default();
+    gained.merge(reserving(&["dynamic"]));
+    assert_eq!(
+        gained.reserved,
+        [id("dynamic")],
+        "merging a reserving report takes its ids"
+    );
+    let mut union = reserving(&["dynamic"]);
+    union.merge(reserving(&["dynamic", "adhoc"]));
+    assert_eq!(union.reserved, [id("adhoc"), id("dynamic")]);
+    assert_eq!(
+        union.notice(),
+        format!(
+            "the environment cannot satisfy this prompt:\n{}\n{}",
+            reserved_line("adhoc"),
+            reserved_line("dynamic")
+        )
     );
 }
 

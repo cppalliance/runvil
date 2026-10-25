@@ -1,6 +1,6 @@
 //! Per-run context and resource limits: [`RunContext`] and [`RunLimits`].
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
 #[path = "config-limits.rs"]
@@ -341,17 +341,23 @@ impl RunContext {
     /// `None`, `prepare` skips the fill and the checks, and the model
     /// bindings stay empty.
     ///
-    /// `prepare` also sets [`Requirements::reserved_adhoc`] when a tool of
-    /// the catalog or a Pack of the roster, usable or not, has the Pack
-    /// id `adhoc`, which holds a section's own tools.
+    /// `prepare` also lists in [`Requirements::reserved`] each reserved
+    /// Pack id, such as `adhoc`, that a tool of the catalog or a Pack of
+    /// the roster, usable or not, has.
     #[must_use]
     pub fn prepare(mut self, prompt: &Prompt) -> (RunContext, Requirements) {
         let mut requirements = Requirements::default();
         self.model_bindings =
             fill::fill_model_bindings(prompt, self.model.as_ref(), &mut requirements);
-        let adhoc = |pack: &PackId| pack.to_string() == "adhoc";
-        requirements.reserved_adhoc = self.tools.tools().iter().any(|tool| adhoc(&tool.id.pack()))
-            || self.roster.keys().any(adhoc);
+        let reserved: BTreeSet<PackId> = self
+            .tools
+            .tools()
+            .iter()
+            .map(|tool| tool.id.pack())
+            .chain(self.roster.keys().cloned())
+            .filter(PackId::is_reserved)
+            .collect();
+        requirements.reserved = reserved.into_iter().collect();
         (self, requirements)
     }
 
