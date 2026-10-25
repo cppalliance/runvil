@@ -647,6 +647,7 @@ pub fn runvil::model::ToolSchema::name(&self) -> &str
 pub fn runvil::model::ToolSchema::parameters(&self) -> &serde_json::value::Value
 pub fn runvil::packs::GlobalName::parse(s: &str) -> core::result::Result<runvil::packs::GlobalName, runvil::packs::GlobalNameError>
 pub fn runvil::packs::PackId::contains(&self, tool: &runvil::tools::ToolId) -> bool
+pub fn runvil::packs::PackId::is_reserved(&self) -> bool
 pub fn runvil::packs::PackId::parse(name: &str) -> core::result::Result<runvil::packs::PackId, runvil::packs::PackIdError>
 pub fn runvil::packs::PackIdError::kind(&self) -> runvil::packs::PackIdErrorKind
 pub fn runvil::packs::PackRef::id(&self) -> &runvil::packs::PackId
@@ -805,7 +806,7 @@ pub runvil::RequirementCheck::ContextMinimum
 pub runvil::RequirementCheck::HardKeyword
 pub runvil::Requirements::missing_required: alloc::vec::Vec<runvil::packs::PackId>
 pub runvil::Requirements::missing_services: alloc::vec::Vec<runvil::MissingService>
-pub runvil::Requirements::reserved_adhoc: bool
+pub runvil::Requirements::reserved: alloc::vec::Vec<runvil::packs::PackId>
 pub runvil::Requirements::unavailable: alloc::vec::Vec<runvil::UnavailablePack>
 pub runvil::Requirements::unmet_requirements: alloc::vec::Vec<runvil::UnmetRequirement>
 pub runvil::RunErrorKind::Binding

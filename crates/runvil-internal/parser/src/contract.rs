@@ -125,11 +125,12 @@ pub(crate) enum PackListError {
     /// The list names this Pack more than once.
     #[error("invalid frontmatter: Pack id {0} is declared more than once under uses")]
     Duplicate(PackId),
-    /// The list names the Pack id `adhoc`, from any vendor.
+    /// The list names this reserved Pack id, from any vendor.
     #[error(
-        "invalid frontmatter: adhoc holds a section's own tools and is never declared under uses"
+        "invalid frontmatter: Pack id {0} is reserved by the Engine and is never declared \
+         under uses"
     )]
-    Adhoc,
+    Reserved(PackId),
 }
 
 /// Refuses a `uses:` list that names one Pack id twice, whatever the
@@ -144,12 +145,13 @@ pub(crate) fn check_distinct_packs(packs: &[PackRef]) -> Result<(), PackListErro
     }
 }
 
-/// Refuses a `uses:` list that names the Pack id `adhoc`, whatever the
-/// vendor, because `adhoc` holds a section's own tools.
-pub(crate) fn check_no_adhoc_pack(packs: &[PackRef]) -> Result<(), PackListError> {
-    if packs.iter().any(|pack| pack.id().to_string() == "adhoc") {
-        Err(PackListError::Adhoc)
-    } else {
-        Ok(())
+/// Refuses a `uses:` list that names a reserved Pack id, such as `adhoc`,
+/// whatever the vendor, because the Engine holds the tools under it.
+///
+/// The refusal names the first reserved Pack id declared.
+pub(crate) fn check_no_reserved_pack(packs: &[PackRef]) -> Result<(), PackListError> {
+    match packs.iter().find(|pack| pack.id().is_reserved()) {
+        Some(pack) => Err(PackListError::Reserved(pack.id().clone())),
+        None => Ok(()),
     }
 }

@@ -91,15 +91,16 @@ impl PackRegistry {
     /// `vendor/name` pair of valid one-segment names,
     /// [`InstallError::DuplicatePack`] when the registry holds the FQN
     /// already, as it holds each built-in's from the start,
-    /// [`InstallError::AdhocPackId`] when the Pack id is `adhoc`, and
+    /// [`InstallError::ReservedPackId`] when the Pack id is
+    /// [reserved](PackId::is_reserved), such as `adhoc`, and
     /// [`InstallError::ReservedName`] when the Pack id is a built-in's.
     pub fn insert(&mut self, info: PackInfo, config: Value) -> Result<(), InstallError> {
         let id = pack_id(info.fqn).ok_or(InstallError::InvalidFqn { fqn: info.fqn })?;
         if self.entries.contains_key(info.fqn) {
             return Err(InstallError::DuplicatePack { fqn: info.fqn });
         }
-        if id.to_string() == ADHOC {
-            return Err(InstallError::AdhocPackId { fqn: info.fqn });
+        if id.is_reserved() {
+            return Err(InstallError::ReservedPackId { fqn: info.fqn, id });
         }
         if self.reserves(&id) {
             return Err(InstallError::ReservedName {
@@ -192,17 +193,17 @@ pub enum InstallError {
         /// The Pack id it would have taken.
         name: PackId,
     },
-    /// The inserted Pack's id is `adhoc`, which holds a section's own
-    /// tools, whatever the vendor.
-    #[error("Pack `{fqn}` cannot take the Pack id adhoc, which holds a section's own tools")]
-    AdhocPackId {
+    /// The inserted Pack's id is one the Engine
+    /// [reserves](PackId::is_reserved), such as `adhoc`, which holds a
+    /// section's own tools, whatever the vendor.
+    #[error("Pack `{fqn}` cannot take the Pack id {id}, which the Engine reserves")]
+    ReservedPackId {
         /// The FQN as its `PackInfo` spells it.
         fqn: &'static str,
+        /// The reserved Pack id it would have taken.
+        id: PackId,
     },
 }
-
-/// The Pack id of a section's own tools, which no Pack may take.
-const ADHOC: &str = "adhoc";
 
 /// The built-ins every registry holds from the start.
 ///
@@ -210,7 +211,10 @@ const ADHOC: &str = "adhoc";
 /// object exists only so building, readiness, and the run snapshot treat
 /// it like any other Pack, so a built-in must never offer tools, carry a
 /// prelude, or need services. Its `call` is unreachable, because the run
-/// snapshot routes a call only to a tool in a Pack's own list.
+/// snapshot routes a call only to a tool in a Pack's own list. A built-in
+/// never takes a [reserved](PackId::is_reserved) Pack id: the Harness
+/// puts every `runvil` Pack no `uses:` entry replaces into every run's
+/// roster, so a reserved one would refuse every run.
 const BUILTIN: [PackInfo; 1] = [PackInfo::new("runvil/subagents", builtin).description(
     "Reserves the subagents name for the Engine's subagent tools, which are not built yet",
 )];

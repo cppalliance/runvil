@@ -1,11 +1,12 @@
 //! Tests for the Pack registry: a new registry holds the built-in
 //! `runvil/subagents` and lists every Pack in FQN order, `insert` refuses an
 //! FQN that is not a vendor/name pair, an FQN the registry holds already,
-//! and a third-party Pack taking the built-in's Pack id, and accepts a
-//! Pack id another vendor has; the registry keeps each Pack's config and
-//! hands it on with the Pack id, its Debug output never shows a config,
-//! and each built-in builds a Pack that offers no tools and carries no
-//! prelude and no needs.
+//! a reserved Pack id from any vendor, and a third-party Pack taking the
+//! built-in's Pack id, and accepts a Pack id another vendor has; the
+//! registry keeps each Pack's config and hands it on with the Pack id, its
+//! Debug output never shows a config, and each built-in takes no reserved
+//! Pack id and builds a Pack that offers no tools and carries no prelude
+//! and no needs.
 
 use serde_json::{Value, json};
 
@@ -113,11 +114,23 @@ fn add_refuses_a_third_party_pack_taking_the_builtins_pack_id() {
 }
 
 #[test]
-fn add_refuses_a_pack_taking_the_adhoc_pack_id_from_any_vendor() {
-    for fqn in ["acme/adhoc", "runvil/adhoc"] {
+fn add_refuses_a_pack_taking_a_reserved_pack_id_from_any_vendor() {
+    for (fqn, reserved) in [
+        ("acme/adhoc", "adhoc"),
+        ("runvil/adhoc", "adhoc"),
+        ("acme/dynamic", "dynamic"),
+        ("runvil/dynamic", "dynamic"),
+    ] {
         let mut packs = PackRegistry::new();
         let refused = packs.insert(fixture(fqn), Value::Null);
-        assert_eq!(refused, Err(InstallError::AdhocPackId { fqn }), "{fqn}");
+        assert_eq!(
+            refused,
+            Err(InstallError::ReservedPackId {
+                fqn,
+                id: name(reserved),
+            }),
+            "{fqn}"
+        );
         assert!(
             !packs.list().any(|(info, _)| info.fqn == fqn),
             "the refused {fqn} is not in the registry"
@@ -198,7 +211,14 @@ fn the_registry_refusals_name_the_pack() {
             fqn: "acme/subagents",
             name: name("subagents"),
         },
-        InstallError::AdhocPackId { fqn: "acme/adhoc" },
+        InstallError::ReservedPackId {
+            fqn: "acme/adhoc",
+            id: name("adhoc"),
+        },
+        InstallError::ReservedPackId {
+            fqn: "acme/dynamic",
+            id: name("dynamic"),
+        },
     ];
     let messages: Vec<String> = refusals.iter().map(ToString::to_string).collect();
     assert_eq!(
@@ -208,10 +228,18 @@ fn the_registry_refusals_name_the_pack() {
             "Pack `acme/web` is already in the registry",
             "Pack `acme/subagents` cannot take the Pack id subagents, \
              which the built-in runvil/subagents reserves",
-            "Pack `acme/adhoc` cannot take the Pack id adhoc, \
-             which holds a section's own tools",
+            "Pack `acme/adhoc` cannot take the Pack id adhoc, which the Engine reserves",
+            "Pack `acme/dynamic` cannot take the Pack id dynamic, which the Engine reserves",
         ]
     );
+}
+
+#[test]
+fn no_builtin_takes_a_reserved_pack_id() {
+    for info in BUILTIN {
+        let id = pack_id(info.fqn).unwrap();
+        assert!(!id.is_reserved(), "{} takes a reserved Pack id", info.fqn);
+    }
 }
 
 #[test]

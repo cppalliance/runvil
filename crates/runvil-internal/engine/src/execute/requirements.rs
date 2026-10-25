@@ -39,27 +39,29 @@ pub struct Requirements {
     ///
     /// The caller adds these. The run fails until the Pack can serve.
     pub unavailable: Vec<UnavailablePack>,
-    /// Whether the run's tool catalog or Pack roster names the Pack id
-    /// `adhoc`, which holds a section's own tools.
+    /// The reserved Pack ids, such as `adhoc`, that the run's tool catalog
+    /// or Pack roster names, sorted, each once.
     ///
-    /// [`RunContext::prepare`](super::RunContext::prepare) sets it. The run
-    /// fails while it is set.
-    pub reserved_adhoc: bool,
+    /// The Engine holds the tools under a reserved Pack id itself, so no
+    /// Pack may take one.
+    /// [`RunContext::prepare`](super::RunContext::prepare) fills it. The
+    /// run fails while it holds any id.
+    pub reserved: Vec<PackId>,
 }
 
 impl Requirements {
     /// Returns whether the report lets the run proceed.
     ///
     /// That holds when every model requirement is met, every required
-    /// Pack is present, can serve, and has the services it needs, and no
-    /// Pack takes the Pack id `adhoc`.
+    /// Pack is present, can serve, and has the services it needs, and
+    /// nothing in the run takes a reserved Pack id.
     #[must_use]
     pub fn is_satisfied(&self) -> bool {
         self.unmet_requirements.is_empty()
             && self.missing_required.is_empty()
             && self.missing_services.is_empty()
             && self.unavailable.is_empty()
-            && !self.reserved_adhoc
+            && self.reserved.is_empty()
     }
 
     /// Adds the entries of `other` to this report.
@@ -67,7 +69,7 @@ impl Requirements {
     /// Use it to combine the caller's Pack report with the report
     /// from `RunContext::prepare`, so that one refusal names every gap.
     /// The merge skips an entry the report already holds, and keeps
-    /// `reserved_adhoc` set when either report sets it.
+    /// `reserved` the union of both reports' ids, sorted, each once.
     ///
     /// The merge drops the `missing_required` entry of a Pack that
     /// lacks a service or is unavailable: the service or unavailable entry
@@ -76,7 +78,9 @@ impl Requirements {
         push_new(&mut self.missing_required, other.missing_required);
         push_new(&mut self.missing_services, other.missing_services);
         push_new(&mut self.unavailable, other.unavailable);
-        self.reserved_adhoc |= other.reserved_adhoc;
+        self.reserved.extend(other.reserved);
+        self.reserved.sort();
+        self.reserved.dedup();
         let (services, unavailable) = (&self.missing_services, &self.unavailable);
         self.missing_required.retain(|id| {
             !services.iter().any(|missing| missing.pack == *id)
@@ -130,10 +134,11 @@ impl Requirements {
                 entry.pack, entry.reason
             );
         }
-        if self.reserved_adhoc {
-            notice.push_str(
-                "\n- the run's tool catalog or Pack roster names the Pack id adhoc, \
-                 which holds a section's own tools",
+        for id in &self.reserved {
+            let _ = write!(
+                notice,
+                "\n- the run's tool catalog or Pack roster names the Pack id {id}, \
+                 which the Engine reserves"
             );
         }
         for unmet in &self.unmet_requirements {

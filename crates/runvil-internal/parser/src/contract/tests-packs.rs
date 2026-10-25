@@ -1,5 +1,5 @@
 //! Tests for the `uses` key: bare Pack ids and vendor/name entries, the
-//! refused entry forms, and duplicates.
+//! refused entry forms, duplicates, and reserved Pack ids.
 
 use super::*;
 
@@ -134,8 +134,16 @@ fn a_pack_id_declared_twice_is_refused() {
 }
 
 #[test]
-fn the_adhoc_pack_id_is_refused_from_any_vendor() {
-    for entries in ["[adhoc]", "[acme/adhoc]", "[web, runvil/adhoc]"] {
+fn a_reserved_pack_id_is_refused_from_any_vendor_naming_the_first_one_declared() {
+    for (entries, reserved) in [
+        ("[adhoc]", "adhoc"),
+        ("[acme/adhoc]", "adhoc"),
+        ("[web, runvil/adhoc]", "adhoc"),
+        ("[dynamic]", "dynamic"),
+        ("[acme/dynamic]", "dynamic"),
+        ("[web, runvil/dynamic]", "dynamic"),
+        ("[dynamic, adhoc]", "dynamic"),
+    ] {
         let error = parse_err(&prompt(&format!("uses: {entries}"), &[]));
         assert_eq!(
             error.kind(),
@@ -144,8 +152,10 @@ fn the_adhoc_pack_id_is_refused_from_any_vendor() {
         );
         assert_eq!(
             error.to_string(),
-            "invalid frontmatter: adhoc holds a section's own tools and is never declared \
-             under uses",
+            format!(
+                "invalid frontmatter: Pack id {reserved} is reserved by the Engine and is \
+                 never declared under uses"
+            ),
             "{entries}"
         );
     }
