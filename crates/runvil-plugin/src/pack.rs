@@ -8,14 +8,14 @@ use std::sync::Arc;
 use runvil_types::packs::PackId;
 use runvil_types::tools::{ToolError, ToolInfo, ToolOutput};
 
-use crate::{HostServices, ServiceId, ToolContext};
+use crate::{HostServices, RenderContext, ServiceId, ToolContext};
 
 /// A boxed future that may borrow for `'a`, the same type as
 /// `futures::future::BoxFuture`.
 ///
-/// [`Pack::call`] and [`Pack::ready`] return one, so the Harness can
-/// hold Packs as `dyn Pack`. An implementation wraps its body in
-/// `Box::pin(async move { ... })`.
+/// [`Pack::call`], [`Pack::ready`], and [`Pack::render`] return one, so
+/// the Harness can hold Packs as `dyn Pack`. An implementation wraps its
+/// body in `Box::pin(async move { ... })`.
 pub type PackFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 
 /// One Pack object: the tools it offers and the calls it performs.
@@ -102,6 +102,32 @@ pub trait Pack: Send + Sync {
         cx: ToolContext<'a>,
         args: serde_json::Value,
     ) -> PackFuture<'a, Result<ToolOutput, ToolError>>;
+
+    /// Returns the tools the model sees, given the tools a section offered
+    /// from this Pack in one set.
+    ///
+    /// A section offers tools in two sets: statically, into the tool list
+    /// every round of the section sends, or dynamically. `cx` names the
+    /// section entry and the model of its first round, and `offered` holds
+    /// the tools the section offered from this Pack in one set. A render
+    /// may reshape, rename, or drop offered tools, and may add model-only
+    /// tools under its own Pack id. Every catalog tool it returns is one
+    /// the section offered in that set. It receives the same inputs for
+    /// either set, and a set the Pack was not offered into is not rendered.
+    /// The default returns `offered` unchanged.
+    ///
+    /// # Invariants
+    ///
+    /// - `render` runs in the effect loop with [`call`](Pack::call)'s
+    ///   rules: it must not block while polled, it must not panic, and it
+    ///   is cancellation-aware.
+    fn render<'a>(
+        &'a self,
+        _cx: RenderContext<'a>,
+        offered: Vec<ToolInfo>,
+    ) -> PackFuture<'a, Vec<ToolInfo>> {
+        Box::pin(async move { offered })
+    }
 }
 
 /// A Pack described as data, which a Plugin inserts into the Host's

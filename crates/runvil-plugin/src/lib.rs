@@ -28,6 +28,9 @@
 //! `construct` function the Host calls once, when it builds its Packs,
 //! to build the one [`Pack`] object every run shares. [`Pack::call`]
 //! performs one tool call with the [`ToolContext`] the Harness lends it.
+//! [`Pack::render`] returns the tools the model sees, given the tools a
+//! section offered from the Pack and the [`RenderContext`] that names the
+//! section entry and its model.
 //! [`HostServices`] maps service ids to the shared objects a Host provides,
 //! each read back through a typed [`ServiceKey`].
 //!
@@ -76,6 +79,13 @@
 //!   [`ToolOutput::untrusted`].
 //! - [`Pack::call`] is cancellation-aware: its future may be dropped
 //!   before it finishes, on the occasions its invariants list.
+//! - [`Pack::render`] runs in the effect loop with the rules of
+//!   [`Pack::call`]: it must not block while polled, it must not panic,
+//!   and it is cancellation-aware.
+//! - [`Pack::render`] takes and returns plain data: its
+//!   [`RenderContext`] and its tool lists hold no Rust-only handle such as
+//!   [`HostServices`], so a later C verb can pass them serialized. A fact
+//!   joins [`RenderContext`] only as plain data.
 
 pub mod abi;
 mod context;
@@ -85,11 +95,12 @@ mod service;
 #[cfg(feature = "test-support")]
 pub mod testing;
 
-pub use context::ToolContext;
+pub use context::{RenderContext, ToolContext};
 pub use pack::{Pack, PackFuture, PackInfo};
 pub use registry::{InstallError, PackOrigin, PackRegistry};
 pub use service::{HostServices, ServiceError, ServiceId, ServiceKey, TOKIO_RUNTIME};
 
+pub use runvil_types::models::{ModelId, ModelInfo, ThinkingMode};
 pub use runvil_types::packs::{PackId, PackIdError, PackIdErrorKind};
 pub use runvil_types::tools::{
     OutputTrust, ToolCallOrigin, ToolCaller, ToolError, ToolErrorKind, ToolId, ToolIdError,

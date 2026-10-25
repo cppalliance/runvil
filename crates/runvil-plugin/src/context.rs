@@ -1,7 +1,9 @@
-//! [`ToolContext`]: what one tool call receives.
+//! [`ToolContext`], what one tool call receives, and [`RenderContext`],
+//! what a render learns about its section entry.
 
 use std::sync::Arc;
 
+use runvil_types::models::ModelInfo;
 use runvil_types::tools::{ToolCallOrigin, ToolId};
 use runvil_vfs::Access;
 
@@ -82,5 +84,32 @@ impl<'a> ToolContext<'a> {
         key: &ServiceKey<T>,
     ) -> Option<Arc<T>> {
         self.services.get(key)
+    }
+}
+
+/// What a Pack learns about the section entry it renders for, in
+/// [`Pack::render`](crate::Pack::render).
+///
+/// A section entry is one execution of a section: re-entering a section,
+/// a fanout arm, a task, and a child started with `call` are each their
+/// own entry. The context holds plain data only, free of Rust-only handles
+/// such as [`HostServices`], so a later C verb can pass it serialized. The
+/// Harness builds it with [`RenderContext::new`], and later facts join as
+/// fields without breaking existing Packs.
+#[derive(Debug)]
+#[non_exhaustive]
+pub struct RenderContext<'a> {
+    /// The section entry, the value Lua reads as `sys.id`.
+    pub entry: &'a str,
+    /// The model of the section's first round.
+    pub model: &'a ModelInfo,
+}
+
+impl<'a> RenderContext<'a> {
+    /// A context naming the section entry `entry` and the model of its
+    /// first round, `model`. The Harness builds one per render.
+    #[must_use]
+    pub fn new(entry: &'a str, model: &'a ModelInfo) -> Self {
+        Self { entry, model }
     }
 }
