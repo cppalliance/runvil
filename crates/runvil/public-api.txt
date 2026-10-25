@@ -703,6 +703,7 @@ pub fn runvil::tools::ToolInfo::describes_tools(self, describes: bool) -> runvil
 pub fn runvil::tools::ToolInfo::new(id: runvil::tools::ToolId, description: impl core::convert::Into<alloc::string::String>, parameters_schema: serde_json::value::Value) -> runvil::tools::ToolInfo
 pub fn runvil::tools::ToolInfo::structured(self, structured: bool) -> runvil::tools::ToolInfo
 pub fn runvil::tools::ToolInfo::survives_stop(self, survives: bool) -> runvil::tools::ToolInfo
+pub fn runvil::tools::ToolInfo::wire_name(self, wire_name: impl core::convert::Into<alloc::string::String>) -> runvil::tools::ToolInfo
 pub fn runvil::tools::ToolOutput::text(&self) -> &str
 pub fn runvil::tools::ToolOutput::trust(&self) -> runvil::tools::OutputTrust
 pub fn runvil::tools::ToolOutput::trusted(text: impl core::convert::Into<alloc::string::String>) -> runvil::tools::ToolOutput
@@ -1324,6 +1325,7 @@ pub runvil::tools::ToolInfo::id: runvil::tools::ToolId
 pub runvil::tools::ToolInfo::parameters_schema: serde_json::value::Value
 pub runvil::tools::ToolInfo::structured_output: bool
 pub runvil::tools::ToolInfo::survives_stop: bool
+pub runvil::tools::ToolInfo::wire_name: core::option::Option<alloc::string::String>
 pub runvil::vfs::Entry::description: core::option::Option<alloc::string::String>
 pub runvil::vfs::Entry::name: alloc::string::String
 pub runvil::vfs::Entry::stat: runvil::vfs::Stat

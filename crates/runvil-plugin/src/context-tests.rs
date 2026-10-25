@@ -1,12 +1,14 @@
-//! Tests for the context one tool call receives: the getters and the typed
-//! service lookup.
+//! Tests for the contexts a Pack receives: a tool call's getters and typed
+//! service lookup, and the facts a render learns.
 
+use std::num::NonZeroU32;
 use std::sync::Arc;
 
+use runvil_types::models::{ModelId, ModelInfo, ThinkingMode};
 use runvil_types::tools::{ToolCallOrigin, ToolCaller, ToolId};
 use runvil_vfs::{Access, Origin, VfsRef};
 
-use super::ToolContext;
+use super::{RenderContext, ToolContext};
 use crate::{HostServices, ServiceKey};
 
 const GREETING: ServiceKey<str> = ServiceKey::new("acme/greeting");
@@ -56,4 +58,19 @@ fn a_service_is_found_by_its_key_and_an_absent_or_mistyped_one_is_not() {
             .is_none(),
         "a service provided as another type is None"
     );
+}
+
+#[test]
+fn a_render_context_holds_the_entry_and_the_model_it_was_built_with() {
+    let model = ModelInfo::new(
+        ModelId::gateway("analyst").expect("a valid model id"),
+        "A careful analysis model",
+        NonZeroU32::new(8_192).expect("a non-zero context window"),
+        ThinkingMode::Switchable,
+    );
+    let entry = String::from("chat-1");
+    let cx = RenderContext::new(&entry, &model);
+    assert_eq!(cx.entry, "chat-1");
+    assert!(std::ptr::eq(cx.model, &raw const model));
+    assert_eq!(cx.model.id().name(), "analyst");
 }

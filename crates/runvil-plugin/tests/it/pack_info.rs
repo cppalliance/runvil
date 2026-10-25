@@ -1,17 +1,20 @@
 //! A fixture Plugin crate's whole Pack side: a `GREETER` constant, a
 //! `construct` that reads a Host-wide service and names its tool under the
 //! Pack id it receives, and an `impl Pack` whose `call` reads a per-run
-//! service through the context it is lent.
+//! service through the context it is lent and whose `render` is the
+//! default.
 
 use std::future::Future;
+use std::num::NonZeroU32;
 use std::pin::pin;
 use std::sync::Arc;
 use std::task::{Context, Poll, Waker};
 
 use runvil_plugin::testing::TestCall;
 use runvil_plugin::{
-    HostServices, OutputTrust, Pack, PackFuture, PackId, PackInfo, ServiceId, ServiceKey,
-    ToolContext, ToolError, ToolErrorKind, ToolId, ToolInfo, ToolOutput,
+    HostServices, ModelId, ModelInfo, OutputTrust, Pack, PackFuture, PackId, PackInfo,
+    RenderContext, ServiceId, ServiceKey, ThinkingMode, ToolContext, ToolError, ToolErrorKind,
+    ToolId, ToolInfo, ToolOutput,
 };
 use serde_json::{Value, json};
 
@@ -147,6 +150,28 @@ fn a_call_through_dyn_pack_answers_from_the_context_it_is_lent() {
         block_on(pack.call(call.context(), json!({"mark": "!"}))).expect("the greet call succeeds");
     assert_eq!(output.text(), "Hello, Ada!");
     assert_eq!(output.trust(), OutputTrust::Untrusted);
+}
+
+#[test]
+fn the_default_render_returns_the_offered_tools_unchanged() {
+    let pack = built_as("greeter");
+    let model = ModelInfo::new(
+        ModelId::gateway("analyst").expect("a valid model id"),
+        "A careful analysis model",
+        NonZeroU32::new(8_192).expect("a non-zero context window"),
+        ThinkingMode::Never,
+    );
+    let farewell = ToolInfo::new(
+        ToolId::parse("greeter/farewell").expect("a two-segment tool id parses"),
+        "Bids this run's visitor goodbye.",
+        json!({"type": "object"}),
+    );
+    let offered = vec![pack.tools()[0].clone().wire_name("hello"), farewell];
+    let rendered = block_on(pack.render(RenderContext::new("chat-1", &model), offered.clone()));
+    assert_eq!(
+        rendered, offered,
+        "a Pack without its own render shows the model what the section offered, in offer order"
+    );
 }
 
 #[test]

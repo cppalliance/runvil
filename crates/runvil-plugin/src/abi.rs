@@ -39,7 +39,7 @@
 //!
 //! # Reserved verbs
 //!
-//! Verbs 3 to 7 are reserved for later versions, so their numbers never
+//! Verbs 3 to 8 are reserved for later versions, so their numbers never
 //! change. Each one gets its own arguments struct behind `call->args`, so
 //! no verb reads fields meant for another. No constants are declared for
 //! them yet.
@@ -52,6 +52,9 @@
 //! - `RV_TOOL_CANCEL` (6): abandon a started call.
 //! - `RV_PRELUDE_INSTALL` (7): install the Pack's native prelude, once per
 //!   Lua VM.
+//! - `RV_PACK_RENDER` (8): render the tools a section offered from one
+//!   Pack for one model, which finishes later through an [`RvHost`]
+//!   function.
 //!
 //! # Status codes
 //!
