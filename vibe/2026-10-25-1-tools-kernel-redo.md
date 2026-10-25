@@ -578,7 +578,7 @@ While iterating, run `cargo nextest run --locked -p runvil-plugin -p runvil-type
 
 <step-2>
 
-### Step 2: Define the Static Set and the Dynamic Set
+### Step 2: Define the Static Set and the Dynamic Set [completed]
 
 - Component: Per-section tool sets
 - Tests:
