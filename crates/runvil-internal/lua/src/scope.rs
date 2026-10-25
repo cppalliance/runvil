@@ -17,7 +17,9 @@ use crate::handles::ToolBinding;
 /// demand through [`ensure`](Self::ensure).
 ///
 /// The executor increments a count when dispatch is attempted (even if the tool
-/// later errors). Lua reads the snapshot through the `tools.calls` table.
+/// later errors). Lua reads the counts through the `tools.stats` table, which
+/// computes its total, its per-Pack counts, and its per-tool counts from a
+/// snapshot of them at each read.
 #[derive(Debug, Clone, Default)]
 pub struct ToolCallCounts {
     inner: Arc<Mutex<BTreeMap<String, u64>>>,
@@ -65,21 +67,12 @@ impl ToolCallCounts {
         Ok(())
     }
 
-    /// Returns the current count for `name`, or `None` when `name` was
-    /// never seeded.
+    /// Returns every seeded name with its count, read under one lock.
     ///
     /// # Errors
     /// Returns [`Error::Internal`] if the mutex is poisoned.
-    pub(crate) fn get(&self, name: &str) -> Result<Option<u64>> {
-        Ok(self.lock()?.get(name).copied())
-    }
-
-    /// Returns a snapshot of every seeded name.
-    ///
-    /// # Errors
-    /// Returns [`Error::Internal`] if the mutex is poisoned.
-    pub(crate) fn names(&self) -> Result<Vec<String>> {
-        Ok(self.lock()?.keys().cloned().collect())
+    pub(crate) fn snapshot(&self) -> Result<BTreeMap<String, u64>> {
+        Ok(self.lock()?.clone())
     }
 }
 

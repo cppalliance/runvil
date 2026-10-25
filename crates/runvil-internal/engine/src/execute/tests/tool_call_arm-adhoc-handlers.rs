@@ -42,7 +42,7 @@ fn an_adhoc_tool_call_issues_no_leaf_work() {
     let source = one_section(&format!(
         "{ADD_ADHOC_GRAB}\
          local out = tools.call('adhoc/grab', {{ value = 'hi' }})\n\
-         return out .. '|' .. tostring(tools.calls['adhoc/grab'])"
+         return out .. '|' .. tostring(tools.stats.tools['adhoc/grab'])"
     ));
     let trace = arm_scenario(source).run();
     assert_eq!(
@@ -78,7 +78,7 @@ fn a_script_calls_an_unoffered_adhoc_tool_by_id_or_object_before_and_after_the_r
          local before = tools.call(grab, {{ value = 'a' }})\n\
          {RENDER}\
          local after = tools.call('adhoc/grab', {{ value = 'b' }})\n\
-         return before .. '|' .. after .. '|' .. tostring(tools.calls['adhoc/grab'])"
+         return before .. '|' .. after .. '|' .. tostring(tools.stats.tools['adhoc/grab'])"
     )));
     let trace = scenario.chat(&gateway).run();
     assert_eq!(
@@ -192,7 +192,7 @@ fn a_handler_dispatches_a_bound_tool_as_one_leaf_request() {
            return tools.call('tools/echo', { value = args.value })
          end))
          local out = tools.call('adhoc/grab', { value = 'hi' })
-         return out .. '|' .. tostring(tools.calls['adhoc/grab']) .. '|' .. tostring(tools.calls['tools/echo'])",
+         return out .. '|' .. tostring(tools.stats.tools['adhoc/grab']) .. '|' .. tostring(tools.stats.tools['tools/echo'])",
     );
     let trace = arm_scenario(source).offer("echo", echo_tool()).run();
     assert_eq!(trace.text(), "echoed: hi|1|1", "both calls count once");

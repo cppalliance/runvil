@@ -66,22 +66,21 @@ impl SectionVm {
         self.lua.globals().raw_set(name, value).map_err(Error::lua)
     }
 
-    /// Installs `tools.calls` as a read-only Lua table backed by a fresh
-    /// [`ToolCallCounts`] seeded with `ids`. Each seeded key
-    /// reads its live count; indexing an unseeded key is a hard error that
-    /// names the bad key and lists the seeded set. When the key is the id
-    /// of a catalog tool that was never seeded - neither offered to the
-    /// section nor dispatched by a script `tools.call` - the diagnostic
-    /// says so.
+    /// Installs `tools.stats`, the read-only Lua view of a fresh
+    /// [`ToolCallCounts`] seeded with `ids`: its `total`, and its `packs`
+    /// and `tools` tables, each computed from the counts at each read.
+    /// Reading a key a table does not hold is a hard error that names the
+    /// key and lists the keys held, and `tools` holds only run catalog and
+    /// adhoc tool ids.
     ///
     /// The installation itself sits in the `tools` module; this method only
     /// supplies the VM's own state.
     ///
-    /// Returns the `ToolCallCounts` handle so the executor's tool loop can
-    /// increment it.
+    /// Returns the `ToolCallCounts` handle so the scheduler can increment
+    /// it.
     ///
     /// # Errors
-    /// Returns [`Error::LuaRuntime`] when installing the `tools.calls` index fails.
+    /// Returns [`Error::LuaRuntime`] when installing `tools.stats` fails.
     pub fn install_tool_call_counts(&self, ids: &[ToolId]) -> Result<ToolCallCounts> {
         install_tool_call_counts_impl(&self.lua, &self.bound_tools, &self.adhoc_tools, ids)
     }
@@ -94,8 +93,8 @@ impl SectionVm {
         self.messages.rendered_target(wire_name)
     }
 
-    /// Returns the ids of the Static Set's tools, or `None` when the
-    /// section has not frozen its sets.
+    /// Returns the ids of both frozen sets' tools, the Static Set's first,
+    /// or `None` when the section has not frozen its sets.
     #[must_use]
     pub fn rendered_ids(&self) -> Option<Vec<ToolId>> {
         let rendered = self.messages.rendered_tools()?;
@@ -103,6 +102,7 @@ impl SectionVm {
             rendered
                 .static_set
                 .iter()
+                .chain(&rendered.dynamic_set)
                 .map(|binding| binding.id().clone())
                 .collect(),
         )

@@ -58,7 +58,8 @@ use runvil_vfs::detail;
 use crate::execute::protocol::{Answer, ToolCallOutcome, ToolCallRecord};
 use crate::execute::run::{Effect, ToolCallOrigin, ToolCaller};
 use crate::lua::{
-    DiscoveryTool, OfferMode, ScriptReport, ToolBinding, ToolCallCounts, current_tool_bindings,
+    DiscoveryTool, OfferMode, ScriptReport, ToolBinding, ToolCallCounts, current_dynamic_set,
+    current_tool_bindings,
 };
 use crate::{Error, Result};
 
@@ -207,19 +208,34 @@ impl Scheduler {
     }
 
     /// The chain's section's tool-call counts, which the section's first
-    /// call installs, seeded from its Static Set once the section froze
-    /// its sets and from its live static offers before.
+    /// call installs, seeded with the ids Lua can see in the section's two
+    /// sets, a run catalog tool's or an adhoc tool's: from its frozen sets
+    /// once the section froze them, with both discovery tools' ids when
+    /// they are rendered, and from its live offers of both kinds before.
     fn section_call_counts(&mut self, id: ChainIndex) -> Result<ToolCallCounts> {
         let chain = &mut self.chains[id.index()];
         let vm = chain.frame()?.vm()?;
-        let ids = match vm.rendered_ids() {
-            Some(ids) => ids,
-            None => {
-                current_tool_bindings(chain.ctx.tool_set(), vm.tool_runtime(), vm.adhoc_tools())?
-                    .iter()
-                    .map(|tool| tool.id().clone())
-                    .collect()
+        let tool_set = chain.ctx.tool_set();
+        let ids = if let Some(frozen) = vm.rendered_ids() {
+            let mut ids = Vec::with_capacity(frozen.len());
+            for tool in frozen {
+                let seeded = DiscoveryTool::of(&tool).is_some()
+                    || tool_set.catalog().get(&tool).is_some()
+                    || vm.adhoc_tools().binding(&tool.to_string())?.is_some();
+                if seeded {
+                    ids.push(tool);
+                }
             }
+            ids
+        } else {
+            let (runtime, adhoc) = (vm.tool_runtime(), vm.adhoc_tools());
+            let static_tools = current_tool_bindings(tool_set, runtime, adhoc)?;
+            let dynamic_tools = current_dynamic_set(tool_set, runtime, adhoc, &static_tools)?;
+            static_tools
+                .iter()
+                .chain(&dynamic_tools)
+                .map(|tool| tool.id().clone())
+                .collect()
         };
         let ctx = chain.ctx.clone();
         chain.frame_mut()?.script_call_counts(&ctx, &ids)
@@ -335,8 +351,8 @@ impl Scheduler {
             turn: self.call_turn(id, &site),
         };
         let counts = self.section_call_counts(id)?;
-        // The counts seed from the section's static offers; a tool outside
-        // them must still be seeded here, because the increment errors on
+        // The counts seed from the section's two sets; a tool outside them
+        // must still be seeded here, because the increment errors on
         // an unseeded id. The attempt counts at dispatch - before the tool
         // runs, so a cancelled dispatch still counts.
         let counted = binding.id().to_string();
