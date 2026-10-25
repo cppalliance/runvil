@@ -1,22 +1,46 @@
 //! Tests for model-visible tool scoping through `tools.offer`.
 
+use std::collections::BTreeMap;
+
 use runvil_parser::test_support::one_section;
+use runvil_types::tools::ToolCatalog;
 
 use super::fixtures::scoped_tool;
 use super::models_loop::{LOOP_TO_TEXT, loop_scenario};
 use super::*;
-use crate::lua::{ToolBinding, ToolSet};
+use crate::execute::scope::{merge_tool_sets, offered_packs, tool_schema};
+use crate::lua::{OfferedTool, ToolSet};
+use crate::model::ToolSchema;
 use crate::test_support::scenario::TEST_SEED;
 use runvil_lua::{AdhocTools, OfferMode};
 
-/// The tool set offering `tool` under the wire name `alias`, described as
-/// `description`, for a test that reads the offering without a run.
+/// The tool set whose catalog holds `tool` under the wire name `alias`,
+/// described as `description`, for a test that reads the offers without a
+/// run.
 fn offering_of(alias: &str, description: &str, tool: &FnTool) -> ToolSet {
+    let info = tool
+        .clone()
+        .description(description)
+        .wire_name(alias)
+        .info();
     ToolSet::new(
         Vec::new(),
-        std::collections::BTreeMap::new(),
-        vec![ToolBinding::for_test(alias, description, &tool.info())],
+        BTreeMap::new(),
+        ToolCatalog::new([info]).expect("one tool"),
+        BTreeMap::new(),
     )
+}
+
+/// The schemas a round advertises when the static offers name `offered`
+/// from `tools`.
+fn advertised(tools: &ToolSet, offered: &[OfferedTool]) -> Vec<ToolSchema> {
+    let frozen = merge_tool_sets(offered, &[], offered_packs(offered, &[]), tools.catalog())
+        .expect("the sets merge");
+    frozen
+        .static_set
+        .iter()
+        .map(|binding| tool_schema(binding).expect("the schema builds"))
+        .collect()
 }
 
 /// An offered tool stays out of the model-visible scope until
@@ -51,9 +75,7 @@ fn an_offered_tool_advertises_its_concrete_schema_under_its_wire_name_and_dispat
     );
     let effective = current_tool_bindings(&tools, &Mutex::new(runtime), &AdhocTools::default())
         .expect("the offered scope snapshots");
-    let schemas = prepare_scoped_tools(&effective)
-        .expect("schemas must build")
-        .schemas;
+    let schemas = advertised(&tools, &effective);
     assert_eq!(schemas.len(), 1);
     assert_eq!(schemas[0].name(), "tools_concrete");
     assert_eq!(schemas[0].description(), "Concrete description.");
@@ -111,12 +133,10 @@ fn a_section_offer_by_id_scopes_the_tool_and_dispatches_it() {
     .expect("the offer chunk must compile");
     vm.run_chunk(&offer, &null_emitter(), "Only")
         .expect("tools.offer must succeed");
-    let (tool_bindings, tool_runtime) = vm.tool_bag_handles();
-    let scope = current_tool_bindings(&tool_bindings, &tool_runtime, vm.adhoc_tools())
+    let (tool_set, tool_runtime) = vm.tool_bag_handles();
+    let scope = current_tool_bindings(&tool_set, &tool_runtime, vm.adhoc_tools())
         .expect("tool scope must snapshot");
-    let schemas = prepare_scoped_tools(&scope)
-        .expect("schemas must build")
-        .schemas;
+    let schemas = advertised(&tool_set, &scope);
     assert_eq!(schemas.len(), 1);
     assert_eq!(schemas[0].name(), "tools_section");
     vm.teardown(&null_emitter(), "Only");

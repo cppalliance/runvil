@@ -5,6 +5,7 @@
 //! to what the VM shares; the one-shot [`run_chunk`]; the tool fixtures as
 //! data; and the scope a VM's offers resolve to.
 
+use std::collections::BTreeMap;
 use std::ops::Deref;
 use std::sync::{Arc, Mutex};
 
@@ -12,7 +13,7 @@ use mlua::{FromLuaMulti, MultiValue};
 use runvil_model_client::model::ModelSet;
 use runvil_types::emitter::Emitter;
 use runvil_types::seed::RunSeed;
-use runvil_types::tools::{ToolId, ToolInfo};
+use runvil_types::tools::{ToolCatalog, ToolId, ToolInfo};
 use runvil_types::untrusted::GuardNonce;
 use runvil_vfs::{Access, Origin, VfsRef};
 use serde_json::{Value as Json, json};
@@ -20,7 +21,7 @@ use serde_json::{Value as Json, json};
 use crate::error::{Error, Result};
 use crate::tests::recording::null_emitter;
 use crate::vm::scalar_return;
-use crate::{Argv, SectionText, SectionVm, ToolSet};
+use crate::{Argv, OfferedTool, SectionText, SectionVm, ToolSet};
 
 /// The one guard-nonce seed of every test VM.
 pub(crate) const TEST_SEED: RunSeed = RunSeed::from_bytes([0x73; 32]);
@@ -109,17 +110,28 @@ pub(crate) fn echo_tool() -> ToolInfo {
     tool_at("tools/echo")
 }
 
+/// The tool set whose run catalog is `tools`, with nothing declared, no
+/// roster, and no vendors.
+#[track_caller]
+pub(crate) fn catalog_set(tools: impl IntoIterator<Item = ToolInfo>) -> ToolSet {
+    ToolSet::new(
+        Vec::new(),
+        BTreeMap::new(),
+        ToolCatalog::new(tools).expect("a fixture catalog's ids differ"),
+        BTreeMap::new(),
+    )
+}
+
 /// The run the offer tests share: `web` (`web/fetch`, `web/search`) and
 /// `user-input` (`user-input/ask`) declared; `gh` (`gh/issues.list`,
-/// `gh/search`) offered but undeclared; `subagents`, with no tool, able to
-/// serve; and `mcp` unable to, because "the mcp server is down". Every
-/// tool is bound under its wire name.
+/// `gh/search`) in the catalog but undeclared; `subagents`, with no tool,
+/// able to serve; and `mcp` unable to, because "the mcp server is down".
+/// Every tool takes its default wire name.
 #[track_caller]
 pub(crate) fn offer_set() -> ToolSet {
     let pack = |name: &str| {
         runvil_types::packs::PackId::parse(name).expect("a fixture Pack id is a valid Pack id")
     };
-    let bind = |id: &str| crate::ToolBinding::from_info(&id.replace(['/', '.'], "_"), &tool_at(id));
     ToolSet::new(
         vec![pack("web"), pack("user-input")],
         [
@@ -131,13 +143,18 @@ pub(crate) fn offer_set() -> ToolSet {
         ]
         .into_iter()
         .collect(),
-        vec![
-            bind("gh/issues.list"),
-            bind("gh/search"),
-            bind("user-input/ask"),
-            bind("web/fetch"),
-            bind("web/search"),
-        ],
+        ToolCatalog::new(
+            [
+                "gh/issues.list",
+                "gh/search",
+                "user-input/ask",
+                "web/fetch",
+                "web/search",
+            ]
+            .map(tool_at),
+        )
+        .expect("the fixture ids differ"),
+        BTreeMap::new(),
     )
 }
 
@@ -183,27 +200,31 @@ pub(crate) fn lua_over(set: ToolSet) -> BuiltVm {
     TestVm::new().tools(set).build()
 }
 
-/// The wire names a round on `vm` advertises, in order.
+/// The wire names of the tools `vm`'s static offers name, in order: a
+/// catalog tool's wire name and an adhoc tool's name.
 #[track_caller]
 pub(crate) fn scoped(vm: &SectionVm) -> Vec<String> {
     let (set, runtime) = vm.tool_bag_handles();
     crate::current_tool_bindings(&set, &runtime, vm.adhoc_tools())
         .expect("the scope resolves")
         .iter()
-        .map(|binding| binding.alias().to_owned())
+        .map(|tool| match tool {
+            OfferedTool::Catalog(info) => crate::wire_name_of(info).into_owned(),
+            OfferedTool::Adhoc(binding) => binding.alias().to_owned(),
+        })
         .collect()
 }
 
-/// The ids of the dynamic list a round on `vm` would store, in order.
+/// The ids of the tools `vm`'s dynamic offers name, in order.
 #[track_caller]
 pub(crate) fn dynamic(vm: &SectionVm) -> Vec<String> {
     let (set, runtime) = vm.tool_bag_handles();
     let adhoc = vm.adhoc_tools();
     let bound = crate::current_tool_bindings(&set, &runtime, adhoc).expect("the scope resolves");
-    crate::current_dynamic_tools(&set, &runtime, adhoc, &bound)
-        .expect("the dynamic list resolves")
+    crate::current_dynamic_set(&set, &runtime, adhoc, &bound)
+        .expect("the dynamic set resolves")
         .iter()
-        .map(ToString::to_string)
+        .map(|tool| tool.id().to_string())
         .collect()
 }
 

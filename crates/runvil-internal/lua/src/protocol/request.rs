@@ -183,9 +183,9 @@ pub enum Request {
     },
     /// One stateless tool-capable model round over the section's list,
     /// yielded by the `models.loop` shim once per round. The dispatch arm
-    /// first refuses an empty list; the round sends the section's
-    /// rendered tool list, which the dispatch arm renders from the
-    /// section's offers at the first round to reach the build and
+    /// first refuses an empty list; the round sends the section's Static
+    /// Set, which the dispatch arm freezes with the Dynamic Set from the
+    /// section's offers at the first round to reach the merge and
     /// attaches to the list.
     Chat {
         /// The list the round sends, which may be empty, since the

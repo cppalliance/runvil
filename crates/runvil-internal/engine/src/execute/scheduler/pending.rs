@@ -24,9 +24,10 @@ pub(super) enum Continuation {
     /// under the single-prose-round reporting rules. The round's id waits
     /// here for the answer, whose events it stamps.
     Infer(RoundId),
-    /// A `chat` round: the completion is classified against the scope the
-    /// chain advertised and reported as one model turn. The round's id
-    /// waits here for the answer, whose events it stamps.
+    /// A `chat` round: the completion is classified against the frozen
+    /// sets of the section the chain is parked in and reported as one
+    /// model turn. The round's id waits here for the answer, whose events
+    /// it stamps.
     Chat(RoundId),
     /// A bound tool call: the tool's own output goes through the shared
     /// dispatch body (counts already taken at dispatch, then the

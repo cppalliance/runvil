@@ -28,16 +28,20 @@ use super::chain_record::ChainKind;
 use super::{ChainIndex, Continuation, Counters, Scheduler, VfsContinuation};
 
 /// The error for a name that resolves to no tool in the run: the name and
-/// the id of every tool the run offers, so the message reads required
-/// versus actual. The `tool_call` arm's answer for an unresolved name.
+/// the id of every catalog tool, in id order, so the message reads
+/// required versus actual. The `tool_call` arm's answer for an unresolved
+/// name.
 pub(super) fn unbound_tool_call(tool_set: &ToolSet, name: &str) -> Error {
+    let mut ids: Vec<_> = tool_set
+        .catalog()
+        .tools()
+        .iter()
+        .map(|info| &info.id)
+        .collect();
+    ids.sort();
     Error::UnboundToolCall {
         name: name.to_owned(),
-        ids: tool_set
-            .offered()
-            .iter()
-            .map(|binding| binding.id().to_string())
-            .collect(),
+        ids: ids.into_iter().map(ToString::to_string).collect(),
     }
 }
 

@@ -170,7 +170,9 @@ impl RunError {
             Error::Internal { .. } => RunErrorKind::Internal,
             Error::Store { .. } => RunErrorKind::Vfs,
             Error::Determinism(_) => RunErrorKind::Determinism,
-            Error::BindSchema { .. } | Error::ModelRequired { .. } => RunErrorKind::Binding,
+            Error::BindSchema { .. } | Error::ToolMerge { .. } | Error::ModelRequired { .. } => {
+                RunErrorKind::Binding
+            }
         }
     }
 
@@ -213,6 +215,7 @@ impl RunError {
             | Error::LuaRuntime { .. }
             | Error::LuaCompile { .. }
             | Error::BindSchema { .. }
+            | Error::ToolMerge { .. }
             | Error::Substitution(_)
             | Error::ToolLoopExhausted
             | Error::TasksLive { .. }
@@ -272,6 +275,7 @@ impl RunError {
             | Error::LuaRuntime { .. }
             | Error::LuaCompile { .. }
             | Error::BindSchema { .. }
+            | Error::ToolMerge { .. }
             | Error::Substitution(_)
             | Error::ToolLoopExhausted
             | Error::TasksLive { .. }

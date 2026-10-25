@@ -4,7 +4,7 @@
 //! caller that catches it, calls another adhoc tool innermost first,
 //! and dispatches a bound tool as one leaf request, whose failure
 //! raises kind `tool` in the handler and whose untrusted wrapper
-//! survives. A model-issued call routes by the section's rendered list,
+//! survives. A model-issued call resolves in the section's frozen sets,
 //! so those cases run one loop round first.
 
 use runvil_parser::test_support::prompt;
@@ -18,8 +18,8 @@ const ADD_ADHOC_GRAB: &str = "tools.offer(tools.adhoc({ name = 'grab', descripti
      value', parameters = { value = 'string' } }, function(args) return 'got ' .. args.value \
      end))\n";
 
-/// One loop round the model answers with text, which renders the
-/// section's tool list so a model-issued call can route by it.
+/// One loop round the model answers with text, which freezes the
+/// section's sets so a model-issued call can resolve in them.
 const RENDER: &str = "messages:user('go')\nmodels.loop()\n";
 
 /// The arm scenario over `source` with one text round for [`RENDER`].

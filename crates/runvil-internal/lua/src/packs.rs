@@ -2,16 +2,16 @@
 //! knows, and the adhoc Pack every section VM holds.
 //!
 //! A Pack the frontmatter declares and a Pack the roster lists as able
-//! to serve have an object even when they offer no tool, and every other
-//! Pack has one when it offers a tool. A Pack the roster lists as
-//! unable to serve has none, and offering it raises its reason. The adhoc
-//! Pack, `adhoc`, has an object in every VM; its `tools` lists the adhoc
-//! tools defined so far. The objects are built once per VM, after the tool
-//! objects, so `tools.packs.get`, the integer keys of `tools.packs`,
-//! `tools.packs.extras()`, and a tool object's `pack` getter hand out the
-//! same userdata for a Pack, while each list read builds a fresh array. A
-//! Pack object's `tools` reads the shared tool objects, so it passes
-//! straight to `tools.offer`.
+//! to serve have an object even when they have no tool, and every other
+//! Pack has one when the run catalog holds a tool of it. A Pack the
+//! roster lists as unable to serve has none, and offering it raises its
+//! reason. The adhoc Pack, `adhoc`, has an object in every VM; its `tools`
+//! lists the adhoc tools defined so far. The objects are built once per
+//! VM, after the tool objects, so `tools.packs.get`, the integer keys of
+//! `tools.packs`, `tools.packs.extras()`, and a tool object's `pack`
+//! getter hand out the same userdata for a Pack, while each list read
+//! builds a fresh array. A Pack object's `tools` reads the shared tool
+//! objects, so it passes straight to `tools.offer`.
 //!
 //! `tools.packs` is an empty proxy with a protected metatable: integer
 //! keys, `#`, and `pairs` walk the Pack objects in name order, `get` and
@@ -24,6 +24,7 @@ use mlua::{
     Value,
 };
 use runvil_types::packs::PackId;
+use runvil_types::tools::ToolId;
 
 use crate::error::{Error, Result};
 use crate::handles::ToolSet;
@@ -48,7 +49,7 @@ pub(crate) fn is_adhoc(pack: &PackId) -> bool {
 /// Where a Pack object's `tools` come from.
 #[derive(Debug, Clone)]
 enum PackTools {
-    /// A catalog Pack's offered tools, by id, in id order.
+    /// A catalog Pack's tools, by id, in id order.
     Catalog(Vec<String>),
     /// The VM's adhoc tools, read on each `tools` read.
     Adhoc(AdhocTools),
@@ -132,7 +133,7 @@ pub(crate) struct PackNames {
 }
 
 /// Builds one Pack object per declared Pack, per usable roster Pack, per
-/// other Pack with offered tools, and the adhoc Pack over `adhoc`, and
+/// other Pack with catalog tools, and the adhoc Pack over `adhoc`, and
 /// returns their names.
 ///
 /// # Errors
@@ -261,29 +262,30 @@ fn pack_array(lua: &Lua, names: &[String]) -> mlua::Result<Table> {
 
 /// Each Pack the run knows, in id order, with its tools: every declared
 /// Pack, each roster Pack that can serve, with or without tools, and every
-/// other Pack that offers one, each with its offered tools' ids in the
-/// set's id order, and the adhoc Pack over `adhoc`.
+/// other Pack the run catalog holds a tool of, each with its catalog
+/// tools' ids in id order, and the adhoc Pack over `adhoc`.
 fn pack_tools(set: &ToolSet, adhoc: &AdhocTools) -> BTreeMap<PackId, PackTools> {
     let usable = set
         .roster()
         .iter()
         .filter(|(_, reason)| reason.is_none())
         .map(|(name, _)| name);
-    let mut packs: BTreeMap<PackId, Vec<String>> = set
+    let mut packs: BTreeMap<PackId, Vec<&ToolId>> = set
         .declared()
         .iter()
         .chain(usable)
         .map(|name| (name.clone(), Vec::new()))
         .collect();
-    for binding in set.offered() {
-        packs
-            .entry(binding.id().pack())
-            .or_default()
-            .push(binding.id().to_string());
+    for info in set.catalog().tools() {
+        packs.entry(info.id.pack()).or_default().push(&info.id);
     }
     let mut packs: BTreeMap<PackId, PackTools> = packs
         .into_iter()
-        .map(|(name, ids)| (name, PackTools::Catalog(ids)))
+        .map(|(name, mut ids)| {
+            ids.sort();
+            let ids = ids.into_iter().map(ToString::to_string).collect();
+            (name, PackTools::Catalog(ids))
+        })
         .collect();
     if let Ok(name) = PackId::parse(ADHOC_PACK) {
         packs.insert(name, PackTools::Adhoc(adhoc.clone()));

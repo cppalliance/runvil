@@ -58,8 +58,8 @@ pub fn message_raw_tool_calls(message: &Message) -> Option<&[Value]> {
 /// facade-visible constructor.
 ///
 /// # Errors
-/// Returns [`ToolSchemaError::InvalidName`] when `name` is empty or contains
-/// a character outside `[A-Za-z0-9_.-]`, and
+/// Returns [`ToolSchemaError::InvalidName`] when `name` does not match
+/// `[A-Za-z][A-Za-z0-9_-]{0,63}`, and
 /// [`ToolSchemaError::NonObjectSchema`] when `parameters` is not a JSON
 /// object, so a tool can never be advertised to the model with an unusable
 /// name or a non-object JSON Schema.
@@ -69,19 +69,16 @@ pub fn tool_schema_new(
     parameters: Value,
 ) -> Result<ToolSchema, ToolSchemaError> {
     let name = name.into();
-    if name.is_empty() {
+    let bytes = name.as_bytes();
+    let valid = (1..=64).contains(&bytes.len())
+        && bytes[0].is_ascii_alphabetic()
+        && bytes[1..]
+            .iter()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-'));
+    if !valid {
         return Err(ToolSchemaError::InvalidName {
             name,
-            reason: "must not be empty",
-        });
-    }
-    if !name
-        .bytes()
-        .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'_' | b'.' | b'-'))
-    {
-        return Err(ToolSchemaError::InvalidName {
-            name,
-            reason: "may contain only [A-Za-z0-9_.-]",
+            reason: "expected [A-Za-z][A-Za-z0-9_-]{0,63}",
         });
     }
     if !parameters.is_object() {

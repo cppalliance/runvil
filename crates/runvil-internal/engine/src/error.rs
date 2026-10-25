@@ -15,9 +15,12 @@
 use runvil_types::ids::TaskId;
 
 mod convert;
+mod merge;
 #[cfg(test)]
 mod tests;
 mod value;
+
+pub(crate) use merge::{FrozenSet, MergeRule, MergeTool};
 
 /// A type-erased owned error cause used by the internal error type.
 type BoxedSource = Box<dyn std::error::Error + Send + Sync>;
@@ -193,6 +196,21 @@ pub(crate) enum Error {
         source: BoxedSource,
     },
 
+    /// A section entry's frozen sets broke a rule of the merge that builds
+    /// them at the entry's first model call, which fails that call. The
+    /// message names each tool that broke it, with its Pack and its set,
+    /// and the rule.
+    ///
+    /// Constructed only by the merge.
+    #[error("{}", merge::merge_message(.rule, .tools))]
+    #[non_exhaustive]
+    ToolMerge {
+        /// The rule the sets broke.
+        rule: MergeRule,
+        /// Each tool that broke it: both tools of a clash.
+        tools: Vec<MergeTool>,
+    },
+
     /// A `{{ }}` prose substitution failed (unknown/missing path, unclosed).
     ///
     /// Holds a typed [`crate::subst::SubstitutionError`] with a stable kind,
@@ -253,7 +271,7 @@ pub(crate) enum Error {
         task: TaskId,
     },
 
-    /// The model referenced a tool outside the section's advertised scope.
+    /// The model called a name outside the section entry's Static Set.
     ///
     /// This is the model tool loop's error alone: a script `tools.call`
     /// resolves against the run's whole catalog and fails with
@@ -263,25 +281,25 @@ pub(crate) enum Error {
     OutOfScopeToolCall {
         /// The alias or identifier the model tried to use.
         name: String,
-        /// Whether the name is the wire name of a tool the run offers.
+        /// Whether the name is a catalog tool's wire name.
         global_exists: bool,
-        /// The aliases that are in scope for this VM.
+        /// The Static Set's wire names.
         in_scope: Vec<String>,
     },
 
     /// A `tools.call` named no adhoc tool and no tool in the run's catalog.
     ///
     /// Script-initiated dispatch resolves a canonical id against the run's
-    /// whole catalog, not the section's advertised scope - the scope shapes
-    /// what the model is offered, and the author's own code is not the
-    /// model - so this error means the name is no catalog tool's id at
-    /// all; a wire name is the model's, never a script's.
+    /// whole catalog, not the section's frozen sets - the sets shape what
+    /// the model is offered, and the author's own code is not the model -
+    /// so this error means the name is no catalog tool's id at all; a wire
+    /// name is the model's, never a script's.
     #[error("tool {name:?} is not a tool in this run; catalog tools: {ids:?}")]
     #[non_exhaustive]
     UnboundToolCall {
         /// The name the call tried to dispatch.
         name: String,
-        /// The id of every tool the run offers.
+        /// The id of every catalog tool, in id order.
         ids: Vec<String>,
     },
 
@@ -427,6 +445,7 @@ impl Error {
             | Error::Interrupted
             | Error::Lua(_)
             | Error::BindSchema { .. }
+            | Error::ToolMerge { .. }
             | Error::Substitution(_)
             | Error::ToolLoopExhausted
             | Error::TasksLive { .. }

@@ -236,17 +236,18 @@ fn a_wrapper_of_a_catalog_tool_takes_its_description_and_schema_unchanged() {
     );
     let (set, _) = vm.tool_bag_handles();
     let catalog = set
-        .offered_binding("web/search")
-        .expect("the catalog tool is offered");
+        .catalog()
+        .get(&runvil_types::tools::ToolId::parse("web/search").expect("a valid id"))
+        .expect("the catalog holds the tool");
     let wrapper = vm
         .adhoc_tools()
         .binding("adhoc/search")
         .expect("the adhoc tools read")
         .expect("the wrapper is defined");
-    assert_eq!(wrapper.description(), catalog.description());
+    assert_eq!(wrapper.description(), catalog.description);
     assert_eq!(
         serde_json::to_string(wrapper.schema()).expect("a schema serializes"),
-        serde_json::to_string(catalog.schema()).expect("a schema serializes"),
+        serde_json::to_string(&catalog.parameters_schema).expect("a schema serializes"),
         "the rendered schema is the same text"
     );
     let parameters: Value = vm.eval("return tools.get('adhoc/search').parameters");
@@ -255,8 +256,7 @@ fn a_wrapper_of_a_catalog_tool_takes_its_description_and_schema_unchanged() {
         .from_value(parameters)
         .expect("the parameters table converts back to JSON");
     assert_eq!(
-        &read,
-        catalog.schema(),
+        read, catalog.parameters_schema,
         "parameters deep-equals the catalog tool's"
     );
 }
@@ -299,7 +299,7 @@ fn an_offered_adhoc_tool_counts_from_zero_and_an_unoffered_one_from_its_first_ca
     let ids: Vec<_> = crate::current_tool_bindings(&set, &runtime, vm.adhoc_tools())
         .expect("the scope resolves")
         .iter()
-        .map(|binding| binding.id().clone())
+        .map(|tool| tool.id().clone())
         .collect();
     let counts = vm
         .install_tool_call_counts(&ids)

@@ -1,6 +1,5 @@
 //! Tests for the `compactors` namespace and the context-window precheck.
 
-use std::collections::BTreeMap;
 use std::num::NonZeroU32;
 
 use mlua::Lua;
@@ -173,18 +172,14 @@ fn the_fail_policy_invokes_as_typed_exhaustion_for_either_reason() {
 fn compactors_clear_removes_every_record_and_keeps_the_send_and_the_rendered_tools() {
     let list = MessageList::default();
     list.push(user("one")).unwrap();
-    list.attach_rendered_tools(RenderedTools {
-        schemas: Vec::new(),
-        dispatch: BTreeMap::new(),
-        dynamic: Vec::new(),
-    });
+    list.attach_rendered_tools(RenderedTools::default());
     let sent = [Message::user("one")];
     let _ = list.commit(RoundId::new(0), &sent);
     let lua = lua_with_compactors_over(&list);
     list.set_compacting(true);
     lua.load("compactors.clear('manual')").exec().unwrap();
     assert!(list.to_records().is_empty(), "every record is gone");
-    assert!(list.rendered(), "the rendered tool list stays attached");
+    assert!(list.rendered(), "the frozen sets stay attached");
     assert_eq!(
         list.commit(RoundId::new(1), &sent),
         (Some(RoundId::new(0)), 1),

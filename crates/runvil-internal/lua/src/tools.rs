@@ -1,21 +1,21 @@
 //! The `tools` namespace: offering, adhoc tools, invocation, and counts.
 //!
 //! One Lua table holds every tool operation, mirroring the `models.*`
-//! namespacing of model operations. The shared [`ToolSet`] holds every
-//! catalog tool the run can offer, each bound under its wire name: its id
-//! with `/` and `.` replaced by `_`, such as `web_fetch`. The model sees
-//! only wire names; Lua names a tool by its id (`web/fetch`) or by its
-//! tool object, and a Pack by its id (`web`) or its Pack object, never by
-//! a global. `adhoc` defines a prompt-author Lua function as a tool of the
-//! adhoc Pack, `get` reads one tool object by id, `packs` reads the Pack
-//! objects, `offer` and `offer_dynamic` remember tools and Packs for the
-//! section's rendered and dynamic lists, `call` dispatches a tool by id
-//! or object (installed by the coroutine shim prelude, since dispatch
-//! suspends), and `calls` is the read-only dispatch counter surface, keyed
-//! by id. Offering what the run cannot offer is a hard error, and so is
-//! every offer once the section's first loop round rendered its tool
-//! list. The installation logic sits here, out of the VM driver; the VM
-//! only calls the installers in setup order.
+//! namespacing of model operations. The shared [`ToolSet`] holds the run
+//! catalog, every catalog tool's `ToolInfo` by id. The model sees only
+//! wire names: a tool's `ToolInfo.wire_name`, or else its id with `/` and
+//! `.` replaced by `_`, such as `web_fetch`. Lua names a tool by its id
+//! (`web/fetch`) or by its tool object, and a Pack by its id (`web`) or
+//! its Pack object, never by a global. `adhoc` defines a prompt-author
+//! Lua function as a tool of the adhoc Pack, `get` reads one tool object
+//! by id, `packs` reads the Pack objects, `offer` and `offer_dynamic`
+//! remember tools and Packs for the section's Static Set and Dynamic Set,
+//! `call` dispatches a tool by id or object (installed by the coroutine
+//! shim prelude, since dispatch suspends), and `calls` is the read-only
+//! dispatch counter surface, keyed by id. Offering a tool the run does
+//! not hold is a hard error, and so is every offer once the section's
+//! first model call froze its sets. The installation logic sits here, out
+//! of the VM driver; the VM only calls the installers in setup order.
 
 use std::sync::{Arc, Mutex};
 
@@ -51,8 +51,8 @@ use offer::{Offering, install_offer};
 /// `Adhoc` answer reads it back to hand the function to the shim.
 const ADHOC_HANDLERS_REGISTRY: &str = "runvil.tools.adhoc_handlers";
 
-/// The refusal of an offer function once the section's tool list is
-/// rendered, after the calling function's name.
+/// The refusal of an offer function once the section's sets are frozen,
+/// after the calling function's name.
 const TOOL_LIST_FIXED: &str = "the section's tool list is fixed at its first models.loop round; \
                                make every offer before the first loop, or offer in another \
                                section";
@@ -62,7 +62,7 @@ const TOOL_LIST_FIXED: &str = "the section's tool list is fixed at its first mod
 const PARAMETERS_NOT_JSON: &str = "tools.adhoc: parameters schema cannot be encoded as JSON";
 
 /// Refuses `call`, an offer function, once `list` holds the section's
-/// rendered tool list.
+/// frozen sets.
 pub(crate) fn refuse_after_render(call: &str, list: &MessageList) -> mlua::Result<()> {
     if list.rendered() {
         return Err(mlua::Error::external(format!("{call}: {TOOL_LIST_FIXED}")));
@@ -92,8 +92,8 @@ pub(crate) fn adhoc_handler(lua: &Lua, name: &str) -> mlua::Result<Function> {
 }
 
 /// Installs the read-only `tools.calls` counter table over `counts`;
-/// `offered`, the ids of every tool the run can offer, and `adhoc`, the
-/// VM's adhoc tools, feed the unknown-key diagnostic.
+/// `catalog`, the ids of every catalog tool, and `adhoc`, the VM's adhoc
+/// tools, feed the unknown-key diagnostic.
 ///
 /// # Errors
 /// Returns [`Error::LuaRuntime`] if the Lua table or callbacks cannot be created or
@@ -101,7 +101,7 @@ pub(crate) fn adhoc_handler(lua: &Lua, name: &str) -> mlua::Result<Function> {
 fn install_lua_tool_calls(
     lua: &Lua,
     counts: &ToolCallCounts,
-    offered: Vec<String>,
+    catalog: Vec<String>,
     adhoc: AdhocTools,
 ) -> Result<()> {
     let globals = lua.globals();
@@ -123,7 +123,7 @@ fn install_lua_tool_calls(
                     .binding(&key)
                     .map_err(mlua::Error::external)?
                     .is_some();
-            let hint = if offered.iter().any(|id| id == &key) {
+            let hint = if catalog.iter().any(|id| id == &key) {
                 " (a catalog tool that was neither offered in this section nor called with \
                  tools.call)"
             } else if adhoc_unseeded {
@@ -158,9 +158,9 @@ fn install_lua_tool_calls(
 /// [`ToolCallCounts`] seeded with `ids`. Each seeded key
 /// reads its live count; indexing an unseeded key is a hard error that
 /// names the bad key and lists the seeded set. When the key is the id of a
-/// catalog tool the run offers or of an adhoc tool `adhoc` holds that was
-/// never seeded - neither offered to the section nor dispatched by a
-/// script `tools.call` - the diagnostic says so.
+/// catalog tool or of an adhoc tool `adhoc` holds that was never seeded,
+/// neither offered to the section nor dispatched by a script `tools.call`,
+/// the diagnostic says so.
 ///
 /// Returns the `ToolCallCounts` handle so the executor's tool loop can
 /// increment it.
@@ -174,12 +174,13 @@ pub(crate) fn install_tool_call_counts(
     ids: &[ToolId],
 ) -> Result<ToolCallCounts> {
     let counts = ToolCallCounts::new(ids.iter().map(ToString::to_string));
-    let offered: Vec<String> = bound_tools
-        .offered()
+    let catalog: Vec<String> = bound_tools
+        .catalog()
+        .tools()
         .iter()
-        .map(|binding| binding.id().to_string())
+        .map(|info| info.id.to_string())
         .collect();
-    install_lua_tool_calls(lua, &counts, offered, adhoc.clone())?;
+    install_lua_tool_calls(lua, &counts, catalog, adhoc.clone())?;
     Ok(counts)
 }
 
@@ -191,7 +192,7 @@ pub(crate) fn install_tool_call_counts(
 /// The coroutine shim prelude installs the suspending `tools.call` on this
 /// table as a Lua function, because yield cannot cross the Rust callback
 /// boundary. Both offer verbs refuse once `list`, the section's
-/// conversation, holds a rendered tool list.
+/// conversation, holds the section's frozen sets.
 ///
 /// # Errors
 /// Returns [`Error::LuaRuntime`] if a Lua table or callback cannot be created or

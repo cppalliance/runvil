@@ -20,7 +20,7 @@ use runvil_types::tools::{ToolId, ToolInfo};
 
 use super::{VmBinds, set_up_vm};
 use crate::execute::section_vm::VmSeed;
-use crate::lua::{SectionVm, ToolBinding, ToolSet};
+use crate::lua::{SectionVm, ToolSet};
 use crate::model::ModelSet;
 use crate::test_support::scenario::test_binding;
 
@@ -39,29 +39,25 @@ fn roles() -> ModelSet {
     )
 }
 
-/// The wire names of the tools [`offering`] offers.
+/// The default wire names of the tools in [`offering`]'s catalog.
 const OFFERED_WIRE_NAMES: [&str; 2] = ["gh_search", "web_search"];
 
-/// A set declaring the Pack `web` and offering `web/search` beside the
-/// undeclared Pack's `gh/search`.
+/// A set declaring the Pack `web`, whose catalog holds `web/search` beside
+/// the undeclared Pack's `gh/search`.
 fn offering() -> ToolSet {
-    let bind = |name: &str, id: &str| {
-        ToolBinding::from_info(
-            name,
-            &ToolInfo::new(
-                ToolId::parse(id).expect("valid id"),
-                "a tool",
-                json!({ "type": "object" }),
-            ),
+    let tool = |id: &str| {
+        ToolInfo::new(
+            ToolId::parse(id).expect("valid id"),
+            "a tool",
+            json!({ "type": "object" }),
         )
     };
     ToolSet::new(
         vec![PackId::parse("web").expect("valid Pack")],
         std::collections::BTreeMap::new(),
-        vec![
-            bind("gh_search", "gh/search"),
-            bind("web_search", "web/search"),
-        ],
+        runvil_types::tools::ToolCatalog::new([tool("gh/search"), tool("web/search")])
+            .expect("the ids differ"),
+        std::collections::BTreeMap::new(),
     )
 }
 

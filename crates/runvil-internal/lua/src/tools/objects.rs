@@ -1,6 +1,6 @@
-//! Tool objects: one frozen [`LuaToolHandle`] per offered catalog tool,
-//! built once per VM, one per adhoc tool, added as `tools.adhoc` defines
-//! it, and `tools.get` over them.
+//! Tool objects: one frozen [`LuaToolHandle`] per catalog tool, built
+//! once per VM, one per adhoc tool, added as `tools.adhoc` defines it,
+//! and `tools.get` over them.
 //!
 //! Every read hands out the same userdata for a tool, so a tool read
 //! through `tools.get` compares `==` to the same tool read through a
@@ -16,8 +16,8 @@ use crate::handles::{ToolBinding, ToolSet};
 /// keyed by id.
 pub(super) const TOOL_OBJECTS_REGISTRY: &str = "runvil.tools.objects";
 
-/// The VM's tool object for the id `id`, or `None` when the run cannot
-/// offer that tool and no adhoc tool holds that id.
+/// The VM's tool object for the id `id`, or `None` when the run catalog
+/// has no such tool and no adhoc tool holds that id.
 ///
 /// # Errors
 /// Returns an `mlua` error when the registry cannot be read.
@@ -32,19 +32,19 @@ pub(crate) fn tool_object(lua: &Lua, id: &str) -> mlua::Result<Option<AnyUserDat
     }
 }
 
-/// Builds the VM's tool-object table over the set's offering.
+/// Builds the VM's tool-object table over the run catalog.
 ///
 /// # Errors
 /// Returns [`Error::Lua`] if an object or the table cannot be created or
 /// stored.
 pub(super) fn install_tool_objects(lua: &Lua, set: &ToolSet) -> Result<()> {
     let objects = lua.create_table().map_err(Error::lua)?;
-    for binding in set.offered() {
+    for info in set.catalog().tools() {
         let object = lua
-            .create_userdata(LuaToolHandle::from_binding(binding))
+            .create_userdata(LuaToolHandle::from_info(info))
             .map_err(Error::lua)?;
         objects
-            .raw_set(binding.id().to_string(), object)
+            .raw_set(info.id.to_string(), object)
             .map_err(Error::lua)?;
     }
     lua.set_named_registry_value(TOOL_OBJECTS_REGISTRY, objects)

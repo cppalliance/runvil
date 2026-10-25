@@ -12,7 +12,6 @@ use serde_json::{Value, json};
 
 use self::context::setup_prompt;
 use self::fixtures::untrusted_echo_tool;
-use super::scope::prepare_scoped_tools;
 use super::turn::advance_turn;
 use super::*;
 use crate::Error;

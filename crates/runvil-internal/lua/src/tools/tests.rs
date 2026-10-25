@@ -1,15 +1,12 @@
 //! Tests for the `tools` namespace installers, tool-name decoding, and the
 //! short-form `parameters` schema.
 
-use std::collections::BTreeMap;
-
 use mlua::{Lua, Value};
 use serde_json::json;
 
 use super::decode::{adhoc_params_schema, model_tool_name, tool_name};
 use super::userdata::LuaToolHandle;
-use crate::test_vm::{TestVm, echo_tool, lua_over, tool_at};
-use crate::{ToolBinding, ToolSet};
+use crate::test_vm::{TestVm, catalog_set, echo_tool, lua_over, tool_at};
 
 #[path = "tests-adhoc.rs"]
 mod adhoc;
@@ -28,7 +25,7 @@ struct Foreign;
 impl mlua::UserData for Foreign {}
 
 fn echo_handle() -> LuaToolHandle {
-    LuaToolHandle::from_binding(&ToolBinding::from_info("tools_echo", &echo_tool()))
+    LuaToolHandle::from_info(&echo_tool())
 }
 
 fn string(lua: &Lua, text: &str) -> Value {
@@ -219,17 +216,9 @@ fn the_shim_prelude_installs_tools_call_and_no_bare_global() {
 
 #[test]
 fn tool_call_counts_seed_by_id_and_explain_an_unseeded_key() {
-    let echo = ToolBinding::from_info("tools_echo", &echo_tool());
-    let vm = lua_over(ToolSet::new(
-        Vec::new(),
-        BTreeMap::new(),
-        vec![
-            echo.clone(),
-            ToolBinding::from_info("tools_other", &tool_at("tools/other")),
-        ],
-    ));
+    let vm = lua_over(catalog_set([echo_tool(), tool_at("tools/other")]));
     let counts = vm
-        .install_tool_call_counts(&[echo.id().clone()])
+        .install_tool_call_counts(&[echo_tool().id])
         .expect("the counts install");
     assert_eq!(
         counts

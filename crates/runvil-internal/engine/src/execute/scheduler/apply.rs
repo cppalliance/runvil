@@ -199,6 +199,7 @@ impl Scheduler {
         let emitter = chain.ctx.emitter();
         let section = chain.section_name();
         let nonce = chain.ctx.nonce();
+        let vendor = chain.ctx.tool_set().vendor_for(call.binding.id());
         match &call.site {
             // Model-issued, alone or batched: the content always resumes,
             // plain - it is the tool record's text for the next round,
@@ -210,6 +211,7 @@ impl Scheduler {
                 };
                 prepare_model_dispatch(
                     &call.binding,
+                    vendor,
                     result,
                     None,
                     nonce,
@@ -222,6 +224,7 @@ impl Scheduler {
             }
             CallSite::Script { .. } => match prepare_dispatch(
                 &call.binding,
+                vendor,
                 result,
                 None,
                 nonce,

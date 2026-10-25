@@ -1,8 +1,9 @@
 //! Tool scoping in a section VM: the section's `tools.offer` over canonical
 //! ids and tool objects, frozen tool objects, and sections over an empty
-//! offering.
+//! catalog.
 
 use super::*;
+use crate::test_vm::scoped;
 
 #[test]
 fn tool_objects_are_frozen() {
@@ -40,7 +41,7 @@ fn a_tool_reads_through_its_object_and_never_through_a_global() {
         &null_emitter(),
         "Section",
     )
-    .expect("the offered tool reads through its object");
+    .expect("the catalog tool reads through its object");
     vm.teardown();
 }
 
@@ -53,14 +54,7 @@ fn section_scope_keeps_each_tool_at_its_first_offer() {
     );
     let vm = TestVm::new().tools(bindings).build();
     run_scalar(&vm, &prologue, &null_emitter(), "Section").expect("section offers must record");
-    let (bindings, runtime) = vm.tool_bag_handles();
-    let scope = current_tool_bindings(&bindings, &runtime, vm.adhoc_tools())
-        .expect("tool scope must snapshot");
-
-    assert_eq!(
-        scope.iter().map(ToolBinding::alias).collect::<Vec<_>>(),
-        ["fixtures_search", "fixtures_fetch"]
-    );
+    assert_eq!(scoped(&vm), ["fixtures_search", "fixtures_fetch"]);
 }
 
 #[test]
@@ -75,14 +69,7 @@ fn tools_offer_accepts_tool_objects_and_arrays() {
     let vm = TestVm::new().tools(bindings).build();
     run_scalar(&vm, &prologue, &null_emitter(), "Section")
         .expect("tools.offer must accept tool objects, ids, and arrays");
-    let (bindings, runtime) = vm.tool_bag_handles();
-    let scope = current_tool_bindings(&bindings, &runtime, vm.adhoc_tools())
-        .expect("tool scope must snapshot");
-
-    assert_eq!(
-        scope.iter().map(ToolBinding::alias).collect::<Vec<_>>(),
-        ["fixtures_search", "fixtures_fetch"]
-    );
+    assert_eq!(scoped(&vm), ["fixtures_search", "fixtures_fetch"]);
     vm.teardown();
 }
 
@@ -98,12 +85,8 @@ fn empty_offer_is_a_no_op_and_failed_bulk_offer_is_atomic() {
     let vm = TestVm::new().tools(bindings).build();
     run_scalar(&vm, &prologue, &null_emitter(), "Section")
         .expect("caught failed offer must not poison recording");
-    let (bindings, runtime) = vm.tool_bag_handles();
-    let scope = current_tool_bindings(&bindings, &runtime, vm.adhoc_tools())
-        .expect("tool scope must snapshot");
-
     assert_eq!(
-        scope.iter().map(ToolBinding::alias).collect::<Vec<_>>(),
+        scoped(&vm),
         ["fixtures_fetch"],
         "empty offer changes nothing and a failed offer records no partial entries"
     );
@@ -127,12 +110,8 @@ fn offer_rejects_a_second_argument_and_records_nothing() {
     let vm = TestVm::new().tools(bindings).build();
     run_scalar(&vm, &prologue, &null_emitter(), "Section")
         .expect("refused offers must not poison recording");
-    let (bindings, runtime) = vm.tool_bag_handles();
-    let scope = current_tool_bindings(&bindings, &runtime, vm.adhoc_tools())
-        .expect("tool scope must snapshot");
-
     assert_eq!(
-        scope.iter().map(ToolBinding::alias).collect::<Vec<_>>(),
+        scoped(&vm),
         ["fixtures_search"],
         "refused calls record nothing and the later valid offer still lands"
     );
@@ -150,7 +129,7 @@ fn an_unknown_id_fails_before_scope_closure() {
         &null_emitter(),
         "Section",
     )
-    .expect_err("only offered tools may enter the section scope");
+    .expect_err("only catalog tools may enter the section scope");
     assert!(
         error
             .to_string()
@@ -162,18 +141,9 @@ fn an_unknown_id_fails_before_scope_closure() {
 
 #[test]
 fn tool_objects_install_without_payload_reports() {
-    let bindings = ToolSet::new(
-        Vec::new(),
-        std::collections::BTreeMap::new(),
-        vec![ToolBinding::for_test(
-            "private_alias",
-            "private capability",
-            &fixture_tool("search"),
-        )],
-    );
     let recorder = Recorder::default();
     let vm = TestVm::new()
-        .tools(bindings)
+        .tools(fixture_set(&[("search", "private capability")]))
         .emitter(recorder.emitter())
         .build();
     vm.teardown();
@@ -188,8 +158,8 @@ fn tool_objects_install_without_payload_reports() {
 }
 
 #[test]
-fn offer_over_an_empty_offering_fails_in_a_chunk() {
-    let error = run("tools.offer('web/search')", "").expect_err("an unoffered id must fail loudly");
+fn offer_over_an_empty_catalog_fails_in_a_chunk() {
+    let error = run("tools.offer('web/search')", "").expect_err("an unknown id must fail loudly");
     assert!(
         error
             .to_string()
@@ -199,7 +169,7 @@ fn offer_over_an_empty_offering_fails_in_a_chunk() {
 }
 
 #[test]
-fn offer_over_an_empty_offering_fails_in_a_prologue() {
+fn offer_over_an_empty_catalog_fails_in_a_prologue() {
     let vm = TestVm::new().build();
     let error = run_scalar(
         &vm,
@@ -207,7 +177,7 @@ fn offer_over_an_empty_offering_fails_in_a_prologue() {
         &null_emitter(),
         "Test",
     )
-    .expect_err("an unoffered id must fail loudly");
+    .expect_err("an unknown id must fail loudly");
     assert!(
         error.to_string().contains("is not a tool in this run"),
         "the error must report the missing tool: {error}"
@@ -216,11 +186,8 @@ fn offer_over_an_empty_offering_fails_in_a_prologue() {
 }
 
 #[test]
-fn a_section_vm_over_an_empty_offering_snapshots_to_an_empty_scope() {
+fn a_section_vm_over_an_empty_catalog_snapshots_to_an_empty_scope() {
     let vm = TestVm::new().build();
-    let (bindings, runtime) = vm.tool_bag_handles();
-    let scope = current_tool_bindings(&bindings, &runtime, vm.adhoc_tools())
-        .expect("an empty scope must snapshot");
-    assert!(scope.is_empty());
+    assert!(scoped(&vm).is_empty());
     vm.teardown();
 }

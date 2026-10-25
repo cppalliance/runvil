@@ -3,16 +3,15 @@
 //! model's `call_id`), plus the `adhoc_tool_done` arm that closes an adhoc
 //! tool call.
 //!
-//! Each call's route is decided once, by `tool_route`, on the driver thread
-//! before any leaf work, from the call's `CallSite`, which names who
-//! asked. A model call's wire name routes by the entry the current frame's
-//! section's rendered list holds for it, and a script call routes by id.
-//! An adhoc tool is answered with its handler; anything else is a catalog
-//! tool, which resolves against the run's offering (a model call by wire
-//! name, a script call by id, which also reaches a catalog tool left out
-//! of the offering), has its attempt counted, and is issued as a
-//! `ToolCall` effect, carrying an identity forked from the chain's access,
-//! whose answer the driver applies through the shared dispatch body.
+//! Each call resolves to its binding once, by `tool_route`, on the driver
+//! thread before any leaf work, from the call's `CallSite`, which names who
+//! asked. A model call's wire name resolves in the Static Set of the
+//! current frame's section, and a script call's id among the section's
+//! adhoc tools or in the run catalog, under the id itself. An adhoc tool
+//! is answered with its handler; any other tool has its attempt counted
+//! and is issued as a `ToolCall` effect under the binding its route holds,
+//! carrying an identity forked from the chain's access, whose answer the
+//! driver applies through the shared dispatch body.
 //! A model-issued call, alone or batched, always resumes a bound tool with
 //! content - a tool's own failure becomes untrusted failure text - and
 //! `ToolResult` fires under the id and the turn of the round that requested
@@ -69,16 +68,15 @@ pub(super) enum ToolCallDispatch {
     Answered(Answer<Error>),
 }
 
-/// Where one tool call is answered, decided before any catalog lookup so
-/// a lone call and a batched one route alike.
+/// Where one tool call is answered, with the binding it resolved to, so a
+/// lone call and a batched one route alike.
 #[derive(Debug)]
 enum ToolRoute {
     /// An adhoc tool of the chain's section VM, answered with its
     /// handler.
     Adhoc(ToolBinding),
-    /// A catalog tool, resolved against the run's offering and issued as
-    /// an effect.
-    Catalog,
+    /// Any other tool, issued as an effect under its binding.
+    Catalog(ToolBinding),
 }
 
 impl Scheduler {
@@ -134,8 +132,8 @@ impl Scheduler {
             };
             let issued = match self.tool_route(id, &call.name, &site) {
                 Ok(ToolRoute::Adhoc(_)) => break,
-                Ok(ToolRoute::Catalog) => {
-                    self.prepare_catalog_call(id, &call.name, call.arguments, site)
+                Ok(ToolRoute::Catalog(binding)) => {
+                    self.prepare_catalog_call(id, binding, call.arguments, site)
                 }
                 Err(error) => Err(error),
             };
@@ -151,29 +149,38 @@ impl Scheduler {
         self.answer_full_batch(id);
     }
 
-    /// Decides the route of the call at `site` naming `name`, the one
-    /// decision a lone call and a batch share. A model call looks its wire
-    /// name up in the rendered list of the current frame's section, never
-    /// in the chain's advertised scope, which another section's rounds
-    /// overwrite while an adhoc tool's handler runs; with no rendered list
-    /// it routes as a catalog call. A script call routes by id. Either goes
+    /// Resolves the call at `site` naming `name` to its binding and route,
+    /// the one lookup a lone call and a batch share. A model reaches only
+    /// the wire names the Static Set of the current frame's section holds.
+    /// A script names a tool by id: an adhoc tool, else any catalog tool,
+    /// bound under its id, because the sets shape what the model is
+    /// offered and the author's own script is not the model. Either goes
     /// to the adhoc tool the id names, when it is one.
+    ///
+    /// # Errors
+    /// Returns [`Error::UnboundToolCall`] for a name that resolves to no
+    /// tool.
     fn tool_route(&self, id: ChainIndex, name: &str, site: &CallSite) -> Result<ToolRoute> {
-        let vm = self.chains[id.index()].frame()?.vm()?;
-        let target = if site.call_id().is_some() {
-            match vm.rendered_target(name) {
-                Some(advertised) => advertised.id.to_string(),
-                None => return Ok(ToolRoute::Catalog),
-            }
-        } else {
-            name.to_owned()
-        };
-        let adhoc = if target.contains('/') {
-            vm.adhoc_tools().binding(&target)?
-        } else {
-            None
-        };
-        Ok(adhoc.map_or(ToolRoute::Catalog, ToolRoute::Adhoc))
+        let chain = &self.chains[id.index()];
+        let vm = chain.frame()?.vm()?;
+        let tool_set = chain.ctx.tool_set();
+        if site.call_id().is_some() {
+            let binding = vm
+                .rendered_target(name)
+                .ok_or_else(|| unbound_tool_call(tool_set, name))?;
+            let adhoc = vm.adhoc_tools().binding(&binding.id().to_string())?;
+            return Ok(adhoc.map_or(ToolRoute::Catalog(binding), ToolRoute::Adhoc));
+        }
+        if name.contains('/')
+            && let Some(binding) = vm.adhoc_tools().binding(name)?
+        {
+            return Ok(ToolRoute::Adhoc(binding));
+        }
+        ToolId::parse(name)
+            .ok()
+            .and_then(|tool| tool_set.catalog().get(&tool))
+            .map(|info| ToolRoute::Catalog(ToolBinding::from_info(&info.id.to_string(), info)))
+            .ok_or_else(|| unbound_tool_call(tool_set, name))
     }
 
     /// The turn every report of a call at `site` carries: the requesting
@@ -185,8 +192,8 @@ impl Scheduler {
     }
 
     /// The chain's section's tool-call counts, which the section's first
-    /// call installs, seeded from its rendered list once there is one and
-    /// from its live scope before.
+    /// call installs, seeded from its Static Set once the section froze
+    /// its sets and from its live static offers before.
     fn section_call_counts(&mut self, id: ChainIndex) -> Result<ToolCallCounts> {
         let chain = &mut self.chains[id.index()];
         let vm = chain.frame()?.vm()?;
@@ -195,7 +202,7 @@ impl Scheduler {
             None => {
                 current_tool_bindings(chain.ctx.tool_set(), vm.tool_runtime(), vm.adhoc_tools())?
                     .iter()
-                    .map(|binding| binding.id().clone())
+                    .map(|tool| tool.id().clone())
                     .collect()
             }
         };
@@ -269,7 +276,7 @@ impl Scheduler {
 
     /// The fallible half of tool-call dispatch, by the call's route: an
     /// adhoc tool (the one-time counts install, the attempt counted, then
-    /// the handler's answer), or a catalog tool, which
+    /// the handler's answer), or any other tool, which
     /// `prepare_catalog_call` issues.
     ///
     /// Every report the call makes carries the turn of the model round
@@ -286,31 +293,25 @@ impl Scheduler {
     ) -> Result<ToolCallDispatch> {
         match self.tool_route(id, alias, &site)? {
             ToolRoute::Adhoc(binding) => self.prepare_adhoc_call(id, &binding, args, &site),
-            ToolRoute::Catalog => {
-                self.prepare_catalog_call(id, alias, args, site)?;
+            ToolRoute::Catalog(binding) => {
+                self.prepare_catalog_call(id, binding, args, site)?;
                 Ok(ToolCallDispatch::Issued)
             }
         }
     }
 
-    /// Issues a catalog call: the one-time counts install, then the tool
-    /// resolved - a model call's wire name against the run's offering, a
-    /// script call's canonical id against the offering and then the full
-    /// catalog, the id then standing as the alias of a tool the run could
-    /// not offer (the section's effective scope shapes what the model is
-    /// offered, and the author's own script is not the model, so the scope
-    /// does not gate it); then the attempt counted under the tool's id,
-    /// the call's identity forked from the chain's access, and the issued
-    /// effect, whose origin names the model as caller for a `Model` or
-    /// `Batch` site and the script for a `Script` site. The answer's
-    /// rules - the model-issued body under the call id, else the script
-    /// body classified by the binding's declared output kind - and a
-    /// `Batch` site's slot are the continuation's, applied when the answer
-    /// lands.
+    /// Issues a call under the `binding` its route resolved: the one-time
+    /// counts install, the attempt counted under the tool's id, the call's
+    /// identity forked from the chain's access, and the issued effect,
+    /// whose origin names the model as caller for a `Model` or `Batch`
+    /// site and the script for a `Script` site. The answer's rules - the
+    /// model-issued body under the call id, else the script body
+    /// classified by the binding's declared output kind - and a `Batch`
+    /// site's slot are the continuation's, applied when the answer lands.
     fn prepare_catalog_call(
         &mut self,
         id: ChainIndex,
-        alias: &str,
+        binding: ToolBinding,
         args: serde_json::Value,
         site: CallSite,
     ) -> Result<()> {
@@ -318,28 +319,10 @@ impl Scheduler {
             turn: self.call_turn(id, &site),
         };
         let counts = self.section_call_counts(id)?;
-        let ctx = &self.chains[id.index()].ctx;
-        let tool_set = ctx.tool_set();
-        // A model reaches only the wire names a round advertised; a script
-        // names a catalog tool by its canonical id, and only a script falls
-        // back to a catalog tool the run could not offer.
-        let binding = if site.call_id().is_some() {
-            tool_set.wire_binding(alias)
-        } else if ToolId::parse(alias).is_ok() {
-            tool_set
-                .offered_binding(alias)
-                .or_else(|| ctx.catalog_binding(alias))
-        } else {
-            None
-        }
-        .cloned();
-        let Some(binding) = binding else {
-            return Err(unbound_tool_call(tool_set, alias));
-        };
-        // The counts seed from the section's effective scope; a tool
-        // outside it must still be seeded here, because the increment
-        // errors on an unseeded id. The attempt counts at dispatch -
-        // before the tool runs, so a cancelled dispatch still counts.
+        // The counts seed from the section's static offers; a tool outside
+        // them must still be seeded here, because the increment errors on
+        // an unseeded id. The attempt counts at dispatch - before the tool
+        // runs, so a cancelled dispatch still counts.
         let counted = binding.id().to_string();
         counts.ensure(&counted)?;
         counts.increment(&counted)?;

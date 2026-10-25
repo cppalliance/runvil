@@ -30,7 +30,7 @@ use serde_json::json;
 
 use crate::execute::protocol::{Answer, Request, YieldParse};
 use crate::execute::section_vm::{SectionVmSetup, VmSeed, setup_section_vm};
-use crate::lua::{Library, SectionText, SectionVm, ToolBinding, ToolSet};
+use crate::lua::{Library, SectionText, SectionVm, ToolSet};
 use crate::model::ModelSet;
 use crate::test_support::fresh_access;
 use crate::test_support::recording::null_emitter;
@@ -57,13 +57,15 @@ fn stub_tool() -> ToolInfo {
     )
 }
 
-/// One tool set offering the stub tool under its wire name `tools_echo`.
+/// One tool set whose catalog holds the stub tool, under its default wire
+/// name `tools_echo`.
 #[track_caller]
 fn test_tools() -> ToolSet {
     ToolSet::new(
         Vec::new(),
         std::collections::BTreeMap::new(),
-        vec![ToolBinding::from_info("tools_echo", &stub_tool())],
+        runvil_types::tools::ToolCatalog::new([stub_tool()]).expect("one tool"),
+        std::collections::BTreeMap::new(),
     )
 }
 
@@ -95,7 +97,7 @@ fn scheduler_vm_with_tools(
 }
 
 /// What a test's section VM binds beyond an empty run's: its section, the
-/// run's offering and model set, and the conditional Engine globals.
+/// run's tool set and model set, and the conditional Engine globals.
 struct VmBinds<'a> {
     section: &'a str,
     tools: &'a ToolSet,

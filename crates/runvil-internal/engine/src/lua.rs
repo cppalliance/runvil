@@ -15,13 +15,13 @@
 // a caller answers a `Vfs` effect through, and the
 // model-facing message renderers a store failure carries.
 pub(crate) use runvil_lua::{
-    Advertised, Argv, CoroStep, Library, LibraryBlock, LibraryKey, LuaBlockResult, MessageList,
-    ModelReport, NonEmpty, OverflowReason, ProseState, QuotaResource, RenderedTools, ScriptReport,
+    Argv, CoroStep, Library, LibraryBlock, LibraryKey, LuaBlockResult, MessageList, ModelReport,
+    NonEmpty, OfferedTool, OverflowReason, ProseState, QuotaResource, RenderedTools, ScriptReport,
     SectionText, SectionVm, ToolBinding, ToolCallCounts, ToolSet, Uninjected, UsageAnchor,
-    current_dynamic_tools, current_tool_bindings, enrich_sys_model, exhaustion_detail,
+    current_dynamic_set, current_tool_bindings, enrich_sys_model, exhaustion_detail,
     install_preludes, install_section_loop_shim, install_store_shims, install_ui, output_reserve,
     precheck, prepare_dispatch, prepare_model_dispatch, project_messages, render_item,
-    resolve_model_binding,
+    resolve_model_binding, wire_name_of,
 };
 pub(crate) use runvil_lua::{run_store_op, store_error_message, store_probe_message};
 

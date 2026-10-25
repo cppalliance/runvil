@@ -424,11 +424,8 @@ fn a_chunk_sees_the_tools_table_and_no_tool_global_ever_installs() {
         .as_deref(),
         Some("nil")
     );
-    let (bindings, runtime) = vm.tool_bag_handles();
-    let scope = current_tool_bindings(&bindings, &runtime, vm.adhoc_tools())
-        .expect("tool scope must snapshot");
     assert_eq!(
-        scope.iter().map(ToolBinding::alias).collect::<Vec<_>>(),
+        crate::test_vm::scoped(&vm),
         ["fixtures_search"],
         "the top-level tools.offer must be recorded"
     );
@@ -460,11 +457,5 @@ fn functions_resolve_engine_globals_when_called_from_a_later_chunk() {
         .as_deref(),
         Some("fixtures/search")
     );
-    let (bindings, runtime) = vm.tool_bag_handles();
-    let scope = current_tool_bindings(&bindings, &runtime, vm.adhoc_tools())
-        .expect("tool scope must snapshot");
-    assert_eq!(
-        scope.iter().map(ToolBinding::alias).collect::<Vec<_>>(),
-        ["fixtures_search"]
-    );
+    assert_eq!(crate::test_vm::scoped(&vm), ["fixtures_search"]);
 }

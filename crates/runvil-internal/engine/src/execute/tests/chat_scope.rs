@@ -1,6 +1,6 @@
 //! Tests for the `Chat` arm's tool scope from a section VM: every round
-//! sends the section's rendered tool list, its effective scope plus every
-//! adhoc tool at the first round.
+//! sends the section's Static Set, its offered catalog tools and adhoc
+//! tools as the first round froze them.
 
 use runvil_parser::test_support::one_section;
 

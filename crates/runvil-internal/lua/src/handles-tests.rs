@@ -1,14 +1,16 @@
 //! Tests for the tool binding built from a catalog tool info: the
 //! tool info's data is copied verbatim and its structured-output flag
-//! selects the binding's output kind. The tool set finds an offered
-//! binding by wire name or by canonical id.
+//! selects the binding's output kind. A catalog tool's wire name is its
+//! own when set and its default otherwise, and the tool set reads the run
+//! catalog and derives each tool's vendor from its Pack.
 
 use std::collections::BTreeMap;
 
-use runvil_types::tools::{ToolId, ToolInfo};
+use runvil_types::packs::PackId;
+use runvil_types::tools::{ToolCatalog, ToolId, ToolInfo};
 use serde_json::json;
 
-use super::{ToolBinding, ToolOutputKind, ToolSet};
+use super::{ToolBinding, ToolOutputKind, ToolSet, wire_name_of};
 
 /// A tool info for `tools/fetch`.
 fn tool_info(structured: bool) -> ToolInfo {
@@ -50,17 +52,52 @@ fn the_test_seam_overrides_only_the_description() {
 }
 
 #[test]
-fn an_offered_binding_is_found_by_its_wire_name_or_its_id_as_one_binding() {
-    let offered = ToolBinding::from_info("tools_fetch", &tool_info(false));
-    let set = ToolSet::new(Vec::new(), BTreeMap::new(), vec![offered.clone()]);
-    assert_eq!(set.offered(), std::slice::from_ref(&offered));
-    assert_eq!(set.offered_binding("tools_fetch"), Some(&offered));
-    assert_eq!(
-        set.offered_binding("tools/fetch"),
-        Some(&offered),
-        "the canonical id finds the binding the wire name finds"
+fn a_catalog_tools_wire_name_is_its_own_when_set_and_its_default_otherwise() {
+    let info = tool_info(false);
+    assert_eq!(wire_name_of(&info), "tools_fetch");
+    assert_eq!(wire_name_of(&info.wire_name("fetch")), "fetch");
+    let dotted = ToolInfo::new(
+        ToolId::parse("gh/issues.list").expect("the id is valid"),
+        "List issues",
+        json!({ "type": "object" }),
     );
-    for miss in ["fetch", "tools/missing", "tools_missing", "Tools/Fetch"] {
-        assert_eq!(set.offered_binding(miss), None, "{miss:?} names no binding");
-    }
+    assert_eq!(
+        wire_name_of(&dotted),
+        "gh_issues_list",
+        "both `/` and `.` turn into `_`"
+    );
+}
+
+#[test]
+fn the_tool_set_reads_the_catalog_and_takes_each_tools_vendor_from_its_pack() {
+    let pack = |name: &str| PackId::parse(name).expect("the Pack id is valid");
+    let id = |id: &str| ToolId::parse(id).expect("the id is valid");
+    let set = ToolSet::new(
+        Vec::new(),
+        BTreeMap::new(),
+        ToolCatalog::new([tool_info(false)]).expect("one tool"),
+        BTreeMap::from([(pack("tools"), "acme".to_owned())]),
+    );
+    assert_eq!(
+        set.catalog()
+            .get(&id("tools/fetch"))
+            .map(|info| info.description.as_str()),
+        Some("Fetch a page")
+    );
+    assert_eq!(set.vendor_for(&id("tools/fetch")), Some("acme"));
+    assert_eq!(
+        set.vendor_for(&id("tools/rendered_only")),
+        Some("acme"),
+        "a tool outside the catalog reports its Pack's vendor"
+    );
+    assert_eq!(
+        set.vendor_for(&id("adhoc/grab")),
+        None,
+        "an adhoc tool reports none"
+    );
+    assert_eq!(
+        set.vendor_for(&id("web/fetch")),
+        None,
+        "a Pack with no vendor reports none"
+    );
 }

@@ -6,8 +6,8 @@
 use std::collections::BTreeMap;
 
 use runvil_types::packs::PackId;
+use runvil_types::tools::ToolCatalog;
 
-use crate::ToolBinding;
 use crate::handles::ToolSet;
 use crate::test_vm::{lua_over, offer_set, offers, raised, scoped, tool_at};
 
@@ -18,15 +18,16 @@ const NAMES: &str = "local function names(list)\n\
        return table.concat(out, ',')\n\
      end\n";
 
-/// A set declaring `mail`, which offers no tool, beside the undeclared
+/// A set declaring `mail`, which has no tool, beside the undeclared
 /// Packs `get`, `extras`, and `tools`, whose names a member of
 /// `tools.packs` or a Pack object also has.
 fn colliding_set() -> ToolSet {
-    let bind = |id: &str| ToolBinding::from_info(&id.replace(['/', '.'], "_"), &tool_at(id));
     ToolSet::new(
         vec![PackId::parse("mail").expect("`mail` is a valid Pack id")],
         BTreeMap::new(),
-        vec![bind("extras/list"), bind("get/one"), bind("tools/tools")],
+        ToolCatalog::new(["extras/list", "get/one", "tools/tools"].map(tool_at))
+            .expect("the fixture ids differ"),
+        BTreeMap::new(),
     )
 }
 

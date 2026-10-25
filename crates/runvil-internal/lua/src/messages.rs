@@ -22,13 +22,13 @@
 //! leading-system rule. A model round's request holds a clone of the same
 //! list, so the round reads every record with no second validation.
 //!
-//! The list also holds the section's rendered tool list, which the Engine
-//! attaches at the first loop round that builds its tools, so it lasts
-//! exactly as long as the section. Once one is attached, every offer
+//! The list also holds the section's frozen sets, which the Engine
+//! attaches at the first model call that builds them, so they last
+//! exactly as long as the section. Once they are attached, every offer
 //! function raises. A compaction edits the list in place and keeps a
 //! snapshot of its records to put back if the compaction fails; neither
 //! the snapshot nor `compactors.clear` touches the last send or the
-//! rendered tool list.
+//! frozen sets.
 
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
@@ -40,8 +40,9 @@ use runvil_types::ids::RoundId;
 use serde_json::{Map, Value as Json};
 
 use crate::error::{Error, Result};
+use crate::handles::ToolBinding;
 use crate::protocol::{MessageRecord, RecordRole, parse_record};
-use crate::scope::{Advertised, RenderedTools};
+use crate::scope::RenderedTools;
 
 #[path = "messages-snapshot.rs"]
 mod snapshot;
@@ -109,7 +110,7 @@ struct ListState {
     /// The last issued send: its round and the wire request it sent.
     last: Option<(RoundId, Vec<Message>)>,
     /// Attached at the first successful build and never detached.
-    rendered: Option<RenderedTools>,
+    rendered: Option<Arc<RenderedTools>>,
     /// Set while a compactor runs over the list.
     compacting: bool,
 }
@@ -205,32 +206,32 @@ impl MessageList {
         })
     }
 
-    /// Whether a rendered tool list is attached; no list means false.
+    /// Whether frozen sets are attached; none means false.
     #[must_use]
     pub(crate) fn rendered(&self) -> bool {
         self.state().rendered.is_some()
     }
 
-    /// A copy of the attached rendered tool list, if one is attached.
+    /// The attached frozen sets, if they are attached.
     #[must_use]
-    pub fn rendered_tools(&self) -> Option<RenderedTools> {
+    pub fn rendered_tools(&self) -> Option<Arc<RenderedTools>> {
         self.state().rendered.clone()
     }
 
-    /// The attached rendered list's entry for `wire_name`, if a list is
-    /// attached and advertises that name.
+    /// The binding the attached Static Set holds under `wire_name`, if
+    /// frozen sets are attached and the Static Set holds that name.
     #[must_use]
-    pub(crate) fn rendered_target(&self, wire_name: &str) -> Option<Advertised> {
+    pub(crate) fn rendered_target(&self, wire_name: &str) -> Option<ToolBinding> {
         let state = self.state();
-        state.rendered.as_ref()?.dispatch.get(wire_name).cloned()
+        state.rendered.as_ref()?.static_binding(wire_name).cloned()
     }
 
-    /// Attaches `tools` as the section's rendered tool list. A list that
-    /// already holds one keeps it.
+    /// Attaches `tools` as the section's frozen sets. A list that already
+    /// holds some keeps them.
     ///
     /// The Engine calls this only on a list with none attached.
     pub fn attach_rendered_tools(&self, tools: RenderedTools) {
-        self.state().rendered.get_or_insert(tools);
+        self.state().rendered.get_or_insert_with(|| Arc::new(tools));
     }
 }
 

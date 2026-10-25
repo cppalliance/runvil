@@ -95,7 +95,7 @@ fn a_catalog_call_records_the_vendor_the_caller_reported_and_an_adhoc_call_none(
     assert_eq!(
         result_vendors(events),
         [
-            result("", "tools_echo", Some("acme")),
+            result("", "tools/echo", Some("acme")),
             result("call_1", "grab", None),
             result("call_2", "tools_echo", Some("acme")),
         ],
@@ -139,7 +139,7 @@ fn a_run_given_no_roster_records_no_vendor() {
     assert_eq!(
         result_vendors(events),
         [
-            result("", "tools_echo", None),
+            result("", "tools/echo", None),
             result("call_1", "grab", None),
             result("call_2", "tools_echo", None),
         ]
