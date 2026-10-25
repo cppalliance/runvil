@@ -13,6 +13,7 @@ runvil-model-client.workspace = true
 runvil-parser.workspace = true
 runvil-types.workspace = true
 runvil-vfs.workspace = true
+regex.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true

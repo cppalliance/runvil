@@ -31,7 +31,7 @@ use crate::json::to_json;
 use crate::messages::MessageList;
 use crate::packs::{ADHOC_PACK, install_pack_list, install_pack_objects};
 use crate::proxy::key_text;
-use crate::scope::{OfferMode, ToolCallCounts, ToolRuntime};
+use crate::scope::{DiscoveryTool, OfferMode, ToolCallCounts, ToolRuntime};
 use crate::vm::AdhocTools;
 
 mod decode;
@@ -285,7 +285,8 @@ fn install_adhoc(lua: &Lua, tools: &Table, adhoc_tools: &AdhocTools) -> Result<(
 
 /// Reads `tools.adhoc`'s attrs as the tool's wire name and info, checking
 /// the keys, the name, the description, the parameters, and the schema,
-/// and that neither the name nor the id is taken.
+/// and that neither the name nor the id is taken, a discovery tool's wire
+/// name included.
 fn adhoc_info(lua: &Lua, attrs: &Table, adhoc: &AdhocTools) -> mlua::Result<(String, ToolInfo)> {
     let mut unknown: Vec<String> = Vec::new();
     for pair in attrs.pairs::<Value, Value>() {
@@ -308,6 +309,14 @@ fn adhoc_info(lua: &Lua, attrs: &Table, adhoc: &AdhocTools) -> mlua::Result<(Str
             "tools.adhoc: invalid name {name:?}: expected [A-Za-z][A-Za-z0-9_-]{{0,63}}"
         ))
     })?);
+    if DiscoveryTool::ALL
+        .iter()
+        .any(|tool| tool.wire_name() == name)
+    {
+        return Err(mlua::Error::external(format!(
+            "tools.adhoc: the name {name:?} is reserved for a discovery tool; pick another name"
+        )));
+    }
     let description = attr_text(attrs, "description")?;
     let id = format!("{ADHOC_PACK}/{}", name.to_ascii_lowercase());
     if adhoc

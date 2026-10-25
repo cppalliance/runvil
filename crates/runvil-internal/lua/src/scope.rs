@@ -1,5 +1,6 @@
-//! Per-VM tool runtime state: call counts, the offers a section made, and
-//! the frozen sets its first model call built from them.
+//! Per-VM tool runtime state: call counts, the offers a section made, the
+//! frozen sets its first model call built from them, and the Engine's two
+//! discovery tools, which join the Static Set beside a Dynamic Set.
 
 use std::borrow::Cow;
 use std::collections::BTreeMap;
@@ -92,7 +93,8 @@ pub enum OfferTarget {
     Pack(PackId),
 }
 
-/// Which set an offer feeds.
+/// Which of a section's two sets an offer feeds, or a frozen binding sits
+/// in.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OfferMode {
     /// The Static Set, which every round of the section sends.
@@ -175,13 +177,63 @@ pub struct RenderedTools {
 }
 
 impl RenderedTools {
-    /// Returns the binding the Static Set holds under `wire_name`. A
-    /// Dynamic Set name finds nothing, because a model never calls a
-    /// Dynamic Set tool directly.
+    /// Returns the binding either set holds under `wire_name`, with the set
+    /// that holds it.
     #[must_use]
-    pub fn static_binding(&self, wire_name: &str) -> Option<&ToolBinding> {
-        self.static_set
-            .iter()
-            .find(|binding| binding.alias() == wire_name)
+    pub fn binding(&self, wire_name: &str) -> Option<(&ToolBinding, OfferMode)> {
+        [
+            (&self.static_set, OfferMode::Static),
+            (&self.dynamic_set, OfferMode::Dynamic),
+        ]
+        .into_iter()
+        .find_map(|(set, mode)| {
+            set.iter()
+                .find(|binding| binding.alias() == wire_name)
+                .map(|binding| (binding, mode))
+        })
+    }
+}
+
+/// One of the Engine's two discovery tools, which join the end of a
+/// section entry's Static Set when its Dynamic Set holds a tool: the model
+/// finds Dynamic Set tools with the first and calls them with the second.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DiscoveryTool {
+    /// `dynamic/search`, which the model calls as `GetDynamicTools`.
+    Search,
+    /// `dynamic/call`, which the model calls as `CallDynamicTool`.
+    Call,
+}
+
+impl DiscoveryTool {
+    /// Both discovery tools, in the order they join the Static Set.
+    pub const ALL: [DiscoveryTool; 2] = [DiscoveryTool::Search, DiscoveryTool::Call];
+
+    /// The vendor both discovery tools report.
+    pub const VENDOR: &'static str = "runvil";
+
+    /// The tool's id, under the reserved Pack id `dynamic`.
+    #[must_use]
+    pub fn id(self) -> &'static str {
+        match self {
+            DiscoveryTool::Search => "dynamic/search",
+            DiscoveryTool::Call => "dynamic/call",
+        }
+    }
+
+    /// The wire name the model calls the tool by.
+    #[must_use]
+    pub fn wire_name(self) -> &'static str {
+        match self {
+            DiscoveryTool::Search => "GetDynamicTools",
+            DiscoveryTool::Call => "CallDynamicTool",
+        }
+    }
+
+    /// The discovery tool whose id is `id`, if it is one.
+    #[must_use]
+    pub fn of(id: &ToolId) -> Option<DiscoveryTool> {
+        let id = id.to_string();
+        DiscoveryTool::ALL.into_iter().find(|tool| tool.id() == id)
     }
 }

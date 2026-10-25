@@ -9,7 +9,7 @@ use super::MessageList;
 use crate::protocol::{Request, YieldParse};
 use crate::test_vm::TestVm;
 use crate::tests::{system, user};
-use crate::{Error, RenderedTools, ToolBinding};
+use crate::{Error, OfferMode, RenderedTools, ToolBinding};
 
 #[path = "messages-tests-list.rs"]
 mod list;
@@ -78,13 +78,13 @@ fn a_list_is_rendered_only_once_sets_are_attached_and_keeps_the_first() {
     );
     assert_eq!(
         list.rendered_target("first"),
-        Some(adhoc("first")),
+        Some((adhoc("first"), OfferMode::Static)),
         "a Static Set binding reads by wire name"
     );
     assert_eq!(
         list.rendered_target("later"),
-        None,
-        "a model never calls a Dynamic Set tool directly"
+        Some((adhoc("later"), OfferMode::Dynamic)),
+        "a Dynamic Set binding reads by wire name, with its set"
     );
     assert_eq!(list.rendered_target("second"), None);
 }

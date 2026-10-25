@@ -5,10 +5,12 @@
 //!
 //! Each call resolves to its binding once, by `tool_route`, on the driver
 //! thread before any leaf work, from the call's `CallSite`, which names who
-//! asked. A model call's wire name resolves in the Static Set of the
+//! asked. A model call's wire name resolves in the frozen sets of the
 //! current frame's section, and a script call's id among the section's
 //! adhoc tools or in the run catalog, under the id itself. An adhoc tool
-//! is answered with its handler; any other tool has its attempt counted
+//! is answered with its handler; a discovery tool, or a Dynamic Set tool
+//! the model names directly, by the discovery route in the `discovery`
+//! child; any other tool has its attempt counted
 //! and is issued as a `ToolCall` effect under the binding its route holds,
 //! carrying an identity forked from the chain's access, whose answer the
 //! driver applies through the shared dispatch body.
@@ -21,7 +23,7 @@
 //! The loop sends a round's unanswered calls together as one
 //! `tool_calls` request. The arm walks them in the model's order and
 //! issues each catalog call at once into a slot of the chain's batch,
-//! stopping at the first call whose route is an adhoc tool. A call that
+//! stopping at the first call whose route is not the catalog. A call that
 //! fails to route or to prepare fills its slot with the error and stops
 //! the batch too. Each landed answer fills its call's slot, and the
 //! chain is answered once no slot is open: every text in call order, or
@@ -44,6 +46,8 @@
 
 #[path = "tool_call-adhoc.rs"]
 mod adhoc;
+#[path = "tool_call-discovery.rs"]
+mod discovery;
 
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
@@ -53,15 +57,18 @@ use runvil_vfs::detail;
 
 use crate::execute::protocol::{Answer, ToolCallOutcome, ToolCallRecord};
 use crate::execute::run::{Effect, ToolCallOrigin, ToolCaller};
-use crate::lua::{ScriptReport, ToolBinding, ToolCallCounts, current_tool_bindings};
+use crate::lua::{
+    DiscoveryTool, OfferMode, ScriptReport, ToolBinding, ToolCallCounts, current_tool_bindings,
+};
 use crate::{Error, Result};
 
 use super::dispatch::unbound_tool_call;
 use super::{CallSite, ChainIndex, Continuation, Scheduler, ToolCallContinuation, prompt_origin};
 
 /// How one `tool_call` dispatch resolved: a bound call issued as an effect
-/// and parked on the pending table, or an adhoc tool's answer settled
-/// on the driver thread. A preparation failure returns `Err` instead.
+/// and parked on the pending table, or an adhoc tool's or the discovery
+/// route's answer settled on the driver thread. A preparation failure
+/// returns `Err` instead.
 #[derive(Debug)]
 pub(super) enum ToolCallDispatch {
     Issued,
@@ -77,6 +84,9 @@ enum ToolRoute {
     Adhoc(ToolBinding),
     /// Any other tool, issued as an effect under its binding.
     Catalog(ToolBinding),
+    /// A discovery tool, or a Dynamic Set tool the model named directly,
+    /// answered by the discovery route.
+    Discovery(ToolBinding),
 }
 
 impl Scheduler {
@@ -114,7 +124,8 @@ impl Scheduler {
     /// model round, in the model's order. Each call before the first
     /// whose route is not the catalog is issued as a `CallSite::Batch`
     /// under the round's `turn` and its own slot, so every catalog call
-    /// issues in this step. A call that fails to route or to prepare
+    /// issues in this step, and the loop sends the call it stopped at
+    /// alone. A call that fails to route or to prepare
     /// fills its slot with the error and stops the batch. The slots park
     /// on the chain, which is answered at once when none is open.
     pub(super) fn dispatch_tool_calls(
@@ -131,7 +142,7 @@ impl Scheduler {
                 slot,
             };
             let issued = match self.tool_route(id, &call.name, &site) {
-                Ok(ToolRoute::Adhoc(_)) => break,
+                Ok(ToolRoute::Adhoc(_) | ToolRoute::Discovery(_)) => break,
                 Ok(ToolRoute::Catalog(binding)) => {
                     self.prepare_catalog_call(id, binding, call.arguments, site)
                 }
@@ -151,7 +162,8 @@ impl Scheduler {
 
     /// Resolves the call at `site` naming `name` to its binding and route,
     /// the one lookup a lone call and a batch share. A model reaches only
-    /// the wire names the Static Set of the current frame's section holds.
+    /// the wire names the frozen sets of the current frame's section hold:
+    /// a discovery tool or a Dynamic Set name goes to the discovery route.
     /// A script names a tool by id: an adhoc tool, else any catalog tool,
     /// bound under its id, because the sets shape what the model is
     /// offered and the author's own script is not the model. Either goes
@@ -165,9 +177,12 @@ impl Scheduler {
         let vm = chain.frame()?.vm()?;
         let tool_set = chain.ctx.tool_set();
         if site.call_id().is_some() {
-            let binding = vm
+            let (binding, set) = vm
                 .rendered_target(name)
                 .ok_or_else(|| unbound_tool_call(tool_set, name))?;
+            if set == OfferMode::Dynamic || DiscoveryTool::of(binding.id()).is_some() {
+                return Ok(ToolRoute::Discovery(binding));
+            }
             let adhoc = vm.adhoc_tools().binding(&binding.id().to_string())?;
             return Ok(adhoc.map_or(ToolRoute::Catalog(binding), ToolRoute::Adhoc));
         }
@@ -276,8 +291,8 @@ impl Scheduler {
 
     /// The fallible half of tool-call dispatch, by the call's route: an
     /// adhoc tool (the one-time counts install, the attempt counted, then
-    /// the handler's answer), or any other tool, which
-    /// `prepare_catalog_call` issues.
+    /// the handler's answer), the discovery route, or any other tool,
+    /// which `prepare_catalog_call` issues.
     ///
     /// Every report the call makes carries the turn of the model round
     /// that requested it, so an adhoc handler earlier in the same batch
@@ -293,6 +308,7 @@ impl Scheduler {
     ) -> Result<ToolCallDispatch> {
         match self.tool_route(id, alias, &site)? {
             ToolRoute::Adhoc(binding) => self.prepare_adhoc_call(id, &binding, args, &site),
+            ToolRoute::Discovery(binding) => self.prepare_discovery_call(id, &binding, args, site),
             ToolRoute::Catalog(binding) => {
                 self.prepare_catalog_call(id, binding, args, site)?;
                 Ok(ToolCallDispatch::Issued)
