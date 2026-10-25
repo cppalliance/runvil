@@ -336,9 +336,9 @@ fn an_offered_adhoc_tool_counts_from_zero_and_an_unoffered_one_from_its_first_ca
     let counts = vm
         .install_tool_call_counts(&ids)
         .expect("the counts install");
-    let offered: i64 = vm.eval("return tools.calls['adhoc/grab']");
+    let offered: i64 = vm.eval("return tools.stats.tools['adhoc/grab']");
     assert_eq!(offered, 0, "an offered adhoc tool is seeded");
-    let unoffered = raised(&vm, "return tools.calls['adhoc/other']");
+    let unoffered = raised(&vm, "return tools.stats.tools['adhoc/other']");
     assert!(
         unoffered.contains(
             "(an adhoc tool that was neither offered in this section nor called with tools.call)"
@@ -349,6 +349,6 @@ fn an_offered_adhoc_tool_counts_from_zero_and_an_unoffered_one_from_its_first_ca
     counts
         .increment("adhoc/other")
         .expect("the seeded id counts");
-    let called: i64 = vm.eval("return tools.calls['adhoc/other']");
+    let called: i64 = vm.eval("return tools.stats.tools['adhoc/other']");
     assert_eq!(called, 1, "a call gives an unoffered adhoc tool its count");
 }

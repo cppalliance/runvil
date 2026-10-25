@@ -1,4 +1,4 @@
-//! Tests for debug capture delivery and the `tools.calls` counters. The
+//! Tests for debug capture delivery and the `tools.stats` counters. The
 //! infer-round reporting cases sit in `infer_rounds`.
 
 use runvil_parser::test_support::{PromptSource, one_section};
@@ -147,7 +147,7 @@ fn debug_capture_none_changes_nothing() {
     assert_eq!(trace.text(), "hello from the mock");
 }
 
-// --- Per-VM tools.calls count tests ---
+// --- Per-VM tools.stats count tests ---
 
 #[test]
 fn tool_calls_count_increments_on_successful_dispatch() {
@@ -155,7 +155,7 @@ fn tool_calls_count_increments_on_successful_dispatch() {
     let source = setup_prompt(PromptSource::new().front("uses: [tools]").section(
         "Only",
         "tools.call('tools/echo', { value = 'x' })
-         assert(tools.calls['tools/echo'] == 1, 'expected 1 call, got ' .. tostring(tools.calls['tools/echo']))
+         assert(tools.stats.tools['tools/echo'] == 1, 'expected 1 call, got ' .. tostring(tools.stats.tools['tools/echo']))
          return 'ok'",
     ));
     let trace = Scenario::new(source).bound().tool(tool).run();
@@ -166,7 +166,7 @@ fn tool_calls_count_increments_on_successful_dispatch() {
 #[test]
 fn tool_calls_count_increments_even_when_tool_errors() {
     // Drive the failing fixture tool through a `models.loop` round and prove
-    // `tools.calls` records exactly one call even though the tool errors
+    // `tools.stats` records exactly one call even though the tool errors
     // (the count is incremented before dispatch). The tool's own failure is
     // the call's error result, so the loop continues to the terminal reply.
     let gateway = ScriptedChat::new(vec![
@@ -177,7 +177,7 @@ fn tool_calls_count_increments_even_when_tool_errors() {
         "tools.offer('tools/failing')
          messages:user('ask the model')
          models.loop()
-         return messages[#messages].content .. '|' .. tostring(tools.calls['tools/failing'])",
+         return messages[#messages].content .. '|' .. tostring(tools.stats.tools['tools/failing']) .. '|' .. tools.stats.total",
     );
     let trace = loop_scenario(source)
         .offer("echo", failing_tool())
@@ -185,8 +185,29 @@ fn tool_calls_count_increments_even_when_tool_errors() {
         .run();
     assert_eq!(
         trace.text(),
-        "final answer|1",
+        "final answer|1|1",
         "the counter must record exactly one call even though the tool errored"
+    );
+}
+
+#[test]
+fn before_the_freeze_a_dynamically_offered_tool_counts_from_zero_and_packs_holds_no_dynamic() {
+    let source = setup_prompt(PromptSource::new().front("uses: [tools]").section(
+        "Only",
+        "assert(tools.stats == nil, 'tools.stats appears at the first tool call')
+         tools.offer('tools/echo')
+         tools.offer_dynamic('tools/lookup')
+         tools.call('tools/echo', { value = 'x' })
+         local ok = pcall(function() return tools.stats.packs.dynamic end)
+         return tools.stats.total .. '|' .. tools.stats.packs.tools .. '|' .. tools.stats.tools['tools/lookup'] .. '|' .. tostring(ok)",
+    ));
+    let (echo, _) = scoped_tool("echo", "Echo a test value.");
+    let (lookup, _) = scoped_tool("lookup", "Look up a value.");
+    let trace = Scenario::new(source).bound().tool(echo).tool(lookup).run();
+    assert_eq!(
+        trace.text(),
+        "1|1|0|false",
+        "a live dynamic offer seeds its tool at zero, and no discovery tool is rendered yet"
     );
 }
 
@@ -205,8 +226,9 @@ fn a_model_call_a_script_call_and_an_adhoc_tool_each_count_under_the_id() {
          messages:user('ask the model')
          models.loop()
          tools.call('tools/echo', { value = 'script' })
-         local ok = pcall(function() return tools.calls['echo'] end)
-         return tostring(tools.calls['tools/echo']) .. '|' .. tostring(tools.calls['adhoc/grab']) .. '|' .. tostring(ok)",
+         local ok = pcall(function() return tools.stats.tools['echo'] end)
+         return tostring(tools.stats.tools['tools/echo']) .. '|' .. tostring(tools.stats.tools['adhoc/grab']) .. '|' .. tostring(ok)
+           .. '|' .. tools.stats.total .. '|' .. tools.stats.packs.tools .. '|' .. tools.stats.packs.adhoc",
     );
     let trace = loop_scenario(source)
         .offer("echo", echo_tool())
@@ -214,9 +236,10 @@ fn a_model_call_a_script_call_and_an_adhoc_tool_each_count_under_the_id() {
         .run();
     assert_eq!(
         trace.text(),
-        "2|1|false",
+        "2|1|false|3|2|1",
         "the model's wire-name call and the script's id call count once each under \
-         the id, the adhoc tool under its own id, and the wire name is no key"
+         the id, the adhoc tool under its own id, and the wire name is no key; total \
+         and each Pack sum them"
     );
 }
 
@@ -230,12 +253,12 @@ fn an_adhoc_tool_defined_after_the_render_has_no_seeded_count() {
          models.loop()
          tools.adhoc({ name = 'late', description = 'Late' }, function() return 'late' end)
          tools.call(grab, {})
-         local ok, err = pcall(function() return tools.calls['adhoc/late'] end)
+         local ok, err = pcall(function() return tools.stats.tools['adhoc/late'] end)
          assert(not ok, 'a tool the rendered list lacks reads no count')
          local text = tostring(err)
          assert(text:find('has no seeded count', 1, true), text)
          assert(text:find('(an adhoc tool that was neither offered in this section nor called with tools.call)', 1, true), text)
-         assert(tools.calls['adhoc/grab'] == 1, 'grab counts once')
+         assert(tools.stats.tools['adhoc/grab'] == 1, 'grab counts once')
          return 'ok'",
     );
     let trace = loop_scenario(source).chat(&gateway).run();
@@ -255,7 +278,7 @@ fn tool_calls_count_zero_for_uncalled_alias_fails_epilog_assert() {
          ```
 
          ```lua
-         assert(tools.calls['tools/search'] > 0, 'search was never called')
+         assert(tools.stats.tools['tools/search'] > 0, 'search was never called')
          return 'unreached'
          ```",
     ));
@@ -279,7 +302,7 @@ fn tool_calls_typo_alias_is_a_hard_error_with_seeded_set() {
          ```
 
          ```lua
-         local _ = tools.calls['tools/serach']
+         local _ = tools.stats.tools['tools/serach']
          return 'unreached'
          ```",
     ));
@@ -287,8 +310,8 @@ fn tool_calls_typo_alias_is_a_hard_error_with_seeded_set() {
     let trace = Scenario::new(source).bound().tool(tool).run();
     let msg = trace.error().to_string();
     assert!(
-        msg.contains("tools/serach") && msg.contains("has no seeded count"),
-        "error must name the bad key and state it was never seeded: {msg}"
+        msg.contains("tools.stats.tools: \"tools/serach\" has no seeded count"),
+        "error must name its table and the bad key and state it was never seeded: {msg}"
     );
     assert!(
         msg.contains("seeded names: [\"tools/search\"]")

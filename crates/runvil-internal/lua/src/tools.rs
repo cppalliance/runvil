@@ -11,11 +11,13 @@
 //! by id, `packs` reads the Pack objects, `offer` and `offer_dynamic`
 //! remember tools and Packs for the section's Static Set and Dynamic Set,
 //! `call` dispatches a tool by id or object (installed by the coroutine
-//! shim prelude, since dispatch suspends), and `calls` is the read-only
-//! dispatch counter surface, keyed by id. Offering a tool the run does
-//! not hold is a hard error, and so is every offer once the section's
-//! first model call froze its sets. The installation logic sits here, out
-//! of the VM driver; the VM only calls the installers in setup order.
+//! shim prelude, since dispatch suspends), and `stats`, which the `stats`
+//! child installs, is the read-only view of the section's call counts: a
+//! total, and counts per Pack and per tool by id. Offering a tool the run
+//! does not hold is a hard error, and so is every offer once the
+//! section's first model call froze its sets. The installation logic sits
+//! here, out of the VM driver; the VM only calls the installers in setup
+//! order.
 
 use std::sync::{Arc, Mutex};
 
@@ -31,15 +33,17 @@ use crate::json::to_json;
 use crate::messages::MessageList;
 use crate::packs::{ADHOC_PACK, install_pack_list, install_pack_objects};
 use crate::proxy::key_text;
-use crate::scope::{DiscoveryTool, OfferMode, ToolCallCounts, ToolRuntime};
+use crate::scope::{DiscoveryTool, OfferMode, ToolRuntime};
 use crate::vm::AdhocTools;
 
 mod decode;
 mod objects;
 mod offer;
+mod stats;
 mod userdata;
 
 pub(crate) use decode::{model_tool_name, tool_name};
+pub(crate) use stats::install_tool_call_counts;
 
 use decode::adhoc_params_schema;
 pub(crate) use objects::tool_object;
@@ -89,99 +93,6 @@ pub(crate) fn adhoc_handler(lua: &Lua, name: &str) -> mlua::Result<Function> {
             "an adhoc tool answer names a registered handler".into(),
         ))),
     }
-}
-
-/// Installs the read-only `tools.calls` counter table over `counts`;
-/// `catalog`, the ids of every catalog tool, and `adhoc`, the VM's adhoc
-/// tools, feed the unknown-key diagnostic.
-///
-/// # Errors
-/// Returns [`Error::LuaRuntime`] if the Lua table or callbacks cannot be created or
-/// installed.
-fn install_lua_tool_calls(
-    lua: &Lua,
-    counts: &ToolCallCounts,
-    catalog: Vec<String>,
-    adhoc: AdhocTools,
-) -> Result<()> {
-    let globals = lua.globals();
-    let tools: Table = globals.raw_get("tools").map_err(Error::lua)?;
-
-    let calls_inner = lua.create_table().map_err(Error::lua)?;
-    let meta = lua.create_table().map_err(Error::lua)?;
-
-    let counts_for_index = counts.clone();
-    let index = lua
-        .create_function(move |_, (_table, key): (Table, String)| {
-            let value = counts_for_index.get(&key).map_err(mlua::Error::external)?;
-            if let Some(count) = value {
-                return Ok(count);
-            }
-            let seeded = counts_for_index.names().map_err(mlua::Error::external)?;
-            let adhoc_unseeded = key.contains('/')
-                && adhoc
-                    .binding(&key)
-                    .map_err(mlua::Error::external)?
-                    .is_some();
-            let hint = if catalog.iter().any(|id| id == &key) {
-                " (a catalog tool that was neither offered in this section nor called with \
-                 tools.call)"
-            } else if adhoc_unseeded {
-                " (an adhoc tool that was neither offered in this section nor called with \
-                 tools.call)"
-            } else if seeded.is_empty() {
-                ""
-            } else {
-                " - check for typos or offer it with tools.offer"
-            };
-            Err(mlua::Error::external(format!(
-                "tools.calls: {key:?} has no seeded count; seeded names: {seeded:?}{hint}"
-            )))
-        })
-        .map_err(Error::lua)?;
-    meta.set("__index", index).map_err(Error::lua)?;
-
-    let newindex_err = lua
-        .create_function(|_, _: MultiValue| -> mlua::Result<()> {
-            Err(mlua::Error::external("tools.calls is read-only"))
-        })
-        .map_err(Error::lua)?;
-    meta.set("__newindex", newindex_err).map_err(Error::lua)?;
-
-    calls_inner.set_metatable(Some(meta)).map_err(Error::lua)?;
-
-    tools.set("calls", calls_inner).map_err(Error::lua)?;
-    Ok(())
-}
-
-/// Installs `tools.calls` as a read-only Lua table backed by a fresh
-/// [`ToolCallCounts`] seeded with `ids`. Each seeded key
-/// reads its live count; indexing an unseeded key is a hard error that
-/// names the bad key and lists the seeded set. When the key is the id of a
-/// catalog tool or of an adhoc tool `adhoc` holds that was never seeded,
-/// neither offered to the section nor dispatched by a script `tools.call`,
-/// the diagnostic says so.
-///
-/// Returns the `ToolCallCounts` handle so the executor's tool loop can
-/// increment it.
-///
-/// # Errors
-/// Returns [`Error::LuaRuntime`] when installing the `tools.calls` index fails.
-pub(crate) fn install_tool_call_counts(
-    lua: &Lua,
-    bound_tools: &ToolSet,
-    adhoc: &AdhocTools,
-    ids: &[ToolId],
-) -> Result<ToolCallCounts> {
-    let counts = ToolCallCounts::new(ids.iter().map(ToString::to_string));
-    let catalog: Vec<String> = bound_tools
-        .catalog()
-        .tools()
-        .iter()
-        .map(|info| info.id.to_string())
-        .collect();
-    install_lua_tool_calls(lua, &counts, catalog, adhoc.clone())?;
-    Ok(counts)
 }
 
 /// Installs the tool and Pack APIs into one section VM (H1 included: there

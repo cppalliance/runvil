@@ -10,7 +10,7 @@ use crate::execute::tests::fixtures::{echo_tool, structured_tool, untrusted_echo
 fn a_script_tools_call_dispatches_and_resumes_as_a_string() {
     // The whole script path in one pass: the shim yields, the scheduler
     // dispatches the bound tool, the plain binding resumes as a Lua
-    // string, and the counts land in the same `tools.calls` table the
+    // string, and the counts land in the same `tools.stats` table the
     // prose loop feeds.
     let md = "---\nname: t\ndescription: d\nrunvil: 0\n---\n\n\
         # ToolCall\n\n\
@@ -18,7 +18,7 @@ fn a_script_tools_call_dispatches_and_resumes_as_a_string() {
         ```lua\n\
         tools.offer('tools/echo')\n\
         local out = tools.call('tools/echo', { value = 'hi' })\n\
-        return out .. '|' .. tostring(tools.calls['tools/echo'])\n\
+        return out .. '|' .. tostring(tools.stats.tools['tools/echo'])\n\
         ```\n";
     let trace = scheduler_scenario(md).offer("echo", echo_tool()).run();
     assert_eq!(trace.text(), "echoed: hi|1");
@@ -66,13 +66,13 @@ fn a_script_tools_call_reaches_an_offered_tool_outside_the_section_scope() {
     // A catalog tool the section never offered (no `tools.offer`) still
     // dispatches for a script: the frozen sets shape what the model is
     // offered, and the author's own code is not the model.
-    // The count lands in the same shared map `tools.calls` reads.
+    // The count lands in the same shared map `tools.stats` reads.
     let md = "---\nname: t\ndescription: d\nrunvil: 0\n---\n\n\
         # ToolCall\n\n\
         ## Only\n\n\
         ```lua\n\
         local out = tools.call('tools/echo', { value = 'hi' })\n\
-        return out .. '|' .. tostring(tools.calls['tools/echo'])\n\
+        return out .. '|' .. tostring(tools.stats.tools['tools/echo'])\n\
         ```\n";
     let trace = scheduler_scenario(md).offer("echo", echo_tool()).run();
     assert_eq!(trace.text(), "echoed: hi|1");

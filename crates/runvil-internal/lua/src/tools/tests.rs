@@ -6,7 +6,7 @@ use serde_json::json;
 
 use super::decode::{adhoc_params_schema, model_tool_name, tool_name};
 use super::userdata::LuaToolHandle;
-use crate::test_vm::{TestVm, catalog_set, echo_tool, lua_over, tool_at};
+use crate::test_vm::{TestVm, echo_tool};
 
 #[path = "tests-adhoc.rs"]
 mod adhoc;
@@ -18,6 +18,8 @@ mod offering;
 mod parameters;
 #[path = "tests-render.rs"]
 mod render;
+#[path = "tests-stats.rs"]
+mod stats;
 
 /// A userdata that is not a Tool object, for the foreign-userdata rejection.
 struct Foreign;
@@ -212,58 +214,4 @@ fn the_shim_prelude_installs_tools_call_and_no_bare_global() {
     assert!(call_is_function, "tools.call installs on the tools table");
     assert!(bare_is_nil, "the bare tool_call global is gone");
     vm.teardown();
-}
-
-#[test]
-fn tool_call_counts_seed_by_id_and_explain_an_unseeded_key() {
-    let vm = lua_over(catalog_set([echo_tool(), tool_at("tools/other")]));
-    let counts = vm
-        .install_tool_call_counts(&[echo_tool().id])
-        .expect("the counts install");
-    assert_eq!(
-        counts
-            .get("tools/echo")
-            .expect("the installed counts read any key"),
-        Some(0)
-    );
-    assert_eq!(
-        counts
-            .get("tools_echo")
-            .expect("the installed counts read any key"),
-        None,
-        "counts key a catalog tool by its id, never its wire name"
-    );
-    vm.exec("tools.adhoc({ name = 'grab', description = 'Grab a value' }, function() end)");
-    let read = |key: &str| -> String {
-        vm.eval(&format!(
-            "local ok, err = pcall(function() return tools.calls[{key:?}] end); return tostring(err)"
-        ))
-    };
-    let offered = read("tools/other");
-    assert!(
-        offered.contains(
-            "tools.calls: \"tools/other\" has no seeded count; seeded names: [\"tools/echo\"] \
-             (a catalog tool that was neither offered in this section nor called with \
-             tools.call)"
-        ),
-        "an offered id that was never seeded says so: {offered}"
-    );
-    let adhoc = read("adhoc/grab");
-    assert!(
-        adhoc.contains(
-            "tools.calls: \"adhoc/grab\" has no seeded count; seeded names: [\"tools/echo\"] \
-             (an adhoc tool that was neither offered in this section nor called with \
-             tools.call)"
-        ),
-        "a defined adhoc tool's id that was never seeded says so, even when defined \
-         after the counts install: {adhoc}"
-    );
-    for key in ["ghost", "tools_echo", "grab"] {
-        let error = read(key);
-        assert!(
-            error.contains(&format!("tools.calls: {key:?} has no seeded count"))
-                && error.contains(" - check for typos or offer it with tools.offer"),
-            "an unknown key names itself and the remedy: {error}"
-        );
-    }
 }

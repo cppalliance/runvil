@@ -40,7 +40,11 @@ fn prepare_dispatch_wraps_a_canned_untrusted_output_counts_it_and_reports_it() {
         "the untrusted marking survives"
     );
     assert_eq!(
-        counts.get("tools/echo").expect("the counts read"),
+        counts
+            .snapshot()
+            .expect("the counts read")
+            .get("tools/echo")
+            .copied(),
         Some(1),
         "preparing the outcome increments the tool's count under its id"
     );

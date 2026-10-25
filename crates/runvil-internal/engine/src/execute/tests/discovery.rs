@@ -39,6 +39,14 @@ const GRAB: &str = r#"{"tool":"grab","description":"Grab a value"}"#;
 /// What the model sees of a section that makes [`OFFERS`].
 const ADVERTISED: [&str; 3] = ["tools_echo", "GetDynamicTools", "CallDynamicTool"];
 
+/// A Lua helper that joins `pairs` over a table as `key=value`, in walk
+/// order.
+const WALK: &str = "local function walk(t)
+       local out = {}
+       for key, value in pairs(t) do out[#out + 1] = key .. '=' .. value end
+       return table.concat(out, ' ')
+     end";
+
 fn nonce() -> GuardNonce {
     GuardNonce::from_seed(&TEST_SEED)
 }
@@ -381,18 +389,14 @@ fn a_listing_is_wrapped_and_untrusted_and_each_discovery_call_reports_the_runvil
 }
 
 #[test]
-fn a_search_counts_whatever_its_outcome_a_refusal_counts_as_the_call_tool_and_a_reach_as_its_target()
- {
+fn a_search_and_every_refusal_count_under_the_dynamic_pack_and_a_reach_under_its_target() {
     let (rig, _) = looped(
         &format!(
             "{OFFERS}\n\
              messages:user('find a tool')\n\
              models.loop()\n\
-             local out = {{}}\n\
-             for _, id in ipairs({{ 'dynamic/search', 'dynamic/call', 'tools/lookup', 'adhoc/grab', 'tools/echo' }}) do\n\
-               out[#out + 1] = id .. '=' .. tools.calls[id]\n\
-             end\n\
-             return table.concat(out, ' ')"
+             {WALK}\n\
+             return tools.stats.total .. ' | ' .. walk(tools.stats.packs) .. ' | ' .. walk(tools.stats.tools)"
         ),
         Vec::new(),
         &[
@@ -414,23 +418,29 @@ fn a_search_counts_whatever_its_outcome_a_refusal_counts_as_the_call_tool_and_a_
     );
     assert_eq!(
         rig.trace().text(),
-        "dynamic/search=2 dynamic/call=2 tools/lookup=1 adhoc/grab=1 tools/echo=0"
+        "6 | adhoc=1 dynamic=4 tools=1 | adhoc/grab=1 tools/echo=0 tools/lookup=1",
+        "two searches and two refusals count under packs.dynamic and two reaches under \
+         their targets, and tools leaves out both discovery ids"
     );
 }
 
 #[test]
-fn the_count_map_starts_with_both_discovery_tools_once_they_are_rendered() {
+fn once_the_discovery_tools_render_packs_starts_with_dynamic_and_tools_with_each_dynamic_tool() {
     let (rig, _) = looped(
         &format!(
             "{OFFERS}\n\
              messages:user('echo')\n\
              models.loop()\n\
-             return tools.calls['dynamic/search'] .. '|' .. tools.calls['dynamic/call']"
+             {WALK}\n\
+             return walk(tools.stats.packs) .. ' | ' .. walk(tools.stats.tools)"
         ),
         Vec::new(),
         &[&[("call_1", "tools_echo", r#"{"value":"a"}"#)]],
     );
-    assert_eq!(rig.trace().text(), "0|0");
+    assert_eq!(
+        rig.trace().text(),
+        "adhoc=0 dynamic=0 tools=1 | adhoc/grab=0 tools/echo=1 tools/lookup=0"
+    );
 }
 
 #[test]

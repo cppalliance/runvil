@@ -90,8 +90,9 @@ pub(super) struct SectionContext {
     /// A spawned chain's `item` seed (a fanout arm's collection member) for
     /// `{{ item }}` substitution; `None` on every other entry.
     item: Option<serde_json::Value>,
-    /// The per-section tool-call counts, installed at the first
-    /// script-initiated `tools.call`.
+    /// The per-section tool-call counts, installed by the section's first
+    /// tool call, a script's or a model's, and bumped on the driver
+    /// thread.
     counts: Option<ToolCallCounts>,
     /// The adhoc tool calls whose handlers are running, innermost last: a
     /// handler that calls another adhoc tool opens a nested entry, and
@@ -187,14 +188,15 @@ impl SectionContext {
         }
     }
 
-    /// The frame's tool-call counts for a script-initiated dispatch,
-    /// running the same one-time scope install the first prose block
-    /// performs (the counts and the Lua `tools.calls` table, the model
-    /// freeze, the `sys.model` enrichment), then seeding any of `ids` not
-    /// seeded yet. `ids` is the section's live static offers before it
-    /// freezes its sets and its Static Set after. The returned handle
-    /// shares the installed counts, so the dispatch task increments them
-    /// off the driver thread.
+    /// The frame's tool-call counts for a tool call, a script's or a
+    /// model's: the section's first call runs the one-time scope install
+    /// (the counts and the Lua `tools.stats` table, the model freeze, the
+    /// `sys.model` enrichment), and every call then seeds any of `ids` not
+    /// seeded yet. `ids` is what Lua can see in the section's two sets,
+    /// from its live offers before it freezes them and from its frozen
+    /// sets after, with the discovery tools' ids once they are rendered.
+    /// The returned handle shares the installed counts, which the caller
+    /// bumps on the driver thread.
     ///
     /// # Errors
     /// Returns the [`Error`] of the scope install or the
@@ -266,12 +268,11 @@ fn prose_renderer(
 }
 
 /// Installs the section's one-time tool-call counts and model resolution,
-/// gated on the counts slot: the first consumer - the section's first
-/// script-initiated `tools.call` - performs the install, and every later
-/// call is a no-op. The counts install backs the Lua `tools.calls` table,
-/// seeded with `ids`: the section's live static offers before it freezes
-/// its sets and its Static Set after. The model resolution freezes the
-/// section's binding and enriches `sys.model`.
+/// gated on the counts slot: the section's first tool call, a script's or
+/// a model's, performs the install, and every later call is a no-op. The
+/// counts install backs the Lua `tools.stats` table, seeded with `ids`.
+/// The model resolution freezes the section's binding and enriches
+/// `sys.model`.
 ///
 /// # Errors
 /// Returns the [`Error`] of the counts install, the model resolution, or

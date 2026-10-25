@@ -826,7 +826,7 @@ While iterating, run `cargo nextest run --locked -p runvil-lua -p runvil-engine 
 
 <step-7>
 
-### Step 7: Document the discovery tools
+### Step 7: Document the discovery tools [completed]
 
 - Component: Dynamic tool discovery
 - Tests:
@@ -852,7 +852,7 @@ Commit in `c:\Users\Vinnie\cursor\runvil-docs`. Read step 6's tool text, paramet
 
 <step-8>
 
-### Step 8: Replace tools.calls with tools.stats
+### Step 8: Replace tools.calls with tools.stats [completed]
 
 - Component: Tool stats
 - Tests:
