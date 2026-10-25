@@ -1,7 +1,8 @@
 //! A section entry's frozen sets: the merge that builds them at the
 //! entry's first model call, from each catalog Pack's tools per set and
-//! the section's adhoc tools, inside the scope validation boundary pair,
-//! and the schema a round advertises each Static Set tool under.
+//! the section's adhoc tools, plus the Engine's two discovery tools beside
+//! a Dynamic Set, inside the scope validation boundary pair, and the
+//! schema a round advertises each Static Set tool under.
 
 use std::collections::BTreeMap;
 
@@ -9,12 +10,25 @@ use runvil_model_client::detail;
 use runvil_types::emitter::Emitter;
 use runvil_types::event::lifecycle;
 use runvil_types::packs::PackId;
-use runvil_types::tools::{ToolCatalog, ToolInfo};
+use runvil_types::tools::{ToolCatalog, ToolId, ToolInfo};
+use serde_json::{Value, json};
 
 use crate::error::{FrozenSet, MergeRule, MergeTool};
-use crate::lua::{OfferedTool, RenderedTools, ToolBinding, wire_name_of};
+use crate::lua::{DiscoveryTool, OfferedTool, RenderedTools, ToolBinding, wire_name_of};
 use crate::model::ToolSchema;
 use crate::{Error, Result};
+
+/// The most Dynamic Set wire names the search tool's description lists.
+const LISTED_NAMES: usize = 100;
+
+/// What the search tool does, before the Dynamic Set's names.
+const SEARCH_USAGE: &str = "Lists and searches the dynamic tools, which CallDynamicTool calls: \
+                            pass toolName for one tool's description and input schema, pattern \
+                            for a regex search of their names, or neither to list them all";
+
+/// What the call tool does.
+const CALL_USAGE: &str = "Calls a dynamic tool: pass its name from GetDynamicTools as toolName \
+                          and its arguments as arguments.";
 
 /// One catalog Pack's tools for each set of a section entry, in the shape
 /// a render answers.
@@ -119,6 +133,8 @@ struct Laid {
 /// - Within a set, a Pack tool whose wire name an adhoc tool of that set
 ///   takes is dropped.
 /// - A Dynamic Set tool whose id the Static Set holds is dropped.
+/// - When the Dynamic Set still holds a tool, the two discovery tools
+///   join the end of the Static Set.
 /// - A wire name used twice across both sets fails the merge.
 /// - Every tool must have a valid wire name and an object parameter
 ///   schema.
@@ -141,6 +157,9 @@ pub(super) fn merge_tool_sets(
             .iter()
             .any(|held| held.binding.id() == tool.binding.id())
     });
+    if !dynamic_set.is_empty() {
+        static_set.extend(discovery_tools(&dynamic_set)?);
+    }
     refuse_clash(&static_set, &dynamic_set)?;
     for tool in static_set.iter().chain(&dynamic_set) {
         tool_schema(&tool.binding)?;
@@ -190,6 +209,82 @@ fn bind(mut tool: ToolInfo, catalog: &ToolCatalog) -> ToolBinding {
         tool.describes_tools = known.describes_tools;
     }
     ToolBinding::from_info(&wire_name_of(&tool), &tool)
+}
+
+/// Binds both discovery tools, in the order they join the Static Set, for
+/// a section entry whose Dynamic Set is `dynamic_set`: the search tool's
+/// description ends with the Dynamic Set's wire names, sorted, the first
+/// [`LISTED_NAMES`] of them and then how many more there are.
+///
+/// # Errors
+/// Returns [`Error::Internal`] should a discovery tool's id not parse.
+fn discovery_tools(dynamic_set: &[Laid]) -> Result<Vec<Laid>> {
+    let mut names: Vec<&str> = dynamic_set
+        .iter()
+        .map(|tool| tool.binding.alias())
+        .collect();
+    names.sort_unstable();
+    let shown = names[..names.len().min(LISTED_NAMES)].join(", ");
+    let listed = if names.len() > LISTED_NAMES {
+        let more = names.len() - LISTED_NAMES;
+        format!("{shown}, and {more} more; call GetDynamicTools to search")
+    } else {
+        shown
+    };
+    DiscoveryTool::ALL
+        .into_iter()
+        .map(|tool| {
+            let (description, parameters) = match tool {
+                DiscoveryTool::Search => {
+                    (format!("{SEARCH_USAGE} ({listed})"), search_parameters())
+                }
+                DiscoveryTool::Call => (CALL_USAGE.to_owned(), call_parameters()),
+            };
+            let id = ToolId::parse(tool.id())
+                .map_err(|_| Error::internal("a discovery tool's id is a tool id"))?;
+            let info = ToolInfo::new(id, description, parameters);
+            Ok(Laid {
+                binding: ToolBinding::from_info(tool.wire_name(), &info),
+                adhoc: false,
+            })
+        })
+        .collect()
+}
+
+/// The search tool's parameters, both optional.
+fn search_parameters() -> Value {
+    json!({
+        "type": "object",
+        "properties": {
+            "toolName": {
+                "type": "string",
+                "description": "A dynamic tool's name, for its description and input schema."
+            },
+            "pattern": {
+                "type": "string",
+                "description": "A regex of at most 256 characters matched against dynamic tool \
+                                names; (?i) makes it case-insensitive."
+            }
+        }
+    })
+}
+
+/// The call tool's parameters: the target's name, and its arguments.
+fn call_parameters() -> Value {
+    json!({
+        "type": "object",
+        "properties": {
+            "toolName": {
+                "type": "string",
+                "description": "The dynamic tool's name, from GetDynamicTools."
+            },
+            "arguments": {
+                "type": "object",
+                "description": "The tool's arguments, as its input schema describes them."
+            }
+        },
+        "required": ["toolName"]
+    })
 }
 
 /// Drops each Pack tool of `set` whose wire name an adhoc tool of `set`

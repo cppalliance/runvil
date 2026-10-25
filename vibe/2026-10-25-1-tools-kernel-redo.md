@@ -753,7 +753,7 @@ While iterating, run `cargo nextest run --locked -p runvil-types -p runvil-plugi
 
 <step-6>
 
-### Step 6: Add the GetDynamicTools and CallDynamicTool discovery tools
+### Step 6: Add the GetDynamicTools and CallDynamicTool discovery tools [completed]
 
 - Component: Dynamic tool discovery
 - Tests:

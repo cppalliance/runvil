@@ -140,7 +140,8 @@ pub use crate::protocol::{
     ToolCallOutcome, ToolCallRecord, VfsOp, VfsOutcome, YieldParse,
 };
 pub use crate::scope::{
-    Offer, OfferMode, OfferTarget, OfferedTool, RenderedTools, ToolCallCounts, ToolRuntime,
+    DiscoveryTool, Offer, OfferMode, OfferTarget, OfferedTool, RenderedTools, ToolCallCounts,
+    ToolRuntime,
 };
 pub use crate::sys::enrich_sys_model;
 pub use crate::vm::{

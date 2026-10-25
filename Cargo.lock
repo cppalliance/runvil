@@ -5323,6 +5323,7 @@ dependencies = [
  "build-ceiling",
  "criterion",
  "mlua",
+ "regex",
  "runvil-lua",
  "runvil-model-client",
  "runvil-parser",

@@ -2,7 +2,8 @@
 //! tool info's data is copied verbatim and its structured-output flag
 //! selects the binding's output kind. A catalog tool's wire name is its
 //! own when set and its default otherwise, and the tool set reads the run
-//! catalog and derives each tool's vendor from its Pack.
+//! catalog and derives each tool's vendor from its Pack, `runvil` for the
+//! Engine's discovery tools.
 
 use std::collections::BTreeMap;
 
@@ -100,4 +101,11 @@ fn the_tool_set_reads_the_catalog_and_takes_each_tools_vendor_from_its_pack() {
         None,
         "a Pack with no vendor reports none"
     );
+    for discovery in ["dynamic/search", "dynamic/call"] {
+        assert_eq!(
+            set.vendor_for(&id(discovery)),
+            Some("runvil"),
+            "the Engine's discovery tool {discovery} reports runvil"
+        );
+    }
 }

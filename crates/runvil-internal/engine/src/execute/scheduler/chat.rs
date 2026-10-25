@@ -15,8 +15,9 @@
 //! events - the turn advance, the debug capture pair, turn completed or
 //! failed or truncated, thinking, and the reply or the tool-call batch -
 //! through the chain's own task-scoped emitter, and rejecting a tool name
-//! outside the Static Set of the section the chain is parked in. The shim
-//! that yielded the round emits nothing; the scheduler owns every event.
+//! outside both frozen sets of the section the chain is parked in. The
+//! shim that yielded the round emits nothing; the scheduler owns every
+//! event.
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, Ordering};
@@ -32,7 +33,7 @@ use crate::execute::run::Effect;
 use crate::execute::scope::{offered_packs, prepare_effective_scope, tool_schema};
 use crate::execute::turn::{Served, advance_turn, report_model_turn};
 use crate::lua::{
-    MessageList, OverflowReason, RenderedTools, ToolBinding, ToolSet, current_dynamic_set,
+    MessageList, OverflowReason, RenderedTools, ToolSet, current_dynamic_set,
     current_tool_bindings, output_reserve, precheck, project_messages, resolve_model_binding,
     wire_name_of,
 };
@@ -200,7 +201,7 @@ impl Scheduler {
     /// the debug capture pair and the completion observation, reports the
     /// thinking side channel, then the reply (with the truncation
     /// observation on a `length` finish) or the tool-call batch; a
-    /// requested tool outside the Static Set of the section the chain is
+    /// requested tool outside both frozen sets of the section the chain is
     /// parked in fails the call as out of scope after a failed-tool-call
     /// observation. A chain has one parked round, and its frame's sets are
     /// read before the round settles, so they are that round's sets. A
@@ -363,11 +364,12 @@ impl ArrivedRound {
     }
 
     /// Reports a tool-call batch and builds its answer, after the scope
-    /// gate: every requested name must be one the Static Set holds, else
-    /// the call fails as out of scope under a failed tool-call
+    /// gate: every requested name must be one either frozen set holds,
+    /// else the call fails as out of scope under a failed tool-call
     /// observation. Each call's event names the tool its name binds and
     /// that tool's vendor. The batch resumes unexecuted; the shim
-    /// dispatches each call.
+    /// dispatches each call, and the discovery route answers a Dynamic
+    /// Set name with text.
     fn tool_calls(
         &self,
         served: &Served,
@@ -380,8 +382,8 @@ impl ArrivedRound {
             .map(|call| {
                 let tool = scope
                     .frozen
-                    .static_binding(call.name())
-                    .map(ToolBinding::id);
+                    .binding(call.name())
+                    .map(|(binding, _)| binding.id());
                 let vendor = tool.and_then(|id| scope.tool_set.vendor_for(id));
                 ToolCallEvent::new(call.id(), call.name(), tool_call_arguments(call).clone())
                     .with_tool(tool.cloned())
@@ -392,7 +394,7 @@ impl ArrivedRound {
             .assistant_tool_calls(&self.section, turn, self.id, &served.model, &events);
         if let Some(rogue) = calls
             .iter()
-            .find(|call| scope.frozen.static_binding(call.name()).is_none())
+            .find(|call| scope.frozen.binding(call.name()).is_none())
         {
             self.emitter
                 .report(&self.section, lifecycle::TOOL_CALL_FAILED);

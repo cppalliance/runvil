@@ -271,7 +271,8 @@ pub(crate) enum Error {
         task: TaskId,
     },
 
-    /// The model called a name outside the section entry's Static Set.
+    /// The model called a name outside both of the section entry's frozen
+    /// sets.
     ///
     /// This is the model tool loop's error alone: a script `tools.call`
     /// resolves against the run's whole catalog and fails with

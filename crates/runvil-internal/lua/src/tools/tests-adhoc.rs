@@ -152,6 +152,38 @@ fn each_refusal_raises_on_the_defining_line() {
 }
 
 #[test]
+fn the_discovery_tools_wire_names_are_refused() {
+    let vm = lua_over(offer_set());
+    for name in ["GetDynamicTools", "CallDynamicTool"] {
+        let error = raised(
+            &vm,
+            &format!("tools.adhoc({{ name = '{name}', description = 'Mine' }}, function() end)"),
+        );
+        assert!(
+            error.contains(&format!(
+                "tools.adhoc: the name {name:?} is reserved for a discovery tool; pick another \
+                 name"
+            )),
+            "{name}: {error}"
+        );
+    }
+    let lowered: String = vm.eval(
+        "return tools.adhoc({ name = 'getdynamictools', description = 'Mine' }, function() end).id",
+    );
+    assert_eq!(
+        lowered, "adhoc/getdynamictools",
+        "only the exact names are taken"
+    );
+    assert!(
+        vm.adhoc_tools()
+            .binding("GetDynamicTools")
+            .expect("the adhoc tools read")
+            .is_none(),
+        "no refused definition registers"
+    );
+}
+
+#[test]
 fn a_definition_whose_tool_object_cannot_be_stored_leaves_no_tool_behind() {
     let vm = lua_over(offer_set());
     let lua = vm.lua();

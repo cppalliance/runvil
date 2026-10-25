@@ -42,7 +42,7 @@ use serde_json::{Map, Value as Json};
 use crate::error::{Error, Result};
 use crate::handles::ToolBinding;
 use crate::protocol::{MessageRecord, RecordRole, parse_record};
-use crate::scope::RenderedTools;
+use crate::scope::{OfferMode, RenderedTools};
 
 #[path = "messages-snapshot.rs"]
 mod snapshot;
@@ -218,12 +218,13 @@ impl MessageList {
         self.state().rendered.clone()
     }
 
-    /// The binding the attached Static Set holds under `wire_name`, if
-    /// frozen sets are attached and the Static Set holds that name.
+    /// The binding the attached sets hold under `wire_name`, with the set
+    /// that holds it, if frozen sets are attached and either holds it.
     #[must_use]
-    pub(crate) fn rendered_target(&self, wire_name: &str) -> Option<ToolBinding> {
+    pub(crate) fn rendered_target(&self, wire_name: &str) -> Option<(ToolBinding, OfferMode)> {
         let state = self.state();
-        state.rendered.as_ref()?.static_binding(wire_name).cloned()
+        let (binding, set) = state.rendered.as_ref()?.binding(wire_name)?;
+        Some((binding.clone(), set))
     }
 
     /// Attaches `tools` as the section's frozen sets. A list that already

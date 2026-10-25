@@ -1,6 +1,8 @@
-//! The loop's scope gate: a model call naming anything its round did not
-//! advertise fails with `OutOfScopeToolCall`, which hints offered but
-//! unscoped only when the name is the wire name of a tool the run offers.
+//! The loop's scope gate: a model call naming anything outside its
+//! section's frozen sets fails with `OutOfScopeToolCall`, which hints
+//! offered but unscoped only when the name is the wire name of a tool the
+//! run offers. A Dynamic Set name passes the gate and is answered with
+//! text.
 
 use super::*;
 use crate::execute::tests::fixtures::{echo_tool, scoped_tool};
@@ -19,6 +21,13 @@ fn scoped_loop(lua: &str) -> Scenario {
             scoped_tool("global_tool", "A global tool.").0,
         )
 }
+
+/// The dynamic offers of `tools/global_tool` and the adhoc `grab`, whose
+/// handler calls `tools/scoped`.
+const DYNAMIC_OFFERS: &str = "tools.offer_dynamic('tools/global_tool')\n\
+                              tools.offer_dynamic(tools.adhoc({ name = 'grab', description = 'Grab' }, function()\n\
+                                return tools.call('tools/scoped', { value = 'grab' })\n\
+                              end))\n";
 
 #[test]
 fn model_calling_an_offered_but_unscoped_tool_is_a_hard_error() {
@@ -122,41 +131,73 @@ fn model_calling_a_defined_but_unoffered_adhoc_tool_gets_no_not_offered_suffix()
 }
 
 #[test]
-fn model_calling_a_dynamic_set_tool_by_its_wire_name_fails_without_issuing_a_call() {
-    // The model reaches only the Static Set: a direct call to a tool the
-    // section offered dynamically, catalog or adhoc, fails the round as
-    // out of scope. Reaching the adhoc tool would run its handler, whose
+fn model_calling_a_dynamic_set_tool_by_its_wire_name_gets_text_and_issues_no_call() {
+    // The gate lets a Dynamic Set name through, alone or in a batch, and
+    // the call is answered with text pointing to CallDynamicTool, so the
+    // loop goes on. Reaching the adhoc tool would run its handler, whose
     // script call would issue a tool call too.
     for (name, args) in [("global_tool", r#"{"value":"x"}"#), ("grab", "{}")] {
-        let gateway = ScriptedChat::new(vec![calls(&[("call_1", name, args)])]);
-        let rig = Rig::run(
-            scoped_loop(
-                "tools.offer_dynamic('tools/global_tool')\n\
-                 tools.offer_dynamic(tools.adhoc({ name = 'grab', description = 'Grab' }, function()\n\
-                   return tools.call('tools/scoped', { value = 'grab' })\n\
-                 end))\n",
-            )
-            .chat(&gateway),
+        let refusal = format!(
+            "{name:?} is a dynamic tool; call it through CallDynamicTool with toolName {name:?}"
         );
-        match rig.trace().error().inner() {
-            Error::OutOfScopeToolCall {
-                name: called,
-                in_scope,
-                ..
-            } => {
-                assert_eq!(called, name);
-                assert_eq!(in_scope, &["scoped".to_owned()]);
-            }
-            other => panic!("expected OutOfScopeToolCall for {name}, got {other:?}"),
-        }
-        assert!(
-            !rig.issued()
+        let alone = vec![("call_1", name, args)];
+        let batched = vec![
+            ("call_1", "scoped", r#"{"value":"a"}"#),
+            ("call_2", name, args),
+        ];
+        for batch in [alone, batched] {
+            let gateway = ScriptedChat::new(vec![calls(&batch), text("done")]);
+            let rig = Rig::run(scoped_loop(DYNAMIC_OFFERS).chat(&gateway));
+            assert_eq!(rig.trace().text(), "done", "{name}: the loop goes on");
+            let last = gateway
+                .last_request()
+                .expect("the loop sends a closing round")
+                .messages_json();
+            let turns: Vec<&str> = last
+                .as_array()
+                .expect("a round's messages serialize to an array")
                 .iter()
-                .any(|record| matches!(record, EffectRecord::ToolCall { .. })),
-            "a direct call to the Dynamic Set's {name} issues no tool call"
-        );
-        assert_eq!(gateway.call_count(), 1, "the rejected round is the last");
+                .filter(|message| message["role"] == "tool")
+                .filter_map(|message| message["content"].as_str())
+                .collect();
+            assert_eq!(turns.last(), Some(&refusal.as_str()), "{name}: {turns:?}");
+            let issued: Vec<String> = rig
+                .issued()
+                .iter()
+                .filter_map(|record| match record {
+                    EffectRecord::ToolCall { tool, .. } => Some(tool.to_string()),
+                    _ => None,
+                })
+                .collect();
+            let expected: &[&str] = if batch.len() == 1 {
+                &[]
+            } else {
+                &["tools/scoped"]
+            };
+            assert_eq!(issued, expected, "a direct call to {name} issues no call");
+        }
     }
+}
+
+#[test]
+fn with_dynamic_offers_a_name_outside_both_sets_fails_listing_only_the_static_set() {
+    // The in-scope list names the Static Set, the two discovery tools
+    // included, and none of the Dynamic Set's tools.
+    let gateway = ScriptedChat::new(vec![calls(&[("call_1", "rogue", "{}")])]);
+    let trace = scoped_loop(DYNAMIC_OFFERS).chat(&gateway).run();
+    match trace.error().inner() {
+        Error::OutOfScopeToolCall {
+            name,
+            global_exists,
+            in_scope,
+        } => {
+            assert_eq!(name, "rogue");
+            assert!(!*global_exists, "the name is no offered tool");
+            assert_eq!(in_scope, &["scoped", "GetDynamicTools", "CallDynamicTool"]);
+        }
+        other => panic!("expected OutOfScopeToolCall, got {other:?}"),
+    }
+    assert_eq!(gateway.call_count(), 1, "the rejected round is the last");
 }
 
 #[test]

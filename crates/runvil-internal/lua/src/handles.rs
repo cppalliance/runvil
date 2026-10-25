@@ -9,6 +9,8 @@ use runvil_types::packs::PackId;
 use runvil_types::tools::{ToolCatalog, ToolId, ToolInfo};
 use serde_json::Value as Json;
 
+use crate::scope::DiscoveryTool;
+
 /// How a bound tool's output resumes into Lua at the `tools.call` boundary.
 ///
 /// Declared on the binding (from the tool info's `structured_output`), not
@@ -255,9 +257,13 @@ impl ToolSet {
     }
 
     /// Returns the vendor the caller reported for the Pack the tool `id`
-    /// belongs to, or `None` when it reported none, as for an adhoc tool.
+    /// belongs to, `runvil` for the Engine's discovery tools, or `None`
+    /// when the caller reported none, as for an adhoc tool.
     #[must_use]
     pub fn vendor_for(&self, id: &ToolId) -> Option<&str> {
+        if DiscoveryTool::of(id).is_some() {
+            return Some(DiscoveryTool::VENDOR);
+        }
         self.vendors.get(&id.pack()).map(String::as_str)
     }
 }

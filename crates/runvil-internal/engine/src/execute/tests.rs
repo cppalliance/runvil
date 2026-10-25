@@ -167,6 +167,7 @@ mod chat_record_rebuild;
 mod chat_scope;
 mod compaction;
 mod debug_and_counts;
+mod discovery;
 mod effects;
 mod event_vendors;
 mod exec_flow;

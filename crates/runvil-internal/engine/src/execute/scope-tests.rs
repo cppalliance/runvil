@@ -1,6 +1,6 @@
 //! Tests for the merge that builds a section entry's frozen sets: one per
-//! rule, in the order the merge applies them, and the order each set
-//! keeps.
+//! rule, in the order the merge applies them, the search tool's list of
+//! Dynamic Set names, and the order each set keeps.
 
 use runvil_lua::ToolOutputKind;
 use runvil_types::tools::ToolId;
@@ -174,11 +174,92 @@ fn rule_three_drops_a_dynamic_set_tool_whose_id_the_static_set_holds() {
         &tools,
     )
     .expect("the dropped tool clashes with nothing");
-    assert_eq!(sited(&frozen.static_set), ["web_search=web/search"]);
+    let mut expected = vec!["web_search=web/search"];
+    expected.extend(DISCOVERY);
+    assert_eq!(sited(&frozen.static_set), expected);
     assert_eq!(sited(&frozen.dynamic_set), ["web_fetch=web/fetch"]);
     let frozen = merged(&[adhoc("grab")], &[adhoc("grab")], &tools).expect("the sets merge");
     assert_eq!(sited(&frozen.static_set), ["grab=adhoc/grab"]);
     assert!(frozen.dynamic_set.is_empty(), "the adhoc tool sits once");
+}
+
+/// The two discovery tools as [`sited`] shows them, in the order they
+/// join the Static Set.
+const DISCOVERY: [&str; 2] = [
+    "GetDynamicTools=dynamic/search",
+    "CallDynamicTool=dynamic/call",
+];
+
+#[test]
+fn rule_four_adds_both_discovery_tools_last_only_when_the_dynamic_set_keeps_a_tool() {
+    let tools = catalog([info("web/fetch"), info("web/search"), info("gh/one")]);
+    let none = merged(&[listed("web/fetch")], &[], &tools).expect("the sets merge");
+    assert_eq!(sited(&none.static_set), ["web_fetch=web/fetch"]);
+    let emptied =
+        merged(&[listed("web/fetch")], &[listed("web/fetch")], &tools).expect("the sets merge");
+    assert_eq!(
+        sited(&emptied.static_set),
+        ["web_fetch=web/fetch"],
+        "a Dynamic Set that rule three empties adds nothing"
+    );
+    let frozen = merged(
+        &[listed("web/fetch"), adhoc("grab")],
+        &[listed("web/search"), adhoc("late"), listed("gh/one")],
+        &tools,
+    )
+    .expect("the sets merge");
+    let mut expected = vec!["web_fetch=web/fetch", "grab=adhoc/grab"];
+    expected.extend(DISCOVERY);
+    assert_eq!(sited(&frozen.static_set), expected);
+    let search = &frozen.static_set[2];
+    assert!(
+        search
+            .description()
+            .ends_with(" (gh_one, late, web_search)"),
+        "the search tool lists the Dynamic Set's wire names, sorted: {}",
+        search.description()
+    );
+    let call = &frozen.static_set[3];
+    for (binding, keys) in [
+        (search, ["pattern", "toolName"]),
+        (call, ["arguments", "toolName"]),
+    ] {
+        let mut declared: Vec<&String> = binding.schema()["properties"]
+            .as_object()
+            .expect("a discovery tool declares its parameters")
+            .keys()
+            .collect();
+        declared.sort();
+        assert_eq!(declared, keys, "{}", binding.alias());
+    }
+    assert_eq!(call.schema()["required"], json!(["toolName"]));
+    assert!(
+        search.schema().get("required").is_none(),
+        "both search parameters are optional"
+    );
+}
+
+#[test]
+fn the_search_tools_description_lists_at_most_one_hundred_names_then_counts_the_rest() {
+    let names = |count: usize| -> Vec<String> { (0..count).map(|n| format!("t{n:03}")).collect() };
+    let described = |count: usize| {
+        let offers: Vec<OfferedTool> = names(count).iter().rev().map(|name| adhoc(name)).collect();
+        let frozen = merged(&[], &offers, &catalog([])).expect("the sets merge");
+        frozen.static_set[0].description().to_owned()
+    };
+    let hundred = described(100);
+    assert!(
+        hundred.ends_with(&format!(" ({})", names(100).join(", "))),
+        "a hundred names are listed whole: {hundred}"
+    );
+    let more = described(102);
+    assert!(
+        more.ends_with(&format!(
+            " ({}, and 2 more; call GetDynamicTools to search)",
+            names(100).join(", ")
+        )),
+        "past a hundred names the list says how many more: {more}"
+    );
 }
 
 #[test]
@@ -218,6 +299,22 @@ fn rule_five_fails_a_wire_name_used_twice_within_one_set_or_across_the_sets() {
             vec![
                 ("adhoc/web_search".to_owned(), FrozenSet::Static),
                 ("web/search".to_owned(), FrozenSet::Dynamic),
+            ]
+        )
+    );
+    let taker = info("web/discover").wire_name("GetDynamicTools");
+    let tools = catalog([taker.clone(), info("web/search")]);
+    let offers = [OfferedTool::Catalog(taker)];
+    merged(&offers, &[], &tools).expect("with no Dynamic Set the name is free");
+    let discovery = merged(&offers, &[listed("web/search")], &tools)
+        .expect_err("a Pack tool takes the search tool's wire name");
+    assert_eq!(
+        clash(discovery),
+        (
+            "GetDynamicTools".to_owned(),
+            vec![
+                ("web/discover".to_owned(), FrozenSet::Static),
+                ("dynamic/search".to_owned(), FrozenSet::Static),
             ]
         )
     );
@@ -272,15 +369,14 @@ fn each_set_keeps_offer_order_with_each_packs_tools_where_it_was_first_offered()
         listed("gh/two"),
     ];
     let frozen = merged(&static_tools, &dynamic_tools, &tools).expect("the sets merge");
-    assert_eq!(
-        sited(&frozen.static_set),
-        [
-            "kit_b=kit/b",
-            "kit_a=kit/a",
-            "web_fetch=web/fetch",
-            "grab=adhoc/grab"
-        ]
-    );
+    let mut expected = vec![
+        "kit_b=kit/b",
+        "kit_a=kit/a",
+        "web_fetch=web/fetch",
+        "grab=adhoc/grab",
+    ];
+    expected.extend(DISCOVERY);
+    assert_eq!(sited(&frozen.static_set), expected);
     assert_eq!(
         sited(&frozen.dynamic_set),
         [

@@ -86,11 +86,11 @@ impl SectionVm {
         install_tool_call_counts_impl(&self.lua, &self.bound_tools, &self.adhoc_tools, ids)
     }
 
-    /// Returns the binding the section's Static Set holds under
-    /// `wire_name`, or `None` when the section has not frozen its sets or
-    /// its Static Set does not hold that name.
+    /// Returns the binding the section's frozen sets hold under
+    /// `wire_name`, with the set that holds it, or `None` when the section
+    /// has not frozen its sets or neither set holds that name.
     #[must_use]
-    pub fn rendered_target(&self, wire_name: &str) -> Option<ToolBinding> {
+    pub fn rendered_target(&self, wire_name: &str) -> Option<(ToolBinding, OfferMode)> {
         self.messages.rendered_target(wire_name)
     }
 
