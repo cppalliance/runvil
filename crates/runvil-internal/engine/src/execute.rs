@@ -17,8 +17,6 @@
 //! - `error` - the public [`RunError`] and its stable [`RunErrorKind`].
 //! - `fill` - prepare's model-role fill function.
 //! - `infer` - the nested-inference round's answer.
-//! - `protocol` - the coroutine request/answer types for the yield/resume
-//!   boundary.
 //! - `requirements` - the preflight [`Requirements`] report.
 //! - `run` - the boundary with the caller: the `Run` state machine with its
 //!   `step`, `resume`, and `cancel`, the `Step` it returns, and the effect
@@ -45,7 +43,6 @@ pub(crate) mod context;
 mod error;
 mod fill;
 mod infer;
-pub(crate) mod protocol;
 mod requirements;
 mod run;
 pub(crate) mod scheduler;
@@ -68,7 +65,7 @@ pub use run::{
 };
 // The store vocabulary a `Vfs` effect holds and its answer returns, for
 // the Engine's own store handling; other crates name it from `runvil_lua`.
-use runvil_lua::{VfsOp, VfsOutcome};
+use crate::lua::{VfsOp, VfsOutcome};
 
 /// Performs the store operation of an [`Effect::Vfs`] and returns its answer.
 ///

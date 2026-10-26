@@ -10,7 +10,7 @@ use runvil_types::tools::{OutputTrust, ToolCallOrigin, ToolId, ToolInfo};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::execute::protocol::{VfsOp, VfsOutcome};
+use crate::lua::{VfsOp, VfsOutcome};
 use crate::model::{Completion, CompletionResult};
 
 /// One catalog Pack's tools for each set of a section entry, in order: the

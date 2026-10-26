@@ -55,7 +55,7 @@ impl Scheduler {
             kind: ChainKind::H1,
             var: serde_json::json!({}),
             call_depth: CallDepth::ROOT,
-            concurrency: self.ctx.limits().concurrency(),
+            concurrency: self.ctx.limits().max_concurrency,
         })?;
         self.chains[id.index()].access = Some(Arc::new(access));
         Ok(id)

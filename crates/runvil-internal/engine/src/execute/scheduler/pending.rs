@@ -11,8 +11,7 @@ use runvil_types::event::lifecycle::Lifecycle;
 use runvil_types::ids::RoundId;
 use runvil_vfs::ExecId;
 
-use crate::execute::protocol::VfsOp;
-use crate::lua::{ScriptReport, ToolBinding};
+use crate::lua::{ScriptReport, ToolBinding, VfsOp};
 use crate::model::ModelBinding;
 
 use super::ChainIndex;

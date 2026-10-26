@@ -198,7 +198,7 @@ fn an_untrusted_structured_output_is_wrapped_before_classification() {
 
 #[test]
 fn a_script_tools_call_before_infer_keeps_the_model_install() {
-    // The one-time section scope install is shared between the first script
+    // The section's first-call install is shared between the first script
     // dispatch and the model resolution: a script `tools.call` that runs
     // first must not swallow the install a later `models.infer` relies on.
     let gateway = ScriptedChat::new(vec![text("prose answer")]);
@@ -213,6 +213,38 @@ fn a_script_tools_call_before_infer_keeps_the_model_install() {
         .chat(&gateway)
         .run();
     assert_eq!(trace.text(), "prose answer");
+}
+
+#[test]
+fn a_first_tool_call_whose_model_step_fails_leaves_the_install_to_the_next_call() {
+    // The set's default names no binding, so the first call's model step
+    // fails after its counts install. The install is not done until the
+    // model step succeeds, so the second call runs it again, under the
+    // selection `models.use` made in between, and `sys.model` lands.
+    let md = "---\nname: t\ndescription: d\nrunvil: 0\n---\n\n\
+        # ToolCall\n\n\
+        ## Only\n\n\
+        ```lua\n\
+        local ok = pcall(tools.call, 'tools/echo', { value = 'x' })\n\
+        assert(not ok, 'the first call fails in its model step')\n\
+        models.use('writer')\n\
+        tools.call('tools/echo', { value = 'y' })\n\
+        return sys.model\n\
+        ```\n";
+    let unbound_default = ModelSet::from_parts(
+        vec![test_binding(
+            "writer",
+            "A general model for tests",
+            "test-model",
+        )],
+        Some("ghost".to_owned()),
+    );
+    let trace = Scenario::new(md)
+        .unprepared()
+        .models(unbound_default)
+        .offer("echo", echo_tool())
+        .run();
+    assert_eq!(trace.text(), "test-model");
 }
 
 #[test]

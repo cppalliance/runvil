@@ -7,8 +7,7 @@
 use runvil_lua::{Error, LuaProgram};
 
 use crate::cancel::CancelHandle;
-use crate::execute::protocol::{Request, YieldParse};
-use crate::lua::{CoroStep, LuaBlockResult};
+use crate::lua::{CoroStep, LuaBlockResult, Request, YieldParse};
 use crate::model::ModelSet;
 
 use super::{compile_block, scheduler_vm};

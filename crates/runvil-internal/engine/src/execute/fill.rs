@@ -1,6 +1,7 @@
 //! Prepare's fill function: the trivial model fill.
 
 use runvil_parser::ModelKeyword;
+use runvil_parser::detail::keyword_name;
 
 use crate::model::ThinkingMode;
 use crate::parser::Prompt;
@@ -36,38 +37,23 @@ pub(super) fn fill_model_bindings(
         for keyword in role.keywords() {
             // Soft keywords document author intent; only the hard
             // keywords have a model info property to check against.
-            let failed = match keyword {
-                ModelKeyword::Thinking if model.thinking() == ThinkingMode::Never => {
-                    Some("thinking")
-                }
+            let actual = match keyword {
+                ModelKeyword::Thinking if model.thinking() == ThinkingMode::Never => Some("Never"),
                 ModelKeyword::NoThinking if model.thinking() == ThinkingMode::Always => {
-                    Some("no-thinking")
+                    Some("Always")
                 }
                 _ => None,
             };
-            if let Some(required) = failed {
+            if let Some(actual) = actual {
                 requirements.unmet_requirements.push(UnmetRequirement {
                     role: label.to_owned(),
                     check: RequirementCheck::HardKeyword,
-                    required: required.to_owned(),
-                    actual: thinking_name(model.thinking()).to_owned(),
+                    required: keyword_name(*keyword).to_owned(),
+                    actual: actual.to_owned(),
                 });
             }
         }
         bindings.bind(label, model.clone());
     }
     bindings
-}
-
-/// The thinking capability as a stable word for required-versus-actual
-/// reporting.
-fn thinking_name(thinking: ThinkingMode) -> &'static str {
-    match thinking {
-        ThinkingMode::Never => "Never",
-        ThinkingMode::Always => "Always",
-        ThinkingMode::Switchable => "Switchable",
-        // `ThinkingMode` is `#[non_exhaustive]`; an unlisted mode reports
-        // as unknown rather than breaking the report.
-        _ => "unknown",
-    }
 }

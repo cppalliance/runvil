@@ -8,7 +8,7 @@
 use runvil_types::metrics::ToolCallEvent;
 use serde_json::json;
 
-use crate::execute::protocol::{
+use crate::lua::{
     AdhocToolOutcome, Answer, ChatOutcome, ChatResult, Request, SpawnVia, ToolCallOutcome, VfsOp,
     VfsOutcome, YieldParse,
 };

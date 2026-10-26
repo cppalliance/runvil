@@ -101,18 +101,18 @@ impl SectionContext {
         // A limits failure propagates bare: no teardown runs here, so no
         // LUA_TEARDOWN_* observation fires on this path.
         vm.apply_lua_limits(
-            ctx.limits().lua_memory().get(),
-            ctx.limits().lua_logs().get(),
+            ctx.limits().lua_memory_bytes.get(),
+            ctx.limits().lua_log_events.get(),
         )?;
         let resolve = library_resolver(
-            Arc::clone(ctx.prompt_arc()),
+            Arc::clone(ctx.prompt()),
             RequireOrigin::Section(home.clone(), index),
         );
         let render = super::prose_renderer(ctx, seed.item.clone());
         // The `prompt` reads resolve over the section's visible set; the
         // suspending calls (`call`, `tasks.fanout`, `models.infer`) are the
         // yield shims the setup half installs.
-        let prompt = Arc::clone(ctx.prompt_arc());
+        let prompt = Arc::clone(ctx.prompt());
         let home = home.clone();
         let read = move |heading: String| {
             walk_target::read_visible(&heading, Visible::of(home.resolve(&prompt), index))
@@ -140,8 +140,7 @@ impl SectionContext {
             item: seed.item,
             counts: None,
             adhoc_calls: Vec::new(),
-            emitter: Arc::clone(ctx.emitter()),
-            turns: Arc::clone(ctx.turns()),
+            reporting: ctx.reporting().clone(),
         })
     }
 
@@ -185,12 +184,12 @@ impl SectionContext {
         // A limits failure propagates bare: no teardown runs here, so no
         // LUA_TEARDOWN_* observation fires on this path.
         vm.apply_lua_limits(
-            ctx.limits().lua_memory().get(),
-            ctx.limits().lua_logs().get(),
+            ctx.limits().lua_memory_bytes.get(),
+            ctx.limits().lua_log_events.get(),
         )?;
-        let resolve = library_resolver(Arc::clone(ctx.prompt_arc()), RequireOrigin::H1);
+        let resolve = library_resolver(Arc::clone(ctx.prompt()), RequireOrigin::H1);
         let render = super::prose_renderer(ctx, None);
-        let prompt = Arc::clone(ctx.prompt_arc());
+        let prompt = Arc::clone(ctx.prompt());
         let read = move |heading: String| {
             walk_target::read_visible(
                 &heading,
@@ -213,8 +212,7 @@ impl SectionContext {
             item: None,
             counts: None,
             adhoc_calls: Vec::new(),
-            emitter: Arc::clone(ctx.emitter()),
-            turns: Arc::clone(ctx.turns()),
+            reporting: ctx.reporting().clone(),
         })
     }
 }

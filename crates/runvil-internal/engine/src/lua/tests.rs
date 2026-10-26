@@ -26,16 +26,15 @@ use std::sync::{Arc, Mutex};
 use mlua::{MultiValue, Thread};
 use runvil_lua::{Error, LuaProgram};
 use runvil_types::tools::{ToolId, ToolInfo};
+use runvil_types::untrusted::GuardNonce;
 use serde_json::json;
 
-use crate::execute::protocol::{Answer, Request, YieldParse};
 use crate::execute::section_vm::{SectionVmSetup, VmSeed, setup_section_vm};
-use crate::lua::{Library, SectionText, SectionVm, ToolSet};
+use crate::lua::{Answer, Library, Request, SectionText, SectionVm, ToolSet, YieldParse};
 use crate::model::ModelSet;
 use crate::test_support::fresh_access;
 use crate::test_support::recording::null_emitter;
 use crate::test_support::scenario::{TEST_SEED, test_binding};
-use crate::untrusted::GuardNonce;
 
 #[track_caller]
 fn test_models() -> ModelSet {

@@ -16,10 +16,9 @@ use runvil_types::event::lifecycle::{self, Lifecycle};
 use runvil_vfs::VfsError;
 
 use crate::error::DepthVia;
-use crate::execute::protocol::{Answer, Blocked, Request, VfsOp};
 use crate::execute::run::Effect;
 use crate::execute::section_context::TaskSeed;
-use crate::lua::{ToolSet, resolve_model_binding};
+use crate::lua::{Answer, Blocked, Request, ToolSet, VfsOp, resolve_model_binding};
 use crate::model::{Message, ModelBinding};
 use crate::{Error, Result};
 

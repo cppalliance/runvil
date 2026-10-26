@@ -25,8 +25,6 @@ mod parser;
 mod subst;
 #[cfg(any(test, feature = "test-support"))]
 pub mod test_support;
-mod tools;
-mod untrusted;
 
 use crate::error::{Error, Result};
 

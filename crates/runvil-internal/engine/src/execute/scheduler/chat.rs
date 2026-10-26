@@ -23,23 +23,21 @@
 //! shim that yielded the round emits nothing; the scheduler owns every
 //! event.
 
-use std::sync::Arc;
-use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::atomic::Ordering;
 
 use runvil_model_client::detail::tool_call_arguments;
-use runvil_types::emitter::Emitter;
 use runvil_types::event::{ReplyOrigin, lifecycle};
 use runvil_types::ids::RoundId;
 use runvil_types::metrics::ToolCallEvent;
 use runvil_types::tools::ToolInfo;
 
-use crate::execute::protocol::{Answer, ChatOutcome, ChatResult};
+use crate::execute::context::ReportingHandles;
 use crate::execute::run::{Effect, PackToolSets};
 use crate::execute::scope::{SectionOffers, offered_packs, prepare_effective_scope, tool_schema};
 use crate::execute::turn::{Served, advance_turn, report_model_turn};
 use crate::lua::{
-    MessageList, OverflowReason, RenderedTools, ToolSet, output_reserve, precheck,
-    project_messages, resolve_model_binding, wire_name_of,
+    Answer, ChatOutcome, ChatResult, MessageList, OverflowReason, RenderedTools, ToolSet,
+    output_reserve, precheck, project_messages, resolve_model_binding, wire_name_of,
 };
 use crate::model::{Completion, CompletionErrorKind, CompletionResult, ModelBinding, ToolCall};
 use crate::{Error, Result};
@@ -127,7 +125,7 @@ impl Scheduler {
                 section: section.clone(),
             })?
         };
-        let handles = frame.reporting_handles();
+        let handles = frame.reporting_handles().clone();
         let emitter = handles.emitter;
         // The section entry's first round freezes its sets, and every offer
         // raises after that, so each later round sends the same tools.
@@ -278,12 +276,10 @@ impl Scheduler {
         result: Result<Box<Completion>>,
     ) -> Result<Answer<Error>> {
         let chain = &self.chains[id.index()];
-        let handles = chain.frame()?.reporting_handles();
         let round = ArrivedRound {
             id: round,
             section: chain.section_name().to_owned(),
-            emitter: handles.emitter,
-            turns: handles.turns,
+            reporting: chain.frame()?.reporting_handles().clone(),
         };
         let completion = match result {
             Ok(completion) => completion,
@@ -295,7 +291,7 @@ impl Scheduler {
         };
         // A round trip that produced a reply is a turn, whether the reply
         // is text or a batch of tool calls.
-        let turn = advance_turn(&round.turns);
+        let turn = advance_turn(&round.reporting.turns);
         let (outcome, served) = round.served(*completion, turn);
         let result = match outcome {
             CompletionResult::Text(text) => Ok(ArrivedRound::text_reply(&served, text, turn)),
@@ -348,14 +344,14 @@ impl Scope<'_> {
 }
 
 /// One arrived round's reporting context: the round's id, the chain's
-/// section label, its task-scoped emitter, and the turn counter it
-/// advances (a task chain's own, so its turns count against its own cap).
+/// section label, and its reporting handles, whose turn counter is a task
+/// chain's own, so its turn numbers, and `tasks.status`'s `turns`, count
+/// only its own rounds.
 #[derive(Debug)]
 struct ArrivedRound {
     id: RoundId,
     section: String,
-    emitter: Arc<Emitter>,
-    turns: Arc<AtomicU32>,
+    reporting: ReportingHandles,
 }
 
 impl ArrivedRound {
@@ -370,16 +366,18 @@ impl ArrivedRound {
     fn failed(&self, error: Error) -> std::result::Result<Box<ChatResult>, Error> {
         match error {
             Error::Completion(error) if error.kind() == CompletionErrorKind::ContextOverflow => {
-                self.emitter
+                self.reporting
+                    .emitter
                     .report(&self.section, lifecycle::MODEL_TURN_FAILED);
                 Ok(Box::new(overflow_result(
                     OverflowReason::Provider,
-                    self.turns.load(Ordering::Relaxed),
+                    self.reporting.turns.load(Ordering::Relaxed),
                 )))
             }
             Error::Completion(error) if error.kind() == CompletionErrorKind::EmptyReply => {
-                let turn = advance_turn(&self.turns);
-                self.emitter
+                let turn = advance_turn(&self.reporting.turns);
+                self.reporting
+                    .emitter
                     .report(&self.section, lifecycle::MODEL_TURN_COMPLETED);
                 Ok(Box::new(ChatResult {
                     outcome: ChatOutcome::Empty(Some(error.message().to_owned())),
@@ -388,7 +386,8 @@ impl ArrivedRound {
                 }))
             }
             error => {
-                self.emitter
+                self.reporting
+                    .emitter
                     .report(&self.section, lifecycle::MODEL_TURN_FAILED);
                 Err(error)
             }
@@ -400,7 +399,7 @@ impl ArrivedRound {
     /// and the metadata the answer arms carry beside it.
     fn served(&self, completion: Completion, turn: u32) -> (CompletionResult, Served) {
         report_model_turn(
-            &self.emitter,
+            &self.reporting.emitter,
             &self.section,
             turn,
             self.id,
@@ -447,13 +446,19 @@ impl ArrivedRound {
                     .with_vendor(vendor.map(str::to_owned))
             })
             .collect();
-        self.emitter
-            .assistant_tool_calls(&self.section, turn, self.id, &served.model, &events);
+        self.reporting.emitter.assistant_tool_calls(
+            &self.section,
+            turn,
+            self.id,
+            &served.model,
+            &events,
+        );
         if let Some(rogue) = calls
             .iter()
             .find(|call| scope.frozen.binding(call.name()).is_none())
         {
-            self.emitter
+            self.reporting
+                .emitter
                 .report(&self.section, lifecycle::TOOL_CALL_FAILED);
             return Err(Error::OutOfScopeToolCall {
                 name: rogue.name().to_owned(),

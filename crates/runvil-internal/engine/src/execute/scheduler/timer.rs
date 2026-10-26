@@ -25,8 +25,8 @@ use std::time::Duration;
 
 use runvil_types::ids::TaskId;
 
-use crate::execute::protocol::Answer;
 use crate::execute::run::{Effect, EffectId};
+use crate::lua::Answer;
 use crate::{Error, Result};
 
 use super::tasks::{TaskBacking, TaskSlot, TaskState};

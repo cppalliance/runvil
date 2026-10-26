@@ -4,22 +4,25 @@
 use std::collections::BTreeMap;
 
 use runvil_parser::ModelKeyword;
+use runvil_parser::detail::keyword_name;
 use runvil_types::packs::PackId;
+use runvil_types::tools::ToolCatalog;
 
 use crate::lua::ToolSet;
 use crate::model::{ModelBinding, ModelInvocation, ModelSet};
 use crate::parser::Prompt;
 
-use super::super::config::RunContext;
+use super::super::bindings::ModelBindings;
 
 /// Builds the run's shared tool set: the frontmatter's declared Packs,
-/// the `roster` moved out of the context, the run catalog, which shares
-/// the context's handle, and each Pack's vendor. Nothing is bound here:
-/// each section entry binds the tools it offers when it freezes its sets.
+/// and the run catalog, the roster, and each Pack's vendor, all moved out
+/// of the context. Nothing is bound here: each section entry binds the
+/// tools it offers when it freezes its sets.
 pub(super) fn bound_tool_set(
     prompt: &Prompt,
-    ctx: &RunContext,
+    tools: ToolCatalog,
     roster: BTreeMap<PackId, Option<String>>,
+    vendors: BTreeMap<PackId, String>,
 ) -> ToolSet {
     ToolSet::new(
         prompt
@@ -29,39 +32,22 @@ pub(super) fn bound_tool_set(
             .map(|entry| entry.id().clone())
             .collect(),
         roster,
-        ctx.tools.clone(),
-        ctx.vendors.clone(),
+        tools,
+        vendors,
     )
 }
 
-/// The keyword's stable kebab-case spelling, journaled onto the binding as
-/// the role's capability set.
-fn keyword_name(keyword: ModelKeyword) -> &'static str {
-    match keyword {
-        ModelKeyword::Thinking => "thinking",
-        ModelKeyword::NoThinking => "no-thinking",
-        ModelKeyword::Frontier => "frontier",
-        ModelKeyword::Fast => "fast",
-        ModelKeyword::Small => "small",
-        ModelKeyword::Creative => "creative",
-        ModelKeyword::Chat => "chat",
-        // `ModelKeyword` is `#[non_exhaustive]`; an unlisted keyword
-        // reports as unknown rather than breaking the fill.
-        _ => "unknown",
-    }
-}
-
-/// Builds the run's shared model set from the prepared bindings: every
+/// Builds the run's shared model set from the prepared `bindings`: every
 /// filled role becomes a binding under its label, holding the role's
 /// keyword set (the handle's `capabilities`), the hard-keyword thinking
 /// switch as the frozen invocation, the model info's provider id when
 /// the catalog names one, and the model info itself, which a section
 /// entry's render receives. Unfilled roles produce no binding:
 /// `models.use` on the label fails at run time.
-pub(super) fn bound_model_set(prompt: &Prompt, ctx: &RunContext) -> ModelSet {
+pub(super) fn bound_model_set(prompt: &Prompt, bindings: &ModelBindings) -> ModelSet {
     let mut set = ModelSet::default();
     for (label, role) in prompt.frontmatter().models() {
-        let Some(info) = ctx.model_bindings.resolve(label) else {
+        let Some(info) = bindings.resolve(label) else {
             continue;
         };
         let mut thinking = None;

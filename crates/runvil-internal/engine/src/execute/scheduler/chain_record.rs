@@ -15,10 +15,9 @@ use runvil_vfs::Access;
 
 use crate::error::DepthVia;
 use crate::execute::context::RunState;
-use crate::execute::protocol::{Answer, Blocked};
 use crate::execute::section_context::{SectionContext, TaskSeed};
 use crate::execute::walk_target::SlicePath;
-use crate::lua::UsageAnchor;
+use crate::lua::{Answer, Blocked, UsageAnchor};
 use crate::model::{Message, ModelId};
 use crate::parser::{Block, BodyText, Prompt, Section};
 use crate::{Error, Result};

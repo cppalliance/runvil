@@ -1,5 +1,5 @@
 //! What a section reads through `sys.model`, `item`, and `reply`:
-//! `sys.model` is unknown before the one-time scope install, and after
+//! `sys.model` is unknown before the first-call install, and after
 //! it reads the bound model's name, without the server namespace its id
 //! also holds, in prose, the epilog, and a fanout arm; a table `item`
 //! member substitutes as compact JSON; and `reply` is not a global: it
@@ -12,7 +12,7 @@ use crate::execute::tests::context::{setup_prompt, with_writer};
 use crate::execute::tests::fixtures::echo_tool;
 
 /// The prompt `source` builds over the fixture tools Pack, run under the
-/// test model with the echo tool: the scope install the first
+/// test model with the echo tool: the first-call install the first
 /// `tools.call` runs is what `sys.model` reads after.
 #[track_caller]
 fn under_tools(source: PromptSource) -> Trace {
@@ -62,7 +62,7 @@ fn prologue_sys_model_unknown_before_scope_close() {
 
 #[test]
 fn prose_substitution_sees_the_model_name_in_sys_model() {
-    // The first script dispatch runs the one-time scope install, which
+    // The first script dispatch runs the first-call install, which
     // enriches `sys.model` with the bound model's name; a prose read after
     // it substitutes that name, not the alias.
     let trace = under_tools(PromptSource::new().prose(

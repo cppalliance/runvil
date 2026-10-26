@@ -24,9 +24,9 @@ use runvil_types::ids::TaskId;
 use runvil_vfs::{ExecId, detail};
 
 use crate::error::DepthVia;
-use crate::execute::protocol::{Answer, Blocked, SpawnVia};
 use crate::execute::run::EffectId;
 use crate::execute::section_context::TaskSeed;
+use crate::lua::{Answer, Blocked, SpawnVia};
 use crate::{Error, Result};
 
 use super::chain::ChainStart;
@@ -182,7 +182,8 @@ impl Scheduler {
         // An explicit input forks the chain's args (and `argv` re-derives
         // from them), as a `call` with input does; otherwise the chain
         // inherits the spawner's context whole. The turn counter is the
-        // task's own, so its turns count against its own cap.
+        // task's own, so its turn numbers, and `tasks.status`'s `turns`,
+        // count only its own rounds.
         let child_ctx = match input {
             Some(input) => chain.ctx.with_args(input),
             None => chain.ctx.clone(),
@@ -222,8 +223,8 @@ impl Scheduler {
         let chain_id = self.allocate_child_id(id)?;
         let task = TaskId::from(chain_id.clone());
         // The task's context reports under its own task id with its own
-        // turn counter, so its events report its provenance and its turns
-        // count against its own cap.
+        // turn counter, so its events report its provenance and its turn
+        // numbers, and `tasks.status`'s `turns`, count only its own rounds.
         let child_ctx = child_ctx.with_task(task.clone(), Arc::new(AtomicU32::new(0)));
         // The task waits for admission from here, and the spawn record
         // holds what the start event reports once the task first runs.

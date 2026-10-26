@@ -22,16 +22,14 @@
 mod construct;
 
 use std::sync::Arc;
-use std::sync::atomic::AtomicU32;
 
-use runvil_types::emitter::Emitter;
 use runvil_types::event::lifecycle;
 use runvil_types::tools::ToolId;
 
 use crate::lua::{ProseState, ScriptReport, SectionVm, ToolCallCounts};
 use crate::{Error, Result, subst};
 
-use super::context::RunState;
+use super::context::{ReportingHandles, RunState};
 
 /// The seeds a spawned task chain's first section entry receives beyond the
 /// shared Engine values: `tasks.spawn`'s `opts.item` (installed as the
@@ -91,30 +89,18 @@ pub(super) struct SectionContext {
     /// A spawned chain's `item` seed (a fanout arm's collection member) for
     /// `{{ item }}` substitution; `None` on every other entry.
     item: Option<serde_json::Value>,
-    /// The per-section tool-call counts, installed by the section's first
-    /// tool call, a script's or a model's, and bumped on the driver
-    /// thread.
+    /// The per-section tool-call counts, set once a tool call, a script's
+    /// or a model's, has fully installed the section's first-call state,
+    /// and bumped on the driver thread.
     counts: Option<ToolCallCounts>,
     /// The adhoc tool calls whose handlers are running, innermost last: a
     /// handler that calls another adhoc tool opens a nested entry, and
     /// each `adhoc_tool_done` closes the innermost.
     adhoc_calls: Vec<AdhocCall>,
-    /// The frame's task-scoped event emitter: the chain's own, so every
-    /// report the frame makes - the teardown boundary, the completion -
-    /// is stamped with the chain's task.
-    emitter: Arc<Emitter>,
-    /// The model-turn counter this frame advances.
-    turns: Arc<AtomicU32>,
-}
-
-/// The frame's effective reporting handles for a model round: the
-/// task-scoped event emitter (which also knows whether the run captures
-/// raw model-turn bodies) and the model-turn counter.
-pub(super) struct ReportingHandles {
-    /// The frame's task-scoped event emitter.
-    pub(super) emitter: Arc<Emitter>,
-    /// The model-turn counter the frame advances.
-    pub(super) turns: Arc<AtomicU32>,
+    /// The frame's reporting handles: the chain's own, so every report
+    /// the frame makes - the teardown boundary, the completion - is
+    /// stamped with the chain's task.
+    reporting: ReportingHandles,
 }
 
 impl SectionContext {
@@ -193,29 +179,27 @@ impl SectionContext {
 
     /// The frame's effective reporting handles for the `chat` rounds the
     /// scheduler applies on this chain (the `models.loop` shim's among
-    /// them), each seeded out of the run context (a spawned task's fork) at
+    /// them), seeded out of the run context (a spawned task's fork) at
     /// construction.
-    pub(super) fn reporting_handles(&self) -> ReportingHandles {
-        ReportingHandles {
-            emitter: Arc::clone(&self.emitter),
-            turns: Arc::clone(&self.turns),
-        }
+    pub(super) fn reporting_handles(&self) -> &ReportingHandles {
+        &self.reporting
     }
 
     /// The frame's tool-call counts for a tool call, a script's or a
-    /// model's: the section's first call runs the one-time scope install
-    /// (the counts and the Lua `tools.stats` table, the model freeze, the
-    /// `sys.model` enrichment), and every call then seeds any of `ids` not
-    /// seeded yet. `ids` is what Lua can see in the section's two sets,
-    /// from its live offers before it freezes them and from its frozen
-    /// sets after, with the discovery tools' ids once they are rendered.
-    /// The returned handle shares the installed counts, which the caller
-    /// bumps on the driver thread.
+    /// model's: the section's first call runs the first-call install (the
+    /// counts and the Lua `tools.stats` table, the model freeze, the
+    /// `sys.model` enrichment), a later call runs it again when it failed,
+    /// and every call then seeds any of `ids` not seeded yet. `ids` is
+    /// what Lua can see in the section's two sets, from its live offers
+    /// before it freezes them and from its frozen sets after, with the
+    /// discovery tools' ids once they are rendered. The returned handle
+    /// shares the installed counts, which the caller bumps on the driver
+    /// thread.
     ///
     /// # Errors
-    /// Returns the [`Error`] of the scope install or the
+    /// Returns the [`Error`] of the first-call install or the
     /// id seeding.
-    pub(super) fn script_call_counts(
+    pub(super) fn tool_call_counts(
         &mut self,
         ctx: &RunState,
         ids: &[ToolId],
@@ -228,10 +212,10 @@ impl SectionContext {
                 "the section frame's VM lives until the frame's own drop",
             ));
         };
-        install_section_scope(vm, ctx, sys, counts, ids)?;
-        let counts = counts
-            .as_ref()
-            .ok_or(Error::internal("the scope install seeds the counts"))?;
+        let counts = match counts {
+            Some(counts) => counts,
+            None => counts.insert(install_first_call_state(vm, ctx, sys, ids)?),
+        };
         for id in ids {
             counts.ensure(&id.to_string())?;
         }
@@ -265,8 +249,8 @@ fn prose_renderer(
     ctx: &RunState,
     item: Option<serde_json::Value>,
 ) -> impl Fn(&str, ProseState<'_>) -> mlua::Result<String> + Send + Sync + 'static {
-    let raw_args = ctx.args_shared();
-    let argv = ctx.argv_shared();
+    let raw_args = Arc::clone(ctx.args());
+    let argv = ctx.argv().cloned();
     move |template: &str, state: ProseState<'_>| -> mlua::Result<String> {
         let globals = |name: &str| (state.globals)(name).map_err(Error::from);
         let sources = subst::Sources {
@@ -281,27 +265,25 @@ fn prose_renderer(
     }
 }
 
-/// Installs the section's one-time tool-call counts and model resolution,
-/// gated on the counts slot: the section's first tool call, a script's or
-/// a model's, performs the install, and every later call is a no-op. The
-/// counts install backs the Lua `tools.stats` table, seeded with `ids`.
-/// The model resolution freezes the section's binding and enriches
-/// `sys.model`.
+/// Installs what a section's first tool call fixes: the counts behind
+/// `tools.stats` and the model binding (`sys.model`).
+///
+/// The counts install backs the Lua `tools.stats` table, seeded with
+/// `ids`, and the model resolution freezes the section's binding and
+/// enriches `sys.model`. The caller stores the returned counts, so its
+/// slot is set only once every step has succeeded, and a failed install
+/// runs again on the section's next tool call.
 ///
 /// # Errors
 /// Returns the [`Error`] of the counts install, the model resolution, or
 /// the `sys` re-seal.
-fn install_section_scope(
+fn install_first_call_state(
     vm: &SectionVm,
     ctx: &RunState,
     sys: &mut serde_json::Value,
-    counts: &mut Option<ToolCallCounts>,
     ids: &[ToolId],
-) -> Result<()> {
-    if counts.is_some() {
-        return Ok(());
-    }
-    *counts = Some(vm.install_tool_call_counts(ids)?);
+) -> Result<ToolCallCounts> {
+    let counts = vm.install_tool_call_counts(ids)?;
     let resolved_model = crate::lua::resolve_model_binding(ctx.models(), vm.model_runtime())?;
     if let Some(binding) = resolved_model.as_ref() {
         let current = vm.current_sys(sys)?;
@@ -309,7 +291,7 @@ fn install_section_scope(
         vm.re_seal_sys(&enriched)?;
         *sys = enriched;
     }
-    Ok(())
+    Ok(counts)
 }
 
 impl Drop for SectionContext {
@@ -325,9 +307,11 @@ impl Drop for SectionContext {
         };
         // The VM's teardown pair reports through the emitter's observer
         // seam, so it lands in the buffer ahead of the completion below.
-        vm.teardown(self.emitter.as_ref(), &self.name);
+        vm.teardown(self.reporting.emitter.as_ref(), &self.name);
         if self.completed {
-            self.emitter.report(&self.name, lifecycle::SECTION_FINISHED);
+            self.reporting
+                .emitter
+                .report(&self.name, lifecycle::SECTION_FINISHED);
         }
     }
 }

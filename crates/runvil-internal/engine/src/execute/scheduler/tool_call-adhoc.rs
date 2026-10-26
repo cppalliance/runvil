@@ -7,9 +7,8 @@ use std::sync::Arc;
 use runvil_types::event::lifecycle;
 use runvil_types::tools::OutputTrust;
 
-use crate::execute::protocol::{AdhocToolOutcome, Answer, ToolCallOutcome};
 use crate::execute::section_context::AdhocCall;
-use crate::lua::{ScriptReport, ToolBinding};
+use crate::lua::{AdhocToolOutcome, Answer, ScriptReport, ToolBinding, ToolCallOutcome};
 use crate::{Error, Result};
 
 use super::super::{CallSite, ChainIndex, Scheduler};

@@ -4,7 +4,9 @@
 //! The `runvil` facade never re-exports this module, so only Engine
 //! crates reach it.
 
-use crate::{Block, Error, Frontmatter, MaxToolIterations, ParseError, Prompt, Section};
+use crate::{
+    Block, Error, Frontmatter, MaxToolIterations, ModelKeyword, ParseError, Prompt, Section,
+};
 
 /// Unwraps a parse failure into the internal error it classifies, so the
 /// Engine can map it onto its own internal error type variant for variant.
@@ -36,4 +38,19 @@ pub fn entry(prompt: &Prompt) -> Option<&Section> {
 #[must_use]
 pub fn max_tool_iterations(frontmatter: &Frontmatter) -> MaxToolIterations {
     frontmatter.max_tool_iterations
+}
+
+/// Returns the keyword's kebab-case spelling, the one the frontmatter
+/// writes.
+#[must_use]
+pub fn keyword_name(keyword: ModelKeyword) -> &'static str {
+    match keyword {
+        ModelKeyword::Thinking => "thinking",
+        ModelKeyword::NoThinking => "no-thinking",
+        ModelKeyword::Frontier => "frontier",
+        ModelKeyword::Fast => "fast",
+        ModelKeyword::Small => "small",
+        ModelKeyword::Creative => "creative",
+        ModelKeyword::Chat => "chat",
+    }
 }
