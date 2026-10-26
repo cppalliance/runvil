@@ -1,7 +1,11 @@
 //! Tests for `RunContext` construction, forking, task sequence seeding,
 //! and the model set a run binds from its filled roles.
 
+use runvil_types::packs::PackId;
+use runvil_types::tools::ToolId;
+
 use super::*;
+use crate::execute::{UnavailablePack, UsablePack};
 use crate::model::ThinkingMode;
 use crate::test_support::scenario::{TEST_SEED, test_model_with};
 
@@ -26,11 +30,10 @@ fn test_state(prompt: &Prompt) -> RunState {
     )
 }
 
-/// The state a run of `prompt` assembles from `ctx`, its owned inputs
-/// moved out as `Run::new` moves them.
-fn state_over(prompt: &Prompt, mut ctx: RunContext) -> RunState {
-    let owned = OwnedInputs::take(&mut ctx);
-    RunState::new(Arc::new(prompt.clone()), "", &ctx, owned)
+/// The state a run of `prompt` assembles from `config`, as `Run::new`
+/// assembles it.
+fn state_over(prompt: &Prompt, config: RunContext) -> RunState {
+    RunState::new(Arc::new(prompt.clone()), "", config)
 }
 
 #[test]
@@ -44,7 +47,7 @@ fn new_builds_a_context_over_the_prompt() {
 fn accessor_returns_the_run_prompt() {
     let prompt = test_prompt();
     let ctx = test_state(&prompt);
-    assert_eq!(ctx.prompt(), &prompt);
+    assert_eq!(**ctx.prompt(), prompt);
 }
 
 #[test]
@@ -69,9 +72,9 @@ fn derived_values_come_from_the_prompt_and_limits() {
 fn forks_swap_only_their_own_fields() {
     let ctx = test_state(&test_prompt());
     let chain = ctx.with_args("chain-args");
-    assert_eq!(&*chain.args_shared(), "chain-args");
+    assert_eq!(&**chain.args(), "chain-args");
     assert!(Arc::ptr_eq(&ctx.prompt, &chain.prompt));
-    assert_eq!(&*ctx.args_shared(), "");
+    assert_eq!(&**ctx.args(), "");
 
     let turns = Arc::new(AtomicU32::new(7));
     let task: TaskId = "0.4".parse().expect("a task id parses");
@@ -138,7 +141,30 @@ fn a_filled_role_binds_with_the_catalog_info_its_render_receives() {
         runvil_types::timestamp::Timestamp::UNIX_EPOCH,
     );
     ctx.bind_role_for_test("writer", info.clone());
-    let set = bound::bound_model_set(&prompt, &ctx);
+    let set = bound::bound_model_set(&prompt, ctx.model_bindings());
     let binding = set.binding("writer").expect("the filled role binds");
     assert_eq!(binding.render_info(), info);
+}
+
+#[test]
+fn a_pack_in_both_roster_lists_records_no_vendor() {
+    let web = PackId::parse("web").expect("a static valid Pack id");
+    let state = state_over(
+        &test_prompt(),
+        RunContext::new(
+            "run-context-test",
+            TEST_SEED,
+            runvil_types::timestamp::Timestamp::UNIX_EPOCH,
+        )
+        .packs(
+            vec![UsablePack::new(web.clone(), "acme")],
+            vec![UnavailablePack::new(web, "the server is down")],
+        ),
+    );
+    let tool = ToolId::parse("web/fetch").expect("a static valid tool id");
+    assert_eq!(
+        state.tool_set().vendor_for(&tool),
+        None,
+        "a name in both lists counts as unavailable, so it has no vendor"
+    );
 }

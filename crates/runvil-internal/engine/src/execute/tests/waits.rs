@@ -13,8 +13,8 @@ use super::context::task;
 use super::scheduler::{asks, scheduler_scenario};
 use super::tasks::TaskRecorder;
 use super::*;
-use crate::execute::protocol::VfsOp;
 use crate::execute::scheduler::test_hooks::TaskState;
+use crate::lua::VfsOp;
 use crate::test_support::rig::Rig;
 
 /// A prompt whose first section drives the tasks it spawns over the

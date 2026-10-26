@@ -12,8 +12,7 @@ use mlua::MultiValue;
 
 use runvil_lua::{Error, ErrorKind, LuaProgram};
 
-use crate::execute::protocol::Answer;
-use crate::lua::{CoroStep, LuaBlockResult};
+use crate::lua::{Answer, CoroStep, LuaBlockResult};
 use crate::model::ModelSet;
 use crate::test_support::recording::null_emitter;
 

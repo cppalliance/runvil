@@ -451,7 +451,7 @@ Pinned tests that must stay green, beside each item's Check:
 
 <step-2>
 
-### Step 2: Simplify run setup and the section frame
+### Step 2: Simplify run setup and the section frame [completed]
 
 - Component: run setup
 - Tests: run each from the runvil root in PowerShell, as written:

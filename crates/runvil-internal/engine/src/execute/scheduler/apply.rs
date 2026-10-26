@@ -22,8 +22,9 @@ use runvil_types::tools::{ToolError, ToolOutput};
 use runvil_vfs::{ExecId, VfsError, detail};
 
 use crate::execute::infer::accept_infer;
-use crate::execute::protocol::{Answer, ToolCallOutcome, VfsOutcome};
-use crate::lua::{ModelReport, prepare_dispatch, prepare_model_dispatch};
+use crate::lua::{
+    Answer, ModelReport, ToolCallOutcome, VfsOutcome, prepare_dispatch, prepare_model_dispatch,
+};
 use crate::model::{Completion, CompletionError};
 use crate::{Error, Result};
 

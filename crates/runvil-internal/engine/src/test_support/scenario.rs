@@ -429,13 +429,13 @@ struct Prefill {
 }
 
 impl Prefill {
-    /// Builds the run of `prompt` under `ctx` with the state filled in, or
-    /// as [`Run::new`] builds it when there is nothing to fill.
-    fn start(self, prompt: Arc<Prompt>, args: &str, ctx: RunContext) -> Run {
+    /// Builds the run of `prompt` under `config` with the state filled in,
+    /// or as [`Run::new`] builds it when there is nothing to fill.
+    fn start(self, prompt: Arc<Prompt>, args: &str, config: RunContext) -> Run {
         if self.models.is_none() && !self.raw_shims {
-            return Run::new(prompt, args, ctx);
+            return Run::new(prompt, args, config);
         }
-        Run::new_for_test(prompt, args, ctx, |mut state| {
+        Run::new_for_test(prompt, args, config, |mut state| {
             if let Some(set) = self.models {
                 state = state.with_models_for_test(set);
             }

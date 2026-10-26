@@ -1,32 +1,13 @@
 //! Per-run resource ceilings: [`RunLimits`].
 
-use std::num::{NonZeroU32, NonZeroU64, NonZeroUsize};
+use std::num::{NonZero, NonZeroU32, NonZeroU64, NonZeroUsize};
 use std::time::Duration;
-
-/// Generates one `nz_*` constructor per `NonZero*` type: a `const fn`
-/// building the wrapper from a compile-time-known non-zero value.
-macro_rules! nz {
-    ($name:ident, $nonzero:ident, $primitive:ty) => {
-        /// Builds the non-zero wrapper from a compile-time-known non-zero
-        /// value.
-        pub(crate) const fn $name(value: $primitive) -> $nonzero {
-            match $nonzero::new(value) {
-                Some(non_zero) => non_zero,
-                None => unreachable!(),
-            }
-        }
-    };
-}
-
-nz!(nz_u32, NonZeroU32, u32);
-nz!(nz_u64, NonZeroU64, u64);
-nz!(nz_usize, NonZeroUsize, usize);
 
 /// Resource limits for one run.
 ///
-/// The limits cover tool iterations per section, task concurrency, model
-/// response size, Lua memory, Lua log volume, and how long a model request
-/// waits for its response.
+/// The limits cover tool iterations per `models.loop` or model handle
+/// `loop` call, task concurrency, model response size, Lua memory, Lua log
+/// volume, and how long a model request waits for its response.
 ///
 /// The defaults are built-in constants and are safe to use as they are. A
 /// prompt's frontmatter `max_tool_iterations` field, when present, overrides
@@ -34,36 +15,39 @@ nz!(nz_usize, NonZeroUsize, usize);
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[non_exhaustive]
 pub struct RunLimits {
-    max_tool_iterations: NonZeroU32,
-    concurrency: NonZeroUsize,
-    max_response_bytes: NonZeroU64,
-    lua_memory_bytes: NonZeroUsize,
-    lua_log_events: NonZeroU32,
-    request_timeout: Duration,
+    pub(crate) max_tool_iterations: NonZeroU32,
+    pub(crate) max_concurrency: NonZeroUsize,
+    pub(crate) max_response_bytes: NonZeroU64,
+    pub(crate) lua_memory_bytes: NonZeroUsize,
+    pub(crate) lua_log_events: NonZeroU32,
+    pub(crate) request_timeout: Duration,
 }
 
 impl RunLimits {
     /// Creates limits with the default values.
     ///
-    /// The defaults are 24 tool iterations per section, 8 concurrent tasks,
-    /// a 16 MiB model response cap, 64 MiB of Lua memory, 1024 Lua log
-    /// events, and a 120 second wait for each part of a model response.
+    /// The defaults are 24 tool iterations per `models.loop` or model
+    /// handle `loop` call, 8 concurrent tasks, a 16 MiB model response cap,
+    /// 64 MiB of Lua memory, 1024 Lua log events, and a 120 second wait for
+    /// each part of a model response.
     #[must_use]
     pub fn new() -> RunLimits {
         RunLimits {
-            max_tool_iterations: const { nz_u32(24) },
-            concurrency: const { nz_usize(8) },
-            max_response_bytes: const { nz_u64(16 * 1024 * 1024) },
-            lua_memory_bytes: const { nz_usize(64 * 1024 * 1024) },
-            lua_log_events: const { nz_u32(1024) },
+            max_tool_iterations: const { NonZero::new(24).unwrap() },
+            max_concurrency: const { NonZero::new(8).unwrap() },
+            max_response_bytes: const { NonZero::new(16 * 1024 * 1024).unwrap() },
+            lua_memory_bytes: const { NonZero::new(64 * 1024 * 1024).unwrap() },
+            lua_log_events: const { NonZero::new(1024).unwrap() },
             request_timeout: Duration::from_secs(120),
         }
     }
 
-    /// Sets the default maximum number of tool iterations per section.
+    /// Sets the default maximum number of tool iterations per `models.loop`
+    /// or model handle `loop` call.
     ///
-    /// A tool iteration is one model round trip. A prompt's frontmatter
-    /// `max_tool_iterations` field overrides this default for that prompt.
+    /// A tool iteration is one model round of such a call; `models.infer`
+    /// rounds do not count. A prompt's frontmatter `max_tool_iterations`
+    /// field overrides this default for that prompt.
     #[must_use]
     pub fn max_tool_iterations(mut self, value: NonZeroU32) -> RunLimits {
         self.max_tool_iterations = value;
@@ -78,7 +62,7 @@ impl RunLimits {
     /// another fanout runs within that arm's remaining share.
     #[must_use]
     pub fn max_concurrency(mut self, value: NonZeroUsize) -> RunLimits {
-        self.concurrency = value;
+        self.max_concurrency = value;
         self
     }
 
@@ -116,36 +100,10 @@ impl RunLimits {
         self
     }
 
-    /// Returns the default maximum number of tool iterations per section.
-    #[must_use]
-    pub(crate) fn tool_iterations(&self) -> NonZeroU32 {
-        self.max_tool_iterations
-    }
-
-    /// Returns the run's concurrency ceiling: the most tasks the
-    /// scheduler admits at once across the whole run.
-    #[must_use]
-    pub(crate) fn concurrency(&self) -> NonZeroUsize {
-        self.concurrency
-    }
-
     /// Returns the maximum accepted model response body size, in bytes.
     #[must_use]
     pub fn response_bytes(&self) -> NonZeroU64 {
         self.max_response_bytes
-    }
-
-    /// Returns the memory ceiling for each Lua virtual machine, in bytes.
-    #[must_use]
-    pub(crate) fn lua_memory(&self) -> NonZeroUsize {
-        self.lua_memory_bytes
-    }
-
-    /// Returns the maximum number of `log` events that a prompt's Lua code
-    /// can record in each Lua virtual machine.
-    #[must_use]
-    pub(crate) fn lua_logs(&self) -> NonZeroU32 {
-        self.lua_log_events
     }
 
     /// Returns the longest time a model request waits for the next part of
@@ -169,31 +127,31 @@ mod tests {
     #[test]
     fn run_limits_pins_all_six_defaults_and_the_untested_builders() {
         let defaults = RunLimits::new();
-        assert_eq!(defaults.tool_iterations().get(), 24);
-        assert_eq!(defaults.concurrency().get(), 8);
+        assert_eq!(defaults.max_tool_iterations.get(), 24);
+        assert_eq!(defaults.max_concurrency.get(), 8);
         assert_eq!(defaults.response_bytes().get(), 16 * 1024 * 1024);
-        assert_eq!(defaults.lua_memory().get(), 64 * 1024 * 1024);
-        assert_eq!(defaults.lua_logs().get(), 1024);
+        assert_eq!(defaults.lua_memory_bytes.get(), 64 * 1024 * 1024);
+        assert_eq!(defaults.lua_log_events.get(), 1024);
         assert_eq!(defaults.timeout(), Duration::from_secs(120));
 
         let built = RunLimits::new()
-            .max_response_bytes(const { nz_u64(4 * 1024) })
-            .lua_log_events(const { nz_u32(7) })
+            .max_response_bytes(const { NonZero::new(4 * 1024).unwrap() })
+            .lua_log_events(const { NonZero::new(7).unwrap() })
             .request_timeout(Duration::from_secs(5));
         assert_eq!(built.response_bytes().get(), 4 * 1024);
-        assert_eq!(built.lua_logs().get(), 7);
+        assert_eq!(built.lua_log_events.get(), 7);
         assert_eq!(built.timeout(), Duration::from_secs(5));
     }
 
     #[test]
     fn the_tool_iteration_builder_replaces_the_default_limit() {
-        let limits = RunLimits::new().max_tool_iterations(const { nz_u32(8) });
-        assert_eq!(limits.tool_iterations().get(), 8);
+        let limits = RunLimits::new().max_tool_iterations(const { NonZero::new(8).unwrap() });
+        assert_eq!(limits.max_tool_iterations.get(), 8);
     }
 
     #[test]
     fn limits_compare_and_hash_by_value() {
-        let tighter = RunLimits::new().max_tool_iterations(const { nz_u32(8) });
+        let tighter = RunLimits::new().max_tool_iterations(const { NonZero::new(8).unwrap() });
         assert_eq!(RunLimits::new(), RunLimits::default());
         assert_ne!(RunLimits::new(), tighter);
         let distinct: std::collections::HashSet<RunLimits> =

@@ -36,8 +36,7 @@ use std::sync::atomic::Ordering;
 use runvil_types::event::Event;
 use runvil_types::ids::TaskId;
 
-use crate::execute::protocol::{Answer, TaskDelivery, TaskPhase, TaskStatus};
-use crate::lua::NonEmpty;
+use crate::lua::{Answer, NonEmpty, TaskDelivery, TaskPhase, TaskStatus};
 use crate::{Error, Result};
 
 use super::tasks::{TaskBacking, TaskSlot, TaskState};
@@ -248,7 +247,7 @@ impl Scheduler {
         let effective = if let Some(limit) = limit {
             let parent_limit = match self.enclosing(id) {
                 Some(parent) => self.chains[parent.index()].concurrency,
-                None => self.ctx.limits().concurrency(),
+                None => self.ctx.limits().max_concurrency,
             };
             let limit = NonZeroUsize::try_from(limit).unwrap_or(NonZeroUsize::MAX);
             let effective = limit.min(parent_limit);

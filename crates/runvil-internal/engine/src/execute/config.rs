@@ -11,6 +11,7 @@ use runvil_types::packs::{PackId, Prelude};
 use runvil_types::replay::Flags;
 use runvil_types::seed::{RunSeed, RunUid};
 use runvil_types::timestamp::Timestamp;
+use runvil_types::tools::ToolCatalog;
 use runvil_vfs::VfsRef;
 
 pub use limits::RunLimits;
@@ -18,7 +19,6 @@ pub use limits::RunLimits;
 use crate::cancel::CancelHandle;
 use crate::model::ModelInfo;
 use crate::parser::Prompt;
-use crate::tools::ToolCatalog;
 
 use super::bindings::ModelBindings;
 use super::fill;
@@ -39,14 +39,7 @@ use super::requirements::{Requirements, UnavailablePack, UsablePack};
 /// reports events and issues effects as values, and returns each one to
 /// the caller from `step`.
 ///
-/// The caller supplies the run's clock and randomness: it passes the
-/// run's `seed` and `started_at` to [`new`](RunContext::new), and both
-/// are required. For a live run, the caller must draw the seed from a
-/// CSPRNG and read the start time from its own clock. The caller records both
-/// values, and a replay passes back the recorded ones. Given the same
-/// inputs and the same answers, a run reproduces its run id, nonces,
-/// `sys.when`, effects, and events. The `Debug` form shows the run id and
-/// never the seed.
+/// The caller supplies the run's clock and randomness through `new`.
 #[non_exhaustive]
 pub struct RunContext {
     /// Run identity, stamped on every report and event.
@@ -59,31 +52,16 @@ pub struct RunContext {
     /// When the run began, as the caller stamped it: rendered as `sys.when`
     /// in every section, the H1 pass included.
     pub(super) started_at: Timestamp,
-    /// Where the root task's provenance sequence starts: 0 by default. When
-    /// the caller puts the prompt's parse events (stamped under task `0`
-    /// from zero) in the same stream ahead of the run, it passes their
-    /// count, so the run's root task continues the sequence and
-    /// `(task, seq)` is unique across the parse/run boundary.
+    /// Where the root task's provenance sequence starts; set by `provenance_start`.
     pub(super) provenance_start: u32,
-    /// Whether the run reports each model round's raw request and response
-    /// bodies as `Request` and `Response` events. Off by default: the
-    /// bodies already travel in the `Chat` effect and its answer, and the
-    /// events serve a caller that wants the pair in the event stream too.
+    /// Whether the run reports raw model-round bodies as events; set by `report_debug`.
     pub(super) report_debug: DebugMode,
-    /// The run's cancel flag: minted once at construction, replaced by
-    /// [`cancel`](RunContext::cancel), and shared from here by every
-    /// section VM's instruction hook and the run's own `cancel`, so one
-    /// flag reaches them all; the caller watches the same flag to drop the
-    /// effects it has in flight.
+    /// The run's cancel flag, minted by `new` and replaced by `cancel`.
     pub(super) cancel: CancelHandle,
     pub(crate) limits: RunLimits,
-    /// The application-state snapshot the `ui()` global serves, taken by
-    /// the caller at run start; its presence also turns on the raw-model-id
-    /// `models.get` fallback.
+    /// The application-state snapshot the `ui()` global serves; set by `ui`.
     pub(super) ui: Option<serde_json::Value>,
-    /// The run's whole filesystem: real directories and the declared
-    /// store. The default is a fresh memory store at `/`; the caller
-    /// replaces it with [`vfs`](RunContext::vfs).
+    /// The run's whole filesystem; set by `vfs`.
     pub(super) vfs: VfsRef,
     /// The run's current model, which the caller chooses, set before
     /// prepare. Input to prepare's fill function, which binds every
@@ -93,23 +71,13 @@ pub struct RunContext {
     /// [`prepare`](RunContext::prepare)'s fill function: which concrete
     /// model each declared role is bound to.
     pub(super) model_bindings: ModelBindings,
-    /// The run's tool catalog: every tool of every Pack the caller can
-    /// serve, declared by the prompt or not, with each tool under its
-    /// Pack's name. Set with [`tools`](RunContext::tools); the run's
-    /// offering draws every tool from it. Empty by default.
+    /// The run's tool catalog; set by `tools`.
     pub(super) tools: ToolCatalog,
-    /// The run's roster: every installed Pack the caller reports, by
-    /// name, with no reason when it can serve the run and the reason when
-    /// it can't. Set with [`packs`](RunContext::packs). Empty by
-    /// default.
+    /// Each roster Pack by name, with the reason when it can't serve; set by `packs`.
     pub(super) roster: BTreeMap<PackId, Option<String>>,
-    /// The vendor the caller reports for each Pack of the roster that
-    /// can serve, by name. Set with [`packs`](RunContext::packs). Empty
-    /// by default.
+    /// The vendor of each roster Pack that can serve, by name; set by `packs`.
     pub(super) vendors: BTreeMap<PackId, String>,
-    /// The run's Pack preludes, in declaration order. Set with
-    /// [`preludes`](RunContext::preludes); every section VM installs each
-    /// one before `require`. Empty by default.
+    /// The run's Pack preludes, in declaration order; set by `preludes`.
     pub(super) preludes: Vec<Prelude>,
 }
 
@@ -284,19 +252,21 @@ impl RunContext {
         usable: Vec<UsablePack>,
         unavailable: Vec<UnavailablePack>,
     ) -> RunContext {
-        self.vendors = usable
+        let roster: BTreeMap<PackId, Option<String>> = usable
             .iter()
-            .map(|entry| (entry.pack.clone(), entry.vendor.clone()))
-            .collect();
-        self.roster = usable
-            .into_iter()
-            .map(|entry| (entry.pack, None))
+            .map(|entry| (entry.pack.clone(), None))
             .chain(
                 unavailable
                     .into_iter()
                     .map(|entry| (entry.pack, Some(entry.reason))),
             )
             .collect();
+        self.vendors = usable
+            .into_iter()
+            .filter(|entry| matches!(roster.get(&entry.pack), Some(None)))
+            .map(|entry| (entry.pack, entry.vendor))
+            .collect();
+        self.roster = roster;
         self
     }
 
@@ -305,9 +275,10 @@ impl RunContext {
     /// A prelude is Lua source that a Pack the prompt declares
     /// contributed. The caller passes them in the order the prompt
     /// declares the Packs. Every section VM of the run installs each
-    /// prelude after the Engine globals and before any block runs, so every
-    /// block, and every library a block loads with `require`, can call what
-    /// the preludes define.
+    /// prelude after the other Engine globals and before `require` and any
+    /// block, so a prelude cannot call `require` while it installs, while
+    /// every block, and every library a block loads with `require`, can
+    /// call what the preludes define.
     ///
     /// A prelude fails the run as
     /// [`RunErrorKind::Lua`](super::RunErrorKind::Lua) if it fails to load,
@@ -377,8 +348,7 @@ impl RunContext {
     ///
     /// The bindings also hold the `ModelInfo` values of the models this run may
     /// use. [`prepare`](RunContext::prepare)'s fill
-    /// function writes them. A lookup goes from a role's label to a model
-    /// id, and from the id to the model's info.
+    /// function writes them.
     #[must_use]
     pub fn model_bindings(&self) -> &ModelBindings {
         &self.model_bindings

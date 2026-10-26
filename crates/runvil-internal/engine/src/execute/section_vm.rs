@@ -72,8 +72,8 @@ pub(crate) struct SectionVmSetup<'a> {
     pub(crate) emitter: &'a Emitter,
     /// The section name used in observations and error messages.
     pub(crate) section_name: &'a str,
-    /// The run's resolved per-section tool-loop cap, captured by the
-    /// `models.loop` shim as its round cap.
+    /// The run's resolved tool-loop cap per `models.loop` or model handle
+    /// `loop` call, captured by the `models.loop` shim as its round cap.
     pub(crate) max_tool_iterations: usize,
     /// The run's application-state snapshot, when the caller supplied one:
     /// its presence gives the section VM the `ui()` global and the

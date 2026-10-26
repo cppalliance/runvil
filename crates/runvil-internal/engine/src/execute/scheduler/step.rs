@@ -11,8 +11,7 @@ use std::sync::Arc;
 use mlua::Thread;
 use runvil_types::event::lifecycle;
 
-use crate::execute::protocol::{Answer, YieldParse};
-use crate::lua::{CoroStep, LuaBlockResult};
+use crate::lua::{Answer, CoroStep, LuaBlockResult, YieldParse};
 use crate::parser::{Block, BodyText};
 use crate::{Error, Result};
 

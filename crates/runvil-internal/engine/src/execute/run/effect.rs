@@ -37,7 +37,7 @@ use runvil_vfs::{Access, VfsError};
 use serde::Serialize;
 use serde_json::Value;
 
-use crate::execute::protocol::{VfsOp, VfsOutcome};
+use crate::lua::{VfsOp, VfsOutcome};
 use crate::model::{Completion, CompletionError, Message, ToolSchema};
 use crate::model::{CompletionOptions, ModelBinding, Temperature};
 

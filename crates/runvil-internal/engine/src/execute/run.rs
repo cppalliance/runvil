@@ -28,7 +28,7 @@ use crate::{Error, Result};
 
 use super::RunResult;
 use super::config::RunContext;
-use super::context::{OwnedInputs, RunState};
+use super::context::RunState;
 use super::error::RunError;
 use super::scheduler::Scheduler;
 
@@ -118,7 +118,7 @@ impl fmt::Debug for Run {
 
 impl Run {
     /// Builds a run of `prompt` with the arguments `args` and the context
-    /// `ctx`.
+    /// `config`.
     ///
     /// A context that skipped
     /// [`RunContext::prepare`](super::RunContext::prepare) runs with an
@@ -131,12 +131,11 @@ impl Run {
     /// filesystem declares no store, or when the store's backend fails its
     /// probe.
     #[must_use]
-    pub fn new(prompt: Arc<Prompt>, args: &str, mut ctx: RunContext) -> Run {
+    pub fn new(prompt: Arc<Prompt>, args: &str, config: RunContext) -> Run {
         // The context's one flag, held here so a stillborn run still has
         // the handle `cancel` and `cancel_handle` name.
-        let cancel = ctx.cancel.clone();
-        let owned = OwnedInputs::take(&mut ctx);
-        match prepare_state(prompt, args, &ctx, owned) {
+        let cancel = config.cancel.clone();
+        match prepare_state(prompt, args, config) {
             Ok(state) => Self::from_state(state),
             Err(error) => Run {
                 phase: Phase::Stillborn(error),
@@ -152,15 +151,15 @@ impl Run {
     pub(crate) fn new_for_test(
         prompt: Arc<Prompt>,
         args: &str,
-        mut ctx: RunContext,
+        config: RunContext,
         edit: impl FnOnce(RunState) -> RunState,
     ) -> Run {
-        let owned = OwnedInputs::take(&mut ctx);
-        match prepare_state(prompt, args, &ctx, owned) {
+        let cancel = config.cancel.clone();
+        match prepare_state(prompt, args, config) {
             Ok(state) => Self::from_state(edit(state)),
             Err(error) => Run {
                 phase: Phase::Stillborn(error),
-                cancel: ctx.cancel.clone(),
+                cancel,
             },
         }
     }
@@ -284,20 +283,15 @@ impl Run {
     }
 }
 
-/// Assembles the run state from the caller's context and the inputs moved
-/// out of it, checking the version gate and then the declared store.
+/// Assembles the run state from the caller's context, checking the version
+/// gate and then the declared store.
 ///
 /// # Errors
 /// Returns [`Error::UnsupportedVersion`] or a structural parse error for a
 /// prompt that is not a supported runvil prompt, or [`Error::Store`]
 /// when the handle declares no store or the store's backend fails the
 /// probe.
-fn prepare_state(
-    prompt: Arc<Prompt>,
-    args: &str,
-    ctx: &RunContext,
-    owned: OwnedInputs,
-) -> Result<RunState> {
+fn prepare_state(prompt: Arc<Prompt>, args: &str, config: RunContext) -> Result<RunState> {
     match prompt.frontmatter().runvil() {
         Some(0) => {}
         Some(other) => return Err(Error::UnsupportedVersion(other)),
@@ -313,12 +307,12 @@ fn prepare_state(
     // stats the store root through a throwaway capability, so a handle
     // with no declaration fails here rather than on the first store call,
     // and a declared-but-failing backend's error fails the run.
-    let probe = ctx
+    let probe = config
         .vfs
         .acquire(runvil_vfs::Origin::new("store mount probe"))
         .map_err(Error::store)?;
     runvil_vfs::detail::probe_store(&probe).map_err(Error::store)?;
-    Ok(RunState::new(prompt, args, ctx, owned))
+    Ok(RunState::new(prompt, args, config))
 }
 
 #[cfg(test)]

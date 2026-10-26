@@ -28,8 +28,7 @@ use runvil_types::tools::OutputTrust;
 use serde::Serialize;
 use serde_json::{Map, Value};
 
-use crate::execute::protocol::{Answer, ToolCallOutcome};
-use crate::lua::{DiscoveryTool, OfferMode, RenderedTools, ToolBinding};
+use crate::lua::{Answer, DiscoveryTool, OfferMode, RenderedTools, ToolBinding, ToolCallOutcome};
 use crate::{Error, Result};
 
 use super::super::{CallSite, ChainIndex, Scheduler};

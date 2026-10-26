@@ -8,10 +8,10 @@ use crate::lua::{SectionVm, ToolSet, resolve_model_binding};
 use crate::test_support::fresh_access;
 use crate::test_support::recording::null_emitter;
 use crate::test_support::scenario::TEST_SEED;
-use crate::untrusted::GuardNonce;
 use crate::{Error, Result};
 use runvil_model_client::model::{CompletionOptions, ModelInvocation};
 use runvil_types::emitter::Emitter;
+use runvil_types::untrusted::GuardNonce;
 use serde_json::json;
 
 /// Compiles one Lua chunk for a section VM drive.

@@ -9,9 +9,9 @@ use std::num::NonZeroUsize;
 use runvil_types::ids::{AbandonReason, ChainId, TaskId};
 
 use crate::execute::context::RunState;
-use crate::execute::protocol::Answer;
 use crate::execute::run::EffectId;
 use crate::execute::walk_target::SlicePath;
+use crate::lua::Answer;
 use crate::{Error, Result};
 
 use super::chain_record::{BlockIndex, CallDepth, ChainKind, SectionIndex};
@@ -37,7 +37,7 @@ pub(super) struct ChainStart {
     /// The id counters the chain continues from: zero for a fresh chain,
     /// the H1 pass's for the root walk that follows it.
     pub(super) counters: Counters,
-    /// The chain's fork of the run context.
+    /// The chain's fork of the run state.
     pub(super) ctx: RunState,
     /// The slice the chain walks.
     pub(super) slice: SlicePath,

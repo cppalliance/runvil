@@ -66,7 +66,7 @@ impl Scheduler {
             kind: ChainKind::Root,
             var: serde_json::json!({}),
             call_depth: CallDepth::ROOT,
-            concurrency: self.ctx.limits().concurrency(),
+            concurrency: self.ctx.limits().max_concurrency,
         })?;
         self.install_root_slots(root, None)?;
         self.ready.push_back(root);

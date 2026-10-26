@@ -55,11 +55,10 @@ use std::sync::atomic::Ordering;
 use runvil_types::tools::ToolId;
 use runvil_vfs::detail;
 
-use crate::execute::protocol::{Answer, ToolCallOutcome, ToolCallRecord};
 use crate::execute::run::{Effect, ToolCallOrigin, ToolCaller};
 use crate::lua::{
-    DiscoveryTool, OfferMode, ScriptReport, ToolBinding, ToolCallCounts, current_dynamic_set,
-    current_tool_bindings,
+    Answer, DiscoveryTool, OfferMode, ScriptReport, ToolBinding, ToolCallCounts, ToolCallOutcome,
+    ToolCallRecord, current_dynamic_set, current_tool_bindings,
 };
 use crate::{Error, Result};
 
@@ -238,7 +237,7 @@ impl Scheduler {
                 .collect()
         };
         let ctx = chain.ctx.clone();
-        chain.frame_mut()?.script_call_counts(&ctx, &ids)
+        chain.frame_mut()?.tool_call_counts(&ctx, &ids)
     }
 
     /// Fills `slot` of the batch the chain is parked on with a landed

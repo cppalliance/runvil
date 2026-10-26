@@ -481,7 +481,7 @@ pub fn runvil::Requirements::refusal(&self) -> core::option::Option<runvil::RunE
 pub fn runvil::Run::cancel(&mut self)
 pub fn runvil::Run::cancel_handle(&self) -> runvil::cancel::CancelHandle
 pub fn runvil::Run::decided(&self) -> bool
-pub fn runvil::Run::new(prompt: alloc::sync::Arc<runvil::Prompt>, args: &str, ctx: runvil::RunContext) -> runvil::Run
+pub fn runvil::Run::new(prompt: alloc::sync::Arc<runvil::Prompt>, args: &str, config: runvil::RunContext) -> runvil::Run
 pub fn runvil::Run::resume(&mut self, id: runvil::effect::EffectId, answer: runvil::effect::EffectAnswer)
 pub fn runvil::Run::step(&mut self) -> runvil::Step
 pub fn runvil::RunContext::cancel(self, handle: runvil::cancel::CancelHandle) -> runvil::RunContext

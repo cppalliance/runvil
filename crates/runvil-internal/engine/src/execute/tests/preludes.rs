@@ -11,8 +11,8 @@ use runvil_types::packs::{PackId, Prelude};
 
 use super::fixtures::echo_tool;
 use super::*;
-use crate::execute::protocol::VfsOp;
 use crate::execute::run::{EffectRecord, ToolCallOrigin, ToolCaller};
+use crate::lua::VfsOp;
 use crate::test_support::scenario::EXECUTION;
 
 /// A prelude contributed by the Pack `id`.

@@ -17,7 +17,7 @@ use std::sync::Arc;
 
 use runvil_types::event::Event;
 
-use crate::execute::protocol::{Answer, Blocked};
+use crate::lua::{Answer, Blocked};
 use crate::{Error, Result};
 
 use super::chain_record::{Admission, ChainKind};

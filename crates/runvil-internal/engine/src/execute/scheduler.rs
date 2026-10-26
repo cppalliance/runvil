@@ -80,11 +80,11 @@ use runvil_types::ids::{Provenance, RoundId, TaskId};
 use runvil_vfs::Origin;
 use runvil_vfs::detail::ScopeHandle;
 
+use crate::lua::Answer;
 use crate::parser::{Block, Prompt};
 use crate::{Error, Result};
 
 use super::context::RunState;
-use super::protocol::Answer;
 use super::run::{Effect, EffectAnswer, EffectId, Round};
 use chain_record::{Chain, ChatAnchor};
 use pending::{CallSite, Continuation, Pending, ToolCallContinuation, VfsContinuation};
@@ -288,7 +288,7 @@ impl Scheduler {
     /// The prompt's shared handle: a chain resolves its walk position
     /// against this clone so the tree borrow never pins the arena.
     fn prompt(&self) -> Arc<Prompt> {
-        Arc::clone(self.ctx.prompt_arc())
+        Arc::clone(self.ctx.prompt())
     }
 
     /// Whether the run's outcome is decided: the end boundary is reported

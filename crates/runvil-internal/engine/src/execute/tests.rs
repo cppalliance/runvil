@@ -7,6 +7,7 @@ use std::sync::{Arc, Mutex};
 use runvil_lua::LuaProgram;
 use runvil_model_client::client::Role;
 use runvil_types::tools::{ToolError, ToolErrorKind, ToolId, ToolOutput};
+use runvil_types::untrusted::GuardNonce;
 use runvil_vfs::{Access, VfsError};
 use serde_json::{Value, json};
 
@@ -26,7 +27,6 @@ use crate::test_support::scripted_chat::{
 };
 use crate::test_support::seeded::Seeded;
 use crate::test_support::{FnTool, fresh_access};
-use crate::untrusted::GuardNonce;
 
 mod context;
 mod fixtures;

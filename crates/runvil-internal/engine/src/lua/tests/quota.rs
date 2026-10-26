@@ -14,7 +14,7 @@ use serde_json::json;
 use runvil_lua::Error;
 use runvil_types::metrics::ToolCallEvent;
 
-use crate::execute::protocol::{Answer, ChatOutcome, ChatResult, Request};
+use crate::lua::{Answer, ChatOutcome, ChatResult, Request};
 
 use super::{parse_request, resume_with, scheduler_vm_with_tools, test_models, test_tools};
 

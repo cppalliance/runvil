@@ -15,8 +15,8 @@ use super::fixtures::echo_tool;
 use super::models_loop::{loop_model_name, loop_scenario};
 use super::scheduler::scheduler_scenario;
 use super::*;
-use crate::execute::protocol::VfsOp;
 use crate::execute::run::{EffectRecord, PackToolSets, Round, ToolCallOrigin, ToolCaller};
+use crate::lua::VfsOp;
 use crate::test_support::rig::Rig;
 use crate::test_support::scenario::{EXECUTION, round_trip};
 
