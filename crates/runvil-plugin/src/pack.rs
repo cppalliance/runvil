@@ -112,9 +112,11 @@ pub trait Pack: Send + Sync {
     /// the tools the section offered from this Pack in one set. A render
     /// may reshape, rename, or drop offered tools, and may add model-only
     /// tools under its own Pack id. Every catalog tool it returns is one
-    /// the section offered in that set. It receives the same inputs for
-    /// either set, and a set the Pack was not offered into is not rendered.
-    /// The default returns `offered` unchanged.
+    /// the section offered in that set, and keeps its catalog flags, such
+    /// as `survives_stop`, whatever the render sets; a model-only tool
+    /// takes the flags the render gives it. It receives the same inputs
+    /// for either set, and a set the Pack was not offered into is not
+    /// rendered. The default returns `offered` unchanged.
     ///
     /// # Invariants
     ///

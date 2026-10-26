@@ -1,7 +1,7 @@
 //! Integration tests for `harness-runner`: the per-run Harness against a
 //! scripted Host, the effect loop against fake performers and an
-//! in-memory recorder, the runner's own performers under the loop, and
-//! run preparation.
+//! in-memory recorder, the runner's own performers under the loop, run
+//! preparation, and a Pack's render under the Harness.
 #![expect(
     clippy::expect_used,
     clippy::unwrap_used,
@@ -14,6 +14,7 @@ mod harness;
 mod performers;
 mod prepare;
 mod recorder;
+mod render;
 mod scripted;
 mod support;
 mod tool_context;

@@ -98,7 +98,8 @@ pub enum EffectRecord {
         /// set.
         offered: Vec<PackToolSets<ToolId>>,
     },
-    /// One catalog tool call.
+    /// One call to a Pack's tool, a run catalog tool or a tool only the
+    /// model sees.
     ToolCall {
         /// The tool's stable live identity.
         tool: ToolId,

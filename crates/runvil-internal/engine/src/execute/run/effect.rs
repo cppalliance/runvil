@@ -150,11 +150,14 @@ pub enum Effect {
         /// set.
         offered: Vec<PackToolSets<ToolInfo>>,
     },
-    /// One call to a catalog tool. The caller resolves `tool`, the tool's
-    /// stable identity, to an implementation. `alias` is the tool's wire
-    /// name for a model call and its id for a script call, and `origin`
-    /// says who made the call and where. The effect's record keeps both
-    /// and leaves out `access`.
+    /// One call to a Pack's tool: a run catalog tool, or a tool only the
+    /// model sees, from the section entry's render. The caller resolves
+    /// `tool`, the tool's stable identity, to an implementation. `alias`
+    /// is the tool's wire name for a model call and its id for a script
+    /// call, and `origin` says who made the call and where. The effect's
+    /// record keeps both and leaves out `access`, a live handle, and
+    /// `survives_stop`, which the run catalog and the render's answer
+    /// already give.
     ToolCall {
         /// The tool's stable live identity.
         tool: ToolId,
@@ -172,6 +175,11 @@ pub enum Effect {
         /// next step. It is rooted at `/`. Once the answer is applied or the
         /// call is aborted, every operation through it is refused.
         access: Arc<Access>,
+        /// Whether a stop leaves the call in flight, from the binding the
+        /// call resolved to: the run catalog's flag for a catalog tool, and
+        /// the flag the section entry's render gave a tool only the model
+        /// sees.
+        survives_stop: bool,
     },
     /// One operation on the run's store view, issued for one of the eight
     /// `store.*` calls a prompt can make.
@@ -298,9 +306,10 @@ pub enum EffectAnswer {
     /// Pack's id, and a run catalog tool may appear only in a set the
     /// section offered it in; an answer that breaks either rule, or the
     /// order, fails the round. A catalog tool keeps the catalog's output
-    /// kind and listing flag, so a render changes only its wire name,
-    /// description, and schema, and any other tool is one only the model
-    /// can call. A tool repeated within a set keeps its first copy.
+    /// kind, listing flag, and stop flag, so a render changes only its
+    /// wire name, description, and schema, and any other tool is one only
+    /// the model can call, with the flags the render gave it. A tool
+    /// repeated within a set keeps its first copy.
     Render(Vec<PackToolSets<ToolInfo>>),
     /// The tool's own output or its own failure, before the Engine applies
     /// its trust rule.

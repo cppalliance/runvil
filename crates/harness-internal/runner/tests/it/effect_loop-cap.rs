@@ -156,10 +156,6 @@ impl ToolPerformer for ParkingTool {
         })
     }
 
-    fn survives_stop(&self, _tool: &ToolId) -> bool {
-        false
-    }
-
     fn max_in_flight(&self) -> NonZeroUsize {
         self.cap
     }

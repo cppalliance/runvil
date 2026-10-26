@@ -1,25 +1,28 @@
 //! One run's snapshot of its Packs: [`HostRunContext`], which holds what
 //! each of the Packs picked for the run looks like to it and performs the
-//! run's tool calls.
+//! run's renders and tool calls.
 //!
 //! The snapshot reads each usable Pack's tool list once, after the wait
 //! for the run's Packs to be ready, and builds the run's one catalog from
-//! the validated lists. The Engine receives a clone of that catalog, and
-//! the Harness routes the run's calls through it, so the tools the run
-//! offers and the tools its calls may reach are the same list and stay
-//! fixed for the run. A run holds one Pack per Pack id, and a tool call
-//! goes to the Pack its id's first segment names.
+//! the validated lists, which stays fixed for the run. The Engine receives
+//! a clone of that catalog. Each section entry's render asks the Packs it
+//! offered tools from what the model sees, and a render may add tools
+//! only the model sees, which no catalog lists. A run holds one Pack per
+//! Pack id, and every render and tool call goes to the Pack its id's
+//! first segment names, so a call reaches a model-only tool as it reaches
+//! a catalog tool.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::sync::Arc;
 
-use runvil::effect::ToolCallOrigin;
+use runvil::effect::{PackToolSets, ToolCallOrigin};
+use runvil::model::ModelInfo;
 use runvil::packs::Prelude;
 use runvil::tools::{ToolCatalog, ToolError, ToolErrorKind, ToolId, ToolInfo, ToolOutput};
 use runvil::vfs::Access;
 use runvil::{MissingService, Prompt, Requirements, UnavailablePack, UsablePack};
-use runvil_plugin::{HostServices, Pack, PackId, PackInfo, ServiceId, ToolContext};
+use runvil_plugin::{HostServices, Pack, PackId, PackInfo, RenderContext, ServiceId, ToolContext};
 use serde_json::Value;
 
 use crate::performers::{BoxFuture, ToolPerformer};
@@ -202,13 +205,10 @@ impl HostRunContext {
         requirements
     }
 
-    /// The usable Pack the tool id's first segment names, when the
-    /// catalog holds the tool, and the tool's info. Validation keeps each
-    /// catalog tool under its Pack's id, so the two lookups agree.
-    fn offering(&self, tool: &ToolId) -> Option<(&Arc<dyn Pack>, &ToolInfo)> {
-        let info = self.catalog.get(tool)?;
-        match self.packs.get(&tool.pack())? {
-            PackState::Usable { pack, .. } => Some((pack, info)),
+    /// The usable Pack whose id is `pack`.
+    fn usable(&self, pack: &PackId) -> Option<&Arc<dyn Pack>> {
+        match self.packs.get(pack)? {
+            PackState::Usable { pack, .. } => Some(pack),
             PackState::Unavailable(_) | PackState::NeedsUnmet(_) => None,
         }
     }
@@ -223,17 +223,17 @@ impl ToolPerformer for HostRunContext {
         origin: ToolCallOrigin,
         args: Value,
     ) -> BoxFuture<Result<ToolOutput, ToolError>> {
-        let pack = self.offering(&tool).map(|(pack, _)| Arc::clone(pack));
+        let pack = self.usable(&tool.pack()).cloned();
         let services = self.services.clone();
         Box::pin(async move {
             let Some(pack) = pack else {
                 tracing::error!(
                     tool = %tool,
                     alias = %alias,
-                    "a ToolCall names a tool no usable Pack of the run offers"
+                    "a ToolCall names a tool of no usable Pack of the run"
                 );
                 return Err(ToolError::message(format!(
-                    "tool `{alias}` ({tool}) is not offered by any usable Pack of this run"
+                    "tool `{alias}` ({tool}) belongs to no usable Pack of this run"
                 ))
                 .with_kind(ToolErrorKind::Other));
             };
@@ -242,9 +242,35 @@ impl ToolPerformer for HostRunContext {
         })
     }
 
-    fn survives_stop(&self, tool: &ToolId) -> bool {
-        self.offering(tool)
-            .is_some_and(|(_, info)| info.survives_stop)
+    /// Asks each usable Pack's `render` once per non-empty set, one at a
+    /// time. A Pack the run cannot use has no catalog tool, so no render
+    /// asks for it; should one, its tools pass through as offered.
+    fn render(
+        &self,
+        entry: String,
+        model: ModelInfo,
+        offered: Vec<PackToolSets<ToolInfo>>,
+    ) -> BoxFuture<Vec<PackToolSets<ToolInfo>>> {
+        let packs: Vec<Option<Arc<dyn Pack>>> = offered
+            .iter()
+            .map(|sets| self.usable(&sets.pack).cloned())
+            .collect();
+        Box::pin(async move {
+            let mut rendered = offered;
+            for (sets, pack) in rendered.iter_mut().zip(packs) {
+                let Some(pack) = pack else {
+                    tracing::error!(pack = %sets.pack, "a Render names no usable Pack of the run");
+                    continue;
+                };
+                for set in [&mut sets.static_set, &mut sets.dynamic_set] {
+                    if !set.is_empty() {
+                        let tools = std::mem::take(set);
+                        *set = pack.render(RenderContext::new(&entry, &model), tools).await;
+                    }
+                }
+            }
+            rendered
+        })
     }
 }
 

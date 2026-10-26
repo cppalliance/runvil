@@ -899,6 +899,7 @@ pub runvil::effect::Effect::ToolCall::access: alloc::sync::Arc<runvil::vfs::Acce
 pub runvil::effect::Effect::ToolCall::alias: alloc::string::String
 pub runvil::effect::Effect::ToolCall::args: serde_json::value::Value
 pub runvil::effect::Effect::ToolCall::origin: runvil::effect::ToolCallOrigin
+pub runvil::effect::Effect::ToolCall::survives_stop: bool
 pub runvil::effect::Effect::ToolCall::tool: runvil::tools::ToolId
 pub runvil::effect::Effect::Vfs { .. }
 pub runvil::effect::Effect::Vfs::access: alloc::sync::Arc<runvil::vfs::Access>

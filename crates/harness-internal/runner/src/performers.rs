@@ -1,5 +1,6 @@
-//! One performer trait for each chat, tool-call, and timer effect, and the
-//! bundle the effect loop performs a run's effects through.
+//! One performer trait for chat effects, one for tool-call and render
+//! effects, and one for timer effects, and the bundle the effect loop
+//! performs a run's effects through.
 //!
 //! The Engine issues an [`Effect`](runvil::effect::Effect) as a
 //! value and waits for its
@@ -30,11 +31,12 @@ use std::pin::Pin;
 use std::sync::Arc;
 use std::time::Duration;
 
-use runvil::effect::{Round, ToolCallOrigin};
+use runvil::effect::{PackToolSets, Round, ToolCallOrigin};
 use runvil::model::{
-    Completion, CompletionError, CompletionOptions, Message, ModelBinding, ModelCatalog, ToolSchema,
+    Completion, CompletionError, CompletionOptions, Message, ModelBinding, ModelCatalog, ModelInfo,
+    ToolSchema,
 };
-use runvil::tools::{ToolError, ToolId, ToolOutput};
+use runvil::tools::{ToolError, ToolId, ToolInfo, ToolOutput};
 use runvil::vfs::Access;
 use serde_json::Value;
 
@@ -80,7 +82,8 @@ pub trait InferenceBroker: Send + Sync {
 const DEFAULT_MAX_IN_FLIGHT: NonZeroUsize = NonZeroUsize::MIN.saturating_add(9);
 
 /// Performs a `ToolCall` effect: resolves `tool` to an implementation and
-/// calls it with `args`, lending it the call's `access` and `origin`.
+/// calls it with `args`, lending it the call's `access` and `origin`. Also
+/// performs a `Render` effect: the tools each offered Pack shows the model.
 pub trait ToolPerformer: Send + Sync {
     /// Calls the tool. `alias` is the tool's wire name for a model call and
     /// its canonical id for a script call, for the performer's own
@@ -97,10 +100,19 @@ pub trait ToolPerformer: Send + Sync {
         args: Value,
     ) -> BoxFuture<Result<ToolOutput, ToolError>>;
 
-    /// Whether a stop leaves a call to `tool` in flight: its tool info's
-    /// `survives_stop` flag. A stop drops every other call in flight; a
-    /// cancel drops this one too.
-    fn survives_stop(&self, tool: &ToolId) -> bool;
+    /// Renders the tools the section entry `entry` offered from each Pack
+    /// in `offered`, for `model`, the model of the entry's first round, and
+    /// answers every Pack asked, in the order asked, with the tools it
+    /// shows the model for each set. The default passes every tool
+    /// through.
+    fn render(
+        &self,
+        _entry: String,
+        _model: ModelInfo,
+        offered: Vec<PackToolSets<ToolInfo>>,
+    ) -> BoxFuture<Vec<PackToolSets<ToolInfo>>> {
+        Box::pin(async move { offered })
+    }
 
     /// The most tool calls the Harness runs at once across the run; calls
     /// beyond it wait and start oldest first. The default is 10.
@@ -118,9 +130,9 @@ pub trait Timer: Send + Sync {
     fn sleep(&self, duration: Duration) -> BoxFuture<()>;
 }
 
-/// The Harness's performers: one for each chat, tool-call, and timer
-/// effect. The loop answers a `Vfs` effect inline and has no performer
-/// for it.
+/// The Harness's performers: one for chat effects, one for tool-call and
+/// render effects, and one for timer effects. The loop answers a `Vfs`
+/// effect inline and has no performer for it.
 ///
 /// Shared handles, so the loop can move a performer into the future it
 /// starts for each effect while the bundle stays whole.
@@ -128,7 +140,7 @@ pub trait Timer: Send + Sync {
 pub struct Performers {
     /// Performs `Chat` effects.
     pub broker: Arc<dyn InferenceBroker>,
-    /// Performs `ToolCall` effects.
+    /// Performs `ToolCall` and `Render` effects.
     pub tool: Arc<dyn ToolPerformer>,
     /// Performs `Timer` effects.
     pub timer: Arc<dyn Timer>,

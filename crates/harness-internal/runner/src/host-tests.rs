@@ -2,7 +2,9 @@
 //! registered Pack, the built-in included, and stores a construct failure
 //! as unavailable; and the snapshot's requirements, roster, catalog,
 //! preludes, and calls. The pick of each run's Packs and the ready wait
-//! over them sit in the `pick` child module.
+//! over them sit in the `pick` child module, and the snapshot's renders
+//! and its routing of a call the catalog lacks in the `render` child
+//! module.
 
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
@@ -21,6 +23,8 @@ use crate::performers::ToolPerformer;
 
 #[path = "host-tests-pick.rs"]
 mod pick;
+#[path = "host-tests-render.rs"]
+mod render;
 
 /// A Host-wide service a fixture's `construct` reads.
 const BACKEND: ServiceKey<str> = ServiceKey::new("tests/backend");
@@ -70,8 +74,8 @@ impl Pack for Listed {
 }
 
 /// Builds a [`Listed`] from a configuration whose `tools` is a list of
-/// `{ id, survives_stop }` tool entries, taking each id as given, and
-/// records the Pack id in [`BUILT`] when the Host provides it.
+/// `{ id }` tool entries, taking each id as given, and records the Pack
+/// id in [`BUILT`] when the Host provides it.
 #[expect(
     clippy::needless_pass_by_value,
     clippy::unnecessary_wraps,
@@ -85,19 +89,26 @@ fn listed(
     if let Some(built) = services.get(&BUILT) {
         built.lock().unwrap().push(name.to_string());
     }
-    let mut tools = Vec::new();
-    for entry in config["tools"].as_array().into_iter().flatten() {
-        let id = ToolId::parse(entry["id"].as_str().unwrap()).unwrap();
-        let schema = json!({ "type": "object", "properties": {} });
-        let info = ToolInfo::new(id, "A listed tool.", schema)
-            .survives_stop(entry["survives_stop"].as_bool().unwrap_or(false));
-        tools.push(info);
-    }
+    let tools = config["tools"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .map(|entry| listed_tool(entry["id"].as_str().unwrap()))
+        .collect();
     Ok(Arc::new(Listed {
         name: name.clone(),
         tools,
         ready: config["ready"].as_str().map(str::to_owned),
     }))
+}
+
+/// The tool `id` as a [`Listed`] Pack lists it.
+fn listed_tool(id: &str) -> ToolInfo {
+    ToolInfo::new(
+        ToolId::parse(id).unwrap(),
+        "A listed tool.",
+        json!({ "type": "object", "properties": {} }),
+    )
 }
 
 /// Builds a [`Listed`] with one `<name>/use` tool, failing when the Host
@@ -474,21 +485,4 @@ async fn a_call_to_a_pack_the_run_cannot_use_fails_naming_the_tool() {
         .await
         .expect_err("the run lacks the Pack's needs");
     assert!(error.to_string().contains("needy/use"), "{error}");
-}
-
-#[test]
-fn survives_stop_answers_from_the_runs_snapshot_of_tool_info() {
-    let config = json!({ "tools": [
-        { "id": "kit/ask", "survives_stop": true },
-        tool("kit/fetch"),
-    ] });
-    let host = host(&[(info("runvil/kit"), config)]);
-    let (run, _requirements) = begin(&host, HostServices::new(), BTreeMap::new(), &prompt(""));
-    let survives = |id: &str| run.survives_stop(&ToolId::parse(id).unwrap());
-    assert!(survives("kit/ask"));
-    assert!(!survives("kit/fetch"));
-    assert!(
-        !survives("other/ask"),
-        "a tool the run lacks does not survive"
-    );
 }

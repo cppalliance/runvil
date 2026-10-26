@@ -28,8 +28,9 @@ pub enum ToolOutputKind {
 }
 
 /// One tool bound under the name its caller reaches it by, holding the
-/// tool's data - its schema, description, output kind, and whether it
-/// lists tools - and never its implementation.
+/// tool's data - its schema, description, output kind, whether it lists
+/// tools, and whether a stop leaves its calls running - and never its
+/// implementation.
 ///
 /// Run-time execution (schema preparation, script dispatch) reads the
 /// binding alone; a call is issued as an effect naming the identity, and
@@ -52,12 +53,15 @@ pub struct ToolBinding {
     /// Whether the tool's output lists tools, which a script's call
     /// receives as plain text.
     describes_tools: bool,
+    /// Whether a stop leaves a call to the tool in flight.
+    survives_stop: bool,
 }
 
 impl ToolBinding {
     /// Binds `alias` to the tool `info` describes: the description is the
     /// tool's own, the output kind follows the tool info's
-    /// structured-output flag, and the listing flag is the tool info's.
+    /// structured-output flag, and the listing and stop flags are the tool
+    /// info's.
     #[must_use]
     pub fn from_info(alias: &str, info: &ToolInfo) -> Self {
         Self {
@@ -71,6 +75,7 @@ impl ToolBinding {
                 ToolOutputKind::Plain
             },
             describes_tools: info.describes_tools,
+            survives_stop: info.survives_stop,
         }
     }
 
@@ -109,6 +114,12 @@ impl ToolBinding {
     #[must_use]
     pub fn describes_tools(&self) -> bool {
         self.describes_tools
+    }
+
+    /// Returns whether a stop leaves a call to the tool in flight.
+    #[must_use]
+    pub fn survives_stop(&self) -> bool {
+        self.survives_stop
     }
 }
 

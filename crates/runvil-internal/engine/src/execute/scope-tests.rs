@@ -86,21 +86,24 @@ fn web(static_set: Vec<ToolInfo>, dynamic_set: Vec<ToolInfo>) -> Vec<PackToolSet
 
 #[test]
 fn rule_one_binds_each_tool_under_its_wire_name_and_keeps_a_catalog_ids_flags() {
-    let search = info("web/search").structured(true).describes_tools(true);
+    let search = info("web/search")
+        .structured(true)
+        .describes_tools(true)
+        .survives_stop(true);
     let fetch = info("web/fetch").wire_name("fetch");
     let tools = catalog([search.clone(), fetch.clone()]);
     let rendered = web(
         vec![
             info("web/search").wire_name("find"),
-            fetch.clone(),
-            info("web/only").structured(true),
+            fetch.clone().survives_stop(true),
+            info("web/only").structured(true).survives_stop(true),
         ],
         Vec::new(),
     );
     let offers = [OfferedTool::Catalog(search), OfferedTool::Catalog(fetch)];
     let offers = SectionOffers::static_first(&offers, &[]);
     let frozen = merge_tool_sets(&offers, rendered, &tools).expect("the sets merge");
-    let bound: Vec<(&str, String, ToolOutputKind, bool)> = frozen
+    let bound: Vec<(&str, String, ToolOutputKind, bool, bool)> = frozen
         .static_set
         .iter()
         .map(|binding| {
@@ -109,6 +112,7 @@ fn rule_one_binds_each_tool_under_its_wire_name_and_keeps_a_catalog_ids_flags() 
                 binding.id().to_string(),
                 binding.output_kind(),
                 binding.describes_tools(),
+                binding.survives_stop(),
             )
         })
         .collect();
@@ -119,19 +123,22 @@ fn rule_one_binds_each_tool_under_its_wire_name_and_keeps_a_catalog_ids_flags() 
                 "find",
                 "web/search".to_owned(),
                 ToolOutputKind::Structured,
+                true,
                 true
             ),
             (
                 "fetch",
                 "web/fetch".to_owned(),
                 ToolOutputKind::Plain,
+                false,
                 false
             ),
             (
                 "web_only",
                 "web/only".to_owned(),
                 ToolOutputKind::Structured,
-                false
+                false,
+                true
             ),
         ],
         "a renamed catalog tool keeps the catalog's flags, a set wire name is used, \
