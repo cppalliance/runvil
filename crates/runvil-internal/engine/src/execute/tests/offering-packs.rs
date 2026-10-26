@@ -139,7 +139,7 @@ fn two_sections_that_offer_one_pack_each_route_a_model_call_by_their_own_sets() 
             tool: ToolId::parse("kit/a").expect("valid id"),
             alias: "kit_a".to_owned(),
             args: json!({ "value": "from a" }),
-            origin: ToolCallOrigin::new(EXECUTION, "A", ToolCaller::Model),
+            origin: model_origin("A"),
         }],
         "only A's call reaches the catalog tool"
     );

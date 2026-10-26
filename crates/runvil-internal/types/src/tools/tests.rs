@@ -192,6 +192,30 @@ fn a_tool_call_origin_keeps_its_logged_shape() {
 }
 
 #[test]
+fn a_tool_call_origin_logged_before_entry_and_model_existed_reads_both_as_absent() {
+    use super::ToolCallOrigin;
+    let line = r#"{"execution":"run-1","section":"Chat","caller":"script"}"#;
+    let origin: ToolCallOrigin =
+        serde_json::from_str(line).expect("an origin from before the fields deserializes");
+    assert_eq!(
+        (origin.entry.as_deref(), origin.model.as_deref()),
+        (None, None),
+        "absent fields read as none"
+    );
+    assert_wire(&origin, line);
+}
+
+#[test]
+fn a_tool_call_origin_naming_its_entry_and_model_logs_both_after_its_caller() {
+    use super::{ToolCallOrigin, ToolCaller};
+    let origin = ToolCallOrigin::new("run-1", "Chat", ToolCaller::Model)
+        .with_entry("0.1")
+        .with_model("test-model");
+    let line = r#"{"execution":"run-1","section":"Chat","caller":"model","entry":"0.1","model":"test-model"}"#;
+    assert_wire(&origin, line);
+}
+
+#[test]
 fn catalog_lookup_matches_the_whole_tool_id() {
     let catalog = ToolCatalog::new([inspect_info()]).expect("unique catalog");
 

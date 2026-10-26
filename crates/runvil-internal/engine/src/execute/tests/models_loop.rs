@@ -5,9 +5,9 @@
 //! `models.compact`, adhoc and bound tools, the tool list the first loop
 //! round renders, explicit-handle calls on a
 //! frozen binding, and the atomic append of a tool-call batch. The shared
-//! loop fixtures (`loop_models`, `loop_scenario`, `catalog_scenario`,
-//! `LOOP_TO_TEXT`, and the `loop_events` filter) sit here for every
-//! loop-driven sibling.
+//! loop fixtures (`loop_models`, `loop_model_name`, `loop_scenario`,
+//! `catalog_scenario`, `LOOP_TO_TEXT`, and the `loop_events` filter) sit
+//! here for every loop-driven sibling.
 //! The compactor argument's tests sit in `models_loop_compactors`; the
 //! loop's exit rules in `exit_rules`; its cap, scope gate, and
 //! result-record trust in `tool_loop`.
@@ -36,6 +36,19 @@ pub(super) fn loop_models() -> ModelSet {
         ],
         Some("writer".to_owned()),
     )
+}
+
+/// The name a tool call's origin gives a round on the loop model bound
+/// under `alias`: the name part of the model's id, which also holds a
+/// server namespace.
+#[track_caller]
+pub(super) fn loop_model_name(alias: &str) -> String {
+    loop_models()
+        .binding(alias)
+        .expect("the loop models bind the alias")
+        .id()
+        .name()
+        .to_owned()
 }
 
 /// A run of `source` over the loop models, unprepared, so the run starts

@@ -288,6 +288,7 @@ The run keeps one Lua-facing catalog by id, and everything model-facing is built
   - The run log gains the render effect and its answer. `EffectRecord::Render` holds the binding's `alias`, as `EffectRecord::Chat` does, plus the section entry id and the offered ids. `AnswerRecord::Render` holds the full rendered `ToolInfo`, because `EffectRecord::Chat` keeps only tool names. Adhoc and discovery tools join later, inside the Engine, so the answer does not hold them.
   - JSON written before the new optional fields existed reads unchanged, and each new field is skipped when absent.
   - `EffectRecord::ToolCall` leaves `survives_stop` out, as `EffectRecord::Chat` leaves out the options it derives from the binding: the run catalog and the render's `AnswerRecord` already give it.
+  - Stale docs are fixed where they are found, never deferred, because stale docs mislead the models that read them. When a step finds a doc comment, a code comment, or a guide passage that is wrong or out of date, whether or not its own change made it so, it fixes it: in the step's own commit when the text lives in that step's repository, and otherwise by naming the file and the passage in its return, so the session fixes it in the other repository before the step's commit message is written.
   - Failure, trust, and refusal behavior is as the Functional Specification states.
 
 </implementation-contract>
@@ -390,6 +391,8 @@ Each work item ships its tests in the same commit. Unit tests pin the new types 
   - Each set places a Pack's tools together at that Pack's first offer, which changes the order the model sees when a section interleaves Packs. The user accepted the change in review over keeping each catalog tool at its own offer position, which needs a special case for a pass-through render.
   - A script call reports the tool's id as its alias, because wire names belong to a section's model while a script names tools by id. Settled in review.
   - Each discovery refusal reports `TOOL_CALL_FAILED` with a trusted `ToolResult`, as a failed model call reports its failure, and a search with no match returns an empty array. Settled in review.
+  - Stale docs are fixed in the step that finds them, in either repository, never deferred. User: "fix the docs whenver you find a problem. dont leave it for later. stale docs confuses models".
+  - A pre-existing intermittent failure in `gateway-logging` (`a_protected_producer_times_out_into_preallocated_loss_accounting`: on Windows a condvar timeout can report before the producer's deadline) blocked verification in steps 3 and 10, so its fix landed as an explicit prerequisite commit below step 10, outside the numbered steps: "Reject a blocked log producer only after its deadline".
   - The round's model name is recorded on the message list when the round is committed and read from the calling frame, because the list already keeps its last send and a section runs one loop at a time. `ChatAnchor` is the wrong store: `settle` takes the in-flight model inside `accept_chat`, before the calls are issued, and `measured` keeps the id only when the provider reported usage. The user chose the message list in review, over threading the name through the loop.
   - Before the merge, offers are deduped by id, and every rule that compares wire names runs in the merge, because a render may rename a tool and avoid a clash. A Dynamic Set tool is dropped for sharing an id with the Static Set, never for sharing a name, so a name clash across the sets fails the merge, even a static adhoc tool beside a dynamically offered Pack tool, which today is skipped quietly. The user chose these moves, the last in review.
   - Every tool call's origin names its section entry, and `render` receives the same entry id, so a Pack can tie a call to the render that shaped it. The user chose this move, and kept it in review.
@@ -905,7 +908,7 @@ While iterating, run `cargo nextest run --locked -p runvil-lua -p runvil-engine 
 
 <step-9>
 
-### Step 9: Document tools.stats
+### Step 9: Document tools.stats [completed]
 
 - Component: Tool stats
 - Tests:
@@ -923,7 +926,7 @@ Commit in `c:\Users\Vinnie\cursor\runvil-docs`. Read step 8's error text in runv
 
 <step-10>
 
-### Step 10: Name the section entry and the model on tool call origins
+### Step 10: Name the section entry and the model on tool call origins [completed]
 
 - Component: Late rendering
 - Tests:
@@ -951,6 +954,7 @@ A section entry is one execution of a section: re-entering a section, a fan-out 
 - `MessageList::commit` (`crates/runvil-internal/lua/src/messages.rs`), whose one production caller is `prepare_chat` (`crates/runvil-internal/engine/src/execute/scheduler/chat.rs`), records the round binding's `ModelId::name()` beside the last send it already keeps. `messages.rs` is 490 lines against the 500-line ceiling, so keep this record a few lines or split the file.
 - `prepare_catalog_call` (`crates/runvil-internal/engine/src/execute/scheduler/tool_call.rs`) reads both fields from the calling frame. Every call's origin names its section entry; a model call's origin also names the requesting round's model, and a script call's origin leaves the model empty.
 - Do not read the model from `ChatAnchor`: `settle` (`crates/runvil-internal/engine/src/execute/scheduler/chain_record.rs`) takes the in-flight model inside `accept_chat`, before the loop issues the calls, and keeps it on `measured` only when the round reported usage. Do not thread it through `Continuation::Chat`, `ChatResult`, the loop's yields, the request parser, and `CallSite` either. The message list is safe: a section runs one loop or compaction at a time (`LOOP_RUNNING` and `COMPACT_RUNNING`, `crates/runvil-internal/lua/src/models_loop.rs`), so no other round commits to the list between a round's answer and the issue of its calls, even when an adhoc handler runs `models.infer`. The name is the binding's, which matches the `ModelInfo` that `render` receives; the provider-reported model can differ.
+- Update the `alias` doc comments on `Effect::ToolCall` and `EffectRecord::ToolCall` (`crates/runvil-internal/engine/src/execute/run/effect.rs`) and on `ToolPerformer::call` (`crates/harness-internal/runner/src/performers.rs`), which still say a script call reports the tool's id only when the run could not offer the tool: since step 3 a model call reports its wire name and every script call reports its id.
 - Regenerate `crates/runvil/public-api.txt` with `Remove-Item Env:CARGO_BUILD_WARNINGS -ErrorAction SilentlyContinue; cargo +nightly-2026-09-05 xtask api --bless`, because `ToolCallOrigin` is in the facade.
 
 Tests to add:
@@ -1011,7 +1015,6 @@ Drivers and hand-stepped tests:
 
 - The exhaustive effect drivers fail to compile until they handle `Effect::Render`, and each answers it with the offered tools unchanged: the engine rigs `crates/runvil-internal/engine/src/test_support.rs` and `crates/runvil-internal/engine/src/test_support/scenario-driving.rs`, the facade's `crates/runvil/tests/suite/support/scenario.rs` and `crates/runvil/examples/greeter.rs`, and the Harness effect loop `crates/harness-internal/runner/src/effect_loop.rs`, whose arm stays a few lines until step 12 replaces it. `effect_loop.rs` is 481 lines, so split it the way `effect_loop-flight.rs` is split if the arm does not fit.
 - Drivers with catch-all arms still compile but would answer a render `Dropped` or panic, and tests that step a run by hand expect a Chat effect first. Since step 3 every test-support tool is in the catalog, so each such test reaches the render. Update every one that runs a section with catalog offers to expect the render effect first: `crates/harness-gateway-client/src/wire/request-tests.rs`, and in `crates/runvil-internal/engine/src/execute/tests/`, `rounds.rs`, `chat_record_rebuild.rs`, `parallel_tool_calls.rs`, `parallel_tool_calls-withdrawn.rs`, and `models_loop_contract-rounds.rs`. A render effect takes a provenance sequence number, so tests that pin later effect ids in runs with catalog offers may shift.
-- Update the `alias` doc comments on `Effect::ToolCall` and `EffectRecord::ToolCall`, wherever the record types now live, which still say a script call reports the tool's id only when the run could not offer the tool: since step 3 a model call reports its wire name and every script call reports its id.
 - Regenerate `crates/runvil/public-api.txt` with `Remove-Item Env:CARGO_BUILD_WARNINGS -ErrorAction SilentlyContinue; cargo +nightly-2026-09-05 xtask api --bless`.
 
 Tests to add:
@@ -1057,7 +1060,7 @@ While iterating, run `cargo nextest run --locked -p runvil-model-client -p runvi
 
 The Harness now answers the render effect by calling `Pack::render`, and each tool call holds the one flag the Harness reads, `survives_stop`, from the binding of the section that made it. A Harness Pack is a Pack the Harness serves, whose tools are in the run catalog. A model-only tool is one that appears only in a render's answer: Lua cannot see or call it, and `tools.stats` counts it only under its Pack.
 
-- `ToolPerformer` (`crates/harness-internal/runner/src/performers.rs`) gains `fn render(&self, entry: String, model: ModelInfo, offered: Vec<PackToolSets<ToolInfo>>) -> BoxFuture<Vec<PackToolSets<ToolInfo>>>`, whose default passes every tool through, and loses `survives_stop`; `call()` and `max_in_flight()` stay. Its futures are `'static`, so an override clones each `Arc<dyn Pack>` and owns its inputs. Reword `call`'s doc on `alias`, which still says the id stands in only when the run could not offer the tool: since step 3 a model call's alias is its wire name and a script call's is its id.
+- `ToolPerformer` (`crates/harness-internal/runner/src/performers.rs`) gains `fn render(&self, entry: String, model: ModelInfo, offered: Vec<PackToolSets<ToolInfo>>) -> BoxFuture<Vec<PackToolSets<ToolInfo>>>`, whose default passes every tool through, and loses `survives_stop`; `call()` and `max_in_flight()` stay. Its futures are `'static`, so an override clones each `Arc<dyn Pack>` and owns its inputs.
 - `HostRunContext` (`crates/harness-internal/runner/src/host-run.rs`) overrides `render`, calling each usable Pack's `render` once per non-empty set with a `RenderContext` that holds the section entry id and the round's `ModelInfo`, and answering every Pack asked, in the order asked.
 - The effect loop (`crates/harness-internal/runner/src/effect_loop.rs`) performs `Effect::Render` inside the effect's own future, in place of step 11's pass-through arm, passing `binding.render_info()` to the performer, so cancellation and a panic behave as for a tool call: a panicking `render` answers `Dropped`. `effect_loop.rs` is 481 lines, so keep the arm short or split the file the way `effect_loop-flight.rs` is split.
 - `ToolBinding` (`crates/runvil-internal/lua/src/handles.rs`) gains `survives_stop`, and `Effect::ToolCall` gains `survives_stop`, taken from the binding the call resolved to, which the effect loop reads when the call is issued. The merge sets the binding's flag per section: a catalog id keeps the catalog's `survives_stop`, and a model-only tool's is whatever that section's render returns. `EffectRecord::ToolCall` leaves the flag out, as `EffectRecord::Chat` leaves out the options it derives from the binding, because the run catalog and the render's `AnswerRecord` already give it.

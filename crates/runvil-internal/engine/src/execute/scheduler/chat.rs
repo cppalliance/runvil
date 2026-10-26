@@ -175,7 +175,7 @@ impl Scheduler {
             .anchor
             .sending(binding.id().clone(), conversation.clone());
         let round = self.number_round(ReplyOrigin::Chat);
-        let (after, keep) = list.commit(round.id, &conversation);
+        let (after, keep) = list.commit(round.id, binding.id().name(), &conversation);
         let effect = Effect::Chat {
             options: binding.completion_options(),
             binding,

@@ -50,7 +50,8 @@ impl LuaModelHandle {
         self.binding.capabilities()
     }
 
-    /// Returns the caller-facing catalog model id.
+    /// Returns the name of the bound model, without the server namespace
+    /// its id also holds.
     #[must_use]
     fn model_id(&self) -> &str {
         self.binding.id().name()

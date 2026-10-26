@@ -82,8 +82,8 @@ const DEFAULT_MAX_IN_FLIGHT: NonZeroUsize = NonZeroUsize::MIN.saturating_add(9);
 /// Performs a `ToolCall` effect: resolves `tool` to an implementation and
 /// calls it with `args`, lending it the call's `access` and `origin`.
 pub trait ToolPerformer: Send + Sync {
-    /// Calls the tool. `alias` is the tool's wire name, or its canonical
-    /// id when the run could not offer the tool, for the performer's own
+    /// Calls the tool. `alias` is the tool's wire name for a model call and
+    /// its canonical id for a script call, for the performer's own
     /// diagnostics; `tool` is the identity it resolves. `access` is the
     /// call's own filesystem access and `origin` says who made the call.
     /// The returned future owns both until it finishes, and drops them

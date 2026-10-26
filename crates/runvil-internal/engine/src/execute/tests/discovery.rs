@@ -9,7 +9,7 @@ use runvil_parser::test_support::one_section;
 use runvil_types::event::Event;
 
 use super::fixtures::{echo_tool, scoped_tool};
-use super::models_loop::{LOOP_TO_TEXT, catalog_scenario};
+use super::models_loop::{LOOP_TO_TEXT, catalog_scenario, loop_model_name};
 use super::*;
 use crate::execute::run::{EffectRecord, ToolCallOrigin, ToolCaller};
 use crate::test_support::rig::{Rig, RigTrace};
@@ -128,13 +128,20 @@ fn issued_calls(rig: &RigTrace) -> Vec<EffectRecord> {
         .collect()
 }
 
+/// The origin of a model call made in the one section's entry.
+fn model_origin() -> ToolCallOrigin {
+    ToolCallOrigin::new(EXECUTION, "Only", ToolCaller::Model)
+        .with_entry("0.1")
+        .with_model(loop_model_name("writer"))
+}
+
 /// A model call of the catalog tool `id` under `alias` with `value`.
 fn model_call(id: &str, alias: &str, value: &str) -> EffectRecord {
     EffectRecord::ToolCall {
         tool: ToolId::parse(id).expect("valid id"),
         alias: alias.to_owned(),
         args: json!({ "value": value }),
-        origin: ToolCallOrigin::new(EXECUTION, "Only", ToolCaller::Model),
+        origin: model_origin(),
     }
 }
 
@@ -301,7 +308,7 @@ fn call_dynamic_tool_without_arguments_calls_its_target_with_an_empty_object() {
             tool: ToolId::parse("tools/lookup").expect("valid id"),
             alias: "tools_lookup".to_owned(),
             args: json!({}),
-            origin: ToolCallOrigin::new(EXECUTION, "Only", ToolCaller::Model),
+            origin: model_origin(),
         }],
         "a missing arguments key reaches the target as an empty object"
     );

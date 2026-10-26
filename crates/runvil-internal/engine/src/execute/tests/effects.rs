@@ -10,7 +10,7 @@ use runvil_types::event::ReplyOrigin;
 use runvil_types::ids::RoundId;
 
 use super::fixtures::echo_tool;
-use super::models_loop::loop_scenario;
+use super::models_loop::{loop_model_name, loop_scenario};
 use super::scheduler::scheduler_scenario;
 use super::*;
 use crate::execute::protocol::VfsOp;
@@ -26,9 +26,10 @@ fn assert_round_trips(records: &[EffectRecord]) {
     }
 }
 
-/// The origin of a call made by `caller` in `section` of the test run.
-fn origin(section: &str, caller: ToolCaller) -> ToolCallOrigin {
-    ToolCallOrigin::new(EXECUTION, section, caller)
+/// The origin of a call made by `caller` in the entry `entry` of
+/// `section` of the test run.
+fn origin(section: &str, entry: &str, caller: ToolCaller) -> ToolCallOrigin {
+    ToolCallOrigin::new(EXECUTION, section, caller).with_entry(entry)
 }
 
 #[test]
@@ -89,7 +90,7 @@ fn a_models_loop_round_issues_one_chat_effect_and_one_tool_call_effect_per_call(
             tool: ToolId::parse("tools/echo").expect("a valid id"),
             alias: "echo".to_owned(),
             args: json!({ "value": "hi" }),
-            origin: origin("Only", ToolCaller::Model),
+            origin: origin("Only", "0.1", ToolCaller::Model).with_model(loop_model_name("writer")),
         },
         "the model's call is one tool_call effect naming the bound identity and the model"
     );
@@ -136,7 +137,7 @@ fn a_script_tools_call_issues_exactly_one_tool_call_effect() {
             tool: ToolId::parse("tools/echo").expect("a valid id"),
             alias: "tools/echo".to_owned(),
             args: json!({ "value": "hi" }),
-            origin: origin("Only", ToolCaller::Script),
+            origin: origin("Only", "0.1", ToolCaller::Script),
         }]
     );
     assert_round_trips(rig.issued());
@@ -162,10 +163,10 @@ fn a_script_tool_call_records_the_section_that_made_it() {
     assert_eq!(
         origins,
         vec![
-            origin("First", ToolCaller::Script),
-            origin("Second", ToolCaller::Script),
+            origin("First", "0.1", ToolCaller::Script),
+            origin("Second", "0.2", ToolCaller::Script),
         ],
-        "each call names the section it was made in"
+        "each call names the section and the entry it was made in"
     );
 }
 

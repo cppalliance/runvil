@@ -264,7 +264,7 @@ fn a_tool_call_made_inside_a_prelude_function_records_a_script_caller() {
             tool: ToolId::parse("tools/echo").expect("a valid id"),
             alias: "tools/echo".to_owned(),
             args: json!({ "value": "hi" }),
-            origin: ToolCallOrigin::new(EXECUTION, "Only", ToolCaller::Script),
+            origin: ToolCallOrigin::new(EXECUTION, "Only", ToolCaller::Script).with_entry("0.1"),
         }]
     );
 }

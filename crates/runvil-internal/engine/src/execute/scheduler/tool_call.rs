@@ -335,8 +335,9 @@ impl Scheduler {
     /// Issues a call under the `binding` its route resolved: the one-time
     /// counts install, the attempt counted under the tool's id, the call's
     /// identity forked from the chain's access, and the issued effect,
-    /// whose origin names the model as caller for a `Model` or `Batch`
-    /// site and the script for a `Script` site. The answer's rules - the
+    /// whose origin names the frame's section entry and the caller: the
+    /// model, with the requesting round's model, for a `Model` or `Batch`
+    /// site, and the script for a `Script` site. The answer's rules - the
     /// model-issued body under the call id, else the script body
     /// classified by the binding's declared output kind - and a `Batch`
     /// site's slot are the continuation's, applied when the answer lands.
@@ -358,26 +359,31 @@ impl Scheduler {
         let counted = binding.id().to_string();
         counts.ensure(&counted)?;
         counts.increment(&counted)?;
+        let prompt = self.prompt();
+        let chain = &self.chains[id.index()];
+        let frame = chain.frame()?;
+        // The list's last send is the requesting round's: a section runs
+        // one loop at a time, so no other round commits to the list
+        // between a round's answer and the issue of its calls.
+        let (caller, model) = match &site {
+            CallSite::Script { .. } => (ToolCaller::Script, None),
+            CallSite::Model { .. } | CallSite::Batch { .. } => {
+                (ToolCaller::Model, frame.vm()?.messages().last_model())
+            }
+        };
+        let mut origin = ToolCallOrigin::new(chain.ctx.execution(), chain.section_name(), caller)
+            .with_entry(frame.entry_id()?);
+        origin.model = model;
         // The call runs under an identity of its own, forked from the
         // chain's, so two calls in flight at once never share one sequence
         // of claims. A refused fork fails the call at its caller, and the
         // counts already taken stay taken.
-        let prompt = self.prompt();
-        let chain = &self.chains[id.index()];
         let access = detail::access_spawn(
             chain.access()?,
             prompt_origin(&prompt, &binding.id().to_string(), chain.blocks(&prompt)),
         )
         .map_err(Error::store)?;
         let exec = detail::access_id(&access);
-        let origin = ToolCallOrigin::new(
-            chain.ctx.execution(),
-            chain.section_name(),
-            match &site {
-                CallSite::Script { .. } => ToolCaller::Script,
-                CallSite::Model { .. } | CallSite::Batch { .. } => ToolCaller::Model,
-            },
-        );
         let effect = Effect::ToolCall {
             tool: binding.id().clone(),
             alias: binding.alias().to_owned(),

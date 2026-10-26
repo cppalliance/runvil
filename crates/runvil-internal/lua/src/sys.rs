@@ -153,7 +153,8 @@ fn enrich_sys_field(sys: &Json, key: &str, value: Json) -> Json {
     }
 }
 
-/// Returns a copy of `sys` with the bound catalog model id under `"model"`.
+/// Returns a copy of `sys` with the name of the bound model under
+/// `"model"`, without the server namespace its id also holds.
 #[must_use]
 pub fn enrich_sys_model(sys: &Json, binding: &ModelBinding) -> Json {
     enrich_sys_field(sys, "model", Json::String(binding.id().name().to_owned()))
