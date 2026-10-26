@@ -4,31 +4,31 @@ overview: "Make tools.offer_dynamic work through two Engine tools, GetDynamicToo
 todos:
   - id: reserve-dynamic
     content: Reserve the Pack id dynamic the way adhoc is reserved (registry, parser, RunContext::prepare) from one const list in runvil-types with a PackId::is_reserved check, replacing Requirements::reserved_adhoc with the reserved ids a run names, with tests
-    status: pending
+    status: completed
   - id: render-hook
     content: Add Pack::render(cx, offered) with a RenderContext and a pass-through default, re-export RenderContext, ModelInfo, ModelId, and ThinkingMode from runvil-plugin, add ToolInfo::wire_name, which a Pack may also set in Pack::tools(), and reserve RV_PACK_RENDER as verb 8 in abi.rs, with tests. It lands before section-bindings, whose test support names tools through wire_name
-    status: pending
+    status: completed
   - id: section-bindings
     content: Add the Static Set and Dynamic Set terms to AGENTS.md in their own commit. In the behavior commit, resolve each call once in tool_route, hold the run's ToolCatalog in ToolSet with vendors per Pack, drop ToolBinding's vendor and derive it at report sites, dedupe offers by id only and move every wire-name rule into the section's merge, check every tool through tool_schema_new, build both sets as ToolBinding lists on RenderedTools in place of dispatch and Advertised, project Chat schemas from the Static Set when the Chat effect is issued, read the frozen sets through the frame in place of Chain.advertised, use catalog wire names for global_exists and the tools.offer hint, and move Scenario::offer and the other test-support offerings into the catalog under wire_name, with tests and docs
-    status: pending
+    status: completed
   - id: discovery-tools
     content: Add GetDynamicTools and CallDynamicTool as one discovery route inside tool_route's single lookup, in a tool_call-discovery child module, for model calls only, reusing prepare_adhoc_call and prepare_catalog_call, and let the scope gate pass Dynamic Set names so a direct call gets refusal text pointing to CallDynamicTool, with tests and docs
-    status: pending
+    status: completed
   - id: stats
     content: Replace tools.calls with the read-only tools.stats table (total, packs, tools), computed in Lua from the one id-keyed ToolCallCounts map with discovery and model-only ids kept out of the tools view, with tests and docs
-    status: pending
+    status: completed
   - id: caller-origin
     content: Add the section entry id, read through a new SectionContext accessor that the render effect reuses, and the round's model name to ToolCallOrigin, both read from the calling frame. Record the model name on the message list when a round is committed, not on ChatAnchor, which drops the round's model inside accept_chat before the calls are issued, with tests
-    status: pending
+    status: completed
   - id: render-effect
     content: Add the Render effect carrying the resolved ModelBinding, its answer, both records, and Continuation::Render holding only that binding, after moving effect.rs's record types into a private child that also defines PackToolSets, and re-export PackToolSets up to the facade. ModelBinding carries the catalog ModelInfo from role fill with a Never fallback. At a section's first model call park the chain before the projection, the precheck, the attach, and the commit, recover the list and offers from the parked frame on the answer, check the answer, merge, attach, and dispatch the chat again. The test rigs and the Harness pass tools through, and every test that steps a run by hand over catalog offers expects the render effect first, with tests
-    status: pending
+    status: completed
   - id: render-harness
     content: Add ToolPerformer::render and have HostRunContext render each offered Pack once per non-empty set, move survives_stop onto Effect::ToolCall in place of ToolPerformer::survives_stop and drop it from the eight test doubles, and route every Harness call by its id's Pack, rewording the registry comment and the host-run.rs module doc that say a call reaches only a listed tool, with tests and docs
-    status: pending
+    status: completed
   - id: fmt-debug
     content: Spell the Debug trait as fmt::Debug in every Rust file, leaving every other std::fmt path as written, and add a build-xtask structural check that refuses the std::fmt::Debug spelling, with tests
-    status: pending
+    status: completed
 isProject: false
 ---
 
