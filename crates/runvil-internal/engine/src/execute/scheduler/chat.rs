@@ -10,6 +10,10 @@
 //! for the chain's last measured round when the request extends it), and
 //! issues the single gateway round as a `Chat` effect - the same effect a
 //! nested `infer` issues, over the section's `messages` and those schemas.
+//! A first round whose offers name a catalog tool issues a `Render`
+//! effect before the merge instead, and dispatches again under the same
+//! binding once the render's answer is merged
+//! ([`Scheduler::accept_render`]).
 //! The driver classifies the answered completion into the round's answer
 //! when it arrives ([`Scheduler::accept_chat`]), emitting the round's
 //! events - the turn advance, the debug capture pair, turn completed or
@@ -27,15 +31,15 @@ use runvil_types::emitter::Emitter;
 use runvil_types::event::{ReplyOrigin, lifecycle};
 use runvil_types::ids::RoundId;
 use runvil_types::metrics::ToolCallEvent;
+use runvil_types::tools::ToolInfo;
 
 use crate::execute::protocol::{Answer, ChatOutcome, ChatResult};
-use crate::execute::run::Effect;
-use crate::execute::scope::{offered_packs, prepare_effective_scope, tool_schema};
+use crate::execute::run::{Effect, PackToolSets};
+use crate::execute::scope::{SectionOffers, offered_packs, prepare_effective_scope, tool_schema};
 use crate::execute::turn::{Served, advance_turn, report_model_turn};
 use crate::lua::{
-    MessageList, OverflowReason, RenderedTools, ToolSet, current_dynamic_set,
-    current_tool_bindings, output_reserve, precheck, project_messages, resolve_model_binding,
-    wire_name_of,
+    MessageList, OverflowReason, RenderedTools, ToolSet, output_reserve, precheck,
+    project_messages, resolve_model_binding, wire_name_of,
 };
 use crate::model::{Completion, CompletionErrorKind, CompletionResult, ModelBinding, ToolCall};
 use crate::{Error, Result};
@@ -53,9 +57,9 @@ fn overflow_result(reason: OverflowReason, turn: u32) -> ChatResult {
     }
 }
 
-/// How one `chat` dispatch resolved: a round issued as an effect and
-/// parked on the pending table, or an answer settled without leaving (the
-/// precheck overflow).
+/// How one `chat` dispatch resolved: a round, or the render before it,
+/// issued as an effect and parked on the pending table, or an answer
+/// settled without leaving (the precheck overflow).
 #[derive(Debug)]
 enum ChatDispatch {
     Issued,
@@ -94,9 +98,13 @@ impl Scheduler {
     /// precheck, and the issued effect. The first round to reach the merge
     /// freezes the sets and attaches them before the projection and the
     /// precheck, so a refused first round still fixes them; a round refused
-    /// earlier attaches nothing, and so does a failed merge. The send is
-    /// recorded on the list only once the precheck passes, so a refused
-    /// round leaves the list's last send in place.
+    /// earlier attaches nothing, and so does a failed merge. When that
+    /// round's offers name a catalog tool, it issues the render instead
+    /// and parks the chain on it with the binding, and the render's answer
+    /// merges and dispatches the round again ([`Scheduler::accept_render`]),
+    /// so the round is projected, prechecked, numbered, and recorded once.
+    /// The send is recorded on the list only once the precheck passes, so
+    /// a refused round leaves the list's last send in place.
     fn prepare_chat(
         &mut self,
         id: ChainIndex,
@@ -126,13 +134,21 @@ impl Scheduler {
         let rendered = if let Some(rendered) = list.rendered_tools() {
             rendered
         } else {
-            let (set, runtime, adhoc) = (chain.ctx.tool_set(), vm.tool_runtime(), vm.adhoc_tools());
-            let static_tools = current_tool_bindings(set, runtime, adhoc)?;
-            let dynamic_tools = current_dynamic_set(set, runtime, adhoc, &static_tools)?;
+            let set = chain.ctx.tool_set();
+            let offers = SectionOffers::read(set, vm)?;
+            let offered = offered_packs(&offers);
+            if !offered.is_empty() {
+                let effect = Effect::Render {
+                    entry: frame.entry_id()?.to_owned(),
+                    binding: binding.clone(),
+                    offered,
+                };
+                self.issue(id, effect, Continuation::Render(binding));
+                return Ok(ChatDispatch::Issued);
+            }
             let frozen = prepare_effective_scope(
-                &static_tools,
-                &dynamic_tools,
-                offered_packs(&static_tools, &dynamic_tools),
+                &offers,
+                offered,
                 set.catalog(),
                 emitter.as_ref(),
                 &section,
@@ -187,6 +203,53 @@ impl Scheduler {
         };
         self.issue(id, effect, Continuation::Chat(round.id));
         Ok(ChatDispatch::Issued)
+    }
+
+    /// Applies a section entry's render: merges the rendered tools into
+    /// the entry's frozen sets, attaches them, and dispatches the round
+    /// that issued the render under `binding`, which issues its `Chat`
+    /// effect or answers the chain inline. A failed merge answers the
+    /// parked round with its error and attaches nothing.
+    pub(super) fn accept_render(
+        &mut self,
+        id: ChainIndex,
+        binding: ModelBinding,
+        rendered: Vec<PackToolSets<ToolInfo>>,
+    ) {
+        match self.merge_render(id, rendered) {
+            Ok(list) => self.dispatch_chat(id, &list, Some(binding)),
+            Err(error) => self.answer_inline(id, Answer::Chat(Err(error))),
+        }
+    }
+
+    /// The fallible half of a render's application: the merge, over the
+    /// offers read back from the parked frame's VM, which runs no Lua
+    /// while the chain is parked, so they are the offers the render was
+    /// asked about, and the attach to the VM's one list, the list the
+    /// round named. Returns that list.
+    ///
+    /// # Errors
+    /// Returns the merge's error, or [`Error::Internal`] when the parked
+    /// chain has lost its frame.
+    fn merge_render(
+        &self,
+        id: ChainIndex,
+        rendered: Vec<PackToolSets<ToolInfo>>,
+    ) -> Result<MessageList> {
+        let chain = &self.chains[id.index()];
+        let frame = chain.frame()?;
+        let vm = frame.vm()?;
+        let set = chain.ctx.tool_set();
+        let frozen = prepare_effective_scope(
+            &SectionOffers::read(set, vm)?,
+            rendered,
+            set.catalog(),
+            frame.reporting_handles().emitter.as_ref(),
+            chain.section_name(),
+        )?;
+        let list = vm.messages().clone();
+        list.attach_rendered_tools(frozen);
+        Ok(list)
     }
 
     /// Classifies one arrived chat round into the chain's answer, emitting

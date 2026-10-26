@@ -42,7 +42,8 @@ mod serial;
 use driving::Answers;
 pub(crate) use driving::{Driving, Record, TestStore, Trace};
 pub(crate) use serial::{
-    Batching, chat_answer, drive_batched, echo_chat, infer_prompt, only_effect, round_trip, text_of,
+    Batching, chat_answer, drive_batched, echo_chat, infer_prompt, only_effect, pass_through,
+    round_trip, text_of,
 };
 
 /// The run name a test that does not choose one runs under.

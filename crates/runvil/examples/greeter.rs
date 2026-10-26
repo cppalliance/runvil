@@ -37,9 +37,9 @@ pub const GREETER: &str = concat!(
 );
 
 /// Answers a store effect from the run's store, the model with `hi there`,
-/// the shout tool with the trusted `HI THERE`, and a timer as fired at
-/// once. A caller with a real clock waits `seconds` before answering a
-/// timer.
+/// a render with the offered tools unchanged, the shout tool with the
+/// trusted `HI THERE`, and a timer as fired at once. A caller with a real
+/// clock waits `seconds` before answering a timer.
 #[must_use]
 pub fn answer(effect: Effect) -> EffectAnswer {
     match effect {
@@ -48,6 +48,7 @@ pub fn answer(effect: Effect) -> EffectAnswer {
             let reply = CompletionResult::Text("hi there".to_owned());
             EffectAnswer::Chat(Completion::from_result(reply, "canned").map(Box::new))
         }
+        Effect::Render { offered, .. } => EffectAnswer::Render(offered),
         Effect::ToolCall { .. } => EffectAnswer::ToolCall(Ok(ToolOutput::trusted("HI THERE"))),
         Effect::Timer { .. } => EffectAnswer::Timer,
     }

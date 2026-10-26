@@ -33,10 +33,11 @@ type Offered = (&'static str, &'static str, Value);
 ///
 /// The section offers every tool in `offered` as `example/test/<name>`, so
 /// the model sees it as `example_test_<name>`, and runs `models.loop` over
-/// one user message. The first `Chat` effect is answered with a call to the
-/// first tool, `call_1` with `{"value":"one"}`; the tool call with the
-/// trusted output `echoed: one`; and the second `Chat` effect, recorded
-/// here, with the text `done`.
+/// one user message. The section's render is answered with its tools
+/// unchanged; the first `Chat` effect with a call to the first tool,
+/// `call_1` with `{"value":"one"}`; the tool call with the trusted output
+/// `echoed: one`; and the second `Chat` effect, recorded here, with the
+/// text `done`.
 fn tool_round(offered: &[Offered]) -> Round {
     let mut offers = String::new();
     for (name, _, _) in offered {
@@ -102,6 +103,7 @@ fn tool_round(offered: &[Offered]) -> Round {
                     });
                     EffectAnswer::Chat(Completion::from_result(reply, "m").map(Box::new))
                 }
+                Effect::Render { offered, .. } => EffectAnswer::Render(offered),
                 Effect::ToolCall { .. } => {
                     EffectAnswer::ToolCall(Ok(ToolOutput::trusted("echoed: one")))
                 }

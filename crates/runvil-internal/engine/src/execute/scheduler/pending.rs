@@ -13,6 +13,7 @@ use runvil_vfs::ExecId;
 
 use crate::execute::protocol::VfsOp;
 use crate::lua::{ScriptReport, ToolBinding};
+use crate::model::ModelBinding;
 
 use super::ChainIndex;
 
@@ -29,6 +30,14 @@ pub(super) enum Continuation {
     /// model turn. The round's id waits here for the answer, whose events
     /// it stamps.
     Chat(RoundId),
+    /// The render a section entry's first `chat` round issued: the
+    /// rendered tools are merged into the entry's frozen sets, with the
+    /// offers and the list read back from the parked frame, and the round
+    /// is then dispatched under the binding held here. Only the binding
+    /// waits here, because a handle round's binding exists nowhere in VM
+    /// state, and resolving the section's model again could pick a
+    /// default another chain set meanwhile.
+    Render(ModelBinding),
     /// A bound tool call: the tool's own output goes through the shared
     /// dispatch body (counts already taken at dispatch, then the
     /// succeeded/failed event, the trust rule, and the `ToolResult`).

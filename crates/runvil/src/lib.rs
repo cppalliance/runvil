@@ -40,6 +40,7 @@ pub mod effect {
     pub use runvil_engine::EffectId;
     pub use runvil_engine::EffectRecord;
     pub use runvil_engine::FailureRecord;
+    pub use runvil_engine::PackToolSets;
     pub use runvil_engine::Round;
     pub use runvil_engine::ToolAnswerRecord;
     pub use runvil_engine::ToolCallOrigin;

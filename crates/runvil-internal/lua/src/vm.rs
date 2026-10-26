@@ -46,7 +46,9 @@ pub use adhoc::AdhocTools;
 pub use inject::InjectFailure;
 pub use run::CoroStep;
 pub(crate) use run::scalar_return;
-pub use state::{current_dynamic_set, current_tool_bindings, resolve_model_binding};
+pub use state::{
+    current_catalog_packs, current_dynamic_set, current_tool_bindings, resolve_model_binding,
+};
 
 /// Default per-VM Lua heap ceiling, matching the executor's `RunLimits`.
 pub(crate) const DEFAULT_LUA_MEMORY_BYTES: usize = 64 * 1024 * 1024;

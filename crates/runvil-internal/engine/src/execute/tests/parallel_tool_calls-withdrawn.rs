@@ -45,11 +45,11 @@ fn echo_run(source: &str) -> Run {
     loop_scenario(source).offer("echo", echo_tool()).into_run()
 }
 
-/// A run of [`CANCELLED_CHILD`] past its first step, with the ids of
-/// Main's `wait` round and Child's loop round.
+/// A run of [`CANCELLED_CHILD`] past its first steps and Child's render,
+/// with the ids of Main's `wait` round and Child's loop round.
 fn cancelled_child() -> (Run, EffectId, EffectId) {
     let mut run = echo_run(CANCELLED_CHILD);
-    let (rounds, withdrawn) = withdrawals(run.step());
+    let (rounds, withdrawn) = step_past_renders(&mut run);
     assert!(
         withdrawn.is_empty(),
         "nothing is withdrawn yet: {withdrawn:?}"
@@ -205,7 +205,7 @@ const CANCELLED_PAIR: &str = "---\nname: loop\ndescription: d\nrunvil: 0\n---\n\
 #[test]
 fn one_step_lists_every_tasks_withdrawn_calls_in_effect_id_order() {
     let mut run = echo_run(CANCELLED_PAIR);
-    let (rounds, _) = withdrawals(run.step());
+    let (rounds, _) = step_past_renders(&mut run);
     let asking = |user: &str| {
         rounds
             .iter()

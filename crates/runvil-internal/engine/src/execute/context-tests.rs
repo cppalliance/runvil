@@ -1,7 +1,9 @@
-//! Tests for `RunContext` construction, forking, and task sequence seeding.
+//! Tests for `RunContext` construction, forking, task sequence seeding,
+//! and the model set a run binds from its filled roles.
 
 use super::*;
-use crate::test_support::scenario::TEST_SEED;
+use crate::model::ThinkingMode;
+use crate::test_support::scenario::{TEST_SEED, test_model_with};
 
 fn test_prompt() -> Prompt {
     let source = concat!(
@@ -117,4 +119,26 @@ fn a_task_fork_reports_into_the_shared_buffer_under_its_own_task() {
     assert_eq!(events[0].provenance().task, TaskId::from(ChainId::root()));
     assert_eq!(events[1].provenance().task, task);
     assert_eq!(events[1].provenance().seq, 0);
+}
+
+#[test]
+fn a_filled_role_binds_with_the_catalog_info_its_render_receives() {
+    let source = concat!(
+        "---\nname: t\ndescription: d\nrunvil: 0\nmodels:\n  writer: {}\n---\n\n",
+        "# Title\n\n## Only\n\ndone\n",
+    );
+    let prompt = Prompt::parse(source, "run-context-test")
+        .0
+        .expect("the test prompt parses");
+    let info =
+        test_model_with("catalog-model", 65_536, ThinkingMode::Switchable).with_provider("acme");
+    let mut ctx = RunContext::new(
+        "run-context-test",
+        TEST_SEED,
+        runvil_types::timestamp::Timestamp::UNIX_EPOCH,
+    );
+    ctx.bind_role_for_test("writer", info.clone());
+    let set = bound::bound_model_set(&prompt, &ctx);
+    let binding = set.binding("writer").expect("the filled role binds");
+    assert_eq!(binding.render_info(), info);
 }

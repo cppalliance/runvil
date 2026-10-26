@@ -9,11 +9,13 @@
 //! the model turn's boundaries and content, the tool call's
 //! succeeded/failed event and `ToolResult` under the trust rule, the store
 //! operation's outcome. A timer's firing completes its
-//! slot and wakes the waiter instead of resuming a chain. A `Dropped`
-//! answer resumes the chain with the cancelled error, whatever it was
-//! parked on. A tool call's answer, of either kind, also ends the call's
-//! identity: what the tool did is joined back into the chain, and the
-//! call's access refuses every later operation.
+//! slot and wakes the waiter instead of resuming a chain, and a render's
+//! answer freezes the section entry's sets and dispatches the round that
+//! issued it. A `Dropped` answer resumes the chain with the cancelled
+//! error, whatever it was parked on; for a render, that is the round's
+//! cancelled answer. A tool call's answer, of either kind, also ends the
+//! call's identity: what the tool did is joined back into the chain, and
+//! the call's access refuses every later operation.
 
 use runvil_types::ids::RoundId;
 use runvil_types::tools::{ToolError, ToolOutput};
@@ -34,12 +36,13 @@ use super::{
 
 /// The cancelled answer for a chain parked on `resume`'s kind of effect:
 /// the protocol variant the chain's shim expects, holding the run's
-/// cancellation error. A timer's drop is applied to its slot and its
-/// waiter instead, before this is reached.
+/// cancellation error, which for a render is the round's chat answer. A
+/// timer's drop is applied to its slot and its waiter instead, before
+/// this is reached.
 fn dropped_answer(resume: &Continuation) -> Answer<Error> {
     match resume {
         Continuation::Infer(_) => Answer::Infer(Err(Error::Interrupted)),
-        Continuation::Chat(_) => Answer::Chat(Err(Error::Interrupted)),
+        Continuation::Chat(_) | Continuation::Render(_) => Answer::Chat(Err(Error::Interrupted)),
         Continuation::ToolCall(_) => Answer::ToolCallResult(Err(Error::Interrupted)),
         // A timer's drop never reaches here; the cancelled store answer
         // is the harmless stand-in should it ever do so.
@@ -53,7 +56,8 @@ impl Scheduler {
     /// under the effect's continuation (emitting the round's events), and
     /// re-queues the chain. A batched tool call's answer fills its slot
     /// instead, and the chain re-queues once the whole batch has landed.
-    /// A timer's firing completes its slot and wakes its waiter instead.
+    /// A timer's firing completes its slot and wakes its waiter instead,
+    /// and a render's answer is applied by [`Scheduler::accept_render`].
     /// A `Dropped` answer is the caller giving the effect up: the chain
     /// resumes with the cancelled error. Every answer
     /// to a tool call, `Dropped` included, first ends the call's identity
@@ -87,6 +91,7 @@ impl Scheduler {
             }
             Continuation::Infer(_)
             | Continuation::Chat(_)
+            | Continuation::Render(_)
             | Continuation::Vfs(_)
             | Continuation::Timer => None,
         };
@@ -101,6 +106,10 @@ impl Scheduler {
             }
             (Continuation::Chat(round), EffectAnswer::Chat(result)) => {
                 self.accept_chat(chain, round, result.map_err(Error::from))?
+            }
+            (Continuation::Render(binding), EffectAnswer::Render(rendered)) => {
+                self.accept_render(chain, binding, rendered);
+                return Ok(());
             }
             (Continuation::ToolCall(call), EffectAnswer::ToolCall(result)) => {
                 Answer::ToolCallResult(self.accept_tool_call(chain, &call, result))
@@ -117,19 +126,38 @@ impl Scheduler {
             (Continuation::Timer, EffectAnswer::Timer) => return self.fire_timer(id),
             (
                 Continuation::Infer(_) | Continuation::Chat(_),
-                EffectAnswer::ToolCall(_) | EffectAnswer::Vfs(_) | EffectAnswer::Timer,
+                EffectAnswer::Render(_)
+                | EffectAnswer::ToolCall(_)
+                | EffectAnswer::Vfs(_)
+                | EffectAnswer::Timer,
+            )
+            | (
+                Continuation::Render(_),
+                EffectAnswer::Chat(_)
+                | EffectAnswer::ToolCall(_)
+                | EffectAnswer::Vfs(_)
+                | EffectAnswer::Timer,
             )
             | (
                 Continuation::ToolCall(_),
-                EffectAnswer::Chat(_) | EffectAnswer::Vfs(_) | EffectAnswer::Timer,
+                EffectAnswer::Chat(_)
+                | EffectAnswer::Render(_)
+                | EffectAnswer::Vfs(_)
+                | EffectAnswer::Timer,
             )
             | (
                 Continuation::Vfs(_),
-                EffectAnswer::Chat(_) | EffectAnswer::ToolCall(_) | EffectAnswer::Timer,
+                EffectAnswer::Chat(_)
+                | EffectAnswer::Render(_)
+                | EffectAnswer::ToolCall(_)
+                | EffectAnswer::Timer,
             )
             | (
                 Continuation::Timer,
-                EffectAnswer::Chat(_) | EffectAnswer::ToolCall(_) | EffectAnswer::Vfs(_),
+                EffectAnswer::Chat(_)
+                | EffectAnswer::Render(_)
+                | EffectAnswer::ToolCall(_)
+                | EffectAnswer::Vfs(_),
             ) => {
                 return Err(Error::internal(
                     "an effect's answer must be of the effect's own kind",

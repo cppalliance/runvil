@@ -8,7 +8,7 @@ use runvil_types::tools::ToolCatalog;
 use super::fixtures::scoped_tool;
 use super::models_loop::{LOOP_TO_TEXT, loop_scenario};
 use super::*;
-use crate::execute::scope::{merge_tool_sets, offered_packs, tool_schema};
+use crate::execute::scope::{SectionOffers, merge_tool_sets, offered_packs, tool_schema};
 use crate::lua::{OfferedTool, ToolSet};
 use crate::model::ToolSchema;
 use crate::test_support::scenario::TEST_SEED;
@@ -34,8 +34,9 @@ fn offering_of(alias: &str, description: &str, tool: &FnTool) -> ToolSet {
 /// The schemas a round advertises when the static offers name `offered`
 /// from `tools`.
 fn advertised(tools: &ToolSet, offered: &[OfferedTool]) -> Vec<ToolSchema> {
-    let frozen = merge_tool_sets(offered, &[], offered_packs(offered, &[]), tools.catalog())
-        .expect("the sets merge");
+    let offers = SectionOffers::static_first(offered, &[]);
+    let frozen =
+        merge_tool_sets(&offers, offered_packs(&offers), tools.catalog()).expect("the sets merge");
     frozen
         .static_set
         .iter()

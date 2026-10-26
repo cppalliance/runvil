@@ -972,7 +972,7 @@ While iterating, run `cargo nextest run --locked -p runvil-types -p runvil-lua -
 
 <step-11>
 
-### Step 11: Render offered Packs through a render effect at the freeze
+### Step 11: Render offered Packs through a render effect at the freeze [completed]
 
 - Component: Late rendering
 - Tests:

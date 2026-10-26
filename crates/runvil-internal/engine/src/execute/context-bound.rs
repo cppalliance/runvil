@@ -54,8 +54,9 @@ fn keyword_name(keyword: ModelKeyword) -> &'static str {
 /// Builds the run's shared model set from the prepared bindings: every
 /// filled role becomes a binding under its label, holding the role's
 /// keyword set (the handle's `capabilities`), the hard-keyword thinking
-/// switch as the frozen invocation, and the model info's provider id when
-/// the catalog names one. Unfilled roles produce no binding:
+/// switch as the frozen invocation, the model info's provider id when
+/// the catalog names one, and the model info itself, which a section
+/// entry's render receives. Unfilled roles produce no binding:
 /// `models.use` on the label fails at run time.
 pub(super) fn bound_model_set(prompt: &Prompt, ctx: &RunContext) -> ModelSet {
     let mut set = ModelSet::default();
@@ -84,7 +85,8 @@ pub(super) fn bound_model_set(prompt: &Prompt, ctx: &RunContext) -> ModelSet {
                 .map(|keyword| keyword_name(*keyword))
                 .map(str::to_owned)
                 .collect(),
-        );
+        )
+        .with_catalog_info(info.clone());
         if let Some(provider) = info.provider() {
             binding = binding.with_provider(provider);
         }

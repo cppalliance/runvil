@@ -299,6 +299,7 @@ impl Driver {
         Ok(match effect {
             Effect::Vfs { access, op } => EffectAnswer::Vfs(perform_vfs_op(&access, op)),
             Effect::Timer { .. } => EffectAnswer::Timer,
+            Effect::Render { offered, .. } => EffectAnswer::Render(offered),
             Effect::Chat { binding, .. } => {
                 let reply = self
                     .replies

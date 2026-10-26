@@ -14,7 +14,7 @@ use crate::execute::tests::tool_call_arm::{ToolRecorder, tool_result_lines};
 use crate::test_support::recording::{
     ReplyReport, ThinkingReport, ToolCallsReport, ToolResultReport,
 };
-use crate::test_support::scenario::{chat_answer, only_effect, text_of};
+use crate::test_support::scenario::{chat_answer, only_effect, pass_through, text_of};
 
 /// Records every observation and every content report as one line, in
 /// order, so a test reads the whole trace a run reports.
@@ -204,6 +204,8 @@ fn a_dropped_model_issued_call_raises_cancelled_at_the_loop_call_site() {
          return tostring(ok) .. ':' .. err.kind .. '|' .. #messages .. '|' .. messages[1].role",
     );
     let mut run = loop_scenario(source).offer("echo", echo_tool()).into_run();
+    let (render, effect) = only_effect(run.step());
+    run.resume(render, pass_through(&effect));
     let (round, effect) = only_effect(run.step());
     assert!(
         matches!(effect, Effect::Chat { .. }),

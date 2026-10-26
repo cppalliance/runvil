@@ -8,6 +8,7 @@
 //! kind. A chat, tool-call, or timer effect's performer future joins the
 //! effects in flight, which the loop polls inside the run's own future: the
 //! loop starts no task, so a run is one future that any executor can drive.
+//! A render's future joins them too and answers with the offered tools.
 //! When an effect's future lands, the loop appends the answer's record and
 //! resumes the run with it, then steps again. A Vfs effect has no future:
 //! the VFS is synchronous by design, so the loop performs the operation
@@ -135,8 +136,8 @@ struct Driver {
     performers: Performers,
     recorder: Arc<dyn RunRecorder>,
     run_id: RunId,
-    /// The chat, tool-call, and timer effects in flight and the tool calls
-    /// waiting for a slot. Dropping the driver drops their futures, so
+    /// The chat, render, tool-call, and timer effects in flight and the
+    /// tool calls waiting for a slot. Dropping the driver drops their futures, so
     /// nothing a performer holds outlives the drive however it ends.
     flights: Flights,
     cancel: CancelHandle,
@@ -321,7 +322,7 @@ impl Driver {
         Ok(())
     }
 
-    /// Puts the performer future of a chat, tool-call, or timer effect in
+    /// Puts the future of a chat, render, tool-call, or timer effect in
     /// flight, where a tool call may wait for a slot, and returns `None`.
     /// The performer is called inside its future, so a performer that
     /// panics as it is called is caught like one that panics as it runs.
@@ -349,6 +350,9 @@ impl Driver {
                     EffectAnswer::Chat(completion)
                 };
                 Box::pin(round)
+            }
+            Effect::Render { offered, .. } => {
+                Box::pin(async move { EffectAnswer::Render(offered) })
             }
             Effect::ToolCall {
                 tool,
