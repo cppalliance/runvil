@@ -4,88 +4,88 @@ overview: "Cleanup Plan from the vibelight scan of runvil-engine: 84 verified fi
 todos:
   - id: w1
     content: "W1: error docs and vestiges (S1-1, S1-2, S1-4, S1-16, S2-18 type doc, S5-3 variant doc, S5-6)"
-    status: pending
+    status: completed
   - id: w2
     content: "W2: run outcome docs (S1-5, S1-15 docs, S5-2 docs, S5-3, V1-1, V1-2)"
-    status: pending
+    status: completed
   - id: w3
     content: "W3: config and limits (S1-7, S1-8, S1-9 internal part, S5-1, S1-10)"
-    status: pending
+    status: completed
   - id: w4
     content: "W4: roster (S1-6)"
-    status: pending
+    status: completed
   - id: w5
     content: "W5: run state (S1-11, S1-12, V3-1, S1-13, V5-1)"
-    status: pending
+    status: completed
   - id: w6
     content: "W6: shim modules (S1-17, S4-1, S4-2, S4-4, S4-5, S5-6 module part)"
-    status: pending
+    status: completed
   - id: w7
     content: "W7: keyword spellings (S1-14)"
-    status: pending
+    status: completed
   - id: w8
     content: "W8: run and effect docs (S2-1, S2-6)"
-    status: pending
+    status: completed
   - id: w9
     content: "W9: scheduler docs (S2-9, S2-10, S2-11, S2-16, S2-17, S2-18, S3-2, S3-3, S3-10, S3-25)"
-    status: pending
+    status: completed
   - id: w10
     content: "W10: effect table (S2-13)"
-    status: pending
+    status: completed
   - id: w11
     content: "W11: task arena (S2-12, S3-4, S3-16, S3-5, S3-6, S3-13 code)"
-    status: pending
+    status: completed
   - id: w12
     content: "W12: chain record (S3-7, S3-19, S3-14, S3-22)"
-    status: pending
+    status: completed
   - id: w13
     content: "W13: small scheduler changes (S2-14, S2-15, S3-9, S3-15, S3-20)"
-    status: pending
+    status: completed
   - id: w14
     content: "W14: frame (S3-17, S3-18, S3-23)"
-    status: pending
+    status: completed
   - id: w15
     content: "W15: section VM and model round docs (S3-1, S3-12, V3-4, S3-11, V3-3, S3-27)"
-    status: pending
+    status: completed
   - id: w16
     content: "W16: `subst` and `heading_address` (S4-6, S4-7 docs, S4-8 doc, S4-9, S4-10, S4-11)"
-    status: pending
+    status: completed
   - id: w17
     content: "W17: test support (S4-12, V4-1, S4-14 doc, S4-15, V3-2)"
-    status: pending
+    status: completed
   - id: w18
     content: "W18: READMEs (S5-5, S5-7)"
-    status: pending
+    status: completed
   - id: w19
     content: "W19: guide (V2-1, S3-13 guide part, V5-1 guide part)"
-    status: pending
+    status: completed
   - id: w20
     content: "W20: facade API changes (S1-15, S1-18, S2-8, S5-2, R-10 to R-15; S1-9's public part as R-11)"
-    status: pending
+    status: completed
   - id: w21
     content: "W21: author-facing messages (S4-7, S4-8, S1-3)"
-    status: pending
+    status: completed
   - id: w22
     content: "W22: rulebook vocabulary (S5-4, S5-5 AGENTS part)"
-    status: pending
+    status: completed
   - id: w23
     content: "W23: run state (R-1, R-2, R-5, R-19)"
-    status: pending
+    status: completed
   - id: w24
     content: "W24: scheduler names and docs (S2-3, S2-19, R-6, R-17)"
-    status: pending
+    status: completed
   - id: w25
     content: "W25: chain lifecycle (R-18)"
-    status: pending
+    status: completed
   - id: w26
     content: "W26: position types (R-7)"
-    status: pending
+    status: completed
   - id: w27
     content: "W27: error types (R-3, R-4, R-8, R-9)"
-    status: pending
+    status: completed
   - id: w28
     content: "W28: Lua error kinds (R-16)"
-    status: pending
+    status: completed
 isProject: false
 ---
 
