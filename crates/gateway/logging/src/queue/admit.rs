@@ -118,7 +118,8 @@ impl LogQueue {
             state = next;
             state.blocked_producers = state.blocked_producers.saturating_sub(1);
             close_accounted = state.closed;
-            if timeout.timed_out() && !state.closed {
+            // `wait_timeout` can report a timeout before `deadline` elapses.
+            if timeout.timed_out() && !state.closed && Instant::now() >= deadline {
                 self.record_rejection(&mut state);
                 self.finish_rejected_producer();
                 drop(state);
