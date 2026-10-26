@@ -233,7 +233,7 @@ impl Scheduler {
         let target_section = self.resolve_chain_target(id, target)?;
         let worker = &target_section.slice.resolve(&prompt)[target_section.index().get()];
         if worker.prologue().is_none() && worker.epilog().is_none() && !worker.items().is_empty() {
-            return Err(Error::Lua(format!(
+            return Err(Error::lua_message(format!(
                 "section `{}` is a list section, not a worker template",
                 worker.name()
             )));

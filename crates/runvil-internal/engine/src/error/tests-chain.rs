@@ -34,8 +34,14 @@ fn cause_bearing() -> Vec<Error> {
         incomplete_input: true,
     };
     let tool = ToolError::new(ToolErrorKind::Backend, "the backend refused");
+    let schema = runvil_model_client::detail::tool_schema_new("echo", "", serde_json::json!([]))
+        .expect_err("an array is not an object schema");
     vec![
         Error::from(frontmatter),
+        Error::BindSchema {
+            alias: "echo".to_owned(),
+            cause: Box::new(schema),
+        },
         Error::lua(mlua::Error::RuntimeError("boom".to_owned())),
         Error::LuaCompile {
             location: "section `S` prologue".to_owned(),
@@ -73,19 +79,11 @@ fn cause_bearing() -> Vec<Error> {
 /// so a chain printer walks more than one segment.
 #[track_caller]
 fn source_bearing() -> Vec<Error> {
-    let schema = runvil_model_client::detail::tool_schema_new("echo", "", serde_json::json!([]))
-        .expect_err("an array is not an object schema");
     let transport = crate::model::CompletionErrorKind::Transport;
-    vec![
-        Error::BindSchema {
-            alias: "echo".to_owned(),
-            source: Box::new(schema),
-        },
-        Error::Completion(
-            crate::model::CompletionError::new(transport, transport.phrase())
-                .with_source(std::io::Error::other("connection reset by peer")),
-        ),
-    ]
+    vec![Error::Completion(
+        crate::model::CompletionError::new(transport, transport.phrase())
+            .with_source(std::io::Error::other("connection reset by peer")),
+    )]
 }
 
 /// Asserts that no segment of `error`'s source chain repeats inside an

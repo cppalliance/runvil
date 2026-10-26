@@ -1,6 +1,6 @@
 //! A section entry's frozen sets: the section's offers, what the entry's
 //! render is asked of them, the merge that builds the sets at the entry's
-//! first model call from each catalog Pack's tools per set, as the render
+//! first loop round from each catalog Pack's tools per set, as the render
 //! answered them, and the section's adhoc tools, plus the Engine's two
 //! discovery tools beside a Dynamic Set, inside the scope validation
 //! boundary pair, and the schema a round advertises each Static Set tool
@@ -15,7 +15,7 @@ use runvil_types::packs::PackId;
 use runvil_types::tools::{ToolCatalog, ToolId, ToolInfo};
 use serde_json::{Value, json};
 
-use crate::error::{FrozenSet, MergeRule, MergeTool};
+use crate::error::{SetRule, SetTool};
 use crate::execute::PackToolSets;
 use crate::lua::{
     DiscoveryTool, OfferedTool, RenderedTools, SectionVm, ToolBinding, ToolSet,
@@ -35,6 +35,24 @@ const SEARCH_USAGE: &str = "Lists and searches the dynamic tools, which CallDyna
 /// What the call tool does.
 const CALL_USAGE: &str = "Calls a dynamic tool: pass its name from GetDynamicTools as toolName \
                           and its arguments as arguments.";
+
+/// One of the two sets a section entry freezes at its first loop round.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum FrozenSet {
+    /// The Static Set, which every round of the entry advertises.
+    Static,
+    /// The Dynamic Set, which no round advertises.
+    Dynamic,
+}
+
+impl std::fmt::Display for FrozenSet {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            FrozenSet::Static => "Static Set",
+            FrozenSet::Dynamic => "Dynamic Set",
+        })
+    }
+}
 
 /// One Pack's tools for `set`.
 fn set_of(sets: &PackToolSets<ToolInfo>, set: FrozenSet) -> &[ToolInfo] {
@@ -192,7 +210,7 @@ struct Laid {
 ///   schema.
 ///
 /// # Errors
-/// Returns [`Error::ToolMerge`] naming the rule and the Packs or tools
+/// Returns [`Error::ToolSets`] naming the rule and the Packs or tools
 /// that broke it, or [`Error::BindSchema`] for a tool no round could
 /// advertise.
 pub(super) fn merge_tool_sets(
@@ -230,7 +248,7 @@ pub(super) fn merge_tool_sets(
 /// with each tool a set repeats kept at its first copy.
 ///
 /// # Errors
-/// Returns [`Error::ToolMerge`] for an answer whose Packs differ from the
+/// Returns [`Error::ToolSets`] for an answer whose Packs differ from the
 /// ones asked, in order, or naming the first rendered tool a Pack's
 /// answer may not hold.
 fn check_render(
@@ -242,8 +260,8 @@ fn check_render(
         all.iter().map(|sets| sets.pack.clone()).collect()
     };
     if packs(asked) != packs(&answered) {
-        return Err(Error::ToolMerge {
-            rule: MergeRule::RenderedPacks {
+        return Err(Error::ToolSets {
+            rule: SetRule::RenderedPacks {
                 asked: packs(asked),
                 answered: packs(&answered),
             },
@@ -269,7 +287,7 @@ fn check_render(
 /// dropped.
 ///
 /// # Errors
-/// Returns [`Error::ToolMerge`] naming the first tool that sits in a set
+/// Returns [`Error::ToolSets`] naming the first tool that sits in a set
 /// the Pack was not offered into, under another Pack's id, or is a run
 /// catalog tool the section did not offer in `set`.
 fn check_set(
@@ -279,9 +297,9 @@ fn check_set(
     tools: Vec<ToolInfo>,
     catalog: &ToolCatalog,
 ) -> Result<Vec<ToolInfo>> {
-    let refuse = |rule: MergeRule, tool: &ToolInfo| Error::ToolMerge {
+    let refuse = |rule: SetRule, tool: &ToolInfo| Error::ToolSets {
         rule,
-        tools: vec![MergeTool {
+        tools: vec![SetTool {
             id: tool.id.clone(),
             set,
         }],
@@ -289,14 +307,14 @@ fn check_set(
     let mut kept: Vec<ToolInfo> = Vec::with_capacity(tools.len());
     for tool in tools {
         if offered.is_empty() {
-            return Err(refuse(MergeRule::UnofferedSet(pack.clone()), &tool));
+            return Err(refuse(SetRule::UnofferedSet(pack.clone()), &tool));
         }
         if !pack.contains(&tool.id) {
-            return Err(refuse(MergeRule::ForeignTool(pack.clone()), &tool));
+            return Err(refuse(SetRule::ForeignTool(pack.clone()), &tool));
         }
         let unoffered = !offered.iter().any(|held| held.id == tool.id);
         if unoffered && catalog.get(&tool.id).is_some() {
-            return Err(refuse(MergeRule::UnofferedCatalogTool, &tool));
+            return Err(refuse(SetRule::UnofferedCatalogTool, &tool));
         }
         if !kept.iter().any(|held| held.id == tool.id) {
             kept.push(tool);
@@ -440,16 +458,16 @@ fn refuse_clash(static_set: &[Laid], dynamic_set: &[Laid]) -> Result<()> {
         .iter()
         .map(|tool| (tool, FrozenSet::Static))
         .chain(dynamic_set.iter().map(|tool| (tool, FrozenSet::Dynamic)));
-    let mut taken: BTreeMap<&str, MergeTool> = BTreeMap::new();
+    let mut taken: BTreeMap<&str, SetTool> = BTreeMap::new();
     for (tool, set) in sited {
         let wire_name = tool.binding.alias();
-        let site = MergeTool {
+        let site = SetTool {
             id: tool.binding.id().clone(),
             set,
         };
         if let Some(first) = taken.get(wire_name) {
-            return Err(Error::ToolMerge {
-                rule: MergeRule::UniqueWireName(wire_name.to_owned()),
+            return Err(Error::ToolSets {
+                rule: SetRule::UniqueWireName(wire_name.to_owned()),
                 tools: vec![first.clone(), site],
             });
         }
@@ -473,7 +491,7 @@ pub(super) fn tool_schema(binding: &ToolBinding) -> Result<ToolSchema> {
     )
     .map_err(|error| Error::BindSchema {
         alias: binding.alias().to_owned(),
-        source: Box::new(error),
+        cause: Box::new(error),
     })
 }
 

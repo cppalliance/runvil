@@ -99,7 +99,7 @@ impl Scheduler {
     ) -> Result<Dispatched> {
         let messages = list.to_records();
         if messages.is_empty() {
-            return Err(Error::Lua("messages must not be empty".to_owned()));
+            return Err(Error::lua_message("messages must not be empty"));
         }
         let chain = &self.chains[id.index()];
         let section = chain.section_name().to_owned();

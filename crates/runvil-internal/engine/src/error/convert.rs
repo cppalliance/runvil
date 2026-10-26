@@ -4,7 +4,6 @@
 //! variant it stands in for.
 
 use std::borrow::Cow;
-use std::num::NonZeroU32;
 
 use runvil_lua::Error as LuaError;
 use runvil_model_client::model::ModelSetError;
@@ -17,33 +16,34 @@ use super::{BoxedSource, Error};
 impl Error {
     /// Builds a parse failure with a stable classification and no source span.
     pub(crate) fn parse(kind: crate::parser::ParseErrorKind, message: impl Into<String>) -> Error {
-        Error::ParseStructured {
-            kind,
-            span: None,
-            message: message.into(),
-            name: None,
-            line: None,
-            column: None,
-        }
+        Error::Parse(runvil_parser::detail::parse_error(kind, message))
     }
 
     /// Stamps the prompt's frontmatter name onto a parse failure raised by
     /// `run` itself: the prompt is already parsed at that point, so the
     /// name is known and the location can name it. Any other variant passes
     /// through unchanged.
-    pub(crate) fn with_prompt_name(mut self, name: &str) -> Error {
-        if let Error::ParseStructured { name: slot, .. } = &mut self {
-            *slot = Some(name.to_owned());
+    pub(crate) fn with_prompt_name(self, name: &str) -> Error {
+        match self {
+            Error::Parse(error) => {
+                Error::Parse(runvil_parser::detail::with_prompt_name(error, name))
+            }
+            other => other,
         }
-        self
     }
 
     /// Builds an internal-invariant failure, capturing the Rust source
     /// position of the call site so [`crate::RunError::location`] can point
-    /// at the broken invariant.
+    /// at the broken invariant. The message is owned when it names a value.
     #[track_caller]
-    pub(crate) fn internal(message: &'static str) -> Error {
-        Error::internal_owned(Cow::Borrowed(message), None)
+    pub(crate) fn internal(message: impl Into<Cow<'static, str>>) -> Error {
+        let location = std::panic::Location::caller();
+        Error::Internal {
+            message: message.into(),
+            file: location.file(),
+            line: location.line(),
+            cause: None,
+        }
     }
 
     /// Builds an internal-invariant failure that keeps the failure which
@@ -51,22 +51,15 @@ impl Error {
     /// [`Error::internal`] does.
     #[track_caller]
     pub(crate) fn internal_with_cause(
-        message: &'static str,
+        message: impl Into<Cow<'static, str>>,
         cause: impl Into<BoxedSource>,
     ) -> Error {
-        Error::internal_owned(Cow::Borrowed(message), Some(cause.into()))
-    }
-
-    /// Builds an internal-invariant failure whose message may name a value,
-    /// capturing the call site as [`Error::internal`] does.
-    #[track_caller]
-    fn internal_owned(message: Cow<'static, str>, cause: Option<BoxedSource>) -> Error {
         let location = std::panic::Location::caller();
         Error::Internal {
-            message,
+            message: message.into(),
             file: location.file(),
             line: location.line(),
-            cause,
+            cause: Some(cause.into()),
         }
     }
 
@@ -90,13 +83,22 @@ impl Error {
         }
     }
 
-    /// Wraps an `mlua` failure as [`Error::LuaRuntime`], keeping it as the
-    /// cause rather than flattening it to a string.
+    /// Builds an [`Error::Lua`] that keeps only `message`, with no
+    /// originating `mlua` error.
+    pub(crate) fn lua_message(message: impl Into<String>) -> Error {
+        Error::Lua {
+            message: message.into(),
+            cause: None,
+        }
+    }
+
+    /// Wraps an `mlua` failure as [`Error::Lua`], keeping it as the cause
+    /// rather than flattening it to a string.
     #[cfg(test)]
     pub(super) fn lua(cause: mlua::Error) -> Error {
-        Error::LuaRuntime {
+        Error::Lua {
             message: cause.to_string(),
-            cause: Box::new(cause),
+            cause: Some(Box::new(cause)),
         }
     }
 }
@@ -122,40 +124,19 @@ impl From<crate::model::CompletionError> for Error {
     }
 }
 
-/// Maps a parse failure back onto this internal type variant for variant, so
-/// `Display`, `source()` chains, and `RunError` classification are unchanged
-/// by the parser extraction. The parser crate's error type is not
-/// `#[non_exhaustive]` (the two crates version together), so this match is
-/// total.
+/// Maps a parse failure onto this internal type: a frontmatter or
+/// structured failure stays a parse failure whole, and a Lua compile or
+/// internal failure maps onto its own variant, so `Display`, `source()`
+/// chains, and `RunError` classification are unchanged by the parser
+/// extraction. The parser crate's error type is not `#[non_exhaustive]`
+/// (the two crates version together), so this match is total.
 impl From<crate::parser::ParseError> for Error {
     fn from(error: crate::parser::ParseError) -> Self {
         match runvil_parser::detail::parse_error_into_inner(error) {
-            ParserError::ParseFrontmatter {
-                message,
-                cause,
-                line,
-                column,
-            } => Error::ParseFrontmatter {
-                message,
-                cause,
-                line: line.map(NonZeroU32::get),
-                column: column.map(NonZeroU32::get),
-            },
-            ParserError::ParseStructured {
-                kind,
-                span,
-                message,
-                name,
-                line,
-                column,
-            } => Error::ParseStructured {
-                kind,
-                span: span.map(|span| (span.start, span.end)),
-                message,
-                name,
-                line: line.map(NonZeroU32::get),
-                column: column.map(NonZeroU32::get),
-            },
+            inner
+            @ (ParserError::ParseFrontmatter { .. } | ParserError::ParseStructured { .. }) => {
+                Error::Parse(runvil_parser::detail::parse_error_from_inner(inner))
+            }
             ParserError::Lua(lua) => Error::from(lua),
             ParserError::Internal(message) => Error::internal(message),
         }
@@ -170,8 +151,11 @@ impl From<crate::parser::ParseError> for Error {
 impl From<LuaError> for Error {
     fn from(error: LuaError) -> Error {
         match error {
-            LuaError::Lua(message) => Error::Lua(message),
-            LuaError::LuaRuntime { message, cause } => Error::LuaRuntime { message, cause },
+            LuaError::Lua(message) => Error::lua_message(message),
+            LuaError::LuaRuntime { message, cause } => Error::Lua {
+                message,
+                cause: Some(cause),
+            },
             LuaError::LuaCompile {
                 location,
                 source_line,
@@ -190,7 +174,7 @@ impl From<LuaError> for Error {
             LuaError::Interrupted => Error::Interrupted,
             LuaError::Tool { message, cause } => Error::Tool { message, cause },
             LuaError::Store { message, cause } => Error::Store { message, cause },
-            LuaError::Internal(message) => Error::internal_owned(message, None),
+            LuaError::Internal(message) => Error::internal(message),
             LuaError::Raised(raised) => Error::from_raised(raised),
         }
     }
@@ -307,7 +291,8 @@ impl Error {
     /// onto the variant its kind names, so a Lua-side raise classifies as
     /// the Rust-raised error it stands in for. A kind whose variant needs
     /// structure the table does not hold (the tool-scope errors, the task
-    /// errors, `internal`) keeps its message as a Lua failure.
+    /// errors, `model_failure`, `model_required`, `internal`) keeps its
+    /// message as a Lua failure.
     fn from_raised(raised: runvil_lua::Raised) -> Error {
         match raised.kind {
             runvil_lua::ErrorKind::ToolLoopExhausted => Error::ToolLoopExhausted,
@@ -315,7 +300,7 @@ impl Error {
                 Some(reason) => Error::ContextExhausted {
                     reason: reason.to_owned(),
                 },
-                None => Error::Lua(raised.message),
+                None => Error::lua_message(raised.message),
             },
             runvil_lua::ErrorKind::EmptyModelReply => {
                 let error = crate::model::CompletionError::new(
@@ -340,11 +325,11 @@ impl Error {
             },
             runvil_lua::ErrorKind::TaskNotOwned => match raised_task(&raised) {
                 Some(task) => Error::TaskNotOwned { task },
-                None => Error::Lua(raised.message),
+                None => Error::lua_message(raised.message),
             },
             runvil_lua::ErrorKind::TaskConsumed => match raised_task(&raised) {
                 Some(task) => Error::TaskConsumed { task },
-                None => Error::Lua(raised.message),
+                None => Error::lua_message(raised.message),
             },
             runvil_lua::ErrorKind::Store => Error::Store {
                 message: raised.message.clone(),
@@ -354,7 +339,9 @@ impl Error {
             | runvil_lua::ErrorKind::UnboundTool
             | runvil_lua::ErrorKind::TasksLive
             | runvil_lua::ErrorKind::Lua
-            | runvil_lua::ErrorKind::Internal => Error::Lua(raised.message),
+            | runvil_lua::ErrorKind::ModelFailure
+            | runvil_lua::ErrorKind::ModelRequired
+            | runvil_lua::ErrorKind::Internal => Error::lua_message(raised.message),
         }
     }
 }

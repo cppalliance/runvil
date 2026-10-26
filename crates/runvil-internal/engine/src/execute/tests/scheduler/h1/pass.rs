@@ -162,7 +162,7 @@ fn an_h1_scalar_return_still_reads_var_back() {
 
     let error = trace.error();
     assert!(
-        matches!(error.inner(), Error::Lua(_)),
+        matches!(error.inner(), Error::Lua { cause: None, .. }),
         "the read-back failure is machinery around the prompt's chunk, \
          not the failed gate, so it keeps the Lua kind: {error}"
     );

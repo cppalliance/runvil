@@ -238,7 +238,10 @@ fn a_compactors_own_string_raise_reaches_the_caller_with_the_reason_tag() {
     );
     let trace = loop_scenario(source).chat_with(overflowing(&rounds)).run();
     match trace.error().inner() {
-        Error::LuaRuntime { message, .. } => assert!(
+        Error::Lua {
+            message,
+            cause: Some(_),
+        } => assert!(
             message.contains("custom failure: provider"),
             "the compactor's own error survives with the reason tag, got: {message}"
         ),

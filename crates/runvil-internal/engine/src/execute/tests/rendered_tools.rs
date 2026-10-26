@@ -290,7 +290,8 @@ fn a_first_round_whose_tool_build_fails_renders_nothing() {
         .run();
     assert_eq!(
         trace.text(),
-        "internal:model-facing schema build failure for tool alias \"shape\""
+        "internal:model-facing schema build failure for tool alias \"shape\": tool \"shape\" \
+         parameters schema must be a JSON object"
     );
     let bodies = gateway.requests();
     assert_eq!(bodies.len(), 1, "the failed round never left");

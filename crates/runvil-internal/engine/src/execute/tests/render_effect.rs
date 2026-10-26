@@ -1,4 +1,4 @@
-//! The render a section entry issues at its first model round: one render
+//! The render a section entry issues at its first loop round: one render
 //! before the first Chat effect when the offers name a catalog tool and
 //! none otherwise, each Pack asked once, in first-offer order, for only the
 //! sets it was offered into, the entry its tool calls name, the binding of

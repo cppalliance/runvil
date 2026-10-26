@@ -54,6 +54,11 @@ pub enum ErrorKind {
     /// The model returned a turn with no product; includes `finish_reason`
     /// when the backend supplied one.
     EmptyModelReply,
+    /// A model round or a catalog fetch failed for any reason other than an
+    /// empty reply: transport, backend, decode, or configuration.
+    ModelFailure,
+    /// A model round found no selected model and no prompt-wide default.
+    ModelRequired,
     /// The model named a tool outside the section's advertised scope.
     OutOfScopeTool,
     /// A script `tools.call` named an alias with no binding in the run.
@@ -75,7 +80,7 @@ pub enum ErrorKind {
     /// in author code, a shim's argument error, or an exhausted Engine quota.
     Lua,
     /// An internal invariant was violated, or a failure outside the prompt the
-    /// author cannot act on (transport, backend, store, configuration).
+    /// author cannot act on that has no kind of its own.
     Internal,
 }
 
@@ -85,6 +90,8 @@ impl ErrorKind {
         ErrorKind::ToolLoopExhausted,
         ErrorKind::ContextExhausted,
         ErrorKind::EmptyModelReply,
+        ErrorKind::ModelFailure,
+        ErrorKind::ModelRequired,
         ErrorKind::OutOfScopeTool,
         ErrorKind::UnboundTool,
         ErrorKind::Tool,
@@ -104,6 +111,8 @@ impl ErrorKind {
             ErrorKind::ToolLoopExhausted => "tool_loop_exhausted",
             ErrorKind::ContextExhausted => "context_exhausted",
             ErrorKind::EmptyModelReply => "empty_model_reply",
+            ErrorKind::ModelFailure => "model_failure",
+            ErrorKind::ModelRequired => "model_required",
             ErrorKind::OutOfScopeTool => "out_of_scope_tool",
             ErrorKind::UnboundTool => "unbound_tool",
             ErrorKind::Tool => "tool",
@@ -124,6 +133,8 @@ impl ErrorKind {
             "tool_loop_exhausted" => Some(ErrorKind::ToolLoopExhausted),
             "context_exhausted" => Some(ErrorKind::ContextExhausted),
             "empty_model_reply" => Some(ErrorKind::EmptyModelReply),
+            "model_failure" => Some(ErrorKind::ModelFailure),
+            "model_required" => Some(ErrorKind::ModelRequired),
             "out_of_scope_tool" => Some(ErrorKind::OutOfScopeTool),
             "unbound_tool" => Some(ErrorKind::UnboundTool),
             "tool" => Some(ErrorKind::Tool),

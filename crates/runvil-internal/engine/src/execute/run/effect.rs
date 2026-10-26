@@ -132,7 +132,7 @@ pub enum Effect {
         round: Round,
     },
     /// The render of the catalog Packs a section entry offered, issued at
-    /// the entry's first model round before that round's request is
+    /// the entry's first loop round before that round's request is
     /// built. The caller answers with the tools each Pack shows the model
     /// for each set, and the Engine merges them with the section's adhoc
     /// tools into the entry's frozen sets, which every round of the entry

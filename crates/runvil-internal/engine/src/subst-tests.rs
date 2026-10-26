@@ -295,7 +295,7 @@ fn non_json_bare_global_is_an_error() {
     let sys = json!({});
     let globals = |name: &str| {
         assert_eq!(name, "f");
-        Err(crate::Error::Lua("global `f` is a function".to_owned()))
+        Err(crate::Error::lua_message("global `f` is a function"))
     };
     let sources = Sources {
         globals: &globals,
@@ -374,8 +374,9 @@ fn item_nil_is_error() {
     let sys = json!({});
     let err = substitute("{{ item }}", &test_sources(&var, &sys)).expect_err("nil item must fail");
     assert!(
-        err.to_string().contains("nil"),
-        "error must mention nil: {err}"
+        err.to_string()
+            .contains("{{ item }} is nil (no item is seeded into this section)"),
+        "error must say no item is seeded: {err}"
     );
 }
 
@@ -387,9 +388,10 @@ fn item_dot_path_is_error() {
         item: Some(&json!("text")),
         ..test_sources(&var, &sys)
     };
-    let err = substitute("{{ item.x }}", &sources).expect_err("item is a string, not a table");
+    let err = substitute("{{ item.x }}", &sources).expect_err("item takes no key path");
     assert!(
-        err.to_string().contains("not a table"),
-        "error must say not a table: {err}"
+        err.to_string()
+            .contains("item takes no key path; {{ item }} renders the whole item"),
+        "error must say item renders whole: {err}"
     );
 }

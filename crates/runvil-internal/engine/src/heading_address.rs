@@ -253,7 +253,7 @@ fn parse_heading_address(heading: &str) -> Result<(usize, String)> {
     let stripped = heading.trim();
     let level = stripped.chars().take_while(|&c| c == '#').count();
     if level == 0 {
-        return Err(Error::Lua(format!(
+        return Err(Error::lua_message(format!(
             "section heading must include ### markers, got bare name: {stripped}"
         )));
     }
@@ -263,12 +263,12 @@ fn parse_heading_address(heading: &str) -> Result<(usize, String)> {
     // no name to parse whether or not whitespace followed the markers.
     let name = rest.trim();
     if name.is_empty() {
-        return Err(Error::Lua(format!(
+        return Err(Error::lua_message(format!(
             "section heading has no name: {stripped}"
         )));
     }
     if !rest.starts_with(|c: char| c.is_whitespace()) {
-        return Err(Error::Lua(format!(
+        return Err(Error::lua_message(format!(
             "section heading must have whitespace after the {} markers: {stripped}",
             "#".repeat(level)
         )));
@@ -329,7 +329,7 @@ fn find_one<'a, T>(
     });
     let found = matches.next();
     if found.is_some() && matches.next().is_some() {
-        return Err(Error::Lua(format!(
+        return Err(Error::lua_message(format!(
             "section heading `{}` is ambiguous; more than one {set} section matches {} {name}",
             heading.trim(),
             "#".repeat(level)
@@ -343,7 +343,7 @@ fn find_one<'a, T>(
 /// structure.
 fn not_found<'a>(heading: &str, available: impl Iterator<Item = &'a Section>) -> Error {
     let available: Vec<String> = available.map(section_heading).collect();
-    Error::Lua(format!(
+    Error::lua_message(format!(
         "section heading `{}` not found; available sections: {}",
         heading.trim(),
         available.join(", ")

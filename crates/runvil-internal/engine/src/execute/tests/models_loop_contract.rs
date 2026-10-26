@@ -145,7 +145,10 @@ fn an_uncaught_loop_arity_error_fails_the_run_naming_the_authors_prompt_line() {
     );
     let trace = loop_scenario(source).chat(&gateway).run();
     match trace.error().inner() {
-        Error::LuaRuntime { message, .. } => {
+        Error::Lua {
+            message,
+            cause: Some(_),
+        } => {
             assert!(
                 message.contains("models.loop takes (compactor?)"),
                 "the runtime error keeps the shim's message: {message}"
