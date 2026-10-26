@@ -2,20 +2,11 @@
 //! surface resolves through.
 //!
 //! A section's Lua names other sections by heading string - `call`, `jump`,
-//! `prompt.section`, `prompt.list`, `tasks.spawn`, and
-//! `tasks.fanout(worker, collection)` (which runs the worker template once per
-//! collection member: the array part in order, then the hash part as
-//! `{ key, value }` pairs sorted by key, a list section's pre-parsed items
-//! feeding in through `prompt.list`). The `fanout` shim itself is Lua over
-//! the task protocol (`runvil-lua`'s `__impl_fanout.lua`): it spawns
-//! one task per member - every arm up front, before any join, so no arm is
-//! ordered after a sibling - and waits on the live set while the scheduler's
-//! admission limit bounds how many arms run at once. This module defines
-//! [`Visible`], the view of a caller's visible set read in place over the
-//! shared prompt, [`find_visible`], the one heading lookup those surfaces
-//! share, and [`resolve_visible`], its adapter for surfaces where a miss is
-//! an error; the collection enumeration sits in the `runvil-lua` crate,
-//! beside the VM and the coroutine protocol that consume it.
+//! `prompt.section`, `prompt.list`, `tasks.spawn`, and `tasks.fanout`'s
+//! worker template. This module defines [`Visible`], the view of a caller's
+//! visible set read in place over the shared prompt, [`find_visible`], the
+//! one heading lookup those surfaces share, and [`resolve_visible`], its
+//! adapter for surfaces where a miss is an error.
 //!
 //! `require` names a library section the same way but reaches wider: a
 //! walked section's direct children, its siblings, and the siblings of each
@@ -24,17 +15,96 @@
 //! [`resolve_reachable`] its adapter where a miss is an error. Each scope
 //! of a reach sits at its own heading level and sibling names are unique,
 //! so an exact address names at most one reachable section.
+//!
+//! [`SlicePath`] and [`SectionIndex`] name a section's place in the shared
+//! prompt tree: its sibling slice by path, and its position in that slice.
+//! A chain and a section's `prompt` reads find their slice by path and
+//! read it in place.
 
-use crate::parser::Section;
+use crate::parser::{Prompt, Section};
 use crate::{Error, Result};
+
+/// Where a sibling slice sits in the prompt tree: the index of each
+/// ancestor section from the top level down to the slice's parent. The
+/// empty path is the top-level slice. A chain names its walk position by
+/// path so it borrows nothing from the tree the run shares through its
+/// `Arc<Prompt>`; the path resolves to the slice on demand.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub(crate) struct SlicePath(Vec<usize>);
+
+/// The top-level slice's path, which the H1's reach borrows.
+static TOP: SlicePath = SlicePath(Vec::new());
+
+impl SlicePath {
+    /// The top-level slice.
+    pub(crate) fn root() -> Self {
+        Self::default()
+    }
+
+    /// The slice of `parent`'s children, where `parent` is the section at
+    /// `index` of this slice.
+    pub(crate) fn child(&self, index: SectionIndex) -> Self {
+        let mut path = self.0.clone();
+        path.push(index.0);
+        Self(path)
+    }
+
+    /// Each ancestor's index, from the top level down.
+    pub(crate) fn indices(&self) -> &[usize] {
+        &self.0
+    }
+
+    /// Resolves the path against `prompt`. A path the scheduler built is
+    /// always in range; an out-of-range index resolves to the empty slice,
+    /// which the walk treats as exhausted rather than panicking.
+    pub(crate) fn resolve<'p>(&self, prompt: &'p Prompt) -> &'p [Section] {
+        let mut slice = runvil_parser::detail::sections(prompt);
+        for &index in &self.0 {
+            slice = slice.get(index).map_or(&[], Section::children);
+        }
+        slice
+    }
+
+    /// The name of the slice's section at `index`, or the prompt's title
+    /// when `index` is past the slice: a chain's section name before its
+    /// first entry.
+    pub(crate) fn name_at<'p>(&self, prompt: &'p Prompt, index: SectionIndex) -> &'p str {
+        self.resolve(prompt)
+            .get(index.0)
+            .map_or(prompt.title(), Section::name)
+    }
+}
+
+/// A section's position in its sibling slice.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct SectionIndex(usize);
+
+impl SectionIndex {
+    /// The slice's first section.
+    pub(crate) const FIRST: SectionIndex = SectionIndex(0);
+
+    /// The section at `index` in its slice.
+    pub(crate) fn new(index: usize) -> SectionIndex {
+        SectionIndex(index)
+    }
+
+    /// The position as a slice index.
+    pub(crate) fn get(self) -> usize {
+        self.0
+    }
+
+    /// The section after this one in the same slice.
+    pub(crate) fn next(self) -> SectionIndex {
+        SectionIndex(self.0 + 1)
+    }
+}
 
 /// A section's visible set, read in place: its home slice minus itself,
 /// plus its direct children.
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct Visible<'a> {
     home: &'a [Section],
-    caller: Option<usize>,
-    children: &'a [Section],
+    caller: Option<SectionIndex>,
 }
 
 impl<'a> Visible<'a> {
@@ -42,15 +112,14 @@ impl<'a> Visible<'a> {
     /// `home[caller]`'s children. `caller` must index `home`; an
     /// out-of-range one yields all of `home` and no children, the same set
     /// as [`Visible::all`].
-    pub(crate) fn of(home: &'a [Section], caller: usize) -> Visible<'a> {
+    pub(crate) fn of(home: &'a [Section], caller: SectionIndex) -> Visible<'a> {
         debug_assert!(
-            caller < home.len(),
+            caller.0 < home.len(),
             "a walked section lies inside its home slice"
         );
         Visible {
             home,
             caller: Some(caller),
-            children: home.get(caller).map_or(&[][..], Section::children),
         }
     }
 
@@ -60,7 +129,6 @@ impl<'a> Visible<'a> {
         Visible {
             home: slice,
             caller: None,
-            children: &[],
         }
     }
 
@@ -68,12 +136,15 @@ impl<'a> Visible<'a> {
     /// skipped, then the children.
     pub(crate) fn iter(self) -> impl Iterator<Item = &'a Section> {
         let caller = self.caller;
+        let children = caller
+            .and_then(|c| self.home.get(c.0))
+            .map_or(&[][..], Section::children);
         self.home
             .iter()
             .enumerate()
-            .filter(move |&(index, _)| Some(index) != caller)
+            .filter(move |&(index, _)| Some(SectionIndex(index)) != caller)
             .map(|(_, section)| section)
-            .chain(self.children)
+            .chain(children)
     }
 }
 
@@ -83,24 +154,28 @@ impl<'a> Visible<'a> {
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct Reachable<'a> {
     root: &'a [Section],
-    path: &'a [usize],
-    caller: Option<usize>,
+    path: &'a SlicePath,
+    caller: Option<SectionIndex>,
 }
 
-/// A reachable section and where it sits: the path of its slice, each
-/// ancestor's index from the top level down, and its index in that slice.
+/// A reachable section and where it sits: the path of its slice and its
+/// index in that slice.
 #[derive(Debug)]
 pub(crate) struct Reached<'a> {
     pub(crate) section: &'a Section,
-    pub(crate) path: Vec<usize>,
-    pub(crate) index: usize,
+    pub(crate) path: SlicePath,
+    pub(crate) index: SectionIndex,
 }
 
 impl<'a> Reachable<'a> {
     /// A walked section's reach: the section at `caller` of the slice that
     /// `path` leads to from `root`. An out-of-range index along the way
     /// leads to an empty slice, as a walk path's does.
-    pub(crate) fn of(root: &'a [Section], path: &'a [usize], caller: usize) -> Reachable<'a> {
+    pub(crate) fn of(
+        root: &'a [Section],
+        path: &'a SlicePath,
+        caller: SectionIndex,
+    ) -> Reachable<'a> {
         Reachable {
             root,
             path,
@@ -112,7 +187,7 @@ impl<'a> Reachable<'a> {
     pub(crate) fn top(root: &'a [Section]) -> Reachable<'a> {
         Reachable {
             root,
-            path: &[],
+            path: &TOP,
             caller: None,
         }
     }
@@ -122,29 +197,33 @@ impl<'a> Reachable<'a> {
     /// ancestor's slice with that ancestor skipped, from the parent's
     /// outward to the top level.
     pub(crate) fn iter(self) -> impl Iterator<Item = Reached<'a>> {
-        let mut slices = Vec::with_capacity(self.path.len());
+        let ancestors = &self.path.0;
+        let mut slices = Vec::with_capacity(ancestors.len());
         let mut home = self.root;
-        for &index in self.path {
+        for &index in ancestors {
             slices.push(home);
             home = home.get(index).map_or(&[][..], Section::children);
         }
-        let mut scopes = vec![(self.path.to_vec(), home, self.caller)];
+        let mut scopes = vec![(self.path.clone(), home, self.caller)];
         if let Some(caller) = self.caller {
-            let mut path = self.path.to_vec();
-            path.push(caller);
             scopes.push((
-                path,
-                home.get(caller).map_or(&[][..], Section::children),
+                self.path.child(caller),
+                home.get(caller.0).map_or(&[][..], Section::children),
                 None,
             ));
         }
-        for (depth, (&slice, &ancestor)) in slices.iter().zip(self.path).enumerate().rev() {
-            scopes.push((self.path[..depth].to_vec(), slice, Some(ancestor)));
+        for (depth, (&slice, &ancestor)) in slices.iter().zip(ancestors).enumerate().rev() {
+            scopes.push((
+                SlicePath(ancestors[..depth].to_vec()),
+                slice,
+                Some(SectionIndex(ancestor)),
+            ));
         }
         scopes.into_iter().flat_map(|(path, slice, skip)| {
             slice
                 .iter()
                 .enumerate()
+                .map(|(index, section)| (SectionIndex(index), section))
                 .filter(move |&(index, _)| Some(index) != skip)
                 .map(move |(index, section)| Reached {
                     section,

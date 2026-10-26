@@ -38,8 +38,8 @@ fn item_global_is_absent_in_a_walked_section() {
 }
 
 /// `{{ item }}` in walked (non-arm) prose is a substitution error at the
-/// read site: the walk pins `item: None`, so only a fanout arm's prose may
-/// reference it.
+/// read site: the walk pins `item: None`, so only a spawned task's first
+/// entry (a fanout arm's included) may reference it.
 #[test]
 fn item_in_walked_prose_is_a_substitution_error() {
     let source = PromptSource::new().prose(

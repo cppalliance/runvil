@@ -1,4 +1,4 @@
-//! What kind of chain a record is: the main walk, the live H1 pass, a
+//! What kind of chain a record is: the main walk, the H1 pass, a
 //! `call` child, or a task's backing chain, each with the links and the
 //! admission state only that kind has.
 
@@ -43,7 +43,7 @@ pub(in crate::execute::scheduler) enum ChainKind {
         released_holder: Option<ChainIndex>,
     },
     /// A spawned task's backing chain, a fanout arm included. Its owner is
-    /// recorded on its task slot.
+    /// recorded on its task entry.
     Task {
         /// Where the task's admission stands.
         admission: Admission,
@@ -51,7 +51,7 @@ pub(in crate::execute::scheduler) enum ChainKind {
 }
 
 impl ChainKind {
-    /// Whether the chain is the live H1 pass.
+    /// Whether the chain is the H1 pass.
     pub(in crate::execute::scheduler) fn is_h1(&self) -> bool {
         matches!(self, ChainKind::H1)
     }

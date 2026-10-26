@@ -201,10 +201,7 @@ fn nested_lua_infer_emits_a_model_turn_observation() {
 
 #[test]
 fn cancelled_nested_infer_does_not_report_model_turn_failed() {
-    let gateway = ScriptedChat::new(vec![delayed(
-        std::time::Duration::from_secs(30),
-        text("too late"),
-    )]);
+    let gateway = ScriptedChat::new(vec![text("too late")]);
     let source = writer_role().h1("
         local writer = models.default('writer')
         return writer:infer('must cancel')");
@@ -260,8 +257,8 @@ fn handle_infer_tool_call_violation_uses_entry_point_neutral_wording() {
 }
 
 #[test]
-fn live_h1_prose_infers_explicitly_and_var_accumulates_into_the_walk() {
-    // The live H1 pass reads its pending buffer only through an explicit
+fn h1_prose_infers_explicitly_and_var_accumulates_into_the_walk() {
+    // The H1 pass reads its pending buffer only through an explicit
     // infer, and `var` writes accumulate across the pass into the walk.
     let gateway = ScriptedChat::new(vec![text("final answer")]);
     let source = writer_role()
@@ -281,7 +278,7 @@ fn live_h1_prose_infers_explicitly_and_var_accumulates_into_the_walk() {
 
 #[test]
 fn h1_and_h2_prose_each_infer_explicitly_in_source_order() {
-    // The live H1 pass and the H2 section each read their own pending
+    // The H1 pass and the H2 section each read their own pending
     // buffer into an explicit infer: two completions, in source order.
     let gateway = ScriptedChat::new(vec![text("h1 reply"), text("h2 reply")]);
     let source = writer_role()

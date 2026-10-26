@@ -52,7 +52,7 @@ pub(super) fn loop_model_name(alias: &str) -> String {
 }
 
 /// A run of `source` over the loop models, unprepared, so the run starts
-/// with what the live H1 pass would leave and no catalog.
+/// with what the H1 pass would leave and no catalog.
 pub(super) fn loop_scenario(source: impl Into<String>) -> Scenario {
     Scenario::new(source).unprepared().models(loop_models())
 }

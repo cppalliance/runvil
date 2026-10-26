@@ -83,7 +83,7 @@ pub enum Step {
 pub struct Run {
     /// Whether the run is live, failed to start, or has reported that
     /// failure.
-    phase: Phase,
+    start: Start,
     /// The run's cancel flag, shared with every chain's VM hook.
     cancel: CancelHandle,
 }
@@ -91,7 +91,7 @@ pub struct Run {
 /// Where a run stands: live with its scheduler, failed to start with the
 /// failure its first step reports, or spent once that step has reported
 /// it.
-enum Phase {
+enum Start {
     /// The run started; its scheduler steps it.
     Live(Box<Scheduler>),
     /// The run failed to start; the first step reports this failure.
@@ -102,14 +102,14 @@ enum Phase {
 
 impl fmt::Debug for Run {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let phase = match &self.phase {
-            Phase::Live(_) => "live",
-            Phase::Stillborn(_) => "stillborn",
-            Phase::Spent => "spent",
+        let start = match &self.start {
+            Start::Live(_) => "live",
+            Start::Stillborn(_) => "stillborn",
+            Start::Spent => "spent",
         };
         let mut state = f.debug_struct("Run");
-        state.field("phase", &phase);
-        if let Phase::Stillborn(error) = &self.phase {
+        state.field("start", &start);
+        if let Start::Stillborn(error) = &self.start {
             state.field("failure", error);
         }
         state.field("cancel", &self.cancel).finish()
@@ -138,14 +138,14 @@ impl Run {
         match prepare_state(prompt, args, config) {
             Ok(state) => Self::from_state(state),
             Err(error) => Run {
-                phase: Phase::Stillborn(error),
+                start: Start::Stillborn(error),
                 cancel,
             },
         }
     }
 
     /// [`Run::new`], with `edit` applied to the assembled state before the
-    /// run starts: how a test fills in what the live H1 pass would
+    /// run starts: how a test fills in what the H1 pass would
     /// otherwise leave in the state.
     #[cfg(test)]
     pub(crate) fn new_for_test(
@@ -158,7 +158,7 @@ impl Run {
         match prepare_state(prompt, args, config) {
             Ok(state) => Self::from_state(edit(state)),
             Err(error) => Run {
-                phase: Phase::Stillborn(error),
+                start: Start::Stillborn(error),
                 cancel,
             },
         }
@@ -171,7 +171,7 @@ impl Run {
     pub(crate) fn from_state(state: RunState) -> Run {
         let cancel = state.cancel().clone();
         Run {
-            phase: Phase::Live(Box::new(Scheduler::new(state))),
+            start: Start::Live(Box::new(Scheduler::new(state))),
             cancel,
         }
     }
@@ -188,12 +188,12 @@ impl Run {
     /// [`RunResult::Failure`]. So the caller drives the loop and owns the
     /// retry policy without catching a panic.
     pub fn step(&mut self) -> Step {
-        if let Phase::Live(scheduler) = &mut self.phase {
+        if let Start::Live(scheduler) = &mut self.start {
             return scheduler.step();
         }
-        let failure = match std::mem::replace(&mut self.phase, Phase::Spent) {
-            Phase::Stillborn(error) => error,
-            Phase::Live(_) | Phase::Spent => {
+        let failure = match std::mem::replace(&mut self.start, Start::Spent) {
+            Start::Stillborn(error) => error,
+            Start::Live(_) | Start::Spent => {
                 Error::internal("a run that failed to start cannot be stepped again")
             }
         };
@@ -219,7 +219,7 @@ impl Run {
     /// `resume` cannot fail: a bad answer ends the run with a
     /// [`RunResult::Failure`] instead of returning an error or panicking.
     pub fn resume(&mut self, id: EffectId, answer: EffectAnswer) {
-        if let Phase::Live(scheduler) = &mut self.phase {
+        if let Start::Live(scheduler) = &mut self.start {
             scheduler.resume(id, answer);
         }
     }
@@ -254,9 +254,9 @@ impl Run {
     /// events, which are only a report.
     #[must_use]
     pub fn decided(&self) -> bool {
-        match &self.phase {
-            Phase::Live(scheduler) => scheduler.decided(),
-            Phase::Stillborn(_) | Phase::Spent => true,
+        match &self.start {
+            Start::Live(scheduler) => scheduler.decided(),
+            Start::Stillborn(_) | Start::Spent => true,
         }
     }
 
@@ -264,9 +264,9 @@ impl Run {
     /// arena.
     #[cfg(test)]
     pub(crate) fn scheduler_for_test(&mut self) -> &mut Scheduler {
-        match &mut self.phase {
-            Phase::Live(scheduler) => scheduler,
-            Phase::Stillborn(_) | Phase::Spent => {
+        match &mut self.start {
+            Start::Live(scheduler) => scheduler,
+            Start::Stillborn(_) | Start::Spent => {
                 panic!("a run built from a state holds its scheduler")
             }
         }
@@ -276,9 +276,9 @@ impl Run {
     /// for a run that failed to start.
     #[cfg(test)]
     pub(crate) fn turns_for_test(&self) -> u32 {
-        match &self.phase {
-            Phase::Live(scheduler) => scheduler.turns_for_test(),
-            Phase::Stillborn(_) | Phase::Spent => 0,
+        match &self.start {
+            Start::Live(scheduler) => scheduler.turns_for_test(),
+            Start::Stillborn(_) | Start::Spent => 0,
         }
     }
 }

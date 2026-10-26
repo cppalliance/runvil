@@ -310,7 +310,7 @@ fn a_spawn_failure_mid_fanout_cancels_the_queued_arms() {
     // check. The first arm was still queued for admission - the spawn
     // failure lands before the drain admits anything - so it never runs
     // its block, and no TaskStarted or TaskCancelled fires for it: a task
-    // that never ran reports no start and no terminal, though its slot
+    // that never ran reports no start and no terminal, though its entry
     // still reaches Cancelled.
     let gateway = ScriptedChat::new(vec![text("after-answer")]);
     let md = "---\nname: t\ndescription: d\nrunvil: 0\n---\n\n\

@@ -1,4 +1,4 @@
-//! The live H1 pass itself: its infer and default-model selection, the
+//! The H1 pass itself: its infer and default-model selection, the
 //! root entry ids of the chunk and the first walked section, H1 assertion
 //! failures and their reports, `var` read back after a scalar return, a
 //! failing H1 library as the failed gate, and the section boundaries the
@@ -8,7 +8,7 @@ use super::*;
 use crate::execute::tests::context::sequence;
 
 #[test]
-fn live_h1_infer_runs_once() {
+fn h1_infer_runs_once() {
     // The H1 pass selects the default model by label, a handle's `infer`
     // yields through the shim, and the H1 `var` hand-off seeds the walk.
     let gateway = ScriptedChat::new(vec![text("h1 answer")]);
@@ -27,7 +27,7 @@ fn live_h1_infer_runs_once() {
 }
 
 #[test]
-fn live_h1_models_infer_resolves_the_default_model_without_touching_sys() {
+fn h1_models_infer_resolves_the_default_model_without_touching_sys() {
     // The H1 `models.infer` (no handle) resolves the current model from the
     // shared set and runs the one infer shape - a single tool-free
     // round on a fresh conversation that leaves `sys` untouched.
@@ -65,7 +65,7 @@ fn live_h1_models_infer_resolves_the_default_model_without_touching_sys() {
 }
 
 #[test]
-fn live_h1_chunk_takes_root_entry_zero_and_the_first_walked_section_takes_root_entry_one() {
+fn h1_chunk_takes_root_entry_zero_and_the_first_walked_section_takes_root_entry_one() {
     // The H1 pass is the root chain's entry 0, so the first walked section
     // takes entry 1 of the same chain.
     let md = "---\nname: live-h1-sys-id\ndescription: d\nrunvil: 0\n---\n\n\
@@ -202,7 +202,7 @@ fn a_failing_library_required_from_h1_ends_the_run_as_requirements_unmet() {
 }
 
 #[test]
-fn the_live_h1_pass_fires_no_section_boundaries() {
+fn the_h1_pass_fires_no_section_boundaries() {
     // The completion-flag contract on the scheduler: the H1 frame never
     // arms completion and is never a walked section, so the pass reports
     // its teardown pair but neither SECTION_STARTED nor SECTION_FINISHED;
@@ -238,6 +238,6 @@ fn the_live_h1_pass_fires_no_section_boundaries() {
             .iter()
             .any(|(section, event)| section == "Boundaries"
                 && (event == &started || event == &finished)),
-        "the live H1 pass fires no section boundaries: {observed:?}"
+        "the H1 pass fires no section boundaries: {observed:?}"
     );
 }

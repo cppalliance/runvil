@@ -112,7 +112,7 @@ type Matcher = Box<dyn Fn(&Effect) -> bool>;
 
 /// How a scenario answers its run's model rounds.
 enum Chat {
-    /// From a script, under the run's timeout.
+    /// From a script.
     Script(ScriptedChat),
     /// Through a closure handed each round's effect.
     Closure(Box<dyn Fn(&Effect) -> EffectAnswer>),
@@ -191,7 +191,7 @@ impl Scenario {
     /// Binds every role the prompt declares to the [`TEST_MODEL`] in the
     /// context's model bindings, as the prepare's fill would, without making
     /// it the current model, so the run's model set starts empty for the
-    /// live H1 pass to fill.
+    /// H1 pass to fill.
     pub(crate) fn bind_roles(mut self) -> Scenario {
         self.bind_roles = true;
         self
@@ -233,7 +233,7 @@ impl Scenario {
     }
 
     /// Fills the run's model set with `set` before the run starts, as the
-    /// live H1 pass would leave it, in place of the set the prepare binds.
+    /// H1 pass would leave it, in place of the set the prepare binds.
     pub(crate) fn models(mut self, set: ModelSet) -> Scenario {
         self.prefill.models = Some(set);
         self
@@ -333,7 +333,6 @@ impl Scenario {
             hold: self.hold,
             signal,
             signalled: Cell::new(false),
-            timeout: ctx.limits.timeout(),
         };
         let run = refused
             .is_none()
@@ -421,7 +420,7 @@ impl Scenario {
 }
 
 /// What a scenario fills into its run's state before the run starts, in
-/// place of what the prepare and the live H1 pass would leave there.
+/// place of what the prepare and the H1 pass would leave there.
 #[derive(Default)]
 struct Prefill {
     models: Option<ModelSet>,

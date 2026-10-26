@@ -10,7 +10,7 @@
 //! Each section entry is one construct-run-teardown cycle: a frame
 //! constructor absorbs the VM construction and setup preamble
 //! ([`SectionContext::new`] for a walked section, a spawned task's first
-//! entry included, and [`SectionContext::new_live_h1`] for the H1 pass;
+//! entry included, and [`SectionContext::new_h1`] for the H1 pass;
 //! the two sit in the `construct` sibling), the scheduler's chain
 //! steps run the blocks, and the frame's [`Drop`] impl is the single
 //! teardown boundary.

@@ -25,7 +25,7 @@ use super::{ChainIndex, Scheduler};
 
 impl Scheduler {
     /// The chain enclosing `id` in the task tree: its owner, read from its
-    /// task slot, for a task chain, its call parent for a call chain, and
+    /// task entry, for a task chain, its call parent for a call chain, and
     /// `None` for the root walk and the H1 pass.
     pub(super) fn enclosing(&self, id: ChainIndex) -> Option<ChainIndex> {
         let chain = &self.chains[id.index()];
@@ -89,7 +89,7 @@ impl Scheduler {
     ///
     /// # Errors
     /// Returns [`Error::Internal`] when a queued chain is not the kind of
-    /// chain its queue holds, which only a scheduler bug produces.
+    /// chain its queue holds.
     pub(super) fn admit(&mut self) -> Result<()> {
         if self.resuming.is_empty() && self.spawned.is_empty() {
             return Ok(());
@@ -137,8 +137,7 @@ impl Scheduler {
     ///
     /// # Errors
     /// Returns [`Error::Internal`] when the slot holder is not an admitted
-    /// task, which only a scheduler bug produces: only an admitted task
-    /// holds slots to give back.
+    /// task: only an admitted task holds slots to give back.
     fn resume_chain(&mut self, id: ChainIndex) -> Result<()> {
         let holder = self.slot_holder(id);
         let ChainKind::Task {
@@ -175,8 +174,8 @@ impl Scheduler {
     ///
     /// # Errors
     /// Returns [`Error::Internal`] when the chain is not a queued task or
-    /// its task has no slot, which only a scheduler bug produces: a spawn
-    /// queues a task chain with its record and registers its slot first.
+    /// its task has no entry: a spawn queues a task chain with its record
+    /// and registers its entry first.
     fn admit_chain(&mut self, id: ChainIndex) -> Result<()> {
         let chain = &mut self.chains[id.index()];
         let ChainKind::Task { admission } = &mut chain.kind else {
@@ -195,7 +194,7 @@ impl Scheduler {
         let index = chain.seed.index;
         let var = chain.var.clone();
         let Some(slot) = self.tasks.get(&task) else {
-            return Err(Error::internal("a task chain has a slot"));
+            return Err(Error::internal("a task chain has an entry"));
         };
         let target = slot.target.clone();
         let emitter = Arc::clone(self.chains[slot.owner.index()].ctx.emitter());
@@ -265,7 +264,7 @@ impl Scheduler {
     ///
     /// # Errors
     /// Returns [`Error::Internal`] when the chain has no suspended block
-    /// to take the answer, which only a scheduler bug produces.
+    /// to take the answer.
     pub(super) fn wake_from_wait(&mut self, id: ChainIndex, answer: Answer<Error>) -> Result<()> {
         let chain = &mut self.chains[id.index()];
         let requeue = match &chain.kind {

@@ -129,8 +129,12 @@ fn duplicate_top_level_section_names_error_loudly() {
         synthetic_section("Dup", 2, Vec::new()),
         synthetic_section("Dup", 2, Vec::new()),
     ];
-    let error = crate::execute::walk_target::resolve_jump_target("## Dup", &sections, 0)
-        .expect_err("two visible sections with one name must be ambiguous");
+    let error = crate::execute::walk_target::resolve_jump_target(
+        "## Dup",
+        &sections,
+        crate::heading_address::SectionIndex::FIRST,
+    )
+    .expect_err("two visible sections with one name must be ambiguous");
     let rendered = error.to_string();
     assert!(rendered.contains("ambiguous"), "error was: {rendered}");
 }

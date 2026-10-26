@@ -271,8 +271,8 @@ fn fanout_recursion_across_the_boundary_trips_the_depth_cap() {
 
 /// An arm runs one call level deeper than its fanout caller: an arm
 /// spawned at the cap's edge trips MAX_CALL_DEPTH on its OWN `call`.
-/// Dropping the `+ 1` from the arm's depth in `run_fanout_arms` must fail
-/// this test.
+/// Dropping the `+ 1` in `CallDepth::deeper`, which every spawn applies,
+/// must fail this test.
 #[test]
 fn call_inside_an_arm_spawned_near_the_cap_trips_the_depth_cap() {
     // B runs at depths 1, 3, 5, 7 (its 4th run); the fanout there spawns arms

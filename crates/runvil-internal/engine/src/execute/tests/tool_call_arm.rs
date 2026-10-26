@@ -63,7 +63,7 @@ impl Observer for ToolRecorder {
 }
 
 /// A tool-call arm test's run of `source`: the loop models filled in (the
-/// arm tests bypass the live H1 pass that would fill them), nothing
+/// arm tests bypass the H1 pass that would fill them), nothing
 /// offered unless the test offers it, and the raw protocol shims exposed
 /// so a section can yield a model-issued call.
 fn arm_scenario(source: impl Into<String>) -> Scenario {

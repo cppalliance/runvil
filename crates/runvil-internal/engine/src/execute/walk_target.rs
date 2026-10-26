@@ -12,64 +12,20 @@
 //! every such surface agrees on what a heading may name. `require` alone
 //! also reaches the siblings of each ancestor (see [`Reachable`]), and
 //! [`resolve_library`] turns the section it names into a [`Library`] keyed
-//! by the section's position. [`SlicePath`] names a walk position in the
-//! shared prompt tree, so a chain and a section's `prompt` reads find
-//! their slice by path and read it in place.
+//! by the section's position.
 
-use crate::heading_address::{self, Reachable, Visible};
+use crate::heading_address::{self, Reachable, SectionIndex, SlicePath, Visible};
 use crate::lua::{Library, LibraryBlock, LibraryKey, SectionText};
 use crate::parser::{Block, Prompt, Section};
 use crate::{Error, Result};
 
-/// Where a sibling slice sits in the prompt tree: the index of each
-/// ancestor section from the top level down to the slice's parent. The
-/// empty path is the top-level slice. A chain names its walk position by
-/// path so it borrows nothing from the tree the run shares through its
-/// `Arc<Prompt>`; the path resolves to the slice on demand.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub(super) struct SlicePath(Vec<usize>);
-
-impl SlicePath {
-    /// The top-level slice.
-    pub(super) fn root() -> Self {
-        Self::default()
-    }
-
-    /// The slice of `parent`'s children, where `parent` is the section at
-    /// `index` of this slice.
-    pub(super) fn child(&self, index: usize) -> Self {
-        let mut path = self.0.clone();
-        path.push(index);
-        Self(path)
-    }
-
-    /// Resolves the path against `prompt`. A path the scheduler built is
-    /// always in range; an out-of-range index resolves to the empty slice,
-    /// which the walk treats as exhausted rather than panicking.
-    pub(super) fn resolve<'p>(&self, prompt: &'p Prompt) -> &'p [Section] {
-        let mut slice = runvil_parser::detail::sections(prompt);
-        for &index in &self.0 {
-            slice = slice.get(index).map_or(&[], Section::children);
-        }
-        slice
-    }
-
-    /// The name of the slice's section at `index`, or the prompt's title
-    /// when `index` is past the slice: a chain's section name before its
-    /// first entry.
-    pub(super) fn name_at<'p>(&self, prompt: &'p Prompt, index: usize) -> &'p str {
-        self.resolve(prompt)
-            .get(index)
-            .map_or(prompt.title(), Section::name)
-    }
-}
-
-/// The index of `target` in `slice`, matched on the parser-unique
+/// The position of `target` in `slice`, matched on the parser-unique
 /// `(level, name)` pair; `None` when the slice does not contain it.
-pub(super) fn section_position(slice: &[Section], target: &Section) -> Option<usize> {
+pub(super) fn section_position(slice: &[Section], target: &Section) -> Option<SectionIndex> {
     slice
         .iter()
         .position(|s| s.level() == target.level() && s.name() == target.name())
+        .map(SectionIndex::new)
 }
 
 /// The H1 pass's visible set: the whole top-level slice. H1 is
@@ -103,9 +59,9 @@ pub(super) fn read_visible(heading: &str, visible: Visible<'_>) -> Result<Option
 #[derive(Debug)]
 pub(super) enum JumpTarget {
     /// A flat index move within the jumper's own slice.
-    Sibling(usize),
+    Sibling(SectionIndex),
     /// A descent into the jumper's child slice, starting at this index.
-    Child(usize),
+    Child(SectionIndex),
 }
 
 /// Resolves `heading` against the visible set of `siblings[jumper]` (the
@@ -125,9 +81,9 @@ pub(super) enum JumpTarget {
 pub(super) fn resolve_jump_target(
     heading: &str,
     siblings: &[Section],
-    jumper: usize,
+    jumper: SectionIndex,
 ) -> Result<JumpTarget> {
-    let jumper_section = siblings.get(jumper).ok_or(Error::internal(
+    let jumper_section = siblings.get(jumper.get()).ok_or(Error::internal(
         "a jumping section is absent from its sibling slice",
     ))?;
     let target = heading_address::resolve_visible(heading, Visible::of(siblings, jumper))?;
@@ -150,7 +106,7 @@ pub(super) enum RequireOrigin {
     /// The H1 pass, which reaches every top-level section.
     H1,
     /// The section at this index of the slice at this path.
-    Section(SlicePath, usize),
+    Section(SlicePath, SectionIndex),
 }
 
 impl RequireOrigin {
@@ -171,7 +127,12 @@ impl RequireOrigin {
         let index = indices
             .pop()
             .ok_or(Error::internal("a library key names no section position"))?;
-        Ok(Self::Section(SlicePath(indices), index))
+        let path = indices
+            .into_iter()
+            .fold(SlicePath::root(), |path, ancestor| {
+                path.child(SectionIndex::new(ancestor))
+            });
+        Ok(Self::Section(path, SectionIndex::new(index)))
     }
 
     /// What a `require` from here can name in `prompt`.
@@ -179,15 +140,21 @@ impl RequireOrigin {
         let root = runvil_parser::detail::sections(prompt);
         match self {
             Self::H1 => Reachable::top(root),
-            Self::Section(home, index) => Reachable::of(root, &home.0, *index),
+            Self::Section(home, index) => Reachable::of(root, home, *index),
         }
     }
 }
 
 /// The key naming the section at `index` of the slice at `path`: every
 /// index, dot-joined, so each position has its own.
-fn library_key(path: &[usize], index: usize) -> LibraryKey {
-    let indices: Vec<String> = path.iter().chain([&index]).map(usize::to_string).collect();
+fn library_key(path: &SlicePath, index: SectionIndex) -> LibraryKey {
+    let indices: Vec<String> = path
+        .indices()
+        .iter()
+        .copied()
+        .chain([index.get()])
+        .map(|index| index.to_string())
+        .collect();
     LibraryKey::new(indices.join("."))
 }
 

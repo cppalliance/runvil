@@ -16,7 +16,7 @@ use runvil_vfs::Access;
 use crate::error::DepthVia;
 use crate::execute::context::RunState;
 use crate::execute::section_context::{SectionContext, TaskSeed};
-use crate::execute::walk_target::SlicePath;
+use crate::heading_address::{SectionIndex, SlicePath};
 use crate::lua::{Answer, Blocked, UsageAnchor};
 use crate::model::{Message, ModelId};
 use crate::parser::{Block, BodyText, Prompt, Section};
@@ -76,30 +76,6 @@ impl ChatAnchor {
         if let (Some((model, messages)), Some(usage)) = (sent, usage) {
             self.measured = Some((model, UsageAnchor::new(messages, usage)));
         }
-    }
-}
-
-/// A section's position in the sibling slice a chain walks.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(super) struct SectionIndex(usize);
-
-impl SectionIndex {
-    /// The slice's first section.
-    pub(super) const FIRST: SectionIndex = SectionIndex(0);
-
-    /// The section at `index` in its slice.
-    pub(super) fn new(index: usize) -> SectionIndex {
-        SectionIndex(index)
-    }
-
-    /// The position as a slice index.
-    pub(super) fn get(self) -> usize {
-        self.0
-    }
-
-    /// The section after this one in the same slice.
-    pub(super) fn next(self) -> SectionIndex {
-        SectionIndex(self.0 + 1)
     }
 }
 
@@ -289,7 +265,7 @@ pub(super) struct Chain {
     /// (`with_task`).
     pub(super) ctx: RunState,
     /// The chain's VFS access capability, installed into each section VM
-    /// the chain enters: the walk and the live H1 pass share one root
+    /// the chain enters: the walk and the H1 pass share one root
     /// identity, a call chain borrows its parent's (a blocking child is
     /// the same serial thread - no new identity, no false conflicts), and
     /// a task chain forks its own from its spawner's, joined back into
@@ -402,9 +378,8 @@ impl Chain {
     /// the block resumes.
     ///
     /// # Errors
-    /// Returns [`Error::Internal`] when the chain has no suspended block,
-    /// which only a scheduler bug produces: every answer goes to a block
-    /// that yielded for it.
+    /// Returns [`Error::Internal`] when the chain has no suspended block:
+    /// every answer goes to a block that yielded for it.
     #[track_caller]
     pub(super) fn deliver(&mut self, answer: Answer<Error>) -> Result<()> {
         let Some(running) = self
@@ -463,7 +438,7 @@ impl Chain {
     }
 
     /// The chain's current section name for observations and errors: the
-    /// prompt's title for the live H1 pass, else the name of the section
+    /// prompt's title for the H1 pass, else the name of the section
     /// the chain most recently entered - so a chain between sections, or
     /// past its slice's last section, reports the section it just left.
     pub(super) fn section_name(&self) -> &str {

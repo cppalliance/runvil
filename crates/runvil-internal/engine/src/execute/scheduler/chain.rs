@@ -1,7 +1,7 @@
 //! The chain lifecycle: arena insertion, and the two chain-end paths - a
 //! chain's finish (the frame's teardown boundary, the chain-end rules for
 //! the tasks it owns, and the outcome's delivery to the root, a call
-//! parent, or a task slot) and the abort of a chain with everything it
+//! parent, or a task entry) and the abort of a chain with everything it
 //! transitively blocks on or owns.
 
 use std::num::NonZeroUsize;
@@ -13,11 +13,11 @@ use runvil_vfs::Access;
 use crate::execute::context::RunState;
 use crate::execute::run::EffectId;
 use crate::execute::section_context::TaskSeed;
-use crate::execute::walk_target::SlicePath;
+use crate::heading_address::{SectionIndex, SlicePath};
 use crate::lua::Answer;
 use crate::{Error, Result};
 
-use super::chain_record::{CallDepth, ChainKind, SectionIndex};
+use super::chain_record::{CallDepth, ChainKind};
 use super::{
     Chain, ChainIndex, ChatAnchor, Continuation, Counters, GENERIC_COMPLETION, Outstanding,
     Pending, Scheduler,
@@ -111,7 +111,7 @@ impl Scheduler {
         };
         let entered_name = start
             .slice
-            .name_at(start.ctx.prompt(), start.index.get())
+            .name_at(start.ctx.prompt(), start.index)
             .to_owned();
         self.chains.push(Chain {
             lineage: start.lineage,
@@ -142,7 +142,7 @@ impl Scheduler {
     /// chain's own, so a waiting owner sees the whole subtree
     /// transitively - and finally the outcome's delivery: the run's result
     /// for the root chain, the call answer for a child chain, the task
-    /// slot's outcome for a spawned chain.
+    /// entry's outcome for a spawned chain.
     ///
     /// `outcome` is the chain's end: a scalar return's value, `None` for a
     /// walk that ran off its slice's last section, or the chain's failure.
@@ -158,7 +158,7 @@ impl Scheduler {
         // drops only when both are gone. The chain-end joins run while
         // this clone is still held.
         let access = chain.access.take();
-        // The live H1 pass never arms completion: SECTION_FINISHED is a
+        // The H1 pass never arms completion: SECTION_FINISHED is a
         // walked section's boundary, not the setup pass's. Its completion
         // paths (fall-through, scalar return) handle the frame themselves;
         // this guard keeps an H1 frame that reaches here - an error path -
@@ -214,7 +214,7 @@ impl Scheduler {
             Err(error @ Error::Determinism(_)) => return ChainStep::RunEnded(Err(error)),
             outcome => outcome,
         };
-        // A scheduler bug that strands the outcome - a missing task slot,
+        // A scheduler bug that strands the outcome - a missing task entry,
         // or a parent or waiting owner with no suspended block to take it -
         // fails the run loudly rather than losing it.
         if is_task {
@@ -238,7 +238,7 @@ impl Scheduler {
     /// turn): the chain leaves the ready queue, its in-flight leaf effects
     /// are orphaned in the effect table, and its state drops in the
     /// teardown order (the suspended coroutine, then the frame unarmed - no
-    /// `SECTION_FINISHED`). The chain's own task slot, if it is a task, is
+    /// `SECTION_FINISHED`). The chain's own task entry, if it is a task, is
     /// the caller's to settle: the owner's chain end abandons it, a cancel
     /// arm cancels it.
     pub(super) fn abort_subtree(&mut self, id: ChainIndex) {

@@ -634,7 +634,7 @@ Pinned tests that must stay green, beside each item's Check:
 
 <step-5>
 
-### Step 5: Unify rendering, positions, and scheduler names
+### Step 5: Unify rendering, positions, and scheduler names [completed]
 
 - Component: names and positions
 - Tests: run each from the runvil root in PowerShell, as written:

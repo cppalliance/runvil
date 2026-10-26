@@ -2,20 +2,19 @@
 //!
 //! When a section's Lua first reads the lazy `prose` value, the Engine
 //! resolves `{{ path }}` placeholders in the pending Markdown template. Lua
-//! source is never substituted. Five sources are available:
-//! `args` (the single raw input string), `argv` (its parsed JSON form, nil
-//! when the args did not parse), `item` (the current fanout arm's
-//! item value, nil outside arms), `var` (values the section's Lua wrote),
-//! and `sys`
-//! (runtime-provided metadata). An unknown first segment resolves as a bare
-//! global: a section-local Lua global (`x = 42` without `local`) read through
-//! a caller-supplied lookup, with dotted paths indexing into its JSON form.
-//! Resolution is a single pass with no recursion:
-//! scalars render as strings, tables/arrays as JSON, and a missing path is a
-//! hard error. `{{ item }}` outside a fanout arm is a hard error. A missing
-//! bare global, or one holding
-//! a function or userdata, is a hard error. Substitution does no arithmetic -
-//! compute in Lua and reference the result.
+//! source is never substituted. Five sources are available: `args` (the single
+//! raw input string), `argv` (its parsed JSON form, nil when the args did not
+//! parse), `item` (the item seeded into this section - a fanout arm's or a
+//! `tasks.spawn` task's first entry - nil otherwise), `var` (values the
+//! section's Lua wrote), and `sys` (runtime-provided metadata). An unknown
+//! first segment resolves as a bare global: a section-local Lua global
+//! (`x = 42` without `local`) read through a caller-supplied lookup, with
+//! dotted paths indexing into its JSON form. Resolution is a single pass with
+//! no recursion: scalars render as strings, tables/arrays as JSON, and a
+//! missing path is a hard error. `{{ item }}` with no item seeded into this
+//! section is a hard error. A missing bare global, or one holding a function
+//! or userdata, is a hard error. Substitution does no arithmetic - compute in
+//! Lua and reference the result.
 //!
 //! # Escape grammar
 //!
@@ -47,19 +46,19 @@ enum SubstErrorKind {
     /// The leading namespace is not one of the known roots and names no bare
     /// global.
     UnknownNamespace,
-    /// A scalar namespace (`args`/`item`) was indexed like a table.
+    /// A key path after `args` or `item`, which render whole only.
     NotATable,
-    /// A `var`/`sys` lookup found no value at the requested key.
+    /// A key path found no value: under `var`, `sys`, `argv`, or a bare
+    /// global.
     MissingKey,
     /// The resolved value was JSON null.
     NullValue,
-    /// `{{ item }}` was used outside a fanout arm.
+    /// `{{ item }}` was used with no item seeded into this section.
     NilItem,
     /// `{{ argv }}` was used when the args string did not parse (or H1 left
     /// `argv` nil).
     NilArgv,
-    /// A table/array value failed to serialize to JSON, or a bare global was
-    /// not JSON data.
+    /// A bare global was not JSON data.
     Serialize,
 }
 
@@ -123,42 +122,23 @@ impl std::error::Error for SubstitutionError {
 
 type SubstResult<T> = std::result::Result<T, SubstitutionError>;
 
-/// Renders the JSON scalar forms shared by item and placeholder rendering.
-fn render_scalar(value: &Value) -> Option<String> {
-    match value {
-        Value::String(value) => Some(value.clone()),
-        Value::Bool(value) => Some(value.to_string()),
-        Value::Number(value) => Some(value.to_string()),
-        Value::Null | Value::Array(_) | Value::Object(_) => None,
-    }
-}
-
-/// Renders a spawned chain's `item` for prose substitution: strings
-/// verbatim, numbers and booleans in their natural string form, arrays and
-/// objects as compact JSON. The one rule is the Lua crate's, shared with
-/// the `fanout` shim's exhausted-arm stub so `{{ item }}` and the stub's
-/// heading render a member identically.
-#[must_use]
-fn render_item(item: &Value) -> String {
-    crate::lua::render_item(item)
-}
-
 /// The value sources `{{ }}` placeholders resolve against.
 ///
 /// `var` and `sys` are JSON objects (`var` read back from the section's
 /// Lua, `sys` built by the runtime). `argv` is the parsed form of the args
 /// string - the run's frozen value on the walk - or `None` when the args
 /// did not parse; `{{ argv }}` renders the whole value and `{{ argv.key }}`
-/// indexes it, with a nil `argv` a hard error. `item` is the current fanout
-/// arm's item value, or `None` outside arms; it renders per
-/// [`render_item`]. `globals` resolves a bare global by name: `Ok(None)`
-/// when unset, `Ok(Some(_))` with its JSON form when set.
+/// indexes it, with a nil `argv` a hard error. `item` is the item seeded into
+/// this section (a fanout arm's or a `tasks.spawn` task's first entry), or
+/// `None` otherwise; it renders per [`render_item`](crate::lua::render_item).
+/// `globals` resolves a bare global by name: `Ok(None)` when unset,
+/// `Ok(Some(_))` with its JSON form when set.
 pub(crate) struct Sources<'a> {
     /// The raw args string: `{{ args }}`.
     pub(crate) args: &'a str,
     /// The parsed form of the args string: `{{ argv }}` and dotted paths.
     pub(crate) argv: Option<&'a Value>,
-    /// The current fanout arm's item value: `{{ item }}`.
+    /// The item seeded into this section: `{{ item }}`.
     pub(crate) item: Option<&'a Value>,
     /// The section's `var` table, read back from its Lua.
     pub(crate) var: &'a Value,
@@ -176,8 +156,10 @@ pub(crate) struct Sources<'a> {
 /// # Errors
 /// Returns [`Error::Substitution`](crate::Error::Substitution) for an unclosed
 /// `{{`, an unknown namespace or missing bare global, an empty or whitespace
-/// path segment, a missing key, a null value, a non-JSON bare global,
-/// `{{ item }}` when `item` is `None`, or `{{ argv }}` when `argv` is `None`.
+/// path segment, a bare `{{ var }}` or `{{ sys }}` with no key, a key path
+/// after `args` or `item`, a missing key, a null value, a non-JSON bare
+/// global, `{{ item }}` when `item` is `None`, or `{{ argv }}` when `argv` is
+/// `None`.
 pub(crate) fn substitute(prose: &str, sources: &Sources<'_>) -> Result<String> {
     Ok(substitute_inner(prose, sources)?)
 }
@@ -275,7 +257,7 @@ fn resolve(path: &str, offset: usize, sources: &Sources<'_>) -> SubstResult<Stri
         return Ok(sources.args.to_string());
     }
     if path == "item" {
-        return sources.item.map(render_item).ok_or_else(|| {
+        return sources.item.map(crate::lua::render_item).ok_or_else(|| {
             SubstitutionError::new(
                 SubstErrorKind::NilItem,
                 offset,
@@ -382,27 +364,17 @@ fn path_preview(path: &str) -> String {
     out
 }
 
-/// Renders a resolved JSON value as its substituted string.
+/// Renders a resolved JSON value as its substituted string, per
+/// [`render_item`](crate::lua::render_item); a null is an error.
 fn render(value: &Value, path: &str, offset: usize) -> SubstResult<String> {
-    if let Some(rendered) = render_scalar(value) {
-        return Ok(rendered);
-    }
     if value.is_null() {
-        Err(SubstitutionError::new(
+        return Err(SubstitutionError::new(
             SubstErrorKind::NullValue,
             offset,
             format!("missing {{{{ {} }}}}", path_preview(path)),
-        ))
-    } else {
-        serde_json::to_string(value).map_err(|error| {
-            SubstitutionError::with_source(
-                SubstErrorKind::Serialize,
-                offset,
-                format!("could not serialize {{{{ {} }}}}", path_preview(path)),
-                Box::new(error),
-            )
-        })
+        ));
     }
+    Ok(crate::lua::render_item(value))
 }
 
 #[cfg(test)]

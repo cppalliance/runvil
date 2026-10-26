@@ -66,8 +66,7 @@ impl Scheduler {
     ///
     /// # Errors
     /// Returns [`Error::Internal`] when the chain has no frame or no open
-    /// adhoc call, which only a shim bug produces, or no suspended block
-    /// to take the answer.
+    /// adhoc call, or no suspended block to take the answer.
     pub(in crate::execute::scheduler) fn dispatch_adhoc_tool_done(
         &mut self,
         id: ChainIndex,

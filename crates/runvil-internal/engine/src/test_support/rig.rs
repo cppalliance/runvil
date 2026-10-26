@@ -3,7 +3,7 @@
 //! scenario does not hold the moment it is issued, and keeps what a
 //! run-level test never reads: each issued effect's record and each model
 //! round, in issue order, and the run itself, so a test reaches the
-//! scheduler between steps and reads its task slots once the run is done.
+//! scheduler between steps and reads its task entries once the run is done.
 //! Between steps a test releases the held effects it chooses, in the order
 //! it chooses, or cancels the run; a shuffled rig answers each step's
 //! effects in a seeded permutation instead of issue order.
@@ -192,7 +192,7 @@ impl RigTrace {
         &self.tap.rounds
     }
 
-    /// The state of `task`'s slot at the run's end, or `None` when no task
+    /// The state of `task`'s entry at the run's end, or `None` when no task
     /// with that id was started.
     ///
     /// # Panics

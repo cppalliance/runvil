@@ -1,17 +1,17 @@
 //! The `timer` arm: the internal timeout behind a timed wait (an author's
-//! `opts.timeout`), as an effect-backed task slot.
+//! `opts.timeout`), as an effect-backed task entry.
 //!
 //! A timer is the one task backed by an in-flight leaf request rather than
-//! a chain: the request sleeps and posts back, and its slot sits in the
+//! a chain: the request sleeps and posts back, and its entry sits in the
 //! task arena beside the chain-backed ones so one wait primitive serves
 //! both - the shim lists the timer's id in its `join_any` set, and the
-//! timer's firing completes its slot and wakes the waiter exactly as a
-//! task chain's end does. Cancel is the ordinary cancel arm: the slot
+//! timer's firing completes its entry and wakes the waiter exactly as a
+//! task chain's end does. Cancel is the ordinary cancel arm: the entry
 //! moves to `Cancelled` and the sleep is dropped through the shared
 //! in-flight abort path.
 //!
 //! The timer is never author-visible. The shim keeps its id, `pending`
-//! and a status table's `tasks` list omit effect-backed slots, and no task
+//! and a status table's `tasks` list omit effect-backed entries, and no task
 //! observation fires for one: it is the wait's implementation detail, not
 //! a task the author started. Its id still consumes the owner's next child
 //! index so that every id the owner hands out stays a function of the
@@ -29,28 +29,27 @@ use crate::execute::run::{Effect, EffectId};
 use crate::lua::Answer;
 use crate::{Error, Result};
 
-use super::tasks::{SlotState, TaskBacking, TaskSlot};
+use super::tasks::{SlotState, TaskBacking, TaskEntry};
 use super::{ChainIndex, Continuation, Scheduler};
 
 impl Scheduler {
     /// Dispatches a `timer` request: allocates the timer's id under the
-    /// caller, registers its effect-backed slot, issues the sleep as an
-    /// effect, and resumes the caller at once with the id. A dispatch
-    /// failure is the call's answer, resumed into the caller so the wait
-    /// shim raises it before any wait.
+    /// caller, registers its effect-backed entry, issues the sleep as an
+    /// effect, and resumes the caller at once with the id. The wait shim
+    /// raises a dispatch failure before any wait.
     pub(super) fn dispatch_timer(&mut self, id: ChainIndex, duration: Duration) -> Result<()> {
         let answer = Answer::Timer(self.prepare_timer(id, duration));
         self.answer_inline(id, answer)
     }
 
     /// The fallible half of timer dispatch: the id allocation, the issued
-    /// effect, and the slot.
+    /// effect, and the entry.
     fn prepare_timer(&mut self, id: ChainIndex, duration: Duration) -> Result<TaskId> {
         let task = TaskId::from(self.allocate_child_id(id)?);
         let effect = self.issue(id, Effect::Timer { duration }, Continuation::Timer);
         self.tasks.insert(
             task.clone(),
-            TaskSlot {
+            TaskEntry {
                 backing: TaskBacking::Effect(effect),
                 owner: id,
                 target: "timer".to_owned(),
@@ -61,25 +60,24 @@ impl Scheduler {
         Ok(task)
     }
 
-    /// Applies a timer's firing: the slot backed by `effect` moves to
+    /// Applies a timer's firing: the entry backed by `effect` moves to
     /// `Done` with an empty outcome and its owner is woken if it is parked
-    /// on a set containing the timer. Otherwise the slot holds until the
+    /// on a set containing the timer. Otherwise the entry holds until the
     /// owner's next wait delivers it - the shim's `join` rounds may
     /// be between waits when the timer fires.
     ///
     /// # Errors
-    /// Returns [`Error::Internal`] when no live slot is backed by
+    /// Returns [`Error::Internal`] when no live entry is backed by
     /// `effect` - a cancelled or abandoned timer's effect is aborted and
     /// its late firing discarded before it reaches here - or when the
-    /// woken owner has no suspended block. Only a scheduler bug produces
-    /// either.
+    /// woken owner has no suspended block.
     pub(super) fn fire_timer(&mut self, effect: EffectId) -> Result<()> {
         let Some((task, slot)) = self
             .tasks
             .iter_mut()
             .find(|(_, slot)| slot.backing == TaskBacking::Effect(effect) && slot.state.is_live())
         else {
-            return Err(Error::internal("a fired timer has a live slot"));
+            return Err(Error::internal("a fired timer has a live entry"));
         };
         slot.state = SlotState::Done(Ok(String::new()));
         let (task, owner) = (task.clone(), slot.owner);
