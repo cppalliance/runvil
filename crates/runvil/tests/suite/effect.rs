@@ -64,7 +64,7 @@ fn a_tool_calls_origin_is_named_at_runvil_effect() -> TestResult {
             _ => None,
         })
         .ok_or("the greeter calls its shout tool before it ends")?;
-    let expected = ToolCallOrigin::new("greeter", "Shout", ToolCaller::Script);
+    let expected = ToolCallOrigin::new("greeter", "Shout", ToolCaller::Script).with_entry("0.1.0");
     assert_eq!(origin, expected);
     Ok(())
 }

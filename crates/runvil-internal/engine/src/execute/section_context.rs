@@ -160,6 +160,19 @@ impl SectionContext {
         ))
     }
 
+    /// The section entry's id: the value its Lua reads as `sys.id`, which
+    /// the walk assigned when it entered the section.
+    ///
+    /// # Errors
+    /// Returns [`Error::Internal`] if `sys` holds no id, which both
+    /// constructors seed.
+    pub(super) fn entry_id(&self) -> Result<&str> {
+        self.sys
+            .get("id")
+            .and_then(serde_json::Value::as_str)
+            .ok_or(Error::internal("a section frame's sys holds its entry id"))
+    }
+
     /// Installs the pending Markdown buffer as the VM's fresh read-only
     /// lazy `prose` template before one Lua coroutine starts. The first
     /// runtime read snapshots the section state, renders every `{{ }}`

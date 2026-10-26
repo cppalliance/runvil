@@ -28,15 +28,17 @@ const SPEAKS: &str = "---\nname: speaks\ndescription: d\nrunvil: 0\n\
 /// it.
 const SPEAKER: PackInfo = echo_pack("tests/speaker", Some(SPEAKER_PRELUDE));
 
-/// The logged record of the speaker's echo called with `value` from
-/// `section` by the section's script.
-fn script_call(value: &str, section: &str) -> serde_json::Value {
+/// The logged record of the speaker's echo called with `value` from the
+/// entry `entry` of `section` by the section's script.
+fn script_call(value: &str, section: &str, entry: &str) -> serde_json::Value {
     json!({
         "ToolCall": {
             "tool": "speaker/echo",
             "alias": "speaker/echo",
             "args": { "value": value },
-            "origin": { "execution": "session-1", "section": section, "caller": "script" },
+            "origin": {
+                "execution": "session-1", "section": section, "caller": "script", "entry": entry
+            },
         }
     })
 }
@@ -71,7 +73,10 @@ async fn a_preludes_tool_calls_are_recorded_as_script_calls_from_the_section_tha
         .collect();
     assert_eq!(
         effects,
-        [script_call("one", "First"), script_call("two", "Second")],
+        [
+            script_call("one", "First", "0.1"),
+            script_call("two", "Second", "0.2")
+        ],
         "each prelude call is one recorded ToolCall effect naming its caller and section"
     );
 }

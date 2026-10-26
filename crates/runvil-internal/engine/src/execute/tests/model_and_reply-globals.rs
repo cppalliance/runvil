@@ -1,9 +1,9 @@
 //! What a section reads through `sys.model`, `item`, and `reply`:
-//! `sys.model` is unknown before the one-time scope install and reads
-//! the catalog id after it, in prose, the epilog, and a fanout arm; a
-//! table `item` member substitutes as compact JSON; and `reply` is not
-//! a global: it reads nil in Lua and fails as an unknown global in
-//! prose.
+//! `sys.model` is unknown before the one-time scope install, and after
+//! it reads the bound model's name, without the server namespace its id
+//! also holds, in prose, the epilog, and a fanout arm; a table `item`
+//! member substitutes as compact JSON; and `reply` is not a global: it
+//! reads nil in Lua and fails as an unknown global in prose.
 
 use runvil_parser::test_support::one_section;
 
@@ -61,10 +61,10 @@ fn prologue_sys_model_unknown_before_scope_close() {
 }
 
 #[test]
-fn prose_substitution_sees_sys_model_catalog_id() {
+fn prose_substitution_sees_the_model_name_in_sys_model() {
     // The first script dispatch runs the one-time scope install, which
-    // enriches `sys.model` with the bound catalog id; a prose read after it
-    // substitutes the catalog id, not the alias.
+    // enriches `sys.model` with the bound model's name; a prose read after
+    // it substitutes that name, not the alias.
     let trace = under_tools(PromptSource::new().prose(
         "Only",
         "
@@ -72,17 +72,17 @@ fn prose_substitution_sees_sys_model_catalog_id() {
         tools.call('tools/echo', { value = 'x' })
         ```
 
-        Model id is {{ sys.model }}.
+        Model name is {{ sys.model }}.
 
         ```lua
         return prose
         ```",
     ));
-    assert_eq!(trace.text(), "Model id is claude-sonnet-4-6.");
+    assert_eq!(trace.text(), "Model name is claude-sonnet-4-6.");
 }
 
 #[test]
-fn epilog_sees_model_catalog_id_not_alias_after_the_scope_install() {
+fn epilog_sees_the_model_name_not_alias_after_the_scope_install() {
     let trace = under_tools(PromptSource::new().prose(
         "Only",
         "
@@ -98,7 +98,7 @@ fn epilog_sees_model_catalog_id_not_alias_after_the_scope_install() {
 }
 
 #[test]
-fn fanout_arm_sees_sys_model_catalog_id_after_the_scope_install() {
+fn fanout_arm_sees_the_model_name_in_sys_model_after_the_scope_install() {
     let trace = under_tools(
         PromptSource::new()
             .section(

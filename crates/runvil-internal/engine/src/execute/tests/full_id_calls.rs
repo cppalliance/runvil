@@ -27,7 +27,7 @@ fn echo_id() -> ToolId {
 
 /// The origin of a script call made in the fixture prompt's one section.
 fn script_origin() -> ToolCallOrigin {
-    ToolCallOrigin::new(EXECUTION, "Only", ToolCaller::Script)
+    ToolCallOrigin::new(EXECUTION, "Only", ToolCaller::Script).with_entry("0.1")
 }
 
 /// A run of the one section `lua` prepared against a catalog of the echo

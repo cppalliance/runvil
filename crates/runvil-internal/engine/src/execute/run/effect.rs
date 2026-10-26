@@ -122,19 +122,18 @@ pub enum Effect {
     },
     /// One call to a catalog tool. The caller resolves `tool`, the tool's
     /// stable identity, to an implementation. `alias` is the tool's wire
-    /// name, or its id for a script call to a tool the run could not
-    /// offer, and `origin` says who made the call and where. The effect's
-    /// record keeps both and leaves out `access`.
+    /// name for a model call and its id for a script call, and `origin`
+    /// says who made the call and where. The effect's record keeps both
+    /// and leaves out `access`.
     ToolCall {
         /// The tool's stable live identity.
         tool: ToolId,
-        /// The tool's wire name, or its id when the run could not offer
-        /// it.
+        /// The tool's wire name for a model call, or its id for a script call.
         alias: String,
         /// The call's arguments.
         args: Value,
-        /// Who made the call: the run, the section, and whether the
-        /// section's script or a model round asked for it.
+        /// Who made the call: the run, the section and its entry, and the
+        /// section's script or the model whose round asked for it.
         origin: ToolCallOrigin,
         /// The call's own identity, forked from the calling chain's
         /// access when the call is issued and joined back into it when the
@@ -277,13 +276,12 @@ pub enum EffectRecord {
     ToolCall {
         /// The tool's stable live identity.
         tool: ToolId,
-        /// The tool's wire name, or its id when the run could not offer
-        /// it.
+        /// The tool's wire name for a model call, or its id for a script call.
         alias: String,
         /// The call's arguments.
         args: Value,
-        /// Who made the call: the run, the section, and whether the
-        /// section's script or a model round asked for it.
+        /// Who made the call: the run, the section and its entry, and the
+        /// section's script or the model whose round asked for it.
         origin: ToolCallOrigin,
     },
     /// One operation on the run's store view.

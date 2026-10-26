@@ -518,6 +518,8 @@ pub fn runvil::effect::Effect::record(&self) -> runvil::effect::EffectRecord
 pub fn runvil::effect::EffectAnswer::record(&self) -> runvil::effect::AnswerRecord
 pub fn runvil::effect::Round::new(id: runvil::ids::RoundId, origin: runvil::event::ReplyOrigin) -> runvil::effect::Round
 pub fn runvil::effect::ToolCallOrigin::new(execution: impl core::convert::Into<alloc::string::String>, section: impl core::convert::Into<alloc::string::String>, caller: runvil::effect::ToolCaller) -> runvil::effect::ToolCallOrigin
+pub fn runvil::effect::ToolCallOrigin::with_entry(self, entry: impl core::convert::Into<alloc::string::String>) -> runvil::effect::ToolCallOrigin
+pub fn runvil::effect::ToolCallOrigin::with_model(self, model: impl core::convert::Into<alloc::string::String>) -> runvil::effect::ToolCallOrigin
 pub fn runvil::event::Event::execution(&self) -> &str
 pub fn runvil::event::Event::provenance(&self) -> &runvil::ids::Provenance
 pub fn runvil::event::Event::section(&self) -> &str
@@ -912,7 +914,9 @@ pub runvil::effect::Round::origin: runvil::event::ReplyOrigin
 pub runvil::effect::ToolAnswerRecord::text: alloc::string::String
 pub runvil::effect::ToolAnswerRecord::trust: runvil::tools::OutputTrust
 pub runvil::effect::ToolCallOrigin::caller: runvil::effect::ToolCaller
+pub runvil::effect::ToolCallOrigin::entry: core::option::Option<alloc::string::String>
 pub runvil::effect::ToolCallOrigin::execution: alloc::string::String
+pub runvil::effect::ToolCallOrigin::model: core::option::Option<alloc::string::String>
 pub runvil::effect::ToolCallOrigin::section: alloc::string::String
 pub runvil::effect::ToolCaller::Model
 pub runvil::effect::ToolCaller::Script

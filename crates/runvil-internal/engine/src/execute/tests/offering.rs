@@ -6,7 +6,7 @@
 use runvil_parser::test_support::{PromptSource, one_section, prompt};
 
 use super::fixtures::echo_tool;
-use super::models_loop::catalog_scenario;
+use super::models_loop::{catalog_scenario, loop_model_name};
 use super::*;
 use crate::execute::run::{EffectRecord, ToolCallOrigin, ToolCaller};
 use crate::test_support::rig::Rig;
@@ -130,7 +130,7 @@ fn a_script_offers_the_extras_and_the_model_calls_an_offered_tool_by_its_wire_na
             tool: ToolId::parse("tools/echo").expect("valid id"),
             alias: "tools_echo".to_owned(),
             args: json!({ "value": "hi" }),
-            origin: ToolCallOrigin::new(EXECUTION, "Only", ToolCaller::Model),
+            origin: model_origin("Only"),
         }]
     );
 }
@@ -185,7 +185,7 @@ fn a_script_calls_an_offered_tool_by_its_object_and_by_its_id_without_offering_i
         tool: ToolId::parse("tools/echo").expect("valid id"),
         alias: "tools/echo".to_owned(),
         args: json!({ "value": value }),
-        origin: ToolCallOrigin::new(EXECUTION, "Only", ToolCaller::Script),
+        origin: ToolCallOrigin::new(EXECUTION, "Only", ToolCaller::Script).with_entry("0.1"),
     };
     assert_eq!(rig.issued(), vec![call("a"), call("b")]);
 }
@@ -208,13 +208,21 @@ fn rounds_and_calls(records: &[EffectRecord]) -> (Vec<Vec<String>>, Vec<EffectRe
     (advertised, calls)
 }
 
+/// The origin of a model call made in `section`, the first section the
+/// walk enters, on the default loop model.
+fn model_origin(section: &str) -> ToolCallOrigin {
+    ToolCallOrigin::new(EXECUTION, section, ToolCaller::Model)
+        .with_entry("0.1")
+        .with_model(loop_model_name("writer"))
+}
+
 /// A model call of `id` under `alias` with `value`, from the one section.
 fn model_call(id: &str, alias: &str, value: &str) -> EffectRecord {
     EffectRecord::ToolCall {
         tool: ToolId::parse(id).expect("valid id"),
         alias: alias.to_owned(),
         args: json!({ "value": value }),
-        origin: ToolCallOrigin::new(EXECUTION, "Only", ToolCaller::Model),
+        origin: model_origin("Only"),
     }
 }
 

@@ -168,7 +168,9 @@ async fn records_are_events_then_effects_then_answers_per_step() {
             "tool": "tests/runner/wait",
             "alias": "tests/runner/wait",
             "args": {},
-            "origin": { "execution": "runner-test", "section": "Only", "caller": "script" }
+            "origin": {
+                "execution": "runner-test", "section": "Only", "caller": "script", "entry": "0.1"
+            }
         } })
     );
     assert_eq!(
@@ -241,7 +243,10 @@ async fn a_cancel_writes_one_dropped_answer_per_outstanding_effect() {
                 "tool": "tests/runner/wait",
                 "alias": "tests/runner/wait",
                 "args": {},
-                "origin": { "execution": "runner-test", "section": "Child", "caller": "script" }
+                "origin": {
+                    "execution": "runner-test", "section": "Child", "caller": "script",
+                    "entry": "0.0.0"
+                }
             } }),
         ],
         "the timer and the child's tool call are the two effects out"

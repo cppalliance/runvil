@@ -174,14 +174,14 @@ fn compactors_clear_removes_every_record_and_keeps_the_send_and_the_rendered_too
     list.push(user("one")).unwrap();
     list.attach_rendered_tools(RenderedTools::default());
     let sent = [Message::user("one")];
-    let _ = list.commit(RoundId::new(0), &sent);
+    let _ = list.commit(RoundId::new(0), "test-model", &sent);
     let lua = lua_with_compactors_over(&list);
     list.set_compacting(true);
     lua.load("compactors.clear('manual')").exec().unwrap();
     assert!(list.to_records().is_empty(), "every record is gone");
     assert!(list.rendered(), "the frozen sets stay attached");
     assert_eq!(
-        list.commit(RoundId::new(1), &sent),
+        list.commit(RoundId::new(1), "test-model", &sent),
         (Some(RoundId::new(0)), 1),
         "the last send stays, so the next send still compares with it"
     );

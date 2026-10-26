@@ -107,8 +107,8 @@ pub(crate) enum ListEditError {
 struct ListState {
     /// The records, in order, shared with the views read from them.
     records: Vec<Arc<MessageRecord>>,
-    /// The last issued send: its round and the wire request it sent.
-    last: Option<(RoundId, Vec<Message>)>,
+    /// The last issued send: its round, model name, and wire request.
+    last: Option<(RoundId, String, Vec<Message>)>,
     /// Attached at the first successful build and never detached.
     rendered: Option<Arc<RenderedTools>>,
     /// Set while a compactor runs over the list.
@@ -190,20 +190,27 @@ impl MessageList {
         Ok(())
     }
 
-    /// Records `request` as the list's send in `round`, and returns the
-    /// previous send's round and how many leading messages `request`
-    /// shares with that send's request; `(None, 0)` on the first send.
+    /// Records `sent` as the list's send in `round` to the model named
+    /// `model`, and returns the previous send's round and how many leading
+    /// messages `sent` shares with that send; `(None, 0)` on the first.
     #[must_use]
-    pub fn commit(&self, round: RoundId, request: &[Message]) -> (Option<RoundId>, u64) {
-        let previous = self.state().last.replace((round, request.to_vec()));
-        previous.map_or((None, 0), |(after, sent)| {
-            let keep = sent
+    pub fn commit(&self, round: RoundId, model: &str, sent: &[Message]) -> (Option<RoundId>, u64) {
+        let latest = (round, model.to_owned(), sent.to_vec());
+        let previous = self.state().last.replace(latest);
+        previous.map_or((None, 0), |(after, _, earlier)| {
+            let keep = earlier
                 .iter()
-                .zip(request)
-                .take_while(|(sent, now)| sent == now)
+                .zip(sent)
+                .take_while(|(earlier, now)| earlier == now)
                 .count();
             (Some(after), u64::try_from(keep).unwrap_or(u64::MAX))
         })
+    }
+
+    /// The name of the model the last send went to; none before the first.
+    #[must_use]
+    pub fn last_model(&self) -> Option<String> {
+        self.state().last.as_ref().map(|(_, name, _)| name.clone())
     }
 
     /// Whether frozen sets are attached; none means false.

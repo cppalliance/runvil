@@ -340,9 +340,8 @@ impl<S> SectionVm<S> {
 
     /// The section's one conversation, which the `messages` global holds
     /// from Engine injection until the VM drops.
-    #[cfg(test)]
     #[must_use]
-    pub(crate) fn messages(&self) -> &MessageList {
+    pub fn messages(&self) -> &MessageList {
         &self.messages
     }
 
