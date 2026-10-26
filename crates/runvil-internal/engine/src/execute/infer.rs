@@ -24,13 +24,10 @@ use crate::model::{Completion, CompletionError, CompletionErrorKind, CompletionR
 
 use super::turn;
 
-/// Reports one completed infer round through the shared round report and
-/// renders its text. The report fires the turn advance's round events - the
-/// debug capture pair, the completed boundary, the thinking side channel,
-/// the `length` truncation observation - plus the [`Emitter::assistant_reply`]
-/// content report tagged `origin = infer`, each content report stamped
-/// with `round`. The no-tools-advertised violation check is what keeps the
-/// round tool-free.
+/// Reports one completed infer round through [`turn::report_model_turn`],
+/// whose sequence ends in the `assistant_reply` tagged `origin = infer`,
+/// and renders its text. The no-tools-advertised violation check is what
+/// keeps the round tool-free.
 fn accept_infer_completion(
     completion: Completion,
     round: RoundId,

@@ -322,8 +322,9 @@ pub enum EffectAnswer {
     /// The caller gave up on the effect and dropped it, for example
     /// because the run was cancelled or the effect's task ended first. If
     /// the chain still waits on the effect, it resumes with a cancelled
-    /// error. A drop is an answer like any other, so it counts as the
-    /// effect's one answer.
+    /// error. Uncaught, that error ends the run as `RunResult::Cancelled`. A
+    /// drop is an answer like any other, so it counts as the effect's one
+    /// answer.
     Dropped,
 }
 

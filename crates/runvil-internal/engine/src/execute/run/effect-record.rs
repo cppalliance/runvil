@@ -48,11 +48,11 @@ impl<T> PackToolSets<T> {
 /// log stores it. A replay compares each re-issued effect against its
 /// record.
 ///
-/// The `Chat` record keeps only what identifies the round: its id, the
-/// alias of the model slot it ran under, and the frozen invocation
-/// settings (temperature, generation cap, and thinking switch). It stores
-/// the request's messages in wire form after the first `keep`, which repeat
-/// round `after`'s request. So a caller that logs records must record every
+/// The `Chat` record holds the round's id, the alias of the model slot it
+/// ran under, the frozen invocation settings (temperature, generation cap,
+/// and thinking switch), the advertised tool names, and the request's
+/// messages in wire form after the first `keep`, which repeat round
+/// `after`'s request. So a caller that logs records must record every
 /// Chat effect a step returns, including ones it drops, for each `after` to
 /// name a recorded round. It names the slot by alias, because the
 /// caller may serve the slot with a different model from the bound one.

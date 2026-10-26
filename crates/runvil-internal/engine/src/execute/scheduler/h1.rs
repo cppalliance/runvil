@@ -1,13 +1,16 @@
 //! The live H1 pass: the prompt's H1 blocks run first as section 0, the
-//! driver loop's first chain, under the walk's rules with three deltas -
-//! the frame takes the root chain's entry 0, a scalar return
-//! short-circuits the run, and a Lua failure is the prompt's failed hard
-//! gate, mapped to [`Error::RequirementsUnmet`]. The pass and the walk
-//! that follows it are the same root chain `0`: the hand-off starts the
-//! walk from the pass's `var` and frozen `argv`, continues the pass's
-//! child and entry counters, so the first walked section is `0.1` and a
-//! child the pass started keeps its index, and hands the pass's tasks to
-//! the walk as their owner.
+//! driver loop's first chain, under the walk's rules with these deltas:
+//! the frame takes the root chain's entry 0 and fires no section
+//! observations, a scalar return short-circuits the run, a Lua failure is
+//! the prompt's failed hard gate, mapped to [`Error::RequirementsUnmet`],
+//! and the pass's end hands off to the root walk. The frame's own deltas,
+//! writable `argv` among them, are listed on `SectionContext::new_live_h1`.
+//!
+//! The pass and the walk that follows it share the root lineage `0` and
+//! are two arena records: the hand-off starts the walk from the pass's
+//! `var` and frozen `argv`, continues the pass's child and entry counters,
+//! so the first walked section is `0.1` and a child the pass started keeps
+//! its index, and hands the pass's tasks to the walk as their owner.
 
 use std::sync::Arc;
 
@@ -39,9 +42,10 @@ impl Scheduler {
         );
         let access = self.ctx.vfs().acquire(origin).map_err(Error::store)?;
         self.scope = Some(runvil_vfs::detail::scope_handle(&access));
-        // The pass is the root chain: its one frame takes entry 0, and the
-        // walk that follows continues its counters as the same chain. Its
-        // admission limit is the run's ceiling.
+        // The pass is the root lineage's first record: its one frame takes
+        // entry 0, and the walk that follows, a second record under the
+        // same lineage, continues its counters. Its admission limit is the
+        // run's ceiling.
         let id = self.start_chain(ChainStart {
             lineage: ChainId::root(),
             counters: Counters::default(),
@@ -85,8 +89,8 @@ impl Scheduler {
         // with the walk, and a task the pass spawned joins the one root
         // identity.
         let walk_access = Arc::clone(chain.access()?);
-        // The walk is the same root chain as the pass, so it continues the
-        // pass's counters: the pass took entry 0, the first walked section
+        // The walk shares the root lineage with the pass, so it continues
+        // the pass's counters: the pass took entry 0, the first walked section
         // takes entry 1, and a child the pass started keeps its index. Its
         // admission limit continues too: the pass may have lowered it with
         // `tasks.concurrency`.

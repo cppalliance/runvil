@@ -16,9 +16,9 @@
 //! ([`Scheduler::accept_render`]).
 //! The driver classifies the answered completion into the round's answer
 //! when it arrives ([`Scheduler::accept_chat`]), emitting the round's
-//! events - the turn advance, the debug capture pair, turn completed or
-//! failed or truncated, thinking, and the reply or the tool-call batch -
-//! through the chain's own task-scoped emitter, and rejecting a tool name
+//! events (the turn advance, then `report_model_turn`'s sequence, which
+//! ends in a text reply's report, or the tool-call batch after it) through
+//! the chain's own task-scoped emitter, and rejecting a tool name
 //! outside both frozen sets of the section the chain is parked in. The
 //! shim that yielded the round emits nothing; the scheduler owns every
 //! event.
@@ -256,17 +256,13 @@ impl Scheduler {
     /// the round's events through the chain's task-scoped emitter, each
     /// content event stamped with `round`.
     ///
-    /// A `ContextOverflow` failure is the overflow answer under a failed
-    /// turn. An `EmptyReply` is a completed round with the reply absent -
-    /// the turn advances and completes - so the shim applies its exit
-    /// rules against `finish_reason`. Every other failure is a failed turn
-    /// and the call's error. A served completion advances the turn, fires
-    /// the debug capture pair and the completion observation, reports the
-    /// thinking side channel, then the reply (with the truncation
-    /// observation on a `length` finish) or the tool-call batch; a
-    /// requested tool outside both frozen sets of the section the chain is
-    /// parked in fails the call as out of scope after a failed-tool-call
-    /// observation. A chain has one parked round, and its frame's sets are
+    /// A failure classifies as `ArrivedRound::failed` describes. A served
+    /// completion advances the turn and reports through
+    /// `report_model_turn`, a text reply's report included; a tool-call
+    /// batch reports after it, and a requested tool outside both frozen
+    /// sets of the section the chain is parked in fails the call as out of
+    /// scope after a failed-tool-call observation. A chain has one parked
+    /// round, and its frame's sets are
     /// read before the round settles, so they are that round's sets. A
     /// round that reported usage becomes the chain's measurement for the
     /// next dispatch's precheck to the same model, whatever the round's
@@ -399,11 +395,9 @@ impl ArrivedRound {
         }
     }
 
-    /// Reports a served completion's round-level events through the shared
-    /// round report - the debug capture pair, the completed boundary, the
-    /// thinking side channel, the `length` truncation observation, and the
-    /// `assistant_reply` content report - and dissolves the completion into
-    /// its outcome and the metadata the answer arms carry beside it.
+    /// Reports a served completion's round-level events through
+    /// [`report_model_turn`] and dissolves the completion into its outcome
+    /// and the metadata the answer arms carry beside it.
     fn served(&self, completion: Completion, turn: u32) -> (CompletionResult, Served) {
         report_model_turn(
             &self.emitter,

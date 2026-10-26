@@ -8,7 +8,7 @@
 //! chain admits at most its effective limit at once. The root's limit is the run's
 //! [`RunLimits::max_concurrency`](crate::execute::RunLimits::max_concurrency)
 //! ceiling; a spawned task and a call chain start with their parent's,
-//! and `tasks.concurrency` lowers it, clamped to the parent's. Queue
+//! and `tasks.concurrency` sets it, clamped to the parent's. Queue
 //! order is spawn order, with resumptions first. The task's start event
 //! fires at admission, when the task first runs.
 
@@ -161,9 +161,10 @@ impl Scheduler {
 
     /// Admits one queued task chain: marks it holding a slot at its owner
     /// and every enclosing ancestor, installs its spawn record, fires the
-    /// start event on the spawner's sequence under the spawning section
-    /// (the spawn-time capture, so a task admitted after its spawner moved
-    /// on still reports where it was spawned), and enqueues it. The start
+    /// start event on its owner's sequence (its spawner, or the root walk
+    /// for a task the H1 pass spawned) under the spawning section (the
+    /// spawn-time capture, so a task admitted after its spawner moved on
+    /// still reports where it was spawned), and enqueues it. The start
     /// event marks admission - the task first runs now - so a task still
     /// waiting for a slot reports no start event, and its Lua VM is only
     /// created at its first section entry, after admission.
@@ -174,14 +175,10 @@ impl Scheduler {
     /// queues a task chain with its record and registers its slot first.
     fn admit_chain(&mut self, id: ChainIndex) -> Result<()> {
         let chain = &mut self.chains[id.index()];
-        let ChainKind::Task {
-            owner: spawner,
-            admission,
-        } = &mut chain.kind
-        else {
+        let ChainKind::Task { owner, admission } = &mut chain.kind else {
             return Err(Error::internal("a queued task chain has a spawner"));
         };
-        let spawner = *spawner;
+        let owner = *owner;
         let Admission::Queued(record) =
             std::mem::replace(admission, Admission::Admitted { holding: true })
         else {
@@ -198,8 +195,8 @@ impl Scheduler {
             return Err(Error::internal("a task chain has a slot"));
         };
         let target = slot.target.clone();
-        let emitter = Arc::clone(self.chains[spawner.index()].ctx.emitter());
-        // The start event fires at admission, on the spawner's sequence:
+        let emitter = Arc::clone(self.chains[owner.index()].ctx.emitter());
+        // The start event fires at admission, on its owner's sequence:
         // the task first runs now, and the payload's seeds are enough to
         // start the same chain again under the same id.
         emitter.emit(&record.section, |execution, section, provenance| {

@@ -32,8 +32,9 @@
 //!   sets, and the schemas a round projects from its Static Set.
 //! - `section_context` - the per-section `SectionContext` frame the
 //!   scheduler's chains construct, run, and tear down.
-//! - `section_vm` - the section VM setup half shared by the walk and the
-//!   fanout arm.
+//! - `section_vm` - the section VM setup both frame constructors share: a
+//!   walked section's (a spawned task's first entry included) and the H1
+//!   pass's.
 //! - `turn` - the model-turn counter and the round report every served
 //!   completion goes through.
 //! - `walk_target` - the walk-target resolution helpers.
@@ -102,42 +103,13 @@ pub fn perform_vfs_op(
 ///
 /// # Outcomes
 /// - [`RunResult::Ok`] - the run completed with its final text.
-/// - [`RunResult::Cancelled`] - the caller cancelled the run.
+/// - [`RunResult::Cancelled`] - the caller cancelled the run, or dropped an
+///   effect the run was waiting on and no `pcall` caught the cancelled
+///   error it resumed with.
 /// - [`RunResult::Failure`] - the run failed.
 ///
 /// A failure's [`RunError`] has a [`kind`](RunError::kind) that classifies
-/// the failure by condition:
-/// - [`RunErrorKind::Parse`] - the prompt, its frontmatter, or a compiled
-///   Lua region was invalid.
-/// - [`RunErrorKind::Version`] - the prompt declared an unsupported
-///   `runvil:` major version.
-/// - [`RunErrorKind::Binding`] - a tool or model capability failed to bind
-///   or was missing.
-/// - [`RunErrorKind::Completion`] - a model completion failed at the transport,
-///   backend, or decode layer.
-/// - [`RunErrorKind::Tool`] - a dispatched tool failed, was out of scope, or the
-///   tool loop failed to converge.
-/// - [`RunErrorKind::Lua`] - a section's Lua phase failed to run or return a
-///   usable value.
-/// - [`RunErrorKind::Quota`] - a Lua resource quota (log events, log bytes,
-///   or instructions) was exhausted.
-/// - [`RunErrorKind::ContextExhausted`] - `compactors.fail` exhausted the
-///   model's context window, after an overflow or with a section's own reason.
-/// - [`RunErrorKind::Substitution`] - a `{{ }}` prose substitution failed.
-/// - [`RunErrorKind::Vfs`] - a run-scoped store operation failed, or the
-///   run's handle lacks a store declaration.
-/// - [`RunErrorKind::Determinism`] - two live execution identities claimed
-///   one store path. The run ended on the spot, and Lua code cannot catch
-///   this failure.
-/// - [`RunErrorKind::Cancelled`] - the caller cancelled the run. This kind
-///   only classifies errors raised while the run is still going. The run
-///   itself ends in [`RunResult::Cancelled`].
-/// - [`RunErrorKind::Internal`] - an internal invariant failed.
-/// - [`RunErrorKind::RequirementsUnmet`] - a missing or unavailable
-///   required Pack, a service the caller left out, a model requirement a
-///   bound model fails to meet
-///   (a context minimum or a hard keyword), or an H1 block that failed the
-///   prompt's hard gate.
+/// the failure by condition; [`RunErrorKind`] documents each kind.
 ///
 /// The enum is `#[non_exhaustive]`, so a `match` on it needs a wildcard
 /// arm.
@@ -148,7 +120,8 @@ pub enum RunResult {
     /// `Result::Ok`, so patterns must write `RunResult::Ok` wherever
     /// `Result` is also in scope.
     Ok(String),
-    /// The caller cancelled the run.
+    /// The caller cancelled the run, or dropped an effect the run was
+    /// waiting on and the cancelled error went uncaught.
     Cancelled,
     /// The run failed. The error's kind classifies the failure.
     Failure(RunError),

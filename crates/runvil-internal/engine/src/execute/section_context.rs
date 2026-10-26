@@ -7,10 +7,11 @@
 //! (the task-scoped event emitter and the turn counter) seeded out of the
 //! run context; a task chain's context is the spawn's fork, so the handles
 //! reach the frame and the task's nested chains through the one value.
-//! Each driver is one construct-run-teardown cycle: the constructor
-//! absorbs the VM construction and setup preamble ([`SectionContext::new`]
-//! for a walked section, [`SectionContext::new_live_h1`] for the live H1
-//! pass; the two sit in the `construct` sibling), the scheduler's chain
+//! Each section entry is one construct-run-teardown cycle: a frame
+//! constructor absorbs the VM construction and setup preamble
+//! ([`SectionContext::new`] for a walked section, a spawned task's first
+//! entry included, and [`SectionContext::new_live_h1`] for the H1 pass;
+//! the two sit in the `construct` sibling), the scheduler's chain
 //! steps run the blocks, and the frame's [`Drop`] impl is the single
 //! teardown boundary.
 //!
@@ -192,7 +193,7 @@ impl SectionContext {
 
     /// The frame's effective reporting handles for the `chat` rounds the
     /// scheduler applies on this chain (the `models.loop` shim's among
-    /// them), each seeded out of the run context (a fanout arm's fork) at
+    /// them), each seeded out of the run context (a spawned task's fork) at
     /// construction.
     pub(super) fn reporting_handles(&self) -> ReportingHandles {
         ReportingHandles {

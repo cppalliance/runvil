@@ -1,11 +1,13 @@
-//! The run: the Engine's boundary with its caller, four methods exchanging
-//! effects and events as values. The caller's loop is documented on the
-//! `runvil` facade's crate page and its `effect` and `cancel` modules.
+//! The run: the Engine's boundary with its caller, which `Run`'s methods
+//! cross by exchanging effects and events as values. The caller's loop is
+//! documented on the `runvil` facade's crate page and its `effect` and
+//! `cancel` modules.
 //!
-//! The effect vocabulary itself - [`Effect`] and its [`Round`] and
-//! [`PackToolSets`], its serializable [`EffectRecord`], [`EffectAnswer`],
-//! and [`EffectId`] - is defined in the `effect` child module and is
-//! re-exported here.
+//! The effect vocabulary - [`Effect`] with its [`Round`] and
+//! [`PackToolSets`], [`EffectAnswer`], [`EffectId`], the serializable
+//! records of effects and answers, and the [`ToolCallOrigin`] and
+//! [`ToolCaller`] it re-exports from `runvil-types` - comes from the
+//! `effect` child module and is re-exported here.
 
 use std::fmt;
 use std::sync::Arc;

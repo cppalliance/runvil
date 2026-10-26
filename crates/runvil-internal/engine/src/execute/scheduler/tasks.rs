@@ -49,8 +49,9 @@ pub(super) enum TaskBacking {
 pub(crate) enum TaskState {
     /// The backing chain or request is live.
     Running,
-    /// The backing chain ended; its outcome waits in the slot. `ok` is
-    /// whether the chain returned rather than failed.
+    /// The backing chain or request ended; its outcome waits in the slot.
+    /// `ok` is whether it returned rather than failed, always `true` for a
+    /// fired timer.
     Done { ok: bool },
     /// The owner took the outcome through a wait. `ok` is the outcome's,
     /// kept so `status` still reports it after the wait took it.
@@ -84,16 +85,19 @@ impl TaskState {
 pub(super) struct TaskSlot {
     /// Where the task's work runs.
     pub(super) backing: TaskBacking,
-    /// The chain that started the task: the only chain allowed to wait on,
-    /// inspect, or cancel it, and the chain whose end ends the task.
+    /// The chain that owns the task: its spawner, or the root walk for a
+    /// task the H1 pass spawned, since the pass and the walk share the root
+    /// lineage `0` as two arena records. The only chain allowed to wait on,
+    /// inspect, or cancel the task, and the chain whose end ends it.
     pub(super) owner: ChainIndex,
-    /// The name of the section the task's chain started at: the section
-    /// its terminal observations report under.
+    /// The name of the section the task's chain started at, which its
+    /// terminal observations report under; the placeholder `timer` for an
+    /// internal timer, which reports none.
     pub(super) target: String,
     /// The task's lifecycle state.
     pub(super) state: TaskState,
-    /// The chain's final text or failure, held from the chain's end until
-    /// the owner takes it.
+    /// The backing chain's final text or failure, or an empty text for a
+    /// fired timer, held from its end until the owner takes it.
     pub(super) outcome: Option<Result<String>>,
     /// The task's happens-before identity: the [`ExecId`] its access was
     /// spawned under, recorded at spawn so a delivery can join the task
@@ -145,9 +149,9 @@ impl Scheduler {
     }
 
     /// The fallible half of spawn dispatch: `call`'s depth cap against the
-    /// spawner's call-depth field (the refusal named after the
-    /// author-facing call that tripped it, `tasks.fanout` for an arm and
-    /// `call` otherwise), `call`'s target resolution over the spawner's
+    /// spawner's call-depth field (the refusal named `tasks.fanout` for an
+    /// arm, and `call` for a `call` or a `tasks.spawn`), `call`'s target
+    /// resolution over the spawner's
     /// visible set, the worker-template check (a list section is not a
     /// target), then the task chain one level deeper under the spawn's
     /// `args` and `var` snapshot, with its own access capability (a
@@ -212,8 +216,9 @@ impl Scheduler {
         // end joins it last.
         let exec = detail::access_id(&access);
         // The task's id is the spawner's next child index, shared with
-        // `call` children, so it depends only on the spawner's own
-        // dispatch order; the task is its chain, named from the other side.
+        // `call` children and the wait shims' timers, so it depends only on
+        // the spawner's own dispatch order; the task is its chain, named
+        // from the other side.
         let chain_id = self.allocate_child_id(id)?;
         let task = TaskId::from(chain_id.clone());
         // The task's context reports under its own task id with its own

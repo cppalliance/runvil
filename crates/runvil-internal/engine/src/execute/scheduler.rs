@@ -30,9 +30,10 @@
 //! borrow, and the scheduler owns itself outright.
 //!
 //! This file holds the scheduler core: the chain arena, the ready queue,
-//! the admission queues (spawned tasks wait there until the run's
-//! concurrency limits admit them), the pending table, the task arena, and
-//! the one `issue` path every leaf arm hands its effect through. The
+//! the admission queues (resumed chains, admitted first, and fresh spawns,
+//! which wait there until the run's concurrency limits admit them), the
+//! pending table, the task arena, and the one `issue` path every leaf arm
+//! hands its effect through. The
 //! submodules hold the rest: `pending` the pending table's entry (the
 //! `Continuation` an answer is applied by), `drive` the run-level step (the
 //! ready-queue drain, the terminal rules, and the teardown), `apply` the
@@ -89,11 +90,14 @@ use chain_record::{Chain, ChatAnchor};
 use pending::{CallSite, Continuation, Pending, ToolCallContinuation, VfsContinuation};
 use tasks::TaskSlot;
 
-/// Maximum nested `call()` depth (inclusive of the first call).
+/// The deepest nesting a chain may run at, counting `call` children and
+/// spawned tasks, fanout arms included; the first level counts.
 const MAX_CALL_DEPTH: usize = 8;
 
-/// The run's final result when no section produced a reply: the generic
-/// completion text both fallback sites (an empty walk, an H1-only run) share.
+/// The run's final result when no section produced a reply, which three
+/// fallback sites share: a prompt with neither H1 blocks nor sections, a
+/// top-level walk that ends without a scalar, and an H1 pass with no walk
+/// after it.
 const GENERIC_COMPLETION: &str = "done";
 
 /// The most precise prompt-source line known for `blocks`: the first
@@ -146,14 +150,14 @@ struct SpawnRecord {
 }
 
 /// A chain's local id counters: the indices its next child chain and its
-/// next section entry take under its lineage. Set once at chain start:
-/// zero for a fresh chain (`Default`), or the values the chain continues
-/// from when it takes over an earlier chain's identity (the walk after
-/// the H1 pass).
+/// next section entry take under its lineage. Set at chain start and
+/// advanced as the chain hands out ids: zero for a fresh chain
+/// (`Default`), or the values the chain continues from when it takes over
+/// an earlier chain's identity (the walk after the H1 pass).
 #[derive(Clone, Copy, Debug, Default)]
 struct Counters {
-    /// The next index a `call` child or a spawned arm takes under the
-    /// chain's lineage. The two share the counter.
+    /// The next child index under the chain's lineage, which `call`
+    /// children, spawned tasks, and the wait shims' timers share.
     next_child: u32,
     /// The next index a section entry takes under the chain's lineage as
     /// its `sys.id`.
@@ -181,22 +185,25 @@ pub(crate) struct Scheduler {
     ctx: RunState,
     /// The chain arena: append-only, indexed by [`ChainIndex`].
     chains: Vec<Chain>,
-    /// Chains eligible to resume (FIFO); the driver drains it before
-    /// awaiting anything.
+    /// Chains eligible to resume (FIFO); empty whenever a step returns,
+    /// because `drain` runs it dry or the run's end clears it.
     ready: VecDeque<ChainIndex>,
-    /// Task chains waiting for admission, in queue order: resumptions (a
-    /// task parked on a task wait that gave its slots back) first, then
-    /// fresh spawns in spawn order. A queued chain holds no Lua VM and
-    /// no copied `var` snapshot: admission is what starts it.
+    /// Chains parked on a task wait that gave their admission slots back,
+    /// waiting to take them again: a task chain, or a call chain that gave
+    /// back its nearest holding ancestor's slots. Each keeps its Lua VM and
+    /// holds its delivered answer; readmission marks the holder holding and
+    /// requeues the chain. Admitted ahead of every fresh spawn.
     resuming: VecDeque<ChainIndex>,
     /// Freshly spawned task chains waiting for admission, in spawn order;
-    /// admitted after every resuming chain.
+    /// admitted after every resuming chain. A queued spawn holds no Lua VM
+    /// yet: admission is what starts it.
     spawned: VecDeque<ChainIndex>,
     /// One entry per in-flight leaf effect, keyed by the effect's id:
     /// the parked chain and how the answer resumes it.
     pending: HashMap<EffectId, Pending>,
     /// The task arena: one slot per task the run has started, keyed by the
-    /// task's id (its backing chain's id). A slot outlives its chain: it
+    /// task's id: its backing chain's id, or, for an internal timer, the id
+    /// it took from its owner's child counter. A slot outlives its chain: it
     /// holds the terminal state and the undelivered outcome at least until
     /// the owner takes the result or ends, and in fact for the run - the
     /// arena is append-only like the chain arena, so `status` can report a

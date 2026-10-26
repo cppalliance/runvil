@@ -1,24 +1,20 @@
 //! The Engine's setup half: one section VM's lifecycle from Engine injection
 //! through the store yield shims' install.
 //!
-//! Every section driver - the walk's section entry and the
-//! fanout arm - runs the identical setup sequence: inject the Engine values,
-//! install the persistent Engine globals, install the control globals, install
-//! the Pack preludes, install `require`, then install the store yield
-//! shims.
-//! Only the deltas live at the call site: the driver builds its own `sys`
-//! JSON (both drivers take the next run-global `id`; the arm adds its
-//! per-fanout `index`), picks the [`VmSeed`] (the walk's rolled-forward
-//! `var`; an arm
-//! adds its collection `item` to the caller's cloned `var`), and supplies
-//! the `read` callback behind the `prompt` reads, resolved over its own
-//! visible set, the library resolver behind `require`, resolved over its
-//! own reach, and the renderer for library prose templates.
+//! Both frame constructors - `SectionContext::new` for a walked section (a
+//! spawned task's first entry included) and `SectionContext::new_live_h1`
+//! for the H1 pass - run the sequence [`setup_section_vm`] lists. Only the
+//! deltas live at the call site: the constructor builds its own `sys` JSON
+//! (both take the chain's next entry `id`; a task's first entry adds its
+//! `index`), picks the [`VmSeed`] (the chain's `var`, plus the item seeded
+//! into this section on a task's first entry), and supplies the `read`
+//! callback behind the `prompt` reads, resolved over its own visible set,
+//! the library resolver behind `require`, resolved over its own reach, and
+//! the renderer for library prose templates.
 //!
-//! VM construction and the Lua limits install stay with the driver. A
-//! construction failure's handling differs (the walk propagates, the arm
-//! finishes its finalizer), and a limits failure must keep
-//! propagating as a bare `?` - routing it through teardown would emit
+//! VM construction and the Lua limits install stay with the frame
+//! constructor. A construction or limits failure propagates as a bare
+//! `?` - routing it through teardown would emit
 //! `LUA_TEARDOWN_STARTED`/`SUCCEEDED` events the walk never emitted. Setup
 //! consumes the uninjected VM, so a setup failure tears it down here, the
 //! one place a VM that never reached its frame is torn down.
@@ -39,18 +35,19 @@ use crate::{Error, Result};
 /// `item` global after the Engine globals, ahead of every block.
 #[derive(Clone, Copy, Debug, Default)]
 pub(crate) struct VmSeed<'a> {
-    /// The walk's current `var`: rolled forward across sections on one walk,
-    /// cloned into a `call` chain or a fanout arm; `None` seeds an empty
-    /// table.
+    /// The chain's current `var`: rolled forward across sections on one
+    /// walk, cloned into a `call` chain or a spawned task (a fanout arm
+    /// included); `None`, the H1 pass's frame, seeds an empty table.
     pub(crate) var: Option<&'a serde_json::Value>,
-    /// The fanout arm's collection member; `None` outside an arm.
+    /// The item seeded into this section, on a spawned task's first entry;
+    /// `None` otherwise.
     pub(crate) item: Option<&'a serde_json::Value>,
 }
 
 /// The borrowed inputs one section VM setup shares.
 ///
-/// Bundled so the walk and the fanout arm each thread one linear set of
-/// borrows into [`setup_section_vm`] rather than a dozen parameters.
+/// Bundled so each frame constructor threads one linear set of borrows
+/// into [`setup_section_vm`] rather than a dozen parameters.
 pub(crate) struct SectionVmSetup<'a> {
     /// The run's argument string, installed as the `args` global.
     pub(crate) args: &'a str,
@@ -59,15 +56,16 @@ pub(crate) struct SectionVmSetup<'a> {
     /// H1 only: `argv` installs writable, so the repair pattern can assign
     /// it; every other section gets the frozen value.
     pub(crate) argv_writable: bool,
-    /// The `sys` JSON the driver built for this section or arm.
+    /// The `sys` JSON the frame constructor built for this section entry.
     pub(crate) sys: &'a serde_json::Value,
     /// The chain step's VFS access capability backing the Lua `store`
-    /// table: the walk's own, a call chain's borrowed parent capability, or
-    /// a fanout arm's spawned one. The store closures share it, so every
+    /// table: the root identity the H1 pass and the walk share, a call
+    /// chain's borrowed parent capability, or a spawned task's forked one
+    /// (a fanout arm included). The store closures share it, so every
     /// store op is attributed to the chain step's identity.
     pub(crate) access: &'a Arc<Access>,
-    /// The driver-specific seed: the walk's `var`, plus the collection
-    /// `item` for an arm.
+    /// The frame constructor's seed: the chain's `var`, plus the item
+    /// seeded into this section on a spawned task's first entry.
     pub(crate) seed: VmSeed<'a>,
     /// The chain's emitter: the persistent Engine globals (`log`, `store`)
     /// capture a clone, and `require`'s library loads report through it.
@@ -93,21 +91,24 @@ pub(crate) struct SectionVmSetup<'a> {
 
 /// Runs one section VM's setup sequence against a constructed, limited VM.
 ///
-/// The sequence is fixed and shared: Engine injection with the driver's
-/// [`VmSeed`], [`SectionVm::install_engine_globals`], the `item` global when the
-/// seed includes one, the control surface
+/// The sequence is fixed and shared: Engine injection with the frame
+/// constructor's [`VmSeed`], [`SectionVm::install_engine_globals`], the
+/// `ui()` global when the run supplied a snapshot, the `item` global when
+/// the seed includes one, the control surface
 /// ([`SectionVm::install_scheduler_control_globals`] for `jump` and the
 /// `prompt` reads, plus [`SectionVm::install_coro_shims`] for the
-/// suspending calls, which the scheduler drives as yield shims), the run's
-/// Pack preludes, [`SectionVm::install_require`] over `resolve` and
-/// `render`, and the store yield shims. The caller applies
-/// the Lua limits itself before calling, so a limits failure propagates
-/// without touching the VM's teardown observation path.
+/// suspending calls, which the scheduler drives as yield shims), the
+/// section's `models.loop` shim, the run's Pack preludes,
+/// [`SectionVm::install_require`] over `resolve` and `render`, and the
+/// store yield shims. The caller applies the Lua limits itself before
+/// calling, so a limits failure propagates without touching the VM's
+/// teardown observation path.
 ///
 /// # Errors
 /// Returns the [`Error`] of whichever step failed, after tearing the VM
 /// down under the setup's section: Engine injection, Engine global
-/// install, `item` install, control-global install, the prelude install (a
+/// install, `ui()` install, `item` install, control-global install, the
+/// `models.loop` shim install, the prelude install (a
 /// prelude that fails to load, or whose global collides, or a store
 /// conflict a prelude's store call recorded), the `require` install, or
 /// the store shims' install.

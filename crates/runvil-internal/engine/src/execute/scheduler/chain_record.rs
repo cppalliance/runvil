@@ -1,7 +1,8 @@
 //! The chain record: one chain's identity, kind, walk position, in-flight
 //! coroutine, task bookkeeping, and walk-scoped slots. The scheduler's
 //! arena holds one per chain it has started, indexed by
-//! [`ChainIndex`](super::ChainIndex).
+//! [`ChainIndex`](super::ChainIndex); the H1 pass and the walk after it
+//! share the root lineage `0` and are two records.
 
 use std::fmt;
 use std::num::NonZeroUsize;
@@ -160,8 +161,8 @@ impl CallDepth {
 /// next entry constructs the next.
 pub(super) struct Chain {
     /// The chain's hierarchical id: the parent chain's id extended by the
-    /// parent's local child counter (the root chain, the main walk, is
-    /// `0`; the H1 pass and the walk that follows it are the same chain).
+    /// parent's local child counter (the root lineage is `0`, which the H1
+    /// pass and the walk that follows it share as two arena records).
     /// Every id the chain hands out - its children's, its section
     /// entries' - extends this path, so two runs of one prompt allocate
     /// identical ids however their chains interleave.
@@ -201,8 +202,13 @@ pub(super) struct Chain {
     /// The latest progress note published through `tasks.note` for the
     /// task this chain backs, reported by `tasks.status`.
     pub(super) note: Option<String>,
-    /// The chain's fork of the run context: the run's own for the root
-    /// chain, `with_args` for a call chain's input override.
+    /// The chain's fork of the run state: the run's own for the H1 pass and
+    /// for a root walk with no pass before it, the hand-off fork holding
+    /// H1's frozen `argv` (`with_walk_state`) for the walk after the pass,
+    /// and the caller's for a `call` child or the spawner's for a task,
+    /// through `with_args` when the call or spawn gave an input. A task's
+    /// fork also reports under its own task id with its own turn counter
+    /// (`with_task`).
     pub(super) ctx: RunState,
     /// The chain's VFS access capability, installed into each section VM
     /// the chain enters: the walk and the live H1 pass share one root
@@ -262,7 +268,7 @@ pub(super) struct Chain {
     /// may have admitted at once. The root's is the run's ceiling
     /// ([`RunLimits::max_concurrency`](crate::execute::RunLimits::max_concurrency));
     /// a spawned task and a call chain start with their parent's, and
-    /// `tasks.concurrency` lowers it, clamped to the parent's.
+    /// `tasks.concurrency` sets it, clamped to the parent's.
     pub(super) concurrency: NonZeroUsize,
     /// The provider's token counts for the chain's `chat` rounds, which the
     /// next round's context precheck counts from.
