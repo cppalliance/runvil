@@ -58,9 +58,9 @@ pub(super) struct ChainStart {
 
 impl Scheduler {
     /// Allocates the next child id under `owner`'s chain: the owner's id
-    /// extended by its local child counter, which `call` children and
-    /// spawned tasks share, so the ids a chain hands out depend only on
-    /// the order of its own dispatches.
+    /// extended by its local child counter, which `call` children, spawned
+    /// tasks, and the wait shims' timers share, so the ids a chain hands
+    /// out depend only on the order of its own dispatches.
     ///
     /// # Errors
     /// Returns [`Error::Internal`] when one chain has started `u32::MAX`

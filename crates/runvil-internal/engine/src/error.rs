@@ -41,8 +41,9 @@ fn cause_suffix(cause: Option<&BoxedSource>) -> String {
     cause.map(|cause| format!(": {cause}")).unwrap_or_default()
 }
 
-/// The author-facing call whose nesting passed the call-depth cap, which
-/// [`Error::CallDepthExceeded`] is named after.
+/// The call name [`Error::CallDepthExceeded`] reports for a nesting that
+/// passed the call-depth cap: `tasks.fanout` for a fanout arm, and `call`
+/// for a `call` or a `tasks.spawn`, which shares its cap.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum DepthVia {
     /// A `call`, or a `tasks.spawn`, which shares `call`'s cap.
@@ -64,12 +65,10 @@ impl std::fmt::Display for DepthVia {
 /// failures.
 ///
 /// This type is `pub(crate)` and never appears in the public API; the public
-/// boundary errors wrap and classify it. Marked `#[non_exhaustive]` so future
-/// variants are not a breaking change. The model variant holds the broker's
+/// boundary errors wrap and classify it. The model variant holds the broker's
 /// closed error whole, so no HTTP client's error type leaks through the
 /// wrappers' `source()`.
 #[derive(Debug, thiserror::Error)]
-#[non_exhaustive]
 pub(crate) enum Error {
     /// The prompt frontmatter was not valid YAML, keeping the parser cause.
     ///
@@ -77,7 +76,6 @@ pub(crate) enum Error {
     /// as the cause beside the location surfaced from it, rather than being
     /// flattened away; `message` already holds its text.
     #[error("invalid frontmatter: {message}")]
-    #[non_exhaustive]
     ParseFrontmatter {
         /// The human-readable diagnostic (no raw source dump).
         message: String,
@@ -95,7 +93,6 @@ pub(crate) enum Error {
     /// classification and location from stored fields instead of inferring them
     /// from message text.
     #[error("{message}")]
-    #[non_exhaustive]
     ParseStructured {
         /// The stable classification of this parse failure.
         kind: crate::parser::ParseErrorKind,
@@ -130,12 +127,14 @@ pub(crate) enum Error {
     #[error("interrupted: the run was cancelled or this call was stopped")]
     Interrupted,
 
-    /// A section's Lua phase failed an Engine contract or hit a poisoned lock: a
-    /// runtime-internal condition with no originating `mlua` error to preserve
-    /// (for example "Engine values have not been injected" or a poisoned mutex).
+    /// A condition the prompt author caused and can fix in Lua, with no
+    /// originating `mlua` error to keep, such as an empty `messages` list or
+    /// a heading that names no section.
     ///
-    /// Failures that *do* have an `mlua` cause use [`Error::LuaRuntime`], which
-    /// keeps that cause. The message is the specific
+    /// It also holds the message of a raised error table whose kind needs
+    /// structure the table does not hold (see `Error::from_raised`).
+    /// Failures that do have an `mlua` cause use [`Error::LuaRuntime`], and
+    /// Engine misuse uses [`Error::Internal`]. The message is the specific
     /// failure as a noun phrase; the public wrapper classifies this as a Lua
     /// failure, so no redundant `lua error:` type label is prepended.
     #[error("{0}")]
@@ -152,7 +151,6 @@ pub(crate) enum Error {
     /// through the public wrappers' `cause()` instead of being flattened to
     /// a string.
     #[error("{message}")]
-    #[non_exhaustive]
     LuaRuntime {
         /// The mapped, location-tagged diagnostic (no redundant type label).
         message: String,
@@ -167,7 +165,6 @@ pub(crate) enum Error {
     /// the public wrappers' `cause()` instead of being flattened into
     /// `message` alone.
     #[error("lua compilation error at {location} (line {source_line}): {message}")]
-    #[non_exhaustive]
     LuaCompile {
         /// The prompt region supplied by the parser, such as a section prologue.
         location: String,
@@ -187,7 +184,6 @@ pub(crate) enum Error {
     ///
     /// Constructed only by the tool-scope preparation.
     #[error("model-facing schema build failure for tool alias {alias:?}")]
-    #[non_exhaustive]
     BindSchema {
         /// The prompt-local alias whose schema could not be built.
         alias: String,
@@ -204,7 +200,6 @@ pub(crate) enum Error {
     ///
     /// Constructed only by the merge.
     #[error("{}", merge::merge_message(.rule, .tools))]
-    #[non_exhaustive]
     ToolMerge {
         /// The rule the sets broke.
         rule: MergeRule,
@@ -281,7 +276,6 @@ pub(crate) enum Error {
     /// resolves against the run's whole catalog and fails with
     /// [`Error::UnboundToolCall`] instead.
     #[error("tool {name:?} is not in this section's scope; in-scope aliases: {in_scope:?}{}", if *.global_exists { " (a catalog tool that was not offered in this section)" } else { "" })]
-    #[non_exhaustive]
     OutOfScopeToolCall {
         /// The alias or identifier the model tried to use.
         name: String,
@@ -299,7 +293,6 @@ pub(crate) enum Error {
     /// so this error means the name is no catalog tool's id at all; a wire
     /// name is the model's, never a script's.
     #[error("tool {name:?} is not a tool in this run; catalog tools: {ids:?}")]
-    #[non_exhaustive]
     UnboundToolCall {
         /// The name the call tried to dispatch.
         name: String,
@@ -307,12 +300,12 @@ pub(crate) enum Error {
         ids: Vec<String>,
     },
 
-    /// A model-facing section has non-empty prose but no `models.use` or
-    /// prompt-wide `models.default` binding.
+    /// A `models.infer` or `models.loop` round found no `models.use`
+    /// selection and no prompt-wide `models.default`.
     #[error("model binding required for section {section}")]
-    #[non_exhaustive]
     ModelRequired {
-        /// The H2 section heading that reached a model turn without a binding.
+        /// The name of the section whose round had no binding, or the
+        /// prompt's H1 title for a round in the H1 pass.
         section: String,
     },
 
@@ -329,7 +322,6 @@ pub(crate) enum Error {
     /// The notice, followed by the cause's text when there is one, is the
     /// whole message, written to be read by a model.
     #[error("{notice}{}", cause_suffix(.cause.as_ref()))]
-    #[non_exhaustive]
     RequirementsUnmet {
         /// The model-readable refusal notice, one line per gap.
         notice: String,
@@ -360,7 +352,6 @@ pub(crate) enum Error {
     /// `#[track_caller]`) so [`crate::RunError::location`] can point at the
     /// broken invariant.
     #[error("internal invariant violated: {message}{}", cause_suffix(.cause.as_ref()))]
-    #[non_exhaustive]
     Internal {
         /// The violated invariant, as a noun phrase; owned when it names a
         /// value, as a Lua internal message passed through whole may.
@@ -373,11 +364,10 @@ pub(crate) enum Error {
         cause: Option<BoxedSource>,
     },
 
-    /// A Lua resource quota (log events, log bytes, or instructions) was
-    /// exhausted. This stable typed variant lets the caller tell quota
-    /// exhaustion apart from an authoring error.
+    /// A Lua log quota (log events or log bytes) ran out. This stable typed
+    /// variant lets the caller tell quota exhaustion apart from an authoring
+    /// error.
     #[error("lua {resource} quota exceeded")]
-    #[non_exhaustive]
     LuaQuota {
         /// The exhausted resource.
         resource: crate::lua::QuotaResource,
@@ -399,7 +389,6 @@ pub(crate) enum Error {
     /// selected compactor did not compact, or a caller raised it with its
     /// own reason.
     #[error("context exhausted: {}", crate::lua::exhaustion_detail(reason))]
-    #[non_exhaustive]
     ContextExhausted {
         /// `precheck` or `provider` after an overflow, else the caller's reason.
         reason: String,

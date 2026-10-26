@@ -3,10 +3,9 @@
 //! walked section (a spawned task's first entry included, seeded with its
 //! `item` and `sys.index`), the live H1 pass (section 0) - and hands back
 //! a live [`SectionContext`] whose `Drop` is the teardown boundary. The
-//! setup half (Engine injection, Engine globals, the control surface, the
-//! Pack preludes, `require`, the store yield shims) is
-//! shared; only the seed, the `sys` extras, the visible set behind the
-//! `prompt` reads, and the origin `require` resolves from differ.
+//! setup half ([`section_vm::setup_section_vm`]) is shared; only the seed,
+//! the `sys` extras, the visible set behind the `prompt` reads, and the
+//! origin `require` resolves from differ.
 
 use std::sync::Arc;
 
@@ -39,11 +38,9 @@ fn library_resolver(
 impl SectionContext {
     /// Constructs the frame for one walked section and runs its setup
     /// preamble: the `sys` JSON, the section-started observation, VM
-    /// construction and limits, the control surface (`jump`, and the
-    /// `prompt` reads resolved over the section's visible set, plus the
-    /// coroutine yield shims for the suspending calls), and
-    /// the rest of the shared setup half (Engine injection, Engine globals, the
-    /// Pack preludes, `require`, the store yield shims).
+    /// construction and limits, and the shared setup half
+    /// ([`section_vm::setup_section_vm`]), with the `prompt` reads resolved
+    /// over the section's visible set.
     ///
     /// `home` is the path of the caller's own walk slice and `index` the
     /// section's place in it. Each `prompt` read resolves that slice from
@@ -120,11 +117,9 @@ impl SectionContext {
         let read = move |heading: String| {
             walk_target::read_visible(&heading, Visible::of(home.resolve(&prompt), index))
         };
-        // The setup half of the section lifecycle - Engine injection, Engine
-        // globals, the control surface, `require`, the store yield shims, and
-        // the captured alias bindings - is shared with the H1 pass; only the
-        // seed, the `sys` extras, and the callbacks' position are the walk's
-        // own.
+        // The shared setup half ([`section_vm::setup_section_vm`]) follows;
+        // only the seed, the `sys` extras, and the callbacks' position are
+        // the walk's own.
         let setup = ctx.vm_setup(
             &sys,
             VmSeed {
@@ -154,14 +149,13 @@ impl SectionContext {
     /// install path as any walked section: the `sys` JSON (`section_id`,
     /// the root chain's entry 0, under the prompt's title, with the run's
     /// `when` like every section after it), VM construction over the
-    /// run's shared sets, limits, and the shared
-    /// setup half (Engine injection, Engine globals, the control surface, the
-    /// coroutine shims, the Pack preludes, `require`, the store yield
-    /// shims).
+    /// run's shared sets, limits, and the shared setup half
+    /// ([`section_vm::setup_section_vm`]).
     ///
     /// H1's only deltas from a walked section: no `SECTION_STARTED`
     /// observation (the pass is not a walked section), an empty `var` seed
-    /// (it runs first and is never re-entered), [`walk_target::h1_visible_sections`]
+    /// (it runs first and is never re-entered), `argv` installed writable
+    /// so the repair pattern can assign it, [`walk_target::h1_visible_sections`]
     /// as the visible set behind the `prompt` reads, and
     /// [`RequireOrigin::H1`], which reaches every top-level section, behind
     /// `require`.

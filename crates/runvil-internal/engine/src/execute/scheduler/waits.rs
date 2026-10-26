@@ -13,8 +13,10 @@
 //! never delivered: a task is abandoned because its owner ended, and only
 //! the owner may wait on it, so no wait can reach the slot.
 //!
-//! Ownership is the rule for every arm: only the chain that spawned a
-//! task may wait on, check, list, or cancel it, and an id naming no task
+//! Ownership is the rule for every arm: only the chain that owns a task -
+//! its spawner, or the root walk for a task the H1 pass spawned, since the
+//! pass and the walk share the root lineage `0` as two arena records - may
+//! wait on, check, list, or cancel it, and an id naming no task
 //! is refused the same way so a caller learns nothing about tasks it never
 //! started. `status` and `note` add the self exception: a chain may read
 //! and annotate the task it runs inside (`sys.taskid`), which is how a

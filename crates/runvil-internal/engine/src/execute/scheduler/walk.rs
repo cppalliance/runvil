@@ -6,8 +6,8 @@
 //! with the parent position suspended on the chain's own position stack
 //! until the child level exhausts. A prompt with H1 blocks runs them first
 //! as section 0 (the `h1` module), and the root walk starts from that
-//! pass's `var` hand-off as the same root chain; a prompt without H1
-//! blocks starts the root walk directly.
+//! pass's `var` hand-off, sharing the root lineage `0` as a second arena
+//! record; a prompt without H1 blocks starts the root walk directly.
 
 use std::sync::Arc;
 

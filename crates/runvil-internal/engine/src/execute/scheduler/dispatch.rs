@@ -333,9 +333,10 @@ impl Scheduler {
         // `chain`'s arena borrow ends here; the resolution names the
         // target's slice by path, so nothing borrows the arena across it.
         let target_section = self.resolve_chain_target(id, target)?;
-        // The child's id is the caller's next child index: `call` children
-        // and spawned tasks share the caller's counter, so the id depends
-        // only on the caller's own dispatch order.
+        // The child's id is the caller's next child index: `call` children,
+        // spawned tasks, and the wait shims' timers share the caller's
+        // counter, so the id depends only on the caller's own dispatch
+        // order.
         let chain_id = self.allocate_child_id(id)?;
         let child = self.start_chain(ChainStart {
             lineage: chain_id,

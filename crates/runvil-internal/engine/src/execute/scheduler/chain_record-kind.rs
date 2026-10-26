@@ -27,13 +27,10 @@ pub(in crate::execute::scheduler) enum Admission {
 pub(in crate::execute::scheduler) enum ChainKind {
     /// The main walk.
     Root,
-    /// The live H1 pass: the prompt's H1 blocks under its title - section
-    /// 0. It runs the walk's rules with three deltas: the frame keeps id
-    /// 0 (no section observations fire), a scalar return short-circuits
-    /// the whole run, and the pass's end starts the root walk with the H1
-    /// `var` hand-off. The `slice`/`index` walk position stays at the
-    /// top-level slice, unused until a jump out of H1 starts the walk at
-    /// the resolved target.
+    /// The H1 pass: the prompt's H1 blocks under its title. It runs the
+    /// walk's rules with the deltas the `h1` module lists. The
+    /// `slice`/`index` walk position stays at the top-level slice, unused
+    /// until a jump out of H1 starts the walk at the resolved target.
     H1,
     /// A `call` child, whose parent is blocked on it.
     Call {
@@ -47,8 +44,10 @@ pub(in crate::execute::scheduler) enum ChainKind {
     },
     /// A spawned task's backing chain, a fanout arm included.
     Task {
-        /// The chain that spawned the task: the only chain allowed to
-        /// wait on, inspect, or cancel it.
+        /// The chain that owns the task: its spawner, or the root walk for
+        /// a task the H1 pass spawned, since the pass and the walk share
+        /// the root lineage `0` as two arena records. The only chain
+        /// allowed to wait on, inspect, or cancel it.
         owner: ChainIndex,
         /// Where the task's admission stands.
         admission: Admission,

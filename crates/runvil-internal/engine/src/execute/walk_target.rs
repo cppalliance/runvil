@@ -5,8 +5,9 @@
 //! visible set: its home slice minus itself, plus its direct children. The
 //! parent, aunts/uncles, nieces/nephews, and grandchildren are never in the
 //! set, so a resolution error that lists the set cannot leak the rest of
-//! the document's structure. The scheduler's chains resolve jumps, `call`
-//! targets, and fanout workers through these helpers, and the
+//! the document's structure. The scheduler's chains resolve jumps and
+//! `call` and `tasks.spawn` targets, fanout workers included, through these
+//! helpers, and the
 //! `prompt.section` and `prompt.list` reads resolve through them too, so
 //! every such surface agrees on what a heading may name. `require` alone
 //! also reaches the siblings of each ancestor (see [`Reachable`]), and

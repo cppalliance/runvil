@@ -205,7 +205,7 @@ fn raised_task(raised: &runvil_lua::Raised) -> Option<TaskId> {
         .and_then(|task| task.parse().ok())
 }
 
-/// The `path` field of a raised error table, when it is a string.
+/// The field `name` of a raised error table, when it is a string.
 fn raised_field<'a>(raised: &'a runvil_lua::Raised, name: &str) -> Option<&'a str> {
     raised
         .fields

@@ -7,7 +7,7 @@ use crate::Error;
 
 /// The stable category of a [`RunError`], for matching in code.
 ///
-/// Each variant names the phase of the run that failed. The enum is
+/// Each variant names the condition that failed the run. The enum is
 /// `#[non_exhaustive]`, so a `match` on it needs a wildcard arm. That lets
 /// new kinds be added while existing callers keep compiling.
 #[non_exhaustive]
@@ -32,13 +32,13 @@ pub enum RunErrorKind {
     /// Two live executions in the run claimed the same store path.
     ///
     /// The run stops at once to keep the interleaving of their store access
-    /// deterministic.
+    /// deterministic. Lua code cannot catch this failure.
     Determinism,
     /// A section's Lua phase failed to run or return a usable value.
     Lua,
-    /// A Lua resource quota (log events, log bytes, or instructions) was
-    /// exhausted, or a `call`, `tasks.spawn`, or `tasks.fanout` arm would
-    /// have nested past the call-depth cap.
+    /// A Lua log quota (log events or log bytes) ran out, or a `call`,
+    /// `tasks.spawn`, or `tasks.fanout` arm would have nested past the
+    /// call-depth cap.
     Quota,
     /// `compactors.fail` raised context exhaustion: a request overflowed the
     /// model's context window and the selected compactor left it over the
@@ -50,8 +50,11 @@ pub enum RunErrorKind {
     Cancelled,
     /// An internal invariant failed.
     Internal,
-    /// The environment falls short of a requirement the prompt states, such
-    /// as an H1 assertion or a model requirement.
+    /// The environment falls short of a requirement the prompt states: a
+    /// missing or unavailable required Pack, a service the caller left out,
+    /// a model requirement a bound model fails to meet (a context minimum
+    /// or a hard keyword), or an H1 block that failed the prompt's hard
+    /// gate.
     RequirementsUnmet,
 }
 
@@ -312,11 +315,5 @@ impl std::error::Error for RunError {
 impl From<Error> for RunError {
     fn from(inner: Error) -> Self {
         RunError { inner }
-    }
-}
-
-impl From<RunError> for Error {
-    fn from(error: RunError) -> Self {
-        error.inner
     }
 }

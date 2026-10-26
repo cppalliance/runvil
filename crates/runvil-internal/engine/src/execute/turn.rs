@@ -13,18 +13,16 @@ use runvil_types::metrics::CallMetrics;
 
 use crate::model::{Completion, CompletionResult};
 
-/// Advances the shared turn counter with saturation, returning the 1-based
-/// index of the turn just started.
-///
-/// Uses `try_update` so the STORED counter saturates at [`u32::MAX`] rather
-/// than wrapping through `fetch_add`. A wrapped counter would reuse a turn index
-/// and desynchronize debug capture; saturation makes that unrepresentable. The
-/// closure never returns `None`, so the update never fails.
+/// Advances the shared turn counter, returning the 1-based index of the
+/// turn just started. The counter saturates at `u32::MAX`, so a run past
+/// four billion turns repeats that index rather than wrapping to reuse
+/// small ones.
 pub(super) fn advance_turn(turns: &AtomicU32) -> u32 {
     turns
         .try_update(Ordering::Relaxed, Ordering::Relaxed, |current| {
             Some(current.saturating_add(1))
         })
+        // The closure always returns `Some`, so the fallback never applies.
         .unwrap_or(u32::MAX)
         .saturating_add(1)
 }
