@@ -87,7 +87,7 @@ fn tool_loop_exhaustion_is_readable_at_the_call_site_after_whole_exchanges() {
 fn tool_loop_uses_the_default_cap_when_unspecified() {
     // A prompt declaring no budget runs the limits default: exactly
     // `RunLimits::max_tool_iterations` round trips.
-    let default_cap = RunLimits::new().max_tool_iterations.get() as usize;
+    let default_cap = RunLimits::default().max_tool_iterations.get() as usize;
     let gateway = ScriptedChat::new(never_converging_script(default_cap));
     let source = one_section(&format!("tools.offer('tools/echo')\n{LOOP_TO_TEXT}"));
     let trace = loop_scenario(source)
@@ -103,7 +103,7 @@ fn tool_loop_uses_the_default_cap_when_unspecified() {
 fn run_resolves_cap_from_frontmatter_else_default() {
     // Mirrors the resolution in `run`: a declared budget wins, an absent
     // one falls back to the raised default.
-    let default_cap = RunLimits::new().max_tool_iterations.get() as usize;
+    let default_cap = RunLimits::default().max_tool_iterations.get() as usize;
     let declared =
         "---\nname: t\ndescription: d\nmax_tool_iterations: 5\n---\n\n# T\n\n## S\n\np\n";
     let p = Prompt::parse(declared, EXECUTION).0.unwrap();

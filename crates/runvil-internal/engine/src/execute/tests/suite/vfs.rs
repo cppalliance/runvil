@@ -10,14 +10,13 @@
 use std::sync::Arc;
 
 use crate::execute::RunResult;
-use crate::execute::run::{Effect, EffectId, Run, Step};
+use crate::execute::run::{Effect, IssuedEffect, Run, Step};
 use crate::execute::tests::context::{parse, test_context};
 use crate::parser::Prompt;
 use crate::test_support::perform_locally;
 use crate::test_support::scenario::{EXECUTION, Scenario};
 use crate::test_support::temp_root::TempRoot;
 use runvil_parser::test_support::{parse_ok, prompt};
-use runvil_types::ids::Provenance;
 use runvil_vfs::{Access, Origin, RealBackend, VfsError, VfsRef};
 
 const ROUND_TRIP_PROMPT: &str = concat!(
@@ -231,19 +230,15 @@ const HELD_STORE: &str = "---\nname: held-store\ndescription: d\nrunvil: 0\n---\
 
 /// Starts the `HELD_STORE` run over `vfs`.
 fn held_store_run(vfs: &VfsRef) -> Run {
-    let ctx = test_context(EXECUTION).vfs(vfs.clone());
+    let ctx = test_context(EXECUTION).with_vfs(vfs.clone());
     Run::new(Arc::new(parse(HELD_STORE)), "", ctx)
 }
 
 /// Answers `effects` through the local performer, keeping each one in
 /// `held` so the store views they carry outlive the answer.
-fn answer_holding(
-    run: &mut Run,
-    effects: Vec<(EffectId, Provenance, Effect)>,
-    held: &mut Vec<Effect>,
-) {
+fn answer_holding(run: &mut Run, effects: Vec<IssuedEffect>, held: &mut Vec<Effect>) {
     assert!(!effects.is_empty(), "every issued effect is answered");
-    for (id, _, effect) in effects {
+    for IssuedEffect { id, effect, .. } in effects {
         let answer = perform_locally(&effect, &mut |effect| {
             panic!("the fixture issues no model round: {effect:?}")
         });
@@ -272,7 +267,7 @@ fn a_run_ends_its_scope_at_done_while_the_caller_still_holds_its_store_views()
     let vfs = VfsRef::default();
     let (run, result, held) = drive_holding_effects(&vfs);
     assert!(
-        matches!(&result, RunResult::Ok(text) if text == "from the run"),
+        matches!(&result, RunResult::Completed(text) if text == "from the run"),
         "the run succeeds: {result:?}"
     );
     assert!(
@@ -326,7 +321,7 @@ fn dropping_a_run_before_done_ends_its_scope_while_the_caller_still_holds_its_st
         Step::Pending { effects, .. } => effects,
         other @ Step::Done { .. } => panic!("the run parks on its store read: {other:?}"),
     };
-    held.extend(effects.into_iter().map(|(_, _, effect)| effect));
+    held.extend(effects.into_iter().map(|issued| issued.effect));
     drop(run);
     // A fresh scope reads the dropped run's write without a conflict,
     // though the test driver still holds every store view the run handed out.

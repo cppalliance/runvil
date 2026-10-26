@@ -161,7 +161,7 @@ pub struct SectionVm<S = Injected> {
     /// coroutine's hook (hooks are per-coroutine in PUC Lua).
     instruction_budget: InstructionBudget,
     /// The raw-model-id fallback, resolved whenever the caller passes an
-    /// application-state snapshot (`RunContext::ui`): then `models.get`
+    /// application-state snapshot (`RunContext::with_ui`): then `models.get`
     /// resolves an undeclared alias as a raw gateway catalog model id. Set
     /// by [`allow_raw_model_ids`](SectionVm::allow_raw_model_ids) before
     /// Engine injection; refused everywhere else.
@@ -268,7 +268,7 @@ impl SectionVm<Uninjected> {
     }
 
     /// Opts the VM into the raw-model-id fallback, on whenever the caller
-    /// passes an application-state snapshot (`RunContext::ui`): `models.get`
+    /// passes an application-state snapshot (`RunContext::with_ui`): `models.get`
     /// resolves an undeclared alias as a raw gateway catalog model id.
     /// Engine injection's `models` table install reads the flag, so only an
     /// uninjected VM takes it. A run without a snapshot never calls it, so

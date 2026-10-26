@@ -27,7 +27,9 @@ use runvil_types::event::Event;
 use runvil_types::tools::ToolError;
 
 use crate::Error;
-use crate::execute::{Effect, EffectAnswer, EffectId, Run, RunError, RunResult, Step};
+use crate::execute::{
+    Effect, EffectAnswer, EffectId, IssuedEffect, Run, RunError, RunResult, Step,
+};
 use crate::lua::run_store_op;
 
 #[cfg(test)]
@@ -165,7 +167,7 @@ pub(crate) fn drive_step(
                 return Some(RunResult::Failure(RunError::from(error)));
             }
             let decided = run.decided();
-            for (id, _, effect) in effects {
+            for IssuedEffect { id, effect, .. } in effects {
                 issued(&effect);
                 let answer = if decided {
                     Some(EffectAnswer::Dropped)

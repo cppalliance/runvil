@@ -278,13 +278,13 @@ fn a_construct_failure_is_stored_and_reported_as_unavailable_with_its_reason() {
         &prompt("uses:\n  - acme/backed\n"),
     );
     assert_eq!(
-        requirements.unavailable,
+        requirements.unavailable_packs,
         [UnavailablePack::new(
             name("backed"),
             "backed needs tests/backend, and this host provides none"
         )]
     );
-    assert!(requirements.missing_required.is_empty());
+    assert!(requirements.missing_packs.is_empty());
 
     let mut wide = HostServices::new();
     wide.provide(&BACKEND, Arc::from("up")).unwrap();
@@ -317,17 +317,17 @@ fn begin_run_reports_every_declared_pack_it_cannot_serve() {
         BTreeMap::new(),
         &prompt("uses:\n  - acme/needy\n  - absent\n  - acme/fine\n  - acme/broken\n"),
     );
-    assert_eq!(requirements.missing_required, [name("absent")]);
+    assert_eq!(requirements.missing_packs, [name("absent")]);
     assert_eq!(
         requirements.missing_services,
         [MissingService::new(name("needy"), "tests/session")]
     );
     assert_eq!(
-        requirements.unavailable.len(),
+        requirements.unavailable_packs.len(),
         1,
         "the declared Pack that failed to build is reported: {requirements:?}"
     );
-    assert_eq!(requirements.unavailable[0].pack, name("broken"));
+    assert_eq!(requirements.unavailable_packs[0].pack, name("broken"));
 }
 
 #[test]

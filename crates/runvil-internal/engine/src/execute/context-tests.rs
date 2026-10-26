@@ -94,7 +94,7 @@ fn the_root_task_sequence_starts_where_the_context_says() {
             TEST_SEED,
             runvil_types::timestamp::Timestamp::UNIX_EPOCH,
         )
-        .provenance_start(5),
+        .with_provenance_start(5),
     );
     ctx.emitter()
         .report("Only", runvil_types::event::lifecycle::SECTION_STARTED);
@@ -156,7 +156,7 @@ fn a_pack_in_both_roster_lists_records_no_vendor() {
             TEST_SEED,
             runvil_types::timestamp::Timestamp::UNIX_EPOCH,
         )
-        .packs(
+        .with_packs(
             vec![UsablePack::new(web.clone(), "acme")],
             vec![UnavailablePack::new(web, "the server is down")],
         ),

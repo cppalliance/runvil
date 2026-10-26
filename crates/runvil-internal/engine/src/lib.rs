@@ -34,8 +34,8 @@ use crate::error::{Error, Result};
 // `runvil_engine::X`, not a module path.
 pub use crate::execute::{
     AnswerRecord, ChatAnswerRecord, Effect, EffectAnswer, EffectId, EffectRecord, FailureRecord,
-    MissingService, ModelBindings, PackToolSets, RequirementCheck, Requirements, Round, Run,
-    RunContext, RunError, RunErrorKind, RunLimits, RunResult, SourceLocation, Step,
+    IssuedEffect, MissingService, ModelBindings, PackToolSets, RequirementCheck, Requirements,
+    Round, Run, RunContext, RunError, RunErrorKind, RunLimits, RunResult, SourceLocation, Step,
     ToolAnswerRecord, ToolCallOrigin, ToolCaller, UnavailablePack, UnmetRequirement, UsablePack,
     perform_vfs_op,
 };

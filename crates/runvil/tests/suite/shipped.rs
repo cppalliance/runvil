@@ -23,7 +23,7 @@ fn the_shipped_research_prompt_offers_its_web_tools_by_id_and_runs_end_to_end() 
         [search, text("a factual summary")],
     )
     .args("Ada Lovelace")
-    .context(move |ctx| ctx.tools(catalog.clone()))
+    .context(move |ctx| ctx.with_tools(catalog.clone()))
     .run(&fs::read_to_string(path)?)?;
     assert_eq!(trace.text()?, "a factual summary");
 

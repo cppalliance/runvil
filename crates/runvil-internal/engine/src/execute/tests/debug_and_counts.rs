@@ -29,7 +29,7 @@ fn ask_the_model() -> String {
 fn debugged(source: String) -> Scenario {
     Scenario::new(source)
         .bound()
-        .context(|ctx| ctx.report_debug(DebugMode::On))
+        .context(|ctx| ctx.with_report_debug(DebugMode::On))
 }
 
 #[test]

@@ -18,7 +18,7 @@ fn withdrawals(step: Step) -> (Vec<(EffectId, Effect)>, Vec<EffectId>) {
     };
     let effects = effects
         .into_iter()
-        .map(|(id, _, effect)| (id, effect))
+        .map(|issued| (issued.id, issued.effect))
         .collect();
     (effects, withdrawn)
 }

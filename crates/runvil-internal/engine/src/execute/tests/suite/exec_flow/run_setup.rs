@@ -59,7 +59,7 @@ fn a_store_backend_that_refuses_its_session_fails_the_run_at_the_first_step() {
     let mut run = crate::execute::run::Run::new(
         Arc::new(prompt.expect("the fixture parses")),
         "",
-        test_context(EXECUTION).vfs(vfs),
+        test_context(EXECUTION).with_vfs(vfs),
     );
     match run.step() {
         crate::execute::run::Step::Done {

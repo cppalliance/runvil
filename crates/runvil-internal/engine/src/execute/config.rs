@@ -1,6 +1,6 @@
 //! Per-run context and resource limits: [`RunContext`] and [`RunLimits`].
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 use std::fmt;
 
 #[path = "config-limits.rs"]
@@ -26,13 +26,15 @@ use super::requirements::{Requirements, UnavailablePack, UsablePack};
 
 /// The inputs for one run of a prompt.
 ///
-/// The caller builds a context with `new` and the builder methods, among
-/// them the run's tool catalog ([`tools`](RunContext::tools)), Pack
-/// roster ([`packs`](RunContext::packs)), and Pack preludes
-/// ([`preludes`](RunContext::preludes)). Then it calls
+/// The caller builds a context with `new` and the `with_*` builder
+/// methods, among them the run's tool catalog
+/// ([`with_tools`](RunContext::with_tools)), Pack roster
+/// ([`with_packs`](RunContext::with_packs)), and Pack preludes
+/// ([`with_preludes`](RunContext::with_preludes)). Then it calls
 /// [`prepare`](RunContext::prepare), which binds the prompt's model roles
-/// and reports what the caller must still satisfy. The Engine owns the
-/// context for the run. Each context belongs to exactly one run.
+/// to the current model and reports what the caller must still satisfy. The
+/// Engine owns the context for the run. Each context belongs to exactly one
+/// run.
 ///
 /// The context holds only the Engine's input. The observer, client, tool
 /// implementations, broker, and capture belong to the caller. The Engine
@@ -52,32 +54,28 @@ pub struct RunContext {
     /// When the run began, as the caller stamped it: rendered as `sys.when`
     /// in every section, the H1 pass included.
     pub(super) started_at: Timestamp,
-    /// Where the root task's provenance sequence starts; set by `provenance_start`.
+    /// Where the root task's provenance sequence starts; set by `with_provenance_start`.
     pub(super) provenance_start: u32,
-    /// Whether the run reports raw model-round bodies as events; set by `report_debug`.
+    /// Whether the run reports raw model-round bodies as events; set by `with_report_debug`.
     pub(super) report_debug: DebugMode,
-    /// The run's cancel flag, minted by `new` and replaced by `cancel`.
+    /// The run's cancel flag, minted by `new` and replaced by `with_cancel`.
     pub(super) cancel: CancelHandle,
     pub(crate) limits: RunLimits,
-    /// The application-state snapshot the `ui()` global serves; set by `ui`.
+    /// The application-state snapshot the `ui()` global serves; set by `with_ui`.
     pub(super) ui: Option<serde_json::Value>,
-    /// The run's whole filesystem; set by `vfs`.
+    /// The run's whole filesystem; set by `with_vfs`.
     pub(super) vfs: VfsRef,
-    /// The run's current model, which the caller chooses, set before
-    /// prepare. Input to prepare's fill function, which binds every
-    /// declared role to it.
-    pub(super) model: Option<ModelInfo>,
     /// The run's model satisfaction, written by
     /// [`prepare`](RunContext::prepare)'s fill function: which concrete
     /// model each declared role is bound to.
     pub(super) model_bindings: ModelBindings,
-    /// The run's tool catalog; set by `tools`.
+    /// The run's tool catalog; set by `with_tools`.
     pub(super) tools: ToolCatalog,
-    /// Each roster Pack by name, with the reason when it can't serve; set by `packs`.
+    /// Each roster Pack by name, with the reason when it can't serve; set by `with_packs`.
     pub(super) roster: BTreeMap<PackId, Option<String>>,
-    /// The vendor of each roster Pack that can serve, by name; set by `packs`.
+    /// The vendor of each roster Pack that can serve, by name; set by `with_packs`.
     pub(super) vendors: BTreeMap<PackId, String>,
-    /// The run's Pack preludes, in declaration order; set by `preludes`.
+    /// The run's Pack preludes, in declaration order; set by `with_preludes`.
     pub(super) preludes: Vec<Prelude>,
 }
 
@@ -105,10 +103,9 @@ impl RunContext {
             provenance_start: 0,
             report_debug: DebugMode::Off,
             cancel: CancelHandle::new(),
-            limits: RunLimits::new(),
+            limits: RunLimits::default(),
             ui: None,
             vfs: VfsRef::default(),
-            model: None,
             model_bindings: ModelBindings::default(),
             tools: ToolCatalog::default(),
             roster: BTreeMap::new(),
@@ -124,7 +121,7 @@ impl RunContext {
     /// wants the pair in the event stream, such as for a debug capture,
     /// passes [`DebugMode::On`].
     #[must_use]
-    pub fn report_debug(mut self, mode: DebugMode) -> RunContext {
+    pub fn with_report_debug(mut self, mode: DebugMode) -> RunContext {
         self.report_debug = mode;
         self
     }
@@ -136,14 +133,14 @@ impl RunContext {
     /// cancels through an awaitable token must bridge the token to this
     /// flag by setting the flag when the token fires.
     #[must_use]
-    pub fn cancel(mut self, handle: CancelHandle) -> RunContext {
+    pub fn with_cancel(mut self, handle: CancelHandle) -> RunContext {
         self.cancel = handle;
         self
     }
 
     /// Sets the resource limits honored across the run.
     #[must_use]
-    pub fn limits(mut self, limits: RunLimits) -> RunContext {
+    pub fn with_limits(mut self, limits: RunLimits) -> RunContext {
         self.limits = limits;
         self
     }
@@ -160,7 +157,7 @@ impl RunContext {
     /// declaring its model. The default is `None`, which leaves the `ui`
     /// global absent and limits `models.get` to declared aliases.
     #[must_use]
-    pub fn ui(mut self, snapshot: serde_json::Value) -> RunContext {
+    pub fn with_ui(mut self, snapshot: serde_json::Value) -> RunContext {
         self.ui = Some(snapshot);
         self
     }
@@ -170,7 +167,7 @@ impl RunContext {
     /// A live run keeps the default, the empty set. A replay passes back the
     /// set the original run recorded.
     #[must_use]
-    pub fn flags(mut self, flags: Flags) -> RunContext {
+    pub fn with_flags(mut self, flags: Flags) -> RunContext {
         self.flags = flags;
         self
     }
@@ -184,21 +181,8 @@ impl RunContext {
     /// past them and every `(task, seq)` in the stream stays unique.
     /// Spawned tasks count from zero.
     #[must_use]
-    pub fn provenance_start(mut self, start: u32) -> RunContext {
+    pub fn with_provenance_start(mut self, start: u32) -> RunContext {
         self.provenance_start = start;
-        self
-    }
-
-    /// Sets the run's current model, which the caller chooses.
-    ///
-    /// [`prepare`](RunContext::prepare)'s fill
-    /// function binds every declared role to this model. It also checks
-    /// each role's hard keywords and context minimum against the model's
-    /// info. With the default, `None`, the model bindings stay empty,
-    /// and selecting a declared role at run time fails.
-    #[must_use]
-    pub fn model(mut self, model: ModelInfo) -> RunContext {
-        self.model = Some(model);
         self
     }
 
@@ -213,9 +197,9 @@ impl RunContext {
     /// same filesystem, so the tools and the run share one set of files.
     /// The caller seeds files before the run and extracts output after it
     /// through the prepared handle, returned by
-    /// [`vfs_handle`](RunContext::vfs_handle).
+    /// [`vfs`](RunContext::vfs).
     #[must_use]
-    pub fn vfs(mut self, vfs: VfsRef) -> RunContext {
+    pub fn with_vfs(mut self, vfs: VfsRef) -> RunContext {
         self.vfs = vfs;
         self
     }
@@ -225,9 +209,9 @@ impl RunContext {
     /// not. The catalog lists every tool the run can use: Lua calls one by id,
     /// and a section offers one to its model with `tools.offer`. The caller
     /// performs every call. Read it back with
-    /// [`catalog`](RunContext::catalog).
+    /// [`tools`](RunContext::tools).
     #[must_use]
-    pub fn tools(mut self, tools: ToolCatalog) -> RunContext {
+    pub fn with_tools(mut self, tools: ToolCatalog) -> RunContext {
         self.tools = tools;
         self
     }
@@ -247,7 +231,7 @@ impl RunContext {
     /// that Pack records the vendor, and a run given no roster records
     /// none.
     #[must_use]
-    pub fn packs(
+    pub fn with_packs(
         mut self,
         usable: Vec<UsablePack>,
         unavailable: Vec<UnavailablePack>,
@@ -287,14 +271,14 @@ impl RunContext {
     /// The failure happens when the first section VM is set up, before the
     /// run issues any effect.
     #[must_use]
-    pub fn preludes(mut self, preludes: Vec<Prelude>) -> RunContext {
+    pub fn with_preludes(mut self, preludes: Vec<Prelude>) -> RunContext {
         self.preludes = preludes;
         self
     }
 
-    /// Binds `prompt`'s model roles to the context's current model and
-    /// reports what the caller must still satisfy, returning the context
-    /// beside the report.
+    /// Binds `prompt`'s model roles to `model`, the run's current model,
+    /// which the caller chooses, and reports what the caller must still
+    /// satisfy, returning the context beside the report.
     ///
     /// `prepare` uses the context's filesystem as given, because the caller
     /// builds the run's whole filesystem, including its real directories and
@@ -302,25 +286,27 @@ impl RunContext {
     /// Pack the prompt declares can serve, and merges that report into the
     /// one `prepare` returns.
     ///
-    /// Every declared model role binds to the context's current model.
-    /// `prepare` then checks each role's hard keywords (`thinking`,
-    /// `no-thinking`) and context minimum against the model's info.
-    /// Each failed check is listed in [`Requirements::unmet_requirements`]
-    /// with the required and actual values, and the role stays bound to
-    /// the current model. Soft keywords record the author's intent only,
-    /// so `prepare` skips them. When the context's current model is
-    /// `None`, `prepare` skips the fill and the checks, and the model
-    /// bindings stay empty.
+    /// Every declared model role binds to `model`. `prepare` then checks
+    /// each role's hard keywords (`thinking`, `no-thinking`) and context
+    /// minimum against the model's info. Each failed check is listed in
+    /// [`Requirements::unmet_models`] with the required and actual values,
+    /// and the role stays bound to `model`. Soft keywords record the
+    /// author's intent only, so `prepare` skips them. When `model` is
+    /// `None`, `prepare` skips the fill and the checks, the model bindings
+    /// stay empty, and selecting a declared role at run time fails.
     ///
     /// `prepare` also lists in [`Requirements::reserved`] each reserved
     /// Pack id, such as `adhoc`, that a tool of the catalog or a Pack of
     /// the roster, usable or not, has.
     #[must_use]
-    pub fn prepare(mut self, prompt: &Prompt) -> (RunContext, Requirements) {
+    pub fn prepare(
+        mut self,
+        prompt: &Prompt,
+        model: Option<ModelInfo>,
+    ) -> (RunContext, Requirements) {
         let mut requirements = Requirements::default();
-        self.model_bindings =
-            fill::fill_model_bindings(prompt, self.model.as_ref(), &mut requirements);
-        let reserved: BTreeSet<PackId> = self
+        self.model_bindings = fill::fill_model_bindings(prompt, model, &mut requirements);
+        requirements.reserved = self
             .tools
             .tools()
             .iter()
@@ -328,7 +314,6 @@ impl RunContext {
             .chain(self.roster.keys().cloned())
             .filter(PackId::is_reserved)
             .collect();
-        requirements.reserved = reserved.into_iter().collect();
         (self, requirements)
     }
 
@@ -337,9 +322,9 @@ impl RunContext {
     /// The filesystem includes the real directories and the declared
     /// store. The caller seeds files through this handle before the run and
     /// extracts output through it after the run. Set the handle with
-    /// [`vfs`](RunContext::vfs).
+    /// [`with_vfs`](RunContext::with_vfs).
     #[must_use]
-    pub fn vfs_handle(&self) -> &VfsRef {
+    pub fn vfs(&self) -> &VfsRef {
         &self.vfs
     }
 
@@ -361,10 +346,10 @@ impl RunContext {
         self.model_bindings.bind(label, model);
     }
 
-    /// Returns the run's tool catalog, set with [`tools`](RunContext::tools).
-    /// It is empty by default.
+    /// Returns the run's tool catalog, set with
+    /// [`with_tools`](RunContext::with_tools). It is empty by default.
     #[must_use]
-    pub fn catalog(&self) -> &ToolCatalog {
+    pub fn tools(&self) -> &ToolCatalog {
         &self.tools
     }
 
@@ -385,9 +370,9 @@ impl RunContext {
     }
 
     /// Returns the behavior flags the run records. Set them with
-    /// [`flags`](RunContext::flags).
+    /// [`with_flags`](RunContext::with_flags).
     #[must_use]
-    pub fn run_flags(&self) -> Flags {
+    pub fn flags(&self) -> Flags {
         self.flags
     }
 
@@ -412,7 +397,6 @@ impl fmt::Debug for RunContext {
             .field("limits", &self.limits)
             .field("ui", &self.ui)
             .field("vfs", &self.vfs)
-            .field("model", &self.model)
             .field("model_bindings", &self.model_bindings)
             .field("tools", &self.tools)
             .field("roster", &self.roster)

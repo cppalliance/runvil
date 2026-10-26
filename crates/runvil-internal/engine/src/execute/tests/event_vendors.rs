@@ -85,7 +85,8 @@ fn result(id: &str, alias: &str, vendor: Option<&str>) -> (String, String, Optio
 #[test]
 fn a_catalog_call_records_the_vendor_the_caller_reported_and_an_adhoc_call_none() {
     let tools = PackId::parse("tools").expect("a static valid Pack id");
-    let trace = both_callers(move |ctx| ctx.packs(vec![UsablePack::new(tools, "acme")], vec![]));
+    let trace =
+        both_callers(move |ctx| ctx.with_packs(vec![UsablePack::new(tools, "acme")], vec![]));
     let events = trace.events();
     assert_eq!(
         batch_vendors(events),

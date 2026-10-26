@@ -137,6 +137,8 @@ pub(crate) struct Scenario {
     hold: Option<Matcher>,
     signal: Option<Matcher>,
     prepare: bool,
+    /// The current model the prepare binds every declared role to.
+    model: Option<ModelInfo>,
     bind_roles: bool,
 }
 
@@ -160,6 +162,7 @@ impl Scenario {
             hold: None,
             signal: None,
             prepare: true,
+            model: None,
             bind_roles: false,
         }
     }
@@ -182,10 +185,17 @@ impl Scenario {
         self
     }
 
-    /// Makes the [`TEST_MODEL`] the context's current model, so the
-    /// prepare's trivial fill binds every role the prompt declares to it.
+    /// Makes the [`TEST_MODEL`] the run's current model, so the prepare's
+    /// trivial fill binds every role the prompt declares to it.
     pub(crate) fn bound(self) -> Scenario {
-        self.context(|ctx| ctx.model(test_model(TEST_MODEL)))
+        self.current_model(test_model(TEST_MODEL))
+    }
+
+    /// Makes `model` the run's current model, which the prepare binds
+    /// every role the prompt declares to.
+    pub(crate) fn current_model(mut self, model: ModelInfo) -> Scenario {
+        self.model = Some(model);
+        self
     }
 
     /// Binds every role the prompt declares to the [`TEST_MODEL`] in the
@@ -199,7 +209,7 @@ impl Scenario {
 
     /// Runs under `limits` in place of the default limits.
     pub(crate) fn limits(self, limits: RunLimits) -> Scenario {
-        self.context(move |ctx| ctx.limits(limits))
+        self.context(move |ctx| ctx.with_limits(limits))
     }
 
     /// Adds `edit` to the edits applied to the run's context, after the
@@ -394,13 +404,13 @@ impl Scenario {
             Ok(prompt) => prompt,
             Err(error) => panic!("expected the scenario source to parse, got {error}"),
         };
-        let mut ctx =
-            RunContext::new(self.name.clone(), self.seed, TEST_STARTED_AT).vfs(self.store.vfs());
+        let mut ctx = RunContext::new(self.name.clone(), self.seed, TEST_STARTED_AT)
+            .with_vfs(self.store.vfs());
         if !self.tools.is_empty() || !self.listed.is_empty() {
             let infos = self.tools.iter().map(FnTool::info);
             let catalog = ToolCatalog::new(infos.chain(self.listed.iter().cloned()))
                 .expect("the scenario's tool ids differ");
-            ctx = ctx.tools(catalog);
+            ctx = ctx.with_tools(catalog);
         }
         let edit = std::mem::replace(&mut self.context, Box::new(|ctx| ctx));
         let mut ctx = edit(ctx);
@@ -412,7 +422,7 @@ impl Scenario {
         let mut refused = None;
         if self.prepare {
             let requirements;
-            (ctx, requirements) = ctx.prepare(&prompt);
+            (ctx, requirements) = ctx.prepare(&prompt, self.model.take());
             refused = requirements.refusal().map(RunResult::Failure);
         }
         (prompt, events, ctx, refused)

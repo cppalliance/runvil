@@ -156,7 +156,7 @@ fn a_key_that_names_no_position_is_an_internal_error_that_keeps_its_cause() {
             "{identity:?} gave {error}"
         );
         assert!(
-            error.cause().is_some(),
+            error.originating_error().is_some(),
             "required the index parse failure as the cause, actual none for {identity:?}"
         );
     }

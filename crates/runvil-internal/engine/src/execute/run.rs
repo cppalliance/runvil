@@ -51,7 +51,7 @@ pub enum Step {
     Pending {
         /// The effects the caller must perform and answer through
         /// [`Run::resume`].
-        effects: Vec<(EffectId, Provenance, Effect)>,
+        effects: Vec<IssuedEffect>,
         /// The events the step reported.
         events: Vec<Event>,
         /// The tool-call effects this step orphaned, in effect-id order.
@@ -72,6 +72,19 @@ pub enum Step {
         /// The events reported since the previous step.
         events: Vec<Event>,
     },
+}
+
+/// One effect a step issued, which the caller performs and answers
+/// through [`Run::resume`].
+#[derive(Debug)]
+#[non_exhaustive]
+pub struct IssuedEffect {
+    /// The effect's id, which the caller passes back with its answer.
+    pub id: EffectId,
+    /// The provenance of the task that built the effect.
+    pub provenance: Provenance,
+    /// The outside work the run asks for.
+    pub effect: Effect,
 }
 
 /// One run of one prompt, which the caller drives through

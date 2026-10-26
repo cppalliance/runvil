@@ -266,7 +266,10 @@ fn a_one_byte_limit_fails_value_injection_with_teardown_observations() {
     // allocation fails. Engine injection is inside the section's teardown
     // boundary, unlike the preceding bare apply_lua_limits call.
     let trace = Scenario::new(one_section("return \"ran\""))
-        .context(|ctx| ctx.limits(RunLimits::new().lua_memory_bytes(std::num::NonZeroUsize::MIN)))
+        .limits(RunLimits {
+            lua_memory_bytes: std::num::NonZeroUsize::MIN,
+            ..RunLimits::default()
+        })
         .run();
     let error = trace.error();
     assert!(

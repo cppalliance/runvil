@@ -44,10 +44,6 @@ pub enum RunErrorKind {
     /// model's context window and the selected compactor left it over the
     /// limit, or a section's Lua raised it with its own reason.
     ContextExhausted,
-    /// A `{{ }}` prose substitution failed.
-    Substitution,
-    /// The caller cancelled the run.
-    Cancelled,
     /// An internal invariant failed.
     Internal,
     /// The environment falls short of a requirement the prompt states: a
@@ -133,9 +129,9 @@ impl SourceLocation {
 /// error. Use [`kind`](RunError::kind) to classify the failure in code. The
 /// message is self-contained: when the failure keeps an originating error,
 /// the message already holds that error's text, and
-/// [`cause`](RunError::cause) returns the error itself. A failure whose
-/// message does not hold its underlying error, such as a model round's,
-/// keeps it behind [`std::error::Error::source`] instead.
+/// [`originating_error`](RunError::originating_error) returns the error
+/// itself. A failure whose message does not hold its underlying error, such
+/// as a model round's, keeps it behind [`std::error::Error::source`] instead.
 #[derive(Debug)]
 #[non_exhaustive]
 pub struct RunError {
@@ -151,38 +147,34 @@ impl RunError {
             Error::LuaQuota { .. } | Error::CallDepthExceeded { .. } => RunErrorKind::Quota,
             Error::ContextExhausted { .. } => RunErrorKind::ContextExhausted,
             // A leaked task, a task reached for by a chain that does not
-            // own it, a result waited on twice, and a wait's delivery of a
-            // cancelled task surfacing uncaught are the author's program
-            // failing, as any Lua fault is.
+            // own it, a result waited on twice, a wait's delivery of a
+            // cancelled task surfacing uncaught, and a failed `{{ }}`
+            // substitution are the author's program failing, as any Lua
+            // fault is.
             Error::LuaCompile { .. }
             | Error::Lua(_)
             | Error::LuaRuntime { .. }
             | Error::TasksLive { .. }
             | Error::TaskNotOwned { .. }
             | Error::TaskConsumed { .. }
-            | Error::TaskCancelled { .. } => RunErrorKind::Lua,
+            | Error::TaskCancelled { .. }
+            | Error::Substitution(_) => RunErrorKind::Lua,
             Error::UnsupportedVersion(_) => RunErrorKind::Version,
             Error::RequirementsUnmet { .. } => RunErrorKind::RequirementsUnmet,
             Error::Completion(_) => RunErrorKind::Completion,
-            Error::Interrupted => RunErrorKind::Cancelled,
-            Error::Substitution(_) => RunErrorKind::Substitution,
             Error::ToolLoopExhausted
             | Error::OutOfScopeToolCall { .. }
             | Error::UnboundToolCall { .. }
             | Error::Tool { .. } => RunErrorKind::Tool,
-            Error::Internal { .. } => RunErrorKind::Internal,
+            // A cancelled run ends as `RunResult::Cancelled`, so an
+            // interruption that reaches a failure is an Engine fault.
+            Error::Internal { .. } | Error::Interrupted => RunErrorKind::Internal,
             Error::Store { .. } => RunErrorKind::Vfs,
             Error::Determinism(_) => RunErrorKind::Determinism,
             Error::BindSchema { .. } | Error::ToolMerge { .. } | Error::ModelRequired { .. } => {
                 RunErrorKind::Binding
             }
         }
-    }
-
-    /// Returns `true` when the run failed because the caller cancelled it.
-    #[must_use]
-    pub fn is_cancelled(&self) -> bool {
-        matches!(self.inner, Error::Interrupted)
     }
 
     /// The Engine's own error behind the boundary one, for a test that
@@ -201,8 +193,8 @@ impl RunError {
     /// return it again, and a printer that walks the source chain shows the
     /// text once.
     #[must_use]
-    pub fn cause(&self) -> Option<&(dyn std::error::Error + Send + Sync + 'static)> {
-        self.inner.cause()
+    pub fn originating_error(&self) -> Option<&(dyn std::error::Error + Send + Sync + 'static)> {
+        self.inner.originating_error()
     }
 
     /// Returns `true` when retrying the run may succeed (transient transport or

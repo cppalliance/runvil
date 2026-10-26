@@ -3,8 +3,6 @@
 //! thread, the admission limit, the arms' child ids, and a large
 //! collection admitted under the ceiling.
 
-use std::num::NonZeroUsize;
-
 use super::*;
 
 #[test]
@@ -100,7 +98,7 @@ fn the_admission_limit_gates_the_arms_a_fanout_runs_at_once() {
         return a .. b\n\
         ```\n";
     let trace = scheduler_scenario(md)
-        .limits(RunLimits::new().max_concurrency(NonZeroUsize::new(1).expect("1 is non-zero")))
+        .limits(ceiling(1))
         .chat(&gateway)
         .run();
 
@@ -187,7 +185,7 @@ fn fanout_over_a_large_collection_admits_arms_under_the_ceiling() {
     let trace = scheduler_scenario(md).chat(&gateway).run();
 
     assert_eq!(trace.text(), "1025:1:1025");
-    let ceiling = RunLimits::new().max_concurrency.get();
+    let ceiling = RunLimits::default().max_concurrency.get();
     let peak = runvil_lua::test_support::section_vm_peak();
     assert!(
         (2..=ceiling + 1).contains(&peak),

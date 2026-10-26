@@ -9,8 +9,8 @@
 //!
 //! A variant that keeps an originating error renders that error's text in
 //! its own `Display` and holds the error as a plain `cause` field behind
-//! [`Error::cause`], never as a `#[source]`, so a printer that walks the
-//! source chain shows the cause's text once.
+//! [`Error::originating_error`], never as a `#[source]`, so a printer that
+//! walks the source chain shows the cause's text once.
 
 use runvil_types::ids::TaskId;
 
@@ -148,8 +148,8 @@ pub(crate) enum Error {
     /// crate builds it from a concrete `mlua::Error` (see the runtime-error
     /// mapping on [`runvil_lua::LuaProgram`]) and the conversion from
     /// that crate's error keeps it intact, so the typed failure survives
-    /// through the public wrappers' `cause()` instead of being flattened to
-    /// a string.
+    /// through [`RunError::originating_error`](crate::RunError::originating_error)
+    /// instead of being flattened to a string.
     #[error("{message}")]
     LuaRuntime {
         /// The mapped, location-tagged diagnostic (no redundant type label).
@@ -162,8 +162,8 @@ pub(crate) enum Error {
     ///
     /// Keeps the originating `mlua` compile error as the cause beside the
     /// location metadata, so the typed compiler diagnostic survives through
-    /// the public wrappers' `cause()` instead of being flattened into
-    /// `message` alone.
+    /// [`RunError::originating_error`](crate::RunError::originating_error)
+    /// instead of being flattened into `message` alone.
     #[error("lua compilation error at {location} (line {source_line}): {message}")]
     LuaCompile {
         /// The prompt region supplied by the parser, such as a section prologue.
@@ -423,7 +423,9 @@ pub(crate) enum Error {
 impl Error {
     /// Returns the originating error a cause-bearing variant keeps, whose
     /// text its `Display` already holds; `None` for every other variant.
-    pub(crate) fn cause(&self) -> Option<&(dyn std::error::Error + Send + Sync + 'static)> {
+    pub(crate) fn originating_error(
+        &self,
+    ) -> Option<&(dyn std::error::Error + Send + Sync + 'static)> {
         match self {
             Error::ParseFrontmatter { cause, .. }
             | Error::LuaRuntime { cause, .. }

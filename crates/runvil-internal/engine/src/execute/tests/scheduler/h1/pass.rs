@@ -104,7 +104,7 @@ fn a_failed_h1_assertion_ends_the_run_as_requirements_unmet() {
         other => panic!("the failed assertion classifies as RequirementsUnmet: {other:?}"),
     };
     let cause = error
-        .cause()
+        .originating_error()
         .expect("the remap keeps the chunk's own failure as the cause")
         .to_string();
     assert!(
@@ -194,7 +194,10 @@ fn a_failing_library_required_from_h1_ends_the_run_as_requirements_unmet() {
         matches!(error.inner(), Error::RequirementsUnmet { .. }),
         "the library's raise is the failed H1 gate: {error}"
     );
-    let cause = error.cause().map(ToString::to_string).unwrap_or_default();
+    let cause = error
+        .originating_error()
+        .map(ToString::to_string)
+        .unwrap_or_default();
     assert!(
         cause.contains("library boom"),
         "the cause is the library's raise: {error}"

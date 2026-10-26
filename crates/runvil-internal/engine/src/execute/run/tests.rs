@@ -372,7 +372,7 @@ fn a_child_cancel_handles_cancel_is_observed_by_the_instruction_hook() {
             "local n = 0\nwhile true do\n  n = n + 1\n  if n == 1 then log('looping') end\nend",
         ),
         "",
-        run_context().cancel(child),
+        run_context().with_cancel(child),
         |fresh| {
             state = Some(fresh.clone());
             fresh
@@ -412,7 +412,7 @@ fn a_context_without_a_caller_handle_shares_its_one_flag_with_prepare_and_the_ru
         .0
         .expect("the run test prompt parses");
     // The flag `prepare` hands the Packs is the context's own.
-    let (ctx, _) = run_context().prepare(&prompt);
+    let (ctx, _) = run_context().prepare(&prompt, None);
     let packs_flag = ctx.cancel.clone();
     let mut run = Run::new(Arc::new(prompt), "", ctx);
     assert!(!packs_flag.is_cancelled());
@@ -455,7 +455,7 @@ fn a_run_is_decided_once_its_end_is_reported_while_done_is_withheld() {
 fn a_run_whose_only_section_returns_a_literal_is_done_at_its_first_step() {
     let mut run = run_of("return 'hello'", run_context());
     let Step::Done {
-        result: RunResult::Ok(text),
+        result: RunResult::Completed(text),
         ..
     } = run.step()
     else {

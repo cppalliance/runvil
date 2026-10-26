@@ -1,5 +1,5 @@
 //! Pack preludes in a run: every section VM installs the preludes
-//! handed to `RunContext::preludes`, fanout arms and spawned task chains
+//! handed to `RunContext::with_preludes`, fanout arms and spawned task chains
 //! included, and the libraries a section requires see them; a prelude
 //! that fails to load or whose global collides fails the run as a Lua
 //! failure before it issues any effect; a store conflict a prelude's
@@ -41,7 +41,7 @@ fn prelude_run(md: &str, preludes: Vec<Prelude>) -> Trace {
     Scenario::new(md)
         .bound()
         .tool(echo_tool())
-        .context(move |ctx| ctx.preludes(preludes))
+        .context(move |ctx| ctx.with_preludes(preludes))
         .run()
 }
 
@@ -61,7 +61,7 @@ fn records(trace: &Trace) -> Vec<EffectRecord> {
 fn assert_fails_before_any_effect(md: &str, preludes: Vec<Prelude>, fragments: &[&str]) {
     let control = prelude_run(md, Vec::new());
     assert!(
-        matches!(control.result(), RunResult::Ok(_)),
+        matches!(control.result(), RunResult::Completed(_)),
         "without preludes the prompt succeeds: {:?}",
         control.result()
     );

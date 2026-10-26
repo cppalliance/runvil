@@ -72,8 +72,8 @@ fn prompt(lua: &str) -> Arc<Prompt> {
 /// prepared against the fixture [`catalog`], over the run's filesystem
 /// `vfs`.
 fn prepared(prompt: Arc<Prompt>, vfs: VfsRef) -> Run {
-    let ctx = RunContext::new(EXECUTION, TEST_SEED, Timestamp::UNIX_EPOCH).vfs(vfs);
-    let (ctx, requirements) = ctx.tools(catalog()).prepare(&prompt);
+    let ctx = RunContext::new(EXECUTION, TEST_SEED, Timestamp::UNIX_EPOCH).with_vfs(vfs);
+    let (ctx, requirements) = ctx.with_tools(catalog()).prepare(&prompt, None);
     assert!(
         requirements.is_satisfied(),
         "the runner fixture prompt declares nothing the environment must supply: {requirements:?}"

@@ -133,14 +133,14 @@ fn the_context_holds_the_flags_and_starts_them_empty() {
     // verbatim when the caller sets it, and readable beside the other
     // inputs.
     let fresh = test_context(EXECUTION);
-    assert_eq!(fresh.run_flags(), Flags::EMPTY);
-    assert!(fresh.run_flags().is_empty(), "no flag is set by default");
+    assert_eq!(fresh.flags(), Flags::EMPTY);
+    assert!(fresh.flags().is_empty(), "no flag is set by default");
 
     let recorded = Flags::from_bits(0b101);
     let mut rng = Seeded::new(DRAWS);
     let seed = rng.run_seed();
-    let ctx = RunContext::new(EXECUTION, seed, STARTED_AT).flags(recorded);
-    assert_eq!(ctx.run_flags(), recorded, "the caller's flags are kept");
+    let ctx = RunContext::new(EXECUTION, seed, STARTED_AT).with_flags(recorded);
+    assert_eq!(ctx.flags(), recorded, "the caller's flags are kept");
     rng.check_eq(&ctx.seed(), &seed, "the caller's seed is kept");
     assert_eq!(ctx.started_at(), STARTED_AT);
 }
@@ -190,7 +190,7 @@ fn the_ui_global_serves_the_snapshot_taken_at_run_start() {
         return ui().selected_model .. '/' .. tostring(ui().workspace_root)\n\
         ```\n";
     let ctx =
-        test_context(EXECUTION).ui(json!({ "selected_model": "m-1", "workspace_root": null }));
+        test_context(EXECUTION).with_ui(json!({ "selected_model": "m-1", "workspace_root": null }));
     let (result, _) = drive(Run::new(Arc::new(parse(md)), "", ctx), |_, effect| {
         panic!("no effect is issued: {effect:?}")
     });

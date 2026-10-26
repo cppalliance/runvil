@@ -41,7 +41,10 @@ pub(super) fn scheduler_scenario(source: impl Into<String>) -> Scenario {
 /// The run's concurrency ceiling narrowed to `n` admitted tasks.
 #[track_caller]
 pub(super) fn ceiling(n: usize) -> RunLimits {
-    RunLimits::new().max_concurrency(NonZeroUsize::new(n).expect("the ceiling is non-zero"))
+    RunLimits {
+        max_concurrency: NonZeroUsize::new(n).expect("the ceiling is non-zero"),
+        ..RunLimits::default()
+    }
 }
 
 /// Whether an effect is the model round a `models.infer(prompt)` sends,

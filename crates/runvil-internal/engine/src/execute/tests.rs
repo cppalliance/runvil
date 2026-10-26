@@ -55,14 +55,14 @@ fn run_with_a_pre_cancelled_handle_fails_as_cancelled() {
     use runvil_parser::test_support::prompt;
 
     // The explicit-cancel wiring of the public entry point: a handle passed
-    // through `RunContext::cancel` is installed around the whole run body, so
+    // through `RunContext::with_cancel` is installed around the whole run body, so
     // the section's Lua instruction hook observes it and the run ends
     // cancelled.
     let source = prompt("", &[("Loop", "local n = 0\nwhile true do n = n + 1 end")]);
     let handle = CancelHandle::new();
     handle.cancel();
     let trace = Scenario::new(source)
-        .context(move |ctx| ctx.cancel(handle))
+        .context(move |ctx| ctx.with_cancel(handle))
         .run();
     assert!(
         matches!(trace.result(), RunResult::Cancelled),

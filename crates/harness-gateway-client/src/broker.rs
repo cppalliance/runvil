@@ -34,7 +34,7 @@ use crate::wire::delta::StreamDelta;
 /// and authenticate with the same bearer key.
 ///
 /// Every round uses the Engine's default run limits from
-/// [`RunLimits::new`]: the wait limit for each part of the response and
+/// [`RunLimits::default`]: the wait limit for each part of the response and
 /// the cap on response size in bytes.
 ///
 /// The broker's futures, [`models`](InferenceBroker::models) included, need
@@ -68,9 +68,9 @@ impl GatewayBroker {
     /// path. Model rounds and model-list requests both go to it.
     #[must_use]
     pub fn new(endpoint: GatewayEndpoint, key: SecretString) -> GatewayBroker {
-        let limits = RunLimits::new();
+        let limits = RunLimits::default();
         let client = GatewayChat::new(endpoint.clone(), key.clone())
-            .with_request_limits(limits.timeout(), limits.response_bytes());
+            .with_request_limits(limits.receive_timeout, limits.max_response_bytes);
         GatewayBroker {
             client,
             endpoint,

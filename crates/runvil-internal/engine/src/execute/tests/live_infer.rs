@@ -106,9 +106,8 @@ fn a_library_calls_engine_globals_at_load_time() {
             log('library loaded')",
         )
         .build();
-    let (_, requirements) = test_context(EXECUTION)
-        .model(test_model(TEST_MODEL))
-        .prepare(&parse_ok(&source));
+    let (_, requirements) =
+        test_context(EXECUTION).prepare(&parse_ok(&source), Some(test_model(TEST_MODEL)));
     assert!(
         requirements.is_satisfied(),
         "the fixture declares nothing: {requirements:?}"
@@ -210,7 +209,7 @@ fn cancelled_nested_infer_does_not_report_model_turn_failed() {
     let mut driving = Scenario::new(source.build())
         .bound()
         .chat(&gateway)
-        .context(move |ctx| ctx.cancel(canceller))
+        .context(move |ctx| ctx.with_cancel(canceller))
         .hold(|effect| matches!(effect, Effect::Chat { .. }))
         .start();
     while driving.step() {}

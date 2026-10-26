@@ -16,7 +16,7 @@ use runvil_vfs::detail::access_id;
 
 use super::models_loop::loop_models;
 use super::*;
-use crate::execute::run::{Effect, EffectAnswer, EffectId, Run, Step};
+use crate::execute::run::{Effect, EffectAnswer, EffectId, IssuedEffect, Run, Step};
 use crate::test_support::scenario::text_of;
 use crate::test_support::{drive, perform_locally};
 
@@ -281,7 +281,7 @@ fn a_cancelled_tasks_tool_call_is_joined_and_its_later_writes_are_refused() {
             run.resume(id, answer);
             continue;
         }
-        for (id, _, effect) in effects {
+        for IssuedEffect { id, effect, .. } in effects {
             if let Effect::ToolCall { access, args, .. } = &effect {
                 let answer = EffectAnswer::ToolCall(use_access(access, args));
                 held = Some((id, Arc::clone(access), answer));

@@ -9,7 +9,7 @@ use std::error::Error;
 use std::num::NonZeroU32;
 use std::sync::Arc;
 
-use runvil::effect::{Effect, EffectAnswer};
+use runvil::effect::{Effect, EffectAnswer, IssuedEffect};
 use runvil::event::Event;
 use runvil::model::{Completion, CompletionResult, ModelId, ModelInfo, ThinkingMode};
 use runvil::timestamp::Timestamp;
@@ -72,32 +72,31 @@ pub fn greet() -> Result<String, Box<dyn Error>> {
     let mut log: Vec<Event> = parse_events.clone();
     let prompt = parsed?;
 
-    // 2. Build the context: run events number on from the parse events, and
-    //    the model is set. A live caller draws the seed's 32 bytes from a
-    //    CSPRNG; the example fixes them.
-    let model = ModelInfo::new(
-        ModelId::gateway("canned")?,
-        "Always replies hi there",
-        NonZeroU32::new(8_192).ok_or("a context window is never zero")?,
-        ThinkingMode::Never,
-    );
+    // 2. Build the context: run events number on from the parse events. A
+    //    live caller draws the seed's 32 bytes from a CSPRNG; the example
+    //    fixes them.
     let ctx = RunContext::new(
         "greeter",
         RunSeed::from_bytes([7; 32]),
         Timestamp::UNIX_EPOCH,
     )
-    .provenance_start(u32::try_from(parse_events.len())?)
-    .model(model);
+    .with_provenance_start(u32::try_from(parse_events.len())?);
 
-    // 3. Offer the shout tool, prepare, and refuse to run when prepare
-    //    reports a gap.
+    // 3. Offer the shout tool, prepare under the current model, and refuse
+    //    to run when prepare reports a gap.
     let shout = ToolInfo::new(
         ToolId::parse("example/text/shout")?,
         "Returns the text in capital letters.",
         serde_json::json!({"type": "object", "properties": {"text": {"type": "string"}}}),
     );
     let catalog = ToolCatalog::new([shout])?;
-    let (ctx, requirements) = ctx.tools(catalog).prepare(&prompt);
+    let model = ModelInfo::new(
+        ModelId::gateway("canned")?,
+        "Always replies hi there",
+        NonZeroU32::new(8_192).ok_or("a context window is never zero")?,
+        ThinkingMode::Never,
+    );
+    let (ctx, requirements) = ctx.with_tools(catalog).prepare(&prompt, Some(model));
     if let Some(refusal) = requirements.refusal() {
         return Err(refusal.into());
     }
@@ -115,7 +114,7 @@ pub fn greet() -> Result<String, Box<dyn Error>> {
                 effects, events, ..
             } => {
                 log.extend(events);
-                for (id, _provenance, effect) in effects {
+                for IssuedEffect { id, effect, .. } in effects {
                     if run.decided() {
                         run.resume(id, EffectAnswer::Dropped);
                     } else {
@@ -134,7 +133,7 @@ pub fn greet() -> Result<String, Box<dyn Error>> {
     //    events.
     assert!(log.starts_with(&parse_events));
     assert!(!cancel.is_cancelled());
-    let RunResult::Ok(text) = result else {
+    let RunResult::Completed(text) = result else {
         return Err(format!("the greeter did not finish: {result:?}").into());
     };
     Ok(text)

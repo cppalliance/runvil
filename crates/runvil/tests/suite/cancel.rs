@@ -42,7 +42,7 @@ fn one_parent_cancel_ends_every_run_holding_one_of_its_children() -> TestResult 
         let parent = parent.clone();
         let mut driver = Scenario::default()
             .hold(|effect| matches!(effect, Effect::Vfs { .. }))
-            .context(move |ctx| ctx.cancel(parent.child()))
+            .context(move |ctx| ctx.with_cancel(parent.child()))
             .start(&source)?;
         driver.pump_until_held()?;
         drivers.push(driver);
