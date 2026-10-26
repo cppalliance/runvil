@@ -62,6 +62,7 @@ use crate::lua::{
 };
 use crate::{Error, Result};
 
+use super::chain_record::Parked;
 use super::dispatch::Dispatched;
 use super::{CallSite, ChainIndex, Continuation, Scheduler, ToolCallContinuation, prompt_origin};
 
@@ -111,20 +112,16 @@ impl Scheduler {
         args: serde_json::Value,
         call_id: Option<String>,
         turn: Option<u32>,
-    ) {
+    ) -> Result<()> {
         let site = match call_id {
             Some(call_id) => CallSite::Model { call_id, turn },
             None => CallSite::Script { turn },
         };
         match self.prepare_tool_call(id, alias, args, site) {
             // An issued call is parked on the effect table.
-            Ok(Dispatched::Issued) => {}
-            Ok(Dispatched::Answered(answer)) => {
-                self.answer_inline(id, answer);
-            }
-            Err(error) => {
-                self.answer_inline(id, Answer::ToolCallResult(Err(error)));
-            }
+            Ok(Dispatched::Issued) => Ok(()),
+            Ok(Dispatched::Answered(answer)) => self.answer_inline(id, answer),
+            Err(error) => self.answer_inline(id, Answer::ToolCallResult(Err(error))),
         }
     }
 
@@ -141,7 +138,7 @@ impl Scheduler {
         id: ChainIndex,
         calls: Vec<ToolCallRecord>,
         turn: u32,
-    ) {
+    ) -> Result<()> {
         let mut batch = Vec::with_capacity(calls.len());
         for (slot, call) in calls.into_iter().enumerate() {
             let site = CallSite::Batch {
@@ -164,8 +161,8 @@ impl Scheduler {
                 }
             }
         }
-        self.chains[id.index()].batch = batch;
-        self.answer_full_batch(id);
+        self.chains[id.index()].parked = Some(Parked::Batch(batch));
+        self.answer_full_batch(id)
     }
 
     /// Resolves the call at `site` naming `name` to its binding and route,
@@ -256,7 +253,8 @@ impl Scheduler {
     ///
     /// # Errors
     /// Returns [`Error::Internal`] when the chain holds no such slot,
-    /// which only an answer the scheduler should have orphaned produces.
+    /// which only an answer the scheduler should have orphaned produces,
+    /// or when the full batch finds no suspended block to answer.
     pub(super) fn fill_batch_slot(
         &mut self,
         id: ChainIndex,
@@ -286,30 +284,31 @@ impl Scheduler {
                 "a batched call lands as plain text or a failure",
             )),
         };
-        let open = self.chains[id.index()]
-            .batch
-            .get_mut(slot)
-            .filter(|open| open.is_none())
-            .ok_or(Error::internal(
-                "a batched call's answer fills an open slot of its chain's batch",
-            ))?;
+        let open = match &mut self.chains[id.index()].parked {
+            Some(Parked::Batch(batch)) => batch.get_mut(slot).filter(|open| open.is_none()),
+            _ => None,
+        }
+        .ok_or(Error::internal(
+            "a batched call's answer fills an open slot of its chain's batch",
+        ))?;
         *open = Some(landed);
-        self.answer_full_batch(id);
-        Ok(())
+        self.answer_full_batch(id)
     }
 
     /// Answers the chain parked on a batch once no slot is open: every
     /// text in call order, or the first failure in call order.
-    fn answer_full_batch(&mut self, id: ChainIndex) {
-        let chain = &mut self.chains[id.index()];
-        if chain.batch.iter().any(Option::is_none) {
-            return;
+    fn answer_full_batch(&mut self, id: ChainIndex) -> Result<()> {
+        let Some(Parked::Batch(batch)) = &mut self.chains[id.index()].parked else {
+            return Ok(());
+        };
+        if batch.iter().any(Option::is_none) {
+            return Ok(());
         }
-        let answer = std::mem::take(&mut chain.batch)
+        let answer = std::mem::take(batch)
             .into_iter()
             .flatten()
             .collect::<Result<Vec<String>>>();
-        self.answer_inline(id, Answer::ToolCallsResult(answer));
+        self.answer_inline(id, Answer::ToolCallsResult(answer))
     }
 
     /// The fallible half of tool-call dispatch, by the call's route: an

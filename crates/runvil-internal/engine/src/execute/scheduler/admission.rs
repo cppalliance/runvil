@@ -17,10 +17,10 @@ use std::sync::Arc;
 
 use runvil_types::event::Event;
 
-use crate::lua::{Answer, Blocked};
+use crate::lua::Answer;
 use crate::{Error, Result};
 
-use super::chain_record::{Admission, ChainKind};
+use super::chain_record::{Admission, ChainKind, Parked};
 use super::{ChainIndex, Scheduler};
 
 impl Scheduler {
@@ -158,7 +158,7 @@ impl Scheduler {
         {
             *released_holder = None;
         }
-        chain.blocked = None;
+        chain.parked = None;
         self.ready.push_back(id);
         Ok(())
     }
@@ -189,10 +189,10 @@ impl Scheduler {
                 "a queued task chain holds its spawn record",
             ));
         };
-        chain.blocked = None;
+        chain.parked = None;
         let task = chain.task.clone();
-        let item = chain.seed.as_ref().and_then(|seed| seed.item.clone());
-        let index = chain.seed.as_ref().and_then(|seed| seed.index);
+        let item = chain.seed.item.clone();
+        let index = chain.seed.index;
         let var = chain.var.clone();
         let Some(slot) = self.tasks.get(&task) else {
             return Err(Error::internal("a task chain has a slot"));
@@ -230,7 +230,7 @@ impl Scheduler {
     pub(super) fn park_wait(&mut self, id: ChainIndex) {
         let chain = &self.chains[id.index()];
         let waits_on_tasks = chain
-            .waiting_on
+            .wait_set()
             .iter()
             .any(|task| self.tasks.get(task).is_some_and(|slot| !slot.is_internal()));
         if !waits_on_tasks {
@@ -262,7 +262,11 @@ impl Scheduler {
     /// back its ancestor's, take them again - admitted ahead of fresh
     /// starts at the drain's edge - while the main walk, and a chain that
     /// kept its slots (a timer-only wait), resume inline.
-    pub(super) fn wake_from_wait(&mut self, id: ChainIndex, answer: Answer<Error>) {
+    ///
+    /// # Errors
+    /// Returns [`Error::Internal`] when the chain has no suspended block
+    /// to take the answer, which only a scheduler bug produces.
+    pub(super) fn wake_from_wait(&mut self, id: ChainIndex, answer: Answer<Error>) -> Result<()> {
         let chain = &mut self.chains[id.index()];
         let requeue = match &chain.kind {
             ChainKind::Call {
@@ -271,14 +275,15 @@ impl Scheduler {
             ChainKind::Task { .. } => !chain.kind.holding(),
             ChainKind::Root | ChainKind::H1 => false,
         };
-        chain.incoming = Some(answer);
+        chain.deliver(answer)?;
         if requeue {
             // Waiting for a slot again reads `queued`, exactly as a
             // fresh spawn's wait does.
-            chain.blocked = Some(Blocked::Queued);
+            chain.parked = Some(Parked::Queued);
             self.resuming.push_back(id);
         } else {
             self.ready.push_back(id);
         }
+        Ok(())
     }
 }

@@ -424,5 +424,29 @@ fn aborting_an_effect_that_is_not_outstanding_records_no_orphan() {
     );
 }
 
+#[test]
+fn an_answer_for_a_chain_with_no_suspended_block_fails_loudly() {
+    // Every answer goes to a block that yielded for it, so an answer that
+    // finds none is a scheduler bug: the inline answer and a wait's wake
+    // both raise Error::Internal rather than drop the answer and strand
+    // the chain off every queue.
+    let md = "---\nname: t\ndescription: d\nrunvil: 0\n---\n\n\
+        # Title\n\n\
+        ## Only\n\n\
+        ```lua\nreturn 'done'\n```\n";
+    let mut rig = Rig::start(scheduler_scenario(md));
+    let deliveries = rig
+        .scheduler_for_test()
+        .answer_unsuspended_for_test()
+        .expect("the chain starts");
+
+    for delivery in deliveries {
+        assert!(
+            matches!(&delivery, Err(Error::Internal { message, .. }) if message.contains("suspended block")),
+            "an answer with no suspended block is a loud invariant failure: {delivery:?}"
+        );
+    }
+}
+
 #[path = "failures-script-tools.rs"]
 mod script_tools;

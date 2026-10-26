@@ -16,12 +16,12 @@ use runvil_types::event::ReplyOrigin;
 use crate::error::DepthVia;
 use crate::execute::run::Effect;
 use crate::execute::section_context::TaskSeed;
-use crate::lua::{Answer, Blocked, Request, VfsOp, resolve_model_binding};
+use crate::lua::{Answer, Request, VfsOp, resolve_model_binding};
 use crate::model::{Message, ModelBinding};
 use crate::{Error, Result};
 
 use super::chain::ChainStart;
-use super::chain_record::ChainKind;
+use super::chain_record::{ChainKind, Parked};
 use super::{ChainIndex, Continuation, Counters, Scheduler};
 
 /// How one leaf dispatch resolved when its preparation succeeded: an
@@ -34,16 +34,18 @@ pub(super) enum Dispatched {
     Answered(Answer<Error>),
 }
 
-/// What a chain parks on when it yields `request`, as `tasks.status`
-/// reports it; `None` for the arms answered inline, whose chain is back on
-/// the ready queue before anyone can look.
-fn blocked_on(request: &Request) -> Option<Blocked> {
+/// What a chain parks on when it yields `request`; `None` for the arms
+/// answered inline, whose chain is back on the ready queue before anyone
+/// can look. A wait's set and a batch's slots start empty, and their arms
+/// fill them when the chain parks.
+fn parked_on(request: &Request) -> Option<Parked> {
     match request {
-        Request::Infer { .. } | Request::Chat { .. } => Some(Blocked::Chat),
-        Request::Call { .. } => Some(Blocked::Call),
-        Request::JoinAny { .. } => Some(Blocked::Tasks),
-        Request::ToolCall { .. } | Request::ToolCalls { .. } => Some(Blocked::ToolCall),
-        Request::Store { .. } => Some(Blocked::Store),
+        Request::Infer { .. } | Request::Chat { .. } => Some(Parked::Chat),
+        Request::Call { .. } => Some(Parked::Call),
+        Request::JoinAny { .. } => Some(Parked::Tasks(Vec::new())),
+        Request::ToolCall { .. } => Some(Parked::ToolCall),
+        Request::ToolCalls { .. } => Some(Parked::Batch(Vec::new())),
+        Request::Store { .. } => Some(Parked::Store),
         Request::Spawn { .. }
         | Request::Timer { .. }
         | Request::Ready { .. }
@@ -61,18 +63,15 @@ impl Scheduler {
     ///
     /// # Errors
     /// Returns the store arm's error when the chain's access capability is
-    /// gone, or the `adhoc_tool_done` arm's error when no adhoc tool call is
-    /// open.
+    /// gone, the `adhoc_tool_done` arm's error when no adhoc tool call is
+    /// open, or [`Error::Internal`] when an arm's answer finds no suspended
+    /// block to take it.
     pub(super) fn dispatch(&mut self, id: ChainIndex, request: Request) -> Result<()> {
-        self.chains[id.index()].blocked = blocked_on(&request);
+        self.chains[id.index()].parked = parked_on(&request);
         match request {
-            Request::Infer { prompt, binding } => {
-                self.dispatch_infer(id, &prompt, binding);
-                Ok(())
-            }
+            Request::Infer { prompt, binding } => self.dispatch_infer(id, &prompt, binding),
             Request::Call { target, input, var } => {
-                self.dispatch_call(id, &target, input.as_deref(), &var);
-                Ok(())
+                self.dispatch_call(id, &target, input.as_deref(), &var)
             }
             Request::Spawn {
                 target,
@@ -81,68 +80,32 @@ impl Scheduler {
                 index,
                 var,
                 via,
-            } => {
-                self.dispatch_spawn(
-                    id,
-                    &target,
-                    input.as_deref(),
-                    TaskSeed { item, index },
-                    var,
-                    via,
-                );
-                Ok(())
-            }
-            Request::Timer { duration } => {
-                self.dispatch_timer(id, duration);
-                Ok(())
-            }
-            Request::JoinAny { tasks } => {
-                self.dispatch_join_any(id, tasks);
-                Ok(())
-            }
-            Request::Ready { task } => {
-                self.dispatch_ready(id, &task);
-                Ok(())
-            }
-            Request::Status { task } => {
-                self.dispatch_status(id, &task);
-                Ok(())
-            }
-            Request::Pending => {
-                self.dispatch_pending(id);
-                Ok(())
-            }
-            Request::Concurrency { limit } => {
-                self.dispatch_concurrency(id, limit);
-                Ok(())
-            }
-            Request::Note { text } => {
-                self.dispatch_note(id, text);
-                Ok(())
-            }
-            Request::Cancel { task } => {
-                self.dispatch_cancel(id, &task);
-                Ok(())
-            }
+            } => self.dispatch_spawn(
+                id,
+                &target,
+                input.as_deref(),
+                TaskSeed { item, index },
+                var,
+                via,
+            ),
+            Request::Timer { duration } => self.dispatch_timer(id, duration),
+            Request::JoinAny { tasks } => self.dispatch_join_any(id, tasks),
+            Request::Ready { task } => self.dispatch_ready(id, &task),
+            Request::Status { task } => self.dispatch_status(id, &task),
+            Request::Pending => self.dispatch_pending(id),
+            Request::Concurrency { limit } => self.dispatch_concurrency(id, limit),
+            Request::Note { text } => self.dispatch_note(id, text),
+            Request::Cancel { task } => self.dispatch_cancel(id, &task),
             Request::ToolCall {
                 alias,
                 args,
                 call_id,
                 turn,
-            } => {
-                self.dispatch_tool_call(id, &alias, args, call_id, turn);
-                Ok(())
-            }
-            Request::ToolCalls { calls, turn } => {
-                self.dispatch_tool_calls(id, calls, turn);
-                Ok(())
-            }
+            } => self.dispatch_tool_call(id, &alias, args, call_id, turn),
+            Request::ToolCalls { calls, turn } => self.dispatch_tool_calls(id, calls, turn),
             Request::AdhocToolDone { outcome } => self.dispatch_adhoc_tool_done(id, outcome),
             Request::Store { op } => self.dispatch_vfs(id, op),
-            Request::Chat { list, binding } => {
-                self.dispatch_chat(id, &list, binding);
-                Ok(())
-            }
+            Request::Chat { list, binding } => self.dispatch_chat(id, &list, binding),
         }
     }
 
@@ -151,9 +114,15 @@ impl Scheduler {
     /// message, and parks the chain in the effect table. A resolution
     /// failure is the call's answer, resumed into the caller so an author
     /// `pcall` can catch it.
-    fn dispatch_infer(&mut self, id: ChainIndex, prompt: &str, binding: Option<ModelBinding>) {
-        if let Err(error) = self.prepare_infer(id, prompt, binding) {
-            self.answer_inline(id, Answer::Infer(Err(error)));
+    fn dispatch_infer(
+        &mut self,
+        id: ChainIndex,
+        prompt: &str,
+        binding: Option<ModelBinding>,
+    ) -> Result<()> {
+        match self.prepare_infer(id, prompt, binding) {
+            Ok(()) => Ok(()),
+            Err(error) => self.answer_inline(id, Answer::Infer(Err(error))),
         }
     }
 
@@ -229,12 +198,13 @@ impl Scheduler {
         target: &str,
         input: Option<&str>,
         var: &serde_json::Value,
-    ) {
+    ) -> Result<()> {
         match self.prepare_call(id, target, input, var) {
-            Ok(child) => self.ready.push_back(child),
-            Err(error) => {
-                self.answer_inline(id, Answer::Call(Err(error)));
+            Ok(child) => {
+                self.ready.push_back(child);
+                Ok(())
             }
+            Err(error) => self.answer_inline(id, Answer::Call(Err(error))),
         }
     }
 
@@ -262,7 +232,7 @@ impl Scheduler {
         // A call chain is a blocking child: it borrows the caller's access
         // capability (the same serial thread of execution), so the caller's
         // standing claims never false-conflict with the child's ops.
-        let access = chain.access.clone();
+        let access = Arc::clone(chain.access()?);
         // A call chain's effective limit starts with its caller's: the
         // tasks it spawns run within the caller's share.
         let child_concurrency = chain.concurrency;
@@ -274,10 +244,11 @@ impl Scheduler {
         // counter, so the id depends only on the caller's own dispatch
         // order.
         let chain_id = self.allocate_child_id(id)?;
-        let child = self.start_chain(ChainStart {
+        self.start_chain(ChainStart {
             lineage: chain_id,
             counters: Counters::default(),
             ctx: child_ctx,
+            access,
             slice: target_section.slice,
             index: target_section.index,
             kind: ChainKind::Call {
@@ -287,8 +258,6 @@ impl Scheduler {
             var: var.clone(),
             call_depth: depth,
             concurrency: child_concurrency,
-        })?;
-        self.chains[child.index()].access = access;
-        Ok(child)
+        })
     }
 }

@@ -589,7 +589,7 @@ Pinned tests that must stay green, beside each item's Check:
 
 <step-4>
 
-### Step 4: Reshape the chain record
+### Step 4: Reshape the chain record [completed]
 
 - Component: scheduler state
 - Tests: run each from the runvil root in PowerShell, as written:

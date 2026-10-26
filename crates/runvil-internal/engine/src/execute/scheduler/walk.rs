@@ -12,7 +12,6 @@
 use std::sync::Arc;
 
 use runvil_types::ids::ChainId;
-use runvil_vfs::Access;
 
 use crate::execute::section_context::SectionContext;
 use crate::execute::walk_target::{
@@ -23,7 +22,7 @@ use crate::parser::Block;
 use crate::{Error, Result};
 
 use super::chain::{ChainStart, ChainStep};
-use super::chain_record::{BlockIndex, CallDepth, ChainKind, SectionIndex};
+use super::chain_record::{CallDepth, ChainKind, Entered, SectionIndex};
 use super::{Chain, ChainIndex, Counters, Scheduler, prompt_origin};
 
 /// A heading resolved against a chain's visible set: the slice the walk or
@@ -57,10 +56,21 @@ impl Scheduler {
             next_child: 0,
             next_entry: 1,
         };
+        // The root walk is its own serial thread of execution, so a prompt
+        // without H1 blocks acquires its capability fresh. It serves every
+        // section in turn, so its label is the prompt's own; the line is
+        // where the walk starts.
+        let prompt = self.ctx.prompt();
+        let blocks: &[Block] =
+            runvil_parser::detail::entry(prompt).map_or(&[], |section| section.blocks());
+        let origin = prompt_origin(prompt, prompt.title(), blocks);
+        let access = self.ctx.vfs().acquire(origin).map_err(Error::store)?;
+        self.scope = Some(runvil_vfs::detail::scope_handle(&access));
         let root = self.start_chain(ChainStart {
             lineage: ChainId::root(),
             counters: after_h1,
             ctx: self.ctx.clone(),
+            access: Arc::new(access),
             slice: SlicePath::root(),
             index: SectionIndex::FIRST,
             kind: ChainKind::Root,
@@ -68,41 +78,7 @@ impl Scheduler {
             call_depth: CallDepth::ROOT,
             concurrency: self.ctx.limits().max_concurrency,
         })?;
-        self.install_root_slots(root, None)?;
         self.ready.push_back(root);
-        Ok(())
-    }
-
-    /// Seeds a fresh root walk chain's slot: its own access capability.
-    /// The root walk is its own serial thread of execution, so a prompt
-    /// without H1 blocks acquires it fresh; the walk that follows the H1
-    /// pass reuses the pass's capability instead - the root identity spans
-    /// the pass and the walk, so nothing the pass touched false-conflicts
-    /// with the walk.
-    ///
-    /// # Errors
-    /// Returns [`Error::Store`] when the backend refuses acquisition.
-    pub(super) fn install_root_slots(
-        &mut self,
-        root: ChainIndex,
-        existing: Option<Arc<Access>>,
-    ) -> Result<()> {
-        let access = if let Some(access) = existing {
-            // The H1 hand-off: the walk continues the pass's identity.
-            access
-        } else {
-            // The walk capability serves every section in turn, so its
-            // label is the prompt's own; the line is where the walk
-            // starts.
-            let prompt = self.ctx.prompt();
-            let blocks: &[Block] =
-                runvil_parser::detail::entry(prompt).map_or(&[], |section| section.blocks());
-            let origin = prompt_origin(prompt, prompt.title(), blocks);
-            let access = self.ctx.vfs().acquire(origin).map_err(Error::store)?;
-            self.scope = Some(runvil_vfs::detail::scope_handle(&access));
-            Arc::new(access)
-        };
-        self.chains[root.index()].access = Some(access);
         Ok(())
     }
 
@@ -136,7 +112,6 @@ impl Scheduler {
     fn enter_section(&mut self, id: ChainIndex) -> Result<bool> {
         let prompt = self.prompt();
         let chain = &mut self.chains[id.index()];
-        chain.pending_prose = None;
         if chain.kind.is_h1() {
             // The H1 pass enters its frame exactly once: section 0 under
             // the prompt's title, through the same install path as any
@@ -144,8 +119,7 @@ impl Scheduler {
             // section. Its id is the root chain's entry 0.
             let section_id = Self::next_entry_id(chain)?;
             let frame = SectionContext::new_live_h1(&chain.ctx, chain.access()?, &section_id)?;
-            chain.frame = Some(frame);
-            chain.block = BlockIndex::FIRST;
+            chain.entered = Some(Entered::new(frame));
             return Ok(true);
         }
         let index = chain.index.get();
@@ -159,7 +133,7 @@ impl Scheduler {
         let task = chain.task.clone();
         // A spawned chain's first entry consumes its `item` and `sys.index`
         // seeds; every later entry, and every other chain's, has none.
-        let seed = chain.seed.take().unwrap_or_default();
+        let seed = std::mem::take(&mut chain.seed);
         let frame = SectionContext::new(
             &chain.ctx,
             chain.access()?,
@@ -170,9 +144,8 @@ impl Scheduler {
             &chain.var,
             seed,
         )?;
-        chain.frame = Some(frame);
-        slice[index].name().clone_into(&mut chain.entered);
-        chain.block = BlockIndex::FIRST;
+        chain.entered = Some(Entered::new(frame));
+        slice[index].name().clone_into(&mut chain.entered_name);
         Ok(true)
     }
 
@@ -220,7 +193,7 @@ impl Scheduler {
     /// frame.
     pub(super) fn end_section(&mut self, id: ChainIndex) -> Result<()> {
         let chain = &mut self.chains[id.index()];
-        let Some(mut frame) = chain.frame.take() else {
+        let Some(Entered { mut frame, .. }) = chain.entered.take() else {
             return Err(Error::internal("a section end implies a live frame"));
         };
         chain.var = frame.read_var()?;
@@ -247,7 +220,7 @@ impl Scheduler {
     pub(super) fn apply_jump(&mut self, id: ChainIndex, heading: &str) -> Result<()> {
         let (slice, index) = {
             let chain = &mut self.chains[id.index()];
-            let Some(mut frame) = chain.frame.take() else {
+            let Some(Entered { mut frame, .. }) = chain.entered.take() else {
                 return Err(Error::internal("a jump implies a live frame"));
             };
             chain.var = frame.read_var()?;

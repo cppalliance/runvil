@@ -5,16 +5,19 @@
 //! transitively blocks on or owns.
 
 use std::num::NonZeroUsize;
+use std::sync::Arc;
 
 use runvil_types::ids::{AbandonReason, ChainId, TaskId};
+use runvil_vfs::Access;
 
 use crate::execute::context::RunState;
 use crate::execute::run::EffectId;
+use crate::execute::section_context::TaskSeed;
 use crate::execute::walk_target::SlicePath;
 use crate::lua::Answer;
 use crate::{Error, Result};
 
-use super::chain_record::{BlockIndex, CallDepth, ChainKind, SectionIndex};
+use super::chain_record::{CallDepth, ChainKind, SectionIndex};
 use super::{
     Chain, ChainIndex, ChatAnchor, Continuation, Counters, GENERIC_COMPLETION, Outstanding,
     Pending, Scheduler,
@@ -40,6 +43,10 @@ pub(super) struct ChainStart {
     pub(super) counters: Counters,
     /// The chain's fork of the run state.
     pub(super) ctx: RunState,
+    /// The chain's VFS access capability: the root identity for the H1
+    /// pass and the walk, the caller's for a `call` child, a fork of the
+    /// spawner's for a task.
+    pub(super) access: Arc<Access>,
     /// The slice the chain walks.
     pub(super) slice: SlicePath,
     /// The section of `slice` the chain starts at.
@@ -102,7 +109,7 @@ impl Scheduler {
             ChainKind::Call { parent, .. } => self.chains[parent.index()].task.clone(),
             ChainKind::Task { .. } => TaskId::from(start.lineage.clone()),
         };
-        let entered = start
+        let entered_name = start
             .slice
             .name_at(start.ctx.prompt(), start.index.get())
             .to_owned();
@@ -111,21 +118,15 @@ impl Scheduler {
             counters: start.counters,
             kind: start.kind,
             task,
-            seed: None,
-            waiting_on: Vec::new(),
-            batch: Vec::new(),
-            blocked: None,
+            seed: TaskSeed::default(),
+            parked: None,
             ctx: start.ctx,
-            access: None,
-            frame: None,
+            access: Some(start.access),
+            entered: None,
             slice: start.slice,
             index: start.index,
-            entered,
+            entered_name,
             positions: Vec::new(),
-            block: BlockIndex::FIRST,
-            coroutine: None,
-            incoming: None,
-            pending_prose: None,
             var: start.var,
             call_depth: start.call_depth,
             concurrency: start.concurrency,
@@ -151,7 +152,7 @@ impl Scheduler {
         let is_task = matches!(chain.kind, ChainKind::Task { .. });
         // `None` when the chain ended by exhausting its slice: the last
         // section's frame already dropped at the fall-through.
-        let mut frame = chain.frame.take();
+        let mut entered = chain.entered.take();
         // Taken now, dropped last: the VM's store closures hold their own
         // Arc clones of the capability, so the identity's last reference
         // drops only when both are gone. The chain-end joins run while
@@ -170,10 +171,10 @@ impl Scheduler {
             // or a task chain discards its clone), and arms the completion
             // flag so the frame's drop fires SECTION_FINISHED. A failure -
             // the read-back's included - drops the frame unarmed.
-            if let Some(frame) = frame.as_mut() {
-                frame.read_var()?;
+            if let Some(entered) = entered.as_mut() {
+                entered.frame.read_var()?;
                 if !is_h1 {
-                    frame.mark_completed();
+                    entered.frame.mark_completed();
                 }
             }
             let text = match returned {
@@ -188,7 +189,7 @@ impl Scheduler {
             Ok(text)
         });
         // The frame drops here: the single teardown boundary.
-        drop(frame);
+        drop(entered);
         // The chain's tasks end with it: a live task turns a success into
         // `tasks_live` and is abandoned.
         let outcome = self.settle_owned_tasks(id, outcome);
@@ -213,9 +214,10 @@ impl Scheduler {
             Err(error @ Error::Determinism(_)) => return ChainStep::RunEnded(Err(error)),
             outcome => outcome,
         };
+        // A scheduler bug that strands the outcome - a missing task slot,
+        // or a parent or waiting owner with no suspended block to take it -
+        // fails the run loudly rather than losing it.
         if is_task {
-            // A missing slot is a scheduler bug: fail the run loudly rather
-            // than lose the task's outcome.
             return match self.complete_task(id, outcome) {
                 Ok(()) => ChainStep::Continue,
                 Err(error) => ChainStep::RunEnded(Err(error)),
@@ -223,10 +225,10 @@ impl Scheduler {
         }
         match parent {
             None => ChainStep::RunEnded(outcome),
-            Some(parent_id) => {
-                self.answer_inline(parent_id, Answer::Call(outcome));
-                ChainStep::Continue
-            }
+            Some(parent_id) => match self.answer_inline(parent_id, Answer::Call(outcome)) {
+                Ok(()) => ChainStep::Continue,
+                Err(error) => ChainStep::RunEnded(Err(error)),
+            },
         }
     }
 
@@ -272,14 +274,10 @@ impl Scheduler {
         }
         let access = {
             let chain = &mut self.chains[id.index()];
-            chain.coroutine = None;
-            chain.incoming = None;
             // A chain aborted mid-wait leaves its set: no member's end may
             // wake a dead chain.
-            chain.waiting_on.clear();
-            chain.batch.clear();
-            chain.blocked = None;
-            chain.frame = None;
+            chain.parked = None;
+            chain.entered = None;
             chain.access.take()
         };
         // A queued chain aborted before admission leaves both queues, and

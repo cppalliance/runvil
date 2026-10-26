@@ -26,11 +26,11 @@ use runvil_vfs::{ExecId, detail};
 use crate::error::DepthVia;
 use crate::execute::run::EffectId;
 use crate::execute::section_context::TaskSeed;
-use crate::lua::{Answer, Blocked, SpawnVia};
+use crate::lua::{Answer, SpawnVia};
 use crate::{Error, Result};
 
 use super::chain::ChainStart;
-use super::chain_record::{Admission, ChainKind};
+use super::chain_record::{Admission, ChainKind, Parked};
 use super::{ChainIndex, Counters, Scheduler, SpawnRecord, prompt_origin};
 
 /// Where a task's work runs.
@@ -170,18 +170,17 @@ impl Scheduler {
         seed: TaskSeed,
         var: serde_json::Value,
         via: SpawnVia,
-    ) {
+    ) -> Result<()> {
         match self.prepare_spawn(id, target, input, seed, var, via) {
             Ok((task, child)) => {
-                self.answer_inline(id, Answer::Spawn(Ok(task)));
+                self.answer_inline(id, Answer::Spawn(Ok(task)))?;
                 // The child waits for admission, queued behind the
                 // spawner; the drain admits it when a slot frees up at
                 // its owner and every ancestor.
                 self.spawned.push_back(child);
+                Ok(())
             }
-            Err(error) => {
-                self.answer_inline(id, Answer::Spawn(Err(error)));
-            }
+            Err(error) => self.answer_inline(id, Answer::Spawn(Err(error))),
         }
     }
 
@@ -269,6 +268,7 @@ impl Scheduler {
             lineage: chain_id,
             counters: Counters::default(),
             ctx: child_ctx,
+            access: Arc::new(access),
             slice: target_section.slice,
             index: target_section.index,
             kind: ChainKind::Task {
@@ -282,11 +282,10 @@ impl Scheduler {
             concurrency: child_concurrency,
         })?;
         let spawned = &mut self.chains[child.index()];
-        spawned.access = Some(Arc::new(access));
-        spawned.seed = Some(seed);
+        spawned.seed = seed;
         // `blocked` reads `queued` in `tasks.status` while the slot's
         // state is still `Running`.
-        spawned.blocked = Some(Blocked::Queued);
+        spawned.parked = Some(Parked::Queued);
         self.tasks.insert(
             task.clone(),
             TaskSlot {

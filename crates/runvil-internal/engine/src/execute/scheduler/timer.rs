@@ -38,9 +38,9 @@ impl Scheduler {
     /// effect, and resumes the caller at once with the id. A dispatch
     /// failure is the call's answer, resumed into the caller so the wait
     /// shim raises it before any wait.
-    pub(super) fn dispatch_timer(&mut self, id: ChainIndex, duration: Duration) {
+    pub(super) fn dispatch_timer(&mut self, id: ChainIndex, duration: Duration) -> Result<()> {
         let answer = Answer::Timer(self.prepare_timer(id, duration));
-        self.answer_inline(id, answer);
+        self.answer_inline(id, answer)
     }
 
     /// The fallible half of timer dispatch: the id allocation, the issued
@@ -69,9 +69,10 @@ impl Scheduler {
     ///
     /// # Errors
     /// Returns [`Error::Internal`] when no live slot is backed by
-    /// `effect`, which only a scheduler bug produces: a cancelled or
-    /// abandoned timer's effect is aborted and its late firing discarded
-    /// before it reaches here.
+    /// `effect` - a cancelled or abandoned timer's effect is aborted and
+    /// its late firing discarded before it reaches here - or when the
+    /// woken owner has no suspended block. Only a scheduler bug produces
+    /// either.
     pub(super) fn fire_timer(&mut self, effect: EffectId) -> Result<()> {
         let Some((task, slot)) = self
             .tasks
@@ -82,7 +83,6 @@ impl Scheduler {
         };
         slot.state = SlotState::Done(Ok(String::new()));
         let (task, owner) = (task.clone(), slot.owner);
-        self.wake_waiter(owner, &task);
-        Ok(())
+        self.wake_waiter(owner, &task)
     }
 }

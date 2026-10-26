@@ -230,12 +230,8 @@ impl Scheduler {
             self.join_owned_tasks(owner, access);
         }
         for chain in &mut self.chains {
-            chain.coroutine = None;
-            chain.incoming = None;
-            chain.waiting_on.clear();
-            chain.batch.clear();
-            chain.blocked = None;
-            chain.frame = None;
+            chain.parked = None;
+            chain.entered = None;
             chain.access = None;
         }
         for entry in self.outstanding.values_mut() {
