@@ -126,15 +126,19 @@ impl InferenceBroker for ScriptedBroker {
     }
 }
 
-/// The scripted catalog: the one model, with a 131072-token window.
-fn catalog() -> ModelCatalog {
-    ModelCatalog::new([ModelInfo::new(
+/// The one model the scripted broker lists, with a 131072-token window.
+pub(crate) fn scripted_model() -> ModelInfo {
+    ModelInfo::new(
         ModelId::gateway(MODEL).expect("the model id is valid"),
         "The scripted model",
         NonZeroU32::new(131_072).expect("131072 is non-zero"),
         ThinkingMode::Never,
-    )])
-    .expect("one model is a valid catalog")
+    )
+}
+
+/// The scripted catalog: the one model.
+fn catalog() -> ModelCatalog {
+    ModelCatalog::new([scripted_model()]).expect("one model is a valid catalog")
 }
 
 /// A text completion of `text` from the scripted model.

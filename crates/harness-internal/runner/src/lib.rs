@@ -3,12 +3,11 @@
 //! prepares an Engine `Run` from the prompt's source (drawing the inputs
 //! the Engine refuses to draw itself, putting the declared input file in
 //! place, taking the run's snapshot of the [`HostContext`]'s Packs,
-//! beginning the run at its recorder),
-//! steps it, performs each chat, tool-call, and timer effect through its
-//! performer and answers each Vfs effect inline, feeds the answers back,
-//! hands every event, effect, and answer to the run's recorder, and reads
-//! the declared output file, all inside the one future [`Harness::run`]
-//! returns.
+//! beginning the run at its recorder), steps it, performs each chat,
+//! render, tool-call, and timer effect through its performer and answers
+//! each Vfs effect inline, feeds the answers back, hands every event,
+//! effect, and answer to the run's recorder, and reads the declared output
+//! file, all inside the one future [`Harness::run`] returns.
 //!
 //! ## Invariants
 //!

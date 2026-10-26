@@ -5,18 +5,17 @@
 //! of the step's effects is issued, so an effect's record never precedes the
 //! events its step reported. Each effect is appended as its
 //! [`EffectRecord`](runvil::effect::EffectRecord) and then handled by
-//! kind. A chat, tool-call, or timer effect's performer future joins the
-//! effects in flight, which the loop polls inside the run's own future: the
-//! loop starts no task, so a run is one future that any executor can drive.
-//! A render's future joins them too and answers with the offered tools.
-//! When an effect's future lands, the loop appends the answer's record and
-//! resumes the run with it, then steps again. A Vfs effect has no future:
-//! the VFS is synchronous by design, so the loop performs the operation
-//! inline, appends the answer's record, and resumes the run at once. It
-//! resumes every Vfs effect of a step this way and then steps once, so the
-//! loop awaits an answer only when it answered nothing inline. Real-disk
-//! operations therefore block whatever polls the run, and Vfs operations
-//! from different chains run one at a time in issue order.
+//! kind. A chat, render, tool-call, or timer effect's performer future
+//! joins the effects in flight, which the loop polls inside the run's own
+//! future: the loop starts no task, so a run is one future that any
+//! executor can drive. When an effect's future lands, the loop appends the
+//! answer's record and resumes the run with it, then steps again. A Vfs
+//! effect has no future: the VFS is synchronous by design, so the loop
+//! performs the operation inline, appends the answer's record, and resumes
+//! the run at once. It resumes every Vfs effect of a step this way and then
+//! steps once, so the loop awaits an answer only when it answered nothing
+//! inline. Real-disk operations therefore block whatever polls the run, and
+//! Vfs operations from different chains run one at a time in issue order.
 //!
 //! The loop waits on three things at once: the run's cancel flag, the stop
 //! a Host raises through [`RunControl::stop_round`](crate::RunControl::stop_round),
@@ -351,8 +350,16 @@ impl Driver {
                 };
                 Box::pin(round)
             }
-            Effect::Render { offered, .. } => {
-                Box::pin(async move { EffectAnswer::Render(offered) })
+            Effect::Render {
+                entry,
+                binding,
+                offered,
+            } => {
+                let performer = Arc::clone(&self.performers.tool);
+                let model = binding.render_info();
+                Box::pin(async move {
+                    EffectAnswer::Render(performer.render(entry, model, offered).await)
+                })
             }
             Effect::ToolCall {
                 tool,
@@ -360,8 +367,8 @@ impl Driver {
                 args,
                 origin,
                 access,
+                survives_stop,
             } => {
-                let survives_stop = self.performers.tool.survives_stop(&tool);
                 let performer = Arc::clone(&self.performers.tool);
                 let call = async move {
                     EffectAnswer::ToolCall(performer.call(tool, alias, access, origin, args).await)

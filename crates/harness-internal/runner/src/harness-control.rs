@@ -39,9 +39,10 @@ impl RunControl {
     /// and lets the run go on.
     ///
     /// A call survives a stop when its tool's info sets
-    /// `survives_stop`, as the question to the operator does. Every other
-    /// effect in flight is aborted and answered `Dropped`. The run's cancel
-    /// flag stays clear.
+    /// `survives_stop`, as the question to the operator does; for a tool
+    /// only the model sees, that is the info its section's render gave it.
+    /// Every other effect in flight is aborted and answered `Dropped`. The
+    /// run's cancel flag stays clear.
     /// A `pcall` around a dropped call catches its cancelled error.
     /// Otherwise, the error ends the run cancelled.
     ///

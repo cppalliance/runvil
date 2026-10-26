@@ -178,9 +178,10 @@ struct Laid {
 ///   offered into. Every rendered tool's id starts with its Pack's id, a
 ///   rendered run catalog tool is one the section offered in that set, and
 ///   a tool repeated within a set keeps its first copy. Each tool binds
-///   under its wire name, and a catalog id keeps the catalog's output kind
-///   and listing flag, so a render changes only a catalog tool's wire
-///   name, description, and schema.
+///   under its wire name, and a catalog id keeps the catalog's output
+///   kind, listing flag, and stop flag, so a render changes only a catalog
+///   tool's wire name, description, and schema, while a model-only tool
+///   binds with the flags its render gave it.
 /// - Within a set, a Pack tool whose wire name an adhoc tool of that set
 ///   takes is dropped.
 /// - A Dynamic Set tool whose id the Static Set holds is dropped.
@@ -335,11 +336,12 @@ fn lay_out(
 }
 
 /// Binds a rendered tool under its wire name, with the catalog's output
-/// kind and listing flag when its id is a catalog tool's.
+/// kind, listing flag, and stop flag when its id is a catalog tool's.
 fn bind(mut tool: ToolInfo, catalog: &ToolCatalog) -> ToolBinding {
     if let Some(known) = catalog.get(&tool.id) {
         tool.structured_output = known.structured_output;
         tool.describes_tools = known.describes_tools;
+        tool.survives_stop = known.survives_stop;
     }
     ToolBinding::from_info(&wire_name_of(&tool), &tool)
 }

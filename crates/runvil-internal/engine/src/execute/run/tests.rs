@@ -116,7 +116,7 @@ fn model_origin() -> ToolCallOrigin {
 }
 
 #[test]
-fn a_tool_call_effect_records_its_identity_alias_args_and_origin_and_drops_the_access() {
+fn a_tool_call_record_keeps_the_identity_alias_args_and_origin_but_no_access_or_stop_flag() {
     let access = Arc::new(
         runvil_vfs::VfsRef::default()
             .acquire(runvil_vfs::Origin::new("run test fixture"))
@@ -128,6 +128,7 @@ fn a_tool_call_effect_records_its_identity_alias_args_and_origin_and_drops_the_a
         args: json!({ "value": "hi" }),
         origin: model_origin(),
         access,
+        survives_stop: true,
     };
     let record = effect.record();
     assert_eq!(
@@ -141,8 +142,8 @@ fn a_tool_call_effect_records_its_identity_alias_args_and_origin_and_drops_the_a
     );
     let text = serde_json::to_string(&record).expect("a record serializes");
     assert!(
-        !text.contains("access"),
-        "the tool call record holds no access: {text}"
+        !text.contains("access") && !text.contains("survives_stop"),
+        "the tool call record holds no access and no stop flag: {text}"
     );
     assert_eq!(round_trip(&record), record);
 }

@@ -210,11 +210,12 @@ pub enum InstallError {
 /// A built-in Pack's behavior and tools live in the Engine. Its Pack
 /// object exists only so building, readiness, and the run snapshot treat
 /// it like any other Pack, so a built-in must never offer tools, carry a
-/// prelude, or need services. Its `call` is unreachable, because the run
-/// snapshot routes a call only to a tool in a Pack's own list. A built-in
-/// never takes a [reserved](PackId::is_reserved) Pack id: the Harness
-/// puts every `runvil` Pack no `uses:` entry replaces into every run's
-/// roster, so a reserved one would refuse every run.
+/// prelude, or need services. Its `call` is unreachable, because the
+/// Engine never issues a call under a built-in's id: a built-in lists no
+/// tools, so no section offers one of its tools and no render of it adds
+/// one. A built-in never takes a [reserved](PackId::is_reserved) Pack id:
+/// the Harness puts every `runvil` Pack no `uses:` entry replaces into
+/// every run's roster, so a reserved one would refuse every run.
 const BUILTIN: [PackInfo; 1] = [PackInfo::new("runvil/subagents", builtin).description(
     "Reserves the subagents name for the Engine's subagent tools, which are not built yet",
 )];

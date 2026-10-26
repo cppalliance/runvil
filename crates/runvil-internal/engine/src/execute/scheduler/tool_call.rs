@@ -390,6 +390,7 @@ impl Scheduler {
             args,
             origin,
             access: Arc::new(access),
+            survives_stop: binding.survives_stop(),
         };
         let resume = Continuation::ToolCall(ToolCallContinuation {
             binding,

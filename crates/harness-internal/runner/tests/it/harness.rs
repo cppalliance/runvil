@@ -46,7 +46,7 @@ const PATIENCE: Duration = Duration::from_secs(10);
 
 /// A request to run `source` under [`NAME`] with [`MODEL`] selected, no
 /// arguments, no input text, and a fresh memory store.
-fn request(source: &str) -> RunRequest {
+pub(crate) fn request(source: &str) -> RunRequest {
     RunRequest {
         name: NAME.to_owned(),
         source: source.to_owned(),
@@ -75,7 +75,7 @@ fn plain_harness(recorder: &Arc<MemoryRecorder>, broker: ScriptedBroker) -> Harn
 /// Yields until `condition` holds, or fails naming `what`. Every
 /// performer here is in memory, so the run beside the caller reaches each
 /// state within a few polls.
-async fn until(what: &str, condition: impl Fn() -> bool) {
+pub(crate) async fn until(what: &str, condition: impl Fn() -> bool) {
     for _ in 0..10_000 {
         if condition() {
             return;
@@ -87,7 +87,7 @@ async fn until(what: &str, condition: impl Fn() -> bool) {
 
 /// Runs `request` on `harness` beside `steer`, which is handed the run's
 /// control, and returns the run's result.
-async fn run_beside<F>(
+pub(crate) async fn run_beside<F>(
     harness: Harness,
     request: RunRequest,
     steer: impl FnOnce(RunControl) -> F,

@@ -1037,7 +1037,7 @@ While iterating, run `cargo nextest run --locked -p runvil-model-client -p runvi
 
 <step-12>
 
-### Step 12: Render Packs in the Harness and route calls by Pack
+### Step 12: Render Packs in the Harness and route calls by Pack [completed]
 
 - Component: Late rendering
 - Tests:
@@ -1092,6 +1092,8 @@ While iterating, run `cargo nextest run --locked -p harness -p harness-runner -p
   - `$env:RUNVIL_DOCS='c:\Users\Vinnie\cursor\runvil-docs'; cargo xtask site --books-only`
 
 Commit in `c:\Users\Vinnie\cursor\runvil-docs`.
+
+Most of this step landed early, under the docs rule, in runvil-docs `c583376` ("Document what a Pack's render can change"), written before step 12's commit message. Check each bullet below against the guide and fix only what is still missing or wrong; when nothing is, change nothing, and the step is marked complete on its Tests line with no commit.
 
 - In `src/language/12-tools.md`, in the passages on who names a tool for the model, as step 4 left them (the wire-name section and the advice that prompt prose names each tool by its tool id): say that a Pack may rename the tools a section offered from it for that section's model and add tools only the model sees, so the names and tools a model sees can differ by section, which is why prompt prose keeps naming tools by id.
 - In the counting section, say that Lua cannot get or call a tool only the model sees, and that `tools.stats.packs` counts its calls while `tools.stats.tools` leaves it out.
