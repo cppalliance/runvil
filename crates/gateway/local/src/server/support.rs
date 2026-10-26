@@ -3,6 +3,7 @@
 
 use std::collections::VecDeque;
 use std::ffi::OsString;
+use std::fmt;
 use std::io::{self, Read};
 use std::net::{TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
@@ -57,7 +58,7 @@ impl ChildSpawner {
     }
 }
 
-impl std::fmt::Debug for ChildSpawner {
+impl fmt::Debug for ChildSpawner {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str("ChildSpawner")
     }

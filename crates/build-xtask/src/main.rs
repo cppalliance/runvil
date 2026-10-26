@@ -10,6 +10,7 @@
 //!   `#[ignore]`d on stable.
 
 mod api;
+mod debug_spelling;
 mod doc_hidden;
 mod engine_clippy;
 mod engine_deps;

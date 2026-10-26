@@ -2,6 +2,7 @@
 //! through a mount, and at spawn, and an identity whose tool call has
 //! ended while its scope stays open.
 
+use std::fmt;
 use std::sync::atomic::AtomicUsize;
 
 use super::*;
@@ -88,7 +89,7 @@ fn a_backend_refusal_fails_spawn_and_releases_the_refused_child() -> Result<(), 
 #[test]
 fn an_ended_identity_refuses_operations_spawns_and_views_while_the_scope_stays_open()
 -> Result<(), VfsError> {
-    fn refused<T: std::fmt::Debug>(result: Result<T, VfsError>, expected: &str) {
+    fn refused<T: fmt::Debug>(result: Result<T, VfsError>, expected: &str) {
         match result {
             Err(VfsError::ScopeEnded { path }) => assert_eq!(path, expected),
             other => panic!("expected an ended-call refusal on {expected}, got {other:?}"),

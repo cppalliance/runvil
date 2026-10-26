@@ -25,6 +25,7 @@
 //! the Host's Packs, taken at preparation. The Host supplies the
 //! [`InferenceBroker`] and the [`Timer`].
 
+use std::fmt;
 use std::future::Future;
 use std::num::NonZeroUsize;
 use std::pin::Pin;
@@ -146,7 +147,7 @@ pub struct Performers {
     pub timer: Arc<dyn Timer>,
 }
 
-impl std::fmt::Debug for Performers {
+impl fmt::Debug for Performers {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Performers").finish_non_exhaustive()
     }

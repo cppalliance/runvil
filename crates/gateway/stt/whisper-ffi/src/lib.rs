@@ -26,6 +26,7 @@ pub use vad::VadContext;
 // Miri excludes dynamic library loading and native log callback tests; native CI owns them.
 #[cfg(test)]
 mod tests {
+    use std::fmt;
     use std::path::PathBuf;
     use std::sync::{Arc, Mutex};
     use std::time::Duration;
@@ -56,7 +57,7 @@ mod tests {
     struct Message(String);
 
     impl tracing::field::Visit for Message {
-        fn record_debug(&mut self, field: &tracing::field::Field, value: &dyn std::fmt::Debug) {
+        fn record_debug(&mut self, field: &tracing::field::Field, value: &dyn fmt::Debug) {
             if field.name() == "message" {
                 self.0 = format!("{value:?}");
             }

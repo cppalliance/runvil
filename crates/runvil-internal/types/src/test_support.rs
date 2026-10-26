@@ -1,7 +1,7 @@
 //! Test support: seeded pseudo-random input, serde checks, and the
 //! auto-trait check.
 
-use std::fmt::{Debug, Display};
+use std::fmt::{self, Display};
 
 use serde::Serialize;
 use serde::de::DeserializeOwned;
@@ -61,7 +61,7 @@ impl Seeded {
     }
 
     #[track_caller]
-    pub(crate) fn check_eq<T: PartialEq + Debug>(
+    pub(crate) fn check_eq<T: PartialEq + fmt::Debug>(
         &self,
         left: &T,
         right: &T,
@@ -83,7 +83,7 @@ pub(crate) fn round_trip<T: Serialize + DeserializeOwned>(value: &T) -> T {
 #[track_caller]
 pub(crate) fn assert_wire<T>(value: &T, line: &str)
 where
-    T: Serialize + DeserializeOwned + PartialEq + Debug,
+    T: Serialize + DeserializeOwned + PartialEq + fmt::Debug,
 {
     let actual = serde_json::to_string(value).expect("the value serializes");
     assert_eq!(actual, line);

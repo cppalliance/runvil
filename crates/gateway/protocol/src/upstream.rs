@@ -3,6 +3,8 @@
 //! This crate implements the trait once, as [`OpenAiUpstream`], which forwards
 //! the OpenAI shape unchanged.
 
+use std::fmt;
+
 use async_trait::async_trait;
 use bytes::Bytes;
 use futures_util::StreamExt;
@@ -31,7 +33,7 @@ pub struct StreamedChunks {
     pub chunks: BoxStream<'static, Result<ChatChunk, ProtocolError>>,
 }
 
-impl std::fmt::Debug for StreamedChunks {
+impl fmt::Debug for StreamedChunks {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("StreamedChunks")
             .field("content_type", &self.content_type)
@@ -54,7 +56,7 @@ pub struct StreamedAudio {
     pub body: BoxStream<'static, Result<Bytes, ProtocolError>>,
 }
 
-impl std::fmt::Debug for StreamedAudio {
+impl fmt::Debug for StreamedAudio {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("StreamedAudio")
             .field("content_type", &self.content_type)

@@ -422,7 +422,7 @@ Each work item ships its tests in the same commit. Unit tests pin the new types 
   - The Plugin entry-point work comes after this plan, with two cheap steps now: reserve the `RV_PACK_RENDER` number, and keep `render`'s inputs and outputs plain data. User: "should we do the entry point stuff now and make sure that the linked and DLL plugins follow the API or do it later?", then "I mean put the cheap steps in the plan".
   - Per-section bindings land first, then the discovery tools, so dynamic offers work before any render work, and the render is split so the Engine half lands with every Pack passing through. User, accepting the reorder: "yeah". In review, the resolve-once edit joins the section-bindings behavior commit, because both edits are `tool_call.rs` and the second lookup exists only while the run-start offering does. The Harness render and the routing became one item, because they edit the same three files and `ToolPerformer` should change once, and the reservation became free to land beside section-bindings. In a later review, render-hook moved ahead of section-bindings, because test support names tools through `ToolInfo.wire_name`.
   - Each work item lands as one commit, or as the separate commits it names, with its tests in the same commit, and docs changes in `runvil-docs` are commits in that repository. Settled while writing this plan.
-  - The `Debug` trait has one spelling, `fmt::Debug`, and every other `std::fmt::` path stays as written. The user asked that the code base not hold both `std::fmt::Debug` and `fmt::Debug`, and that the rule be enforced. No clippy lint can enforce it: both spellings resolve to the same trait, so `disallowed_types` cannot tell them apart, and `absolute_paths`, the only lint that reads spelling, flags every path of three or more segments. So a structural check in `build-xtask` reads the source text, and it runs under `cargo test -p build-xtask` and the workspace nextest run. A `macro_rules!` body, whose paths resolve at each call site, writes `::core::fmt::Debug`, which the check accepts; none names the trait today. It lands last, as its own step, because it is independent of the tool work. Settled while amending this plan.
+  - The `Debug` trait has one spelling, `fmt::Debug`, and every other `std::fmt::` path stays as written. The user asked that the code base not hold both `std::fmt::Debug` and `fmt::Debug`, and that the rule be enforced. No clippy lint can enforce it: both spellings resolve to the same trait, so `disallowed_types` cannot tell them apart, and `absolute_paths`, the only lint that reads spelling, flags every path of three or more segments. So a structural check in `build-xtask` reads the source text, and it runs under `cargo test -p build-xtask` and the workspace nextest run. A `macro_rules!` body is no exception: it writes `fmt::Debug` like any other code, and none names the trait today. A `std::fmt::{...}` group that lists `Debug` is refused too, because it brings in a bare `Debug`, a second spelling. It lands last, as its own step, because it is independent of the tool work. Settled while amending this plan.
 - Rejected alternatives:
   - Several run-wide copies of the catalog: `ToolSet.offered`, `RunState.catalog_bindings`, a `RunState` `ToolCatalog`, or a catalog entry that copies its Pack's vendor. Reason: once names move to the merge they hold the same thing, and vendors belong to Packs. `ToolSet` holds the one `ToolCatalog` handle instead. Revisit: closed.
   - Converting the catalog into a `BTreeMap<ToolId, ToolInfo>` on `ToolSet`. Reason: `ToolCatalog` is already an `Arc<[ToolInfo]>` with a by-id lookup, so the map only deep-clones every description and schema. Revisit if a catalog ever grows large enough for the scan to matter.
@@ -1085,7 +1085,7 @@ While iterating, run `cargo nextest run --locked -p harness -p harness-runner -p
 
 <step-13>
 
-### Step 13: Document late Pack rendering
+### Step 13: Document late Pack rendering [completed]
 
 - Component: Late rendering
 - Tests:
@@ -1102,7 +1102,7 @@ Most of this step landed early, under the docs rule, in runvil-docs `c583376` ("
 
 <step-14>
 
-### Step 14: Spell the Debug trait as fmt::Debug
+### Step 14: Spell the Debug trait as fmt::Debug [completed]
 
 - Component: Debug trait spelling
 - Tests:

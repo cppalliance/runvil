@@ -1,6 +1,7 @@
 //! Routing table entries: the [`Model`] and [`Endpoint`] vocabulary shared by
 //! the gateway's routing table and the local inference crate.
 
+use std::fmt;
 use std::sync::Arc;
 
 use gateway_config::{Capabilities, ModelKind, ThinkingMode};
@@ -29,7 +30,7 @@ pub struct Endpoint {
     pub queue: DominionQueue,
 }
 
-impl std::fmt::Debug for Endpoint {
+impl fmt::Debug for Endpoint {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Endpoint")
             .field("id", &self.id)

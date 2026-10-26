@@ -6,6 +6,7 @@ mod support;
 mod tests;
 
 use std::ffi::OsString;
+use std::fmt;
 use std::path::{Path, PathBuf};
 use std::process::{Child, ExitStatus};
 use std::sync::Arc;
@@ -55,7 +56,7 @@ struct AttemptIdentity {
     api_key: String,
 }
 
-impl std::fmt::Debug for AttemptIdentity {
+impl fmt::Debug for AttemptIdentity {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         // Never render the per-attempt bearer token (HYGIENE-SECRET-DEBUG-001).
         f.debug_struct("AttemptIdentity")
@@ -82,7 +83,7 @@ struct SpawnRequest<'a> {
 /// Renders an argument vector with the value following `--api-key` redacted.
 struct RedactedArgs<'a>(&'a [OsString]);
 
-impl std::fmt::Debug for RedactedArgs<'_> {
+impl fmt::Debug for RedactedArgs<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut list = f.debug_list();
         let mut redact_next = false;
@@ -99,7 +100,7 @@ impl std::fmt::Debug for RedactedArgs<'_> {
     }
 }
 
-impl std::fmt::Debug for SpawnRequest<'_> {
+impl fmt::Debug for SpawnRequest<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         // Redact the credential in both `args` (the `--api-key <token>` pair) and
         // the test-only `api_key` field (HYGIENE-SECRET-DEBUG-002).

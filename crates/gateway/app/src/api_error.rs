@@ -7,6 +7,8 @@
 //! semver surface. Callers classify failures with the `kind()` method
 //! instead of matching private variants.
 
+use std::fmt;
+
 use gateway_config::ConfigError;
 
 /// A startup failure while assembling or serving the gateway.
@@ -91,9 +93,9 @@ impl StartupError {
     }
 }
 
-impl std::fmt::Debug for StartupError {
+impl fmt::Debug for StartupError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        std::fmt::Debug::fmt(&self.0, f)
+        fmt::Debug::fmt(&self.0, f)
     }
 }
 
@@ -123,7 +125,7 @@ impl ServeError {
     }
 }
 
-impl std::fmt::Debug for ServeError {
+impl fmt::Debug for ServeError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_tuple("ServeError").field(&self.0).finish()
     }

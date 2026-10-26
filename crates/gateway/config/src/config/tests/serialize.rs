@@ -1,5 +1,7 @@
 //! Tests for config JSON round-tripping, key naming, and secret redaction.
 
+use std::fmt;
+
 use super::super::*;
 
 /// A fixture exercising every config struct, every enum spelling, and all
@@ -217,7 +219,7 @@ fn serialized_output_never_contains_a_secret_value() {
 fn enums_round_trip_with_their_toml_spellings() {
     fn check<T>(value: T, spelling: &str)
     where
-        T: serde::Serialize + serde::de::DeserializeOwned + PartialEq + std::fmt::Debug + Copy,
+        T: serde::Serialize + serde::de::DeserializeOwned + PartialEq + fmt::Debug + Copy,
     {
         let json = serde_json::to_value(value).expect("serializes");
         assert_eq!(json, spelling);

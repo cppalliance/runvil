@@ -1,5 +1,6 @@
 //! The [`ProfileName`] identifier type and its parse error.
 
+use std::fmt;
 use std::path::Path;
 
 /// A validated profile name safe for URLs, state files, and operator labels.
@@ -74,7 +75,7 @@ impl ProfileNameError {
     }
 }
 
-impl std::fmt::Debug for ProfileNameError {
+impl fmt::Debug for ProfileNameError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("ProfileNameError")
             .field("reason", &self.reason)

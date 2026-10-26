@@ -11,6 +11,7 @@
 //! plainly), and an empty `gateway.api_key` omits the `Authorization`
 //! header.
 
+use std::fmt;
 use std::path::{Path, PathBuf};
 
 /// Address the workshop server binds to when no override is given.
@@ -123,7 +124,7 @@ pub struct GatewayConfig {
 }
 
 // Manual so the bearer key is never written to logs.
-impl std::fmt::Debug for GatewayConfig {
+impl fmt::Debug for GatewayConfig {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("GatewayConfig")
             .field("base_url", &self.base_url)
