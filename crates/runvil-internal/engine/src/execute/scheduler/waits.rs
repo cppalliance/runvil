@@ -39,6 +39,7 @@ use runvil_types::ids::TaskId;
 use crate::lua::{Answer, NonEmpty, TaskDelivery, TaskPhase, TaskStatus};
 use crate::{Error, Result};
 
+use super::chain_record::Parked;
 use super::tasks::{SlotState, TaskBacking, TaskSlot, TaskState};
 use super::{ChainIndex, Scheduler};
 
@@ -90,15 +91,20 @@ impl Scheduler {
     /// on the set until a member's chain end wakes it. Parking on a set
     /// with real members gives the chain's admission slots back, so its
     /// own tasks can run under its limit.
-    pub(super) fn dispatch_join_any(&mut self, id: ChainIndex, tasks: NonEmpty<TaskId>) {
+    pub(super) fn dispatch_join_any(
+        &mut self,
+        id: ChainIndex,
+        tasks: NonEmpty<TaskId>,
+    ) -> Result<()> {
         match self.first_terminal(id, &tasks) {
             Ok(Some(task)) => {
                 let delivery = self.deliver(&task);
-                self.answer_inline(id, Answer::JoinAny(Ok(delivery)));
+                self.answer_inline(id, Answer::JoinAny(Ok(delivery)))
             }
             Ok(None) => {
-                self.chains[id.index()].waiting_on = tasks.into_vec();
+                self.chains[id.index()].parked = Some(Parked::Tasks(tasks.into_vec()));
                 self.park_wait(id);
+                Ok(())
             }
             Err(error) => self.answer_inline(id, Answer::JoinAny(Err(error))),
         }
@@ -175,27 +181,26 @@ impl Scheduler {
     /// Wakes `task`'s owner if it is parked on a set containing `task`:
     /// the member is delivered as the wait's answer and the owner leaves
     /// its wait.
-    pub(super) fn wake_waiter(&mut self, owner: ChainIndex, task: &TaskId) {
-        if !self.chains[owner.index()].waiting_on.contains(task) {
-            return;
+    pub(super) fn wake_waiter(&mut self, owner: ChainIndex, task: &TaskId) -> Result<()> {
+        if !self.chains[owner.index()].end_wait_for(task) {
+            return Ok(());
         }
-        self.chains[owner.index()].waiting_on.clear();
         let delivery = self.deliver(task);
-        self.wake_from_wait(owner, Answer::JoinAny(Ok(delivery)));
+        self.wake_from_wait(owner, Answer::JoinAny(Ok(delivery)))
     }
 
     /// Dispatches a `ready` request: whether a task the chain owns has
     /// ended, delivered or not.
-    pub(super) fn dispatch_ready(&mut self, id: ChainIndex, task: &TaskId) {
+    pub(super) fn dispatch_ready(&mut self, id: ChainIndex, task: &TaskId) -> Result<()> {
         let answer = self.owned_slot(id, task).map(|slot| !slot.state.is_live());
-        self.answer_inline(id, Answer::Ready(answer));
+        self.answer_inline(id, Answer::Ready(answer))
     }
 
     /// Dispatches a `status` request over a task the chain owns or runs
     /// inside.
-    pub(super) fn dispatch_status(&mut self, id: ChainIndex, task: &TaskId) {
+    pub(super) fn dispatch_status(&mut self, id: ChainIndex, task: &TaskId) -> Result<()> {
         let answer = self.task_status(id, task).map(Box::new);
-        self.answer_inline(id, Answer::Status(answer));
+        self.answer_inline(id, Answer::Status(answer))
     }
 
     /// Reads one task's status: the slot's facts and note, plus the backing
@@ -222,10 +227,10 @@ impl Scheduler {
             status.depth = u32::try_from(chain.call_depth.get()).unwrap_or(u32::MAX);
             if slot.state.is_live() {
                 status.section = chain
-                    .frame
+                    .entered
                     .is_some()
                     .then(|| chain.section_name().to_owned());
-                status.blocked = chain.blocked;
+                status.blocked = chain.blocked();
                 status.tasks = self.live_tasks_of(backing);
             }
         }
@@ -234,9 +239,9 @@ impl Scheduler {
 
     /// Dispatches a `pending` request: the chain's live tasks in spawn
     /// order.
-    pub(super) fn dispatch_pending(&mut self, id: ChainIndex) {
+    pub(super) fn dispatch_pending(&mut self, id: ChainIndex) -> Result<()> {
         let tasks = self.live_tasks_of(id);
-        self.answer_inline(id, Answer::Pending(Ok(tasks)));
+        self.answer_inline(id, Answer::Pending(Ok(tasks)))
     }
 
     /// Dispatches a `concurrency` request: with a limit, the chain's
@@ -246,7 +251,11 @@ impl Scheduler {
     /// portable wherever it runs, tighter ceilings included; without one,
     /// the effective limit is read back. The clamp never preempts a task
     /// already running - the limit gates admissions from here on only.
-    pub(super) fn dispatch_concurrency(&mut self, id: ChainIndex, limit: Option<NonZeroU64>) {
+    pub(super) fn dispatch_concurrency(
+        &mut self,
+        id: ChainIndex,
+        limit: Option<NonZeroU64>,
+    ) -> Result<()> {
         let effective = if let Some(limit) = limit {
             let parent_limit = match self.enclosing(id) {
                 Some(parent) => self.chains[parent.index()].concurrency,
@@ -259,24 +268,24 @@ impl Scheduler {
         } else {
             self.chains[id.index()].concurrency
         };
-        self.answer_inline(id, Answer::Concurrency(Ok(effective.get())));
+        self.answer_inline(id, Answer::Concurrency(Ok(effective.get())))
     }
 
     /// Dispatches a `note` request: the text becomes the latest note of the
     /// task the chain runs inside, recorded on the task's slot, so a `call`
     /// child's note is the task's. A note outside a slotted task (the main
     /// walk, task `0`, and its `call` children) records nothing.
-    pub(super) fn dispatch_note(&mut self, id: ChainIndex, text: String) {
+    pub(super) fn dispatch_note(&mut self, id: ChainIndex, text: String) -> Result<()> {
         if let Some(slot) = self.tasks.get_mut(&self.chains[id.index()].task) {
             slot.note = Some(text);
         }
-        self.answer_inline(id, Answer::Note(Ok(())));
+        self.answer_inline(id, Answer::Note(Ok(())))
     }
 
     /// Dispatches a `cancel` request over a task the chain owns.
-    pub(super) fn dispatch_cancel(&mut self, id: ChainIndex, task: &TaskId) {
+    pub(super) fn dispatch_cancel(&mut self, id: ChainIndex, task: &TaskId) -> Result<()> {
         let answer = self.cancel_task(id, task);
-        self.answer_inline(id, Answer::Cancel(answer));
+        self.answer_inline(id, Answer::Cancel(answer))
     }
 
     /// Cancels a live task `caller` owns: the slot moves to `Cancelled`, the

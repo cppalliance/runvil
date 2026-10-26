@@ -69,15 +69,11 @@ impl Scheduler {
         id: ChainIndex,
         list: &MessageList,
         binding: Option<ModelBinding>,
-    ) {
+    ) -> Result<()> {
         match self.prepare_chat(id, list, binding) {
-            Ok(Dispatched::Issued) => {}
-            Ok(Dispatched::Answered(answer)) => {
-                self.answer_inline(id, answer);
-            }
-            Err(error) => {
-                self.answer_inline(id, Answer::Chat(Err(error)));
-            }
+            Ok(Dispatched::Issued) => Ok(()),
+            Ok(Dispatched::Answered(answer)) => self.answer_inline(id, answer),
+            Err(error) => self.answer_inline(id, Answer::Chat(Err(error))),
         }
     }
 
@@ -207,7 +203,7 @@ impl Scheduler {
         id: ChainIndex,
         binding: ModelBinding,
         rendered: Vec<PackToolSets<ToolInfo>>,
-    ) {
+    ) -> Result<()> {
         match self.merge_render(id, rendered) {
             Ok(list) => self.dispatch_chat(id, &list, Some(binding)),
             Err(error) => self.answer_inline(id, Answer::Chat(Err(error))),

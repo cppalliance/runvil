@@ -21,7 +21,7 @@ use crate::heading_address::{self, Visible};
 use crate::{Error, Result};
 
 use super::chain::{ChainStart, ChainStep};
-use super::chain_record::{CallDepth, ChainKind, SectionIndex};
+use super::chain_record::{CallDepth, ChainKind, Entered, SectionIndex};
 use super::{ChainIndex, Counters, GENERIC_COMPLETION, Scheduler, prompt_origin};
 
 impl Scheduler {
@@ -46,19 +46,18 @@ impl Scheduler {
         // entry 0, and the walk that follows, a second record under the
         // same lineage, continues its counters. Its admission limit is the
         // run's ceiling.
-        let id = self.start_chain(ChainStart {
+        self.start_chain(ChainStart {
             lineage: ChainId::root(),
             counters: Counters::default(),
             ctx: self.ctx.clone(),
+            access: Arc::new(access),
             slice: SlicePath::root(),
             index: SectionIndex::FIRST,
             kind: ChainKind::H1,
             var: serde_json::json!({}),
             call_depth: CallDepth::ROOT,
             concurrency: self.ctx.limits().max_concurrency,
-        })?;
-        self.chains[id.index()].access = Some(Arc::new(access));
-        Ok(id)
+        })
     }
 
     /// Ends the H1 pass at its fall-through: the final `var` read back
@@ -76,7 +75,7 @@ impl Scheduler {
     /// reuses the pass's capability, so the hand-off acquires nothing.
     pub(super) fn end_live_h1(&mut self, id: ChainIndex, start: SectionIndex) -> Result<ChainStep> {
         let chain = &mut self.chains[id.index()];
-        let Some(frame) = chain.frame.take() else {
+        let Some(Entered { frame, .. }) = chain.entered.take() else {
             return Err(Error::internal("the H1 pass ends with a live frame"));
         };
         let var = frame.read_var()?;
@@ -112,6 +111,7 @@ impl Scheduler {
             lineage: ChainId::root(),
             counters,
             ctx: walk_ctx,
+            access: walk_access,
             slice: SlicePath::root(),
             index: start,
             kind: ChainKind::Root,
@@ -119,7 +119,6 @@ impl Scheduler {
             call_depth: CallDepth::ROOT,
             concurrency,
         })?;
-        self.install_root_slots(root, Some(walk_access))?;
         // The walk is the pass's continuation, so the tasks the pass
         // spawned are the walk's from here: it waits on, cancels, or leaks
         // them exactly as if it had spawned them.

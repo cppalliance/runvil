@@ -303,9 +303,14 @@ impl Scheduler {
 
     /// Resumes `id` at once with `answer`: the inline-answer path every
     /// non-waiting task arm takes.
-    fn answer_inline(&mut self, id: ChainIndex, answer: Answer<Error>) {
-        self.chains[id.index()].incoming = Some(answer);
+    ///
+    /// # Errors
+    /// Returns [`Error::Internal`] when the chain has no suspended block
+    /// to take the answer, which only a scheduler bug produces.
+    fn answer_inline(&mut self, id: ChainIndex, answer: Answer<Error>) -> Result<()> {
+        self.chains[id.index()].deliver(answer)?;
         self.ready.push_back(id);
+        Ok(())
     }
 
     /// Issues one leaf effect for `chain`: allocates its id, stamps it with

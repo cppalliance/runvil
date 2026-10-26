@@ -120,8 +120,8 @@ impl Scheduler {
     ///
     /// # Errors
     /// Returns [`Error::Internal`] when the answer's kind does not match
-    /// the effect's, or when a batched call's answer finds no open slot to
-    /// fill.
+    /// the effect's, when a batched call's answer finds no open slot to
+    /// fill, or when the chain it resumes has no suspended block.
     /// Returns [`Error::Determinism`] when a store answer reports a
     /// claims-model conflict: the run ends on the spot rather than
     /// resuming the conflict into Lua, where an author `pcall` could catch
@@ -148,10 +148,7 @@ impl Scheduler {
             | Continuation::Timer => None,
         };
         let answer = match (resume, answer) {
-            (Continuation::Timer, EffectAnswer::Dropped) => {
-                self.drop_timer(id);
-                return Ok(());
-            }
+            (Continuation::Timer, EffectAnswer::Dropped) => return self.drop_timer(id),
             (resume, EffectAnswer::Dropped) => dropped_answer(&resume),
             (Continuation::Infer(round), EffectAnswer::Chat(result)) => {
                 Answer::Infer(self.accept_infer(chain, round, result))
@@ -160,8 +157,7 @@ impl Scheduler {
                 self.accept_chat(chain, round, result.map_err(Error::from))?
             }
             (Continuation::Render(binding), EffectAnswer::Render(rendered)) => {
-                self.accept_render(chain, binding, rendered);
-                return Ok(());
+                return self.accept_render(chain, binding, rendered);
             }
             (Continuation::ToolCall(call), EffectAnswer::ToolCall(result)) => {
                 Answer::ToolCallResult(self.accept_tool_call(chain, &call, result))
@@ -219,8 +215,7 @@ impl Scheduler {
         if let Some(slot) = slot {
             return self.fill_batch_slot(chain, slot, answer);
         }
-        self.answer_inline(chain, answer);
-        Ok(())
+        self.answer_inline(chain, answer)
     }
 
     /// Ends `exec`, the identity of the tool call `chain` was parked on,
@@ -357,22 +352,19 @@ impl Scheduler {
     /// it. A timer nothing waits on is dropped silently. Under a run cancel the
     /// drop wakes no one, since the cancel tears the waiter down with
     /// every other chain.
-    fn drop_timer(&mut self, effect: EffectId) {
+    fn drop_timer(&mut self, effect: EffectId) -> Result<()> {
         let Some((task, slot)) = self
             .tasks
             .iter_mut()
             .find(|(_, slot)| slot.backing == TaskBacking::Effect(effect) && slot.state.is_live())
         else {
-            return;
+            return Ok(());
         };
         slot.state = SlotState::Cancelled;
         let (task, owner) = (task.clone(), slot.owner);
-        if self.ctx.cancel().is_cancelled()
-            || !self.chains[owner.index()].waiting_on.contains(&task)
-        {
-            return;
+        if self.ctx.cancel().is_cancelled() || !self.chains[owner.index()].end_wait_for(&task) {
+            return Ok(());
         }
-        self.chains[owner.index()].waiting_on.clear();
-        self.wake_from_wait(owner, Answer::JoinAny(Err(Error::Interrupted)));
+        self.wake_from_wait(owner, Answer::JoinAny(Err(Error::Interrupted)))
     }
 }

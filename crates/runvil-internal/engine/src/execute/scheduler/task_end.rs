@@ -31,9 +31,9 @@ impl Scheduler {
     /// holds the outcome until a wait takes it.
     ///
     /// # Errors
-    /// Returns [`Error::Internal`] when the chain has no slot, which only a
-    /// scheduler bug produces: every task chain registers its slot before
-    /// it is enqueued.
+    /// Returns [`Error::Internal`] when the chain has no slot - every task
+    /// chain registers its slot before it is enqueued - or when the woken
+    /// owner has no suspended block. Only a scheduler bug produces either.
     pub(super) fn complete_task(&mut self, id: ChainIndex, outcome: Result<String>) -> Result<()> {
         let chain = &self.chains[id.index()];
         let task = chain.task.clone();
@@ -63,8 +63,7 @@ impl Scheduler {
                 }
             }
         });
-        self.wake_waiter(owner, &task);
-        Ok(())
+        self.wake_waiter(owner, &task)
     }
 
     /// Applies the chain-end rules for tasks to `owner`'s `outcome`: every

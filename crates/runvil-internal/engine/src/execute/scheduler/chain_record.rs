@@ -1,5 +1,5 @@
-//! The chain record: one chain's identity, kind, walk position, in-flight
-//! coroutine, task bookkeeping, and walk-scoped slots. The scheduler's
+//! The chain record: one chain's identity, kind, walk position, entered
+//! section, task bookkeeping, and walk-scoped slots. The scheduler's
 //! arena holds one per chain it has started, indexed by
 //! [`ChainIndex`](super::ChainIndex); the H1 pass and the walk after it
 //! share the root lineage `0` and are two records.
@@ -149,15 +149,107 @@ impl CallDepth {
     }
 }
 
+/// What a suspended chain is parked on, from its dispatch until its
+/// answer resumes it. A wait keeps its data until the wake: the
+/// `join_any` set until a member's end answers it, the `tool_calls` slots
+/// until the last one lands. From that answer to the resume, the chain
+/// reports what it was parked on, unless the wake requeued it for a slot.
+#[derive(Debug)]
+pub(super) enum Parked {
+    /// A `chat` or `infer` round.
+    Chat,
+    /// A lone tool call.
+    ToolCall,
+    /// The answers of a `tool_calls` batch, in call order: `None` while a
+    /// call is in flight, its text or failure once it lands. Empty from
+    /// dispatch until the arm issues the calls, and once the full batch
+    /// has answered the chain.
+    Batch(Vec<Option<Result<String>>>),
+    /// A store operation.
+    Store,
+    /// The tasks of a `join_any` wait. Empty from dispatch until the arm
+    /// parks, and once a member's end has answered the wait, so no other
+    /// member wakes the chain again.
+    Tasks(Vec<TaskId>),
+    /// A `call` child.
+    Call,
+    /// A concurrency slot: a fresh spawn before admission, or a wake that
+    /// takes back the slots its wait gave up.
+    Queued,
+}
+
+impl Parked {
+    /// What `tasks.status` reports the chain blocked on.
+    fn blocked(&self) -> Blocked {
+        match self {
+            Parked::Chat => Blocked::Chat,
+            Parked::ToolCall | Parked::Batch(_) => Blocked::ToolCall,
+            Parked::Store => Blocked::Store,
+            Parked::Tasks(_) => Blocked::Tasks,
+            Parked::Call => Blocked::Call,
+            Parked::Queued => Blocked::Queued,
+        }
+    }
+}
+
+/// A Lua block that is running or suspended: its coroutine and the answer
+/// delivered for it.
+#[derive(Debug)]
+pub(super) struct Running {
+    /// The block's coroutine handle; a block that returns disposes of it.
+    pub(super) coroutine: Thread,
+    /// The answer delivered for the suspended coroutine, taken at resume.
+    pub(super) answer: Option<Answer<Error>>,
+}
+
+/// The section a chain has entered: built at each section entry, the H1
+/// pass's included, and taken at the section's end, at chain end, and at
+/// an abort, where the frame's drop is the teardown boundary.
+pub(super) struct Entered {
+    /// The section's running or suspended Lua block, `None` between
+    /// blocks. Declared first: a suspended coroutine drops before the
+    /// frame it runs in.
+    pub(super) running: Option<Running>,
+    /// The per-section frame (VM, `sys`, conversation, counts).
+    pub(super) frame: SectionContext,
+    /// The section's in-flight or next Lua/prose block: the running
+    /// block's index while `running` is `Some`, otherwise the next block
+    /// to start.
+    pub(super) block: BlockIndex,
+    /// The pending Markdown buffer: the prose block the next Lua fence
+    /// consumes, installed as that block's lazy `prose` template when the
+    /// coroutine starts. An unconsumed buffer drops with the section,
+    /// never evaluated.
+    pub(super) pending_prose: Option<BodyText>,
+}
+
+impl Entered {
+    /// A fresh entry into `frame`'s section: no block running, the first
+    /// block next, and no pending prose.
+    pub(super) fn new(frame: SectionContext) -> Entered {
+        Entered {
+            running: None,
+            frame,
+            block: BlockIndex::FIRST,
+            pending_prose: None,
+        }
+    }
+
+    /// The block at the section's block position in `blocks`, or `None`
+    /// once they are exhausted.
+    pub(super) fn block_in<'p>(&self, blocks: &'p [Block]) -> Option<&'p Block> {
+        blocks.get(self.block.0)
+    }
+}
+
 /// One chain: a contained line of section execution.
 ///
-/// The chain owns its per-section frame and adds the chain position (the
-/// sibling slice being walked plus the current index), the coroutine handle
-/// for the in-flight Lua block, and the walk-scoped slots: the pending
-/// Markdown buffer the next Lua fence consumes and the walk's `var` table.
-/// One section entry is
-/// one frame; the fall-through advance tears the old frame down and the
-/// next entry constructs the next.
+/// The chain owns its entered section (the frame, the block position, the
+/// pending Markdown buffer, and the in-flight Lua block) and adds the
+/// chain position (the sibling slice being walked plus the current index)
+/// and the walk's `var` table. One section entry is one [`Entered`]; the
+/// fall-through advance tears the old one down and the next entry
+/// constructs the next.
 pub(super) struct Chain {
     /// The chain's hierarchical id: the parent chain's id extended by the
     /// parent's local child counter (the root lineage is `0`, which the H1
@@ -180,24 +272,14 @@ pub(super) struct Chain {
     /// so the two share one task), and task `0` for the root chain. Every
     /// section the chain enters reads it as `sys.taskid`.
     pub(super) task: TaskId,
-    /// A spawned chain's `item` and `sys.index` seeds, consumed by its
-    /// first section entry; `None` afterward and on every other chain.
-    pub(super) seed: Option<TaskSeed>,
-    /// The tasks the chain is parked on in a `join_any` wait; empty while
-    /// the chain is not waiting. A member's chain end delivers it and
-    /// clears the set.
-    pub(super) waiting_on: Vec<TaskId>,
-    /// The answers of the `tool_calls` batch the chain is parked on, in
-    /// call order: `None` while a call is in flight, its text or failure
-    /// once it lands. The chain is answered once no slot is open. Empty
-    /// while the chain is not parked on a batch.
-    pub(super) batch: Vec<Option<Result<String>>>,
-    /// What the chain's suspended request is parked on, as `tasks.status`
-    /// reports it, or [`Blocked::Queued`] while the chain waits for a
-    /// concurrency slot: set at dispatch or spawn, cleared when the
-    /// answer resumes the chain. `None` while the chain runs or between
-    /// blocks.
-    pub(super) blocked: Option<Blocked>,
+    /// A spawned chain's `item` and `sys.index` seeds, taken by its first
+    /// section entry; empty afterward and on every other chain.
+    pub(super) seed: TaskSeed,
+    /// What the chain's suspended request is parked on: set at dispatch,
+    /// at spawn, and when a wake requeues the chain for a slot; cleared
+    /// when the chain is admitted or its answer resumes it. `None` while
+    /// the chain runs or between blocks.
+    pub(super) parked: Option<Parked>,
     /// The chain's fork of the run state: the run's own for the H1 pass and
     /// for a root walk with no pass before it, the hand-off fork holding
     /// H1's frozen `argv` (`with_walk_state`) for the walk after the pass,
@@ -211,15 +293,15 @@ pub(super) struct Chain {
     /// identity, a call chain borrows its parent's (a blocking child is
     /// the same serial thread - no new identity, no false conflicts), and
     /// a task chain forks its own from its spawner's, joined back into
-    /// the spawner at every delivery and at chain end. `None` only after
-    /// the chain ends: the arena is append-only, so `finish` and
-    /// `abort_subtree` take the slot to drop the identity's last
-    /// reference at chain end rather than at scheduler drop.
+    /// the spawner at every delivery and at chain end. Installed at chain
+    /// start and `None` only after the chain ends: the arena is
+    /// append-only, so `finish` and `abort_subtree` take the slot to drop
+    /// the identity's last reference at chain end rather than at
+    /// scheduler drop.
     pub(super) access: Option<Arc<Access>>,
-    /// The per-section frame (VM, `sys`, conversation, counts): `Some`
-    /// while a section is entered, `None` before the first entry and
-    /// between sections.
-    pub(super) frame: Option<SectionContext>,
+    /// The section the chain has entered: `Some` while a section is
+    /// entered, `None` before the first entry and between sections.
+    pub(super) entered: Option<Entered>,
     /// The sibling slice the chain walks, named by its path in the prompt
     /// tree the run shares. A jump to a child swaps this to the jumper's
     /// child slice until the child level exhausts.
@@ -232,26 +314,12 @@ pub(super) struct Chain {
     /// the walk runs off its slice, where `index` names no running section.
     /// Before the first entry, the name of the section at the chain's
     /// start index, or the prompt's title when the index is past the slice.
-    pub(super) entered: String,
+    pub(super) entered_name: String,
     /// The suspended parent positions of the chain's jump-started child
     /// walks: the parent slice plus the jumper's index in it. A jump to a
     /// child pushes the current position and descends; when the child
     /// level exhausts, the pop resumes the parent after the jumper.
     pub(super) positions: Vec<(SlicePath, SectionIndex)>,
-    /// The section's in-flight or next Lua/prose block: while `coroutine`
-    /// is `Some` this is the suspended block's index, otherwise the next
-    /// block to start.
-    pub(super) block: BlockIndex,
-    /// The coroutine handle for the in-flight Lua block: exists only while
-    /// a block is running or suspended; a block that returns disposes of it.
-    pub(super) coroutine: Option<Thread>,
-    /// The answer delivered for a suspended coroutine, consumed at resume.
-    pub(super) incoming: Option<Answer<Error>>,
-    /// The pending Markdown buffer: the prose block the next Lua fence
-    /// consumes, installed as that block's lazy `prose` template when the
-    /// coroutine starts. Cleared at every section entry; an unconsumed
-    /// buffer drops with the section, never evaluated.
-    pub(super) pending_prose: Option<BodyText>,
     /// The walk's `var` table: seeds each section's VM at entry; the
     /// section's final `var` is read back before teardown and replaces the
     /// slot. A call chain's slot seeds from the caller's snapshot and
@@ -279,10 +347,9 @@ impl fmt::Debug for Chain {
             .field("task", &self.task)
             .field("slice", &self.slice)
             .field("index", &self.index)
-            .field("entered", &self.entered)
-            .field("block", &self.block)
-            .field("blocked", &self.blocked)
-            .field("waiting_on", &self.waiting_on)
+            .field("entered_name", &self.entered_name)
+            .field("block", &self.entered.as_ref().map(|entered| entered.block))
+            .field("parked", &self.parked)
             .field("call_depth", &self.call_depth)
             .field("concurrency", &self.concurrency)
             .finish_non_exhaustive()
@@ -303,7 +370,58 @@ impl Chain {
             .ok_or(Error::internal("a live chain holds its access capability"))
     }
 
-    /// The frame of the section the chain is running.
+    /// What `tasks.status` reports the chain blocked on, or `None` while
+    /// it runs or between blocks.
+    pub(super) fn blocked(&self) -> Option<Blocked> {
+        self.parked.as_ref().map(Parked::blocked)
+    }
+
+    /// The tasks the chain's `join_any` wait is parked on: empty while the
+    /// chain is not waiting, and once a member's end answered the wait.
+    pub(super) fn wait_set(&self) -> &[TaskId] {
+        match &self.parked {
+            Some(Parked::Tasks(set)) => set,
+            _ => &[],
+        }
+    }
+
+    /// Ends the chain's `join_any` wait when its set holds `task`, and
+    /// reports whether it did. The set empties, so no other member's end
+    /// wakes the chain again.
+    pub(super) fn end_wait_for(&mut self, task: &TaskId) -> bool {
+        match &mut self.parked {
+            Some(Parked::Tasks(set)) if set.contains(task) => {
+                set.clear();
+                true
+            }
+            _ => false,
+        }
+    }
+
+    /// Hands `answer` to the chain's suspended block, to be taken when
+    /// the block resumes.
+    ///
+    /// # Errors
+    /// Returns [`Error::Internal`] when the chain has no suspended block,
+    /// which only a scheduler bug produces: every answer goes to a block
+    /// that yielded for it.
+    #[track_caller]
+    pub(super) fn deliver(&mut self, answer: Answer<Error>) -> Result<()> {
+        let Some(running) = self
+            .entered
+            .as_mut()
+            .and_then(|entered| entered.running.as_mut())
+        else {
+            return Err(Error::internal(
+                "a delivered answer implies a suspended block",
+            ));
+        };
+        running.answer = Some(answer);
+        Ok(())
+    }
+
+    /// The frame of the section the chain is running, for a path that
+    /// reaches the chain by its arena index.
     ///
     /// # Errors
     /// Returns [`Error::Internal`] when the chain is between sections,
@@ -311,8 +429,9 @@ impl Chain {
     /// running block can see.
     #[track_caller]
     pub(super) fn frame(&self) -> Result<&SectionContext> {
-        self.frame
+        self.entered
             .as_ref()
+            .map(|entered| &entered.frame)
             .ok_or(Error::internal("a live chain holds its frame"))
     }
 
@@ -322,32 +441,25 @@ impl Chain {
     /// As [`frame`](Self::frame).
     #[track_caller]
     pub(super) fn frame_mut(&mut self) -> Result<&mut SectionContext> {
-        self.frame
+        self.entered
             .as_mut()
+            .map(|entered| &mut entered.frame)
             .ok_or(Error::internal("a live chain holds its frame"))
     }
 
-    /// The chain's current section within `prompt`: the section at its
-    /// walk position. Resolved against the caller's handle on the tree so
-    /// the result outlives a mutable borrow of the chain.
-    fn section<'p>(&self, prompt: &'p Prompt) -> &'p Section {
-        &self.slice.resolve(prompt)[self.index.get()]
-    }
-
-    /// The chain's current block sequence: the H1 pass's blocks, or
-    /// the current section's blocks on the walk.
+    /// The chain's current block sequence: the H1 pass's blocks, or the
+    /// current section's blocks on the walk, empty while the chain's index
+    /// is past its slice. Resolved against the caller's handle on the tree
+    /// so the result outlives a mutable borrow of the chain.
     pub(super) fn blocks<'p>(&self, prompt: &'p Prompt) -> &'p [Block] {
         if self.kind.is_h1() {
             runvil_parser::detail::h1_blocks(prompt)
         } else {
-            self.section(prompt).blocks()
+            self.slice
+                .resolve(prompt)
+                .get(self.index.get())
+                .map_or(&[], Section::blocks)
         }
-    }
-
-    /// The block at the chain's block position, or `None` once the
-    /// section's blocks are exhausted.
-    pub(super) fn current_block<'p>(&self, prompt: &'p Prompt) -> Option<&'p Block> {
-        self.blocks(prompt).get(self.block.0)
     }
 
     /// The chain's current section name for observations and errors: the
@@ -358,7 +470,7 @@ impl Chain {
         if self.kind.is_h1() {
             self.ctx.prompt().title()
         } else {
-            &self.entered
+            &self.entered_name
         }
     }
 }
