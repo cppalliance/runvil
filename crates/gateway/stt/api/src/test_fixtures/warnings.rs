@@ -1,5 +1,6 @@
 //! A `tracing` subscriber that records every WARN-level message.
 
+use std::fmt;
 use std::fmt::Write as _;
 use std::sync::{Arc, Mutex, PoisonError};
 
@@ -19,7 +20,7 @@ impl Warnings {
 struct Message(String);
 
 impl tracing::field::Visit for Message {
-    fn record_debug(&mut self, field: &tracing::field::Field, value: &dyn std::fmt::Debug) {
+    fn record_debug(&mut self, field: &tracing::field::Field, value: &dyn fmt::Debug) {
         if !self.0.is_empty() {
             self.0.push(' ');
         }

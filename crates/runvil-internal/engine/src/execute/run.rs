@@ -7,6 +7,7 @@
 //! and [`EffectId`] - is defined in the `effect` child module and is
 //! re-exported here.
 
+use std::fmt;
 use std::sync::Arc;
 
 use runvil_types::event::Event;
@@ -97,7 +98,7 @@ enum Phase {
     Spent,
 }
 
-impl std::fmt::Debug for Run {
+impl fmt::Debug for Run {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let phase = match &self.phase {
             Phase::Live(_) => "live",

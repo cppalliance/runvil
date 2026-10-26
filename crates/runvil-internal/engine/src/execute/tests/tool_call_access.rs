@@ -9,6 +9,8 @@
 //! dropped answer and a cancelled task's call are joined like any other,
 //! and an access used after its call has ended is refused.
 
+use std::fmt;
+
 use runvil_vfs::ExecId;
 use runvil_vfs::detail::access_id;
 
@@ -100,7 +102,7 @@ fn perform_store(effect: &Effect) -> EffectAnswer {
 /// Asserts that `result` is the refusal of an access whose tool call has
 /// ended. The run and the tool call end an access as the same variant;
 /// the callers hold the run open, so the call's end is the one refused.
-fn assert_refused_as_ended<T: std::fmt::Debug>(result: std::result::Result<T, VfsError>) {
+fn assert_refused_as_ended<T: fmt::Debug>(result: std::result::Result<T, VfsError>) {
     match result {
         Err(VfsError::ScopeEnded { .. }) => {}
         other => panic!("expected the ended-call refusal, got {other:?}"),

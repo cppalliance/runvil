@@ -17,6 +17,7 @@
 //! without spawning anything.
 
 use std::ffi::OsString;
+use std::fmt;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -65,7 +66,7 @@ pub(crate) struct RevealCommand {
 
 /// Launches a [`RevealCommand`]; injectable so tests observe the
 /// constructed command without spawning a process.
-pub(crate) trait RevealLauncher: Send + Sync + std::fmt::Debug {
+pub(crate) trait RevealLauncher: Send + Sync + fmt::Debug {
     /// Launches `command` without waiting for it to exit.
     ///
     /// # Errors

@@ -4,8 +4,10 @@
 //! `runvil` and `harness` facades' source shape (run from
 //! `facade_shape`), the `doc(hidden)` ban over both facades and their
 //! containers (run from `doc_hidden`), the doctest ban over every
-//! workspace crate (run from `no_doctests`), the unsafe allowlist (run
-//! from `unsafe_allowlist`), and the ceiling wiring (run from `wiring`).
+//! workspace crate (run from `no_doctests`), the `Debug` trait's one
+//! spelling over every workspace crate (run from `debug_spelling`), the
+//! unsafe allowlist (run from `unsafe_allowlist`), and the ceiling wiring
+//! (run from `wiring`).
 //!
 //! Each check returns a list of human-readable violations. The `#[test]`
 //! wrappers assert the lists are empty, so `cargo test -p build-xtask`
@@ -72,6 +74,7 @@ pub(crate) fn all_violations(root: &Path) -> Vec<String> {
     violations.extend(crate::facade_shape::facade_shape_violations(root));
     violations.extend(crate::doc_hidden::doc_hidden_violations(root));
     violations.extend(crate::no_doctests::no_doctests_violations(root));
+    violations.extend(crate::debug_spelling::debug_spelling_violations(root));
     violations
 }
 
@@ -353,7 +356,7 @@ fn walled_tier_violations(root: &Path) -> Vec<String> {
 /// A component that is not valid UTF-8 is rendered lossily rather than
 /// dropped: dropping it would shorten the path and could make it match an
 /// allowlist entry, exempting a file the rule should report.
-fn slash_path(root: &Path, file: &Path) -> String {
+pub(crate) fn slash_path(root: &Path, file: &Path) -> String {
     file.strip_prefix(root)
         .unwrap_or(file)
         .components()

@@ -1,6 +1,6 @@
 //! Backend-neutral model construction and stateless decoding contracts.
 
-use std::fmt::{self, Debug};
+use std::fmt;
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 
@@ -51,7 +51,7 @@ impl Clone for RequestSamples {
     }
 }
 
-impl Debug for RequestSamples {
+impl fmt::Debug for RequestSamples {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
             .debug_struct("RequestSamples")
@@ -226,7 +226,7 @@ pub trait Decoder {
 }
 
 /// Constructs backend decoders on the worker threads that own them.
-pub trait ModelFactory: Debug + Send + Sync + 'static {
+pub trait ModelFactory: fmt::Debug + Send + Sync + 'static {
     /// Constructs the decoder for `mode`.
     ///
     /// `None` is valid only for an unconfigured final worker.

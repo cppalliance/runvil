@@ -1,5 +1,6 @@
 //! Bounded registry admitting realtime sessions and retiring their tasks.
 
+use std::fmt;
 #[cfg(feature = "test-fixtures")]
 use std::future::Future;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -105,7 +106,7 @@ async fn join_retired_tasks<T>(tasks: Vec<JoinHandle<T>>) -> usize {
     failures
 }
 
-impl std::fmt::Debug for RegistryState {
+impl fmt::Debug for RegistryState {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         formatter
             .debug_struct("RegistryState")

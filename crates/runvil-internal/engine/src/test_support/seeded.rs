@@ -1,7 +1,7 @@
 //! Seeded pseudo-random test input, so a randomized test replays exactly
 //! and every failure names the seed that produced it.
 
-use std::fmt::{Debug, Display};
+use std::fmt::{self, Display};
 
 use runvil_types::seed::RunSeed;
 
@@ -58,7 +58,7 @@ impl Seeded {
     }
 
     #[track_caller]
-    pub(crate) fn check_eq<T: PartialEq + Debug>(
+    pub(crate) fn check_eq<T: PartialEq + fmt::Debug>(
         &self,
         left: &T,
         right: &T,

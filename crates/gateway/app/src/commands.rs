@@ -13,6 +13,8 @@
 //! [`CommandQueue::pending_commands`]) feeds the tray and the admin routes.
 
 use std::collections::VecDeque;
+#[cfg(test)]
+use std::fmt;
 use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
@@ -204,7 +206,7 @@ struct QueueState {
 struct ExecutorOverride(Arc<Executor>);
 
 #[cfg(test)]
-impl std::fmt::Debug for ExecutorOverride {
+impl fmt::Debug for ExecutorOverride {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str("ExecutorOverride(..)")
     }

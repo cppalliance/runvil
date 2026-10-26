@@ -2,6 +2,7 @@
 //! topic. The flipping policy and the conflict helper live here because
 //! every topic module uses them.
 
+use std::fmt;
 use std::sync::atomic::Ordering;
 use std::sync::{Arc, Mutex, PoisonError};
 
@@ -39,7 +40,7 @@ impl Policy for FlipPolicy {
 }
 
 /// Extracts the Conflict message or fails the test.
-fn conflict_message<T: std::fmt::Debug>(result: Result<T, VfsError>) -> String {
+fn conflict_message<T: fmt::Debug>(result: Result<T, VfsError>) -> String {
     match result {
         Err(VfsError::Conflict { detail, .. }) => detail,
         other => panic!("expected a conflict, got {other:?}"),

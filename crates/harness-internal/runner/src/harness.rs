@@ -10,6 +10,7 @@
 //! one future, and every VFS operation runs inline in it, so the Harness
 //! starts no task and names no runtime.
 
+use std::fmt;
 use std::pin::pin;
 use std::sync::Arc;
 
@@ -46,7 +47,7 @@ pub struct Harness {
     control: RunControl,
 }
 
-impl std::fmt::Debug for Harness {
+impl fmt::Debug for Harness {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Harness")
             .field("host", &self.host)

@@ -8,6 +8,7 @@
 //! takes over; with no live file and no explicit config there is nothing
 //! to connect to, which is the plain [`ResolveError`].
 
+use std::fmt;
 use std::path::Path;
 
 use gateway_api_discovery::{Resolution, SidecarError, StaleReason, ValidatedConnection};
@@ -28,7 +29,7 @@ pub struct ResolvedGateway {
 }
 
 // Manual so the bearer key is never written to logs.
-impl std::fmt::Debug for ResolvedGateway {
+impl fmt::Debug for ResolvedGateway {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("ResolvedGateway")
             .field("base_url", &self.base_url)

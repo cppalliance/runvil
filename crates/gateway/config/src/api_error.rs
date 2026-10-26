@@ -7,6 +7,8 @@
 //! classify failures with the `kind()` method instead of matching private
 //! variants.
 
+use std::fmt;
+
 use crate::error::ConfigError as ConfigErrorRepr;
 
 /// A configuration load or validation failure.
@@ -60,9 +62,9 @@ impl ConfigError {
     }
 }
 
-impl std::fmt::Debug for ConfigError {
+impl fmt::Debug for ConfigError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        std::fmt::Debug::fmt(&self.0, f)
+        fmt::Debug::fmt(&self.0, f)
     }
 }
 

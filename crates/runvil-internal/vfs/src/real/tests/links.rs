@@ -1,6 +1,8 @@
 //! Tests for links under a rooted backend: escapes, dangling links,
 //! and path operations that act on a link itself.
 
+use std::fmt;
+
 use super::*;
 
 /// Creates a directory link. Windows uses a junction (no privilege
@@ -60,7 +62,7 @@ fn make_dangling_dir_link(link: &Path, target: &Path) -> Result<(), VfsError> {
 
 /// Asserts `result` is the dangling-link refusal, not an escape or an
 /// OS failure. Both refusals are `OutsideRoot`, told apart by detail.
-fn assert_dangling_refusal<T: std::fmt::Debug>(result: Result<T, VfsError>, operation: &str) {
+fn assert_dangling_refusal<T: fmt::Debug>(result: Result<T, VfsError>, operation: &str) {
     match result {
         Err(VfsError::OutsideRoot { detail, .. }) => assert!(
             detail.contains("passes through a dangling symbolic link"),

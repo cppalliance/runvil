@@ -1,5 +1,6 @@
 //! Agent status tests: which conversation events push a status frame and reset the backoff.
 
+use std::fmt;
 use std::time::Duration;
 
 use runvil::ids::{ChainId, Provenance, RoundId, TaskId};
@@ -14,7 +15,7 @@ use super::*;
 fn wired_push() -> (
     Push,
     broadcast::Receiver<workshop_protocol::StatusBarUpdate>,
-    impl std::fmt::Debug + Send + Sync + 'static + use<>,
+    impl fmt::Debug + Send + Sync + 'static + use<>,
 ) {
     let status = StatusBus::new();
     let status_rx = status.subscribe();

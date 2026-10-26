@@ -18,6 +18,7 @@
 //! per-client round-robin is the only discipline.
 
 use std::collections::{HashMap, VecDeque};
+use std::fmt;
 use std::sync::{Arc, Mutex};
 
 use gateway_config::{Config, QueuePolicy};
@@ -90,7 +91,7 @@ struct LimitedQueue {
     state: Mutex<WaitState>,
 }
 
-impl std::fmt::Debug for LimitedQueue {
+impl fmt::Debug for LimitedQueue {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("LimitedQueue")
             .field("max_inflight", &self.max_inflight)

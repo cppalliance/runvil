@@ -20,6 +20,7 @@
 //! `prose` between a [`swap`] and a [`restore`], which hands the caller's
 //! read back with its memo.
 
+use std::fmt;
 use std::sync::{Arc, Mutex};
 
 use mlua::{Lua, LuaSerdeExt, Value};
@@ -50,7 +51,7 @@ pub struct ProseState<'a> {
     pub globals: &'a dyn Fn(&str) -> Result<Option<Json>>,
 }
 
-impl std::fmt::Debug for ProseState<'_> {
+impl fmt::Debug for ProseState<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("ProseState")
             .field("var", &self.var)

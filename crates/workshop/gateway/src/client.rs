@@ -7,6 +7,7 @@
 //! subscription is decoded from SSE into a [`ProgressStream`] of decoded
 //! snapshots.
 
+use std::fmt;
 use std::time::Duration;
 
 mod events;
@@ -108,7 +109,7 @@ pub struct GatewayClient {
 }
 
 // Manual so the bearer key is never written to logs.
-impl std::fmt::Debug for GatewayClient {
+impl fmt::Debug for GatewayClient {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("GatewayClient")
             .field("base_url", &self.base_url)

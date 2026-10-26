@@ -1,5 +1,6 @@
 //! Supervised local `llama-server` upstream with lazy respawn on child death.
 
+use std::fmt;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
@@ -45,7 +46,7 @@ pub(crate) struct LocalUpstream {
     http_stream: reqwest::Client,
 }
 
-impl std::fmt::Debug for LocalUpstream {
+impl fmt::Debug for LocalUpstream {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("LocalUpstream")
             .field("executable", &self.inner.executable)

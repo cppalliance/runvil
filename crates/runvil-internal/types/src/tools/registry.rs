@@ -1,6 +1,7 @@
 //! The caller-supplied [`ToolCatalog`] of `ToolInfo` values and the catalog's
 //! construction error.
 
+use std::fmt;
 use std::sync::Arc;
 
 use super::ids::ToolId;
@@ -25,7 +26,7 @@ pub struct ToolCatalog {
     tools: Arc<[ToolInfo]>,
 }
 
-impl std::fmt::Debug for ToolCatalog {
+impl fmt::Debug for ToolCatalog {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         formatter
             .debug_struct("ToolCatalog")
