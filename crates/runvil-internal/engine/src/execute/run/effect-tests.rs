@@ -1,15 +1,19 @@
 //! The `Chat` effect's record keeps `after` and `keep` and logs only the
 //! request's messages after the first `keep`, while the effect still holds
-//! the whole request. Then the answer record: a `Chat` answer projects to
-//! the reply or the requested tool names beside the model and finish
-//! reason, never the bodies; a `ToolCall` answer projects to its text and
+//! the whole request, and the `Render` effect's record keeps the slot's
+//! alias, the entry, and the offered ids. Then the answer record: a `Chat`
+//! answer projects to the reply or the requested tool names beside the
+//! model and finish reason, never the bodies; a `Render` answer keeps its
+//! rendered tools whole; a `ToolCall` answer projects to its text and
 //! trust; and every failure projects to its kind's tag and its display
 //! text. Each record round-trips through serde, as a run log and a replay
-//! depend on.
+//! depend on, and a record written before the render existed reads
+//! unchanged.
 
-use runvil_model_client::client::{RawExchange, ToolCall};
+use runvil_model_client::client::{CompletionResult, RawExchange, ToolCall};
 use runvil_model_client::model::CompletionErrorKind;
-use runvil_types::tools::ToolErrorKind;
+use runvil_types::packs::PackId;
+use runvil_types::tools::{OutputTrust, ToolErrorKind};
 use serde_json::json;
 
 use super::*;
@@ -105,6 +109,74 @@ fn a_keep_equal_to_the_message_count_logs_no_messages() {
         messages.is_empty(),
         "the request repeats round 2's whole: {messages:?}"
     );
+}
+
+/// The `tools` Pack's one tool, `tools/echo`, as `description` describes
+/// it under the wire name `wire_name`.
+#[track_caller]
+fn tools_pack(description: &str, wire_name: &str) -> Vec<PackToolSets<ToolInfo>> {
+    let echo = ToolInfo::new(
+        ToolId::parse("tools/echo").expect("a fixture tool id"),
+        description,
+        json!({ "type": "object" }),
+    )
+    .wire_name(wire_name);
+    vec![PackToolSets::new(
+        PackId::parse("tools").expect("a fixture Pack id"),
+        vec![echo],
+        Vec::new(),
+    )]
+}
+
+#[test]
+fn a_render_record_keeps_the_slots_alias_the_entry_and_the_offered_ids() {
+    let effect = Effect::Render {
+        entry: "0.1".to_owned(),
+        binding: test_binding("writer", "A general model for tests", "test-model"),
+        offered: tools_pack("Echo the value.", "echo"),
+    };
+    let record = effect.record();
+    let canonical = serde_json::to_value(&record).expect("a render record converts");
+    assert_eq!(
+        canonical.to_string(),
+        r#"{"Render":{"alias":"writer","entry":"0.1","offered":[{"dynamic_set":[],"pack":"tools","static_set":["tools/echo"]}]}}"#
+    );
+    let back: EffectRecord =
+        serde_json::from_value(canonical).expect("the canonical form reads back");
+    assert_eq!(back, record);
+}
+
+#[test]
+fn a_render_answer_records_each_rendered_tool_whole() {
+    let record = EffectAnswer::Render(tools_pack("Shout the value.", "shout")).record();
+    let canonical = serde_json::to_value(&record).expect("a render answer record converts");
+    assert_eq!(
+        canonical.to_string(),
+        r#"{"Render":[{"dynamic_set":[],"pack":"tools","static_set":[{"describes_tools":false,"description":"Shout the value.","id":"tools/echo","parameters_schema":{"type":"object"},"structured_output":false,"survives_stop":false,"wire_name":"shout"}]}]}"#
+    );
+    let back: AnswerRecord =
+        serde_json::from_value(canonical).expect("the canonical form reads back");
+    assert_eq!(back, record);
+    assert_eq!(answer_round_trip(&record), record);
+}
+
+#[test]
+fn records_written_before_the_render_existed_read_unchanged() {
+    let effect: EffectRecord =
+        serde_json::from_str(r#"{"Timer":{"seconds":0.5}}"#).expect("an older record reads");
+    assert_eq!(effect, EffectRecord::Timer { seconds: 0.5 });
+    for (line, expected) in [
+        (
+            r#"{"Chat":{"Ok":{"model":"m","finish_reason":null,"reply":"hi","tool_calls":[]}}}"#,
+            AnswerRecord::Chat(Ok(
+                ChatAnswerRecord::new("m").with_reply(Some("hi".to_owned()))
+            )),
+        ),
+        (r#""Dropped""#, AnswerRecord::Dropped),
+    ] {
+        let read: AnswerRecord = serde_json::from_str(line).expect("an older record reads");
+        assert_eq!(read, expected, "{line}");
+    }
 }
 
 #[test]

@@ -1,6 +1,6 @@
 //! The serial helpers for suites that drive a bare [`Run`]: the canned
-//! chat answer, the one-effect step, the effect record's round trip, and
-//! the batched driver.
+//! chat answer, the render answer that changes nothing, the one-effect
+//! step, the effect record's round trip, and the batched driver.
 
 use std::collections::BTreeMap;
 
@@ -18,6 +18,19 @@ use crate::execute::{Effect, EffectAnswer, EffectId, EffectRecord, Run, RunResul
 /// [`ScriptedChat::complete_now`]: super::super::scripted_chat::ScriptedChat::complete_now
 pub(crate) fn chat_answer(reply: &ScriptedReply) -> EffectAnswer {
     EffectAnswer::Chat(reply.answer().map(Box::new))
+}
+
+/// The answer to `effect`, a render, that leaves every offered tool as
+/// it was.
+///
+/// # Panics
+/// When `effect` is not a render.
+#[track_caller]
+pub(crate) fn pass_through(effect: &Effect) -> EffectAnswer {
+    match effect {
+        Effect::Render { offered, .. } => EffectAnswer::Render(offered.clone()),
+        other => panic!("a render: {other:?}"),
+    }
 }
 
 /// The one effect a pending step issued, with its id.

@@ -63,10 +63,10 @@ pub(crate) fn fresh_access() -> std::sync::Arc<runvil_vfs::Access> {
 }
 
 /// Performs one effect locally, with no I/O: a store operation runs on the
-/// effect's own access handle, a timer fires at once, a bound tool is
-/// unbound, and a model round is answered by
-/// `chat`, a function of the effect alone so the answer never depends on
-/// arrival order.
+/// effect's own access handle, a timer fires at once, a render passes
+/// every offered tool through, a bound tool is unbound, and a model round
+/// is answered by `chat`, a function of the effect alone so the answer
+/// never depends on arrival order.
 ///
 /// # Panics
 ///
@@ -78,6 +78,7 @@ pub fn perform_locally(
 ) -> EffectAnswer {
     match effect {
         Effect::Chat { .. } => chat(effect),
+        Effect::Render { offered, .. } => EffectAnswer::Render(offered.clone()),
         Effect::ToolCall { alias, .. } => EffectAnswer::ToolCall(Err(ToolError::message(format!(
             "no tool is bound as {alias} in this test"
         )))),

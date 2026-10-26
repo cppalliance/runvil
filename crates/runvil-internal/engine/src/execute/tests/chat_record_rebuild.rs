@@ -43,9 +43,10 @@ impl Sent {
 /// Each round a scenario's model was sent, as it was sent, in issue order.
 type SentLog = Rc<RefCell<Vec<Sent>>>;
 
-/// A loop section running `lua` with `echo` bound and offered, its model
-/// rounds answered from `replies` in order and every tool call by the echo
-/// tool, beside the log its model keeps of each round it is sent.
+/// A loop section running `lua` with `echo` bound and offered, its render
+/// passed through, its model rounds answered from `replies` in order and
+/// every tool call by the echo tool, beside the log its model keeps of
+/// each round it is sent.
 fn echo_rounds(lua: &str, replies: Vec<EffectAnswer>) -> (Scenario, SentLog) {
     let replies = RefCell::new(replies.into_iter());
     let sent = SentLog::default();
@@ -72,19 +73,26 @@ fn echo_rounds(lua: &str, replies: Vec<EffectAnswer>) -> (Scenario, SentLog) {
     (scenario, sent)
 }
 
-/// Asserts `trace` issued only model rounds and tool calls, then rebuilds
-/// every request from the records alone and asserts each equals the wire
-/// messages its live effect sent. Every `after` must name a round recorded
-/// earlier in the log.
+/// Asserts `trace` issued the section's render and then only model rounds
+/// and tool calls, then rebuilds every request from the records alone and
+/// asserts each equals the wire messages its live effect sent. Every
+/// `after` must name a round recorded earlier in the log.
 #[track_caller]
 fn assert_rebuilds(trace: &Trace, sent: &[Sent]) {
+    let (render, rest) = trace
+        .effects()
+        .split_first()
+        .expect("the run issues effects");
     assert!(
-        trace.effects().iter().all(|(effect, _)| matches!(
+        matches!(render.0, EffectRecord::Render { .. }),
+        "the section's render comes first: {render:?}"
+    );
+    assert!(
+        rest.iter().all(|(effect, _)| matches!(
             effect,
             EffectRecord::Chat { .. } | EffectRecord::ToolCall { .. }
         )),
-        "only model rounds and tool calls are issued: {:?}",
-        trace.effects()
+        "then only model rounds and tool calls are issued: {rest:?}"
     );
     let mut requests: BTreeMap<RoundId, Vec<Value>> = BTreeMap::new();
     for one in sent {

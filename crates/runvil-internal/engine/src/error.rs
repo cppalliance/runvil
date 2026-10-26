@@ -196,10 +196,11 @@ pub(crate) enum Error {
         source: BoxedSource,
     },
 
-    /// A section entry's frozen sets broke a rule of the merge that builds
-    /// them at the entry's first model call, which fails that call. The
-    /// message names each tool that broke it, with its Pack and its set,
-    /// and the rule.
+    /// A section entry's frozen sets, or the render answer they are merged
+    /// from, broke a rule of the merge that builds them at the entry's
+    /// first model call, which fails that call. The message names each
+    /// tool that broke it, with its Pack and its set, or the Packs a
+    /// render answered, and the rule.
     ///
     /// Constructed only by the merge.
     #[error("{}", merge::merge_message(.rule, .tools))]
@@ -207,7 +208,9 @@ pub(crate) enum Error {
     ToolMerge {
         /// The rule the sets broke.
         rule: MergeRule,
-        /// Each tool that broke it: both tools of a clash.
+        /// Each tool that broke it: both tools of a clash, the one
+        /// rendered tool a render rule refuses, or none when the render
+        /// answered other Packs.
         tools: Vec<MergeTool>,
     },
 

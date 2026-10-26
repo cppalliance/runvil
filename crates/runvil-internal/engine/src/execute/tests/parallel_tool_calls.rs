@@ -5,7 +5,8 @@
 //! alone between its neighbors, and a task cancelled while parked on a
 //! batch orphans every call in it and lists each in the step's
 //! `withdrawn`, which a decided run leaves empty. Each test steps a `Run`
-//! by hand, so it sees exactly what each step issued and withdrew.
+//! by hand, so it sees exactly what each step issued and withdrew, and
+//! answers each section's render with its tools unchanged.
 
 use runvil_parser::test_support::one_section;
 use runvil_types::event::{Event, ReplyOrigin};
@@ -15,7 +16,7 @@ use super::models_loop::loop_scenario;
 use super::*;
 use crate::execute::run::{Effect, EffectAnswer, EffectId, Step};
 use crate::model::{Completion, CompletionResult, ToolCall};
-use crate::test_support::scenario::{chat_answer, only_effect, text_of};
+use crate::test_support::scenario::{chat_answer, only_effect, pass_through, text_of};
 
 /// The effects one step issued, in issue order, and the events it
 /// reported. Panics when the run is over.
@@ -31,6 +32,37 @@ fn pending(step: Step) -> (Vec<(EffectId, Effect)>, Vec<Event>) {
         .map(|(id, _, effect)| (id, effect))
         .collect();
     (effects, events)
+}
+
+/// Steps the run, answering each render a step issues with its tools
+/// unchanged and stepping again until a step issues none, and returns
+/// every other effect those steps issued, in issue order, beside every
+/// call they withdrew. Panics when the run is over.
+fn step_past_renders(run: &mut Run) -> (Vec<(EffectId, Effect)>, Vec<EffectId>) {
+    let (mut effects, mut withdrawn) = (Vec::new(), Vec::new());
+    loop {
+        let Step::Pending {
+            effects: issued,
+            withdrawn: dropped,
+            ..
+        } = run.step()
+        else {
+            panic!("the run is still going");
+        };
+        withdrawn.extend(dropped);
+        let mut rendered = false;
+        for (id, _, effect) in issued {
+            if matches!(effect, Effect::Render { .. }) {
+                run.resume(id, pass_through(&effect));
+                rendered = true;
+            } else {
+                effects.push((id, effect));
+            }
+        }
+        if !rendered {
+            return (effects, withdrawn);
+        }
+    }
 }
 
 /// A round requesting every `(id, name, arguments)` call, in order.
@@ -84,6 +116,8 @@ fn a_rounds_catalog_calls_are_issued_in_one_step_and_append_in_call_order() {
     );
     let mut run = loop_scenario(md).offer("echo", echo_tool()).into_run();
     let mut events = Vec::new();
+    let (render, effect) = only_effect(run.step());
+    run.resume(render, pass_through(&effect));
     let (round, _) = only_effect(run.step());
     run.resume(
         round,
@@ -156,6 +190,8 @@ fn adhoc_calls_run_alone_between_their_neighbors() {
          return table.concat(ids, ',') .. '|' .. messages[4].content",
     );
     let mut run = loop_scenario(md).offer("echo", echo_tool()).into_run();
+    let (render, effect) = only_effect(run.step());
+    run.resume(render, pass_through(&effect));
     let (round, _) = only_effect(run.step());
     run.resume(
         round,
@@ -209,7 +245,7 @@ fn cancelling_a_task_parked_on_a_batch_orphans_every_call() {
               models.loop()\n\
               return 'child done'\n```\n";
     let mut run = loop_scenario(md).offer("echo", echo_tool()).into_run();
-    let (rounds, _) = pending(run.step());
+    let (rounds, _) = step_past_renders(&mut run);
     let origin = |wanted: ReplyOrigin| {
         rounds
             .iter()

@@ -2,9 +2,10 @@
 //! effects and events as values. The caller's loop is documented on the
 //! `runvil` facade's crate page and its `effect` and `cancel` modules.
 //!
-//! The effect vocabulary itself - [`Effect`] and its [`Round`], its
-//! serializable [`EffectRecord`], [`EffectAnswer`], and [`EffectId`] - is
-//! defined in the `effect` child module and is re-exported here.
+//! The effect vocabulary itself - [`Effect`] and its [`Round`] and
+//! [`PackToolSets`], its serializable [`EffectRecord`], [`EffectAnswer`],
+//! and [`EffectId`] - is defined in the `effect` child module and is
+//! re-exported here.
 
 use std::sync::Arc;
 
@@ -15,7 +16,7 @@ mod effect;
 
 pub use effect::{
     AnswerRecord, ChatAnswerRecord, Effect, EffectAnswer, EffectId, EffectRecord, FailureRecord,
-    Round, ToolAnswerRecord, ToolCallOrigin, ToolCaller,
+    PackToolSets, Round, ToolAnswerRecord, ToolCallOrigin, ToolCaller,
 };
 
 use crate::cancel::CancelHandle;

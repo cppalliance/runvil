@@ -1,6 +1,7 @@
 //! Tests for the tools the section's offers name, which the merge takes:
 //! the static offers in call order, Pack expansion at the freeze, offers
-//! deduped by id only, and the dynamic offers beside them.
+//! deduped by id only, the dynamic offers beside them, and the catalog
+//! Packs those tools come from, in the order a render asks them.
 
 use crate::test_vm::{dynamic, lua_over, offer_set, scoped};
 
@@ -128,6 +129,35 @@ fn the_dynamic_list_keeps_what_the_static_list_lacks_in_offer_order_once() {
         scoped(&vm).is_empty(),
         "dynamic offers never reach the static list"
     );
+}
+
+#[test]
+fn each_catalog_pack_comes_once_where_one_of_its_tools_was_first_offered_into_either_set() {
+    let vm = lua_over(offer_set());
+    vm.exec(
+        "tools.offer(tools.adhoc({ name = 'grab', description = 'Grab a value' }, function() end))\n\
+         tools.offer_dynamic('gh/search')\n\
+         tools.offer('web')\n\
+         tools.offer('gh/search')\n\
+         tools.offer_dynamic('web/fetch')",
+    );
+    let (set, runtime) = vm.tool_bag_handles();
+    let packs: Vec<String> = crate::current_catalog_packs(&set, &runtime, vm.adhoc_tools())
+        .expect("the offers resolve")
+        .iter()
+        .map(ToString::to_string)
+        .collect();
+    assert_eq!(
+        packs,
+        ["gh", "web"],
+        "an adhoc tool names no catalog Pack, and gh keeps the place of its first offer"
+    );
+    assert_eq!(
+        scoped(&vm),
+        ["grab", "web_fetch", "web_search", "gh_search"],
+        "though the static offer that came later holds its tool"
+    );
+    assert!(dynamic(&vm).is_empty());
 }
 
 #[test]

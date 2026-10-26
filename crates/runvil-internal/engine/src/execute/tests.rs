@@ -187,6 +187,7 @@ mod parallel_tool_calls;
 mod precheck_anchor;
 mod preludes;
 mod provenance;
+mod render_effect;
 mod rendered_tools;
 mod rounds;
 mod run_inputs;

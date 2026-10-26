@@ -63,7 +63,7 @@ pub use requirements::{
 };
 pub use run::{
     AnswerRecord, ChatAnswerRecord, Effect, EffectAnswer, EffectId, EffectRecord, FailureRecord,
-    Round, Run, Step, ToolAnswerRecord, ToolCallOrigin, ToolCaller,
+    PackToolSets, Round, Run, Step, ToolAnswerRecord, ToolCallOrigin, ToolCaller,
 };
 // The store vocabulary a `Vfs` effect holds and its answer returns, for
 // the Engine's own store handling; other crates name it from `runvil_lua`.

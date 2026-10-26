@@ -14,7 +14,7 @@ use crate::execute::run::{Effect, EffectAnswer, Round};
 use crate::model::{Completion, CompletionResult, ToolCall};
 use crate::test_support::drive;
 use crate::test_support::rig::Rig;
-use crate::test_support::scenario::text_of;
+use crate::test_support::scenario::{pass_through, text_of};
 
 /// Offers `echo`, infers once, then loops over one tool round and its
 /// closing reply.
@@ -89,8 +89,9 @@ fn a_rounds_thinking_reply_and_tool_call_events_hold_the_id_its_chat_effect_held
             issued.push(*round);
             answers.next().expect("the script covers every round")
         }
+        Effect::Render { .. } => pass_through(effect),
         Effect::ToolCall { .. } => EffectAnswer::ToolCall(Ok(ToolOutput::trusted("echoed"))),
-        other => panic!("only rounds and the echo call are issued: {other:?}"),
+        other => panic!("only rounds, the loop's render, and the echo call are issued: {other:?}"),
     });
     assert_eq!(text_of(result), "a|b");
     assert_eq!(

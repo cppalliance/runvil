@@ -1,12 +1,13 @@
 //! Section VM state reads: `var`, bare globals, `argv`, the tool call
-//! counts, the frozen sets' entries, the section's offered tools, and its
-//! effective model binding.
+//! counts, the frozen sets' entries, the section's offered tools and the
+//! catalog Packs they come from, and its effective model binding.
 
 use std::borrow::Cow;
 use std::sync::{Arc, Mutex};
 
 use mlua::{LuaSerdeExt, Value};
 use runvil_model_client::model::{ModelBinding, ModelView};
+use runvil_types::packs::PackId;
 use runvil_types::tools::{ToolId, ToolInfo};
 use serde_json::Value as Json;
 
@@ -142,7 +143,7 @@ pub fn current_tool_bindings(
     adhoc: &AdhocTools,
 ) -> Result<Vec<OfferedTool>> {
     let mut tools: Vec<OfferedTool> = Vec::new();
-    for tool in expanded(set, runtime, adhoc, OfferMode::Static)? {
+    for tool in expanded(set, runtime, adhoc, Some(OfferMode::Static))? {
         if !tools.iter().any(|held| held.id() == tool.id()) {
             tools.push(tool);
         }
@@ -164,7 +165,7 @@ pub fn current_dynamic_set(
     static_tools: &[OfferedTool],
 ) -> Result<Vec<OfferedTool>> {
     let mut tools: Vec<OfferedTool> = Vec::new();
-    for tool in expanded(set, runtime, adhoc, OfferMode::Dynamic)? {
+    for tool in expanded(set, runtime, adhoc, Some(OfferMode::Dynamic))? {
         let held = static_tools
             .iter()
             .chain(&tools)
@@ -176,20 +177,50 @@ pub fn current_dynamic_set(
     Ok(tools)
 }
 
-/// Every tool the offers of `mode` name, in call order, with repeats:
-/// the one expansion both sets read, so they never disagree about what
-/// an offer names.
+/// Reads the catalog Packs the section's offers name without mutating
+/// the tool runtime: each Pack once, in the order the section first
+/// offered one of its tools, into either set, which is the order a
+/// section entry's render asks its Packs in.
+///
+/// # Errors
+/// Returns [`Error::Internal`] if the tool runtime's mutex or the adhoc
+/// tools are poisoned, or an offered id names no tool.
+pub fn current_catalog_packs(
+    set: &ToolSet,
+    runtime: &Mutex<ToolRuntime>,
+    adhoc: &AdhocTools,
+) -> Result<Vec<PackId>> {
+    let mut packs: Vec<PackId> = Vec::new();
+    for tool in expanded(set, runtime, adhoc, None)? {
+        if let OfferedTool::Catalog(info) = tool {
+            let pack = info.id.pack();
+            if !packs.contains(&pack) {
+                packs.push(pack);
+            }
+        }
+    }
+    Ok(packs)
+}
+
+/// Every tool the offers of `mode` name, or every offer's tools when
+/// `mode` is `None`, in call order, with repeats: the one expansion both
+/// sets and the catalog Packs read, so they never disagree about what an
+/// offer names.
 fn expanded(
     set: &ToolSet,
     runtime: &Mutex<ToolRuntime>,
     adhoc: &AdhocTools,
-    mode: OfferMode,
+    mode: Option<OfferMode>,
 ) -> Result<Vec<OfferedTool>> {
     let runtime = runtime
         .lock()
         .map_err(|_| Error::Internal("tool declaration runtime was poisoned".into()))?;
     let mut tools = Vec::new();
-    for offer in runtime.offers.iter().filter(|offer| offer.mode == mode) {
+    let offers = runtime
+        .offers
+        .iter()
+        .filter(|offer| mode.is_none_or(|mode| offer.mode == mode));
+    for offer in offers {
         match &offer.target {
             OfferTarget::Tool(id) => {
                 let tool = if is_adhoc(&id.pack()) {

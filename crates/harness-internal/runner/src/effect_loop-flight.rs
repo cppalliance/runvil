@@ -1,5 +1,5 @@
-//! The effects in flight: each chat, tool-call, and timer effect's
-//! performer future, polled inside the run's own future beside the rest,
+//! The effects in flight: each chat, render, tool-call, and timer
+//! effect's future, polled inside the run's own future beside the rest,
 //! and the tool calls waiting for a slot.
 //!
 //! Every future in flight sits in one `FuturesUnordered` as an `Abortable`
@@ -12,8 +12,8 @@
 //! it yields then is discarded, so the run never sees two answers for one
 //! effect.
 //!
-//! At most `cap` tool calls are in flight at once; chat and timer effects
-//! never wait and never count toward it. A tool call beyond the cap waits
+//! At most `cap` tool calls are in flight at once; chat, render, and timer
+//! effects never wait and never count toward it. A tool call beyond the cap waits
 //! as its performer future, not yet polled, so a waiting call has started
 //! nothing. Whenever a slot frees, because a call landed, panicked, or was
 //! aborted, the waiting call with the lowest effect id starts. Ids follow
@@ -122,9 +122,9 @@ impl Flights {
         self.effects.len() + self.waiting.len()
     }
 
-    /// Puts `answer`, the performer future of chat or timer effect `id`,
-    /// in flight under `provenance`. It never waits and never counts
-    /// toward the cap.
+    /// Puts `answer`, the future of chat, render, or timer effect `id`, in
+    /// flight under `provenance`. It never waits and never counts toward
+    /// the cap.
     pub(super) fn start(
         &mut self,
         id: EffectId,

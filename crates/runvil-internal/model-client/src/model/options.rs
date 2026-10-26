@@ -4,7 +4,7 @@
 use std::num::NonZeroU32;
 use std::sync::Mutex;
 
-use runvil_types::models::ModelId;
+use runvil_types::models::{ModelId, ModelInfo, ThinkingMode};
 
 /// The largest sampling temperature the backend accepts.
 const TEMPERATURE_MAX: f64 = 2.0;
@@ -131,6 +131,9 @@ pub struct ModelBinding {
     capabilities: Vec<String>,
     /// The model's provider id, when the catalog names one.
     provider: Option<String>,
+    /// The catalog's description of the bound model, when the binding was
+    /// filled from the catalog.
+    catalog: Option<ModelInfo>,
 }
 
 impl ModelBinding {
@@ -154,6 +157,7 @@ impl ModelBinding {
             context,
             capabilities: Vec::new(),
             provider: None,
+            catalog: None,
         }
     }
 
@@ -161,6 +165,14 @@ impl ModelBinding {
     #[must_use]
     pub fn with_provider(mut self, provider: impl Into<String>) -> Self {
         self.provider = Some(provider.into());
+        self
+    }
+
+    /// Sets the catalog's description of the bound model, which
+    /// [`render_info`](Self::render_info) returns.
+    #[must_use]
+    pub fn with_catalog_info(mut self, info: ModelInfo) -> Self {
+        self.catalog = Some(info);
         self
     }
 
@@ -219,6 +231,28 @@ impl ModelBinding {
     #[must_use]
     pub fn provider(&self) -> Option<&str> {
         self.provider.as_deref()
+    }
+
+    /// Returns the model info a section entry's render receives for this
+    /// binding: the catalog's, when the binding holds it, or else one built
+    /// from the binding's id, description, context window, and provider
+    /// that claims [`ThinkingMode::Never`], the claim that asks least of
+    /// the model.
+    #[must_use]
+    pub fn render_info(&self) -> ModelInfo {
+        if let Some(info) = &self.catalog {
+            return info.clone();
+        }
+        let info = ModelInfo::new(
+            self.id.clone(),
+            self.description.clone(),
+            self.context,
+            ThinkingMode::Never,
+        );
+        match &self.provider {
+            Some(provider) => info.with_provider(provider.clone()),
+            None => info,
+        }
     }
 
     /// Builds the [`CompletionOptions`] for a completion made under this

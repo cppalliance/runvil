@@ -1,20 +1,22 @@
 //! Effects as values: every leaf request kind a section yields - `infer`
 //! and `chat`, `tool_call`, `store`, `timer` - issues
-//! exactly one `Effect` out of the run's `step`, and each effect's record
-//! round-trips through serde; a section's round carries the `Chat` origin
-//! and a nested infer round the `Infer` origin. The run's answer rules (a
-//! drop, an orphan, a wrong kind) are pinned beside `Run` itself.
+//! exactly one `Effect` out of the run's `step`, after the one `Render`
+//! a section's first round with catalog offers issues, and each effect's
+//! record round-trips through serde; a section's round carries the `Chat`
+//! origin and a nested infer round the `Infer` origin. The run's answer
+//! rules (a drop, an orphan, a wrong kind) are pinned beside `Run` itself.
 
 use runvil_parser::test_support::one_section;
 use runvil_types::event::ReplyOrigin;
 use runvil_types::ids::RoundId;
+use runvil_types::packs::PackId;
 
 use super::fixtures::echo_tool;
 use super::models_loop::{loop_model_name, loop_scenario};
 use super::scheduler::scheduler_scenario;
 use super::*;
 use crate::execute::protocol::VfsOp;
-use crate::execute::run::{EffectRecord, Round, ToolCallOrigin, ToolCaller};
+use crate::execute::run::{EffectRecord, PackToolSets, Round, ToolCallOrigin, ToolCaller};
 use crate::test_support::rig::Rig;
 use crate::test_support::scenario::{EXECUTION, round_trip};
 
@@ -77,15 +79,32 @@ fn a_models_loop_round_issues_one_chat_effect_and_one_tool_call_effect_per_call(
     assert_eq!(rig.trace().text(), "done");
 
     let records = rig.issued();
-    assert_eq!(records.len(), 3, "two rounds and one call: {records:?}");
-    assert!(
-        matches!(&records[0], EffectRecord::Chat { tools, after: None, keep: 0, messages, .. }
-            if tools == &["echo".to_owned()] && messages.len() == 1),
-        "the first round advertises the scope over the author's list, which starts here: {:?}",
-        records[0]
+    assert_eq!(
+        records.len(),
+        4,
+        "the render, two rounds, and one call: {records:?}"
     );
     assert_eq!(
-        records[1],
+        records[0],
+        EffectRecord::Render {
+            alias: "writer".to_owned(),
+            entry: "0.1".to_owned(),
+            offered: vec![PackToolSets::new(
+                PackId::parse("tools").expect("a valid Pack id"),
+                vec![ToolId::parse("tools/echo").expect("a valid id")],
+                Vec::new(),
+            )],
+        },
+        "the first round's render asks for the one offered tool"
+    );
+    assert!(
+        matches!(&records[1], EffectRecord::Chat { tools, after: None, keep: 0, messages, .. }
+            if tools == &["echo".to_owned()] && messages.len() == 1),
+        "the first round advertises the scope over the author's list, which starts here: {:?}",
+        records[1]
+    );
+    assert_eq!(
+        records[2],
         EffectRecord::ToolCall {
             tool: ToolId::parse("tools/echo").expect("a valid id"),
             alias: "echo".to_owned(),
@@ -94,14 +113,14 @@ fn a_models_loop_round_issues_one_chat_effect_and_one_tool_call_effect_per_call(
         },
         "the model's call is one tool_call effect naming the bound identity and the model"
     );
-    let (after, keep, messages) = match &records[2] {
+    let (after, keep, messages) = match &records[3] {
         EffectRecord::Chat {
             after,
             keep,
             messages,
             ..
         } => (after, keep, messages),
-        other => panic!("the third effect is the second round: {other:?}"),
+        other => panic!("the fourth effect is the second round: {other:?}"),
     };
     assert_eq!(
         (*after, *keep),

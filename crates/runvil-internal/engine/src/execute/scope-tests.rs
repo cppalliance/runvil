@@ -1,12 +1,17 @@
 //! Tests for the merge that builds a section entry's frozen sets: one per
 //! rule, in the order the merge applies them, the search tool's list of
-//! Dynamic Set names, and the order each set keeps.
+//! Dynamic Set names, and the order each set keeps. The checks rule one
+//! makes of a render's answer, and the order around a render that adds a
+//! tool, are in the `render` child.
 
 use runvil_lua::ToolOutputKind;
 use runvil_types::tools::ToolId;
 use serde_json::json;
 
 use super::*;
+
+#[path = "scope-tests-render.rs"]
+mod render;
 
 /// The catalog tool `id`, described as `<id> tool`, under its default wire
 /// name.
@@ -41,15 +46,15 @@ fn catalog(tools: impl IntoIterator<Item = ToolInfo>) -> ToolCatalog {
     ToolCatalog::new(tools).expect("the fixture ids differ")
 }
 
-/// Merges the offers with each Pack's offered tools passed through as its
-/// rendered tools.
+/// Merges the offers of a section that made its static offers first, with
+/// each Pack's offered tools passed through as its rendered tools.
 fn merged(
     static_tools: &[OfferedTool],
     dynamic_tools: &[OfferedTool],
     catalog: &ToolCatalog,
 ) -> Result<RenderedTools> {
-    let rendered = offered_packs(static_tools, dynamic_tools);
-    merge_tool_sets(static_tools, dynamic_tools, rendered, catalog)
+    let offers = SectionOffers::static_first(static_tools, dynamic_tools);
+    merge_tool_sets(&offers, offered_packs(&offers), catalog)
 }
 
 /// Each binding of `set` as `<wire name>=<id>`, in order.
@@ -59,14 +64,24 @@ fn sited(set: &[ToolBinding]) -> Vec<String> {
         .collect()
 }
 
-/// The `web` Pack's rendered tools: `static_set`, then `dynamic_set`.
+/// The Pack `pack`'s rendered tools: `static_set`, then `dynamic_set`.
 #[track_caller]
-fn web(static_set: Vec<ToolInfo>, dynamic_set: Vec<ToolInfo>) -> Vec<PackSets> {
-    vec![PackSets {
-        pack: PackId::parse("web").expect("a fixture Pack id"),
+fn sets(
+    pack: &str,
+    static_set: Vec<ToolInfo>,
+    dynamic_set: Vec<ToolInfo>,
+) -> PackToolSets<ToolInfo> {
+    PackToolSets::new(
+        PackId::parse(pack).expect("a fixture Pack id"),
         static_set,
         dynamic_set,
-    }]
+    )
+}
+
+/// The `web` Pack's rendered tools: `static_set`, then `dynamic_set`.
+#[track_caller]
+fn web(static_set: Vec<ToolInfo>, dynamic_set: Vec<ToolInfo>) -> Vec<PackToolSets<ToolInfo>> {
+    vec![sets("web", static_set, dynamic_set)]
 }
 
 #[test]
@@ -83,7 +98,8 @@ fn rule_one_binds_each_tool_under_its_wire_name_and_keeps_a_catalog_ids_flags() 
         Vec::new(),
     );
     let offers = [OfferedTool::Catalog(search), OfferedTool::Catalog(fetch)];
-    let frozen = merge_tool_sets(&offers, &[], rendered, &tools).expect("the sets merge");
+    let offers = SectionOffers::static_first(&offers, &[]);
+    let frozen = merge_tool_sets(&offers, rendered, &tools).expect("the sets merge");
     let bound: Vec<(&str, String, ToolOutputKind, bool)> = frozen
         .static_set
         .iter()
@@ -151,8 +167,9 @@ fn rule_two_drops_a_pack_tool_whose_wire_name_an_adhoc_tool_of_its_set_takes() {
         ],
         Vec::new(),
     );
-    let offers = [listed("web/fetch"), adhoc("grab"), adhoc("extra")];
-    let frozen = merge_tool_sets(&offers, &[], renamed, &tools).expect("the sets merge");
+    let offers =
+        SectionOffers::static_first(&[listed("web/fetch"), adhoc("grab"), adhoc("extra")], &[]);
+    let frozen = merge_tool_sets(&offers, renamed, &tools).expect("the sets merge");
     assert_eq!(
         sited(&frozen.static_set),
         ["grab=adhoc/grab", "extra=adhoc/extra"],
@@ -164,17 +181,13 @@ fn rule_two_drops_a_pack_tool_whose_wire_name_an_adhoc_tool_of_its_set_takes() {
 fn rule_three_drops_a_dynamic_set_tool_whose_id_the_static_set_holds() {
     let tools = catalog([info("web/fetch"), info("web/search")]);
     let both = web(
-        vec![info("web/search")],
-        vec![info("web/search"), info("web/fetch")],
+        vec![info("web/search"), info("web/only")],
+        vec![info("web/only"), info("web/fetch")],
     );
-    let frozen = merge_tool_sets(
-        &[listed("web/search")],
-        &[listed("web/fetch")],
-        both,
-        &tools,
-    )
-    .expect("the dropped tool clashes with nothing");
-    let mut expected = vec!["web_search=web/search"];
+    let offers = SectionOffers::static_first(&[listed("web/search")], &[listed("web/fetch")]);
+    let frozen =
+        merge_tool_sets(&offers, both, &tools).expect("the dropped tool clashes with nothing");
+    let mut expected = vec!["web_search=web/search", "web_only=web/only"];
     expected.extend(DISCOVERY);
     assert_eq!(sited(&frozen.static_set), expected);
     assert_eq!(sited(&frozen.dynamic_set), ["web_fetch=web/fetch"]);

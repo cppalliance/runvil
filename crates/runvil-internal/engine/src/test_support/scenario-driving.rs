@@ -27,9 +27,10 @@ use crate::lua::run_store_op;
 use crate::model::{CompletionError, CompletionErrorKind};
 
 /// How a scenario answers its run's effects: a store operation on the
-/// effect's own access, a timer at once, a tool call through the
-/// scenario's tool of that id, and a model round from its script or
-/// closure, unless the scenario holds the effect.
+/// effect's own access, a timer at once, a render with every offered tool
+/// passed through, a tool call through the scenario's tool of that id,
+/// and a model round from its script or closure, unless the scenario
+/// holds the effect.
 pub(super) struct Answers {
     pub(super) tools: BTreeMap<ToolId, FnTool>,
     pub(super) chat: Option<Chat>,
@@ -79,6 +80,7 @@ impl Answers {
                     "model access is turned off or not configured",
                 ))),
             },
+            Effect::Render { offered, .. } => EffectAnswer::Render(offered.clone()),
             Effect::ToolCall { tool, args, .. } => match self.tools.get(tool) {
                 Some(tool) => EffectAnswer::ToolCall(tool.call_now(args.clone())),
                 None => EffectAnswer::ToolCall(Err(ToolError::message(

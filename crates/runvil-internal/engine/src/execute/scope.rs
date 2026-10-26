@@ -1,8 +1,10 @@
-//! A section entry's frozen sets: the merge that builds them at the
-//! entry's first model call, from each catalog Pack's tools per set and
-//! the section's adhoc tools, plus the Engine's two discovery tools beside
-//! a Dynamic Set, inside the scope validation boundary pair, and the
-//! schema a round advertises each Static Set tool under.
+//! A section entry's frozen sets: the section's offers, what the entry's
+//! render is asked of them, the merge that builds the sets at the entry's
+//! first model call from each catalog Pack's tools per set, as the render
+//! answered them, and the section's adhoc tools, plus the Engine's two
+//! discovery tools beside a Dynamic Set, inside the scope validation
+//! boundary pair, and the schema a round advertises each Static Set tool
+//! under.
 
 use std::collections::BTreeMap;
 
@@ -14,7 +16,11 @@ use runvil_types::tools::{ToolCatalog, ToolId, ToolInfo};
 use serde_json::{Value, json};
 
 use crate::error::{FrozenSet, MergeRule, MergeTool};
-use crate::lua::{DiscoveryTool, OfferedTool, RenderedTools, ToolBinding, wire_name_of};
+use crate::execute::PackToolSets;
+use crate::lua::{
+    DiscoveryTool, OfferedTool, RenderedTools, SectionVm, ToolBinding, ToolSet,
+    current_catalog_packs, current_dynamic_set, current_tool_bindings, wire_name_of,
+};
 use crate::model::ToolSchema;
 use crate::{Error, Result};
 
@@ -30,39 +36,83 @@ const SEARCH_USAGE: &str = "Lists and searches the dynamic tools, which CallDyna
 const CALL_USAGE: &str = "Calls a dynamic tool: pass its name from GetDynamicTools as toolName \
                           and its arguments as arguments.";
 
-/// One catalog Pack's tools for each set of a section entry, in the shape
-/// a render answers.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(super) struct PackSets {
-    /// The Pack.
-    pub(super) pack: PackId,
-    /// Its tools for the Static Set, in order.
-    pub(super) static_set: Vec<ToolInfo>,
-    /// Its tools for the Dynamic Set, in order.
-    pub(super) dynamic_set: Vec<ToolInfo>,
+/// One Pack's tools for `set`.
+fn set_of(sets: &PackToolSets<ToolInfo>, set: FrozenSet) -> &[ToolInfo] {
+    match set {
+        FrozenSet::Static => &sets.static_set,
+        FrozenSet::Dynamic => &sets.dynamic_set,
+    }
 }
 
-impl PackSets {
-    /// The Pack's tools for `set`.
-    fn set_mut(&mut self, set: FrozenSet) -> &mut Vec<ToolInfo> {
-        match set {
-            FrozenSet::Static => &mut self.static_set,
-            FrozenSet::Dynamic => &mut self.dynamic_set,
+/// One Pack's tools for `set`, to change.
+fn set_mut(sets: &mut PackToolSets<ToolInfo>, set: FrozenSet) -> &mut Vec<ToolInfo> {
+    match set {
+        FrozenSet::Static => &mut sets.static_set,
+        FrozenSet::Dynamic => &mut sets.dynamic_set,
+    }
+}
+
+/// A section's offers, as its render and its merge read them: the tools
+/// each set's offers name, in offer order, and each catalog Pack those
+/// tools come from, once, in the order the section first offered one of
+/// its tools, into either set.
+#[derive(Debug)]
+pub(super) struct SectionOffers {
+    static_tools: Vec<OfferedTool>,
+    dynamic_tools: Vec<OfferedTool>,
+    packs: Vec<PackId>,
+}
+
+impl SectionOffers {
+    /// Reads the offers `vm`'s section has made, expanded against `set`.
+    ///
+    /// # Errors
+    /// Returns the expansion's error.
+    pub(super) fn read(set: &ToolSet, vm: &SectionVm) -> Result<Self> {
+        let (runtime, adhoc) = (vm.tool_runtime(), vm.adhoc_tools());
+        let static_tools = current_tool_bindings(set, runtime, adhoc)?;
+        let dynamic_tools = current_dynamic_set(set, runtime, adhoc, &static_tools)?;
+        let packs = current_catalog_packs(set, runtime, adhoc)?;
+        Ok(Self {
+            static_tools,
+            dynamic_tools,
+            packs,
+        })
+    }
+}
+
+#[cfg(test)]
+impl SectionOffers {
+    /// The offers of a section that made every offer of `static_tools`
+    /// before any offer of `dynamic_tools`.
+    pub(super) fn static_first(
+        static_tools: &[OfferedTool],
+        dynamic_tools: &[OfferedTool],
+    ) -> Self {
+        let mut packs: Vec<PackId> = Vec::new();
+        for tool in static_tools.iter().chain(dynamic_tools) {
+            if let OfferedTool::Catalog(info) = tool
+                && !packs.contains(&info.id.pack())
+            {
+                packs.push(info.id.pack());
+            }
+        }
+        Self {
+            static_tools: static_tools.to_vec(),
+            dynamic_tools: dynamic_tools.to_vec(),
+            packs,
         }
     }
 }
 
-/// Each catalog Pack the offers name, once, in the order the Static Set's
-/// offers first name it and then the Dynamic Set's, with the catalog tools
-/// offered from it into each set, in offer order.
-pub(super) fn offered_packs(
-    static_tools: &[OfferedTool],
-    dynamic_tools: &[OfferedTool],
-) -> Vec<PackSets> {
-    let mut packs: Vec<PackSets> = Vec::new();
+/// Each catalog Pack `offers` names, once, in the order the section first
+/// offered one of its tools, into either set, with the catalog tools
+/// offered from it into each set, in offer order: what a render is asked.
+pub(super) fn offered_packs(offers: &SectionOffers) -> Vec<PackToolSets<ToolInfo>> {
+    let mut packs: Vec<PackToolSets<ToolInfo>> = Vec::new();
     for (set, tools) in [
-        (FrozenSet::Static, static_tools),
-        (FrozenSet::Dynamic, dynamic_tools),
+        (FrozenSet::Static, &offers.static_tools),
+        (FrozenSet::Dynamic, &offers.dynamic_tools),
     ] {
         for tool in tools {
             let OfferedTool::Catalog(info) = tool else {
@@ -72,16 +122,13 @@ pub(super) fn offered_packs(
             let index = if let Some(index) = packs.iter().position(|held| held.pack == pack) {
                 index
             } else {
-                packs.push(PackSets {
-                    pack,
-                    static_set: Vec::new(),
-                    dynamic_set: Vec::new(),
-                });
+                packs.push(PackToolSets::new(pack, Vec::new(), Vec::new()));
                 packs.len() - 1
             };
-            packs[index].set_mut(set).push(info.clone());
+            set_mut(&mut packs[index], set).push(info.clone());
         }
     }
+    packs.sort_by_key(|sets| offers.packs.iter().position(|pack| *pack == sets.pack));
     packs
 }
 
@@ -92,15 +139,14 @@ pub(super) fn offered_packs(
 /// # Errors
 /// Returns the merge's error.
 pub(super) fn prepare_effective_scope(
-    static_tools: &[OfferedTool],
-    dynamic_tools: &[OfferedTool],
-    rendered: Vec<PackSets>,
+    offers: &SectionOffers,
+    rendered: Vec<PackToolSets<ToolInfo>>,
     catalog: &ToolCatalog,
     emitter: &Emitter,
     section: &str,
 ) -> Result<RenderedTools> {
     emitter.report(section, lifecycle::TOOL_SCOPE_VALIDATION_STARTED);
-    let result = merge_tool_sets(static_tools, dynamic_tools, rendered, catalog);
+    let result = merge_tool_sets(offers, rendered, catalog);
     emitter.report(
         section,
         if result.is_ok() {
@@ -121,15 +167,20 @@ struct Laid {
 
 /// Merges a section entry's offers into its frozen sets.
 ///
-/// `static_tools` and `dynamic_tools` are each set's offers in offer
-/// order, and `rendered` is each catalog Pack's tools per set, as a render
-/// answers them. Each set keeps offer order: a Pack's rendered tools sit
-/// as one block where that Pack's first tool was offered into the set, in
-/// the order they arrive, and an adhoc tool keeps its own place. Then the
-/// rules run, in this order:
+/// `offers` holds each set's offers in offer order, and `rendered` is
+/// each catalog Pack's tools per set, as a render answers them. Each set
+/// keeps offer order: a Pack's rendered tools sit as one block where that
+/// Pack's first tool was offered into the set, in the order they arrive,
+/// and an adhoc tool keeps its own place. The rules run in this order:
 ///
-/// - Each tool binds under its wire name, and a catalog id keeps the
-///   catalog's output kind and listing flag.
+/// - The render answered what [`offered_packs`] asks of these offers: the
+///   same Packs in the same order, with no tool for a set a Pack was not
+///   offered into. Every rendered tool's id starts with its Pack's id, a
+///   rendered run catalog tool is one the section offered in that set, and
+///   a tool repeated within a set keeps its first copy. Each tool binds
+///   under its wire name, and a catalog id keeps the catalog's output kind
+///   and listing flag, so a render changes only a catalog tool's wire
+///   name, description, and schema.
 /// - Within a set, a Pack tool whose wire name an adhoc tool of that set
 ///   takes is dropped.
 /// - A Dynamic Set tool whose id the Static Set holds is dropped.
@@ -140,14 +191,17 @@ struct Laid {
 ///   schema.
 ///
 /// # Errors
-/// Returns [`Error::ToolMerge`] naming both tools of a wire-name clash, or
-/// [`Error::BindSchema`] for a tool no round could advertise.
+/// Returns [`Error::ToolMerge`] naming the rule and the Packs or tools
+/// that broke it, or [`Error::BindSchema`] for a tool no round could
+/// advertise.
 pub(super) fn merge_tool_sets(
-    static_tools: &[OfferedTool],
-    dynamic_tools: &[OfferedTool],
-    mut rendered: Vec<PackSets>,
+    offers: &SectionOffers,
+    rendered: Vec<PackToolSets<ToolInfo>>,
     catalog: &ToolCatalog,
 ) -> Result<RenderedTools> {
+    let asked = offered_packs(offers);
+    let mut rendered = check_render(&asked, rendered, catalog)?;
+    let (static_tools, dynamic_tools) = (&offers.static_tools, &offers.dynamic_tools);
     let mut static_set = lay_out(static_tools, FrozenSet::Static, &mut rendered, catalog);
     let mut dynamic_set = lay_out(dynamic_tools, FrozenSet::Dynamic, &mut rendered, catalog);
     drop_shadowed(&mut static_set);
@@ -171,12 +225,91 @@ pub(super) fn merge_tool_sets(
     })
 }
 
+/// Checks a render's answer against what it was `asked`, and returns it
+/// with each tool a set repeats kept at its first copy.
+///
+/// # Errors
+/// Returns [`Error::ToolMerge`] for an answer whose Packs differ from the
+/// ones asked, in order, or naming the first rendered tool a Pack's
+/// answer may not hold.
+fn check_render(
+    asked: &[PackToolSets<ToolInfo>],
+    answered: Vec<PackToolSets<ToolInfo>>,
+    catalog: &ToolCatalog,
+) -> Result<Vec<PackToolSets<ToolInfo>>> {
+    let packs = |all: &[PackToolSets<ToolInfo>]| -> Vec<PackId> {
+        all.iter().map(|sets| sets.pack.clone()).collect()
+    };
+    if packs(asked) != packs(&answered) {
+        return Err(Error::ToolMerge {
+            rule: MergeRule::RenderedPacks {
+                asked: packs(asked),
+                answered: packs(&answered),
+            },
+            tools: Vec::new(),
+        });
+    }
+    answered
+        .into_iter()
+        .zip(asked)
+        .map(|(mut sets, offered)| {
+            for set in [FrozenSet::Static, FrozenSet::Dynamic] {
+                let tools = std::mem::take(set_mut(&mut sets, set));
+                let kept = check_set(&sets.pack, set, set_of(offered, set), tools, catalog)?;
+                *set_mut(&mut sets, set) = kept;
+            }
+            Ok(sets)
+        })
+        .collect()
+}
+
+/// Checks the tools `pack`'s render returned for `set`, which the section
+/// offered `offered` from it into, and returns them with each repeat
+/// dropped.
+///
+/// # Errors
+/// Returns [`Error::ToolMerge`] naming the first tool that sits in a set
+/// the Pack was not offered into, under another Pack's id, or is a run
+/// catalog tool the section did not offer in `set`.
+fn check_set(
+    pack: &PackId,
+    set: FrozenSet,
+    offered: &[ToolInfo],
+    tools: Vec<ToolInfo>,
+    catalog: &ToolCatalog,
+) -> Result<Vec<ToolInfo>> {
+    let refuse = |rule: MergeRule, tool: &ToolInfo| Error::ToolMerge {
+        rule,
+        tools: vec![MergeTool {
+            id: tool.id.clone(),
+            set,
+        }],
+    };
+    let mut kept: Vec<ToolInfo> = Vec::with_capacity(tools.len());
+    for tool in tools {
+        if offered.is_empty() {
+            return Err(refuse(MergeRule::UnofferedSet(pack.clone()), &tool));
+        }
+        if !pack.contains(&tool.id) {
+            return Err(refuse(MergeRule::ForeignTool(pack.clone()), &tool));
+        }
+        let unoffered = !offered.iter().any(|held| held.id == tool.id);
+        if unoffered && catalog.get(&tool.id).is_some() {
+            return Err(refuse(MergeRule::UnofferedCatalogTool, &tool));
+        }
+        if !kept.iter().any(|held| held.id == tool.id) {
+            kept.push(tool);
+        }
+    }
+    Ok(kept)
+}
+
 /// Lays `offers` out as `set`: each adhoc tool at its place, and each
 /// Pack's rendered tools for `set` where that Pack's first tool sits.
 fn lay_out(
     offers: &[OfferedTool],
     set: FrozenSet,
-    rendered: &mut [PackSets],
+    rendered: &mut [PackToolSets<ToolInfo>],
     catalog: &ToolCatalog,
 ) -> Vec<Laid> {
     let mut laid = Vec::new();
@@ -189,7 +322,7 @@ fn lay_out(
             OfferedTool::Catalog(info) => {
                 let pack = info.id.pack();
                 if let Some(answer) = rendered.iter_mut().find(|answer| answer.pack == pack) {
-                    let block = std::mem::take(answer.set_mut(set));
+                    let block = std::mem::take(set_mut(answer, set));
                     laid.extend(block.into_iter().map(|tool| Laid {
                         binding: bind(tool, catalog),
                         adhoc: false,

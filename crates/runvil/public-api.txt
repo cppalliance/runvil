@@ -48,6 +48,7 @@
 #[non_exhaustive] pub struct runvil::UsablePack { .. }
 #[non_exhaustive] pub struct runvil::effect::ChatAnswerRecord { .. }
 #[non_exhaustive] pub struct runvil::effect::FailureRecord { .. }
+#[non_exhaustive] pub struct runvil::effect::PackToolSets<T> { .. }
 #[non_exhaustive] pub struct runvil::effect::Round { .. }
 #[non_exhaustive] pub struct runvil::effect::ToolAnswerRecord { .. }
 #[non_exhaustive] pub struct runvil::effect::ToolCallOrigin { .. }
@@ -432,6 +433,19 @@ impl<'a> core::iter::traits::iterator::Iterator for runvil::prompt::ArgsDeclIter
 impl<'a> core::iter::traits::iterator::Iterator for runvil::prompt::ModelRolesIter<'a>
 impl<'a> core::iter::traits::iterator::Iterator for runvil::prompt::ModelRolesIter<'a> { type Item = (&'a str, &'a runvil::prompt::ModelRole) }
 impl<'a> runvil::vfs::OpEvent<'a>
+impl<'de, T> serde_core::de::Deserialize<'de> for runvil::effect::PackToolSets<T> where T: serde_core::de::Deserialize<'de>
+impl<T: core::clone::Clone> core::clone::Clone for runvil::effect::PackToolSets<T>
+impl<T: core::cmp::Eq> core::cmp::Eq for runvil::effect::PackToolSets<T>
+impl<T: core::cmp::PartialEq> core::cmp::PartialEq for runvil::effect::PackToolSets<T>
+impl<T: core::fmt::Debug> core::fmt::Debug for runvil::effect::PackToolSets<T>
+impl<T> core::marker::Freeze for runvil::effect::PackToolSets<T> where alloc::vec::Vec<T>: core::marker::Freeze + core::marker::Freeze
+impl<T> core::marker::Send for runvil::effect::PackToolSets<T> where alloc::vec::Vec<T>: core::marker::Send + core::marker::Send
+impl<T> core::marker::Sync for runvil::effect::PackToolSets<T> where alloc::vec::Vec<T>: core::marker::Sync + core::marker::Sync
+impl<T> core::marker::Unpin for runvil::effect::PackToolSets<T> where alloc::vec::Vec<T>: core::marker::Unpin + core::marker::Unpin
+impl<T> core::panic::unwind_safe::RefUnwindSafe for runvil::effect::PackToolSets<T> where alloc::vec::Vec<T>: core::panic::unwind_safe::RefUnwindSafe + core::panic::unwind_safe::RefUnwindSafe
+impl<T> core::panic::unwind_safe::UnwindSafe for runvil::effect::PackToolSets<T> where alloc::vec::Vec<T>: core::panic::unwind_safe::UnwindSafe + core::panic::unwind_safe::UnwindSafe
+impl<T> runvil::effect::PackToolSets<T>
+impl<T> serde_core::ser::Serialize for runvil::effect::PackToolSets<T> where T: serde_core::ser::Serialize
 pub const fn runvil::RunSeed::as_bytes(&self) -> &[u8; 32]
 pub const fn runvil::RunSeed::from_bytes(bytes: [u8; 32]) -> runvil::RunSeed
 pub const fn runvil::effect::EffectId::get(self) -> u64
@@ -516,6 +530,7 @@ pub fn runvil::effect::ChatAnswerRecord::with_reply(self, reply: core::option::O
 pub fn runvil::effect::ChatAnswerRecord::with_tool_calls(self, tool_calls: alloc::vec::Vec<alloc::string::String>) -> runvil::effect::ChatAnswerRecord
 pub fn runvil::effect::Effect::record(&self) -> runvil::effect::EffectRecord
 pub fn runvil::effect::EffectAnswer::record(&self) -> runvil::effect::AnswerRecord
+pub fn runvil::effect::PackToolSets::new(pack: runvil::packs::PackId, static_set: alloc::vec::Vec<T>, dynamic_set: alloc::vec::Vec<T>) -> runvil::effect::PackToolSets<T>
 pub fn runvil::effect::Round::new(id: runvil::ids::RoundId, origin: runvil::event::ReplyOrigin) -> runvil::effect::Round
 pub fn runvil::effect::ToolCallOrigin::new(execution: impl core::convert::Into<alloc::string::String>, section: impl core::convert::Into<alloc::string::String>, caller: runvil::effect::ToolCaller) -> runvil::effect::ToolCallOrigin
 pub fn runvil::effect::ToolCallOrigin::with_entry(self, entry: impl core::convert::Into<alloc::string::String>) -> runvil::effect::ToolCallOrigin
@@ -602,7 +617,9 @@ pub fn runvil::model::ModelBinding::id(&self) -> &runvil::model::ModelId
 pub fn runvil::model::ModelBinding::invocation(&self) -> &runvil::model::ModelInvocation
 pub fn runvil::model::ModelBinding::new(alias: impl core::convert::Into<alloc::string::String>, description: impl core::convert::Into<alloc::string::String>, id: runvil::model::ModelId, invocation: runvil::model::ModelInvocation, context: core::num::nonzero::NonZeroU32) -> Self
 pub fn runvil::model::ModelBinding::provider(&self) -> core::option::Option<&str>
+pub fn runvil::model::ModelBinding::render_info(&self) -> runvil::model::ModelInfo
 pub fn runvil::model::ModelBinding::with_capabilities(self, capabilities: alloc::vec::Vec<alloc::string::String>) -> Self
+pub fn runvil::model::ModelBinding::with_catalog_info(self, info: runvil::model::ModelInfo) -> Self
 pub fn runvil::model::ModelBinding::with_invocation(self, invocation: runvil::model::ModelInvocation) -> Self
 pub fn runvil::model::ModelBinding::with_provider(self, provider: impl core::convert::Into<alloc::string::String>) -> Self
 pub fn runvil::model::ModelBindings::is_empty(&self) -> bool
@@ -852,6 +869,8 @@ pub runvil::UsablePack::vendor: alloc::string::String
 pub runvil::effect::AnswerRecord::Chat(..)
 pub runvil::effect::AnswerRecord::Chat::0: core::result::Result<runvil::effect::ChatAnswerRecord, runvil::effect::FailureRecord>
 pub runvil::effect::AnswerRecord::Dropped
+pub runvil::effect::AnswerRecord::Render(..)
+pub runvil::effect::AnswerRecord::Render::0: alloc::vec::Vec<runvil::effect::PackToolSets<runvil::tools::ToolInfo>>
 pub runvil::effect::AnswerRecord::Timer
 pub runvil::effect::AnswerRecord::ToolCall(..)
 pub runvil::effect::AnswerRecord::ToolCall::0: core::result::Result<runvil::effect::ToolAnswerRecord, runvil::effect::FailureRecord>
@@ -869,6 +888,10 @@ pub runvil::effect::Effect::Chat::messages: alloc::vec::Vec<runvil::model::Messa
 pub runvil::effect::Effect::Chat::options: runvil::model::CompletionOptions
 pub runvil::effect::Effect::Chat::round: runvil::effect::Round
 pub runvil::effect::Effect::Chat::tools: alloc::vec::Vec<runvil::model::ToolSchema>
+pub runvil::effect::Effect::Render { .. }
+pub runvil::effect::Effect::Render::binding: runvil::model::ModelBinding
+pub runvil::effect::Effect::Render::entry: alloc::string::String
+pub runvil::effect::Effect::Render::offered: alloc::vec::Vec<runvil::effect::PackToolSets<runvil::tools::ToolInfo>>
 pub runvil::effect::Effect::Timer { .. }
 pub runvil::effect::Effect::Timer::duration: core::time::Duration
 pub runvil::effect::Effect::ToolCall { .. }
@@ -883,6 +906,8 @@ pub runvil::effect::Effect::Vfs::op: runvil::vfs::VfsOp
 pub runvil::effect::EffectAnswer::Chat(..)
 pub runvil::effect::EffectAnswer::Chat::0: core::result::Result<alloc::boxed::Box<runvil::model::Completion>, runvil::model::CompletionError>
 pub runvil::effect::EffectAnswer::Dropped
+pub runvil::effect::EffectAnswer::Render(..)
+pub runvil::effect::EffectAnswer::Render::0: alloc::vec::Vec<runvil::effect::PackToolSets<runvil::tools::ToolInfo>>
 pub runvil::effect::EffectAnswer::Timer
 pub runvil::effect::EffectAnswer::ToolCall(..)
 pub runvil::effect::EffectAnswer::ToolCall::0: core::result::Result<runvil::tools::ToolOutput, runvil::tools::ToolError>
@@ -898,6 +923,10 @@ pub runvil::effect::EffectRecord::Chat::round: runvil::ids::RoundId
 pub runvil::effect::EffectRecord::Chat::temperature: core::option::Option<f64>
 pub runvil::effect::EffectRecord::Chat::thinking: core::option::Option<bool>
 pub runvil::effect::EffectRecord::Chat::tools: alloc::vec::Vec<alloc::string::String>
+pub runvil::effect::EffectRecord::Render { .. }
+pub runvil::effect::EffectRecord::Render::alias: alloc::string::String
+pub runvil::effect::EffectRecord::Render::entry: alloc::string::String
+pub runvil::effect::EffectRecord::Render::offered: alloc::vec::Vec<runvil::effect::PackToolSets<runvil::tools::ToolId>>
 pub runvil::effect::EffectRecord::Timer { .. }
 pub runvil::effect::EffectRecord::Timer::seconds: f64
 pub runvil::effect::EffectRecord::ToolCall { .. }
@@ -909,6 +938,9 @@ pub runvil::effect::EffectRecord::Vfs { .. }
 pub runvil::effect::EffectRecord::Vfs::op: runvil::vfs::VfsOp
 pub runvil::effect::FailureRecord::kind: alloc::string::String
 pub runvil::effect::FailureRecord::message: alloc::string::String
+pub runvil::effect::PackToolSets::dynamic_set: alloc::vec::Vec<T>
+pub runvil::effect::PackToolSets::pack: runvil::packs::PackId
+pub runvil::effect::PackToolSets::static_set: alloc::vec::Vec<T>
 pub runvil::effect::Round::id: runvil::ids::RoundId
 pub runvil::effect::Round::origin: runvil::event::ReplyOrigin
 pub runvil::effect::ToolAnswerRecord::text: alloc::string::String
