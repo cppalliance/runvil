@@ -286,8 +286,8 @@ fn the_search_tools_description_lists_at_most_one_hundred_names_then_counts_the_
 fn rule_five_fails_a_wire_name_used_twice_within_one_set_or_across_the_sets() {
     let tools = catalog([info("dup/a.b"), info("dup/a/b"), info("web/search")]);
     let clash = |error: Error| match error {
-        Error::ToolMerge {
-            rule: MergeRule::UniqueWireName(wire_name),
+        Error::ToolSets {
+            rule: SetRule::UniqueWireName(wire_name),
             tools,
         } => (
             wire_name,

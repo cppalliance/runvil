@@ -7,17 +7,17 @@ use super::*;
 
 /// A failed merge's rule and the tools it names.
 #[track_caller]
-fn broken(error: Error) -> (MergeRule, Vec<MergeTool>) {
+fn broken(error: Error) -> (SetRule, Vec<SetTool>) {
     match error {
-        Error::ToolMerge { rule, tools } => (rule, tools),
+        Error::ToolSets { rule, tools } => (rule, tools),
         other => panic!("expected a broken merge rule, got {other:?}"),
     }
 }
 
 /// The tool `id` in `set`, as a failed merge names it.
 #[track_caller]
-fn site(id: &str, set: FrozenSet) -> MergeTool {
-    MergeTool {
+fn site(id: &str, set: FrozenSet) -> SetTool {
+    SetTool {
         id: ToolId::parse(id).expect("a fixture tool id"),
         set,
     }
@@ -61,7 +61,7 @@ fn rule_one_refuses_an_answer_whose_packs_are_not_the_ones_asked_in_offer_order(
         assert_eq!(
             broken(error),
             (
-                MergeRule::RenderedPacks {
+                SetRule::RenderedPacks {
                     asked: vec![pack("gh"), pack("web")],
                     answered: answered_packs,
                 },
@@ -87,42 +87,42 @@ fn rule_one_refuses_a_rendered_tool_outside_what_its_pack_was_asked() {
             gh,
             FrozenSet::Static,
             "gh/new",
-            MergeRule::UnofferedSet(pack("gh")),
+            SetRule::UnofferedSet(pack("gh")),
         ),
         (
             "a model-only tool under another Pack's id",
             web,
             FrozenSet::Static,
             "gh/new",
-            MergeRule::ForeignTool(pack("web")),
+            SetRule::ForeignTool(pack("web")),
         ),
         (
             "another Pack's catalog tool",
             web,
             FrozenSet::Dynamic,
             "gh/one",
-            MergeRule::ForeignTool(pack("web")),
+            SetRule::ForeignTool(pack("web")),
         ),
         (
             "a catalog tool the section never offered",
             web,
             FrozenSet::Static,
             "web/other",
-            MergeRule::UnofferedCatalogTool,
+            SetRule::UnofferedCatalogTool,
         ),
         (
             "a catalog tool the section offered only into the Dynamic Set",
             web,
             FrozenSet::Static,
             "web/search",
-            MergeRule::UnofferedCatalogTool,
+            SetRule::UnofferedCatalogTool,
         ),
         (
             "a catalog tool the section offered only into the Static Set",
             web,
             FrozenSet::Dynamic,
             "web/fetch",
-            MergeRule::UnofferedCatalogTool,
+            SetRule::UnofferedCatalogTool,
         ),
     ];
     for (case, index, set, id, rule) in cases {

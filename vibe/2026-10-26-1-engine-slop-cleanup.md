@@ -763,7 +763,7 @@ Pinned tests that must stay green, beside each item's Check:
 
 <step-7>
 
-### Step 7: Restructure errors, messages, and Lua kinds
+### Step 7: Restructure errors, messages, and Lua kinds [completed]
 
 - Component: error vocabulary
 - Tests: run each from the runvil root in PowerShell, as written:

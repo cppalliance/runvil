@@ -177,10 +177,7 @@ fn a_failing_run_still_reports_run_finished() {
     // observation must report the run failure.
     let trace = Scenario::new(failing_prompt()).run();
     assert!(
-        matches!(
-            trace.error().inner(),
-            Error::Lua(_) | Error::LuaRuntime { .. }
-        ),
+        matches!(trace.error().inner(), Error::Lua { .. }),
         "the prologue fails as a Lua error, got {:?}",
         trace.error()
     );

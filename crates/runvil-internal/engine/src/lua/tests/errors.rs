@@ -341,7 +341,7 @@ fn a_raised_table_maps_onto_the_executor_error_type_by_kind() {
         fields: std::collections::BTreeMap::new(),
     };
     match crate::Error::from(Error::Raised(reasonless)) {
-        crate::Error::Lua(message) => assert_eq!(message, "context exhausted"),
+        crate::Error::Lua { message, .. } => assert_eq!(message, "context exhausted"),
         other => panic!("a reasonless table must keep its message as a Lua failure, got {other:?}"),
     }
     let loop_exhausted = runvil_lua::Raised {
@@ -381,6 +381,32 @@ fn a_raised_table_maps_onto_the_executor_error_type_by_kind() {
             assert_eq!(error.finish_reason(), Some("length"));
         }
         other => panic!("expected the empty-reply failure, got {other:?}"),
+    }
+    // A model failure or a missing model holds none of the structure its
+    // variant needs, so the table keeps its message as a Lua failure with
+    // no cause rather than rebuilding a completion failure.
+    for (kind, message) in [
+        (
+            ErrorKind::ModelFailure,
+            "the model backend reported a fault of its own (status 500)",
+        ),
+        (
+            ErrorKind::ModelRequired,
+            "model binding required for section Only",
+        ),
+    ] {
+        let raised = runvil_lua::Raised {
+            kind,
+            message: message.to_owned(),
+            fields: std::collections::BTreeMap::new(),
+        };
+        match crate::Error::from(Error::Raised(raised)) {
+            crate::Error::Lua {
+                message: kept,
+                cause: None,
+            } => assert_eq!(kept, message),
+            other => panic!("a {kind:?} table must stay a cause-less Lua failure, got {other:?}"),
+        }
     }
 }
 

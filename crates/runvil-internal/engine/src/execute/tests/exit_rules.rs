@@ -112,21 +112,16 @@ fn missing_version_is_not_a_runvil_prompt() {
     // error rather than executing it.
     let trace = Scenario::new(ran_under("")).run();
     match trace.error().inner() {
-        Error::ParseStructured {
-            kind,
-            message,
-            name,
-            ..
-        } => {
-            assert_eq!(*kind, ParseErrorKind::Structure);
+        Error::Parse(error) => {
+            assert_eq!(error.kind(), ParseErrorKind::Structure);
             assert_eq!(
-                name.as_deref(),
+                error.name(),
                 Some("t"),
                 "the error reports the parsed prompt's frontmatter name"
             );
             assert!(
-                message.contains("not a runvil prompt"),
-                "the Parse message must name the missing version, got: {message}"
+                error.to_string().contains("not a runvil prompt"),
+                "the Parse message must name the missing version, got: {error}"
             );
         }
         other => panic!("expected Parse, got {other:?}"),

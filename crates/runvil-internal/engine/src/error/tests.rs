@@ -10,18 +10,6 @@ use crate::parser::Prompt;
 #[path = "tests-chain.rs"]
 mod chain;
 
-#[track_caller]
-fn assert_source_survives_run_error(error: Error) {
-    assert!(
-        std::error::Error::source(&error).is_some(),
-        "the internal error must preserve its source"
-    );
-    assert!(
-        std::error::Error::source(&crate::RunError::from(error)).is_some(),
-        "the public RunError wrapper must keep the source reachable"
-    );
-}
-
 #[test]
 fn context_exhaustion_maps_from_lua_and_classifies() {
     // The compactor's typed exhaustion crosses the crate seam
@@ -57,22 +45,27 @@ fn context_exhaustion_maps_from_lua_and_classifies() {
 }
 
 #[test]
-fn source_bearing_binding_errors_preserve_their_cause() {
-    // The binding and tool-scope failures keep the originating typed
-    // error as a private `source()` instead of flattening it to a string,
-    // and the chain survives through the public `RunError` wrapper.
+fn a_schema_build_failure_renders_its_refusal_and_keeps_it_as_the_cause() {
+    // The binding failure renders the schema refusal in its message and
+    // keeps the typed refusal as its cause, which the public `RunError`
+    // wrapper reaches.
     let schema_error =
         runvil_model_client::detail::tool_schema_new("echo", "", serde_json::json!([]))
             .expect_err("an array is not an object schema");
     let bind = Error::BindSchema {
         alias: "echo".to_owned(),
-        source: Box::new(schema_error),
+        cause: Box::new(schema_error),
     };
     assert_eq!(
         bind.to_string(),
-        "model-facing schema build failure for tool alias \"echo\""
+        "model-facing schema build failure for tool alias \"echo\": tool \"echo\" parameters \
+         schema must be a JSON object"
     );
-    assert_source_survives_run_error(bind);
+    let run_error = crate::RunError::from(bind);
+    let cause = run_error
+        .originating_error()
+        .and_then(|cause| cause.downcast_ref::<runvil_model_client::client::ToolSchemaError>());
+    assert!(cause.is_some(), "the schema refusal is the cause");
 }
 
 #[test]

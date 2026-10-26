@@ -1,6 +1,7 @@
 //! The public run-error surface: [`RunError`] and its stable [`RunErrorKind`].
 
 use std::fmt;
+use std::num::NonZeroU32;
 use std::ops::Range;
 
 use crate::Error;
@@ -143,7 +144,7 @@ impl RunError {
     #[must_use]
     pub fn kind(&self) -> RunErrorKind {
         match &self.inner {
-            Error::ParseStructured { .. } | Error::ParseFrontmatter { .. } => RunErrorKind::Parse,
+            Error::Parse(_) => RunErrorKind::Parse,
             Error::LuaQuota { .. } | Error::CallDepthExceeded { .. } => RunErrorKind::Quota,
             Error::ContextExhausted { .. } => RunErrorKind::ContextExhausted,
             // A leaked task, a task reached for by a chain that does not
@@ -152,8 +153,7 @@ impl RunError {
             // substitution are the author's program failing, as any Lua
             // fault is.
             Error::LuaCompile { .. }
-            | Error::Lua(_)
-            | Error::LuaRuntime { .. }
+            | Error::Lua { .. }
             | Error::TasksLive { .. }
             | Error::TaskNotOwned { .. }
             | Error::TaskConsumed { .. }
@@ -171,7 +171,7 @@ impl RunError {
             Error::Internal { .. } | Error::Interrupted => RunErrorKind::Internal,
             Error::Store { .. } => RunErrorKind::Vfs,
             Error::Determinism(_) => RunErrorKind::Determinism,
-            Error::BindSchema { .. } | Error::ToolMerge { .. } | Error::ModelRequired { .. } => {
+            Error::BindSchema { .. } | Error::ToolSets { .. } | Error::ModelRequired { .. } => {
                 RunErrorKind::Binding
             }
         }
@@ -203,14 +203,12 @@ impl RunError {
     pub fn is_retryable(&self) -> bool {
         match &self.inner {
             Error::Completion(error) => error.is_retryable(),
-            Error::ParseFrontmatter { .. }
-            | Error::ParseStructured { .. }
+            Error::Parse(_)
             | Error::Interrupted
-            | Error::Lua(_)
-            | Error::LuaRuntime { .. }
+            | Error::Lua { .. }
             | Error::LuaCompile { .. }
             | Error::BindSchema { .. }
-            | Error::ToolMerge { .. }
+            | Error::ToolSets { .. }
             | Error::Substitution(_)
             | Error::ToolLoopExhausted
             | Error::TasksLive { .. }
@@ -244,33 +242,21 @@ impl RunError {
     #[must_use]
     pub fn location(&self) -> Option<SourceLocation> {
         match &self.inner {
-            Error::ParseFrontmatter { line, column, .. } => Some(
-                SourceLocation::new("<prompt>")
-                    .with_line(*line)
-                    .with_column(*column),
-            ),
-            Error::ParseStructured {
-                name,
-                line,
-                column,
-                span,
-                ..
-            } => Some(
-                SourceLocation::new(name.as_deref().unwrap_or("<prompt>"))
-                    .with_line(*line)
-                    .with_column(*column)
-                    .with_span(span.map(|(start, end)| start..end)),
+            Error::Parse(error) => Some(
+                SourceLocation::new(error.name().unwrap_or("<prompt>"))
+                    .with_line(error.line().map(NonZeroU32::get))
+                    .with_column(error.column().map(NonZeroU32::get))
+                    .with_span(error.span()),
             ),
             Error::Internal { file, line, .. } => {
                 Some(SourceLocation::new(*file).with_line(Some(*line)))
             }
             Error::Completion(_)
             | Error::Interrupted
-            | Error::Lua(_)
-            | Error::LuaRuntime { .. }
+            | Error::Lua { .. }
             | Error::LuaCompile { .. }
             | Error::BindSchema { .. }
-            | Error::ToolMerge { .. }
+            | Error::ToolSets { .. }
             | Error::Substitution(_)
             | Error::ToolLoopExhausted
             | Error::TasksLive { .. }

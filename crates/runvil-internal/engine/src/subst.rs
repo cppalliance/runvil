@@ -261,7 +261,7 @@ fn resolve(path: &str, offset: usize, sources: &Sources<'_>) -> SubstResult<Stri
             SubstitutionError::new(
                 SubstErrorKind::NilItem,
                 offset,
-                "{{ item }} is nil (not inside a fanout arm)".to_string(),
+                "{{ item }} is nil (no item is seeded into this section)".to_string(),
             )
         });
     }
@@ -298,11 +298,18 @@ fn resolve(path: &str, offset: usize, sources: &Sources<'_>) -> SubstResult<Stri
         "var" => sources.var,
         "sys" => sources.sys,
         "argv" => nil_argv(sources.argv, path, offset)?,
-        "args" | "item" => {
+        "args" => {
             return Err(SubstitutionError::new(
                 SubstErrorKind::NotATable,
                 offset,
-                format!("{namespace} is a string, not a table"),
+                "args is a string, not a table".to_string(),
+            ));
+        }
+        "item" => {
+            return Err(SubstitutionError::new(
+                SubstErrorKind::NotATable,
+                offset,
+                "item takes no key path; {{ item }} renders the whole item".to_string(),
             ));
         }
         other => {

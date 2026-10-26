@@ -207,6 +207,8 @@ impl SectionVm {
                 ErrorKind::ToolLoopExhausted
                 | ErrorKind::ContextExhausted
                 | ErrorKind::EmptyModelReply
+                | ErrorKind::ModelFailure
+                | ErrorKind::ModelRequired
                 | ErrorKind::OutOfScopeTool
                 | ErrorKind::UnboundTool
                 | ErrorKind::Tool

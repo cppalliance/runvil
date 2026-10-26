@@ -46,7 +46,7 @@ mod infer;
 mod requirements;
 mod run;
 pub(crate) mod scheduler;
-mod scope;
+pub(crate) mod scope;
 mod section_context;
 pub(crate) mod section_vm;
 mod turn;

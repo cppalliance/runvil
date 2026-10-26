@@ -262,6 +262,42 @@ fn a_failing_model_turn_is_reported_before_the_error_propagates() {
 }
 
 #[test]
+fn a_caught_model_failure_reads_as_the_model_failure_kind() {
+    let gateway = ScriptedChat::new(vec![fail(
+        CompletionErrorKind::ServerError,
+        500,
+        "backend fault",
+    )]);
+    let source = one_section(
+        "messages:user('go')
+         local ok, err = pcall(models.loop)
+         assert(not ok, 'the failed round raises')
+         assert(err.kind == 'model_failure', err.kind)
+         return err.kind .. ':' .. tostring(err)",
+    );
+    let trace = loop_scenario(source).chat(&gateway).run();
+    assert_eq!(
+        trace.text(),
+        "model_failure:the model backend reported a fault of its own (status 500)"
+    );
+}
+
+#[test]
+fn a_caught_missing_model_reads_as_the_model_required_kind() {
+    let source = one_section(
+        "messages:user('go')
+         local ok, err = pcall(models.loop)
+         assert(not ok, 'a section with no model is refused')
+         return err.kind .. ':' .. tostring(err)",
+    );
+    let trace = loop_scenario(source).models(ModelSet::default()).run();
+    assert_eq!(
+        trace.text(),
+        "model_required:model binding required for section Only"
+    );
+}
+
+#[test]
 fn a_client_rejection_without_overflow_signatures_stays_a_rejection() {
     // Same status class as a provider overflow, unrelated body: not context
     // overflow, so the bare rejection propagates and no compactor is

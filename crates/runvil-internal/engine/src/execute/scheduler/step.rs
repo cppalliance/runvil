@@ -65,12 +65,10 @@ fn settle_block(
             // run conditions (cancellation, the claims violation)
             // keep their own classification either way.
             return Err(match error {
-                error @ (Error::Lua(_) | Error::LuaRuntime { .. }) if is_h1 => {
-                    Error::RequirementsUnmet {
-                        notice: H1_GATE_FAILED.to_owned(),
-                        cause: Some(Box::new(error)),
-                    }
-                }
+                error @ Error::Lua { .. } if is_h1 => Error::RequirementsUnmet {
+                    notice: H1_GATE_FAILED.to_owned(),
+                    cause: Some(Box::new(error)),
+                },
                 other => other,
             });
         }

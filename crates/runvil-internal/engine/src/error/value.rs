@@ -5,17 +5,18 @@ use super::{Error, join_task_ids};
 use crate::model::CompletionErrorKind;
 
 /// The internal type's rendering into the Lua error table: the kind an author
-/// branches on and the kind's fields. Failures outside the prompt
-/// (transport, backend, configuration, input) render as
-/// `internal`; every Lua-phase failure renders as `lua`; a store
-/// operation's own failure renders as `store` with its `reason` and the
-/// structured variant's fields.
+/// branches on and the kind's fields. A failed model round renders as
+/// `model_failure`, or `empty_model_reply` for an empty reply, and a round
+/// with no model as `model_required`; other failures outside the prompt
+/// (a failed tool freeze, configuration, input) render as `internal`;
+/// every Lua-phase failure renders as `lua`; a store operation's own
+/// failure renders as `store` with its `reason` and the structured
+/// variant's fields.
 impl runvil_lua::ErrorValue for Error {
     fn kind(&self) -> runvil_lua::ErrorKind {
         use runvil_lua::ErrorKind;
         match self {
-            Error::Lua(_)
-            | Error::LuaRuntime { .. }
+            Error::Lua { .. }
             | Error::LuaCompile { .. }
             | Error::LuaQuota { .. }
             | Error::CallDepthExceeded { .. }
@@ -24,6 +25,8 @@ impl runvil_lua::ErrorValue for Error {
             Error::Completion(error) if error.kind() == CompletionErrorKind::EmptyReply => {
                 ErrorKind::EmptyModelReply
             }
+            Error::Completion(_) => ErrorKind::ModelFailure,
+            Error::ModelRequired { .. } => ErrorKind::ModelRequired,
             Error::Interrupted | Error::TaskCancelled { .. } => ErrorKind::Cancelled,
             Error::ToolLoopExhausted => ErrorKind::ToolLoopExhausted,
             Error::TasksLive { .. } => ErrorKind::TasksLive,
@@ -33,12 +36,9 @@ impl runvil_lua::ErrorValue for Error {
             Error::UnboundToolCall { .. } => ErrorKind::UnboundTool,
             Error::Tool { .. } => ErrorKind::Tool,
             Error::Store { .. } => ErrorKind::Store,
-            Error::ParseFrontmatter { .. }
-            | Error::ParseStructured { .. }
-            | Error::Completion(_)
+            Error::Parse(_)
             | Error::BindSchema { .. }
-            | Error::ToolMerge { .. }
-            | Error::ModelRequired { .. }
+            | Error::ToolSets { .. }
             | Error::UnsupportedVersion(_)
             | Error::RequirementsUnmet { .. }
             | Error::Internal { .. }
@@ -73,15 +73,13 @@ impl runvil_lua::ErrorValue for Error {
                 vec![("task".to_owned(), ErrorField::String(task.to_string()))]
             }
             Error::Store { cause, .. } => runvil_lua::store_error_value_fields(cause),
-            Error::ParseFrontmatter { .. }
-            | Error::ParseStructured { .. }
+            Error::Parse(_)
             | Error::Completion(_)
             | Error::Interrupted
-            | Error::Lua(_)
-            | Error::LuaRuntime { .. }
+            | Error::Lua { .. }
             | Error::LuaCompile { .. }
             | Error::BindSchema { .. }
-            | Error::ToolMerge { .. }
+            | Error::ToolSets { .. }
             | Error::Substitution(_)
             | Error::ToolLoopExhausted
             | Error::ModelRequired { .. }

@@ -15,12 +15,12 @@
 use runvil_types::ids::TaskId;
 
 mod convert;
-mod merge;
+mod sets;
 #[cfg(test)]
 mod tests;
 mod value;
 
-pub(crate) use merge::{FrozenSet, MergeRule, MergeTool};
+pub(crate) use sets::{SetRule, SetTool};
 
 /// A type-erased owned error cause used by the internal error type.
 type BoxedSource = Box<dyn std::error::Error + Send + Sync>;
@@ -70,46 +70,14 @@ impl std::fmt::Display for DepthVia {
 /// wrappers' `source()`.
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum Error {
-    /// The prompt frontmatter was not valid YAML, keeping the parser cause.
+    /// The prompt failed to parse: invalid frontmatter YAML or a
+    /// structurally-classified failure.
     ///
-    /// The originating YAML decode failure (a `serde_yaml_ng::Error`) stays
-    /// as the cause beside the location surfaced from it, rather than being
-    /// flattened away; `message` already holds its text.
-    #[error("invalid frontmatter: {message}")]
-    ParseFrontmatter {
-        /// The human-readable diagnostic (no raw source dump).
-        message: String,
-        /// The originating YAML parse failure, whose text `message` holds.
-        cause: BoxedSource,
-        /// The 1-based file line of the YAML failure, surfaced from the
-        /// retained cause's location when it has one.
-        line: Option<u32>,
-        /// The 1-based file column of the YAML failure, when known.
-        column: Option<u32>,
-    },
-
-    /// A structurally-classified parse failure with a stable kind and an
-    /// optional source byte span, so [`ParseError`](runvil_parser::ParseError) can expose the
-    /// classification and location from stored fields instead of inferring them
-    /// from message text.
-    #[error("{message}")]
-    ParseStructured {
-        /// The stable classification of this parse failure.
-        kind: crate::parser::ParseErrorKind,
-        /// The byte span of the offending region, when known, relative to the
-        /// document body after the frontmatter and a leading BOM, with CRLF
-        /// normalized to LF.
-        span: Option<(usize, usize)>,
-        /// The human-readable diagnostic.
-        message: String,
-        /// The prompt's frontmatter name, when the failure postdates the
-        /// frontmatter (a frontmatter failure predates the name).
-        name: Option<String>,
-        /// The 1-based file line of the span's start, when a span is known.
-        line: Option<u32>,
-        /// The 1-based byte column of the span's start, when a span is known.
-        column: Option<u32>,
-    },
+    /// Holds the parser's [`ParseError`](crate::parser::ParseError) whole, so
+    /// its stable kind, its location fields, and the YAML decode failure a
+    /// frontmatter failure keeps as its cause survive the public wrappers.
+    #[error(transparent)]
+    Parse(crate::parser::ParseError),
 
     /// A model round or a catalog fetch failed, as the broker that performed
     /// it reported.
@@ -127,35 +95,23 @@ pub(crate) enum Error {
     #[error("interrupted: the run was cancelled or this call was stopped")]
     Interrupted,
 
-    /// A condition the prompt author caused and can fix in Lua, with no
-    /// originating `mlua` error to keep, such as an empty `messages` list or
-    /// a heading that names no section.
+    /// A condition the prompt author caused and can fix in Lua, such as an
+    /// empty `messages` list, a heading that names no section, or a
+    /// section's Lua phase failing at runtime or while bridging Engine
+    /// values.
     ///
     /// It also holds the message of a raised error table whose kind needs
     /// structure the table does not hold (see `Error::from_raised`).
-    /// Failures that do have an `mlua` cause use [`Error::LuaRuntime`], and
-    /// Engine misuse uses [`Error::Internal`]. The message is the specific
-    /// failure as a noun phrase; the public wrapper classifies this as a Lua
-    /// failure, so no redundant `lua error:` type label is prepended.
-    #[error("{0}")]
-    Lua(String),
-
-    /// A section's Lua phase failed at runtime or while bridging Engine values:
-    /// the mapped prompt-location message, beside the originating `mlua`
-    /// error kept as the cause.
-    ///
-    /// This is the cause-bearing counterpart to [`Error::Lua`]: the Lua
-    /// crate builds it from a concrete `mlua::Error` (see the runtime-error
-    /// mapping on [`runvil_lua::LuaProgram`]) and the conversion from
-    /// that crate's error keeps it intact, so the typed failure survives
-    /// through [`RunError::originating_error`](crate::RunError::originating_error)
-    /// instead of being flattened to a string.
+    /// `cause` holds the originating `mlua` error when there is one. The
+    /// message is the specific failure as a noun phrase; the public wrapper
+    /// classifies this as a Lua failure, so no redundant `lua error:` type
+    /// label is prepended.
     #[error("{message}")]
-    LuaRuntime {
-        /// The mapped, location-tagged diagnostic (no redundant type label).
+    Lua {
+        /// The diagnostic, location-tagged when it maps to a prompt line.
         message: String,
         /// The originating Lua error, whose text `message` already holds.
-        cause: BoxedSource,
+        cause: Option<BoxedSource>,
     },
 
     /// Lua source was not syntactically valid at its prompt location.
@@ -178,35 +134,34 @@ pub(crate) enum Error {
         cause: BoxedSource,
     },
 
-    /// Building a model-facing tool schema for a bound alias failed, retaining
-    /// the schema validation error as the private `#[source]` cause rather
-    /// than flattening it into `detail`.
+    /// Building a model-facing tool schema for a bound alias failed. The
+    /// message renders the schema validation failure, kept as the cause.
     ///
     /// Constructed only by the tool-scope preparation.
-    #[error("model-facing schema build failure for tool alias {alias:?}")]
+    #[error("model-facing schema build failure for tool alias {alias:?}: {cause}")]
     BindSchema {
         /// The prompt-local alias whose schema could not be built.
         alias: String,
-        /// The originating schema validation failure, kept as the cause.
-        #[source]
-        source: BoxedSource,
+        /// The originating schema validation failure, whose text the
+        /// message holds.
+        cause: BoxedSource,
     },
 
     /// A section entry's frozen sets, or the render answer they are merged
     /// from, broke a rule of the merge that builds them at the entry's
-    /// first model call, which fails that call. The message names each
+    /// first loop round, which fails that round. The message names each
     /// tool that broke it, with its Pack and its set, or the Packs a
     /// render answered, and the rule.
     ///
     /// Constructed only by the merge.
-    #[error("{}", merge::merge_message(.rule, .tools))]
-    ToolMerge {
+    #[error("{}", sets::sets_message(.rule, .tools))]
+    ToolSets {
         /// The rule the sets broke.
-        rule: MergeRule,
+        rule: SetRule,
         /// Each tool that broke it: both tools of a clash, the one
         /// rendered tool a render rule refuses, or none when the render
         /// answered other Packs.
-        tools: Vec<MergeTool>,
+        tools: Vec<SetTool>,
     },
 
     /// A `{{ }}` prose substitution failed (unknown/missing path, unclosed).
@@ -427,20 +382,17 @@ impl Error {
         &self,
     ) -> Option<&(dyn std::error::Error + Send + Sync + 'static)> {
         match self {
-            Error::ParseFrontmatter { cause, .. }
-            | Error::LuaRuntime { cause, .. }
+            Error::Parse(error) => error.cause(),
+            Error::BindSchema { cause, .. }
             | Error::LuaCompile { cause, .. }
             | Error::Tool { cause, .. } => Some(cause.as_ref()),
-            Error::RequirementsUnmet { cause, .. } | Error::Internal { cause, .. } => {
-                cause.as_deref()
-            }
+            Error::Lua { cause, .. }
+            | Error::RequirementsUnmet { cause, .. }
+            | Error::Internal { cause, .. } => cause.as_deref(),
             Error::Store { cause, .. } => Some(cause),
-            Error::ParseStructured { .. }
-            | Error::Completion(_)
+            Error::Completion(_)
             | Error::Interrupted
-            | Error::Lua(_)
-            | Error::BindSchema { .. }
-            | Error::ToolMerge { .. }
+            | Error::ToolSets { .. }
             | Error::Substitution(_)
             | Error::ToolLoopExhausted
             | Error::TasksLive { .. }

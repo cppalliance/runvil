@@ -21,7 +21,7 @@ fn failing_round(offer: &str) -> String {
         "tools.offer('{offer}')\n\
          messages:user('go')\n\
          local ok, err = pcall(models.loop)\n\
-         assert(not ok, 'the merge fails the first model call')\n\
+         assert(not ok, 'the merge fails the first loop round')\n\
          return err.kind .. ':' .. tostring(err)"
     )
 }
@@ -90,8 +90,8 @@ fn a_catalog_tool_whose_default_name_is_invalid_fails_only_the_sections_that_off
     );
     assert_eq!(
         rig.trace().text(),
-        "internal:model-facing schema build failure for tool alias \"9lives_fetch\"|\
-         9lives/fetch: x",
+        "internal:model-facing schema build failure for tool alias \"9lives_fetch\": invalid \
+         tool wire name \"9lives_fetch\": expected [A-Za-z][A-Za-z0-9_-]{0,63}|9lives/fetch: x",
         "the section that offers the tool fails, and a script still calls it by id"
     );
     let (advertised, _) = rounds_and_calls(rig.issued());
