@@ -42,6 +42,7 @@ use crate::lua::{
 use crate::model::{Completion, CompletionErrorKind, CompletionResult, ModelBinding, ToolCall};
 use crate::{Error, Result};
 
+use super::dispatch::Dispatched;
 use super::{ChainIndex, Continuation, Scheduler};
 
 /// The answer for a round refused as too large by `reason`'s gate, before
@@ -55,19 +56,10 @@ fn overflow_result(reason: OverflowReason, turn: u32) -> ChatResult {
     }
 }
 
-/// How one `chat` dispatch resolved: a round, or the render before it,
-/// issued as an effect and parked on the pending table, or an answer
-/// settled without leaving (the precheck overflow).
-#[derive(Debug)]
-enum ChatDispatch {
-    Issued,
-    Answered(Answer<Error>),
-}
-
 impl Scheduler {
     /// Dispatches a `chat` request: one tool-capable model round over the
     /// author's message list. An issued round parks the chain in the
-    /// pending table; a precheck overflow answers the round on the spot
+    /// effect table; a precheck overflow answers the round on the spot
     /// with the overflow flag; every preparation failure - the empty list,
     /// the binding, the scope, the projection, the client - is the call's
     /// answer, resumed into the caller so an author `pcall` catches it
@@ -79,8 +71,8 @@ impl Scheduler {
         binding: Option<ModelBinding>,
     ) {
         match self.prepare_chat(id, list, binding) {
-            Ok(ChatDispatch::Issued) => {}
-            Ok(ChatDispatch::Answered(answer)) => {
+            Ok(Dispatched::Issued) => {}
+            Ok(Dispatched::Answered(answer)) => {
                 self.answer_inline(id, answer);
             }
             Err(error) => {
@@ -93,22 +85,24 @@ impl Scheduler {
     /// binding (the handle whose `loop` ran, when one did, else the
     /// section's current model), the section entry's frozen sets and the
     /// Static Set's schemas, the per-dispatch projection, the context
-    /// precheck, and the issued effect. The first round to reach the merge
-    /// freezes the sets and attaches them before the projection and the
-    /// precheck, so a refused first round still fixes them; a round refused
-    /// earlier attaches nothing, and so does a failed merge. When that
-    /// round's offers name a catalog tool, it issues the render instead
-    /// and parks the chain on it with the binding, and the render's answer
-    /// merges and dispatches the round again ([`Scheduler::accept_render`]),
-    /// so the round is projected, prechecked, numbered, and recorded once.
-    /// The send is recorded on the list only once the precheck passes, so
-    /// a refused round leaves the list's last send in place.
+    /// precheck, and the issued effect: the round, or the render before
+    /// it. Only a precheck overflow is answered without leaving, with the
+    /// overflow flag. The first round to reach the merge freezes the sets
+    /// and attaches them before the projection and the precheck, so a
+    /// refused first round still fixes them; a round refused earlier
+    /// attaches nothing, and so does a failed merge. When that round's
+    /// offers name a catalog tool, it issues the render instead and parks
+    /// the chain on it with the binding, and the render's answer merges and
+    /// dispatches the round again ([`Scheduler::accept_render`]), so the
+    /// round is projected, prechecked, numbered, and recorded once. The
+    /// send is recorded on the list only once the precheck passes, so a
+    /// refused round leaves the list's last send in place.
     fn prepare_chat(
         &mut self,
         id: ChainIndex,
         list: &MessageList,
         binding: Option<ModelBinding>,
-    ) -> Result<ChatDispatch> {
+    ) -> Result<Dispatched> {
         let messages = list.to_records();
         if messages.is_empty() {
             return Err(Error::Lua("messages must not be empty".to_owned()));
@@ -142,7 +136,7 @@ impl Scheduler {
                     offered,
                 };
                 self.issue(id, effect, Continuation::Render(binding));
-                return Ok(ChatDispatch::Issued);
+                return Ok(Dispatched::Issued);
             }
             let frozen = prepare_effective_scope(
                 &offers,
@@ -181,7 +175,7 @@ impl Scheduler {
         let anchor = chain.anchor.measured(binding.id());
         if let Err(reason) = precheck(&conversation, context, reserve, anchor) {
             emitter.report(&section, lifecycle::MODEL_TURN_FAILED);
-            return Ok(ChatDispatch::Answered(Answer::Chat(Ok(Box::new(
+            return Ok(Dispatched::Answered(Answer::Chat(Ok(Box::new(
                 overflow_result(reason, handles.turns.load(Ordering::Relaxed)),
             )))));
         }
@@ -200,7 +194,7 @@ impl Scheduler {
             round,
         };
         self.issue(id, effect, Continuation::Chat(round.id));
-        Ok(ChatDispatch::Issued)
+        Ok(Dispatched::Issued)
     }
 
     /// Applies a section entry's render: merges the rendered tools into

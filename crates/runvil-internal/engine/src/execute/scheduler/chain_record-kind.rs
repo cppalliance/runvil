@@ -42,13 +42,9 @@ pub(in crate::execute::scheduler) enum ChainKind {
         /// the chain is not parked that way.
         released_holder: Option<ChainIndex>,
     },
-    /// A spawned task's backing chain, a fanout arm included.
+    /// A spawned task's backing chain, a fanout arm included. Its owner is
+    /// recorded on its task slot.
     Task {
-        /// The chain that owns the task: its spawner, or the root walk for
-        /// a task the H1 pass spawned, since the pass and the walk share
-        /// the root lineage `0` as two arena records. The only chain
-        /// allowed to wait on, inspect, or cancel it.
-        owner: ChainIndex,
         /// Where the task's admission stands.
         admission: Admission,
     },
@@ -60,27 +56,12 @@ impl ChainKind {
         matches!(self, ChainKind::H1)
     }
 
-    /// The task's owner, when the chain backs a task.
-    pub(in crate::execute::scheduler) fn owner(&self) -> Option<ChainIndex> {
-        match self {
-            ChainKind::Task { owner, .. } => Some(*owner),
-            ChainKind::Root | ChainKind::H1 | ChainKind::Call { .. } => None,
-        }
-    }
-
     /// The call parent blocked on the chain, when it is a `call` child.
     pub(in crate::execute::scheduler) fn parent(&self) -> Option<ChainIndex> {
         match self {
             ChainKind::Call { parent, .. } => Some(*parent),
             ChainKind::Root | ChainKind::H1 | ChainKind::Task { .. } => None,
         }
-    }
-
-    /// The chain enclosing this one in the task tree: a task's owner, a
-    /// `call` child's parent, and `None` for the root walk and the H1
-    /// pass.
-    pub(in crate::execute::scheduler) fn enclosing(&self) -> Option<ChainIndex> {
-        self.owner().or(self.parent())
     }
 
     /// Whether the chain backs a task that has been admitted at least

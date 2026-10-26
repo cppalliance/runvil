@@ -31,8 +31,8 @@ use serde_json::{Map, Value};
 use crate::lua::{Answer, DiscoveryTool, OfferMode, RenderedTools, ToolBinding, ToolCallOutcome};
 use crate::{Error, Result};
 
+use super::super::dispatch::Dispatched;
 use super::super::{CallSite, ChainIndex, Scheduler};
-use super::ToolCallDispatch;
 
 /// The longest `pattern` a search compiles, in characters.
 const PATTERN_LIMIT: usize = 256;
@@ -80,7 +80,7 @@ impl Scheduler {
         binding: &ToolBinding,
         args: Value,
         site: CallSite,
-    ) -> Result<ToolCallDispatch> {
+    ) -> Result<Dispatched> {
         let tool = DiscoveryTool::of(binding.id());
         let frozen = self.chains[id.index()]
             .frame()?
@@ -133,7 +133,7 @@ impl Scheduler {
             &text,
             trust,
         );
-        Ok(ToolCallDispatch::Answered(Answer::ToolCallResult(Ok(
+        Ok(Dispatched::Answered(Answer::ToolCallResult(Ok(
             ToolCallOutcome::Plain(text),
         ))))
     }
@@ -147,7 +147,7 @@ impl Scheduler {
         target: ToolBinding,
         args: Value,
         site: CallSite,
-    ) -> Result<ToolCallDispatch> {
+    ) -> Result<Dispatched> {
         let adhoc = self.chains[id.index()]
             .frame()?
             .vm()?
@@ -157,7 +157,7 @@ impl Scheduler {
             return self.prepare_adhoc_call(id, &adhoc, args, &site);
         }
         self.prepare_catalog_call(id, target, args, site)?;
-        Ok(ToolCallDispatch::Issued)
+        Ok(Dispatched::Issued)
     }
 }
 

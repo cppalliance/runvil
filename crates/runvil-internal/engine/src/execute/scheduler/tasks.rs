@@ -37,14 +37,60 @@ use super::{ChainIndex, Counters, Scheduler, SpawnRecord, prompt_origin};
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum TaskBacking {
     /// A chain in the arena: every spawned task.
-    Chain(ChainIndex),
+    Chain {
+        /// The backing chain.
+        chain: ChainIndex,
+        /// The task's happens-before identity: the [`ExecId`] its access
+        /// was spawned under, recorded at spawn so a delivery can join the
+        /// task after its chain has dropped the access.
+        exec: ExecId,
+    },
     /// An in-flight leaf effect: the internal timer behind a wait's
-    /// timeout, never author-visible.
+    /// timeout, never author-visible, with no identity to join.
     Effect(EffectId),
 }
 
+/// One task's lifecycle state as its slot holds it, the outcome included.
+#[derive(Debug)]
+pub(super) enum SlotState {
+    /// The backing chain or request is live.
+    Running,
+    /// The backing chain or request ended, and its outcome waits here: the
+    /// backing chain's final text or failure, or an empty text for a fired
+    /// timer, held from its end until the owner takes it.
+    Done(Result<String>),
+    /// The owner took the outcome through a wait. `ok` is the outcome's,
+    /// kept so `status` still reports it after the wait took it.
+    Delivered { ok: bool },
+    /// The owner cancelled the task.
+    Cancelled,
+    /// The owner ended while the task was live, so the Engine ended it.
+    Abandoned,
+}
+
+impl SlotState {
+    /// True while the task's backing chain or request is still running:
+    /// the one state a chain end must act on.
+    pub(super) fn is_live(&self) -> bool {
+        matches!(self, SlotState::Running)
+    }
+
+    /// The state without its outcome, as `status` and the suites read it.
+    pub(super) fn view(&self) -> TaskState {
+        match self {
+            SlotState::Running => TaskState::Running,
+            SlotState::Done(outcome) => TaskState::Done {
+                ok: outcome.is_ok(),
+            },
+            SlotState::Delivered { ok } => TaskState::Delivered { ok: *ok },
+            SlotState::Cancelled => TaskState::Cancelled,
+            SlotState::Abandoned => TaskState::Abandoned,
+        }
+    }
+}
+
 /// One task's lifecycle state, with whether it ended well once it has
-/// ended.
+/// ended: the `Copy` view of a slot's [`SlotState`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum TaskState {
     /// The backing chain or request is live.
@@ -63,12 +109,6 @@ pub(crate) enum TaskState {
 }
 
 impl TaskState {
-    /// True while the task's backing chain or request is still running:
-    /// the one state a chain end must act on.
-    pub(super) fn is_live(self) -> bool {
-        matches!(self, TaskState::Running)
-    }
-
     /// Whether the task ended well, once it has ended: a cancelled or
     /// abandoned task did not.
     pub(super) fn ok(self) -> Option<bool> {
@@ -89,21 +129,18 @@ pub(super) struct TaskSlot {
     /// task the H1 pass spawned, since the pass and the walk share the root
     /// lineage `0` as two arena records. The only chain allowed to wait on,
     /// inspect, or cancel the task, and the chain whose end ends it.
+    /// Recorded only here: admission reads it as the task chain's
+    /// enclosing chain.
     pub(super) owner: ChainIndex,
     /// The name of the section the task's chain started at, which its
     /// terminal observations report under; the placeholder `timer` for an
     /// internal timer, which reports none.
     pub(super) target: String,
-    /// The task's lifecycle state.
-    pub(super) state: TaskState,
-    /// The backing chain's final text or failure, or an empty text for a
-    /// fired timer, held from its end until the owner takes it.
-    pub(super) outcome: Option<Result<String>>,
-    /// The task's happens-before identity: the [`ExecId`] its access was
-    /// spawned under, recorded at spawn so a delivery can join the task
-    /// after its chain has dropped the access. `None` for the internal
-    /// timer, which has no identity to join.
-    pub(super) exec: Option<ExecId>,
+    /// The task's lifecycle state, holding its outcome once it ends.
+    pub(super) state: SlotState,
+    /// The latest progress note published through `tasks.note` from inside
+    /// the task, reported by `tasks.status`.
+    pub(super) note: Option<String>,
 }
 
 impl TaskSlot {
@@ -235,7 +272,6 @@ impl Scheduler {
             slice: target_section.slice,
             index: target_section.index,
             kind: ChainKind::Task {
-                owner: id,
                 admission: Admission::Queued(SpawnRecord {
                     input: input.map(str::to_owned),
                     section: spawner_section,
@@ -254,12 +290,11 @@ impl Scheduler {
         self.tasks.insert(
             task.clone(),
             TaskSlot {
-                backing: TaskBacking::Chain(child),
+                backing: TaskBacking::Chain { chain: child, exec },
                 owner: id,
                 target: worker.name().to_owned(),
-                state: TaskState::Running,
-                outcome: None,
-                exec: Some(exec),
+                state: SlotState::Running,
+                note: None,
             },
         );
         Ok((task, child))

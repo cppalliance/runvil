@@ -3,8 +3,8 @@
 //! caller. The step starts the run's first chain on its first call, drains
 //! the ready queue, and returns the effects the drain issued with the
 //! events it reported.
-//! An empty ready queue with an empty pending table and no queued chain
-//! that can be admitted is a stall, which fails loudly rather than hangs.
+//! An empty ready queue with no parked effect and no queued chain that can
+//! be admitted is a stall, which fails loudly rather than hangs.
 //! The run's `Done` is withheld until
 //! every issued effect has its answer, so every effect the caller was
 //! handed has exactly one answer.
@@ -18,7 +18,7 @@ use crate::execute::run::{EffectAnswer, EffectId, Step};
 use crate::{Error, Result};
 
 use super::chain::ChainStep;
-use super::{ChainIndex, GENERIC_COMPLETION, Phase, Scheduler};
+use super::{ChainIndex, GENERIC_COMPLETION, Outstanding, Phase, Scheduler};
 
 impl Scheduler {
     /// Drains the ready queue and returns the step's outcome: the effects
@@ -36,17 +36,22 @@ impl Scheduler {
         if matches!(self.phase, Phase::Running) {
             self.drain();
         }
-        // Every unfinished chain is ready, pending on an effect, blocked on
+        // Every unfinished chain is ready, parked on an effect, blocked on
         // a child, waiting on a task, or queued for admission, and a
         // blocked or waiting chain transitively bottoms out in a ready or
-        // pending chain, so an empty ready queue with an empty pending
-        // table and no admissible queued chain can only be a scheduler
-        // bug (nothing ready, nothing pending, no slot that will ever
-        // free, and whatever is waiting can never be woken) - fail loudly
-        // rather than hang. A running drain returns only after `admit`
-        // left the ready queue empty, so no queued chain is admissible
-        // here and the two empty checks are the whole guard.
-        if matches!(self.phase, Phase::Running) && self.ready.is_empty() && self.pending.is_empty()
+        // parked chain, so an empty ready queue with no parked effect and
+        // no admissible queued chain can only be a scheduler bug (nothing
+        // ready, nothing parked, no slot that will ever free, and whatever
+        // is waiting can never be woken) - fail loudly rather than hang. A
+        // running drain returns only after `admit` left the ready queue
+        // empty, so no queued chain is admissible here and the two checks
+        // are the whole guard.
+        if matches!(self.phase, Phase::Running)
+            && self.ready.is_empty()
+            && !self
+                .outstanding
+                .values()
+                .any(|entry| matches!(entry, Outstanding::Parked(_)))
         {
             self.end(Err(Error::internal(
                 "the scheduler stalled with no ready chain, no in-flight request, \
@@ -57,12 +62,11 @@ impl Scheduler {
         let mut withdrawn = std::mem::take(&mut self.withdrawn);
         withdrawn.sort_unstable();
         let events = self.ctx.take_events();
-        let answered = self.pending.is_empty() && self.orphaned.is_empty();
+        let answered = self.outstanding.is_empty();
         match std::mem::replace(&mut self.phase, Phase::Done) {
             Phase::Ending(result) if answered => {
-                // Only here, with every pending and orphaned effect
-                // answered, so an orphan's store effect still runs in the
-                // live scope.
+                // Only here, with every issued effect answered, so an
+                // orphan's store effect still runs in the live scope.
                 self.end_scope();
                 Step::Done {
                     result: match result {
@@ -100,15 +104,22 @@ impl Scheduler {
         if matches!(self.phase, Phase::Done) {
             return;
         }
-        if self.orphaned.remove(&id) {
-            return;
-        }
+        let parked = match self.outstanding.remove(&id) {
+            Some(Outstanding::Parked(parked)) => parked,
+            Some(Outstanding::Orphaned) => return,
+            None => {
+                self.end(Err(Error::internal(
+                    "an answer arrived for an effect the run did not issue or already answered",
+                )));
+                return;
+            }
+        };
         // Every answer is applied here, on the caller's thread: the
         // round's events fire against the parked chain's own reporting
         // handles, a chat round's tool calls are checked against its
         // section's frozen sets, a timer's firing wakes its waiter, and a
         // fatal store conflict ends the run.
-        if let Err(error) = self.apply_answer(id, answer) {
+        if let Err(error) = self.apply_answer(id, parked, answer) {
             self.end(Err(error));
         }
     }
@@ -201,7 +212,7 @@ impl Scheduler {
 
     /// Drops every chain's live state in the teardown order (the suspended
     /// coroutine, then the frame unarmed, then the access capability) and
-    /// orphans every pending effect. The task slots keep their terminal
+    /// orphans every parked effect. The task slots keep their terminal
     /// state for inspection; every slot is terminal by now, `end` having
     /// settled the live ones, so nothing here reports. Each chain joins
     /// the tasks it owns before its access drops, closing the run's
@@ -227,7 +238,8 @@ impl Scheduler {
             chain.frame = None;
             chain.access = None;
         }
-        self.orphaned
-            .extend(self.pending.drain().map(|(effect, _)| effect));
+        for entry in self.outstanding.values_mut() {
+            *entry = Outstanding::Orphaned;
+        }
     }
 }

@@ -20,9 +20,8 @@ use runvil_vfs::Access;
 
 use crate::{Error, Result};
 
-use super::chain_record::ChainKind;
-use super::tasks::{TaskBacking, TaskState};
-use super::{ChainIndex, Scheduler};
+use super::tasks::{SlotState, TaskBacking};
+use super::{ChainIndex, Outstanding, Scheduler};
 
 impl Scheduler {
     /// Applies a task chain's end to its slot: the outcome lands in the
@@ -44,8 +43,7 @@ impl Scheduler {
             return Err(Error::internal("a task chain's end implies its slot"));
         };
         let succeeded = outcome.is_ok();
-        slot.state = TaskState::Done { ok: succeeded };
-        slot.outcome = Some(outcome);
+        slot.state = SlotState::Done(outcome);
         let owner = slot.owner;
         emitter.emit(&slot.target, |execution, section, provenance| {
             let task = task.clone();
@@ -98,7 +96,8 @@ impl Scheduler {
     /// owner's next step. A timer (no identity) and an owner already
     /// ended (no access) need no join.
     pub(super) fn join_task(&self, owner: ChainIndex, task: &TaskId) {
-        let Some(exec) = self.tasks.get(task).and_then(|slot| slot.exec) else {
+        let Some(TaskBacking::Chain { exec, .. }) = self.tasks.get(task).map(|slot| slot.backing)
+        else {
             return;
         };
         let Ok(access) = self.chains[owner.index()].access() else {
@@ -115,7 +114,10 @@ impl Scheduler {
             .tasks
             .values()
             .filter(|slot| slot.owner == owner)
-            .filter_map(|slot| slot.exec);
+            .filter_map(|slot| match slot.backing {
+                TaskBacking::Chain { exec, .. } => Some(exec),
+                TaskBacking::Effect(_) => None,
+            });
         for exec in execs {
             runvil_vfs::detail::access_join(access, exec);
         }
@@ -137,24 +139,21 @@ impl Scheduler {
         owner: ChainIndex,
         reason: AbandonReason,
     ) -> Vec<TaskId> {
-        // The arena is a hash map; ids order as paths and one owner's tasks
-        // are its direct children, so sorting recovers spawn order.
-        let mut live: Vec<(TaskId, TaskBacking, String)> = self
+        let live: Vec<(TaskId, TaskBacking, String)> = self
             .tasks
             .iter()
             .filter(|(_, slot)| slot.owner == owner && slot.state.is_live())
             .map(|(task, slot)| (task.clone(), slot.backing, slot.target.clone()))
             .collect();
-        live.sort_unstable_by(|left, right| left.0.cmp(&right.0));
         let mut leaked = Vec::new();
         for (task, backing, target) in live {
             if let Some(slot) = self.tasks.get_mut(&task) {
-                slot.state = TaskState::Abandoned;
+                slot.state = SlotState::Abandoned;
             }
             // The backing ends first, so anything it owned reports before
             // the task's own terminal event, which is the last word on it.
             let backing_chain = match backing {
-                TaskBacking::Chain(backing_chain) => backing_chain,
+                TaskBacking::Chain { chain, .. } => chain,
                 TaskBacking::Effect(effect) => {
                     self.abort_effect(effect);
                     continue;
@@ -225,19 +224,14 @@ impl Scheduler {
                 slot.owner = to;
             }
         }
-        // An effect-backed slot's effect is keyed under its owner in the
-        // pending table; the pass has no parked effect of its own at the
+        // An effect-backed slot's effect is parked under its owner in the
+        // effect table; the pass has no parked effect of its own at the
         // hand-off, so every entry under it is such a slot's.
-        for pending in self.pending.values_mut() {
-            if pending.chain == from {
-                pending.chain = to;
-            }
-        }
-        for chain in &mut self.chains {
-            if let ChainKind::Task { owner, .. } = &mut chain.kind
-                && *owner == from
+        for entry in self.outstanding.values_mut() {
+            if let Outstanding::Parked(parked) = entry
+                && parked.chain == from
             {
-                *owner = to;
+                parked.chain = to;
             }
         }
     }

@@ -11,7 +11,7 @@
 //!
 //! The loop is `resume -> match request -> dispatch -> resume with answer`.
 //! A chain whose coroutine yields a leaf request (`infer`) is parked in the
-//! pending table while its [`Effect`] is out with the caller: the arm builds
+//! effect table while its [`Effect`] is out with the caller: the arm builds
 //! the effect as a value, `issue` stamps it with the chain's task
 //! provenance and queues it for the step's return, and `apply_answer`
 //! turns the caller's answer into the chain's protocol answer on the
@@ -32,9 +32,9 @@
 //! This file holds the scheduler core: the chain arena, the ready queue,
 //! the admission queues (resumed chains, admitted first, and fresh spawns,
 //! which wait there until the run's concurrency limits admit them), the
-//! pending table, the task arena, and the one `issue` path every leaf arm
+//! effect table, the task arena, and the one `issue` path every leaf arm
 //! hands its effect through. The
-//! submodules hold the rest: `pending` the pending table's entry (the
+//! submodules hold the rest: `pending` the effect table's entry (the
 //! `Continuation` an answer is applied by), `drive` the run-level step (the
 //! ready-queue drain, the terminal rules, and the teardown), `apply` the
 //! answer application, `chain` the chain lifecycle (arena insertion and the
@@ -72,7 +72,7 @@ mod tool_call;
 mod waits;
 mod walk;
 
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::{BTreeMap, HashMap, VecDeque};
 use std::sync::Arc;
 
 use runvil_types::event::{ReplyOrigin, lifecycle};
@@ -87,12 +87,16 @@ use crate::{Error, Result};
 use super::context::RunState;
 use super::run::{Effect, EffectAnswer, EffectId, Round};
 use chain_record::{Chain, ChatAnchor};
-use pending::{CallSite, Continuation, Pending, ToolCallContinuation, VfsContinuation};
+use pending::{CallSite, Continuation, Outstanding, Pending, ToolCallContinuation};
 use tasks::TaskSlot;
 
 /// The deepest nesting a chain may run at, counting `call` children and
 /// spawned tasks, fanout arms included; the first level counts.
 const MAX_CALL_DEPTH: usize = 8;
+
+/// The most chains one run may start: the arena indexes chains by `u32`,
+/// so the count is bounded by the index space.
+const MAX_CHAINS: usize = u32::MAX as usize;
 
 /// The run's final result when no section produced a reply, which three
 /// fallback sites share: a prompt with neither H1 blocks nor sections, a
@@ -177,7 +181,7 @@ enum Phase {
     Done,
 }
 
-/// The coroutine protocol's driver: the chain arena, ready queue, pending
+/// The coroutine protocol's driver: the chain arena, ready queue, effect
 /// table, task arena, and issued-effect queue, owned outright by the run.
 pub(crate) struct Scheduler {
     /// The ambient run context, cloned into chains and forked by call
@@ -198,38 +202,38 @@ pub(crate) struct Scheduler {
     /// admitted after every resuming chain. A queued spawn holds no Lua VM
     /// yet: admission is what starts it.
     spawned: VecDeque<ChainIndex>,
-    /// One entry per in-flight leaf effect, keyed by the effect's id:
-    /// the parked chain and how the answer resumes it.
-    pending: HashMap<EffectId, Pending>,
+    /// The effect table: one entry per issued effect the caller has not
+    /// answered yet, keyed by the effect's id. An entry is parked while its
+    /// chain waits, holding how the answer resumes the chain, and orphaned
+    /// once the chain stopped waiting (a chain end, a task cancel or
+    /// abandonment, the run's teardown): the caller still owes the answer,
+    /// which is discarded on arrival. An entry leaves when its answer
+    /// arrives, so an id with no entry means the caller answered an effect
+    /// the run never issued, or answered one twice - which fails loudly
+    /// rather than passing silently.
+    outstanding: HashMap<EffectId, Outstanding>,
     /// The task arena: one slot per task the run has started, keyed by the
     /// task's id: its backing chain's id, or, for an internal timer, the id
     /// it took from its owner's child counter. A slot outlives its chain: it
     /// holds the terminal state and the undelivered outcome at least until
     /// the owner takes the result or ends, and in fact for the run - the
     /// arena is append-only like the chain arena, so `status` can report a
-    /// terminal state at any later time.
-    tasks: HashMap<TaskId, TaskSlot>,
+    /// terminal state at any later time. Ids order as paths, and one
+    /// owner's tasks are its direct children, so one owner's slots iterate
+    /// in spawn order.
+    tasks: BTreeMap<TaskId, TaskSlot>,
     /// The effects issued since the step began, in issue order, each with
     /// the provenance of the task that built it; the step returns them.
     issued: Vec<(EffectId, Provenance, Effect)>,
-    /// The effects whose chain stopped waiting before the caller answered (a
-    /// chain end, a task cancel or abandonment, the run's teardown): the
-    /// caller still owes each one answer, which is discarded on arrival. An
-    /// unknown id that is neither pending nor orphaned means the caller
-    /// answered an effect the run never issued, or answered one twice -
-    /// which fails loudly rather than passing silently. An id leaves the
-    /// set when its answer arrives, so the set stays bounded by the
-    /// orphans whose answers have not landed.
-    orphaned: HashSet<EffectId>,
     /// Tool-call effects orphaned since the last step, drained into
     /// `Step::Pending`.
     withdrawn: Vec<EffectId>,
     /// The run's phase.
     phase: Phase,
-    /// The most chains one run may start: the arena indexes chains by
-    /// `u32`, so the count is bounded by the index space. A field rather
-    /// than a constant so a test can shrink the bound and drive the
-    /// overflow path without allocating the real one.
+    /// The chain-count bound in test builds: [`MAX_CHAINS`] until a test
+    /// shrinks it to drive the overflow path without allocating the real
+    /// one.
+    #[cfg(test)]
     max_chains: usize,
     /// The next effect id: a run-wide counter, so every effect the run
     /// issues has a distinct in-flight handle.
@@ -264,13 +268,13 @@ impl Scheduler {
             ready: VecDeque::new(),
             resuming: VecDeque::new(),
             spawned: VecDeque::new(),
-            pending: HashMap::new(),
-            tasks: HashMap::new(),
+            outstanding: HashMap::new(),
+            tasks: BTreeMap::new(),
             issued: Vec::new(),
-            orphaned: HashSet::new(),
             withdrawn: Vec::new(),
             phase: Phase::Fresh,
-            max_chains: u32::MAX as usize,
+            #[cfg(test)]
+            max_chains: MAX_CHAINS,
             next_effect: 0,
             next_round: 0,
             scope: None,
@@ -306,7 +310,7 @@ impl Scheduler {
 
     /// Issues one leaf effect for `chain`: allocates its id, stamps it with
     /// the chain's task provenance, queues it for the step's return, and
-    /// parks the chain in the pending table with `resume`, the rule its
+    /// parks the chain in the effect table with `resume`, the rule its
     /// answer is applied by. The one path every leaf arm takes, so no arm
     /// parks on its own.
     fn issue(&mut self, chain: ChainIndex, effect: Effect, resume: Continuation) -> EffectId {
@@ -314,7 +318,8 @@ impl Scheduler {
         self.next_effect += 1;
         let provenance = self.chains[chain.index()].ctx.emitter().stamp_effect();
         self.issued.push((id, provenance, effect));
-        self.pending.insert(id, Pending { chain, resume });
+        self.outstanding
+            .insert(id, Outstanding::Parked(Pending { chain, resume }));
         id
     }
 

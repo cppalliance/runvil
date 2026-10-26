@@ -140,8 +140,8 @@ fn fatal_arm_aborts_queued_siblings() {
 fn fatal_arm_aborts_an_in_flight_sibling() {
     // The sibling-abort port: the failing arm and a sibling parked on a
     // held infer are both live when the failure lands. The fanout shim
-    // cancels the live sibling before it re-raises, so the cancel removes
-    // the sibling from the pending table, drops its round, and fires the
+    // cancels the live sibling before it re-raises, so the cancel orphans
+    // the sibling's effect, drops its round, and fires the
     // sibling's TaskCancelled BEFORE the parent's chunk failure - a shim
     // that raised first would leak the sibling into `tasks_live`. The
     // sibling's round is never answered, so the run cannot have waited
@@ -393,6 +393,33 @@ fn an_answer_for_an_unknown_request_id_fails_loudly() {
     assert!(
         matches!(rig.trace().error().inner(), Error::Internal { message, .. } if message.contains("did not issue")),
         "the unknown answer is a loud invariant failure: {:?}",
+        rig.trace().error()
+    );
+}
+
+#[test]
+fn aborting_an_effect_that_is_not_outstanding_records_no_orphan() {
+    // An abort orphans only an effect still in flight. An id the run never
+    // issued stays unknown, so an answer for it still fails loudly instead
+    // of being discarded as an orphan's late answer.
+    let gateway = ScriptedChat::new(vec![text("real-answer")]);
+    let md = "---\nname: t\ndescription: d\nrunvil: 0\n---\n\n\
+        # Infer\n\n\
+        ## Only\n\n\
+        ```lua\nreturn models.infer('ask')\n```\n";
+    let mut rig = Rig::start(scheduler_scenario(md).chat(&gateway));
+    let phantom = EffectId(u64::MAX);
+    rig.scheduler_for_test().abort_effect_for_test(phantom);
+    assert!(
+        !rig.scheduler_for_test().orphaned_for_test(phantom),
+        "an abort of an id that is not outstanding records no orphan"
+    );
+    rig.run_for_test().resume(phantom, EffectAnswer::Timer);
+    let rig = rig.finish();
+
+    assert!(
+        matches!(rig.trace().error().inner(), Error::Internal { message, .. } if message.contains("did not issue")),
+        "the answer for the never-issued id still fails loudly: {:?}",
         rig.trace().error()
     );
 }

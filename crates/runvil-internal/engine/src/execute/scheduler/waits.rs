@@ -21,8 +21,8 @@
 //! started. `status` and `note` add the self exception: a chain may read
 //! and annotate the task it runs inside (`sys.taskid`), which is how a
 //! task reports progress. The main walk is task `0` with no slot, so its
-//! own status is not reportable; `note` from the main walk records on the
-//! walk itself, where nothing reads it.
+//! own status is not reportable, and a note outside a slotted task (the
+//! main walk and its `call` children) records nothing.
 //!
 //! Cancel is idempotent: a live task's slot moves to `Cancelled`, its
 //! backing chain aborts with everything it owns, and `TaskCancelled` fires
@@ -39,7 +39,7 @@ use runvil_types::ids::TaskId;
 use crate::lua::{Answer, NonEmpty, TaskDelivery, TaskPhase, TaskStatus};
 use crate::{Error, Result};
 
-use super::tasks::{TaskBacking, TaskSlot, TaskState};
+use super::tasks::{SlotState, TaskBacking, TaskSlot, TaskState};
 use super::{ChainIndex, Scheduler};
 
 /// The phase `tasks.status` reports: a delivered task reads `done`, since
@@ -75,18 +75,13 @@ impl Scheduler {
     }
 
     /// The live tasks `owner` owns in spawn order; an internal timer slot
-    /// is never listed. The arena is a hash map; ids order as paths and one
-    /// owner's tasks are its direct children, so sorting recovers spawn
-    /// order.
+    /// is never listed.
     fn live_tasks_of(&self, owner: ChainIndex) -> Vec<TaskId> {
-        let mut live: Vec<TaskId> = self
-            .tasks
+        self.tasks
             .iter()
             .filter(|(_, slot)| slot.owner == owner && slot.state.is_live() && !slot.is_internal())
             .map(|(task, _)| task.clone())
-            .collect();
-        live.sort_unstable();
-        live
+            .collect()
     }
 
     /// Dispatches a `join_any` request: every member must be a task the
@@ -118,11 +113,11 @@ impl Scheduler {
         for task in tasks {
             let slot = self.owned_slot(id, task)?;
             match slot.state {
-                TaskState::Delivered { .. } => {
+                SlotState::Delivered { .. } => {
                     return Err(Error::TaskConsumed { task: task.clone() });
                 }
-                TaskState::Running => {}
-                TaskState::Done { .. } | TaskState::Cancelled | TaskState::Abandoned => {
+                SlotState::Running => {}
+                SlotState::Done(_) | SlotState::Cancelled | SlotState::Abandoned => {
                     if first.is_none() {
                         first = Some(task.clone());
                     }
@@ -146,21 +141,29 @@ impl Scheduler {
             self.join_task(owner, task);
         }
         let outcome = match self.tasks.get_mut(task) {
-            Some(slot) => match slot.state {
-                TaskState::Done { ok } => {
-                    slot.state = TaskState::Delivered { ok };
-                    slot.outcome
-                        .take()
-                        .unwrap_or_else(|| Err(Error::internal("a done slot holds its outcome")))
+            Some(slot) => {
+                let ok = matches!(slot.state, SlotState::Done(Ok(_)));
+                // Every state but `Done` goes back as it was.
+                match std::mem::replace(&mut slot.state, SlotState::Delivered { ok }) {
+                    SlotState::Done(outcome) => outcome,
+                    SlotState::Cancelled => {
+                        slot.state = SlotState::Cancelled;
+                        Err(Error::TaskCancelled { task: task.clone() })
+                    }
+                    SlotState::Abandoned => {
+                        slot.state = SlotState::Abandoned;
+                        Err(Error::internal(
+                            "an abandoned task's owner ended, so no wait can deliver it",
+                        ))
+                    }
+                    state @ (SlotState::Running | SlotState::Delivered { .. }) => {
+                        slot.state = state;
+                        Err(Error::internal(
+                            "only a terminal, undelivered slot is delivered",
+                        ))
+                    }
                 }
-                TaskState::Cancelled => Err(Error::TaskCancelled { task: task.clone() }),
-                TaskState::Abandoned => Err(Error::internal(
-                    "an abandoned task's owner ended, so no wait can deliver it",
-                )),
-                TaskState::Running | TaskState::Delivered { .. } => Err(Error::internal(
-                    "only a terminal, undelivered slot is delivered",
-                )),
-            },
+            }
             None => Err(Error::internal("a delivered task has a slot")),
         };
         TaskDelivery {
@@ -195,28 +198,28 @@ impl Scheduler {
         self.answer_inline(id, Answer::Status(answer));
     }
 
-    /// Reads one task's status: the slot's facts, plus the backing chain's
-    /// position while it is live (its section and what it is parked on)
-    /// and the chain's counters and note, which the append-only arena
+    /// Reads one task's status: the slot's facts and note, plus the backing
+    /// chain's position while it is live (its section and what it is
+    /// parked on) and the chain's counters, which the append-only arena
     /// keeps after the chain ends.
     fn task_status(&self, id: ChainIndex, task: &TaskId) -> Result<TaskStatus> {
         let slot = self.visible_slot(id, task)?;
+        let state = slot.state.view();
         let mut status = TaskStatus {
             target: slot.target.clone(),
-            state: task_phase(slot.state),
-            ok: slot.state.ok(),
+            state: task_phase(state),
+            ok: state.ok(),
             section: None,
             blocked: None,
             turns: 0,
             tasks: Vec::new(),
             depth: 0,
-            note: None,
+            note: slot.note.clone(),
         };
-        if let TaskBacking::Chain(backing) = slot.backing {
+        if let TaskBacking::Chain { chain: backing, .. } = slot.backing {
             let chain = &self.chains[backing.index()];
             status.turns = chain.ctx.turns().load(Ordering::Relaxed);
             status.depth = u32::try_from(chain.call_depth.get()).unwrap_or(u32::MAX);
-            status.note.clone_from(&chain.note);
             if slot.state.is_live() {
                 status.section = chain
                     .frame
@@ -260,16 +263,13 @@ impl Scheduler {
     }
 
     /// Dispatches a `note` request: the text becomes the latest note of the
-    /// task the chain runs inside - recorded on the task's backing chain,
-    /// so a `call` child's note is the task's - or of the chain itself when
-    /// it runs inside no slotted task (the main walk).
+    /// task the chain runs inside, recorded on the task's slot, so a `call`
+    /// child's note is the task's. A note outside a slotted task (the main
+    /// walk, task `0`, and its `call` children) records nothing.
     pub(super) fn dispatch_note(&mut self, id: ChainIndex, text: String) {
-        let task = self.chains[id.index()].task.clone();
-        let target = match self.tasks.get(&task).map(|slot| slot.backing) {
-            Some(TaskBacking::Chain(backing)) => backing,
-            Some(TaskBacking::Effect(_)) | None => id,
-        };
-        self.chains[target.index()].note = Some(text);
+        if let Some(slot) = self.tasks.get_mut(&self.chains[id.index()].task) {
+            slot.note = Some(text);
+        }
         self.answer_inline(id, Answer::Note(Ok(())));
     }
 
@@ -294,12 +294,12 @@ impl Scheduler {
         let backing = slot.backing;
         let target = slot.target.clone();
         if let Some(slot) = self.tasks.get_mut(task) {
-            slot.state = TaskState::Cancelled;
+            slot.state = SlotState::Cancelled;
         }
         // The backing ends first, so anything it owned reports before the
         // task's own terminal event, which is the last word on it.
         let backing_chain = match backing {
-            TaskBacking::Chain(backing_chain) => backing_chain,
+            TaskBacking::Chain { chain, .. } => chain,
             TaskBacking::Effect(effect) => {
                 self.abort_effect(effect);
                 return Ok(());
