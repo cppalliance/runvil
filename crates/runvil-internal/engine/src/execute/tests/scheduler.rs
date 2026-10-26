@@ -1,4 +1,4 @@
-//! Scheduler-side tests, split by seam into the `walk`, `live_h1`, `fanout`,
+//! Scheduler-side tests, split by seam into the `walk`, `h1`, `fanout`,
 //! `concurrency`, and `failures` submodules. The model set `writer_models`,
 //! its scenario `scheduler_scenario`, the concurrency ceiling `ceiling`,
 //! the round and timer matchers `asks` and `is_timer`, the prompt readers
@@ -18,7 +18,7 @@ use crate::execute::EffectRecord;
 use crate::test_support::rig::RigTrace;
 use crate::test_support::scenario::{infer_prompt, test_binding};
 
-/// The model set the live H1 pass would leave behind: one `writer` binding
+/// The model set the H1 pass would leave behind: one `writer` binding
 /// as the prompt-wide default. The scheduler's tests bypass H1, so they
 /// pre-fill the run's shared set directly.
 fn writer_models() -> ModelSet {
@@ -126,5 +126,5 @@ fn terminal_count(trace: &Trace, is: fn(&Event) -> bool) -> usize {
 mod concurrency;
 mod failures;
 mod fanout;
-mod live_h1;
+mod h1;
 mod walk;

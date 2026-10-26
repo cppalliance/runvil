@@ -3,17 +3,17 @@
 //! runs beside its spawner instead of in place of it: `tasks.spawn` (and
 //! the `fanout` shim, once per arm) starts the chain over the target's
 //! slice - under `call`'s target resolution and depth cap, refusing a list
-//! section as the target - registers a slot for it keyed by the chain's
+//! section as the target - registers an entry for it keyed by the chain's
 //! own hierarchical id, and resumes the spawner at once with the id. The
 //! spawner runs first; the child waits in the admission queue, holding no
 //! Lua VM, until the run's concurrency limits admit it.
 //!
-//! The slot outlives the chain. When the chain ends, its outcome lands in
-//! the slot and the slot moves to `Done`; the owner later takes the result
-//! through a wait, which moves it to `Delivered`. Cancellation and
+//! The entry outlives the chain. When the chain ends, its outcome lands in
+//! the entry and the entry moves to `Done`; the owner later takes the
+//! result through a wait, which moves it to `Delivered`. Cancellation and
 //! abandonment (the owner ending first) are the two other terminal states,
 //! kept apart because the log and `tasks.status` must tell "stopped on
-//! purpose" from "lost its owner". A terminal slot is never removed: the
+//! purpose" from "lost its owner". A terminal entry is never removed: the
 //! arena is append-only as the chain arena is, so a late `status` can
 //! still report how a task ended.
 
@@ -50,7 +50,7 @@ pub(super) enum TaskBacking {
     Effect(EffectId),
 }
 
-/// One task's lifecycle state as its slot holds it, the outcome included.
+/// One task's lifecycle state as its entry holds it, the outcome included.
 #[derive(Debug)]
 pub(super) enum SlotState {
     /// The backing chain or request is live.
@@ -90,12 +90,12 @@ impl SlotState {
 }
 
 /// One task's lifecycle state, with whether it ended well once it has
-/// ended: the `Copy` view of a slot's [`SlotState`].
+/// ended: the `Copy` view of an entry's [`SlotState`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum TaskState {
     /// The backing chain or request is live.
     Running,
-    /// The backing chain or request ended; its outcome waits in the slot.
+    /// The backing chain or request ended; its outcome waits in the entry.
     /// `ok` is whether it returned rather than failed, always `true` for a
     /// fired timer.
     Done { ok: bool },
@@ -120,9 +120,9 @@ impl TaskState {
     }
 }
 
-/// One task's slot in the arena.
+/// One task's entry in the arena.
 #[derive(Debug)]
-pub(super) struct TaskSlot {
+pub(super) struct TaskEntry {
     /// Where the task's work runs.
     pub(super) backing: TaskBacking,
     /// The chain that owns the task: its spawner, or the root walk for a
@@ -143,9 +143,9 @@ pub(super) struct TaskSlot {
     pub(super) note: Option<String>,
 }
 
-impl TaskSlot {
-    /// True for a slot the author never sees: the effect-backed timer
-    /// behind a timed wait. Internal slots are omitted from `pending` and
+impl TaskEntry {
+    /// True for an entry the author never sees: the effect-backed timer
+    /// behind a timed wait. Internal entries are omitted from `pending` and
     /// a status table's `tasks`, report no task observations, and never
     /// count as leaked.
     pub(super) fn is_internal(&self) -> bool {
@@ -155,13 +155,12 @@ impl TaskSlot {
 
 impl Scheduler {
     /// Dispatches a `spawn` request: constructs the task's chain, registers
-    /// its slot, and resumes the spawner with the task's id; the child is
+    /// its entry, and resumes the spawner with the task's id; the child is
     /// enqueued behind the spawner, so `spawn` returns before the child
-    /// runs. Every dispatch failure - the depth cap, target resolution, the
-    /// worker check, chain construction - is the call's answer, resumed
-    /// into the spawner so an author `pcall` can catch it. `via` names the
-    /// call that started the task: a `fanout` arm's depth-cap refusal is
-    /// named after `tasks.fanout`.
+    /// runs. Its preparation fails on the depth cap, target resolution,
+    /// the worker check, or chain construction. `via` names the call that
+    /// started the task: a `fanout` arm's depth-cap refusal is named after
+    /// `tasks.fanout`.
     pub(super) fn dispatch_spawn(
         &mut self,
         id: ChainIndex,
@@ -196,7 +195,7 @@ impl Scheduler {
     /// it back) and a fresh turn counter. The child leaves this call queued
     /// for admission - holding no Lua VM yet - with its `var` snapshot
     /// moved into the chain and its start record stashed; the drain admits
-    /// it when a slot frees up.
+    /// it when an admission slot frees up.
     pub(super) fn prepare_spawn(
         &mut self,
         id: ChainIndex,
@@ -232,7 +231,7 @@ impl Scheduler {
         // target's slice by path, resolved against the shared tree.
         let prompt = self.prompt();
         let target_section = self.resolve_chain_target(id, target)?;
-        let worker = &target_section.slice.resolve(&prompt)[target_section.index.get()];
+        let worker = &target_section.slice.resolve(&prompt)[target_section.index().get()];
         if worker.prologue().is_none() && worker.epilog().is_none() && !worker.items().is_empty() {
             return Err(Error::Lua(format!(
                 "section `{}` is a list section, not a worker template",
@@ -242,7 +241,8 @@ impl Scheduler {
         // The access spawns before the chain exists: a store refusal here
         // is the last fallible step that can leave nothing behind, so it
         // runs ahead of the id allocation and the arena push rather than
-        // orphaning a started chain that is neither enqueued nor slotted.
+        // orphaning a started chain that is neither enqueued nor entered
+        // in the arena.
         let access = detail::access_spawn(
             &spawner_access,
             prompt_origin(&prompt, worker.name(), worker.blocks()),
@@ -269,8 +269,8 @@ impl Scheduler {
             counters: Counters::default(),
             ctx: child_ctx,
             access: Arc::new(access),
+            index: target_section.index(),
             slice: target_section.slice,
-            index: target_section.index,
             kind: ChainKind::Task {
                 admission: Admission::Queued(SpawnRecord {
                     input: input.map(str::to_owned),
@@ -283,12 +283,12 @@ impl Scheduler {
         })?;
         let spawned = &mut self.chains[child.index()];
         spawned.seed = seed;
-        // `blocked` reads `queued` in `tasks.status` while the slot's
+        // `blocked` reads `queued` in `tasks.status` while the entry's
         // state is still `Running`.
         spawned.parked = Some(Parked::Queued);
         self.tasks.insert(
             task.clone(),
-            TaskSlot {
+            TaskEntry {
                 backing: TaskBacking::Chain { chain: child, exec },
                 owner: id,
                 target: worker.name().to_owned(),

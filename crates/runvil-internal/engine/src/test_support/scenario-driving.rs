@@ -8,7 +8,6 @@ use std::collections::BTreeMap;
 use std::sync::Mutex;
 use std::sync::mpsc::Sender;
 use std::thread::JoinHandle;
-use std::time::Duration;
 
 use runvil_types::event::Event;
 use runvil_types::tools::{ToolError, ToolId};
@@ -39,7 +38,6 @@ pub(super) struct Answers {
     pub(super) signal: Option<(Matcher, Sender<()>)>,
     /// Whether the canceller was woken.
     pub(super) signalled: Cell<bool>,
-    pub(super) timeout: Duration,
 }
 
 impl Answers {
@@ -71,7 +69,7 @@ impl Answers {
                 ..
             } => match &self.chat {
                 Some(Chat::Script(chat)) => {
-                    let answer = chat.complete_now(messages, tools, options, self.timeout);
+                    let answer = chat.complete_now(messages, tools, options);
                     EffectAnswer::Chat(answer.map(Box::new))
                 }
                 Some(Chat::Closure(answer)) => answer(effect),

@@ -15,27 +15,34 @@ use runvil_types::ids::ChainId;
 
 use crate::execute::section_context::SectionContext;
 use crate::execute::walk_target::{
-    JumpTarget, SlicePath, h1_visible_sections, resolve_jump_target, section_position,
+    JumpTarget, h1_visible_sections, resolve_jump_target, section_position,
 };
-use crate::heading_address::{self, Visible};
+use crate::heading_address::{self, SectionIndex, SlicePath, Visible};
 use crate::parser::Block;
 use crate::{Error, Result};
 
 use super::chain::{ChainStart, ChainStep};
-use super::chain_record::{CallDepth, ChainKind, Entered, SectionIndex};
+use super::chain_record::{CallDepth, ChainKind, Entered};
 use super::{Chain, ChainIndex, Counters, Scheduler, prompt_origin};
 
-/// A heading resolved against a chain's visible set: the slice the walk or
-/// a contained chain continues on, the target's index in it, and whether
-/// the target is a direct child of the current section (a descent).
+/// A heading resolved against a chain's visible set: how the jump moves
+/// (to a sibling, or down into a direct child of the current section)
+/// and the slice the walk or a contained chain continues on.
 #[derive(Debug)]
 pub(super) struct ChainTarget {
+    /// The target's position, and whether reaching it is a descent.
+    pub(super) jump: JumpTarget,
     /// The slice the walk or chain continues on.
     pub(super) slice: SlicePath,
+}
+
+impl ChainTarget {
     /// The target's index in `slice`.
-    pub(super) index: SectionIndex,
-    /// True when the target is a direct child of the current section.
-    child: bool,
+    pub(super) fn index(&self) -> SectionIndex {
+        match self.jump {
+            JumpTarget::Sibling(index) | JumpTarget::Child(index) => index,
+        }
+    }
 }
 
 impl Scheduler {
@@ -118,17 +125,17 @@ impl Scheduler {
             // section - and no SECTION_STARTED, the pass is not a walked
             // section. Its id is the root chain's entry 0.
             let section_id = Self::next_entry_id(chain)?;
-            let frame = SectionContext::new_live_h1(&chain.ctx, chain.access()?, &section_id)?;
+            let frame = SectionContext::new_h1(&chain.ctx, chain.access()?, &section_id)?;
             chain.entered = Some(Entered::new(frame));
             return Ok(true);
         }
-        let index = chain.index.get();
+        let index = chain.index;
         // `slice` borrows the shared prompt tree, not the arena, so the
         // frame construction can borrow the chain's own context and slots.
         let slice = chain.slice.resolve(&prompt);
-        if index >= slice.len() {
+        let Some(section) = slice.get(index.get()) else {
             return Ok(false);
-        }
+        };
         let section_id = Self::next_entry_id(chain)?;
         let task = chain.task.clone();
         // A spawned chain's first entry consumes its `item` and `sys.index`
@@ -145,7 +152,7 @@ impl Scheduler {
             seed,
         )?;
         chain.entered = Some(Entered::new(frame));
-        slice[index].name().clone_into(&mut chain.entered_name);
+        section.name().clone_into(&mut chain.entered_name);
         Ok(true)
     }
 
@@ -230,11 +237,11 @@ impl Scheduler {
         };
         let target = self.resolve_chain_target(id, heading)?;
         let chain = &mut self.chains[id.index()];
-        if target.child {
+        if matches!(target.jump, JumpTarget::Child(_)) {
             chain.positions.push((slice, index));
         }
+        chain.index = target.index();
         chain.slice = target.slice;
-        chain.index = target.index;
         Ok(())
     }
 
@@ -261,24 +268,15 @@ impl Scheduler {
                 "a resolved H1 target is absent from the top-level slice",
             ))?;
             return Ok(ChainTarget {
+                jump: JumpTarget::Sibling(index),
                 slice: SlicePath::root(),
-                index: SectionIndex::new(index),
-                child: false,
             });
         }
-        let slice = chain.slice.resolve(prompt);
-        let index = chain.index.get();
-        match resolve_jump_target(heading, slice, index)? {
-            JumpTarget::Child(child) => Ok(ChainTarget {
-                slice: chain.slice.child(index),
-                index: SectionIndex::new(child),
-                child: true,
-            }),
-            JumpTarget::Sibling(sibling) => Ok(ChainTarget {
-                slice: chain.slice.clone(),
-                index: SectionIndex::new(sibling),
-                child: false,
-            }),
-        }
+        let jump = resolve_jump_target(heading, chain.slice.resolve(prompt), chain.index)?;
+        let slice = match jump {
+            JumpTarget::Child(_) => chain.slice.child(chain.index),
+            JumpTarget::Sibling(_) => chain.slice.clone(),
+        };
+        Ok(ChainTarget { jump, slice })
     }
 }

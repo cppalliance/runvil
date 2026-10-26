@@ -1,5 +1,5 @@
 //! The task arena and `tasks.spawn`: a spawn returns to its caller before
-//! the child chain runs, a finished child moves its slot to `Done` and
+//! the child chain runs, a finished child moves its entry to `Done` and
 //! reports its terminal task observation, `TaskStarted` reports the spawn
 //! seeds the child then sees (`args`, `item`, `sys.index`, `var`, its own
 //! `sys.taskid`), and spawn shares `call`'s target resolution and depth cap.
@@ -129,7 +129,7 @@ fn spawn_returns_to_its_caller_before_the_child_runs() {
 }
 
 #[test]
-fn a_finished_child_moves_its_slot_to_done_and_reports_task_succeeded() {
+fn a_finished_child_moves_its_entry_to_done_and_reports_task_succeeded() {
     let md = spawner_prompt(
         "tasks.spawn('## Child')\n\
          store.write('park', 'x')\n\
@@ -142,7 +142,7 @@ fn a_finished_child_moves_its_slot_to_done_and_reports_task_succeeded() {
     assert_eq!(
         rig.task_state_for_test(&task("0.0")),
         Some(TaskState::Done { ok: true }),
-        "the child's completion moves its slot to Done"
+        "the child's completion moves its entry to Done"
     );
     let recorder = TaskRecorder::replayed(rig.trace());
     let started = recorder.position(
@@ -169,7 +169,7 @@ fn a_finished_child_moves_its_slot_to_done_and_reports_task_succeeded() {
 }
 
 #[test]
-fn a_failed_child_moves_its_slot_to_done_and_reports_task_failed() {
+fn a_failed_child_moves_its_entry_to_done_and_reports_task_failed() {
     let md = spawner_prompt(
         "tasks.spawn('## Child')\n\
          store.write('park', 'x')\n\
@@ -186,7 +186,7 @@ fn a_failed_child_moves_its_slot_to_done_and_reports_task_failed() {
     assert_eq!(
         rig.task_state_for_test(&task("0.0")),
         Some(TaskState::Done { ok: false }),
-        "a failed child's slot is Done with a failed outcome"
+        "a failed child's entry is Done with a failed outcome"
     );
     let recorder = TaskRecorder::replayed(rig.trace());
     recorder.position("Child", &Observation::TaskFailed { task: task("0.0") });

@@ -47,7 +47,7 @@ pub(super) enum Continuation {
     /// render under the call surface the author used.
     Vfs(VfsOp),
     /// The internal timer behind a timed wait: the firing completes the
-    /// slot backed by the effect and wakes its waiting owner; no chain
+    /// task entry backed by the effect and wakes its waiting owner; no chain
     /// resumes.
     Timer,
 }

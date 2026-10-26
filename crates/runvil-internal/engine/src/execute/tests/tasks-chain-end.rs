@@ -39,7 +39,7 @@ fn a_chain_ending_with_live_author_tasks_fails_as_tasks_live_naming_the_ids() {
     // admitted, since the spawner returned without suspending - so the
     // run fails with `tasks_live` naming both ids in spawn order, and
     // both tasks are abandoned because their owner returned. A task that
-    // never ran reports no start and no terminal, though its slot still
+    // never ran reports no start and no terminal, though its entry still
     // reaches Abandoned.
     let md = spawner_prompt(
         "tasks.spawn('## Child')\n\
@@ -69,7 +69,7 @@ fn a_chain_ending_with_live_author_tasks_fails_as_tasks_live_naming_the_ids() {
         assert_eq!(
             rig.task_state_for_test(&task(id)),
             Some(TaskState::Abandoned),
-            "a leaked task's slot is Abandoned, not Done or Cancelled"
+            "a leaked task's entry is Abandoned, not Done or Cancelled"
         );
     }
     let records = TaskRecorder::replayed(rig.trace()).records();
@@ -83,7 +83,7 @@ fn a_chain_ending_with_live_author_tasks_fails_as_tasks_live_naming_the_ids() {
 fn a_chain_failing_with_a_live_task_keeps_its_own_error_and_abandons_the_task() {
     // The spawner errors after spawning: the leak is the lesser fault, so
     // the run's error is the spawner's own, not `tasks_live`; the task
-    // still ends with its owner, its slot Abandoned. The task was never
+    // still ends with its owner, its entry Abandoned. The task was never
     // admitted - the spawner failed without suspending - so it reports no
     // start and no terminal.
     let md = spawner_prompt(
@@ -120,7 +120,7 @@ const CHILD_PARKED_ON_HELD_ROUND: &str = "return models.infer('park')";
 
 /// Drives `scenario` with the child's round held, so the spawner's body
 /// must suspend after its spawn for the child to run. Asserts that task
-/// `0.0` started and then ended with its owner: its slot is Abandoned and
+/// `0.0` started and then ended with its owner: its entry is Abandoned and
 /// its only terminal, under the child's section, carries `reason`.
 #[track_caller]
 fn run_abandoning_a_running_task(scenario: Scenario, reason: AbandonReason) -> RigTrace {
@@ -231,7 +231,7 @@ fn moving_spawner_prompt(movement: &str) -> String {
 }
 
 /// Drives `md` and asserts that the run fails `tasks_live` naming `0.0`
-/// alone, with the task's slot Abandoned because its owner returned. The
+/// alone, with the task's entry Abandoned because its owner returned. The
 /// task never ran - neither chain suspended between the spawn and the
 /// end - so it reports no start and no terminal.
 #[track_caller]
@@ -324,7 +324,7 @@ fn a_task_spawned_in_h1_belongs_to_the_main_walk() {
     // to a chain that never finishes and the run would end `done`. The
     // task was never admitted - neither the pass nor the walk suspended
     // between the spawn and the walk's end - so it reports no start and
-    // no terminal, though its slot ends Abandoned.
+    // no terminal, though its entry ends Abandoned.
     let md = "---\nname: h1\ndescription: d\nrunvil: 0\n---\n\n\
         # Tasks\n\n\
         ```lua\n\
@@ -364,7 +364,7 @@ fn a_task_spawned_in_h1_belongs_to_the_main_walk() {
 fn aborting_a_chain_abandons_the_tasks_it_owns() {
     // A fatal sibling arm makes the fanout shim cancel the spawning arm
     // before it resumes; the abort takes the arm's task with it: the
-    // task's slot is Abandoned because its owner was aborted. The task
+    // task's entry is Abandoned because its owner was aborted. The task
     // was never admitted - the arm was cancelled while its spawn was
     // still queued - so it reports no start and no terminal, and its
     // chain never runs its block.

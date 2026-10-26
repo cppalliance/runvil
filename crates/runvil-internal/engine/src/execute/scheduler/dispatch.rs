@@ -111,9 +111,8 @@ impl Scheduler {
 
     /// Dispatches an `infer` request: resolves the binding, issues the
     /// single tool-free gateway round as a `Chat` effect over one user
-    /// message, and parks the chain in the effect table. A resolution
-    /// failure is the call's answer, resumed into the caller so an author
-    /// `pcall` can catch it.
+    /// message, and parks the chain in the effect table. Its preparation
+    /// fails on the binding resolution.
     fn dispatch_infer(
         &mut self,
         id: ChainIndex,
@@ -188,10 +187,8 @@ impl Scheduler {
 
     /// Dispatches a `call` request: constructs the child chain and
     /// enqueues it; the parent blocks until the child's finish delivers
-    /// its final text as the answer. Every dispatch
-    /// failure - the depth cap, target resolution, child construction - is
-    /// the call's answer, resumed into the caller so an author `pcall` can
-    /// catch it.
+    /// its final text as the answer. Its preparation fails on the depth
+    /// cap, target resolution, or child construction.
     fn dispatch_call(
         &mut self,
         id: ChainIndex,
@@ -249,8 +246,8 @@ impl Scheduler {
             counters: Counters::default(),
             ctx: child_ctx,
             access,
+            index: target_section.index(),
             slice: target_section.slice,
-            index: target_section.index,
             kind: ChainKind::Call {
                 parent: id,
                 released_holder: None,

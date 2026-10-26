@@ -19,6 +19,11 @@
 //! yields a structural request (`call`) blocks while its child chain runs,
 //! and the child's finish delivers its final text as the parent's answer.
 //! When no chain is ready the step returns and the caller performs the effects.
+//! Every `dispatch_*` arm with a fallible half resumes that half's error
+//! into the calling chain as the call's answer (`tool_calls` into the
+//! failing call's batch slot), so an author `pcall` catches it. An
+//! `Error::Internal` from a scheduler method marks a state the scheduler's
+//! own invariants rule out: a scheduler or shim bug.
 //!
 //! [`RunState`] stays the ambient shared read-mostly context, cloned into
 //! chains and callbacks; the scheduler owns the run's copy and is the
@@ -26,7 +31,7 @@
 //! merged: `RunState` is cloned into callbacks, while the scheduler must
 //! stay unreachable from the callback layer. The prompt tree is shared
 //! through the context's `Arc`, so a chain names its position in it by
-//! path ([`SlicePath`](super::walk_target::SlicePath)) rather than by
+//! path ([`SlicePath`](crate::heading_address::SlicePath)) rather than by
 //! borrow, and the scheduler owns itself outright.
 //!
 //! This file holds the scheduler core: the chain arena, the ready queue,
@@ -40,7 +45,7 @@
 //! answer application, `chain` the chain lifecycle (arena insertion and the
 //! two chain-end paths), `chain_record` the chain record the arena holds,
 //! `step` one chain's step to its next suspension point, `walk` the section
-//! walk rules, `h1` the live H1 pass and its hand-off to the walk,
+//! walk rules, `h1` the H1 pass and its hand-off to the walk,
 //! `dispatch` the request arms, `chat` the one-round `chat` arm and its
 //! answer application, `tool_call` the script and model-issued `tool_call`
 //! arm (the two arms the section-visible `models.loop` shim drives),
@@ -48,7 +53,7 @@
 //! limits, `task_end` the chain-end rules for tasks, `waits` the `join_any`
 //! wait and the `ready`, `status`, `pending`, `note`, `concurrency`, and
 //! `cancel` arms over the arena, `timer` the wait shims' internal timeout
-//! as an effect-backed slot, and `test_hooks` (test builds only) the seams
+//! as an effect-backed entry, and `test_hooks` (test builds only) the seams
 //! the suites inspect the arena through. A fanout is Lua over those arms
 //! (the `fanout` shim spawns one task per member, all up front, and waits
 //! on the live set).
@@ -88,7 +93,7 @@ use super::context::RunState;
 use super::run::{Effect, EffectAnswer, EffectId, Round};
 use chain_record::{Chain, ChatAnchor};
 use pending::{CallSite, Continuation, Outstanding, Pending, ToolCallContinuation};
-use tasks::TaskSlot;
+use tasks::TaskEntry;
 
 /// The deepest nesting a chain may run at, counting `call` children and
 /// spawned tasks, fanout arms included; the first level counts.
@@ -212,23 +217,24 @@ pub(crate) struct Scheduler {
     /// the run never issued, or answered one twice - which fails loudly
     /// rather than passing silently.
     outstanding: HashMap<EffectId, Outstanding>,
-    /// The task arena: one slot per task the run has started, keyed by the
+    /// The task arena: one entry per task the run has started, keyed by the
     /// task's id: its backing chain's id, or, for an internal timer, the id
-    /// it took from its owner's child counter. A slot outlives its chain: it
-    /// holds the terminal state and the undelivered outcome at least until
-    /// the owner takes the result or ends, and in fact for the run - the
-    /// arena is append-only like the chain arena, so `status` can report a
-    /// terminal state at any later time. Ids order as paths, and one
-    /// owner's tasks are its direct children, so one owner's slots iterate
+    /// it took from its owner's child counter. An entry outlives its chain:
+    /// it holds the terminal state and the undelivered outcome at least
+    /// until the owner takes the result or ends, and in fact for the run -
+    /// the arena is append-only like the chain arena, so `status` can report
+    /// a terminal state at any later time. Ids order as paths, and one
+    /// owner's tasks are its direct children, so one owner's entries iterate
     /// in spawn order.
-    tasks: BTreeMap<TaskId, TaskSlot>,
+    tasks: BTreeMap<TaskId, TaskEntry>,
     /// The effects issued since the step began, in issue order, each with
     /// the provenance of the task that built it; the step returns them.
     issued: Vec<(EffectId, Provenance, Effect)>,
     /// Tool-call effects orphaned since the last step, drained into
     /// `Step::Pending`.
     withdrawn: Vec<EffectId>,
-    /// The run's phase.
+    /// Where the step loop stands: not started, running, ending with the
+    /// outcome held until the orphans are answered, or done.
     phase: Phase,
     /// The chain-count bound in test builds: [`MAX_CHAINS`] until a test
     /// shrinks it to drive the overflow path without allocating the real
@@ -306,7 +312,7 @@ impl Scheduler {
     ///
     /// # Errors
     /// Returns [`Error::Internal`] when the chain has no suspended block
-    /// to take the answer, which only a scheduler bug produces.
+    /// to take the answer.
     fn answer_inline(&mut self, id: ChainIndex, answer: Answer<Error>) -> Result<()> {
         self.chains[id.index()].deliver(answer)?;
         self.ready.push_back(id);

@@ -1,10 +1,10 @@
-//! The live H1 pass: the prompt's H1 blocks run first as section 0, the
+//! The H1 pass: the prompt's H1 blocks run first as section 0, the
 //! driver loop's first chain, under the walk's rules with these deltas:
 //! the frame takes the root chain's entry 0 and fires no section
 //! observations, a scalar return short-circuits the run, a Lua failure is
 //! the prompt's failed hard gate, mapped to [`Error::RequirementsUnmet`],
 //! and the pass's end hands off to the root walk. The frame's own deltas,
-//! writable `argv` among them, are listed on `SectionContext::new_live_h1`.
+//! writable `argv` among them, are listed on `SectionContext::new_h1`.
 //!
 //! The pass and the walk that follows it share the root lineage `0` and
 //! are two arena records: the hand-off starts the walk from the pass's
@@ -16,12 +16,12 @@ use std::sync::Arc;
 
 use runvil_types::ids::ChainId;
 
-use crate::execute::walk_target::{SlicePath, h1_visible_sections, section_position};
-use crate::heading_address::{self, Visible};
+use crate::execute::walk_target::{h1_visible_sections, section_position};
+use crate::heading_address::{self, SectionIndex, SlicePath, Visible};
 use crate::{Error, Result};
 
 use super::chain::{ChainStart, ChainStep};
-use super::chain_record::{CallDepth, ChainKind, Entered, SectionIndex};
+use super::chain_record::{CallDepth, ChainKind, Entered};
 use super::{ChainIndex, Counters, GENERIC_COMPLETION, Scheduler, prompt_origin};
 
 impl Scheduler {
@@ -32,8 +32,8 @@ impl Scheduler {
     /// # Errors
     /// Returns [`Error::Internal`] when the run's chain count exceeds `u32`,
     /// or [`Error::Store`] when the backend refuses acquisition.
-    pub(super) fn start_live_h1(&mut self) -> Result<ChainIndex> {
-        // The live H1 pass runs under the prompt's title, from its first
+    pub(super) fn start_h1(&mut self) -> Result<ChainIndex> {
+        // The H1 pass runs under the prompt's title, from its first
         // compiled H1 chunk.
         let origin = prompt_origin(
             self.ctx.prompt(),
@@ -73,7 +73,7 @@ impl Scheduler {
     /// left `argv` as non-JSON data,
     /// or [`Error::Internal`] when the chain holds no frame. The walk
     /// reuses the pass's capability, so the hand-off acquires nothing.
-    pub(super) fn end_live_h1(&mut self, id: ChainIndex, start: SectionIndex) -> Result<ChainStep> {
+    pub(super) fn end_h1(&mut self, id: ChainIndex, start: SectionIndex) -> Result<ChainStep> {
         let chain = &mut self.chains[id.index()];
         let Some(Entered { frame, .. }) = chain.entered.take() else {
             return Err(Error::internal("the H1 pass ends with a live frame"));
@@ -134,18 +134,14 @@ impl Scheduler {
     /// # Errors
     /// Returns [`Error::Lua`] when the heading is malformed, matches no
     /// top-level section, or matches more than one; the pass's own ending
-    /// can fail as [`end_live_h1`](Self::end_live_h1) documents.
-    pub(super) fn end_live_h1_at_jump(
-        &mut self,
-        id: ChainIndex,
-        heading: &str,
-    ) -> Result<ChainStep> {
+    /// can fail as [`end_h1`](Self::end_h1) documents.
+    pub(super) fn end_h1_at_jump(&mut self, id: ChainIndex, heading: &str) -> Result<ChainStep> {
         let prompt = self.prompt();
         let sections = h1_visible_sections(&prompt);
         let target = heading_address::resolve_visible(heading, Visible::all(sections))?;
         let start = section_position(sections, target).ok_or(Error::internal(
             "a resolved H1 jump target is absent from the top-level slice",
         ))?;
-        self.end_live_h1(id, SectionIndex::new(start))
+        self.end_h1(id, start)
     }
 }

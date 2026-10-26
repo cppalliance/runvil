@@ -9,7 +9,7 @@
 //! the model turn's boundaries and content, the tool call's
 //! succeeded/failed event and `ToolResult` under the trust rule, the store
 //! operation's outcome. A timer's firing completes its
-//! slot and wakes the waiter instead of resuming a chain, and a render's
+//! entry and wakes the waiter instead of resuming a chain, and a render's
 //! answer freezes the section entry's sets and dispatches the round that
 //! issued it. A `Dropped` answer resumes the chain with the cancelled
 //! error, whatever it was parked on; for a render, that is the round's
@@ -90,7 +90,7 @@ fn classify_vfs_failure(op: &VfsOp, error: VfsError) -> Error {
 /// The cancelled answer for a chain parked on `resume`'s kind of effect:
 /// the protocol variant the chain's shim expects, holding the run's
 /// cancellation error, which for a render is the round's chat answer. A
-/// timer's drop is applied to its slot and its waiter instead, before
+/// timer's drop is applied to its entry and its waiter instead, before
 /// this is reached.
 fn dropped_answer(resume: &Continuation) -> Answer<Error> {
     match resume {
@@ -109,7 +109,7 @@ impl Scheduler {
     /// parked chain's protocol answer under the effect's continuation
     /// (emitting the round's events), and re-queues the chain. A batched
     /// tool call's answer fills its slot instead, and the chain re-queues
-    /// once the whole batch has landed. A timer's firing completes its slot
+    /// once the whole batch has landed. A timer's firing completes its entry
     /// and wakes its waiter instead, and a render's answer is applied by
     /// [`Scheduler::accept_render`]. A `Dropped` answer is the caller
     /// giving the effect up: the chain resumes with the cancelled error.
@@ -344,7 +344,7 @@ impl Scheduler {
         result.map_err(|error| classify_vfs_failure(op, error))
     }
 
-    /// Applies a dropped timer: the slot backed by the effect moves to
+    /// Applies a dropped timer: the entry backed by the effect moves to
     /// `Cancelled`. While the run's cancel flag is clear, the caller gave
     /// up the timeout and the run goes on, so the chain parked on the
     /// timer leaves its wait with the cancelled error, as a dropped `Chat`

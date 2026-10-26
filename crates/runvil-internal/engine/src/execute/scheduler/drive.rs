@@ -137,7 +137,7 @@ impl Scheduler {
             }
             self.start_root_walk()?;
         } else {
-            let h1 = self.start_live_h1()?;
+            let h1 = self.start_h1()?;
             self.ready.push_back(h1);
         }
         Ok(())
@@ -212,8 +212,8 @@ impl Scheduler {
 
     /// Drops every chain's live state in the teardown order (the suspended
     /// coroutine, then the frame unarmed, then the access capability) and
-    /// orphans every parked effect. The task slots keep their terminal
-    /// state for inspection; every slot is terminal by now, `end` having
+    /// orphans every parked effect. The task entries keep their terminal
+    /// state for inspection; every entry is terminal by now, `end` having
     /// settled the live ones, so nothing here reports. Each chain joins
     /// the tasks it owns before its access drops, closing the run's
     /// happens-before record.

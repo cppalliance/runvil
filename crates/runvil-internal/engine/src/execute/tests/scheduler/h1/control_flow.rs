@@ -1,4 +1,4 @@
-//! Control flow out of the live H1 pass: `call` as a contained chain and
+//! Control flow out of the H1 pass: `call` as a contained chain and
 //! the child ids it takes, `jump` to start the walk at a target, `fanout`,
 //! and the decision-tool idiom, with the unknown-section failures.
 

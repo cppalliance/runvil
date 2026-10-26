@@ -30,7 +30,7 @@ fn h1_only_lua_no_return() {
 #[test]
 fn h1_scalar_return_short_circuits_the_walk() {
     // The short-circuit half of the H1 return rule: a scalar return from
-    // the live H1 pass ends the whole run, so no section ever runs - the
+    // the H1 pass ends the whole run, so no section ever runs - the
     // walk's erroring section is the tripwire.
     let md = "---\nname: t\ndescription: d\nrunvil: 0\n---\n\n\
         # Short Circuit\n\n\
@@ -65,7 +65,7 @@ fn h1_prose_inferred_explicitly_is_the_run_result() {
 
 #[test]
 fn h1_and_h2_prose_each_infer_explicitly_in_source_order() {
-    // The live H1 pass and the H2 section each read their own pending
+    // The H1 pass and the H2 section each read their own pending
     // buffer into an explicit infer - two completions, in source order.
     let gateway = ScriptedChat::new(vec![text("h1 reply"), text("h2 reply")]);
     let md = "---\nname: shared-loop\ndescription: d\nrunvil: 0\nmodels:\n  writer: {}\n---\n\n\
@@ -130,7 +130,7 @@ fn unread_h1_prose_stays_inert_and_explicit_infer_requires_a_model() {
 }
 
 #[test]
-fn live_h1_prose_infers_explicitly_and_var_accumulates_into_the_walk() {
+fn h1_prose_infers_explicitly_and_var_accumulates_into_the_walk() {
     // The pass reads its pending buffer only through an explicit infer, and
     // `var` writes accumulate across the pass into the walk.
     let gateway = ScriptedChat::new(vec![text("final answer")]);

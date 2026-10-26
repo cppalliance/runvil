@@ -44,12 +44,9 @@ fn nested_call_and_inference_run_end_to_end_on_a_current_thread_runtime() {
 
 #[test]
 fn cancellation_while_suspended_on_infer_interrupts_the_run() {
-    // The 30-second reply is held, and the cancel lands once its round is
-    // issued.
-    let gateway = ScriptedChat::new(vec![delayed(
-        std::time::Duration::from_secs(30),
-        text("too late"),
-    )]);
+    // The round is held, so its reply never arrives, and the cancel lands
+    // once the round is issued.
+    let gateway = ScriptedChat::new(vec![text("too late")]);
     let md = "---\nname: cancel\ndescription: d\nrunvil: 0\n---\n\n\
         # Cancel\n\n\
         ## Only\n\n\

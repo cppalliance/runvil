@@ -249,7 +249,7 @@ fn waiting_on_a_delivered_task_raises_task_consumed() {
 fn cancel_ends_a_parked_task_idempotently_and_reports_task_cancelled_once() {
     // The child parks on a store write; the owner cancels it twice (the
     // second is a no-op), reads the terminal state, and ends with no live
-    // task - so no `tasks_live`. A wait on the cancelled slot delivers
+    // task - so no `tasks_live`. A wait on the cancelled entry delivers
     // `ok = false` with a `cancelled` error value.
     //
     // The rig holds the child's write until the child's `TaskCancelled` is

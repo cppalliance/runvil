@@ -3,7 +3,7 @@
 //! `tasks_live` at chain end); on `tasks.join` it returns `results,
 //! timed_out` with the unfinished members absent. When a member wins the
 //! shim cancels the timer and its leaf work is dropped. The timer is an
-//! effect-backed slot the author never sees: `tasks.pending` and a status
+//! effect-backed entry the author never sees: `tasks.pending` and a status
 //! table's `tasks` list omit it, and it reports no task observations.
 //!
 //! A slow member parks on a model round the rig holds while it answers the
@@ -59,7 +59,7 @@ fn join_any_returns_nil_when_the_timer_wins_and_the_member_keeps_running() {
     assert_eq!(
         rig.task_state_for_test(&task("0.1")),
         Some(TaskState::Delivered { ok: true }),
-        "the fired timer's slot was delivered to the wait"
+        "the fired timer's entry was delivered to the wait"
     );
     assert!(
         recorder.observations_of(&task("0.1")).is_empty(),
@@ -71,7 +71,7 @@ fn join_any_returns_nil_when_the_timer_wins_and_the_member_keeps_running() {
 #[test]
 fn join_any_cancels_the_timer_when_a_member_wins() {
     // The child returns at once; the wait's 30s timer is held and never
-    // fires: the shim cancels it, its slot is `Cancelled`, and the run
+    // fires: the shim cancels it, its entry is `Cancelled`, and the run
     // ends without waiting on it or leaking it.
     let md = tasks_prompt(
         "local t = tasks.spawn('## Child')\n\

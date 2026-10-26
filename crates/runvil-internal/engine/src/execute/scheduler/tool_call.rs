@@ -101,10 +101,8 @@ enum ToolRoute {
 impl Scheduler {
     /// Dispatches a `tool_call` request. An issued bound call parks the
     /// chain in the effect table; an adhoc tool's handler resumes the
-    /// chain on the spot; every preparation failure - an unbound alias,
-    /// the counts install - is the call's answer, resumed
-    /// into the caller so an author `pcall` catches it exactly as a tool
-    /// failure.
+    /// chain on the spot. Its preparation fails on an unbound alias or the
+    /// counts install.
     pub(super) fn dispatch_tool_call(
         &mut self,
         id: ChainIndex,

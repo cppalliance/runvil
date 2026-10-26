@@ -12,8 +12,7 @@ use super::super::scripted_chat::{ScriptedReply, text};
 use crate::execute::{Effect, EffectAnswer, EffectId, EffectRecord, Run, RunResult, Step};
 
 /// The answer a `Chat` effect gets from the scripted model's `reply`,
-/// built as [`ScriptedChat::complete_now`] builds it for a round within the
-/// timeout.
+/// built as [`ScriptedChat::complete_now`] builds it.
 ///
 /// [`ScriptedChat::complete_now`]: super::super::scripted_chat::ScriptedChat::complete_now
 pub(crate) fn chat_answer(reply: &ScriptedReply) -> EffectAnswer {

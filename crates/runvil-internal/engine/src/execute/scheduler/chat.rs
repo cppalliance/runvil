@@ -60,10 +60,8 @@ impl Scheduler {
     /// Dispatches a `chat` request: one tool-capable model round over the
     /// author's message list. An issued round parks the chain in the
     /// effect table; a precheck overflow answers the round on the spot
-    /// with the overflow flag; every preparation failure - the empty list,
-    /// the binding, the scope, the projection, the client - is the call's
-    /// answer, resumed into the caller so an author `pcall` catches it
-    /// exactly as on the other dispatch paths.
+    /// with the overflow flag. Its preparation fails on the empty list,
+    /// the binding, the scope, the projection, or the client.
     pub(super) fn dispatch_chat(
         &mut self,
         id: ChainIndex,

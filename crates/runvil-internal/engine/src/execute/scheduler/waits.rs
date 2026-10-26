@@ -3,15 +3,15 @@
 //! `join_any` is the one scheduler wait primitive: a chain names a set of
 //! tasks it owns and is resumed with the first member that ends - at once
 //! when one already has, otherwise when a member's chain end delivers it.
-//! Delivery moves a `Done` slot to `Delivered` (its outcome is taken by
+//! Delivery moves a `Done` entry to `Delivered` (its outcome is taken by
 //! exactly one wait; a second wait raises `task_consumed`), and it joins
 //! the task: everything the task did happens before the owner's next
 //! step, so its store writes are visible from the very next operation. A
-//! `Cancelled` slot delivers `ok = false` with the `cancelled` error
+//! `Cancelled` entry delivers `ok = false` with the `cancelled` error
 //! value and stays as it is, since it holds no result to consume - but
-//! its delivery still joins its partial writes. An `Abandoned` slot is
+//! its delivery still joins its partial writes. An `Abandoned` entry is
 //! never delivered: a task is abandoned because its owner ended, and only
-//! the owner may wait on it, so no wait can reach the slot.
+//! the owner may wait on it, so no wait can reach the entry.
 //!
 //! Ownership is the rule for every arm: only the chain that owns a task -
 //! its spawner, or the root walk for a task the H1 pass spawned, since the
@@ -20,11 +20,11 @@
 //! is refused the same way so a caller learns nothing about tasks it never
 //! started. `status` and `note` add the self exception: a chain may read
 //! and annotate the task it runs inside (`sys.taskid`), which is how a
-//! task reports progress. The main walk is task `0` with no slot, so its
-//! own status is not reportable, and a note outside a slotted task (the
-//! main walk and its `call` children) records nothing.
+//! task reports progress. The main walk is task `0` with no entry, so its
+//! own status is not reportable, and a note outside a task with an entry
+//! (the main walk and its `call` children) records nothing.
 //!
-//! Cancel is idempotent: a live task's slot moves to `Cancelled`, its
+//! Cancel is idempotent: a live task's entry moves to `Cancelled`, its
 //! backing chain aborts with everything it owns, and `TaskCancelled` fires
 //! once under its target; a task already in a terminal state is left as it
 //! is and reports nothing.
@@ -40,7 +40,7 @@ use crate::lua::{Answer, NonEmpty, TaskDelivery, TaskPhase, TaskStatus};
 use crate::{Error, Result};
 
 use super::chain_record::Parked;
-use super::tasks::{SlotState, TaskBacking, TaskSlot, TaskState};
+use super::tasks::{SlotState, TaskBacking, TaskEntry, TaskState};
 use super::{ChainIndex, Scheduler};
 
 /// The phase `tasks.status` reports: a delivered task reads `done`, since
@@ -55,18 +55,18 @@ fn task_phase(state: TaskState) -> TaskPhase {
 }
 
 impl Scheduler {
-    /// The slot of a task `caller` owns, or [`Error::TaskNotOwned`] - for
+    /// The entry of a task `caller` owns, or [`Error::TaskNotOwned`] - for
     /// an unknown id too.
-    fn owned_slot(&self, caller: ChainIndex, task: &TaskId) -> Result<&TaskSlot> {
+    fn owned_entry(&self, caller: ChainIndex, task: &TaskId) -> Result<&TaskEntry> {
         match self.tasks.get(task) {
             Some(slot) if slot.owner == caller => Ok(slot),
             _ => Err(Error::TaskNotOwned { task: task.clone() }),
         }
     }
 
-    /// The slot of a task `caller` owns or runs inside (its `sys.taskid`,
+    /// The entry of a task `caller` owns or runs inside (its `sys.taskid`,
     /// which a `call` child of the task chain shares).
-    fn visible_slot(&self, caller: ChainIndex, task: &TaskId) -> Result<&TaskSlot> {
+    fn visible_entry(&self, caller: ChainIndex, task: &TaskId) -> Result<&TaskEntry> {
         match self.tasks.get(task) {
             Some(slot) if slot.owner == caller || self.chains[caller.index()].task == *task => {
                 Ok(slot)
@@ -75,8 +75,8 @@ impl Scheduler {
         }
     }
 
-    /// The live tasks `owner` owns in spawn order; an internal timer slot
-    /// is never listed.
+    /// The live tasks `owner` owns in spawn order; an internal timer's
+    /// entry is never listed.
     fn live_tasks_of(&self, owner: ChainIndex) -> Vec<TaskId> {
         self.tasks
             .iter()
@@ -117,7 +117,7 @@ impl Scheduler {
     fn first_terminal(&self, id: ChainIndex, tasks: &[TaskId]) -> Result<Option<TaskId>> {
         let mut first = None;
         for task in tasks {
-            let slot = self.owned_slot(id, task)?;
+            let slot = self.owned_entry(id, task)?;
             match slot.state {
                 SlotState::Delivered { .. } => {
                     return Err(Error::TaskConsumed { task: task.clone() });
@@ -133,10 +133,10 @@ impl Scheduler {
         Ok(first)
     }
 
-    /// Takes a terminal slot's outcome as a delivery: a `Done` slot's
-    /// outcome moves out and the slot to `Delivered`; a cancelled slot
+    /// Takes a terminal entry's outcome as a delivery: a `Done` entry's
+    /// outcome moves out and the entry to `Delivered`; a cancelled entry
     /// yields the `cancelled` error value and stays, having no result to
-    /// consume. An abandoned slot has no live owner to wait on it, so its
+    /// consume. An abandoned entry has no live owner to wait on it, so its
     /// delivery is a scheduler bug. The delivery is the join: everything
     /// the task did happens before the owner's next step, so its store
     /// writes - a cancelled task's partial writes included - are visible
@@ -165,12 +165,12 @@ impl Scheduler {
                     state @ (SlotState::Running | SlotState::Delivered { .. }) => {
                         slot.state = state;
                         Err(Error::internal(
-                            "only a terminal, undelivered slot is delivered",
+                            "only a terminal, undelivered entry is delivered",
                         ))
                     }
                 }
             }
-            None => Err(Error::internal("a delivered task has a slot")),
+            None => Err(Error::internal("a delivered task has an entry")),
         };
         TaskDelivery {
             task: task.clone(),
@@ -192,7 +192,7 @@ impl Scheduler {
     /// Dispatches a `ready` request: whether a task the chain owns has
     /// ended, delivered or not.
     pub(super) fn dispatch_ready(&mut self, id: ChainIndex, task: &TaskId) -> Result<()> {
-        let answer = self.owned_slot(id, task).map(|slot| !slot.state.is_live());
+        let answer = self.owned_entry(id, task).map(|slot| !slot.state.is_live());
         self.answer_inline(id, Answer::Ready(answer))
     }
 
@@ -203,12 +203,12 @@ impl Scheduler {
         self.answer_inline(id, Answer::Status(answer))
     }
 
-    /// Reads one task's status: the slot's facts and note, plus the backing
+    /// Reads one task's status: the entry's facts and note, plus the backing
     /// chain's position while it is live (its section and what it is
     /// parked on) and the chain's counters, which the append-only arena
     /// keeps after the chain ends.
     fn task_status(&self, id: ChainIndex, task: &TaskId) -> Result<TaskStatus> {
-        let slot = self.visible_slot(id, task)?;
+        let slot = self.visible_entry(id, task)?;
         let state = slot.state.view();
         let mut status = TaskStatus {
             target: slot.target.clone(),
@@ -272,9 +272,9 @@ impl Scheduler {
     }
 
     /// Dispatches a `note` request: the text becomes the latest note of the
-    /// task the chain runs inside, recorded on the task's slot, so a `call`
-    /// child's note is the task's. A note outside a slotted task (the main
-    /// walk, task `0`, and its `call` children) records nothing.
+    /// task the chain runs inside, recorded on the task's entry, so a `call`
+    /// child's note is the task's. A note outside a task with an entry (the
+    /// main walk, task `0`, and its `call` children) records nothing.
     pub(super) fn dispatch_note(&mut self, id: ChainIndex, text: String) -> Result<()> {
         if let Some(slot) = self.tasks.get_mut(&self.chains[id.index()].task) {
             slot.note = Some(text);
@@ -288,7 +288,7 @@ impl Scheduler {
         self.answer_inline(id, Answer::Cancel(answer))
     }
 
-    /// Cancels a live task `caller` owns: the slot moves to `Cancelled`, the
+    /// Cancels a live task `caller` owns: the entry moves to `Cancelled`, the
     /// backing ends (a chain with everything it owns, a request dropped),
     /// and `TaskCancelled` fires once under the target - except for an
     /// internal timer, whose cancel is the wait shim's own bookkeeping and
@@ -296,7 +296,7 @@ impl Scheduler {
     /// start event and reports no terminal. A task already in a terminal
     /// state is left as it is.
     fn cancel_task(&mut self, caller: ChainIndex, task: &TaskId) -> Result<()> {
-        let slot = self.owned_slot(caller, task)?;
+        let slot = self.owned_entry(caller, task)?;
         if !slot.state.is_live() {
             return Ok(());
         }

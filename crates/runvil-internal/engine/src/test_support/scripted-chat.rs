@@ -3,17 +3,15 @@
 //! The Engine emits each round as a `Chat` effect for the caller to perform.
 //! [`ScriptedChat`] answers each round from a fixed script instead, with
 //! no HTTP and no wire code, and records what every round carried so a
-//! suite asserts on the effect rather than on a request body. The answers
-//! follow the rules the gateway client's reader applies: an empty reply is
-//! the reader's `EmptyReply` failure, and a reply past the run's timeout is
-//! the client's `Timeout` failure. The reply constructors beside it -
-//! [`text`], [`text_finish`], [`calls`], [`fail`], and [`delayed`] - write
-//! the script. The bench answers its rounds from the same model through
-//! the `test-support` feature.
+//! suite asserts on the effect rather than on a request body. The
+//! empty-reply wording copies the gateway client's reader, because the
+//! Engine cannot depend on the gateway client; the two copies change
+//! together. The reply constructors beside it -
+//! [`text`], [`text_finish`], [`calls`], and [`fail`] - write the script.
+//! The bench answers its rounds from the same model through the
+//! `test-support` feature.
 
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};
-use std::time::Duration;
 
 use runvil_model_client::client::{Completion, CompletionResult, Message, ToolCall, ToolSchema};
 use runvil_model_client::model::{CompletionError, CompletionErrorKind, CompletionOptions};
@@ -78,8 +76,10 @@ pub fn calls(calls: &[(&str, &str, &str)]) -> ScriptedReply {
 
 /// A failed round of `kind`, with HTTP `status` and response `body`.
 ///
-/// It reads as the gateway client reports a non-success status: the kind's
-/// phrase with the status appended, and the body as the detail.
+/// For every kind it builds the kind's phrase with the status appended and
+/// the body as the detail, skipping the gateway client's classification
+/// (no credentials wording for 401 and 403, no parsed overflow counts), so
+/// each test names its kind directly.
 #[must_use]
 pub fn fail(kind: CompletionErrorKind, status: u16, body: &str) -> ScriptedReply {
     ScriptedReply::Failure {
@@ -88,12 +88,6 @@ pub fn fail(kind: CompletionErrorKind, status: u16, body: &str) -> ScriptedReply
         detail: Some(body.to_owned()),
         finish_reason: None,
     }
-}
-
-/// `reply`, answered after `delay`, which the run's timeout bounds.
-#[must_use]
-pub fn delayed(delay: Duration, reply: ScriptedReply) -> ScriptedReply {
-    ScriptedReply::Delayed(delay, Box::new(reply))
 }
 
 /// One scripted answer to a round.
@@ -135,23 +129,11 @@ pub enum ScriptedReply {
         /// The backend's stop label, when it supplied one.
         finish_reason: Option<String>,
     },
-    /// Another reply, answered after a delay the run's timeout bounds.
-    Delayed(Duration, Box<ScriptedReply>),
 }
 
 impl ScriptedReply {
-    /// The total delay before this reply is answered.
-    fn delay(&self) -> Duration {
-        match self {
-            ScriptedReply::Delayed(delay, inner) => *delay + inner.delay(),
-            _ => Duration::ZERO,
-        }
-    }
-
-    /// Answers a round with this reply, ignoring its delay.
-    ///
-    /// This is the answer [`ScriptedChat::complete_now`] gives a round
-    /// within the timeout.
+    /// Answers a round with this reply: the answer
+    /// [`ScriptedChat::complete_now`] gives.
     ///
     /// # Errors
     /// Returns the scripted failure, the `EmptyReply` failure for an empty
@@ -205,7 +187,6 @@ impl ScriptedReply {
                 }
                 Err(error)
             }
-            ScriptedReply::Delayed(_, inner) => inner.answer(),
         }
     }
 }
@@ -224,12 +205,6 @@ fn empty_reply(reasoning_present: bool, finish_reason: Option<&str>) -> Completi
         Some(reason) => error.with_finish_reason(reason),
         None => error,
     }
-}
-
-/// The client's failure for a reply that missed the run's timeout.
-fn timed_out() -> CompletionError {
-    let kind = CompletionErrorKind::Timeout;
-    CompletionError::new(kind, kind.phrase())
 }
 
 /// What one round's `Chat` effect carried.
@@ -271,8 +246,6 @@ impl ScriptedCall {
 pub struct ScriptedChat {
     replies: Arc<Vec<ScriptedReply>>,
     requests: Arc<Mutex<Vec<ScriptedCall>>>,
-    /// The number of rounds asked of the script so far.
-    pub(crate) calls: Arc<AtomicUsize>,
 }
 
 impl ScriptedChat {
@@ -289,14 +262,16 @@ impl ScriptedChat {
         ScriptedChat {
             replies: Arc::new(replies),
             requests: Arc::new(Mutex::new(Vec::new())),
-            calls: Arc::new(AtomicUsize::new(0)),
         }
     }
 
     /// The number of rounds asked of the script so far.
     #[must_use]
     pub fn call_count(&self) -> usize {
-        self.calls.load(Ordering::SeqCst)
+        self.requests
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .len()
     }
 
     /// Every recorded round, in the order the rounds arrived.
@@ -320,37 +295,29 @@ impl ScriptedChat {
 
     /// Answers one round at once.
     ///
-    /// It records what the round carried, counts it, and returns the
-    /// completion or the failure. Nothing waits: a delay past `timeout`
-    /// answers the `Timeout` failure, and any other delay answers the inner
-    /// reply.
+    /// It records what the round carried, which counts it, and returns the
+    /// completion or the failure.
     ///
     /// # Errors
-    /// Returns the scripted failure, the `Timeout` failure for a delay past
-    /// `timeout`, the `EmptyReply` failure for an empty text reply, and the
-    /// `InvalidParts` failure for a tool call the validating constructors
-    /// refuse.
+    /// Returns the scripted failure, the `EmptyReply` failure for an empty
+    /// text reply, and the `InvalidParts` failure for a tool call the
+    /// validating constructors refuse.
     pub fn complete_now(
         &self,
         messages: &[Message],
         tools: &[ToolSchema],
         options: &CompletionOptions,
-        timeout: Duration,
     ) -> Result<Completion, CompletionError> {
-        let index = self.calls.fetch_add(1, Ordering::SeqCst);
-        self.requests
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .push(ScriptedCall {
+        let index = {
+            let mut requests = self.requests.lock().unwrap_or_else(PoisonError::into_inner);
+            let index = requests.len();
+            requests.push(ScriptedCall {
                 messages: messages.to_vec(),
                 tools: tools.to_vec(),
                 options: options.clone(),
             });
-        let reply = &self.replies[index.min(self.replies.len() - 1)];
-        if reply.delay() > timeout {
-            Err(timed_out())
-        } else {
-            reply.answer()
-        }
+            index
+        };
+        self.replies[index.min(self.replies.len() - 1)].answer()
     }
 }

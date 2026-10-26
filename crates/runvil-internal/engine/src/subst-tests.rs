@@ -393,16 +393,3 @@ fn item_dot_path_is_error() {
         "error must say not a table: {err}"
     );
 }
-
-#[test]
-fn render_item_renders_by_type() {
-    // The item rendering rule: strings verbatim, numbers and booleans in
-    // their natural string form, arrays and objects as compact JSON.
-    assert_eq!(render_item(&json!("abc")), "abc");
-    assert_eq!(render_item(&json!(3)), "3");
-    assert_eq!(render_item(&json!(1.5)), "1.5");
-    assert_eq!(render_item(&json!(true)), "true");
-    assert_eq!(render_item(&json!(["a", 1])), "[\"a\",1]");
-    assert_eq!(render_item(&json!({ "k": 1 })), "{\"k\":1}");
-    assert_eq!(render_item(&Value::Null), "null");
-}

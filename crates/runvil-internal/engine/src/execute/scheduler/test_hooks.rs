@@ -1,6 +1,6 @@
 //! Test-only hooks over the scheduler's private state: the seams the
 //! `execute::tests` suites drive the scheduler's edge paths through
-//! (overflow bounds, the effect table, task slots, and answer delivery)
+//! (overflow bounds, the effect table, task entries, and answer delivery)
 //! and the turn counter and tool set they read. Compiled only under test; nothing here
 //! exists in a shipped Engine.
 
@@ -12,14 +12,14 @@ use runvil_types::ids::{ChainId, TaskId};
 use runvil_vfs::{Origin, detail};
 
 use crate::execute::run::EffectId;
-use crate::execute::walk_target::SlicePath;
+use crate::heading_address::{SectionIndex, SlicePath};
 use crate::lua::{Answer, ToolSet};
 use crate::{Error, Result};
 
 use super::chain::ChainStart;
-use super::chain_record::{Admission, CallDepth, ChainKind, SectionIndex};
+use super::chain_record::{Admission, CallDepth, ChainKind};
 pub(crate) use super::tasks::TaskState;
-use super::tasks::{SlotState, TaskBacking, TaskSlot};
+use super::tasks::{SlotState, TaskBacking, TaskEntry};
 use super::{ChainIndex, Counters, Outstanding, Scheduler};
 
 impl Scheduler {
@@ -65,7 +65,7 @@ impl Scheduler {
                 .expect("the arena has room for the wedge");
             self.tasks.insert(
                 task,
-                TaskSlot {
+                TaskEntry {
                     backing: TaskBacking::Chain { chain: wedge, exec },
                     owner,
                     target: "wedge".to_owned(),
@@ -88,8 +88,8 @@ impl Scheduler {
         matches!(self.outstanding.get(&effect), Some(Outstanding::Orphaned))
     }
 
-    /// The state of one task's slot, or `None` when no task with that id
-    /// was ever started, so a test can prove a chain's end moved its slot.
+    /// The state of one task's entry, or `None` when no task with that id
+    /// was ever started, so a test can prove a chain's end moved its entry.
     pub(crate) fn task_state_for_test(&self, task: &TaskId) -> Option<TaskState> {
         self.tasks.get(task).map(|slot| slot.state.view())
     }

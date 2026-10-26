@@ -2,7 +2,7 @@
 //! end every task an ending chain owns.
 //!
 //! The chain-end rules: a task ends with its owner. When a chain ends,
-//! every live task it owns is abandoned - its slot moves to `Abandoned`,
+//! every live task it owns is abandoned - its entry moves to `Abandoned`,
 //! its terminal observation names how the owner ended, and its backing
 //! chain aborts with everything it owns in turn. A task left live is the
 //! author's bug, so the owner's own outcome becomes `tasks_live` naming the
@@ -24,23 +24,23 @@ use super::tasks::{SlotState, TaskBacking};
 use super::{ChainIndex, Outstanding, Scheduler};
 
 impl Scheduler {
-    /// Applies a task chain's end to its slot: the outcome lands in the
-    /// slot, the slot moves to `Done`, the task's terminal observation
+    /// Applies a task chain's end to its entry: the outcome lands in the
+    /// entry, the entry moves to `Done`, the task's terminal observation
     /// fires under its target section, and an owner parked on a set
-    /// containing the task is woken with it delivered. Otherwise the slot
+    /// containing the task is woken with it delivered. Otherwise the entry
     /// holds the outcome until a wait takes it.
     ///
     /// # Errors
-    /// Returns [`Error::Internal`] when the chain has no slot - every task
-    /// chain registers its slot before it is enqueued - or when the woken
-    /// owner has no suspended block. Only a scheduler bug produces either.
+    /// Returns [`Error::Internal`] when the chain has no entry - every task
+    /// chain registers its entry before it is enqueued - or when the woken
+    /// owner has no suspended block.
     pub(super) fn complete_task(&mut self, id: ChainIndex, outcome: Result<String>) -> Result<()> {
         let chain = &self.chains[id.index()];
         let task = chain.task.clone();
         // The terminal is the task's own last word, stamped with its task.
         let emitter = Arc::clone(chain.ctx.emitter());
         let Some(slot) = self.tasks.get_mut(&task) else {
-            return Err(Error::internal("a task chain's end implies its slot"));
+            return Err(Error::internal("a task chain's end implies its entry"));
         };
         let succeeded = outcome.is_ok();
         slot.state = SlotState::Done(outcome);
@@ -123,11 +123,11 @@ impl Scheduler {
     }
 
     /// Ends every live task `owner` owns because `owner` is ending: each
-    /// slot moves to `Abandoned`, its backing chain aborts with everything
+    /// entry moves to `Abandoned`, its backing chain aborts with everything
     /// it owns in turn (or its in-flight request is dropped), and its
     /// terminal observation fires under its target with `reason` - the
     /// observation is the reason's record, since no wait can reach an
-    /// abandoned slot once its owner is gone. An internal timer slot ends
+    /// abandoned entry once its owner is gone. An internal timer's entry ends
     /// the same way but reports nothing and never counts as leaked: it is
     /// the wait's detail, not a task the author started. Returns the
     /// abandoned ids in spawn order, for the owner's `tasks_live` outcome;
@@ -187,12 +187,12 @@ impl Scheduler {
     /// Ends every live task in the arena because the run itself is ending:
     /// the whole-run counterpart of the per-owner chain-end rule, so a
     /// task stranded by a run cancel or a fatal answer still receives its
-    /// one terminal before the run's end boundary. Each live slot's owner
+    /// one terminal before the run's end boundary. Each live entry's owner
     /// is passed to [`abandon_owned_tasks`](Self::abandon_owned_tasks)
-    /// with `reason`, in ascending arena order. No slot reports twice:
+    /// with `reason`, in ascending arena order. No entry reports twice:
     /// abandoning a task aborts its backing chain, and `abort_subtree`
     /// abandons that chain's own tasks (as `OwnerAborted`) on the way, so
-    /// a nested slot is already terminal when its owner's turn comes and
+    /// a nested entry is already terminal when its owner's turn comes and
     /// `is_live()` skips it. The leaked list is discarded: no one
     /// receives an outcome for a run that is ending.
     pub(super) fn settle_all_tasks(&mut self, reason: AbandonReason) {
@@ -223,9 +223,9 @@ impl Scheduler {
                 slot.owner = to;
             }
         }
-        // An effect-backed slot's effect is parked under its owner in the
+        // An effect-backed task's effect is parked under its owner in the
         // effect table; the pass has no parked effect of its own at the
-        // hand-off, so every entry under it is such a slot's.
+        // hand-off, so every effect-table entry under it is such a task's.
         for entry in self.outstanding.values_mut() {
             if let Outstanding::Parked(parked) = entry
                 && parked.chain == from

@@ -2,7 +2,7 @@
 //! through the store yield shims' install.
 //!
 //! Both frame constructors - `SectionContext::new` for a walked section (a
-//! spawned task's first entry included) and `SectionContext::new_live_h1`
+//! spawned task's first entry included) and `SectionContext::new_h1`
 //! for the H1 pass - run the sequence [`setup_section_vm`] lists. Only the
 //! deltas live at the call site: the constructor builds its own `sys` JSON
 //! (both take the chain's next entry `id`; a task's first entry adds its

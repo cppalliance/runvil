@@ -344,6 +344,7 @@ mod tests {
             render_item(&json!({"key": "alpha", "value": 1})),
             "{\"key\":\"alpha\",\"value\":1}"
         );
+        assert_eq!(render_item(&serde_json::Value::Null), "null");
     }
 
     #[test]

@@ -190,7 +190,7 @@ impl RunState {
         self.raw_shims = true;
     }
 
-    /// Replaces the run's model set with `set`, as the live H1 pass would
+    /// Replaces the run's model set with `set`, as the H1 pass would
     /// leave it, so a test can skip the pass. Call it before the run
     /// starts: every section VM shares the set it finds here.
     #[cfg(test)]

@@ -9,12 +9,13 @@
 use runvil_types::emitter::Emitter;
 use runvil_types::event::lifecycle;
 
+use crate::heading_address::SectionIndex;
 use crate::lua::{Answer, CoroStep, LuaBlockResult, Request, YieldParse};
 use crate::parser::{Block, BodyText};
 use crate::{Error, Result};
 
 use super::chain::ChainStep;
-use super::chain_record::{Entered, Running, SectionIndex};
+use super::chain_record::{Entered, Running};
 use super::{ChainIndex, Scheduler};
 
 /// The notice a failed H1 gate ends the run with; the chunk's own failure
@@ -196,7 +197,7 @@ impl Scheduler {
                     return Err(Error::internal("an unrecognized block kind cannot advance"));
                 }
                 // The section's blocks are exhausted: fall through.
-                None if is_h1 => return self.end_live_h1(id, SectionIndex::FIRST),
+                None if is_h1 => return self.end_h1(id, SectionIndex::FIRST),
                 None => {
                     self.end_section(id)?;
                     self.ready.push_back(id);
@@ -223,7 +224,7 @@ impl Scheduler {
             Settled::Answer(answer) => self.answer_inline(id, answer)?,
             // A jump out of H1 ends the pass and starts the walk at the
             // target.
-            Settled::Jump(heading) if is_h1 => return self.end_live_h1_at_jump(id, &heading),
+            Settled::Jump(heading) if is_h1 => return self.end_h1_at_jump(id, &heading),
             Settled::Jump(heading) => {
                 self.apply_jump(id, &heading)?;
                 self.ready.push_back(id);

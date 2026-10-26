@@ -23,7 +23,7 @@
 //!   vocabulary (the `Effect` a leaf arm issues, its serializable
 //!   `EffectRecord`, and the `EffectAnswer` the caller returns).
 //! - `scheduler` - the chain scheduler driving the coroutine protocol:
-//!   the live H1 pass, the walk, call chains, fanout, and the `chat` and
+//!   the H1 pass, the walk, call chains, fanout, and the `chat` and
 //!   `tool_call` rounds that `models.loop` and a model handle's `loop`
 //!   yield over the section's `messages`.
 //! - `scope` - the merge that builds and checks a section entry's frozen

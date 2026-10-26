@@ -82,8 +82,7 @@ fn parse_loop_prompt() -> Prompt {
 
 /// Prepares and runs `prompt` on a `context`-token window, on the serial
 /// driver: every effect is performed in process, and every round is
-/// answered by `chat` under the run's timeout. A prompt the prepare
-/// refuses ends with the refusal.
+/// answered by `chat`. A prompt the prepare refuses ends with the refusal.
 fn run_once(prompt: &Prompt, chat: &ScriptedChat, context: u32) -> RunResult {
     let limits = RunLimits::new();
     let ctx = RunContext::new(EXECUTION, SEED, Timestamp::UNIX_EPOCH)
@@ -105,7 +104,7 @@ fn run_once(prompt: &Prompt, chat: &ScriptedChat, context: u32) -> RunResult {
             else {
                 unreachable!("perform_locally hands the model only chat effects");
             };
-            let answer = chat.complete_now(messages, tools, options, limits.timeout());
+            let answer = chat.complete_now(messages, tools, options);
             EffectAnswer::Chat(answer.map(Box::new))
         })
     });

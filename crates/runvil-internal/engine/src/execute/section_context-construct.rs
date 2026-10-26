@@ -1,7 +1,7 @@
 //! The frame's two constructors: one per arrival kind. Each absorbs the VM
 //! construction and setup preamble for its kind of section entry - a
 //! walked section (a spawned task's first entry included, seeded with its
-//! `item` and `sys.index`), the live H1 pass (section 0) - and hands back
+//! `item` and `sys.index`), the H1 pass (section 0) - and hands back
 //! a live [`SectionContext`] whose `Drop` is the teardown boundary. The
 //! setup half ([`section_vm::setup_section_vm`]) is shared; only the seed,
 //! the `sys` extras, the visible set behind the `prompt` reads, and the
@@ -15,8 +15,8 @@ use runvil_vfs::Access;
 
 use crate::execute::context::RunState;
 use crate::execute::section_vm::{self, VmSeed};
-use crate::execute::walk_target::{self, RequireOrigin, SlicePath};
-use crate::heading_address::Visible;
+use crate::execute::walk_target::{self, RequireOrigin};
+use crate::heading_address::{SectionIndex, SlicePath, Visible};
 use crate::lua::{Library, LibraryKey, SectionVm};
 use crate::parser::Prompt;
 use crate::{Error, Result};
@@ -68,7 +68,7 @@ impl SectionContext {
         ctx: &RunState,
         access: &Arc<Access>,
         home: &SlicePath,
-        index: usize,
+        index: SectionIndex,
         section_id: &str,
         task_id: &TaskId,
         var: &serde_json::Value,
@@ -76,7 +76,7 @@ impl SectionContext {
     ) -> Result<Self> {
         let section = home
             .resolve(ctx.prompt())
-            .get(index)
+            .get(index.get())
             .ok_or(Error::internal(
                 "an entered section is absent from its slice",
             ))?;
@@ -164,11 +164,7 @@ impl SectionContext {
     /// construction or limits failure propagates bare, before any teardown
     /// observation exists; a setup failure tears the fresh VM down first, so
     /// the teardown boundary still fires exactly once on that path.
-    pub(crate) fn new_live_h1(
-        ctx: &RunState,
-        access: &Arc<Access>,
-        section_id: &str,
-    ) -> Result<Self> {
+    pub(crate) fn new_h1(ctx: &RunState, access: &Arc<Access>, section_id: &str) -> Result<Self> {
         let title = ctx.prompt().title();
         // The pass is the root chain, and the root chain is task `0`.
         let root_task = TaskId::from(ChainId::root());

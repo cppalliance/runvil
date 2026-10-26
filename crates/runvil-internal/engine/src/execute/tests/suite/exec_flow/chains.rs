@@ -308,15 +308,16 @@ fn fanout_arms_take_child_ids_in_collection_order_and_a_per_fanout_index() {
     assert_eq!(Scenario::new(source).run().text(), "ok");
 }
 
-/// `sys.index` exists only inside a fanout arm; reading it in a walked
-/// section raises the sealed-sys unknown-field error.
+/// `sys.index` exists only on a spawned task's first entry (a fanout arm's,
+/// or a `tasks.spawn` with `opts.index`); reading it in a walked section
+/// raises the sealed-sys unknown-field error.
 #[test]
 fn sys_index_outside_a_fanout_errors() {
     let trace = Scenario::new(prompt("", &[("Main", "return tostring(sys.index)")])).run();
     let rendered = trace.error().to_string();
     assert!(
         rendered.contains("unknown sys field 'index'"),
-        "sys.index is fanout-only: {rendered}"
+        "sys.index is absent in a walked section: {rendered}"
     );
 }
 

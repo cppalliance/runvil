@@ -34,10 +34,17 @@ fn library_tree() -> Prompt {
         .expect("the tree parses")
 }
 
+/// The slice path through `ancestors`, from the top level down.
+fn path(ancestors: &[usize]) -> SlicePath {
+    ancestors.iter().fold(SlicePath::root(), |path, &index| {
+        path.child(SectionIndex::new(index))
+    })
+}
+
 /// `#### Self`: index 1 of `### Parent`'s children, which sit under
 /// `## Grand`.
 fn self_origin() -> RequireOrigin {
-    RequireOrigin::Section(SlicePath::root().child(1).child(0), 1)
+    RequireOrigin::Section(path(&[1, 0]), SectionIndex::new(1))
 }
 
 fn program(source: &str) -> LuaProgram {
@@ -98,13 +105,13 @@ fn a_key_maps_back_to_its_section_position() {
         resolve_library(&prompt, &self_origin(), "#### Sibling", None).expect("a sibling resolves");
     assert_eq!(
         RequireOrigin::from_key(&library.key).expect("the key parses"),
-        RequireOrigin::Section(SlicePath::root().child(1).child(0), 0)
+        RequireOrigin::Section(path(&[1, 0]), SectionIndex::FIRST)
     );
     let top = resolve_library(&prompt, &RequireOrigin::H1, "## Top", None)
         .expect("a top-level section resolves");
     assert_eq!(
         RequireOrigin::from_key(&top.key).expect("the key parses"),
-        RequireOrigin::Section(SlicePath::root(), 0)
+        RequireOrigin::Section(SlicePath::root(), SectionIndex::FIRST)
     );
 }
 
@@ -113,7 +120,7 @@ fn one_heading_from_two_positions_names_two_libraries() {
     let prompt = library_tree();
     let near = resolve_library(&prompt, &self_origin(), "### Helpers", None)
         .expect("the parent's sibling resolves");
-    let top = RequireOrigin::Section(SlicePath::root(), 0);
+    let top = RequireOrigin::Section(SlicePath::root(), SectionIndex::FIRST);
     let far = resolve_library(&prompt, &top, "### Helpers", None)
         .expect("a top-level section's child resolves");
     assert_eq!(near.heading, far.heading);

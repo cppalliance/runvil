@@ -23,7 +23,7 @@ use crate::parser::Prompt;
 use crate::test_support::recording::{Observation, Observer, detail, null_emitter};
 use crate::test_support::scenario::{Scenario, Trace};
 use crate::test_support::scripted_chat::{
-    MOCK_MODEL, ScriptedCall, ScriptedChat, ScriptedReply, calls, delayed, fail, text, text_finish,
+    MOCK_MODEL, ScriptedCall, ScriptedChat, ScriptedReply, calls, fail, text, text_finish,
 };
 use crate::test_support::seeded::Seeded;
 use crate::test_support::{FnTool, fresh_access};
