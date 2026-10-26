@@ -136,7 +136,7 @@ const UI_SNAPSHOT_OPTIONS: mlua::serde::SerializeOptions = mlua::serde::Serializ
 /// lifecycle: each call converts the run's `snapshot` afresh into a new
 /// table, JSON nulls reading as nil, so author code that mutates one
 /// result never sees the mutation on the next call. The snapshot is the
-/// application state the caller passed to `RunContext::ui` at run start;
+/// application state the caller passed to `RunContext::with_ui` at run start;
 /// a later change takes effect on the next run. A run started without a
 /// snapshot never installs the global, so `ui` is absent there - not
 /// stubbed.

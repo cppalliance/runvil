@@ -61,7 +61,7 @@ pub use requirements::{
 };
 pub use run::{
     AnswerRecord, ChatAnswerRecord, Effect, EffectAnswer, EffectId, EffectRecord, FailureRecord,
-    PackToolSets, Round, Run, Step, ToolAnswerRecord, ToolCallOrigin, ToolCaller,
+    IssuedEffect, PackToolSets, Round, Run, Step, ToolAnswerRecord, ToolCallOrigin, ToolCaller,
 };
 // The store vocabulary a `Vfs` effect holds and its answer returns, for
 // the Engine's own store handling; other crates name it from `runvil_lua`.
@@ -99,7 +99,7 @@ pub fn perform_vfs_op(
 /// payload explains it to people and models.
 ///
 /// # Outcomes
-/// - [`RunResult::Ok`] - the run completed with its final text.
+/// - [`RunResult::Completed`] - the run completed with its final text.
 /// - [`RunResult::Cancelled`] - the caller cancelled the run, or dropped an
 ///   effect the run was waiting on and no `pcall` caught the cancelled
 ///   error it resumed with.
@@ -113,10 +113,8 @@ pub fn perform_vfs_op(
 #[derive(Debug)]
 #[non_exhaustive]
 pub enum RunResult {
-    /// The run completed with its final text. The name matches
-    /// `Result::Ok`, so patterns must write `RunResult::Ok` wherever
-    /// `Result` is also in scope.
-    Ok(String),
+    /// The run completed with its final text.
+    Completed(String),
     /// The caller cancelled the run, or dropped an effect the run was
     /// waiting on and the cancelled error went uncaught.
     Cancelled,

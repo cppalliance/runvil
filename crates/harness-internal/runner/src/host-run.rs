@@ -175,17 +175,17 @@ impl HostRunContext {
         {
             if let Some(reason) = unresolved.get(&name) {
                 match reason {
-                    None => requirements.missing_required.push(name),
+                    None => requirements.missing_packs.push(name),
                     Some(reason) => requirements
-                        .unavailable
+                        .unavailable_packs
                         .push(UnavailablePack::new(name, reason.clone())),
                 }
                 continue;
             }
             match self.packs.get(&name) {
-                None => requirements.missing_required.push(name),
+                None => requirements.missing_packs.push(name),
                 Some(PackState::Unavailable(reason)) => requirements
-                    .unavailable
+                    .unavailable_packs
                     .push(UnavailablePack::new(name, reason.clone())),
                 Some(PackState::NeedsUnmet(unmet)) => {
                     for service in unmet {

@@ -97,7 +97,7 @@ fn a_role_check_by_hand_finds_the_same_shortfall_prepare_reports() -> TestResult
     }
     assert_eq!(misses, [("checker", true, false)]);
 
-    let [unmet] = requirements.unmet_requirements.as_slice() else {
+    let [unmet] = requirements.unmet_models.as_slice() else {
         return Err("only the checker falls short".into());
     };
     assert_eq!(unmet.role, "checker");

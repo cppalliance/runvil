@@ -699,7 +699,7 @@ Pinned tests that must stay green, beside each item's Check:
 
 <step-6>
 
-### Step 6: Reshape the facade API and fix the guide
+### Step 6: Reshape the facade API and fix the guide [completed]
 
 - Component: public facade
 - Tests: run each from the runvil root in PowerShell, as written:

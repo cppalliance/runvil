@@ -12,10 +12,11 @@ fn two_runs_whose_contexts_carry_different_rosters_each_see_their_own() -> TestR
     let usable = {
         let kit = kit.clone();
         Scenario::default()
-            .context(move |ctx| ctx.packs(vec![UsablePack::new(kit.clone(), "acme")], vec![]))
+            .context(move |ctx| ctx.with_packs(vec![UsablePack::new(kit.clone(), "acme")], vec![]))
     };
-    let unavailable = Scenario::default()
-        .context(move |ctx| ctx.packs(vec![], vec![UnavailablePack::new(kit.clone(), "down")]));
+    let unavailable = Scenario::default().context(move |ctx| {
+        ctx.with_packs(vec![], vec![UnavailablePack::new(kit.clone(), "down")])
+    });
 
     for (scenario, expected) in [(usable, "true"), (unavailable, "false")] {
         assert_eq!(scenario.run(&source)?.text()?, expected);

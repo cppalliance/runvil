@@ -11,7 +11,7 @@ use crate::recorder::RunOutcome;
 /// result enum is `#[non_exhaustive]`.
 pub(super) fn outcome_of(result: RunResult) -> RunOutcome {
     match result {
-        RunResult::Ok(final_text) => RunOutcome::Completed { final_text },
+        RunResult::Completed(final_text) => RunOutcome::Completed { final_text },
         RunResult::Cancelled => RunOutcome::Cancelled,
         RunResult::Failure(error) => failed_outcome(&error),
         unknown => RunOutcome::Failed {

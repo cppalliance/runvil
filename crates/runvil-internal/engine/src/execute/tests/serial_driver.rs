@@ -106,22 +106,22 @@ fn a_three_arm_fanout_fed_its_answers_in_reverse_order_packs_results_in_collecti
         other @ Step::Done { .. } => panic!("the fanout parks on its arms' rounds: {other:?}"),
     };
     assert!(
-        matches!(&effects[0].2, Effect::Vfs { .. }),
+        matches!(&effects[0].effect, Effect::Vfs { .. }),
         "the parent's store write is issued first: {effects:?}"
     );
-    let (id, _, store) = effects.remove(0);
-    run.resume(id, perform_locally(&store, &mut echo_chat));
+    let store = effects.remove(0);
+    run.resume(store.id, perform_locally(&store.effect, &mut echo_chat));
     let effects = match run.step() {
         Step::Pending { effects, .. } => effects,
         other @ Step::Done { .. } => panic!("the fanout parks on its arms' rounds: {other:?}"),
     };
     let prompts: Vec<String> = effects
         .iter()
-        .map(|(_, _, effect)| infer_prompt(effect))
+        .map(|issued| infer_prompt(&issued.effect))
         .collect();
     assert_eq!(prompts, ["a", "b", "c"], "all three arms issue in one step");
-    for (id, _, effect) in effects.into_iter().rev() {
-        run.resume(id, echo_chat(&effect));
+    for issued in effects.into_iter().rev() {
+        run.resume(issued.id, echo_chat(&issued.effect));
     }
     let (result, events) = match run.step() {
         Step::Done { result, events } => (result, events),

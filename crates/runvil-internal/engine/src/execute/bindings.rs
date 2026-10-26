@@ -8,7 +8,7 @@ use crate::model::{ModelId, ModelInfo};
 /// the model info of every model the run may use.
 ///
 /// [`prepare`](super::RunContext::prepare) fills these bindings. It binds
-/// every declared role to the run context's current model.
+/// every declared role to the current model the caller passes it.
 ///
 /// A lookup goes from a role label to a model identity, and from that
 /// identity to the model's info.

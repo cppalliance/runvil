@@ -9,7 +9,7 @@ use std::fmt::Write as _;
 use std::num::NonZeroU32;
 use std::sync::Arc;
 
-use runvil::effect::{Effect, EffectAnswer};
+use runvil::effect::{Effect, EffectAnswer, IssuedEffect};
 use runvil::model::{Completion, CompletionResult, ModelId, ModelInfo, ThinkingMode, ToolCall};
 use runvil::timestamp::Timestamp;
 use runvil::tools::{ToolCatalog, ToolId, ToolInfo, ToolOutput};
@@ -65,10 +65,9 @@ fn tool_round(offered: &[Offered]) -> Round {
         NonZeroU32::new(8_192).expect("8192 is non-zero"),
         ThinkingMode::Never,
     );
-    let ctx =
-        RunContext::new("round", RunSeed::from_bytes([7; 32]), Timestamp::UNIX_EPOCH).model(model);
+    let ctx = RunContext::new("round", RunSeed::from_bytes([7; 32]), Timestamp::UNIX_EPOCH);
     let catalog = ToolCatalog::new(tools).expect("the offered tools are distinct");
-    let (ctx, requirements) = ctx.tools(catalog).prepare(&prompt);
+    let (ctx, requirements) = ctx.with_tools(catalog).prepare(&prompt, Some(model));
     assert!(requirements.refusal().is_none(), "the round prepares");
     let mut run = Run::new(Arc::new(prompt), "", ctx);
     let mut rounds = Vec::new();
@@ -77,7 +76,7 @@ fn tool_round(offered: &[Offered]) -> Round {
             Step::Pending { effects, .. } => effects,
             Step::Done { result, .. } => break result,
         };
-        for (id, _provenance, effect) in effects {
+        for IssuedEffect { id, effect, .. } in effects {
             let answer = match effect {
                 Effect::Chat {
                     messages,
@@ -113,7 +112,7 @@ fn tool_round(offered: &[Offered]) -> Round {
         }
     };
     assert!(
-        matches!(&result, RunResult::Ok(text) if text == "done"),
+        matches!(&result, RunResult::Completed(text) if text == "done"),
         "the round runs to its terminal reply: {result:?}"
     );
     assert_eq!(rounds.len(), 2, "one tool round, then the terminal round");

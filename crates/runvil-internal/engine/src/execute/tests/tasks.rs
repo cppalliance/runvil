@@ -283,7 +283,7 @@ fn spawn_shares_calls_depth_cap() {
     let rig = Rig::run(scheduler_scenario(md));
     let outcome = rig.trace().result();
     assert!(
-        matches!(outcome, RunResult::Ok(_))
+        matches!(outcome, RunResult::Completed(_))
             || matches!(outcome, RunResult::Failure(error)
                 if matches!(error.inner(), Error::TasksLive { .. })),
         "unexpected outcome: {outcome:?}"

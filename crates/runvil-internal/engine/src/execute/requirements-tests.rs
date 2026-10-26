@@ -1,6 +1,8 @@
 //! Tests for the preflight report's missing services, unavailable
 //! Packs, and the reserved Pack ids `adhoc` and `dynamic`.
 
+use std::collections::BTreeSet;
+
 use runvil_types::packs::PackId;
 use runvil_types::timestamp::Timestamp;
 use runvil_types::tools::{ToolCatalog, ToolId, ToolInfo};
@@ -56,25 +58,25 @@ fn a_catalog_or_roster_naming_a_reserved_pack_id_refuses_the_run_naming_the_id_o
         let contexts = [
             (
                 "the catalog",
-                context().tools(catalog(&["web/fetch", &grab, &put])),
+                context().with_tools(catalog(&["web/fetch", &grab, &put])),
             ),
             (
                 "the usable roster",
-                context().packs(vec![UsablePack::new(id(reserved), "acme")], Vec::new()),
+                context().with_packs(vec![UsablePack::new(id(reserved), "acme")], Vec::new()),
             ),
             (
                 "the unavailable roster",
-                context().packs(
+                context().with_packs(
                     Vec::new(),
                     vec![UnavailablePack::new(id(reserved), "the server is down")],
                 ),
             ),
         ];
         for (named_by, ctx) in contexts {
-            let (_, requirements) = ctx.prepare(&declares_nothing());
+            let (_, requirements) = ctx.prepare(&declares_nothing(), None);
             assert_eq!(
                 requirements.reserved,
-                [id(reserved)],
+                BTreeSet::from([id(reserved)]),
                 "{named_by} names {reserved}"
             );
             assert!(!requirements.is_satisfied(), "{named_by} names {reserved}");
@@ -99,18 +101,21 @@ fn a_catalog_or_roster_naming_a_reserved_pack_id_refuses_the_run_naming_the_id_o
 #[test]
 fn a_context_naming_both_reserved_pack_ids_lists_them_sorted_each_once() {
     let ctx = context()
-        .tools(catalog(&[
+        .with_tools(catalog(&[
             "dynamic/search",
             "web/fetch",
             "adhoc/grab",
             "dynamic/call",
         ]))
-        .packs(
+        .with_packs(
             vec![UsablePack::new(id("dynamic"), "acme")],
             vec![UnavailablePack::new(id("adhoc"), "the server is down")],
         );
-    let (_, requirements) = ctx.prepare(&declares_nothing());
-    assert_eq!(requirements.reserved, [id("adhoc"), id("dynamic")]);
+    let (_, requirements) = ctx.prepare(&declares_nothing(), None);
+    assert_eq!(
+        requirements.reserved,
+        BTreeSet::from([id("adhoc"), id("dynamic")])
+    );
     assert_eq!(
         requirements.notice(),
         format!(
@@ -124,12 +129,12 @@ fn a_context_naming_both_reserved_pack_ids_lists_them_sorted_each_once() {
 #[test]
 fn a_context_naming_no_reserved_pack_id_leaves_the_reservations_empty() {
     let ctx = context()
-        .tools(catalog(&["web/fetch", "dynamics/search", "adhoc2/grab"]))
-        .packs(
+        .with_tools(catalog(&["web/fetch", "dynamics/search", "adhoc2/grab"]))
+        .with_packs(
             vec![UsablePack::new(id("web"), "runvil")],
             vec![UnavailablePack::new(id("mcp"), "the server is down")],
         );
-    let (_, requirements) = ctx.prepare(&declares_nothing());
+    let (_, requirements) = ctx.prepare(&declares_nothing(), None);
     assert!(requirements.reserved.is_empty(), "{requirements:?}");
     assert!(requirements.is_satisfied(), "{requirements:?}");
 }
@@ -144,19 +149,19 @@ fn merge_keeps_the_union_of_both_reports_reserved_ids_sorted_each_once() {
     kept.merge(Requirements::default());
     assert_eq!(
         kept.reserved,
-        [id("dynamic")],
+        BTreeSet::from([id("dynamic")]),
         "merging a clear report keeps the ids"
     );
     let mut gained = Requirements::default();
     gained.merge(reserving(&["dynamic"]));
     assert_eq!(
         gained.reserved,
-        [id("dynamic")],
+        BTreeSet::from([id("dynamic")]),
         "merging a reserving report takes its ids"
     );
     let mut union = reserving(&["dynamic"]);
     union.merge(reserving(&["dynamic", "adhoc"]));
-    assert_eq!(union.reserved, [id("adhoc"), id("dynamic")]);
+    assert_eq!(union.reserved, BTreeSet::from([id("adhoc"), id("dynamic")]));
     assert_eq!(
         union.notice(),
         format!(
@@ -174,7 +179,7 @@ fn web_down() -> UnavailablePack {
 #[test]
 fn an_unavailable_pack_leaves_the_report_unsatisfied() {
     let mut unavailable = Requirements::default();
-    unavailable.unavailable.push(web_down());
+    unavailable.unavailable_packs.push(web_down());
     assert!(!unavailable.is_satisfied());
     assert!(unavailable.refusal().is_some());
 }
@@ -182,7 +187,7 @@ fn an_unavailable_pack_leaves_the_report_unsatisfied() {
 #[test]
 fn the_notice_names_an_unavailable_packs_reason() {
     let mut requirements = Requirements::default();
-    requirements.unavailable.push(web_down());
+    requirements.unavailable_packs.push(web_down());
     assert_eq!(
         requirements.notice(),
         "the environment cannot satisfy this prompt:\n\
@@ -193,27 +198,27 @@ fn the_notice_names_an_unavailable_packs_reason() {
 #[test]
 fn merge_drops_a_missing_pack_named_as_unavailable() {
     let mut requirements = Requirements::default();
-    requirements.missing_required.push(id("web"));
-    requirements.missing_required.push(id("other"));
+    requirements.missing_packs.push(id("web"));
+    requirements.missing_packs.push(id("other"));
     let mut activation = Requirements::default();
-    activation.unavailable.push(web_down());
+    activation.unavailable_packs.push(web_down());
     requirements.merge(activation);
-    assert_eq!(requirements.missing_required, [id("other")]);
-    assert_eq!(requirements.unavailable, [web_down()]);
+    assert_eq!(requirements.missing_packs, [id("other")]);
+    assert_eq!(requirements.unavailable_packs, [web_down()]);
 }
 
 #[test]
 fn merge_folds_in_unavailable_packs_without_repeating_one() {
     let mut requirements = Requirements::default();
-    requirements.unavailable.push(web_down());
+    requirements.unavailable_packs.push(web_down());
     let mut other = Requirements::default();
-    other.unavailable.push(web_down());
+    other.unavailable_packs.push(web_down());
     other
-        .unavailable
+        .unavailable_packs
         .push(UnavailablePack::new(id("mcp"), "the server is down"));
     requirements.merge(other);
     assert_eq!(
-        requirements.unavailable,
+        requirements.unavailable_packs,
         [
             web_down(),
             UnavailablePack::new(id("mcp"), "the server is down")
@@ -261,24 +266,24 @@ fn merge_drops_an_incoming_missing_pack_already_named_as_lacking_a_service() {
         .missing_services
         .push(missing_input("user-input"));
     let mut other = Requirements::default();
-    other.missing_required.push(id("user-input"));
-    other.missing_required.push(id("other"));
+    other.missing_packs.push(id("user-input"));
+    other.missing_packs.push(id("other"));
     requirements.merge(other);
-    assert_eq!(requirements.missing_required, [id("other")]);
+    assert_eq!(requirements.missing_packs, [id("other")]);
     assert_eq!(requirements.missing_services, [missing_input("user-input")]);
 }
 
 #[test]
 fn merge_drops_a_missing_pack_the_incoming_report_names_as_lacking_a_service() {
     let mut requirements = Requirements::default();
-    requirements.missing_required.push(id("user-input"));
-    requirements.missing_required.push(id("other"));
+    requirements.missing_packs.push(id("user-input"));
+    requirements.missing_packs.push(id("other"));
     let mut activation = Requirements::default();
     activation
         .missing_services
         .push(missing_input("user-input"));
     requirements.merge(activation);
-    assert_eq!(requirements.missing_required, [id("other")]);
+    assert_eq!(requirements.missing_packs, [id("other")]);
     assert_eq!(requirements.missing_services, [missing_input("user-input")]);
 }
 
@@ -301,7 +306,7 @@ fn the_notice_lists_missing_services_after_missing_packs() {
     requirements
         .missing_services
         .push(missing_input("user-input"));
-    requirements.missing_required.push(id("web"));
+    requirements.missing_packs.push(id("web"));
     assert_eq!(
         requirements.notice(),
         "the environment cannot satisfy this prompt:\n\

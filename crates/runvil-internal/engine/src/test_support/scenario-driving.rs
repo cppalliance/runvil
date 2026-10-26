@@ -302,7 +302,7 @@ impl Trace {
     #[track_caller]
     pub(crate) fn text(&self) -> &str {
         match &self.result {
-            RunResult::Ok(text) => text,
+            RunResult::Completed(text) => text,
             other => panic!("expected the run to succeed, got {other:?}"),
         }
     }

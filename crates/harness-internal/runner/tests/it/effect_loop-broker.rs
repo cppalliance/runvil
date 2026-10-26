@@ -47,8 +47,8 @@ fn infers_then_chats() -> Run {
         NonZeroU32::new(131_072).expect("131072 is non-zero"),
         ThinkingMode::Never,
     );
-    let ctx = RunContext::new(EXECUTION, TEST_SEED, Timestamp::UNIX_EPOCH).model(model);
-    let (ctx, requirements) = ctx.prepare(&prompt);
+    let ctx = RunContext::new(EXECUTION, TEST_SEED, Timestamp::UNIX_EPOCH);
+    let (ctx, requirements) = ctx.prepare(&prompt, Some(model));
     assert!(
         requirements.is_satisfied(),
         "the bound model satisfies the fixture's one role: {requirements:?}"

@@ -235,7 +235,7 @@ impl ModelRuntime {
 /// frontmatter's, and an unknown label is a hard error.
 ///
 /// `raw_ids` is the raw-model-id fallback, resolved whenever the caller
-/// passes an application-state snapshot (`RunContext::ui`): then
+/// passes an application-state snapshot (`RunContext::with_ui`): then
 /// `models.get` resolves an undeclared alias as a raw gateway catalog model
 /// id, so the built-in chat prompt can run `models.get(ui().selected_model)`
 /// without declaring its model. Refused, an undeclared alias is the usual

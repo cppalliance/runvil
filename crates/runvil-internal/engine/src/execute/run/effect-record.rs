@@ -193,11 +193,12 @@ pub struct ChatAnswerRecord {
     pub tool_calls: Vec<String>,
 }
 
+#[cfg(test)]
 impl ChatAnswerRecord {
     /// Builds the record of a round `model` served, with no finish reason,
     /// no reply, and no tool calls.
     #[must_use]
-    pub fn new(model: impl Into<String>) -> ChatAnswerRecord {
+    pub(crate) fn new(model: impl Into<String>) -> ChatAnswerRecord {
         ChatAnswerRecord {
             model: model.into(),
             finish_reason: None,
@@ -208,21 +209,21 @@ impl ChatAnswerRecord {
 
     /// Sets the provider's finish reason.
     #[must_use]
-    pub fn with_finish_reason(mut self, finish_reason: Option<String>) -> ChatAnswerRecord {
+    pub(crate) fn with_finish_reason(mut self, finish_reason: Option<String>) -> ChatAnswerRecord {
         self.finish_reason = finish_reason;
         self
     }
 
     /// Sets the reply text.
     #[must_use]
-    pub fn with_reply(mut self, reply: Option<String>) -> ChatAnswerRecord {
+    pub(crate) fn with_reply(mut self, reply: Option<String>) -> ChatAnswerRecord {
         self.reply = reply;
         self
     }
 
     /// Sets the names of the tools the model requested, in call order.
     #[must_use]
-    pub fn with_tool_calls(mut self, tool_calls: Vec<String>) -> ChatAnswerRecord {
+    pub(crate) fn with_tool_calls(mut self, tool_calls: Vec<String>) -> ChatAnswerRecord {
         self.tool_calls = tool_calls;
         self
     }

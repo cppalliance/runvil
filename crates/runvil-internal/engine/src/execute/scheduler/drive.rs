@@ -70,7 +70,7 @@ impl Scheduler {
                 self.end_scope();
                 Step::Done {
                     result: match result {
-                        Ok(text) => RunResult::Ok(text),
+                        Ok(text) => RunResult::Completed(text),
                         Err(Error::Interrupted) => RunResult::Cancelled,
                         Err(error) => RunResult::Failure(RunError::from(error)),
                     },

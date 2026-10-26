@@ -73,13 +73,13 @@ fn a_bare_entry_that_only_another_vendor_has_is_refused_naming_each_fqn() {
         &prompt("uses:\n  - poop\n"),
     );
     assert_eq!(
-        requirements.unavailable,
+        requirements.unavailable_packs,
         [UnavailablePack::new(
             name("poop"),
             "poop means runvil/poop, which is not installed; write acme/poop to use that Pack"
         )]
     );
-    assert!(requirements.missing_required.is_empty());
+    assert!(requirements.missing_packs.is_empty());
 
     let both = host(&[
         (info("zed/poop"), Value::Null),
@@ -92,7 +92,7 @@ fn a_bare_entry_that_only_another_vendor_has_is_refused_naming_each_fqn() {
         &prompt("uses:\n  - poop\n"),
     );
     assert_eq!(
-        requirements.unavailable,
+        requirements.unavailable_packs,
         [UnavailablePack::new(
             name("poop"),
             "poop means runvil/poop, which is not installed; \
@@ -110,9 +110,9 @@ fn an_entry_no_vendor_has_is_missing_and_an_absent_vendor_name_is_unavailable() 
         BTreeMap::new(),
         &prompt("uses:\n  - nope\n  - acme/gone\n"),
     );
-    assert_eq!(requirements.missing_required, [name("nope")]);
+    assert_eq!(requirements.missing_packs, [name("nope")]);
     assert_eq!(
-        requirements.unavailable,
+        requirements.unavailable_packs,
         [UnavailablePack::new(
             name("gone"),
             "acme/gone is not installed"
@@ -164,7 +164,7 @@ fn a_ready_failure_is_keyed_by_fqn_and_never_reaches_another_vendors_pack() {
     let (_run, requirements) =
         host.begin_run(&packs, HostServices::new(), failures, &declares_acme);
     assert_eq!(
-        requirements.unavailable,
+        requirements.unavailable_packs,
         [UnavailablePack::new(name("web"), "web will not be ready")]
     );
 

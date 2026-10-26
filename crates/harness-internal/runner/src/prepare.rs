@@ -310,13 +310,10 @@ pub(crate) async fn prepare_noting_cancel(
     // is unique across every record of the run.
     let provenance_start = u32::try_from(parse_events.len()).unwrap_or(u32::MAX);
     let mut ctx = RunContext::new(name, seed, started_at)
-        .cancel(cancel.clone())
-        .provenance_start(provenance_start);
+        .with_cancel(cancel.clone())
+        .with_provenance_start(provenance_start);
     if let Some(ui) = ui {
-        ctx = ctx.ui(ui);
-    }
-    if let Some(model) = model {
-        ctx = ctx.model(model);
+        ctx = ctx.with_ui(ui);
     }
     // The pick-wait-snapshot-prepare-refuse ceremony: the run's whole
     // filesystem, the real directories and the declared store, goes to
@@ -330,7 +327,8 @@ pub(crate) async fn prepare_noting_cancel(
     let packs = host.pick(&prompt);
     let failures = host.wait_ready(&packs, &cancel).await;
     let (snapshot, unmet) = host.begin_run(&packs, services, failures, &prompt);
-    let (ctx, mut requirements) = prepare_from_snapshot(ctx.vfs(vfs), &snapshot, &prompt);
+    let (ctx, mut requirements) =
+        prepare_from_snapshot(ctx.with_vfs(vfs), &snapshot, &prompt, model);
     requirements.merge(unmet);
     if let Some(error) = requirements.refusal() {
         let cancelled = cancel.is_cancelled();
@@ -358,17 +356,19 @@ pub(crate) async fn prepare_noting_cancel(
 }
 
 /// Sets `snapshot`'s catalog, roster with each usable Pack's vendor, and
-/// declared preludes on `ctx`, then prepares it for `prompt`.
+/// declared preludes on `ctx`, then prepares it for `prompt` under the
+/// current `model`.
 fn prepare_from_snapshot(
     ctx: RunContext,
     snapshot: &HostRunContext,
     prompt: &Prompt,
+    model: Option<ModelInfo>,
 ) -> (RunContext, Requirements) {
     let (usable, unavailable) = snapshot.roster();
-    ctx.tools(snapshot.catalog())
-        .packs(usable, unavailable)
-        .preludes(snapshot.preludes(prompt))
-        .prepare(prompt)
+    ctx.with_tools(snapshot.catalog())
+        .with_packs(usable, unavailable)
+        .with_preludes(snapshot.preludes(prompt))
+        .prepare(prompt, model)
 }
 
 /// The failed outcome of a run that ended in preparation: `kind` names the

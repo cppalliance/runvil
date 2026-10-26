@@ -257,7 +257,7 @@ fn a_raw_gateway_model_id_renders_with_a_model_info_built_from_its_binding() {
          return messages[#messages].content",
     );
     let mut driving = loop_scenario(source)
-        .context(|ctx| ctx.ui(json!({})))
+        .context(|ctx| ctx.with_ui(json!({})))
         .offer("echo", echo_tool())
         .chat(&gateway)
         .start();

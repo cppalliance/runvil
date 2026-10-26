@@ -294,7 +294,7 @@ fn shuffled_results(scenario: impl Fn(&TestStore) -> Scenario) -> Vec<(Seeded, R
 /// The text of a successful result, or `None`.
 fn ok_text(result: &RunResult) -> Option<&str> {
     match result {
-        RunResult::Ok(text) => Some(text),
+        RunResult::Completed(text) => Some(text),
         _ => None,
     }
 }

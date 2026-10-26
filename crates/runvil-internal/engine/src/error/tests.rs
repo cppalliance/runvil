@@ -43,7 +43,7 @@ fn context_exhaustion_maps_from_lua_and_classifies() {
             "the mapping preserves the reason, got {error:?}"
         );
         assert!(
-            error.cause().is_none(),
+            error.originating_error().is_none(),
             "a variant with no originating error has no cause"
         );
         assert_eq!(error.to_string(), message);
@@ -91,11 +91,11 @@ fn lua_compile_keeps_the_originating_compiler_error_as_its_cause() {
         }),
     };
     let cause = compile
-        .cause()
+        .originating_error()
         .and_then(|cause| cause.downcast_ref::<mlua::Error>())
         .expect("the compiler error is the cause");
     assert!(matches!(cause, mlua::Error::SyntaxError { .. }));
-    assert!(crate::RunError::from(compile).cause().is_some());
+    assert!(crate::RunError::from(compile).originating_error().is_some());
 }
 
 #[test]
@@ -121,7 +121,7 @@ fn typed_error_survives_the_lua_external_boundary() {
     }
     // Re-wrapping through the crate's Lua boundary keeps the cause reachable.
     let wrapped = Error::lua(external);
-    assert!(wrapped.cause().is_some());
+    assert!(wrapped.originating_error().is_some());
 }
 
 #[test]
@@ -225,6 +225,35 @@ fn errors_without_a_location_return_none() {
 }
 
 #[test]
+fn interrupted_and_substitution_failures_classify_under_kinds_a_finished_run_reports() {
+    // A finished run reports cancellation as `RunResult::Cancelled`, so an
+    // interruption that reaches a `RunError` is the Engine's fault, and a
+    // failed `{{ }}` substitution is the author's program failing, as any
+    // Lua fault is.
+    assert_eq!(
+        crate::RunError::from(Error::Interrupted).kind(),
+        crate::RunErrorKind::Internal
+    );
+    let (var, sys) = (serde_json::json!({}), serde_json::json!({}));
+    let unset = |_: &str| -> Result<Option<serde_json::Value>> { Ok(None) };
+    let sources = crate::subst::Sources {
+        args: "",
+        argv: None,
+        item: None,
+        var: &var,
+        sys: &sys,
+        globals: &unset,
+    };
+    let error = crate::subst::substitute("{{ var.missing }}", &sources)
+        .expect_err("a missing key fails the substitution");
+    assert!(matches!(error, Error::Substitution(_)), "{error:?}");
+    assert_eq!(
+        crate::RunError::from(error).kind(),
+        crate::RunErrorKind::Lua
+    );
+}
+
+#[test]
 fn requirements_unmet_classifies_and_reports_the_notice_as_its_message() {
     // The refusal notice is the whole Display, and the kind classifies
     // it for code. Retrying cannot help: the
@@ -235,7 +264,6 @@ fn requirements_unmet_classifies_and_reports_the_notice_as_its_message() {
     };
     let run_error = crate::RunError::from(error);
     assert_eq!(run_error.kind(), crate::RunErrorKind::RequirementsUnmet);
-    assert!(!run_error.is_cancelled());
     assert!(!run_error.is_retryable());
     assert!(run_error.location().is_none());
     assert!(run_error.to_string().contains("analyst"));
@@ -259,7 +287,7 @@ fn the_call_depth_cap_is_a_quota_that_lua_still_reads_as_lua() {
         assert_eq!(run_error.kind(), crate::RunErrorKind::Quota);
         assert!(!run_error.is_retryable());
         assert!(run_error.location().is_none());
-        assert!(run_error.cause().is_none());
+        assert!(run_error.originating_error().is_none());
     }
 }
 

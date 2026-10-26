@@ -41,13 +41,14 @@
 #[non_exhaustive] pub struct runvil::Requirements { .. }
 #[non_exhaustive] pub struct runvil::RunContext { /* private fields */ }
 #[non_exhaustive] pub struct runvil::RunError { /* private fields */ }
-#[non_exhaustive] pub struct runvil::RunLimits { /* private fields */ }
+#[non_exhaustive] pub struct runvil::RunLimits { .. }
 #[non_exhaustive] pub struct runvil::SourceLocation { .. }
 #[non_exhaustive] pub struct runvil::UnavailablePack { .. }
 #[non_exhaustive] pub struct runvil::UnmetRequirement { .. }
 #[non_exhaustive] pub struct runvil::UsablePack { .. }
 #[non_exhaustive] pub struct runvil::effect::ChatAnswerRecord { .. }
 #[non_exhaustive] pub struct runvil::effect::FailureRecord { .. }
+#[non_exhaustive] pub struct runvil::effect::IssuedEffect { .. }
 #[non_exhaustive] pub struct runvil::effect::PackToolSets<T> { .. }
 #[non_exhaustive] pub struct runvil::effect::Round { .. }
 #[non_exhaustive] pub struct runvil::effect::ToolAnswerRecord { .. }
@@ -120,6 +121,7 @@ auto runvil::effect::EffectAnswer: Freeze, !RefUnwindSafe, Send, Sync, Unpin, !U
 auto runvil::effect::EffectId: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::effect::EffectRecord: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::effect::FailureRecord: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
+auto runvil::effect::IssuedEffect: Freeze, !RefUnwindSafe, Send, Sync, Unpin, !UnwindSafe
 auto runvil::effect::Round: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::effect::ToolAnswerRecord: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::effect::ToolCallOrigin: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
@@ -246,6 +248,7 @@ derives runvil::effect::EffectAnswer: Debug
 derives runvil::effect::EffectId: Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd
 derives runvil::effect::EffectRecord: Clone, Debug, Deserialize, PartialEq, Serialize
 derives runvil::effect::FailureRecord: Clone, Debug, Deserialize, Eq, PartialEq, Serialize
+derives runvil::effect::IssuedEffect: Debug
 derives runvil::effect::Round: Clone, Copy, Debug, Eq, PartialEq
 derives runvil::effect::ToolAnswerRecord: Clone, Debug, Deserialize, Eq, PartialEq, Serialize
 derives runvil::effect::ToolCallOrigin: Clone, Debug, Deserialize, Eq, PartialEq, Serialize
@@ -484,39 +487,28 @@ pub fn runvil::Run::decided(&self) -> bool
 pub fn runvil::Run::new(prompt: alloc::sync::Arc<runvil::Prompt>, args: &str, config: runvil::RunContext) -> runvil::Run
 pub fn runvil::Run::resume(&mut self, id: runvil::effect::EffectId, answer: runvil::effect::EffectAnswer)
 pub fn runvil::Run::step(&mut self) -> runvil::Step
-pub fn runvil::RunContext::cancel(self, handle: runvil::cancel::CancelHandle) -> runvil::RunContext
-pub fn runvil::RunContext::catalog(&self) -> &runvil::tools::ToolCatalog
-pub fn runvil::RunContext::flags(self, flags: runvil::replay::Flags) -> runvil::RunContext
-pub fn runvil::RunContext::limits(self, limits: runvil::RunLimits) -> runvil::RunContext
-pub fn runvil::RunContext::model(self, model: runvil::model::ModelInfo) -> runvil::RunContext
+pub fn runvil::RunContext::flags(&self) -> runvil::replay::Flags
 pub fn runvil::RunContext::model_bindings(&self) -> &runvil::model::ModelBindings
 pub fn runvil::RunContext::new(name: impl core::convert::Into<alloc::string::String>, seed: runvil::RunSeed, started_at: runvil::timestamp::Timestamp) -> runvil::RunContext
-pub fn runvil::RunContext::packs(self, usable: alloc::vec::Vec<runvil::UsablePack>, unavailable: alloc::vec::Vec<runvil::UnavailablePack>) -> runvil::RunContext
-pub fn runvil::RunContext::preludes(self, preludes: alloc::vec::Vec<runvil::packs::Prelude>) -> runvil::RunContext
-pub fn runvil::RunContext::prepare(self, prompt: &runvil::Prompt) -> (runvil::RunContext, runvil::Requirements)
-pub fn runvil::RunContext::provenance_start(self, start: u32) -> runvil::RunContext
-pub fn runvil::RunContext::report_debug(self, mode: runvil::event::DebugMode) -> runvil::RunContext
-pub fn runvil::RunContext::run_flags(&self) -> runvil::replay::Flags
+pub fn runvil::RunContext::prepare(self, prompt: &runvil::Prompt, model: core::option::Option<runvil::model::ModelInfo>) -> (runvil::RunContext, runvil::Requirements)
 pub fn runvil::RunContext::seed(&self) -> runvil::RunSeed
 pub fn runvil::RunContext::started_at(&self) -> runvil::timestamp::Timestamp
-pub fn runvil::RunContext::tools(self, tools: runvil::tools::ToolCatalog) -> runvil::RunContext
-pub fn runvil::RunContext::ui(self, snapshot: serde_json::value::Value) -> runvil::RunContext
-pub fn runvil::RunContext::vfs(self, vfs: runvil::vfs::VfsRef) -> runvil::RunContext
-pub fn runvil::RunContext::vfs_handle(&self) -> &runvil::vfs::VfsRef
-pub fn runvil::RunError::cause(&self) -> core::option::Option<&dyn core::error::Error + core::marker::Send + core::marker::Sync + 'static>
-pub fn runvil::RunError::is_cancelled(&self) -> bool
+pub fn runvil::RunContext::tools(&self) -> &runvil::tools::ToolCatalog
+pub fn runvil::RunContext::vfs(&self) -> &runvil::vfs::VfsRef
+pub fn runvil::RunContext::with_cancel(self, handle: runvil::cancel::CancelHandle) -> runvil::RunContext
+pub fn runvil::RunContext::with_flags(self, flags: runvil::replay::Flags) -> runvil::RunContext
+pub fn runvil::RunContext::with_limits(self, limits: runvil::RunLimits) -> runvil::RunContext
+pub fn runvil::RunContext::with_packs(self, usable: alloc::vec::Vec<runvil::UsablePack>, unavailable: alloc::vec::Vec<runvil::UnavailablePack>) -> runvil::RunContext
+pub fn runvil::RunContext::with_preludes(self, preludes: alloc::vec::Vec<runvil::packs::Prelude>) -> runvil::RunContext
+pub fn runvil::RunContext::with_provenance_start(self, start: u32) -> runvil::RunContext
+pub fn runvil::RunContext::with_report_debug(self, mode: runvil::event::DebugMode) -> runvil::RunContext
+pub fn runvil::RunContext::with_tools(self, tools: runvil::tools::ToolCatalog) -> runvil::RunContext
+pub fn runvil::RunContext::with_ui(self, snapshot: serde_json::value::Value) -> runvil::RunContext
+pub fn runvil::RunContext::with_vfs(self, vfs: runvil::vfs::VfsRef) -> runvil::RunContext
 pub fn runvil::RunError::is_retryable(&self) -> bool
 pub fn runvil::RunError::kind(&self) -> runvil::RunErrorKind
 pub fn runvil::RunError::location(&self) -> core::option::Option<runvil::SourceLocation>
-pub fn runvil::RunLimits::lua_log_events(self, value: core::num::nonzero::NonZeroU32) -> runvil::RunLimits
-pub fn runvil::RunLimits::lua_memory_bytes(self, value: core::num::nonzero::NonZeroUsize) -> runvil::RunLimits
-pub fn runvil::RunLimits::max_concurrency(self, value: core::num::nonzero::NonZeroUsize) -> runvil::RunLimits
-pub fn runvil::RunLimits::max_response_bytes(self, value: core::num::nonzero::NonZeroU64) -> runvil::RunLimits
-pub fn runvil::RunLimits::max_tool_iterations(self, value: core::num::nonzero::NonZeroU32) -> runvil::RunLimits
-pub fn runvil::RunLimits::new() -> runvil::RunLimits
-pub fn runvil::RunLimits::request_timeout(self, value: core::time::Duration) -> runvil::RunLimits
-pub fn runvil::RunLimits::response_bytes(&self) -> core::num::nonzero::NonZeroU64
-pub fn runvil::RunLimits::timeout(&self) -> core::time::Duration
+pub fn runvil::RunError::originating_error(&self) -> core::option::Option<&dyn core::error::Error + core::marker::Send + core::marker::Sync + 'static>
 pub fn runvil::UnavailablePack::new(pack: runvil::packs::PackId, reason: impl core::convert::Into<alloc::string::String>) -> runvil::UnavailablePack
 pub fn runvil::UsablePack::new(pack: runvil::packs::PackId, vendor: impl core::convert::Into<alloc::string::String>) -> runvil::UsablePack
 pub fn runvil::cancel::CancelHandle::cancel(&self)
@@ -524,10 +516,6 @@ pub fn runvil::cancel::CancelHandle::cancelled(&self) -> runvil::cancel::Cancell
 pub fn runvil::cancel::CancelHandle::child(&self) -> runvil::cancel::CancelHandle
 pub fn runvil::cancel::CancelHandle::is_cancelled(&self) -> bool
 pub fn runvil::cancel::CancelHandle::new() -> Self
-pub fn runvil::effect::ChatAnswerRecord::new(model: impl core::convert::Into<alloc::string::String>) -> runvil::effect::ChatAnswerRecord
-pub fn runvil::effect::ChatAnswerRecord::with_finish_reason(self, finish_reason: core::option::Option<alloc::string::String>) -> runvil::effect::ChatAnswerRecord
-pub fn runvil::effect::ChatAnswerRecord::with_reply(self, reply: core::option::Option<alloc::string::String>) -> runvil::effect::ChatAnswerRecord
-pub fn runvil::effect::ChatAnswerRecord::with_tool_calls(self, tool_calls: alloc::vec::Vec<alloc::string::String>) -> runvil::effect::ChatAnswerRecord
 pub fn runvil::effect::Effect::record(&self) -> runvil::effect::EffectRecord
 pub fn runvil::effect::EffectAnswer::record(&self) -> runvil::effect::AnswerRecord
 pub fn runvil::effect::PackToolSets::new(pack: runvil::packs::PackId, static_set: alloc::vec::Vec<T>, dynamic_set: alloc::vec::Vec<T>) -> runvil::effect::PackToolSets<T>
@@ -823,13 +811,12 @@ pub runvil::ParseErrorKind::Lua
 pub runvil::ParseErrorKind::Structure
 pub runvil::RequirementCheck::ContextMinimum
 pub runvil::RequirementCheck::HardKeyword
-pub runvil::Requirements::missing_required: alloc::vec::Vec<runvil::packs::PackId>
+pub runvil::Requirements::missing_packs: alloc::vec::Vec<runvil::packs::PackId>
 pub runvil::Requirements::missing_services: alloc::vec::Vec<runvil::MissingService>
-pub runvil::Requirements::reserved: alloc::vec::Vec<runvil::packs::PackId>
-pub runvil::Requirements::unavailable: alloc::vec::Vec<runvil::UnavailablePack>
-pub runvil::Requirements::unmet_requirements: alloc::vec::Vec<runvil::UnmetRequirement>
+pub runvil::Requirements::reserved: alloc::collections::btree::set::BTreeSet<runvil::packs::PackId>
+pub runvil::Requirements::unavailable_packs: alloc::vec::Vec<runvil::UnavailablePack>
+pub runvil::Requirements::unmet_models: alloc::vec::Vec<runvil::UnmetRequirement>
 pub runvil::RunErrorKind::Binding
-pub runvil::RunErrorKind::Cancelled
 pub runvil::RunErrorKind::Completion
 pub runvil::RunErrorKind::ContextExhausted
 pub runvil::RunErrorKind::Determinism
@@ -838,15 +825,20 @@ pub runvil::RunErrorKind::Lua
 pub runvil::RunErrorKind::Parse
 pub runvil::RunErrorKind::Quota
 pub runvil::RunErrorKind::RequirementsUnmet
-pub runvil::RunErrorKind::Substitution
 pub runvil::RunErrorKind::Tool
 pub runvil::RunErrorKind::Version
 pub runvil::RunErrorKind::Vfs
+pub runvil::RunLimits::lua_log_events: core::num::nonzero::NonZeroU32
+pub runvil::RunLimits::lua_memory_bytes: core::num::nonzero::NonZeroUsize
+pub runvil::RunLimits::max_concurrency: core::num::nonzero::NonZeroUsize
+pub runvil::RunLimits::max_response_bytes: core::num::nonzero::NonZeroU64
+pub runvil::RunLimits::max_tool_iterations: core::num::nonzero::NonZeroU32
+pub runvil::RunLimits::receive_timeout: core::time::Duration
 pub runvil::RunResult::Cancelled
+pub runvil::RunResult::Completed(..)
+pub runvil::RunResult::Completed::0: alloc::string::String
 pub runvil::RunResult::Failure(..)
 pub runvil::RunResult::Failure::0: runvil::RunError
-pub runvil::RunResult::Ok(..)
-pub runvil::RunResult::Ok::0: alloc::string::String
 pub runvil::SourceLocation::column: core::option::Option<u32>
 pub runvil::SourceLocation::line: core::option::Option<u32>
 pub runvil::SourceLocation::path: alloc::string::String
@@ -855,7 +847,7 @@ pub runvil::Step::Done { .. }
 pub runvil::Step::Done::events: alloc::vec::Vec<runvil::event::Event>
 pub runvil::Step::Done::result: runvil::RunResult
 pub runvil::Step::Pending { .. }
-pub runvil::Step::Pending::effects: alloc::vec::Vec<(runvil::effect::EffectId, runvil::ids::Provenance, runvil::effect::Effect)>
+pub runvil::Step::Pending::effects: alloc::vec::Vec<runvil::effect::IssuedEffect>
 pub runvil::Step::Pending::events: alloc::vec::Vec<runvil::event::Event>
 pub runvil::Step::Pending::withdrawn: alloc::vec::Vec<runvil::effect::EffectId>
 pub runvil::UnavailablePack::pack: runvil::packs::PackId
@@ -939,6 +931,9 @@ pub runvil::effect::EffectRecord::Vfs { .. }
 pub runvil::effect::EffectRecord::Vfs::op: runvil::vfs::VfsOp
 pub runvil::effect::FailureRecord::kind: alloc::string::String
 pub runvil::effect::FailureRecord::message: alloc::string::String
+pub runvil::effect::IssuedEffect::effect: runvil::effect::Effect
+pub runvil::effect::IssuedEffect::id: runvil::effect::EffectId
+pub runvil::effect::IssuedEffect::provenance: runvil::ids::Provenance
 pub runvil::effect::PackToolSets::dynamic_set: alloc::vec::Vec<T>
 pub runvil::effect::PackToolSets::pack: runvil::packs::PackId
 pub runvil::effect::PackToolSets::static_set: alloc::vec::Vec<T>

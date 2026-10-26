@@ -22,7 +22,7 @@ fn report(front: &str, context: u32, thinking: ThinkingMode) -> TestResult<Requi
 }
 
 fn only_unmet(requirements: &Requirements) -> TestResult<&UnmetRequirement> {
-    match requirements.unmet_requirements.as_slice() {
+    match requirements.unmet_models.as_slice() {
         [unmet] => Ok(unmet),
         unmet => Err(format!("exactly one requirement is unmet: {unmet:?}").into()),
     }
@@ -36,12 +36,12 @@ fn two_runs_writing_the_same_real_file_through_the_shared_base_conflict() -> Tes
         .mount("/", RealBackend::rooted(temp.path())?)
         .store("/my/store", MemoryBackend::new())
         .build();
-    let scenario = Scenario::default().context(move |ctx| ctx.vfs(vfs.clone()));
+    let scenario = Scenario::default().context(move |ctx| ctx.with_vfs(vfs.clone()));
     let source = greeter("return 'done'");
     let (run_a, run_b) = (scenario.prepare(&source)?, scenario.prepare(&source)?);
-    let access_a = run_a.ctx.vfs_handle().acquire(Origin::new("run-a"))?;
+    let access_a = run_a.ctx.vfs().acquire(Origin::new("run-a"))?;
     access_a.write("/shared.txt", b"from a")?;
-    let access_b = run_b.ctx.vfs_handle().acquire(Origin::new("run-b"))?;
+    let access_b = run_b.ctx.vfs().acquire(Origin::new("run-b"))?;
     let error = access_b
         .write("/shared.txt", b"from b")
         .expect_err("run b conflicts with run a's live claim");
@@ -80,7 +80,7 @@ fn every_declared_role_resolves_to_the_current_model() -> TestResult {
 fn a_context_minimum_above_the_current_models_is_reported() -> TestResult {
     let requirements = report(ANALYST, 32_000, ThinkingMode::Always)?;
     assert!(!requirements.is_satisfied());
-    assert_eq!(requirements.missing_required, []);
+    assert_eq!(requirements.missing_packs, []);
     let unmet = only_unmet(&requirements)?;
     assert_eq!(unmet.role, "analyst");
     assert_eq!(unmet.check, RequirementCheck::ContextMinimum);
@@ -112,7 +112,7 @@ fn a_hard_keyword_the_current_model_fails_is_reported() -> TestResult {
 fn prepared_over(info: &ToolInfo) -> TestResult<Prepared> {
     let catalog = ToolCatalog::new([info.clone()])?;
     Scenario::default()
-        .context(move |ctx| ctx.tools(catalog.clone()))
+        .context(move |ctx| ctx.with_tools(catalog.clone()))
         .prepare(&declaring("uses: [web]"))
 }
 
@@ -130,7 +130,7 @@ fn a_prepared_context_keeps_the_caller_supplied_catalog() -> TestResult {
         requirements.is_satisfied(),
         "a catalog reports nothing: {requirements:?}"
     );
-    assert_eq!(ctx.catalog().tools(), [info]);
+    assert_eq!(ctx.tools().tools(), [info]);
     Ok(())
 }
 
@@ -147,6 +147,6 @@ fn prepare_reports_nothing_for_a_declared_pack_the_catalog_lacks() -> TestResult
         requirements.is_satisfied(),
         "the Engine's prepare checks model roles only: {requirements:?}"
     );
-    assert_eq!(ctx.catalog().tools(), [other]);
+    assert_eq!(ctx.tools().tools(), [other]);
     Ok(())
 }

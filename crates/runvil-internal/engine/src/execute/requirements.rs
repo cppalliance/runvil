@@ -1,5 +1,7 @@
 //! The preflight report: [`Requirements`].
 
+use std::collections::BTreeSet;
+
 use runvil_types::packs::PackId;
 
 #[cfg(test)]
@@ -21,12 +23,12 @@ pub struct Requirements {
     /// `min_context` of 200000 against a model with a 32k context, and
     /// `thinking` against a model whose thinking mode is `Never`. Only
     /// model binding in `RunContext::prepare` adds these.
-    pub unmet_requirements: Vec<UnmetRequirement>,
+    pub unmet_models: Vec<UnmetRequirement>,
     /// The required Packs that the run lacks.
     ///
     /// The caller adds a Pack the prompt declares that is not installed.
     /// The run fails until every one is satisfied.
-    pub missing_required: Vec<PackId>,
+    pub missing_packs: Vec<PackId>,
     /// The required Packs that are installed but need a service
     /// the run lacks.
     ///
@@ -38,15 +40,15 @@ pub struct Requirements {
     /// with the reason, such as a failure to build.
     ///
     /// The caller adds these. The run fails until the Pack can serve.
-    pub unavailable: Vec<UnavailablePack>,
+    pub unavailable_packs: Vec<UnavailablePack>,
     /// The reserved Pack ids, such as `adhoc`, that the run's tool catalog
-    /// or Pack roster names, sorted, each once.
+    /// or Pack roster names.
     ///
     /// The Engine holds the tools under a reserved Pack id itself, so no
     /// Pack may take one.
     /// [`RunContext::prepare`](super::RunContext::prepare) fills it. The
     /// run fails while it holds any id.
-    pub reserved: Vec<PackId>,
+    pub reserved: BTreeSet<PackId>,
 }
 
 impl Requirements {
@@ -57,10 +59,10 @@ impl Requirements {
     /// nothing in the run takes a reserved Pack id.
     #[must_use]
     pub fn is_satisfied(&self) -> bool {
-        self.unmet_requirements.is_empty()
-            && self.missing_required.is_empty()
+        self.unmet_models.is_empty()
+            && self.missing_packs.is_empty()
             && self.missing_services.is_empty()
-            && self.unavailable.is_empty()
+            && self.unavailable_packs.is_empty()
             && self.reserved.is_empty()
     }
 
@@ -69,24 +71,22 @@ impl Requirements {
     /// Use it to combine the caller's Pack report with the report
     /// from `RunContext::prepare`, so that one refusal names every gap.
     /// The merge skips an entry the report already holds, and keeps
-    /// `reserved` the union of both reports' ids, sorted, each once.
+    /// `reserved` the union of both reports' ids.
     ///
-    /// The merge drops the `missing_required` entry of a Pack that
-    /// lacks a service or is unavailable: the service or unavailable entry
+    /// The merge drops the `missing_packs` entry of a Pack that lacks a
+    /// service or is unavailable: the service or unavailable entry
     /// already names the real cause.
     pub fn merge(&mut self, other: Requirements) {
-        push_new(&mut self.missing_required, other.missing_required);
+        push_new(&mut self.missing_packs, other.missing_packs);
         push_new(&mut self.missing_services, other.missing_services);
-        push_new(&mut self.unavailable, other.unavailable);
+        push_new(&mut self.unavailable_packs, other.unavailable_packs);
         self.reserved.extend(other.reserved);
-        self.reserved.sort();
-        self.reserved.dedup();
-        let (services, unavailable) = (&self.missing_services, &self.unavailable);
-        self.missing_required.retain(|id| {
+        let (services, unavailable) = (&self.missing_services, &self.unavailable_packs);
+        self.missing_packs.retain(|id| {
             !services.iter().any(|missing| missing.pack == *id)
                 && !unavailable.iter().any(|entry| entry.pack == *id)
         });
-        self.unmet_requirements.extend(other.unmet_requirements);
+        self.unmet_models.extend(other.unmet_models);
     }
 
     /// Returns the error to fail the run with, or `None` when the report
@@ -117,7 +117,7 @@ impl Requirements {
         // discarded under the denied `unwrap_used`/`expect_used` lints.
         use std::fmt::Write as _;
         let mut notice = String::from("the environment cannot satisfy this prompt:");
-        for id in &self.missing_required {
+        for id in &self.missing_packs {
             let _ = write!(notice, "\n- missing required Pack: {id}");
         }
         for missing in &self.missing_services {
@@ -127,7 +127,7 @@ impl Requirements {
                 missing.pack, missing.service
             );
         }
-        for entry in &self.unavailable {
+        for entry in &self.unavailable_packs {
             let _ = write!(
                 notice,
                 "\n- {} is unavailable: {}",
@@ -141,7 +141,7 @@ impl Requirements {
                  which the Engine reserves"
             );
         }
-        for unmet in &self.unmet_requirements {
+        for unmet in &self.unmet_models {
             let _ = match unmet.check {
                 RequirementCheck::ContextMinimum => write!(
                     notice,
@@ -173,8 +173,8 @@ fn push_new<T: PartialEq>(entries: &mut Vec<T>, incoming: Vec<T>) {
 /// An installed Pack that can serve the run, and its vendor.
 ///
 /// The run's roster, set with
-/// [`RunContext::packs`](super::RunContext::packs), lists every one the
-/// run holds. The caller reports each Pack's vendor as it picked the
+/// [`RunContext::with_packs`](super::RunContext::with_packs), lists every
+/// one the run holds. The caller reports each Pack's vendor as it picked the
 /// Pack, and every tool-call and tool-result event for one of the Pack's
 /// tools records it.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -204,8 +204,8 @@ impl UsablePack {
 ///
 /// The caller's Pack report lists each one the prompt declares, and the
 /// run's roster, set with
-/// [`RunContext::packs`](super::RunContext::packs), lists every one the
-/// run holds.
+/// [`RunContext::with_packs`](super::RunContext::with_packs), lists every
+/// one the run holds.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct UnavailablePack {

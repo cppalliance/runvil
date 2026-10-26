@@ -15,7 +15,7 @@
 use std::collections::VecDeque;
 use std::sync::Arc;
 
-use runvil::effect::{AnswerRecord, Effect, EffectAnswer, EffectId, EffectRecord};
+use runvil::effect::{AnswerRecord, Effect, EffectAnswer, EffectId, EffectRecord, IssuedEffect};
 use runvil::event::Event;
 use runvil::ids::Provenance;
 use runvil::model::{Completion, ModelInfo};
@@ -115,16 +115,15 @@ impl Scenario {
             None => canned()?,
         };
         let mut ctx = RunContext::new("greeter", TEST_SEED, self.started_at)
-            .provenance_start(u32::try_from(events.len())?)
-            .model(model);
+            .with_provenance_start(u32::try_from(events.len())?);
         if let Some(tool) = &self.tool {
             let info = tool_info(tool.id, json!({ "type": "object" }))?;
-            ctx = ctx.tools(ToolCatalog::new([info])?);
+            ctx = ctx.with_tools(ToolCatalog::new([info])?);
         }
         if let Some(edit) = &self.context {
             ctx = edit(ctx);
         }
-        let (ctx, requirements) = ctx.prepare(&prompt);
+        let (ctx, requirements) = ctx.prepare(&prompt, Some(model));
         Ok(Prepared {
             prompt,
             ctx,
@@ -224,7 +223,13 @@ impl Driver {
             effects.reverse();
         }
         let issued = effects.len();
-        for (id, provenance, effect) in effects {
+        for IssuedEffect {
+            id,
+            provenance,
+            effect,
+            ..
+        } in effects
+        {
             let effect_record = effect.record();
             let held = Issued {
                 id,
@@ -336,11 +341,11 @@ pub(crate) struct Trace {
 }
 
 impl Trace {
-    /// The text of a `RunResult::Ok`. Fails on any other result.
+    /// The text of a `RunResult::Completed`. Fails on any other result.
     pub(crate) fn text(&self) -> TestResult<&str> {
         match &self.result {
-            RunResult::Ok(text) => Ok(text),
-            result => Err(format!("expected RunResult::Ok, got {result:?}").into()),
+            RunResult::Completed(text) => Ok(text),
+            result => Err(format!("expected RunResult::Completed, got {result:?}").into()),
         }
     }
 }

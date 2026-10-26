@@ -9,14 +9,14 @@ use crate::parser::Prompt;
 use super::bindings::ModelBindings;
 use super::requirements::{RequirementCheck, Requirements, UnmetRequirement};
 
-/// The trivial model fill: binds every declared role to the
-/// context's current model and checks each role's hard keywords and
-/// context minimum against its model info, reporting required versus
-/// actual into [`Requirements::unmet_requirements`]. With no current
-/// model there is nothing to fill or check.
+/// The trivial model fill: binds every declared role to the run's
+/// current model and checks each role's hard keywords and context
+/// minimum against its model info, reporting required versus actual into
+/// [`Requirements::unmet_models`]. With no current model there is nothing
+/// to fill or check.
 pub(super) fn fill_model_bindings(
     prompt: &Prompt,
-    model: Option<&crate::model::ModelInfo>,
+    model: Option<crate::model::ModelInfo>,
     requirements: &mut Requirements,
 ) -> ModelBindings {
     let mut bindings = ModelBindings::default();
@@ -27,7 +27,7 @@ pub(super) fn fill_model_bindings(
         if let Some(minimum) = role.min_context()
             && model.context() < minimum
         {
-            requirements.unmet_requirements.push(UnmetRequirement {
+            requirements.unmet_models.push(UnmetRequirement {
                 role: label.to_owned(),
                 check: RequirementCheck::ContextMinimum,
                 required: minimum.to_string(),
@@ -45,7 +45,7 @@ pub(super) fn fill_model_bindings(
                 _ => None,
             };
             if let Some(actual) = actual {
-                requirements.unmet_requirements.push(UnmetRequirement {
+                requirements.unmet_models.push(UnmetRequirement {
                     role: label.to_owned(),
                     check: RequirementCheck::HardKeyword,
                     required: keyword_name(*keyword).to_owned(),

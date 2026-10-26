@@ -49,7 +49,7 @@ use std::sync::Arc;
 use std::task::Poll;
 
 use runvil::cancel::CancelHandle;
-use runvil::effect::{Effect, EffectAnswer, EffectId};
+use runvil::effect::{Effect, EffectAnswer, EffectId, IssuedEffect};
 use runvil::event::Event;
 use runvil::ids::Provenance;
 use runvil::vfs::{Access, VfsOp, perform_vfs_op};
@@ -184,9 +184,9 @@ impl Driver {
                         // it is performed, and every effect in flight is
                         // moot too. Record each effect and answer it
                         // `Dropped` so the next step reaches `Done`.
-                        for (id, provenance, effect) in effects {
-                            self.commit_effect(id, &provenance, &effect).await?;
-                            self.drop_effect(id, &provenance).await?;
+                        for issued in effects {
+                            self.commit_effect(&issued).await?;
+                            self.drop_effect(issued.id, &issued.provenance).await?;
                         }
                         self.drop_in_flight(Reach::All).await?;
                         continue;
@@ -195,15 +195,16 @@ impl Driver {
                     if self.stop.is_raised() {
                         answered = self.act_on_stop().await?;
                     }
-                    for (id, provenance, effect) in effects {
-                        self.commit_effect(id, &provenance, &effect).await?;
+                    for issued in effects {
+                        self.commit_effect(&issued).await?;
                         // A Vfs effect comes back from `perform` and is
                         // answered here; every other kind goes in flight.
                         // The run is not stepped between inline answers:
                         // the whole batch is resumed, then stepped once.
-                        if let Some((access, op)) = self.perform(id, &provenance, effect) {
-                            let answer = answer_vfs(id, &provenance, access, op);
-                            self.answer(id, &provenance, answer).await?;
+                        let (id, provenance) = (issued.id, &issued.provenance);
+                        if let Some((access, op)) = self.perform(id, provenance, issued.effect) {
+                            let answer = answer_vfs(id, provenance, access, op);
+                            self.answer(id, provenance, answer).await?;
                             answered = true;
                         }
                     }
@@ -406,17 +407,12 @@ impl Driver {
     }
 
     /// Appends one issued effect's record.
-    async fn commit_effect(
-        &mut self,
-        id: EffectId,
-        provenance: &Provenance,
-        effect: &Effect,
-    ) -> Result<(), RecorderError> {
-        let payload = serde_json::to_value(effect.record()).map_err(RecorderError::new)?;
+    async fn commit_effect(&mut self, issued: &IssuedEffect) -> Result<(), RecorderError> {
+        let payload = serde_json::to_value(issued.effect.record()).map_err(RecorderError::new)?;
         self.append(record(
-            provenance,
+            &issued.provenance,
             RecordKind::Effect,
-            Some(id.get()),
+            Some(issued.id.get()),
             payload,
         ))
         .await

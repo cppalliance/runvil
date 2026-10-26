@@ -81,7 +81,7 @@ use std::collections::{BTreeMap, HashMap, VecDeque};
 use std::sync::Arc;
 
 use runvil_types::event::{ReplyOrigin, lifecycle};
-use runvil_types::ids::{Provenance, RoundId, TaskId};
+use runvil_types::ids::{RoundId, TaskId};
 use runvil_vfs::Origin;
 use runvil_vfs::detail::ScopeHandle;
 
@@ -90,7 +90,7 @@ use crate::parser::{Block, Prompt};
 use crate::{Error, Result};
 
 use super::context::RunState;
-use super::run::{Effect, EffectAnswer, EffectId, Round};
+use super::run::{Effect, EffectAnswer, EffectId, IssuedEffect, Round};
 use chain_record::{Chain, ChatAnchor};
 use pending::{CallSite, Continuation, Outstanding, Pending, ToolCallContinuation};
 use tasks::TaskEntry;
@@ -229,7 +229,7 @@ pub(crate) struct Scheduler {
     tasks: BTreeMap<TaskId, TaskEntry>,
     /// The effects issued since the step began, in issue order, each with
     /// the provenance of the task that built it; the step returns them.
-    issued: Vec<(EffectId, Provenance, Effect)>,
+    issued: Vec<IssuedEffect>,
     /// Tool-call effects orphaned since the last step, drained into
     /// `Step::Pending`.
     withdrawn: Vec<EffectId>,
@@ -328,7 +328,11 @@ impl Scheduler {
         let id = EffectId(self.next_effect);
         self.next_effect += 1;
         let provenance = self.chains[chain.index()].ctx.emitter().stamp_effect();
-        self.issued.push((id, provenance, effect));
+        self.issued.push(IssuedEffect {
+            id,
+            provenance,
+            effect,
+        });
         self.outstanding
             .insert(id, Outstanding::Parked(Pending { chain, resume }));
         id

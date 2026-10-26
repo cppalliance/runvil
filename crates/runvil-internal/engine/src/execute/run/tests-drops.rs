@@ -51,7 +51,9 @@ fn bound_sections(sections: &str) -> Run {
         json!({ "type": "object" }),
     );
     let catalog = ToolCatalog::new([echo]).expect("one tool is a valid catalog");
-    let (ctx, requirements) = run_context().model(model).tools(catalog).prepare(&prompt);
+    let (ctx, requirements) = run_context()
+        .with_tools(catalog)
+        .prepare(&prompt, Some(model));
     assert!(
         requirements.refusal().is_none(),
         "the model fills the prompt's role: {requirements:?}"
@@ -110,7 +112,7 @@ fn a_dropped_chat_or_tool_call_resumes_a_pcall_with_the_cancelled_error_and_the_
     let Step::Done { result, events } = run.step() else {
         panic!("the run ends once its last round is answered");
     };
-    let RunResult::Ok(text) = result else {
+    let RunResult::Completed(text) = result else {
         panic!("a caught drop leaves the run to succeed: {result:?}");
     };
     assert_eq!(text, "false:cancelled|false:cancelled|kept");
@@ -175,7 +177,7 @@ fn a_dropped_loop_round_resumes_a_pcall_with_the_cancelled_error_and_the_run_con
     let Step::Done { result, events } = run.step() else {
         panic!("the run ends once its last round is answered");
     };
-    let RunResult::Ok(text) = result else {
+    let RunResult::Completed(text) = result else {
         panic!("a caught drop leaves the run to succeed: {result:?}");
     };
     assert_eq!(
@@ -244,10 +246,10 @@ fn parked_wait(run: &mut Run) -> (EffectId, EffectId) {
         panic!("the main parks on its timed wait while the child's round is out");
     };
     let issued = |kind: fn(&Effect) -> bool| {
-        let Some((id, _, _)) = effects.iter().find(|(_, _, effect)| kind(effect)) else {
+        let Some(issued) = effects.iter().find(|issued| kind(&issued.effect)) else {
             panic!("the step issued the timer and the round: {effects:?}");
         };
-        *id
+        issued.id
     };
     let timer = issued(|effect| matches!(effect, Effect::Timer { .. }));
     let chat = issued(|effect| matches!(effect, Effect::Chat { .. }));
@@ -280,7 +282,7 @@ fn a_dropped_timer_raises_the_cancelled_error_into_a_timed_waits_pcall_and_the_r
         let Step::Done { result, .. } = run.step() else {
             panic!("{wait}: the run ends once the child's round is answered");
         };
-        let RunResult::Ok(out) = result else {
+        let RunResult::Completed(out) = result else {
             panic!("{wait}: a caught drop leaves the run to succeed: {result:?}");
         };
         assert_eq!(

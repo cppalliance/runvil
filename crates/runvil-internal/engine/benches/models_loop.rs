@@ -25,7 +25,7 @@ use std::sync::Arc;
 use criterion::{Criterion, criterion_group, criterion_main};
 use runvil_engine::test_support::scripted_chat::{ScriptedChat, ScriptedReply};
 use runvil_engine::test_support::{drive, perform_locally};
-use runvil_engine::{Effect, EffectAnswer, Run, RunContext, RunLimits, RunResult};
+use runvil_engine::{Effect, EffectAnswer, Run, RunContext, RunResult};
 use runvil_parser::Prompt;
 use runvil_types::models::{ModelCatalog, ModelId, ModelInfo, ThinkingMode};
 use runvil_types::seed::RunSeed;
@@ -84,11 +84,9 @@ fn parse_loop_prompt() -> Prompt {
 /// driver: every effect is performed in process, and every round is
 /// answered by `chat`. A prompt the prepare refuses ends with the refusal.
 fn run_once(prompt: &Prompt, chat: &ScriptedChat, context: u32) -> RunResult {
-    let limits = RunLimits::new();
-    let ctx = RunContext::new(EXECUTION, SEED, Timestamp::UNIX_EPOCH)
-        .model(bench_catalog(context).models()[0].clone())
-        .limits(limits);
-    let (ctx, requirements) = ctx.prepare(prompt);
+    let ctx = RunContext::new(EXECUTION, SEED, Timestamp::UNIX_EPOCH);
+    let model = bench_catalog(context).models()[0].clone();
+    let (ctx, requirements) = ctx.prepare(prompt, Some(model));
     if let Some(refusal) = requirements.refusal() {
         return RunResult::Failure(refusal);
     }
@@ -120,7 +118,7 @@ fn models_loop(c: &mut Criterion) {
         b.iter(|| {
             let result = run_once(&prompt, &chat, 131_072);
             assert!(
-                matches!(result, RunResult::Ok(_)),
+                matches!(result, RunResult::Completed(_)),
                 "the loop bench run succeeds: {result:?}"
             );
         });

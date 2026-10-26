@@ -1,6 +1,6 @@
 //! The error-chain convention: a cause-bearing failure's message holds the
 //! cause's text, its source chain shows that text once, and its cause stays
-//! reachable through `cause()`; a variant that still keeps a `source()`
+//! reachable through `originating_error()`; a variant that still keeps a `source()`
 //! shows each segment of its chain once; an internal failure built with a
 //! cause appends it once; and the store probe names a missing store.
 
@@ -108,7 +108,7 @@ fn assert_no_segment_repeats(error: &(dyn std::error::Error + 'static)) -> usize
 fn no_segment_of_an_error_chain_repeats() {
     for error in cause_bearing() {
         assert!(
-            error.cause().is_some(),
+            error.originating_error().is_some(),
             "the cause stays reachable: {error:?}"
         );
         assert!(
@@ -118,7 +118,7 @@ fn no_segment_of_an_error_chain_repeats() {
         );
         let run_error = crate::RunError::from(error);
         assert!(
-            run_error.cause().is_some(),
+            run_error.originating_error().is_some(),
             "the public wrapper reaches the cause: {run_error}"
         );
         assert_eq!(assert_no_segment_repeats(&run_error), 1);
@@ -141,7 +141,10 @@ fn an_internal_failure_built_with_a_cause_shows_its_text_once_and_keeps_it() {
         "internal invariant violated: a test invariant: the cause"
     );
     assert_eq!(
-        error.cause().map(ToString::to_string).as_deref(),
+        error
+            .originating_error()
+            .map(ToString::to_string)
+            .as_deref(),
         Some("the cause")
     );
     let location = crate::RunError::from(error)
@@ -155,7 +158,7 @@ fn an_internal_failure_built_with_a_cause_shows_its_text_once_and_keeps_it() {
     assert_eq!(location.line, Some(expected_line));
 
     let bare = Error::internal("a test invariant");
-    assert!(bare.cause().is_none());
+    assert!(bare.originating_error().is_none());
     assert_eq!(
         bare.to_string(),
         "internal invariant violated: a test invariant"

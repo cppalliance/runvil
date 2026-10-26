@@ -86,8 +86,8 @@ fn run_of(sections: &str) -> Run {
         json!({ "type": "object", "properties": { "name": { "type": "string" } } }),
     );
     let catalog = ToolCatalog::new([tool]).expect("the one-tool catalog is valid");
-    let ctx = RunContext::new(EXECUTION, TEST_SEED, Timestamp::UNIX_EPOCH).model(model);
-    let (ctx, requirements) = ctx.tools(catalog).prepare(&prompt);
+    let ctx = RunContext::new(EXECUTION, TEST_SEED, Timestamp::UNIX_EPOCH).with_tools(catalog);
+    let (ctx, requirements) = ctx.prepare(&prompt, Some(model));
     assert!(
         requirements.is_satisfied(),
         "the bound model and the catalog satisfy the fixture: {requirements:?}"

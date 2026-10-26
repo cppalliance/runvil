@@ -29,14 +29,14 @@ const DECLARES_NOTHING: &str = concat!(
 #[test]
 fn two_runs_writing_the_same_store_path_do_not_conflict() {
     let prompt = parse_ok(DECLARES_NOTHING);
-    let (ctx_a, _) = test_context("run-a").prepare(&prompt);
-    let (ctx_b, _) = test_context("run-b").prepare(&prompt);
+    let (ctx_a, _) = test_context("run-a").prepare(&prompt, None);
+    let (ctx_b, _) = test_context("run-b").prepare(&prompt, None);
     let access_a = ctx_a
-        .vfs_handle()
+        .vfs()
         .acquire(Origin::new("run-a"))
         .expect("run a acquires");
     let access_b = ctx_b
-        .vfs_handle()
+        .vfs()
         .acquire(Origin::new("run-b"))
         .expect("run b acquires");
     let store_a =
@@ -84,9 +84,7 @@ fn current_model(context: u32, thinking: ThinkingMode) -> ModelInfo {
 
 /// A scenario over `source` run under the one current model `model`.
 fn under_model(source: &str, name: &str, model: ModelInfo) -> Scenario {
-    Scenario::new(source)
-        .name(name)
-        .context(move |ctx| ctx.model(model))
+    Scenario::new(source).name(name).current_model(model)
 }
 
 #[test]

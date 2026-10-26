@@ -9,7 +9,9 @@ use runvil_types::ids::{Provenance, TaskId};
 
 use super::super::perform_locally;
 use super::super::scripted_chat::{ScriptedReply, text};
-use crate::execute::{Effect, EffectAnswer, EffectId, EffectRecord, Run, RunResult, Step};
+use crate::execute::{
+    Effect, EffectAnswer, EffectId, EffectRecord, IssuedEffect, Run, RunResult, Step,
+};
 
 /// The answer a `Chat` effect gets from the scripted model's `reply`,
 /// built as [`ScriptedChat::complete_now`] builds it.
@@ -46,7 +48,7 @@ pub(crate) fn only_effect(step: Step) -> (EffectId, Effect) {
         1,
         "exactly one effect is issued: {effects:?}"
     );
-    let (id, _, effect) = effects.remove(0);
+    let IssuedEffect { id, effect, .. } = effects.remove(0);
     (id, effect)
 }
 
@@ -75,7 +77,7 @@ pub(crate) fn infer_prompt(effect: &Effect) -> String {
 #[track_caller]
 pub(crate) fn text_of(result: RunResult) -> String {
     match result {
-        RunResult::Ok(text) => text,
+        RunResult::Completed(text) => text,
         other => panic!("the run succeeds: {other:?}"),
     }
 }
@@ -128,7 +130,7 @@ impl Outcome {
     #[track_caller]
     pub(crate) fn text(&self) -> &str {
         match &self.result {
-            RunResult::Ok(text) => text,
+            RunResult::Completed(text) => text,
             other => panic!("the run succeeds: {other:?}"),
         }
     }
@@ -159,7 +161,12 @@ pub(crate) fn drive_batched(mut run: Run, batching: Batching) -> Outcome {
                 ..
             } => {
                 events.extend(more);
-                for (id, provenance, effect) in issued {
+                for IssuedEffect {
+                    id,
+                    provenance,
+                    effect,
+                } in issued
+                {
                     effects.push((provenance, effect.record()));
                     outstanding.push((id, effect));
                 }

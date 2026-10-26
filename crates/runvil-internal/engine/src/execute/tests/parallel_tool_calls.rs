@@ -14,7 +14,7 @@ use runvil_types::event::{Event, ReplyOrigin};
 use super::fixtures::echo_tool;
 use super::models_loop::loop_scenario;
 use super::*;
-use crate::execute::run::{Effect, EffectAnswer, EffectId, Step};
+use crate::execute::run::{Effect, EffectAnswer, EffectId, IssuedEffect, Step};
 use crate::model::{Completion, CompletionResult, ToolCall};
 use crate::test_support::scenario::{chat_answer, only_effect, pass_through, text_of};
 
@@ -29,7 +29,7 @@ fn pending(step: Step) -> (Vec<(EffectId, Effect)>, Vec<Event>) {
     };
     let effects = effects
         .into_iter()
-        .map(|(id, _, effect)| (id, effect))
+        .map(|issued| (issued.id, issued.effect))
         .collect();
     (effects, events)
 }
@@ -51,7 +51,7 @@ fn step_past_renders(run: &mut Run) -> (Vec<(EffectId, Effect)>, Vec<EffectId>) 
         };
         withdrawn.extend(dropped);
         let mut rendered = false;
-        for (id, _, effect) in issued {
+        for IssuedEffect { id, effect, .. } in issued {
             if matches!(effect, Effect::Render { .. }) {
                 run.resume(id, pass_through(&effect));
                 rendered = true;
