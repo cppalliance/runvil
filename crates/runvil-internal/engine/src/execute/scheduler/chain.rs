@@ -16,7 +16,8 @@ use crate::{Error, Result};
 
 use super::chain_record::{BlockIndex, CallDepth, ChainKind, SectionIndex};
 use super::{
-    Chain, ChainIndex, ChatAnchor, Continuation, Counters, GENERIC_COMPLETION, Pending, Scheduler,
+    Chain, ChainIndex, ChatAnchor, Continuation, Counters, GENERIC_COMPLETION, Outstanding,
+    Pending, Scheduler,
 };
 
 /// What one chain's step left the run with: the run goes on, or the step
@@ -86,7 +87,11 @@ impl Scheduler {
     /// # Errors
     /// Returns [`Error::Internal`] when the run's chain count exceeds `u32`.
     pub(super) fn start_chain(&mut self, start: ChainStart) -> Result<ChainIndex> {
-        if self.chains.len() >= self.max_chains {
+        #[cfg(test)]
+        let max_chains = self.max_chains;
+        #[cfg(not(test))]
+        let max_chains = super::MAX_CHAINS;
+        if self.chains.len() >= max_chains {
             return Err(Error::internal("a run's chain count cannot exceed u32"));
         }
         let id = ChainIndex(u32::try_from(self.chains.len()).map_err(|error| {
@@ -110,7 +115,6 @@ impl Scheduler {
             waiting_on: Vec::new(),
             batch: Vec::new(),
             blocked: None,
-            note: None,
             ctx: start.ctx,
             access: None,
             frame: None,
@@ -144,7 +148,7 @@ impl Scheduler {
     pub(super) fn finish(&mut self, id: ChainIndex, outcome: Result<Option<String>>) -> ChainStep {
         let chain = &mut self.chains[id.index()];
         let parent = chain.kind.parent();
-        let is_task = chain.kind.owner().is_some();
+        let is_task = matches!(chain.kind, ChainKind::Task { .. });
         // `None` when the chain ended by exhausting its slice: the last
         // section's frame already dropped at the fall-through.
         let mut frame = chain.frame.take();
@@ -229,8 +233,8 @@ impl Scheduler {
     /// Aborts one chain and everything it transitively blocks on or owns -
     /// its call children and the tasks it spawned (a fanout's arms among
     /// them; each abandoned as `owner_aborted`, its own subtree aborted in
-    /// turn): the chain leaves the ready queue and the pending table, its
-    /// in-flight leaf effects are orphaned, and its state drops in the
+    /// turn): the chain leaves the ready queue, its in-flight leaf effects
+    /// are orphaned in the effect table, and its state drops in the
     /// teardown order (the suspended coroutine, then the frame unarmed - no
     /// `SECTION_FINISHED`). The chain's own task slot, if it is a task, is
     /// the caller's to settle: the owner's chain end abandons it, a cancel
@@ -257,9 +261,9 @@ impl Scheduler {
         // one. Each tool call's identity ends as it is orphaned, so the
         // entries go in issue order rather than the table's.
         let mut effects: Vec<EffectId> = self
-            .pending
+            .outstanding
             .iter()
-            .filter(|(_, pending)| pending.chain == id)
+            .filter(|(_, entry)| matches!(entry, Outstanding::Parked(parked) if parked.chain == id))
             .map(|(effect, _)| *effect)
             .collect();
         effects.sort_unstable();
@@ -291,24 +295,27 @@ impl Scheduler {
         }
     }
 
-    /// Orphans one in-flight leaf effect whose chain is going away: the
-    /// pending entry leaves, and the id is recorded so the caller's answer,
+    /// Orphans one in-flight leaf effect whose chain is going away: its
+    /// entry in the effect table becomes orphaned, so the caller's answer,
     /// when it arrives, is discarded rather than failing the run. A tool
     /// call's identity ends here as its answer would end it, so what the
     /// tool already did is joined into the parked chain and anything it
     /// tries later is refused. A tool call is also listed as withdrawn,
     /// for the step to report. The caller still owes the answer: `Done`
     /// waits for every issued effect, so the run ends only once the
-    /// caller has answered all of them.
+    /// caller has answered all of them. An id with no entry is left
+    /// unknown, so an answer for it still fails loudly.
     pub(super) fn abort_effect(&mut self, effect: EffectId) {
-        if let Some(Pending {
+        let Some(entry) = self.outstanding.get_mut(&effect) else {
+            return;
+        };
+        if let Outstanding::Parked(Pending {
             chain,
             resume: Continuation::ToolCall(call),
-        }) = self.pending.remove(&effect)
+        }) = std::mem::replace(entry, Outstanding::Orphaned)
         {
             self.end_tool_call(chain, call.exec);
             self.withdrawn.push(effect);
         }
-        self.orphaned.insert(effect);
     }
 }

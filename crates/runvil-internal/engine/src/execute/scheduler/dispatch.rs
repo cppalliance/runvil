@@ -12,70 +12,26 @@
 use std::sync::Arc;
 
 use runvil_types::event::ReplyOrigin;
-use runvil_types::event::lifecycle::{self, Lifecycle};
-use runvil_vfs::VfsError;
 
 use crate::error::DepthVia;
 use crate::execute::run::Effect;
 use crate::execute::section_context::TaskSeed;
-use crate::lua::{Answer, Blocked, Request, ToolSet, VfsOp, resolve_model_binding};
+use crate::lua::{Answer, Blocked, Request, VfsOp, resolve_model_binding};
 use crate::model::{Message, ModelBinding};
 use crate::{Error, Result};
 
 use super::chain::ChainStart;
 use super::chain_record::ChainKind;
-use super::{ChainIndex, Continuation, Counters, Scheduler, VfsContinuation};
+use super::{ChainIndex, Continuation, Counters, Scheduler};
 
-/// The error for a name that resolves to no tool in the run: the name and
-/// the id of every catalog tool, in id order, so the message reads
-/// required versus actual. The `tool_call` arm's answer for an unresolved
-/// name.
-pub(super) fn unbound_tool_call(tool_set: &ToolSet, name: &str) -> Error {
-    let mut ids: Vec<_> = tool_set
-        .catalog()
-        .tools()
-        .iter()
-        .map(|info| &info.id)
-        .collect();
-    ids.sort();
-    Error::UnboundToolCall {
-        name: name.to_owned(),
-        ids: ids.into_iter().map(ToString::to_string).collect(),
-    }
-}
-
-/// The succeeded/failed observation pair one store operation reports;
-/// nothing for an op this crate does not name.
-fn vfs_observations(op: &VfsOp) -> Option<(Lifecycle, Lifecycle)> {
-    let pair = match op {
-        VfsOp::Write { .. } => (lifecycle::VFS_WRITE_SUCCEEDED, lifecycle::VFS_WRITE_FAILED),
-        VfsOp::Append { .. } => (
-            lifecycle::VFS_APPEND_SUCCEEDED,
-            lifecycle::VFS_APPEND_FAILED,
-        ),
-        VfsOp::Read { .. } => (lifecycle::VFS_READ_SUCCEEDED, lifecycle::VFS_READ_FAILED),
-        VfsOp::ReadNumbered { .. } => (
-            lifecycle::VFS_READ_NUMBERED_SUCCEEDED,
-            lifecycle::VFS_READ_NUMBERED_FAILED,
-        ),
-        VfsOp::StrReplace { .. } => (
-            lifecycle::VFS_REPLACE_SUCCEEDED,
-            lifecycle::VFS_REPLACE_FAILED,
-        ),
-        VfsOp::Delete { .. } => (
-            lifecycle::VFS_DELETE_SUCCEEDED,
-            lifecycle::VFS_DELETE_FAILED,
-        ),
-        VfsOp::Glob { .. } => (lifecycle::VFS_GLOB_SUCCEEDED, lifecycle::VFS_GLOB_FAILED),
-        VfsOp::Exists { .. } => (
-            lifecycle::VFS_EXISTS_SUCCEEDED,
-            lifecycle::VFS_EXISTS_FAILED,
-        ),
-        // Any op `runvil-lua` adds behind its `#[non_exhaustive]`
-        // `VfsOp` before this crate names it reports nothing.
-        _ => return None,
-    };
-    Some(pair)
+/// How one leaf dispatch resolved when its preparation succeeded: an
+/// effect issued, with the chain parked on the effect table, or an answer
+/// settled on the driver thread without leaving. A preparation failure
+/// returns `Err` instead.
+#[derive(Debug)]
+pub(super) enum Dispatched {
+    Issued,
+    Answered(Answer<Error>),
 }
 
 /// What a chain parks on when it yields `request`, as `tasks.status`
@@ -97,23 +53,6 @@ fn blocked_on(request: &Request) -> Option<Blocked> {
         | Request::Note { .. }
         | Request::Cancel { .. }
         | Request::AdhocToolDone { .. } => None,
-    }
-}
-
-/// Classifies one store operation's failure for the answer channel. A
-/// claims-model conflict becomes the fatal determinism violation: the
-/// driver intercepts it at the answer boundary and ends the run on the
-/// spot rather than resuming it into Lua, so no author `pcall` can catch
-/// it. Every other failure returns as the call's answer as an
-/// [`Error::Store`] holding the model-facing message rendered for the
-/// operation and the structured cause, which ends the run as a
-/// `RunErrorKind::Vfs` error if it aborts the chunk uncaught.
-pub(super) fn classify_vfs_failure(op: &VfsOp, error: VfsError) -> Error {
-    match error {
-        VfsError::Conflict { detail, .. } => Error::Determinism(detail),
-        // `VfsError` is `#[non_exhaustive]` across the crate seam; every
-        // other failure is the call's answer.
-        error => Error::store_op(op, error),
     }
 }
 
@@ -209,11 +148,11 @@ impl Scheduler {
 
     /// Dispatches an `infer` request: resolves the binding, issues the
     /// single tool-free gateway round as a `Chat` effect over one user
-    /// message, and parks the chain in the pending table. A resolution
+    /// message, and parks the chain in the effect table. A resolution
     /// failure is the call's answer, resumed into the caller so an author
     /// `pcall` can catch it.
     fn dispatch_infer(&mut self, id: ChainIndex, prompt: &str, binding: Option<ModelBinding>) {
-        if let Err(error) = self.issue_infer(id, prompt, binding) {
+        if let Err(error) = self.prepare_infer(id, prompt, binding) {
             self.answer_inline(id, Answer::Infer(Err(error)));
         }
     }
@@ -221,7 +160,7 @@ impl Scheduler {
     /// The fallible half of infer dispatch: the binding resolution (the
     /// handle's frozen binding, else the section's current model) and the
     /// issued effect.
-    fn issue_infer(
+    fn prepare_infer(
         &mut self,
         id: ChainIndex,
         prompt: &str,
@@ -256,7 +195,7 @@ impl Scheduler {
     /// Dispatches a `store` request: derives the store view from the
     /// chain's access capability and issues the operation through it as a
     /// `Vfs` effect for the caller to perform, parking the chain in the
-    /// pending table exactly as a leaf I/O round does. Every store
+    /// effect table exactly as a leaf I/O round does. Every store
     /// operation takes this yield path uniformly (memory mounts and real
     /// files alike, with no inline fast path) so interleaving behavior never
     /// depends on which backend serves the mount. The operation's event is
@@ -270,13 +209,11 @@ impl Scheduler {
     fn dispatch_vfs(&mut self, id: ChainIndex, op: VfsOp) -> Result<()> {
         let access = Arc::clone(self.chains[id.index()].access()?);
         let view = Arc::new(runvil_vfs::detail::store_view(&access).map_err(Error::store)?);
-        let observations = vfs_observations(&op);
-        let continuation = VfsContinuation {
+        let effect = Effect::Vfs {
+            access: view,
             op: op.clone(),
-            observations,
         };
-        let effect = Effect::Vfs { access: view, op };
-        self.issue(id, effect, Continuation::Vfs(continuation));
+        self.issue(id, effect, Continuation::Vfs(op));
         Ok(())
     }
 

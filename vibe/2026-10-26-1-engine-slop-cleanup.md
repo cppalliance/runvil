@@ -531,7 +531,7 @@ Pinned tests that must stay green, beside each item's Check:
 
 <step-3>
 
-### Step 3: Merge the effect maps and reshape the task arena
+### Step 3: Merge the effect maps and reshape the task arena [completed]
 
 - Component: scheduler state
 - Tests: run each from the runvil root in PowerShell, as written:

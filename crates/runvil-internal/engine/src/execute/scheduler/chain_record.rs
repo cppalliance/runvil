@@ -198,9 +198,6 @@ pub(super) struct Chain {
     /// answer resumes the chain. `None` while the chain runs or between
     /// blocks.
     pub(super) blocked: Option<Blocked>,
-    /// The latest progress note published through `tasks.note` for the
-    /// task this chain backs, reported by `tasks.status`.
-    pub(super) note: Option<String>,
     /// The chain's fork of the run state: the run's own for the H1 pass and
     /// for a root walk with no pass before it, the hand-off fork holding
     /// H1's frozen `argv` (`with_walk_state`) for the walk after the pass,

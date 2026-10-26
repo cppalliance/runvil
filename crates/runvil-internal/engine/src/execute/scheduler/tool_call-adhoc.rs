@@ -11,20 +11,21 @@ use crate::execute::section_context::AdhocCall;
 use crate::lua::{AdhocToolOutcome, Answer, ScriptReport, ToolBinding, ToolCallOutcome};
 use crate::{Error, Result};
 
+use super::super::dispatch::Dispatched;
 use super::super::{CallSite, ChainIndex, Scheduler};
-use super::ToolCallDispatch;
 
 impl Scheduler {
     /// Answers a call routed to the adhoc tool `binding` binds: the
     /// one-time counts install, the attempt counted under the tool's id,
-    /// the call opened on the frame, then the handler's answer.
+    /// the call opened on the frame, then the handler's answer, settled on
+    /// the driver thread without an effect.
     pub(super) fn prepare_adhoc_call(
         &mut self,
         id: ChainIndex,
         binding: &ToolBinding,
         args: serde_json::Value,
         site: &CallSite,
-    ) -> Result<ToolCallDispatch> {
+    ) -> Result<Dispatched> {
         let report = ScriptReport {
             turn: self.call_turn(id, site),
         };
@@ -43,7 +44,7 @@ impl Scheduler {
                 report,
                 listing: false,
             });
-        Ok(ToolCallDispatch::Answered(Answer::ToolCallResult(Ok(
+        Ok(Dispatched::Answered(Answer::ToolCallResult(Ok(
             ToolCallOutcome::Adhoc {
                 alias: binding.alias().to_owned(),
                 args,

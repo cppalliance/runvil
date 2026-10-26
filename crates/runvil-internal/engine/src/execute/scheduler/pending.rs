@@ -1,13 +1,13 @@
-//! The pending table's entry: what a parked chain asked for, in the terms
-//! `apply_answer` needs to turn the caller's raw [`EffectAnswer`] into the
-//! chain's protocol [`Answer`] and emit the round's events. The effect
-//! itself holds none of this: it describes the work, the continuation
-//! describes what the work means to the chain.
+//! The effect table's entry: whether a chain is still parked on an issued
+//! effect, and if so what it asked for, in the terms `apply_answer` needs
+//! to turn the caller's raw [`EffectAnswer`] into the chain's protocol
+//! [`Answer`] and emit the round's events. The effect itself holds none of
+//! this: it describes the work, the continuation describes what the work
+//! means to the chain.
 //!
 //! [`EffectAnswer`]: super::EffectAnswer
 //! [`Answer`]: super::Answer
 
-use runvil_types::event::lifecycle::Lifecycle;
 use runvil_types::ids::RoundId;
 use runvil_vfs::ExecId;
 
@@ -41,27 +41,15 @@ pub(super) enum Continuation {
     /// dispatch body (counts already taken at dispatch, then the
     /// succeeded/failed event, the trust rule, and the `ToolResult`).
     ToolCall(ToolCallContinuation),
-    /// A [`Vfs`](super::Effect::Vfs) effect: the operation itself (for the
-    /// answer's rendered message and conflict classification) and the
-    /// succeeded/failed observation pair its outcome reports; `None` for
-    /// an op this crate does not name.
-    Vfs(VfsContinuation),
+    /// A [`Vfs`](super::Effect::Vfs) effect: the operation the chain
+    /// yielded, from which the answer's succeeded/failed observation, its
+    /// failure's model-facing message, and its determinism classification
+    /// render under the call surface the author used.
+    Vfs(VfsOp),
     /// The internal timer behind a timed wait: the firing completes the
     /// slot backed by the effect and wakes its waiting owner; no chain
     /// resumes.
     Timer,
-}
-
-/// What a store answer is applied with: the operation the chain yielded,
-/// so its failure's model-facing message and determinism classification
-/// render from the call surface the author used.
-#[derive(Debug)]
-pub(super) struct VfsContinuation {
-    /// The operation the effect performs.
-    pub(super) op: VfsOp,
-    /// The succeeded/failed observation pair the outcome reports; `None`
-    /// for an op this crate does not name.
-    pub(super) observations: Option<(Lifecycle, Lifecycle)>,
 }
 
 /// What a bound `tool_call`'s answer is applied with: the binding the call
@@ -121,8 +109,22 @@ impl CallSite {
     }
 }
 
-/// One in-flight leaf effect's pending entry: the chain parked on it and
-/// how its answer resumes that chain.
+/// One issued effect the caller has not answered yet.
+#[derive(Debug)]
+#[expect(
+    clippy::large_enum_variant,
+    reason = "most entries are parked, and an orphan's unused room lasts only until its answer lands"
+)]
+pub(super) enum Outstanding {
+    /// A chain is parked on the effect.
+    Parked(Pending),
+    /// The chain stopped waiting before the caller answered: the answer is
+    /// still owed, and it is discarded on arrival.
+    Orphaned,
+}
+
+/// A parked effect's entry: the chain parked on it and how its answer
+/// resumes that chain.
 #[derive(Debug)]
 pub(super) struct Pending {
     /// The parked chain (for a timer, the owner whose wait the timer

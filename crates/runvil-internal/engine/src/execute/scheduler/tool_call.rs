@@ -58,21 +58,29 @@ use runvil_vfs::detail;
 use crate::execute::run::{Effect, ToolCallOrigin, ToolCaller};
 use crate::lua::{
     Answer, DiscoveryTool, OfferMode, ScriptReport, ToolBinding, ToolCallCounts, ToolCallOutcome,
-    ToolCallRecord, current_dynamic_set, current_tool_bindings,
+    ToolCallRecord, ToolSet, current_dynamic_set, current_tool_bindings,
 };
 use crate::{Error, Result};
 
-use super::dispatch::unbound_tool_call;
+use super::dispatch::Dispatched;
 use super::{CallSite, ChainIndex, Continuation, Scheduler, ToolCallContinuation, prompt_origin};
 
-/// How one `tool_call` dispatch resolved: a bound call issued as an effect
-/// and parked on the pending table, or an adhoc tool's or the discovery
-/// route's answer settled on the driver thread. A preparation failure
-/// returns `Err` instead.
-#[derive(Debug)]
-pub(super) enum ToolCallDispatch {
-    Issued,
-    Answered(Answer<Error>),
+/// The error for a name that resolves to no tool in the run: the name and
+/// the id of every catalog tool, in id order, so the message reads
+/// required versus actual. The `tool_call` arm's answer for an unresolved
+/// name.
+fn unbound_tool_call(tool_set: &ToolSet, name: &str) -> Error {
+    let mut ids: Vec<_> = tool_set
+        .catalog()
+        .tools()
+        .iter()
+        .map(|info| &info.id)
+        .collect();
+    ids.sort();
+    Error::UnboundToolCall {
+        name: name.to_owned(),
+        ids: ids.into_iter().map(ToString::to_string).collect(),
+    }
 }
 
 /// Where one tool call is answered, with the binding it resolved to, so a
@@ -91,7 +99,7 @@ enum ToolRoute {
 
 impl Scheduler {
     /// Dispatches a `tool_call` request. An issued bound call parks the
-    /// chain in the pending table; an adhoc tool's handler resumes the
+    /// chain in the effect table; an adhoc tool's handler resumes the
     /// chain on the spot; every preparation failure - an unbound alias,
     /// the counts install - is the call's answer, resumed
     /// into the caller so an author `pcall` catches it exactly as a tool
@@ -109,9 +117,9 @@ impl Scheduler {
             None => CallSite::Script { turn },
         };
         match self.prepare_tool_call(id, alias, args, site) {
-            // An issued call is parked on the pending table.
-            Ok(ToolCallDispatch::Issued) => {}
-            Ok(ToolCallDispatch::Answered(answer)) => {
+            // An issued call is parked on the effect table.
+            Ok(Dispatched::Issued) => {}
+            Ok(Dispatched::Answered(answer)) => {
                 self.answer_inline(id, answer);
             }
             Err(error) => {
@@ -306,8 +314,9 @@ impl Scheduler {
 
     /// The fallible half of tool-call dispatch, by the call's route: an
     /// adhoc tool (the one-time counts install, the attempt counted, then
-    /// the handler's answer), the discovery route, or any other tool,
-    /// which `prepare_catalog_call` issues.
+    /// the handler's answer, settled on the driver thread), the discovery
+    /// route, or any other tool, which `prepare_catalog_call` issues as an
+    /// effect.
     ///
     /// Every report the call makes carries the turn of the model round
     /// that requested it, so an adhoc handler earlier in the same batch
@@ -320,13 +329,13 @@ impl Scheduler {
         alias: &str,
         args: serde_json::Value,
         site: CallSite,
-    ) -> Result<ToolCallDispatch> {
+    ) -> Result<Dispatched> {
         match self.tool_route(id, alias, &site)? {
             ToolRoute::Adhoc(binding) => self.prepare_adhoc_call(id, &binding, args, &site),
             ToolRoute::Discovery(binding) => self.prepare_discovery_call(id, &binding, args, site),
             ToolRoute::Catalog(binding) => {
                 self.prepare_catalog_call(id, binding, args, site)?;
-                Ok(ToolCallDispatch::Issued)
+                Ok(Dispatched::Issued)
             }
         }
     }

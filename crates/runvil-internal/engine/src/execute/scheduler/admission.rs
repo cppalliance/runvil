@@ -24,18 +24,22 @@ use super::chain_record::{Admission, ChainKind};
 use super::{ChainIndex, Scheduler};
 
 impl Scheduler {
-    /// The chain enclosing `id` in the task tree: its spawner for a task
-    /// chain, its call parent for a call chain, `None` for the root.
+    /// The chain enclosing `id` in the task tree: its owner, read from its
+    /// task slot, for a task chain, its call parent for a call chain, and
+    /// `None` for the root walk and the H1 pass.
     pub(super) fn enclosing(&self, id: ChainIndex) -> Option<ChainIndex> {
-        self.chains[id.index()].kind.enclosing()
+        let chain = &self.chains[id.index()];
+        match chain.kind {
+            ChainKind::Task { .. } => self.tasks.get(&chain.task).map(|slot| slot.owner),
+            ChainKind::Call { parent, .. } => Some(parent),
+            ChainKind::Root | ChainKind::H1 => None,
+        }
     }
 
     /// The chains a slot the task chain `id` holds counts against: its
     /// owner and every enclosing ancestor.
     fn slot_ancestors(&self, id: ChainIndex) -> impl Iterator<Item = ChainIndex> + '_ {
-        std::iter::successors(self.chains[id.index()].kind.owner(), |at| {
-            self.chains[at.index()].kind.enclosing()
-        })
+        std::iter::successors(self.enclosing(id), |at| self.enclosing(*at))
     }
 
     /// The admission slots in use at each chain, by arena index, counted
@@ -175,10 +179,9 @@ impl Scheduler {
     /// queues a task chain with its record and registers its slot first.
     fn admit_chain(&mut self, id: ChainIndex) -> Result<()> {
         let chain = &mut self.chains[id.index()];
-        let ChainKind::Task { owner, admission } = &mut chain.kind else {
-            return Err(Error::internal("a queued task chain has a spawner"));
+        let ChainKind::Task { admission } = &mut chain.kind else {
+            return Err(Error::internal("a queued chain backs a task"));
         };
-        let owner = *owner;
         let Admission::Queued(record) =
             std::mem::replace(admission, Admission::Admitted { holding: true })
         else {
@@ -195,7 +198,7 @@ impl Scheduler {
             return Err(Error::internal("a task chain has a slot"));
         };
         let target = slot.target.clone();
-        let emitter = Arc::clone(self.chains[owner.index()].ctx.emitter());
+        let emitter = Arc::clone(self.chains[slot.owner.index()].ctx.emitter());
         // The start event fires at admission, on its owner's sequence:
         // the task first runs now, and the payload's seeds are enough to
         // start the same chain again under the same id.

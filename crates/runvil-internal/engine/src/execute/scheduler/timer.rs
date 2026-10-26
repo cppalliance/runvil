@@ -18,7 +18,7 @@
 //! owner's own dispatch order.
 //!
 //! The sleep is a `Timer` effect issued under the owner: keyed in the
-//! pending table under the owner so the stall check and the abort paths
+//! effect table under the owner so the stall check and the abort paths
 //! see it as the in-flight effect it is, and performed by the caller.
 
 use std::time::Duration;
@@ -29,7 +29,7 @@ use crate::execute::run::{Effect, EffectId};
 use crate::lua::Answer;
 use crate::{Error, Result};
 
-use super::tasks::{TaskBacking, TaskSlot, TaskState};
+use super::tasks::{SlotState, TaskBacking, TaskSlot};
 use super::{ChainIndex, Continuation, Scheduler};
 
 impl Scheduler {
@@ -54,9 +54,8 @@ impl Scheduler {
                 backing: TaskBacking::Effect(effect),
                 owner: id,
                 target: "timer".to_owned(),
-                state: TaskState::Running,
-                outcome: None,
-                exec: None,
+                state: SlotState::Running,
+                note: None,
             },
         );
         Ok(task)
@@ -81,8 +80,7 @@ impl Scheduler {
         else {
             return Err(Error::internal("a fired timer has a live slot"));
         };
-        slot.state = TaskState::Done { ok: true };
-        slot.outcome = Some(Ok(String::new()));
+        slot.state = SlotState::Done(Ok(String::new()));
         let (task, owner) = (task.clone(), slot.owner);
         self.wake_waiter(owner, &task);
         Ok(())

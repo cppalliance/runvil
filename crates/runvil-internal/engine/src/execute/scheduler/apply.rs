@@ -17,23 +17,75 @@
 //! call's identity: what the tool did is joined back into the chain, and
 //! the call's access refuses every later operation.
 
+use runvil_types::event::lifecycle::{self, Lifecycle};
 use runvil_types::ids::RoundId;
 use runvil_types::tools::{ToolError, ToolOutput};
 use runvil_vfs::{ExecId, VfsError, detail};
 
 use crate::execute::infer::accept_infer;
 use crate::lua::{
-    Answer, ModelReport, ToolCallOutcome, VfsOutcome, prepare_dispatch, prepare_model_dispatch,
+    Answer, ModelReport, ToolCallOutcome, VfsOp, VfsOutcome, prepare_dispatch,
+    prepare_model_dispatch,
 };
 use crate::model::{Completion, CompletionError};
 use crate::{Error, Result};
 
-use super::dispatch::classify_vfs_failure;
-use super::tasks::{TaskBacking, TaskState};
+use super::tasks::{SlotState, TaskBacking};
 use super::{
     CallSite, ChainIndex, Continuation, EffectAnswer, EffectId, Pending, Scheduler,
-    ToolCallContinuation, VfsContinuation,
+    ToolCallContinuation,
 };
+
+/// The succeeded/failed observation pair one store operation reports;
+/// nothing for an op this crate does not name.
+fn vfs_observations(op: &VfsOp) -> Option<(Lifecycle, Lifecycle)> {
+    let pair = match op {
+        VfsOp::Write { .. } => (lifecycle::VFS_WRITE_SUCCEEDED, lifecycle::VFS_WRITE_FAILED),
+        VfsOp::Append { .. } => (
+            lifecycle::VFS_APPEND_SUCCEEDED,
+            lifecycle::VFS_APPEND_FAILED,
+        ),
+        VfsOp::Read { .. } => (lifecycle::VFS_READ_SUCCEEDED, lifecycle::VFS_READ_FAILED),
+        VfsOp::ReadNumbered { .. } => (
+            lifecycle::VFS_READ_NUMBERED_SUCCEEDED,
+            lifecycle::VFS_READ_NUMBERED_FAILED,
+        ),
+        VfsOp::StrReplace { .. } => (
+            lifecycle::VFS_REPLACE_SUCCEEDED,
+            lifecycle::VFS_REPLACE_FAILED,
+        ),
+        VfsOp::Delete { .. } => (
+            lifecycle::VFS_DELETE_SUCCEEDED,
+            lifecycle::VFS_DELETE_FAILED,
+        ),
+        VfsOp::Glob { .. } => (lifecycle::VFS_GLOB_SUCCEEDED, lifecycle::VFS_GLOB_FAILED),
+        VfsOp::Exists { .. } => (
+            lifecycle::VFS_EXISTS_SUCCEEDED,
+            lifecycle::VFS_EXISTS_FAILED,
+        ),
+        // Any op `runvil-lua` adds behind its `#[non_exhaustive]`
+        // `VfsOp` before this crate names it reports nothing.
+        _ => return None,
+    };
+    Some(pair)
+}
+
+/// Classifies one store operation's failure for the answer channel. A
+/// claims-model conflict becomes the fatal determinism violation: the
+/// driver intercepts it at the answer boundary and ends the run on the
+/// spot rather than resuming it into Lua, so no author `pcall` can catch
+/// it. Every other failure returns as the call's answer as an
+/// [`Error::Store`] holding the model-facing message rendered for the
+/// operation and the structured cause, which ends the run as a
+/// `RunErrorKind::Vfs` error if it aborts the chunk uncaught.
+fn classify_vfs_failure(op: &VfsOp, error: VfsError) -> Error {
+    match error {
+        VfsError::Conflict { detail, .. } => Error::Determinism(detail),
+        // `VfsError` is `#[non_exhaustive]` across the crate seam; every
+        // other failure is the call's answer.
+        error => Error::store_op(op, error),
+    }
+}
 
 /// The cancelled answer for a chain parked on `resume`'s kind of effect:
 /// the protocol variant the chain's shim expects, holding the run's
@@ -52,36 +104,35 @@ fn dropped_answer(resume: &Continuation) -> Answer<Error> {
 }
 
 impl Scheduler {
-    /// Applies one performed effect's answer: removes the effect's pending
-    /// entry, turns the raw answer into the parked chain's protocol answer
-    /// under the effect's continuation (emitting the round's events), and
-    /// re-queues the chain. A batched tool call's answer fills its slot
-    /// instead, and the chain re-queues once the whole batch has landed.
-    /// A timer's firing completes its slot and wakes its waiter instead,
-    /// and a render's answer is applied by [`Scheduler::accept_render`].
-    /// A `Dropped` answer is the caller giving the effect up: the chain
-    /// resumes with the cancelled error. Every answer
-    /// to a tool call, `Dropped` included, first ends the call's identity
-    /// through [`Scheduler::end_tool_call`], so whatever the tool did
-    /// happens before the chain's next step and nothing it tries after is
-    /// admitted.
+    /// Applies one performed effect's answer to `parked`, the entry
+    /// `resume` took out of the effect table: turns the raw answer into the
+    /// parked chain's protocol answer under the effect's continuation
+    /// (emitting the round's events), and re-queues the chain. A batched
+    /// tool call's answer fills its slot instead, and the chain re-queues
+    /// once the whole batch has landed. A timer's firing completes its slot
+    /// and wakes its waiter instead, and a render's answer is applied by
+    /// [`Scheduler::accept_render`]. A `Dropped` answer is the caller
+    /// giving the effect up: the chain resumes with the cancelled error.
+    /// Every answer to a tool call, `Dropped` included, first ends the
+    /// call's identity through [`Scheduler::end_tool_call`], so whatever
+    /// the tool did happens before the chain's next step and nothing it
+    /// tries after is admitted.
     ///
     /// # Errors
-    /// Returns [`Error::Internal`] when no pending entry explains the id
-    /// (`resume` has already ruled out an orphan, so the caller answered
-    /// an effect the run never issued or answered one twice - which fails
-    /// loudly), when the answer's kind does not match the effect's, or
-    /// when a batched call's answer finds no open slot to fill.
+    /// Returns [`Error::Internal`] when the answer's kind does not match
+    /// the effect's, or when a batched call's answer finds no open slot to
+    /// fill.
     /// Returns [`Error::Determinism`] when a store answer reports a
     /// claims-model conflict: the run ends on the spot rather than
     /// resuming the conflict into Lua, where an author `pcall` could catch
     /// it.
-    pub(super) fn apply_answer(&mut self, id: EffectId, answer: EffectAnswer) -> Result<()> {
-        let Some(Pending { chain, resume }) = self.pending.remove(&id) else {
-            return Err(Error::internal(
-                "an answer arrived for an effect the run did not issue or already answered",
-            ));
-        };
+    pub(super) fn apply_answer(
+        &mut self,
+        id: EffectId,
+        parked: Pending,
+        answer: EffectAnswer,
+    ) -> Result<()> {
+        let Pending { chain, resume } = parked;
         let slot = match &resume {
             Continuation::ToolCall(call) => {
                 self.end_tool_call(chain, call.exec);
@@ -115,8 +166,8 @@ impl Scheduler {
             (Continuation::ToolCall(call), EffectAnswer::ToolCall(result)) => {
                 Answer::ToolCallResult(self.accept_tool_call(chain, &call, result))
             }
-            (Continuation::Vfs(continuation), EffectAnswer::Vfs(result)) => {
-                match self.accept_vfs(chain, &continuation, result) {
+            (Continuation::Vfs(op), EffectAnswer::Vfs(result)) => {
+                match self.accept_vfs(chain, &op, result) {
                     // A claims-model conflict is fatal: the suspended
                     // chains drop unarmed in the run's teardown, exactly
                     // as on the cancellation path.
@@ -285,17 +336,17 @@ impl Scheduler {
     fn accept_vfs(
         &self,
         chain: ChainIndex,
-        continuation: &VfsContinuation,
+        op: &VfsOp,
         result: std::result::Result<VfsOutcome, VfsError>,
     ) -> Result<VfsOutcome> {
         let chain = &self.chains[chain.index()];
-        if let Some((succeeded, failed)) = continuation.observations {
+        if let Some((succeeded, failed)) = vfs_observations(op) {
             chain.ctx.emitter().report(
                 chain.section_name(),
                 if result.is_ok() { succeeded } else { failed },
             );
         }
-        result.map_err(|error| classify_vfs_failure(&continuation.op, error))
+        result.map_err(|error| classify_vfs_failure(op, error))
     }
 
     /// Applies a dropped timer: the slot backed by the effect moves to
@@ -314,7 +365,7 @@ impl Scheduler {
         else {
             return;
         };
-        slot.state = TaskState::Cancelled;
+        slot.state = SlotState::Cancelled;
         let (task, owner) = (task.clone(), slot.owner);
         if self.ctx.cancel().is_cancelled()
             || !self.chains[owner.index()].waiting_on.contains(&task)
