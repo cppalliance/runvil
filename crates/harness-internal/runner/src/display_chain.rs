@@ -14,9 +14,8 @@ use std::error::Error;
 ///
 /// A cause is skipped when its text already appears in the text rendered
 /// so far. Some error variants copy their source's text into their own
-/// message, and the Engine's `LuaRuntime` variant is one example.
-/// Appending such a cause again would print its text twice. The check is
-/// a plain substring test.
+/// message. Appending such a cause again would print its text twice. The
+/// check is a plain substring test.
 #[must_use]
 pub fn display_chain(error: &dyn Error) -> String {
     let mut rendered = error.to_string();

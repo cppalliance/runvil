@@ -377,12 +377,12 @@ isProject: false
 
 <step-6>
 
-### Step 6: Correct display_chain's doc and the guide's run-limit claim, and run the exit gates
+### Step 6: Correct display_chain's doc and the guide's run-limit claim, and run the exit gates [completed]
 
 - Component: Documentation
 - Tests: run each from `c:\Users\Vinnie\cursor\runvil` in PowerShell, as written and in this order, after clearing `CARGO_BUILD_WARNINGS` and `RUSTDOCFLAGS` so each command sees only the variables it sets itself; each exits 0.
   - `if (Select-String -Path crates/harness-internal/runner/src/display_chain.rs -Pattern 'LuaRuntime' -Quiet) { throw 'display_chain.rs still names LuaRuntime' }`
-  - `if (Select-String -Path ../runvil-docs/src/language/16-limits-and-errors.md -Pattern 'can differ from the ones in the table|unless the Harness sets another' -Quiet) { throw 'the guide still says a run''s limits can differ from the defaults' }`
+  - `if (Select-String -Path ../runvil-docs/src/language/16-limits-and-errors.md -Pattern 'can differ from the ones in the table|and it is the default set unless the Harness sets another' -Quiet) { throw 'the guide still says a run''s limits can differ from the defaults' }`
   - `if (-not (Select-String -Path ../runvil-docs/src/language/16-limits-and-errors.md -Pattern 'the Harness passes none today' -SimpleMatch -Quiet)) { throw 'the guide does not say the Harness passes no limits today' }`
   - `cargo nextest run --locked --workspace --exclude workshop --exclude workshop-server --exclude workshop-server-api --all-features`
   - `$env:CARGO_BUILD_WARNINGS='deny'; cargo clippy --workspace --exclude workshop --exclude workshop-server --exclude workshop-server-api --all-targets --all-features`
