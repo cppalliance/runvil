@@ -28,7 +28,7 @@ impl Scheduler {
     /// task entry, for a task chain, its call parent for a call chain, and
     /// `None` for the root walk and the H1 pass.
     pub(super) fn enclosing(&self, id: ChainIndex) -> Option<ChainIndex> {
-        let chain = &self.chains[id.index()];
+        let chain = &self.chains[id];
         match chain.kind {
             ChainKind::Task { .. } => self.tasks.get(&chain.task).map(|slot| slot.owner),
             ChainKind::Call { parent, .. } => Some(parent),
@@ -48,9 +48,7 @@ impl Scheduler {
     /// stored that could drift from the tasks' `holding` state.
     fn slots_in_use(&self) -> Vec<usize> {
         let mut used = vec![0; self.chains.len()];
-        // The arena is u32-bounded at insertion (`start_chain`), so the
-        // index range covers every chain.
-        for (id, chain) in (0..).map(ChainIndex).zip(&self.chains) {
+        for (id, chain) in self.chains.iter() {
             if chain.kind.holding() {
                 self.count_slot(&mut used, id);
             }
@@ -70,15 +68,14 @@ impl Scheduler {
     /// `used`: a free slot at its owner and at every enclosing ancestor,
     /// so the task counts against each chain's limit on the way up.
     fn can_admit(&self, used: &[usize], id: ChainIndex) -> bool {
-        self.slot_ancestors(id).all(|ancestor| {
-            used[ancestor.index()] < self.chains[ancestor.index()].concurrency.get()
-        })
+        self.slot_ancestors(id)
+            .all(|ancestor| used[ancestor.index()] < self.chains[ancestor].concurrency.get())
     }
 
     /// Gives back `id`'s admission slots when it holds any: the shared
     /// half of the chain-end paths and a task wait's park.
     pub(super) fn release_chain_slots(&mut self, id: ChainIndex) {
-        self.chains[id.index()].kind.stop_holding();
+        self.chains[id].kind.stop_holding();
     }
 
     /// Admits every queued task that can take a slot now: resumptions
@@ -122,7 +119,7 @@ impl Scheduler {
     /// The chain whose slots `id`'s resumption takes back: the holding
     /// ancestor a parked call chain released, or the resumed task itself.
     fn slot_holder(&self, id: ChainIndex) -> ChainIndex {
-        match self.chains[id.index()].kind {
+        match self.chains[id].kind {
             ChainKind::Call {
                 released_holder: Some(holder),
                 ..
@@ -143,14 +140,14 @@ impl Scheduler {
         let ChainKind::Task {
             admission: Admission::Admitted { holding },
             ..
-        } = &mut self.chains[holder.index()].kind
+        } = &mut self.chains[holder].kind
         else {
             return Err(Error::internal(
                 "a resumed chain's slots belong to an admitted task",
             ));
         };
         *holding = true;
-        let chain = &mut self.chains[id.index()];
+        let chain = &mut self.chains[id];
         if let ChainKind::Call {
             released_holder, ..
         } = &mut chain.kind
@@ -177,7 +174,7 @@ impl Scheduler {
     /// its task has no entry: a spawn queues a task chain with its record
     /// and registers its entry first.
     fn admit_chain(&mut self, id: ChainIndex) -> Result<()> {
-        let chain = &mut self.chains[id.index()];
+        let chain = &mut self.chains[id];
         let ChainKind::Task { admission } = &mut chain.kind else {
             return Err(Error::internal("a queued chain backs a task"));
         };
@@ -197,7 +194,7 @@ impl Scheduler {
             return Err(Error::internal("a task chain has an entry"));
         };
         let target = slot.target.clone();
-        let emitter = Arc::clone(self.chains[slot.owner.index()].ctx.emitter());
+        let emitter = Arc::clone(self.chains[slot.owner].ctx.emitter());
         // The start event fires at admission, on its owner's sequence:
         // the task first runs now, and the payload's seeds are enough to
         // start the same chain again under the same id.
@@ -227,7 +224,7 @@ impl Scheduler {
     /// which chain gave them. A call chain in the main walk finds no
     /// holding ancestor, and the main walk holds no slots to give.
     pub(super) fn park_wait(&mut self, id: ChainIndex) {
-        let chain = &self.chains[id.index()];
+        let chain = &self.chains[id];
         let waits_on_tasks = chain
             .wait_set()
             .iter()
@@ -241,12 +238,12 @@ impl Scheduler {
         }
         let mut at = chain.kind.parent();
         while let Some(ancestor) = at {
-            let chain = &self.chains[ancestor.index()];
+            let chain = &self.chains[ancestor];
             if chain.kind.holding() {
                 self.release_chain_slots(ancestor);
                 if let ChainKind::Call {
                     released_holder, ..
-                } = &mut self.chains[id.index()].kind
+                } = &mut self.chains[id].kind
                 {
                     *released_holder = Some(ancestor);
                 }
@@ -266,7 +263,7 @@ impl Scheduler {
     /// Returns [`Error::Internal`] when the chain has no suspended block
     /// to take the answer.
     pub(super) fn wake_from_wait(&mut self, id: ChainIndex, answer: Answer<Error>) -> Result<()> {
-        let chain = &mut self.chains[id.index()];
+        let chain = &mut self.chains[id];
         let requeue = match &chain.kind {
             ChainKind::Call {
                 released_holder, ..

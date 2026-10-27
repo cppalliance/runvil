@@ -72,7 +72,7 @@ impl Scheduler {
     /// or [`Error::Internal`] when the chain holds no frame. The walk
     /// reuses the pass's capability, so the hand-off acquires nothing.
     pub(super) fn end_h1(&mut self, id: ChainIndex, start: SectionPos) -> Result<ChainStep> {
-        let chain = &mut self.chains[id.index()];
+        let chain = &mut self.chains[id];
         let Some(Entered { frame, .. }) = chain.entered.take() else {
             return Err(Error::internal("the H1 pass ends with a live frame"));
         };

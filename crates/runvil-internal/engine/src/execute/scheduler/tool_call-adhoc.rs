@@ -35,15 +35,13 @@ impl Scheduler {
         let counted = binding.id().to_string();
         counts.ensure(&counted)?;
         counts.increment(&counted)?;
-        self.chains[id.index()]
-            .frame_mut()?
-            .push_adhoc_call(AdhocCall {
-                tool: binding.id().clone(),
-                alias: binding.alias().to_owned(),
-                call_id: site.call_id().map(str::to_owned),
-                report,
-                listing: false,
-            });
+        self.chains[id].frame_mut()?.push_adhoc_call(AdhocCall {
+            tool: binding.id().clone(),
+            alias: binding.alias().to_owned(),
+            call_id: site.call_id().map(str::to_owned),
+            report,
+            listing: false,
+        });
         Ok(Dispatched::Answered(Answer::ToolCallResult(Ok(
             ToolCallOutcome::Adhoc {
                 alias: binding.alias().to_owned(),
@@ -72,7 +70,7 @@ impl Scheduler {
         id: ChainIndex,
         outcome: AdhocToolOutcome,
     ) -> Result<()> {
-        let chain = &mut self.chains[id.index()];
+        let chain = &mut self.chains[id];
         let emitter = Arc::clone(chain.ctx.emitter());
         let section = chain.section_name().to_owned();
         let call = chain.frame_mut()?.pop_adhoc_call().ok_or(Error::internal(

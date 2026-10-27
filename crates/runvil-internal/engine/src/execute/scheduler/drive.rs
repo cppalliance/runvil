@@ -18,7 +18,8 @@ use crate::execute::run::{EffectAnswer, EffectId, Step};
 use crate::{Error, Result};
 
 use super::chain::ChainStep;
-use super::{ChainIndex, GENERIC_COMPLETION, Outstanding, Phase, Scheduler};
+use super::effects::Arrival;
+use super::{GENERIC_COMPLETION, Phase, Scheduler};
 
 impl Scheduler {
     /// Drains the ready queue and returns the step's outcome: the effects
@@ -48,21 +49,16 @@ impl Scheduler {
         // are the whole guard.
         if matches!(self.phase, Phase::Running)
             && self.ready.is_empty()
-            && !self
-                .outstanding
-                .values()
-                .any(|entry| matches!(entry, Outstanding::Parked(_)))
+            && !self.effects.has_awaited()
         {
             self.end(Err(Error::internal(
                 "the scheduler stalled with no ready chain, no in-flight request, \
                  and no queued chain that can be admitted",
             )));
         }
-        let effects = std::mem::take(&mut self.issued);
-        let mut withdrawn = std::mem::take(&mut self.withdrawn);
-        withdrawn.sort_unstable();
+        let (effects, withdrawn) = self.effects.take_step();
         let events = self.ctx.take_events();
-        let answered = self.outstanding.is_empty();
+        let answered = self.effects.all_answered();
         match std::mem::replace(&mut self.phase, Phase::Done) {
             Phase::Ending(result) if answered => {
                 // Only here, with every issued effect answered, so an
@@ -104,10 +100,10 @@ impl Scheduler {
         if matches!(self.phase, Phase::Done) {
             return;
         }
-        let parked = match self.outstanding.remove(&id) {
-            Some(Outstanding::Parked(parked)) => parked,
-            Some(Outstanding::Orphaned) => return,
-            None => {
+        let parked = match self.effects.arrive(id) {
+            Arrival::Awaited(parked) => parked,
+            Arrival::Orphaned => return,
+            Arrival::Unknown => {
                 self.end(Err(Error::internal(
                     "an answer arrived for an effect the run did not issue or already answered",
                 )));
@@ -198,7 +194,7 @@ impl Scheduler {
         self.teardown();
         // Settling withdrew the abandoned tasks' calls, but teardown orphans
         // the rest unlisted, so a decided run lists none rather than some.
-        self.withdrawn.clear();
+        self.effects.clear_withdrawn();
         self.ctx.emitter().report(
             self.ctx.prompt().title(),
             if result.is_ok() {
@@ -212,7 +208,7 @@ impl Scheduler {
 
     /// Drops every chain's live state in the teardown order (the suspended
     /// coroutine, then the frame unarmed, then the access capability) and
-    /// orphans every parked effect. The task entries keep their terminal
+    /// orphans every awaited effect. The task entries keep their terminal
     /// state for inspection; every entry is terminal by now, `end` having
     /// settled the live ones, so nothing here reports. Each chain joins
     /// the tasks it owns before its access drops, closing the run's
@@ -221,21 +217,17 @@ impl Scheduler {
         self.ready.clear();
         self.resuming.clear();
         self.spawned.clear();
-        // The arena is u32-bounded at insertion (`start_chain`), so the
-        // index range covers every chain.
-        for (owner, chain) in (0..).map(ChainIndex).zip(&self.chains) {
+        for (owner, chain) in self.chains.iter() {
             let Some(access) = chain.access.as_ref() else {
                 continue;
             };
             self.join_owned_tasks(owner, access);
         }
-        for chain in &mut self.chains {
+        for chain in self.chains.iter_mut() {
             chain.parked = None;
             chain.entered = None;
             chain.access = None;
         }
-        for entry in self.outstanding.values_mut() {
-            *entry = Outstanding::Orphaned;
-        }
+        self.effects.orphan_all();
     }
 }

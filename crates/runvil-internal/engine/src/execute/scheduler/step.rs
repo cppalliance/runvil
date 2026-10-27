@@ -131,7 +131,7 @@ impl Scheduler {
     /// returns or fails - a suspension is neither.
     pub(super) fn step_chain(&mut self, id: ChainIndex) -> Result<ChainStep> {
         let prompt = self.prompt();
-        let chain = &mut self.chains[id.index()];
+        let chain = &mut self.chains[id];
         let blocks = chain.blocks(&prompt);
         let is_h1 = chain.kind.is_h1();
         let name = chain.section_name().to_owned();
@@ -235,7 +235,7 @@ impl Scheduler {
                 // fires SECTION_FINISHED - and the run ends here, so the
                 // pass's live tasks end under the chain-end rules as at
                 // any chain end.
-                self.chains[id.index()].entered = None;
+                self.chains[id].entered = None;
                 return Ok(ChainStep::RunEnded(self.settle_owned_tasks(id, Ok(value))));
             }
             // A scalar return ends the chain it fired in.

@@ -1,15 +1,27 @@
 //! Tests for the chain's usage-anchor bookkeeping (what a settled round
 //! keeps for the next precheck, what a failed or usage-less round leaves
-//! alone, and which model a measurement is offered to) and for its walk
-//! stack, one rule each.
+//! alone, and which model a measurement is offered to), for its walk
+//! stack and its id counters, and for the arena that holds the chains,
+//! one rule each.
 
+use std::num::NonZeroUsize;
+use std::sync::Arc;
+
+use runvil_types::ids::{ChainId, TaskId};
 use runvil_types::metrics::Usage;
 
-use super::{ChatAnchor, Walk};
+use super::{
+    Admission, CallDepth, Chain, ChainArena, ChainIndex, ChainKind, ChatAnchor, Counters, Walk,
+};
+use crate::execute::RunContext;
+use crate::execute::context::RunState;
+use crate::execute::section_context::TaskSeed;
 use crate::execute::walk_target::JumpTarget;
 use crate::heading_address::{SectionIndex, SectionPos};
 use crate::lua::UsageAnchor;
 use crate::model::{Message, ModelId};
+use crate::parser::Prompt;
+use crate::test_support::scenario::{TEST_SEED, TEST_STARTED_AT};
 
 fn usage(prompt: u32, completion: u32) -> Usage {
     Usage::new(prompt, completion, prompt + completion)
@@ -200,4 +212,130 @@ fn a_walk_unwinds_nested_descents_one_level_per_pop() {
     assert_eq!(walk.current(), &top(2));
     assert!(!walk.pop());
     assert_eq!(walk.current(), &top(2));
+}
+
+/// A chain of `kind` under `lineage` that holds no access and has entered
+/// no section.
+fn chain(lineage: ChainId, kind: ChainKind) -> Chain {
+    let source = concat!(
+        "---\nname: t\ndescription: d\nrunvil: 0\n---\n\n",
+        "# Title\n\n## Only\n\ndone\n",
+    );
+    let prompt = Prompt::parse(source, "chain-arena-test")
+        .0
+        .expect("the test prompt parses");
+    let ctx = RunState::new(
+        Arc::new(prompt),
+        "",
+        RunContext::new("chain-arena-test", TEST_SEED, TEST_STARTED_AT),
+    );
+    Chain {
+        task: TaskId::from(lineage.clone()),
+        lineage,
+        counters: Counters::default(),
+        kind,
+        seed: TaskSeed::default(),
+        parked: None,
+        ctx,
+        access: None,
+        entered: None,
+        walk: Walk::new(top(0)),
+        entered_name: "Only".to_owned(),
+        var: serde_json::json!({}),
+        call_depth: CallDepth::ROOT,
+        concurrency: NonZeroUsize::MIN,
+        anchor: ChatAnchor::default(),
+    }
+}
+
+fn call_of(parent: ChainIndex) -> ChainKind {
+    ChainKind::Call {
+        parent,
+        released_holder: None,
+    }
+}
+
+#[test]
+fn a_chain_hands_out_child_and_entry_ids_from_separate_counters() {
+    let lineage = ChainId::root().child(4);
+    let mut chain = chain(lineage.clone(), ChainKind::Root);
+    assert_eq!(
+        chain.next_child_id().expect("a child id is left"),
+        lineage.child(0)
+    );
+    assert_eq!(
+        chain.next_entry_id().expect("an entry id is left"),
+        lineage.entry(0)
+    );
+    assert_eq!(
+        chain.next_child_id().expect("a child id is left"),
+        lineage.child(1)
+    );
+    assert_eq!(
+        chain.next_entry_id().expect("an entry id is left"),
+        lineage.entry(1)
+    );
+}
+
+#[test]
+fn each_index_a_push_hands_out_names_the_chain_it_pushed() {
+    let mut arena = ChainArena::new();
+    let ids: Vec<ChainIndex> = (0..3)
+        .map(|n| {
+            arena
+                .push(chain(ChainId::root().child(n), ChainKind::Root))
+                .expect("the arena has room")
+        })
+        .collect();
+    assert_eq!(arena.len(), 3);
+    for (n, id) in (0..).zip(&ids) {
+        assert_eq!(arena[*id].lineage, ChainId::root().child(n));
+    }
+    let listed: Vec<ChainIndex> = arena.iter().map(|(id, _)| id).collect();
+    assert_eq!(listed, ids, "the arena lists its chains in push order");
+}
+
+#[test]
+fn a_push_at_the_bound_fails_without_adding_a_chain() {
+    let mut arena = ChainArena::new();
+    arena.set_max_for_test(1);
+    let first = arena
+        .push(chain(ChainId::root(), ChainKind::Root))
+        .expect("the first chain fits");
+    assert!(
+        arena
+            .push(chain(ChainId::root().child(0), ChainKind::Root))
+            .is_err()
+    );
+    assert_eq!(arena.len(), 1);
+    assert_eq!(arena[first].lineage, ChainId::root());
+}
+
+#[test]
+fn call_children_lists_only_the_parents_own_call_children() {
+    let mut arena = ChainArena::new();
+    let mut push = |lineage: ChainId, kind: ChainKind| {
+        arena
+            .push(chain(lineage, kind))
+            .expect("the arena has room")
+    };
+    let root = ChainId::root();
+    let walk = push(root.clone(), ChainKind::Root);
+    let first = push(root.child(0), call_of(walk));
+    push(
+        root.child(1),
+        ChainKind::Task {
+            admission: Admission::Admitted { holding: false },
+        },
+    );
+    let grandchild = push(root.child(0).child(0), call_of(first));
+    let second = push(root.child(2), call_of(walk));
+    let children: Vec<ChainIndex> = arena.call_children(walk).collect();
+    assert_eq!(
+        children,
+        [first, second],
+        "a task and a grandchild are not listed"
+    );
+    let children: Vec<ChainIndex> = arena.call_children(first).collect();
+    assert_eq!(children, [grandchild]);
 }

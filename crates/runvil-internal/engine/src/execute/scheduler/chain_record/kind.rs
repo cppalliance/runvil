@@ -2,7 +2,8 @@
 //! `call` child, or a task's backing chain, each with the links and the
 //! admission state only that kind has.
 
-use super::super::{ChainIndex, SpawnRecord};
+use super::super::SpawnRecord;
+use super::ChainIndex;
 
 /// Where a task chain's admission stands.
 #[derive(Debug)]
