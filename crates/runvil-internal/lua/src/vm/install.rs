@@ -298,30 +298,3 @@ impl SectionVm {
         crate::prose::install(&self.lua, &self.sys_live, render)
     }
 }
-
-impl<S> SectionVm<S> {
-    /// Snapshot of the live sealed `sys` JSON, or `fallback` when unset.
-    ///
-    /// Distinguishes the two non-value states rather than collapsing both to
-    /// `fallback`: an *unset* live slot (before Engine injection fills it) is
-    /// a legitimate state and yields `Ok(fallback)`, while a *poisoned* lock
-    /// is a real failure and yields [`Error::Internal`] instead of silently
-    /// masquerading as the fallback.
-    ///
-    /// # Errors
-    /// Returns [`Error::Internal`] when the live `sys` mutex is poisoned.
-    pub fn current_sys(&self, fallback: &Json) -> Result<Json> {
-        let guard = self
-            .sys_live
-            .lock()
-            .map_err(|_| Error::Internal(SYS_LIVE_POISONED.into()))?;
-        Ok(guard.clone().unwrap_or_else(|| fallback.clone()))
-    }
-
-    /// Shared live `sys` JSON, for the poisoned-slot test.
-    #[cfg(test)]
-    #[must_use]
-    pub(crate) fn sys_live_handle(&self) -> Arc<std::sync::Mutex<Option<Json>>> {
-        Arc::clone(&self.sys_live)
-    }
-}

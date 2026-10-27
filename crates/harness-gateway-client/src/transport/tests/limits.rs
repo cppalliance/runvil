@@ -78,7 +78,7 @@ async fn complete_refuses_a_success_stream_over_the_size_cap() {
     )
     .await;
     let client = keyed_client(&base).with_request_limits(
-        DEFAULT_REQUEST_TIMEOUT,
+        DEFAULT_RECEIVE_TIMEOUT,
         NonZeroU64::new(8).expect("non-zero cap"),
     );
     let err = client
@@ -103,7 +103,7 @@ async fn complete_refuses_a_backend_error_body_over_the_size_cap() {
     )
     .await;
     let client = keyed_client(&base).with_request_limits(
-        DEFAULT_REQUEST_TIMEOUT,
+        DEFAULT_RECEIVE_TIMEOUT,
         NonZeroU64::new(8).expect("non-zero cap"),
     );
     let err = client

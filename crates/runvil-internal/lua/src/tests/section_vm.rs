@@ -146,38 +146,6 @@ fn untrusted_global_is_callable_before_engine_values_inject() {
 }
 
 #[test]
-fn current_sys_returns_fallback_when_unset_and_errors_on_poison() {
-    // An unset live slot is a legitimate state and yields the
-    // fallback; a poisoned lock is a real failure and must NOT masquerade as
-    // the fallback.
-    let vm = SectionVm::new(&test_nonce(), &null_emitter(), "Section").expect("VM must build");
-    let fallback = json!({ "id": 7 });
-    let got = vm
-        .current_sys(&fallback)
-        .expect("an unset live slot yields the fallback");
-    assert_eq!(got, fallback, "unset must return the fallback verbatim");
-
-    // Poison the live mutex via a panicking guard, then a snapshot must be a
-    // concrete error rather than a silent fallback.
-    let handle = vm.sys_live_handle();
-    let poisoned = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        let _guard = handle.lock().expect("first lock is not poisoned");
-        panic!("poison the sys_live mutex");
-    }));
-    assert!(
-        poisoned.is_err(),
-        "the panic must unwind and poison the lock"
-    );
-    let error = vm
-        .current_sys(&fallback)
-        .expect_err("a poisoned live slot must surface a concrete error");
-    assert!(
-        error.to_string().contains("poisoned"),
-        "the error must name the poison: {error}"
-    );
-}
-
-#[test]
 fn a_section_vm_reads_back_an_empty_var_after_injection() {
     let vm = TestVm::new().inject();
     assert_eq!(vm.var().expect("var must serialize"), json!({}));

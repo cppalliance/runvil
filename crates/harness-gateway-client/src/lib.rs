@@ -3,7 +3,7 @@
 //!
 //! [`GatewayBroker`] is the [`harness::InferenceBroker`] that a Host using
 //! the Gateway passes to `Harness::new`. It runs every model round on a
-//! [`GatewayChat`] under the Engine's default run limits, and it lists the
+//! [`GatewayChat`] under the client's own request limits, and it lists the
 //! Gateway's models through [`fetch_model_catalog`]. A Host that shows a
 //! reply as it forms runs the round through
 //! [`GatewayBroker::chat_streaming`], which hands each [`StreamDelta`] to

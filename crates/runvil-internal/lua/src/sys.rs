@@ -3,7 +3,6 @@
 use std::borrow::Cow;
 
 use mlua::{Lua, LuaSerdeExt, Value};
-use runvil_model_client::model::ModelBinding;
 use serde_json::Value as Json;
 
 use crate::error::{Error, Result};
@@ -139,25 +138,6 @@ fn materialize_guarded_value(
         plain.raw_set(key, materialize_guarded_value(lua, value, guarded_data)?)?;
     }
     Ok(Value::Table(plain))
-}
-
-/// Returns a copy of `sys` with one object field replaced.
-fn enrich_sys_field(sys: &Json, key: &str, value: Json) -> Json {
-    match sys {
-        Json::Object(map) => {
-            let mut out = map.clone();
-            out.insert(key.to_owned(), value);
-            Json::Object(out)
-        }
-        other => other.clone(),
-    }
-}
-
-/// Returns a copy of `sys` with the name of the bound model under
-/// `"model"`, without the server namespace its id also holds.
-#[must_use]
-pub fn enrich_sys_model(sys: &Json, binding: &ModelBinding) -> Json {
-    enrich_sys_field(sys, "model", Json::String(binding.id().name().to_owned()))
 }
 
 /// Builds a sealed Lua `sys` table from runtime metadata.

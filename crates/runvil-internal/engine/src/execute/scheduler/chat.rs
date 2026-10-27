@@ -125,7 +125,7 @@ impl Scheduler {
             let offered = offered_packs(&offers);
             if !offered.is_empty() {
                 let effect = Effect::Render {
-                    entry: frame.entry_id()?.to_owned(),
+                    entry: frame.entry_id().to_owned(),
                     binding: binding.clone(),
                     offered,
                 };

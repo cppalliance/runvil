@@ -2,7 +2,7 @@
 //!
 //! [`SectionContext`] is born at a section entry and dies at its teardown.
 //! It owns the section VM plus the state the block walk reads and writes -
-//! the `sys` JSON, a spawned chain's `item`, and the tool-call counts -
+//! the section's [`SectionSys`], a spawned chain's `item`, and the tool-call counts -
 //! and it holds the frame's effective reporting handles
 //! (the task-scoped event emitter and the turn counter) seeded out of the
 //! run context; a task chain's context is the spawn's fork, so the handles
@@ -24,6 +24,7 @@ mod construct;
 use std::sync::Arc;
 
 use runvil_types::event::lifecycle;
+use runvil_types::ids::TaskId;
 use runvil_types::tools::ToolId;
 
 use crate::lua::{ProseState, ScriptReport, SectionVm, ToolCallCounts};
@@ -41,6 +42,53 @@ pub(super) struct TaskSeed {
     pub(super) item: Option<serde_json::Value>,
     /// The chain's `sys.index`, when the spawn gave one.
     pub(super) index: Option<u64>,
+}
+
+/// The values one section entry's Lua reads as `sys`.
+///
+/// `index` and `model` are left out of [`SectionSys::to_json`] when unset,
+/// never written as null: Lua raises on an absent `sys` field but reads a
+/// null one as nil.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(super) struct SectionSys {
+    /// The run's `started_at` as RFC 3339, the same in every section.
+    pub(super) when: Arc<str>,
+    /// The section entry's hierarchical id.
+    pub(super) id: String,
+    /// The nearest enclosing task: the main walk is task `0`, and a `call`
+    /// child reports its caller's task.
+    pub(super) taskid: TaskId,
+    /// The section's name, or the prompt's title for the H1 pass.
+    pub(super) section_name: String,
+    /// The run's execution identifier.
+    pub(super) execution: Arc<str>,
+    /// The prompt's top-level section count.
+    pub(super) section_count: usize,
+    /// A spawned chain's `opts.index`, on its first entry only.
+    pub(super) index: Option<u64>,
+    /// The name of the section's bound model, set by the first-call install.
+    pub(super) model: Option<String>,
+}
+
+impl SectionSys {
+    /// The JSON object the section VM seals as `sys`.
+    pub(super) fn to_json(&self) -> serde_json::Value {
+        let mut sys = serde_json::json!({
+            "when": &*self.when,
+            "id": self.id,
+            "taskid": self.taskid.to_string(),
+            "section_name": self.section_name,
+            "execution": &*self.execution,
+            "section_count": self.section_count,
+        });
+        if let Some(index) = self.index {
+            sys["index"] = serde_json::Value::from(index);
+        }
+        if let Some(model) = &self.model {
+            sys["model"] = serde_json::Value::from(model.as_str());
+        }
+        sys
+    }
 }
 
 /// One adhoc tool call whose handler is running in the frame's block
@@ -76,16 +124,14 @@ pub(super) struct SectionContext {
     /// until the frame's `Drop` takes it for the teardown boundary.
     /// `SectionVm` is `runvil-lua`'s type, tested in that crate.
     vm: Option<SectionVm>,
-    /// The section's own name, retained so `Drop` reports the teardown
-    /// boundary and the completion observation without a parameter.
-    name: String,
     /// Armed by [`SectionContext::mark_completed`] on the success path
     /// only, so `Drop` fires `SECTION_FINISHED` on completion (a jump or
     /// return included) and never on an error.
     completed: bool,
-    /// The section's `sys` JSON, enriched in place by the walk (the model
-    /// binding).
-    sys: serde_json::Value,
+    /// The section's `sys`, whose `section_name` `Drop` reports the
+    /// teardown boundary and the completion observation under. The
+    /// first-call install sets its `model`.
+    sys: SectionSys,
     /// A spawned chain's `item` seed (a fanout arm's collection member) for
     /// `{{ item }}` substitution; `None` on every other entry.
     item: Option<serde_json::Value>,
@@ -149,15 +195,8 @@ impl SectionContext {
 
     /// The section entry's id: the value its Lua reads as `sys.id`, which
     /// the walk assigned when it entered the section.
-    ///
-    /// # Errors
-    /// Returns [`Error::Internal`] if `sys` holds no id, which both
-    /// constructors seed.
-    pub(super) fn entry_id(&self) -> Result<&str> {
-        self.sys
-            .get("id")
-            .and_then(serde_json::Value::as_str)
-            .ok_or(Error::internal("a section frame's sys holds its entry id"))
+    pub(super) fn entry_id(&self) -> &str {
+        &self.sys.id
     }
 
     /// Installs the pending Markdown buffer as the VM's fresh read-only
@@ -270,9 +309,10 @@ fn prose_renderer(
 ///
 /// The counts install backs the Lua `tools.stats` table, seeded with
 /// `ids`, and the model resolution freezes the section's binding and
-/// enriches `sys.model`. The caller stores the returned counts, so its
-/// slot is set only once every step has succeeded, and a failed install
-/// runs again on the section's next tool call.
+/// sets `sys.model` to the bound model's name. The caller stores the
+/// returned counts, so its slot is set only once every step has
+/// succeeded, and a failed install runs again on the section's next tool
+/// call. `sys` changes only once the VM's re-seal succeeds.
 ///
 /// # Errors
 /// Returns the [`Error`] of the counts install, the model resolution, or
@@ -280,15 +320,15 @@ fn prose_renderer(
 fn install_first_call_state(
     vm: &SectionVm,
     ctx: &RunState,
-    sys: &mut serde_json::Value,
+    sys: &mut SectionSys,
     ids: &[ToolId],
 ) -> Result<ToolCallCounts> {
     let counts = vm.install_tool_call_counts(ids)?;
     let resolved_model = crate::lua::resolve_model_binding(ctx.models(), vm.model_runtime())?;
     if let Some(binding) = resolved_model.as_ref() {
-        let current = vm.current_sys(sys)?;
-        let enriched = crate::lua::enrich_sys_model(&current, binding);
-        vm.re_seal_sys(&enriched)?;
+        let mut enriched = sys.clone();
+        enriched.model = Some(binding.id().name().to_owned());
+        vm.re_seal_sys(&enriched.to_json())?;
         *sys = enriched;
     }
     Ok(counts)
@@ -307,11 +347,15 @@ impl Drop for SectionContext {
         };
         // The VM's teardown pair reports through the emitter's observer
         // seam, so it lands in the buffer ahead of the completion below.
-        vm.teardown(self.reporting.emitter.as_ref(), &self.name);
+        vm.teardown(self.reporting.emitter.as_ref(), &self.sys.section_name);
         if self.completed {
             self.reporting
                 .emitter
-                .report(&self.name, lifecycle::SECTION_FINISHED);
+                .report(&self.sys.section_name, lifecycle::SECTION_FINISHED);
         }
     }
 }
+
+#[cfg(test)]
+#[path = "section_context-tests.rs"]
+mod tests;

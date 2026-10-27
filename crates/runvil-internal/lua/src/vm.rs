@@ -142,8 +142,7 @@ pub struct SectionVm<S = Injected> {
     /// failure maps through them as well as through the started block, so
     /// library code reports its own location and prompt line.
     library_programs: Arc<Mutex<Vec<LuaProgram>>>,
-    /// Live sealed `sys` JSON, mirrored for [`current_sys`](Self::current_sys)
-    /// snapshots.
+    /// Live sealed `sys` JSON, mirrored for prose snapshots.
     sys_live: Arc<Mutex<Option<Json>>>,
     /// The slot the direct store closures record a claims-model conflict
     /// into while the Pack preludes install, for the executor to read

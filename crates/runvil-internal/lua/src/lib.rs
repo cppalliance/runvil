@@ -143,7 +143,6 @@ pub use crate::scope::{
     DiscoveryTool, Offer, OfferMode, OfferTarget, OfferedTool, RenderedTools, ToolCallCounts,
     ToolRuntime,
 };
-pub use crate::sys::enrich_sys_model;
 pub use crate::vm::{
     AdhocTools, CoroStep, InjectFailure, Injected, SectionVm, Uninjected, current_catalog_packs,
     current_dynamic_set, current_tool_bindings, resolve_model_binding,

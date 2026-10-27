@@ -10,7 +10,7 @@
 use std::sync::Arc;
 
 use runvil_types::event::lifecycle;
-use runvil_types::ids::{ChainId, TaskId};
+use runvil_types::ids::TaskId;
 use runvil_vfs::Access;
 
 use crate::execute::context::RunState;
@@ -37,7 +37,7 @@ fn library_resolver(
 
 impl SectionContext {
     /// Constructs the frame for one walked section and runs its setup
-    /// preamble: the `sys` JSON, the section-started observation, VM
+    /// preamble: the section's `sys`, the section-started observation, VM
     /// construction and limits, and the shared setup half
     /// ([`section_vm::setup_section_vm`]), with the `prompt` reads resolved
     /// over the section's visible set.
@@ -80,13 +80,11 @@ impl SectionContext {
             .ok_or(Error::internal(
                 "an entered section is absent from its slice",
             ))?;
-        let mut sys = ctx.sys_json(section_id, task_id, section.name());
+        let mut sys = ctx.section_sys(section_id, task_id, section.name());
         // A spawned chain's `sys.index` is the spawn's own value, verbatim;
         // absent otherwise, so a walked section reading `sys.index` raises
         // the sealed-sys unknown-field error.
-        if let Some(index) = seed.index {
-            sys["index"] = serde_json::Value::from(index);
-        }
+        sys.index = seed.index;
         ctx.emitter()
             .report(section.name(), lifecycle::SECTION_STARTED);
         let vm = SectionVm::new_for_section(
@@ -120,8 +118,9 @@ impl SectionContext {
         // The shared setup half ([`section_vm::setup_section_vm`]) follows;
         // only the seed, the `sys` extras, and the callbacks' position are
         // the walk's own.
+        let sys_json = sys.to_json();
         let setup = ctx.vm_setup(
-            &sys,
+            &sys_json,
             VmSeed {
                 var: Some(var),
                 item: seed.item.as_ref(),
@@ -134,7 +133,6 @@ impl SectionContext {
         let vm = section_vm::setup_section_vm(vm, &setup, read, resolve, render)?;
         Ok(Self {
             vm: Some(vm),
-            name: section.name().to_owned(),
             completed: false,
             sys,
             item: seed.item,
@@ -145,10 +143,11 @@ impl SectionContext {
     }
 
     /// Constructs the frame for the H1 pass - section 0 - through the same
-    /// install path as any walked section: the `sys` JSON (`section_id`,
-    /// the root chain's entry 0, under the prompt's title, with the run's
-    /// `when` like every section after it), VM construction over the
-    /// run's shared sets, limits, and the shared setup half
+    /// install path as any walked section: the section's `sys`
+    /// (`section_id`, the root chain's entry 0, and `task_id`, the root
+    /// chain's task, under the prompt's title, with the run's `when` like
+    /// every section after it), VM construction over the run's shared
+    /// sets, limits, and the shared setup half
     /// ([`section_vm::setup_section_vm`]).
     ///
     /// H1's only deltas from a walked section: no `SECTION_STARTED`
@@ -164,11 +163,14 @@ impl SectionContext {
     /// construction or limits failure propagates bare, before any teardown
     /// observation exists; a setup failure tears the fresh VM down first, so
     /// the teardown boundary still fires exactly once on that path.
-    pub(crate) fn new_h1(ctx: &RunState, access: &Arc<Access>, section_id: &str) -> Result<Self> {
+    pub(crate) fn new_h1(
+        ctx: &RunState,
+        access: &Arc<Access>,
+        section_id: &str,
+        task_id: &TaskId,
+    ) -> Result<Self> {
         let title = ctx.prompt().title();
-        // The pass is the root chain, and the root chain is task `0`.
-        let root_task = TaskId::from(ChainId::root());
-        let sys = ctx.sys_json(section_id, &root_task, title);
+        let sys = ctx.section_sys(section_id, task_id, title);
         let vm = SectionVm::new_for_section(
             ctx.nonce(),
             ctx.tool_set(),
@@ -195,14 +197,14 @@ impl SectionContext {
         // H1's one privilege: `argv` installs writable, so the repair
         // pattern can assign it; the executor reads the value back at the
         // freeze (see the scheduler's H1-to-walk handoff).
-        let mut setup = ctx.vm_setup(&sys, VmSeed::default(), access, title);
+        let sys_json = sys.to_json();
+        let mut setup = ctx.vm_setup(&sys_json, VmSeed::default(), access, title);
         setup.argv_writable = true;
         // Setup runs on the bare VM and tears it down itself on failure:
         // the frame does not exist yet, so its `Drop` cannot own this path.
         let vm = section_vm::setup_section_vm(vm, &setup, read, resolve, render)?;
         Ok(Self {
             vm: Some(vm),
-            name: title.to_owned(),
             completed: false,
             sys,
             item: None,
