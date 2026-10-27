@@ -1,4 +1,4 @@
-//! The chain record: one chain's identity, kind, walk position, entered
+//! The chain record: one chain's identity, kind, walk stack, entered
 //! section, task bookkeeping, and walk-scoped slots. The scheduler's
 //! arena holds one per chain it has started, indexed by
 //! [`ChainIndex`](super::ChainIndex); the H1 pass and the walk after it
@@ -16,7 +16,8 @@ use runvil_vfs::Access;
 use crate::error::DepthVia;
 use crate::execute::context::RunState;
 use crate::execute::section_context::{SectionContext, TaskSeed};
-use crate::heading_address::{SectionIndex, SlicePath};
+use crate::execute::walk_target::JumpTarget;
+use crate::heading_address::SectionPos;
 use crate::lua::{Answer, Blocked, UsageAnchor};
 use crate::model::{Message, ModelId};
 use crate::parser::{Block, BodyText, Prompt, Section};
@@ -218,14 +219,65 @@ impl Entered {
     }
 }
 
+/// A chain's walk: a stack of positions that is never empty, with the
+/// current position on top. Each level below the top is a suspended parent
+/// walk, held at the section whose jump descended from it.
+#[derive(Debug)]
+pub(super) struct Walk {
+    /// The section the chain is running, or the next entry candidate while
+    /// the chain is between sections.
+    top: SectionPos,
+    /// The jumpers of the suspended parent walks, outermost first.
+    below: Vec<SectionPos>,
+}
+
+impl Walk {
+    /// A walk at `start`, with no suspended parent.
+    pub(super) fn new(start: SectionPos) -> Walk {
+        Walk {
+            top: start,
+            below: Vec::new(),
+        }
+    }
+
+    /// The current position.
+    pub(super) fn current(&self) -> &SectionPos {
+        &self.top
+    }
+
+    /// Falls through to the next sibling.
+    pub(super) fn advance(&mut self) {
+        self.top = self.top.next();
+    }
+
+    /// Moves to `target`: a descent suspends the current position below the
+    /// target, and a sibling jump replaces it.
+    pub(super) fn jump(&mut self, target: JumpTarget) {
+        let jumper = std::mem::replace(&mut self.top, target.pos);
+        if target.descends {
+            self.below.push(jumper);
+        }
+    }
+
+    /// Drops an exhausted child level and moves its parent past the
+    /// jumper. Returns `false` at the root level, leaving the position
+    /// unchanged.
+    pub(super) fn pop(&mut self) -> bool {
+        let Some(jumper) = self.below.pop() else {
+            return false;
+        };
+        self.top = jumper.next();
+        true
+    }
+}
+
 /// One chain: a contained line of section execution.
 ///
 /// The chain owns its entered section (the frame, the block position, the
 /// pending Markdown buffer, and the in-flight Lua block) and adds the
-/// chain position (the sibling slice being walked plus the current index)
-/// and the walk's `var` table. One section entry is one [`Entered`]; the
-/// fall-through advance tears the old one down and the next entry
-/// constructs the next.
+/// chain's [`Walk`] and the walk's `var` table. One section entry is one
+/// [`Entered`]; the fall-through advance tears the old one down and the
+/// next entry constructs the next.
 pub(super) struct Chain {
     /// The chain's hierarchical id: the parent chain's id extended by the
     /// parent's local child counter (the root lineage is `0`, which the H1
@@ -278,24 +330,16 @@ pub(super) struct Chain {
     /// The section the chain has entered: `Some` while a section is
     /// entered, `None` before the first entry and between sections.
     pub(super) entered: Option<Entered>,
-    /// The sibling slice the chain walks, named by its path in the prompt
-    /// tree the run shares. A jump to a child swaps this to the jumper's
-    /// child slice until the child level exhausts.
-    pub(super) slice: SlicePath,
-    /// The section of `slice` the chain is running, or the next entry
-    /// candidate while the chain is between sections.
-    pub(super) index: SectionIndex,
+    /// The chain's walk through the prompt tree the run shares, each
+    /// position named by path. The H1 pass's walk is never read.
+    pub(super) walk: Walk,
     /// The name of the section the chain most recently entered: the name
     /// its reports carry on the walk, including between sections and after
-    /// the walk runs off its slice, where `index` names no running section.
-    /// Before the first entry, the name of the section at the chain's
-    /// start index, or the prompt's title when the index is past the slice.
+    /// the walk runs off its slice, where the walk names no running
+    /// section. Before the first entry, the name of the section at the
+    /// chain's start, or the prompt's title when the start is past its
+    /// slice.
     pub(super) entered_name: String,
-    /// The suspended parent positions of the chain's jump-started child
-    /// walks: the parent slice plus the jumper's index in it. A jump to a
-    /// child pushes the current position and descends; when the child
-    /// level exhausts, the pop resumes the parent after the jumper.
-    pub(super) positions: Vec<(SlicePath, SectionIndex)>,
     /// The walk's `var` table: seeds each section's VM at entry; the
     /// section's final `var` is read back before teardown and replaces the
     /// slot. A call chain's slot seeds from the caller's snapshot and
@@ -321,8 +365,7 @@ impl fmt::Debug for Chain {
             .field("lineage", &self.lineage)
             .field("kind", &self.kind)
             .field("task", &self.task)
-            .field("slice", &self.slice)
-            .field("index", &self.index)
+            .field("walk", &self.walk)
             .field("entered_name", &self.entered_name)
             .field("block", &self.entered.as_ref().map(|entered| entered.block))
             .field("parked", &self.parked)
@@ -423,16 +466,16 @@ impl Chain {
     }
 
     /// The chain's current block sequence: the H1 pass's blocks, or the
-    /// current section's blocks on the walk, empty while the chain's index
-    /// is past its slice. Resolved against the caller's handle on the tree
-    /// so the result outlives a mutable borrow of the chain.
+    /// current section's blocks on the walk, empty while the walk is past
+    /// its slice. Resolved against the caller's handle on the tree so the
+    /// result outlives a mutable borrow of the chain.
     pub(super) fn blocks<'p>(&self, prompt: &'p Prompt) -> &'p [Block] {
         if self.kind.is_h1() {
             runvil_parser::detail::h1_blocks(prompt)
         } else {
-            self.slice
-                .resolve(prompt)
-                .get(self.index.get())
+            self.walk
+                .current()
+                .section(prompt)
                 .map_or(&[], Section::blocks)
         }
     }

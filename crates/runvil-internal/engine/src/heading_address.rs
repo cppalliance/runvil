@@ -16,8 +16,8 @@
 //! of a reach sits at its own heading level and sibling names are unique,
 //! so an exact address names at most one reachable section.
 //!
-//! [`SlicePath`] and [`SectionIndex`] name a section's place in the shared
-//! prompt tree: its sibling slice by path, and its position in that slice.
+//! [`SectionPos`] names a section's place in the shared prompt tree: its
+//! sibling slice by [`SlicePath`], and its [`SectionIndex`] in that slice.
 //! A chain and a section's `prompt` reads find their slice by path and
 //! read it in place.
 
@@ -31,9 +31,6 @@ use crate::{Error, Result};
 /// `Arc<Prompt>`; the path resolves to the slice on demand.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub(crate) struct SlicePath(Vec<usize>);
-
-/// The top-level slice's path, which the H1's reach borrows.
-static TOP: SlicePath = SlicePath(Vec::new());
 
 impl SlicePath {
     /// The top-level slice.
@@ -64,15 +61,6 @@ impl SlicePath {
         }
         slice
     }
-
-    /// The name of the slice's section at `index`, or the prompt's title
-    /// when `index` is past the slice: a chain's section name before its
-    /// first entry.
-    pub(crate) fn name_at<'p>(&self, prompt: &'p Prompt, index: SectionIndex) -> &'p str {
-        self.resolve(prompt)
-            .get(index.0)
-            .map_or(prompt.title(), Section::name)
-    }
 }
 
 /// A section's position in its sibling slice.
@@ -96,6 +84,59 @@ impl SectionIndex {
     /// The section after this one in the same slice.
     pub(crate) fn next(self) -> SectionIndex {
         SectionIndex(self.0 + 1)
+    }
+}
+
+/// A section's place in the prompt tree: the path of its sibling slice and
+/// its index in that slice. A position the walk moves to may sit past its
+/// slice's last section, where it names no section.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct SectionPos {
+    /// The path of the section's sibling slice.
+    pub(crate) slice: SlicePath,
+    /// The section's index in that slice.
+    pub(crate) index: SectionIndex,
+}
+
+impl SectionPos {
+    /// The top-level section at `index`.
+    pub(crate) fn top(index: SectionIndex) -> SectionPos {
+        SectionPos {
+            slice: SlicePath::root(),
+            index,
+        }
+    }
+
+    /// The next sibling.
+    pub(crate) fn next(&self) -> SectionPos {
+        SectionPos {
+            slice: self.slice.clone(),
+            index: self.index.next(),
+        }
+    }
+
+    /// This section's child at `index`.
+    pub(crate) fn child(&self, index: SectionIndex) -> SectionPos {
+        SectionPos {
+            slice: self.slice.child(self.index),
+            index,
+        }
+    }
+
+    /// The section's sibling slice, resolved against `prompt`.
+    pub(crate) fn siblings<'p>(&self, prompt: &'p Prompt) -> &'p [Section] {
+        self.slice.resolve(prompt)
+    }
+
+    /// The section, or `None` when the index is past its slice.
+    pub(crate) fn section<'p>(&self, prompt: &'p Prompt) -> Option<&'p Section> {
+        self.siblings(prompt).get(self.index.0)
+    }
+
+    /// The section's name, or the prompt's title when the index is past
+    /// its slice: a chain's section name before its first entry.
+    pub(crate) fn name<'p>(&self, prompt: &'p Prompt) -> &'p str {
+        self.section(prompt).map_or(prompt.title(), Section::name)
     }
 }
 
@@ -154,42 +195,31 @@ impl<'a> Visible<'a> {
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct Reachable<'a> {
     root: &'a [Section],
-    path: &'a SlicePath,
-    caller: Option<SectionIndex>,
+    /// The walked section the reach is from, or `None` for the H1 pass.
+    from: Option<&'a SectionPos>,
 }
 
-/// A reachable section and where it sits: the path of its slice and its
-/// index in that slice.
+/// A reachable section and where it sits.
 #[derive(Debug)]
 pub(crate) struct Reached<'a> {
     pub(crate) section: &'a Section,
-    pub(crate) path: SlicePath,
-    pub(crate) index: SectionIndex,
+    pub(crate) pos: SectionPos,
 }
 
 impl<'a> Reachable<'a> {
-    /// A walked section's reach: the section at `caller` of the slice that
-    /// `path` leads to from `root`. An out-of-range index along the way
-    /// leads to an empty slice, as a walk path's does.
-    pub(crate) fn of(
-        root: &'a [Section],
-        path: &'a SlicePath,
-        caller: SectionIndex,
-    ) -> Reachable<'a> {
+    /// A walked section's reach: the section at `from`, read from `root`.
+    /// An out-of-range index along the way leads to an empty slice, as a
+    /// walk path's does.
+    pub(crate) fn of(root: &'a [Section], from: &'a SectionPos) -> Reachable<'a> {
         Reachable {
             root,
-            path,
-            caller: Some(caller),
+            from: Some(from),
         }
     }
 
     /// The H1's reach: every top-level section.
     pub(crate) fn top(root: &'a [Section]) -> Reachable<'a> {
-        Reachable {
-            root,
-            path: &TOP,
-            caller: None,
-        }
+        Reachable { root, from: None }
     }
 
     /// The sections with their positions, nearest scope first: the home
@@ -197,21 +227,24 @@ impl<'a> Reachable<'a> {
     /// ancestor's slice with that ancestor skipped, from the parent's
     /// outward to the top level.
     pub(crate) fn iter(self) -> impl Iterator<Item = Reached<'a>> {
-        let ancestors = &self.path.0;
+        let ancestors = self.from.map_or(&[][..], |from| from.slice.indices());
+        let caller = self.from.map(|from| from.index);
         let mut slices = Vec::with_capacity(ancestors.len());
         let mut home = self.root;
         for &index in ancestors {
             slices.push(home);
             home = home.get(index).map_or(&[][..], Section::children);
         }
-        let mut scopes = vec![(self.path.clone(), home, self.caller)];
-        if let Some(caller) = self.caller {
-            scopes.push((
-                self.path.child(caller),
+        let path = SlicePath(ancestors.to_vec());
+        let children = caller.map(|caller| {
+            (
+                path.child(caller),
                 home.get(caller.0).map_or(&[][..], Section::children),
                 None,
-            ));
-        }
+            )
+        });
+        let mut scopes = vec![(path, home, caller)];
+        scopes.extend(children);
         for (depth, (&slice, &ancestor)) in slices.iter().zip(ancestors).enumerate().rev() {
             scopes.push((
                 SlicePath(ancestors[..depth].to_vec()),
@@ -227,8 +260,10 @@ impl<'a> Reachable<'a> {
                 .filter(move |&(index, _)| Some(index) != skip)
                 .map(move |(index, section)| Reached {
                     section,
-                    path: path.clone(),
-                    index,
+                    pos: SectionPos {
+                        slice: path.clone(),
+                        index,
+                    },
                 })
         })
     }

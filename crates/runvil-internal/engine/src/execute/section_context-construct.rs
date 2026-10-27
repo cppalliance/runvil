@@ -16,7 +16,7 @@ use runvil_vfs::Access;
 use crate::execute::context::RunState;
 use crate::execute::section_vm::{self, VmSeed};
 use crate::execute::walk_target::{self, RequireOrigin};
-use crate::heading_address::{SectionIndex, SlicePath, Visible};
+use crate::heading_address::{SectionPos, Visible};
 use crate::lua::{Library, LibraryKey, SectionVm};
 use crate::parser::Prompt;
 use crate::{Error, Result};
@@ -42,11 +42,11 @@ impl SectionContext {
     /// ([`section_vm::setup_section_vm`]), with the `prompt` reads resolved
     /// over the section's visible set.
     ///
-    /// `home` is the path of the caller's own walk slice and `index` the
-    /// section's place in it. Each `prompt` read resolves that slice from
-    /// the shared prompt and reads the section's visible set (its siblings
-    /// minus itself, plus its direct children) in place, and `require`
-    /// resolves from the same position over its wider reach. `section_id`
+    /// `pos` is the section's place in the caller's walk. Each `prompt`
+    /// read resolves its sibling slice from the shared prompt and reads
+    /// the section's visible set (its siblings minus itself, plus its
+    /// direct children) in place, and `require` resolves from the same
+    /// position over its wider reach. `section_id`
     /// is the section's `sys.id`: the entering chain's hierarchical id extended
     /// by its local entry counter, allocated by the scheduler; `task_id`
     /// is the entering chain's `sys.taskid`. `var` is the walk's current
@@ -55,31 +55,23 @@ impl SectionContext {
     /// every other entry.
     ///
     /// # Errors
-    /// Returns [`Error::Internal`] when `index` is past the `home` slice,
-    /// and otherwise the [`Error`] of whichever step failed. A VM
+    /// Returns [`Error::Internal`] when `pos` is past its slice, and
+    /// otherwise the [`Error`] of whichever step failed. A VM
     /// construction or limits failure propagates bare, before any teardown
     /// observation exists; a setup failure tears the fresh VM down first, so
     /// the teardown boundary still fires exactly once on that path.
-    #[expect(
-        clippy::too_many_arguments,
-        reason = "the walk frame keeps its context, capability, slice path, section index, entry id, task id, var seed, and task seed explicit and linear"
-    )]
     pub(crate) fn new(
         ctx: &RunState,
         access: &Arc<Access>,
-        home: &SlicePath,
-        index: SectionIndex,
+        pos: &SectionPos,
         section_id: &str,
         task_id: &TaskId,
         var: &serde_json::Value,
         seed: TaskSeed,
     ) -> Result<Self> {
-        let section = home
-            .resolve(ctx.prompt())
-            .get(index.get())
-            .ok_or(Error::internal(
-                "an entered section is absent from its slice",
-            ))?;
+        let section = pos.section(ctx.prompt()).ok_or(Error::internal(
+            "an entered section is absent from its slice",
+        ))?;
         let mut sys = ctx.section_sys(section_id, task_id, section.name());
         // A spawned chain's `sys.index` is the spawn's own value, verbatim;
         // absent otherwise, so a walked section reading `sys.index` raises
@@ -104,16 +96,16 @@ impl SectionContext {
         )?;
         let resolve = library_resolver(
             Arc::clone(ctx.prompt()),
-            RequireOrigin::Section(home.clone(), index),
+            RequireOrigin::Section(pos.clone()),
         );
         let render = super::prose_renderer(ctx, seed.item.clone());
         // The `prompt` reads resolve over the section's visible set; the
         // suspending calls (`call`, `tasks.fanout`, `models.infer`) are the
         // yield shims the setup half installs.
         let prompt = Arc::clone(ctx.prompt());
-        let home = home.clone();
+        let pos = pos.clone();
         let read = move |heading: String| {
-            walk_target::read_visible(&heading, Visible::of(home.resolve(&prompt), index))
+            walk_target::read_visible(&heading, Visible::of(pos.siblings(&prompt), pos.index))
         };
         // The shared setup half ([`section_vm::setup_section_vm`]) follows;
         // only the seed, the `sys` extras, and the callbacks' position are

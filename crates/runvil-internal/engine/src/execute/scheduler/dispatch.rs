@@ -235,7 +235,7 @@ impl Scheduler {
         let child_concurrency = chain.concurrency;
         // `chain`'s arena borrow ends here; the resolution names the
         // target's slice by path, so nothing borrows the arena across it.
-        let target_section = self.resolve_chain_target(id, target)?;
+        let resolved = self.resolve_chain_target(id, target)?;
         // The child's id is the caller's next child index: `call` children,
         // spawned tasks, and the wait shims' timers share the caller's
         // counter, so the id depends only on the caller's own dispatch
@@ -246,8 +246,7 @@ impl Scheduler {
             counters: Counters::default(),
             ctx: child_ctx,
             access,
-            index: target_section.index(),
-            slice: target_section.slice,
+            start: resolved.pos,
             kind: ChainKind::Call {
                 parent: id,
                 released_holder: None,

@@ -1,9 +1,13 @@
 //! Child-level walks: a jump into a child level starts that level's walk,
-//! down to H4; a running child addresses only its own siblings and
-//! children; child levels and call children take nested `sys.id` values,
-//! the same on every run; and the fall-through walk never descends.
+//! down to H4, and its exhaustion resumes the parent after the jumper in
+//! every kind of chain, even when the jumper was its slice's last section;
+//! a running child addresses only its own siblings and children; child
+//! levels and call children take nested `sys.id` values, the same on every
+//! run; and the fall-through walk never descends.
 
 use super::*;
+use crate::execute::tests::context::sequence;
+use crate::test_support::rig::Rig;
 
 #[test]
 fn jump_to_a_child_starts_the_child_level_walk() {
@@ -62,6 +66,134 @@ fn child_walk_recurses_to_h4() {
     let trace = scheduler_scenario(md).run();
 
     assert_eq!(trace.text(), "A\nX\nP\nQ\nY\nB\n");
+}
+
+#[test]
+fn a_child_level_that_runs_out_inside_a_call_chain_resumes_after_the_jumper() {
+    // The call chain's own walk descends and unwinds: when `### S2` runs
+    // out, the chain resumes at `## After`, the jumper's next sibling, and
+    // that section's return is the call's answer.
+    let md = "---\nname: t\ndescription: d\nrunvil: 0\n---\n\n\
+        # CallDescend\n\n\
+        ## Main\n\n\
+        ```lua\nreturn 'main:' .. call('## Sub')\n```\n\n\
+        ## Sub\n\n\
+        ```lua\n\
+        var.order = 'Sub'\n\
+        jump('### S1')\n\
+        ```\n\n\
+        ### S1\n\n\
+        ```lua\nvar.order = var.order .. ',S1'\n```\n\n\
+        ### S2\n\n\
+        ```lua\nvar.order = var.order .. ',S2'\n```\n\n\
+        ## After\n\n\
+        ```lua\nreturn var.order .. ',After'\n```\n";
+    let trace = scheduler_scenario(md).run();
+
+    assert_eq!(trace.text(), "main:Sub,S1,S2,After");
+}
+
+#[test]
+fn a_child_level_that_runs_out_inside_a_task_chain_resumes_after_the_jumper() {
+    // A task chain walks the same way: when `### W1` runs out, the task
+    // resumes at `## After`, and that section's return is the task's
+    // result.
+    let md = "---\nname: t\ndescription: d\nrunvil: 0\n---\n\n\
+        # TaskDescend\n\n\
+        ## Main\n\n\
+        ```lua\n\
+        local results = tasks.join({ tasks.spawn('## Worker') })\n\
+        return 'main:' .. results[1].result\n\
+        ```\n\n\
+        ## Worker\n\n\
+        ```lua\n\
+        var.order = 'Worker'\n\
+        jump('### W1')\n\
+        ```\n\n\
+        ### W1\n\n\
+        ```lua\nvar.order = var.order .. ',W1'\n```\n\n\
+        ## After\n\n\
+        ```lua\nreturn var.order .. ',After'\n```\n";
+    let trace = scheduler_scenario(md).run();
+
+    assert_eq!(trace.text(), "main:Worker,W1,After");
+}
+
+#[test]
+fn a_child_level_whose_jumper_was_last_in_its_slice_unwinds_through_a_second_pop() {
+    // `### Y` is the last of `## A`'s children, so when `#### P` runs out
+    // the restored level has nothing after the jumper: it runs out in
+    // turn, and the root level resumes at `## B`.
+    let md = "---\nname: t\ndescription: d\nrunvil: 0\n---\n\n\
+        # LastJumper\n\n\
+        ## A\n\n\
+        ```lua\n\
+        var.order = 'A'\n\
+        jump('### X')\n\
+        ```\n\n\
+        ### X\n\n\
+        ```lua\nvar.order = var.order .. ',X'\n```\n\n\
+        ### Y\n\n\
+        ```lua\n\
+        var.order = var.order .. ',Y'\n\
+        jump('#### P')\n\
+        ```\n\n\
+        #### P\n\n\
+        ```lua\nvar.order = var.order .. ',P'\n```\n\n\
+        ## B\n\n\
+        ```lua\nreturn var.order .. ',B'\n```\n";
+    let trace = scheduler_scenario(md).run();
+
+    assert_eq!(trace.text(), "A,X,Y,P,B");
+}
+
+#[test]
+fn a_child_level_whose_jumper_was_last_at_the_root_ends_the_chain() {
+    // `## Last` is the last top-level section, so when its child runs out
+    // the root level has nothing after the jumper and the walk ends with
+    // the generic completion.
+    let md = "---\nname: t\ndescription: d\nrunvil: 0\n---\n\n\
+        # LastAtRoot\n\n\
+        ## First\n\n\
+        ```lua\nstore.append('order.txt', 'First\\n')\n```\n\n\
+        ## Last\n\n\
+        ```lua\n\
+        store.append('order.txt', 'Last\\n')\n\
+        jump('### C')\n\
+        ```\n\n\
+        ### C\n\n\
+        ```lua\nstore.append('order.txt', 'C\\n')\n```\n";
+    let rig = Rig::run(scheduler_scenario(md));
+
+    assert_eq!(rig.trace().text(), "done");
+    assert_eq!(
+        rig.trace().read("order.txt").expect("order log"),
+        "First\nLast\nC\n"
+    );
+}
+
+#[test]
+fn the_chain_reports_the_section_it_resumes_in_after_a_pop() {
+    // After `### X` runs out, the walk resumes at `## B`, and B's chunk
+    // reports under B rather than the child the chain just left.
+    let md = "---\nname: t\ndescription: d\nrunvil: 0\n---\n\n\
+        # Names\n\n\
+        ## A\n\n\
+        ```lua\njump('### X')\n```\n\n\
+        ### X\n\n\
+        ```lua\nvar.x = 1\n```\n\n\
+        ## B\n\n\
+        ```lua\nreturn 'b-ran'\n```\n";
+    let trace = scheduler_scenario(md).run();
+
+    assert_eq!(trace.text(), "b-ran");
+    let chunk_started = detail::LUA_CHUNK_STARTED.to_string();
+    let reported: Vec<String> = sequence(&trace)
+        .into_iter()
+        .filter(|(_, event)| *event == chunk_started)
+        .map(|(section, _)| section)
+        .collect();
+    assert_eq!(reported, ["A", "X", "B"]);
 }
 
 #[test]

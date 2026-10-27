@@ -1,10 +1,13 @@
-//! Tests for the chain's usage-anchor bookkeeping: what a settled round
+//! Tests for the chain's usage-anchor bookkeeping (what a settled round
 //! keeps for the next precheck, what a failed or usage-less round leaves
-//! alone, and which model a measurement is offered to.
+//! alone, and which model a measurement is offered to) and for its walk
+//! stack, one rule each.
 
 use runvil_types::metrics::Usage;
 
-use super::ChatAnchor;
+use super::{ChatAnchor, Walk};
+use crate::execute::walk_target::JumpTarget;
+use crate::heading_address::{SectionIndex, SectionPos};
 use crate::lua::UsageAnchor;
 use crate::model::{Message, ModelId};
 
@@ -125,4 +128,76 @@ fn a_round_on_another_model_with_no_usage_keeps_the_older_measurement() {
         "a round that measured nothing leaves the older measurement"
     );
     assert!(anchor.measured(&model("b")).is_none());
+}
+
+fn top(index: usize) -> SectionPos {
+    SectionPos::top(SectionIndex::new(index))
+}
+
+fn descend(jumper: &SectionPos, index: usize) -> JumpTarget {
+    JumpTarget {
+        pos: jumper.child(SectionIndex::new(index)),
+        descends: true,
+    }
+}
+
+#[test]
+fn a_new_walk_is_at_its_start() {
+    assert_eq!(Walk::new(top(2)).current(), &top(2));
+}
+
+#[test]
+fn advancing_a_walk_moves_to_the_next_sibling_at_the_same_level() {
+    let start = top(1).child(SectionIndex::FIRST);
+    let mut walk = Walk::new(start.clone());
+    walk.advance();
+    assert_eq!(walk.current(), &start.next());
+    assert_eq!(walk.current(), &top(1).child(SectionIndex::new(1)));
+}
+
+#[test]
+fn a_walk_descends_on_a_child_jump_and_a_pop_resumes_after_the_jumper() {
+    let mut walk = Walk::new(top(1));
+    walk.jump(descend(&top(1), 0));
+    assert_eq!(walk.current(), &top(1).child(SectionIndex::FIRST));
+    assert!(walk.pop(), "a child level pops back to its parent");
+    assert_eq!(walk.current(), &top(2));
+}
+
+#[test]
+fn a_sibling_jump_replaces_the_walks_top_without_adding_a_level() {
+    let mut walk = Walk::new(top(0));
+    walk.jump(descend(&top(0), 0));
+    let sibling = top(0).child(SectionIndex::new(2));
+    walk.jump(JumpTarget {
+        pos: sibling.clone(),
+        descends: false,
+    });
+    assert_eq!(walk.current(), &sibling);
+    assert!(walk.pop(), "the child level is still one level down");
+    assert_eq!(walk.current(), &top(1));
+    assert!(!walk.pop(), "the sibling jump added no level");
+}
+
+#[test]
+fn popping_a_walk_at_the_root_level_returns_false_and_keeps_the_position() {
+    let mut walk = Walk::new(top(3));
+    assert!(!walk.pop());
+    assert_eq!(walk.current(), &top(3));
+}
+
+#[test]
+fn a_walk_unwinds_nested_descents_one_level_per_pop() {
+    let mut walk = Walk::new(top(1));
+    walk.jump(descend(&top(1), 0));
+    walk.advance();
+    let jumper = top(1).child(SectionIndex::new(1));
+    walk.jump(descend(&jumper, 2));
+    assert_eq!(walk.current(), &jumper.child(SectionIndex::new(2)));
+    assert!(walk.pop());
+    assert_eq!(walk.current(), &jumper.next());
+    assert!(walk.pop());
+    assert_eq!(walk.current(), &top(2));
+    assert!(!walk.pop());
+    assert_eq!(walk.current(), &top(2));
 }

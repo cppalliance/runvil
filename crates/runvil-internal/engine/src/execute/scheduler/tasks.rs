@@ -230,8 +230,10 @@ impl Scheduler {
         // `chain`'s arena borrow ends here; the resolution names the
         // target's slice by path, resolved against the shared tree.
         let prompt = self.prompt();
-        let target_section = self.resolve_chain_target(id, target)?;
-        let worker = &target_section.slice.resolve(&prompt)[target_section.index().get()];
+        let resolved = self.resolve_chain_target(id, target)?;
+        let worker = resolved.pos.section(&prompt).ok_or(Error::internal(
+            "a resolved worker is absent from its slice",
+        ))?;
         if worker.prologue().is_none() && worker.epilog().is_none() && !worker.items().is_empty() {
             return Err(Error::lua_message(format!(
                 "section `{}` is a list section, not a worker template",
@@ -269,8 +271,7 @@ impl Scheduler {
             counters: Counters::default(),
             ctx: child_ctx,
             access: Arc::new(access),
-            index: target_section.index(),
-            slice: target_section.slice,
+            start: resolved.pos,
             kind: ChainKind::Task {
                 admission: Admission::Queued(SpawnRecord {
                     input: input.map(str::to_owned),

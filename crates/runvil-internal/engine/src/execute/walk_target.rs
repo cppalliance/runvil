@@ -14,7 +14,7 @@
 //! [`resolve_library`] turns the section it names into a [`Library`] keyed
 //! by the section's position.
 
-use crate::heading_address::{self, Reachable, SectionIndex, SlicePath, Visible};
+use crate::heading_address::{self, Reachable, SectionIndex, SectionPos, SlicePath, Visible};
 use crate::lua::{Library, LibraryBlock, LibraryKey, SectionText};
 use crate::parser::{Block, Prompt, Section};
 use crate::{Error, Result};
@@ -55,20 +55,23 @@ pub(super) fn read_visible(heading: &str, visible: Visible<'_>) -> Result<Option
     )
 }
 
-/// Where a jump transfers control, resolved against the jumper's visible set.
+/// Where a jump, a `call`, or a spawn lands, resolved against the caller's
+/// visible set: the target's position, and whether reaching it descends
+/// into the caller's child slice.
 #[derive(Debug)]
-pub(super) enum JumpTarget {
-    /// A flat index move within the jumper's own slice.
-    Sibling(SectionIndex),
-    /// A descent into the jumper's child slice, starting at this index.
-    Child(SectionIndex),
+pub(super) struct JumpTarget {
+    /// The target's position.
+    pub(super) pos: SectionPos,
+    /// Whether the target is a direct child of the caller, so a jump to it
+    /// starts a child-level walk.
+    pub(super) descends: bool,
 }
 
-/// Resolves `heading` against the visible set of `siblings[jumper]` (the
-/// sibling slice minus the jumper, plus its direct children), read in place
-/// through [`Visible::of`], and classifies the target: a direct child of
-/// the jumper starts a child-level walk; anything else is a sibling within
-/// the jumper's own slice.
+/// Resolves `heading` against the visible set of the section at `jumper`
+/// (its sibling slice minus itself, plus its direct children), read in
+/// place through [`Visible::of`], and classifies the target: a direct
+/// child of the jumper starts a child-level walk; anything else is a
+/// sibling within the jumper's own slice.
 ///
 /// Resolution is an exact `(level, name)` match (see
 /// [`heading_address::resolve_visible`]): two visible sections sharing an
@@ -80,24 +83,33 @@ pub(super) enum JumpTarget {
 /// section, or matches more than one.
 pub(super) fn resolve_jump_target(
     heading: &str,
-    siblings: &[Section],
-    jumper: SectionIndex,
+    prompt: &Prompt,
+    jumper: &SectionPos,
 ) -> Result<JumpTarget> {
-    let jumper_section = siblings.get(jumper.get()).ok_or(Error::internal(
+    let siblings = jumper.siblings(prompt);
+    let jumper_section = jumper.section(prompt).ok_or(Error::internal(
         "a jumping section is absent from its sibling slice",
     ))?;
-    let target = heading_address::resolve_visible(heading, Visible::of(siblings, jumper))?;
+    let target = heading_address::resolve_visible(heading, Visible::of(siblings, jumper.index))?;
     if let Some(index) = section_position(jumper_section.children(), target) {
-        return Ok(JumpTarget::Child(index));
+        return Ok(JumpTarget {
+            pos: jumper.child(index),
+            descends: true,
+        });
     }
     // `target` was resolved out of the visible set read from exactly these
     // two slices, so a miss here is an internal invariant violation, not a
     // user-facing Lua error.
-    section_position(siblings, target)
-        .map(JumpTarget::Sibling)
-        .ok_or(Error::internal(
-            "resolved jump target is absent from the jumper's sibling slice",
-        ))
+    let index = section_position(siblings, target).ok_or(Error::internal(
+        "resolved jump target is absent from the jumper's sibling slice",
+    ))?;
+    Ok(JumpTarget {
+        pos: SectionPos {
+            slice: jumper.slice.clone(),
+            index,
+        },
+        descends: false,
+    })
 }
 
 /// Where a `require` resolves from: the H1 pass, or a walked section.
@@ -105,8 +117,8 @@ pub(super) fn resolve_jump_target(
 pub(super) enum RequireOrigin {
     /// The H1 pass, which reaches every top-level section.
     H1,
-    /// The section at this index of the slice at this path.
-    Section(SlicePath, SectionIndex),
+    /// The walked section at this position.
+    Section(SectionPos),
 }
 
 impl RequireOrigin {
@@ -127,12 +139,15 @@ impl RequireOrigin {
         let index = indices
             .pop()
             .ok_or(Error::internal("a library key names no section position"))?;
-        let path = indices
+        let slice = indices
             .into_iter()
             .fold(SlicePath::root(), |path, ancestor| {
                 path.child(SectionIndex::new(ancestor))
             });
-        Ok(Self::Section(path, SectionIndex::new(index)))
+        Ok(Self::Section(SectionPos {
+            slice,
+            index: SectionIndex::new(index),
+        }))
     }
 
     /// What a `require` from here can name in `prompt`.
@@ -140,19 +155,20 @@ impl RequireOrigin {
         let root = runvil_parser::detail::sections(prompt);
         match self {
             Self::H1 => Reachable::top(root),
-            Self::Section(home, index) => Reachable::of(root, home, *index),
+            Self::Section(pos) => Reachable::of(root, pos),
         }
     }
 }
 
-/// The key naming the section at `index` of the slice at `path`: every
-/// index, dot-joined, so each position has its own.
-fn library_key(path: &SlicePath, index: SectionIndex) -> LibraryKey {
-    let indices: Vec<String> = path
+/// The key naming the section at `pos`: every index along its path, then
+/// its own, dot-joined, so each position has its own.
+fn library_key(pos: &SectionPos) -> LibraryKey {
+    let indices: Vec<String> = pos
+        .slice
         .indices()
         .iter()
         .copied()
-        .chain([index.get()])
+        .chain([pos.index.get()])
         .map(|index| index.to_string())
         .collect();
     LibraryKey::new(indices.join("."))
@@ -176,7 +192,7 @@ pub(super) fn resolve_library(
     let keyed = key.map(RequireOrigin::from_key).transpose()?;
     let from = keyed.as_ref().unwrap_or(origin);
     let reached = heading_address::resolve_reachable(heading, from.reach(prompt))?;
-    build_library(reached.section, library_key(&reached.path, reached.index))
+    build_library(reached.section, library_key(&reached.pos))
 }
 
 /// The library `section` makes under `key`: each Lua block in order,

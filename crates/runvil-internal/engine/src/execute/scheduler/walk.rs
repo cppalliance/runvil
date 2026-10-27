@@ -3,7 +3,7 @@
 //! chain's next entry id (the chain's hierarchical id extended by its
 //! local entry counter), and a jump transfers control - a sibling move
 //! within the chain's slice, or a descent into the jumper's child slice
-//! with the parent position suspended on the chain's own position stack
+//! with the parent position suspended on the chain's own walk stack
 //! until the child level exhausts. A prompt with H1 blocks runs them first
 //! as section 0 (the `h1` module), and the root walk starts from that
 //! pass's `var` hand-off, sharing the root lineage `0` as a second arena
@@ -17,33 +17,13 @@ use crate::execute::section_context::SectionContext;
 use crate::execute::walk_target::{
     JumpTarget, h1_visible_sections, resolve_jump_target, section_position,
 };
-use crate::heading_address::{self, SectionIndex, SlicePath, Visible};
+use crate::heading_address::{self, SectionIndex, SectionPos, Visible};
 use crate::parser::Block;
 use crate::{Error, Result};
 
 use super::chain::{ChainStart, ChainStep};
 use super::chain_record::{CallDepth, ChainKind, Entered};
 use super::{Chain, ChainIndex, Counters, Scheduler, prompt_origin};
-
-/// A heading resolved against a chain's visible set: how the jump moves
-/// (to a sibling, or down into a direct child of the current section)
-/// and the slice the walk or a contained chain continues on.
-#[derive(Debug)]
-pub(super) struct ChainTarget {
-    /// The target's position, and whether reaching it is a descent.
-    pub(super) jump: JumpTarget,
-    /// The slice the walk or chain continues on.
-    pub(super) slice: SlicePath,
-}
-
-impl ChainTarget {
-    /// The target's index in `slice`.
-    pub(super) fn index(&self) -> SectionIndex {
-        match self.jump {
-            JumpTarget::Sibling(index) | JumpTarget::Child(index) => index,
-        }
-    }
-}
 
 impl Scheduler {
     /// Starts the root walk chain over the top-level sections when the
@@ -78,8 +58,7 @@ impl Scheduler {
             counters: after_h1,
             ctx: self.ctx.clone(),
             access: Arc::new(access),
-            slice: SlicePath::root(),
-            index: SectionIndex::FIRST,
+            start: SectionPos::top(SectionIndex::FIRST),
             kind: ChainKind::Root,
             var: serde_json::json!({}),
             call_depth: CallDepth::ROOT,
@@ -130,11 +109,9 @@ impl Scheduler {
             chain.entered = Some(Entered::new(frame));
             return Ok(true);
         }
-        let index = chain.index;
-        // `slice` borrows the shared prompt tree, not the arena, so the
+        // `section` borrows the shared prompt tree, not the arena, so the
         // frame construction can borrow the chain's own context and slots.
-        let slice = chain.slice.resolve(&prompt);
-        let Some(section) = slice.get(index.get()) else {
+        let Some(section) = chain.walk.current().section(&prompt) else {
             return Ok(false);
         };
         let section_id = Self::next_entry_id(chain)?;
@@ -145,8 +122,7 @@ impl Scheduler {
         let frame = SectionContext::new(
             &chain.ctx,
             chain.access()?,
-            &chain.slice,
-            index,
+            chain.walk.current(),
             &section_id,
             &task,
             &chain.var,
@@ -180,13 +156,7 @@ impl Scheduler {
     /// The child walk shared the `var` slot, so it already holds the
     /// child level's last value.
     fn pop_position(&mut self, id: ChainIndex) -> bool {
-        let chain = &mut self.chains[id.index()];
-        let Some((slice, jumper)) = chain.positions.pop() else {
-            return false;
-        };
-        chain.slice = slice;
-        chain.index = jumper.next();
-        true
+        self.chains[id.index()].walk.pop()
     }
 
     /// Falls the chain through at its section's end: the section's final
@@ -207,7 +177,7 @@ impl Scheduler {
         chain.var = frame.read_var()?;
         frame.mark_completed();
         drop(frame);
-        chain.index = chain.index.next();
+        chain.walk.advance();
         Ok(())
     }
 
@@ -215,10 +185,10 @@ impl Scheduler {
     /// completed (the final `var`
     /// rolled forward; the armed drop firing `SECTION_FINISHED`, a jump
     /// being a completion), resolves the heading against the jumper's
-    /// visible set, and moves the walk. A sibling target sets the index
-    /// within the target's slice; a child target pushes the
-    /// current position onto the chain's position stack and descends into
-    /// the jumper's child slice from the target.
+    /// visible set, and moves the walk. A sibling target replaces the
+    /// walk's current position; a child target suspends the jumper on the
+    /// chain's walk stack and descends into the jumper's child slice from
+    /// the target.
     ///
     /// # Errors
     /// Returns [`Error::Lua`] when the `var` read-back fails (the
@@ -226,7 +196,7 @@ impl Scheduler {
     /// or more than one - the jumper's frame has already closed as
     /// completed.
     pub(super) fn apply_jump(&mut self, id: ChainIndex, heading: &str) -> Result<()> {
-        let (slice, index) = {
+        {
             let chain = &mut self.chains[id.index()];
             let Some(Entered { mut frame, .. }) = chain.entered.take() else {
                 return Err(Error::internal("a jump implies a live frame"));
@@ -234,32 +204,23 @@ impl Scheduler {
             chain.var = frame.read_var()?;
             frame.mark_completed();
             drop(frame);
-            (chain.slice.clone(), chain.index)
-        };
-        let target = self.resolve_chain_target(id, heading)?;
-        let chain = &mut self.chains[id.index()];
-        if matches!(target.jump, JumpTarget::Child(_)) {
-            chain.positions.push((slice, index));
         }
-        chain.index = target.index();
-        chain.slice = target.slice;
+        let target = self.resolve_chain_target(id, heading)?;
+        self.chains[id.index()].walk.jump(target);
         Ok(())
     }
 
-    /// Resolves `heading` against the chain's current section's visible set
-    /// and returns the slice the walk or a contained chain continues on:
-    /// the jumper's child slice for a direct child, the target's own slice
-    /// otherwise.
+    /// Resolves `heading` against the chain's current section's visible
+    /// set into the position the walk or a contained chain continues from:
+    /// a direct child's place in the jumper's child slice, or a sibling's
+    /// in the jumper's own. The H1 pass's set is the whole top-level
+    /// slice, so its targets never descend.
     ///
     /// # Errors
     /// Returns [`Error::Lua`] when the heading is malformed, matches no
     /// visible section, or matches more than one (see
     /// [`heading_address::resolve_visible`]).
-    pub(super) fn resolve_chain_target(
-        &self,
-        id: ChainIndex,
-        heading: &str,
-    ) -> Result<ChainTarget> {
+    pub(super) fn resolve_chain_target(&self, id: ChainIndex, heading: &str) -> Result<JumpTarget> {
         let prompt = self.ctx.prompt();
         let chain = &self.chains[id.index()];
         if chain.kind.is_h1() {
@@ -268,16 +229,11 @@ impl Scheduler {
             let index = section_position(sections, target).ok_or(Error::internal(
                 "a resolved H1 target is absent from the top-level slice",
             ))?;
-            return Ok(ChainTarget {
-                jump: JumpTarget::Sibling(index),
-                slice: SlicePath::root(),
+            return Ok(JumpTarget {
+                pos: SectionPos::top(index),
+                descends: false,
             });
         }
-        let jump = resolve_jump_target(heading, chain.slice.resolve(prompt), chain.index)?;
-        let slice = match jump {
-            JumpTarget::Child(_) => chain.slice.child(chain.index),
-            JumpTarget::Sibling(_) => chain.slice.clone(),
-        };
-        Ok(ChainTarget { jump, slice })
+        resolve_jump_target(heading, prompt, chain.walk.current())
     }
 }

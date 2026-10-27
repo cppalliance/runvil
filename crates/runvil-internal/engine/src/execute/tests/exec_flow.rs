@@ -121,7 +121,8 @@ fn nested_call_without_input_inherits_the_chains_args() {
 }
 
 /// Two top-level sections sharing one name error loudly as ambiguous rather
-/// than silently resolving to the first.
+/// than silently resolving to the first. The parser refuses such a prompt,
+/// so the jumper's visible set is built by hand.
 #[test]
 fn duplicate_top_level_section_names_error_loudly() {
     let sections = vec![
@@ -129,10 +130,9 @@ fn duplicate_top_level_section_names_error_loudly() {
         synthetic_section("Dup", 2, Vec::new()),
         synthetic_section("Dup", 2, Vec::new()),
     ];
-    let error = crate::execute::walk_target::resolve_jump_target(
+    let error = crate::heading_address::resolve_visible(
         "## Dup",
-        &sections,
-        crate::heading_address::SectionIndex::FIRST,
+        crate::heading_address::Visible::of(&sections, crate::heading_address::SectionIndex::FIRST),
     )
     .expect_err("two visible sections with one name must be ambiguous");
     let rendered = error.to_string();
