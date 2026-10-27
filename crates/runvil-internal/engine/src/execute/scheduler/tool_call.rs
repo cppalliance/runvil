@@ -64,7 +64,7 @@ use crate::{Error, Result};
 
 use super::chain_record::Parked;
 use super::dispatch::Dispatched;
-use super::{CallSite, ChainIndex, Continuation, Scheduler, ToolCallContinuation, prompt_origin};
+use super::{CallSite, ChainOps, Continuation, ToolCallContinuation, prompt_origin};
 
 /// The error for a name that resolves to no tool in the run: the name and
 /// the id of every catalog tool, in id order, so the message reads
@@ -98,14 +98,13 @@ enum ToolRoute {
     Discovery(ToolBinding),
 }
 
-impl Scheduler {
+impl ChainOps<'_> {
     /// Dispatches a `tool_call` request. An issued bound call parks the
     /// chain in the effect table; an adhoc tool's handler resumes the
     /// chain on the spot. Its preparation fails on an unbound alias or the
     /// counts install.
     pub(super) fn dispatch_tool_call(
         &mut self,
-        id: ChainIndex,
         alias: &str,
         args: serde_json::Value,
         call_id: Option<String>,
@@ -115,11 +114,11 @@ impl Scheduler {
             Some(call_id) => CallSite::Model { call_id, turn },
             None => CallSite::Script { turn },
         };
-        match self.prepare_tool_call(id, alias, args, site) {
+        match self.prepare_tool_call(alias, args, site) {
             // An issued call is parked on the effect table.
             Ok(Dispatched::Issued) => Ok(()),
-            Ok(Dispatched::Answered(answer)) => self.answer_inline(id, answer),
-            Err(error) => self.answer_inline(id, Answer::ToolCallResult(Err(error))),
+            Ok(Dispatched::Answered(answer)) => self.answer(answer),
+            Err(error) => self.answer(Answer::ToolCallResult(Err(error))),
         }
     }
 
@@ -133,7 +132,6 @@ impl Scheduler {
     /// on the chain, which is answered at once when none is open.
     pub(super) fn dispatch_tool_calls(
         &mut self,
-        id: ChainIndex,
         calls: Vec<ToolCallRecord>,
         turn: u32,
     ) -> Result<()> {
@@ -144,10 +142,10 @@ impl Scheduler {
                 turn,
                 slot,
             };
-            let issued = match self.tool_route(id, &call.name, &site) {
+            let issued = match self.tool_route(&call.name, &site) {
                 Ok(ToolRoute::Adhoc(_) | ToolRoute::Discovery(_)) => break,
                 Ok(ToolRoute::Catalog(binding)) => {
-                    self.prepare_catalog_call(id, binding, call.arguments, site)
+                    self.prepare_catalog_call(binding, call.arguments, site)
                 }
                 Err(error) => Err(error),
             };
@@ -159,8 +157,8 @@ impl Scheduler {
                 }
             }
         }
-        self.chains[id].parked = Some(Parked::Batch(batch));
-        self.answer_full_batch(id)
+        self.chain.parked = Some(Parked::Batch(batch));
+        self.answer_full_batch()
     }
 
     /// Resolves the call at `site` naming `name` to its binding and route,
@@ -175,8 +173,8 @@ impl Scheduler {
     /// # Errors
     /// Returns [`Error::UnboundToolCall`] for a name that resolves to no
     /// tool.
-    fn tool_route(&self, id: ChainIndex, name: &str, site: &CallSite) -> Result<ToolRoute> {
-        let chain = &self.chains[id];
+    fn tool_route(&self, name: &str, site: &CallSite) -> Result<ToolRoute> {
+        let chain = &*self.chain;
         let vm = chain.frame()?.vm()?;
         let tool_set = chain.ctx.tool_set();
         if site.call_id().is_some() {
@@ -204,9 +202,9 @@ impl Scheduler {
     /// The turn every report of a call at `site` carries: the requesting
     /// round's turn when the site names one, else the chain's turn
     /// counter at dispatch.
-    fn call_turn(&self, id: ChainIndex, site: &CallSite) -> u32 {
+    fn call_turn(&self, site: &CallSite) -> u32 {
         site.turn()
-            .unwrap_or_else(|| self.chains[id].ctx.turns().load(Ordering::Relaxed))
+            .unwrap_or_else(|| self.chain.ctx.turns().load(Ordering::Relaxed))
     }
 
     /// The chain's section's tool-call counts, which the section's first
@@ -214,8 +212,8 @@ impl Scheduler {
     /// sets, a run catalog tool's or an adhoc tool's: from its frozen sets
     /// once the section froze them, with both discovery tools' ids when
     /// they are rendered, and from its live offers of both kinds before.
-    fn section_call_counts(&mut self, id: ChainIndex) -> Result<ToolCallCounts> {
-        let chain = &mut self.chains[id];
+    fn section_call_counts(&mut self) -> Result<ToolCallCounts> {
+        let chain = &mut *self.chain;
         let vm = chain.frame()?.vm()?;
         let tool_set = chain.ctx.tool_set();
         let ids = if let Some(frozen) = vm.rendered_ids() {
@@ -253,12 +251,7 @@ impl Scheduler {
     /// Returns [`Error::Internal`] when the chain holds no such slot,
     /// which only an answer the scheduler should have orphaned produces,
     /// or when the full batch finds no suspended block to answer.
-    pub(super) fn fill_batch_slot(
-        &mut self,
-        id: ChainIndex,
-        slot: usize,
-        answer: Answer<Error>,
-    ) -> Result<()> {
+    pub(super) fn fill_batch_slot(&mut self, slot: usize, answer: Answer<Error>) -> Result<()> {
         let landed = match answer {
             Answer::ToolCallResult(Ok(ToolCallOutcome::Plain(text))) => Ok(text),
             Answer::ToolCallResult(Err(error)) => Err(error),
@@ -282,7 +275,7 @@ impl Scheduler {
                 "a batched call lands as plain text or a failure",
             )),
         };
-        let open = match &mut self.chains[id].parked {
+        let open = match &mut self.chain.parked {
             Some(Parked::Batch(batch)) => batch.get_mut(slot).filter(|open| open.is_none()),
             _ => None,
         }
@@ -290,13 +283,13 @@ impl Scheduler {
             "a batched call's answer fills an open slot of its chain's batch",
         ))?;
         *open = Some(landed);
-        self.answer_full_batch(id)
+        self.answer_full_batch()
     }
 
     /// Answers the chain parked on a batch once no slot is open: every
     /// text in call order, or the first failure in call order.
-    fn answer_full_batch(&mut self, id: ChainIndex) -> Result<()> {
-        let Some(Parked::Batch(batch)) = &mut self.chains[id].parked else {
+    fn answer_full_batch(&mut self) -> Result<()> {
+        let Some(Parked::Batch(batch)) = &mut self.chain.parked else {
             return Ok(());
         };
         if batch.iter().any(Option::is_none) {
@@ -306,7 +299,7 @@ impl Scheduler {
             .into_iter()
             .flatten()
             .collect::<Result<Vec<String>>>();
-        self.answer_inline(id, Answer::ToolCallsResult(answer))
+        self.answer(Answer::ToolCallsResult(answer))
     }
 
     /// The fallible half of tool-call dispatch, by the call's route: an
@@ -322,16 +315,15 @@ impl Scheduler {
     /// value at dispatch.
     fn prepare_tool_call(
         &mut self,
-        id: ChainIndex,
         alias: &str,
         args: serde_json::Value,
         site: CallSite,
     ) -> Result<Dispatched> {
-        match self.tool_route(id, alias, &site)? {
-            ToolRoute::Adhoc(binding) => self.prepare_adhoc_call(id, &binding, args, &site),
-            ToolRoute::Discovery(binding) => self.prepare_discovery_call(id, &binding, args, site),
+        match self.tool_route(alias, &site)? {
+            ToolRoute::Adhoc(binding) => self.prepare_adhoc_call(&binding, args, &site),
+            ToolRoute::Discovery(binding) => self.prepare_discovery_call(&binding, args, site),
             ToolRoute::Catalog(binding) => {
-                self.prepare_catalog_call(id, binding, args, site)?;
+                self.prepare_catalog_call(binding, args, site)?;
                 Ok(Dispatched::Issued)
             }
         }
@@ -348,15 +340,14 @@ impl Scheduler {
     /// site's slot are the continuation's, applied when the answer lands.
     fn prepare_catalog_call(
         &mut self,
-        id: ChainIndex,
         binding: ToolBinding,
         args: serde_json::Value,
         site: CallSite,
     ) -> Result<()> {
         let report = ScriptReport {
-            turn: self.call_turn(id, &site),
+            turn: self.call_turn(&site),
         };
-        let counts = self.section_call_counts(id)?;
+        let counts = self.section_call_counts()?;
         // The counts seed from the section's two sets; a tool outside them
         // must still be seeded here, because the increment errors on
         // an unseeded id. The attempt counts at dispatch - before the tool
@@ -365,7 +356,7 @@ impl Scheduler {
         counts.ensure(&counted)?;
         counts.increment(&counted)?;
         let prompt = self.prompt();
-        let chain = &self.chains[id];
+        let chain = &*self.chain;
         let frame = chain.frame()?;
         // The list's last send is the requesting round's: a section runs
         // one loop at a time, so no other round commits to the list
@@ -403,7 +394,7 @@ impl Scheduler {
             site,
             exec,
         });
-        self.issue(id, effect, resume);
+        self.issue(effect, resume);
         Ok(())
     }
 }

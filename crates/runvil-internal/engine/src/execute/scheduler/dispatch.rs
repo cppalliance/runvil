@@ -1,6 +1,6 @@
 //! The request arms: one dispatch per validated protocol request from a
 //! suspended chain. Every leaf arm builds its [`Effect`] and issues it
-//! through the scheduler's one `issue` path; the arm performs nothing and
+//! through the chain view's one `issue` path; the arm performs nothing and
 //! emits nothing for the answer, which `apply_answer` handles when it
 //! lands. Every store operation is a leaf yield, handed to the caller
 //! uniformly for all backends - no inline fast path - so interleaving
@@ -22,7 +22,7 @@ use crate::{Error, Result};
 
 use super::chain::ChainStart;
 use super::chain_record::{ChainKind, Parked};
-use super::{ChainIndex, Continuation, Counters, Scheduler};
+use super::{ChainIndex, ChainOps, Continuation, Counters, Scheduler};
 
 /// How one leaf dispatch resolved when its preparation succeeded: an
 /// effect issued, with the chain parked on the effect table, or an answer
@@ -69,7 +69,9 @@ impl Scheduler {
     pub(super) fn dispatch(&mut self, id: ChainIndex, request: Request) -> Result<()> {
         self.chains[id].parked = parked_on(&request);
         match request {
-            Request::Infer { prompt, binding } => self.dispatch_infer(id, &prompt, binding),
+            Request::Infer { prompt, binding } => {
+                self.with_chain(id, |ops| ops.dispatch_infer(&prompt, binding))
+            }
             Request::Call { target, input, var } => {
                 self.dispatch_call(id, &target, input.as_deref(), &var)
             }
@@ -101,88 +103,20 @@ impl Scheduler {
                 args,
                 call_id,
                 turn,
-            } => self.dispatch_tool_call(id, &alias, args, call_id, turn),
-            Request::ToolCalls { calls, turn } => self.dispatch_tool_calls(id, calls, turn),
-            Request::AdhocToolDone { outcome } => self.dispatch_adhoc_tool_done(id, outcome),
-            Request::Store { op } => self.dispatch_vfs(id, op),
-            Request::Chat { list, binding } => self.dispatch_chat(id, &list, binding),
+            } => self.with_chain(id, |ops| {
+                ops.dispatch_tool_call(&alias, args, call_id, turn)
+            }),
+            Request::ToolCalls { calls, turn } => {
+                self.with_chain(id, |ops| ops.dispatch_tool_calls(calls, turn))
+            }
+            Request::AdhocToolDone { outcome } => {
+                self.with_chain(id, |ops| ops.dispatch_adhoc_tool_done(outcome))
+            }
+            Request::Store { op } => self.with_chain(id, |ops| ops.dispatch_vfs(op)),
+            Request::Chat { list, binding } => {
+                self.with_chain(id, |ops| ops.dispatch_chat(&list, binding))
+            }
         }
-    }
-
-    /// Dispatches an `infer` request: resolves the binding, issues the
-    /// single tool-free gateway round as a `Chat` effect over one user
-    /// message, and parks the chain in the effect table. Its preparation
-    /// fails on the binding resolution.
-    fn dispatch_infer(
-        &mut self,
-        id: ChainIndex,
-        prompt: &str,
-        binding: Option<ModelBinding>,
-    ) -> Result<()> {
-        match self.prepare_infer(id, prompt, binding) {
-            Ok(()) => Ok(()),
-            Err(error) => self.answer_inline(id, Answer::Infer(Err(error))),
-        }
-    }
-
-    /// The fallible half of infer dispatch: the binding resolution (the
-    /// handle's frozen binding, else the section's current model) and the
-    /// issued effect.
-    fn prepare_infer(
-        &mut self,
-        id: ChainIndex,
-        prompt: &str,
-        binding: Option<ModelBinding>,
-    ) -> Result<()> {
-        let chain = &self.chains[id];
-        let binding = if let Some(binding) = binding {
-            binding
-        } else {
-            resolve_model_binding(chain.ctx.models(), chain.frame()?.vm()?.model_runtime())?
-                .ok_or_else(|| Error::ModelRequired {
-                    section: chain.section_name().to_owned(),
-                })?
-        };
-        // A nested infer round consumes only the accumulated completion;
-        // its `Infer` origin tells the caller its live deltas have no
-        // consumer.
-        let round = self.number_round(ReplyOrigin::Infer);
-        let effect = Effect::Chat {
-            options: binding.completion_options(),
-            binding,
-            messages: vec![Message::user(prompt)],
-            after: None,
-            keep: 0,
-            tools: Vec::new(),
-            round,
-        };
-        self.issue(id, effect, Continuation::Infer(round.id));
-        Ok(())
-    }
-
-    /// Dispatches a `store` request: derives the store view from the
-    /// chain's access capability and issues the operation through it as a
-    /// `Vfs` effect for the caller to perform, parking the chain in the
-    /// effect table exactly as a leaf I/O round does. Every store
-    /// operation takes this yield path uniformly (memory mounts and real
-    /// files alike, with no inline fast path) so interleaving behavior never
-    /// depends on which backend serves the mount. The operation's event is
-    /// pushed when the answer is applied, before the chain resumes.
-    ///
-    /// # Errors
-    /// Returns [`Error::Internal`] when the live chain's access capability
-    /// is gone, which only the chain-end paths take, or [`Error::Store`]
-    /// when the handle the chain's access came from declares no store,
-    /// which the run's start probe already ruled out.
-    fn dispatch_vfs(&mut self, id: ChainIndex, op: VfsOp) -> Result<()> {
-        let access = Arc::clone(self.chains[id].access()?);
-        let view = Arc::new(runvil_vfs::detail::store_view(&access).map_err(Error::store)?);
-        let effect = Effect::Vfs {
-            access: view,
-            op: op.clone(),
-        };
-        self.issue(id, effect, Continuation::Vfs(op));
-        Ok(())
     }
 
     /// Dispatches a `call` request: constructs the child chain and
@@ -235,7 +169,7 @@ impl Scheduler {
         let child_concurrency = chain.concurrency;
         // `chain`'s arena borrow ends here; the resolution names the
         // target's slice by path, so nothing borrows the arena across it.
-        let resolved = self.resolve_chain_target(id, target)?;
+        let resolved = self.with_chain(id, |ops| ops.resolve_chain_target(target))?;
         // The child's id is the caller's next child index: `call` children,
         // spawned tasks, and the wait shims' timers share the caller's
         // counter, so the id depends only on the caller's own dispatch
@@ -255,5 +189,73 @@ impl Scheduler {
             call_depth: depth,
             concurrency: child_concurrency,
         })
+    }
+}
+
+impl ChainOps<'_> {
+    /// Dispatches an `infer` request: resolves the binding, issues the
+    /// single tool-free gateway round as a `Chat` effect over one user
+    /// message, and parks the chain in the effect table. Its preparation
+    /// fails on the binding resolution.
+    fn dispatch_infer(&mut self, prompt: &str, binding: Option<ModelBinding>) -> Result<()> {
+        match self.prepare_infer(prompt, binding) {
+            Ok(()) => Ok(()),
+            Err(error) => self.answer(Answer::Infer(Err(error))),
+        }
+    }
+
+    /// The fallible half of infer dispatch: the binding resolution (the
+    /// handle's frozen binding, else the section's current model) and the
+    /// issued effect.
+    fn prepare_infer(&mut self, prompt: &str, binding: Option<ModelBinding>) -> Result<()> {
+        let chain = &*self.chain;
+        let binding = if let Some(binding) = binding {
+            binding
+        } else {
+            resolve_model_binding(chain.ctx.models(), chain.frame()?.vm()?.model_runtime())?
+                .ok_or_else(|| Error::ModelRequired {
+                    section: chain.section_name().to_owned(),
+                })?
+        };
+        // A nested infer round consumes only the accumulated completion;
+        // its `Infer` origin tells the caller its live deltas have no
+        // consumer.
+        let round = self.number_round(ReplyOrigin::Infer);
+        let effect = Effect::Chat {
+            options: binding.completion_options(),
+            binding,
+            messages: vec![Message::user(prompt)],
+            after: None,
+            keep: 0,
+            tools: Vec::new(),
+            round,
+        };
+        self.issue(effect, Continuation::Infer(round.id));
+        Ok(())
+    }
+
+    /// Dispatches a `store` request: derives the store view from the
+    /// chain's access capability and issues the operation through it as a
+    /// `Vfs` effect for the caller to perform, parking the chain in the
+    /// effect table exactly as a leaf I/O round does. Every store
+    /// operation takes this yield path uniformly (memory mounts and real
+    /// files alike, with no inline fast path) so interleaving behavior never
+    /// depends on which backend serves the mount. The operation's event is
+    /// pushed when the answer is applied, before the chain resumes.
+    ///
+    /// # Errors
+    /// Returns [`Error::Internal`] when the live chain's access capability
+    /// is gone, which only the chain-end paths take, or [`Error::Store`]
+    /// when the handle the chain's access came from declares no store,
+    /// which the run's start probe already ruled out.
+    fn dispatch_vfs(&mut self, op: VfsOp) -> Result<()> {
+        let access = Arc::clone(self.chain.access()?);
+        let view = Arc::new(runvil_vfs::detail::store_view(&access).map_err(Error::store)?);
+        let effect = Effect::Vfs {
+            access: view,
+            op: op.clone(),
+        };
+        self.issue(effect, Continuation::Vfs(op));
+        Ok(())
     }
 }

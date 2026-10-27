@@ -32,7 +32,7 @@ use crate::lua::{Answer, DiscoveryTool, OfferMode, RenderedTools, ToolBinding, T
 use crate::{Error, Result};
 
 use super::super::dispatch::Dispatched;
-use super::super::{CallSite, ChainIndex, Scheduler};
+use super::super::{CallSite, ChainOps};
 
 /// The longest `pattern` a search compiles, in characters.
 const PATTERN_LIMIT: usize = 256;
@@ -61,7 +61,7 @@ struct Listed<'a> {
     input_schema: Option<&'a Value>,
 }
 
-impl Scheduler {
+impl ChainOps<'_> {
     /// Answers a model call routed to `binding`, a discovery tool or a
     /// Dynamic Set tool the model named directly. A `CallDynamicTool` call
     /// that reaches its target goes to that tool's preparer. Any other
@@ -76,13 +76,13 @@ impl Scheduler {
     /// error of the counts install or of the target's preparer.
     pub(super) fn prepare_discovery_call(
         &mut self,
-        id: ChainIndex,
         binding: &ToolBinding,
         args: Value,
         site: CallSite,
     ) -> Result<Dispatched> {
         let tool = DiscoveryTool::of(binding.id());
-        let frozen = self.chains[id]
+        let frozen = self
+            .chain
             .frame()?
             .vm()?
             .rendered_tools()
@@ -99,7 +99,7 @@ impl Scheduler {
         };
         let (text, trust, boundary) = match discovered {
             Discovered::Reached(target, args) => {
-                return self.prepare_reached(id, target, args, site);
+                return self.prepare_reached(target, args, site);
             }
             Discovered::Listing(listing) => (
                 listing,
@@ -111,11 +111,11 @@ impl Scheduler {
             }
         };
         let counted = tool.unwrap_or(DiscoveryTool::Call).id();
-        let counts = self.section_call_counts(id)?;
+        let counts = self.section_call_counts()?;
         counts.ensure(counted)?;
         counts.increment(counted)?;
-        let turn = self.call_turn(id, &site);
-        let chain = &self.chains[id];
+        let turn = self.call_turn(&site);
+        let chain = &*self.chain;
         let text = match trust {
             OutputTrust::Trusted => text,
             _ => chain.ctx.nonce().wrap(&text),
@@ -143,20 +143,20 @@ impl Scheduler {
     /// defines under its id, else the catalog tool, issued as a model call.
     fn prepare_reached(
         &mut self,
-        id: ChainIndex,
         target: ToolBinding,
         args: Value,
         site: CallSite,
     ) -> Result<Dispatched> {
-        let adhoc = self.chains[id]
+        let adhoc = self
+            .chain
             .frame()?
             .vm()?
             .adhoc_tools()
             .binding(&target.id().to_string())?;
         if let Some(adhoc) = adhoc {
-            return self.prepare_adhoc_call(id, &adhoc, args, &site);
+            return self.prepare_adhoc_call(&adhoc, args, &site);
         }
-        self.prepare_catalog_call(id, target, args, site)?;
+        self.prepare_catalog_call(target, args, site)?;
         Ok(Dispatched::Issued)
     }
 }

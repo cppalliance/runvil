@@ -154,7 +154,7 @@ flowchart TD
     - Queries: `awaited_by(chain)`, in issue order; `has_awaited()`, the stall check; and `all_answered()`, which gates `Done`.
     - `reassign(from, to)`, for the H1 hand-off.
     - Step bookkeeping: `take_step()` and `clear_withdrawn()`.
-  - `ChainArena`, in `execute/scheduler/chain_record.rs` beside `Chain`:
+  - `ChainArena`, in the `chain_record` module beside `Chain`, at `execute/scheduler/chain_record/arena.rs`. The engine's 500-line file check leaves no room for it in `chain_record.rs`, which also moves `ChatAnchor` to `chain_record/anchor.rs`. With four child files, the repository's layout rule puts them, `kind.rs` and `tests.rs` included, in the `chain_record/` subdirectory.
     - `ChainIndex` moves here from `execute/scheduler.rs`, and only `push` creates one.
     - Rule: every index the arena hands out names a chain. The arena holds at most `u32::MAX` chains and never shrinks.
     - `push(Chain) -> Result<ChainIndex>`, which checks the bound first; `Index<ChainIndex>` and `IndexMut<ChainIndex>`; `iter()`; `len()`; and `call_children(parent)`.
@@ -590,7 +590,7 @@ Suites to watch: `execute/run/tests-drops.rs`, `execute/tests/parallel_tool_call
 
 <step-4>
 
-### Step 4: Run the one-chain requests in a ChainOps view
+### Step 4: Run the one-chain requests in a ChainOps view [completed]
 
 - Component: effect and chain owners
 - Tests: run each from the runvil root in PowerShell, as written:

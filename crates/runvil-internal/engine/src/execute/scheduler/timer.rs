@@ -46,7 +46,9 @@ impl Scheduler {
     /// effect, and the entry.
     fn prepare_timer(&mut self, id: ChainIndex, duration: Duration) -> Result<TaskId> {
         let task = TaskId::from(self.chains[id].next_child_id()?);
-        let effect = self.issue(id, Effect::Timer { duration }, Continuation::Timer);
+        let effect = self.with_chain(id, |ops| {
+            ops.issue(Effect::Timer { duration }, Continuation::Timer)
+        });
         self.tasks.insert(
             task.clone(),
             TaskEntry {
