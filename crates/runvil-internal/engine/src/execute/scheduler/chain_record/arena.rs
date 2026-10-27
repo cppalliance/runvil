@@ -34,6 +34,60 @@ impl ChainIndex {
     }
 }
 
+#[cfg(test)]
+impl Chain {
+    /// A chain of `kind` under `lineage` that admits at most `concurrency`
+    /// tasks at once, holds no access, and has entered no section, for a
+    /// test that fills an arena without a run.
+    pub(in crate::execute::scheduler) fn for_test(
+        lineage: runvil_types::ids::ChainId,
+        kind: super::ChainKind,
+        concurrency: std::num::NonZeroUsize,
+    ) -> Chain {
+        use std::sync::Arc;
+
+        use runvil_types::ids::TaskId;
+
+        use super::{CallDepth, ChatAnchor, Counters, Walk};
+        use crate::execute::RunContext;
+        use crate::execute::context::RunState;
+        use crate::execute::section_context::TaskSeed;
+        use crate::heading_address::{SectionIndex, SectionPos};
+        use crate::parser::Prompt;
+        use crate::test_support::scenario::{TEST_SEED, TEST_STARTED_AT};
+
+        let source = concat!(
+            "---\nname: t\ndescription: d\nrunvil: 0\n---\n\n",
+            "# Title\n\n## Only\n\ndone\n",
+        );
+        let prompt = Prompt::parse(source, "chain-test")
+            .0
+            .expect("the test prompt parses");
+        let ctx = RunState::new(
+            Arc::new(prompt),
+            "",
+            RunContext::new("chain-test", TEST_SEED, TEST_STARTED_AT),
+        );
+        Chain {
+            task: TaskId::from(lineage.clone()),
+            lineage,
+            counters: Counters::default(),
+            kind,
+            seed: TaskSeed::default(),
+            parked: None,
+            ctx,
+            access: None,
+            entered: None,
+            walk: Walk::new(SectionPos::top(SectionIndex::FIRST)),
+            entered_name: "Only".to_owned(),
+            var: serde_json::json!({}),
+            call_depth: CallDepth::ROOT,
+            concurrency,
+            anchor: ChatAnchor::default(),
+        }
+    }
+}
+
 /// The chain arena: every chain the run has started, indexed by
 /// [`ChainIndex`]. Every index the arena hands out names a chain: it holds
 /// at most `u32::MAX` chains and never shrinks.

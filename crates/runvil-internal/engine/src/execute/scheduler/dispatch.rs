@@ -181,10 +181,7 @@ impl Scheduler {
             ctx: child_ctx,
             access,
             start: resolved.pos,
-            kind: ChainKind::Call {
-                parent: id,
-                released_holder: None,
-            },
+            kind: ChainKind::Call { parent: id },
             var: var.clone(),
             call_depth: depth,
             concurrency: child_concurrency,

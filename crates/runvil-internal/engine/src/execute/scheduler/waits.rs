@@ -38,6 +38,7 @@ use runvil_types::ids::TaskId;
 use crate::lua::{Answer, NonEmpty, TaskDelivery, TaskPhase, TaskStatus};
 use crate::{Error, Result};
 
+use super::admission::ChainTree;
 use super::chain_record::Parked;
 use super::tasks::{Stop, TaskBacking, TaskState};
 use super::{ChainIndex, Scheduler};
@@ -71,8 +72,14 @@ impl Scheduler {
                 self.answer_inline(id, Answer::JoinAny(Ok(delivery)))
             }
             Ok(None) => {
+                // Only a chain-backed task has an identity; a timer has none.
+                let waits_on_tasks = tasks.iter().any(|task| self.tasks.exec_of(task).is_some());
                 self.chains[id].parked = Some(Parked::Tasks(tasks.into_vec()));
-                self.park_wait(id);
+                let tree = ChainTree {
+                    chains: &self.chains,
+                    tasks: &self.tasks,
+                };
+                self.admission.park(id, &tree, waits_on_tasks);
                 Ok(())
             }
             Err(error) => self.answer_inline(id, Answer::JoinAny(Err(error))),
@@ -176,8 +183,12 @@ impl Scheduler {
         limit: Option<NonZeroU64>,
     ) -> Result<()> {
         let effective = if let Some(limit) = limit {
-            let parent_limit = match self.enclosing(id) {
-                Some(parent) => self.chains[parent].concurrency,
+            let tree = ChainTree {
+                chains: &self.chains,
+                tasks: &self.tasks,
+            };
+            let parent_limit = match tree.enclosing(id) {
+                Some(parent) => tree.limit(parent),
                 None => self.ctx.limits().max_concurrency,
             };
             let limit = NonZeroUsize::try_from(limit).unwrap_or(NonZeroUsize::MAX);

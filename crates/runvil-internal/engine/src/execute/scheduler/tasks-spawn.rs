@@ -18,9 +18,10 @@ use crate::execute::section_context::TaskSeed;
 use crate::lua::{Answer, SpawnVia};
 use crate::{Error, Result};
 
+use super::super::admission::SpawnRecord;
 use super::super::chain::ChainStart;
-use super::super::chain_record::{Admission, ChainKind, Parked};
-use super::super::{ChainIndex, Counters, Scheduler, SpawnRecord, prompt_origin};
+use super::super::chain_record::{ChainKind, Parked};
+use super::super::{ChainIndex, Counters, Scheduler, prompt_origin};
 use super::TaskBacking;
 
 impl Scheduler {
@@ -41,13 +42,12 @@ impl Scheduler {
         via: SpawnVia,
     ) -> Result<()> {
         match self.prepare_spawn(id, target, input, seed, var, via) {
-            Ok((task, child)) => {
-                self.answer_inline(id, Answer::Spawn(Ok(task)))?;
+            Ok((task, child, record)) => {
                 // The child waits for admission, queued behind the
                 // spawner; the drain admits it when a slot frees up at
                 // its owner and every ancestor.
-                self.spawned.push_back(child);
-                Ok(())
+                self.admission.enqueue_spawn(child, record);
+                self.answer_inline(id, Answer::Spawn(Ok(task)))
             }
             Err(error) => self.answer_inline(id, Answer::Spawn(Err(error))),
         }
@@ -62,10 +62,10 @@ impl Scheduler {
     /// `args` and `var` snapshot, with its own access capability (a
     /// concurrent thread of execution, forked from the spawner's so the
     /// spawn is the happens-before edge; every delivery of the task joins
-    /// it back) and a fresh turn counter. The child leaves this call queued
-    /// for admission - holding no Lua VM yet - with its `var` snapshot
-    /// moved into the chain and its start record stashed; the drain admits
-    /// it when an admission slot frees up.
+    /// it back) and a fresh turn counter. The child leaves this call
+    /// holding no Lua VM yet, with its `var` snapshot moved into the chain,
+    /// and its spawn record comes back for the admission queue; the drain
+    /// admits it when an admission slot frees up.
     fn prepare_spawn(
         &mut self,
         id: ChainIndex,
@@ -74,7 +74,7 @@ impl Scheduler {
         seed: TaskSeed,
         var: serde_json::Value,
         via: SpawnVia,
-    ) -> Result<(TaskId, ChainIndex)> {
+    ) -> Result<(TaskId, ChainIndex, SpawnRecord)> {
         let chain = &self.chains[id];
         let depth = chain.call_depth.deeper(match via {
             SpawnVia::Fanout => DepthVia::Fanout,
@@ -134,20 +134,13 @@ impl Scheduler {
         // turn counter, so its events report its provenance and its turn
         // numbers, and `tasks.status`'s `turns`, count only its own rounds.
         let child_ctx = child_ctx.with_task(task.clone(), Arc::new(AtomicU32::new(0)));
-        // The task waits for admission from here, and the spawn record
-        // holds what the start event reports once the task first runs.
         let child = self.start_chain(ChainStart {
             lineage: chain_id,
             counters: Counters::default(),
             ctx: child_ctx,
             access: Arc::new(access),
             start: resolved.pos,
-            kind: ChainKind::Task {
-                admission: Admission::Queued(SpawnRecord {
-                    input: input.map(str::to_owned),
-                    section: spawner_section,
-                }),
-            },
+            kind: ChainKind::Task,
             var,
             call_depth: depth,
             concurrency: child_concurrency,
@@ -163,6 +156,12 @@ impl Scheduler {
             id,
             worker.name().to_owned(),
         );
-        Ok((task, child))
+        // The task waits for admission from here, and the spawn record
+        // holds what the start event reports once the task first runs.
+        let record = SpawnRecord {
+            input: input.map(str::to_owned),
+            section: spawner_section,
+        };
+        Ok((task, child, record))
     }
 }

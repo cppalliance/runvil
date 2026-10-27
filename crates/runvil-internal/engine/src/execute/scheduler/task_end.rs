@@ -177,7 +177,7 @@ impl Scheduler {
         // its backing chain's emitter, taken before the abort clears the
         // chain's state. A task that was never admitted (still queued for
         // a slot) has no start event, so it reports no terminal either.
-        let admitted = self.chains[chain].kind.admitted();
+        let admitted = !self.admission.is_queued(chain);
         let emitter = Arc::clone(self.chains[chain].ctx.emitter());
         self.abort_subtree(chain);
         if admitted {

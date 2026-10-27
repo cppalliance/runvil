@@ -29,7 +29,7 @@ mod kind;
 
 pub(super) use anchor::ChatAnchor;
 pub(super) use arena::{ChainArena, ChainIndex};
-pub(super) use kind::{Admission, ChainKind};
+pub(super) use kind::ChainKind;
 
 /// A chain's local id counters: the indices its next child chain and its
 /// next section entry take under its lineage. Set at chain start and
@@ -257,8 +257,7 @@ pub(super) struct Chain {
     /// or not the prompt has H1 blocks, so the first walked section is
     /// always `0.1`.
     pub(super) counters: Counters,
-    /// What kind of chain this is, with the links and admission state
-    /// only that kind has.
+    /// What kind of chain this is, with the links only that kind has.
     pub(super) kind: ChainKind,
     /// The nearest enclosing task: the chain's own id when the chain is a
     /// spawned task (a fanout arm included), its caller's task for a
@@ -390,15 +389,6 @@ impl Chain {
     /// it runs or between blocks.
     pub(super) fn blocked(&self) -> Option<Blocked> {
         self.parked.as_ref().map(Parked::blocked)
-    }
-
-    /// The tasks the chain's `join_any` wait is parked on: empty while the
-    /// chain is not waiting, and once a member's end answered the wait.
-    pub(super) fn wait_set(&self) -> &[TaskId] {
-        match &self.parked {
-            Some(Parked::Tasks(set)) => set,
-            _ => &[],
-        }
     }
 
     /// Ends the chain's `join_any` wait when its set holds `task`, and

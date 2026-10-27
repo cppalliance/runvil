@@ -5,23 +5,15 @@
 //! one rule each.
 
 use std::num::NonZeroUsize;
-use std::sync::Arc;
 
-use runvil_types::ids::{ChainId, TaskId};
+use runvil_types::ids::ChainId;
 use runvil_types::metrics::Usage;
 
-use super::{
-    Admission, CallDepth, Chain, ChainArena, ChainIndex, ChainKind, ChatAnchor, Counters, Walk,
-};
-use crate::execute::RunContext;
-use crate::execute::context::RunState;
-use crate::execute::section_context::TaskSeed;
+use super::{Chain, ChainArena, ChainIndex, ChainKind, ChatAnchor, Walk};
 use crate::execute::walk_target::JumpTarget;
 use crate::heading_address::{SectionIndex, SectionPos};
 use crate::lua::UsageAnchor;
 use crate::model::{Message, ModelId};
-use crate::parser::Prompt;
-use crate::test_support::scenario::{TEST_SEED, TEST_STARTED_AT};
 
 fn usage(prompt: u32, completion: u32) -> Usage {
     Usage::new(prompt, completion, prompt + completion)
@@ -214,45 +206,13 @@ fn a_walk_unwinds_nested_descents_one_level_per_pop() {
     assert_eq!(walk.current(), &top(2));
 }
 
-/// A chain of `kind` under `lineage` that holds no access and has entered
-/// no section.
+/// A chain of `kind` under `lineage` that admits one task at a time.
 fn chain(lineage: ChainId, kind: ChainKind) -> Chain {
-    let source = concat!(
-        "---\nname: t\ndescription: d\nrunvil: 0\n---\n\n",
-        "# Title\n\n## Only\n\ndone\n",
-    );
-    let prompt = Prompt::parse(source, "chain-arena-test")
-        .0
-        .expect("the test prompt parses");
-    let ctx = RunState::new(
-        Arc::new(prompt),
-        "",
-        RunContext::new("chain-arena-test", TEST_SEED, TEST_STARTED_AT),
-    );
-    Chain {
-        task: TaskId::from(lineage.clone()),
-        lineage,
-        counters: Counters::default(),
-        kind,
-        seed: TaskSeed::default(),
-        parked: None,
-        ctx,
-        access: None,
-        entered: None,
-        walk: Walk::new(top(0)),
-        entered_name: "Only".to_owned(),
-        var: serde_json::json!({}),
-        call_depth: CallDepth::ROOT,
-        concurrency: NonZeroUsize::MIN,
-        anchor: ChatAnchor::default(),
-    }
+    Chain::for_test(lineage, kind, NonZeroUsize::MIN)
 }
 
 fn call_of(parent: ChainIndex) -> ChainKind {
-    ChainKind::Call {
-        parent,
-        released_holder: None,
-    }
+    ChainKind::Call { parent }
 }
 
 #[test]
@@ -322,12 +282,7 @@ fn call_children_lists_only_the_parents_own_call_children() {
     let root = ChainId::root();
     let walk = push(root.clone(), ChainKind::Root);
     let first = push(root.child(0), call_of(walk));
-    push(
-        root.child(1),
-        ChainKind::Task {
-            admission: Admission::Admitted { holding: false },
-        },
-    );
+    push(root.child(1), ChainKind::Task);
     let grandchild = push(root.child(0).child(0), call_of(first));
     let second = push(root.child(2), call_of(walk));
     let children: Vec<ChainIndex> = arena.call_children(walk).collect();

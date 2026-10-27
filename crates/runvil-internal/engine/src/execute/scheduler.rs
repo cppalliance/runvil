@@ -35,12 +35,14 @@
 //! path ([`SectionPos`](crate::heading_address::SectionPos)) rather than by
 //! borrow, and the scheduler owns itself outright.
 //!
-//! This file holds the scheduler core: the ready queue and the admission
+//! This file holds the scheduler core: the run's lifecycle and the ready
+//! queue. The core owns four sub-objects that each hold their state and
+//! enforce their own rules, and none writes another: the chain arena, the
+//! effect table, the task arena, and admission, which holds the admission
 //! queues (resumed chains, admitted first, and fresh spawns, which wait
-//! there until the run's concurrency limits admit them). The core owns
-//! three sub-objects that each hold their state and enforce their own
-//! rules, and none writes another: the chain arena, the effect table, and
-//! the task arena. A request that touches only its own chain runs
+//! there until the run's concurrency limits admit them) and the slots
+//! held, and reads the chain tree through a read-only view - the one
+//! cross-read. A request that touches only its own chain runs
 //! in a view of that chain, which borrows the chain, the effect table, and
 //! the run context and nothing else, and holds the one `issue` path every
 //! leaf arm hands its effect through; the core keeps every request that
@@ -56,7 +58,8 @@
 //! answer application, `tool_call` the script and model-issued `tool_call`
 //! arm (the two arms the section-visible `models.loop` shim drives),
 //! `tasks` the task arena and the `spawn` arm, `admission` the admission
-//! limits, `task_end` the chain-end rules for tasks, `waits` the `join_any`
+//! owner and its view of the chain tree, `task_end` the chain-end rules
+//! for tasks, `waits` the `join_any`
 //! wait and the `ready`, `status`, `pending`, `note`, `concurrency`, and
 //! `cancel` arms over the arena, `timer` the wait shims' internal timeout
 //! as an effect-backed entry, and `test_hooks` (test builds only) the seams
@@ -97,6 +100,7 @@ use crate::{Error, Result};
 
 use super::context::RunState;
 use super::run::EffectAnswer;
+use admission::Admission;
 use chain_ops::ChainOps;
 use chain_record::{Chain, ChainArena, ChainIndex, ChatAnchor, Counters};
 use effects::{CallSite, Continuation, EffectTable, Pending, ToolCallContinuation};
@@ -132,21 +136,6 @@ fn prompt_origin(prompt: &Prompt, label: &str, blocks: &[Block]) -> Origin {
     Origin::at(label, prompt.title(), first_chunk_line(blocks))
 }
 
-/// A queued task chain's spawn record, held from spawn until its
-/// admission: the input override and the spawning section the start event
-/// reports. The `var` snapshot lives in the chain's `var` slot from spawn
-/// on, moved once out of the yield - never copied - so a queued chain
-/// shares it until admission installs it into the first section.
-#[derive(Debug)]
-struct SpawnRecord {
-    /// The `opts.input` override, reported in the start event.
-    input: Option<String>,
-    /// The spawner's section at spawn, reported as the start event's
-    /// section: a task admitted after its spawner moved on still reports
-    /// where it was spawned, not where the spawner is now.
-    section: String,
-}
-
 /// The run's phase, as the step loop reads it.
 enum Phase {
     /// No chain has started: the next step starts the H1 pass or the walk.
@@ -161,7 +150,7 @@ enum Phase {
 }
 
 /// The coroutine protocol's driver: the chain arena, ready queue, effect
-/// table, and task arena, owned outright by the run.
+/// table, task arena, and admission, owned outright by the run.
 pub(crate) struct Scheduler {
     /// The ambient run context, cloned into chains and forked by call
     /// chains.
@@ -171,16 +160,6 @@ pub(crate) struct Scheduler {
     /// Chains eligible to resume (FIFO); empty whenever a step returns,
     /// because `drain` runs it dry or the run's end clears it.
     ready: VecDeque<ChainIndex>,
-    /// Chains parked on a task wait that gave their admission slots back,
-    /// waiting to take them again: a task chain, or a call chain that gave
-    /// back its nearest holding ancestor's slots. Each keeps its Lua VM and
-    /// holds its delivered answer; readmission marks the holder holding and
-    /// requeues the chain. Admitted ahead of every fresh spawn.
-    resuming: VecDeque<ChainIndex>,
-    /// Freshly spawned task chains waiting for admission, in spawn order;
-    /// admitted after every resuming chain. A queued spawn holds no Lua VM
-    /// yet: admission is what starts it.
-    spawned: VecDeque<ChainIndex>,
     /// The effect table: every issued effect the caller has not answered
     /// yet, and the step's outgoing queue of issued and withdrawn effects.
     effects: EffectTable,
@@ -192,6 +171,10 @@ pub(crate) struct Scheduler {
     /// the arena is append-only like the chain arena, so `status` can report
     /// a terminal state at any later time.
     tasks: TaskArena,
+    /// Admission: the task chains waiting for slots - resumed chains,
+    /// admitted first, and fresh spawns with their spawn records - and the
+    /// chains holding slots now.
+    admission: Admission,
     /// Where the step loop stands: not started, running, ending with the
     /// outcome held until the orphans are answered, or done.
     phase: Phase,
@@ -220,10 +203,9 @@ impl Scheduler {
             ctx,
             chains: ChainArena::new(),
             ready: VecDeque::new(),
-            resuming: VecDeque::new(),
-            spawned: VecDeque::new(),
             effects: EffectTable::default(),
             tasks: TaskArena::default(),
+            admission: Admission::default(),
             phase: Phase::Fresh,
             scope: None,
         }
