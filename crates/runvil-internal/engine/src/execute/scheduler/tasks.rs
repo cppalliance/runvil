@@ -1,12 +1,6 @@
-//! The task arena and the `spawn` arm. A task is
-//! a chain the scheduler
-//! runs beside its spawner instead of in place of it: `tasks.spawn` (and
-//! the `fanout` shim, once per arm) starts the chain over the target's
-//! slice - under `call`'s target resolution and depth cap, refusing a list
-//! section as the target - registers an entry for it keyed by the chain's
-//! own hierarchical id, and resumes the spawner at once with the id. The
-//! spawner runs first; the child waits in the admission queue, holding no
-//! Lua VM, until the run's concurrency limits admit it.
+//! The task arena, with the `spawn` arm in the `spawn` child. A task is a
+//! chain the scheduler runs beside its spawner instead of in place of it,
+//! with an entry in the arena keyed by the chain's own hierarchical id.
 //!
 //! The entry outlives the chain. When the chain ends, its outcome lands in
 //! the entry and the entry moves to `Done`; the owner later takes the
@@ -16,22 +10,25 @@
 //! purpose" from "lost its owner". A terminal entry is never removed: the
 //! arena is append-only as the chain arena is, so a late `status` can
 //! still report how a task ended.
+//!
+//! The [`TaskArena`] owns every entry and enforces the lifecycle: a task
+//! moves only from `Running` to `Done`, `Cancelled`, or `Abandoned`, and
+//! from `Done` to `Delivered`. It checks ownership, and a chain's view of
+//! the task it runs inside, and it lists an owner's tasks in spawn order
+//! without the internal timers.
 
-use std::sync::Arc;
-use std::sync::atomic::AtomicU32;
+#[path = "tasks-spawn.rs"]
+mod spawn;
+
+use std::collections::BTreeMap;
 
 use runvil_types::ids::TaskId;
-use runvil_vfs::{ExecId, detail};
+use runvil_vfs::ExecId;
 
-use crate::error::DepthVia;
 use crate::execute::run::EffectId;
-use crate::execute::section_context::TaskSeed;
-use crate::lua::{Answer, SpawnVia};
 use crate::{Error, Result};
 
-use super::chain::ChainStart;
-use super::chain_record::{Admission, ChainKind, Parked};
-use super::{ChainIndex, Counters, Scheduler, SpawnRecord, prompt_origin};
+use super::ChainIndex;
 
 /// Where a task's work runs.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -52,7 +49,7 @@ pub(super) enum TaskBacking {
 
 /// One task's lifecycle state as its entry holds it, the outcome included.
 #[derive(Debug)]
-pub(super) enum SlotState {
+pub(super) enum EntryState {
     /// The backing chain or request is live.
     Running,
     /// The backing chain or request ended, and its outcome waits here: the
@@ -68,29 +65,29 @@ pub(super) enum SlotState {
     Abandoned,
 }
 
-impl SlotState {
+impl EntryState {
     /// True while the task's backing chain or request is still running:
     /// the one state a chain end must act on.
     pub(super) fn is_live(&self) -> bool {
-        matches!(self, SlotState::Running)
+        matches!(self, EntryState::Running)
     }
 
     /// The state without its outcome, as `status` and the suites read it.
     pub(super) fn view(&self) -> TaskState {
         match self {
-            SlotState::Running => TaskState::Running,
-            SlotState::Done(outcome) => TaskState::Done {
+            EntryState::Running => TaskState::Running,
+            EntryState::Done(outcome) => TaskState::Done {
                 ok: outcome.is_ok(),
             },
-            SlotState::Delivered { ok } => TaskState::Delivered { ok: *ok },
-            SlotState::Cancelled => TaskState::Cancelled,
-            SlotState::Abandoned => TaskState::Abandoned,
+            EntryState::Delivered { ok } => TaskState::Delivered { ok: *ok },
+            EntryState::Cancelled => TaskState::Cancelled,
+            EntryState::Abandoned => TaskState::Abandoned,
         }
     }
 }
 
 /// One task's lifecycle state, with whether it ended well once it has
-/// ended: the `Copy` view of an entry's [`SlotState`].
+/// ended: the `Copy` view of an entry's [`EntryState`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum TaskState {
     /// The backing chain or request is live.
@@ -137,7 +134,7 @@ pub(super) struct TaskEntry {
     /// internal timer, which reports none.
     pub(super) target: String,
     /// The task's lifecycle state, holding its outcome once it ends.
-    pub(super) state: SlotState,
+    pub(super) state: EntryState,
     /// The latest progress note published through `tasks.note` from inside
     /// the task, reported by `tasks.status`.
     pub(super) note: Option<String>,
@@ -148,155 +145,258 @@ impl TaskEntry {
     /// behind a timed wait. Internal entries are omitted from `pending` and
     /// a status table's `tasks`, report no task observations, and never
     /// count as leaked.
-    pub(super) fn is_internal(&self) -> bool {
+    fn is_internal(&self) -> bool {
         matches!(self.backing, TaskBacking::Effect(_))
     }
 }
 
-impl Scheduler {
-    /// Dispatches a `spawn` request: constructs the task's chain, registers
-    /// its entry, and resumes the spawner with the task's id; the child is
-    /// enqueued behind the spawner, so `spawn` returns before the child
-    /// runs. Its preparation fails on the depth cap, target resolution,
-    /// the worker check, or chain construction. `via` names the call that
-    /// started the task: a `fanout` arm's depth-cap refusal is named after
-    /// `tasks.fanout`.
-    pub(super) fn dispatch_spawn(
+/// How a live task ends before its own chain or request does.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum Stop {
+    /// The owner cancelled the task.
+    Cancelled,
+    /// The owner ended while the task was live.
+    Abandoned,
+}
+
+/// The task arena: one entry per task the run has started, keyed by the
+/// task's id. Entries leave the arena by shared reference only, so every
+/// state change goes through the arena's rules.
+#[derive(Default)]
+pub(super) struct TaskArena {
+    /// Ids order as paths, and one owner's tasks are its direct children,
+    /// so one owner's entries iterate in spawn order.
+    entries: BTreeMap<TaskId, TaskEntry>,
+}
+
+impl TaskArena {
+    /// Registers a running task that `owner` started over `backing`,
+    /// reporting under `target`.
+    pub(super) fn insert(
         &mut self,
-        id: ChainIndex,
-        target: &str,
-        input: Option<&str>,
-        seed: TaskSeed,
-        var: serde_json::Value,
-        via: SpawnVia,
-    ) -> Result<()> {
-        match self.prepare_spawn(id, target, input, seed, var, via) {
-            Ok((task, child)) => {
-                self.answer_inline(id, Answer::Spawn(Ok(task)))?;
-                // The child waits for admission, queued behind the
-                // spawner; the drain admits it when a slot frees up at
-                // its owner and every ancestor.
-                self.spawned.push_back(child);
-                Ok(())
-            }
-            Err(error) => self.answer_inline(id, Answer::Spawn(Err(error))),
+        task: TaskId,
+        backing: TaskBacking,
+        owner: ChainIndex,
+        target: String,
+    ) {
+        let entry = TaskEntry {
+            backing,
+            owner,
+            target,
+            state: EntryState::Running,
+            note: None,
+        };
+        self.entries.insert(task, entry);
+    }
+
+    /// The entry of a task `caller` owns, or [`Error::TaskNotOwned`] - for
+    /// an unknown id too, so a caller learns nothing about tasks it never
+    /// started.
+    pub(super) fn owned(&self, caller: ChainIndex, task: &TaskId) -> Result<&TaskEntry> {
+        match self.entries.get(task) {
+            Some(entry) if entry.owner == caller => Ok(entry),
+            _ => Err(Error::TaskNotOwned { task: task.clone() }),
         }
     }
 
-    /// The fallible half of spawn dispatch: `call`'s depth cap against the
-    /// spawner's call-depth field (the refusal named `tasks.fanout` for an
-    /// arm, and `call` for a `call` or a `tasks.spawn`), `call`'s target
-    /// resolution over the spawner's
-    /// visible set, the worker-template check (a list section is not a
-    /// target), then the task chain one level deeper under the spawn's
-    /// `args` and `var` snapshot, with its own access capability (a
-    /// concurrent thread of execution, forked from the spawner's so the
-    /// spawn is the happens-before edge; every delivery of the task joins
-    /// it back) and a fresh turn counter. The child leaves this call queued
-    /// for admission - holding no Lua VM yet - with its `var` snapshot
-    /// moved into the chain and its start record stashed; the drain admits
-    /// it when an admission slot frees up.
-    pub(super) fn prepare_spawn(
-        &mut self,
-        id: ChainIndex,
-        target: &str,
-        input: Option<&str>,
-        seed: TaskSeed,
-        var: serde_json::Value,
-        via: SpawnVia,
-    ) -> Result<(TaskId, ChainIndex)> {
-        let chain = &self.chains[id];
-        let depth = chain.call_depth.deeper(match via {
-            SpawnVia::Fanout => DepthVia::Fanout,
-            SpawnVia::Spawn => DepthVia::Call,
-        })?;
-        // The spawning section, captured now: the start event reports it
-        // at admission, which may come after the spawner's walk moved to
-        // another section.
-        let spawner_section = chain.section_name().to_owned();
-        // An explicit input forks the chain's args (and `argv` re-derives
-        // from them), as a `call` with input does; otherwise the chain
-        // inherits the spawner's context whole. The turn counter is the
-        // task's own, so its turn numbers, and `tasks.status`'s `turns`,
-        // count only its own rounds.
-        let child_ctx = match input {
-            Some(input) => chain.ctx.with_args(input),
-            None => chain.ctx.clone(),
-        };
-        // A spawned chain's effective limit starts with its spawner's:
-        // its tasks run within the spawner's share and every ancestor's.
-        let child_concurrency = chain.concurrency;
-        let spawner_access = Arc::clone(chain.access()?);
-        // `chain`'s arena borrow ends here; the resolution names the
-        // target's slice by path, resolved against the shared tree.
-        let prompt = self.prompt();
-        let resolved = self.with_chain(id, |ops| ops.resolve_chain_target(target))?;
-        let worker = resolved.pos.section(&prompt).ok_or(Error::internal(
-            "a resolved worker is absent from its slice",
-        ))?;
-        if worker.prologue().is_none() && worker.epilog().is_none() && !worker.items().is_empty() {
-            return Err(Error::lua_message(format!(
-                "section `{}` is a list section, not a worker template",
-                worker.name()
-            )));
+    /// The entry of a task `caller` owns or runs inside: `caller_task` is
+    /// the caller's `sys.taskid`, which a `call` child of the task chain
+    /// shares.
+    pub(super) fn visible(
+        &self,
+        caller: ChainIndex,
+        caller_task: &TaskId,
+        task: &TaskId,
+    ) -> Result<&TaskEntry> {
+        match self.entries.get(task) {
+            Some(entry) if entry.owner == caller || caller_task == task => Ok(entry),
+            _ => Err(Error::TaskNotOwned { task: task.clone() }),
         }
-        // The access spawns before the chain exists: a store refusal here
-        // is the last fallible step that can leave nothing behind, so it
-        // runs ahead of the id allocation and the arena push rather than
-        // orphaning a started chain that is neither enqueued nor entered
-        // in the arena.
-        let access = detail::access_spawn(
-            &spawner_access,
-            prompt_origin(&prompt, worker.name(), worker.blocks()),
-        )
-        .map_err(Error::store)?;
-        // The task's happens-before identity, recorded before the access
-        // moves into the chain: every delivery joins it, and the chain
-        // end joins it last.
-        let exec = detail::access_id(&access);
-        // The task's id is the spawner's next child index, shared with
-        // `call` children and the wait shims' timers, so it depends only on
-        // the spawner's own dispatch order; the task is its chain, named
-        // from the other side.
-        let chain_id = self.chains[id].next_child_id()?;
-        let task = TaskId::from(chain_id.clone());
-        // The task's context reports under its own task id with its own
-        // turn counter, so its events report its provenance and its turn
-        // numbers, and `tasks.status`'s `turns`, count only its own rounds.
-        let child_ctx = child_ctx.with_task(task.clone(), Arc::new(AtomicU32::new(0)));
-        // The task waits for admission from here, and the spawn record
-        // holds what the start event reports once the task first runs.
-        let child = self.start_chain(ChainStart {
-            lineage: chain_id,
-            counters: Counters::default(),
-            ctx: child_ctx,
-            access: Arc::new(access),
-            start: resolved.pos,
-            kind: ChainKind::Task {
-                admission: Admission::Queued(SpawnRecord {
-                    input: input.map(str::to_owned),
-                    section: spawner_section,
-                }),
-            },
-            var,
-            call_depth: depth,
-            concurrency: child_concurrency,
-        })?;
-        let spawned = &mut self.chains[child];
-        spawned.seed = seed;
-        // `blocked` reads `queued` in `tasks.status` while the entry's
-        // state is still `Running`.
-        spawned.parked = Some(Parked::Queued);
-        self.tasks.insert(
-            task.clone(),
-            TaskEntry {
-                backing: TaskBacking::Chain { chain: child, exec },
-                owner: id,
-                target: worker.name().to_owned(),
-                state: SlotState::Running,
-                note: None,
-            },
-        );
-        Ok((task, child))
+    }
+
+    /// The live tasks `owner` owns, in spawn order; an internal timer is
+    /// never listed.
+    pub(super) fn live_of(&self, owner: ChainIndex) -> Vec<TaskId> {
+        self.live_entries(owner)
+            .filter(|(_, entry)| !entry.is_internal())
+            .map(|(task, _)| task.clone())
+            .collect()
+    }
+
+    /// Every live task `owner` owns, internal timers included, in spawn
+    /// order: the tasks the owner's end ends.
+    pub(super) fn live_with_timers(&self, owner: ChainIndex) -> Vec<TaskId> {
+        self.live_entries(owner)
+            .map(|(task, _)| task.clone())
+            .collect()
+    }
+
+    fn live_entries(&self, owner: ChainIndex) -> impl Iterator<Item = (&TaskId, &TaskEntry)> {
+        self.entries
+            .iter()
+            .filter(move |(_, entry)| entry.owner == owner && entry.state.is_live())
+    }
+
+    /// Validates a wait set and returns its first terminal member in set
+    /// order, or `None` when every member is still running. Every member
+    /// must be a task `caller` owns, and none may be delivered already. An
+    /// `Abandoned` member cannot pass the ownership check (its owner has
+    /// ended), so the terminal arm only ever sees `Done` and `Cancelled`.
+    pub(super) fn first_terminal(
+        &self,
+        caller: ChainIndex,
+        tasks: &[TaskId],
+    ) -> Result<Option<TaskId>> {
+        let mut first = None;
+        for task in tasks {
+            match self.owned(caller, task)?.state {
+                EntryState::Delivered { .. } => {
+                    return Err(Error::TaskConsumed { task: task.clone() });
+                }
+                EntryState::Running => {}
+                EntryState::Done(_) | EntryState::Cancelled | EntryState::Abandoned => {
+                    if first.is_none() {
+                        first = Some(task.clone());
+                    }
+                }
+            }
+        }
+        Ok(first)
+    }
+
+    /// Moves a running task to `Done`, holding `outcome`, and returns its
+    /// entry. A task that isn't live, or has no entry, is left as it is and
+    /// yields `None`.
+    pub(super) fn complete(
+        &mut self,
+        task: &TaskId,
+        outcome: Result<String>,
+    ) -> Option<&TaskEntry> {
+        let entry = self.entries.get_mut(task)?;
+        if !entry.state.is_live() {
+            return None;
+        }
+        entry.state = EntryState::Done(outcome);
+        Some(entry)
+    }
+
+    /// Takes a terminal task's outcome as its delivery: a `Done` entry's
+    /// outcome moves out and the entry to `Delivered`, so it is taken once.
+    /// A cancelled entry yields the `cancelled` error value and stays,
+    /// having no result to consume. An abandoned entry has no live owner to
+    /// wait on it, so its delivery is a scheduler bug.
+    pub(super) fn take_delivery(&mut self, task: &TaskId) -> Result<String> {
+        let Some(entry) = self.entries.get_mut(task) else {
+            return Err(Error::internal("a delivered task has an entry"));
+        };
+        let ok = matches!(entry.state, EntryState::Done(Ok(_)));
+        // Every state but `Done` goes back as it was.
+        match std::mem::replace(&mut entry.state, EntryState::Delivered { ok }) {
+            EntryState::Done(outcome) => outcome,
+            EntryState::Cancelled => {
+                entry.state = EntryState::Cancelled;
+                Err(Error::TaskCancelled { task: task.clone() })
+            }
+            EntryState::Abandoned => {
+                entry.state = EntryState::Abandoned;
+                Err(Error::internal(
+                    "an abandoned task's owner ended, so no wait can deliver it",
+                ))
+            }
+            state @ (EntryState::Running | EntryState::Delivered { .. }) => {
+                entry.state = state;
+                Err(Error::internal(
+                    "only a terminal, undelivered entry is delivered",
+                ))
+            }
+        }
+    }
+
+    /// Stops a running task: its entry moves to `Cancelled` or `Abandoned`,
+    /// and its backing and target come back for the scheduler to end. A
+    /// task that isn't live, or has no entry, is left as it is and yields
+    /// `None`.
+    pub(super) fn stop(&mut self, task: &TaskId, stop: Stop) -> Option<(TaskBacking, String)> {
+        let entry = self.entries.get_mut(task)?;
+        if !entry.state.is_live() {
+            return None;
+        }
+        entry.state = match stop {
+            Stop::Cancelled => EntryState::Cancelled,
+            Stop::Abandoned => EntryState::Abandoned,
+        };
+        Some((entry.backing, entry.target.clone()))
+    }
+
+    /// The owners of every live task, internal timers included, each once,
+    /// in ascending arena order.
+    pub(super) fn live_owners(&self) -> Vec<ChainIndex> {
+        let mut owners: Vec<ChainIndex> = self
+            .entries
+            .values()
+            .filter(|entry| entry.state.is_live())
+            .map(|entry| entry.owner)
+            .collect();
+        owners.sort_unstable_by_key(|owner| owner.index());
+        owners.dedup();
+        owners
+    }
+
+    /// Moves every task `from` owns to `to`.
+    pub(super) fn reassign(&mut self, from: ChainIndex, to: ChainIndex) {
+        for entry in self.entries.values_mut() {
+            if entry.owner == from {
+                entry.owner = to;
+            }
+        }
+    }
+
+    /// Records `text` as `task`'s latest note. A task with no entry records
+    /// nothing.
+    pub(super) fn set_note(&mut self, task: &TaskId, text: String) {
+        if let Some(entry) = self.entries.get_mut(task) {
+            entry.note = Some(text);
+        }
+    }
+
+    /// The happens-before identity of every task `owner` owns, ended or
+    /// not; an internal timer has none.
+    pub(super) fn execs_owned_by(&self, owner: ChainIndex) -> impl Iterator<Item = ExecId> + '_ {
+        self.entries
+            .values()
+            .filter(move |entry| entry.owner == owner)
+            .filter_map(|entry| match entry.backing {
+                TaskBacking::Chain { exec, .. } => Some(exec),
+                TaskBacking::Effect(_) => None,
+            })
+    }
+
+    /// `task`'s happens-before identity, or `None` for an internal timer
+    /// and for an id with no entry.
+    pub(super) fn exec_of(&self, task: &TaskId) -> Option<ExecId> {
+        match self.entries.get(task)?.backing {
+            TaskBacking::Chain { exec, .. } => Some(exec),
+            TaskBacking::Effect(_) => None,
+        }
+    }
+
+    /// The chain that owns `task`.
+    pub(super) fn owner_of(&self, task: &TaskId) -> Option<ChainIndex> {
+        self.entries.get(task).map(|entry| entry.owner)
+    }
+
+    /// The section `task`'s observations report under.
+    pub(super) fn target_of(&self, task: &TaskId) -> Option<&str> {
+        self.entries.get(task).map(|entry| entry.target.as_str())
+    }
+
+    /// `task`'s state, or `None` when no task with that id was started.
+    #[cfg(test)]
+    pub(super) fn state_of(&self, task: &TaskId) -> Option<TaskState> {
+        self.entries.get(task).map(|entry| entry.state.view())
     }
 }
+
+#[cfg(test)]
+#[path = "tasks-tests.rs"]
+mod tests;

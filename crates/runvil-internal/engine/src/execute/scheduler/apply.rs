@@ -18,7 +18,7 @@
 //! the call's access refuses every later operation.
 
 use runvil_types::event::lifecycle::{self, Lifecycle};
-use runvil_types::ids::RoundId;
+use runvil_types::ids::{RoundId, TaskId};
 use runvil_types::tools::{ToolError, ToolOutput};
 use runvil_vfs::{ExecId, VfsError, detail};
 
@@ -30,9 +30,9 @@ use crate::lua::{
 use crate::model::{Completion, CompletionError};
 use crate::{Error, Result};
 
-use super::tasks::{SlotState, TaskBacking};
+use super::tasks::Stop;
 use super::{
-    CallSite, ChainIndex, ChainOps, Continuation, EffectAnswer, EffectId, Pending, Scheduler,
+    CallSite, ChainIndex, ChainOps, Continuation, EffectAnswer, Pending, Scheduler,
     ToolCallContinuation,
 };
 
@@ -99,7 +99,7 @@ fn dropped_answer(resume: &Continuation) -> Answer<Error> {
         Continuation::ToolCall(_) => Answer::ToolCallResult(Err(Error::Interrupted)),
         // A timer's drop never reaches here; the cancelled store answer
         // is the harmless stand-in should it ever do so.
-        Continuation::Vfs(_) | Continuation::Timer => Answer::Store(Err(Error::Interrupted)),
+        Continuation::Vfs(_) | Continuation::Timer(_) => Answer::Store(Err(Error::Interrupted)),
     }
 }
 
@@ -126,12 +126,7 @@ impl Scheduler {
     /// claims-model conflict: the run ends on the spot rather than
     /// resuming the conflict into Lua, where an author `pcall` could catch
     /// it.
-    pub(super) fn apply_answer(
-        &mut self,
-        id: EffectId,
-        parked: Pending,
-        answer: EffectAnswer,
-    ) -> Result<()> {
+    pub(super) fn apply_answer(&mut self, parked: Pending, answer: EffectAnswer) -> Result<()> {
         let Pending { chain, resume } = parked;
         let slot = match &resume {
             Continuation::ToolCall(call) => {
@@ -145,10 +140,10 @@ impl Scheduler {
             | Continuation::Chat(_)
             | Continuation::Render(_)
             | Continuation::Vfs(_)
-            | Continuation::Timer => None,
+            | Continuation::Timer(_) => None,
         };
         let answer = match (resume, answer) {
-            (Continuation::Timer, EffectAnswer::Dropped) => return self.drop_timer(id),
+            (Continuation::Timer(task), EffectAnswer::Dropped) => return self.drop_timer(&task),
             (resume, EffectAnswer::Dropped) => dropped_answer(&resume),
             (Continuation::Infer(round), EffectAnswer::Chat(result)) => {
                 Answer::Infer(self.with_chain(chain, |ops| ops.accept_infer(round, result)))
@@ -174,7 +169,7 @@ impl Scheduler {
                     result => Answer::Store(result),
                 }
             }
-            (Continuation::Timer, EffectAnswer::Timer) => return self.fire_timer(id),
+            (Continuation::Timer(task), EffectAnswer::Timer) => return self.fire_timer(&task),
             (
                 Continuation::Infer(_) | Continuation::Chat(_),
                 EffectAnswer::Render(_)
@@ -204,7 +199,7 @@ impl Scheduler {
                 | EffectAnswer::Timer,
             )
             | (
-                Continuation::Timer,
+                Continuation::Timer(_),
                 EffectAnswer::Chat(_)
                 | EffectAnswer::Render(_)
                 | EffectAnswer::ToolCall(_)
@@ -238,25 +233,22 @@ impl Scheduler {
         detail::end_access(scope, owner, exec);
     }
 
-    /// Applies a dropped timer: the entry backed by the effect moves to
-    /// `Cancelled`. While the run's cancel flag is clear, the caller gave
-    /// up the timeout and the run goes on, so the chain parked on the
-    /// timer leaves its wait with the cancelled error, as a dropped `Chat`
-    /// or `ToolCall` does: a timed `tasks.join` or `tasks.join_any` raises
-    /// it. A timer nothing waits on is dropped silently. Under a run cancel the
-    /// drop wakes no one, since the cancel tears the waiter down with
-    /// every other chain.
-    fn drop_timer(&mut self, effect: EffectId) -> Result<()> {
-        let Some((task, slot)) = self
-            .tasks
-            .iter_mut()
-            .find(|(_, slot)| slot.backing == TaskBacking::Effect(effect) && slot.state.is_live())
-        else {
+    /// Applies a dropped timer: `task`'s entry moves to `Cancelled`. While
+    /// the run's cancel flag is clear, the caller gave up the timeout and
+    /// the run goes on, so the chain parked on the timer leaves its wait
+    /// with the cancelled error, as a dropped `Chat` or `ToolCall` does: a
+    /// timed `tasks.join` or `tasks.join_any` raises it. A timer whose
+    /// entry isn't live, or that nothing waits on, is dropped silently.
+    /// Under a run cancel the drop wakes no one, since the cancel tears
+    /// the waiter down with every other chain.
+    fn drop_timer(&mut self, task: &TaskId) -> Result<()> {
+        let Some(owner) = self.tasks.owner_of(task) else {
             return Ok(());
         };
-        slot.state = SlotState::Cancelled;
-        let (task, owner) = (task.clone(), slot.owner);
-        if self.ctx.cancel().is_cancelled() || !self.chains[owner].end_wait_for(&task) {
+        if self.tasks.stop(task, Stop::Cancelled).is_none() {
+            return Ok(());
+        }
+        if self.ctx.cancel().is_cancelled() || !self.chains[owner].end_wait_for(task) {
             return Ok(());
         }
         self.wake_from_wait(owner, Answer::JoinAny(Err(Error::Interrupted)))

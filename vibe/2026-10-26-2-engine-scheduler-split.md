@@ -649,7 +649,7 @@ Acceptance:
 
 <step-5>
 
-### Step 5: Give tasks one owner in TaskArena
+### Step 5: Give tasks one owner in TaskArena [completed]
 
 - Component: task and admission owners
 - Tests: run each from the runvil root in PowerShell, as written:
