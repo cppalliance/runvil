@@ -62,7 +62,7 @@ The gateway is the one process that holds model credentials, so no other process
 
 ## Documentation
 
-The [documentation site](https://gh.cppalliance.org/runvil/) has the [Language guide](https://gh.cppalliance.org/runvil/language/) for writing prompts, the [Gateway guide](https://gh.cppalliance.org/runvil/gateway/) for installing and configuring the gateway, and the API references for embedding the Engine and the Harness in your own program.
+The documentation site, [runvil.org](https://runvil.org), has the [Language guide](https://gh.cppalliance.org/runvil/language/) for writing prompts, the [Gateway guide](https://gh.cppalliance.org/runvil/gateway/) for installing and configuring the gateway, and the API references for embedding the Engine and the Harness in your own program.
 
 ## Contributing
 
