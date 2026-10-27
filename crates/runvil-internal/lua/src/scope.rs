@@ -96,6 +96,15 @@ pub enum OfferMode {
     Dynamic,
 }
 
+impl std::fmt::Display for OfferMode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            OfferMode::Static => "Static Set",
+            OfferMode::Dynamic => "Dynamic Set",
+        })
+    }
+}
+
 /// One remembered offer: what it names and which set it feeds.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Offer {

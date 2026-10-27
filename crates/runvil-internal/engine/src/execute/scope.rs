@@ -18,7 +18,7 @@ use serde_json::{Value, json};
 use crate::error::{SetRule, SetTool};
 use crate::execute::PackToolSets;
 use crate::lua::{
-    DiscoveryTool, OfferedTool, RenderedTools, SectionVm, ToolBinding, ToolSet,
+    DiscoveryTool, OfferMode, OfferedTool, RenderedTools, SectionVm, ToolBinding, ToolSet,
     current_catalog_packs, current_dynamic_set, current_tool_bindings, wire_name_of,
 };
 use crate::model::ToolSchema;
@@ -36,37 +36,19 @@ const SEARCH_USAGE: &str = "Lists and searches the dynamic tools, which CallDyna
 const CALL_USAGE: &str = "Calls a dynamic tool: pass its name from GetDynamicTools as toolName \
                           and its arguments as arguments.";
 
-/// One of the two sets a section entry freezes at its first loop round.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum FrozenSet {
-    /// The Static Set, which every round of the entry advertises.
-    Static,
-    /// The Dynamic Set, which no round advertises.
-    Dynamic,
-}
-
-impl std::fmt::Display for FrozenSet {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(match self {
-            FrozenSet::Static => "Static Set",
-            FrozenSet::Dynamic => "Dynamic Set",
-        })
-    }
-}
-
 /// One Pack's tools for `set`.
-fn set_of(sets: &PackToolSets<ToolInfo>, set: FrozenSet) -> &[ToolInfo] {
+fn set_of(sets: &PackToolSets<ToolInfo>, set: OfferMode) -> &[ToolInfo] {
     match set {
-        FrozenSet::Static => &sets.static_set,
-        FrozenSet::Dynamic => &sets.dynamic_set,
+        OfferMode::Static => &sets.static_set,
+        OfferMode::Dynamic => &sets.dynamic_set,
     }
 }
 
 /// One Pack's tools for `set`, to change.
-fn set_mut(sets: &mut PackToolSets<ToolInfo>, set: FrozenSet) -> &mut Vec<ToolInfo> {
+fn set_mut(sets: &mut PackToolSets<ToolInfo>, set: OfferMode) -> &mut Vec<ToolInfo> {
     match set {
-        FrozenSet::Static => &mut sets.static_set,
-        FrozenSet::Dynamic => &mut sets.dynamic_set,
+        OfferMode::Static => &mut sets.static_set,
+        OfferMode::Dynamic => &mut sets.dynamic_set,
     }
 }
 
@@ -129,8 +111,8 @@ impl SectionOffers {
 pub(super) fn offered_packs(offers: &SectionOffers) -> Vec<PackToolSets<ToolInfo>> {
     let mut packs: Vec<PackToolSets<ToolInfo>> = Vec::new();
     for (set, tools) in [
-        (FrozenSet::Static, &offers.static_tools),
-        (FrozenSet::Dynamic, &offers.dynamic_tools),
+        (OfferMode::Static, &offers.static_tools),
+        (OfferMode::Dynamic, &offers.dynamic_tools),
     ] {
         for tool in tools {
             let OfferedTool::Catalog(info) = tool else {
@@ -221,8 +203,8 @@ pub(super) fn merge_tool_sets(
     let asked = offered_packs(offers);
     let mut rendered = check_render(&asked, rendered, catalog)?;
     let (static_tools, dynamic_tools) = (&offers.static_tools, &offers.dynamic_tools);
-    let mut static_set = lay_out(static_tools, FrozenSet::Static, &mut rendered, catalog);
-    let mut dynamic_set = lay_out(dynamic_tools, FrozenSet::Dynamic, &mut rendered, catalog);
+    let mut static_set = lay_out(static_tools, OfferMode::Static, &mut rendered, catalog);
+    let mut dynamic_set = lay_out(dynamic_tools, OfferMode::Dynamic, &mut rendered, catalog);
     drop_shadowed(&mut static_set);
     drop_shadowed(&mut dynamic_set);
     dynamic_set.retain(|tool| {
@@ -272,7 +254,7 @@ fn check_render(
         .into_iter()
         .zip(asked)
         .map(|(mut sets, offered)| {
-            for set in [FrozenSet::Static, FrozenSet::Dynamic] {
+            for set in [OfferMode::Static, OfferMode::Dynamic] {
                 let tools = std::mem::take(set_mut(&mut sets, set));
                 let kept = check_set(&sets.pack, set, set_of(offered, set), tools, catalog)?;
                 *set_mut(&mut sets, set) = kept;
@@ -292,7 +274,7 @@ fn check_render(
 /// catalog tool the section did not offer in `set`.
 fn check_set(
     pack: &PackId,
-    set: FrozenSet,
+    set: OfferMode,
     offered: &[ToolInfo],
     tools: Vec<ToolInfo>,
     catalog: &ToolCatalog,
@@ -327,7 +309,7 @@ fn check_set(
 /// Pack's rendered tools for `set` where that Pack's first tool sits.
 fn lay_out(
     offers: &[OfferedTool],
-    set: FrozenSet,
+    set: OfferMode,
     rendered: &mut [PackToolSets<ToolInfo>],
     catalog: &ToolCatalog,
 ) -> Vec<Laid> {
@@ -456,8 +438,8 @@ fn drop_shadowed(set: &mut Vec<Laid>) {
 fn refuse_clash(static_set: &[Laid], dynamic_set: &[Laid]) -> Result<()> {
     let sited = static_set
         .iter()
-        .map(|tool| (tool, FrozenSet::Static))
-        .chain(dynamic_set.iter().map(|tool| (tool, FrozenSet::Dynamic)));
+        .map(|tool| (tool, OfferMode::Static))
+        .chain(dynamic_set.iter().map(|tool| (tool, OfferMode::Dynamic)));
     let mut taken: BTreeMap<&str, SetTool> = BTreeMap::new();
     for (tool, set) in sited {
         let wire_name = tool.binding.alias();

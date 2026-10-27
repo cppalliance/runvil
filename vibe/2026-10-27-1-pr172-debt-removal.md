@@ -299,13 +299,13 @@ isProject: false
 
 <step-3>
 
-### Step 3: Make OfferMode the one frozen-set enum
+### Step 3: Make OfferMode the one frozen-set enum [completed]
 
 - Component: Scope types
 - Tests: run each from `c:\Users\Vinnie\cursor\runvil` in PowerShell, as written, after clearing `CARGO_BUILD_WARNINGS` and `RUSTDOCFLAGS` so each command sees only the variables it sets itself; each exits 0.
   - `cargo nextest run --locked -p runvil-engine --all-features`
   - `cargo nextest run --locked -p runvil-lua --all-features scope`
-  - `if (Get-ChildItem crates/runvil-internal/engine -Recurse -Filter *.rs | Select-String -Pattern 'FrozenSet' -Quiet) { throw 'the engine still names FrozenSet' }`
+  - `if (Get-ChildItem crates/runvil-internal/engine -Recurse -Filter *.rs | Select-String -Pattern 'FrozenSet' -CaseSensitive -List) { throw 'the engine still names FrozenSet' }`
   - `cargo fmt --all --check`
   - `$env:CARGO_BUILD_WARNINGS='deny'; cargo clippy -p runvil-lua -p runvil-engine --all-targets --all-features`
   - `$env:RUSTDOCFLAGS='-D warnings'; cargo doc --locked --no-deps --all-features -p runvil-engine --document-private-items`

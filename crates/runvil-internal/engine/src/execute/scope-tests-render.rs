@@ -16,7 +16,7 @@ fn broken(error: Error) -> (SetRule, Vec<SetTool>) {
 
 /// The tool `id` in `set`, as a failed merge names it.
 #[track_caller]
-fn site(id: &str, set: FrozenSet) -> SetTool {
+fn site(id: &str, set: OfferMode) -> SetTool {
     SetTool {
         id: ToolId::parse(id).expect("a fixture tool id"),
         set,
@@ -85,42 +85,42 @@ fn rule_one_refuses_a_rendered_tool_outside_what_its_pack_was_asked() {
         (
             "a model-only tool in a set its Pack was not offered into",
             gh,
-            FrozenSet::Static,
+            OfferMode::Static,
             "gh/new",
             SetRule::UnofferedSet(pack("gh")),
         ),
         (
             "a model-only tool under another Pack's id",
             web,
-            FrozenSet::Static,
+            OfferMode::Static,
             "gh/new",
             SetRule::ForeignTool(pack("web")),
         ),
         (
             "another Pack's catalog tool",
             web,
-            FrozenSet::Dynamic,
+            OfferMode::Dynamic,
             "gh/one",
             SetRule::ForeignTool(pack("web")),
         ),
         (
             "a catalog tool the section never offered",
             web,
-            FrozenSet::Static,
+            OfferMode::Static,
             "web/other",
             SetRule::UnofferedCatalogTool,
         ),
         (
             "a catalog tool the section offered only into the Dynamic Set",
             web,
-            FrozenSet::Static,
+            OfferMode::Static,
             "web/search",
             SetRule::UnofferedCatalogTool,
         ),
         (
             "a catalog tool the section offered only into the Static Set",
             web,
-            FrozenSet::Dynamic,
+            OfferMode::Dynamic,
             "web/fetch",
             SetRule::UnofferedCatalogTool,
         ),

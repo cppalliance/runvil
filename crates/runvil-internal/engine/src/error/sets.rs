@@ -2,10 +2,9 @@
 //! the message [`Error::ToolSets`](super::Error::ToolSets) renders when
 //! the sets break one.
 
+use runvil_lua::OfferMode;
 use runvil_types::packs::PackId;
 use runvil_types::tools::ToolId;
-
-use crate::execute::scope::FrozenSet;
 
 /// A merge rule a section entry's frozen sets broke.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -38,7 +37,7 @@ pub(crate) struct SetTool {
     /// The tool's id.
     pub(crate) id: ToolId,
     /// The set the tool sits in.
-    pub(crate) set: FrozenSet,
+    pub(crate) set: OfferMode,
 }
 
 /// `packs` as a bracketed list, such as `[web, gh]`.

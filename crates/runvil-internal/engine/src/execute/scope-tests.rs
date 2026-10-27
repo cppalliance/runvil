@@ -305,20 +305,27 @@ fn rule_five_fails_a_wire_name_used_twice_within_one_set_or_across_the_sets() {
         (
             "dup_a_b".to_owned(),
             vec![
-                ("dup/a/b".to_owned(), FrozenSet::Static),
-                ("dup/a.b".to_owned(), FrozenSet::Static),
+                ("dup/a/b".to_owned(), OfferMode::Static),
+                ("dup/a.b".to_owned(), OfferMode::Static),
             ]
         )
     );
     let across = merged(&[adhoc("web_search")], &[listed("web/search")], &tools)
         .expect_err("a static adhoc tool and a dynamic Pack tool of its name clash");
     assert_eq!(
+        across.to_string(),
+        "the tools adhoc/web_search of the adhoc Pack in the Static Set and web/search of the \
+         web Pack in the Dynamic Set share the wire name \"web_search\", and a wire name names \
+         one tool across a section's Static Set and Dynamic Set; offer only one of them",
+        "the message names each tool's set"
+    );
+    assert_eq!(
         clash(across),
         (
             "web_search".to_owned(),
             vec![
-                ("adhoc/web_search".to_owned(), FrozenSet::Static),
-                ("web/search".to_owned(), FrozenSet::Dynamic),
+                ("adhoc/web_search".to_owned(), OfferMode::Static),
+                ("web/search".to_owned(), OfferMode::Dynamic),
             ]
         )
     );
@@ -333,8 +340,8 @@ fn rule_five_fails_a_wire_name_used_twice_within_one_set_or_across_the_sets() {
         (
             "GetDynamicTools".to_owned(),
             vec![
-                ("web/discover".to_owned(), FrozenSet::Static),
-                ("dynamic/search".to_owned(), FrozenSet::Static),
+                ("web/discover".to_owned(), OfferMode::Static),
+                ("dynamic/search".to_owned(), OfferMode::Static),
             ]
         )
     );
