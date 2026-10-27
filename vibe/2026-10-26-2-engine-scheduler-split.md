@@ -4,22 +4,22 @@ overview: Land three approved fixes in runvil-engine (response limits out of the
 todos:
   - id: step1-limits-sys
     content: "Step 1: drop max_response_bytes and receive_timeout from RunLimits (the gateway client keeps its own limits, renamed receive_timeout) and type each section's sys as SectionSys (infallible entry_id; delete enrich_sys_model and current_sys); one runvil commit, then one runvil-docs commit for the guide edits"
-    status: pending
+    status: completed
   - id: step2-walk
     content: "Step 2: SectionPos and the chain's Walk stack; one JumpTarget struct replaces the enum and ChainTarget; Reachable, Reached, RequireOrigin, library_key, ChainStart, and SectionContext::new take SectionPos; Walk unit tests and the gap tests; one commit"
-    status: pending
+    status: completed
   - id: step3-effects-arena
     content: "Step 3: EffectTable first (outstanding, issued, withdrawn, both counters; Parked becomes Awaited; silent orphan_all), then ChainArena (mints ChainIndex, Index impls, iter, len, call_children; id counters move onto Chain); unit tests; one commit"
-    status: pending
+    status: completed
   - id: step4-chain-ops
     content: "Step 4: ChainOps view (one chain, the effect table, a shared ctx) takes the 29 one-chain request methods; Scheduler::with_chain is its only entry and does the requeue; Scheduler::issue and number_round go; one commit"
-    status: pending
+    status: completed
   - id: step5-tasks
     content: "Step 5: TaskArena with lifecycle rules and unit tests, Continuation::Timer(TaskId), Stop enum, one shared end_backing for cancel and abandon, rename SlotState to EntryState; one commit"
-    status: pending
+    status: completed
   - id: step6-admission
     content: "Step 6 (conditional): Admission owns the queues, spawn records, and slot state, reading the tree through ChainTree; ChainKind becomes Root, H1, Call { parent }, Task; one commit. If it can't pass the suites without changing admission order, revert it, finish at Step 5, and record it as deferred"
-    status: pending
+    status: completed
 isProject: false
 ---
 
