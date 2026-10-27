@@ -326,7 +326,7 @@ isProject: false
 
 <step-4>
 
-### Step 4: Tie the discovery tool ids to a reserved Pack
+### Step 4: Tie the discovery tool ids to a reserved Pack [completed]
 
 - Component: Scope types
 - Tests: run each from `c:\Users\Vinnie\cursor\runvil` in PowerShell, as written, after clearing `CARGO_BUILD_WARNINGS` and `RUSTDOCFLAGS` so each command sees only the variables it sets itself; each exits 0.

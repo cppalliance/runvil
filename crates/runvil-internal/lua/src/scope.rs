@@ -239,3 +239,7 @@ impl DiscoveryTool {
         DiscoveryTool::ALL.into_iter().find(|tool| tool.id() == id)
     }
 }
+
+#[cfg(test)]
+#[path = "scope-tests.rs"]
+mod tests;
