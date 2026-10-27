@@ -3,7 +3,8 @@
 //! admission against the next, a task holds a slot at its owner and every
 //! ancestor, a task wait gives those slots back and a timer-only wait keeps
 //! them, a call chain gives them back through its nearest holding ancestor,
-//! and a forgotten chain leaves admission.
+//! a forgotten chain leaves admission, and a pass that fails leaves
+//! admission as it found it.
 
 use std::num::NonZeroUsize;
 
@@ -257,4 +258,60 @@ fn a_resumption_whose_slots_belong_to_no_admitted_task_is_an_internal_error() {
         admission.plan(&tree.view()),
         Err(Error::Internal { .. })
     ));
+    assert!(admission.resuming.contains(&queued));
+}
+
+#[test]
+fn a_pass_that_fails_on_an_internal_error_leaves_admission_as_it_found_it() {
+    let mut tree = Tree::new();
+    let mut admission = Admission::default();
+    let root = tree.root(2);
+    let task = spawn(&mut admission, &mut tree, root);
+    let call = tree.call(root);
+    admission.enqueue_spawn(
+        call,
+        SpawnRecord {
+            input: None,
+            section: "not a task".to_owned(),
+        },
+    );
+    assert!(matches!(
+        admission.plan(&tree.view()),
+        Err(Error::Internal { .. })
+    ));
+    assert!(admission.is_queued(task));
+    assert!(!admission.holding.contains(&task));
+}
+
+#[test]
+fn a_pass_that_fails_after_admitting_a_resumption_leaves_its_slots_given_back() {
+    let mut tree = Tree::new();
+    let mut admission = Admission::default();
+    let root = tree.root(2);
+    let task = spawn(&mut admission, &mut tree, root);
+    assert_eq!(plan(&mut admission, &tree), [Admitted::Started(task)]);
+    let call = tree.call(task);
+    admission.park(call, &tree.view(), true);
+    assert!(admission.wake(call, &tree.view()));
+    let stray = tree.call(root);
+    admission.enqueue_spawn(
+        stray,
+        SpawnRecord {
+            input: None,
+            section: "not a task".to_owned(),
+        },
+    );
+    assert!(matches!(
+        admission.plan(&tree.view()),
+        Err(Error::Internal { .. })
+    ));
+    assert_eq!(admission.released.get(&call), Some(&task));
+    assert!(admission.resuming.contains(&call));
+    assert!(!admission.holding.contains(&task));
+    admission.forget(stray);
+    assert_eq!(
+        plan(&mut admission, &tree),
+        [Admitted::Resumed(call)],
+        "the failed pass reached the stray spawn after admitting the resumption"
+    );
 }

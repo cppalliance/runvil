@@ -157,18 +157,22 @@ impl Admission {
     ///
     /// # Errors
     /// Returns [`Error::Internal`] when a resumed chain's slots belong to
-    /// no admitted task, or a queued spawn is not a task chain.
+    /// no admitted task, or a queued spawn is not a task chain. A failed
+    /// pass leaves admission as it found it: both queues, the holders, and
+    /// the given-back slots.
     pub(super) fn plan(&mut self, tree: &ChainTree<'_>) -> Result<Vec<Admit>> {
         let mut admitted = Vec::new();
         if self.resuming.is_empty() && self.spawned.is_empty() {
             return Ok(admitted);
         }
-        let mut used = self.slots_in_use(tree);
-        let mut remaining = VecDeque::new();
-        for id in std::mem::take(&mut self.resuming) {
-            let holder = self.slot_holder(id);
+        let mut holding = self.holding.clone();
+        let mut released = self.released.clone();
+        let mut used = slots_in_use(&holding, tree);
+        let mut resuming = VecDeque::new();
+        for &id in &self.resuming {
+            let holder = slot_holder(&released, id);
             if !can_admit(&used, tree, holder) {
-                remaining.push_back(id);
+                resuming.push_back(id);
                 continue;
             }
             if !matches!(tree.kind(holder), ChainKind::Task) || self.is_queued(holder) {
@@ -176,44 +180,37 @@ impl Admission {
                     "a resumed chain's slots belong to an admitted task",
                 ));
             }
-            self.holding.insert(holder);
-            self.released.remove(&id);
+            holding.insert(holder);
+            released.remove(&id);
             count_slot(&mut used, tree, holder);
             admitted.push(Admit::Resumed(id));
         }
-        self.resuming = remaining;
-        let mut remaining = VecDeque::new();
-        for (id, record) in std::mem::take(&mut self.spawned) {
+        let mut starts = Vec::with_capacity(self.spawned.len());
+        for &(id, _) in &self.spawned {
             if !can_admit(&used, tree, id) {
-                remaining.push_back((id, record));
+                starts.push(false);
                 continue;
             }
             if !matches!(tree.kind(id), ChainKind::Task) {
                 return Err(Error::internal("a queued chain backs a task"));
             }
-            self.holding.insert(id);
+            holding.insert(id);
             count_slot(&mut used, tree, id);
-            admitted.push(Admit::Started(id, record));
+            starts.push(true);
         }
-        self.spawned = remaining;
+        let mut spawned = VecDeque::new();
+        for ((id, record), start) in std::mem::take(&mut self.spawned).into_iter().zip(starts) {
+            if start {
+                admitted.push(Admit::Started(id, record));
+            } else {
+                spawned.push_back((id, record));
+            }
+        }
+        self.resuming = resuming;
+        self.spawned = spawned;
+        self.holding = holding;
+        self.released = released;
         Ok(admitted)
-    }
-
-    /// The chain whose slots `id`'s resumption takes back: the holding
-    /// ancestor a parked call chain gave back, or the resumed task itself.
-    fn slot_holder(&self, id: ChainIndex) -> ChainIndex {
-        self.released.get(&id).copied().unwrap_or(id)
-    }
-
-    /// The admission slots in use at each chain, by arena index, counted
-    /// from the chains holding theirs: a chain's count is its own
-    /// children's and, transitively, every descendant's.
-    fn slots_in_use(&self, tree: &ChainTree<'_>) -> Vec<usize> {
-        let mut used = vec![0; tree.chains.len()];
-        for holder in &self.holding {
-            count_slot(&mut used, tree, *holder);
-        }
-        used
     }
 
     /// Parks `id` on a task wait. A wait that holds real tasks gives
@@ -287,6 +284,24 @@ impl Admission {
     pub(super) fn hold_for_test(&mut self, id: ChainIndex) {
         self.holding.insert(id);
     }
+}
+
+/// The chain whose slots `id`'s resumption takes back: the holding
+/// ancestor a parked call chain gave back, as `released` records it, or
+/// the resumed task itself.
+fn slot_holder(released: &HashMap<ChainIndex, ChainIndex>, id: ChainIndex) -> ChainIndex {
+    released.get(&id).copied().unwrap_or(id)
+}
+
+/// The admission slots in use at each chain, by arena index, counted
+/// from the task chains in `holding`: a chain's count is its own
+/// children's and, transitively, every descendant's.
+fn slots_in_use(holding: &HashSet<ChainIndex>, tree: &ChainTree<'_>) -> Vec<usize> {
+    let mut used = vec![0; tree.chains.len()];
+    for holder in holding {
+        count_slot(&mut used, tree, *holder);
+    }
+    used
 }
 
 /// Counts one slot the task chain `id` holds into `used`, at its owner

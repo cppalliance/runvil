@@ -267,7 +267,7 @@ isProject: false
 
 <step-2>
 
-### Step 2: Leave admission as it was when a pass fails
+### Step 2: Leave admission as it was when a pass fails [completed]
 
 - Component: Admission
 - Tests: run each from `c:\Users\Vinnie\cursor\runvil` in PowerShell, as written, after clearing `CARGO_BUILD_WARNINGS` and `RUSTDOCFLAGS` so each command sees only the variables it sets itself; each exits 0.
