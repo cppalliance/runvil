@@ -16,7 +16,7 @@ use serde_json::Value;
 
 mod scenario;
 
-pub(super) use scenario::{Prepared, Scenario};
+pub(super) use scenario::{Prepared, Scenario, Trace};
 
 pub(super) type TestResult<T = ()> = Result<T, Box<dyn Error>>;
 
