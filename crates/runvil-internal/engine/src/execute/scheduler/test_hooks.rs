@@ -18,8 +18,8 @@ use crate::{Error, Result};
 
 use super::chain::ChainStart;
 use super::chain_record::{Admission, CallDepth, ChainKind};
+use super::tasks::TaskBacking;
 pub(crate) use super::tasks::TaskState;
-use super::tasks::{SlotState, TaskBacking, TaskEntry};
 use super::{ChainIndex, Counters, Scheduler};
 
 impl Scheduler {
@@ -68,13 +68,9 @@ impl Scheduler {
                 .expect("the arena has room for the wedge");
             self.tasks.insert(
                 task,
-                TaskEntry {
-                    backing: TaskBacking::Chain { chain: wedge, exec },
-                    owner,
-                    target: "wedge".to_owned(),
-                    state: SlotState::Running,
-                    note: None,
-                },
+                TaskBacking::Chain { chain: wedge, exec },
+                owner,
+                "wedge".to_owned(),
             );
         }
     }
@@ -94,7 +90,7 @@ impl Scheduler {
     /// The state of one task's entry, or `None` when no task with that id
     /// was ever started, so a test can prove a chain's end moved its entry.
     pub(crate) fn task_state_for_test(&self, task: &TaskId) -> Option<TaskState> {
-        self.tasks.get(task).map(|slot| slot.state.view())
+        self.tasks.state_of(task)
     }
 
     /// The run's tool set: the Packs the prompt declares, the roster, the

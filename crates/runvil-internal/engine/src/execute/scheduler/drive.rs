@@ -115,7 +115,7 @@ impl Scheduler {
         // handles, a chat round's tool calls are checked against its
         // section's frozen sets, a timer's firing wakes its waiter, and a
         // fatal store conflict ends the run.
-        if let Err(error) = self.apply_answer(id, parked, answer) {
+        if let Err(error) = self.apply_answer(parked, answer) {
             self.end(Err(error));
         }
     }

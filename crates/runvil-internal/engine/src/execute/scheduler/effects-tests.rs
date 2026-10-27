@@ -32,7 +32,12 @@ fn timer() -> Effect {
 
 /// Issues a timer for `chain`: the simplest effect to build.
 fn issue_timer(table: &mut EffectTable, chain: ChainIndex) -> EffectId {
-    table.issue(chain, provenance(), timer(), Continuation::Timer)
+    table.issue(
+        chain,
+        provenance(),
+        timer(),
+        Continuation::Timer(TaskId::from(ChainId::root().child(0))),
+    )
 }
 
 /// Issues a script tool call for `chain` under a fresh identity and returns
@@ -67,7 +72,7 @@ fn an_issued_effect_is_awaited_until_its_one_answer_arrives() {
         panic!("the first answer finds its chain awaiting it");
     };
     assert_eq!(pending.chain, chain(3));
-    assert!(matches!(pending.resume, Continuation::Timer));
+    assert!(matches!(pending.resume, Continuation::Timer(_)));
     assert!(!table.has_awaited());
     assert!(table.all_answered());
 }

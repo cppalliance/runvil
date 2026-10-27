@@ -35,12 +35,12 @@
 //! path ([`SectionPos`](crate::heading_address::SectionPos)) rather than by
 //! borrow, and the scheduler owns itself outright.
 //!
-//! This file holds the scheduler core: the ready queue, the admission
+//! This file holds the scheduler core: the ready queue and the admission
 //! queues (resumed chains, admitted first, and fresh spawns, which wait
-//! there until the run's concurrency limits admit them), and the task
-//! arena. The core owns two sub-objects that each hold their state and
-//! enforce their own rules, and neither writes the other: the chain arena
-//! and the effect table. A request that touches only its own chain runs
+//! there until the run's concurrency limits admit them). The core owns
+//! three sub-objects that each hold their state and enforce their own
+//! rules, and none writes another: the chain arena, the effect table, and
+//! the task arena. A request that touches only its own chain runs
 //! in a view of that chain, which borrows the chain, the effect table, and
 //! the run context and nothing else, and holds the one `issue` path every
 //! leaf arm hands its effect through; the core keeps every request that
@@ -84,11 +84,10 @@ mod tool_call;
 mod waits;
 mod walk;
 
-use std::collections::{BTreeMap, VecDeque};
+use std::collections::VecDeque;
 use std::sync::Arc;
 
 use runvil_types::event::lifecycle;
-use runvil_types::ids::TaskId;
 use runvil_vfs::Origin;
 use runvil_vfs::detail::ScopeHandle;
 
@@ -97,11 +96,11 @@ use crate::parser::{Block, Prompt};
 use crate::{Error, Result};
 
 use super::context::RunState;
-use super::run::{EffectAnswer, EffectId};
+use super::run::EffectAnswer;
 use chain_ops::ChainOps;
 use chain_record::{Chain, ChainArena, ChainIndex, ChatAnchor, Counters};
 use effects::{CallSite, Continuation, EffectTable, Pending, ToolCallContinuation};
-use tasks::TaskEntry;
+use tasks::TaskArena;
 
 /// The deepest nesting a chain may run at, counting `call` children and
 /// spawned tasks, fanout arms included; the first level counts.
@@ -191,10 +190,8 @@ pub(crate) struct Scheduler {
     /// it holds the terminal state and the undelivered outcome at least
     /// until the owner takes the result or ends, and in fact for the run -
     /// the arena is append-only like the chain arena, so `status` can report
-    /// a terminal state at any later time. Ids order as paths, and one
-    /// owner's tasks are its direct children, so one owner's entries iterate
-    /// in spawn order.
-    tasks: BTreeMap<TaskId, TaskEntry>,
+    /// a terminal state at any later time.
+    tasks: TaskArena,
     /// Where the step loop stands: not started, running, ending with the
     /// outcome held until the orphans are answered, or done.
     phase: Phase,
@@ -226,7 +223,7 @@ impl Scheduler {
             resuming: VecDeque::new(),
             spawned: VecDeque::new(),
             effects: EffectTable::default(),
-            tasks: BTreeMap::new(),
+            tasks: TaskArena::default(),
             phase: Phase::Fresh,
             scope: None,
         }

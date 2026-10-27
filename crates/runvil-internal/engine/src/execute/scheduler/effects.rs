@@ -22,7 +22,7 @@
 use std::collections::HashMap;
 
 use runvil_types::event::ReplyOrigin;
-use runvil_types::ids::{Provenance, RoundId};
+use runvil_types::ids::{Provenance, RoundId, TaskId};
 use runvil_vfs::ExecId;
 
 use crate::execute::run::{Effect, EffectId, IssuedEffect, Round};
@@ -61,10 +61,10 @@ pub(super) enum Continuation {
     /// failure's model-facing message, and its determinism classification
     /// render under the call surface the author used.
     Vfs(VfsOp),
-    /// The internal timer behind a timed wait: the firing completes the
-    /// task entry backed by the effect and wakes its waiting owner; no chain
-    /// resumes.
-    Timer,
+    /// The internal timer behind a timed wait, naming the timer's task: the
+    /// firing completes that task's entry and wakes its waiting owner; no
+    /// chain resumes.
+    Timer(TaskId),
 }
 
 /// What a bound `tool_call`'s answer is applied with: the binding the call

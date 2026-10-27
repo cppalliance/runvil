@@ -15,12 +15,12 @@
 use std::sync::Arc;
 
 use runvil_types::event::Event;
-use runvil_types::ids::{AbandonReason, TaskId};
+use runvil_types::ids::{AbandonReason, Provenance, TaskId};
 use runvil_vfs::Access;
 
 use crate::{Error, Result};
 
-use super::tasks::{SlotState, TaskBacking};
+use super::tasks::{Stop, TaskBacking};
 use super::{ChainIndex, Scheduler};
 
 impl Scheduler {
@@ -31,21 +31,21 @@ impl Scheduler {
     /// holds the outcome until a wait takes it.
     ///
     /// # Errors
-    /// Returns [`Error::Internal`] when the chain has no entry - every task
-    /// chain registers its entry before it is enqueued - or when the woken
-    /// owner has no suspended block.
+    /// Returns [`Error::Internal`] when the chain has no live entry - every
+    /// task chain registers its entry before it is enqueued, and a stopped
+    /// task's chain is aborted before it can end - or when the woken owner
+    /// has no suspended block.
     pub(super) fn complete_task(&mut self, id: ChainIndex, outcome: Result<String>) -> Result<()> {
         let chain = &self.chains[id];
         let task = chain.task.clone();
         // The terminal is the task's own last word, stamped with its task.
         let emitter = Arc::clone(chain.ctx.emitter());
-        let Some(slot) = self.tasks.get_mut(&task) else {
+        let succeeded = outcome.is_ok();
+        let Some(entry) = self.tasks.complete(&task, outcome) else {
             return Err(Error::internal("a task chain's end implies its entry"));
         };
-        let succeeded = outcome.is_ok();
-        slot.state = SlotState::Done(outcome);
-        let owner = slot.owner;
-        emitter.emit(&slot.target, |execution, section, provenance| {
+        let owner = entry.owner;
+        emitter.emit(&entry.target, |execution, section, provenance| {
             let task = task.clone();
             if succeeded {
                 Event::TaskSucceeded {
@@ -95,8 +95,7 @@ impl Scheduler {
     /// owner's next step. A timer (no identity) and an owner already
     /// ended (no access) need no join.
     pub(super) fn join_task(&self, owner: ChainIndex, task: &TaskId) {
-        let Some(TaskBacking::Chain { exec, .. }) = self.tasks.get(task).map(|slot| slot.backing)
-        else {
+        let Some(exec) = self.tasks.exec_of(task) else {
             return;
         };
         let Ok(access) = self.chains[owner].access() else {
@@ -109,15 +108,7 @@ impl Scheduler {
     /// so the chain's own final clock transitively covers everything its
     /// tasks did even when no wait delivered them.
     pub(super) fn join_owned_tasks(&self, owner: ChainIndex, access: &Access) {
-        let execs = self
-            .tasks
-            .values()
-            .filter(|slot| slot.owner == owner)
-            .filter_map(|slot| match slot.backing {
-                TaskBacking::Chain { exec, .. } => Some(exec),
-                TaskBacking::Effect(_) => None,
-            });
-        for exec in execs {
+        for exec in self.tasks.execs_owned_by(owner) {
             runvil_vfs::detail::access_join(access, exec);
         }
     }
@@ -138,36 +129,13 @@ impl Scheduler {
         owner: ChainIndex,
         reason: AbandonReason,
     ) -> Vec<TaskId> {
-        let live: Vec<(TaskId, TaskBacking, String)> = self
-            .tasks
-            .iter()
-            .filter(|(_, slot)| slot.owner == owner && slot.state.is_live())
-            .map(|(task, slot)| (task.clone(), slot.backing, slot.target.clone()))
-            .collect();
         let mut leaked = Vec::new();
-        for (task, backing, target) in live {
-            if let Some(slot) = self.tasks.get_mut(&task) {
-                slot.state = SlotState::Abandoned;
-            }
-            // The backing ends first, so anything it owned reports before
-            // the task's own terminal event, which is the last word on it.
-            let backing_chain = match backing {
-                TaskBacking::Chain { chain, .. } => chain,
-                TaskBacking::Effect(effect) => {
-                    self.abort_effect(effect);
-                    continue;
-                }
+        for task in self.tasks.live_with_timers(owner) {
+            let Some((backing, target)) = self.tasks.stop(&task, Stop::Abandoned) else {
+                continue;
             };
-            // The terminal is stamped with the abandoned task's own
-            // provenance: its backing chain's emitter, taken before the
-            // abort clears the chain's state. A task that was never
-            // admitted (still queued for a slot) has no start event, so
-            // it reports no terminal either.
-            let admitted = self.chains[backing_chain].kind.admitted();
-            let emitter = Arc::clone(self.chains[backing_chain].ctx.emitter());
-            self.abort_subtree(backing_chain);
-            if admitted {
-                emitter.emit(&target, |execution, section, provenance| {
+            let chain_backed =
+                self.end_backing(backing, &target, |execution, section, provenance| {
                     Event::TaskAbandoned {
                         execution,
                         section,
@@ -176,12 +144,46 @@ impl Scheduler {
                         reason,
                     }
                 });
+            if chain_backed {
+                leaked.push(task);
             }
-            leaked.push(task);
         }
         // The abandoned tasks' slots are free: the drain admits the
         // queued chains that now fit at its next edge.
         leaked
+    }
+
+    /// Ends the backing of a task the arena just stopped, the one path a
+    /// cancel and an abandonment share: an internal timer's effect is
+    /// aborted and reports nothing; a chain aborts with everything it owns,
+    /// then `terminal` fires under `target`. The backing ends first, so
+    /// anything it owned reports before the task's own terminal event,
+    /// which is the last word on it. Returns whether the backing was a
+    /// chain.
+    pub(super) fn end_backing(
+        &mut self,
+        backing: TaskBacking,
+        target: &str,
+        terminal: impl FnOnce(String, String, Provenance) -> Event,
+    ) -> bool {
+        let chain = match backing {
+            TaskBacking::Chain { chain, .. } => chain,
+            TaskBacking::Effect(effect) => {
+                self.abort_effect(effect);
+                return false;
+            }
+        };
+        // The terminal is stamped with the stopped task's own provenance:
+        // its backing chain's emitter, taken before the abort clears the
+        // chain's state. A task that was never admitted (still queued for
+        // a slot) has no start event, so it reports no terminal either.
+        let admitted = self.chains[chain].kind.admitted();
+        let emitter = Arc::clone(self.chains[chain].ctx.emitter());
+        self.abort_subtree(chain);
+        if admitted {
+            emitter.emit(target, terminal);
+        }
+        true
     }
 
     /// Ends every live task in the arena because the run itself is ending:
@@ -196,15 +198,7 @@ impl Scheduler {
     /// `is_live()` skips it. The leaked list is discarded: no one
     /// receives an outcome for a run that is ending.
     pub(super) fn settle_all_tasks(&mut self, reason: AbandonReason) {
-        let mut owners: Vec<ChainIndex> = self
-            .tasks
-            .values()
-            .filter(|slot| slot.state.is_live())
-            .map(|slot| slot.owner)
-            .collect();
-        owners.sort_unstable_by_key(|owner| owner.index());
-        owners.dedup();
-        for owner in owners {
+        for owner in self.tasks.live_owners() {
             self.abandon_owned_tasks(owner, reason);
         }
     }
@@ -218,11 +212,7 @@ impl Scheduler {
     /// hold count against the walk from here, under the limit the walk
     /// inherited from the pass.
     pub(super) fn reassign_tasks(&mut self, from: ChainIndex, to: ChainIndex) {
-        for slot in self.tasks.values_mut() {
-            if slot.owner == from {
-                slot.owner = to;
-            }
-        }
+        self.tasks.reassign(from, to);
         // An effect-backed task's effect is awaited under its owner in the
         // effect table; the pass awaits no effect of its own at the
         // hand-off, so every effect-table entry under it is such a task's.

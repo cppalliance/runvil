@@ -30,7 +30,7 @@ impl Scheduler {
     pub(super) fn enclosing(&self, id: ChainIndex) -> Option<ChainIndex> {
         let chain = &self.chains[id];
         match chain.kind {
-            ChainKind::Task { .. } => self.tasks.get(&chain.task).map(|slot| slot.owner),
+            ChainKind::Task { .. } => self.tasks.owner_of(&chain.task),
             ChainKind::Call { parent, .. } => Some(parent),
             ChainKind::Root | ChainKind::H1 => None,
         }
@@ -190,11 +190,12 @@ impl Scheduler {
         let item = chain.seed.item.clone();
         let index = chain.seed.index;
         let var = chain.var.clone();
-        let Some(slot) = self.tasks.get(&task) else {
+        let (Some(owner), Some(target)) = (self.tasks.owner_of(&task), self.tasks.target_of(&task))
+        else {
             return Err(Error::internal("a task chain has an entry"));
         };
-        let target = slot.target.clone();
-        let emitter = Arc::clone(self.chains[slot.owner].ctx.emitter());
+        let target = target.to_owned();
+        let emitter = Arc::clone(self.chains[owner].ctx.emitter());
         // The start event fires at admission, on its owner's sequence:
         // the task first runs now, and the payload's seeds are enough to
         // start the same chain again under the same id.
@@ -225,10 +226,11 @@ impl Scheduler {
     /// holding ancestor, and the main walk holds no slots to give.
     pub(super) fn park_wait(&mut self, id: ChainIndex) {
         let chain = &self.chains[id];
+        // Only a chain-backed task has an identity; a timer has none.
         let waits_on_tasks = chain
             .wait_set()
             .iter()
-            .any(|task| self.tasks.get(task).is_some_and(|slot| !slot.is_internal()));
+            .any(|task| self.tasks.exec_of(task).is_some());
         if !waits_on_tasks {
             return;
         }

@@ -25,11 +25,11 @@ use std::time::Duration;
 
 use runvil_types::ids::TaskId;
 
-use crate::execute::run::{Effect, EffectId};
+use crate::execute::run::Effect;
 use crate::lua::Answer;
 use crate::{Error, Result};
 
-use super::tasks::{SlotState, TaskBacking, TaskEntry};
+use super::tasks::TaskBacking;
 use super::{ChainIndex, Continuation, Scheduler};
 
 impl Scheduler {
@@ -47,42 +47,36 @@ impl Scheduler {
     fn prepare_timer(&mut self, id: ChainIndex, duration: Duration) -> Result<TaskId> {
         let task = TaskId::from(self.chains[id].next_child_id()?);
         let effect = self.with_chain(id, |ops| {
-            ops.issue(Effect::Timer { duration }, Continuation::Timer)
+            ops.issue(
+                Effect::Timer { duration },
+                Continuation::Timer(task.clone()),
+            )
         });
         self.tasks.insert(
             task.clone(),
-            TaskEntry {
-                backing: TaskBacking::Effect(effect),
-                owner: id,
-                target: "timer".to_owned(),
-                state: SlotState::Running,
-                note: None,
-            },
+            TaskBacking::Effect(effect),
+            id,
+            "timer".to_owned(),
         );
         Ok(task)
     }
 
-    /// Applies a timer's firing: the entry backed by `effect` moves to
-    /// `Done` with an empty outcome and its owner is woken if it is parked
-    /// on a set containing the timer. Otherwise the entry holds until the
-    /// owner's next wait delivers it - the shim's `join` rounds may
-    /// be between waits when the timer fires.
+    /// Applies a timer's firing: `task`'s entry moves to `Done` with an
+    /// empty outcome and its owner is woken if it is parked on a set
+    /// containing the timer. Otherwise the entry holds until the owner's
+    /// next wait delivers it - the shim's `join` rounds may be between
+    /// waits when the timer fires.
     ///
     /// # Errors
-    /// Returns [`Error::Internal`] when no live entry is backed by
-    /// `effect` - a cancelled or abandoned timer's effect is aborted and
-    /// its late firing discarded before it reaches here - or when the
-    /// woken owner has no suspended block.
-    pub(super) fn fire_timer(&mut self, effect: EffectId) -> Result<()> {
-        let Some((task, slot)) = self
-            .tasks
-            .iter_mut()
-            .find(|(_, slot)| slot.backing == TaskBacking::Effect(effect) && slot.state.is_live())
-        else {
+    /// Returns [`Error::Internal`] when `task`'s entry isn't live - a
+    /// cancelled or abandoned timer's effect is aborted and its late firing
+    /// discarded before it reaches here - or when the woken owner has no
+    /// suspended block.
+    pub(super) fn fire_timer(&mut self, task: &TaskId) -> Result<()> {
+        let Some(entry) = self.tasks.complete(task, Ok(String::new())) else {
             return Err(Error::internal("a fired timer has a live entry"));
         };
-        slot.state = SlotState::Done(Ok(String::new()));
-        let (task, owner) = (task.clone(), slot.owner);
-        self.wake_waiter(owner, &task)
+        let owner = entry.owner;
+        self.wake_waiter(owner, task)
     }
 }
