@@ -21,7 +21,7 @@ use runvil_vfs::Access;
 use crate::{Error, Result};
 
 use super::tasks::{SlotState, TaskBacking};
-use super::{ChainIndex, Outstanding, Scheduler};
+use super::{ChainIndex, Scheduler};
 
 impl Scheduler {
     /// Applies a task chain's end to its entry: the outcome lands in the
@@ -35,7 +35,7 @@ impl Scheduler {
     /// chain registers its entry before it is enqueued - or when the woken
     /// owner has no suspended block.
     pub(super) fn complete_task(&mut self, id: ChainIndex, outcome: Result<String>) -> Result<()> {
-        let chain = &self.chains[id.index()];
+        let chain = &self.chains[id];
         let task = chain.task.clone();
         // The terminal is the task's own last word, stamped with its task.
         let emitter = Arc::clone(chain.ctx.emitter());
@@ -99,7 +99,7 @@ impl Scheduler {
         else {
             return;
         };
-        let Ok(access) = self.chains[owner.index()].access() else {
+        let Ok(access) = self.chains[owner].access() else {
             return;
         };
         runvil_vfs::detail::access_join(access, exec);
@@ -163,8 +163,8 @@ impl Scheduler {
             // abort clears the chain's state. A task that was never
             // admitted (still queued for a slot) has no start event, so
             // it reports no terminal either.
-            let admitted = self.chains[backing_chain.index()].kind.admitted();
-            let emitter = Arc::clone(self.chains[backing_chain.index()].ctx.emitter());
+            let admitted = self.chains[backing_chain].kind.admitted();
+            let emitter = Arc::clone(self.chains[backing_chain].ctx.emitter());
             self.abort_subtree(backing_chain);
             if admitted {
                 emitter.emit(&target, |execution, section, provenance| {
@@ -223,15 +223,9 @@ impl Scheduler {
                 slot.owner = to;
             }
         }
-        // An effect-backed task's effect is parked under its owner in the
-        // effect table; the pass has no parked effect of its own at the
+        // An effect-backed task's effect is awaited under its owner in the
+        // effect table; the pass awaits no effect of its own at the
         // hand-off, so every effect-table entry under it is such a task's.
-        for entry in self.outstanding.values_mut() {
-            if let Outstanding::Parked(parked) = entry
-                && parked.chain == from
-            {
-                parked.chain = to;
-            }
-        }
+        self.effects.reassign(from, to);
     }
 }

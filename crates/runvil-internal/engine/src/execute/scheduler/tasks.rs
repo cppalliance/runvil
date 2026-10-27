@@ -205,7 +205,7 @@ impl Scheduler {
         var: serde_json::Value,
         via: SpawnVia,
     ) -> Result<(TaskId, ChainIndex)> {
-        let chain = &self.chains[id.index()];
+        let chain = &self.chains[id];
         let depth = chain.call_depth.deeper(match via {
             SpawnVia::Fanout => DepthVia::Fanout,
             SpawnVia::Spawn => DepthVia::Call,
@@ -258,7 +258,7 @@ impl Scheduler {
         // `call` children and the wait shims' timers, so it depends only on
         // the spawner's own dispatch order; the task is its chain, named
         // from the other side.
-        let chain_id = self.allocate_child_id(id)?;
+        let chain_id = self.chains[id].next_child_id()?;
         let task = TaskId::from(chain_id.clone());
         // The task's context reports under its own task id with its own
         // turn counter, so its events report its provenance and its turn
@@ -282,7 +282,7 @@ impl Scheduler {
             call_depth: depth,
             concurrency: child_concurrency,
         })?;
-        let spawned = &mut self.chains[child.index()];
+        let spawned = &mut self.chains[child];
         spawned.seed = seed;
         // `blocked` reads `queued` in `tasks.status` while the entry's
         // state is still `Running`.

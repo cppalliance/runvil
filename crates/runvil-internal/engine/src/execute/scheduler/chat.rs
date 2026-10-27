@@ -101,7 +101,7 @@ impl Scheduler {
         if messages.is_empty() {
             return Err(Error::lua_message("messages must not be empty"));
         }
-        let chain = &self.chains[id.index()];
+        let chain = &self.chains[id];
         let section = chain.section_name().to_owned();
         let frame = chain.frame()?;
         let vm = frame.vm()?;
@@ -159,7 +159,7 @@ impl Scheduler {
         };
         let context = binding.context();
         let reserve = output_reserve(context, binding.invocation().max_tokens);
-        let chain = &mut self.chains[id.index()];
+        let chain = &mut self.chains[id];
         // The pre-dispatch precheck: a request that leaves the reply no
         // room never leaves. The refusal is the round's answer - the
         // overflow flag - and is observed as a failed turn, exactly as the
@@ -222,7 +222,7 @@ impl Scheduler {
         id: ChainIndex,
         rendered: Vec<PackToolSets<ToolInfo>>,
     ) -> Result<MessageList> {
-        let chain = &self.chains[id.index()];
+        let chain = &self.chains[id];
         let frame = chain.frame()?;
         let vm = frame.vm()?;
         let set = chain.ctx.tool_set();
@@ -263,7 +263,7 @@ impl Scheduler {
         round: RoundId,
         result: Result<Box<Completion>>,
     ) -> Result<Answer<Error>> {
-        let chain = &self.chains[id.index()];
+        let chain = &self.chains[id];
         let round = ArrivedRound {
             id: round,
             section: chain.section_name().to_owned(),
@@ -273,7 +273,7 @@ impl Scheduler {
             Ok(completion) => completion,
             Err(error) => {
                 let failure = round.failed(error);
-                self.chains[id.index()].anchor.settle(None);
+                self.chains[id].anchor.settle(None);
                 return Ok(Answer::Chat(failure));
             }
         };
@@ -306,7 +306,7 @@ impl Scheduler {
             .metrics
             .as_ref()
             .and_then(|metrics| metrics.usage.as_ref());
-        self.chains[id.index()].anchor.settle(usage);
+        self.chains[id].anchor.settle(usage);
         Ok(Answer::Chat(result.map(Box::new)))
     }
 }

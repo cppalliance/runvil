@@ -67,7 +67,7 @@ impl Scheduler {
     /// open, or [`Error::Internal`] when an arm's answer finds no suspended
     /// block to take it.
     pub(super) fn dispatch(&mut self, id: ChainIndex, request: Request) -> Result<()> {
-        self.chains[id.index()].parked = parked_on(&request);
+        self.chains[id].parked = parked_on(&request);
         match request {
             Request::Infer { prompt, binding } => self.dispatch_infer(id, &prompt, binding),
             Request::Call { target, input, var } => {
@@ -134,7 +134,7 @@ impl Scheduler {
         prompt: &str,
         binding: Option<ModelBinding>,
     ) -> Result<()> {
-        let chain = &self.chains[id.index()];
+        let chain = &self.chains[id];
         let binding = if let Some(binding) = binding {
             binding
         } else {
@@ -175,7 +175,7 @@ impl Scheduler {
     /// when the handle the chain's access came from declares no store,
     /// which the run's start probe already ruled out.
     fn dispatch_vfs(&mut self, id: ChainIndex, op: VfsOp) -> Result<()> {
-        let access = Arc::clone(self.chains[id.index()].access()?);
+        let access = Arc::clone(self.chains[id].access()?);
         let view = Arc::new(runvil_vfs::detail::store_view(&access).map_err(Error::store)?);
         let effect = Effect::Vfs {
             access: view,
@@ -216,7 +216,7 @@ impl Scheduler {
         input: Option<&str>,
         var: &serde_json::Value,
     ) -> Result<ChainIndex> {
-        let chain = &self.chains[id.index()];
+        let chain = &self.chains[id];
         let depth = chain.call_depth.deeper(DepthVia::Call)?;
         // An explicit input forks the chain's args (and `argv` re-derives
         // from them); a no-input call inherits the caller's context whole,
@@ -240,7 +240,7 @@ impl Scheduler {
         // spawned tasks, and the wait shims' timers share the caller's
         // counter, so the id depends only on the caller's own dispatch
         // order.
-        let chain_id = self.allocate_child_id(id)?;
+        let chain_id = self.chains[id].next_child_id()?;
         self.start_chain(ChainStart {
             lineage: chain_id,
             counters: Counters::default(),

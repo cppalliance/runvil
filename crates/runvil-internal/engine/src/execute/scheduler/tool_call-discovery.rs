@@ -82,7 +82,7 @@ impl Scheduler {
         site: CallSite,
     ) -> Result<Dispatched> {
         let tool = DiscoveryTool::of(binding.id());
-        let frozen = self.chains[id.index()]
+        let frozen = self.chains[id]
             .frame()?
             .vm()?
             .rendered_tools()
@@ -115,7 +115,7 @@ impl Scheduler {
         counts.ensure(counted)?;
         counts.increment(counted)?;
         let turn = self.call_turn(id, &site);
-        let chain = &self.chains[id.index()];
+        let chain = &self.chains[id];
         let text = match trust {
             OutputTrust::Trusted => text,
             _ => chain.ctx.nonce().wrap(&text),
@@ -148,7 +148,7 @@ impl Scheduler {
         args: Value,
         site: CallSite,
     ) -> Result<Dispatched> {
-        let adhoc = self.chains[id.index()]
+        let adhoc = self.chains[id]
             .frame()?
             .vm()?
             .adhoc_tools()

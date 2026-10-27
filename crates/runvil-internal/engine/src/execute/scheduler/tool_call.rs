@@ -159,7 +159,7 @@ impl Scheduler {
                 }
             }
         }
-        self.chains[id.index()].parked = Some(Parked::Batch(batch));
+        self.chains[id].parked = Some(Parked::Batch(batch));
         self.answer_full_batch(id)
     }
 
@@ -176,7 +176,7 @@ impl Scheduler {
     /// Returns [`Error::UnboundToolCall`] for a name that resolves to no
     /// tool.
     fn tool_route(&self, id: ChainIndex, name: &str, site: &CallSite) -> Result<ToolRoute> {
-        let chain = &self.chains[id.index()];
+        let chain = &self.chains[id];
         let vm = chain.frame()?.vm()?;
         let tool_set = chain.ctx.tool_set();
         if site.call_id().is_some() {
@@ -206,7 +206,7 @@ impl Scheduler {
     /// counter at dispatch.
     fn call_turn(&self, id: ChainIndex, site: &CallSite) -> u32 {
         site.turn()
-            .unwrap_or_else(|| self.chains[id.index()].ctx.turns().load(Ordering::Relaxed))
+            .unwrap_or_else(|| self.chains[id].ctx.turns().load(Ordering::Relaxed))
     }
 
     /// The chain's section's tool-call counts, which the section's first
@@ -215,7 +215,7 @@ impl Scheduler {
     /// once the section froze them, with both discovery tools' ids when
     /// they are rendered, and from its live offers of both kinds before.
     fn section_call_counts(&mut self, id: ChainIndex) -> Result<ToolCallCounts> {
-        let chain = &mut self.chains[id.index()];
+        let chain = &mut self.chains[id];
         let vm = chain.frame()?.vm()?;
         let tool_set = chain.ctx.tool_set();
         let ids = if let Some(frozen) = vm.rendered_ids() {
@@ -282,7 +282,7 @@ impl Scheduler {
                 "a batched call lands as plain text or a failure",
             )),
         };
-        let open = match &mut self.chains[id.index()].parked {
+        let open = match &mut self.chains[id].parked {
             Some(Parked::Batch(batch)) => batch.get_mut(slot).filter(|open| open.is_none()),
             _ => None,
         }
@@ -296,7 +296,7 @@ impl Scheduler {
     /// Answers the chain parked on a batch once no slot is open: every
     /// text in call order, or the first failure in call order.
     fn answer_full_batch(&mut self, id: ChainIndex) -> Result<()> {
-        let Some(Parked::Batch(batch)) = &mut self.chains[id.index()].parked else {
+        let Some(Parked::Batch(batch)) = &mut self.chains[id].parked else {
             return Ok(());
         };
         if batch.iter().any(Option::is_none) {
@@ -365,7 +365,7 @@ impl Scheduler {
         counts.ensure(&counted)?;
         counts.increment(&counted)?;
         let prompt = self.prompt();
-        let chain = &self.chains[id.index()];
+        let chain = &self.chains[id];
         let frame = chain.frame()?;
         // The list's last send is the requesting round's: a section runs
         // one loop at a time, so no other round commits to the list

@@ -228,7 +228,7 @@ impl Scheduler {
         let Some(scope) = &self.scope else {
             return;
         };
-        let owner = self.chains[chain.index()]
+        let owner = self.chains[chain]
             .access()
             .ok()
             .map(|access| detail::access_id(access));
@@ -244,7 +244,7 @@ impl Scheduler {
         round: RoundId,
         result: std::result::Result<Box<Completion>, CompletionError>,
     ) -> Result<String> {
-        let chain = &self.chains[chain.index()];
+        let chain = &self.chains[chain];
         accept_infer(
             result,
             round,
@@ -268,7 +268,7 @@ impl Scheduler {
         call: &ToolCallContinuation,
         result: std::result::Result<ToolOutput, ToolError>,
     ) -> Result<ToolCallOutcome> {
-        let chain = &mut self.chains[chain.index()];
+        let chain = &mut self.chains[chain];
         // The shared dispatch body reports through this chain's emitter, so
         // its reports land in the buffer under this chain's task.
         let emitter = chain.ctx.emitter();
@@ -334,7 +334,7 @@ impl Scheduler {
         op: &VfsOp,
         result: std::result::Result<VfsOutcome, VfsError>,
     ) -> Result<VfsOutcome> {
-        let chain = &self.chains[chain.index()];
+        let chain = &self.chains[chain];
         if let Some((succeeded, failed)) = vfs_observations(op) {
             chain.ctx.emitter().report(
                 chain.section_name(),
@@ -362,7 +362,7 @@ impl Scheduler {
         };
         slot.state = SlotState::Cancelled;
         let (task, owner) = (task.clone(), slot.owner);
-        if self.ctx.cancel().is_cancelled() || !self.chains[owner.index()].end_wait_for(&task) {
+        if self.ctx.cancel().is_cancelled() || !self.chains[owner].end_wait_for(&task) {
             return Ok(());
         }
         self.wake_from_wait(owner, Answer::JoinAny(Err(Error::Interrupted)))

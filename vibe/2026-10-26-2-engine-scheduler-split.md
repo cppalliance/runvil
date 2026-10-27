@@ -521,7 +521,7 @@ Suites to watch: `execute/tests/scheduler/walk/`, `execute/tests/scheduler/h1.rs
 
 <step-3>
 
-### Step 3: Extract the effect table and the chain arena
+### Step 3: Extract the effect table and the chain arena [completed]
 
 - Component: effect and chain owners
 - Tests: run each from the runvil root in PowerShell, as written:

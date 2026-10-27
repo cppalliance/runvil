@@ -10,10 +10,10 @@
 //! and moves between threads between calls.
 //!
 //! The loop is `resume -> match request -> dispatch -> resume with answer`.
-//! A chain whose coroutine yields a leaf request (`infer`) is parked in the
-//! effect table while its [`Effect`] is out with the caller: the arm builds
-//! the effect as a value, `issue` stamps it with the chain's task
-//! provenance and queues it for the step's return, and `apply_answer`
+//! A chain whose coroutine yields a leaf request (`infer`) awaits its
+//! answer in the effect table while its [`Effect`] is out with the caller:
+//! the arm builds the effect as a value, `issue` stamps it with the chain's
+//! task provenance and queues it for the step's return, and `apply_answer`
 //! turns the caller's answer into the chain's protocol answer on the
 //! caller's thread, emitting the round's events there. A chain that
 //! yields a structural request (`call`) blocks while its child chain runs,
@@ -34,19 +34,20 @@
 //! path ([`SectionPos`](crate::heading_address::SectionPos)) rather than by
 //! borrow, and the scheduler owns itself outright.
 //!
-//! This file holds the scheduler core: the chain arena, the ready queue,
-//! the admission queues (resumed chains, admitted first, and fresh spawns,
-//! which wait there until the run's concurrency limits admit them), the
-//! effect table, the task arena, and the one `issue` path every leaf arm
-//! hands its effect through. The
-//! submodules hold the rest: `pending` the effect table's entry (the
-//! `Continuation` an answer is applied by), `drive` the run-level step (the
-//! ready-queue drain, the terminal rules, and the teardown), `apply` the
-//! answer application, `chain` the chain lifecycle (arena insertion and the
-//! two chain-end paths), `chain_record` the chain record the arena holds,
-//! `step` one chain's step to its next suspension point, `walk` the section
-//! walk rules, `h1` the H1 pass and its hand-off to the walk,
-//! `dispatch` the request arms, `chat` the one-round `chat` arm and its
+//! This file holds the scheduler core: the ready queue, the admission
+//! queues (resumed chains, admitted first, and fresh spawns, which wait
+//! there until the run's concurrency limits admit them), the task arena,
+//! and the one `issue` path every leaf arm hands its effect through. The
+//! core owns two sub-objects that each hold their state and enforce their
+//! own rules, and neither writes the other: the chain arena and the effect
+//! table. The submodules hold the rest: `effects` the effect table and its
+//! entries (the `Continuation` an answer is applied by), `drive` the
+//! run-level step (the ready-queue drain, the terminal rules, and the
+//! teardown), `apply` the answer application, `chain` the chain lifecycle
+//! (chain start and the two chain-end paths), `chain_record` the chain
+//! record and the arena that holds it, `step` one chain's step to its next
+//! suspension point, `walk` the section walk rules, `h1` the H1 pass and
+//! its hand-off to the walk, `dispatch` the request arms, `chat` the one-round `chat` arm and its
 //! answer application, `tool_call` the script and model-issued `tool_call`
 //! arm (the two arms the section-visible `models.loop` shim drives),
 //! `tasks` the task arena and the `spawn` arm, `admission` the admission
@@ -65,8 +66,8 @@ mod chain_record;
 mod chat;
 mod dispatch;
 mod drive;
+mod effects;
 mod h1;
-mod pending;
 mod step;
 mod task_end;
 mod tasks;
@@ -77,11 +78,11 @@ mod tool_call;
 mod waits;
 mod walk;
 
-use std::collections::{BTreeMap, HashMap, VecDeque};
+use std::collections::{BTreeMap, VecDeque};
 use std::sync::Arc;
 
 use runvil_types::event::{ReplyOrigin, lifecycle};
-use runvil_types::ids::{RoundId, TaskId};
+use runvil_types::ids::TaskId;
 use runvil_vfs::Origin;
 use runvil_vfs::detail::ScopeHandle;
 
@@ -90,18 +91,14 @@ use crate::parser::{Block, Prompt};
 use crate::{Error, Result};
 
 use super::context::RunState;
-use super::run::{Effect, EffectAnswer, EffectId, IssuedEffect, Round};
-use chain_record::{Chain, ChatAnchor};
-use pending::{CallSite, Continuation, Outstanding, Pending, ToolCallContinuation};
+use super::run::{Effect, EffectAnswer, EffectId, Round};
+use chain_record::{Chain, ChainArena, ChainIndex, ChatAnchor, Counters};
+use effects::{CallSite, Continuation, EffectTable, Pending, ToolCallContinuation};
 use tasks::TaskEntry;
 
 /// The deepest nesting a chain may run at, counting `call` children and
 /// spawned tasks, fanout arms included; the first level counts.
 const MAX_CALL_DEPTH: usize = 8;
-
-/// The most chains one run may start: the arena indexes chains by `u32`,
-/// so the count is bounded by the index space.
-const MAX_CHAINS: usize = u32::MAX as usize;
 
 /// The run's final result when no section produced a reply, which three
 /// fallback sites share: a prompt with neither H1 blocks nor sections, a
@@ -129,20 +126,6 @@ fn prompt_origin(prompt: &Prompt, label: &str, blocks: &[Block]) -> Origin {
     Origin::at(label, prompt.title(), first_chunk_line(blocks))
 }
 
-/// Arena index of a chain: indices, not references, so no chain ever holds
-/// a pointer to another. The index is the scheduler's private handle; the
-/// chain's identity for authors and callers is its hierarchical
-/// [`ChainId`](runvil_types::ids::ChainId), which never depends on arena order.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-struct ChainIndex(u32);
-
-impl ChainIndex {
-    /// The arena index as a `usize`.
-    fn index(self) -> usize {
-        self.0 as usize
-    }
-}
-
 /// A queued task chain's spawn record, held from spawn until its
 /// admission: the input override and the spawning section the start event
 /// reports. The `var` snapshot lives in the chain's `var` slot from spawn
@@ -156,21 +139,6 @@ struct SpawnRecord {
     /// section: a task admitted after its spawner moved on still reports
     /// where it was spawned, not where the spawner is now.
     section: String,
-}
-
-/// A chain's local id counters: the indices its next child chain and its
-/// next section entry take under its lineage. Set at chain start and
-/// advanced as the chain hands out ids: zero for a fresh chain
-/// (`Default`), or the values the chain continues from when it takes over
-/// an earlier chain's identity (the walk after the H1 pass).
-#[derive(Clone, Copy, Debug, Default)]
-struct Counters {
-    /// The next child index under the chain's lineage, which `call`
-    /// children, spawned tasks, and the wait shims' timers share.
-    next_child: u32,
-    /// The next index a section entry takes under the chain's lineage as
-    /// its `sys.id`.
-    next_entry: u32,
 }
 
 /// The run's phase, as the step loop reads it.
@@ -187,13 +155,13 @@ enum Phase {
 }
 
 /// The coroutine protocol's driver: the chain arena, ready queue, effect
-/// table, task arena, and issued-effect queue, owned outright by the run.
+/// table, and task arena, owned outright by the run.
 pub(crate) struct Scheduler {
     /// The ambient run context, cloned into chains and forked by call
     /// chains.
     ctx: RunState,
     /// The chain arena: append-only, indexed by [`ChainIndex`].
-    chains: Vec<Chain>,
+    chains: ChainArena,
     /// Chains eligible to resume (FIFO); empty whenever a step returns,
     /// because `drain` runs it dry or the run's end clears it.
     ready: VecDeque<ChainIndex>,
@@ -207,16 +175,9 @@ pub(crate) struct Scheduler {
     /// admitted after every resuming chain. A queued spawn holds no Lua VM
     /// yet: admission is what starts it.
     spawned: VecDeque<ChainIndex>,
-    /// The effect table: one entry per issued effect the caller has not
-    /// answered yet, keyed by the effect's id. An entry is parked while its
-    /// chain waits, holding how the answer resumes the chain, and orphaned
-    /// once the chain stopped waiting (a chain end, a task cancel or
-    /// abandonment, the run's teardown): the caller still owes the answer,
-    /// which is discarded on arrival. An entry leaves when its answer
-    /// arrives, so an id with no entry means the caller answered an effect
-    /// the run never issued, or answered one twice - which fails loudly
-    /// rather than passing silently.
-    outstanding: HashMap<EffectId, Outstanding>,
+    /// The effect table: every issued effect the caller has not answered
+    /// yet, and the step's outgoing queue of issued and withdrawn effects.
+    effects: EffectTable,
     /// The task arena: one entry per task the run has started, keyed by the
     /// task's id: its backing chain's id, or, for an internal timer, the id
     /// it took from its owner's child counter. An entry outlives its chain:
@@ -227,26 +188,9 @@ pub(crate) struct Scheduler {
     /// owner's tasks are its direct children, so one owner's entries iterate
     /// in spawn order.
     tasks: BTreeMap<TaskId, TaskEntry>,
-    /// The effects issued since the step began, in issue order, each with
-    /// the provenance of the task that built it; the step returns them.
-    issued: Vec<IssuedEffect>,
-    /// Tool-call effects orphaned since the last step, drained into
-    /// `Step::Pending`.
-    withdrawn: Vec<EffectId>,
     /// Where the step loop stands: not started, running, ending with the
     /// outcome held until the orphans are answered, or done.
     phase: Phase,
-    /// The chain-count bound in test builds: [`MAX_CHAINS`] until a test
-    /// shrinks it to drive the overflow path without allocating the real
-    /// one.
-    #[cfg(test)]
-    max_chains: usize,
-    /// The next effect id: a run-wide counter, so every effect the run
-    /// issues has a distinct in-flight handle.
-    next_effect: u64,
-    /// The next round id: a run-wide counter numbering the model rounds
-    /// in dispatch order, chat and nested-infer rounds alike.
-    next_round: u64,
     /// The run's scope, taken where the run acquires its root identity:
     /// closed when the run reaches `Done` or is dropped before it, so a
     /// store view the caller still holds never outlives the run.
@@ -270,19 +214,13 @@ impl Scheduler {
             .report(ctx.prompt().title(), lifecycle::RUN_STARTED);
         Self {
             ctx,
-            chains: Vec::new(),
+            chains: ChainArena::new(),
             ready: VecDeque::new(),
             resuming: VecDeque::new(),
             spawned: VecDeque::new(),
-            outstanding: HashMap::new(),
+            effects: EffectTable::default(),
             tasks: BTreeMap::new(),
-            issued: Vec::new(),
-            withdrawn: Vec::new(),
             phase: Phase::Fresh,
-            #[cfg(test)]
-            max_chains: MAX_CHAINS,
-            next_effect: 0,
-            next_round: 0,
             scope: None,
         }
     }
@@ -314,35 +252,23 @@ impl Scheduler {
     /// Returns [`Error::Internal`] when the chain has no suspended block
     /// to take the answer.
     fn answer_inline(&mut self, id: ChainIndex, answer: Answer<Error>) -> Result<()> {
-        self.chains[id.index()].deliver(answer)?;
+        self.chains[id].deliver(answer)?;
         self.ready.push_back(id);
         Ok(())
     }
 
-    /// Issues one leaf effect for `chain`: allocates its id, stamps it with
-    /// the chain's task provenance, queues it for the step's return, and
-    /// parks the chain in the effect table with `resume`, the rule its
-    /// answer is applied by. The one path every leaf arm takes, so no arm
-    /// parks on its own.
+    /// Issues one leaf effect for `chain`, stamped with the chain's task
+    /// provenance, into the effect table with `resume`, the rule its answer
+    /// is applied by. The one path every leaf arm takes, so no arm writes
+    /// the effect table on its own.
     fn issue(&mut self, chain: ChainIndex, effect: Effect, resume: Continuation) -> EffectId {
-        let id = EffectId(self.next_effect);
-        self.next_effect += 1;
-        let provenance = self.chains[chain.index()].ctx.emitter().stamp_effect();
-        self.issued.push(IssuedEffect {
-            id,
-            provenance,
-            effect,
-        });
-        self.outstanding
-            .insert(id, Outstanding::Parked(Pending { chain, resume }));
-        id
+        let provenance = self.chains[chain].ctx.emitter().stamp_effect();
+        self.effects.issue(chain, provenance, effect, resume)
     }
 
     /// Numbers the model round about to be issued with `origin`: the run's
     /// next round id, in dispatch order.
     fn number_round(&mut self, origin: ReplyOrigin) -> Round {
-        let id = RoundId::new(self.next_round);
-        self.next_round += 1;
-        Round { id, origin }
+        self.effects.number_round(origin)
     }
 }

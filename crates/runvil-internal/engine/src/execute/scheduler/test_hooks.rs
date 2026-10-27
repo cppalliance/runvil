@@ -20,27 +20,31 @@ use super::chain::ChainStart;
 use super::chain_record::{Admission, CallDepth, ChainKind};
 pub(crate) use super::tasks::TaskState;
 use super::tasks::{SlotState, TaskBacking, TaskEntry};
-use super::{ChainIndex, Counters, Outstanding, Scheduler};
+use super::{ChainIndex, Counters, Scheduler};
 
 impl Scheduler {
     /// Shrinks the chain-count bound so a test can drive the
     /// [`start_chain`](Self::start_chain) overflow path.
     pub(crate) fn set_max_chains_for_test(&mut self, limit: usize) {
-        self.max_chains = limit;
+        self.chains.set_max_for_test(limit);
     }
 
     /// Fills every admission slot of the chain at arena index `chain` with
     /// a task it owns whose chain holds its slot but never runs or ends, so
     /// a test can leave a queued task that no slot will ever admit.
     pub(crate) fn wedge_admission_for_test(&mut self, chain: u32) {
-        let owner = ChainIndex(chain);
-        for _ in 0..self.chains[owner.index()].concurrency.get() {
-            let lineage = self
-                .allocate_child_id(owner)
+        let (owner, _) = self
+            .chains
+            .iter()
+            .nth(chain as usize)
+            .expect("the wedged chain is in the arena");
+        for _ in 0..self.chains[owner].concurrency.get() {
+            let lineage = self.chains[owner]
+                .next_child_id()
                 .expect("the wedged chain has a child id left");
             let task = TaskId::from(lineage.clone());
             let access = detail::access_spawn(
-                self.chains[owner.index()]
+                self.chains[owner]
                     .access()
                     .expect("the wedged chain holds its access"),
                 Origin::at("wedge", self.ctx.prompt().title(), 1),
@@ -84,7 +88,7 @@ impl Scheduler {
     /// Whether `effect` is recorded as orphaned: its chain stopped waiting,
     /// and the caller's answer, still owed, is discarded on arrival.
     pub(crate) fn orphaned_for_test(&self, effect: EffectId) -> bool {
-        matches!(self.outstanding.get(&effect), Some(Outstanding::Orphaned))
+        self.effects.is_orphaned(effect)
     }
 
     /// The state of one task's entry, or `None` when no task with that id
@@ -116,7 +120,7 @@ impl Scheduler {
     /// count exceeds its bound.
     pub(crate) fn name_before_first_entry_for_test(&mut self, index: usize) -> Result<String> {
         let id = self.start_probe_chain(index)?;
-        Ok(self.chains[id.index()].section_name().to_owned())
+        Ok(self.chains[id].section_name().to_owned())
     }
 
     /// Starts a chain that has entered no section, so it holds no

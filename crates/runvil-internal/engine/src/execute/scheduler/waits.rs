@@ -68,9 +68,7 @@ impl Scheduler {
     /// which a `call` child of the task chain shares).
     fn visible_entry(&self, caller: ChainIndex, task: &TaskId) -> Result<&TaskEntry> {
         match self.tasks.get(task) {
-            Some(slot) if slot.owner == caller || self.chains[caller.index()].task == *task => {
-                Ok(slot)
-            }
+            Some(slot) if slot.owner == caller || self.chains[caller].task == *task => Ok(slot),
             _ => Err(Error::TaskNotOwned { task: task.clone() }),
         }
     }
@@ -102,7 +100,7 @@ impl Scheduler {
                 self.answer_inline(id, Answer::JoinAny(Ok(delivery)))
             }
             Ok(None) => {
-                self.chains[id.index()].parked = Some(Parked::Tasks(tasks.into_vec()));
+                self.chains[id].parked = Some(Parked::Tasks(tasks.into_vec()));
                 self.park_wait(id);
                 Ok(())
             }
@@ -182,7 +180,7 @@ impl Scheduler {
     /// the member is delivered as the wait's answer and the owner leaves
     /// its wait.
     pub(super) fn wake_waiter(&mut self, owner: ChainIndex, task: &TaskId) -> Result<()> {
-        if !self.chains[owner.index()].end_wait_for(task) {
+        if !self.chains[owner].end_wait_for(task) {
             return Ok(());
         }
         let delivery = self.deliver(task);
@@ -222,7 +220,7 @@ impl Scheduler {
             note: slot.note.clone(),
         };
         if let TaskBacking::Chain { chain: backing, .. } = slot.backing {
-            let chain = &self.chains[backing.index()];
+            let chain = &self.chains[backing];
             status.turns = chain.ctx.turns().load(Ordering::Relaxed);
             status.depth = u32::try_from(chain.call_depth.get()).unwrap_or(u32::MAX);
             if slot.state.is_live() {
@@ -258,15 +256,15 @@ impl Scheduler {
     ) -> Result<()> {
         let effective = if let Some(limit) = limit {
             let parent_limit = match self.enclosing(id) {
-                Some(parent) => self.chains[parent.index()].concurrency,
+                Some(parent) => self.chains[parent].concurrency,
                 None => self.ctx.limits().max_concurrency,
             };
             let limit = NonZeroUsize::try_from(limit).unwrap_or(NonZeroUsize::MAX);
             let effective = limit.min(parent_limit);
-            self.chains[id.index()].concurrency = effective;
+            self.chains[id].concurrency = effective;
             effective
         } else {
-            self.chains[id.index()].concurrency
+            self.chains[id].concurrency
         };
         self.answer_inline(id, Answer::Concurrency(Ok(effective.get())))
     }
@@ -276,7 +274,7 @@ impl Scheduler {
     /// child's note is the task's. A note outside a task with an entry (the
     /// main walk, task `0`, and its `call` children) records nothing.
     pub(super) fn dispatch_note(&mut self, id: ChainIndex, text: String) -> Result<()> {
-        if let Some(slot) = self.tasks.get_mut(&self.chains[id.index()].task) {
+        if let Some(slot) = self.tasks.get_mut(&self.chains[id].task) {
             slot.note = Some(text);
         }
         self.answer_inline(id, Answer::Note(Ok(())))
@@ -319,8 +317,8 @@ impl Scheduler {
         // clears the chain's state. A task that was never admitted (still
         // queued for a slot) has no start event, so it reports no
         // terminal either.
-        let admitted = self.chains[backing_chain.index()].kind.admitted();
-        let emitter = Arc::clone(self.chains[backing_chain.index()].ctx.emitter());
+        let admitted = self.chains[backing_chain].kind.admitted();
+        let emitter = Arc::clone(self.chains[backing_chain].ctx.emitter());
         self.abort_subtree(backing_chain);
         if admitted {
             emitter.emit(&target, |execution, section, provenance| {

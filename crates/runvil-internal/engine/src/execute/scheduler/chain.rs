@@ -1,4 +1,4 @@
-//! The chain lifecycle: arena insertion, and the two chain-end paths - a
+//! The chain lifecycle: chain start, and the two chain-end paths - a
 //! chain's finish (the frame's teardown boundary, the chain-end rules for
 //! the tasks it owns, and the outcome's delivery to the root, a call
 //! parent, or a task entry) and the abort of a chain with everything it
@@ -18,10 +18,7 @@ use crate::lua::Answer;
 use crate::{Error, Result};
 
 use super::chain_record::{CallDepth, ChainKind, Walk};
-use super::{
-    Chain, ChainIndex, ChatAnchor, Continuation, Counters, GENERIC_COMPLETION, Outstanding,
-    Pending, Scheduler,
-};
+use super::{Chain, ChainIndex, ChatAnchor, Counters, GENERIC_COMPLETION, Scheduler};
 
 /// What one chain's step left the run with: the run goes on, or the step
 /// decided the run's result.
@@ -63,23 +60,6 @@ pub(super) struct ChainStart {
 }
 
 impl Scheduler {
-    /// Allocates the next child id under `owner`'s chain: the owner's id
-    /// extended by its local child counter, which `call` children, spawned
-    /// tasks, and the wait shims' timers share, so the ids a chain hands
-    /// out depend only on the order of its own dispatches.
-    ///
-    /// # Errors
-    /// Returns [`Error::Internal`] when one chain has started `u32::MAX`
-    /// children, which no reachable run does.
-    pub(super) fn allocate_child_id(&mut self, owner: ChainIndex) -> Result<ChainId> {
-        let chain = &mut self.chains[owner.index()];
-        let index = chain.counters.next_child;
-        chain.counters.next_child = index
-            .checked_add(1)
-            .ok_or(Error::internal("a chain's child count cannot exceed u32"))?;
-        Ok(chain.lineage.child(index))
-    }
-
     /// Creates one chain from `start` and returns its arena index. A
     /// fresh chain enters its first section on its first step, taking
     /// entry 0 of its own id; the root walk continues the counters of the
@@ -92,19 +72,9 @@ impl Scheduler {
     /// # Errors
     /// Returns [`Error::Internal`] when the run's chain count exceeds `u32`.
     pub(super) fn start_chain(&mut self, start: ChainStart) -> Result<ChainIndex> {
-        #[cfg(test)]
-        let max_chains = self.max_chains;
-        #[cfg(not(test))]
-        let max_chains = super::MAX_CHAINS;
-        if self.chains.len() >= max_chains {
-            return Err(Error::internal("a run's chain count cannot exceed u32"));
-        }
-        let id = ChainIndex(u32::try_from(self.chains.len()).map_err(|error| {
-            Error::internal_with_cause("a run's chain count cannot exceed u32", error)
-        })?);
         let task = match &start.kind {
             ChainKind::Root | ChainKind::H1 => TaskId::from(ChainId::root()),
-            ChainKind::Call { parent, .. } => self.chains[parent.index()].task.clone(),
+            ChainKind::Call { parent, .. } => self.chains[*parent].task.clone(),
             ChainKind::Task { .. } => TaskId::from(start.lineage.clone()),
         };
         let entered_name = start.start.name(start.ctx.prompt()).to_owned();
@@ -124,8 +94,7 @@ impl Scheduler {
             call_depth: start.call_depth,
             concurrency: start.concurrency,
             anchor: ChatAnchor::default(),
-        });
-        Ok(id)
+        })
     }
 
     /// Finishes one chain: the frame's teardown boundary when the chain
@@ -140,7 +109,7 @@ impl Scheduler {
     /// `outcome` is the chain's end: a scalar return's value, `None` for a
     /// walk that ran off its slice's last section, or the chain's failure.
     pub(super) fn finish(&mut self, id: ChainIndex, outcome: Result<Option<String>>) -> ChainStep {
-        let chain = &mut self.chains[id.index()];
+        let chain = &mut self.chains[id];
         let parent = chain.kind.parent();
         let is_task = matches!(chain.kind, ChainKind::Task { .. });
         // `None` when the chain ended by exhausting its slice: the last
@@ -235,14 +204,7 @@ impl Scheduler {
     /// the caller's to settle: the owner's chain end abandons it, a cancel
     /// arm cancels it.
     pub(super) fn abort_subtree(&mut self, id: ChainIndex) {
-        // The arena is u32-bounded at insertion (`start_chain`), so the
-        // index range covers every chain.
-        let children: Vec<ChainIndex> = (0..)
-            .map(ChainIndex)
-            .zip(&self.chains)
-            .filter(|(_, chain)| chain.kind.parent() == Some(id))
-            .map(|(child, _)| child)
-            .collect();
+        let children: Vec<ChainIndex> = self.chains.call_children(id).collect();
         for child in children {
             self.abort_subtree(child);
         }
@@ -250,23 +212,16 @@ impl Scheduler {
         // one to reach, so the leaked-author list is moot here.
         self.abandon_owned_tasks(id, AbandonReason::OwnerAborted);
         self.ready.retain(|ready| *ready != id);
-        // The chain's own parked leaf effects: one, or every call of a
+        // The chain's own awaited leaf effects: one, or every call of a
         // `tool_calls` batch. A timer the chain owned is keyed under it
         // too, but `abandon_owned_tasks` above already aborted every live
         // one. Each tool call's identity ends as it is orphaned, so the
-        // entries go in issue order rather than the table's.
-        let mut effects: Vec<EffectId> = self
-            .outstanding
-            .iter()
-            .filter(|(_, entry)| matches!(entry, Outstanding::Parked(parked) if parked.chain == id))
-            .map(|(effect, _)| *effect)
-            .collect();
-        effects.sort_unstable();
-        for effect in effects {
+        // entries go in issue order.
+        for effect in self.effects.awaited_by(id) {
             self.abort_effect(effect);
         }
         let access = {
-            let chain = &mut self.chains[id.index()];
+            let chain = &mut self.chains[id];
             // A chain aborted mid-wait leaves its set: no member's end may
             // wake a dead chain.
             chain.parked = None;
@@ -297,16 +252,8 @@ impl Scheduler {
     /// caller has answered all of them. An id with no entry is left
     /// unknown, so an answer for it still fails loudly.
     pub(super) fn abort_effect(&mut self, effect: EffectId) {
-        let Some(entry) = self.outstanding.get_mut(&effect) else {
-            return;
-        };
-        if let Outstanding::Parked(Pending {
-            chain,
-            resume: Continuation::ToolCall(call),
-        }) = std::mem::replace(entry, Outstanding::Orphaned)
-        {
-            self.end_tool_call(chain, call.exec);
-            self.withdrawn.push(effect);
+        if let Some((chain, exec)) = self.effects.orphan(effect) {
+            self.end_tool_call(chain, exec);
         }
     }
 }

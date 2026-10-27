@@ -23,7 +23,7 @@ use crate::{Error, Result};
 
 use super::chain::{ChainStart, ChainStep};
 use super::chain_record::{CallDepth, ChainKind, Entered};
-use super::{Chain, ChainIndex, Counters, Scheduler, prompt_origin};
+use super::{ChainIndex, Counters, Scheduler, prompt_origin};
 
 impl Scheduler {
     /// Starts the root walk chain over the top-level sections when the
@@ -68,21 +68,6 @@ impl Scheduler {
         Ok(())
     }
 
-    /// Hands out the chain's next section-entry id: its hierarchical id
-    /// extended by the local entry counter, the value the entered section
-    /// reads as `sys.id`.
-    ///
-    /// # Errors
-    /// Returns [`Error::Internal`] when one chain has entered `u32::MAX`
-    /// sections, which no reachable run does.
-    fn next_entry_id(chain: &mut Chain) -> Result<String> {
-        let index = chain.counters.next_entry;
-        chain.counters.next_entry = index
-            .checked_add(1)
-            .ok_or(Error::internal("a chain's entry count cannot exceed u32"))?;
-        Ok(chain.lineage.entry(index))
-    }
-
     /// Enters the chain's next section and reports whether one was entered:
     /// constructs the frame with the chain's next entry id and its task id,
     /// seeded from the chain's `var` slot (and, on a spawned
@@ -97,13 +82,13 @@ impl Scheduler {
     /// [`SectionContext::new`].
     fn enter_section(&mut self, id: ChainIndex) -> Result<bool> {
         let prompt = self.prompt();
-        let chain = &mut self.chains[id.index()];
+        let chain = &mut self.chains[id];
         if chain.kind.is_h1() {
             // The H1 pass enters its frame exactly once: section 0 under
             // the prompt's title, through the same install path as any
             // section - and no SECTION_STARTED, the pass is not a walked
             // section. Its id is the root chain's entry 0.
-            let section_id = Self::next_entry_id(chain)?;
+            let section_id = chain.next_entry_id()?;
             let frame =
                 SectionContext::new_h1(&chain.ctx, chain.access()?, &section_id, &chain.task)?;
             chain.entered = Some(Entered::new(frame));
@@ -114,7 +99,7 @@ impl Scheduler {
         let Some(section) = chain.walk.current().section(&prompt) else {
             return Ok(false);
         };
-        let section_id = Self::next_entry_id(chain)?;
+        let section_id = chain.next_entry_id()?;
         let task = chain.task.clone();
         // A spawned chain's first entry consumes its `item` and `sys.index`
         // seeds; every later entry, and every other chain's, has none.
@@ -156,7 +141,7 @@ impl Scheduler {
     /// The child walk shared the `var` slot, so it already holds the
     /// child level's last value.
     fn pop_position(&mut self, id: ChainIndex) -> bool {
-        self.chains[id.index()].walk.pop()
+        self.chains[id].walk.pop()
     }
 
     /// Falls the chain through at its section's end: the section's final
@@ -170,7 +155,7 @@ impl Scheduler {
     /// frame drops unarmed), or [`Error::Internal`] when the chain holds no
     /// frame.
     pub(super) fn end_section(&mut self, id: ChainIndex) -> Result<()> {
-        let chain = &mut self.chains[id.index()];
+        let chain = &mut self.chains[id];
         let Some(Entered { mut frame, .. }) = chain.entered.take() else {
             return Err(Error::internal("a section end implies a live frame"));
         };
@@ -197,7 +182,7 @@ impl Scheduler {
     /// completed.
     pub(super) fn apply_jump(&mut self, id: ChainIndex, heading: &str) -> Result<()> {
         {
-            let chain = &mut self.chains[id.index()];
+            let chain = &mut self.chains[id];
             let Some(Entered { mut frame, .. }) = chain.entered.take() else {
                 return Err(Error::internal("a jump implies a live frame"));
             };
@@ -206,7 +191,7 @@ impl Scheduler {
             drop(frame);
         }
         let target = self.resolve_chain_target(id, heading)?;
-        self.chains[id.index()].walk.jump(target);
+        self.chains[id].walk.jump(target);
         Ok(())
     }
 
@@ -222,7 +207,7 @@ impl Scheduler {
     /// [`heading_address::resolve_visible`]).
     pub(super) fn resolve_chain_target(&self, id: ChainIndex, heading: &str) -> Result<JumpTarget> {
         let prompt = self.ctx.prompt();
-        let chain = &self.chains[id.index()];
+        let chain = &self.chains[id];
         if chain.kind.is_h1() {
             let sections = h1_visible_sections(prompt);
             let target = heading_address::resolve_visible(heading, Visible::all(sections))?;

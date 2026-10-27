@@ -45,7 +45,7 @@ impl Scheduler {
     /// The fallible half of timer dispatch: the id allocation, the issued
     /// effect, and the entry.
     fn prepare_timer(&mut self, id: ChainIndex, duration: Duration) -> Result<TaskId> {
-        let task = TaskId::from(self.allocate_child_id(id)?);
+        let task = TaskId::from(self.chains[id].next_child_id()?);
         let effect = self.issue(id, Effect::Timer { duration }, Continuation::Timer);
         self.tasks.insert(
             task.clone(),
