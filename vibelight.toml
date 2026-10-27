@@ -1,0 +1,14 @@
+# Written by vibelight. It chooses the crates a plain `vibelight` outlines:
+# edit `exclude` to change which of them are analyzed.
+workspace = true
+follow = ["**"]
+exclude = [
+    "crates/build-ceiling",  # build tooling
+    "crates/build-llama-cuda",  # build tooling
+    "crates/build-ui",  # build tooling
+    "crates/build-user-guide",  # build tooling
+    "crates/build-workshop",  # run by the cargo alias `workshop`
+    "crates/build-xtask",  # run by the cargo alias `xtask`
+    "crates/harness-internal/test-plugin",  # a test fixture or helper
+]
+out = ".vibelight"
