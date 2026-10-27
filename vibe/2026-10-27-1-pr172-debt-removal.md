@@ -4,22 +4,22 @@ overview: "Debt collection over runvil 951e4bb9b..1d6937459 (the 27 merged commi
 todos:
   - id: c1-research-prompt
     content: "C-1: add the shipped.rs regression test (no user message the model reads names a tool id), confirm it fails, then rewrite prompts/research-person.md lines 32-33 to describe the tools by role"
-    status: pending
+    status: completed
   - id: set-enum-and-discovery-guard
     content: "D1-11, D1-19, D1-23: OfferMode gains the Static Set and Dynamic Set Display and replaces FrozenSet; a new runvil-lua scope-tests.rs ties every DiscoveryTool id to a reserved Pack"
-    status: pending
+    status: completed
   - id: admission-all-or-nothing
     content: "D1-24: regression tests that a failed admission pass leaves its queues and holders as it found them; run the pass on locals and write back only on success"
-    status: pending
+    status: completed
   - id: drop-dispatch-counts
     content: "D1-27: drop the always-None counts parameter, its increment, and both too_many_arguments expects from prepare_dispatch and prepare_model_dispatch"
-    status: pending
+    status: completed
   - id: display-chain-doc
     content: "D1-31: replace the stale Engine LuaRuntime example in display_chain.rs with an accurate one, or drop it"
-    status: pending
+    status: completed
   - id: guide-run-limits
     content: "D1-34: in runvil-docs, 16-limits-and-errors.md:125 says the Harness passes no limits today, so every run observes the defaults; commit there"
-    status: pending
+    status: completed
 isProject: false
 ---
 
