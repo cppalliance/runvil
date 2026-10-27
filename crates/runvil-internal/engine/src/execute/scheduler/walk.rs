@@ -125,7 +125,8 @@ impl Scheduler {
             // section - and no SECTION_STARTED, the pass is not a walked
             // section. Its id is the root chain's entry 0.
             let section_id = Self::next_entry_id(chain)?;
-            let frame = SectionContext::new_h1(&chain.ctx, chain.access()?, &section_id)?;
+            let frame =
+                SectionContext::new_h1(&chain.ctx, chain.access()?, &section_id, &chain.task)?;
             chain.entered = Some(Entered::new(frame));
             return Ok(true);
         }

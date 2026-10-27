@@ -13,7 +13,6 @@ use std::fmt;
 use std::sync::Arc;
 
 use harness::{BoxFuture, InferenceBroker};
-use runvil::RunLimits;
 use runvil::effect::Round;
 use runvil::model::{
     Completion, CompletionError, CompletionOptions, Message, ModelBinding, ModelCatalog, ToolSchema,
@@ -33,9 +32,8 @@ use crate::wire::delta::StreamDelta;
 /// [`fetch_model_catalog`]. Both kinds of request go to the same API root
 /// and authenticate with the same bearer key.
 ///
-/// Every round uses the Engine's default run limits from
-/// [`RunLimits::default`]: the wait limit for each part of the response and
-/// the cap on response size in bytes.
+/// Every round uses the client's own request limits: a 120 second wait for
+/// each receive and a 16 MiB cap on each reply.
 ///
 /// The broker's futures, [`models`](InferenceBroker::models) included, need
 /// a tokio runtime with its reactor and timer. A Host that uses this broker
@@ -68,9 +66,7 @@ impl GatewayBroker {
     /// path. Model rounds and model-list requests both go to it.
     #[must_use]
     pub fn new(endpoint: GatewayEndpoint, key: SecretString) -> GatewayBroker {
-        let limits = RunLimits::default();
-        let client = GatewayChat::new(endpoint.clone(), key.clone())
-            .with_request_limits(limits.receive_timeout, limits.max_response_bytes);
+        let client = GatewayChat::new(endpoint.clone(), key.clone());
         GatewayBroker {
             client,
             endpoint,

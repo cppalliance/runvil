@@ -831,9 +831,7 @@ pub runvil::RunErrorKind::Vfs
 pub runvil::RunLimits::lua_log_events: core::num::nonzero::NonZeroU32
 pub runvil::RunLimits::lua_memory_bytes: core::num::nonzero::NonZeroUsize
 pub runvil::RunLimits::max_concurrency: core::num::nonzero::NonZeroUsize
-pub runvil::RunLimits::max_response_bytes: core::num::nonzero::NonZeroU64
 pub runvil::RunLimits::max_tool_iterations: core::num::nonzero::NonZeroU32
-pub runvil::RunLimits::receive_timeout: core::time::Duration
 pub runvil::RunResult::Cancelled
 pub runvil::RunResult::Completed(..)
 pub runvil::RunResult::Completed::0: alloc::string::String

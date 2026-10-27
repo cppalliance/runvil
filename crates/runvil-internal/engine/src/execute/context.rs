@@ -23,6 +23,7 @@ use crate::model::{ModelSet, ModelView};
 use crate::parser::Prompt;
 
 use super::config::{RunContext, RunLimits};
+use super::section_context::SectionSys;
 use super::section_vm::{SectionVmSetup, VmSeed};
 
 #[path = "context-bound.rs"]
@@ -368,10 +369,10 @@ impl RunState {
         }
     }
 
-    /// The `sys` JSON for one section entry of this run: the six shared
-    /// fields in one construction, with the constructor supplying only the
+    /// The `sys` for one section entry of this run: the six shared fields
+    /// in one construction, with the constructor supplying only the
     /// section entry's hierarchical id, the entering chain's task id, and
-    /// the section name. A task's first entry adds `index` at its own call
+    /// the section name. A task's first entry sets `index` at its own call
     /// site.
     ///
     /// `when` is the run's `started_at` rendered as RFC 3339, the same
@@ -381,20 +382,17 @@ impl RunState {
     /// enclosing task (the main walk is task `0`; a `call` child reports
     /// its caller's task), the handle a chain passes to `tasks.*` to speak
     /// about itself.
-    pub(super) fn sys_json(
-        &self,
-        id: &str,
-        task_id: &TaskId,
-        section_name: &str,
-    ) -> serde_json::Value {
-        serde_json::json!({
-            "when": &*self.when,
-            "id": id,
-            "taskid": task_id.to_string(),
-            "section_name": section_name,
-            "execution": &*self.execution,
-            "section_count": self.section_count(),
-        })
+    pub(super) fn section_sys(&self, id: &str, task_id: &TaskId, section_name: &str) -> SectionSys {
+        SectionSys {
+            when: Arc::clone(&self.when),
+            id: id.to_owned(),
+            taskid: task_id.clone(),
+            section_name: section_name.to_owned(),
+            execution: Arc::clone(&self.execution),
+            section_count: self.section_count(),
+            index: None,
+            model: None,
+        }
     }
 }
 

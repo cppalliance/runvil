@@ -15,8 +15,8 @@ harness.workspace = true
 plugin-web.workspace = true
 # The Engine's public API: the chat vocabulary (Message, ToolSchema,
 # Completion, CompletionError) the wire code reads and builds through its
-# public constructors, the canonical metrics and model catalog
-# vocabulary, and the run limits the broker applies to every round.
+# public constructors, and the canonical metrics and model catalog
+# vocabulary.
 runvil.workspace = true
 # `SearchProvider` is an `async_trait` trait.
 async-trait.workspace = true

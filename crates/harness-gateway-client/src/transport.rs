@@ -36,15 +36,14 @@ pub struct GatewayChat {
     key: Option<SecretString>,
     /// Longest wait for the response headers, and then for each next body
     /// chunk; a stream that keeps arriving is never cut off.
-    request_timeout: Duration,
+    receive_timeout: Duration,
     /// Byte ceiling enforced on a response body before it is decoded.
     max_response_bytes: u64,
 }
 
-/// Default longest wait for the next receive, matching the executor's run
-/// limits.
-const DEFAULT_REQUEST_TIMEOUT: Duration = Duration::from_secs(120);
-/// Default response-body ceiling, matching the executor's run limits.
+/// Default longest wait for the next receive.
+const DEFAULT_RECEIVE_TIMEOUT: Duration = Duration::from_secs(120);
+/// Default response-body ceiling.
 const DEFAULT_MAX_RESPONSE_BYTES: u64 = 16 * 1024 * 1024;
 
 #[derive(Clone)]
@@ -96,7 +95,7 @@ impl GatewayChat {
             transport: GatewayTransport::Http(reqwest::Client::new()),
             base_url: endpoint.url,
             key: Some(key),
-            request_timeout: DEFAULT_REQUEST_TIMEOUT,
+            receive_timeout: DEFAULT_RECEIVE_TIMEOUT,
             max_response_bytes: DEFAULT_MAX_RESPONSE_BYTES,
         }
     }
@@ -119,7 +118,7 @@ impl GatewayChat {
             transport: GatewayTransport::Http(reqwest::Client::new()),
             base_url: endpoint.url,
             key: None,
-            request_timeout: DEFAULT_REQUEST_TIMEOUT,
+            receive_timeout: DEFAULT_RECEIVE_TIMEOUT,
             max_response_bytes: DEFAULT_MAX_RESPONSE_BYTES,
         }
     }
@@ -136,7 +135,7 @@ impl GatewayChat {
             transport: GatewayTransport::Disabled,
             base_url: String::new(),
             key: None,
-            request_timeout: DEFAULT_REQUEST_TIMEOUT,
+            receive_timeout: DEFAULT_RECEIVE_TIMEOUT,
             max_response_bytes: DEFAULT_MAX_RESPONSE_BYTES,
         }
     }
@@ -148,10 +147,10 @@ impl GatewayChat {
         self.key.is_some()
     }
 
-    /// Applies the run's HTTP limits to this client: a timeout for each
-    /// receive and a cap on the response size.
+    /// Applies the client's request limits: a timeout for each receive and
+    /// a cap on the response size.
     ///
-    /// `request_timeout` is the longest a completion request waits for its
+    /// `receive_timeout` is the longest a completion request waits for its
     /// response headers, and then for each next body chunk. Every chunk that
     /// arrives restarts the wait. A long stream that keeps arriving
     /// completes, and a stream that stalls fails as a timeout.
@@ -161,10 +160,10 @@ impl GatewayChat {
     #[must_use]
     pub fn with_request_limits(
         mut self,
-        request_timeout: Duration,
+        receive_timeout: Duration,
         max_response_bytes: NonZeroU64,
     ) -> GatewayChat {
-        self.request_timeout = request_timeout;
+        self.receive_timeout = receive_timeout;
         self.max_response_bytes = max_response_bytes.get();
         self
     }
@@ -273,7 +272,7 @@ impl GatewayChat {
         if let Some(key) = &self.key {
             request = request.bearer_auth(key.expose());
         }
-        let response = tokio::time::timeout(self.request_timeout, request.send())
+        let response = tokio::time::timeout(self.receive_timeout, request.send())
             .await
             .map_err(elapsed)?
             .map_err(transport_failure)?;
@@ -282,7 +281,7 @@ impl GatewayChat {
         let content_length = response.content_length();
         let mut chunks = ResponseChunks {
             response,
-            timeout: self.request_timeout,
+            timeout: self.receive_timeout,
         };
         if !status.is_success() {
             let raw_body =
