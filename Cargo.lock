@@ -4643,6 +4643,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "plugin-std"
+version = "0.3.0"
+dependencies = [
+ "runvil-plugin",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "plugin-user-input"
 version = "0.3.0"
 dependencies = [
@@ -8694,6 +8703,7 @@ dependencies = [
  "harness",
  "harness-gateway-client",
  "plugin-mcp",
+ "plugin-std",
  "plugin-user-input",
  "plugin-web",
  "reqwest",

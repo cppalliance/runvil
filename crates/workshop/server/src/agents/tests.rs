@@ -112,7 +112,7 @@ async fn every_run_holds_the_packs_the_three_plugins_add_and_the_builtin() {
     let lists = "---\nname: lists\ndescription: reads its Packs\nrunvil: 0\n---\n\n\
         # Lists\n\n## Only\n\n```lua\n\
         local names = {}\n\
-        for _, id in ipairs({ 'web', 'user-input', 'subagents', 'mcp' }) do\n\
+        for _, id in ipairs({ 'web', 'user-input', 'subagents', 'mcp', 'std' }) do\n\
           names[#names + 1] = tools.packs.get(id).name\n\
         end\n\
         return table.concat(names, ',')\n```\n";
@@ -120,7 +120,7 @@ async fn every_run_holds_the_packs_the_three_plugins_add_and_the_builtin() {
     assert_eq!(
         run_prompt(&Arc::new(host), lists.to_owned()).await,
         Some(RunOutcome::Completed {
-            final_text: "web,user-input,subagents,mcp".to_owned(),
+            final_text: "web,user-input,subagents,mcp,std".to_owned(),
         }),
         "a run that declares nothing holds every runvil Pack the server built"
     );

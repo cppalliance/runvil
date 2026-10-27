@@ -139,11 +139,11 @@ fn read_mcp_servers(setting: Option<&Path>) -> Value {
 
 /// A Host over the Host-wide `services` after the server calls the
 /// Plugins of the Packs agents may declare: `web`, `user-input`, so they
-/// can ask the operator, and `mcp`, with the `servers` object as its
-/// configuration. Building the Host builds those Packs and the built-in
-/// `subagents`. The ask tool is the fixed `user-input/ask` of the
-/// `runvil/user-input` Pack, so its vendor is `runvil`, and `None` only if
-/// the user-input Plugin was refused.
+/// can ask the operator, `mcp`, with the `servers` object as its
+/// configuration, and `std`, the file tools. Building the Host builds
+/// those Packs and the built-in `subagents`. The ask tool is the fixed
+/// `user-input/ask` of the `runvil/user-input` Pack, so its vendor is
+/// `runvil`, and `None` only if the user-input Plugin was refused.
 fn with_plugins(services: HostServices, servers: Value) -> (HostContext, Option<AskTool>) {
     let mut packs = PackRegistry::new();
     if let Err(error) = plugin_web::install(&mut packs, Value::Null) {
@@ -165,6 +165,9 @@ fn with_plugins(services: HostServices, servers: Value) -> (HostContext, Option<
     let mcp = Map::from_iter([("mcp".to_owned(), servers)]);
     if let Err(error) = plugin_mcp::install(&mut packs, Value::Object(mcp)) {
         tracing::warn!(%error, "the mcp Plugin inserted no Pack");
+    }
+    if let Err(error) = plugin_std::install(&mut packs, Value::Null) {
+        tracing::warn!(%error, "the std Plugin inserted no Pack");
     }
     (HostContext::new(packs, services), ask)
 }

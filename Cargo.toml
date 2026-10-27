@@ -50,6 +50,7 @@ harness-runner = { path = "crates/harness-internal/runner" }
 harness-plugin-loader = { path = "crates/harness-internal/plugin-loader" }
 plugin-user-input = { path = "crates/plugin-user-input" }
 plugin-web = { path = "crates/plugin-web" }
+plugin-std = { path = "crates/plugin-std" }
 plugin-mcp = { path = "crates/plugin-mcp" }
 gateway-routing = { path = "crates/gateway/routing" }
 runvil-lua = { path = "crates/runvil-internal/lua" }

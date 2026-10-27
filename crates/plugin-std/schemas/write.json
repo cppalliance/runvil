@@ -1,0 +1,18 @@
+{
+  "wire_name": "Write",
+  "description": "Creates or overwrites a file at the specified path. Use this tool to create a new file or to replace the whole contents of an existing one. If the destination file already exists, you MUST first read it before writing, so a change you did not make is never overwritten. For a targeted change to an existing file, prefer StrReplace.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "path": {
+        "type": "string",
+        "description": "The absolute path of the file to write"
+      },
+      "contents": {
+        "type": "string",
+        "description": "The contents to write to the file"
+      }
+    },
+    "required": ["path", "contents"]
+  }
+}

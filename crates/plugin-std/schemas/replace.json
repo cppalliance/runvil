@@ -1,0 +1,26 @@
+{
+  "wire_name": "StrReplace",
+  "description": "Replaces an exact string in a file with a new string. The old string must be unique in the file unless replace_all is true, so include enough surrounding context to identify the one occurrence you mean. Read the file first.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "path": {
+        "type": "string",
+        "description": "The absolute path of the file to modify"
+      },
+      "old_string": {
+        "type": "string",
+        "description": "The text to replace"
+      },
+      "new_string": {
+        "type": "string",
+        "description": "The text to replace it with (must be different from old_string)"
+      },
+      "replace_all": {
+        "type": "boolean",
+        "description": "Replace all occurrences of old_string (default false)"
+      }
+    },
+    "required": ["path", "old_string", "new_string"]
+  }
+}

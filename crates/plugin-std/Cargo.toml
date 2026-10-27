@@ -1,0 +1,22 @@
+[package]
+name = "plugin-std"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+# The Plugin contract: `PackInfo`, the Pack trait, the context a
+# call is lent, and the tool, error, and service vocabulary.
+runvil-plugin.workspace = true
+# Each tool's definition is embedded JSON, read into a spec at construct.
+serde.workspace = true
+serde_json.workspace = true
+
+[dev-dependencies]
+# `testing::TestCall`, which lends the tools a context without a Harness.
+runvil-plugin = { workspace = true, features = ["test-support"] }
+
+[lints]
+workspace = true

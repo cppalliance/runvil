@@ -26,6 +26,8 @@ plugin-web.workspace = true
 # The MCP client Pack, installed once over every server of the
 # configured `mcp.json`.
 plugin-mcp.workspace = true
+# The file-tool Pack every agent run's Host installs: `runvil/std`.
+plugin-std.workspace = true
 # The Engine's public API: the events the agent socket frames as
 # transcript entries and the status reporter derives status from, and
 # the prompt parser behind the `/prompts/contract` route.

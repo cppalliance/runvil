@@ -1,0 +1,18 @@
+{
+  "wire_name": "Glob",
+  "description": "Finds files by name pattern and returns their paths. Use this to locate files when you know part of a name or an extension but not the directory, and prefer it over listing directories one at a time.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "glob_pattern": {
+        "type": "string",
+        "description": "The glob pattern to match files against"
+      },
+      "target_directory": {
+        "type": "string",
+        "description": "The absolute path to the directory to search in. If not provided, the run's filesystem root is used."
+      }
+    },
+    "required": ["glob_pattern"]
+  }
+}
