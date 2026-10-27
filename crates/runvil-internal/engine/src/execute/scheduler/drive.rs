@@ -215,8 +215,7 @@ impl Scheduler {
     /// happens-before record.
     fn teardown(&mut self) {
         self.ready.clear();
-        self.resuming.clear();
-        self.spawned.clear();
+        self.admission.clear();
         for (owner, chain) in self.chains.iter() {
             let Some(access) = chain.access.as_ref() else {
                 continue;

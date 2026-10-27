@@ -74,8 +74,8 @@ impl Scheduler {
     pub(super) fn start_chain(&mut self, start: ChainStart) -> Result<ChainIndex> {
         let task = match &start.kind {
             ChainKind::Root | ChainKind::H1 => TaskId::from(ChainId::root()),
-            ChainKind::Call { parent, .. } => self.chains[*parent].task.clone(),
-            ChainKind::Task { .. } => TaskId::from(start.lineage.clone()),
+            ChainKind::Call { parent } => self.chains[*parent].task.clone(),
+            ChainKind::Task => TaskId::from(start.lineage.clone()),
         };
         let entered_name = start.start.name(start.ctx.prompt()).to_owned();
         self.chains.push(Chain {
@@ -111,7 +111,7 @@ impl Scheduler {
     pub(super) fn finish(&mut self, id: ChainIndex, outcome: Result<Option<String>>) -> ChainStep {
         let chain = &mut self.chains[id];
         let parent = chain.kind.parent();
-        let is_task = matches!(chain.kind, ChainKind::Task { .. });
+        let is_task = matches!(chain.kind, ChainKind::Task);
         // `None` when the chain ended by exhausting its slice: the last
         // section's frame already dropped at the fall-through.
         let mut entered = chain.entered.take();
@@ -166,7 +166,7 @@ impl Scheduler {
         // A task chain that was holding admission slots releases them at
         // its end, before its owner is woken: the owner's re-acquire and
         // any queued sibling need the freed capacity.
-        self.release_chain_slots(id);
+        self.admission.release(id);
         // A determinism violation is fatal to the run on the spot and
         // never resumes into Lua as a catchable member failure: a shim
         // that re-raises it after its own cleanup yields would flatten
@@ -230,9 +230,7 @@ impl Scheduler {
         };
         // A queued chain aborted before admission leaves both queues, and
         // a running task's held slots are given back.
-        self.resuming.retain(|queued| *queued != id);
-        self.spawned.retain(|queued| *queued != id);
-        self.release_chain_slots(id);
+        self.admission.forget(id);
         // The chain-end join: the aborted chain's final clock still
         // transitively covers its tasks, for whoever joins the aborted
         // chain itself.

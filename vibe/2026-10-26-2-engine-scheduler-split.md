@@ -709,7 +709,7 @@ Suites to watch: `execute/tests/waits.rs`, `execute/tests/timeouts.rs`, `execute
 
 <step-6>
 
-### Step 6: Give admission one owner (conditional)
+### Step 6: Give admission one owner (conditional) [completed]
 
 - Component: task and admission owners
 - Tests: run each from the runvil root in PowerShell, as written:

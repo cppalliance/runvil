@@ -17,7 +17,7 @@ use crate::lua::{Answer, ToolSet};
 use crate::{Error, Result};
 
 use super::chain::ChainStart;
-use super::chain_record::{Admission, CallDepth, ChainKind};
+use super::chain_record::{CallDepth, ChainKind};
 use super::tasks::TaskBacking;
 pub(crate) use super::tasks::TaskState;
 use super::{ChainIndex, Counters, Scheduler};
@@ -58,9 +58,7 @@ impl Scheduler {
                     ctx: self.ctx.clone(),
                     access: Arc::new(access),
                     start: SectionPos::top(SectionIndex::FIRST),
-                    kind: ChainKind::Task {
-                        admission: Admission::Admitted { holding: true },
-                    },
+                    kind: ChainKind::Task,
                     var: serde_json::json!({}),
                     call_depth: CallDepth::ROOT,
                     concurrency: NonZeroUsize::MIN,
@@ -72,6 +70,7 @@ impl Scheduler {
                 owner,
                 "wedge".to_owned(),
             );
+            self.admission.hold_for_test(wedge);
         }
     }
 
