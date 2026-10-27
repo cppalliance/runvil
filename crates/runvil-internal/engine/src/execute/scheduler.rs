@@ -5,17 +5,18 @@
 //! runs every chain step, and the Lua shims only yield (they never call
 //! into Rust for suspending operations), so the scheduler state is
 //! unreachable from Lua. Nothing here awaits, spawns, or sleeps: a leaf
-//! request becomes an [`Effect`] the step hands out, and the caller's
-//! [`EffectAnswer`] comes back through `resume`. The scheduler is `Send`
-//! and moves between threads between calls.
+//! request becomes an [`Effect`](super::run::Effect) the step hands out,
+//! and the caller's [`EffectAnswer`] comes back through `resume`. The
+//! scheduler is `Send` and moves between threads between calls.
 //!
 //! The loop is `resume -> match request -> dispatch -> resume with answer`.
 //! A chain whose coroutine yields a leaf request (`infer`) awaits its
-//! answer in the effect table while its [`Effect`] is out with the caller:
-//! the arm builds the effect as a value, `issue` stamps it with the chain's
-//! task provenance and queues it for the step's return, and `apply_answer`
-//! turns the caller's answer into the chain's protocol answer on the
-//! caller's thread, emitting the round's events there. A chain that
+//! answer in the effect table while its [`Effect`](super::run::Effect) is
+//! out with the caller: the arm builds the effect as a value, `issue`
+//! stamps it with the chain's task provenance and queues it for the step's
+//! return, and `apply_answer` turns the caller's answer into the chain's
+//! protocol answer on the caller's thread, emitting the round's events
+//! there. A chain that
 //! yields a structural request (`call`) blocks while its child chain runs,
 //! and the child's finish delivers its final text as the parent's answer.
 //! When no chain is ready the step returns and the caller performs the effects.
@@ -36,12 +37,16 @@
 //!
 //! This file holds the scheduler core: the ready queue, the admission
 //! queues (resumed chains, admitted first, and fresh spawns, which wait
-//! there until the run's concurrency limits admit them), the task arena,
-//! and the one `issue` path every leaf arm hands its effect through. The
-//! core owns two sub-objects that each hold their state and enforce their
-//! own rules, and neither writes the other: the chain arena and the effect
-//! table. The submodules hold the rest: `effects` the effect table and its
-//! entries (the `Continuation` an answer is applied by), `drive` the
+//! there until the run's concurrency limits admit them), and the task
+//! arena. The core owns two sub-objects that each hold their state and
+//! enforce their own rules, and neither writes the other: the chain arena
+//! and the effect table. A request that touches only its own chain runs
+//! in a view of that chain, which borrows the chain, the effect table, and
+//! the run context and nothing else, and holds the one `issue` path every
+//! leaf arm hands its effect through; the core keeps every request that
+//! coordinates more than one owner. The submodules hold the rest:
+//! `effects` the effect table and its entries (the `Continuation` an
+//! answer is applied by), `chain_ops` the one-chain view, `drive` the
 //! run-level step (the ready-queue drain, the terminal rules, and the
 //! teardown), `apply` the answer application, `chain` the chain lifecycle
 //! (chain start and the two chain-end paths), `chain_record` the chain
@@ -62,6 +67,7 @@
 mod admission;
 mod apply;
 mod chain;
+mod chain_ops;
 mod chain_record;
 mod chat;
 mod dispatch;
@@ -81,7 +87,7 @@ mod walk;
 use std::collections::{BTreeMap, VecDeque};
 use std::sync::Arc;
 
-use runvil_types::event::{ReplyOrigin, lifecycle};
+use runvil_types::event::lifecycle;
 use runvil_types::ids::TaskId;
 use runvil_vfs::Origin;
 use runvil_vfs::detail::ScopeHandle;
@@ -91,7 +97,8 @@ use crate::parser::{Block, Prompt};
 use crate::{Error, Result};
 
 use super::context::RunState;
-use super::run::{Effect, EffectAnswer, EffectId, Round};
+use super::run::{EffectAnswer, EffectId};
+use chain_ops::ChainOps;
 use chain_record::{Chain, ChainArena, ChainIndex, ChatAnchor, Counters};
 use effects::{CallSite, Continuation, EffectTable, Pending, ToolCallContinuation};
 use tasks::TaskEntry;
@@ -245,8 +252,8 @@ impl Scheduler {
         matches!(self.phase, Phase::Ending(_) | Phase::Done)
     }
 
-    /// Resumes `id` at once with `answer`: the inline-answer path every
-    /// non-waiting task arm takes.
+    /// Resumes `id` at once with `answer`: the inline-answer path of every
+    /// request the core keeps, and of a chain end answering another chain.
     ///
     /// # Errors
     /// Returns [`Error::Internal`] when the chain has no suspended block
@@ -255,20 +262,5 @@ impl Scheduler {
         self.chains[id].deliver(answer)?;
         self.ready.push_back(id);
         Ok(())
-    }
-
-    /// Issues one leaf effect for `chain`, stamped with the chain's task
-    /// provenance, into the effect table with `resume`, the rule its answer
-    /// is applied by. The one path every leaf arm takes, so no arm writes
-    /// the effect table on its own.
-    fn issue(&mut self, chain: ChainIndex, effect: Effect, resume: Continuation) -> EffectId {
-        let provenance = self.chains[chain].ctx.emitter().stamp_effect();
-        self.effects.issue(chain, provenance, effect, resume)
-    }
-
-    /// Numbers the model round about to be issued with `origin`: the run's
-    /// next round id, in dispatch order.
-    fn number_round(&mut self, origin: ReplyOrigin) -> Round {
-        self.effects.number_round(origin)
     }
 }

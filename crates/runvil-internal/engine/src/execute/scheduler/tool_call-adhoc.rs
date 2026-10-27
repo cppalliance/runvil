@@ -12,30 +12,29 @@ use crate::lua::{AdhocToolOutcome, Answer, ScriptReport, ToolBinding, ToolCallOu
 use crate::{Error, Result};
 
 use super::super::dispatch::Dispatched;
-use super::super::{CallSite, ChainIndex, Scheduler};
+use super::super::{CallSite, ChainOps};
 
-impl Scheduler {
+impl ChainOps<'_> {
     /// Answers a call routed to the adhoc tool `binding` binds: the
     /// one-time counts install, the attempt counted under the tool's id,
     /// the call opened on the frame, then the handler's answer, settled on
     /// the driver thread without an effect.
     pub(super) fn prepare_adhoc_call(
         &mut self,
-        id: ChainIndex,
         binding: &ToolBinding,
         args: serde_json::Value,
         site: &CallSite,
     ) -> Result<Dispatched> {
         let report = ScriptReport {
-            turn: self.call_turn(id, site),
+            turn: self.call_turn(site),
         };
-        let counts = self.section_call_counts(id)?;
+        let counts = self.section_call_counts()?;
         // The attempt counts at dispatch, before the handler runs, so a
         // handler that then fails still counts.
         let counted = binding.id().to_string();
         counts.ensure(&counted)?;
         counts.increment(&counted)?;
-        self.chains[id].frame_mut()?.push_adhoc_call(AdhocCall {
+        self.chain.frame_mut()?.push_adhoc_call(AdhocCall {
             tool: binding.id().clone(),
             alias: binding.alias().to_owned(),
             call_id: site.call_id().map(str::to_owned),
@@ -67,10 +66,9 @@ impl Scheduler {
     /// adhoc call, or no suspended block to take the answer.
     pub(in crate::execute::scheduler) fn dispatch_adhoc_tool_done(
         &mut self,
-        id: ChainIndex,
         outcome: AdhocToolOutcome,
     ) -> Result<()> {
-        let chain = &mut self.chains[id];
+        let chain = &mut *self.chain;
         let emitter = Arc::clone(chain.ctx.emitter());
         let section = chain.section_name().to_owned();
         let call = chain.frame_mut()?.pop_adhoc_call().ok_or(Error::internal(
@@ -105,6 +103,6 @@ impl Scheduler {
                 Ok(ToolCallOutcome::Plain(String::new()))
             }
         };
-        self.answer_inline(id, Answer::ToolCallResult(answer))
+        self.answer(Answer::ToolCallResult(answer))
     }
 }

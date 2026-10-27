@@ -230,7 +230,7 @@ impl Scheduler {
         // `chain`'s arena borrow ends here; the resolution names the
         // target's slice by path, resolved against the shared tree.
         let prompt = self.prompt();
-        let resolved = self.resolve_chain_target(id, target)?;
+        let resolved = self.with_chain(id, |ops| ops.resolve_chain_target(target))?;
         let worker = resolved.pos.section(&prompt).ok_or(Error::internal(
             "a resolved worker is absent from its slice",
         ))?;

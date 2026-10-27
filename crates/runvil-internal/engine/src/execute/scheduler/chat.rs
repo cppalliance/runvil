@@ -13,9 +13,9 @@
 //! A first round whose offers name a catalog tool issues a `Render`
 //! effect before the merge instead, and dispatches again under the same
 //! binding once the render's answer is merged
-//! ([`Scheduler::accept_render`]).
+//! ([`ChainOps::accept_render`]).
 //! The driver classifies the answered completion into the round's answer
-//! when it arrives ([`Scheduler::accept_chat`]), emitting the round's
+//! when it arrives ([`ChainOps::accept_chat`]), emitting the round's
 //! events (the turn advance, then `report_model_turn`'s sequence, which
 //! ends in a text reply's report, or the tool-call batch after it) through
 //! the chain's own task-scoped emitter, and rejecting a tool name
@@ -43,7 +43,7 @@ use crate::model::{Completion, CompletionErrorKind, CompletionResult, ModelBindi
 use crate::{Error, Result};
 
 use super::dispatch::Dispatched;
-use super::{ChainIndex, Continuation, Scheduler};
+use super::{ChainOps, Continuation};
 
 /// The answer for a round refused as too large by `reason`'s gate, before
 /// or by the provider: no round ran, so no finish reason is present and
@@ -56,7 +56,7 @@ fn overflow_result(reason: OverflowReason, turn: u32) -> ChatResult {
     }
 }
 
-impl Scheduler {
+impl ChainOps<'_> {
     /// Dispatches a `chat` request: one tool-capable model round over the
     /// author's message list. An issued round parks the chain in the
     /// effect table; a precheck overflow answers the round on the spot
@@ -64,14 +64,13 @@ impl Scheduler {
     /// the binding, the scope, the projection, or the client.
     pub(super) fn dispatch_chat(
         &mut self,
-        id: ChainIndex,
         list: &MessageList,
         binding: Option<ModelBinding>,
     ) -> Result<()> {
-        match self.prepare_chat(id, list, binding) {
+        match self.prepare_chat(list, binding) {
             Ok(Dispatched::Issued) => Ok(()),
-            Ok(Dispatched::Answered(answer)) => self.answer_inline(id, answer),
-            Err(error) => self.answer_inline(id, Answer::Chat(Err(error))),
+            Ok(Dispatched::Answered(answer)) => self.answer(answer),
+            Err(error) => self.answer(Answer::Chat(Err(error))),
         }
     }
 
@@ -87,13 +86,12 @@ impl Scheduler {
     /// attaches nothing, and so does a failed merge. When that round's
     /// offers name a catalog tool, it issues the render instead and parks
     /// the chain on it with the binding, and the render's answer merges and
-    /// dispatches the round again ([`Scheduler::accept_render`]), so the
+    /// dispatches the round again ([`ChainOps::accept_render`]), so the
     /// round is projected, prechecked, numbered, and recorded once. The
     /// send is recorded on the list only once the precheck passes, so a
     /// refused round leaves the list's last send in place.
     fn prepare_chat(
         &mut self,
-        id: ChainIndex,
         list: &MessageList,
         binding: Option<ModelBinding>,
     ) -> Result<Dispatched> {
@@ -101,7 +99,7 @@ impl Scheduler {
         if messages.is_empty() {
             return Err(Error::lua_message("messages must not be empty"));
         }
-        let chain = &self.chains[id];
+        let chain = &*self.chain;
         let section = chain.section_name().to_owned();
         let frame = chain.frame()?;
         let vm = frame.vm()?;
@@ -129,7 +127,7 @@ impl Scheduler {
                     binding: binding.clone(),
                     offered,
                 };
-                self.issue(id, effect, Continuation::Render(binding));
+                self.issue(effect, Continuation::Render(binding));
                 return Ok(Dispatched::Issued);
             }
             let frozen = prepare_effective_scope(
@@ -159,7 +157,7 @@ impl Scheduler {
         };
         let context = binding.context();
         let reserve = output_reserve(context, binding.invocation().max_tokens);
-        let chain = &mut self.chains[id];
+        let chain = &mut *self.chain;
         // The pre-dispatch precheck: a request that leaves the reply no
         // room never leaves. The refusal is the round's answer - the
         // overflow flag - and is observed as a failed turn, exactly as the
@@ -187,7 +185,7 @@ impl Scheduler {
             tools,
             round,
         };
-        self.issue(id, effect, Continuation::Chat(round.id));
+        self.issue(effect, Continuation::Chat(round.id));
         Ok(Dispatched::Issued)
     }
 
@@ -198,13 +196,12 @@ impl Scheduler {
     /// parked round with its error and attaches nothing.
     pub(super) fn accept_render(
         &mut self,
-        id: ChainIndex,
         binding: ModelBinding,
         rendered: Vec<PackToolSets<ToolInfo>>,
     ) -> Result<()> {
-        match self.merge_render(id, rendered) {
-            Ok(list) => self.dispatch_chat(id, &list, Some(binding)),
-            Err(error) => self.answer_inline(id, Answer::Chat(Err(error))),
+        match self.merge_render(rendered) {
+            Ok(list) => self.dispatch_chat(&list, Some(binding)),
+            Err(error) => self.answer(Answer::Chat(Err(error))),
         }
     }
 
@@ -217,12 +214,8 @@ impl Scheduler {
     /// # Errors
     /// Returns the merge's error, or [`Error::Internal`] when the parked
     /// chain has lost its frame.
-    fn merge_render(
-        &self,
-        id: ChainIndex,
-        rendered: Vec<PackToolSets<ToolInfo>>,
-    ) -> Result<MessageList> {
-        let chain = &self.chains[id];
+    fn merge_render(&self, rendered: Vec<PackToolSets<ToolInfo>>) -> Result<MessageList> {
+        let chain = &*self.chain;
         let frame = chain.frame()?;
         let vm = frame.vm()?;
         let set = chain.ctx.tool_set();
@@ -259,11 +252,10 @@ impl Scheduler {
     /// or its section's frozen sets.
     pub(super) fn accept_chat(
         &mut self,
-        id: ChainIndex,
         round: RoundId,
         result: Result<Box<Completion>>,
     ) -> Result<Answer<Error>> {
-        let chain = &self.chains[id];
+        let chain = &*self.chain;
         let round = ArrivedRound {
             id: round,
             section: chain.section_name().to_owned(),
@@ -273,7 +265,7 @@ impl Scheduler {
             Ok(completion) => completion,
             Err(error) => {
                 let failure = round.failed(error);
-                self.chains[id].anchor.settle(None);
+                self.chain.anchor.settle(None);
                 return Ok(Answer::Chat(failure));
             }
         };
@@ -306,7 +298,7 @@ impl Scheduler {
             .metrics
             .as_ref()
             .and_then(|metrics| metrics.usage.as_ref());
-        self.chains[id].anchor.settle(usage);
+        self.chain.anchor.settle(usage);
         Ok(Answer::Chat(result.map(Box::new)))
     }
 }

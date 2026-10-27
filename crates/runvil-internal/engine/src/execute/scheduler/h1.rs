@@ -126,15 +126,15 @@ impl Scheduler {
 
     /// Ends the H1 pass on a jump out: the heading resolves against the
     /// pass's top-level set through
-    /// [`resolve_chain_target`](Self::resolve_chain_target), then the pass
-    /// ends and the root walk starts at the target.
+    /// [`resolve_chain_target`](super::ChainOps::resolve_chain_target),
+    /// then the pass ends and the root walk starts at the target.
     ///
     /// # Errors
     /// Returns [`Error::Lua`] when the heading is malformed, matches no
     /// top-level section, or matches more than one; the pass's own ending
     /// can fail as [`end_h1`](Self::end_h1) documents.
     pub(super) fn end_h1_at_jump(&mut self, id: ChainIndex, heading: &str) -> Result<ChainStep> {
-        let target = self.resolve_chain_target(id, heading)?;
+        let target = self.with_chain(id, |ops| ops.resolve_chain_target(heading))?;
         self.end_h1(id, target.pos)
     }
 }

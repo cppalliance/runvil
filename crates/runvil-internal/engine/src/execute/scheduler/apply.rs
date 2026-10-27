@@ -32,7 +32,7 @@ use crate::{Error, Result};
 
 use super::tasks::{SlotState, TaskBacking};
 use super::{
-    CallSite, ChainIndex, Continuation, EffectAnswer, EffectId, Pending, Scheduler,
+    CallSite, ChainIndex, ChainOps, Continuation, EffectAnswer, EffectId, Pending, Scheduler,
     ToolCallContinuation,
 };
 
@@ -111,7 +111,7 @@ impl Scheduler {
     /// tool call's answer fills its slot instead, and the chain re-queues
     /// once the whole batch has landed. A timer's firing completes its entry
     /// and wakes its waiter instead, and a render's answer is applied by
-    /// [`Scheduler::accept_render`]. A `Dropped` answer is the caller
+    /// [`ChainOps::accept_render`]. A `Dropped` answer is the caller
     /// giving the effect up: the chain resumes with the cancelled error.
     /// Every answer to a tool call, `Dropped` included, first ends the
     /// call's identity through [`Scheduler::end_tool_call`], so whatever
@@ -151,19 +151,22 @@ impl Scheduler {
             (Continuation::Timer, EffectAnswer::Dropped) => return self.drop_timer(id),
             (resume, EffectAnswer::Dropped) => dropped_answer(&resume),
             (Continuation::Infer(round), EffectAnswer::Chat(result)) => {
-                Answer::Infer(self.accept_infer(chain, round, result))
+                Answer::Infer(self.with_chain(chain, |ops| ops.accept_infer(round, result)))
             }
-            (Continuation::Chat(round), EffectAnswer::Chat(result)) => {
-                self.accept_chat(chain, round, result.map_err(Error::from))?
-            }
+            (Continuation::Chat(round), EffectAnswer::Chat(result)) => self
+                .with_chain(chain, |ops| {
+                    ops.accept_chat(round, result.map_err(Error::from))
+                })?,
             (Continuation::Render(binding), EffectAnswer::Render(rendered)) => {
-                return self.accept_render(chain, binding, rendered);
+                return self.with_chain(chain, |ops| ops.accept_render(binding, rendered));
             }
             (Continuation::ToolCall(call), EffectAnswer::ToolCall(result)) => {
-                Answer::ToolCallResult(self.accept_tool_call(chain, &call, result))
+                Answer::ToolCallResult(
+                    self.with_chain(chain, |ops| ops.accept_tool_call(&call, result)),
+                )
             }
             (Continuation::Vfs(op), EffectAnswer::Vfs(result)) => {
-                match self.accept_vfs(chain, &op, result) {
+                match self.with_chain(chain, |ops| ops.accept_vfs(&op, result)) {
                     // A claims-model conflict is fatal: the suspended
                     // chains drop unarmed in the run's teardown, exactly
                     // as on the cancellation path.
@@ -213,7 +216,7 @@ impl Scheduler {
             }
         };
         if let Some(slot) = slot {
-            return self.fill_batch_slot(chain, slot, answer);
+            return self.with_chain(chain, |ops| ops.fill_batch_slot(slot, answer));
         }
         self.answer_inline(chain, answer)
     }
@@ -235,16 +238,41 @@ impl Scheduler {
         detail::end_access(scope, owner, exec);
     }
 
+    /// Applies a dropped timer: the entry backed by the effect moves to
+    /// `Cancelled`. While the run's cancel flag is clear, the caller gave
+    /// up the timeout and the run goes on, so the chain parked on the
+    /// timer leaves its wait with the cancelled error, as a dropped `Chat`
+    /// or `ToolCall` does: a timed `tasks.join` or `tasks.join_any` raises
+    /// it. A timer nothing waits on is dropped silently. Under a run cancel the
+    /// drop wakes no one, since the cancel tears the waiter down with
+    /// every other chain.
+    fn drop_timer(&mut self, effect: EffectId) -> Result<()> {
+        let Some((task, slot)) = self
+            .tasks
+            .iter_mut()
+            .find(|(_, slot)| slot.backing == TaskBacking::Effect(effect) && slot.state.is_live())
+        else {
+            return Ok(());
+        };
+        slot.state = SlotState::Cancelled;
+        let (task, owner) = (task.clone(), slot.owner);
+        if self.ctx.cancel().is_cancelled() || !self.chains[owner].end_wait_for(&task) {
+            return Ok(());
+        }
+        self.wake_from_wait(owner, Answer::JoinAny(Err(Error::Interrupted)))
+    }
+}
+
+impl ChainOps<'_> {
     /// Applies a nested infer round's completion: the single-prose-round
     /// reporting through the chain's own emitter, stamped with `round`,
     /// then the round's text.
     fn accept_infer(
         &self,
-        chain: ChainIndex,
         round: RoundId,
         result: std::result::Result<Box<Completion>, CompletionError>,
     ) -> Result<String> {
-        let chain = &self.chains[chain];
+        let chain = &*self.chain;
         accept_infer(
             result,
             round,
@@ -264,11 +292,10 @@ impl Scheduler {
     /// taken at dispatch, so the body is handed `None` for them.
     fn accept_tool_call(
         &mut self,
-        chain: ChainIndex,
         call: &ToolCallContinuation,
         result: std::result::Result<ToolOutput, ToolError>,
     ) -> Result<ToolCallOutcome> {
-        let chain = &mut self.chains[chain];
+        let chain = &mut *self.chain;
         // The shared dispatch body reports through this chain's emitter, so
         // its reports land in the buffer under this chain's task.
         let emitter = chain.ctx.emitter();
@@ -330,11 +357,10 @@ impl Scheduler {
     /// operation's own wording.
     fn accept_vfs(
         &self,
-        chain: ChainIndex,
         op: &VfsOp,
         result: std::result::Result<VfsOutcome, VfsError>,
     ) -> Result<VfsOutcome> {
-        let chain = &self.chains[chain];
+        let chain = &*self.chain;
         if let Some((succeeded, failed)) = vfs_observations(op) {
             chain.ctx.emitter().report(
                 chain.section_name(),
@@ -342,29 +368,5 @@ impl Scheduler {
             );
         }
         result.map_err(|error| classify_vfs_failure(op, error))
-    }
-
-    /// Applies a dropped timer: the entry backed by the effect moves to
-    /// `Cancelled`. While the run's cancel flag is clear, the caller gave
-    /// up the timeout and the run goes on, so the chain parked on the
-    /// timer leaves its wait with the cancelled error, as a dropped `Chat`
-    /// or `ToolCall` does: a timed `tasks.join` or `tasks.join_any` raises
-    /// it. A timer nothing waits on is dropped silently. Under a run cancel the
-    /// drop wakes no one, since the cancel tears the waiter down with
-    /// every other chain.
-    fn drop_timer(&mut self, effect: EffectId) -> Result<()> {
-        let Some((task, slot)) = self
-            .tasks
-            .iter_mut()
-            .find(|(_, slot)| slot.backing == TaskBacking::Effect(effect) && slot.state.is_live())
-        else {
-            return Ok(());
-        };
-        slot.state = SlotState::Cancelled;
-        let (task, owner) = (task.clone(), slot.owner);
-        if self.ctx.cancel().is_cancelled() || !self.chains[owner].end_wait_for(&task) {
-            return Ok(());
-        }
-        self.wake_from_wait(owner, Answer::JoinAny(Err(Error::Interrupted)))
     }
 }

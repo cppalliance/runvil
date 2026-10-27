@@ -56,7 +56,7 @@ pub(super) enum Continuation {
     /// dispatch body (counts already taken at dispatch, then the
     /// succeeded/failed event, the trust rule, and the `ToolResult`).
     ToolCall(ToolCallContinuation),
-    /// A [`Vfs`](super::Effect::Vfs) effect: the operation the chain
+    /// A [`Vfs`](Effect::Vfs) effect: the operation the chain
     /// yielded, from which the answer's succeeded/failed observation, its
     /// failure's model-facing message, and its determinism classification
     /// render under the call surface the author used.

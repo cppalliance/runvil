@@ -16,7 +16,7 @@ use crate::{Error, Result};
 
 use super::chain::ChainStep;
 use super::chain_record::{Entered, Running};
-use super::{ChainIndex, Scheduler};
+use super::{ChainIndex, ChainOps, Scheduler};
 
 /// The notice a failed H1 gate ends the run with; the chunk's own failure
 /// follows it as the cause.
@@ -199,7 +199,7 @@ impl Scheduler {
                     return self.end_h1(id, SectionPos::top(SectionIndex::FIRST));
                 }
                 None => {
-                    self.end_section(id)?;
+                    self.with_chain(id, ChainOps::end_section)?;
                     self.ready.push_back(id);
                     return Ok(ChainStep::Continue);
                 }
@@ -226,7 +226,7 @@ impl Scheduler {
             // target.
             Settled::Jump(heading) if is_h1 => return self.end_h1_at_jump(id, &heading),
             Settled::Jump(heading) => {
-                self.apply_jump(id, &heading)?;
+                self.with_chain(id, |ops| ops.apply_jump(&heading))?;
                 self.ready.push_back(id);
             }
             Settled::Returned(value) if is_h1 => {

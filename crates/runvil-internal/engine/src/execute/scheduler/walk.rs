@@ -23,7 +23,7 @@ use crate::{Error, Result};
 
 use super::chain::{ChainStart, ChainStep};
 use super::chain_record::{CallDepth, ChainKind, Entered};
-use super::{ChainIndex, Counters, Scheduler, prompt_origin};
+use super::{ChainIndex, ChainOps, Counters, Scheduler, prompt_origin};
 
 impl Scheduler {
     /// Starts the root walk chain over the top-level sections when the
@@ -68,6 +68,27 @@ impl Scheduler {
         Ok(())
     }
 
+    /// Enters the chain's next section and requeues it, or finishes the
+    /// chain when its slice is exhausted.
+    ///
+    /// # Errors
+    /// Returns the [`Error`] of frame construction, as documented on
+    /// [`SectionContext::new`].
+    pub(super) fn advance_entry(&mut self, id: ChainIndex) -> Result<ChainStep> {
+        if self.with_chain(id, ChainOps::enter_section)?
+            || self.with_chain(id, ChainOps::pop_position)
+        {
+            // A section was entered, or a jump-started child level
+            // exhausted and the parent walk resumes after the jumper.
+            self.ready.push_back(id);
+            return Ok(ChainStep::Continue);
+        }
+        // The walk ran off the slice's last section: the chain ends.
+        Ok(self.finish(id, Ok(None)))
+    }
+}
+
+impl ChainOps<'_> {
     /// Enters the chain's next section and reports whether one was entered:
     /// constructs the frame with the chain's next entry id and its task id,
     /// seeded from the chain's `var` slot (and, on a spawned
@@ -80,9 +101,9 @@ impl Scheduler {
     /// # Errors
     /// Returns the [`Error`] of frame construction, as documented on
     /// [`SectionContext::new`].
-    fn enter_section(&mut self, id: ChainIndex) -> Result<bool> {
+    fn enter_section(&mut self) -> Result<bool> {
         let prompt = self.prompt();
-        let chain = &mut self.chains[id];
+        let chain = &mut *self.chain;
         if chain.kind.is_h1() {
             // The H1 pass enters its frame exactly once: section 0 under
             // the prompt's title, through the same install path as any
@@ -118,30 +139,13 @@ impl Scheduler {
         Ok(true)
     }
 
-    /// Enters the chain's next section and requeues it, or finishes the
-    /// chain when its slice is exhausted.
-    ///
-    /// # Errors
-    /// Returns the [`Error`] of frame construction, as documented on
-    /// [`SectionContext::new`].
-    pub(super) fn advance_entry(&mut self, id: ChainIndex) -> Result<ChainStep> {
-        if self.enter_section(id)? || self.pop_position(id) {
-            // A section was entered, or a jump-started child level
-            // exhausted and the parent walk resumes after the jumper.
-            self.ready.push_back(id);
-            return Ok(ChainStep::Continue);
-        }
-        // The walk ran off the slice's last section: the chain ends.
-        Ok(self.finish(id, Ok(None)))
-    }
-
     /// Resumes a jump-suspended parent position when a child level
     /// exhausts, returning `false` when the chain holds no suspended
     /// position - meaning its own root slice exhausted and the chain ends.
     /// The child walk shared the `var` slot, so it already holds the
     /// child level's last value.
-    fn pop_position(&mut self, id: ChainIndex) -> bool {
-        self.chains[id].walk.pop()
+    fn pop_position(&mut self) -> bool {
+        self.chain.walk.pop()
     }
 
     /// Falls the chain through at its section's end: the section's final
@@ -154,8 +158,8 @@ impl Scheduler {
     /// Returns [`Error::Lua`] when the final `var` read-back fails (the
     /// frame drops unarmed), or [`Error::Internal`] when the chain holds no
     /// frame.
-    pub(super) fn end_section(&mut self, id: ChainIndex) -> Result<()> {
-        let chain = &mut self.chains[id];
+    pub(super) fn end_section(&mut self) -> Result<()> {
+        let chain = &mut *self.chain;
         let Some(Entered { mut frame, .. }) = chain.entered.take() else {
             return Err(Error::internal("a section end implies a live frame"));
         };
@@ -180,9 +184,9 @@ impl Scheduler {
     /// frame drops unarmed) or when the heading matches no visible section
     /// or more than one - the jumper's frame has already closed as
     /// completed.
-    pub(super) fn apply_jump(&mut self, id: ChainIndex, heading: &str) -> Result<()> {
+    pub(super) fn apply_jump(&mut self, heading: &str) -> Result<()> {
         {
-            let chain = &mut self.chains[id];
+            let chain = &mut *self.chain;
             let Some(Entered { mut frame, .. }) = chain.entered.take() else {
                 return Err(Error::internal("a jump implies a live frame"));
             };
@@ -190,8 +194,8 @@ impl Scheduler {
             frame.mark_completed();
             drop(frame);
         }
-        let target = self.resolve_chain_target(id, heading)?;
-        self.chains[id].walk.jump(target);
+        let target = self.resolve_chain_target(heading)?;
+        self.chain.walk.jump(target);
         Ok(())
     }
 
@@ -205,11 +209,11 @@ impl Scheduler {
     /// Returns [`Error::Lua`] when the heading is malformed, matches no
     /// visible section, or matches more than one (see
     /// [`heading_address::resolve_visible`]).
-    pub(super) fn resolve_chain_target(&self, id: ChainIndex, heading: &str) -> Result<JumpTarget> {
-        let prompt = self.ctx.prompt();
-        let chain = &self.chains[id];
+    pub(super) fn resolve_chain_target(&self, heading: &str) -> Result<JumpTarget> {
+        let prompt = self.prompt();
+        let chain = &*self.chain;
         if chain.kind.is_h1() {
-            let sections = h1_visible_sections(prompt);
+            let sections = h1_visible_sections(&prompt);
             let target = heading_address::resolve_visible(heading, Visible::all(sections))?;
             let index = section_position(sections, target).ok_or(Error::internal(
                 "a resolved H1 target is absent from the top-level slice",
@@ -219,6 +223,6 @@ impl Scheduler {
                 descends: false,
             });
         }
-        resolve_jump_target(heading, prompt, chain.walk.current())
+        resolve_jump_target(heading, &prompt, chain.walk.current())
     }
 }
