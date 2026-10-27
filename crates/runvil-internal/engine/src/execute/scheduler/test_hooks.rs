@@ -12,7 +12,7 @@ use runvil_types::ids::{ChainId, TaskId};
 use runvil_vfs::{Origin, detail};
 
 use crate::execute::run::EffectId;
-use crate::heading_address::{SectionIndex, SlicePath};
+use crate::heading_address::{SectionIndex, SectionPos};
 use crate::lua::{Answer, ToolSet};
 use crate::{Error, Result};
 
@@ -53,8 +53,7 @@ impl Scheduler {
                     counters: Counters::default(),
                     ctx: self.ctx.clone(),
                     access: Arc::new(access),
-                    slice: SlicePath::root(),
-                    index: SectionIndex::FIRST,
+                    start: SectionPos::top(SectionIndex::FIRST),
                     kind: ChainKind::Task {
                         admission: Admission::Admitted { holding: true },
                     },
@@ -146,8 +145,7 @@ impl Scheduler {
             counters: Counters::default(),
             ctx: self.ctx.clone(),
             access: Arc::new(access),
-            slice: SlicePath::root(),
-            index: SectionIndex::new(index),
+            start: SectionPos::top(SectionIndex::new(index)),
             kind: ChainKind::Root,
             var: serde_json::json!({}),
             call_depth: CallDepth::ROOT,

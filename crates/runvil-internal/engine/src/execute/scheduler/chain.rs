@@ -13,11 +13,11 @@ use runvil_vfs::Access;
 use crate::execute::context::RunState;
 use crate::execute::run::EffectId;
 use crate::execute::section_context::TaskSeed;
-use crate::heading_address::{SectionIndex, SlicePath};
+use crate::heading_address::SectionPos;
 use crate::lua::Answer;
 use crate::{Error, Result};
 
-use super::chain_record::{CallDepth, ChainKind};
+use super::chain_record::{CallDepth, ChainKind, Walk};
 use super::{
     Chain, ChainIndex, ChatAnchor, Continuation, Counters, GENERIC_COMPLETION, Outstanding,
     Pending, Scheduler,
@@ -47,10 +47,8 @@ pub(super) struct ChainStart {
     /// pass and the walk, the caller's for a `call` child, a fork of the
     /// spawner's for a task.
     pub(super) access: Arc<Access>,
-    /// The slice the chain walks.
-    pub(super) slice: SlicePath,
-    /// The section of `slice` the chain starts at.
-    pub(super) index: SectionIndex,
+    /// The section the chain starts at, which its walk continues from.
+    pub(super) start: SectionPos,
     /// What kind of chain it is.
     pub(super) kind: ChainKind,
     /// The `var` the chain's first section seeds from: a call or task
@@ -86,8 +84,8 @@ impl Scheduler {
     /// fresh chain enters its first section on its first step, taking
     /// entry 0 of its own id; the root walk continues the counters of the
     /// H1 pass it follows. Until its first entry the chain reports under
-    /// the section at its start index, or the prompt's title when the
-    /// index is past the slice. The chain's task is its own id for a task
+    /// the section at its start, or the prompt's title when the start is
+    /// past its slice. The chain's task is its own id for a task
     /// chain, its call parent's for a `call` child, and task `0` for the
     /// root walk and the H1 pass.
     ///
@@ -109,10 +107,7 @@ impl Scheduler {
             ChainKind::Call { parent, .. } => self.chains[parent.index()].task.clone(),
             ChainKind::Task { .. } => TaskId::from(start.lineage.clone()),
         };
-        let entered_name = start
-            .slice
-            .name_at(start.ctx.prompt(), start.index)
-            .to_owned();
+        let entered_name = start.start.name(start.ctx.prompt()).to_owned();
         self.chains.push(Chain {
             lineage: start.lineage,
             counters: start.counters,
@@ -123,10 +118,8 @@ impl Scheduler {
             ctx: start.ctx,
             access: Some(start.access),
             entered: None,
-            slice: start.slice,
-            index: start.index,
+            walk: Walk::new(start.start),
             entered_name,
-            positions: Vec::new(),
             var: start.var,
             call_depth: start.call_depth,
             concurrency: start.concurrency,

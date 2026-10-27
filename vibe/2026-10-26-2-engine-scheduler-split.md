@@ -452,7 +452,7 @@ Acceptance:
 
 <step-2>
 
-### Step 2: Give the engine one section position and one walk stack per chain
+### Step 2: Give the engine one section position and one walk stack per chain [completed]
 
 - Component: engine fixes
 - Tests: run each from the runvil root in PowerShell, as written:

@@ -16,8 +16,7 @@ use std::sync::Arc;
 
 use runvil_types::ids::ChainId;
 
-use crate::execute::walk_target::{h1_visible_sections, section_position};
-use crate::heading_address::{self, SectionIndex, SlicePath, Visible};
+use crate::heading_address::{SectionIndex, SectionPos};
 use crate::{Error, Result};
 
 use super::chain::{ChainStart, ChainStep};
@@ -51,8 +50,7 @@ impl Scheduler {
             counters: Counters::default(),
             ctx: self.ctx.clone(),
             access: Arc::new(access),
-            slice: SlicePath::root(),
-            index: SectionIndex::FIRST,
+            start: SectionPos::top(SectionIndex::FIRST),
             kind: ChainKind::H1,
             var: serde_json::json!({}),
             call_depth: CallDepth::ROOT,
@@ -63,8 +61,8 @@ impl Scheduler {
     /// Ends the H1 pass at its fall-through: the final `var` read back
     /// while the VM is live, then the frame drops unarmed - the
     /// pass never arms completion, so `SECTION_FINISHED` never fires for
-    /// it. The root walk then starts from the `var` hand-off at section
-    /// `start` (the first on a fall-through, the resolved target on a jump
+    /// it. The root walk then starts from the `var` hand-off at `start`
+    /// (the first section on a fall-through, the resolved target on a jump
     /// out) under the walk's own context fork; with no sections the run's
     /// result is the shared generic completion.
     ///
@@ -73,7 +71,7 @@ impl Scheduler {
     /// left `argv` as non-JSON data,
     /// or [`Error::Internal`] when the chain holds no frame. The walk
     /// reuses the pass's capability, so the hand-off acquires nothing.
-    pub(super) fn end_h1(&mut self, id: ChainIndex, start: SectionIndex) -> Result<ChainStep> {
+    pub(super) fn end_h1(&mut self, id: ChainIndex, start: SectionPos) -> Result<ChainStep> {
         let chain = &mut self.chains[id.index()];
         let Some(Entered { frame, .. }) = chain.entered.take() else {
             return Err(Error::internal("the H1 pass ends with a live frame"));
@@ -112,8 +110,7 @@ impl Scheduler {
             counters,
             ctx: walk_ctx,
             access: walk_access,
-            slice: SlicePath::root(),
-            index: start,
+            start,
             kind: ChainKind::Root,
             var,
             call_depth: CallDepth::ROOT,
@@ -127,21 +124,17 @@ impl Scheduler {
         Ok(ChainStep::Continue)
     }
 
-    /// Ends the H1 pass on a jump out: the heading resolves against
-    /// [`h1_visible_sections`], then the pass ends and the root walk starts
-    /// at the target.
+    /// Ends the H1 pass on a jump out: the heading resolves against the
+    /// pass's top-level set through
+    /// [`resolve_chain_target`](Self::resolve_chain_target), then the pass
+    /// ends and the root walk starts at the target.
     ///
     /// # Errors
     /// Returns [`Error::Lua`] when the heading is malformed, matches no
     /// top-level section, or matches more than one; the pass's own ending
     /// can fail as [`end_h1`](Self::end_h1) documents.
     pub(super) fn end_h1_at_jump(&mut self, id: ChainIndex, heading: &str) -> Result<ChainStep> {
-        let prompt = self.prompt();
-        let sections = h1_visible_sections(&prompt);
-        let target = heading_address::resolve_visible(heading, Visible::all(sections))?;
-        let start = section_position(sections, target).ok_or(Error::internal(
-            "a resolved H1 jump target is absent from the top-level slice",
-        ))?;
-        self.end_h1(id, start)
+        let target = self.resolve_chain_target(id, heading)?;
+        self.end_h1(id, target.pos)
     }
 }

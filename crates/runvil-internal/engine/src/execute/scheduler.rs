@@ -31,7 +31,7 @@
 //! merged: `RunState` is cloned into callbacks, while the scheduler must
 //! stay unreachable from the callback layer. The prompt tree is shared
 //! through the context's `Arc`, so a chain names its position in it by
-//! path ([`SlicePath`](crate::heading_address::SlicePath)) rather than by
+//! path ([`SectionPos`](crate::heading_address::SectionPos)) rather than by
 //! borrow, and the scheduler owns itself outright.
 //!
 //! This file holds the scheduler core: the chain arena, the ready queue,

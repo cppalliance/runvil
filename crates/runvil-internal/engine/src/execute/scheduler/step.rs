@@ -9,7 +9,7 @@
 use runvil_types::emitter::Emitter;
 use runvil_types::event::lifecycle;
 
-use crate::heading_address::SectionIndex;
+use crate::heading_address::{SectionIndex, SectionPos};
 use crate::lua::{Answer, CoroStep, LuaBlockResult, Request, YieldParse};
 use crate::parser::{Block, BodyText};
 use crate::{Error, Result};
@@ -195,7 +195,9 @@ impl Scheduler {
                     return Err(Error::internal("an unrecognized block kind cannot advance"));
                 }
                 // The section's blocks are exhausted: fall through.
-                None if is_h1 => return self.end_h1(id, SectionIndex::FIRST),
+                None if is_h1 => {
+                    return self.end_h1(id, SectionPos::top(SectionIndex::FIRST));
+                }
                 None => {
                     self.end_section(id)?;
                     self.ready.push_back(id);

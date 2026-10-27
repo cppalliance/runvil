@@ -28,9 +28,10 @@ pub(in crate::execute::scheduler) enum ChainKind {
     /// The main walk.
     Root,
     /// The H1 pass: the prompt's H1 blocks under its title. It runs the
-    /// walk's rules with the deltas the `h1` module lists. The
-    /// `slice`/`index` walk position stays at the top-level slice, unused
-    /// until a jump out of H1 starts the walk at the resolved target.
+    /// walk's rules with the deltas the `h1` module lists. Its `walk`
+    /// stays at the first top-level section, unused: the walk after the
+    /// pass is a separate root chain, started at the first section or at
+    /// the target a jump out of H1 resolves to.
     H1,
     /// A `call` child, whose parent is blocked on it.
     Call {
