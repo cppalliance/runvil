@@ -9,6 +9,10 @@ rustflags = ["-C", "target-feature=+crt-static"]
 [alias]
 workshop = "run -p build-workshop --"
 xtask = "run -p build-xtask --"
+# Outlines the workspace with the vibelight checkout next to this repo. Cargo
+# builds it in release mode on first use and rebuilds it when its source
+# changes. Run it from the repo root: the path is relative to the cwd.
+vibelight = "run --release --manifest-path ../vibelight/Cargo.toml --"
 
 # Clippy appends a docs-link line to every diagnostic; the lint name already
 # identifies it.
