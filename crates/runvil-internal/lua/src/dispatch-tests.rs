@@ -13,16 +13,14 @@ fn binding(alias: &str, tool: &ToolInfo) -> ToolBinding {
 }
 
 #[test]
-fn prepare_dispatch_wraps_a_canned_untrusted_output_counts_it_and_reports_it() {
+fn prepare_dispatch_wraps_a_canned_untrusted_output_and_reports_it() {
     let recorder = Recorder::default();
-    let counts = ToolCallCounts::new(["tools/echo".to_owned()]);
     let echo = binding("echo", &echo_tool());
     let nonce = test_nonce();
     let outcome = prepare_dispatch(
         &echo,
         Some("acme"),
         Ok(ToolOutput::untrusted("canned output")),
-        Some(&counts),
         &nonce,
         recorder.emitter(),
         TEST_SECTION,
@@ -38,15 +36,6 @@ fn prepare_dispatch_wraps_a_canned_untrusted_output_counts_it_and_reports_it() {
         outcome.trust(),
         OutputTrust::Untrusted,
         "the untrusted marking survives"
-    );
-    assert_eq!(
-        counts
-            .snapshot()
-            .expect("the counts read")
-            .get("tools/echo")
-            .copied(),
-        Some(1),
-        "preparing the outcome increments the tool's count under its id"
     );
     assert_eq!(
         recorder.kinds(),
@@ -84,7 +73,6 @@ fn prepare_dispatch_turns_a_canned_tool_error_into_the_typed_error() {
         &failing,
         None,
         Err(ToolError::message("canned failure").with_kind(ToolErrorKind::Backend)),
-        None,
         &test_nonce(),
         recorder.emitter(),
         TEST_SECTION,
@@ -118,7 +106,6 @@ fn a_model_issued_tool_failure_becomes_untrusted_failure_text_under_its_call_id(
         &failing,
         None,
         Err(ToolError::message("the tool's own backend failed").with_kind(ToolErrorKind::Backend)),
-        None,
         &nonce,
         recorder.emitter(),
         TEST_SECTION,
@@ -162,7 +149,6 @@ fn a_scripts_listing_call_passes_its_untrusted_text_verbatim_and_reports_it_untr
         &listing,
         None,
         Ok(ToolOutput::untrusted("the <listing> [INST]")),
-        None,
         &test_nonce(),
         recorder.emitter(),
         TEST_SECTION,
@@ -193,7 +179,6 @@ fn a_models_listing_call_receives_the_envelope() {
         &listing,
         None,
         Ok(ToolOutput::untrusted("the listing")),
-        None,
         &nonce,
         Recorder::default().emitter(),
         TEST_SECTION,
@@ -213,7 +198,6 @@ fn the_listing_rule_needs_the_flag_and_untrusted_output() {
             &binding("tool", tool),
             None,
             Ok(output),
-            None,
             &nonce,
             Recorder::default().emitter(),
             TEST_SECTION,
@@ -234,7 +218,6 @@ fn the_listing_rule_needs_the_flag_and_untrusted_output() {
         &binding("tool", &listing_tool()),
         None,
         Err(ToolError::message("the servers are down")),
-        None,
         &nonce,
         Recorder::default().emitter(),
         TEST_SECTION,
@@ -254,7 +237,6 @@ fn a_model_issued_dispatch_reports_its_result_under_the_call_id() {
         &echo,
         Some("acme"),
         Ok(ToolOutput::trusted("echoed: hi")),
-        None,
         &test_nonce(),
         recorder.emitter(),
         TEST_SECTION,

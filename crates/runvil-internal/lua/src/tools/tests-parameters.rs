@@ -157,7 +157,6 @@ fn metadata_of_a_pack_whose_results_are_untrusted_never_takes_the_envelope() {
         &ToolBinding::from_info("web_search", &search_tool()),
         None,
         Ok(ToolOutput::untrusted("fetched page")),
-        None,
         &nonce,
         &null_emitter(),
         TEST_SECTION,

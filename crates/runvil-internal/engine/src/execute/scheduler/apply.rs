@@ -280,8 +280,7 @@ impl ChainOps<'_> {
     /// issued the call (a tool's own failure then resumes as untrusted
     /// failure text), else as a script call classified by the binding's
     /// declared output kind. A script call that receives a listing marks
-    /// the chain's frame's innermost open adhoc call. The counts were
-    /// taken at dispatch, so the body is handed `None` for them.
+    /// the chain's frame's innermost open adhoc call.
     fn accept_tool_call(
         &mut self,
         call: &ToolCallContinuation,
@@ -307,7 +306,6 @@ impl ChainOps<'_> {
                     &call.binding,
                     vendor,
                     result,
-                    None,
                     nonce,
                     emitter,
                     section,
@@ -320,7 +318,6 @@ impl ChainOps<'_> {
                 &call.binding,
                 vendor,
                 result,
-                None,
                 nonce,
                 emitter,
                 section,

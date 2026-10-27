@@ -1,8 +1,8 @@
 //! The shared tool-dispatch body every executor invokes.
 //!
 //! [`prepare_dispatch`] is the one place a bound tool's answer composes the
-//! per-VM call counts, the succeeded/failed observation, the untrusted nonce
-//! wrap, and the `ToolResult` report. It is synchronous and takes the tool's
+//! succeeded/failed observation, the untrusted nonce wrap, and the
+//! `ToolResult` report. It is synchronous and takes the tool's
 //! outcome as a value, so the Harness performs the call and the Engine applies
 //! the same rules when the answer arrives; [`prepare_model_dispatch`] is
 //! the same body under the model-issued rule (a tool's own failure resumes
@@ -20,7 +20,6 @@ use runvil_types::untrusted::GuardNonce;
 
 use crate::error::{Error, Result};
 use crate::handles::ToolBinding;
-use crate::scope::ToolCallCounts;
 
 /// The run coordinates a script-initiated dispatch reports under.
 ///
@@ -99,10 +98,8 @@ impl ToolDispatch {
 /// Applies the dispatch rules to one bound tool call's answer: the shared
 /// synchronous body every executor invokes once the tool has spoken.
 ///
-/// The sequence is fixed: the counts increment when `counts` is `Some` (an
-/// executor that counted the attempt at dispatch passes `None`), the
-/// succeeded/failed observation,
-/// then the trust rule - a trusted output passes verbatim, anything else is
+/// The sequence is fixed: the succeeded/failed observation, then the trust
+/// rule - a trusted output passes verbatim, anything else is
 /// nonce-wrapped before it can reach a model turn or a calling script,
 /// except that a script-initiated call to a binding that describes tools
 /// receives its untrusted output verbatim, still marked untrusted, as a
@@ -118,25 +115,16 @@ impl ToolDispatch {
 ///
 /// # Errors
 /// Returns [`Error::Tool`] when `call_result` is the tool's failure (its
-/// typed error retained as the cause), or the counts' own error when
-/// `binding`'s id was never seeded.
-#[expect(
-    clippy::too_many_arguments,
-    reason = "the dispatch body takes the call's answer beside every coordinate its report names, the tool's vendor included, in one call"
-)]
+/// typed error retained as the cause).
 pub fn prepare_dispatch(
     binding: &ToolBinding,
     vendor: Option<&str>,
     call_result: std::result::Result<ToolOutput, ToolError>,
-    counts: Option<&ToolCallCounts>,
     nonce: &GuardNonce,
     emitter: &Emitter,
     section: &str,
     script: Option<ScriptReport>,
 ) -> Result<ToolDispatch> {
-    if let Some(counts) = counts {
-        counts.increment(&binding.id().to_string())?;
-    }
     emitter.report(
         section,
         if call_result.is_ok() {
@@ -193,44 +181,32 @@ pub fn prepare_dispatch(
 /// ([`Error::Tool`]) becomes the call's result - the error message
 /// nonce-wrapped as untrusted - so the model reads the failure and the
 /// round continues; `prepare_dispatch` has already fired the failed
-/// observation. The counts increment and every other dispatch failure
-/// still propagate. Nothing here awaits: the Harness performs the call, and
-/// the Engine applies these rules to the answer.
+/// observation. Every other dispatch failure still propagates. Nothing
+/// here awaits: the Harness performs the call, and the Engine applies
+/// these rules to the answer.
 ///
 /// # Errors
-/// Returns the counts' own error when `binding`'s id was never seeded.
-#[expect(
-    clippy::too_many_arguments,
-    reason = "the dispatch body takes the call's answer beside every coordinate its report names, the tool's vendor included, in one call"
-)]
+/// Propagates any error of [`prepare_dispatch`] other than the tool's own
+/// failure ([`Error::Tool`]), which becomes the call's result.
 pub fn prepare_model_dispatch(
     binding: &ToolBinding,
     vendor: Option<&str>,
     call_result: std::result::Result<ToolOutput, ToolError>,
-    counts: Option<&ToolCallCounts>,
     nonce: &GuardNonce,
     emitter: &Emitter,
     section: &str,
     report: &ModelReport,
 ) -> Result<ToolDispatch> {
-    let outcome = match prepare_dispatch(
-        binding,
-        vendor,
-        call_result,
-        counts,
-        nonce,
-        emitter,
-        section,
-        None,
-    ) {
-        Ok(outcome) => outcome,
-        Err(Error::Tool { message, .. }) => ToolDispatch {
-            content: nonce.wrap(&message),
-            trust: OutputTrust::Untrusted,
-            listing: false,
-        },
-        Err(error) => return Err(error),
-    };
+    let outcome =
+        match prepare_dispatch(binding, vendor, call_result, nonce, emitter, section, None) {
+            Ok(outcome) => outcome,
+            Err(Error::Tool { message, .. }) => ToolDispatch {
+                content: nonce.wrap(&message),
+                trust: OutputTrust::Untrusted,
+                listing: false,
+            },
+            Err(error) => return Err(error),
+        };
     emitter.tool_result(
         section,
         report.script.turn,

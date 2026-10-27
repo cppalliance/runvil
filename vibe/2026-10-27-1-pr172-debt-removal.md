@@ -348,7 +348,7 @@ isProject: false
 
 <step-5>
 
-### Step 5: Drop the dead counts parameter from the dispatch bodies
+### Step 5: Drop the dead counts parameter from the dispatch bodies [completed]
 
 - Component: Dispatch bodies
 - Tests: run each from `c:\Users\Vinnie\cursor\runvil` in PowerShell, as written, after clearing `CARGO_BUILD_WARNINGS` and `RUSTDOCFLAGS` so each command sees only the variables it sets itself; each exits 0.
