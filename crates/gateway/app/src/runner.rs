@@ -135,6 +135,39 @@ impl ServeOptions {
     }
 }
 
+/// The parsed app options: the serve options plus how the main thread runs.
+#[derive(Debug)]
+pub struct AppOptions {
+    /// What the launch does.
+    pub command: LaunchCommand,
+
+    /// What to serve. Under [`LaunchCommand::Diagnostics`] only the config path
+    /// is meaningful: the report names it.
+    pub serve: ServeOptions,
+
+    /// Whether the system tray occupies the main thread (default).
+    /// `--no-tray` keeps the headless Ctrl-C loop for servers and CI.
+    pub tray: bool,
+
+    /// Whether the launch came from the OS autostart entry (`--login`).
+    pub login: bool,
+
+    /// Whether to print the Settings handoff URL to stdout (`--print-url`).
+    /// Implies the headless loop: the flag exists for tray-less
+    /// environments.
+    pub print_url: bool,
+}
+
+/// What this launch does.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LaunchCommand {
+    /// Serve (the default and only serving mode).
+    Serve,
+
+    /// Prints the diagnostics report and exits.
+    Diagnostics,
+}
+
 /// Optional admin configuration path plus the active profile name.
 #[non_exhaustive]
 #[derive(Debug, Clone, Default)]

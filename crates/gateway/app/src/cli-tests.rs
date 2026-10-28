@@ -14,7 +14,7 @@ fn args(items: &[&str]) -> Vec<OsString> {
 
 /// The kind of the parse error for `items`; panics if they parse.
 fn error_kind(items: &[&str]) -> ErrorKind {
-    AppOptions::from_args(args(items))
+    parse_args(args(items))
         .expect_err("the arguments are rejected")
         .kind()
 }
@@ -58,7 +58,7 @@ fn neither_path_set_defers_to_boot_discovery() {
 
 #[test]
 fn the_root_invocation_serves_with_discovery() {
-    let invocation = AppOptions::from_args(args(&[])).expect("the bare invocation parses");
+    let invocation = parse_args(args(&[])).expect("the bare invocation parses");
     assert_eq!(
         invocation.serve.config_path, None,
         "no --config defers to boot discovery"
@@ -93,7 +93,7 @@ fn a_positional_config_path_is_rejected() {
 
 #[test]
 fn the_config_flag_sets_the_path() {
-    let invocation = AppOptions::from_args(args(&["--config", "gateway.toml"])).expect("parse");
+    let invocation = parse_args(args(&["--config", "gateway.toml"])).expect("parse");
     assert_eq!(
         invocation.serve.config_path,
         Some(PathBuf::from("gateway.toml"))
@@ -115,8 +115,8 @@ fn the_config_flag_is_given_once() {
 
 #[test]
 fn parses_path_and_profile() {
-    let invocation = AppOptions::from_args(args(&["--config", "gateway.toml", "--profile", "dev"]))
-        .expect("parse");
+    let invocation =
+        parse_args(args(&["--config", "gateway.toml", "--profile", "dev"])).expect("parse");
     assert_eq!(
         invocation.serve.profile.as_ref().map(ProfileName::as_str),
         Some("dev")
@@ -129,14 +129,14 @@ fn parses_path_and_profile() {
 
 #[test]
 fn the_tray_is_default_and_login_is_off() {
-    let invocation = AppOptions::from_args(args(&["--config", "gateway.toml"])).expect("parse");
+    let invocation = parse_args(args(&["--config", "gateway.toml"])).expect("parse");
     assert!(invocation.tray, "the tray is the default main loop");
     assert!(!invocation.login);
 }
 
 #[test]
 fn no_tray_selects_the_headless_loop() {
-    let invocation = AppOptions::from_args(args(&["--no-tray"])).expect("parse");
+    let invocation = parse_args(args(&["--no-tray"])).expect("parse");
     assert!(!invocation.tray);
     assert!(!invocation.login);
 }
@@ -145,14 +145,14 @@ fn no_tray_selects_the_headless_loop() {
 fn the_autostart_command_line_parses() {
     // The Run-key entry is `"<exe>" --login`; a login launch must
     // never fail on its own command line.
-    let invocation = AppOptions::from_args(args(&["--login"])).expect("parse");
+    let invocation = parse_args(args(&["--login"])).expect("parse");
     assert!(invocation.login);
     assert!(invocation.tray, "a login launch still shows the tray");
 }
 
 #[test]
 fn print_url_parses_and_leaves_the_other_flags_alone() {
-    let invocation = AppOptions::from_args(args(&["--print-url"])).expect("parse");
+    let invocation = parse_args(args(&["--print-url"])).expect("parse");
     assert!(invocation.print_url);
     assert!(
         invocation.tray,
@@ -163,7 +163,7 @@ fn print_url_parses_and_leaves_the_other_flags_alone() {
 
 #[test]
 fn print_url_combines_with_no_tray_and_a_config_path() {
-    let invocation = AppOptions::from_args(args(&[
+    let invocation = parse_args(args(&[
         "--config",
         "gateway.toml",
         "--no-tray",
@@ -180,7 +180,7 @@ fn print_url_combines_with_no_tray_and_a_config_path() {
 
 #[test]
 fn browser_parses_and_reaches_the_serve_options() {
-    let invocation = AppOptions::from_args(args(&["--browser"])).expect("parse");
+    let invocation = parse_args(args(&["--browser"])).expect("parse");
     assert!(
         invocation.serve.browser,
         "the flag reaches the spawn hook through ServeOptions"
@@ -190,7 +190,7 @@ fn browser_parses_and_reaches_the_serve_options() {
 
 #[test]
 fn login_wins_over_browser() {
-    let invocation = AppOptions::from_args(args(&["--login", "--browser"])).expect("parse");
+    let invocation = parse_args(args(&["--login", "--browser"])).expect("parse");
     assert!(
         !invocation.serve.browser,
         "a login launch never opens a browser"
@@ -199,7 +199,7 @@ fn login_wins_over_browser() {
 
 #[test]
 fn missing_profile_defers_to_environment_or_state() {
-    let invocation = AppOptions::from_args(args(&["--config", "gateway.toml"])).expect("parse");
+    let invocation = parse_args(args(&["--config", "gateway.toml"])).expect("parse");
     assert!(invocation.serve.profile.is_none());
 }
 
@@ -227,7 +227,7 @@ fn rejects_an_unknown_argument() {
 #[test]
 fn help_is_recognized() {
     for flag in ["--help", "-h"] {
-        let error = AppOptions::from_args(args(&[flag])).unwrap_err();
+        let error = parse_args(args(&[flag])).unwrap_err();
         assert_eq!(error.kind(), ErrorKind::DisplayHelp, "{flag}");
         assert!(!error.use_stderr(), "{flag} prints to stdout and succeeds");
     }
@@ -236,7 +236,7 @@ fn help_is_recognized() {
 #[test]
 fn version_is_recognized() {
     for flag in ["--version", "-V"] {
-        let error = AppOptions::from_args(args(&[flag])).unwrap_err();
+        let error = parse_args(args(&[flag])).unwrap_err();
         assert_eq!(error.kind(), ErrorKind::DisplayVersion, "{flag}");
         assert!(!error.use_stderr(), "{flag} prints to stdout and succeeds");
     }
@@ -252,17 +252,17 @@ fn rejects_unknown_flag() {
 
 #[test]
 fn diagnostics_is_the_only_subcommand() {
-    let invocation = AppOptions::from_args(args(&["diagnostics"])).expect("parses");
+    let invocation = parse_args(args(&["diagnostics"])).expect("parses");
     assert_eq!(invocation.command, LaunchCommand::Diagnostics);
     assert_eq!(invocation.serve.config_path, None);
-    let invocation = AppOptions::from_args(args(&[])).expect("the bare invocation parses");
+    let invocation = parse_args(args(&[])).expect("the bare invocation parses");
     assert_eq!(invocation.command, LaunchCommand::Serve);
 }
 
 #[test]
 fn diagnostics_accepts_a_config_path() {
     let invocation =
-        AppOptions::from_args(args(&["diagnostics", "--config", "gateway.toml"])).expect("parses");
+        parse_args(args(&["diagnostics", "--config", "gateway.toml"])).expect("parses");
     assert_eq!(invocation.command, LaunchCommand::Diagnostics);
     assert_eq!(
         invocation.serve.config_path,
@@ -292,8 +292,7 @@ fn diagnostics_after_a_flag_is_not_a_subcommand() {
 
 #[test]
 fn supervised_option_parses_and_reaches_the_serve_options() {
-    let invocation =
-        AppOptions::from_args(args(&["--supervised", "--no-tray"])).expect("should parse");
+    let invocation = parse_args(args(&["--supervised", "--no-tray"])).expect("should parse");
 
     assert!(invocation.serve.supervised);
     assert!(
@@ -304,12 +303,11 @@ fn supervised_option_parses_and_reaches_the_serve_options() {
 
 #[test]
 fn supervised_option_does_not_override_no_tray_option() {
-    let invocation = AppOptions::from_args(args(&["--supervised"])).expect("should parse");
+    let invocation = parse_args(args(&["--supervised"])).expect("should parse");
 
     assert!(invocation.tray, "--supervised should not set tray to false");
 
-    let invocation =
-        AppOptions::from_args(args(&["--supervised", "--no-tray"])).expect("should parse");
+    let invocation = parse_args(args(&["--supervised", "--no-tray"])).expect("should parse");
 
     assert!(
         !invocation.tray,
@@ -319,7 +317,7 @@ fn supervised_option_does_not_override_no_tray_option() {
 
 #[test]
 fn a_launch_is_not_supervised_by_default() {
-    let invocation = AppOptions::from_args(args(&[])).expect("should parse");
+    let invocation = parse_args(args(&[])).expect("should parse");
 
     assert!(!invocation.serve.supervised);
 }
@@ -338,7 +336,7 @@ fn supervised_and_print_url_options_cannot_be_used_together() {
 
 #[test]
 fn diagnostics_has_its_own_help() {
-    let error = AppOptions::from_args(args(&["diagnostics", "--help"])).unwrap_err();
+    let error = parse_args(args(&["diagnostics", "--help"])).unwrap_err();
     assert_eq!(error.kind(), ErrorKind::DisplayHelp);
     let help = error.to_string();
     assert!(help.contains("--config"), "{help}");
@@ -369,14 +367,14 @@ fn the_help_text_lists_all_flags() {
 
 #[test]
 fn preferred_port_parses_and_reaches_the_serve_options() {
-    let options = AppOptions::from_args(args(&["--preferred-port", "8081"])).expect("should parse");
+    let options = parse_args(args(&["--preferred-port", "8081"])).expect("should parse");
 
     assert_eq!(options.serve.preferred_port, Some(8081));
 }
 
 #[test]
 fn a_launch_has_no_preferred_port_by_default() {
-    let options = AppOptions::from_args(args(&[])).expect("the bare invocation should parse");
+    let options = parse_args(args(&[])).expect("the bare invocation should parse");
 
     assert_eq!(options.serve.preferred_port, None);
 }

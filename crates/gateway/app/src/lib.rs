@@ -128,7 +128,8 @@ use crate::boot_load::STT_RUNTIME_UNAVAILABLE;
 pub use crate::diagnostics::diagnostics_json;
 pub use crate::relaunch::{GatewayStartup, GatewayStartupError, settle_gateway_startup};
 pub use crate::runner::{
-    Gateway, GatewayHandle, ProfilesContext, ServeOptions, run, run_printing_url, spawn,
+    AppOptions, Gateway, GatewayHandle, LaunchCommand, ProfilesContext, ServeOptions, run,
+    run_printing_url, spawn,
 };
 pub use crate::shutdown::{RESTART_REQUESTED, ShutdownReason};
 pub use crate::tray::run_with_tray;

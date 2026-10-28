@@ -15,14 +15,15 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 
 use gateway::{
-    GatewayStartup, ShutdownReason, run, run_printing_url, run_with_tray, settle_gateway_startup,
+    GatewayStartup, LaunchCommand, ShutdownReason, run, run_printing_url, run_with_tray,
+    settle_gateway_startup,
 };
 use gateway_logging::{LogConfig, LogRuntime};
 use tracing_subscriber::Layer as _;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 
-use crate::cli::{AppOptions, LaunchCommand};
+use crate::cli::parse_args;
 
 mod cli;
 
@@ -60,7 +61,7 @@ fn main() -> ExitCode {
         );
     }
 
-    let app_options = match AppOptions::from_args(std::env::args_os()) {
+    let app_options = match parse_args(std::env::args_os()) {
         Ok(options) => options,
 
         // clap returns `--help` and `--version` through the error channel.

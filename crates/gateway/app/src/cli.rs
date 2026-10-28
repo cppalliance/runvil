@@ -1,83 +1,50 @@
 use std::{ffi::OsString, path::PathBuf};
 
 use clap::{Parser, Subcommand};
-use gateway::{ProfileName, ServeOptions};
+use gateway::{AppOptions, LaunchCommand, ProfileName, ServeOptions};
 
-/// The parsed app options: the serve options plus how the main thread runs.
-#[derive(Debug)]
-pub(crate) struct AppOptions {
-    /// What the launch does.
-    pub command: LaunchCommand,
+/// Parses command line args into an [`AppOptions`].
+///
+/// Config paths are read as `OsString`, so non-UTF-8 paths survive.
+/// The config path
+/// (`--config PATH`, falling back to `RUNVIL_GATEWAY_CONFIG`) stays
+/// optional: with neither set, the gateway discovers or generates the
+/// boot config itself.
+/// `--profile NAME` is validated into a
+/// [`ProfileName`] at parse time.
+///
+/// `--help` and `--version` also arrive as a [`clap::Error`]; its
+/// `use_stderr()` is false for them.
+pub(crate) fn parse_args(
+    args: impl IntoIterator<Item = OsString>,
+) -> Result<AppOptions, clap::Error> {
+    let cli = Cli::try_parse_from(args)?;
+    let env = std::env::var_os("RUNVIL_GATEWAY_CONFIG");
 
-    /// What to serve. Under [`LaunchCommand::Diagnostics`] only the config path
-    /// is meaningful: the report names it.
-    pub serve: ServeOptions,
+    let config_path = resolve_config_path(cli.config, env);
 
-    /// Whether the system tray occupies the main thread (default).
-    /// `--no-tray` keeps the headless Ctrl-C loop for servers and CI.
-    pub tray: bool,
+    Ok(match cli.command {
+        Some(SubCommand::Diagnostics) => AppOptions {
+            command: LaunchCommand::Diagnostics,
+            serve: ServeOptions::new(config_path, None),
+            tray: false,
+            login: false,
+            print_url: false,
+        },
 
-    /// Whether the launch came from the OS autostart entry (`--login`).
-    pub login: bool,
-
-    /// Whether to print the Settings handoff URL to stdout (`--print-url`).
-    /// Implies the headless loop: the flag exists for tray-less
-    /// environments.
-    pub print_url: bool,
-}
-
-impl AppOptions {
-    /// Constructs an [`AppOptions`] from command line args.
-    ///
-    /// Config paths are read as `OsString`, so non-UTF-8 paths survive.
-    /// The config path
-    /// (`--config PATH`, falling back to `RUNVIL_GATEWAY_CONFIG`) stays
-    /// optional: with neither set, the gateway discovers or generates the
-    /// boot config itself.
-    /// `--profile NAME` is validated into a
-    /// [`ProfileName`] at parse time.
-    ///
-    /// `--help` and `--version` also arrive as a [`clap::Error`]; its
-    /// `use_stderr()` is false for them.
-    pub(crate) fn from_args(args: impl IntoIterator<Item = OsString>) -> Result<Self, clap::Error> {
-        let cli = Cli::try_parse_from(args)?;
-        let env = std::env::var_os("RUNVIL_GATEWAY_CONFIG");
-
-        let config_path = resolve_config_path(cli.config, env);
-
-        Ok(match cli.command {
-            Some(SubCommand::Diagnostics) => Self {
-                command: LaunchCommand::Diagnostics,
-                serve: ServeOptions::new(config_path, None),
-                tray: false,
-                login: false,
-                print_url: false,
-            },
-
-            None => Self {
-                command: LaunchCommand::Serve,
-                // `--login`'s contract is absolute - a login launch never opens a
-                // browser - so it wins over `--browser`.
-                serve: ServeOptions::new(config_path, cli.profile)
-                    .with_browser(cli.browser && !cli.login)
-                    .with_supervised(cli.supervised)
-                    .with_preferred_port(cli.preferred_port),
-                tray: !cli.no_tray,
-                login: cli.login,
-                print_url: cli.print_url,
-            },
-        })
-    }
-}
-
-/// What this launch does.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum LaunchCommand {
-    /// Serve (the default and only serving mode).
-    Serve,
-
-    /// Prints the diagnostics report and exits.
-    Diagnostics,
+        None => AppOptions {
+            command: LaunchCommand::Serve,
+            // `--login`'s contract is absolute - a login launch never opens a
+            // browser - so it wins over `--browser`.
+            serve: ServeOptions::new(config_path, cli.profile)
+                .with_browser(cli.browser && !cli.login)
+                .with_supervised(cli.supervised)
+                .with_preferred_port(cli.preferred_port),
+            tray: !cli.no_tray,
+            login: cli.login,
+            print_url: cli.print_url,
+        },
+    })
 }
 
 /// The command line as clap reads it
