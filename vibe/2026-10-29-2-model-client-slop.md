@@ -323,7 +323,7 @@ Acceptance: both new tests pass; the existing tests listed in the Testing Plan p
 
 <step-3>
 
-### Step 3: correct the two guide chapters
+### Step 3: correct the two guide chapters [completed]
 
 - Component: `runvil-docs-guide`
 - Tests: from the `runvil` repository root with `RUNVIL_DOCS` set to `c:\Users\Vinnie\cursor\runvil-docs`:
