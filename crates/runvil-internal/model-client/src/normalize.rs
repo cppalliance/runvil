@@ -36,14 +36,19 @@ pub(crate) fn check_call_name(name: &str) -> Result<()> {
 }
 
 /// Refuses tool-call arguments that are not a JSON object, the shape tools
-/// accept.
-pub(crate) fn check_call_arguments(arguments: &Value) -> Result<()> {
-    if !arguments.is_object() {
-        return Err(CompletionError::invalid_parts(
+/// accept, and hands back the object it proved.
+///
+/// The check cannot `unwrap` the map out of the value, because the
+/// workspace denies `unwrap_used` and `expect_used`, so it matches the
+/// object arm and returns the map. A caller that needs the map then holds
+/// it without a second parse.
+pub(crate) fn checked_call_arguments(arguments: Value) -> Result<serde_json::Map<String, Value>> {
+    match arguments {
+        Value::Object(map) => Ok(map),
+        _ => Err(CompletionError::invalid_parts(
             "tool call arguments were not a JSON object",
-        ));
+        )),
     }
-    Ok(())
 }
 
 /// Records `id` in `seen`, refusing an id another call in the turn has.

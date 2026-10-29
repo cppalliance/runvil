@@ -52,6 +52,21 @@ fn non_object_arguments_are_rejected() {
 }
 
 #[test]
+fn checked_call_arguments_hands_back_the_object_it_proved() {
+    // A validating constructor cannot `unwrap` the map out of the value,
+    // because the workspace denies it, so the check returns what it proved.
+    // A rewrite that returned `()` or re-wrapped the payload as a `Value`
+    // would force a second parse at every construction site.
+    let arguments = json!({ "query": "rust", "limit": 5 });
+    let map = checked_call_arguments(arguments.clone()).expect("an object is accepted");
+    assert_eq!(
+        Value::Object(map),
+        arguments,
+        "the returned map holds exactly the entries the caller passed"
+    );
+}
+
+#[test]
 fn duplicate_tool_call_ids_are_rejected() {
     let call = |name: &str| ToolCall::from_parts("dup", name, json!({})).expect("a whole call");
     let error =

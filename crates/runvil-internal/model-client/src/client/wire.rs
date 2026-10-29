@@ -113,8 +113,9 @@ pub struct ToolSchema {
 }
 
 impl ToolSchema {
-    /// Returns the tool's name as sent to the model. It holds one or more
-    /// characters, all from `[A-Za-z0-9_.-]`.
+    /// Returns the tool's name as sent to the model. [`crate::detail::tool_schema_new`]
+    /// is the only builder, and it accepts a leading ASCII letter followed
+    /// by up to 63 letters, digits, `_`, or `-`.
     #[must_use]
     pub fn name(&self) -> &str {
         &self.name
@@ -171,13 +172,13 @@ pub enum ToolSchemaError {
 #[non_exhaustive]
 pub struct ToolCall {
     /// The id the model assigned to this call, echoed back with its result.
-    pub(super) id: String,
+    id: String,
     /// The name of the tool to invoke.
-    pub(super) name: String,
+    name: String,
     /// The parsed arguments for the call. The raw wire JSON stays
     /// crate-private: the caller inspects arguments through
     /// [`ToolCall::arguments`].
-    pub(crate) arguments: Value,
+    pub(crate) arguments: serde_json::Map<String, Value>,
 }
 
 impl ToolCall {
@@ -200,7 +201,7 @@ impl ToolCall {
     #[must_use]
     pub fn arguments(&self) -> ToolArguments<'_> {
         ToolArguments {
-            value: &self.arguments,
+            map: &self.arguments,
         }
     }
 }
@@ -212,38 +213,35 @@ impl ToolCall {
 #[derive(Debug, Clone, Copy)]
 #[non_exhaustive]
 pub struct ToolArguments<'a> {
-    value: &'a Value,
+    map: &'a serde_json::Map<String, Value>,
 }
 
 impl ToolArguments<'_> {
     /// Returns the arguments object serialized as canonical JSON text.
     #[must_use]
     pub fn to_json_string(&self) -> String {
-        self.value.to_string()
+        // A map built from a `Value` tree always serializes, so the fallback
+        // arm is unreachable. `unwrap_or_default` is still wrong here: it
+        // would publish an empty arguments string, which a tool cannot parse.
+        serde_json::to_string(self.map).unwrap_or_else(|_| "{}".to_owned())
     }
 
     /// Returns whether the arguments object is empty.
     #[must_use]
     pub fn is_empty(&self) -> bool {
-        match self.value {
-            Value::Null => true,
-            Value::Object(map) => map.is_empty(),
-            _ => false,
-        }
+        self.map.is_empty()
     }
 
     /// Returns whether the arguments object has a top-level key named `key`.
     #[must_use]
     pub fn contains(&self, key: &str) -> bool {
-        self.value
-            .as_object()
-            .is_some_and(|map| map.contains_key(key))
+        self.map.contains_key(key)
     }
 
     /// Returns the top-level argument names of the arguments object.
     pub fn names(&self) -> ArgumentNames<'_> {
         ArgumentNames {
-            keys: self.value.as_object().map(serde_json::Map::keys),
+            keys: self.map.keys(),
         }
     }
 }
@@ -254,19 +252,19 @@ impl ToolArguments<'_> {
 #[derive(Debug, Clone)]
 #[must_use = "an iterator does nothing until it is consumed"]
 pub struct ArgumentNames<'a> {
-    /// The object's keys, or `None` for a null payload.
-    keys: Option<serde_json::map::Keys<'a>>,
+    /// The object's keys.
+    keys: serde_json::map::Keys<'a>,
 }
 
 impl<'a> Iterator for ArgumentNames<'a> {
     type Item = &'a str;
 
     fn next(&mut self) -> Option<&'a str> {
-        self.keys.as_mut()?.next().map(String::as_str)
+        self.keys.next().map(String::as_str)
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
-        self.keys.as_ref().map_or((0, Some(0)), Iterator::size_hint)
+        self.keys.size_hint()
     }
 }
 
@@ -351,7 +349,7 @@ pub struct Completion {
     /// One line per response metadata section that was present but
     /// malformed and degraded to `None`; empty for a well-formed body. The
     /// Engine reports each line as a `model_metadata_degraded` event.
-    pub(crate) metadata_diagnostics: Vec<String>,
+    metadata_diagnostics: Vec<String>,
     /// The request and response the broker attached for debug capture.
     raw: Option<RawExchange>,
 }
@@ -391,8 +389,8 @@ impl Completion {
     /// That is the name last set through
     /// [`with_model`](Completion::with_model), or else the name the
     /// completion was built with. A completion decoded from a response is
-    /// built with the model the response body named, or an empty name when
-    /// the body omits one.
+    /// labeled with the model the request body named, or, when the request
+    /// body named none, with the model the response body named.
     #[must_use]
     pub fn model(&self) -> &str {
         &self.model

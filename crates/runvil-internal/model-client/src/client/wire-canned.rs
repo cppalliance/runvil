@@ -14,7 +14,7 @@ use serde_json::Value;
 use super::{Completion, CompletionResult, RawExchange, ToolCall};
 use crate::model::CompletionError;
 use crate::normalize::{
-    check_call_arguments, check_call_id, check_call_name, check_unique_call_id, empty_reply_error,
+    check_call_id, check_call_name, check_unique_call_id, checked_call_arguments, empty_reply_error,
 };
 
 impl Completion {
@@ -140,11 +140,10 @@ impl ToolCall {
         let name = name.into();
         check_call_id(&id)?;
         check_call_name(&name)?;
-        check_call_arguments(&arguments)?;
         Ok(ToolCall {
             id,
             name,
-            arguments,
+            arguments: checked_call_arguments(arguments)?,
         })
     }
 }

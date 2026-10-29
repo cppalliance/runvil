@@ -420,13 +420,9 @@ impl ArrivedRound {
                     .binding(call.name())
                     .map(|(binding, _)| binding.id());
                 let vendor = tool.and_then(|id| scope.tool_set.vendor_for(id));
-                ToolCallEvent::new(
-                    call.id(),
-                    call.name(),
-                    detail::tool_call_arguments(call).clone(),
-                )
-                .with_tool(tool.cloned())
-                .with_vendor(vendor.map(str::to_owned))
+                ToolCallEvent::new(call.id(), call.name(), detail::tool_call_arguments(call))
+                    .with_tool(tool.cloned())
+                    .with_vendor(vendor.map(str::to_owned))
             })
             .collect();
         self.reporting.emitter.assistant_tool_calls(

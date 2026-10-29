@@ -1,11 +1,10 @@
 //! Operations on the wire types that only the Engine performs.
 //!
 //! The `runvil` facade never re-exports this module, so only Engine
-//! crates reach it. Each function stands in for what would
-//! otherwise be an inherent method or a public field on a facade-visible
-//! type: building a message from pre-validated parts, reading the raw JSON
-//! a message holds, building a tool schema, and reading a tool call's raw
-//! arguments.
+//! crates reach it. Each function reaches a field or a construction step
+//! the facade-visible type keeps private. [`completion_into_result`] is the
+//! one that splits a completion into the result the tool loop consumes and
+//! the metadata the round reports.
 
 use serde_json::Value;
 
@@ -93,9 +92,15 @@ pub fn tool_schema_new(
 
 /// Returns a tool call's parsed arguments as the raw wire JSON the
 /// dispatcher hands a tool.
+///
+/// The call's arguments are stored as a map, and the dispatcher's
+/// [`ToolCallEvent`] field is already a [`Value`], so the value is built
+/// here and moved into the event rather than cloned at the call site.
+///
+/// [`ToolCallEvent`]: runvil_types::metrics::ToolCallEvent
 #[must_use]
-pub fn tool_call_arguments(call: &ToolCall) -> &Value {
-    &call.arguments
+pub fn tool_call_arguments(call: &ToolCall) -> Value {
+    Value::Object(call.arguments.clone())
 }
 
 /// Takes the text or tool-call outcome out of a completion.

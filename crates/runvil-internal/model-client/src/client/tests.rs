@@ -4,7 +4,7 @@ use runvil_types::metrics::{CallMetrics, Usage};
 use serde_json::{Value, json};
 
 use super::*;
-use crate::detail::{message_from_validated_parts, tool_schema_new};
+use crate::detail::{message_from_validated_parts, tool_call_arguments, tool_schema_new};
 use crate::model::CompletionErrorKind;
 use crate::test_support::{assert_json, pong};
 
@@ -86,11 +86,8 @@ fn a_role_parses_from_its_name_and_a_refusal_lists_the_accepted_roles() {
 fn tool_arguments_view_exposes_no_raw_value() {
     // The public arguments view surfaces typed accessors, never a
     // serde_json::Value.
-    let call = ToolCall {
-        id: "call_1".to_owned(),
-        name: "search".to_owned(),
-        arguments: json!({"query": "rust", "limit": 5}),
-    };
+    let call = ToolCall::from_parts("call_1", "search", json!({"query": "rust", "limit": 5}))
+        .expect("a whole call");
     let args = call.arguments();
     assert!(!args.is_empty());
     assert!(args.contains("query"));
@@ -101,16 +98,40 @@ fn tool_arguments_view_exposes_no_raw_value() {
     assert_eq!(names, ["limit", "query"]);
     let json = args.to_json_string();
     assert!(json.contains("\"query\":\"rust\""), "got {json}");
+}
 
-    // A null payload reads as empty.
-    let empty = ToolCall {
-        id: "c2".to_owned(),
-        name: "noop".to_owned(),
-        arguments: Value::Null,
-    };
-    assert!(empty.arguments().is_empty());
-    assert!(!empty.arguments().contains("anything"));
-    assert_eq!(empty.arguments().names().count(), 0);
+#[test]
+fn an_arguments_view_of_an_empty_object_serializes_as_an_empty_object() {
+    // The storage is a map, so no payload can be null and no view can be
+    // null-backed. An empty object must still serialize to `{}` rather than
+    // to the empty string, which a tool would receive as unparseable
+    // arguments.
+    let call = ToolCall::from_parts("call_1", "noop", json!({})).expect("a whole call");
+    let args = call.arguments();
+    assert_eq!(
+        args.to_json_string(),
+        "{}",
+        "empty arguments are still a JSON object, never a blank string"
+    );
+    assert!(args.is_empty(), "an object with no keys is empty");
+    assert!(!args.contains("anything"));
+    assert_eq!(args.names().count(), 0);
+    assert_eq!(
+        args.names().size_hint(),
+        (0, Some(0)),
+        "the key iterator's hint matches the map it reads"
+    );
+}
+
+#[test]
+fn tool_call_arguments_hands_the_dispatcher_an_owned_value() {
+    // The dispatcher stores the arguments in a `ToolCallEvent`, whose field
+    // is already a `Value`, so the detail accessor returns an owned copy
+    // and every caller moves it instead of cloning it again.
+    let call =
+        ToolCall::from_parts("call_1", "search", json!({"query": "rust"})).expect("a whole call");
+    let arguments: Value = tool_call_arguments(&call);
+    assert_eq!(arguments, json!({ "query": "rust" }));
 }
 
 #[test]
