@@ -1,7 +1,6 @@
 //! Sandbox hardening for section VMs: the `_G` guard, global removal, and
-//! the instruction-budget hook.
+//! the cancellation hook.
 
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, OnceLock};
 
 use mlua::{HookTriggers, Lua, Thread, Value, VmState};
@@ -12,25 +11,17 @@ use crate::error::{Error, Result};
 /// How many instructions between hook firings.
 const HOOK_INTERVAL: u32 = 10_000;
 
-/// Hook-firing trip budget, effectively unlimited.
-///
-/// Long-running and infinite loops are legal: no instruction ceiling aborts a
-/// block, so the hook's job is the cancellation poll and the run's
-/// `CancelHandle` is the kill switch for a runaway loop. The typed quota
-/// errors remain for the memory and log budgets.
-const HOOK_BUDGET: u64 = u64::MAX;
-
 /// Removes code-loading, direct output, and reflection globals the base library
-/// provides. The `io`, `os`, `package`, `coroutine`, and `debug` libraries are
-/// never loaded.
+/// provides. The `io`, `os`, `package`, and `debug` libraries are never
+/// loaded; the coroutine library loads only while the shim prelude installs,
+/// and its global is stripped again.
 ///
 /// First installs the `_G` guard with its `setmetatable` and
 /// `getmetatable` replacements ([`crate::globals`]).
 ///
 /// Also wraps `table.concat` so a value with a `__tostring` metamethod
-/// (fanout result objects, Engine userdata) coerces like `tostring`, keeping
-/// existing `table.concat(results)` callers working with structured
-/// results. Plain tables, booleans, and nil still error as stock Lua would.
+/// (fanout result objects, Engine userdata) coerces like `tostring`. Plain
+/// tables, booleans, and nil still raise as stock Lua does.
 pub(crate) fn harden(lua: &Lua) -> Result<()> {
     // The guard captures the raw functions removed below, and every later
     // chunk, the `table.concat` wrapper included, must capture the
@@ -94,37 +85,35 @@ end
     Ok(())
 }
 
-/// A VM's shared instruction-hook state.
+/// A VM's shared cancellation-hook state.
 ///
-/// The hook exists for cooperative cancellation: its trip budget
-/// ([`HOOK_BUDGET`]) is effectively unlimited, so a long-running or infinite
-/// loop is legal and only the run's cancel flag aborts it. The flag is the
-/// run's synchronous [`CancelHandle`], installed once by the executor
-/// through [`set_cancel`](Self::set_cancel); a VM no executor claimed
-/// (a test fixture, the direct chunk path) is never cancelled.
+/// The hook polls the run's cancel flag every [`HOOK_INTERVAL`]
+/// instructions, so a long-running or infinite loop is legal and only the
+/// flag aborts it. The flag is the run's synchronous [`CancelHandle`],
+/// installed once by the executor through [`set_cancel`](Self::set_cancel);
+/// a VM no executor claimed (a test fixture) is never cancelled.
 ///
 /// Instruction hooks are per-coroutine in PUC Lua: the hook installed on the
 /// main state at construction never fires inside a resumed coroutine, so
-/// every block coroutine receives the same hook (over the same counter) via
+/// every block coroutine receives the same hook (over the same flag) via
 /// [`install_on_thread`](Self::install_on_thread), keeping every chunk the
 /// VM runs cancellable.
 #[derive(Debug, Default, Clone)]
-pub(crate) struct InstructionBudget {
-    fired: Arc<AtomicU64>,
+pub(crate) struct CancelHook {
     /// The run's cancel flag, set once; the hook polls it on every firing.
     cancel: Arc<OnceLock<CancelHandle>>,
 }
 
-impl InstructionBudget {
-    /// Installs the budget/cancellation hook on a block coroutine.
+impl CancelHook {
+    /// Installs the cancellation hook on a block coroutine.
     ///
     /// # Errors
-    /// Returns [`Error::Lua`] if the VM rejects the hook callback.
+    /// Returns [`Error::LuaRuntime`] if the VM rejects the hook callback.
     pub(crate) fn install_on_thread(&self, thread: &Thread) -> Result<()> {
         thread
             .set_hook(
                 HookTriggers::new().every_nth_instruction(HOOK_INTERVAL),
-                budget_hook(Arc::clone(&self.fired), Arc::clone(&self.cancel)),
+                cancel_poll(Arc::clone(&self.cancel)),
             )
             .map_err(Error::lua)
     }
@@ -141,13 +130,6 @@ impl InstructionBudget {
     pub(crate) fn is_cancelled(&self) -> bool {
         self.cancel.get().is_some_and(CancelHandle::is_cancelled)
     }
-
-    /// Returns how many hook firings have counted, which leaves out a
-    /// firing that a set cancel flag aborted.
-    #[cfg(test)]
-    pub(crate) fn fired(&self) -> u64 {
-        self.fired.load(Ordering::Relaxed)
-    }
 }
 
 /// Returns whether `cancel` holds a set flag, the hook's poll of one
@@ -157,10 +139,8 @@ fn cancelled(cancel: &OnceLock<CancelHandle>) -> bool {
 }
 
 /// Builds the every-Nth-instruction hook body shared by the main state and
-/// every block coroutine: the cancellation poll, plus a trip budget that is
-/// effectively unlimited ([`HOOK_BUDGET`]) and never fires in practice.
-fn budget_hook(
-    fired: Arc<AtomicU64>,
+/// every block coroutine: the cancellation poll.
+fn cancel_poll(
     cancel: Arc<OnceLock<CancelHandle>>,
 ) -> impl Fn(&Lua, &mlua::debug::Debug<'_>) -> mlua::Result<VmState> {
     move |_lua, _debug| {
@@ -172,11 +152,6 @@ fn budget_hook(
                 "lua execution cancelled".to_string(),
             ));
         }
-        if fired.fetch_add(1, Ordering::Relaxed) == HOOK_BUDGET {
-            return Err(mlua::Error::external(crate::error::QuotaExceeded(
-                crate::error::QuotaResource::Instruction,
-            )));
-        }
         Ok(VmState::Continue)
     }
 }
@@ -184,16 +159,16 @@ fn budget_hook(
 /// Installs the every-Nth-instruction hook that keeps a block cancellable.
 ///
 /// The hook covers the main state only; coroutines need
-/// [`InstructionBudget::install_on_thread`] with the returned counter.
+/// [`CancelHook::install_on_thread`] with the returned hook.
 ///
 /// # Errors
-/// Returns [`Error::Lua`] if the VM rejects the hook callback.
-pub(crate) fn install_instruction_budget(lua: &Lua) -> Result<InstructionBudget> {
-    let budget = InstructionBudget::default();
+/// Returns [`Error::LuaRuntime`] if the VM rejects the hook callback.
+pub(crate) fn install_cancel_hook(lua: &Lua) -> Result<CancelHook> {
+    let hook = CancelHook::default();
     lua.set_hook(
         HookTriggers::new().every_nth_instruction(HOOK_INTERVAL),
-        budget_hook(Arc::clone(&budget.fired), Arc::clone(&budget.cancel)),
+        cancel_poll(Arc::clone(&hook.cancel)),
     )
     .map_err(Error::lua)?;
-    Ok(budget)
+    Ok(hook)
 }

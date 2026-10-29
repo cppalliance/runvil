@@ -146,7 +146,7 @@ const UI_SNAPSHOT_OPTIONS: mlua::serde::SerializeOptions = mlua::serde::Serializ
 /// its own copy of the JSON tree.
 ///
 /// # Errors
-/// Returns [`Error::Lua`] if the function or the global cannot be created.
+/// Returns [`Error::LuaRuntime`] if the function or the global cannot be created.
 pub fn install_ui(lua: &Lua, snapshot: Arc<serde_json::Value>) -> Result<()> {
     let snapshot = lua
         .create_function(move |lua, ()| lua.to_value_with(snapshot.as_ref(), UI_SNAPSHOT_OPTIONS))

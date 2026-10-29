@@ -34,7 +34,7 @@ use serde_json::Value as Json;
 use crate::engine_globals::{LUA_LOG_CHARACTER_LIMIT, install_untrusted};
 use crate::error::{Error, Result};
 use crate::handles::ToolSet;
-use crate::hardening::{InstructionBudget, harden, install_instruction_budget};
+use crate::hardening::{CancelHook, harden, install_cancel_hook};
 use crate::iteration::install_deterministic_iteration;
 use crate::messages::MessageList;
 use crate::models::{ModelRuntime, RawModelIds};
@@ -156,9 +156,9 @@ pub struct SectionVm<S = Injected> {
     log_byte_budget: Arc<AtomicUsize>,
     /// The adhoc tools `tools.adhoc` defined.
     adhoc_tools: AdhocTools,
-    /// The VM's instruction-budget counter, shared with every block
-    /// coroutine's hook (hooks are per-coroutine in PUC Lua).
-    instruction_budget: InstructionBudget,
+    /// The VM's cancellation hook, shared with every block coroutine's hook
+    /// (hooks are per-coroutine in PUC Lua).
+    cancel_hook: CancelHook,
     /// The raw-model-id fallback, resolved whenever the caller passes an
     /// application-state snapshot (`RunContext::with_ui`): then `models.get`
     /// resolves an undeclared alias as a raw gateway catalog model id. Set
@@ -221,7 +221,7 @@ impl SectionVm<Uninjected> {
             log_budget: Arc::new(AtomicU32::new(DEFAULT_LUA_LOG_EVENTS)),
             log_byte_budget: Arc::new(AtomicUsize::new(log_byte_budget(DEFAULT_LUA_LOG_EVENTS))),
             adhoc_tools: AdhocTools::default(),
-            instruction_budget: InstructionBudget::default(),
+            cancel_hook: CancelHook::default(),
             raw_model_ids: RawModelIds::Refused,
             messages: MessageList::default(),
             state: Uninjected,
@@ -235,8 +235,8 @@ impl SectionVm<Uninjected> {
         if let Err(error) = install_untrusted(&vm.lua, nonce) {
             return vm.construction_failed(error, emitter, section);
         }
-        match install_instruction_budget(&vm.lua) {
-            Ok(budget) => vm.instruction_budget = budget,
+        match install_cancel_hook(&vm.lua) {
+            Ok(hook) => vm.cancel_hook = hook,
             Err(error) => return vm.construction_failed(error, emitter, section),
         }
         Ok(vm)
@@ -317,7 +317,7 @@ impl<S> SectionVm<S> {
     /// running chunk as [`Error::Interrupted`]. A VM without one is never
     /// cancelled. The first install wins.
     pub fn set_cancel(&self, cancel: runvil_types::cancel::CancelHandle) {
-        self.instruction_budget.set_cancel(cancel);
+        self.cancel_hook.set_cancel(cancel);
     }
 
     /// The section's offers: what `tools.offer` and `tools.offer_dynamic`

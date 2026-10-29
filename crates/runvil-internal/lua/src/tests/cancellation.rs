@@ -1,4 +1,4 @@
-//! Cooperative cancellation: the instruction hook aborts a cancelled block,
+//! Cooperative cancellation: the cancellation hook aborts a cancelled block,
 //! and the coroutine shim's `pcall` and `xpcall` neither swallow
 //! cancellation nor change an uncancelled failure.
 
@@ -10,9 +10,9 @@ fn long_running_lua_block_cancels_cooperatively() {
 
     // An unbounded loop that, without cooperative cancellation, would run
     // forever: no instruction ceiling ends it. With the cancel flag set, the
-    // very first instruction-hook firing aborts it before counting itself;
-    // the hook's error is the raw cancellation message, which the VM
-    // classifies as `Error::Interrupted` once the flag is observed set.
+    // very first instruction-hook firing aborts it; the hook's error is the
+    // raw cancellation message, which the VM classifies as
+    // `Error::Interrupted` once the flag is observed set.
     let program = LuaProgram::compile(
         "local n = 0\nwhile true do n = n + 1 end",
         "cancel loop",
@@ -26,22 +26,16 @@ fn long_running_lua_block_cancels_cooperatively() {
     handle.cancel();
 
     let lua = Lua::new();
-    let budget = install_instruction_budget(&lua).expect("hook installs on a fresh VM");
-    budget.set_cancel(handle);
+    let hook = install_cancel_hook(&lua).expect("hook installs on a fresh VM");
+    hook.set_cancel(handle);
     let func = program
         .load(&lua)
         .expect("compiled bytecode loads into a fresh VM");
-    let fired = budget.fired();
     let outcome = func.call::<()>(());
 
-    assert_eq!(
-        budget.fired(),
-        fired,
-        "a cancelled Lua block must abort at the first hook firing, required no counted firing"
-    );
     assert!(
-        budget.is_cancelled(),
-        "the budget reports the installed flag as set"
+        hook.is_cancelled(),
+        "the hook reports the installed flag as set"
     );
     let raw = outcome
         .expect_err("a cancelled loop cannot finish")
@@ -59,20 +53,14 @@ fn a_pre_cancelled_run_aborts_a_tight_loop_promptly() {
     // No instruction ceiling aborts a runaway block anymore; the cancel flag,
     // polled by the instruction hook, is the kill switch. With the flag set
     // before the chunk starts, the first hook firing inside a tight
-    // `while true do end` aborts it before counting itself.
+    // `while true do end` aborts it.
     let handle = CancelHandle::new();
     handle.cancel();
 
     let vm = TestVm::new().build();
     vm.set_cancel(handle);
-    let fired = vm.hook_firings();
     let outcome = run_scalar(&vm, &program("while true do end"), &null_emitter(), "Loop");
 
-    assert_eq!(
-        vm.hook_firings(),
-        fired,
-        "a cancelled tight loop must abort at the first hook firing, required no counted firing"
-    );
     vm.teardown();
     assert!(
         matches!(outcome, Err(Error::Interrupted)),

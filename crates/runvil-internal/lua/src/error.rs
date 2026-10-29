@@ -2,8 +2,8 @@
 //!
 //! [`Error`] mirrors `runvil-engine`'s own internal error type: it
 //! is never part of the documented API. The executor's public boundary
-//! (`runvil_engine::RunError`) wraps and classifies core's own error type,
-//! which maps this one back variant-for-variant through
+//! (`runvil_engine::RunError`) wraps and classifies `runvil-engine`'s
+//! internal error type, which maps this one back variant-for-variant through
 //! `From<runvil_lua::Error>`. The internal type is public only so
 //! `runvil-engine` can perform that mapping verbatim; the facade does
 //! not re-export it, and it is not marked `#[non_exhaustive]`, so the
@@ -23,14 +23,12 @@ type BoxedSource = Box<dyn std::error::Error + Send + Sync>;
 
 /// A cloneable, shareable error cause.
 ///
-/// Some caches re-produce a typed [`Error`] on every lookup (for example the
-/// resolver decision cache), so a non-`Clone` dependency error cannot be moved
-/// into a fresh [`Error`] each time. Wrapping it in a reference-counted
-/// [`SharedSource`] lets the typed cause be retained as a cause and cloned
-/// cheaply per lookup instead of being flattened to a string. The
-/// compiled-program statics (the coroutine, tasks, and fanout shims, the
-/// globals chunk, and the store shims) are the callers, through
-/// `detail::shared_source_new`.
+/// Some compiled-program statics re-produce a typed [`Error`] on every
+/// lookup, so a non-`Clone` dependency error cannot be moved into a fresh
+/// [`Error`] each time. Wrapping it in a reference-counted [`SharedSource`]
+/// keeps the typed cause and clones it cheaply per lookup instead of
+/// flattening it to a string. Every embedded chunk's compiled-program static
+/// is a caller, through `detail::shared_source_new`.
 #[derive(Debug, Clone)]
 pub(crate) struct SharedSource(pub(crate) std::sync::Arc<dyn std::error::Error + Send + Sync>);
 
@@ -53,8 +51,6 @@ pub enum QuotaResource {
     LogEvent,
     /// The cumulative `log()` byte budget.
     LogByte,
-    /// The per-VM instruction budget.
-    Instruction,
 }
 
 impl std::fmt::Display for QuotaResource {
@@ -62,16 +58,12 @@ impl std::fmt::Display for QuotaResource {
         formatter.write_str(match self {
             QuotaResource::LogEvent => "log event",
             QuotaResource::LogByte => "log byte",
-            QuotaResource::Instruction => "instruction",
         })
     }
 }
 
-/// The crate's internal error type, spanning sandbox construction, Engine
-/// value bridging, capability binding, and Lua compile/runtime failures.
-///
-/// Public only so `runvil-engine` can convert it back onto its own
-/// internal type variant-for-variant; the facade does not re-export it.
+/// The crate's internal error type: every failure a section VM's setup, Lua
+/// code, or Engine calls can end in.
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     /// A condition the prompt author caused and can fix in Lua, with no
@@ -120,9 +112,9 @@ pub enum Error {
         cause: BoxedSource,
     },
 
-    /// An Engine quota on Lua (log events, log bytes, or instructions) was
-    /// exhausted. A stable typed error rather than a bare `Lua(String)` so the caller
-    /// can distinguish quota exhaustion from an authoring error.
+    /// An Engine quota on Lua (log events or log bytes) was exhausted. A
+    /// stable typed error rather than a bare `Lua(String)` so the caller can
+    /// distinguish quota exhaustion from an authoring error.
     #[error("lua {resource} quota exceeded")]
     LuaQuota {
         /// The exhausted resource.
@@ -198,25 +190,13 @@ pub(crate) struct QuotaExceeded(pub(crate) QuotaResource);
 impl std::fmt::Display for QuotaExceeded {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         formatter.write_str(match self.0 {
-            QuotaResource::LogEvent => lua_quota::LOG_EVENT,
-            QuotaResource::LogByte => lua_quota::LOG_BYTE,
-            QuotaResource::Instruction => lua_quota::INSTRUCTION,
+            QuotaResource::LogEvent => "lua log event budget exceeded",
+            QuotaResource::LogByte => "lua log cumulative byte budget exceeded",
         })
     }
 }
 
 impl std::error::Error for QuotaExceeded {}
-
-/// The messages Lua Engine-quota refusals show: the [`QuotaExceeded`]
-/// display text.
-pub(crate) mod lua_quota {
-    /// Log event-count budget exhausted.
-    pub(crate) const LOG_EVENT: &str = "lua log event budget exceeded";
-    /// Cumulative log byte budget exhausted.
-    pub(crate) const LOG_BYTE: &str = "lua log cumulative byte budget exceeded";
-    /// Per-VM instruction budget exhausted.
-    pub(crate) const INSTRUCTION: &str = "lua instruction budget exceeded";
-}
 
 impl Error {
     /// Wraps an `mlua` failure as [`Error::LuaRuntime`], keeping it as the
@@ -228,10 +208,9 @@ impl Error {
         }
     }
 
-    /// Re-produces a typed [`Error`] from a [`SharedSource`] a cache or
-    /// static captured once and replays on every lookup (the compiled-program
-    /// statics), cloning the `Arc` rather than flattening the cause to a
-    /// string.
+    /// Re-produces a typed [`Error`] from a [`SharedSource`] a
+    /// compiled-program static captured once, cloning the `Arc` rather than
+    /// flattening the cause to a string.
     pub(crate) fn shared(source: &SharedSource) -> Error {
         Error::LuaRuntime {
             message: source.to_string(),
@@ -274,6 +253,12 @@ impl Error {
             | Error::Raised(_) => None,
         }
     }
+}
+
+/// An author error raised across the Lua boundary: an external
+/// [`Error::Lua`], which `pcall` reports as kind `lua`.
+pub(crate) fn author_refusal(message: String) -> mlua::Error {
+    mlua::Error::external(Error::Lua(message))
 }
 
 /// Maps a poisoned model-set lock onto [`Error::Internal`], the mapping

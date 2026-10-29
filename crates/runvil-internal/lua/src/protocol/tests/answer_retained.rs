@@ -9,7 +9,7 @@ use crate::{CoroStep, LuaProgram};
 /// The typed error every case answers the block's `models.infer` with.
 fn quota() -> Error {
     Error::LuaQuota {
-        resource: crate::QuotaResource::Instruction,
+        resource: crate::QuotaResource::LogEvent,
     }
 }
 
@@ -45,7 +45,7 @@ fn a_block_raising_the_answered_error_table_surfaces_the_typed_error() {
     ] {
         match answered(source) {
             Err(Error::LuaQuota {
-                resource: crate::QuotaResource::Instruction,
+                resource: crate::QuotaResource::LogEvent,
             }) => {}
             other => panic!("block {source:?} must surface the typed quota error, got {other:?}"),
         }
@@ -58,7 +58,7 @@ fn a_block_raising_the_answered_errors_text_as_its_own_keeps_its_own_error() {
     // block's own string, not the answer's table.
     match answered("local ok, err = pcall(models.infer, 'hi')\nerror(tostring(err), 0)") {
         Err(Error::LuaRuntime { message, .. }) => assert!(
-            message.contains("lua instruction quota exceeded"),
+            message.contains("lua log event quota exceeded"),
             "the block's own raise keeps its message: {message}"
         ),
         other => panic!("the block's own raise must stay its own error, got {other:?}"),

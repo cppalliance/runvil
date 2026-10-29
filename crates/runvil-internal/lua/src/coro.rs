@@ -33,7 +33,7 @@ use crate::engine_globals::route_store_to_shims;
 use crate::error::SharedSource;
 use crate::error::{Error, Result};
 use crate::error_value::{install_error_value, install_normalize_failure};
-use crate::hardening::InstructionBudget;
+use crate::hardening::CancelHook;
 use crate::program::LuaProgram;
 use crate::sys::var_snapshot_table;
 
@@ -156,7 +156,7 @@ static FANOUT_PROGRAM: LazyLock<std::result::Result<LuaProgram, SharedSource>> =
 /// and down on `adhoc_handler_depth`, the counter the VM's `jump` reads, so
 /// `jump` refuses while an adhoc tool's handler runs, whatever reference
 /// the handler calls it through. Then `cancel_requested` reads the
-/// cancel flag of `instruction_budget`, so the chunk's protected calls
+/// cancel flag of `cancel_hook`, so the chunk's protected calls
 /// raise a failure caught under cancellation again instead of returning
 /// it, and the hook's abort always reaches the block guard. Next,
 /// `is_model_handle` reports whether a value is a model handle, so the
@@ -165,14 +165,14 @@ static FANOUT_PROGRAM: LazyLock<std::result::Result<LuaProgram, SharedSource>> =
 /// call for the trampoline.
 ///
 /// # Errors
-/// Returns [`Error::Lua`] if the coroutine library, the shim chunk, or any
+/// Returns [`Error::LuaRuntime`] if the coroutine library, the shim chunk, or any
 /// install step fails.
 pub(crate) fn install_shim_prelude(
     lua: &Lua,
     max_tool_iterations: usize,
     adhoc_handler_depth: &Arc<AtomicU32>,
     loop_running: &Arc<AtomicBool>,
-    instruction_budget: &InstructionBudget,
+    cancel_hook: &CancelHook,
 ) -> Result<()> {
     lua.load_std_libs(StdLib::COROUTINE).map_err(Error::lua)?;
     let globals = lua.globals();
@@ -189,9 +189,9 @@ pub(crate) fn install_shim_prelude(
     let normalize_failure = install_normalize_failure(lua).map_err(Error::lua)?;
     let (enter_adhoc_handler, leave_adhoc_handler) =
         adhoc_handler_captures(lua, adhoc_handler_depth)?;
-    let budget = instruction_budget.clone();
+    let hook = cancel_hook.clone();
     let cancel_requested = lua
-        .create_function(move |_, ()| Ok(budget.is_cancelled()))
+        .create_function(move |_, ()| Ok(hook.is_cancelled()))
         .map_err(Error::lua)?;
     let is_model_handle = lua
         .create_function(|_, value: Value| Ok(crate::models::is_handle(&value)))
@@ -201,9 +201,9 @@ pub(crate) fn install_shim_prelude(
         max_tool_iterations,
         compactors,
         loop_running,
-        instruction_budget,
+        cancel_hook,
     )?;
-    let compact_begin = crate::models_loop::compact_begin(lua, loop_running, instruction_budget)?;
+    let compact_begin = crate::models_loop::compact_begin(lua, loop_running, cancel_hook)?;
     let program = SHIM_PROGRAM.as_ref().map_err(Error::shared)?;
     let shims: Table = program
         .load(lua)?
@@ -330,7 +330,7 @@ fn adhoc_handler_captures(lua: &Lua, depth: &Arc<AtomicU32>) -> Result<(Function
 /// intact instead of only as mlua's stringification.
 ///
 /// # Errors
-/// Returns [`Error::Lua`] if the shim prelude never ran on this VM.
+/// Returns [`Error::LuaRuntime`] if the shim prelude never ran on this VM.
 pub(crate) fn block_guard(lua: &Lua) -> Result<Function> {
     lua.named_registry_value(GUARD_REGISTRY).map_err(Error::lua)
 }
@@ -377,7 +377,7 @@ pub(crate) fn handle_method(lua: &Lua, name: &str) -> mlua::Result<Value> {
 /// The executor's section setup and live H1 setup are the only callers.
 ///
 /// # Errors
-/// Returns [`Error::Lua`] if the shim prelude never ran on this VM, the
+/// Returns [`Error::LuaRuntime`] if the shim prelude never ran on this VM, the
 /// `store` table is absent, or the install fails.
 pub fn install_store_shims(lua: &Lua) -> Result<()> {
     let shims: Table = lua

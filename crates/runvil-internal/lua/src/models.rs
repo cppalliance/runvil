@@ -245,7 +245,7 @@ impl ModelRuntime {
 /// `models.loop`, because yield cannot cross the Rust callback boundary.
 ///
 /// # Errors
-/// Returns [`Error::Lua`] if a Lua table or callback cannot be created or
+/// Returns [`Error::LuaRuntime`] if a Lua table or callback cannot be created or
 /// installed.
 pub(crate) fn install_models(
     lua: &Lua,

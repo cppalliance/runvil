@@ -41,7 +41,7 @@ impl SectionVm {
     /// block, created from the block's loaded function on this persistent
     /// VM, so the VM's globals (`var` and the bare globals) roll forward
     /// across blocks. Instruction hooks are
-    /// per-coroutine in PUC Lua, so the VM's budget/cancellation hook is
+    /// per-coroutine in PUC Lua, so the VM's cancellation hook is
     /// installed on the fresh thread; the main-state hook from construction
     /// never fires inside a resumed coroutine.
     ///
@@ -72,7 +72,7 @@ impl SectionVm {
         let function = program.load(&self.lua)?;
         let guard = block_guard(&self.lua)?;
         let thread = self.lua.create_thread(guard).map_err(Error::lua)?;
-        self.instruction_budget.install_on_thread(&thread)?;
+        self.cancel_hook.install_on_thread(&thread)?;
         let result = thread.resume::<MultiValue>(function);
         self.step_block_coro::<Error>(program, thread, result, None)
     }
@@ -228,7 +228,7 @@ impl SectionVm {
     /// else maps through `LuaProgram::map_runtime_error_among` of `program`
     /// and of every library block `require` loaded into this VM.
     pub(crate) fn map_chunk_failure(&self, program: &LuaProgram, error: &mlua::Error) -> Error {
-        if self.instruction_budget.is_cancelled() {
+        if self.cancel_hook.is_cancelled() {
             return Error::Interrupted;
         }
         match self.library_programs.lock() {

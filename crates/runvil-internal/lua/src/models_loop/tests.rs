@@ -16,7 +16,7 @@ use super::{LOOP_RUNNING, act, envelope_failure, loop_begin, lua_type_name, read
 use crate::compactors::OverflowReason;
 use crate::error::Error;
 use crate::error_value::{ErrorField, ErrorKind, Raised, error_table, raised_from};
-use crate::hardening::InstructionBudget;
+use crate::hardening::CancelHook;
 use crate::messages::MessageList;
 use crate::models::LuaModelHandle;
 use crate::protocol::{AdhocToolOutcome, Answer, ChatOutcome, ChatResult, Request, YieldParse};
@@ -91,8 +91,8 @@ fn install_section_list(lua: &Lua) -> MessageList {
 fn begin_with_flag(lua: &Lua, max_rounds: usize) -> (Function, Arc<AtomicBool>) {
     let running = Arc::new(AtomicBool::new(false));
     let compactors = lua.create_table().unwrap();
-    let budget = InstructionBudget::default();
-    let begin = loop_begin(lua, max_rounds, compactors, &running, &budget).unwrap();
+    let hook = CancelHook::default();
+    let begin = loop_begin(lua, max_rounds, compactors, &running, &hook).unwrap();
     (begin, running)
 }
 
@@ -181,7 +181,7 @@ fn a_running_loop_refuses_another_until_its_step_ends_or_fails() {
         0,
         lua.create_table().unwrap(),
         &running,
-        &InstructionBudget::default(),
+        &CancelHook::default(),
     )
     .unwrap();
     let flag = Arc::clone(&running);
@@ -303,9 +303,9 @@ fn a_chat_answer_resumes_as_a_chat_result_userdata_the_step_takes_whole() {
         panic!("the chat answer resumes as a userdata, got {values:?}");
     };
     assert!(resumed.is::<ChatResult>());
-    let budget = InstructionBudget::default();
+    let hook = CancelHook::default();
     let values = MultiValue::from_vec(values);
-    let input = read_input(&lua, &Phase::Chatting, values, &budget).unwrap();
+    let input = read_input(&lua, &Phase::Chatting, values, &hook).unwrap();
     let Input::Answered(Ok(taken)) = input else {
         panic!("the step reads the chat answer, got {input:?}");
     };

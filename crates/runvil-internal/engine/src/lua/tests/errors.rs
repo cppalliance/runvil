@@ -262,11 +262,11 @@ fn a_typed_error_substituted_at_the_coroutine_boundary_keeps_its_kind() {
             panic!("the shim yield must suspend the block");
         };
         let answer = Answer::Infer(Err(Error::LuaQuota {
-            resource: runvil_lua::QuotaResource::Instruction,
+            resource: runvil_lua::QuotaResource::LogEvent,
         }));
         match vm.resume_block_coro_answer::<Error>(&program, &thread, answer) {
             Err(Error::LuaQuota {
-                resource: runvil_lua::QuotaResource::Instruction,
+                resource: runvil_lua::QuotaResource::LogEvent,
             }) => {}
             other => panic!("block {source:?} must surface the typed quota error, got {other:?}"),
         }

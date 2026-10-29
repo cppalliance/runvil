@@ -49,7 +49,6 @@ fn an_author_raise_of_a_quota_refusals_text_is_an_ordinary_runtime_error() {
     for refusal in [
         "lua log event budget exceeded",
         "lua log cumulative byte budget exceeded",
-        "lua instruction budget exceeded",
     ] {
         let error = run_scalar(
             &vm,

@@ -70,7 +70,7 @@ static GLOBALS_PROGRAM: LazyLock<std::result::Result<LuaProgram, SharedSource>> 
 /// `setmetatable` or `getmetatable`.
 ///
 /// # Errors
-/// Returns [`Error::Lua`] if the chunk cannot load or run, or the guard
+/// Returns [`Error::LuaRuntime`] if the chunk cannot load or run, or the guard
 /// and the replacements cannot be installed.
 pub(crate) fn install(lua: &Lua) -> Result<()> {
     let globals = lua.globals();
@@ -105,7 +105,7 @@ pub(crate) fn install(lua: &Lua) -> Result<()> {
 /// assignment of the global raises the freeze refusal.
 ///
 /// # Errors
-/// Returns [`Error::Lua`] if the guard's slot table is missing or cannot
+/// Returns [`Error::LuaRuntime`] if the guard's slot table is missing or cannot
 /// be written.
 pub(crate) fn freeze_argv(lua: &Lua, frozen: Value) -> Result<()> {
     let state = state(lua)?;
@@ -127,7 +127,7 @@ pub(crate) fn install_prose(lua: &Lua, render: Function) -> Result<()> {
 /// returns the render it replaced, nil before the first install.
 ///
 /// # Errors
-/// Returns [`Error::Lua`] if the guard's slot table is missing or cannot
+/// Returns [`Error::LuaRuntime`] if the guard's slot table is missing or cannot
 /// be read or written.
 pub(crate) fn replace_prose(lua: &Lua, render: Value) -> Result<Value> {
     let state = state(lua)?;
@@ -140,16 +140,16 @@ pub(crate) fn replace_prose(lua: &Lua, render: Value) -> Result<Value> {
 /// `messages` slot, which every later read of the global returns.
 ///
 /// # Errors
-/// Returns [`Error::Lua`] if the guard's slot table is missing or cannot
+/// Returns [`Error::LuaRuntime`] if the guard's slot table is missing or cannot
 /// be written.
-pub(crate) fn install_messages(lua: &Lua, list: AnyUserData) -> Result<()> {
+pub(crate) fn set_messages(lua: &Lua, list: AnyUserData) -> Result<()> {
     state(lua)?.raw_set("messages", list).map_err(Error::lua)
 }
 
 /// The section's list, as the `messages` slot holds it.
 ///
 /// # Errors
-/// Returns [`Error::Lua`] if the guard's slot table is missing or cannot
+/// Returns [`Error::LuaRuntime`] if the guard's slot table is missing or cannot
 /// be read, and [`Error::Internal`] if no list is installed.
 pub(crate) fn messages(lua: &Lua) -> Result<AnyUserData> {
     match state(lua)?

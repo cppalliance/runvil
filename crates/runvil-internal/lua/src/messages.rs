@@ -39,7 +39,7 @@ use runvil_model_client::client::{Message, Role};
 use runvil_types::ids::RoundId;
 use serde_json::{Map, Value as Json};
 
-use crate::error::{Error, Result};
+use crate::error::{Error, Result, author_refusal};
 use crate::handles::ToolBinding;
 use crate::protocol::{MessageRecord, RecordRole, parse_record};
 use crate::scope::{OfferMode, RenderedTools};
@@ -60,11 +60,11 @@ pub(crate) const ASSIGNMENT_REFUSAL: &str = "messages is the section's conversat
 /// Installs `list` as the `messages` global, served from the guard's slot.
 ///
 /// # Errors
-/// Returns [`Error::Lua`] if the userdata cannot be built or the guard's
+/// Returns [`Error::LuaRuntime`] if the userdata cannot be built or the guard's
 /// slot table cannot be written.
 pub(crate) fn install_messages(lua: &Lua, list: &MessageList) -> Result<()> {
     let userdata = lua.create_userdata(list.clone()).map_err(Error::lua)?;
-    crate::globals::install_messages(lua, userdata)
+    crate::globals::set_messages(lua, userdata)
 }
 
 /// A section's conversation, which the `messages` global holds. The same
@@ -277,12 +277,6 @@ fn check_leading_system(records: &[Arc<MessageRecord>]) -> std::result::Result<(
     }
 }
 
-/// Raises `message` as a list method's error, which an author `pcall`
-/// catches.
-fn refusal(message: String) -> mlua::Error {
-    mlua::Error::external(Error::Lua(message))
-}
-
 /// The list a method was called on.
 fn handle(this: &AnyUserData) -> mlua::Result<MessageList> {
     Ok(this.borrow::<MessageList>()?.clone())
@@ -300,7 +294,7 @@ fn json(lua: &Lua, value: Value) -> std::result::Result<Json, String> {
 /// the position `index` it takes.
 fn record_json(lua: &Lua, index: usize, value: Value) -> mlua::Result<Json> {
     json(lua, value).map_err(|reason| {
-        refusal(format!(
+        author_refusal(format!(
             "messages[{index}] must be a JSON-representable message table: {reason}"
         ))
     })
@@ -309,9 +303,9 @@ fn record_json(lua: &Lua, index: usize, value: Value) -> mlua::Result<Json> {
 /// Validates `entry` as the record at `index`, the end of `list`, and
 /// appends it.
 fn add(list: &MessageList, index: usize, entry: &Json) -> mlua::Result<()> {
-    let record = parse_record(index, entry).map_err(refusal)?;
+    let record = parse_record(index, entry).map_err(author_refusal)?;
     list.push(record)
-        .map_err(|refused| refusal(refused.to_string()))
+        .map_err(|refused| author_refusal(refused.to_string()))
 }
 
 /// Appends the record a builder makes from `role` and `fields`, leaving
@@ -329,7 +323,7 @@ fn build<const N: usize>(
     for (name, value) in fields {
         if !value.is_nil() {
             let value = json(lua, value).map_err(|reason| {
-                refusal(format!(
+                author_refusal(format!(
                     "messages[{index}] {name} must be JSON-representable: {reason}"
                 ))
             })?;
@@ -366,8 +360,10 @@ fn key_index(key: &Value) -> Option<usize> {
 /// One `replace` bound under the integer rule.
 fn bound(name: &str, value: &Value) -> mlua::Result<i64> {
     integral(value).ok_or_else(|| match value {
-        Value::Number(bound) => refusal(format!("replace {name} must be an integer, got {bound}")),
-        other => refusal(format!(
+        Value::Number(bound) => {
+            author_refusal(format!("replace {name} must be an integer, got {bound}"))
+        }
+        other => author_refusal(format!(
             "replace {name} must be an integer, got {}",
             other.type_name()
         )),
@@ -435,7 +431,7 @@ impl UserData for MessageList {
             |lua, (this, first, last, records): (AnyUserData, Value, Value, Variadic<Value>)| {
                 let target = handle(&this)?;
                 if !target.compacting() {
-                    return Err(refusal(
+                    return Err(author_refusal(
                         "replace works only inside a compactor; rewrite history with \
                          models.compact(compactor, reason)"
                             .to_owned(),
@@ -446,19 +442,20 @@ impl UserData for MessageList {
                 let len = target.len();
                 let (first, last) = match (usize::try_from(first), usize::try_from(last)) {
                     (Ok(first), Ok(last)) if in_bounds(first, last, len) => (first, last),
-                    _ => return Err(refusal(out_of_bounds(first, last, len).to_string())),
+                    _ => return Err(author_refusal(out_of_bounds(first, last, len).to_string())),
                 };
                 let records = records
                     .into_iter()
                     .enumerate()
                     .map(|(offset, value)| {
                         let index = first + offset;
-                        parse_record(index, &record_json(lua, index, value)?).map_err(refusal)
+                        parse_record(index, &record_json(lua, index, value)?)
+                            .map_err(author_refusal)
                     })
                     .collect::<mlua::Result<Vec<_>>>()?;
                 target
                     .replace(first, last, records)
-                    .map_err(|refused| refusal(refused.to_string()))?;
+                    .map_err(|refused| author_refusal(refused.to_string()))?;
                 Ok(this)
             },
         );
@@ -484,7 +481,7 @@ impl UserData for MessageList {
         methods.add_meta_method(
             MetaMethod::NewIndex,
             |_, _, _: (Value, Value)| -> mlua::Result<()> {
-                Err(refusal(
+                Err(author_refusal(
                     "messages cannot be assigned to by index; add records with append(record), \
                      or rewrite history with models.compact(compactor, reason)"
                         .to_owned(),

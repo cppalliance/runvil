@@ -20,7 +20,7 @@ use mlua::{Lua, LuaSerdeExt, LuaString, Table, Value};
 use serde_json::{Map, Number, Value as Json};
 
 use super::keys::{Entries, Rule, Shape, entries, shape};
-use super::refusal;
+use crate::error::author_refusal;
 use crate::proxy::{key_path, key_text};
 use crate::walk_budget::{HELD_KEY_LIMIT, TooLarge, WalkBudget};
 
@@ -33,8 +33,8 @@ pub(super) fn encode(lua: &Lua, (value, options): (Value, Value)) -> mlua::Resul
     const FUNCTION: &str = "json.encode";
     let debug = debug_option(&options, FUNCTION)?;
     let json = to_json(lua, FUNCTION, debug, &value)?;
-    let text =
-        serde_json::to_string(&json).map_err(|error| refusal(format!("{FUNCTION}: {error}")))?;
+    let text = serde_json::to_string(&json)
+        .map_err(|error| author_refusal(format!("{FUNCTION}: {error}")))?;
     lua.create_string(text)
 }
 
@@ -56,7 +56,7 @@ pub(super) fn encode_lines(lua: &Lua, (list, options): (Value, Value)) -> mlua::
     const FUNCTION: &str = "json.encode_lines";
     let debug = debug_option(&options, FUNCTION)?;
     let Value::Table(list) = list else {
-        return Err(refusal(format!(
+        return Err(author_refusal(format!(
             "{FUNCTION} expects a list, got {}",
             list.type_name()
         )));
@@ -64,7 +64,7 @@ pub(super) fn encode_lines(lua: &Lua, (list, options): (Value, Value)) -> mlua::
     let mut text = String::new();
     for item in Encoder::new(lua, FUNCTION, debug).items(&list)? {
         let line = serde_json::to_string(&item)
-            .map_err(|error| refusal(format!("{FUNCTION}: {error}")))?;
+            .map_err(|error| author_refusal(format!("{FUNCTION}: {error}")))?;
         text.push_str(&line);
         text.push('\n');
     }
@@ -79,7 +79,7 @@ fn debug_option(options: &Value, function: &str) -> mlua::Result<bool> {
         Value::Nil => return Ok(false),
         Value::Table(table) => table,
         other => {
-            return Err(refusal(format!(
+            return Err(author_refusal(format!(
                 "{function}: options must be a table, got {}",
                 other.type_name()
             )));
@@ -91,14 +91,14 @@ fn debug_option(options: &Value, function: &str) -> mlua::Result<bool> {
     let mut debug = false;
     for key in options.keys {
         if !matches!(&key, Value::String(name) if name == "debug") {
-            return Err(refusal(format!(
+            return Err(author_refusal(format!(
                 "{function}: unknown option {}",
                 key_text(&key)
             )));
         }
         let value: Value = table.raw_get(key)?;
         let Value::Boolean(flag) = value else {
-            return Err(refusal(format!(
+            return Err(author_refusal(format!(
                 "{function}: option debug must be a boolean, got {}",
                 value.type_name()
             )));
@@ -110,12 +110,11 @@ fn debug_option(options: &Value, function: &str) -> mlua::Result<bool> {
 
 /// The refusal for a value too large to walk: past the value budget, the
 /// byte budget, or the held-key limit. It has no path.
-fn too_large(function: &str) -> mlua::Error {
-    refusal(format!("{function}: value is too large to encode"))
+fn too_large(prefix: &str) -> mlua::Error {
+    author_refusal(format!("{prefix}: value is too large to encode"))
 }
 
-/// Why a value cannot be encoded, before the function name and path are
-/// added.
+/// Why a value cannot be encoded, before the prefix and path are added.
 enum Failure {
     NotData(&'static str),
     NotUtf8,
@@ -159,7 +158,7 @@ enum Resolved {
 /// is left of the budget for values and text, and how many keys the tables
 /// on the path hold as Lua references.
 struct Encoder {
-    function: &'static str,
+    prefix: &'static str,
     debug: bool,
     marker: Table,
     keys: Vec<Value>,
@@ -169,9 +168,9 @@ struct Encoder {
 }
 
 impl Encoder {
-    fn new(lua: &Lua, function: &'static str, debug: bool) -> Self {
+    fn new(lua: &Lua, prefix: &'static str, debug: bool) -> Self {
         Self {
-            function,
+            prefix,
             debug,
             marker: lua.array_metatable(),
             keys: Vec::new(),
@@ -185,7 +184,7 @@ impl Encoder {
     /// no path, and it never becomes a placeholder: one placeholder per
     /// remaining value would not bound the work.
     fn too_large(&self) -> mlua::Error {
-        too_large(self.function)
+        too_large(self.prefix)
     }
 
     /// Spends one value of the budget.
@@ -208,7 +207,7 @@ impl Encoder {
             .keys
             .iter()
             .fold("value".to_owned(), |path, key| key_path(&path, key));
-        refusal(format!("{}: {path} {}", self.function, failure.text()))
+        author_refusal(format!("{}: {path} {}", self.prefix, failure.text()))
     }
 
     /// `placeholder` in debug mode, or the error for `failure`.
@@ -383,9 +382,9 @@ impl Encoder {
         let marked = self.is_marked(&data);
         let has_items = keys.iter().any(|key| matches!(key, Value::Integer(_)));
         if let (false, false, Some(key)) = (marked, has_items, keys.first()) {
-            return Err(refusal(format!(
+            return Err(author_refusal(format!(
                 "{} expects a list, got a table with a {} key",
-                self.function,
+                self.prefix,
                 key.type_name()
             )));
         }

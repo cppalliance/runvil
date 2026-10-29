@@ -9,7 +9,7 @@ use std::sync::Arc;
 
 use mlua::{AnyUserData, Function, Lua, LuaSerdeExt, MetaMethod, UserData, UserDataMethods, Value};
 
-use super::refusal;
+use crate::error::author_refusal;
 use crate::protocol::MessageRecord;
 
 /// The fields a view reads, in the order `pairs` visits them.
@@ -99,7 +99,7 @@ impl UserData for RecordView {
         methods.add_meta_method(
             MetaMethod::NewIndex,
             |_, _, _: (Value, Value)| -> mlua::Result<()> {
-                Err(refusal(
+                Err(author_refusal(
                     "records read from messages are read-only; rewrite history with \
                      models.compact(compactor, reason)"
                         .to_owned(),

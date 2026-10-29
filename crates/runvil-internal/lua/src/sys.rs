@@ -242,7 +242,10 @@ pub(crate) fn guarded_var(lua: &Lua, initial: Option<&Json>) -> Result<mlua::Tab
 /// includes the caller's `var` as a clone.
 ///
 /// # Errors
-/// Returns [`Error::Lua`] under the same conditions as [`var_to_json`].
+/// Returns [`Error::Lua`] if the author reassigned the `var` global,
+/// [`Error::LuaRuntime`] if a registry slot cannot be read (Engine values
+/// were never injected) or a nested proxy cannot be copied, and
+/// [`Error::Internal`] if the root data value is not a table.
 pub(crate) fn var_snapshot_table(lua: &Lua) -> Result<mlua::Table> {
     let proxy: mlua::Table = lua
         .named_registry_value(VAR_PROXY_REGISTRY)
@@ -274,9 +277,7 @@ pub(crate) fn var_snapshot_table(lua: &Lua) -> Result<mlua::Table> {
 /// Reads the hidden `var` data table back as JSON.
 ///
 /// # Errors
-/// Returns [`Error::Lua`] if the data table is absent (Engine values were
-/// never injected), if the author reassigned the `var` global (the proxy is
-/// no longer reachable, so the hidden table no longer reflects it), or if
+/// Fails as [`var_snapshot_table`] does, and with [`Error::LuaRuntime`] if
 /// the data cannot be represented as JSON.
 pub(crate) fn var_to_json(lua: &Lua) -> Result<Json> {
     lua.from_value(Value::Table(var_snapshot_table(lua)?))

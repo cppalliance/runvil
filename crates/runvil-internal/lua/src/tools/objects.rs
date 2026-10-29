@@ -35,7 +35,7 @@ pub(crate) fn tool_object(lua: &Lua, id: &str) -> mlua::Result<Option<AnyUserDat
 /// Builds the VM's tool-object table over the run catalog.
 ///
 /// # Errors
-/// Returns [`Error::Lua`] if an object or the table cannot be created or
+/// Returns [`Error::LuaRuntime`] if an object or the table cannot be created or
 /// stored.
 pub(super) fn install_tool_objects(lua: &Lua, set: &ToolSet) -> Result<()> {
     let objects = lua.create_table().map_err(Error::lua)?;
@@ -75,7 +75,7 @@ pub(super) fn remove_tool_object(lua: &Lua, id: &str) -> mlua::Result<()> {
 /// Installs `tools.get(id)`.
 ///
 /// # Errors
-/// Returns [`Error::Lua`] if the function cannot be created or installed.
+/// Returns [`Error::LuaRuntime`] if the function cannot be created or installed.
 pub(super) fn install_tool_get(lua: &Lua, tools: &Table) -> Result<()> {
     let get = lua
         .create_function(|lua, id: Value| match id {

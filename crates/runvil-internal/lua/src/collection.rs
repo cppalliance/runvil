@@ -115,7 +115,7 @@ pub fn render_item(item: &serde_json::Value) -> String {
 /// heading reads exactly as `{{ item }}` would render the same member.
 ///
 /// # Errors
-/// Returns [`Error::Lua`] when the value has no JSON form.
+/// Returns [`Error::LuaRuntime`] when the value has no JSON form.
 pub(crate) fn render_item_value(lua: &Lua, item: Value) -> Result<String> {
     let json: serde_json::Value = lua.from_value(item).map_err(Error::lua)?;
     Ok(render_item(&json))

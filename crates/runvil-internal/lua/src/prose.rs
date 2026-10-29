@@ -68,7 +68,7 @@ impl fmt::Debug for ProseState<'_> {
 /// install and first read is visible to the render.
 ///
 /// # Errors
-/// Returns [`Error::Lua`] if the read cannot be built or the guard cannot
+/// Returns [`Error::LuaRuntime`] if the read cannot be built or the guard cannot
 /// record it.
 pub(crate) fn install<F>(lua: &Lua, sys_live: &Arc<Mutex<Option<Json>>>, render: F) -> Result<()>
 where
@@ -85,7 +85,7 @@ where
 /// hands back text the caller already read without rendering again.
 ///
 /// # Errors
-/// Returns [`Error::Lua`] if the read cannot be built or the guard cannot
+/// Returns [`Error::LuaRuntime`] if the read cannot be built or the guard cannot
 /// record it.
 pub(crate) fn swap<F>(lua: &Lua, sys_live: &Arc<Mutex<Option<Json>>>, render: F) -> Result<Value>
 where
@@ -98,7 +98,7 @@ where
 /// Puts back the read [`swap`] replaced.
 ///
 /// # Errors
-/// Returns [`Error::Lua`] if the guard cannot record it.
+/// Returns [`Error::LuaRuntime`] if the guard cannot record it.
 pub(crate) fn restore(lua: &Lua, saved: Value) -> Result<()> {
     crate::globals::replace_prose(lua, saved).map(drop)
 }
@@ -107,7 +107,7 @@ pub(crate) fn restore(lua: &Lua, saved: Value) -> Result<()> {
 /// the Engine callback and memoizes, and every later call returns the memo.
 ///
 /// # Errors
-/// Returns [`Error::Lua`] if the closure cannot be created.
+/// Returns [`Error::LuaRuntime`] if the closure cannot be created.
 fn lazy_read<F>(lua: &Lua, sys_live: &Arc<Mutex<Option<Json>>>, render: F) -> Result<mlua::Function>
 where
     F: Fn(ProseState<'_>) -> mlua::Result<String> + Send + Sync + 'static,

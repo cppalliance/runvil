@@ -77,7 +77,6 @@ fn a_quota_error_names_its_exhausted_resource() {
     for (resource, expected) in [
         (QuotaResource::LogEvent, "lua log event quota exceeded"),
         (QuotaResource::LogByte, "lua log byte quota exceeded"),
-        (QuotaResource::Instruction, "lua instruction quota exceeded"),
     ] {
         assert_eq!(Error::LuaQuota { resource }.to_string(), expected);
     }

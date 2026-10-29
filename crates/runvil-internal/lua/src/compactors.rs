@@ -299,7 +299,7 @@ fn message_chars(message: &Message) -> u64 {
 /// section's `messages` list.
 ///
 /// # Errors
-/// Returns [`Error::Lua`] if a function or the global install fails.
+/// Returns [`Error::LuaRuntime`] if a function or the global install fails.
 pub(crate) fn install_compactors(lua: &Lua, globals: &Table, list: &MessageList) -> Result<()> {
     let compactors = lua.create_table().map_err(Error::lua)?;
     for (name, policy) in [("fail", Compactor::Fail), ("clear", Compactor::Clear)] {

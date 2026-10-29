@@ -141,7 +141,7 @@ impl SectionVm {
             max_tool_iterations,
             &self.adhoc_handler_depth,
             &self.loop_running,
-            &self.instruction_budget,
+            &self.cancel_hook,
         )
     }
 
@@ -289,7 +289,7 @@ impl SectionVm {
     /// the template is rejected as recursive.
     ///
     /// # Errors
-    /// Returns [`Error::Lua`] if the read cannot be built or the `_G` guard
+    /// Returns [`Error::LuaRuntime`] if the read cannot be built or the `_G` guard
     /// cannot record it.
     pub fn install_lazy_prose<F>(&self, render: F) -> Result<()>
     where

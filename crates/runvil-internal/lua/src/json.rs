@@ -18,7 +18,7 @@ pub(crate) use encode::to_json;
 
 use mlua::{Lua, LuaSerdeExt, Table, Value};
 
-use crate::error::{Error, Result};
+use crate::error::{Error, Result, author_refusal};
 
 /// Installs the `json` table as a global.
 ///
@@ -73,19 +73,13 @@ fn array(lua: &Lua, value: Value) -> mlua::Result<Table> {
                 Ok(table)
             }
             Some(metatable) if metatable == marker => Ok(table),
-            Some(_) => Err(refusal(
+            Some(_) => Err(author_refusal(
                 "json.array: the table already has a metatable".to_owned(),
             )),
         },
-        other => Err(refusal(format!(
+        other => Err(author_refusal(format!(
             "json.array expects a table or no argument, got {}",
             other.type_name()
         ))),
     }
-}
-
-/// Raises `message` as an author error, which `pcall` reports as kind
-/// `lua`.
-fn refusal(message: String) -> mlua::Error {
-    mlua::Error::external(Error::Lua(message))
 }

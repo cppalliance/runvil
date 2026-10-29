@@ -54,13 +54,13 @@ fn an_ok_spawn_answer_resumes_the_task_id_as_its_path_text() {
 fn an_err_answer_round_trips_and_retains_the_typed_error() {
     let lua = Lua::new();
     let (envelope, retained) = Answer::Call(Err(Error::LuaQuota {
-        resource: crate::QuotaResource::Instruction,
+        resource: crate::QuotaResource::LogEvent,
     }))
     .into_envelope(&lua)
     .expect("the envelope renders");
     match retained {
         Some(Error::LuaQuota {
-            resource: crate::QuotaResource::Instruction,
+            resource: crate::QuotaResource::LogEvent,
         }) => {}
         other => panic!("expected the retained LuaQuota error, got {other:?}"),
     }
@@ -68,7 +68,7 @@ fn an_err_answer_round_trips_and_retains_the_typed_error() {
     assert!(!ok);
     let (kind, message) = failure_parts(&lua, result);
     assert_eq!(kind, "lua");
-    assert_eq!(message, "lua instruction quota exceeded");
+    assert_eq!(message, "lua log event quota exceeded");
 }
 
 #[test]
@@ -82,14 +82,14 @@ fn a_join_any_delivery_of_a_failed_member_retains_the_members_typed_error() {
     let (envelope, retained) = Answer::<Error>::JoinAny(Ok(TaskDelivery {
         task,
         outcome: Err(Error::LuaQuota {
-            resource: crate::QuotaResource::Instruction,
+            resource: crate::QuotaResource::LogEvent,
         }),
     }))
     .into_envelope(&lua)
     .expect("the envelope renders");
     match retained {
         Some(Error::LuaQuota {
-            resource: crate::QuotaResource::Instruction,
+            resource: crate::QuotaResource::LogEvent,
         }) => {}
         other => panic!("expected the member's retained LuaQuota error, got {other:?}"),
     }
@@ -104,7 +104,7 @@ fn a_join_any_delivery_of_a_failed_member_retains_the_members_typed_error() {
     assert_eq!(id, "0.1");
     assert!(!member_ok, "the member failed");
     assert_eq!(kind, "lua");
-    assert_eq!(message, "lua instruction quota exceeded");
+    assert_eq!(message, "lua log event quota exceeded");
 }
 
 #[test]

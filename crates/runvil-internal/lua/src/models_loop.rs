@@ -26,7 +26,7 @@ use runvil_types::metrics::ToolCallEvent;
 
 use crate::error::{Error, Result};
 use crate::error_value::{ErrorKind, error_table, normalized};
-use crate::hardening::InstructionBudget;
+use crate::hardening::CancelHook;
 use crate::messages::MessageList;
 use crate::protocol::ChatResult;
 
@@ -79,30 +79,23 @@ const COMPACT_RUNNING: &str =
 ///
 /// `max_tool_iterations` is the round cap, `compactors` the table that
 /// `compactors.fail` is read from at each call, `loop_running` the VM's
-/// flag that is set while one of its loops runs, and `budget` the VM's
-/// instruction budget, whose cancel flag the step reads where the shim
+/// flag that is set while one of its loops runs, and `hook` the VM's
+/// cancellation hook, whose cancel flag the step reads where the shim
 /// called `cancel_requested()`.
 ///
 /// # Errors
-/// Returns [`Error::Lua`] if the function cannot be created.
+/// Returns [`Error::LuaRuntime`] if the function cannot be created.
 pub(crate) fn loop_begin(
     lua: &Lua,
     max_tool_iterations: usize,
     compactors: Table,
     loop_running: &Arc<AtomicBool>,
-    budget: &InstructionBudget,
+    hook: &CancelHook,
 ) -> Result<Function> {
     let running = Arc::clone(loop_running);
-    let budget = budget.clone();
+    let hook = hook.clone();
     lua.create_function(move |lua, args: MultiValue| {
-        begin(
-            lua,
-            args,
-            max_tool_iterations,
-            &compactors,
-            &running,
-            &budget,
-        )
+        begin(lua, args, max_tool_iterations, &compactors, &running, &hook)
     })
     .map_err(Error::lua)
 }
@@ -112,7 +105,7 @@ pub(crate) fn loop_begin(
 /// or the list's `compacting` flag is set, then the machine over the
 /// section's list and its step closure,
 /// whose body is `act(lua, machine.step(read_input(lua, machine.phase(),
-/// values, &budget)?))`, then the first action. `running` is set only once
+/// values, &hook)?))`, then the first action. `running` is set only once
 /// nothing here can fail and the first action leaves the machine running;
 /// the step clears it when the machine is done, before it builds that
 /// action, and whenever it fails. A failed step also clears the list's
@@ -124,7 +117,7 @@ fn begin(
     max_rounds: usize,
     compactors: &Table,
     running: &Arc<AtomicBool>,
-    budget: &InstructionBudget,
+    hook: &CancelHook,
 ) -> mlua::Result<MultiValue> {
     let mut args = args.into_iter();
     let Some(Value::Boolean(method)) = args.next() else {
@@ -170,11 +163,10 @@ fn begin(
     let flagged = list.clone();
     let (mut machine, first) = Machine::begin(max_rounds, list, messages, handle, compactor);
     let started = !matches!(machine.phase(), Phase::Done);
-    let budget = budget.clone();
+    let hook = hook.clone();
     let cleared = Arc::clone(running);
     let step = lua.create_function_mut(move |lua, values: MultiValue| {
-        let then =
-            read_input(lua, machine.phase(), values, &budget).map(|input| machine.step(input));
+        let then = read_input(lua, machine.phase(), values, &hook).map(|input| machine.step(input));
         if matches!(machine.phase(), Phase::Done) {
             cleared.store(false, Ordering::Relaxed);
         }
@@ -202,19 +194,19 @@ fn begin(
 /// action with the compactor and the reason; or `nil`, `"raise"`, and the
 /// refusal. The step takes the compactor's raw `pcall` outcome, settles it
 /// as an overflowed round's is settled but under the structural rules
-/// only, and returns the `"return"` or `"raise"` action. `budget` is the
-/// VM's instruction budget, whose cancel flag the step reads.
+/// only, and returns the `"return"` or `"raise"` action. `hook` is the
+/// VM's cancellation hook, whose cancel flag the step reads.
 ///
 /// # Errors
-/// Returns [`Error::Lua`] if the function cannot be created.
+/// Returns [`Error::LuaRuntime`] if the function cannot be created.
 pub(crate) fn compact_begin(
     lua: &Lua,
     loop_running: &Arc<AtomicBool>,
-    budget: &InstructionBudget,
+    hook: &CancelHook,
 ) -> Result<Function> {
     let running = Arc::clone(loop_running);
-    let budget = budget.clone();
-    lua.create_function(move |lua, args: MultiValue| compact(lua, args, &running, &budget))
+    let hook = hook.clone();
+    lua.create_function(move |lua, args: MultiValue| compact(lua, args, &running, &hook))
         .map_err(Error::lua)
 }
 
@@ -224,7 +216,7 @@ fn compact(
     lua: &Lua,
     args: MultiValue,
     running: &AtomicBool,
-    budget: &InstructionBudget,
+    hook: &CancelHook,
 ) -> mlua::Result<MultiValue> {
     let args: Vec<Value> = args.into_iter().collect();
     if args.len() > 2 {
@@ -248,7 +240,7 @@ fn compact(
         return refuse(lua, COMPACT_RUNNING);
     }
     let mut snapshot = Some(list.snapshot());
-    let budget = budget.clone();
+    let hook = hook.clone();
     let compacted = list.clone();
     let step = lua.create_function_mut(move |lua, (ok, value): (Value, Value)| {
         let Some(snapshot) = snapshot.take() else {
@@ -257,7 +249,7 @@ fn compact(
             ));
         };
         let outcome = if truthy(&ok) { Ok(value) } else { Err(value) };
-        let then = settle(&compacted, snapshot, outcome, budget.is_cancelled(), None)
+        let then = settle(&compacted, snapshot, outcome, hook.is_cancelled(), None)
             .map_or_else(|refusal| refusal, |_| Then::Return);
         act(lua, then)
     })?;
@@ -284,7 +276,7 @@ fn read_input(
     lua: &Lua,
     phase: &Phase<Value>,
     values: MultiValue,
-    budget: &InstructionBudget,
+    hook: &CancelHook,
 ) -> mlua::Result<Input<Value>> {
     let mut values = values.into_iter();
     let mut next = || values.next().unwrap_or(Value::Nil);
@@ -293,7 +285,7 @@ fn read_input(
     match phase {
         Phase::Compacting(_) | Phase::Handling => Ok(Input::Called {
             outcome: if ok { Ok(value) } else { Err(value) },
-            cancelled: budget.is_cancelled(),
+            cancelled: hook.is_cancelled(),
         }),
         Phase::Chatting => Ok(Input::Answered(answer(lua, ok, value, |round| {
             lua.unpack::<AnyUserData>(round)?

@@ -40,7 +40,8 @@ impl SectionVm {
     ///
     /// # Errors
     /// Returns [`Error::Lua`] when H1 left `argv` as a function, userdata,
-    /// or thread, or when its value cannot be represented as JSON.
+    /// or thread, and [`Error::LuaRuntime`] when its value cannot be
+    /// represented as JSON.
     pub fn argv_json(&self) -> Result<Option<Json>> {
         let value: Value = self.lua.globals().get("argv").map_err(Error::lua)?;
         match value {
@@ -114,12 +115,6 @@ impl SectionVm {
     #[must_use]
     pub fn rendered_tools(&self) -> Option<Arc<RenderedTools>> {
         self.messages.rendered_tools()
-    }
-
-    /// How many of this VM's instruction-hook firings have counted.
-    #[cfg(test)]
-    pub(crate) fn hook_firings(&self) -> u64 {
-        self.instruction_budget.fired()
     }
 }
 

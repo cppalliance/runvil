@@ -22,7 +22,7 @@ use super::*;
 use crate::engine_globals::LUA_LOG_CHARACTER_LIMIT;
 use crate::error::Result;
 use crate::handles::resolve_section_target;
-use crate::hardening::install_instruction_budget;
+use crate::hardening::install_cancel_hook;
 use crate::sys::{guarded_var, var_snapshot_table, var_to_json};
 use crate::test_vm::{
     BuiltVm, LuaOutcome, TEST_SECTION, TestVm, fresh_access, run_chunk, test_nonce,

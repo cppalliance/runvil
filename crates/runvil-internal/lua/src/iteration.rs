@@ -46,7 +46,7 @@ use crate::error::{Error, Result};
 /// library's hash-order versions.
 ///
 /// # Errors
-/// Returns [`Error::Lua`] if either global cannot be created or installed.
+/// Returns [`Error::LuaRuntime`] if either global cannot be created or installed.
 pub(crate) fn install_deterministic_iteration(lua: &Lua) -> Result<()> {
     let globals = lua.globals();
     let next_fn = lua

@@ -49,7 +49,8 @@ pub enum ErrorKind {
     /// The model tool loop ran its iteration cap without a final reply.
     ToolLoopExhausted,
     /// A request overflowed the model's context window and the selected
-    /// compactor does not compact; includes `reason`.
+    /// compactor did not compact, or a caller raised it through
+    /// `compactors.fail` with its own reason; includes `reason`.
     ContextExhausted,
     /// The model returned a turn with no product; includes `finish_reason`
     /// when the backend supplied one.
@@ -71,7 +72,9 @@ pub enum ErrorKind {
     TaskConsumed,
     /// A section ended while tasks it owns were still live.
     TasksLive,
-    /// The run was cancelled.
+    /// The run was cancelled, the caller dropped a call the run was waiting
+    /// on, or a wait delivered a task its owner cancelled (that value
+    /// includes `task`).
     Cancelled,
     /// A store operation's own failure; includes `reason` and the
     /// [`VfsError`](runvil_vfs::VfsError) variant's fields.
@@ -194,7 +197,8 @@ impl ParseErrorKindError {
 pub enum ErrorField {
     /// A string-valued field.
     String(String),
-    /// An integer-valued field (a store anchor's `count`).
+    /// An integer-valued field (a store anchor's `count`, a UTF-8 failure's
+    /// `valid_up_to`).
     Integer(i64),
 }
 
@@ -274,7 +278,7 @@ impl ErrorValue for Error {
 }
 
 /// A structured error table read back into Rust: the kind, the message
-/// `tostring` rendered, and the kind's string fields.
+/// `tostring` rendered, and the kind's fields.
 ///
 /// This is the shape a block coroutine's failure takes when the raised
 /// value was an error table (built by the shim's `raise` or by
@@ -288,7 +292,8 @@ pub struct Raised {
     /// The message `tostring` renders.
     pub message: String,
     /// The kind's own fields (`reason`, `finish_reason`, ...), string- or
-    /// integer-valued (a store anchor's `count`).
+    /// integer-valued (a store anchor's `count`, a UTF-8 failure's
+    /// `valid_up_to`).
     pub fields: BTreeMap<String, ErrorField>,
 }
 

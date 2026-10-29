@@ -362,7 +362,7 @@ pub(crate) fn install_store_table(
 /// from here on exactly as `store.*` does.
 ///
 /// # Errors
-/// Returns [`Error::Lua`] if the VM's store table was never installed or
+/// Returns [`Error::LuaRuntime`] if the VM's store table was never installed or
 /// the switch fails.
 pub(crate) fn route_store_to_shims(lua: &Lua, shims: &Table) -> Result<()> {
     let phase: Table = lua

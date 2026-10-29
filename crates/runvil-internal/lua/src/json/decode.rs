@@ -9,7 +9,7 @@
 use mlua::{BorrowedBytes, Lua, LuaSerdeExt, Value};
 use serde_json::Value as Json;
 
-use super::refusal;
+use crate::error::author_refusal;
 
 /// The most bytes either function takes.
 const INPUT_LIMIT: usize = 8_388_608;
@@ -17,8 +17,8 @@ const INPUT_LIMIT: usize = 8_388_608;
 /// `json.decode(text)`: the one JSON document `text` holds, as Lua values.
 pub(super) fn decode(lua: &Lua, text: Value) -> mlua::Result<Value> {
     let bytes = input(text, "json.decode")?;
-    let document: Json =
-        serde_json::from_slice(&bytes).map_err(|error| refusal(format!("json.decode: {error}")))?;
+    let document: Json = serde_json::from_slice(&bytes)
+        .map_err(|error| author_refusal(format!("json.decode: {error}")))?;
     lua.to_value(&document)
 }
 
@@ -31,7 +31,7 @@ pub(super) fn decode_lines(lua: &Lua, text: Value) -> mlua::Result<Value> {
     let values = serde_json::Deserializer::from_slice(&bytes)
         .into_iter::<Json>()
         .collect::<Result<Vec<Json>, _>>()
-        .map_err(|error| refusal(format!("json.decode_lines: {error}")))?;
+        .map_err(|error| author_refusal(format!("json.decode_lines: {error}")))?;
     lua.to_value(&values)
 }
 
@@ -41,7 +41,7 @@ fn input(text: Value, function: &str) -> mlua::Result<BorrowedBytes> {
     let text = match text {
         Value::String(text) => text,
         other => {
-            return Err(refusal(format!(
+            return Err(author_refusal(format!(
                 "{function} expects a string, got {}",
                 other.type_name()
             )));
@@ -49,7 +49,7 @@ fn input(text: Value, function: &str) -> mlua::Result<BorrowedBytes> {
     };
     let bytes = text.as_bytes();
     if bytes.len() > INPUT_LIMIT {
-        return Err(refusal(format!(
+        return Err(author_refusal(format!(
             "{function}: input exceeds the {INPUT_LIMIT}-byte limit"
         )));
     }
