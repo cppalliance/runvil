@@ -69,9 +69,6 @@ pub(super) struct Machine<V> {
     calls: Vec<ToolCallEvent>,
     /// The current batch's results so far, one per answered call.
     results: Vec<String>,
-    /// The records from before this round's compaction, held until the
-    /// retried round's answer arrives. Set means the round has compacted.
-    snapshot: Option<Snapshot>,
     /// What the machine waits on.
     phase: Phase<V>,
 }
@@ -80,11 +77,13 @@ pub(super) struct Machine<V> {
 /// next.
 #[derive(Debug)]
 pub(super) enum Phase<V> {
-    /// The `chat` answer: `(ok, round)`.
-    Chatting,
+    /// The `chat` answer: `(ok, round)`, with the records from before
+    /// this round's compaction, held until the retried round's answer
+    /// arrives. `Some` means the round has compacted.
+    Chatting(Option<Snapshot>),
     /// The compactor's raw `pcall` after an overflow for this reason:
-    /// `(ok, value)`.
-    Compacting(OverflowReason),
+    /// `(ok, value)`, with the records from before the compaction.
+    Compacting(OverflowReason, Snapshot),
     /// The `tool_calls` answer for the batch's unanswered calls:
     /// `(ok, texts)`.
     Batching,
@@ -181,7 +180,6 @@ impl<V: Clone> Machine<V> {
             turn: 0,
             calls: Vec::new(),
             results: Vec::new(),
-            snapshot: None,
             phase: Phase::Done,
         };
         let first = machine.next_round();
@@ -200,23 +198,13 @@ impl<V: Clone> Machine<V> {
     /// error.
     pub(super) fn step(&mut self, input: Input<V>) -> Then<V> {
         match (std::mem::replace(&mut self.phase, Phase::Done), input) {
-            (Phase::Chatting, Input::Answered(answer)) => {
-                let compacted = self.snapshot.take();
-                match answer {
-                    Ok(round) => self.judge(*round, compacted),
-                    Err(failure) => Then::Raise(failure),
-                }
-            }
-            (Phase::Compacting(reason), Input::Called { outcome, cancelled }) => {
-                let Some(snapshot) = self.snapshot.take() else {
-                    self.list.set_compacting(false);
-                    return Then::RaiseNew(raised(ErrorKind::Internal, UNEXPECTED_INPUT));
-                };
+            (Phase::Chatting(compacted), Input::Answered(answer)) => match answer {
+                Ok(round) => self.judge(*round, compacted),
+                Err(failure) => Then::Raise(failure),
+            },
+            (Phase::Compacting(reason, snapshot), Input::Called { outcome, cancelled }) => {
                 match settle(&self.list, snapshot, outcome, cancelled, Some(reason)) {
-                    Ok(snapshot) => {
-                        self.snapshot = Some(snapshot);
-                        self.chat()
-                    }
+                    Ok(snapshot) => self.chat(Some(snapshot)),
                     Err(refusal) => refusal,
                 }
             }
@@ -256,13 +244,14 @@ impl<V: Clone> Machine<V> {
             return Then::RaiseNew(raised(ErrorKind::ToolLoopExhausted, NOT_CONVERGED));
         }
         self.rounds += 1;
-        self.chat()
+        self.chat(None)
     }
 
     /// Sends the list in a `chat` without counting a round: a new round's
-    /// send, or a compacted round's retry.
-    fn chat(&mut self) -> Then<V> {
-        self.phase = Phase::Chatting;
+    /// send, or a compacted round's retry holding its `compacted`
+    /// snapshot.
+    fn chat(&mut self, compacted: Option<Snapshot>) -> Then<V> {
+        self.phase = Phase::Chatting(compacted);
         Then::Chat {
             messages: self.messages.clone(),
             handle: self.handle.clone(),
@@ -315,9 +304,9 @@ impl<V: Clone> Machine<V> {
             self.list.restore(snapshot);
             return Then::RaiseNew(exhausted(reason));
         }
-        self.snapshot = Some(self.list.snapshot());
+        let snapshot = self.list.snapshot();
         self.list.set_compacting(true);
-        self.phase = Phase::Compacting(reason);
+        self.phase = Phase::Compacting(reason, snapshot);
         Then::Compact {
             compactor: self.compactor.clone(),
             reason,

@@ -99,10 +99,8 @@ pub(crate) fn adhoc_handler(lua: &Lua, name: &str) -> mlua::Result<Function> {
 /// objects, `tools.packs`, both offer verbs, `tools.adhoc`, and
 /// `tools.get`.
 ///
-/// The coroutine shim prelude installs the suspending `tools.call` on this
-/// table as a Lua function, because yield cannot cross the Rust callback
-/// boundary. Both offer verbs refuse once `list`, the section's
-/// conversation, holds the section's frozen sets.
+/// Both offer verbs refuse once `list`, the section's conversation, holds
+/// the section's frozen sets.
 ///
 /// # Errors
 /// Returns [`Error::LuaRuntime`] if a Lua table or callback cannot be created or

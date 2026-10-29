@@ -2,8 +2,7 @@
 //! and the `compacting` flag set around that compactor. A snapshot shares
 //! each record with the list and with every view read from it, so taking
 //! one copies no record, and putting it back restores the list's records
-//! exactly. Neither touches the list's last send or its rendered tool
-//! list.
+//! exactly. Neither touches the list's last send or its frozen sets.
 
 use std::sync::Arc;
 
@@ -31,12 +30,12 @@ impl MessageList {
         Snapshot(self.state().records.clone())
     }
 
-    /// Puts the records back; the send state and the frozen sets stay.
+    /// Puts the records back; the last send and the frozen sets stay.
     pub(crate) fn restore(&self, snapshot: Snapshot) {
         self.state().records = snapshot.0;
     }
 
-    /// Removes every record; the send state and the frozen sets stay.
+    /// Removes every record; the last send and the frozen sets stay.
     pub(crate) fn clear(&self) {
         self.state().records.clear();
     }

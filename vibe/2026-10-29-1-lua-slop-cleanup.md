@@ -696,7 +696,7 @@ None. Both questions were answered by the operator: the `Answer` restructure lan
 
 <step-6>
 
-### Step 6: the compaction retry state, the snapshot words, and the models family docs
+### Step 6: the compaction retry state, the snapshot words, and the models family docs [completed]
 
 - Component: VM setup and models loop
 - Tests:

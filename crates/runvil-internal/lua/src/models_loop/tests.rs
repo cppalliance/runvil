@@ -304,7 +304,7 @@ fn a_chat_answer_resumes_as_a_chat_result_userdata_the_step_takes_whole() {
     assert!(resumed.is::<ChatResult>());
     let hook = CancelHook::default();
     let values = MultiValue::from_vec(values);
-    let input = read_input(&lua, &Phase::Chatting, values, &hook).unwrap();
+    let input = read_input(&lua, &Phase::Chatting(None), values, &hook).unwrap();
     let Input::Answered(Ok(taken)) = input else {
         panic!("the step reads the chat answer, got {input:?}");
     };

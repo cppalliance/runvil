@@ -134,7 +134,7 @@ fn a_round_starts_with_the_chat_naming_the_handle_and_pushes_nothing() {
     let list = MessageList::default();
     let (machine, first) = Machine::begin(2, list.clone(), "list", Some("h"), "compactor");
     assert_eq!(show(&first), "chat list h");
-    assert!(matches!(machine.phase(), Phase::Chatting));
+    assert!(matches!(machine.phase(), Phase::Chatting(_)));
     assert!(
         records(&list).is_empty(),
         "a round's start pushes no record"

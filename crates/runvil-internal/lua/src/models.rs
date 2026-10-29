@@ -36,8 +36,8 @@ pub(crate) enum RawModelIds {
     Resolved,
 }
 
-/// The context window a raw gateway-id binding records: catalog metadata
-/// the hack never sees, so a conservative default keeps the compactor
+/// The context window a raw-model-id binding records: the fallback has no
+/// catalog metadata, so a conservative default keeps the compactor
 /// precheck safe rather than refusing the model.
 const RAW_ID_CONTEXT: NonZeroU32 = match NonZeroU32::new(8192) {
     Some(value) => value,
@@ -243,8 +243,9 @@ impl ModelSelection {
 /// without declaring its model. Refused, an undeclared alias is the usual
 /// error.
 ///
-/// The coroutine shim layer installs the suspending `models.infer` and
-/// `models.loop`, because yield cannot cross the Rust callback boundary.
+/// The coroutine shim layer installs the suspending `models.infer`,
+/// `models.loop`, and `models.compact`, because yield cannot cross the
+/// Rust callback boundary.
 ///
 /// # Errors
 /// Returns [`Error::LuaRuntime`] if a Lua table or callback cannot be created or

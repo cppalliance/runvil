@@ -11,8 +11,9 @@ use mlua::{UserData, UserDataFields, Value};
 
 use runvil_model_client::model::ModelBinding;
 
-/// Inspectable Lua userdata returned by `models.use` / `models.default` /
-/// `models.get`.
+/// One model handle over a frozen `ModelBinding`. Its getters return raw
+/// Lua numbers where the binding keeps validated types (`NonZeroU32`,
+/// `Temperature`).
 #[derive(Debug, Clone)]
 pub(crate) struct LuaModelHandle {
     binding: ModelBinding,
@@ -31,16 +32,10 @@ impl LuaModelHandle {
         &self.binding
     }
 
-    /// Returns the prompt-local alias.
+    /// Returns the role label the handle was obtained by; the `name` and
+    /// `label` fields both read it.
     #[must_use]
     fn name(&self) -> &str {
-        self.binding.alias()
-    }
-
-    /// Returns the role label the binding filled (the alias, under the
-    /// frontmatter's role vocabulary).
-    #[must_use]
-    fn label(&self) -> &str {
         self.binding.alias()
     }
 
@@ -64,9 +59,6 @@ impl LuaModelHandle {
     }
 
     /// Returns the catalog context window size in tokens.
-    ///
-    /// The binding stores a [`NonZeroU32`](std::num::NonZeroU32); the raw `u32`
-    /// is exposed only here, at the Lua presentation boundary.
     #[must_use]
     fn context(&self) -> u32 {
         self.binding.context().get()
@@ -85,10 +77,6 @@ impl LuaModelHandle {
     }
 
     /// Returns the frozen sampling temperature, when the role declared one.
-    ///
-    /// The binding stores a validated
-    /// [`Temperature`](runvil_model_client::model::Temperature); the
-    /// raw `f64` is exposed only here, at the Lua presentation boundary.
     #[must_use]
     fn temperature(&self) -> Option<f64> {
         self.binding
@@ -98,9 +86,6 @@ impl LuaModelHandle {
     }
 
     /// Returns the frozen max generation tokens, when the role declared one.
-    ///
-    /// The binding stores a [`NonZeroU32`](std::num::NonZeroU32); the raw `u32`
-    /// is exposed only here, at the Lua presentation boundary.
     #[must_use]
     fn max_tokens(&self) -> Option<u32> {
         self.binding
@@ -113,7 +98,7 @@ impl LuaModelHandle {
 impl UserData for LuaModelHandle {
     fn add_fields<F: UserDataFields<Self>>(fields: &mut F) {
         fields.add_field_method_get("name", |_, this| Ok(this.name().to_owned()));
-        fields.add_field_method_get("label", |_, this| Ok(this.label().to_owned()));
+        fields.add_field_method_get("label", |_, this| Ok(this.name().to_owned()));
         fields.add_field_method_get("capabilities", |lua, this| {
             lua.create_sequence_from(this.capabilities().to_vec())
         });

@@ -100,17 +100,16 @@ pub(crate) fn loop_begin(
     .map_err(Error::lua)
 }
 
-/// `loop_begin`'s body: the entry flag, then that entry's argument checks
-/// in Functional Specification's order, then the refusal while `running`
-/// or the list's `compacting` flag is set, then the machine over the
-/// section's list and its step closure,
-/// whose body is `act(lua, machine.step(read_input(lua, machine.phase(),
-/// values, &hook)?))`, then the first action. `running` is set only once
-/// nothing here can fail and the first action leaves the machine running;
-/// the step clears it when the machine is done, before it builds that
-/// action, and whenever it fails. A failed step also clears the list's
-/// `compacting` flag, which an overflow sets before the step builds the
-/// compactor's action.
+/// `loop_begin`'s body: the entry flag; for a handle's `loop`, the
+/// receiver then the arity, and for `models.loop`, the handle-first
+/// refusal then the arity; the compactor's type; the refusal while
+/// `running` or the list's `compacting` flag is set; then the machine over
+/// the section's list, its step closure, and the first action. `running`
+/// is set only once nothing here can fail and the first action leaves the
+/// machine running; the step clears it when the machine is done, before it
+/// builds that action, and whenever it fails. A failed step also clears
+/// the list's `compacting` flag, which an overflow sets before the step
+/// builds the compactor's action.
 fn begin(
     lua: &Lua,
     args: MultiValue,
@@ -283,11 +282,11 @@ fn read_input(
     let ok = truthy(&next());
     let value = next();
     match phase {
-        Phase::Compacting(_) | Phase::Handling => Ok(Input::Called {
+        Phase::Compacting(..) | Phase::Handling => Ok(Input::Called {
             outcome: if ok { Ok(value) } else { Err(value) },
             cancelled: hook.is_cancelled(),
         }),
-        Phase::Chatting => Ok(Input::Answered(answer(lua, ok, value, |round| {
+        Phase::Chatting(_) => Ok(Input::Answered(answer(lua, ok, value, |round| {
             lua.unpack::<AnyUserData>(round)?
                 .take::<ChatResult>()
                 .map(Box::new)
