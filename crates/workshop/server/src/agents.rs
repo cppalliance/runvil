@@ -321,7 +321,7 @@ impl AgentSessions {
         let request = RunRequest {
             name: conversation.id().to_string(),
             source,
-            args: String::new(),
+            args: Value::from(""),
             input_text: None,
             vfs: VfsRef::default(),
             host: host_snapshot(&self.inner.registry),

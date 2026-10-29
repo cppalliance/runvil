@@ -50,7 +50,7 @@ pub(crate) fn request(source: &str) -> RunRequest {
     RunRequest {
         name: NAME.to_owned(),
         source: source.to_owned(),
-        args: String::new(),
+        args: Value::from(""),
         input_text: None,
         vfs: VfsRef::default(),
         host: HostSnapshot {
@@ -160,6 +160,49 @@ const INFERS_AND_STORES: &str = "---\nname: infers\ndescription: d\nrunvil: 0\n\
     # Title\n\n```lua\nmodels.default('writer')\n```\n\n## Only\n\n```lua\n\
     store.write('note.md', 'kept')\n\
     return models.infer('asked') .. '|' .. store.read('note.md')\n```\n";
+
+/// A prompt under the default `args:` declaration that returns its args
+/// text beside its `argv.prose`.
+const ECHOES_PROSE: &str = "---\nname: prose\ndescription: d\nrunvil: 0\n---\n\n\
+    # Title\n\n## Only\n\n```lua\nreturn args .. '|' .. argv.prose\n```\n";
+
+/// A prompt declaring a structured `topic` argument that returns
+/// `argv.topic` beside its args text.
+const ECHOES_TOPIC: &str = "---\nname: topic\ndescription: d\nrunvil: 0\n\
+    args:\n  topic:\n    type: string\n    description: the topic\n---\n\n\
+    # Title\n\n## Only\n\n```lua\nreturn argv.topic .. '|' .. args\n```\n";
+
+/// The final text of a run of `source` with `args`.
+async fn final_text(source: &str, args: Value) -> String {
+    let recorder = Arc::new(MemoryRecorder::new());
+    let report = plain_harness(&recorder, ScriptedBroker::replying())
+        .run(RunRequest {
+            args,
+            ..request(source)
+        })
+        .await
+        .expect("the run reaches an outcome");
+    let RunOutcome::Completed { final_text } = report.outcome else {
+        panic!("the run completes: {:?}", report.outcome);
+    };
+    final_text
+}
+
+#[tokio::test]
+async fn a_string_argument_is_the_prose_of_a_default_declared_prompt() {
+    assert_eq!(
+        final_text(ECHOES_PROSE, json!("two words")).await,
+        "two words|two words"
+    );
+}
+
+#[tokio::test]
+async fn an_object_argument_is_the_argv_of_a_structured_prompt() {
+    assert_eq!(
+        final_text(ECHOES_TOPIC, json!({ "topic": "cats" })).await,
+        r#"cats|{"topic":"cats"}"#
+    );
+}
 
 #[tokio::test]
 async fn run_returns_the_declared_output_and_the_outcome_under_the_requests_name() {

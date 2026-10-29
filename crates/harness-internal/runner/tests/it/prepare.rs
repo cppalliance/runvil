@@ -187,7 +187,7 @@ fn completed(outcome: RunOutcome) -> String {
 #[tokio::test]
 async fn an_unmet_requirement_is_refused_with_the_engines_notice_and_its_run_ended_as_failed() {
     let recorder = recorder();
-    let error = prepare(NEEDS_WEB, "", services(&recorder, bare()))
+    let error = prepare(NEEDS_WEB, &"".into(), services(&recorder, bare()))
         .await
         .expect_err("a missing required Pack refuses the run");
 
@@ -221,7 +221,7 @@ async fn an_unmet_requirement_is_refused_with_the_engines_notice_and_its_run_end
 #[tokio::test]
 async fn a_prompt_that_does_not_parse_fails_preparation_and_its_run_ends_as_a_parse_failure() {
     let recorder = recorder();
-    let error = prepare(UNCLOSED, "", services(&recorder, bare()))
+    let error = prepare(UNCLOSED, &"".into(), services(&recorder, bare()))
         .await
         .expect_err("a prompt without a closed frontmatter does not parse");
 
@@ -248,10 +248,10 @@ async fn a_prompt_that_does_not_parse_fails_preparation_and_its_run_ends_as_a_pa
 async fn two_prepared_runs_draw_different_seeds_and_both_begin_at_the_recorder() {
     let recorder = recorder();
     let before = unix_millis_now();
-    let first = prepare(PLAIN, "", services(&recorder, bare()))
+    let first = prepare(PLAIN, &"".into(), services(&recorder, bare()))
         .await
         .unwrap();
-    let second = prepare(PLAIN, "", services(&recorder, bare()))
+    let second = prepare(PLAIN, &"".into(), services(&recorder, bare()))
         .await
         .unwrap();
     let after = unix_millis_now();
@@ -310,7 +310,7 @@ async fn a_prepared_run_drives_to_its_end_under_its_own_performers() {
         run_id,
         performers,
         ..
-    } = prepare(PLAIN, "", services(&recorder, bare()))
+    } = prepare(PLAIN, &"".into(), services(&recorder, bare()))
         .await
         .unwrap();
     let outcome = drive_run(
@@ -333,7 +333,7 @@ async fn a_prepared_run_drives_to_its_end_under_its_own_performers() {
 /// Prepares `source` over `host` and drives the run to its end.
 pub(crate) async fn drive_over(source: &str, host: HostContext) -> RunOutcome {
     let recorder = recorder();
-    let prepared = prepare(source, "", services(&recorder, host))
+    let prepared = prepare(source, &"".into(), services(&recorder, host))
         .await
         .unwrap();
     drive_run(
@@ -387,9 +387,13 @@ async fn a_bare_entry_another_vendor_answers_is_refused_naming_its_fqn() {
     let recorder = recorder();
     let declares_bare = "---\nname: bare\ndescription: d\nrunvil: 0\n\
         uses:\n  - tools\n---\n\n# Title\n\n## Only\n\nDone.\n";
-    let error = prepare(declares_bare, "", services(&recorder, building(TOOLS)))
-        .await
-        .expect_err("a bare id means the runvil Pack, which the Host lacks");
+    let error = prepare(
+        declares_bare,
+        &"".into(),
+        services(&recorder, building(TOOLS)),
+    )
+    .await
+    .expect_err("a bare id means the runvil Pack, which the Host lacks");
     let PrepareError::Refused { error, .. } = error else {
         panic!("the refusal is a requirements refusal: {error}");
     };

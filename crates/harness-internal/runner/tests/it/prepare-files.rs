@@ -38,7 +38,7 @@ async fn prepare_over(
     let mut services = services(&recorder, bare());
     services.vfs = vfs.clone();
     services.input_text = input_text.map(str::to_owned);
-    let prepared = prepare(source, "", services).await;
+    let prepared = prepare(source, &"".into(), services).await;
     (recorder, prepared)
 }
 

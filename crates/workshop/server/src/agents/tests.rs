@@ -83,7 +83,7 @@ async fn run_prompt(host: &Arc<HostContext>, source: String) -> Option<RunOutcom
     let request = RunRequest {
         name: conversation.id().to_string(),
         source,
-        args: String::new(),
+        args: serde_json::Value::from(""),
         input_text: None,
         vfs: VfsRef::default(),
         host: HostSnapshot::default(),

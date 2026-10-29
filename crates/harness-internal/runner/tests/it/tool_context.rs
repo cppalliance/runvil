@@ -77,9 +77,13 @@ impl Pack for Record {
 #[tokio::test]
 async fn a_tool_writes_through_its_context_and_the_calling_script_reads_it_back() {
     let recorder = Arc::new(MemoryRecorder::new());
-    let prepared = prepare(CALLS_RECORD, "", services(&recorder, building(CONTEXT)))
-        .await
-        .unwrap();
+    let prepared = prepare(
+        CALLS_RECORD,
+        &"".into(),
+        services(&recorder, building(CONTEXT)),
+    )
+    .await
+    .unwrap();
     let outcome = drive_run(
         prepared.run,
         prepared.performers,

@@ -171,7 +171,7 @@ fn request(source: &str) -> RunRequest {
     RunRequest {
         name: "session-1".to_owned(),
         source: source.to_owned(),
-        args: String::new(),
+        args: serde_json::Value::from(""),
         input_text: None,
         vfs: VfsRef::default(),
         host: HostSnapshot {
@@ -210,11 +210,15 @@ impl RunRecorder for CancelsAtEnd {
 async fn a_pack_whose_ready_resolves_late_has_its_tools_in_the_run() {
     let (host, moves, startup) = slow_host(Phase::Starting);
     let recorder = recorder();
+    let args = Value::from("");
     let (prepared, ()) = tokio::time::timeout(PATIENCE, async {
-        tokio::join!(prepare(CALLS_SLOW, "", services(&recorder, host)), async {
-            startup.asked.notified().await;
-            moves.send(Phase::Ready).unwrap();
-        })
+        tokio::join!(
+            prepare(CALLS_SLOW, &args, services(&recorder, host)),
+            async {
+                startup.asked.notified().await;
+                moves.send(Phase::Ready).unwrap();
+            }
+        )
     })
     .await
     .expect("the Harness waits on the Pack's ready");
@@ -235,9 +239,10 @@ async fn a_pack_whose_ready_resolves_late_has_its_tools_in_the_run() {
 async fn every_starting_pack_is_asked_to_be_ready_before_any_of_them_answers() {
     let (host, handles) = starting_host(&[SLOW, SLOWER], Phase::Starting);
     let recorder = recorder();
+    let args = Value::from("");
     let (prepared, ()) = tokio::time::timeout(PATIENCE, async {
         tokio::join!(
-            prepare(COUNTS_OFFERED, "", services(&recorder, host)),
+            prepare(COUNTS_OFFERED, &args, services(&recorder, host)),
             async {
                 for (_, startup) in &handles {
                     startup.asked.notified().await;
@@ -274,7 +279,7 @@ async fn a_declared_pack_whose_ready_fails_refuses_the_run_naming_its_reason() {
     let reason = "the fixture server refused the handshake";
     let (host, _moves, _startup) = slow_host(Phase::Failed(reason));
     let recorder = recorder();
-    let error = prepare(DECLARES_SLOW, "", services(&recorder, host))
+    let error = prepare(DECLARES_SLOW, &"".into(), services(&recorder, host))
         .await
         .expect_err("a declared Pack that will not be ready refuses the run");
 

@@ -211,12 +211,25 @@ impl PrepareError {
 /// refuses a write.
 pub async fn prepare(
     source: &str,
-    args: &str,
+    args: &serde_json::Value,
     services: Services,
 ) -> Result<Prepared, PrepareError> {
     prepare_noting_cancel(source, args, services)
         .await
         .map_err(|(error, _)| error)
+}
+
+/// The Engine's argument text for `args` under `prompt`'s declaration: a
+/// default-declared prompt reads a JSON string as its prose verbatim, and
+/// every other value, or any value under a structured declaration, goes as
+/// its JSON text.
+fn args_text(prompt: &Prompt, args: &serde_json::Value) -> String {
+    match args {
+        serde_json::Value::String(prose) if prompt.frontmatter().args().is_default() => {
+            prose.clone()
+        }
+        value => value.to_string(),
+    }
 }
 
 /// [`prepare`], whose failure comes beside whether it ended the run
@@ -231,7 +244,7 @@ pub async fn prepare(
 )]
 pub(crate) async fn prepare_noting_cancel(
     source: &str,
-    args: &str,
+    args: &serde_json::Value,
     services: Services,
 ) -> Result<Prepared, (PrepareError, bool)> {
     let Services {
@@ -341,7 +354,8 @@ pub(crate) async fn prepare_noting_cancel(
         return Err((PrepareError::Refused { run_id, error }, cancelled));
     }
 
-    let run = Run::new(Arc::new(prompt), args, ctx);
+    let args = args_text(&prompt, args);
+    let run = Run::new(Arc::new(prompt), &args, ctx);
     let performers = Performers {
         broker,
         tool: Arc::new(snapshot),

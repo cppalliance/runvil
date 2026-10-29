@@ -67,7 +67,7 @@ async fn prepare_greeter(
     let recorder = recorder();
     let mut services = services(&recorder, building(GREETER));
     services.services = run;
-    let prepared = prepare(GREETS, "", services).await;
+    let prepared = prepare(GREETS, &"".into(), services).await;
     (recorder, prepared)
 }
 

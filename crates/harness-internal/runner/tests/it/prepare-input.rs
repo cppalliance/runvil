@@ -89,7 +89,7 @@ fn with_input(input: Option<Arc<dyn AskBroker>>) -> HostServices {
 /// Prepares `source` under `services` and drives the run to its end.
 async fn drive_prompt(source: &str, services: Services) -> RunOutcome {
     let recorder = Arc::clone(&services.recorder);
-    let prepared = prepare(source, "", services)
+    let prepared = prepare(source, &"".into(), services)
         .await
         .expect("the prompt prepares");
     drive_run(
@@ -158,7 +158,7 @@ async fn a_required_user_input_declaration_on_a_host_without_a_broker_is_refused
     let recorder = recorder();
     let error = prepare(
         &user_input_prompt(REQUIRED, ASKS_ONCE),
-        "",
+        &"".into(),
         user_input_services(&recorder, None),
     )
     .await
