@@ -435,7 +435,7 @@ Every bullet is replaced or appended prose plus one visibility token. No behavio
 
 <step-9>
 
-### Step 9: Engine repository drift, two files
+### Step 9: Engine repository drift, two files [completed]
 
 - Component: Drift
 - Tests: `cargo test -p build-xtask` and `node --test crates/workshop/ui/test/docs-claims.mjs`
