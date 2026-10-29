@@ -33,6 +33,9 @@ pub struct RunLimits {
     pub lua_memory_bytes: NonZeroUsize,
     /// The maximum number of `log` events that a prompt's Lua code can
     /// record in each Lua virtual machine.
+    ///
+    /// The log byte ceiling is derived from this count, so raising it raises
+    /// both budgets.
     pub lua_log_events: NonZeroU32,
 }
 

@@ -1,5 +1,5 @@
 //! Building the internal error: its constructors, the `From` bridges that
-//! map the gateway client, parser, and Lua crates' errors onto it variant
+//! map the model-client, parser, and Lua crates' errors onto it variant
 //! for variant, and the rebuild of a raised Lua error table into the
 //! variant it stands in for.
 

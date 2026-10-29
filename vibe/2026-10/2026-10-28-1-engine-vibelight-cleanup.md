@@ -369,7 +369,7 @@ Ten steps, one commit each. Order is by cause, not by file count. The Pack roste
 
 <step-7>
 
-### Step 7: Engine doc sentences, one file at a time
+### Step 7: Engine doc sentences, one file at a time [completed]
 
 - Component: Doc text
 - Tests: `cargo nextest run --locked -p runvil-engine` and `RUSTDOCFLAGS=-D warnings cargo doc --locked --no-deps --all-features -p runvil-engine --document-private-items`

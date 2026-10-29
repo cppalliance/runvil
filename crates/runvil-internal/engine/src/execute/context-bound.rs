@@ -1,5 +1,9 @@
 //! The run-scoped sets built from the prepared bindings, and the `argv`
 //! derivation: the pieces `RunState::new` assembles once per run.
+//!
+//! The sets are built once. [`derive_argv`] is not: `RunState::new` calls it
+//! for the run's own args, and every args fork calls it again, so a
+//! contained chain parses the input it was given.
 
 use std::collections::BTreeMap;
 
@@ -38,9 +42,10 @@ pub(super) fn bound_tool_set(
 /// Builds the run's shared model set from the prepared `bindings`: every
 /// filled role becomes a binding under its label, holding the role's
 /// keyword set (the handle's `capabilities`), the hard-keyword thinking
-/// switch as the frozen invocation, the model info's provider id when
-/// the catalog names one, and the model info itself, which a section
-/// entry's render receives. Unfilled roles produce no binding:
+/// switch as the frozen invocation, the role's declared description (else
+/// the model info's), the catalog model info's context window, the model
+/// info's provider id when the catalog names one, and the model info itself,
+/// which a section entry's render receives. Unfilled roles produce no binding:
 /// `models.use` on the label fails at run time.
 pub(super) fn bound_model_set(prompt: &Prompt, bindings: &ModelBindings) -> ModelSet {
     let mut set = ModelSet::default();

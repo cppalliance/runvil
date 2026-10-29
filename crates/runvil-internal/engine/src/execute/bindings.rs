@@ -1,11 +1,11 @@
-//! The run's journaled model bindings: [`ModelBindings`].
+//! The run's model bindings: [`ModelBindings`].
 
 use std::collections::BTreeMap;
 
 use crate::model::{ModelId, ModelInfo};
 
 /// The models bound for a run: which model each declared role uses, and
-/// the model info of every model the run may use.
+/// the model info of every model a role is bound to.
 ///
 /// [`prepare`](super::RunContext::prepare) fills these bindings. It binds
 /// every declared role to the current model the caller passes it.
@@ -15,9 +15,9 @@ use crate::model::{ModelId, ModelInfo};
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct ModelBindings {
-    /// The decision, journaled: role label to the bound model's identity.
+    /// The decision: role label to the bound model's identity.
     roles: BTreeMap<String, ModelId>,
-    /// What this run may use: identity to model info.
+    /// The info of every model a role is bound to: identity to model info.
     models: BTreeMap<ModelId, ModelInfo>,
 }
 
@@ -43,8 +43,12 @@ impl ModelBindings {
         self.roles.get(label).and_then(|id| self.models.get(id))
     }
 
-    /// Returns the info of the model with the identity `id`, or
-    /// `None` when this run may not use that model.
+    /// Returns the info of the model with the identity `id`, or `None`
+    /// when no role is bound to that model.
+    ///
+    /// `None` does not mean the run may not use the model: a catalog model
+    /// that a UI snapshot reaches by raw id is not in this map either,
+    /// because only a role binding puts one here.
     #[must_use]
     pub fn model(&self, id: &ModelId) -> Option<&ModelInfo> {
         self.models.get(id)

@@ -70,9 +70,9 @@ fn malformed_reply(specific: &str) -> Error {
 }
 
 /// Applies one infer round's answer - the completion the performer
-/// obtained, or its failure - reporting it exactly like one prose round
-/// of `round` through the chain's `emitter` under `section`, and renders
-/// its text.
+/// obtained, or its failure - reporting it exactly like a prose round
+/// through `turn::report_model_turn` on the chain's `emitter` under
+/// `section`, and renders its text.
 ///
 /// A failed completion is a failed turn and the call's error. The
 /// performer's task is aborted on cancellation before any answer lands,

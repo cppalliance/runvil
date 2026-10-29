@@ -1,16 +1,24 @@
 //! The crate's internal error type.
 //!
 //! [`Error`] is a `pub(crate)` internal error type, never part of the public API.
-//! Every public boundary returns its own typed error ([`crate::RunError`],
-//! [`ParseError`](runvil_parser::ParseError), [`CompletionError`](runvil_model_client::model::CompletionError),
-//! [`runvil_types::tools::ToolError`]); those wrappers
-//! classify this internal type and keep its cause. See the module wrappers for
-//! the `From` bridges that let internal `?` keep flowing through the error type.
+//! The public boundary is [`crate::RunError`], and [`ParseError`](runvil_parser::ParseError),
+//! [`CompletionError`](runvil_model_client::model::CompletionError), and
+//! [`runvil_types::tools::ToolError`] each reach it through `RunError`'s
+//! classification, which classifies this internal type and keeps its cause.
+//! See the module wrappers for the `From` bridges that let internal `?` keep
+//! flowing through the error type.
 //!
 //! A variant that keeps an originating error renders that error's text in
 //! its own `Display` and holds the error as a plain `cause` field behind
 //! [`Error::originating_error`], never as a `#[source]`, so a printer that
 //! walks the source chain shows the cause's text once.
+//!
+//! Three variants are `#[error(transparent)]` and so keep no `cause` field
+//! of their own: `Parse`, `Completion`, and `Substitution` hand their whole
+//! `Display` and `source` to the error they hold. That is the exception to
+//! the field rule above, and it is why [`Error::originating_error`] answers
+//! `None` for `Completion` and `Substitution` and the parser's own cause for
+//! `Parse`.
 
 use runvil_types::ids::TaskId;
 
@@ -81,9 +89,13 @@ fn out_of_scope_message(
 /// The call name [`Error::CallDepthExceeded`] reports for a nesting that
 /// passed the call-depth cap: `tasks.fanout` for a fanout arm, and `call`
 /// for a `call` or a `tasks.spawn`, which shares its cap.
+///
+/// The name reported is the cap's, not the author's construct: a
+/// `tasks.spawn` that trips the cap reports `call`, because that is the cap
+/// it shares.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum DepthVia {
-    /// A `call`, or a `tasks.spawn`, which shares `call`'s cap.
+    /// A `call`, or a `tasks.spawn`.
     Call,
     /// One arm of a `tasks.fanout`.
     Fanout,
@@ -311,6 +323,9 @@ pub(crate) enum Error {
 
     /// The prompt declares a `runvil:` major this build does not support,
     /// so it is refused rather than run under mismatched rules.
+    ///
+    /// Major 0 is the only supported major, and the `Display` names it
+    /// beside the major the prompt declared.
     #[error("unsupported runvil version: {0} (this build supports major 0)")]
     UnsupportedVersion(u32),
 
@@ -364,9 +379,10 @@ pub(crate) enum Error {
         cause: Option<BoxedSource>,
     },
 
-    /// A Lua log quota (log events or log bytes) ran out. This stable typed
-    /// variant lets the caller tell quota exhaustion apart from an authoring
-    /// error.
+    /// A Lua quota ran out: a `log()` event or byte budget, or the
+    /// instruction-hook budget that keeps a block cancellable. This stable
+    /// typed variant lets the caller tell quota exhaustion apart from an
+    /// authoring error.
     #[error("lua {resource} quota exceeded")]
     LuaQuota {
         /// The exhausted resource.
@@ -401,6 +417,12 @@ pub(crate) enum Error {
     /// the operation (or the probe text, which says when the run declares no
     /// store), kept beside the error because the error alone does not name
     /// the operation.
+    ///
+    /// The cause is the concrete `VfsError` rather than the `BoxedSource`
+    /// the other cause-bearing variants hold, because the Lua error table
+    /// carries the tag and fields this crate rebuilds that type from, so a
+    /// raise that crossed the Lua boundary can be turned back into the
+    /// variant it stands in for.
     #[error("{message}")]
     Store {
         /// The rendered store failure message, from the Lua crate's

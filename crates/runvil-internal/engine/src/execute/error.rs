@@ -1,4 +1,5 @@
-//! The public run-error surface: [`RunError`] and its stable [`RunErrorKind`].
+//! The public run-error surface: [`RunError`], its stable [`RunErrorKind`],
+//! and the [`SourceLocation`] that says where a failure happened.
 
 use std::fmt;
 use std::num::NonZeroU32;
@@ -14,7 +15,8 @@ use crate::Error;
 #[non_exhaustive]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum RunErrorKind {
-    /// Parsing the prompt failed, or a compiled Lua region was invalid.
+    /// Parsing the prompt failed: invalid frontmatter YAML, or a failure the
+    /// parser classified as structural.
     Parse,
     /// The prompt declared a `runvil:` major version outside the set
     /// this build supports.
@@ -35,11 +37,17 @@ pub enum RunErrorKind {
     /// The run stops at once to keep the interleaving of their store access
     /// deterministic. Lua code cannot catch this failure.
     Determinism,
-    /// A section's Lua phase failed to run or return a usable value.
+    /// A section's Lua phase failed to run or return a usable value, or the
+    /// author's program broke where the Engine cannot fix it: Lua source
+    /// that did not compile, a chain that ended with tasks still live, a
+    /// task reached for by a chain that does not own it, a task result
+    /// waited on twice, a wait delivering a cancelled task that surfaced
+    /// uncaught, and a failed `{{ }}` substitution.
     Lua,
-    /// A Lua log quota (log events or log bytes) ran out, or a `call`,
-    /// `tasks.spawn`, or `tasks.fanout` arm would have nested past the
-    /// call-depth cap.
+    /// A Lua quota ran out: the `log()` event budget, the `log()` byte
+    /// budget, or the instruction-hook budget that keeps a block
+    /// cancellable. Also the `call`, `tasks.spawn`, or `tasks.fanout` arm
+    /// that would have nested past the call-depth cap.
     Quota,
     /// `compactors.fail` raised context exhaustion: a request overflowed the
     /// model's context window and the selected compactor left it over the
@@ -186,12 +194,21 @@ impl RunError {
 
     /// Returns the originating error this failure keeps, when it has one.
     ///
-    /// A Lua failure keeps the Lua error, a tool failure the tool's own
-    /// error, a store failure the store's structured error, and a
-    /// frontmatter failure the YAML decode failure. The message already
-    /// holds the cause's text, so [`std::error::Error::source`] does not
-    /// return it again, and a printer that walks the source chain shows the
-    /// text once.
+    /// Eight variants can answer one. Seven hold it in a `cause` field: a
+    /// Lua runtime failure keeps the `mlua` error, a Lua compile failure the
+    /// compiler diagnostic, a schema binding failure the validation error, a
+    /// tool failure the tool's own error, a store failure the store's
+    /// structured error, an unmet requirement the failure it stands in for,
+    /// and an internal fault the failure that broke the invariant. The
+    /// eighth, `Parse`, is transparent and answers the parser's cause.
+    ///
+    /// `Completion` and `Substitution` are transparent too, and both answer
+    /// `None`: whatever cause each holds belongs to the error it wraps, not
+    /// to this one.
+    ///
+    /// The message already holds the cause's text, so
+    /// [`std::error::Error::source`] does not return it again, and a printer
+    /// that walks the source chain shows the text once.
     #[must_use]
     pub fn originating_error(&self) -> Option<&(dyn std::error::Error + Send + Sync + 'static)> {
         self.inner.originating_error()

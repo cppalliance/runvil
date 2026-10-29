@@ -9,7 +9,7 @@
 //! The run's outcome type ([`RunResult`]) is defined here; the rest lives in
 //! focused private children:
 //!
-//! - `bindings` - the run's journaled [`ModelBindings`].
+//! - `bindings` - the run's model bindings, [`ModelBindings`].
 //! - `config` - the public [`RunContext`], whose `prepare` binds model
 //!   roles, and [`RunLimits`]; installing Packs and taking each run's
 //!   catalog from them is the Harness's job.
@@ -95,21 +95,22 @@ pub fn perform_vfs_op(
 /// The outcome of a run, which the caller reads out of [`Step::Done`].
 ///
 /// Every outcome is a value of this enum. That includes a prompt that
-/// declines its task. The variant tells code what happened, and the
-/// payload explains it to people and models.
+/// declines its task: a decline is not an error and not a cancellation, so
+/// the run still completes, with the prompt's reason for declining as the
+/// [`Completed`](RunResult::Completed) text. The variant tells code what
+/// happened, and the payload explains it to people and models.
 ///
-/// # Outcomes
-/// - [`RunResult::Completed`] - the run completed with its final text.
-/// - [`RunResult::Cancelled`] - the caller cancelled the run, or dropped an
-///   effect the run was waiting on and no `pcall` caught the cancelled
-///   error it resumed with.
-/// - [`RunResult::Failure`] - the run failed.
+/// This enum is the one outcome type that is `#[non_exhaustive]`, so a
+/// `match` on it needs a wildcard arm, while [`Step`], [`Effect`], and
+/// [`EffectAnswer`] are deliberately closed. Those three are the caller's
+/// protocol: its loop names every kind, so a new kind there must break its
+/// build rather than reach code that cannot handle it. A run's outcome is
+/// the exception because the caller consumes it as a result, and a wildcard
+/// arm that treats an unfamiliar outcome as a failure is a sound default
+/// where an unfamiliar effect kind is not.
 ///
 /// A failure's [`RunError`] has a [`kind`](RunError::kind) that classifies
 /// the failure by condition; [`RunErrorKind`] documents each kind.
-///
-/// The enum is `#[non_exhaustive]`, so a `match` on it needs a wildcard
-/// arm.
 #[derive(Debug)]
 #[non_exhaustive]
 pub enum RunResult {

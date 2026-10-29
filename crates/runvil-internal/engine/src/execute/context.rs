@@ -50,8 +50,8 @@ pub(super) struct ReportingHandles {
 /// The three sanctioned forks: [`with_walk_state`](Self::with_walk_state)
 /// at the H1-to-walk handoff, [`with_task`](Self::with_task) giving a
 /// spawned chain its own task emitter and turn counter, and
-/// [`with_args`](Self::with_args) passing a `call` call's args override
-/// into its contained chain.
+/// [`with_args`](Self::with_args) passing a `call` or task-spawning arm's
+/// input override into its contained chain.
 #[derive(Clone)]
 pub(crate) struct RunState {
     /// The prompt this run executes.
@@ -241,7 +241,7 @@ impl RunState {
     }
 
     /// The run's resource limits.
-    pub(crate) fn limits(&self) -> RunLimits {
+    pub(super) fn limits(&self) -> RunLimits {
         self.limits
     }
 
@@ -314,9 +314,10 @@ impl RunState {
     }
 
     /// The context a contained chain runs under: `args` in place of the
-    /// run's own, because a `call` call's explicit input overrides the
-    /// run's args for the chain - and `argv` re-derives from the chain's
-    /// args, so the chain sees the parsed form of what it was passed.
+    /// run's own, because a `call`, a `tasks.spawn`, or a `tasks.fanout`
+    /// arm that was given an input overrides the run's args for the chain -
+    /// and `argv` re-derives from the chain's args, so the chain sees the
+    /// parsed form of what it was passed.
     #[must_use]
     pub(super) fn with_args(&self, args: &str) -> Self {
         let mut ctx = self.clone();

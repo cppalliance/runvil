@@ -45,7 +45,8 @@ use super::requirements::{Requirements, UnavailablePack, UsablePack};
 /// The caller supplies the run's clock and randomness through `new`.
 #[non_exhaustive]
 pub struct RunContext {
-    /// Run identity, stamped on every report and event.
+    /// The caller's run label, moved into `RunState::execution` at start and
+    /// read nowhere else.
     pub(super) name: String,
     /// The run's seed, as the caller supplied it: the source of the run id,
     /// the untrusted-envelope nonce, and every other in-run random choice.
@@ -66,9 +67,10 @@ pub struct RunContext {
     pub(super) ui: Option<serde_json::Value>,
     /// The run's whole filesystem; set by `with_vfs`.
     pub(super) vfs: VfsRef,
-    /// The run's model satisfaction, written by
+    /// The run's model bindings, written by
     /// [`prepare`](RunContext::prepare)'s fill function: which concrete
-    /// model each declared role is bound to.
+    /// model each declared role is bound to, and the info of every model a
+    /// role is bound to.
     pub(super) model_bindings: ModelBindings,
     /// The run's tool catalog; set by `with_tools`.
     pub(super) tools: ToolCatalog,
@@ -334,9 +336,8 @@ impl RunContext {
     /// Returns the run's model bindings, which map each declared role to a
     /// concrete model.
     ///
-    /// The bindings also hold the `ModelInfo` values of the models this run may
-    /// use. [`prepare`](RunContext::prepare)'s fill
-    /// function writes them.
+    /// The bindings also hold the `ModelInfo` of every model a role is bound
+    /// to. [`prepare`](RunContext::prepare)'s fill function writes them.
     #[must_use]
     pub fn model_bindings(&self) -> &ModelBindings {
         &self.model_bindings
@@ -364,9 +365,9 @@ impl RunContext {
 
     /// Returns the run's id, derived from its seed.
     ///
-    /// The id is one-way, so it can be shown in logs, records, and views
-    /// without revealing the seed or the nonce. A replay under the recorded
-    /// seed has the same id.
+    /// The id is one-way, so it does not reveal the seed or the nonce. It
+    /// appears in a debug rendering only: events and reports carry the
+    /// run's `name`. A replay under the recorded seed has the same id.
     #[must_use]
     pub(crate) fn uid(&self) -> RunUid {
         RunUid::from_seed(&self.seed)

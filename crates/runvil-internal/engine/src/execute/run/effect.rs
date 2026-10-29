@@ -204,6 +204,11 @@ pub enum Effect {
     /// behind a timed wait.
     Timer {
         /// How long the sleep lasts.
+        ///
+        /// The effect holds a [`Duration`], but its record stores fractional
+        /// seconds as an `f64`, so a half-second timer records as
+        /// `{"Timer":{"seconds":0.5}}`. A sub-second duration keeps its
+        /// fraction there rather than rounding to whole seconds.
         duration: Duration,
     },
 }

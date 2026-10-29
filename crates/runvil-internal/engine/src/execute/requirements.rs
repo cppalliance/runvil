@@ -73,6 +73,9 @@ impl Requirements {
     /// The merge skips an entry the report already holds, and keeps
     /// `reserved` the union of both reports' ids.
     ///
+    /// `unmet_models` is the exception: it is appended whole, so a role the
+    /// report already lists is listed again rather than skipped.
+    ///
     /// The merge drops the `missing_packs` entry of a Pack that lacks a
     /// service or is unavailable: the service or unavailable entry
     /// already names the real cause.
@@ -108,9 +111,10 @@ impl Requirements {
 
     /// Returns the refusal notice, which explains what blocks the run.
     ///
-    /// Each line names what is missing or falls short, with required versus
-    /// actual. The notice is written for a model to read: concise, factual,
-    /// and self-contained.
+    /// Each line names what is missing or falls short. The model lines
+    /// carry required versus actual; the Pack lines name the Pack and, for
+    /// a service or an unavailable Pack, the reason. The notice is written
+    /// for a model to read: concise, factual, and self-contained.
     #[must_use]
     pub fn notice(&self) -> String {
         // Writing to a String is infallible, so each `write!` result is
@@ -177,6 +181,10 @@ fn push_new<T: PartialEq>(entries: &mut Vec<T>, incoming: Vec<T>) {
 /// one the run holds. The caller reports each Pack's vendor as it picked the
 /// Pack, and every tool-call and tool-result event for one of the Pack's
 /// tools records it.
+///
+/// The vendor promise holds only for a Pack the roster lists as usable. A
+/// Pack named in both roster lists counts as unavailable, so it has no
+/// vendor and its tools record none.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct UsablePack {
