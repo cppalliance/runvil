@@ -18,7 +18,7 @@ models.default("researcher")
 ## Research
 
 ```lua
-tools.offer({"web/search", "web/fetch"})
+tools.offer("web")
 ```
 
 You research people using live web tools and return a compact, factual summary.

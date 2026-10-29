@@ -31,7 +31,7 @@ fn research_ada_lovelace() -> TestResult<Trace> {
 }
 
 #[test]
-fn the_shipped_research_prompt_offers_its_web_tools_by_id_and_runs_end_to_end() -> TestResult {
+fn the_shipped_research_prompt_offers_the_web_pack_and_runs_end_to_end() -> TestResult {
     let trace = research_ada_lovelace()?;
     assert_eq!(trace.text()?, "a factual summary");
 
@@ -48,11 +48,11 @@ fn the_shipped_research_prompt_offers_its_web_tools_by_id_and_runs_end_to_end() 
             _ => {}
         }
     }
-    let wire_names = vec!["web_search".to_owned(), "web_fetch".to_owned()];
+    let wire_names = vec!["web_fetch".to_owned(), "web_search".to_owned()];
     assert_eq!(
         advertised,
         [wire_names.clone(), wire_names],
-        "both rounds advertise the offered tools under their wire names, in offer order"
+        "both rounds advertise the web Pack's tools under their wire names, in id order"
     );
     assert_eq!(
         tool_calls,
