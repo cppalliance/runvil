@@ -1,8 +1,9 @@
 //! The read-only proxy every seal builds on - `sys`, a frozen `argv` table,
 //! a sealed prelude global, and a prelude's `var` view - and the key
 //! formatter their refusals and field paths share.
+//! `tools.stats` and `tools.packs` build on the walkable [`read_only_walk`].
 
-use mlua::{Lua, MaybeSend, Table, Value};
+use mlua::{Function, Lua, MaybeSend, MultiValue, Table, Value};
 
 /// Renders a table key for a refusal: a string as its text, an integer as
 /// its digits, and any other key by its type name.
@@ -44,5 +45,31 @@ pub(crate) fn read_only_proxy(
     metatable.raw_set("__metatable", label)?;
     let proxy = lua.create_table()?;
     proxy.set_metatable(Some(metatable))?;
+    Ok(proxy)
+}
+
+/// An empty proxy whose metatable holds `index`, a `__pairs` that walks
+/// with `step`, a `__newindex` that raises `<path> is read-only`, and that
+/// text as its `__metatable`, which protects it.
+pub(crate) fn read_only_walk(
+    lua: &Lua,
+    index: Function,
+    step: Function,
+    path: &str,
+) -> mlua::Result<Table> {
+    let label = format!("{path} is read-only");
+    let pairs =
+        lua.create_function(move |_, proxy: Table| Ok((step.clone(), proxy, Value::Nil)))?;
+    let refusal = label.clone();
+    let newindex = lua.create_function(move |_, _: MultiValue| -> mlua::Result<()> {
+        Err(mlua::Error::external(refusal.clone()))
+    })?;
+    let meta = lua.create_table()?;
+    meta.raw_set("__index", index)?;
+    meta.raw_set("__pairs", pairs)?;
+    meta.raw_set("__newindex", newindex)?;
+    meta.raw_set("__metatable", label)?;
+    let proxy = lua.create_table()?;
+    proxy.set_metatable(Some(meta))?;
     Ok(proxy)
 }

@@ -31,9 +31,9 @@ use runvil_types::untrusted::GuardNonce;
 use runvil_vfs::Access;
 use serde_json::Value as Json;
 
+use crate::bindings::ToolSet;
 use crate::engine_globals::{LUA_LOG_CHARACTER_LIMIT, install_untrusted};
 use crate::error::{Error, Result};
-use crate::handles::ToolSet;
 use crate::hardening::{CancelHook, harden, install_cancel_hook};
 use crate::iteration::install_deterministic_iteration;
 use crate::messages::MessageList;

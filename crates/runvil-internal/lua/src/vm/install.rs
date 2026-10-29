@@ -13,11 +13,11 @@ use super::{SYS_LIVE_POISONED, SectionVm, pack_sequence};
 use crate::coro::install_shim_prelude;
 use crate::engine_globals::{install_log, install_store_table};
 use crate::error::{Error, Result};
-use crate::handles::{Library, LibraryKey, SectionText, resolve_section_target};
 use crate::prose::ProseState;
+use crate::section::{Library, LibraryKey, SectionText, resolve_section_target};
 use crate::sys::seal_sys;
 #[cfg(test)]
-use crate::sys::var_to_json;
+use crate::var::var_to_json;
 
 impl SectionVm {
     /// Installs `log`, `store`, and `json` as persistent globals for the

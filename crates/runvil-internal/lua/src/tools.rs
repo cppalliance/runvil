@@ -26,8 +26,8 @@ use runvil_types::tools::{ToolId, ToolInfo};
 use serde_json::{Value as Json, json};
 
 use crate::alias::Alias;
+use crate::bindings::{ToolBinding, ToolSet};
 use crate::error::{Error, Result};
-use crate::handles::{ToolBinding, ToolSet};
 use crate::json::to_json;
 use crate::messages::MessageList;
 use crate::packs::{ADHOC_PACK, install_pack_list, install_pack_objects};

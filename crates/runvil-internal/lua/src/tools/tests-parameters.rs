@@ -10,8 +10,8 @@ use runvil_types::tools::{ToolCatalog, ToolId, ToolInfo, ToolOutput};
 use serde_json::{Value as Json, json};
 
 use crate::ToolBinding;
-use crate::dispatch::prepare_dispatch;
-use crate::handles::ToolSet;
+use crate::bindings::ToolSet;
+use crate::dispatch::dispatch_body;
 use crate::test_vm::{TEST_SECTION, lua_over, test_nonce};
 use crate::tests::recording::null_emitter;
 
@@ -152,7 +152,7 @@ fn strings(value: &Json, out: &mut Vec<String>) {
 #[test]
 fn metadata_of_a_pack_whose_results_are_untrusted_never_takes_the_envelope() {
     let nonce = test_nonce();
-    let result = prepare_dispatch(
+    let result = dispatch_body(
         &ToolBinding::from_info("web_search", &search_tool()),
         None,
         Ok(ToolOutput::untrusted("fetched page")),

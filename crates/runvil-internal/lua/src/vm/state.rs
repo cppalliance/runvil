@@ -12,13 +12,13 @@ use runvil_types::tools::{ToolId, ToolInfo};
 use serde_json::Value as Json;
 
 use super::{AdhocTools, SectionVm};
+use crate::bindings::{ToolBinding, ToolSet};
 use crate::error::{Error, Result};
-use crate::handles::{ToolBinding, ToolSet};
 use crate::models::ModelSelection;
 use crate::packs::is_adhoc;
 use crate::scope::{OfferMode, OfferTarget, OfferedTool, Offers, RenderedTools, ToolCallCounts};
-use crate::sys::var_to_json;
 use crate::tools::install_tool_call_counts as install_tool_call_counts_impl;
+use crate::var::var_to_json;
 
 impl SectionVm {
     /// Returns the current `var` table as JSON, read from the hidden data

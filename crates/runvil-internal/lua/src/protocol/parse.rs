@@ -23,8 +23,8 @@ use tasks::{
 use tools::{parse_adhoc_tool_done, parse_tool_call, parse_tool_calls};
 
 use crate::error::{Error, Result};
-use crate::handles::resolve_section_target;
 use crate::models::LuaModelHandle;
+use crate::section::resolve_section_target;
 
 use super::answer::Answer;
 use super::request::Request;

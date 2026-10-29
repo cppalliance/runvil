@@ -3,8 +3,7 @@
 //! [`prepare_dispatch`] is the one place a bound tool's answer composes the
 //! succeeded/failed observation, the untrusted nonce wrap, and the
 //! `ToolResult` report. It is synchronous and takes the tool's
-//! outcome as a value, so the Harness performs the call and the Engine applies
-//! the same rules when the answer arrives; [`prepare_model_dispatch`] is
+//! outcome as a value; [`prepare_model_dispatch`] is
 //! the same body under the model-issued rule (a tool's own failure resumes
 //! as untrusted failure text, and the `ToolResult` fires under the model's
 //! call id). Nothing here performs a call: the executor issues the call as
@@ -18,16 +17,14 @@ use runvil_types::event::lifecycle;
 use runvil_types::tools::{OutputTrust, ToolError, ToolOutput};
 use runvil_types::untrusted::GuardNonce;
 
+use crate::bindings::ToolBinding;
 use crate::error::{Error, Result};
-use crate::handles::ToolBinding;
 
 /// The run coordinates a script-initiated dispatch reports under.
 ///
-/// [`prepare_dispatch`] fires the `ToolResult` event with them; a
-/// model tool-loop dispatch passes `None` instead and reports the result itself,
-/// because it owns the model-issued call id the script path lacks. The
-/// script report's `tool_call_id` is therefore empty. The chain and depth
-/// are not part of the report: the emitter
+/// [`prepare_dispatch`] fires the `ToolResult` event with them under an
+/// empty `tool_call_id`, since only a model-issued call has one. The chain
+/// and depth are not part of the report: the emitter
 /// stamps every event with its provenance, which already names the task the
 /// event belongs to.
 #[derive(Debug, Clone, Copy)]
@@ -36,25 +33,22 @@ pub struct ScriptReport {
     pub turn: u32,
 }
 
-/// The run coordinates a model-issued dispatch reports under: the chain's
-/// script coordinates plus the call id the model issued.
-///
-/// [`prepare_model_dispatch`] fires the `ToolResult` event under
-/// `call_id`, so the result correlates with the assistant tool-call record
-/// that requested it.
+/// The run coordinates a model-issued dispatch reports under: the turn the
+/// call fired in and the call id the model issued.
 #[derive(Debug, Clone)]
 pub struct ModelReport {
-    /// The turn the call fired in.
-    pub script: ScriptReport,
+    /// The section's completed model-turn count at dispatch.
+    pub turn: u32,
     /// The model-issued call id the result answers.
     pub call_id: String,
 }
 
 /// The resolved outcome of one dispatched tool call: the final content -
 /// nonce-wrapped when untrusted, except a script's listing - beside its
-/// trust marking. A model tool-loop dispatch reports the pair through the
-/// `ToolResult` event itself; a script-initiated dispatch reads only the
-/// content, its report already fired inside [`prepare_dispatch`].
+/// trust marking. [`prepare_model_dispatch`] reports the pair through the
+/// `ToolResult` event under the model's call id; a script-initiated
+/// dispatch reads only the content, its report already fired inside
+/// [`prepare_dispatch`].
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ToolDispatch {
     content: String,
@@ -103,20 +97,42 @@ impl ToolDispatch {
 /// nonce-wrapped before it can reach a model turn or a calling script,
 /// except that a script-initiated call to a binding that describes tools
 /// receives its untrusted output verbatim, still marked untrusted, as a
-/// listing the script reads. A script-initiated call (`script` is `Some`)
-/// also fires the `ToolResult` event with the final content and `vendor`,
-/// the vendor of the tool's Pack; a model-loop call fires no content
-/// event here: the loop reports the returned [`ToolDispatch`] under the
-/// model-issued call id.
+/// listing the script reads. It also fires the `ToolResult` event with the
+/// final content and `vendor`, the vendor of the tool's Pack.
 ///
 /// `call_result` is the tool's own answer, however the caller obtained it.
-/// Nothing here awaits: the Harness performs the call, and the Engine
-/// applies these rules when the answer arrives.
 ///
 /// # Errors
 /// Returns [`Error::Tool`] when `call_result` is the tool's failure (its
 /// typed error retained as the cause).
 pub fn prepare_dispatch(
+    binding: &ToolBinding,
+    vendor: Option<&str>,
+    call_result: std::result::Result<ToolOutput, ToolError>,
+    nonce: &GuardNonce,
+    emitter: &Emitter,
+    section: &str,
+    script: ScriptReport,
+) -> Result<ToolDispatch> {
+    dispatch_body(
+        binding,
+        vendor,
+        call_result,
+        nonce,
+        emitter,
+        section,
+        Some(script),
+    )
+}
+
+/// The body of [`prepare_dispatch`], with `script` optional. A model-issued
+/// call passes `None`, and [`prepare_model_dispatch`] reports the returned
+/// [`ToolDispatch`] under the model's call id.
+///
+/// # Errors
+/// Returns [`Error::Tool`] when `call_result` is the tool's failure (its
+/// typed error retained as the cause).
+pub(crate) fn dispatch_body(
     binding: &ToolBinding,
     vendor: Option<&str>,
     call_result: std::result::Result<ToolOutput, ToolError>,
@@ -174,16 +190,15 @@ pub fn prepare_dispatch(
 }
 
 /// Applies the model-issued dispatch rules to one bound tool call's answer:
-/// [`prepare_dispatch`] under the model-loop failure rule, then the
-/// `ToolResult` event report under the model's call id.
+/// the dispatch rules of [`prepare_dispatch`], without its script report,
+/// under the model-loop failure rule, then the `ToolResult` event report
+/// under the model's call id.
 ///
 /// A model-issued call always resumes with content: the tool's own failure
 /// ([`Error::Tool`]) becomes the call's result - the error message
 /// nonce-wrapped as untrusted - so the model reads the failure and the
-/// round continues; `prepare_dispatch` has already fired the failed
-/// observation. Every other dispatch failure still propagates. Nothing
-/// here awaits: the Harness performs the call, and the Engine applies
-/// these rules to the answer.
+/// round continues; the shared rules have already fired the failed
+/// observation. Every other dispatch failure still propagates.
 ///
 /// # Errors
 /// Propagates any error of [`prepare_dispatch`] other than the tool's own
@@ -197,19 +212,18 @@ pub fn prepare_model_dispatch(
     section: &str,
     report: &ModelReport,
 ) -> Result<ToolDispatch> {
-    let outcome =
-        match prepare_dispatch(binding, vendor, call_result, nonce, emitter, section, None) {
-            Ok(outcome) => outcome,
-            Err(Error::Tool { message, .. }) => ToolDispatch {
-                content: nonce.wrap(&message),
-                trust: OutputTrust::Untrusted,
-                listing: false,
-            },
-            Err(error) => return Err(error),
-        };
+    let outcome = match dispatch_body(binding, vendor, call_result, nonce, emitter, section, None) {
+        Ok(outcome) => outcome,
+        Err(Error::Tool { message, .. }) => ToolDispatch {
+            content: nonce.wrap(&message),
+            trust: OutputTrust::Untrusted,
+            listing: false,
+        },
+        Err(error) => return Err(error),
+    };
     emitter.tool_result(
         section,
-        report.script.turn,
+        report.turn,
         &report.call_id,
         binding.alias(),
         Some(binding.id()),

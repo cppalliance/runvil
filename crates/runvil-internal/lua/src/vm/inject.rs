@@ -14,8 +14,9 @@ use crate::compactors::install_compactors;
 use crate::error::{Error, Result};
 use crate::messages::install_messages;
 use crate::models::install_models;
-use crate::sys::{guarded_var, seal_sys};
+use crate::sys::seal_sys;
 use crate::tools::install_tools;
+use crate::var::guarded_var;
 
 /// A refused Engine injection: the error, beside the uninjected VM it was
 /// refused on, which the caller tears down at its own boundary.

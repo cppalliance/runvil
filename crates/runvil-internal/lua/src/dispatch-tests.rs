@@ -24,7 +24,7 @@ fn prepare_dispatch_wraps_a_canned_untrusted_output_and_reports_it() {
         &nonce,
         recorder.emitter(),
         TEST_SECTION,
-        Some(ScriptReport { turn: 3 }),
+        ScriptReport { turn: 3 },
     )
     .expect("a canned output prepares without awaiting anything");
     assert_eq!(
@@ -69,7 +69,7 @@ fn prepare_dispatch_wraps_a_canned_untrusted_output_and_reports_it() {
 fn prepare_dispatch_turns_a_canned_tool_error_into_the_typed_error() {
     let recorder = Recorder::default();
     let failing = binding("failing", &tool_at("tools/failing"));
-    let error = prepare_dispatch(
+    let error = dispatch_body(
         &failing,
         None,
         Err(ToolError::message("canned failure").with_kind(ToolErrorKind::Backend)),
@@ -92,7 +92,7 @@ fn prepare_dispatch_turns_a_canned_tool_error_into_the_typed_error() {
 
 fn model_report(call_id: &str) -> ModelReport {
     ModelReport {
-        script: ScriptReport { turn: 1 },
+        turn: 1,
         call_id: call_id.to_owned(),
     }
 }
@@ -152,7 +152,7 @@ fn a_scripts_listing_call_passes_its_untrusted_text_verbatim_and_reports_it_untr
         &test_nonce(),
         recorder.emitter(),
         TEST_SECTION,
-        Some(ScriptReport { turn: 2 }),
+        ScriptReport { turn: 2 },
     )
     .expect("a listing dispatches");
     assert_eq!(outcome.content(), "the <listing> [INST]");
@@ -201,7 +201,7 @@ fn the_listing_rule_needs_the_flag_and_untrusted_output() {
             &nonce,
             Recorder::default().emitter(),
             TEST_SECTION,
-            Some(ScriptReport { turn: 1 }),
+            ScriptReport { turn: 1 },
         )
         .expect("the call dispatches")
     };
@@ -221,7 +221,7 @@ fn the_listing_rule_needs_the_flag_and_untrusted_output() {
         &nonce,
         Recorder::default().emitter(),
         TEST_SECTION,
-        Some(ScriptReport { turn: 1 }),
+        ScriptReport { turn: 1 },
     );
     assert!(
         matches!(failed, Err(Error::Tool { .. })),

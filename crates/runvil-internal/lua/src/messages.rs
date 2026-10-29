@@ -39,8 +39,8 @@ use runvil_model_client::client::{Message, Role};
 use runvil_types::ids::RoundId;
 use serde_json::{Map, Value as Json};
 
+use crate::bindings::ToolBinding;
 use crate::error::{Error, Result, author_refusal};
-use crate::handles::ToolBinding;
 use crate::protocol::{MessageRecord, RecordRole, parse_record};
 use crate::scope::{OfferMode, RenderedTools};
 

@@ -27,7 +27,7 @@ use mlua::{Lua, LuaSerdeExt, Value};
 use serde_json::Value as Json;
 
 use crate::error::{Error, Result};
-use crate::sys::var_to_json;
+use crate::var::var_to_json;
 use crate::vm::{NOT_INJECTED, SYS_LIVE_POISONED};
 
 /// The refusal an assignment of the `prose` global raises.

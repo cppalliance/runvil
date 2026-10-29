@@ -68,6 +68,7 @@
 
 mod alias;
 mod argv;
+mod bindings;
 mod collection;
 mod compactors;
 mod coro;
@@ -78,7 +79,6 @@ mod error;
 #[path = "error-value.rs"]
 mod error_value;
 mod globals;
-mod handles;
 mod hardening;
 mod iteration;
 mod json;
@@ -94,8 +94,10 @@ mod protocol;
 mod proxy;
 mod require;
 mod scope;
+mod section;
 mod sys;
 mod tools;
+mod var;
 mod vm;
 mod walk_budget;
 
@@ -109,6 +111,7 @@ mod tests;
 // The executor-facing surface: every item `runvil-engine` names crosses
 // here. The facade re-exports only `VfsOp` and `VfsOutcome`.
 pub use crate::argv::Argv;
+pub use crate::bindings::{RosterEntry, ToolBinding, ToolOutputKind, ToolSet, wire_name_of};
 pub use crate::collection::render_item;
 pub use crate::compactors::{
     OverflowReason, UsageAnchor, exhaustion_detail, output_reserve, precheck,
@@ -125,10 +128,6 @@ pub use crate::error_value::{
     ErrorField, ErrorKind, ErrorValue, ParseErrorKindError, Raised, store_error_value_fields,
 };
 pub use crate::globals::{RESERVED_NAMES, Reserved, reserved_name};
-pub use crate::handles::{
-    Library, LibraryBlock, LibraryKey, LuaBlockResult, RosterEntry, SectionText, ToolBinding,
-    ToolOutputKind, ToolSet, wire_name_of,
-};
 pub use crate::messages::MessageList;
 pub use crate::models::ModelSelection;
 pub use crate::prelude::install_preludes;
@@ -144,6 +143,7 @@ pub use crate::scope::{
     DiscoveryTool, Offer, OfferMode, OfferTarget, OfferedTool, Offers, RenderedTools,
     ToolCallCounts,
 };
+pub use crate::section::{Library, LibraryBlock, LibraryKey, LuaBlockResult, SectionText};
 pub use crate::vm::{
     AdhocTools, CoroStep, InjectFailure, Injected, SectionVm, Uninjected, current_catalog_packs,
     current_dynamic_set, current_static_set, resolve_model_binding,

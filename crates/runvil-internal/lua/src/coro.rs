@@ -35,7 +35,7 @@ use crate::error::{Error, Result};
 use crate::error_value::{install_error_value, install_normalize_failure};
 use crate::hardening::CancelHook;
 use crate::program::LuaProgram;
-use crate::sys::var_snapshot_table;
+use crate::var::var_snapshot_table;
 
 use failure::stash_failure_capture;
 pub(crate) use failure::take_failure;

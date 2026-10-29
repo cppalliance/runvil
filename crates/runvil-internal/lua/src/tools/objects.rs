@@ -9,8 +9,8 @@
 use mlua::{AnyUserData, Lua, Table, Value};
 
 use super::userdata::LuaToolHandle;
+use crate::bindings::{ToolBinding, ToolSet};
 use crate::error::{Error, Result};
-use crate::handles::{ToolBinding, ToolSet};
 
 /// The registry key of the VM's tool-object table: one object per tool,
 /// keyed by id.

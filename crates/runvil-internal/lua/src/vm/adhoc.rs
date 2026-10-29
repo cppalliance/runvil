@@ -3,8 +3,8 @@
 
 use std::sync::{Arc, Mutex, MutexGuard};
 
+use crate::bindings::ToolBinding;
 use crate::error::{Error, Result};
-use crate::handles::ToolBinding;
 
 /// The adhoc tools `tools.adhoc` defined on a section VM, in definition
 /// order.

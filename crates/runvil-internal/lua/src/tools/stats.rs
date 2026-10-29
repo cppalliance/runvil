@@ -15,12 +15,12 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::ops::Bound;
 use std::sync::Arc;
 
-use mlua::{Function, Lua, MultiValue, Table, Value};
+use mlua::{Lua, Table, Value};
 use runvil_types::tools::ToolId;
 
+use crate::bindings::ToolSet;
 use crate::error::{Error, Result};
-use crate::handles::ToolSet;
-use crate::proxy::key_text;
+use crate::proxy::{key_text, read_only_walk};
 use crate::scope::ToolCallCounts;
 use crate::vm::AdhocTools;
 
@@ -209,7 +209,7 @@ fn stats_proxy(lua: &Lua, stats: &Stats) -> mlua::Result<Table> {
             None => Ok((Value::Nil, Value::Nil)),
         }
     })?;
-    proxy(lua, index, step, STATS)
+    read_only_walk(lua, index, step, STATS)
 }
 
 /// Builds the table of `view` over `stats`: a key it holds reads its
@@ -246,26 +246,5 @@ fn view_proxy(lua: &Lua, stats: &Stats, view: View) -> mlua::Result<Table> {
         };
         Ok(next.unzip())
     })?;
-    proxy(lua, index, step, view.path())
-}
-
-/// An empty proxy whose metatable holds `index`, a `__pairs` that walks
-/// with `step`, a `__newindex` that raises `<path> is read-only`, and that
-/// text as its `__metatable`, which protects it.
-fn proxy(lua: &Lua, index: Function, step: Function, path: &str) -> mlua::Result<Table> {
-    let label = format!("{path} is read-only");
-    let pairs =
-        lua.create_function(move |_, proxy: Table| Ok((step.clone(), proxy, Value::Nil)))?;
-    let refusal = label.clone();
-    let newindex = lua.create_function(move |_, _: MultiValue| -> mlua::Result<()> {
-        Err(mlua::Error::external(refusal.clone()))
-    })?;
-    let meta = lua.create_table()?;
-    meta.raw_set("__index", index)?;
-    meta.raw_set("__pairs", pairs)?;
-    meta.raw_set("__newindex", newindex)?;
-    meta.raw_set("__metatable", label)?;
-    let proxy = lua.create_table()?;
-    proxy.set_metatable(Some(meta))?;
-    Ok(proxy)
+    read_only_walk(lua, index, step, view.path())
 }

@@ -8,9 +8,9 @@ use super::SectionVm;
 use crate::coro::{block_guard, take_failure};
 use crate::error::{Error, Result};
 use crate::error_value::ErrorKind;
-use crate::handles::LuaBlockResult;
 use crate::program::LuaProgram;
 use crate::protocol::{Answer, Request, Retained, YieldParse};
+use crate::section::LuaBlockResult;
 
 impl SectionVm {
     /// Takes any recorded jump target, propagating a poisoned jump-slot lock

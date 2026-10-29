@@ -26,8 +26,9 @@ use mlua::{
 use runvil_types::packs::PackId;
 use runvil_types::tools::ToolId;
 
+use crate::bindings::{RosterEntry, ToolSet};
 use crate::error::{Error, Result};
-use crate::handles::{RosterEntry, ToolSet};
+use crate::proxy::read_only_walk;
 use crate::tools::tool_object;
 use crate::vm::AdhocTools;
 
@@ -36,10 +37,6 @@ pub(crate) const ADHOC_PACK: &str = "adhoc";
 
 /// The registry key of the VM's Pack-object table, keyed by name.
 const PACK_OBJECTS_REGISTRY: &str = "runvil.packs.objects";
-
-/// The label `getmetatable(tools.packs)` returns, which also protects the
-/// metatable from `setmetatable`.
-const PACKS_LABEL: &str = "tools.packs is read-only";
 
 /// Whether `pack` is the adhoc Pack.
 pub(crate) fn is_adhoc(pack: &PackId) -> bool {
@@ -173,7 +170,8 @@ pub(crate) fn install_pack_objects(
 ///
 /// # Errors
 /// Returns [`Error::LuaRuntime`] if a function or table cannot be created
-/// or installed.
+/// or installed, and [`Error::Internal`] if the `tools.packs` proxy comes
+/// back without the metatable `__len` is set on.
 pub(crate) fn install_pack_list(lua: &Lua, tools: &Table, names: PackNames) -> Result<()> {
     let PackNames { all, extras } = names;
     let get = lua
@@ -189,7 +187,6 @@ pub(crate) fn install_pack_list(lua: &Lua, tools: &Table, names: PackNames) -> R
         .create_function(move |lua, ()| pack_array(lua, &extras))
         .map_err(Error::lua)?;
 
-    let meta = lua.create_table().map_err(Error::lua)?;
     let indexed = all.clone();
     let index = lua
         .create_function(move |lua, (_, key): (Table, Value)| match key {
@@ -201,12 +198,10 @@ pub(crate) fn install_pack_list(lua: &Lua, tools: &Table, names: PackNames) -> R
             },
         })
         .map_err(Error::lua)?;
-    meta.raw_set("__index", index).map_err(Error::lua)?;
     let count = all.len();
     let len = lua
         .create_function(move |_, _: MultiValue| Ok(count))
         .map_err(Error::lua)?;
-    meta.raw_set("__len", len).map_err(Error::lua)?;
     let step = lua
         .create_function(move |lua, (_, key): (Value, Value)| {
             let next = match key {
@@ -222,21 +217,11 @@ pub(crate) fn install_pack_list(lua: &Lua, tools: &Table, names: PackNames) -> R
             }
         })
         .map_err(Error::lua)?;
-    let pairs = lua
-        .create_function(move |_, proxy: Table| Ok((step.clone(), proxy, Value::Nil)))
-        .map_err(Error::lua)?;
-    meta.raw_set("__pairs", pairs).map_err(Error::lua)?;
-    let newindex = lua
-        .create_function(|_, _: MultiValue| -> mlua::Result<()> {
-            Err(mlua::Error::external(PACKS_LABEL))
-        })
-        .map_err(Error::lua)?;
-    meta.raw_set("__newindex", newindex).map_err(Error::lua)?;
-    meta.raw_set("__metatable", PACKS_LABEL)
-        .map_err(Error::lua)?;
-
-    let proxy = lua.create_table().map_err(Error::lua)?;
-    proxy.set_metatable(Some(meta)).map_err(Error::lua)?;
+    let proxy = read_only_walk(lua, index, step, "tools.packs").map_err(Error::lua)?;
+    let meta = proxy
+        .metatable()
+        .ok_or_else(|| Error::Internal("tools.packs was built without a metatable".into()))?;
+    meta.raw_set("__len", len).map_err(Error::lua)?;
     tools.raw_set("packs", proxy).map_err(Error::lua)
 }
 

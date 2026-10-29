@@ -299,7 +299,7 @@ impl ChainOps<'_> {
             // never classified by output kind.
             CallSite::Model { call_id, .. } | CallSite::Batch { call_id, .. } => {
                 let report = ModelReport {
-                    script: call.report,
+                    turn: call.report.turn,
                     call_id: call_id.clone(),
                 };
                 prepare_model_dispatch(
@@ -321,7 +321,7 @@ impl ChainOps<'_> {
                 nonce,
                 emitter,
                 section,
-                Some(call.report),
+                call.report,
             ) {
                 Ok(outcome) => {
                     if outcome.listing() {

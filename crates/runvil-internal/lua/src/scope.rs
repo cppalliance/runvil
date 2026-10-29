@@ -8,8 +8,8 @@ use std::sync::{Arc, Mutex};
 use runvil_types::packs::PackId;
 use runvil_types::tools::{ToolId, ToolInfo};
 
+use crate::bindings::ToolBinding;
 use crate::error::{Error, Result};
-use crate::handles::ToolBinding;
 
 /// Shared per-VM tool-call counts, keyed by tool id and seeded at 0 for
 /// every id the installer was given. `increment` seeds a missing id at 0,

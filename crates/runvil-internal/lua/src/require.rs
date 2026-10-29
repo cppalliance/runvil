@@ -24,9 +24,9 @@ use serde_json::Value as Json;
 use crate::error::SharedSource;
 use crate::error::{Error, Result};
 use crate::error_value::install_error_value;
-use crate::handles::{Library, LibraryKey};
 use crate::program::LuaProgram;
 use crate::prose::ProseState;
+use crate::section::{Library, LibraryKey};
 
 /// The loader chunk's name, `@`-prefixed as the shim chunks' names are.
 const REQUIRE_CHUNK_NAME: &str = "@crates/runvil-internal/lua/src/__impl_require.lua";

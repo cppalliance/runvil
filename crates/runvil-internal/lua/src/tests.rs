@@ -21,12 +21,12 @@ use self::recording::{Observation, Recorder, boundary, null_emitter};
 use super::*;
 use crate::engine_globals::LUA_LOG_CHARACTER_LIMIT;
 use crate::error::Result;
-use crate::handles::resolve_section_target;
 use crate::hardening::install_cancel_hook;
-use crate::sys::{guarded_var, var_snapshot_table, var_to_json};
+use crate::section::resolve_section_target;
 use crate::test_vm::{
     BuiltVm, LuaOutcome, TEST_SECTION, TestVm, fresh_access, run_chunk, test_nonce,
 };
+use crate::var::{guarded_var, var_snapshot_table, var_to_json};
 use crate::vm::{DEFAULT_LUA_LOG_EVENTS, DEFAULT_LUA_MEMORY_BYTES};
 
 #[path = "tests-recording.rs"]

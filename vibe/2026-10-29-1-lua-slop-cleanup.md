@@ -486,7 +486,7 @@ None. Both questions were answered by the operator: the `Answer` restructure lan
 
 <step-3>
 
-### Step 3: split `handles` and `sys`, one walkable read-only proxy, and the dispatch report path
+### Step 3: split `handles` and `sys`, one walkable read-only proxy, and the dispatch report path [completed]
 
 - Component: Tool surface
 - Tests:

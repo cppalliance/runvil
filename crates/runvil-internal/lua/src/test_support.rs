@@ -13,14 +13,15 @@ use runvil_types::event::lifecycle;
 use runvil_types::packs::PackId;
 use runvil_types::tools::ToolInfo;
 
+use crate::bindings::{RosterEntry, ToolBinding, ToolSet};
 use crate::coro::MODEL_TOOL_CALL_REGISTRY;
 use crate::error::{Error, Result};
 use crate::error_value::ErrorValue;
-use crate::handles::{LuaBlockResult, RosterEntry, ToolBinding, ToolSet};
 use crate::models::ModelSelection;
 use crate::program::LuaProgram;
 use crate::protocol::Answer;
 use crate::scope::Offers;
+use crate::section::LuaBlockResult;
 use crate::vm::{SectionVm, scalar_return};
 
 /// A per-thread tally of live section VMs.

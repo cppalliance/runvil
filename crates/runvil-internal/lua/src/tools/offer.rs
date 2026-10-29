@@ -17,8 +17,8 @@ use runvil_types::tools::ToolId;
 
 use super::refuse_after_render;
 use super::userdata::LuaToolHandle;
+use crate::bindings::{RosterEntry, ToolSet, wire_name_of};
 use crate::error::{Error, Result};
-use crate::handles::{RosterEntry, ToolSet, wire_name_of};
 use crate::messages::MessageList;
 use crate::packs::{LuaPackHandle, is_adhoc, pack_object};
 use crate::proxy::key_text;

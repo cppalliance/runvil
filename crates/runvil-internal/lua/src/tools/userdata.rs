@@ -14,7 +14,7 @@ use mlua::{LuaSerdeExt, MetaMethod, UserData, UserDataFields, UserDataMethods, V
 use runvil_types::tools::{ToolId, ToolInfo};
 use serde_json::Value as Json;
 
-use crate::handles::ToolBinding;
+use crate::bindings::ToolBinding;
 use crate::packs::pack_object;
 
 /// One tool as Lua sees it: `id`, `description`, `parameters`, and

@@ -11,9 +11,9 @@
 use runvil_types::ids::TaskId;
 use runvil_types::metrics::ToolCallEvent;
 
+use crate::bindings::ToolOutputKind;
 use crate::compactors::OverflowReason;
 use crate::error::{Error, Result};
-use crate::handles::ToolOutputKind;
 
 /// The result of one [`VfsOp`](super::VfsOp) run against the run's store
 /// view.

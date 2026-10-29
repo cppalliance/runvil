@@ -8,7 +8,7 @@ use std::collections::BTreeMap;
 use runvil_types::packs::PackId;
 use runvil_types::tools::ToolCatalog;
 
-use crate::handles::ToolSet;
+use crate::bindings::ToolSet;
 use crate::test_vm::{lua_over, offer_set, offers, raised, scoped, tool_at};
 
 /// A Lua helper joining the `name` of each Pack object in a list.

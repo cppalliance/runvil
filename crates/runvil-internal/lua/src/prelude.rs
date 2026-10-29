@@ -199,9 +199,8 @@ fn check_collision(
     )))
 }
 
-/// Seals a prelude's table global at its top level: an empty proxy whose
-/// `__index` reads the hidden table, whose `__newindex` raises, and whose
-/// `__metatable` is set, so `pairs` over it sees nothing.
+/// Seals a prelude's table global at its top level with a
+/// [`read_only_proxy`] over the hidden table.
 fn seal(lua: &Lua, pack: &PackId, name: &str, hidden: Table) -> Result<Table> {
     let refusal = format!("{name} is read-only: Pack `{pack}` defines it; cannot set");
     read_only_proxy(
