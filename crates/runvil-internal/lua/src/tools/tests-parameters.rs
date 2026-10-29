@@ -45,7 +45,6 @@ pub(super) fn search_set() -> ToolSet {
         vec![PackId::parse("web").expect("`web` is a valid Pack id")],
         BTreeMap::new(),
         ToolCatalog::new([search_tool()]).expect("one tool"),
-        BTreeMap::new(),
     )
 }
 

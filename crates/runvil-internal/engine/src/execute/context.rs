@@ -120,7 +120,7 @@ impl RunState {
     /// Builds the context for one run of `prompt` over `config`, which it
     /// consumes. The turn counter is minted here (starting at zero), as are
     /// the run's shared tool and model sets - built from the catalog, the
-    /// roster, the vendors, and the model bindings (only the bindings come
+    /// roster, and the model bindings (only the bindings come
     /// from [`RunContext::prepare`](super::RunContext::prepare), and they
     /// stay empty on a caller-built context that skipped it); the nonce
     /// derives from `config`'s seed and `when` renders `config`'s
@@ -139,12 +139,11 @@ impl RunState {
             vfs,
             model_bindings,
             tools,
-            roster,
-            vendors,
+            packs,
             preludes,
             ..
         } = config;
-        let tool_set = Arc::new(bound::bound_tool_set(&prompt, tools, roster, vendors));
+        let tool_set = Arc::new(bound::bound_tool_set(&prompt, tools, packs));
         let model_set = Arc::new(Mutex::new(bound::bound_model_set(&prompt, &model_bindings)));
         let execution: Arc<str> = Arc::from(name);
         // The root task's counter starts at the context's `provenance_start`:

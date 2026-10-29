@@ -57,7 +57,6 @@ fn offering() -> ToolSet {
         std::collections::BTreeMap::new(),
         runvil_types::tools::ToolCatalog::new([tool("gh/search"), tool("web/search")])
             .expect("the ids differ"),
-        std::collections::BTreeMap::new(),
     )
 }
 

@@ -125,8 +125,8 @@ pub use crate::error_value::{
 };
 pub use crate::globals::{RESERVED_NAMES, Reserved, reserved_name};
 pub use crate::handles::{
-    Library, LibraryBlock, LibraryKey, LuaBlockResult, SectionText, ToolBinding, ToolOutputKind,
-    ToolSet, wire_name_of,
+    Library, LibraryBlock, LibraryKey, LuaBlockResult, RosterEntry, SectionText, ToolBinding,
+    ToolOutputKind, ToolSet, wire_name_of,
 };
 pub use crate::messages::MessageList;
 pub use crate::models::ModelRuntime;

@@ -210,41 +210,67 @@ pub struct LibraryBlock {
     pub prose: String,
 }
 
-/// The run's tool set: the declared Packs, the run's roster, the run
-/// catalog, and each Pack's vendor. Nothing changes it during a run, so the
-/// run and every section VM share one `Arc<ToolSet>`. Nothing in it is
-/// bound: each section entry binds the tools it offers when it freezes its
-/// sets.
+/// How one roster Pack stands in its run, which the caller decides.
+///
+/// The two variants carry what the run needs of the Pack and nothing else,
+/// so a Pack is either usable with a vendor or unavailable with a reason,
+/// never both.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RosterEntry {
+    /// The Pack can serve the run: the vendor the caller picked it from.
+    Usable {
+        /// The vendor, one segment, such as `runvil` or `acme`.
+        vendor: String,
+    },
+    /// The Pack cannot serve the run: the reason, written for the model
+    /// that reads the refusal.
+    Unavailable {
+        /// Why it cannot serve.
+        reason: String,
+    },
+}
+
+impl RosterEntry {
+    /// Returns the vendor when the Pack can serve the run.
+    #[must_use]
+    pub(crate) fn vendor(&self) -> Option<&str> {
+        match self {
+            RosterEntry::Usable { vendor } => Some(vendor),
+            RosterEntry::Unavailable { .. } => None,
+        }
+    }
+}
+
+/// The run's tool set: the declared Packs, the run's roster, and the run
+/// catalog. Nothing changes it during a run, so the run and every section
+/// VM share one `Arc<ToolSet>`. Nothing in it is bound: each section entry
+/// binds the tools it offers when it freezes its sets.
 #[derive(Debug, Clone, Default)]
 pub struct ToolSet {
     /// The Packs the frontmatter declares, in declaration order.
     declared: Vec<PackId>,
-    /// Every Pack the caller reports the run holds, with or without
-    /// tools: no reason when it can serve the run, and the reason, written
-    /// for the model, when it can't.
-    roster: BTreeMap<PackId, Option<String>>,
+    /// Every Pack the caller reports the run holds, with or without tools:
+    /// one entry per Pack, holding its vendor when it can serve the run and
+    /// the reason, written for the model, when it can't.
+    roster: BTreeMap<PackId, RosterEntry>,
     /// The run catalog: every catalog tool's `ToolInfo` by id, the handle
     /// the caller's context holds, which is what Lua sees.
     catalog: ToolCatalog,
-    /// The vendor the caller reported for each Pack that can serve.
-    vendors: BTreeMap<PackId, String>,
 }
 
 impl ToolSet {
     /// Builds the run's tool set from the declared Packs in declaration
-    /// order, the roster, the run catalog, and each Pack's vendor.
+    /// order, the roster, and the run catalog.
     #[must_use]
     pub fn new(
         declared: Vec<PackId>,
-        roster: BTreeMap<PackId, Option<String>>,
+        roster: BTreeMap<PackId, RosterEntry>,
         catalog: ToolCatalog,
-        vendors: BTreeMap<PackId, String>,
     ) -> Self {
         Self {
             declared,
             roster,
             catalog,
-            vendors,
         }
     }
 
@@ -254,10 +280,11 @@ impl ToolSet {
         &self.declared
     }
 
-    /// Returns every installed Pack the caller reports, with the reason,
-    /// written for the model, when it cannot serve the run.
+    /// Returns every installed Pack the caller reports, each with its
+    /// vendor when it can serve the run, or the reason, written for the
+    /// model, when it cannot. Tests read it through `test_support`.
     #[must_use]
-    pub(crate) fn roster(&self) -> &BTreeMap<PackId, Option<String>> {
+    pub(crate) fn roster(&self) -> &BTreeMap<PackId, RosterEntry> {
         &self.roster
     }
 
@@ -269,13 +296,14 @@ impl ToolSet {
 
     /// Returns the vendor the caller reported for the Pack the tool `id`
     /// belongs to, `runvil` for the Engine's discovery tools, or `None`
-    /// when the caller reported none, as for an adhoc tool.
+    /// when the caller reported none, as for an adhoc tool or a Pack the
+    /// roster lists as unable to serve.
     #[must_use]
     pub fn vendor_for(&self, id: &ToolId) -> Option<&str> {
         if DiscoveryTool::of(id).is_some() {
             return Some(DiscoveryTool::VENDOR);
         }
-        self.vendors.get(&id.pack()).map(String::as_str)
+        self.roster.get(&id.pack()).and_then(RosterEntry::vendor)
     }
 }
 

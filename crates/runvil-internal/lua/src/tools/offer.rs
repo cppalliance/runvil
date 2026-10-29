@@ -18,7 +18,7 @@ use runvil_types::tools::ToolId;
 use super::refuse_after_render;
 use super::userdata::LuaToolHandle;
 use crate::error::{Error, Result};
-use crate::handles::{ToolSet, wire_name_of};
+use crate::handles::{RosterEntry, ToolSet, wire_name_of};
 use crate::messages::MessageList;
 use crate::packs::{LuaPackHandle, is_adhoc, pack_object};
 use crate::proxy::key_text;
@@ -150,7 +150,7 @@ impl Offering {
             });
         }
         if let Ok(pack) = PackId::parse(name) {
-            if let Some(Some(reason)) = self.set.roster().get(&pack) {
+            if let Some(RosterEntry::Unavailable { reason }) = self.set.roster().get(&pack) {
                 return Err(mlua::Error::external(format!(
                     "{verb}: the {pack} Pack is unavailable in this run: {reason}"
                 )));

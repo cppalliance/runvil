@@ -27,7 +27,6 @@ fn offering_of(alias: &str, description: &str, tool: &FnTool) -> ToolSet {
         Vec::new(),
         BTreeMap::new(),
         ToolCatalog::new([info]).expect("one tool"),
-        BTreeMap::new(),
     )
 }
 

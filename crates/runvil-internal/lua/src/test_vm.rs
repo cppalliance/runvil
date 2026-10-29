@@ -21,7 +21,7 @@ use serde_json::{Value as Json, json};
 use crate::error::{Error, Result};
 use crate::tests::recording::null_emitter;
 use crate::vm::scalar_return;
-use crate::{Argv, OfferedTool, SectionText, SectionVm, ToolSet};
+use crate::{Argv, OfferedTool, RosterEntry, SectionText, SectionVm, ToolSet};
 
 /// The one guard-nonce seed of every test VM.
 pub(crate) const TEST_SEED: RunSeed = RunSeed::from_bytes([0x73; 32]);
@@ -110,15 +110,14 @@ pub(crate) fn echo_tool() -> ToolInfo {
     tool_at("tools/echo")
 }
 
-/// The tool set whose run catalog is `tools`, with nothing declared, no
-/// roster, and no vendors.
+/// The tool set whose run catalog is `tools`, with nothing declared and no
+/// roster.
 #[track_caller]
 pub(crate) fn catalog_set(tools: impl IntoIterator<Item = ToolInfo>) -> ToolSet {
     ToolSet::new(
         Vec::new(),
         BTreeMap::new(),
         ToolCatalog::new(tools).expect("a fixture catalog's ids differ"),
-        BTreeMap::new(),
     )
 }
 
@@ -132,14 +131,27 @@ pub(crate) fn offer_set() -> ToolSet {
     let pack = |name: &str| {
         runvil_types::packs::PackId::parse(name).expect("a fixture Pack id is a valid Pack id")
     };
+    let usable = |name: &str| {
+        (
+            pack(name),
+            RosterEntry::Usable {
+                vendor: "acme".to_owned(),
+            },
+        )
+    };
     ToolSet::new(
         vec![pack("web"), pack("user-input")],
         [
-            (pack("gh"), None),
-            (pack("mcp"), Some("the mcp server is down".to_owned())),
-            (pack("subagents"), None),
-            (pack("user-input"), None),
-            (pack("web"), None),
+            usable("gh"),
+            (
+                pack("mcp"),
+                RosterEntry::Unavailable {
+                    reason: "the mcp server is down".to_owned(),
+                },
+            ),
+            usable("subagents"),
+            usable("user-input"),
+            usable("web"),
         ]
         .into_iter()
         .collect(),
@@ -154,7 +166,6 @@ pub(crate) fn offer_set() -> ToolSet {
             .map(tool_at),
         )
         .expect("the fixture ids differ"),
-        BTreeMap::new(),
     )
 }
 

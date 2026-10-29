@@ -17,6 +17,7 @@ use runvil_vfs::VfsRef;
 pub use limits::RunLimits;
 
 use crate::cancel::CancelHandle;
+use crate::lua::RosterEntry;
 use crate::model::ModelInfo;
 use crate::parser::Prompt;
 
@@ -71,10 +72,9 @@ pub struct RunContext {
     pub(super) model_bindings: ModelBindings,
     /// The run's tool catalog; set by `with_tools`.
     pub(super) tools: ToolCatalog,
-    /// Each roster Pack by name, with the reason when it can't serve; set by `with_packs`.
-    pub(super) roster: BTreeMap<PackId, Option<String>>,
-    /// The vendor of each roster Pack that can serve, by name; set by `with_packs`.
-    pub(super) vendors: BTreeMap<PackId, String>,
+    /// Each roster Pack by name, with its vendor when it can serve and the
+    /// reason when it can't; set by `with_packs`.
+    pub(super) packs: BTreeMap<PackId, RosterEntry>,
     /// The run's Pack preludes, in declaration order; set by `with_preludes`.
     pub(super) preludes: Vec<Prelude>,
 }
@@ -108,8 +108,7 @@ impl RunContext {
             vfs: VfsRef::default(),
             model_bindings: ModelBindings::default(),
             tools: ToolCatalog::default(),
-            roster: BTreeMap::new(),
-            vendors: BTreeMap::new(),
+            packs: BTreeMap::new(),
             preludes: Vec::new(),
         }
     }
@@ -236,21 +235,25 @@ impl RunContext {
         usable: Vec<UsablePack>,
         unavailable: Vec<UnavailablePack>,
     ) -> RunContext {
-        let roster: BTreeMap<PackId, Option<String>> = usable
-            .iter()
-            .map(|entry| (entry.pack.clone(), None))
-            .chain(
-                unavailable
-                    .into_iter()
-                    .map(|entry| (entry.pack, Some(entry.reason))),
-            )
-            .collect();
-        self.vendors = usable
+        self.packs = usable
             .into_iter()
-            .filter(|entry| matches!(roster.get(&entry.pack), Some(None)))
-            .map(|entry| (entry.pack, entry.vendor))
+            .map(|entry| {
+                (
+                    entry.pack,
+                    RosterEntry::Usable {
+                        vendor: entry.vendor,
+                    },
+                )
+            })
+            .chain(unavailable.into_iter().map(|entry| {
+                (
+                    entry.pack,
+                    RosterEntry::Unavailable {
+                        reason: entry.reason,
+                    },
+                )
+            }))
             .collect();
-        self.roster = roster;
         self
     }
 
@@ -311,7 +314,7 @@ impl RunContext {
             .tools()
             .iter()
             .map(|tool| tool.id.pack())
-            .chain(self.roster.keys().cloned())
+            .chain(self.packs.keys().cloned())
             .filter(PackId::is_reserved)
             .collect();
         (self, requirements)
@@ -399,8 +402,7 @@ impl fmt::Debug for RunContext {
             .field("vfs", &self.vfs)
             .field("model_bindings", &self.model_bindings)
             .field("tools", &self.tools)
-            .field("roster", &self.roster)
-            .field("vendors", &self.vendors)
+            .field("packs", &self.packs)
             .field(
                 "preludes",
                 &self.preludes.iter().map(Prelude::pack).collect::<Vec<_>>(),

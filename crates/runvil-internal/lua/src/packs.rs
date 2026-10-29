@@ -27,7 +27,7 @@ use runvil_types::packs::PackId;
 use runvil_types::tools::ToolId;
 
 use crate::error::{Error, Result};
-use crate::handles::ToolSet;
+use crate::handles::{RosterEntry, ToolSet};
 use crate::tools::tool_object;
 use crate::vm::AdhocTools;
 
@@ -268,7 +268,7 @@ fn pack_tools(set: &ToolSet, adhoc: &AdhocTools) -> BTreeMap<PackId, PackTools> 
     let usable = set
         .roster()
         .iter()
-        .filter(|(_, reason)| reason.is_none())
+        .filter(|(_, entry)| matches!(entry, RosterEntry::Usable { .. }))
         .map(|(name, _)| name);
     let mut packs: BTreeMap<PackId, Vec<&ToolId>> = set
         .declared()

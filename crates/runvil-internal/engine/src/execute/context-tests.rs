@@ -6,6 +6,7 @@ use runvil_types::tools::ToolId;
 
 use super::*;
 use crate::execute::{UnavailablePack, UsablePack};
+use crate::lua::RosterEntry;
 use crate::model::ThinkingMode;
 use crate::test_support::scenario::{TEST_SEED, test_model_with};
 
@@ -158,7 +159,7 @@ fn a_pack_in_both_roster_lists_records_no_vendor() {
         )
         .with_packs(
             vec![UsablePack::new(web.clone(), "acme")],
-            vec![UnavailablePack::new(web, "the server is down")],
+            vec![UnavailablePack::new(web.clone(), "the server is down")],
         ),
     );
     let tool = ToolId::parse("web/fetch").expect("a static valid tool id");
@@ -166,5 +167,12 @@ fn a_pack_in_both_roster_lists_records_no_vendor() {
         state.tool_set().vendor_for(&tool),
         None,
         "a name in both lists counts as unavailable, so it has no vendor"
+    );
+    assert_eq!(
+        state.tool_set().roster_for_test().get(&web),
+        Some(&RosterEntry::Unavailable {
+            reason: "the server is down".to_owned(),
+        }),
+        "one roster entry per Pack, and the unavailable one won, carrying the given reason"
     );
 }

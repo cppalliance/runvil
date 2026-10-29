@@ -64,7 +64,6 @@ fn test_tools() -> ToolSet {
         Vec::new(),
         std::collections::BTreeMap::new(),
         runvil_types::tools::ToolCatalog::new([stub_tool()]).expect("one tool"),
-        std::collections::BTreeMap::new(),
     )
 }
 

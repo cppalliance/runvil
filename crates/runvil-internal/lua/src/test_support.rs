@@ -3,18 +3,20 @@
 //! crate's tests and under the `test-support` feature, which only
 //! dev-dependencies and bench `required-features` enable.
 
+use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
 
 use mlua::{Function, Lua, MultiValue, Table};
 use runvil_model_client::model::ModelSet;
 use runvil_types::emitter::Emitter;
 use runvil_types::event::lifecycle;
+use runvil_types::packs::PackId;
 use runvil_types::tools::ToolInfo;
 
 use crate::coro::MODEL_TOOL_CALL_REGISTRY;
 use crate::error::{Error, Result};
 use crate::error_value::ErrorValue;
-use crate::handles::{LuaBlockResult, ToolBinding, ToolSet};
+use crate::handles::{LuaBlockResult, RosterEntry, ToolBinding, ToolSet};
 use crate::models::ModelRuntime;
 use crate::program::LuaProgram;
 use crate::protocol::Answer;
@@ -107,6 +109,17 @@ impl ToolBinding {
         let mut described = info.clone();
         description.clone_into(&mut described.description);
         Self::from_info(alias, &described)
+    }
+}
+
+impl ToolSet {
+    /// Returns every installed Pack the caller reports with its one
+    /// [`RosterEntry`]: the map production reads only through
+    /// [`vendor_for`](Self::vendor_for) and the Pack walk, exposed so a
+    /// companion crate's test can assert the one-map shape.
+    #[must_use]
+    pub fn roster_for_test(&self) -> &BTreeMap<PackId, RosterEntry> {
+        self.roster()
     }
 }
 

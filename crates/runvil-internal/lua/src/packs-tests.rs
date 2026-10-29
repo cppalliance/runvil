@@ -27,7 +27,6 @@ fn colliding_set() -> ToolSet {
         BTreeMap::new(),
         ToolCatalog::new(["extras/list", "get/one", "tools/tools"].map(tool_at))
             .expect("the fixture ids differ"),
-        BTreeMap::new(),
     )
 }
 

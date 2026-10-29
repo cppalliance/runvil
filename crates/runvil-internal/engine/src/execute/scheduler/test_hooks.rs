@@ -92,8 +92,8 @@ impl Scheduler {
         self.tasks.state_of(task)
     }
 
-    /// The run's tool set: the Packs the prompt declares, the roster, the
-    /// run catalog, and each Pack's vendor.
+    /// The run's tool set: the Packs the prompt declares, the roster, and
+    /// the run catalog.
     pub(crate) fn tool_set_for_test(&self) -> &ToolSet {
         self.ctx.tool_set()
     }

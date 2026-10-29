@@ -11,7 +11,7 @@ use runvil_types::packs::PackId;
 use runvil_types::tools::{ToolCatalog, ToolId, ToolInfo};
 use serde_json::json;
 
-use super::{ToolBinding, ToolOutputKind, ToolSet, wire_name_of};
+use super::{RosterEntry, ToolBinding, ToolOutputKind, ToolSet, wire_name_of};
 
 /// A tool info for `tools/fetch`.
 fn tool_info(structured: bool) -> ToolInfo {
@@ -75,9 +75,13 @@ fn the_tool_set_reads_the_catalog_and_takes_each_tools_vendor_from_its_pack() {
     let id = |id: &str| ToolId::parse(id).expect("the id is valid");
     let set = ToolSet::new(
         Vec::new(),
-        BTreeMap::new(),
+        BTreeMap::from([(
+            pack("tools"),
+            RosterEntry::Usable {
+                vendor: "acme".to_owned(),
+            },
+        )]),
         ToolCatalog::new([tool_info(false)]).expect("one tool"),
-        BTreeMap::from([(pack("tools"), "acme".to_owned())]),
     );
     assert_eq!(
         set.catalog()
