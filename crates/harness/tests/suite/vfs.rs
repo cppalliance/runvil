@@ -140,7 +140,7 @@ async fn a_hosts_edit_of_a_file_the_run_read_conflicts_while_the_run_waits_on_it
     let request = RunRequest {
         name: "desk-review-1".to_owned(),
         source: REVIEW.to_owned(),
-        args: serde_json::Value::from(""),
+        args: "".into(),
         input_text: None,
         vfs: vfs.clone(),
         host: HostSnapshot::default(),

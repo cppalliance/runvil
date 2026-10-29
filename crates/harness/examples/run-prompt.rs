@@ -75,7 +75,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let request = RunRequest {
         name: "desk-greet-1".to_owned(),
         source: GREET.to_owned(),
-        args: serde_json::Value::from(""),
+        args: "".into(),
         input_text: Some("desk".to_owned()),
         vfs: VfsRef::default(),
         host: HostSnapshot::default(),

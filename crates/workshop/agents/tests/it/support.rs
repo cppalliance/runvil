@@ -74,7 +74,7 @@ pub(crate) fn harness_for(
     let request = RunRequest {
         name: conversation.id().to_string(),
         source,
-        args: serde_json::Value::from(""),
+        args: "".into(),
         input_text: None,
         vfs: VfsRef::default(),
         host: HostSnapshot::default(),

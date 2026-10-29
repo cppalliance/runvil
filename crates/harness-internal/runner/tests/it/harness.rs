@@ -50,7 +50,7 @@ pub(crate) fn request(source: &str) -> RunRequest {
     RunRequest {
         name: NAME.to_owned(),
         source: source.to_owned(),
-        args: Value::from(""),
+        args: "".into(),
         input_text: None,
         vfs: VfsRef::default(),
         host: HostSnapshot {

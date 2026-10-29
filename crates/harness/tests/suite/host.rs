@@ -63,7 +63,7 @@ fn request(name: &str, source: &str) -> RunRequest {
     RunRequest {
         name: name.to_owned(),
         source: source.to_owned(),
-        args: serde_json::Value::from(""),
+        args: "".into(),
         input_text: None,
         vfs: VfsRef::default(),
         host: HostSnapshot::default(),

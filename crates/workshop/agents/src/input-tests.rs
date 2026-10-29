@@ -289,7 +289,7 @@ async fn an_ask_is_answered_when_the_registry_receives_the_text() {
     let request = RunRequest {
         name: "conversation-1".to_owned(),
         source: source.to_owned(),
-        args: serde_json::Value::from(""),
+        args: "".into(),
         input_text: None,
         vfs: VfsRef::default(),
         host: HostSnapshot::default(),

@@ -171,7 +171,7 @@ fn request(source: &str) -> RunRequest {
     RunRequest {
         name: "session-1".to_owned(),
         source: source.to_owned(),
-        args: serde_json::Value::from(""),
+        args: "".into(),
         input_text: None,
         vfs: VfsRef::default(),
         host: HostSnapshot {

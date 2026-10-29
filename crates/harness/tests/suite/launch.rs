@@ -35,7 +35,7 @@ fn request(source: &str, vfs: VfsRef) -> RunRequest {
     RunRequest {
         name: "shouts-1".to_owned(),
         source: source.to_owned(),
-        args: serde_json::Value::from(""),
+        args: "".into(),
         input_text: Some("hello".to_owned()),
         vfs,
         host: HostSnapshot::default(),

@@ -94,7 +94,7 @@ async fn a_sections_round_reaches_the_broker_as_chat_and_a_nested_infer_round_as
         .run(RunRequest {
             name: "rounds-1".to_owned(),
             source: INFERS_THEN_CHATS.to_owned(),
-            args: serde_json::Value::from(""),
+            args: "".into(),
             input_text: None,
             vfs: VfsRef::default(),
             host: HostSnapshot {
