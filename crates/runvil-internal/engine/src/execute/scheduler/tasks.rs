@@ -15,7 +15,8 @@
 //! moves only from `Running` to `Done`, `Cancelled`, or `Abandoned`, and
 //! from `Done` to `Delivered`. It checks ownership, and a chain's view of
 //! the task it runs inside, and it lists an owner's tasks in spawn order
-//! without the internal timers.
+//! two ways: the author-visible tasks, and every live task with the
+//! internal timers included.
 
 #[path = "tasks-spawn.rs"]
 mod spawn;
@@ -96,8 +97,8 @@ pub(crate) enum TaskState {
     /// `ok` is whether it returned rather than failed, always `true` for a
     /// fired timer.
     Done { ok: bool },
-    /// The owner took the outcome through a wait. `ok` is the outcome's,
-    /// kept so `status` still reports it after the wait took it.
+    /// The owner took the outcome through a wait. Whether the task ended
+    /// well, carried so `status` can report it after the outcome is gone.
     Delivered { ok: bool },
     /// The owner cancelled the task.
     Cancelled,
@@ -214,9 +215,9 @@ impl TaskArena {
         }
     }
 
-    /// The live tasks `owner` owns, in spawn order; an internal timer is
-    /// never listed.
-    pub(super) fn live_of(&self, owner: ChainIndex) -> Vec<TaskId> {
+    /// The live tasks `owner` owns that an author can see, in spawn order;
+    /// an internal timer is never listed.
+    pub(super) fn live_author_tasks(&self, owner: ChainIndex) -> Vec<TaskId> {
         self.live_entries(owner)
             .filter(|(_, entry)| !entry.is_internal())
             .map(|(task, _)| task.clone())
@@ -225,7 +226,7 @@ impl TaskArena {
 
     /// Every live task `owner` owns, internal timers included, in spawn
     /// order: the tasks the owner's end ends.
-    pub(super) fn live_with_timers(&self, owner: ChainIndex) -> Vec<TaskId> {
+    pub(super) fn live_all(&self, owner: ChainIndex) -> Vec<TaskId> {
         self.live_entries(owner)
             .map(|(task, _)| task.clone())
             .collect()

@@ -32,17 +32,8 @@
 //! an ordinary `tool_call`. The calls in flight run concurrently, each
 //! under its own forked identity.
 //!
-//! An adhoc tool call is a two-yield handshake. The `tool_call` answer is
-//! [`ToolCallOutcome::Adhoc`], which hands the shim the handler, and the
-//! frame opens an [`AdhocCall`](crate::execute::section_context::AdhocCall)
-//! for it. The shim runs the handler inside the
-//! chain's block coroutine, so the handler's own suspending calls are
-//! ordinary requests of this chain, then yields `adhoc_tool_done`. That
-//! arm closes the innermost open call and reports it: the succeeded or
-//! failed observation and, on success, the `ToolResult` under the tool's
-//! id and the call id recorded at dispatch, trusted unless the handler
-//! fetched a listing while the call was open. An adhoc call never issues
-//! leaf work of its own. The adhoc arm sits in the `adhoc` child.
+//! The adhoc arm and its two-yield handshake are documented in the `adhoc`
+//! child.
 
 #[path = "tool_call-adhoc.rs"]
 mod adhoc;

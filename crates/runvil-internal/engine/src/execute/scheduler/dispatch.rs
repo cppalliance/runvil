@@ -4,10 +4,15 @@
 //! emits nothing for the answer, which `apply_answer` handles when it
 //! lands. Every store operation is a leaf yield, handed to the caller
 //! uniformly for all backends - no inline fast path - so interleaving
-//! behavior never depends on which backend serves the mount.
-//! The `tool_call`, `tool_calls`, `adhoc_tool_done`, `chat`, `spawn`,
-//! `timer`, and task wait, inspection, note, concurrency, and cancel arms
-//! are defined in their own modules.
+//! behavior never depends on which backend serves the mount. A refusal
+//! decided before dispatch may still report its failure and answer inline,
+//! so the arm returns without the chain ever parking.
+//!
+//! This file keeps three routing arms: `infer`, `call`, and `store`. Every
+//! other group lives in its own module - `chat` the `chat` arm, `tasks` the
+//! `spawn` arm, `tool_call` the `tool_call`, `tool_calls`, and
+//! `adhoc_tool_done` arms, `timer` the `timer` arm, and `waits` the task
+//! wait, inspection, note, concurrency, and cancel arms.
 
 use std::sync::Arc;
 
@@ -233,11 +238,8 @@ impl ChainOps<'_> {
     /// Dispatches a `store` request: derives the store view from the
     /// chain's access capability and issues the operation through it as a
     /// `Vfs` effect for the caller to perform, parking the chain in the
-    /// effect table exactly as a leaf I/O round does. Every store
-    /// operation takes this yield path uniformly (memory mounts and real
-    /// files alike, with no inline fast path) so interleaving behavior never
-    /// depends on which backend serves the mount. The operation's event is
-    /// pushed when the answer is applied, before the chain resumes.
+    /// effect table exactly as a leaf I/O round does. The operation's event
+    /// is pushed when the answer is applied, before the chain resumes.
     ///
     /// # Errors
     /// Returns [`Error::Internal`] when the live chain's access capability

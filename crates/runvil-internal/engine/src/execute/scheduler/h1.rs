@@ -9,29 +9,32 @@
 //! The pass and the walk that follows it share the root lineage `0` and
 //! are two arena records: the hand-off starts the walk from the pass's
 //! `var` and frozen `argv`, continues the pass's child and entry counters,
-//! so the first walked section is `0.1` and a child the pass started keeps
-//! its index, and hands the pass's tasks to the walk as their owner.
+//! so a child the pass started keeps its index and the first walked section
+//! takes the next entry after the pass's entry 0 (see [`Chain::counters`]
+//! for the normative statement), and hands the pass's tasks to the walk as
+//! their owner.
+//!
+//! [`Chain::counters`]: super::Chain
 
 use std::sync::Arc;
-
-use runvil_types::ids::ChainId;
 
 use crate::heading_address::{SectionIndex, SectionPos};
 use crate::{Error, Result};
 
-use super::chain::{ChainStart, ChainStep};
-use super::chain_record::{CallDepth, ChainKind, Entered};
+use super::chain::ChainStep;
+use super::chain_record::{ChainKind, Entered};
 use super::{ChainIndex, Counters, GENERIC_COMPLETION, Scheduler, prompt_origin};
 
 impl Scheduler {
     /// Starts the H1 pass as the driver loop's first chain: the prompt's
     /// H1 blocks under its title - section 0 - driven through the same
-    /// coroutine machinery as any section.
+    /// coroutine machinery as any section. The root start enqueues the
+    /// chain itself, so this returns no index and no caller pushes it.
     ///
     /// # Errors
     /// Returns [`Error::Internal`] when the run's chain count exceeds `u32`,
     /// or [`Error::Store`] when the backend refuses acquisition.
-    pub(super) fn start_h1(&mut self) -> Result<ChainIndex> {
+    pub(super) fn start_h1(&mut self) -> Result<()> {
         // The H1 pass runs under the prompt's title, from its first
         // compiled H1 chunk.
         let origin = prompt_origin(
@@ -45,17 +48,16 @@ impl Scheduler {
         // entry 0, and the walk that follows, a second record under the
         // same lineage, continues its counters. Its admission limit is the
         // run's ceiling.
-        self.start_chain(ChainStart {
-            lineage: ChainId::root(),
-            counters: Counters::default(),
-            ctx: self.ctx.clone(),
-            access: Arc::new(access),
-            start: SectionPos::top(SectionIndex::FIRST),
-            kind: ChainKind::H1,
-            var: serde_json::json!({}),
-            call_depth: CallDepth::ROOT,
-            concurrency: self.ctx.limits().max_concurrency,
-        })
+        self.start_root_chain(
+            ChainKind::H1,
+            Counters::default(),
+            self.ctx.clone(),
+            Arc::new(access),
+            SectionPos::top(SectionIndex::FIRST),
+            serde_json::json!({}),
+            self.ctx.limits().max_concurrency,
+        )?;
+        Ok(())
     }
 
     /// Ends the H1 pass at its fall-through: the final `var` read back
@@ -69,8 +71,10 @@ impl Scheduler {
     /// # Errors
     /// Returns [`Error::Lua`] when the final `var` read-back fails or H1
     /// left `argv` as non-JSON data,
-    /// or [`Error::Internal`] when the chain holds no frame. The walk
-    /// reuses the pass's capability, so the hand-off acquires nothing.
+    /// or [`Error::Internal`] when the chain holds no frame, when the walk
+    /// it hands off to cannot start because the run's chain count exceeds
+    /// `u32`, or when the pass's capability is gone - the walk reuses it, so
+    /// it acquires nothing and has nothing to fall back on.
     pub(super) fn end_h1(&mut self, id: ChainIndex, start: SectionPos) -> Result<ChainStep> {
         let chain = &mut self.chains[id];
         let Some(Entered { frame, .. }) = chain.entered.take() else {
@@ -87,7 +91,8 @@ impl Scheduler {
         // identity.
         let walk_access = Arc::clone(chain.access()?);
         // The walk shares the root lineage with the pass, so it continues
-        // the pass's counters: the pass took entry 0, the first walked section
+        // the pass's counters (see `Chain::counters` for the normative
+        // statement): the pass took entry 0, the first walked section
         // takes entry 1, and a child the pass started keeps its index. Its
         // admission limit continues too: the pass may have lowered it with
         // `tasks.concurrency`.
@@ -105,22 +110,19 @@ impl Scheduler {
         // `argv`; H1's prompt-wide records already landed in the shared
         // sets the views read, and `when` is the run's own.
         let walk_ctx = self.ctx.with_walk_state(argv);
-        let root = self.start_chain(ChainStart {
-            lineage: ChainId::root(),
+        let root = self.start_root_chain(
+            ChainKind::Root,
             counters,
-            ctx: walk_ctx,
-            access: walk_access,
+            walk_ctx,
+            walk_access,
             start,
-            kind: ChainKind::Root,
             var,
-            call_depth: CallDepth::ROOT,
             concurrency,
-        })?;
+        )?;
         // The walk is the pass's continuation, so the tasks the pass
         // spawned are the walk's from here: it waits on, cancels, or leaks
         // them exactly as if it had spawned them.
         self.reassign_tasks(id, root);
-        self.ready.push_back(root);
         Ok(ChainStep::Continue)
     }
 

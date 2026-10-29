@@ -45,9 +45,10 @@ use crate::{Error, Result};
 use super::dispatch::Dispatched;
 use super::{ChainOps, Continuation};
 
-/// The answer for a round refused as too large by `reason`'s gate, before
-/// or by the provider: no round ran, so no finish reason is present and
-/// `turn` is the unadvanced counter.
+/// The answer for a round refused as too large by `reason`'s gate: either
+/// the precheck, where no round ran, or a provider's overflow refusal,
+/// where the round ran and reported no finish reason. So no finish reason is
+/// present either way, and `turn` is the unadvanced counter.
 fn overflow_result(reason: OverflowReason, turn: u32) -> ChatResult {
     ChatResult {
         outcome: ChatOutcome::Overflow(reason),

@@ -45,8 +45,10 @@ impl Scheduler {
         // ready, nothing parked, no slot that will ever free, and whatever
         // is waiting can never be woken) - fail loudly rather than hang. A
         // running drain returns only after `admit` left the ready queue
-        // empty, so no queued chain is admissible here and the two checks
-        // are the whole guard.
+        // empty, so no queued chain is admissible here. Those two
+        // conditions are the whole guard; the admission queue needs no
+        // third, because a chain that can be admitted is a queued chain the
+        // drain already offered.
         if matches!(self.phase, Phase::Running)
             && self.ready.is_empty()
             && !self.effects.has_awaited()
@@ -133,8 +135,7 @@ impl Scheduler {
             }
             self.start_root_walk()?;
         } else {
-            let h1 = self.start_h1()?;
-            self.ready.push_back(h1);
+            self.start_h1()?;
         }
         Ok(())
     }

@@ -1,6 +1,7 @@
 //! The discovery arm of the `tool_call` arm: a model call that names a
 //! discovery tool, or a Dynamic Set tool by its own wire name, decided in
-//! full before any preparer runs.
+//! full before any preparer runs - the freeze-before-preparer guarantee
+//! this module rests on.
 //!
 //! `GetDynamicTools` answers inline from the section's frozen Dynamic Set:
 //! one tool's description and input schema for a `toolName`, which wins
@@ -57,6 +58,8 @@ enum Discovered {
 struct Listed<'a> {
     tool: &'a str,
     description: Cow<'a, str>,
+    /// The tool's input schema, sent only by the `toolName` branch: a
+    /// search result leaves it out, so a listing stays small.
     #[serde(rename = "inputSchema", skip_serializing_if = "Option::is_none")]
     input_schema: Option<&'a Value>,
 }

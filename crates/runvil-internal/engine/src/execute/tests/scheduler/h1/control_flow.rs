@@ -146,3 +146,26 @@ fn the_h1_decision_tool_idiom_runs_before_the_walk() {
         "the loop runs the tool-call round and the terminal text round"
     );
 }
+
+#[test]
+fn a_limit_lowered_in_h1_is_the_walks_own_limit() {
+    // The hand-off carries the pass's effective limit into the walk as a
+    // root-chain parameter, so a `tasks.concurrency` call in H1 still bounds
+    // the tasks the walk spawns. Were the walk's limit re-read from the run's
+    // ceiling instead of carried, the walk would read back 8 here.
+    let md = "---\nname: t\ndescription: d\nrunvil: 0\n---\n\n\
+        # Test prompt\n\n\
+        ```lua\n\
+        local n = tasks.concurrency(2)\n\
+        assert(n == 2, 'the pass sets its own limit, got ' .. n)\n\
+        ```\n\n\
+        ## Result\n\n\
+        ```lua\nreturn 'walk limit: ' .. tasks.concurrency()\n```\n";
+    let trace = h1_scenario(md).limits(ceiling(8)).run();
+
+    assert_eq!(
+        trace.text(),
+        "walk limit: 2",
+        "the walk inherits the pass's lowered limit, not the ceiling"
+    );
+}

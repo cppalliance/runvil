@@ -129,9 +129,10 @@ pub(super) struct Admission {
     /// child gives them back while that child parks on a task wait.
     holding: HashSet<ChainIndex>,
     /// Each call chain parked on a task wait that gave back its nearest
-    /// holding ancestor's slots, with that ancestor: the chain's wake
-    /// takes the ancestor's slots back before the chain continues.
-    released: HashMap<ChainIndex, ChainIndex>,
+    /// holding ancestor's slots, with that ancestor: the map of chains that
+    /// gave slots back, not of the slots, so the chain's wake takes the
+    /// ancestor's slots back before the chain continues.
+    gave_back: HashMap<ChainIndex, ChainIndex>,
 }
 
 impl Admission {
@@ -153,7 +154,9 @@ impl Admission {
     /// starve behind a long queue), then fresh spawns in spawn order. The
     /// slots in use are counted once per pass, and each admission adds its
     /// own. Every admitted chain's slot holder holds its slots from here;
-    /// the scheduler applies the rest.
+    /// the scheduler applies the rest. This is where both ordering and
+    /// counting live, which is what makes an admission count against the
+    /// next admission in the same pass.
     ///
     /// # Errors
     /// Returns [`Error::Internal`] when a resumed chain's slots belong to
@@ -166,11 +169,11 @@ impl Admission {
             return Ok(admitted);
         }
         let mut holding = self.holding.clone();
-        let mut released = self.released.clone();
+        let mut gave_back = self.gave_back.clone();
         let mut used = slots_in_use(&holding, tree);
         let mut resuming = VecDeque::new();
         for &id in &self.resuming {
-            let holder = slot_holder(&released, id);
+            let holder = slot_holder(&gave_back, id);
             if !can_admit(&used, tree, holder) {
                 resuming.push_back(id);
                 continue;
@@ -181,7 +184,7 @@ impl Admission {
                 ));
             }
             holding.insert(holder);
-            released.remove(&id);
+            gave_back.remove(&id);
             count_slot(&mut used, tree, holder);
             admitted.push(Admit::Resumed(id));
         }
@@ -209,7 +212,7 @@ impl Admission {
         self.resuming = resuming;
         self.spawned = spawned;
         self.holding = holding;
-        self.released = released;
+        self.gave_back = gave_back;
         Ok(admitted)
     }
 
@@ -232,7 +235,7 @@ impl Admission {
         let mut at = tree.call_parent(id);
         while let Some(ancestor) = at {
             if self.holding.remove(&ancestor) {
-                self.released.insert(id, ancestor);
+                self.gave_back.insert(id, ancestor);
                 return;
             }
             at = tree.call_parent(ancestor);
@@ -246,7 +249,7 @@ impl Admission {
     /// slots (a timer-only wait) resume at once.
     pub(super) fn wake(&mut self, id: ChainIndex, tree: &ChainTree<'_>) -> bool {
         let requeue = match tree.kind(id) {
-            ChainKind::Call { .. } => self.released.contains_key(&id),
+            ChainKind::Call { .. } => self.gave_back.contains_key(&id),
             ChainKind::Task => !self.holding.contains(&id),
             ChainKind::Root | ChainKind::H1 => false,
         };
@@ -256,18 +259,22 @@ impl Admission {
         requeue
     }
 
-    /// Gives back `id`'s slots at its chain end, when it holds any.
-    pub(super) fn release(&mut self, id: ChainIndex) {
+    /// Takes back `id`'s slots at its chain end, giving them up so a queued
+    /// sibling or a resumption can have them. A chain that holds none, or
+    /// holds only slots it already gave back while parked, changes nothing.
+    pub(super) fn take_back(&mut self, id: ChainIndex) {
         self.holding.remove(&id);
     }
 
-    /// Drops an aborted chain: it leaves both queues, and the slots it
-    /// holds are given back.
-    pub(super) fn forget(&mut self, id: ChainIndex) {
+    /// Drops an aborted chain: it leaves both queues - no admission can
+    /// start it, and no wake can requeue it - and the slots it still holds
+    /// are given back. The chain's own `gave_back` record goes too, since
+    /// no resumption will read it.
+    pub(super) fn drop_aborted(&mut self, id: ChainIndex) {
         self.resuming.retain(|queued| *queued != id);
         self.spawned.retain(|(queued, _)| *queued != id);
         self.holding.remove(&id);
-        self.released.remove(&id);
+        self.gave_back.remove(&id);
     }
 
     /// Drops every queued chain and every held slot: the run's teardown.
@@ -275,7 +282,7 @@ impl Admission {
         self.resuming.clear();
         self.spawned.clear();
         self.holding.clear();
-        self.released.clear();
+        self.gave_back.clear();
     }
 
     /// Marks the task chain `id` holding its slots, so a test can fill a
@@ -287,10 +294,10 @@ impl Admission {
 }
 
 /// The chain whose slots `id`'s resumption takes back: the holding
-/// ancestor a parked call chain gave back, as `released` records it, or
+/// ancestor a parked call chain gave back, as `gave_back` records it, or
 /// the resumed task itself.
-fn slot_holder(released: &HashMap<ChainIndex, ChainIndex>, id: ChainIndex) -> ChainIndex {
-    released.get(&id).copied().unwrap_or(id)
+fn slot_holder(gave_back: &HashMap<ChainIndex, ChainIndex>, id: ChainIndex) -> ChainIndex {
+    gave_back.get(&id).copied().unwrap_or(id)
 }
 
 /// The admission slots in use at each chain, by arena index, counted
@@ -322,9 +329,7 @@ fn can_admit(used: &[usize], tree: &ChainTree<'_>, id: ChainIndex) -> bool {
 
 impl Scheduler {
     /// Admits every queued task that can take a slot now, applying each
-    /// admission in the order [`Admission::plan`] made them: a resumed
-    /// chain leaves its wait for the ready queue - its start event already
-    /// fired at its first admission - and a fresh spawn starts.
+    /// admission [`Admission::plan`] made, in its order.
     ///
     /// # Errors
     /// Returns [`Error::Internal`] when the plan does, or when a started
@@ -346,14 +351,11 @@ impl Scheduler {
         Ok(())
     }
 
-    /// Starts one admitted task chain: fires the start event with its
-    /// spawn record on its owner's sequence (its spawner, or the root walk
-    /// for a task the H1 pass spawned) under the spawning section (the
-    /// spawn-time capture, so a task admitted after its spawner moved on
-    /// still reports where it was spawned), and enqueues it. The start
-    /// event marks admission - the task first runs now - so a task still
-    /// waiting for a slot reports no start event, and its Lua VM is only
-    /// created at its first section entry, after admission.
+    /// Starts one admitted task chain: enqueues it and fires its start
+    /// event with the spawn record on its owner's sequence (its spawner, or
+    /// the root walk for a task the H1 pass spawned) under the spawning
+    /// section (the spawn-time capture, so a task admitted after its
+    /// spawner moved on still reports where it was spawned).
     ///
     /// # Errors
     /// Returns [`Error::Internal`] when its task has no entry: a spawn

@@ -1,10 +1,46 @@
 //! The core walk rules: fall-through order, the generic result, `sys.id`
 //! per section entry, `call` chains over off-walk siblings, `var` across
-//! fall-through and into calls, and the section boundaries fall-through
-//! fires.
+//! fall-through and into calls, the section boundaries fall-through
+//! fires, and the root start's own enqueue.
 
 use super::*;
 use crate::execute::tests::context::sequence;
+
+#[test]
+fn a_prompt_without_h1_blocks_runs_its_first_section_exactly_once() {
+    // `start_root_walk` reaches the ready queue through `start_root_chain`,
+    // which enqueues. Were the chain enqueued twice - the helper and a
+    // caller's own push - the drain would pop it a second time while it is
+    // still ready, stepping it past `First` before `First` had run, and the
+    // section order would lose `First`.
+    let md = "---\nname: once\ndescription: d\nrunvil: 0\n---\n\n\
+        # Once\n\n\
+        ## First\n\n\
+        ```lua\nstore.append('order.txt', 'First\\n')\n```\n\n\
+        ## Second\n\n\
+        ```lua\n\
+        store.append('order.txt', 'Second\\n')\n\
+        return store.read('order.txt')\n\
+        ```\n";
+    let trace = scheduler_scenario(md).run();
+
+    assert_eq!(
+        trace.text(),
+        "First\nSecond\n",
+        "each section runs once, in order"
+    );
+    let chunk_started = detail::LUA_CHUNK_STARTED.to_string();
+    let started: Vec<String> = sequence(&trace)
+        .into_iter()
+        .filter(|(_, event)| *event == chunk_started)
+        .map(|(section, _)| section)
+        .collect();
+    assert_eq!(
+        started,
+        ["First", "Second"],
+        "a root start enqueues itself once, so no section starts twice"
+    );
+}
 
 #[test]
 fn sections_run_in_fall_through_order() {

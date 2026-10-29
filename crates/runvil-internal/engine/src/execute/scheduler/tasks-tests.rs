@@ -1,8 +1,8 @@
 //! Tests for the task arena alone, one rule each: a stop ends only a live
 //! task, a completed task's outcome is delivered once, entries are never
 //! removed, `owned` admits only the owner, `visible` adds the chain
-//! running inside the task, and `live_of` lists an owner's live tasks in
-//! spawn order without internal timers.
+//! running inside the task, and `live_author_tasks` lists an owner's live
+//! tasks in spawn order without internal timers.
 
 use runvil_types::ids::{ChainId, TaskId};
 use runvil_vfs::{Origin, VfsRef};
@@ -179,7 +179,7 @@ fn visible_also_admits_a_caller_running_inside_the_task() {
 }
 
 #[test]
-fn live_of_lists_an_owners_live_tasks_in_spawn_order_without_timers() {
+fn live_author_tasks_lists_an_owners_live_tasks_in_spawn_order_without_timers() {
     let mut arena = TaskArena::default();
     let (tenth, _) = spawn(&mut arena, chain(0), 10);
     let (second, _) = spawn(&mut arena, chain(0), 2);
@@ -188,5 +188,5 @@ fn live_of_lists_an_owners_live_tasks_in_spawn_order_without_timers() {
     spawn(&mut arena, chain(5), 4);
     let (first, _) = spawn(&mut arena, chain(0), 0);
     assert!(arena.stop(&ended, Stop::Cancelled).is_some());
-    assert_eq!(arena.live_of(chain(0)), [first, second, tenth]);
+    assert_eq!(arena.live_author_tasks(chain(0)), [first, second, tenth]);
 }

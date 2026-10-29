@@ -157,7 +157,7 @@ impl Scheduler {
                     .is_some()
                     .then(|| chain.section_name().to_owned());
                 status.blocked = chain.blocked();
-                status.tasks = self.tasks.live_of(backing);
+                status.tasks = self.tasks.live_author_tasks(backing);
             }
         }
         Ok(status)
@@ -166,7 +166,7 @@ impl Scheduler {
     /// Dispatches a `pending` request: the chain's live tasks in spawn
     /// order.
     pub(super) fn dispatch_pending(&mut self, id: ChainIndex) -> Result<()> {
-        let tasks = self.tasks.live_of(id);
+        let tasks = self.tasks.live_author_tasks(id);
         self.answer_inline(id, Answer::Pending(Ok(tasks)))
     }
 

@@ -1,18 +1,19 @@
 //! The one-chain view: the requests that touch only their own chain run
 //! in a [`ChainOps`], which borrows that chain and the effect table
-//! mutably and the run context shared, and owns nothing. A request in the
-//! view can change only its own chain and the effect table: it can't
-//! reach another chain, the task arena, admission, or the ready queue,
-//! and the compiler enforces that. [`Scheduler::with_chain`] is the only
-//! way into the view. The view's requests sit beside the arms they belong
-//! to, in `impl ChainOps<'_>` blocks in `chat`, `dispatch`, `apply`,
-//! `tool_call`, and `walk`.
+//! mutably and owns nothing. A request in the view can change only its own
+//! chain and the effect table: it can't reach another chain, the task
+//! arena, admission, or the ready queue, and the compiler enforces that.
+//! [`Scheduler::with_chain`] is the only way into the view. The view's
+//! requests sit beside the arms they belong to, in the eight
+//! `impl ChainOps<'_>` blocks this crate holds: the shared `prompt`,
+//! `answer`, `issue`, and `number_round` live here in `chain_ops`, and the
+//! arms live in `apply`, `chat`, `dispatch`, `tool_call`, its `adhoc` and
+//! `discovery` children, and `walk`.
 
 use std::sync::Arc;
 
 use runvil_types::event::ReplyOrigin;
 
-use crate::execute::context::RunState;
 use crate::execute::run::{Effect, EffectId, Round};
 use crate::lua::Answer;
 use crate::parser::Prompt;
@@ -31,8 +32,6 @@ pub(super) struct ChainOps<'a> {
     pub(super) chain: &'a mut Chain,
     /// The effect table the view's leaf arms issue into.
     effects: &'a mut EffectTable,
-    /// The run's own context, which holds the shared prompt tree.
-    ctx: &'a RunState,
     /// How many answers the view delivered to the chain: one requeue each.
     answered: usize,
 }
@@ -51,7 +50,6 @@ impl Scheduler {
             id,
             chain: &mut self.chains[id],
             effects: &mut self.effects,
-            ctx: &self.ctx,
             answered: 0,
         };
         let result = f(&mut ops);
@@ -64,9 +62,11 @@ impl Scheduler {
 
 impl ChainOps<'_> {
     /// The prompt's shared handle: the chain resolves its walk position
-    /// against this clone so the tree borrow never pins the chain.
+    /// against this clone so the tree borrow never pins the chain. The
+    /// chain's own context fork is the source, which is the one `RunState`
+    /// the chain reads the prompt from.
     pub(super) fn prompt(&self) -> Arc<Prompt> {
-        Arc::clone(self.ctx.prompt())
+        Arc::clone(self.chain.ctx.prompt())
     }
 
     /// Resumes the chain at once with `answer`: the inline-answer path of

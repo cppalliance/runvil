@@ -97,6 +97,47 @@ impl Scheduler {
         })
     }
 
+    /// Starts a root chain and enqueues it: the H1 pass, the root walk, or
+    /// the walk a jump out of H1 starts. The root lineage and the root call
+    /// depth are what makes a chain a root chain, so neither is a
+    /// parameter, and `start` and `concurrency` are, because a walk
+    /// inherits the pass's start position and the pass's limit after
+    /// `tasks.concurrency` lowered it. A root start enqueues itself: the
+    /// chain is on the ready queue when this returns, and no caller pushes
+    /// it again.
+    ///
+    /// # Errors
+    /// Returns [`Error::Internal`] when the run's chain count exceeds
+    /// `u32`, leaving the ready queue unchanged.
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "a root start inlines the `ChainStart` it would build, so no caller can set `lineage` or `call_depth`, and the four values it forwards verbatim from its site stay explicit"
+    )]
+    pub(super) fn start_root_chain(
+        &mut self,
+        kind: ChainKind,
+        counters: Counters,
+        ctx: RunState,
+        access: Arc<Access>,
+        start: SectionPos,
+        var: serde_json::Value,
+        concurrency: NonZeroUsize,
+    ) -> Result<ChainIndex> {
+        let id = self.start_chain(ChainStart {
+            lineage: ChainId::root(),
+            counters,
+            ctx,
+            access,
+            start,
+            kind,
+            var,
+            call_depth: CallDepth::ROOT,
+            concurrency,
+        })?;
+        self.ready.push_back(id);
+        Ok(id)
+    }
+
     /// Finishes one chain: the frame's teardown boundary when the chain
     /// ends mid-section, the chain-end rules for the tasks it owns (a live
     /// task makes the outcome `tasks_live` and is abandoned), then the
@@ -105,6 +146,10 @@ impl Scheduler {
     /// transitively - and finally the outcome's delivery: the run's result
     /// for the root chain, the call answer for a child chain, the task
     /// entry's outcome for a spawned chain.
+    ///
+    /// Delivery is one of those three ways and a `Determinism` outcome
+    /// takes none of them: it ends the run before the delivery match. The
+    /// frame is armed for completion only when the chain is not H1.
     ///
     /// `outcome` is the chain's end: a scalar return's value, `None` for a
     /// walk that ran off its slice's last section, or the chain's failure.
@@ -163,10 +208,10 @@ impl Scheduler {
             self.join_owned_tasks(id, access);
         }
         drop(access);
-        // A task chain that was holding admission slots releases them at
+        // A task chain that was holding admission slots gives them back at
         // its end, before its owner is woken: the owner's re-acquire and
         // any queued sibling need the freed capacity.
-        self.admission.release(id);
+        self.admission.take_back(id);
         // A determinism violation is fatal to the run on the spot and
         // never resumes into Lua as a catchable member failure: a shim
         // that re-raises it after its own cleanup yields would flatten
@@ -230,7 +275,7 @@ impl Scheduler {
         };
         // A queued chain aborted before admission leaves both queues, and
         // a running task's held slots are given back.
-        self.admission.forget(id);
+        self.admission.drop_aborted(id);
         // The chain-end join: the aborted chain's final clock still
         // transitively covers its tasks, for whoever joins the aborted
         // chain itself.

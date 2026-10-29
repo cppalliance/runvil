@@ -147,7 +147,12 @@ pub(super) struct Running {
 
 /// The section a chain has entered: built at each section entry, the H1
 /// pass's included, and taken at the section's end, at chain end, and at
-/// an abort, where the frame's drop is the teardown boundary.
+/// an abort. The frame's drop is the teardown boundary on every path that
+/// takes the `Entered`, and it reports `SECTION_FINISHED` only where the
+/// section completed: `end_section`, `apply_jump`, and `finish` arm the
+/// frame first, while the H1 pass's fall-through and scalar return, an
+/// abort, and the run's teardown take it unarmed and are deliberately
+/// silent.
 pub(super) struct Entered {
     /// The section's running or suspended Lua block, `None` between
     /// blocks. Declared first: a suspended coroutine drops before the
@@ -252,10 +257,11 @@ pub(super) struct Chain {
     /// entries' - extends this path, so two runs of one prompt allocate
     /// identical ids however their chains interleave.
     pub(super) lineage: ChainId,
-    /// The chain's local child and entry counters under `lineage`. The
-    /// root chain's entry 0 is the H1 pass (section 0), consumed whether
-    /// or not the prompt has H1 blocks, so the first walked section is
-    /// always `0.1`.
+    /// The chain's local child and entry counters under `lineage`. This is
+    /// the normative `0.1` statement for the run: the root chain's entry 0
+    /// is the H1 pass (section 0), consumed whether or not the prompt has
+    /// H1 blocks, so the first walked section is always `0.1`. Every other
+    /// site that names the first walked entry defers to this one.
     pub(super) counters: Counters,
     /// What kind of chain this is, with the links only that kind has.
     pub(super) kind: ChainKind,
@@ -303,7 +309,10 @@ pub(super) struct Chain {
     /// the walk runs off its slice, where the walk names no running
     /// section. Before the first entry, the name of the section at the
     /// chain's start, or the prompt's title when the start is past its
-    /// slice.
+    /// slice. While a section is entered, this and the walk position name
+    /// the same section; this field is the only record between sections and
+    /// after teardown, and it is written only after the frame is
+    /// constructed.
     pub(super) entered_name: String,
     /// The walk's `var` table: seeds each section's VM at entry; the
     /// section's final `var` is read back before teardown and replaces the
@@ -348,6 +357,9 @@ impl Chain {
     /// # Errors
     /// Returns [`Error::Internal`] when the chain's capability is gone,
     /// which only the chain-end paths do - a live chain always holds it.
+    /// The two teardown probes skip rather than fail on a gone capability:
+    /// `join_task` returns without a join, and `end_tool_call` ends the
+    /// call's identity with no owner to merge it into.
     pub(super) fn access(&self) -> Result<&Arc<Access>> {
         self.access
             .as_ref()

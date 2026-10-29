@@ -131,7 +131,9 @@ fn first_chunk_line(blocks: &[Block]) -> u32 {
 /// The observability origin for a capability the run acquires: `label` is
 /// the section or pass the capability serves, and the prompt's title
 /// stands in for a file name - a prompt's name is its title, since the
-/// source may never have existed on disk.
+/// source may never have existed on disk. Four shapes reach it: the H1
+/// pass's own title, the walk's title, a worker section's name for a task's
+/// spawn, and the tool id a `tool_call`'s access fork reports under.
 fn prompt_origin(prompt: &Prompt, label: &str, blocks: &[Block]) -> Origin {
     Origin::at(label, prompt.title(), first_chunk_line(blocks))
 }
@@ -180,7 +182,9 @@ pub(crate) struct Scheduler {
     phase: Phase,
     /// The run's scope, taken where the run acquires its root identity:
     /// closed when the run reaches `Done` or is dropped before it, so a
-    /// store view the caller still holds never outlives the run.
+    /// store view the caller still holds never outlives the run. The two
+    /// root-start sites (`h1::start_h1` and `walk::start_root_walk`) are its
+    /// only writers, each at the acquisition that opens the run's identity.
     scope: Option<ScopeHandle>,
 }
 

@@ -1,10 +1,8 @@
 //! One chain's step to its next suspension point: resume a suspended
-//! coroutine with its delivered answer, or advance the walk - entering the
-//! next section, starting the next Lua block's coroutine, stashing one
-//! prose block as the pending Markdown buffer, or falling through at a
-//! section's end - then apply the block coroutine's outcome: park a
-//! yielded chain on its request's dispatch, advance or finish a completed
-//! block, and report the chunk's closing observation boundary.
+//! coroutine with its delivered answer, or advance the walk, then apply the
+//! block coroutine's outcome: park a yielded chain on its request's
+//! dispatch, advance or finish a completed block, and report the chunk's
+//! closing observation boundary.
 
 use runvil_types::emitter::Emitter;
 use runvil_types::event::lifecycle;
@@ -120,11 +118,9 @@ fn settle_block(
 
 impl Scheduler {
     /// Runs one ready chain to its next suspension point: resume a
-    /// suspended coroutine with its delivered answer, or advance the walk -
-    /// entering the next section, starting the next Lua block's coroutine,
-    /// stashing one prose block as the pending Markdown buffer, or falling
-    /// through at a section's end. The step never awaits: every dispatch
-    /// either issues its leaf effect or answers on the spot.
+    /// suspended coroutine with its delivered answer, or advance the walk.
+    /// The step never awaits: every dispatch either issues its leaf effect
+    /// or answers on the spot.
     ///
     /// The driver owns the chunk observation boundaries: STARTED at a
     /// block's start, SUCCEEDED or FAILED when its coroutine finally

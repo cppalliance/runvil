@@ -229,10 +229,13 @@ impl EffectTable {
     }
 
     /// Orphans `id`, whose chain stopped waiting: the caller still owes the
-    /// answer, which is discarded on arrival. A tool call is also listed
-    /// as withdrawn, and its chain and identity are returned so the call
-    /// can be ended. An id with no entry stays unknown, so an answer for it
-    /// still fails loudly.
+    /// answer, which is discarded on arrival. Any continuation other than a
+    /// tool call is orphaned the same way and returns `None`, since only a
+    /// tool call has an identity to end: a `chat` round, an `infer`, a
+    /// render, a store operation, and a timer all leave the entry orphaned
+    /// with nothing to report. A tool call is also listed as withdrawn, and
+    /// its chain and identity are returned so the call can be ended. An id
+    /// with no entry stays unknown, so an answer for it still fails loudly.
     pub(super) fn orphan(&mut self, id: EffectId) -> Option<(ChainIndex, ExecId)> {
         let entry = self.outstanding.get_mut(&id)?;
         let Outstanding::Awaited(Pending {
@@ -301,7 +304,10 @@ impl EffectTable {
         (issued, withdrawn)
     }
 
-    /// Drops the withdrawals listed since the last step.
+    /// Drops the withdrawals listed since the last step. `drive::end` calls
+    /// this after its teardown: the teardown orphans whatever is still in
+    /// flight silently, and those orphans are not listed, so a decided run
+    /// lists none rather than some.
     pub(super) fn clear_withdrawn(&mut self) {
         self.withdrawn.clear();
     }

@@ -12,11 +12,12 @@ use super::Chain;
 const MAX_CHAINS: usize = u32::MAX as usize;
 
 /// Arena index of a chain: indices, not references, so no chain ever holds
-/// a pointer to another. Only [`ChainArena::push`] creates one, so every
-/// index names a chain. The index is the scheduler's private handle; the
-/// chain's identity for authors and callers is its hierarchical
-/// [`ChainId`](runvil_types::ids::ChainId), which never depends on arena
-/// order.
+/// a pointer to another. Only [`ChainArena::push`] creates one outside test
+/// builds, so every index names a chain; a `#[cfg(test)]` constructor mints
+/// one for tables that only compare indices. The index is the scheduler's
+/// private handle; the chain's identity for authors and callers is its
+/// hierarchical [`ChainId`](runvil_types::ids::ChainId), which never depends
+/// on arena order.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub(in crate::execute::scheduler) struct ChainIndex(u32);
 
@@ -90,7 +91,9 @@ impl Chain {
 
 /// The chain arena: every chain the run has started, indexed by
 /// [`ChainIndex`]. Every index the arena hands out names a chain: it holds
-/// at most `u32::MAX` chains and never shrinks.
+/// at most [`MAX_CHAINS`] and never shrinks. A test build lowers that bound
+/// through a `#[cfg(test)]` setter, so the overflow path runs without
+/// allocating the real bound.
 pub(in crate::execute::scheduler) struct ChainArena {
     chains: Vec<Chain>,
     /// The chain-count bound in test builds: [`MAX_CHAINS`] until a test

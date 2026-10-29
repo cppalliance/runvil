@@ -130,7 +130,7 @@ impl Scheduler {
         reason: AbandonReason,
     ) -> Vec<TaskId> {
         let mut leaked = Vec::new();
-        for task in self.tasks.live_with_timers(owner) {
+        for task in self.tasks.live_all(owner) {
             let Some((backing, target)) = self.tasks.stop(&task, Stop::Abandoned) else {
                 continue;
             };
@@ -158,8 +158,9 @@ impl Scheduler {
     /// aborted and reports nothing; a chain aborts with everything it owns,
     /// then `terminal` fires under `target`. The backing ends first, so
     /// anything it owned reports before the task's own terminal event,
-    /// which is the last word on it. Returns whether the backing was a
-    /// chain.
+    /// which is the last word on it. A task still queued for a slot is
+    /// silent: it has no start event, so it reports no terminal, and the
+    /// abort is all that happens. Returns whether the backing was a chain.
     pub(super) fn end_backing(
         &mut self,
         backing: TaskBacking,

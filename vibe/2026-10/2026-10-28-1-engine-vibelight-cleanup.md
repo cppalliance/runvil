@@ -303,7 +303,7 @@ Ten steps, one commit each. Order is by cause, not by file count. The Pack roste
 
 <step-5>
 
-### Step 5: Root-chain constructor, `Admission` names, `ChainOps` state, scheduler doc text
+### Step 5: Root-chain constructor, `Admission` names, `ChainOps` state, scheduler doc text [completed]
 
 - Component: Scheduler
 - Tests: `cargo nextest run --locked -p runvil-engine`

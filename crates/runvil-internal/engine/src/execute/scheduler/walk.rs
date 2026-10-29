@@ -11,8 +11,6 @@
 
 use std::sync::Arc;
 
-use runvil_types::ids::ChainId;
-
 use crate::execute::section_context::SectionContext;
 use crate::execute::walk_target::{
     JumpTarget, h1_visible_sections, resolve_jump_target, section_position,
@@ -21,16 +19,16 @@ use crate::heading_address::{self, SectionIndex, SectionPos, Visible};
 use crate::parser::Block;
 use crate::{Error, Result};
 
-use super::chain::{ChainStart, ChainStep};
-use super::chain_record::{CallDepth, ChainKind, Entered};
+use super::chain::ChainStep;
+use super::chain_record::{ChainKind, Entered};
 use super::{ChainIndex, ChainOps, Counters, Scheduler, prompt_origin};
 
 impl Scheduler {
     /// Starts the root walk chain over the top-level sections when the
-    /// prompt has no H1 blocks, seeded with an empty `var`, and enqueues
-    /// it. The walk is the root chain `0`; its entry 0 stays reserved for
-    /// the H1 pass the prompt does not have, so the first walked section
-    /// is `0.1` exactly as on a prompt whose pass ran.
+    /// prompt has no H1 blocks, seeded with an empty `var`. The walk is the
+    /// root chain `0`; its entry 0 stays reserved for the H1 pass the
+    /// prompt does not have, so the first walked section is `0.1` - see
+    /// [`Chain::counters`](super::Chain) for the normative statement.
     ///
     /// # Errors
     /// Returns [`Error::Internal`] when the run's chain count exceeds `u32`,
@@ -53,18 +51,15 @@ impl Scheduler {
         let origin = prompt_origin(prompt, prompt.title(), blocks);
         let access = self.ctx.vfs().acquire(origin).map_err(Error::store)?;
         self.scope = Some(runvil_vfs::detail::scope_handle(&access));
-        let root = self.start_chain(ChainStart {
-            lineage: ChainId::root(),
-            counters: after_h1,
-            ctx: self.ctx.clone(),
-            access: Arc::new(access),
-            start: SectionPos::top(SectionIndex::FIRST),
-            kind: ChainKind::Root,
-            var: serde_json::json!({}),
-            call_depth: CallDepth::ROOT,
-            concurrency: self.ctx.limits().max_concurrency,
-        })?;
-        self.ready.push_back(root);
+        self.start_root_chain(
+            ChainKind::Root,
+            after_h1,
+            self.ctx.clone(),
+            Arc::new(access),
+            SectionPos::top(SectionIndex::FIRST),
+            serde_json::json!({}),
+            self.ctx.limits().max_concurrency,
+        )?;
         Ok(())
     }
 

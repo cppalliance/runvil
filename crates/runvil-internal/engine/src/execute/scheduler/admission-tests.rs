@@ -3,7 +3,7 @@
 //! admission against the next, a task holds a slot at its owner and every
 //! ancestor, a task wait gives those slots back and a timer-only wait keeps
 //! them, a call chain gives them back through its nearest holding ancestor,
-//! a forgotten chain leaves admission, and a pass that fails leaves
+//! an aborted chain leaves admission, and a pass that fails leaves
 //! admission as it found it.
 
 use std::num::NonZeroUsize;
@@ -154,7 +154,7 @@ fn a_task_holds_a_slot_at_its_owner_and_every_ancestor() {
         [],
         "the grandchild's slot counts against the root"
     );
-    admission.release(grandchild);
+    admission.take_back(grandchild);
     assert_eq!(plan(&mut admission, &tree), [Admitted::Started(sibling)]);
 }
 
@@ -178,7 +178,7 @@ fn a_task_wait_gives_its_slots_back_until_the_wake_takes_them_again() {
         [],
         "the slot is the queued task's now"
     );
-    admission.release(queued);
+    admission.take_back(queued);
     assert_eq!(plan(&mut admission, &tree), [Admitted::Resumed(waiter)]);
 }
 
@@ -212,7 +212,7 @@ fn a_call_chain_gives_slots_back_through_its_nearest_holding_ancestor() {
         "the task the nested call runs inside gave its slot back"
     );
     assert!(admission.wake(nested, &tree.view()));
-    admission.release(queued);
+    admission.take_back(queued);
     assert_eq!(plan(&mut admission, &tree), [Admitted::Resumed(nested)]);
     spawn(&mut admission, &mut tree, root);
     assert_eq!(
@@ -233,16 +233,16 @@ fn a_call_chain_in_the_main_walk_has_no_slots_to_give_back() {
 }
 
 #[test]
-fn a_forgotten_chain_leaves_its_queue_and_its_slots() {
+fn an_aborted_chain_leaves_its_queue_and_its_slots() {
     let mut tree = Tree::new();
     let mut admission = Admission::default();
     let root = tree.root(1);
     let running = spawn(&mut admission, &mut tree, root);
     assert_eq!(plan(&mut admission, &tree), [Admitted::Started(running)]);
     let aborted = spawn(&mut admission, &mut tree, root);
-    admission.forget(aborted);
+    admission.drop_aborted(aborted);
     assert!(!admission.is_queued(aborted));
-    admission.forget(running);
+    admission.drop_aborted(running);
     let next = spawn(&mut admission, &mut tree, root);
     assert_eq!(plan(&mut admission, &tree), [Admitted::Started(next)]);
 }
@@ -305,10 +305,10 @@ fn a_pass_that_fails_after_admitting_a_resumption_leaves_its_slots_given_back() 
         admission.plan(&tree.view()),
         Err(Error::Internal { .. })
     ));
-    assert_eq!(admission.released.get(&call), Some(&task));
+    assert_eq!(admission.gave_back.get(&call), Some(&task));
     assert!(admission.resuming.contains(&call));
     assert!(!admission.holding.contains(&task));
-    admission.forget(stray);
+    admission.drop_aborted(stray);
     assert_eq!(
         plan(&mut admission, &tree),
         [Admitted::Resumed(call)],

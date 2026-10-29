@@ -1,6 +1,17 @@
 //! The adhoc arm of the `tool_call` arm: a call routed to an adhoc tool,
 //! answered with its handler, and the `adhoc_tool_done` request that
 //! closes it.
+//!
+//! An adhoc tool call is a two-yield handshake. The `tool_call` answer is
+//! [`ToolCallOutcome::Adhoc`], which hands the shim the handler, and the
+//! frame opens an [`AdhocCall`] for it. The shim runs the handler inside the
+//! chain's block coroutine, so the handler's own suspending calls are
+//! ordinary requests of this chain, then yields `adhoc_tool_done`. That arm
+//! closes the innermost open call and reports it: the succeeded or failed
+//! observation and, on success, the `ToolResult` under the tool's id and the
+//! call id recorded at dispatch, trusted unless the handler fetched a
+//! listing while the call was open. An adhoc call never issues leaf work of
+//! its own.
 
 use std::sync::Arc;
 
