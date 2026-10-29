@@ -166,11 +166,9 @@ fn log_accepts_exactly_one_bounded_control_free_utf8_string() {
         serde_json::to_string(&too_long).expect("test string must serialize")
     );
     let error = run(&source, "").expect_err("257 characters must fail");
-    assert!(
-        error
-            .to_string()
-            .contains("log message must be at most 256 characters")
-    );
+    assert!(error.to_string().contains(&format!(
+        "log message must be at most {LUA_LOG_CHARACTER_LIMIT} characters"
+    )));
 
     let maximum = "é".repeat(LUA_LOG_CHARACTER_LIMIT);
     let source = format!(

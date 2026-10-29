@@ -86,6 +86,7 @@ mod json;
 mod messages;
 mod models;
 mod models_loop;
+mod order;
 mod packs;
 mod prelude;
 mod program;

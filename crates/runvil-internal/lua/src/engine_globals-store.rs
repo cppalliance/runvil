@@ -1,6 +1,9 @@
-//! The `store` table: Lua dispatchers over the direct store closures,
-//! and the switch that routes them to the yield shims once the shared
-//! library has loaded.
+//! The `store` table: Lua dispatchers over the direct store closures, and
+//! the switch that routes them to the yield shims once the Pack preludes
+//! have installed.
+
+#[path = "engine_globals-store-read.rs"]
+mod read;
 
 use std::sync::{Arc, LazyLock, Mutex, PoisonError};
 
@@ -9,11 +12,11 @@ use runvil_types::emitter::Emitter;
 use runvil_types::event::lifecycle::{self, Lifecycle};
 use runvil_vfs::{Access, VfsError};
 
-use super::{read_store, read_store_numbered};
 use crate::error::SharedSource;
 use crate::error::{Error, Result};
 use crate::program::LuaProgram;
-use crate::protocol::VfsOp;
+use crate::protocol::{VfsOp, VfsOutcome};
+use read::{read_store, read_store_numbered};
 
 /// The store dispatcher chunk's name, `@`-prefixed as the shim chunks'
 /// names are, so its frames render as verbatim `file:line:` references.
@@ -212,7 +215,7 @@ fn record_store_conflict<T>(
 /// caller's VFS access capability, so each operation runs under the
 /// caller's own identity and the store's strict path rules.
 /// Installed once per section with [`Lua::create_function`], so the table
-/// stays valid across every chunk the VM runs without a live [`mlua::Scope`].
+/// stays valid across every chunk the VM runs.
 ///
 /// The table is a deterministic Engine global, present regardless of tool
 /// scoping. The mutating ops (`write`/`append`/`str_replace`/`delete`) return
@@ -369,6 +372,38 @@ pub(crate) fn route_store_to_shims(lua: &Lua, shims: &Table) -> Result<()> {
         .named_registry_value(STORE_PHASE_REGISTRY)
         .map_err(Error::lua)?;
     phase.raw_set("shims", shims.clone()).map_err(Error::lua)
+}
+
+/// Executes one validated store operation against the store view: the
+/// executor's leaf-yield dispatch for a `store.*` call inside a block.
+///
+/// The direct closures `install_store_table` builds share these operation
+/// bodies. `view` is the store view the caller derived.
+///
+/// # Errors
+/// Returns the [`VfsError`] the operation produces: path or pattern
+/// validation, not-found, anchor, range, conflict, or backend failure.
+pub fn run_store_op(view: &Access, op: VfsOp) -> std::result::Result<VfsOutcome, VfsError> {
+    match op {
+        VfsOp::Write { path, contents } => view
+            .write(&path, contents.as_bytes())
+            .map(|()| VfsOutcome::Unit),
+        VfsOp::Append { path, contents } => view
+            .append(&path, contents.as_bytes())
+            .map(|()| VfsOutcome::Unit),
+        VfsOp::Read { path, start, end } => {
+            read_store(view, &path, start, end).map(VfsOutcome::Text)
+        }
+        VfsOp::ReadNumbered { path, start, end } => {
+            read_store_numbered(view, &path, start, end).map(VfsOutcome::Text)
+        }
+        VfsOp::StrReplace { path, old, new } => view
+            .str_replace(&path, &old, &new)
+            .map(|()| VfsOutcome::Unit),
+        VfsOp::Delete { path } => view.remove(&path, false).map(|_| VfsOutcome::Unit),
+        VfsOp::Glob { pattern } => view.glob(&pattern).map(VfsOutcome::Paths),
+        VfsOp::Exists { path } => view.exists(&path).map(VfsOutcome::Bool),
+    }
 }
 
 #[cfg(test)]

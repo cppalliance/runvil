@@ -50,8 +50,8 @@ fn sort_key_classifies_scalars_and_rejects_unsortable_keys() {
     assert!(matches!(key, SortKey::Text(bytes) if bytes == b"alpha"));
     assert_eq!(label, "alpha");
 
-    // A non-finite number has no ordered position, so it is rejected
-    // rather than silently ordered by a NaN or infinity comparison.
+    // A non-finite number is refused, and each caller decides its own
+    // diagnostic.
     let non_finite =
         sort_key(&Value::Number(f64::INFINITY)).expect_err("a non-finite number fails");
     assert!(matches!(non_finite, KeyError::NotFinite));

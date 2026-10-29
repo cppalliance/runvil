@@ -24,23 +24,24 @@
 //! scalar keys that sort after the array segment - booleans and smaller
 //! numbers may be visited more than once. No key is lost, and `pairs` is
 //! unaffected because it advances a captured snapshot rather than re-deriving
-//! order from the live table. A cleared non-scalar key has no cross-process
+//! order from the live table. A cleared unordered key has no cross-process
 //! position, so `next` falls back to the trailing segment such keys occupy,
 //! the best a stateless resume can do.
 //! Rebuilding
 //! costs `O(n log n)` per step; section tables are small and the determinism
-//! is the point. The ordering covers string, number, and boolean keys, the
-//! only keys a payload the run log stores can carry. A non-scalar key (table,
-//! function, userdata, or thread) is still visited rather than dropped, but it
-//! sits after every scalar key in the order Lua's own `next` produced it: such
-//! a key has no cross-process position, and it cannot back a logged value.
+//! is the point. The ordering covers boolean keys, finite number keys, and
+//! valid UTF-8 string keys, the only keys a payload the run log stores can
+//! hold. Every other key (a table, function, userdata, or thread, a
+//! non-UTF-8 string, or an infinite number) is still visited rather than
+//! dropped, after every ordered key, in the order Lua's own `next` produced
+//! it.
 
 use std::cmp::Ordering;
 
 use mlua::{Lua, MultiValue, Table, Value};
 
-use crate::collection::{SortKey, sort_key};
 use crate::error::{Error, Result};
+use crate::order::{SortKey, sort_key};
 
 /// Installs the deterministic `next` and `pairs` globals, replacing the base
 /// library's hash-order versions.
@@ -64,12 +65,12 @@ struct WalkKey {
 }
 
 /// Where a key sits in the walk order: the array segment, the scalar hash
-/// segment (by [`SortKey`]), or the trailing non-scalar segment. The segments
+/// segment (by [`SortKey`]), or the trailing unordered segment. The segments
 /// compare before the inner position, so an array key always precedes a
 /// boolean hash key even though [`SortKey`] ranks a boolean below a number;
-/// the ordered list and the resumption comparator thus agree. A non-scalar key
-/// has no cross-position, so all of them compare equal and keep their raw
-/// `pairs` order.
+/// the ordered list and the resumption comparator thus agree. An unordered
+/// key, any key `sort_key` refuses, has no cross-process position, so all of
+/// them compare equal and keep the order Lua's own `next` produced.
 enum WalkOrder {
     Array(i64),
     Scalar(SortKey),
@@ -78,7 +79,7 @@ enum WalkOrder {
 
 impl WalkOrder {
     /// The segment rank: the array part, then scalar hash keys, then
-    /// non-scalar keys. Segments compare before any within-segment position.
+    /// unordered keys. Segments compare before any within-segment position.
     fn segment(&self) -> u8 {
         match self {
             WalkOrder::Array(_) => 0,
@@ -88,8 +89,8 @@ impl WalkOrder {
     }
 
     /// Orders two walk positions by segment, then within the segment. All
-    /// non-scalar positions compare equal, so a stable sort keeps their raw
-    /// `pairs` order.
+    /// unordered positions compare equal, so a stable sort keeps their raw
+    /// traversal order.
     fn compare(&self, other: &Self) -> Ordering {
         match (self, other) {
             (WalkOrder::Array(left), WalkOrder::Array(right)) => left.cmp(right),
@@ -182,8 +183,8 @@ fn pairs(lua: &Lua, value: Value) -> mlua::Result<MultiValue> {
 }
 
 /// The table's live keys in deterministic walk order: the array part
-/// (`1..=#table`) in index order, then the hash part's scalar keys by
-/// [`SortKey`], then any non-scalar keys.
+/// (`1..=#table`) in index order, then the hash part's keys `sort_key`
+/// accepts, by [`SortKey`], then every key it refuses.
 fn ordered_keys(table: &Table) -> mlua::Result<Vec<WalkKey>> {
     let border = table.raw_len();
     let mut keys: Vec<WalkKey> = Vec::with_capacity(border);
@@ -232,9 +233,7 @@ fn ordered_keys(table: &Table) -> mlua::Result<Vec<WalkKey>> {
 /// The index in `keys` to return for a `next` call with `previous` as the
 /// last key. An exact match advances one slot. A key whose value was cleared
 /// (`previous` absent) resumes at the first key that sorts strictly after it,
-/// so the cleared key is skipped rather than revisited; a cleared non-scalar
-/// key has no computed position, so the resume falls back to the trailing
-/// segment, the best a stateless resume can offer.
+/// so the cleared key is skipped rather than revisited.
 fn next_index(keys: &[WalkKey], previous: &Value) -> Option<usize> {
     if matches!(previous, Value::Nil) {
         return (!keys.is_empty()).then_some(0);
@@ -253,16 +252,9 @@ fn next_index(keys: &[WalkKey], previous: &Value) -> Option<usize> {
 }
 
 /// The walk position a lone key would occupy, ignoring whether it is still in
-/// the table: any integer `index >= 1` is an array key, a scalar hash key keeps
-/// its [`SortKey`], and anything else is non-scalar. The integer case does not
-/// consult the live border, so a cleared integer key resumes as an array key
-/// and its position does not shift with the mutable length hint. Because an
-/// absent integer key cannot be distinguished from a cleared array key, a
-/// cleared non-array integer hash key (for example `t[7]` with no array part)
-/// likewise resumes as if it were in the array part; the returned
-/// `Array(index)` then replays the scalar keys that sort after the array
-/// segment (booleans and smaller numbers may be visited more than once). No
-/// key is lost, and `pairs`, which advances a captured snapshot, is unaffected.
+/// the table: any integer `index >= 1` is an array key without consulting the
+/// live border (the module doc gives the resume limit this sets), a hash key
+/// `sort_key` accepts keeps its [`SortKey`], and any other key is unordered.
 fn previous_order(previous: &Value) -> WalkOrder {
     if let Value::Integer(index) = previous
         && *index >= 1

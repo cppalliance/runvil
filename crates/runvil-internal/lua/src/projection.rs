@@ -28,8 +28,7 @@
 //! `{id, type, function: {name, arguments}}` object, the exact inverse of the
 //! Engine's own inbound parser, so records stay neutral while the wire
 //! dogfoods the gateway's ingress contract. The projection is recomputed per
-//! dispatch for whichever model the call targets, so any later
-//! provider-specific mapping changes this one module.
+//! dispatch and is the same for every model.
 
 use std::collections::BTreeSet;
 
@@ -165,8 +164,6 @@ fn project(messages: &[MessageRecord]) -> Vec<Message> {
     match system_len {
         0 => {}
         1 => projected.push(messages[0].clone()),
-        // Composition is textual; validation refused parts in a composed
-        // block, so the visible text is the whole content.
         _ => projected.push(MessageRecord {
             role: RecordRole::System,
             content: MessageContent::Text(
@@ -257,9 +254,8 @@ fn content_parts(content: &MessageContent) -> Vec<ContentPart> {
     }
 }
 
-/// The visible text of one content: the text, or the concatenation of its
-/// text parts. Only called on plain-text system records (validation refused
-/// parts in a composed block), so this never drops an image.
+/// The text of a plain-text content. Only called on composed system records,
+/// where validation refused parts, so the parts arm is unreachable.
 fn visible_text(content: &MessageContent) -> &str {
     match content {
         MessageContent::Text(text) => text,

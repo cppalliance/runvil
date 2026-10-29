@@ -37,11 +37,8 @@ fn compile_chunk(source: &str, chunk_name: &str) -> std::result::Result<Vec<u8>,
 /// produced once by Lua 5.5. The bytecode is an in-memory implementation detail:
 /// it is not a stable or portable serialization format and must not be persisted.
 ///
-/// Compilation does not execute the source. Loading a program (a crate-internal
-/// step) creates a function in the supplied VM but likewise does not call it.
-///
-/// `#[non_exhaustive]` so the crate can evolve the retained representation
-/// (fields are already private) without a breaking change before release.
+/// Compilation does not execute the source. Loading a program ([`load`](Self::load))
+/// creates a function in the supplied VM but likewise does not call it.
 ///
 /// # Sensitivity
 /// A program retains the author's original prompt Lua source verbatim, and
@@ -55,7 +52,6 @@ fn compile_chunk(source: &str, chunk_name: &str) -> std::result::Result<Vec<u8>,
 /// name and a line number) and hold no source text. The crate itself never logs the
 /// retained source; compilation observations contain only fixed strings.
 #[derive(Debug, Clone, PartialEq, Eq)]
-#[non_exhaustive]
 pub struct LuaProgram {
     source: String,
     bytecode: Vec<u8>,
@@ -129,27 +125,25 @@ impl LuaProgram {
         })
     }
 
-    /// Compiles an internal chunk (the coroutine shim prelude) without
-    /// observations.
+    /// Compiles one of the crate's embedded Lua chunks without observations.
     ///
     /// Internal chunks are crate source, not author prompt source, so the
-    /// compilation is bookkeeping. `location` is the chunk name verbatim;
-    /// an `@`-prefixed name renders as a file path in errors, which the line
-    /// mapper never rewrites (it only touches an owner's own
-    /// `[string "{chunk name}"]:` marker).
+    /// compilation is bookkeeping. `chunk_name` serves as both the chunk
+    /// name and the display location; an `@`-prefixed name renders as a
+    /// file path in errors, which the line mapper never rewrites.
     ///
     /// # Errors
     /// Returns [`Error::LuaRuntime`] if the temporary compiler VM cannot be
     /// created or the source fails to compile.
-    pub fn compile_internal(source: &str, location: &str) -> Result<Self> {
-        let bytecode = compile_chunk(source, location).map_err(|error| match error {
+    pub fn compile_internal(source: &str, chunk_name: &str) -> Result<Self> {
+        let bytecode = compile_chunk(source, chunk_name).map_err(|error| match error {
             CompilerError::Vm(error) | CompilerError::Chunk(error) => Error::lua(error),
         })?;
         Ok(Self {
             source: source.to_owned(),
             bytecode,
-            chunk_name: location.to_owned(),
-            location: location.to_owned(),
+            chunk_name: chunk_name.to_owned(),
+            location: chunk_name.to_owned(),
             source_line: NonZeroU32::MIN,
         })
     }

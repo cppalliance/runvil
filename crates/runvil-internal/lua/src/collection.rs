@@ -12,11 +12,7 @@
 use mlua::{Lua, LuaSerdeExt, Table, Value};
 
 use crate::error::{Error, Result};
-
-#[path = "collection-order.rs"]
-mod order;
-
-pub(crate) use order::{KeyError, SortKey, sort_key};
+use crate::order::{KeyError, SortKey, sort_key};
 
 /// Enumerates fanout's collection argument as the sequence of members the
 /// shim spawns arms over: the array part (`1..=#t`) in order, then the hash
@@ -95,8 +91,8 @@ fn check_member(member: &Value, index: &str) -> Result<()> {
 }
 
 /// Renders a fanout arm's item for prose substitution and stub text:
-/// strings verbatim, numbers and booleans in their natural string form,
-/// arrays and objects as compact JSON.
+/// strings verbatim, numbers and booleans in their natural string form, and
+/// arrays, objects, and null as compact JSON.
 #[must_use]
 pub fn render_item(item: &serde_json::Value) -> String {
     match item {

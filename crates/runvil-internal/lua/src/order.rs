@@ -4,9 +4,10 @@
 //! turns a table into an ordered sequence imposes the same order: booleans
 //! first (`false` before `true`), then numbers by value, then strings
 //! bytewise. [`sort_key`] classifies one Lua key into its [`SortKey`];
-//! [`SortKey::compare`] orders two of them. Fanout's member enumeration and
-//! the deterministic `pairs`/`next` installer share both, so a table's order
-//! is a function of its contents wherever it is read.
+//! [`SortKey::compare`] orders two of them. Fanout's member enumeration, the
+//! deterministic `pairs`/`next` installer, and `json.encode`'s key order
+//! share both, so a table's order is a function of its contents wherever it
+//! is read.
 
 use std::cmp::Ordering;
 
@@ -103,7 +104,7 @@ fn compare_integer_float(integer: i64, float: f64) -> Ordering {
 /// Why a Lua value cannot be a sortable hash key.
 #[derive(Debug)]
 pub(crate) enum KeyError {
-    /// A number key that is NaN or infinite: it has no ordered position.
+    /// A number key that is NaN or infinite.
     NotFinite,
     /// A string key whose bytes are not valid UTF-8, so it has no label.
     NotUtf8(mlua::Error),
@@ -115,10 +116,10 @@ pub(crate) enum KeyError {
 /// label naming it (a string's text, any other scalar's rendering).
 ///
 /// # Errors
-/// Returns [`KeyError`] when the value has no ordered position: a non-scalar
-/// key, a string whose bytes are not valid UTF-8, or a number that is not
-/// finite. Each caller maps the failure onto its own diagnostic, so this
-/// helper names no feature.
+/// Returns [`KeyError`] when the value is not a string, number, or boolean,
+/// when a string's bytes are not valid UTF-8 (it has no label), or when a
+/// number is not finite. Each caller maps the failure onto its own
+/// diagnostic, so this helper names no feature.
 pub(crate) fn sort_key(key: &Value) -> Result<(SortKey, String), KeyError> {
     match key {
         Value::String(s) => {
@@ -139,5 +140,5 @@ pub(crate) fn sort_key(key: &Value) -> Result<(SortKey, String), KeyError> {
 }
 
 #[cfg(test)]
-#[path = "collection-order-tests.rs"]
+#[path = "order-tests.rs"]
 mod tests;

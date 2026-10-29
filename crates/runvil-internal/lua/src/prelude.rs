@@ -2,7 +2,7 @@
 //! contributes, installed into every section VM before `require`.
 //!
 //! A prelude runs once per VM as a main chunk whose `...` is its Pack's
-//! local name, in an environment table of its own. That table's metatable `__index` is a lookup table of the base
+//! id, in an environment table of its own. That table's metatable `__index` is a lookup table of the base
 //! functions that survive hardening, the `string`, `table`, `math`, and `utf8`
 //! libraries, `tools`, `store`, `untrusted`, `json`, and a view of `var` that is
 //! read-only at every depth, each read from `_G` when the prelude installs. Reading them then means

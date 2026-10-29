@@ -26,7 +26,7 @@ impl SectionVm {
     /// Called once after Engine injection.
     /// The closures capture owned strings, a clone of the emitter, and Arc
     /// clones of the log budget counters and the store view, so they stay
-    /// valid across every chunk this VM runs without a live [`mlua::Scope`].
+    /// valid across every chunk this VM runs.
     /// The direct store closures record a claims-model conflict into the
     /// VM's slot for the executor to read with
     /// [`take_store_conflict`](Self::take_store_conflict).
@@ -81,7 +81,7 @@ impl SectionVm {
     /// [`install_scheduler_control_globals`](Self::install_scheduler_control_globals)
     /// and `call` as a yield shim. The
     /// callbacks own their run context, so the closures stay valid across
-    /// every chunk this VM runs without a live [`mlua::Scope`]. The `jump`
+    /// every chunk this VM runs. The `jump`
     /// closure captures a clone of the VM's jump slot; the slot is reset
     /// before each chunk and read after it by the control-run path. The
     /// `call` closure snapshots this VM's `var` at call time (reading the
@@ -148,8 +148,7 @@ impl SectionVm {
         )
     }
 
-    /// Installs Runvil's `require` as a persistent global for the
-    /// section's whole lifecycle.
+    /// Installs Runvil's `require` as a persistent global.
     ///
     /// `resolver` finds a library from the heading as written. While a
     /// library loads, a `require` passes that library's key, so the

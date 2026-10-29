@@ -166,7 +166,7 @@ fn a_prelude_receives_its_packs_name_as_its_chunk_argument() {
     assert_eq!(
         (kit.as_str(), other.as_str()),
         ("kit", "other-kit"),
-        "each prelude reads its own Pack's local name from `...`"
+        "each prelude reads its own Pack's id from `...`"
     );
 }
 

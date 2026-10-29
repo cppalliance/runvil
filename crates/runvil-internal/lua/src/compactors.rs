@@ -95,16 +95,11 @@ pub fn exhaustion_detail(reason: &str) -> Cow<'_, str> {
     }
 }
 
-/// The compactor policies the `compactors` global ships.
-///
-/// `Fail` is the omitted-compactor default: invoked with any reason, it
-/// always raises typed context exhaustion. `Clear` removes every record,
-/// so a section can start its conversation over without leaving, and
-/// refuses unless a compactor is running over the list.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+/// The compactor policies the `compactors` global ships; `Fail` is the one
+/// the loop reads when the compactor argument is omitted.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Compactor {
     /// `compactors.fail`: always raises [`Error::ContextExhausted`].
-    #[default]
     Fail,
     /// `compactors.clear`: removes every record from the list, leaving its
     /// last send and its frozen sets. It works only inside a compactor.
@@ -200,6 +195,7 @@ impl UsageAnchor {
     }
 
     /// The anchored token count: the request's prompt plus its reply.
+    #[cfg(any(test, feature = "test-support"))]
     #[must_use]
     pub fn tokens(&self) -> u64 {
         self.tokens
@@ -293,8 +289,7 @@ fn message_chars(message: &Message) -> u64 {
 /// the structured error table before re-raising it, so the kind reaches
 /// author code and the Engine alike; a direct call the block does not
 /// catch keeps the kind through the block's failure mapping, so the run
-/// ends as context exhaustion either way. `compactors.clear` empties `list`,
-/// and only while a compactor runs over it.
+/// ends as context exhaustion either way.
 /// The namespace installs during Engine injection, right after the
 /// section's `messages` list.
 ///

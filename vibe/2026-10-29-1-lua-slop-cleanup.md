@@ -742,7 +742,7 @@ None. Both questions were answered by the operator: the `Answer` restructure lan
 
 <step-7>
 
-### Step 7: the store module, the program and compactor vestiges, the key order module, and the closing outline check
+### Step 7: the store module, the program and compactor vestiges, the key order module, and the closing outline check [completed]
 
 - Component: Store and module docs
 - Tests:
@@ -822,7 +822,7 @@ None. Both questions were answered by the operator: the `Answer` restructure lan
 
 <step-8>
 
-### Step 8: the guide's setup order, in a second repository
+### Step 8: the guide's setup order, in a second repository [completed]
 
 - Component: Guide setup order
 - Tests:

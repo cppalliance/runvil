@@ -5,7 +5,7 @@ use std::cmp::Ordering;
 
 use mlua::{Table, Value};
 
-use crate::collection::{KeyError, SortKey, sort_key};
+use crate::order::{KeyError, SortKey, sort_key};
 
 /// What a table's keys make it.
 pub(super) enum Shape {

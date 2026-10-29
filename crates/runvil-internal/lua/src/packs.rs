@@ -129,9 +129,7 @@ pub(crate) struct PackNames {
     extras: Vec<String>,
 }
 
-/// Builds one Pack object per declared Pack, per usable roster Pack, per
-/// other Pack with catalog tools, and the adhoc Pack over `adhoc`, and
-/// returns their names.
+/// Builds one Pack object per Pack `pack_tools` lists and returns their names.
 ///
 /// # Errors
 /// Returns [`Error::LuaRuntime`] if an object cannot be created or stored.

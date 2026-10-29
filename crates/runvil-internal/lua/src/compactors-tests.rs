@@ -63,16 +63,7 @@ fn raised_reason(error: &mlua::Error) -> &str {
 }
 
 #[test]
-fn the_omitted_compactor_defaults_to_fail() {
-    // The optional compactor parameter's default: omitting it selects
-    // `compactors.fail`.
-    // Resolve through a call boundary, exactly as the loop's optional
-    // compactor parameter resolves.
-    fn resolve(selected: Option<Compactor>) -> Compactor {
-        selected.unwrap_or_default()
-    }
-    assert_eq!(Compactor::default(), Compactor::Fail);
-    assert_eq!(resolve(None), Compactor::Fail);
+fn fail_raises_typed_exhaustion_for_a_provider_overflow() {
     let error = fail_invoked(OverflowReason::Provider);
     assert!(
         matches!(&error, Error::ContextExhausted { reason } if reason == "provider"),
