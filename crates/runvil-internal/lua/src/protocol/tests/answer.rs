@@ -168,7 +168,7 @@ fn lua_with_adhoc_grab() -> Lua {
         &lua,
         &lua.globals(),
         &std::sync::Arc::new(crate::ToolSet::default()),
-        &std::sync::Arc::new(std::sync::Mutex::new(crate::ToolRuntime::default())),
+        &std::sync::Arc::new(std::sync::Mutex::new(crate::Offers::default())),
         &crate::vm::AdhocTools::default(),
         &crate::MessageList::default(),
     )

@@ -7,7 +7,7 @@ use super::*;
 #[test]
 fn a_poisoned_store_conflict_slot_still_hands_over_its_conflict() {
     let vm = TestVm::new().build();
-    let slot = vm.store_conflicts_handle();
+    let slot = vm.store_conflict_handle();
     let poisoned = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         let mut held = slot.lock().expect("the first lock is not poisoned");
         *held = Some("a.txt claimed by two identities".to_owned());

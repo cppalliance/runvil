@@ -5,7 +5,7 @@ use std::sync::Arc;
 use mlua::Value;
 use runvil_model_client::model::{ModelBinding, ModelId, ModelInvocation, ModelSet, Temperature};
 
-use super::{ModelRuntime, UseOptions, option_check_order};
+use super::{ModelSelection, UseOptions, option_check_order};
 use crate::alias::Alias;
 use crate::test_vm::{BuiltVm, TestVm};
 
@@ -16,7 +16,7 @@ fn alias(text: &str) -> Alias {
 }
 
 /// The runtime's selected label, if any.
-fn used(runtime: &ModelRuntime) -> Option<&str> {
+fn used(runtime: &ModelSelection) -> Option<&str> {
     runtime.selection().map(|(label, _)| label.as_str())
 }
 
@@ -24,7 +24,7 @@ fn used(runtime: &ModelRuntime) -> Option<&str> {
 fn model_runtime_select_allows_reselection() {
     // Selections are read at call time, so a later `models.use` replaces the
     // earlier one and steers the next model round.
-    let mut runtime = ModelRuntime::new();
+    let mut runtime = ModelSelection::new();
     assert!(used(&runtime).is_none());
     runtime.select(alias("writer"), UseOptions::default());
     assert_eq!(used(&runtime), Some("writer"));
@@ -38,7 +38,7 @@ fn model_runtime_select_allows_reselection() {
 
 #[test]
 fn model_runtime_starts_with_no_selection() {
-    let runtime = ModelRuntime::new();
+    let runtime = ModelSelection::new();
     assert!(used(&runtime).is_none(), "fresh runtime has no selection");
 }
 
@@ -106,7 +106,7 @@ fn models_use_selects_a_bound_role_by_label() {
     assert_eq!(handle, "writer|writer");
     assert_eq!(
         used(
-            &vm.model_runtime()
+            &vm.model_selection()
                 .lock()
                 .expect("the model runtime mutex is not poisoned")
         ),
@@ -136,7 +136,7 @@ fn models_use_options_reach_the_returned_handle() {
     assert_eq!(max_tokens, 256);
     assert_eq!(
         used(
-            &vm.model_runtime()
+            &vm.model_selection()
                 .lock()
                 .expect("the model runtime mutex is not poisoned")
         ),
@@ -217,7 +217,7 @@ fn models_use_rejects_invalid_options_without_selecting() {
         );
         assert!(
             used(
-                &vm.model_runtime()
+                &vm.model_selection()
                     .lock()
                     .expect("the model runtime mutex is not poisoned")
             )
@@ -288,7 +288,7 @@ fn models_use_reports_the_first_bad_option_in_key_order_on_every_state() {
 /// way the Engine's Chat-effect sites read it.
 #[track_caller]
 fn effective_sampling(vm: &BuiltVm) -> (Option<f64>, Option<u32>) {
-    let binding = crate::resolve_model_binding(vm.models.as_ref(), vm.model_runtime())
+    let binding = crate::resolve_model_binding(vm.models.as_ref(), vm.model_selection())
         .expect("the model state is readable")
         .expect("a selection resolves");
     let invocation = binding.invocation();
@@ -411,7 +411,7 @@ fn the_raw_id_fallback_still_validates_the_gateway_id() {
 #[test]
 fn a_poisoned_model_set_reaches_the_caller_as_an_internal_error() {
     let vm = models_vm();
-    vm.model_runtime()
+    vm.model_selection()
         .lock()
         .expect("the model runtime mutex is not poisoned")
         .select(alias("writer"), UseOptions::default());
@@ -422,7 +422,7 @@ fn a_poisoned_model_set_reaches_the_caller_as_an_internal_error() {
     })
     .join();
 
-    let error = crate::resolve_model_binding(vm.models.as_ref(), vm.model_runtime())
+    let error = crate::resolve_model_binding(vm.models.as_ref(), vm.model_selection())
         .expect_err("a poisoned model set cannot resolve a binding");
     assert!(
         matches!(&error, crate::Error::Internal(message) if message == "model set mutex was poisoned"),

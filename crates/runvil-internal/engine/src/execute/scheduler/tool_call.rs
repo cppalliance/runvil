@@ -49,7 +49,7 @@ use runvil_vfs::detail;
 use crate::execute::run::{Effect, ToolCallOrigin, ToolCaller};
 use crate::lua::{
     Answer, DiscoveryTool, OfferMode, ScriptReport, ToolBinding, ToolCallCounts, ToolCallOutcome,
-    ToolCallRecord, ToolSet, current_dynamic_set, current_tool_bindings,
+    ToolCallRecord, ToolSet, current_dynamic_set, current_static_set,
 };
 use crate::{Error, Result};
 
@@ -219,8 +219,8 @@ impl ChainOps<'_> {
             }
             ids
         } else {
-            let (runtime, adhoc) = (vm.tool_runtime(), vm.adhoc_tools());
-            let static_tools = current_tool_bindings(tool_set, runtime, adhoc)?;
+            let (runtime, adhoc) = (vm.offers(), vm.adhoc_tools());
+            let static_tools = current_static_set(tool_set, runtime, adhoc)?;
             let dynamic_tools = current_dynamic_set(tool_set, runtime, adhoc, &static_tools)?;
             static_tools
                 .iter()
@@ -339,12 +339,9 @@ impl ChainOps<'_> {
             turn: self.call_turn(&site),
         };
         let counts = self.section_call_counts()?;
-        // The counts seed from the section's two sets; a tool outside them
-        // must still be seeded here, because the increment errors on
-        // an unseeded id. The attempt counts at dispatch - before the tool
-        // runs, so a cancelled dispatch still counts.
+        // The attempt counts at dispatch - before the tool runs, so a
+        // cancelled dispatch still counts.
         let counted = binding.id().to_string();
-        counts.ensure(&counted)?;
         counts.increment(&counted)?;
         let prompt = self.prompt();
         let chain = &*self.chain;

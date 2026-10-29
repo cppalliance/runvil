@@ -3,21 +3,20 @@
 //! One Lua table holds every tool operation, mirroring the `models.*`
 //! namespacing of model operations. The shared [`ToolSet`] holds the run
 //! catalog, every catalog tool's `ToolInfo` by id. The model sees only
-//! wire names: a tool's `ToolInfo.wire_name`, or else its id with `/` and
-//! `.` replaced by `_`, such as `web_fetch`. Lua names a tool by its id
-//! (`web/fetch`) or by its tool object, and a Pack by its id (`web`) or
-//! its Pack object, never by a global. `adhoc` defines a prompt-author
-//! Lua function as a tool of the adhoc Pack, `get` reads one tool object
-//! by id, `packs` reads the Pack objects, `offer` and `offer_dynamic`
-//! remember tools and Packs for the section's Static Set and Dynamic Set,
-//! `call` dispatches a tool by id or object (installed by the coroutine
-//! shim prelude, since dispatch suspends), and `stats`, which the `stats`
-//! child installs, is the read-only view of the section's call counts: a
-//! total, and counts per Pack and per tool by id. Offering a tool the run
-//! does not hold is a hard error, and so is every offer once the
-//! section's first model call froze its sets. The installation logic sits
-//! here, out of the VM driver; the VM only calls the installers in setup
-//! order.
+//! wire names, as `wire_name_of` gives them, such as `web_fetch`. Lua
+//! names a tool by its id (`web/fetch`) or by its tool object, and a Pack
+//! by its id (`web`) or its Pack object, never by a global. `adhoc`
+//! defines a prompt-author Lua function as a tool of the adhoc Pack,
+//! `get` reads one tool object by id, `packs` reads the Pack objects,
+//! `offer` and `offer_dynamic` remember tools and Packs for the section's
+//! Static Set and Dynamic Set, `call` dispatches a tool by id or object
+//! (installed by the coroutine shim prelude, since dispatch suspends), and
+//! `stats`, which the `stats` child installs, is the read-only view of the
+//! section's call counts: a total, and counts per Pack and per tool by id.
+//! Offering a tool the run does not hold is a hard error, and so is every
+//! offer once the section's first loop round froze its sets. The
+//! installation logic sits here, out of the VM driver; the VM only calls
+//! the installers in setup order.
 
 use std::sync::{Arc, Mutex};
 
@@ -33,7 +32,7 @@ use crate::json::to_json;
 use crate::messages::MessageList;
 use crate::packs::{ADHOC_PACK, install_pack_list, install_pack_objects};
 use crate::proxy::key_text;
-use crate::scope::{DiscoveryTool, OfferMode, ToolRuntime};
+use crate::scope::{DiscoveryTool, OfferMode, Offers};
 use crate::vm::AdhocTools;
 
 mod decode;
@@ -42,7 +41,7 @@ mod offer;
 mod stats;
 mod userdata;
 
-pub(crate) use decode::{model_tool_name, tool_name};
+pub(crate) use decode::{model_tool_name, tool_id};
 pub(crate) use stats::install_tool_call_counts;
 
 use decode::adhoc_params_schema;
@@ -68,7 +67,7 @@ const PARAMETERS_NOT_JSON: &str = "tools.adhoc: parameters schema cannot be enco
 /// Refuses `call`, an offer function, once `list` holds the section's
 /// frozen sets.
 pub(crate) fn refuse_after_render(call: &str, list: &MessageList) -> mlua::Result<()> {
-    if list.rendered() {
+    if list.rendered_tools().is_some() {
         return Err(mlua::Error::external(format!("{call}: {TOOL_LIST_FIXED}")));
     }
     Ok(())
@@ -112,7 +111,7 @@ pub(crate) fn install_tools(
     lua: &Lua,
     globals: &Table,
     set: &Arc<ToolSet>,
-    runtime: &Arc<Mutex<ToolRuntime>>,
+    runtime: &Arc<Mutex<Offers>>,
     adhoc_tools: &AdhocTools,
     list: &MessageList,
 ) -> Result<()> {

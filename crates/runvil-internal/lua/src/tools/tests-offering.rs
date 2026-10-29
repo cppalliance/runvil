@@ -224,7 +224,8 @@ fn an_array_is_read_through_its_metamethods() {
 fn the_render_refusal_comes_before_every_other_check_and_defining_still_works() {
     let vm = lua_over(offer_set());
     vm.exec("tools.offer('web/search')");
-    vm.messages()
+    let _ = vm
+        .messages()
         .attach_rendered_tools(RenderedTools::default());
     for verb in ["tools.offer", "tools.offer_dynamic"] {
         for args in ["'gh'", "'web/search'", "'wbe'", "42", "", "'web', 'gh'"] {

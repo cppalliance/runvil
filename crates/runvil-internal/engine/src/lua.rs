@@ -23,7 +23,7 @@ pub(crate) use runvil_lua::{
     RosterEntry, ScriptReport, SectionText, SectionVm, SpawnVia, TaskDelivery, TaskPhase,
     TaskStatus, ToolBinding, ToolCallCounts, ToolCallOutcome, ToolCallRecord, ToolSet, Uninjected,
     UsageAnchor, VfsOp, VfsOutcome, YieldParse, current_catalog_packs, current_dynamic_set,
-    current_tool_bindings, exhaustion_detail, install_preludes, install_section_loop_shim,
+    current_static_set, exhaustion_detail, install_preludes, install_section_loop_shim,
     install_store_shims, install_ui, output_reserve, precheck, prepare_dispatch,
     prepare_model_dispatch, project_messages, render_item, resolve_model_binding, wire_name_of,
 };

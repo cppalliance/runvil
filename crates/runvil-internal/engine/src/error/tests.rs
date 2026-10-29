@@ -287,10 +287,7 @@ fn the_call_depth_cap_is_a_quota_that_lua_still_reads_as_lua() {
 
 #[test]
 fn an_owned_lua_internal_message_reaches_the_engine_error_whole() {
-    let message = format!(
-        "tool call counts: name {:?} was not pre-seeded",
-        "web/fetch"
-    );
+    let message = format!("tool call counts: id {:?} could not be read", "web/fetch");
     let error = Error::from(LuaError::Internal(std::borrow::Cow::Owned(message.clone())));
     match &error {
         Error::Internal {

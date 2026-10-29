@@ -1,8 +1,7 @@
-//! Per-VM tool runtime state: call counts, the offers a section made, the
-//! frozen sets its first model call built from them, and the Engine's two
+//! Per-VM tool state: call counts, the offers a section made, the frozen
+//! sets its first loop round built from them, and the Engine's two
 //! discovery tools, which join the Static Set beside a Dynamic Set.
 
-use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
 
@@ -13,8 +12,8 @@ use crate::error::{Error, Result};
 use crate::handles::ToolBinding;
 
 /// Shared per-VM tool-call counts, keyed by tool id and seeded at 0 for
-/// every id the installer was given. A dispatch seeds a missing key on
-/// demand through [`ensure`](Self::ensure).
+/// every id the installer was given. `increment` seeds a missing id at 0,
+/// and `ensure` pre-seeds one so `tools.stats` lists it before any call.
 ///
 /// The executor increments a count when dispatch is attempted (even if the tool
 /// later errors). Lua reads the counts through the `tools.stats` table, which
@@ -26,10 +25,10 @@ pub struct ToolCallCounts {
 }
 
 impl ToolCallCounts {
-    /// Creates a counts map pre-seeded with 0 for every name.
+    /// Creates a counts map pre-seeded with 0 for every id.
     #[must_use]
-    pub(crate) fn new(names: impl IntoIterator<Item = String>) -> Self {
-        let map: BTreeMap<String, u64> = names.into_iter().map(|name| (name, 0)).collect();
+    pub(crate) fn new(ids: impl IntoIterator<Item = String>) -> Self {
+        let map: BTreeMap<String, u64> = ids.into_iter().map(|id| (id, 0)).collect();
         Self {
             inner: Arc::new(Mutex::new(map)),
         }
@@ -41,33 +40,27 @@ impl ToolCallCounts {
             .map_err(|_| Error::Internal("tool call counts mutex was poisoned".into()))
     }
 
-    /// Ensures `name` is present in the map, seeding it at 0 when new.
+    /// Ensures `id` is present in the map, seeding it at 0 when new.
     ///
     /// # Errors
     /// Returns [`Error::Internal`] if the mutex is poisoned.
-    pub fn ensure(&self, name: &str) -> Result<()> {
+    pub fn ensure(&self, id: &str) -> Result<()> {
         let mut map = self.lock()?;
-        map.entry(name.to_owned()).or_insert(0);
+        map.entry(id.to_owned()).or_insert(0);
         Ok(())
     }
 
-    /// Increments the count for `name`.
+    /// Increments the count for `id`, seeding it at 0 first when new.
     ///
     /// # Errors
-    /// Returns [`Error::Internal`] if the mutex is poisoned or `name` was
-    /// never seeded.
-    pub fn increment(&self, name: &str) -> Result<()> {
+    /// Returns [`Error::Internal`] if the mutex is poisoned.
+    pub fn increment(&self, id: &str) -> Result<()> {
         let mut map = self.lock()?;
-        let count = map.get_mut(name).ok_or_else(|| {
-            Error::Internal(Cow::Owned(format!(
-                "tool call counts: name {name:?} was not pre-seeded"
-            )))
-        })?;
-        *count += 1;
+        *map.entry(id.to_owned()).or_insert(0) += 1;
         Ok(())
     }
 
-    /// Returns every seeded name with its count, read under one lock.
+    /// Returns every seeded id with its count, read under one lock.
     ///
     /// # Errors
     /// Returns [`Error::Internal`] if the mutex is poisoned.
@@ -138,12 +131,12 @@ impl OfferedTool {
 
 /// The offers one section VM made, in call order.
 #[derive(Debug, Default)]
-pub struct ToolRuntime {
+pub struct Offers {
     /// Every offer, in call order, each held once.
-    pub offers: Vec<Offer>,
+    pub(crate) offers: Vec<Offer>,
 }
 
-impl ToolRuntime {
+impl Offers {
     /// Remembers an offer of the tool `id` under `mode`, unless an equal
     /// offer is already held.
     pub fn add_tool(&mut self, id: ToolId, mode: OfferMode) {
@@ -164,10 +157,10 @@ impl ToolRuntime {
     }
 }
 
-/// The two sets a section entry froze at its first model call: the one
-/// record of what its model was shown. Each holds its tools' bindings
-/// under their wire names, in merge order, and no wire name appears twice
-/// across them.
+/// The two sets a section entry froze at its first loop round
+/// (`models.loop` or a handle's `loop`): the one record of what its model
+/// was shown. Each holds its tools' bindings under their wire names, in
+/// merge order, and no wire name appears twice across them.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct RenderedTools {
     /// The Static Set: the tools every round of the section advertises,

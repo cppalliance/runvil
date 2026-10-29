@@ -37,9 +37,9 @@ use crate::handles::ToolSet;
 use crate::hardening::{CancelHook, harden, install_cancel_hook};
 use crate::iteration::install_deterministic_iteration;
 use crate::messages::MessageList;
-use crate::models::{ModelRuntime, RawModelIds};
+use crate::models::{ModelSelection, RawModelIds};
 use crate::program::LuaProgram;
-use crate::scope::ToolRuntime;
+use crate::scope::Offers;
 use crate::walk_budget::HeapCeiling;
 
 pub use adhoc::AdhocTools;
@@ -47,7 +47,7 @@ pub use inject::InjectFailure;
 pub use run::CoroStep;
 pub(crate) use run::scalar_return;
 pub use state::{
-    current_catalog_packs, current_dynamic_set, current_tool_bindings, resolve_model_binding,
+    current_catalog_packs, current_dynamic_set, current_static_set, resolve_model_binding,
 };
 
 /// Default per-VM Lua heap ceiling, matching the executor's `RunLimits`.
@@ -120,14 +120,14 @@ pub struct SectionVm<S = Injected> {
     /// The run's shared tool set: the declared Packs, the roster, and the
     /// run catalog. Shared with the run, not snapshotted; nothing writes
     /// it during a run.
-    pub(crate) bound_tools: Arc<ToolSet>,
+    pub(crate) tool_set: Arc<ToolSet>,
     /// The run's shared model set: the frontmatter's filled roles plus the
     /// prompt-wide default. Shared for the same reason (`models.default`).
     pub(crate) bound_models: Arc<Mutex<ModelSet>>,
-    /// The section's tool-addition runtime, read by the executor's scope path.
-    tool_runtime: Arc<Mutex<ToolRuntime>>,
-    /// The section's model-selection runtime, read by the executor's scope path.
-    model_runtime: Arc<Mutex<ModelRuntime>>,
+    /// The section's offers, read by the executor's scope path.
+    offers: Arc<Mutex<Offers>>,
+    /// The section's model selection, read by the executor's scope path.
+    model_selection: Arc<Mutex<ModelSelection>>,
     /// Set by Lua `jump` before it aborts the current chunk.
     jump_slot: Arc<Mutex<Option<String>>>,
     /// How many adhoc tool handlers are running on this VM; `jump` refuses
@@ -148,7 +148,7 @@ pub struct SectionVm<S = Injected> {
     /// into while the Pack preludes install, for the executor to read
     /// once they return via
     /// [`take_store_conflict`](Self::take_store_conflict).
-    store_conflicts: Arc<Mutex<Option<String>>>,
+    store_conflict: Arc<Mutex<Option<String>>>,
     /// Remaining `log()` events this VM may emit before the budget is exhausted.
     log_budget: Arc<AtomicU32>,
     /// Remaining cumulative `log()` message bytes this VM may emit. Bounds total
@@ -207,17 +207,17 @@ impl SectionVm<Uninjected> {
         lua.set_app_data(HeapCeiling(DEFAULT_LUA_MEMORY_BYTES));
         let mut vm = Self {
             lua,
-            bound_tools: Arc::new(ToolSet::default()),
+            tool_set: Arc::new(ToolSet::default()),
             bound_models: Arc::new(Mutex::new(ModelSet::default())),
-            tool_runtime: Arc::new(Mutex::new(ToolRuntime::default())),
-            model_runtime: Arc::new(Mutex::new(ModelRuntime::new())),
+            offers: Arc::new(Mutex::new(Offers::default())),
+            model_selection: Arc::new(Mutex::new(ModelSelection::new())),
             jump_slot: Arc::new(Mutex::new(None)),
             adhoc_handler_depth: Arc::new(AtomicU32::new(0)),
             loop_running: Arc::new(AtomicBool::new(false)),
             library_load_depth: Arc::new(AtomicU32::new(0)),
             library_programs: Arc::new(Mutex::new(Vec::new())),
             sys_live: Arc::new(Mutex::new(None)),
-            store_conflicts: Arc::new(Mutex::new(None)),
+            store_conflict: Arc::new(Mutex::new(None)),
             log_budget: Arc::new(AtomicU32::new(DEFAULT_LUA_LOG_EVENTS)),
             log_byte_budget: Arc::new(AtomicUsize::new(log_byte_budget(DEFAULT_LUA_LOG_EVENTS))),
             adhoc_tools: AdhocTools::default(),
@@ -261,7 +261,7 @@ impl SectionVm<Uninjected> {
         section: &str,
     ) -> Result<Self> {
         let mut vm = Self::new(nonce, emitter, section)?;
-        vm.bound_tools = Arc::clone(tools);
+        vm.tool_set = Arc::clone(tools);
         vm.bound_models = Arc::clone(models);
         Ok(vm)
     }
@@ -323,8 +323,8 @@ impl<S> SectionVm<S> {
     /// The section's offers: what `tools.offer` and `tools.offer_dynamic`
     /// recorded.
     #[must_use]
-    pub fn tool_runtime(&self) -> &Arc<Mutex<ToolRuntime>> {
-        &self.tool_runtime
+    pub fn offers(&self) -> &Arc<Mutex<Offers>> {
+        &self.offers
     }
 
     /// The adhoc tools `tools.adhoc` defined on this VM.
@@ -333,10 +333,10 @@ impl<S> SectionVm<S> {
         &self.adhoc_tools
     }
 
-    /// The section's model-selection runtime: what `models.use` recorded.
+    /// The section's model selection: what `models.use` recorded.
     #[must_use]
-    pub fn model_runtime(&self) -> &Arc<Mutex<ModelRuntime>> {
-        &self.model_runtime
+    pub fn model_selection(&self) -> &Arc<Mutex<ModelSelection>> {
+        &self.model_selection
     }
 
     /// The section's one conversation, which the `messages` global holds

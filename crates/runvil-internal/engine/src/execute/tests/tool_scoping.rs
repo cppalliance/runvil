@@ -51,8 +51,8 @@ fn advertised(tools: &ToolSet, offered: &[OfferedTool]) -> Vec<ToolSchema> {
 fn offered_tools_are_not_injected_without_an_offer() {
     let (tool, _) = scoped_tool("concrete", "Concrete description.");
     let tools = offering_of("tools_concrete", "capability", &tool);
-    let runtime = Mutex::new(runvil_lua::ToolRuntime::default());
-    let effective = current_tool_bindings(&tools, &runtime, &AdhocTools::default())
+    let runtime = Mutex::new(runvil_lua::Offers::default());
+    let effective = current_static_set(&tools, &runtime, &AdhocTools::default())
         .expect("the scope must snapshot");
     assert!(
         effective.is_empty(),
@@ -68,12 +68,12 @@ fn an_offered_tool_advertises_its_concrete_schema_under_its_wire_name_and_dispat
     ]);
     let (tool, called) = scoped_tool("concrete", "Concrete description.");
     let tools = offering_of("tools_concrete", "Concrete description.", &tool);
-    let mut runtime = runvil_lua::ToolRuntime::default();
+    let mut runtime = runvil_lua::Offers::default();
     runtime.add_tool(
         ToolId::parse("tools/concrete").expect("a fixture tool id"),
         OfferMode::Static,
     );
-    let effective = current_tool_bindings(&tools, &Mutex::new(runtime), &AdhocTools::default())
+    let effective = current_static_set(&tools, &Mutex::new(runtime), &AdhocTools::default())
         .expect("the offered scope snapshots");
     let schemas = advertised(&tools, &effective);
     assert_eq!(schemas.len(), 1);
@@ -121,7 +121,7 @@ fn a_section_offer_by_id_scopes_the_tool_and_dispatches_it() {
     .inject_values("", &json!({}), &fresh_access())
     .expect("values must inject");
 
-    // The section's `tools.offer` lands in its tool runtime; the scope
+    // The section's `tools.offer` lands in its offers; the scope
     // snapshot over it includes the offered tool's wire name.
     let offer = LuaProgram::compile(
         "tools.offer('tools/section')",
@@ -133,9 +133,9 @@ fn a_section_offer_by_id_scopes_the_tool_and_dispatches_it() {
     .expect("the offer chunk must compile");
     vm.run_chunk(&offer, &null_emitter(), "Only")
         .expect("tools.offer must succeed");
-    let (tool_set, tool_runtime) = vm.tool_bag_handles();
-    let scope = current_tool_bindings(&tool_set, &tool_runtime, vm.adhoc_tools())
-        .expect("tool scope must snapshot");
+    let (tool_set, offers) = vm.tool_bag_handles();
+    let scope =
+        current_static_set(&tool_set, &offers, vm.adhoc_tools()).expect("tool scope must snapshot");
     let schemas = advertised(&tool_set, &scope);
     assert_eq!(schemas.len(), 1);
     assert_eq!(schemas[0].name(), "tools_section");

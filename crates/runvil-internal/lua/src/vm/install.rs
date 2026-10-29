@@ -48,7 +48,7 @@ impl SectionVm {
             &self.state.access,
             emitter,
             section,
-            &self.store_conflicts,
+            &self.store_conflict,
         )?;
         crate::json::install(&self.lua)
     }
@@ -61,7 +61,7 @@ impl SectionVm {
     pub fn take_store_conflict(&self) -> Option<String> {
         // A panic elsewhere cannot leave the slot half-written, so a
         // poisoned lock still holds the conflict to hand over.
-        self.store_conflicts
+        self.store_conflict
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
             .take()
@@ -69,8 +69,8 @@ impl SectionVm {
 
     /// Shared store-conflict slot, for the poisoned-slot test.
     #[cfg(test)]
-    pub(crate) fn store_conflicts_handle(&self) -> Arc<std::sync::Mutex<Option<String>>> {
-        Arc::clone(&self.store_conflicts)
+    pub(crate) fn store_conflict_handle(&self) -> Arc<std::sync::Mutex<Option<String>>> {
+        Arc::clone(&self.store_conflict)
     }
 
     /// Installs `call`, `jump`, and the `prompt` reads (`prompt.section`

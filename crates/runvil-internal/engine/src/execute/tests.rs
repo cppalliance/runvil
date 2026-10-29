@@ -16,7 +16,7 @@ use self::fixtures::untrusted_echo_tool;
 use super::turn::advance_turn;
 use super::*;
 use crate::Error;
-use crate::lua::{SectionVm, current_tool_bindings};
+use crate::lua::{SectionVm, current_static_set};
 use crate::model::{ModelInfo, ModelSet};
 use crate::parser::ParseErrorKind;
 use crate::parser::Prompt;

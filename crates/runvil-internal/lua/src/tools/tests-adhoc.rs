@@ -328,7 +328,7 @@ fn an_offered_adhoc_tool_counts_from_zero_and_an_unoffered_one_from_its_first_ca
          tools.offer(grab)"
     ));
     let (set, runtime) = vm.tool_bag_handles();
-    let ids: Vec<_> = crate::current_tool_bindings(&set, &runtime, vm.adhoc_tools())
+    let ids: Vec<_> = crate::current_static_set(&set, &runtime, vm.adhoc_tools())
         .expect("the scope resolves")
         .iter()
         .map(|tool| tool.id().clone())
@@ -345,10 +345,9 @@ fn an_offered_adhoc_tool_counts_from_zero_and_an_unoffered_one_from_its_first_ca
         ),
         "{unoffered}"
     );
-    counts.ensure("adhoc/other").expect("a call seeds its id");
     counts
         .increment("adhoc/other")
-        .expect("the seeded id counts");
+        .expect("a call seeds and counts its id");
     let called: i64 = vm.eval("return tools.stats.tools['adhoc/other']");
     assert_eq!(called, 1, "a call gives an unoffered adhoc tool its count");
 }

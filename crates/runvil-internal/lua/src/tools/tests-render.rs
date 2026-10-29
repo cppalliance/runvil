@@ -82,7 +82,7 @@ fn offers_that_share_a_wire_name_all_reach_the_merge_and_only_an_id_dedupes() {
          tools.offer_dynamic('web')",
     );
     let (set, runtime) = vm.tool_bag_handles();
-    let ids: Vec<String> = crate::current_tool_bindings(&set, &runtime, vm.adhoc_tools())
+    let ids: Vec<String> = crate::current_static_set(&set, &runtime, vm.adhoc_tools())
         .expect("the static offers resolve")
         .iter()
         .map(|tool| tool.id().to_string())
@@ -172,7 +172,7 @@ fn dynamic_offers_leave_the_static_bindings_unchanged() {
     );
     let bindings = |vm: &crate::SectionVm| {
         let (set, runtime) = vm.tool_bag_handles();
-        crate::current_tool_bindings(&set, &runtime, vm.adhoc_tools()).expect("the scope resolves")
+        crate::current_static_set(&set, &runtime, vm.adhoc_tools()).expect("the scope resolves")
     };
     assert_eq!(bindings(&plain), bindings(&with_dynamic));
 }

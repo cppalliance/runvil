@@ -17,10 +17,10 @@ use crate::coro::MODEL_TOOL_CALL_REGISTRY;
 use crate::error::{Error, Result};
 use crate::error_value::ErrorValue;
 use crate::handles::{LuaBlockResult, RosterEntry, ToolBinding, ToolSet};
-use crate::models::ModelRuntime;
+use crate::models::ModelSelection;
 use crate::program::LuaProgram;
 use crate::protocol::Answer;
-use crate::scope::ToolRuntime;
+use crate::scope::Offers;
 use crate::vm::{SectionVm, scalar_return};
 
 /// A per-thread tally of live section VMs.
@@ -194,27 +194,24 @@ impl SectionVm {
         Ok(LuaBlockResult::Returned(scalar_return(returned)?))
     }
 
-    /// Returns the shared tool set and the live section addition runtime.
+    /// Returns the shared tool set and the live section offers.
     #[must_use]
-    pub fn tool_bag_handles(&self) -> (Arc<ToolSet>, Arc<Mutex<ToolRuntime>>) {
-        (
-            Arc::clone(&self.bound_tools),
-            Arc::clone(self.tool_runtime()),
-        )
+    pub fn tool_bag_handles(&self) -> (Arc<ToolSet>, Arc<Mutex<Offers>>) {
+        (Arc::clone(&self.tool_set), Arc::clone(self.offers()))
     }
 
     /// Returns a snapshot of the shared model set and the live section
-    /// selection runtime. Production reads the run's shared set through the
+    /// model selection. Production reads the run's shared set through the
     /// model view instead.
     ///
     /// # Errors
     /// Returns [`Error::Internal`] if the shared model set's mutex is poisoned.
-    pub fn model_bag_handles(&self) -> Result<(ModelSet, Arc<Mutex<ModelRuntime>>)> {
+    pub fn model_bag_handles(&self) -> Result<(ModelSet, Arc<Mutex<ModelSelection>>)> {
         let models = self
             .bound_models
             .lock()
             .map_err(|_| Error::Internal("model set mutex was poisoned".into()))?
             .clone();
-        Ok((models, Arc::clone(self.model_runtime())))
+        Ok((models, Arc::clone(self.model_selection())))
     }
 }

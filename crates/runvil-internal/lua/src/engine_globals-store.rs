@@ -67,7 +67,7 @@ type Bounds = (String, Option<i64>, Option<i64>);
 struct StoreShared {
     view: Arc<Access>,
     reporter: Arc<StoreReporter>,
-    conflicts: Arc<Mutex<Option<String>>>,
+    conflict: Arc<Mutex<Option<String>>>,
 }
 
 impl StoreShared {
@@ -89,11 +89,11 @@ impl StoreShared {
     {
         let view = Arc::clone(&self.view);
         let reporter = Arc::clone(&self.reporter);
-        let conflicts = Arc::clone(&self.conflicts);
+        let conflict = Arc::clone(&self.conflict);
         let (success, failure) = outcomes;
         lua.create_function(move |_, arguments: A| {
             let result = operation(&view, &arguments);
-            record_store_conflict(&conflicts, &result);
+            record_store_conflict(&conflict, &result);
             reporter.report(&result, success, failure);
             result.map_err(|source| mlua::Error::external(Error::store(&op(arguments), source)))
         })
@@ -196,13 +196,13 @@ pub fn store_probe_message(error: &VfsError) -> String {
 /// still end the run with a determinism violation, so the direct closures
 /// write it here rather than only raising it.
 fn record_store_conflict<T>(
-    conflicts: &Mutex<Option<String>>,
+    conflict: &Mutex<Option<String>>,
     result: &std::result::Result<T, VfsError>,
 ) {
     if let Err(VfsError::Conflict { detail, .. }) = result {
         // A panic elsewhere cannot leave the slot half-written, so a
         // poisoned lock still takes the conflict.
-        *conflicts.lock().unwrap_or_else(PoisonError::into_inner) = Some(detail.clone());
+        *conflict.lock().unwrap_or_else(PoisonError::into_inner) = Some(detail.clone());
     }
 }
 
@@ -232,7 +232,7 @@ fn record_store_conflict<T>(
 /// spawned from the caller's, so two unordered arms touching one path
 /// surface the conflict as [`VfsError::Conflict`]. A conflict these direct
 /// closures see - while the Pack preludes install, before the yield
-/// shims install - is recorded in `conflicts`, the shared slot the Engine
+/// shims install - is recorded in `conflict`, the shared slot the Engine
 /// reads when the preludes return, so the run ends with a determinism
 /// violation even if the prelude caught the error.
 ///
@@ -252,7 +252,7 @@ pub(crate) fn install_store_table(
     access: &Arc<Access>,
     emitter: &Emitter,
     section: &str,
-    conflicts: &Arc<Mutex<Option<String>>>,
+    conflict: &Arc<Mutex<Option<String>>>,
 ) -> Result<()> {
     let table = lua.create_table().map_err(Error::lua)?;
     // One store view for the section's whole life: derived once from the
@@ -269,7 +269,7 @@ pub(crate) fn install_store_table(
             emitter: emitter.clone(),
             section: section.to_owned(),
         }),
-        conflicts: Arc::clone(conflicts),
+        conflict: Arc::clone(conflict),
     };
     let program = STORE_PROGRAM.as_ref().map_err(Error::shared)?;
     let (dispatcher, phase): (Function, Table) = program.load(lua)?.call(()).map_err(Error::lua)?;

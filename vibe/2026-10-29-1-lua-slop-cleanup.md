@@ -413,7 +413,7 @@ None. Both questions were answered by the operator: the `Answer` restructure lan
 
 <step-2>
 
-### Step 2: the counts API, `Offers` and `ModelSelection`, the tool names, and where the sets freeze
+### Step 2: the counts API, `Offers` and `ModelSelection`, the tool names, and where the sets freeze [completed]
 
 - Component: Tool surface
 - Tests:

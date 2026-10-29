@@ -4,7 +4,7 @@
 use mlua::{Lua, LuaSerdeExt, MultiValue, Value};
 
 use crate::protocol::{AdhocToolOutcome, Request, ToolCallRecord};
-use crate::tools::{model_tool_name, tool_name};
+use crate::tools::{model_tool_name, tool_id};
 use crate::vm::scalar_return;
 
 use super::{FieldFailure, call_error, shim_optional_string, shim_optional_u32};
@@ -60,7 +60,7 @@ fn read_tool_call(
     let decode = if call_id.is_some() {
         model_tool_name
     } else {
-        tool_name
+        tool_id
     };
     let alias = match table.raw_get::<Value>("alias") {
         // Flatten to the call-error string so the answer frames exactly as

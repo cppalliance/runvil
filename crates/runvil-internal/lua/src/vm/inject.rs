@@ -135,8 +135,8 @@ impl SectionVm<Uninjected> {
         install_tools(
             &self.lua,
             &globals,
-            &self.bound_tools,
-            &self.tool_runtime,
+            &self.tool_set,
+            &self.offers,
             &self.adhoc_tools,
             &self.messages,
         )?;
@@ -144,7 +144,7 @@ impl SectionVm<Uninjected> {
             &self.lua,
             &globals,
             &self.bound_models,
-            &self.model_runtime,
+            &self.model_selection,
             self.raw_model_ids,
         )?;
         install_messages(&self.lua, &self.messages)?;
@@ -155,17 +155,17 @@ impl SectionVm<Uninjected> {
     fn injected(self, access: Arc<Access>) -> SectionVm {
         let SectionVm {
             lua,
-            bound_tools,
+            tool_set,
             bound_models,
-            tool_runtime,
-            model_runtime,
+            offers,
+            model_selection,
             jump_slot,
             adhoc_handler_depth,
             loop_running,
             library_load_depth,
             library_programs,
             sys_live,
-            store_conflicts,
+            store_conflict,
             log_budget,
             log_byte_budget,
             adhoc_tools,
@@ -176,17 +176,17 @@ impl SectionVm<Uninjected> {
         } = self;
         SectionVm {
             lua,
-            bound_tools,
+            tool_set,
             bound_models,
-            tool_runtime,
-            model_runtime,
+            offers,
+            model_selection,
             jump_slot,
             adhoc_handler_depth,
             loop_running,
             library_load_depth,
             library_programs,
             sys_live,
-            store_conflicts,
+            store_conflict,
             log_budget,
             log_byte_budget,
             adhoc_tools,

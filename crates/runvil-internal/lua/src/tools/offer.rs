@@ -22,7 +22,7 @@ use crate::handles::{RosterEntry, ToolSet, wire_name_of};
 use crate::messages::MessageList;
 use crate::packs::{LuaPackHandle, is_adhoc, pack_object};
 use crate::proxy::key_text;
-use crate::scope::{OfferMode, OfferTarget, ToolRuntime};
+use crate::scope::{OfferMode, OfferTarget, Offers};
 use crate::vm::AdhocTools;
 use crate::walk_budget::HELD_KEY_LIMIT;
 
@@ -32,7 +32,7 @@ use crate::walk_budget::HELD_KEY_LIMIT;
 #[derive(Clone)]
 pub(super) struct Offering {
     pub(super) set: Arc<ToolSet>,
-    pub(super) runtime: Arc<Mutex<ToolRuntime>>,
+    pub(super) runtime: Arc<Mutex<Offers>>,
     pub(super) adhoc: AdhocTools,
     pub(super) list: MessageList,
 }
@@ -59,7 +59,7 @@ pub(super) fn install_offer(
             let mut runtime = offering
                 .runtime
                 .lock()
-                .map_err(|_| mlua::Error::external("tool declaration runtime was poisoned"))?;
+                .map_err(|_| mlua::Error::external("section offers lock was poisoned"))?;
             for target in targets {
                 match target {
                     OfferTarget::Tool(id) => runtime.add_tool(id, mode),

@@ -18,7 +18,7 @@ use crate::error::{SetEvidence, SetRule, SetTool};
 use crate::execute::PackToolSets;
 use crate::lua::{
     DiscoveryTool, NonEmpty, OfferMode, OfferedTool, RenderedTools, SectionVm, ToolBinding,
-    ToolSet, current_catalog_packs, current_dynamic_set, current_tool_bindings, wire_name_of,
+    ToolSet, current_catalog_packs, current_dynamic_set, current_static_set, wire_name_of,
 };
 use crate::model::{ToolSchema, detail};
 use crate::{Error, Result};
@@ -72,8 +72,8 @@ impl SectionOffers {
     /// # Errors
     /// Returns the expansion's error.
     pub(super) fn read(set: &ToolSet, vm: &SectionVm) -> Result<Self> {
-        let (runtime, adhoc) = (vm.tool_runtime(), vm.adhoc_tools());
-        let static_tools = current_tool_bindings(set, runtime, adhoc)?;
+        let (runtime, adhoc) = (vm.offers(), vm.adhoc_tools());
+        let static_tools = current_static_set(set, runtime, adhoc)?;
         let dynamic_tools = current_dynamic_set(set, runtime, adhoc, &static_tools)?;
         let packs = current_catalog_packs(set, runtime, adhoc)?;
         Ok(Self {

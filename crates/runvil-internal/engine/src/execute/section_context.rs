@@ -326,7 +326,7 @@ fn install_first_call_state(
     ids: &[ToolId],
 ) -> Result<ToolCallCounts> {
     let counts = vm.install_tool_call_counts(ids)?;
-    let resolved_model = crate::lua::resolve_model_binding(ctx.models(), vm.model_runtime())?;
+    let resolved_model = crate::lua::resolve_model_binding(ctx.models(), vm.model_selection())?;
     if let Some(binding) = resolved_model.as_ref() {
         let mut enriched = sys.clone();
         enriched.model = Some(binding.id().name().to_owned());

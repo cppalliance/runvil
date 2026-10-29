@@ -14,11 +14,9 @@ use serde_json::Value as Json;
 use super::{AdhocTools, SectionVm};
 use crate::error::{Error, Result};
 use crate::handles::{ToolBinding, ToolSet};
-use crate::models::ModelRuntime;
+use crate::models::ModelSelection;
 use crate::packs::is_adhoc;
-use crate::scope::{
-    OfferMode, OfferTarget, OfferedTool, RenderedTools, ToolCallCounts, ToolRuntime,
-};
+use crate::scope::{OfferMode, OfferTarget, OfferedTool, Offers, RenderedTools, ToolCallCounts};
 use crate::sys::var_to_json;
 use crate::tools::install_tool_call_counts as install_tool_call_counts_impl;
 
@@ -84,7 +82,7 @@ impl SectionVm {
     /// # Errors
     /// Returns [`Error::LuaRuntime`] when installing `tools.stats` fails.
     pub fn install_tool_call_counts(&self, ids: &[ToolId]) -> Result<ToolCallCounts> {
-        install_tool_call_counts_impl(&self.lua, &self.bound_tools, &self.adhoc_tools, ids)
+        install_tool_call_counts_impl(&self.lua, &self.tool_set, &self.adhoc_tools, ids)
     }
 
     /// Returns the binding the section's frozen sets hold under
@@ -119,22 +117,22 @@ impl SectionVm {
 }
 
 /// Reads the tools the section's static offers name without mutating the
-/// tool runtime: each static offer in call order, a tool adding itself
+/// offers: each static offer in call order, a tool adding itself
 /// and a Pack adding its tools in id order, each tool once, at its first
 /// place. Catalog ids resolve against the run catalog and adhoc ids
 /// against `adhoc`.
 ///
-/// The section's first model call freezes its Static Set from these
+/// The section's first loop round freezes its Static Set from these
 /// tools. An offered adhoc Pack expands to the adhoc tools defined when
 /// this function runs, so after the freeze the Engine reads the frozen
 /// sets instead.
 ///
 /// # Errors
-/// Returns [`Error::Internal`] if the tool runtime's mutex or the adhoc
+/// Returns [`Error::Internal`] if the offers' mutex or the adhoc
 /// tools are poisoned, or an offered id names no tool.
-pub fn current_tool_bindings(
+pub fn current_static_set(
     set: &ToolSet,
-    runtime: &Mutex<ToolRuntime>,
+    runtime: &Mutex<Offers>,
     adhoc: &AdhocTools,
 ) -> Result<Vec<OfferedTool>> {
     let mut tools: Vec<OfferedTool> = Vec::new();
@@ -147,15 +145,15 @@ pub fn current_tool_bindings(
 }
 
 /// Reads the tools the section's dynamic offers name without mutating
-/// the tool runtime: each tool once, in offer order, unless `static_tools`
+/// the offers: each tool once, in offer order, unless `static_tools`
 /// holds its id.
 ///
 /// # Errors
-/// Returns [`Error::Internal`] if the tool runtime's mutex or the adhoc
+/// Returns [`Error::Internal`] if the offers' mutex or the adhoc
 /// tools are poisoned, or an offered id names no tool.
 pub fn current_dynamic_set(
     set: &ToolSet,
-    runtime: &Mutex<ToolRuntime>,
+    runtime: &Mutex<Offers>,
     adhoc: &AdhocTools,
     static_tools: &[OfferedTool],
 ) -> Result<Vec<OfferedTool>> {
@@ -173,16 +171,16 @@ pub fn current_dynamic_set(
 }
 
 /// Reads the catalog Packs the section's offers name without mutating
-/// the tool runtime: each Pack once, in the order the section first
+/// the offers: each Pack once, in the order the section first
 /// offered one of its tools, into either set, which is the order a
 /// section entry's render asks its Packs in.
 ///
 /// # Errors
-/// Returns [`Error::Internal`] if the tool runtime's mutex or the adhoc
+/// Returns [`Error::Internal`] if the offers' mutex or the adhoc
 /// tools are poisoned, or an offered id names no tool.
 pub fn current_catalog_packs(
     set: &ToolSet,
-    runtime: &Mutex<ToolRuntime>,
+    runtime: &Mutex<Offers>,
     adhoc: &AdhocTools,
 ) -> Result<Vec<PackId>> {
     let mut packs: Vec<PackId> = Vec::new();
@@ -203,13 +201,13 @@ pub fn current_catalog_packs(
 /// offer names.
 fn expanded(
     set: &ToolSet,
-    runtime: &Mutex<ToolRuntime>,
+    runtime: &Mutex<Offers>,
     adhoc: &AdhocTools,
     mode: Option<OfferMode>,
 ) -> Result<Vec<OfferedTool>> {
     let runtime = runtime
         .lock()
-        .map_err(|_| Error::Internal("tool declaration runtime was poisoned".into()))?;
+        .map_err(|_| Error::Internal("section offers lock was poisoned".into()))?;
     let mut tools = Vec::new();
     let offers = runtime
         .offers
@@ -246,20 +244,20 @@ fn expanded(
 }
 
 /// Reads the section's effective model binding through the run's model view
-/// without mutating the model runtime: the H2 `models.use` selection with
+/// without mutating the model selection: the H2 `models.use` selection with
 /// its options applied, else the prompt-wide `models.default` baseline.
 ///
 /// # Errors
-/// Returns [`Error::Internal`] if the model runtime's mutex or the shared
+/// Returns [`Error::Internal`] if the model selection's mutex or the shared
 /// model set is poisoned, or the selected alias has no frozen binding.
 pub fn resolve_model_binding(
     bindings: &dyn ModelView,
-    runtime: &Mutex<ModelRuntime>,
+    runtime: &Mutex<ModelSelection>,
 ) -> Result<Option<ModelBinding>> {
     let selection = {
         let runtime = runtime
             .lock()
-            .map_err(|_| Error::Internal("model declaration runtime was poisoned".into()))?;
+            .map_err(|_| Error::Internal("model selection lock was poisoned".into()))?;
         runtime
             .selection()
             .map(|(alias, options)| (alias.as_str().to_owned(), options))

@@ -1,6 +1,8 @@
 //! Tests for the section's `messages` list and its parse through the
 //! protocol.
 
+use std::sync::Arc;
+
 use mlua::{Lua, LuaSerdeExt, Value};
 use runvil_types::tools::{ToolId, ToolInfo};
 use serde_json::json;
@@ -65,12 +67,22 @@ fn rendered(static_names: &[&str], dynamic_names: &[&str]) -> RenderedTools {
 #[test]
 fn a_list_is_rendered_only_once_sets_are_attached_and_keeps_the_first() {
     let list = MessageList::default();
-    assert!(!list.rendered(), "a fresh list holds no frozen sets");
-    assert!(list.rendered_tools().is_none());
-    list.clone()
+    assert!(
+        list.rendered_tools().is_none(),
+        "a fresh list holds no frozen sets"
+    );
+    let first = list
+        .clone()
         .attach_rendered_tools(rendered(&["first"], &["later"]));
-    assert!(list.rendered(), "a clone shares the attached sets");
-    list.attach_rendered_tools(rendered(&["second"], &[]));
+    assert!(
+        list.rendered_tools().is_some(),
+        "a clone shares the attached sets"
+    );
+    let second = list.attach_rendered_tools(rendered(&["second"], &[]));
+    assert!(
+        Arc::ptr_eq(&first, &second),
+        "a second attach hands back the sets the first left in place"
+    );
     assert_eq!(
         *list.rendered_tools().expect("the list holds frozen sets"),
         rendered(&["first"], &["later"]),

@@ -43,7 +43,8 @@
 //! `tools.adhoc` defines a Lua function as a tool of the adhoc Pack.
 //! `tools.offer` and `tools.offer_dynamic` remember tools and Packs, by
 //! id or object, for the section's Static Set and Dynamic Set, which the
-//! section's first model call freezes; after that, every offer raises.
+//! section's first loop round freezes; after that, every offer raises.
+//! `models.infer` freezes nothing.
 //!
 //! `messages` is the section's one conversation: a list the VM creates
 //! empty at each section entry and serves as a global that no assignment
@@ -129,7 +130,7 @@ pub use crate::handles::{
     ToolOutputKind, ToolSet, wire_name_of,
 };
 pub use crate::messages::MessageList;
-pub use crate::models::ModelRuntime;
+pub use crate::models::ModelSelection;
 pub use crate::prelude::install_preludes;
 pub use crate::program::LuaProgram;
 pub use crate::projection::project_messages;
@@ -140,10 +141,10 @@ pub use crate::protocol::{
     ToolCallOutcome, ToolCallRecord, VfsOp, VfsOutcome, YieldParse,
 };
 pub use crate::scope::{
-    DiscoveryTool, Offer, OfferMode, OfferTarget, OfferedTool, RenderedTools, ToolCallCounts,
-    ToolRuntime,
+    DiscoveryTool, Offer, OfferMode, OfferTarget, OfferedTool, Offers, RenderedTools,
+    ToolCallCounts,
 };
 pub use crate::vm::{
     AdhocTools, CoroStep, InjectFailure, Injected, SectionVm, Uninjected, current_catalog_packs,
-    current_dynamic_set, current_tool_bindings, resolve_model_binding,
+    current_dynamic_set, current_static_set, resolve_model_binding,
 };

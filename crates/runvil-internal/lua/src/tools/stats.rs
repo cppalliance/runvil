@@ -137,7 +137,7 @@ impl Members {
 }
 
 /// Installs `tools.stats` over a fresh [`ToolCallCounts`] seeded with
-/// `ids`, telling the ids Lua can see by `bound_tools`' run catalog and
+/// `ids`, telling the ids Lua can see by `tool_set`'s run catalog and
 /// `adhoc`, and returns the counts so the scheduler can increment them.
 ///
 /// # Errors
@@ -145,7 +145,7 @@ impl Members {
 /// installed.
 pub(crate) fn install_tool_call_counts(
     lua: &Lua,
-    bound_tools: &ToolSet,
+    tool_set: &ToolSet,
     adhoc: &AdhocTools,
     ids: &[ToolId],
 ) -> Result<ToolCallCounts> {
@@ -153,7 +153,7 @@ pub(crate) fn install_tool_call_counts(
     let stats = Stats {
         counts: counts.clone(),
         catalog: Arc::new(
-            bound_tools
+            tool_set
                 .catalog()
                 .tools()
                 .iter()

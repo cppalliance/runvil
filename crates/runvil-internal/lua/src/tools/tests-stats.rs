@@ -46,11 +46,10 @@ fn seeded() -> (BuiltVm, ToolCallCounts) {
     (vm, counts)
 }
 
-/// Counts `times` calls of `id`, seeding it first as a dispatch does.
+/// Counts `times` calls of `id`, as a dispatch does.
 fn call(counts: &ToolCallCounts, id: &str, times: u32) {
-    counts.ensure(id).expect("the counts seed");
     for _ in 0..times {
-        counts.increment(id).expect("a seeded id counts");
+        counts.increment(id).expect("an increment counts");
     }
 }
 

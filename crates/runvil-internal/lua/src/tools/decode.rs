@@ -19,7 +19,7 @@ use super::userdata::LuaToolHandle;
 /// # Errors
 /// Returns an `mlua` external error when the value is neither a string
 /// holding a `/` nor a tool object.
-pub(crate) fn tool_name(value: &Value) -> mlua::Result<String> {
+pub(crate) fn tool_id(value: &Value) -> mlua::Result<String> {
     match value {
         Value::String(text) => {
             let name = text.to_string_lossy();
@@ -71,13 +71,8 @@ pub(super) fn object_id(value: &Value) -> Option<String> {
 /// `tools.adhoc` `parameters` table. Each value is a bare type string or a
 /// `{type, description}` array; every declared parameter is required.
 ///
-/// The `required` list is the only Rust-side `table.pairs` walk in this crate
-/// that builds an ordered array without sorting it, so it sorts its names
-/// itself. The other ordered walks, `ordered_keys` in `iteration.rs` and
-/// `collection_members` in `collection.rs`, already sort their output. The
-/// walk's order is unspecified, so a schema left in it would read differently
-/// in two VMs; `properties` needs no sort because it is a `serde_json::Map`,
-/// a `BTreeMap` with no `preserve_order` in the graph.
+/// `properties` is a `serde_json::Map`, a `BTreeMap` while `serde_json`'s
+/// `preserve_order` is off, so only `required` needs the sort below.
 pub(super) fn adhoc_params_schema(params: &mlua::Table) -> mlua::Result<Json> {
     let mut properties = serde_json::Map::new();
     let mut required = Vec::new();

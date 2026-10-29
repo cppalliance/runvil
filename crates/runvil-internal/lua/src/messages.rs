@@ -23,8 +23,8 @@
 //! list, so the round reads every record with no second validation.
 //!
 //! The list also holds the section's frozen sets, which the Engine
-//! attaches at the first model call that builds them, so they last
-//! exactly as long as the section. Once they are attached, every offer
+//! attaches at the section's first loop round, so they last exactly as
+//! long as the section. Once they are attached, every offer
 //! function raises. A compaction edits the list in place and keeps a
 //! snapshot of its records to put back if the compaction fails; neither
 //! the snapshot nor `compactors.clear` touches the last send or the
@@ -213,12 +213,6 @@ impl MessageList {
         self.state().last.as_ref().map(|(_, name, _)| name.clone())
     }
 
-    /// Whether frozen sets are attached; none means false.
-    #[must_use]
-    pub(crate) fn rendered(&self) -> bool {
-        self.state().rendered.is_some()
-    }
-
     /// The attached frozen sets, if they are attached.
     #[must_use]
     pub fn rendered_tools(&self) -> Option<Arc<RenderedTools>> {
@@ -234,12 +228,13 @@ impl MessageList {
         Some((binding.clone(), set))
     }
 
-    /// Attaches `tools` as the section's frozen sets. A list that already
-    /// holds some keeps them.
+    /// Attaches `tools` as the section's frozen sets and returns the sets
+    /// the list holds. A list that already holds some keeps them.
     ///
     /// The Engine calls this only on a list with none attached.
-    pub fn attach_rendered_tools(&self, tools: RenderedTools) {
-        self.state().rendered.get_or_insert_with(|| Arc::new(tools));
+    #[must_use]
+    pub fn attach_rendered_tools(&self, tools: RenderedTools) -> Arc<RenderedTools> {
+        Arc::clone(self.state().rendered.get_or_insert_with(|| Arc::new(tools)))
     }
 }
 

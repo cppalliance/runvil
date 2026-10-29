@@ -108,7 +108,7 @@ impl ChainOps<'_> {
         let binding = if let Some(binding) = binding {
             binding
         } else {
-            let current = resolve_model_binding(chain.ctx.models(), vm.model_runtime())?;
+            let current = resolve_model_binding(chain.ctx.models(), vm.model_selection())?;
             current.ok_or_else(|| Error::ModelRequired {
                 section: section.clone(),
             })?
@@ -139,9 +139,7 @@ impl ChainOps<'_> {
                 emitter.as_ref(),
                 &section,
             )?;
-            list.attach_rendered_tools(frozen);
-            list.rendered_tools()
-                .ok_or(Error::internal("a list holds the sets attached to it"))?
+            list.attach_rendered_tools(frozen)
         };
         let tools = rendered
             .static_set
@@ -228,7 +226,7 @@ impl ChainOps<'_> {
             chain.section_name(),
         )?;
         let list = vm.messages().clone();
-        list.attach_rendered_tools(frozen);
+        let _ = list.attach_rendered_tools(frozen);
         Ok(list)
     }
 

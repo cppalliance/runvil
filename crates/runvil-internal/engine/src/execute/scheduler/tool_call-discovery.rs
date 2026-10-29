@@ -115,7 +115,6 @@ impl ChainOps<'_> {
         };
         let counted = tool.unwrap_or(DiscoveryTool::Call).id();
         let counts = self.section_call_counts()?;
-        counts.ensure(counted)?;
         counts.increment(counted)?;
         let turn = self.call_turn(&site);
         let chain = &*self.chain;

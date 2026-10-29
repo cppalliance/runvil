@@ -43,7 +43,6 @@ impl ChainOps<'_> {
         // The attempt counts at dispatch, before the handler runs, so a
         // handler that then fails still counts.
         let counted = binding.id().to_string();
-        counts.ensure(&counted)?;
         counts.increment(&counted)?;
         self.chain.frame_mut()?.push_adhoc_call(AdhocCall {
             tool: binding.id().clone(),

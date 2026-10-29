@@ -198,25 +198,27 @@ fn parse_use_options(options: Value, rest: &MultiValue) -> mlua::Result<UseOptio
 /// Section model-selection state: the current `models.use` label and the
 /// options it set.
 #[derive(Debug)]
-pub struct ModelRuntime {
-    used: Option<(Alias, UseOptions)>,
+pub struct ModelSelection {
+    selection: Option<(Alias, UseOptions)>,
 }
 
-impl ModelRuntime {
+impl ModelSelection {
     pub(crate) fn new() -> Self {
-        ModelRuntime { used: None }
+        ModelSelection { selection: None }
     }
 
     /// Returns the current `models.use` label and its options, if any.
     pub(crate) fn selection(&self) -> Option<(&Alias, UseOptions)> {
-        self.used.as_ref().map(|(label, options)| (label, *options))
+        self.selection
+            .as_ref()
+            .map(|(label, options)| (label, *options))
     }
 
     /// Records a `models.use` selection, replacing any prior label and
     /// options: the selection is read at call time, so the latest call
     /// steers the next model round.
     fn select(&mut self, alias: Alias, options: UseOptions) {
-        self.used = Some((alias, options));
+        self.selection = Some((alias, options));
     }
 }
 
@@ -251,7 +253,7 @@ pub(crate) fn install_models(
     lua: &Lua,
     globals: &Table,
     set: &Arc<Mutex<ModelSet>>,
-    runtime: &Arc<Mutex<ModelRuntime>>,
+    runtime: &Arc<Mutex<ModelSelection>>,
     raw_ids: RawModelIds,
 ) -> Result<()> {
     let models = lua.create_table().map_err(Error::lua)?;
@@ -276,7 +278,7 @@ pub(crate) fn install_models(
                 let options = parse_use_options(options, &rest)?;
                 let mut state = state
                     .lock()
-                    .map_err(|_| mlua::Error::external("model declaration runtime was poisoned"))?;
+                    .map_err(|_| mlua::Error::external("model selection lock was poisoned"))?;
                 state.select(label, options);
                 Ok(LuaModelHandle::from_binding(options.apply(binding)))
             },

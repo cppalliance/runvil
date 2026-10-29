@@ -173,7 +173,7 @@ pub(crate) fn offer_set() -> ToolSet {
 /// `static` or `dynamic`, in call order.
 #[track_caller]
 pub(crate) fn offers(vm: &SectionVm) -> Vec<String> {
-    vm.tool_runtime()
+    vm.offers()
         .lock()
         .expect("the runtime mutex is not poisoned")
         .offers
@@ -216,7 +216,7 @@ pub(crate) fn lua_over(set: ToolSet) -> BuiltVm {
 #[track_caller]
 pub(crate) fn scoped(vm: &SectionVm) -> Vec<String> {
     let (set, runtime) = vm.tool_bag_handles();
-    crate::current_tool_bindings(&set, &runtime, vm.adhoc_tools())
+    crate::current_static_set(&set, &runtime, vm.adhoc_tools())
         .expect("the scope resolves")
         .iter()
         .map(|tool| match tool {
@@ -231,7 +231,7 @@ pub(crate) fn scoped(vm: &SectionVm) -> Vec<String> {
 pub(crate) fn dynamic(vm: &SectionVm) -> Vec<String> {
     let (set, runtime) = vm.tool_bag_handles();
     let adhoc = vm.adhoc_tools();
-    let bound = crate::current_tool_bindings(&set, &runtime, adhoc).expect("the scope resolves");
+    let bound = crate::current_static_set(&set, &runtime, adhoc).expect("the scope resolves");
     crate::current_dynamic_set(&set, &runtime, adhoc, &bound)
         .expect("the dynamic set resolves")
         .iter()

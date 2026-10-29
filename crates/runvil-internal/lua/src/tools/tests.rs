@@ -4,7 +4,7 @@
 use mlua::{Lua, Value};
 use serde_json::json;
 
-use super::decode::{adhoc_params_schema, model_tool_name, tool_name};
+use super::decode::{adhoc_params_schema, model_tool_name, tool_id};
 use super::userdata::LuaToolHandle;
 use crate::test_vm::{TestVm, echo_tool};
 
@@ -41,10 +41,10 @@ fn string(lua: &Lua, text: &str) -> Value {
 fn tool_name_accepts_an_id_and_refuses_a_string_without_a_slash() {
     let lua = Lua::new();
     assert_eq!(
-        tool_name(&string(&lua, "tools/echo")).expect("an id decodes"),
+        tool_id(&string(&lua, "tools/echo")).expect("an id decodes"),
         "tools/echo"
     );
-    let error = tool_name(&string(&lua, "grab")).expect_err("a bare name is not an id");
+    let error = tool_id(&string(&lua, "grab")).expect_err("a bare name is not an id");
     assert!(
         error
             .to_string()
@@ -86,7 +86,7 @@ fn tool_name_reads_the_id_off_a_tool_object() {
         .create_userdata(echo_handle())
         .expect("a fresh VM creates a tool object");
     assert_eq!(
-        tool_name(&Value::UserData(userdata)).expect("a tool object decodes"),
+        tool_id(&Value::UserData(userdata)).expect("a tool object decodes"),
         "tools/echo",
         "a tool object stands for its id, not its wire name"
     );
@@ -95,7 +95,7 @@ fn tool_name_reads_the_id_off_a_tool_object() {
 #[test]
 fn tool_name_rejects_tables_other_types_and_other_userdata() {
     let lua = Lua::new();
-    let number = tool_name(&Value::Integer(42)).expect_err("a number is not a tool");
+    let number = tool_id(&Value::Integer(42)).expect_err("a number is not a tool");
     assert!(
         number
             .to_string()
@@ -106,7 +106,7 @@ fn tool_name_rejects_tables_other_types_and_other_userdata() {
         .load("{ id = 'tools/echo', name = 'tools_echo' }")
         .eval::<mlua::Table>()
         .expect("the record evaluates");
-    let table = tool_name(&Value::Table(record)).expect_err("a record is not a tool");
+    let table = tool_id(&Value::Table(record)).expect_err("a record is not a tool");
     assert!(
         table.to_string().contains("got table"),
         "a plain record is not a tool: {table}"
@@ -116,7 +116,7 @@ fn tool_name_rejects_tables_other_types_and_other_userdata() {
     let foreign = lua
         .create_userdata(Foreign)
         .expect("a fresh VM creates a foreign userdata");
-    let other = tool_name(&Value::UserData(foreign)).expect_err("not a tool object");
+    let other = tool_id(&Value::UserData(foreign)).expect_err("not a tool object");
     assert!(
         other
             .to_string()
