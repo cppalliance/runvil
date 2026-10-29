@@ -99,7 +99,8 @@ fn typed_error_survives_the_lua_external_boundary() {
     let original = Error::OutOfScopeToolCall {
         name: "echo".to_owned(),
         global_exists: false,
-        in_scope: vec!["other".to_owned()],
+        has_dynamic_set: false,
+        static_aliases: vec!["other".to_owned()],
     };
     let display = original.to_string();
     let external = mlua::Error::external(original);

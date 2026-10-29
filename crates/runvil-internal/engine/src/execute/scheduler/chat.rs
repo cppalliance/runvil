@@ -442,7 +442,8 @@ impl ArrivedRound {
             return Err(Error::OutOfScopeToolCall {
                 name: rogue.name().to_owned(),
                 global_exists: scope.global_exists(rogue.name()),
-                in_scope: scope
+                has_dynamic_set: !scope.frozen.dynamic_set.is_empty(),
+                static_aliases: scope
                     .frozen
                     .static_set
                     .iter()

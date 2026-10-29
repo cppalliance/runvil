@@ -15,11 +15,11 @@ use runvil_types::packs::PackId;
 use runvil_types::tools::{ToolCatalog, ToolId, ToolInfo};
 use serde_json::{Value, json};
 
-use crate::error::{SetRule, SetTool};
+use crate::error::{SetEvidence, SetRule, SetTool};
 use crate::execute::PackToolSets;
 use crate::lua::{
-    DiscoveryTool, OfferMode, OfferedTool, RenderedTools, SectionVm, ToolBinding, ToolSet,
-    current_catalog_packs, current_dynamic_set, current_tool_bindings, wire_name_of,
+    DiscoveryTool, NonEmpty, OfferMode, OfferedTool, RenderedTools, SectionVm, ToolBinding,
+    ToolSet, current_catalog_packs, current_dynamic_set, current_tool_bindings, wire_name_of,
 };
 use crate::model::ToolSchema;
 use crate::{Error, Result};
@@ -60,6 +60,10 @@ fn set_mut(sets: &mut PackToolSets<ToolInfo>, set: OfferMode) -> &mut Vec<ToolIn
 pub(super) struct SectionOffers {
     static_tools: Vec<OfferedTool>,
     dynamic_tools: Vec<OfferedTool>,
+    /// Each catalog Pack the offers name, once, in the order the section
+    /// first offered one of its tools, into either set. This is the only
+    /// copy of that order: [`offered_packs`] takes each Pack's slot from
+    /// it, so nothing else may produce or reorder the sequence.
     packs: Vec<PackId>,
 }
 
@@ -105,11 +109,15 @@ impl SectionOffers {
     }
 }
 
-/// Each catalog Pack `offers` names, once, in the order the section first
-/// offered one of its tools, into either set, with the catalog tools
-/// offered from it into each set, in offer order: what a render is asked.
+/// Each catalog Pack `offers` names in `SectionOffers::packs` order, with
+/// the catalog tools offered from it into each set, in offer order: what a
+/// render is asked.
 pub(super) fn offered_packs(offers: &SectionOffers) -> Vec<PackToolSets<ToolInfo>> {
-    let mut packs: Vec<PackToolSets<ToolInfo>> = Vec::new();
+    let mut packs: Vec<PackToolSets<ToolInfo>> = offers
+        .packs
+        .iter()
+        .map(|pack| PackToolSets::new(pack.clone(), Vec::new(), Vec::new()))
+        .collect();
     for (set, tools) in [
         (OfferMode::Static, &offers.static_tools),
         (OfferMode::Dynamic, &offers.dynamic_tools),
@@ -118,17 +126,11 @@ pub(super) fn offered_packs(offers: &SectionOffers) -> Vec<PackToolSets<ToolInfo
             let OfferedTool::Catalog(info) = tool else {
                 continue;
             };
-            let pack = info.id.pack();
-            let index = if let Some(index) = packs.iter().position(|held| held.pack == pack) {
-                index
-            } else {
-                packs.push(PackToolSets::new(pack, Vec::new(), Vec::new()));
-                packs.len() - 1
-            };
-            set_mut(&mut packs[index], set).push(info.clone());
+            if let Some(slot) = packs.iter_mut().find(|held| held.pack == info.id.pack()) {
+                set_mut(slot, set).push(info.clone());
+            }
         }
     }
-    packs.sort_by_key(|sets| offers.packs.iter().position(|pack| *pack == sets.pack));
     packs
 }
 
@@ -243,11 +245,10 @@ fn check_render(
     };
     if packs(asked) != packs(&answered) {
         return Err(Error::ToolSets {
-            rule: SetRule::RenderedPacks {
+            evidence: SetEvidence::RenderedPacks {
                 asked: packs(asked),
                 answered: packs(&answered),
             },
-            tools: Vec::new(),
         });
     }
     answered
@@ -280,11 +281,16 @@ fn check_set(
     catalog: &ToolCatalog,
 ) -> Result<Vec<ToolInfo>> {
     let refuse = |rule: SetRule, tool: &ToolInfo| Error::ToolSets {
-        rule,
-        tools: vec![SetTool {
-            id: tool.id.clone(),
-            set,
-        }],
+        evidence: SetEvidence::Tools {
+            rule,
+            tools: NonEmpty::new(
+                SetTool {
+                    id: tool.id.clone(),
+                    set,
+                },
+                Vec::new(),
+            ),
+        },
     };
     let mut kept: Vec<ToolInfo> = Vec::with_capacity(tools.len());
     for tool in tools {
@@ -449,8 +455,10 @@ fn refuse_clash(static_set: &[Laid], dynamic_set: &[Laid]) -> Result<()> {
         };
         if let Some(first) = taken.get(wire_name) {
             return Err(Error::ToolSets {
-                rule: SetRule::UniqueWireName(wire_name.to_owned()),
-                tools: vec![first.clone(), site],
+                evidence: SetEvidence::Tools {
+                    rule: SetRule::UniqueWireName(wire_name.to_owned()),
+                    tools: NonEmpty::new(first.clone(), vec![site]),
+                },
             });
         }
         taken.insert(wire_name, site);

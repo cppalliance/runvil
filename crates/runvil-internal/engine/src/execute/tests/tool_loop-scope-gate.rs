@@ -45,19 +45,23 @@ fn model_calling_an_offered_but_unscoped_tool_is_a_hard_error() {
         Error::OutOfScopeToolCall {
             name,
             global_exists,
-            in_scope,
+            has_dynamic_set,
+            static_aliases,
         } => {
             assert_eq!(name, "global_tool");
             assert!(*global_exists, "the name is an offered tool's wire name");
-            assert_eq!(in_scope, &["scoped".to_owned()]);
+            assert!(!*has_dynamic_set, "the section offers no Dynamic Set");
+            assert_eq!(static_aliases, &["scoped".to_owned()]);
         }
         other => panic!("expected OutOfScopeToolCall, got {other:?}"),
     }
+    let message = error.to_string();
     assert!(
-        error
-            .to_string()
-            .ends_with("[\"scoped\"] (a catalog tool that was not offered in this section)"),
-        "error message must hint offered-but-unscoped: {error}"
+        message.ends_with(
+            "aliases this section offers: [\"scoped\"] \
+             (a catalog tool that was not offered in this section)"
+        ),
+        "the alias list ends before the offered-but-unscoped hint: {message}"
     );
     assert_eq!(gateway.call_count(), 1, "the rejected round is the last");
 }
@@ -79,22 +83,24 @@ fn model_calling_an_advertised_tool_by_canonical_id_gets_no_not_offered_suffix()
         Error::OutOfScopeToolCall {
             name,
             global_exists,
-            in_scope,
+            has_dynamic_set,
+            static_aliases,
         } => {
             assert_eq!(name, "tools/scoped");
             assert!(!*global_exists, "an id is no offered tool's wire name");
-            assert_eq!(in_scope, &["scoped".to_owned()]);
+            assert!(!*has_dynamic_set, "the section offers no Dynamic Set");
+            assert_eq!(static_aliases, &["scoped".to_owned()]);
         }
         other => panic!("expected OutOfScopeToolCall, got {other:?}"),
     }
     let message = error.to_string();
     assert!(
-        message.ends_with("[\"scoped\"]"),
-        "error message must end with the in-scope list: {message}"
-    );
-    assert!(
         !message.contains("not offered in this section"),
         "an advertised tool's id must not hint offered-but-unscoped: {message}"
+    );
+    assert!(
+        message.ends_with("aliases this section offers: [\"scoped\"]"),
+        "the alias list ends the message: this section has no Dynamic Set: {message}"
     );
 }
 
@@ -113,14 +119,16 @@ fn model_calling_a_defined_but_unoffered_adhoc_tool_gets_no_not_offered_suffix()
         Error::OutOfScopeToolCall {
             name,
             global_exists,
-            in_scope,
+            has_dynamic_set,
+            static_aliases,
         } => {
             assert_eq!(name, "grab");
             assert!(
                 !*global_exists,
                 "an adhoc tool's name is no catalog tool's wire name"
             );
-            assert_eq!(in_scope, &["scoped".to_owned()]);
+            assert!(!*has_dynamic_set, "the section offers no Dynamic Set");
+            assert_eq!(static_aliases, &["scoped".to_owned()]);
         }
         other => panic!("expected OutOfScopeToolCall, got {other:?}"),
     }
@@ -181,23 +189,93 @@ fn model_calling_a_dynamic_set_tool_by_its_wire_name_gets_text_and_issues_no_cal
 
 #[test]
 fn with_dynamic_offers_a_name_outside_both_sets_fails_listing_only_the_static_set() {
-    // The in-scope list names the Static Set, the two discovery tools
-    // included, and none of the Dynamic Set's tools.
+    // The Static Set is what the list names, the two discovery tools
+    // included, and none of the Dynamic Set's tools. The message names the
+    // discovery tools because this section has them.
     let gateway = ScriptedChat::new(vec![calls(&[("call_1", "rogue", "{}")])]);
     let trace = scoped_loop(DYNAMIC_OFFERS).chat(&gateway).run();
     match trace.error().inner() {
         Error::OutOfScopeToolCall {
             name,
             global_exists,
-            in_scope,
+            has_dynamic_set,
+            static_aliases,
         } => {
             assert_eq!(name, "rogue");
             assert!(!*global_exists, "the name is no offered tool");
-            assert_eq!(in_scope, &["scoped", "GetDynamicTools", "CallDynamicTool"]);
+            assert!(*has_dynamic_set, "the section offers a Dynamic Set");
+            assert_eq!(
+                static_aliases,
+                &["scoped", "GetDynamicTools", "CallDynamicTool"]
+            );
         }
         other => panic!("expected OutOfScopeToolCall, got {other:?}"),
     }
+    let message = trace.error().inner().to_string();
+    assert!(
+        message.ends_with(
+            "; a Dynamic Set tool is reached through GetDynamicTools and CallDynamicTool"
+        ),
+        "the message names the discovery tools this section offers: {message}"
+    );
     assert_eq!(gateway.call_count(), 1, "the rejected round is the last");
+}
+
+#[test]
+fn a_section_without_a_dynamic_set_is_told_nothing_about_the_discovery_tools() {
+    // A section whose Dynamic Set holds nothing freezes no discovery tool,
+    // so naming one would point a model at a tool its round cannot call.
+    let gateway = ScriptedChat::new(vec![calls(&[("call_1", "rogue", "{}")])]);
+    let trace = scoped_loop("").chat(&gateway).run();
+    let message = trace.error().inner().to_string();
+    assert!(
+        message.ends_with("aliases this section offers: [\"scoped\"]"),
+        "the message ends at the Static Set: {message}"
+    );
+    assert!(
+        !message.contains("GetDynamicTools"),
+        "a section with no Dynamic Set names no discovery tool: {message}"
+    );
+}
+
+#[test]
+fn a_static_tool_wearing_a_discovery_wire_name_does_not_claim_a_dynamic_set() {
+    // The discovery clause reports the section's Dynamic Set, not the
+    // aliases the Static Set happens to hold. A catalog tool may take a
+    // discovery tool's wire name while no Dynamic Set holds a tool, so a
+    // section offering both names as ordinary static aliases has no
+    // Dynamic Set to point at and must claim none.
+    let gateway = ScriptedChat::new(vec![calls(&[("call_1", "rogue", "{}")])]);
+    let source = one_section(&format!(
+        "tools.offer('tools/discover')\ntools.offer('tools/call')\n{LOOP_TO_TEXT}"
+    ));
+    let trace = loop_scenario(source)
+        .offer("GetDynamicTools", scoped_tool("discover", "Discover.").0)
+        .offer("CallDynamicTool", scoped_tool("call", "Call.").0)
+        .chat(&gateway)
+        .run();
+    let error = trace.error().inner();
+    match error {
+        Error::OutOfScopeToolCall {
+            has_dynamic_set,
+            static_aliases,
+            ..
+        } => {
+            assert!(!*has_dynamic_set, "the section holds no Dynamic Set tool");
+            assert_eq!(
+                static_aliases,
+                &["GetDynamicTools".to_owned(), "CallDynamicTool".to_owned()],
+                "the discovery wire names are ordinary static aliases here"
+            );
+        }
+        other => panic!("expected OutOfScopeToolCall, got {other:?}"),
+    }
+    let message = error.to_string();
+    assert!(
+        !message.contains("a Dynamic Set tool is reached"),
+        "a section with no Dynamic Set claims no dynamic route, even when its \
+         static aliases wear the discovery wire names: {message}"
+    );
 }
 
 #[test]
@@ -217,11 +295,13 @@ fn model_calling_pure_unknown_tool_is_a_hard_error() {
         Error::OutOfScopeToolCall {
             name,
             global_exists,
-            in_scope,
+            has_dynamic_set,
+            static_aliases,
         } => {
             assert_eq!(name, "nonexistent");
             assert!(!*global_exists, "the name is no offered tool");
-            assert_eq!(in_scope, &["echo".to_owned()]);
+            assert!(!*has_dynamic_set, "the section offers no Dynamic Set");
+            assert_eq!(static_aliases, &["echo".to_owned()]);
         }
         other => panic!("expected OutOfScopeToolCall, got {other:?}"),
     }

@@ -200,7 +200,7 @@ fn an_out_of_scope_tool_name_fails_the_round_with_out_of_scope_tool() {
     assert_eq!(
         trace.text(),
         "out_of_scope_tool|rogue|tool \"rogue\" is not in this section's scope; \
-         in-scope aliases: [\"echo\"]"
+         aliases this section offers: [\"echo\"]"
     );
     let events = trace.events();
     assert!(
@@ -225,11 +225,12 @@ fn an_out_of_scope_tool_name_fails_the_round_with_out_of_scope_tool() {
         Error::OutOfScopeToolCall {
             name,
             global_exists,
-            in_scope,
+            static_aliases,
+            ..
         } => {
             assert_eq!(name, "rogue");
             assert!(!global_exists, "rogue is bound nowhere");
-            assert_eq!(in_scope, &["echo".to_owned()]);
+            assert_eq!(static_aliases, &["echo".to_owned()]);
         }
         other => panic!("expected OutOfScopeToolCall, got {other:?}"),
     }

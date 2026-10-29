@@ -157,10 +157,12 @@ fn the_scope_gate_says_a_name_exists_only_for_a_catalog_tools_own_wire_name() {
         match trace.error().inner() {
             Error::OutOfScopeToolCall {
                 global_exists,
-                in_scope,
+                has_dynamic_set,
+                static_aliases,
                 ..
             } => {
-                assert_eq!(in_scope, &["gh_search".to_owned()]);
+                assert!(!has_dynamic_set, "the section holds no Dynamic Set tool");
+                assert_eq!(static_aliases, &["gh_search".to_owned()]);
                 *global_exists
             }
             other => panic!("expected OutOfScopeToolCall, got {other:?}"),

@@ -14,13 +14,15 @@
 
 use runvil_types::ids::TaskId;
 
+use crate::lua::DiscoveryTool;
+
 mod convert;
 mod sets;
 #[cfg(test)]
 mod tests;
 mod value;
 
-pub(crate) use sets::{SetRule, SetTool};
+pub(crate) use sets::{SetEvidence, SetRule, SetTool};
 
 /// A type-erased owned error cause used by the internal error type.
 type BoxedSource = Box<dyn std::error::Error + Send + Sync>;
@@ -39,6 +41,41 @@ fn join_task_ids(tasks: &[TaskId]) -> String {
 /// own text, or nothing when there is no cause.
 fn cause_suffix(cause: Option<&BoxedSource>) -> String {
     cause.map(|cause| format!(": {cause}")).unwrap_or_default()
+}
+
+/// The [`Error::OutOfScopeToolCall`] message: the name the model tried,
+/// the Static Set's aliases labelled as what they are, the offered-but-
+/// unscoped hint when the name is a catalog tool's wire name, and where a
+/// Dynamic Set tool is reached from when the section has a Dynamic Set.
+fn out_of_scope_message(
+    name: &str,
+    global_exists: bool,
+    static_aliases: &[String],
+    has_dynamic_set: bool,
+) -> String {
+    let hint = if global_exists {
+        " (a catalog tool that was not offered in this section)"
+    } else {
+        ""
+    };
+    // A section whose Dynamic Set holds nothing freezes no discovery tool,
+    // so naming one would point the model at a tool it cannot call. The
+    // caller holds that fact; scanning `static_aliases` for the discovery
+    // wire names cannot recover it, because a catalog tool may take one of
+    // those names while no Dynamic Set holds a tool.
+    let dynamic_set = if has_dynamic_set {
+        format!(
+            "; a Dynamic Set tool is reached through {} and {}",
+            DiscoveryTool::Search.wire_name(),
+            DiscoveryTool::Call.wire_name()
+        )
+    } else {
+        String::new()
+    };
+    format!(
+        "tool {name:?} is not in this section's scope; aliases this section offers: \
+         {static_aliases:?}{hint}{dynamic_set}"
+    )
 }
 
 /// The call name [`Error::CallDepthExceeded`] reports for a nesting that
@@ -154,14 +191,11 @@ pub(crate) enum Error {
     /// render answered, and the rule.
     ///
     /// Constructed only by the merge.
-    #[error("{}", sets::sets_message(.rule, .tools))]
+    #[error("{}", sets::sets_message(.evidence))]
     ToolSets {
-        /// The rule the sets broke.
-        rule: SetRule,
-        /// Each tool that broke it: both tools of a clash, the one
-        /// rendered tool a render rule refuses, or none when the render
-        /// answered other Packs.
-        tools: Vec<SetTool>,
+        /// What broke the rule: the tools that broke one, or the Packs a
+        /// render answered.
+        evidence: SetEvidence,
     },
 
     /// A `{{ }}` prose substitution failed (unknown/missing path, unclosed).
@@ -230,14 +264,25 @@ pub(crate) enum Error {
     /// This is the model tool loop's error alone: a script `tools.call`
     /// resolves against the run's whole catalog and fails with
     /// [`Error::UnboundToolCall`] instead.
-    #[error("tool {name:?} is not in this section's scope; in-scope aliases: {in_scope:?}{}", if *.global_exists { " (a catalog tool that was not offered in this section)" } else { "" })]
+    #[error(
+        "{}",
+        out_of_scope_message(.name, *.global_exists, .static_aliases, *.has_dynamic_set)
+    )]
     OutOfScopeToolCall {
         /// The alias or identifier the model tried to use.
         name: String,
         /// Whether the name is a catalog tool's wire name.
         global_exists: bool,
-        /// The Static Set's wire names.
-        in_scope: Vec<String>,
+        /// Whether the section has a Dynamic Set holding a tool, and so
+        /// offers the two discovery tools.
+        ///
+        /// The caller reads it from the frozen sets. The message must not
+        /// infer it from `static_aliases`: a catalog tool may take a
+        /// discovery tool's wire name while no Dynamic Set holds a tool.
+        has_dynamic_set: bool,
+        /// The Static Set's wire names: this section's own offers, with the
+        /// two discovery tools when a Dynamic Set holds a tool.
+        static_aliases: Vec<String>,
     },
 
     /// A `tools.call` named no adhoc tool and no tool in the run's catalog.

@@ -5,12 +5,27 @@
 
 use super::*;
 
-/// A failed merge's rule and the tools it names.
+/// A failed merge's rule and the tools it names, as a vector so a case can
+/// write the expected list inline.
 #[track_caller]
 fn broken(error: Error) -> (SetRule, Vec<SetTool>) {
     match error {
-        Error::ToolSets { rule, tools } => (rule, tools),
-        other => panic!("expected a broken merge rule, got {other:?}"),
+        Error::ToolSets {
+            evidence: SetEvidence::Tools { rule, tools },
+        } => (rule, tools.into_vec()),
+        other => panic!("expected a broken merge rule naming tools, got {other:?}"),
+    }
+}
+
+/// The Packs a failed render rule was asked about, and the Packs it was
+/// answered with.
+#[track_caller]
+fn render_evidence(error: Error) -> (Vec<PackId>, Vec<PackId>) {
+    match error {
+        Error::ToolSets {
+            evidence: SetEvidence::RenderedPacks { asked, answered },
+        } => (asked, answered),
+        other => panic!("expected a broken render rule naming Packs, got {other:?}"),
     }
 }
 
@@ -59,14 +74,8 @@ fn rule_one_refuses_an_answer_whose_packs_are_not_the_ones_asked_in_offer_order(
         let answered_packs = answered.iter().map(|sets| sets.pack.clone()).collect();
         let error = merge_tool_sets(&offers, answered, &tools).expect_err(case);
         assert_eq!(
-            broken(error),
-            (
-                SetRule::RenderedPacks {
-                    asked: vec![pack("gh"), pack("web")],
-                    answered: answered_packs,
-                },
-                Vec::new()
-            ),
+            render_evidence(error),
+            (vec![pack("gh"), pack("web")], answered_packs),
             "{case}"
         );
     }
@@ -187,5 +196,47 @@ fn each_set_keeps_offer_order_around_a_render_that_reorders_and_adds_model_only_
     assert_eq!(
         sited(&frozen.dynamic_set),
         ["late=adhoc/late", "gh_one=gh/one", "gh_added=gh/added"]
+    );
+}
+
+#[test]
+fn the_stored_pack_order_is_the_whole_of_what_a_render_is_asked() {
+    // `SectionOffers::packs` is the only producer of the Pack order, so a
+    // Pack it does not name is never asked: the offered tools still fill
+    // the slots it does name, and nothing else gains one. A second
+    // producer would ask a Pack the section never stored, at the front.
+    let offers = SectionOffers {
+        static_tools: vec![listed("web/fetch")],
+        dynamic_tools: vec![listed("gh/one")],
+        packs: vec![pack("web")],
+    };
+    assert_eq!(
+        offered_packs(&offers),
+        [sets("web", vec![info("web/fetch")], Vec::new())],
+        "a Pack outside the stored order is asked nowhere"
+    );
+}
+
+#[test]
+fn a_render_rules_message_names_both_asked_and_answered_packs_and_never_renders_subjectless() {
+    // The rule that names Packs carries `asked` and `answered` as its own
+    // shape, so its message can never render with no subject: the counts
+    // and both lists are the evidence, not tools it was handed. A
+    // `RenderedPacks` rule that could arrive with no tool list is the
+    // shape this variant replaces.
+    let tools = catalog([info("web/fetch"), info("gh/one")]);
+    let offers = SectionOffers {
+        static_tools: vec![listed("web/fetch")],
+        dynamic_tools: vec![listed("gh/one")],
+        packs: vec![pack("gh"), pack("web")],
+    };
+    let asked = offered_packs(&offers);
+    let error = merge_tool_sets(&offers, asked.into_iter().rev().collect(), &tools)
+        .expect_err("the render answered the Packs in the wrong order");
+    assert_eq!(
+        error.to_string(),
+        "the render answered the Packs [web, gh] where the section offered the Packs [gh, web]; \
+         a render answers each offered Pack once, in offer order",
+        "the message names both the asked and the answered Packs"
     );
 }

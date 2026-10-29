@@ -284,7 +284,7 @@ Ten steps, one commit each. Order is by cause, not by file count. The Pack roste
 
 <step-4>
 
-### Step 4: One producer for the Pack order and self-evidencing tool-set errors
+### Step 4: One producer for the Pack order and self-evidencing tool-set errors [completed]
 
 - Component: Offers and errors
 - Tests: `cargo nextest run --locked -p runvil-engine`

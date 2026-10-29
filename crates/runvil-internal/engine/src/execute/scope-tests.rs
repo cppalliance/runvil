@@ -287,8 +287,11 @@ fn rule_five_fails_a_wire_name_used_twice_within_one_set_or_across_the_sets() {
     let tools = catalog([info("dup/a.b"), info("dup/a/b"), info("web/search")]);
     let clash = |error: Error| match error {
         Error::ToolSets {
-            rule: SetRule::UniqueWireName(wire_name),
-            tools,
+            evidence:
+                SetEvidence::Tools {
+                    rule: SetRule::UniqueWireName(wire_name),
+                    tools,
+                },
         } => (
             wire_name,
             tools
