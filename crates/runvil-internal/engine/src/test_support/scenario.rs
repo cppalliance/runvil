@@ -344,9 +344,10 @@ impl Scenario {
             signal,
             signalled: Cell::new(false),
         };
-        let run = refused
-            .is_none()
-            .then(|| self.prefill.start(Arc::new(prompt), &self.args, ctx));
+        let run = refused.is_none().then(|| {
+            self.prefill
+                .start(Arc::new(prompt), &self.args.as_str().into(), ctx)
+        });
         let canceller = run.as_ref().zip(signalled).map(|(run, signalled)| {
             let cancel = run.cancel_handle();
             thread::spawn(move || {
@@ -391,7 +392,8 @@ impl Scenario {
         if let Some(refused) = refused {
             panic!("expected the prepare to accept the run, got {refused:?}");
         }
-        self.prefill.start(Arc::new(prompt), &self.args, ctx)
+        self.prefill
+            .start(Arc::new(prompt), &self.args.as_str().into(), ctx)
     }
 
     /// Parses the source and builds the run's context, prepared unless the
@@ -440,7 +442,7 @@ struct Prefill {
 impl Prefill {
     /// Builds the run of `prompt` under `config` with the state filled in,
     /// or as [`Run::new`] builds it when there is nothing to fill.
-    fn start(self, prompt: Arc<Prompt>, args: &str, config: RunContext) -> Run {
+    fn start(self, prompt: Arc<Prompt>, args: &serde_json::Value, config: RunContext) -> Run {
         if self.models.is_none() && !self.raw_shims {
             return Run::new(prompt, args, config);
         }

@@ -33,7 +33,7 @@ fn test_state(prompt: &Prompt) -> RunState {
 /// The state a run of `prompt` assembles from `config`, as `Run::new`
 /// assembles it.
 fn state_over(prompt: &Prompt, config: RunContext) -> RunState {
-    RunState::new(Arc::new(prompt.clone()), "", config)
+    RunState::new(Arc::new(prompt.clone()), &"".into(), config)
 }
 
 #[test]
@@ -66,6 +66,55 @@ fn derived_values_come_from_the_prompt_and_limits() {
         runvil_parser::detail::sections(&prompt).len()
     );
     assert_eq!(ctx.max_tool_iterations(), 24);
+}
+
+/// The args text and `argv` a run of `prompt` with `args` starts from.
+fn args_of(prompt: &str, args: &serde_json::Value) -> (String, Option<serde_json::Value>) {
+    let prompt = Prompt::parse(prompt, "run-context-test")
+        .0
+        .expect("the test prompt parses");
+    let ctx = RunState::new(
+        Arc::new(prompt),
+        args,
+        RunContext::new(
+            "run-context-test",
+            TEST_SEED,
+            runvil_types::timestamp::Timestamp::UNIX_EPOCH,
+        ),
+    );
+    (
+        ctx.args().to_string(),
+        ctx.argv().map(|argv| (**argv).clone()),
+    )
+}
+
+#[test]
+fn a_string_argument_is_the_args_text_as_it_stands() {
+    let source = concat!(
+        "---\nname: t\ndescription: d\nrunvil: 0\n---\n\n",
+        "# Title\n\n## Only\n\ndone\n",
+    );
+    assert_eq!(
+        args_of(source, &serde_json::json!("two words")),
+        (
+            "two words".to_owned(),
+            Some(serde_json::json!({ "prose": "two words" }))
+        )
+    );
+}
+
+#[test]
+fn any_other_argument_is_its_json_text_and_a_structured_prompts_argv() {
+    let source = concat!(
+        "---\nname: t\ndescription: d\nrunvil: 0\n",
+        "args:\n  topic:\n    type: string\n    description: the topic\n---\n\n",
+        "# Title\n\n## Only\n\ndone\n",
+    );
+    let args = serde_json::json!({ "topic": "cats" });
+    assert_eq!(
+        args_of(source, &args),
+        (r#"{"topic":"cats"}"#.to_owned(), Some(args))
+    );
 }
 
 #[test]

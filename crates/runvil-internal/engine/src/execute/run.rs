@@ -133,6 +133,11 @@ impl Run {
     /// Builds a run of `prompt` with the arguments `args` and the context
     /// `config`.
     ///
+    /// A JSON string in `args` is the run's argument text as it stands;
+    /// any other value is its JSON text. The prompt's `args` global and
+    /// `{{ args }}` read that text, and `argv` is derived from it under the
+    /// prompt's `args:` declaration.
+    ///
     /// A context that skipped
     /// [`RunContext::prepare`](super::RunContext::prepare) runs with an
     /// empty model set. Its tool set holds whatever catalog and roster the
@@ -144,7 +149,7 @@ impl Run {
     /// filesystem declares no store, or when the store's backend fails its
     /// probe.
     #[must_use]
-    pub fn new(prompt: Arc<Prompt>, args: &str, config: RunContext) -> Run {
+    pub fn new(prompt: Arc<Prompt>, args: &serde_json::Value, config: RunContext) -> Run {
         // The context's one flag, held here so a stillborn run still has
         // the handle `cancel` and `cancel_handle` name.
         let cancel = config.cancel.clone();
@@ -163,7 +168,7 @@ impl Run {
     #[cfg(test)]
     pub(crate) fn new_for_test(
         prompt: Arc<Prompt>,
-        args: &str,
+        args: &serde_json::Value,
         config: RunContext,
         edit: impl FnOnce(RunState) -> RunState,
     ) -> Run {
@@ -304,7 +309,11 @@ impl Run {
 /// prompt that is not a supported runvil prompt, or [`Error::Store`]
 /// when the handle declares no store or the store's backend fails the
 /// probe.
-fn prepare_state(prompt: Arc<Prompt>, args: &str, config: RunContext) -> Result<RunState> {
+fn prepare_state(
+    prompt: Arc<Prompt>,
+    args: &serde_json::Value,
+    config: RunContext,
+) -> Result<RunState> {
     match prompt.frontmatter().runvil() {
         Some(0) => {}
         Some(other) => return Err(Error::UnsupportedVersion(other)),

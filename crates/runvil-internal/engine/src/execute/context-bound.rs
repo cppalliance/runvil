@@ -81,6 +81,15 @@ pub(super) fn bound_model_set(prompt: &Prompt, bindings: &ModelBindings) -> Mode
     set
 }
 
+/// The run's argument text for the arguments `args`: a JSON string as it
+/// stands, and any other value as its JSON text.
+pub(super) fn args_text(args: &serde_json::Value) -> String {
+    match args {
+        serde_json::Value::String(text) => text.clone(),
+        value => value.to_string(),
+    }
+}
+
 /// Derives a section's `argv` from the args string under the prompt's
 /// declaration: a default-declared prompt wraps the interface prose into
 /// the default shape (`argv.prose`, with the empty string present, not

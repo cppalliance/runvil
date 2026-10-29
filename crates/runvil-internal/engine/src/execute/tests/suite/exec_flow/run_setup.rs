@@ -58,7 +58,7 @@ fn a_store_backend_that_refuses_its_session_fails_the_run_at_the_first_step() {
     let vfs = VfsRef::builder().store("/", RefusingStore).build();
     let mut run = crate::execute::run::Run::new(
         Arc::new(prompt.expect("the fixture parses")),
-        "",
+        &"".into(),
         test_context(EXECUTION).with_vfs(vfs),
     );
     match run.step() {

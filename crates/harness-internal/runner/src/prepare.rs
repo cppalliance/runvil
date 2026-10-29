@@ -219,19 +219,6 @@ pub async fn prepare(
         .map_err(|(error, _)| error)
 }
 
-/// The Engine's argument text for `args` under `prompt`'s declaration: a
-/// default-declared prompt reads a JSON string as its prose verbatim, and
-/// every other value, or any value under a structured declaration, goes as
-/// its JSON text.
-fn args_text(prompt: &Prompt, args: &serde_json::Value) -> String {
-    match args {
-        serde_json::Value::String(prose) if prompt.frontmatter().args().is_default() => {
-            prose.clone()
-        }
-        value => value.to_string(),
-    }
-}
-
 /// [`prepare`], whose failure comes beside whether it ended the run
 /// `Cancelled`, which only a refusal after the run's cancel fired does.
 /// That one reading of the cancel decides the record, and the caller
@@ -354,8 +341,7 @@ pub(crate) async fn prepare_noting_cancel(
         return Err((PrepareError::Refused { run_id, error }, cancelled));
     }
 
-    let args = args_text(&prompt, args);
-    let run = Run::new(Arc::new(prompt), &args, ctx);
+    let run = Run::new(Arc::new(prompt), args, ctx);
     let performers = Performers {
         broker,
         tool: Arc::new(snapshot),

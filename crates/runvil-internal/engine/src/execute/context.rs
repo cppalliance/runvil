@@ -126,7 +126,7 @@ impl RunState {
     /// derives from `config`'s seed and `when` renders `config`'s
     /// `started_at`, so two contexts over the same inputs agree on both.
     #[must_use]
-    pub(super) fn new(prompt: Arc<Prompt>, args: &str, config: RunContext) -> Self {
+    pub(super) fn new(prompt: Arc<Prompt>, args: &serde_json::Value, config: RunContext) -> Self {
         let RunContext {
             name,
             seed,
@@ -158,7 +158,8 @@ impl RunState {
             Arc::clone(&execution),
             report_debug,
         ));
-        let derived_argv = bound::derive_argv(&prompt, args).map(Arc::from);
+        let args = bound::args_text(args);
+        let derived_argv = bound::derive_argv(&prompt, &args).map(Arc::from);
         Self {
             prompt,
             nonce: GuardNonce::from_seed(&seed),

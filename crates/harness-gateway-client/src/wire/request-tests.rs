@@ -69,7 +69,7 @@ fn tool_round(offered: &[Offered]) -> Round {
     let catalog = ToolCatalog::new(tools).expect("the offered tools are distinct");
     let (ctx, requirements) = ctx.with_tools(catalog).prepare(&prompt, Some(model));
     assert!(requirements.refusal().is_none(), "the round prepares");
-    let mut run = Run::new(Arc::new(prompt), "", ctx);
+    let mut run = Run::new(Arc::new(prompt), &"".into(), ctx);
     let mut rounds = Vec::new();
     let result = loop {
         let effects = match run.step() {

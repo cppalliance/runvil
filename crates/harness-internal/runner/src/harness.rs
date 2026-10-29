@@ -67,9 +67,8 @@ pub struct RunRequest {
     /// The prompt's Markdown source. The Harness reads the prompt only
     /// from this text.
     pub source: String,
-    /// The run's arguments. A prompt with the default `args:` declaration
-    /// reads a JSON string as its prose; any other value, or any value
-    /// for a structured declaration, reaches the prompt as its JSON text.
+    /// The run's arguments: a JSON string is the prompt's argument text as
+    /// it stands, and any other value is its JSON text.
     pub args: serde_json::Value,
     /// Text written to the prompt's declared `input:` file before the run
     /// starts.
