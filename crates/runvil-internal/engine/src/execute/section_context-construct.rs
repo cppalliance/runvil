@@ -119,6 +119,7 @@ impl SectionContext {
             },
             access,
             section.name(),
+            false,
         );
         // Setup runs on the bare VM and tears it down itself on failure:
         // the frame does not exist yet, so its `Drop` cannot own this path.
@@ -190,8 +191,7 @@ impl SectionContext {
         // pattern can assign it; the executor reads the value back at the
         // freeze (see the scheduler's H1-to-walk handoff).
         let sys_json = sys.to_json();
-        let mut setup = ctx.vm_setup(&sys_json, VmSeed::default(), access, title);
-        setup.argv_writable = true;
+        let setup = ctx.vm_setup(&sys_json, VmSeed::default(), access, title, true);
         // Setup runs on the bare VM and tears it down itself on failure:
         // the frame does not exist yet, so its `Drop` cannot own this path.
         let vm = section_vm::setup_section_vm(vm, &setup, read, resolve, render)?;

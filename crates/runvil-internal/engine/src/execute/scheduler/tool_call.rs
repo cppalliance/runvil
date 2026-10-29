@@ -175,7 +175,7 @@ impl ChainOps<'_> {
     /// tool.
     fn tool_route(&self, name: &str, site: &CallSite) -> Result<ToolRoute> {
         let chain = &*self.chain;
-        let vm = chain.frame()?.vm()?;
+        let vm = chain.frame()?.vm();
         let tool_set = chain.ctx.tool_set();
         if site.call_id().is_some() {
             let (binding, set) = vm
@@ -214,7 +214,7 @@ impl ChainOps<'_> {
     /// they are rendered, and from its live offers of both kinds before.
     fn section_call_counts(&mut self) -> Result<ToolCallCounts> {
         let chain = &mut *self.chain;
-        let vm = chain.frame()?.vm()?;
+        let vm = chain.frame()?.vm();
         let tool_set = chain.ctx.tool_set();
         let ids = if let Some(frozen) = vm.rendered_ids() {
             let mut ids = Vec::with_capacity(frozen.len());
@@ -364,7 +364,7 @@ impl ChainOps<'_> {
         let (caller, model) = match &site {
             CallSite::Script { .. } => (ToolCaller::Script, None),
             CallSite::Model { .. } | CallSite::Batch { .. } => {
-                (ToolCaller::Model, frame.vm()?.messages().last_model())
+                (ToolCaller::Model, frame.vm().messages().last_model())
             }
         };
         let mut origin = ToolCallOrigin::new(chain.ctx.execution(), chain.section_name(), caller)

@@ -51,11 +51,12 @@ pub(crate) struct VmSeed<'a> {
 pub(crate) struct SectionVmSetup<'a> {
     /// The run's argument string, installed as the `args` global.
     pub(crate) args: &'a str,
-    /// The run's `argv` (the parsed form of `args`; `None` installs nil).
-    pub(crate) argv: Option<&'a serde_json::Value>,
-    /// H1 only: `argv` installs writable, so the repair pattern can assign
-    /// it; every other section gets the frozen value.
-    pub(crate) argv_writable: bool,
+    /// The run's `argv` (the parsed form of `args`; `None` installs nil),
+    /// with its mode: writable for the H1 pass alone, so the repair pattern
+    /// can assign it, and frozen for every other section. The caller picks
+    /// the mode at construction, so a writable value cannot reach a
+    /// non-H1 section.
+    pub(crate) argv: crate::lua::Argv<'a>,
     /// The `sys` JSON the frame constructor built for this section entry.
     pub(crate) sys: &'a serde_json::Value,
     /// The chain step's VFS access capability backing the Lua `store`
@@ -132,13 +133,14 @@ where
     if setup.ui.is_some() {
         vm.allow_raw_model_ids();
     }
-    let argv = if setup.argv_writable {
-        crate::lua::Argv::Writable(setup.argv)
-    } else {
-        crate::lua::Argv::Frozen(setup.argv)
-    };
     let mut vm = vm
-        .inject_values_with_var(setup.args, setup.sys, setup.access, setup.seed.var, argv)
+        .inject_values_with_var(
+            setup.args,
+            setup.sys,
+            setup.access,
+            setup.seed.var,
+            setup.argv,
+        )
         .map_err(|failure| Error::from(failure.teardown(setup.emitter, setup.section_name)))?;
     match install_after_injection(&mut vm, setup, read, resolve, render) {
         Ok(()) => Ok(vm),

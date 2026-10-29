@@ -157,9 +157,9 @@ impl SectionContext {
     /// # Errors
     /// Returns [`Error::Lua`] if the VM's `var` cannot be
     /// converted back to JSON (the write guard keeps this conversion from
-    /// failing in practice), or [`Error::Internal`] if the VM is gone.
+    /// failing in practice).
     pub(super) fn read_var(&self) -> Result<serde_json::Value> {
-        Ok(self.vm()?.var()?)
+        Ok(self.vm().var()?)
     }
 
     /// Reads the H1 pass's `argv` back as JSON while the frame is live: the
@@ -167,10 +167,9 @@ impl SectionContext {
     /// repair. `None` reads as nil.
     ///
     /// # Errors
-    /// Returns [`Error::Lua`] when H1 left `argv` as
-    /// non-JSON data, or [`Error::Internal`] if the VM is gone.
+    /// Returns [`Error::Lua`] when H1 left `argv` as non-JSON data.
     pub(super) fn read_argv(&self) -> Result<Option<serde_json::Value>> {
-        self.vm()?.argv_json().map_err(Error::from)
+        self.vm().argv_json().map_err(Error::from)
     }
 
     /// Arms the completion flag: the block walk completed (a jump or
@@ -184,13 +183,10 @@ impl SectionContext {
     /// Borrows the frame's VM for the scheduler's coroutine driving (block
     /// start, yield validation, answer resume) and model resolution.
     ///
-    /// # Errors
-    /// Returns [`Error::Internal`] if the VM is gone, which only the frame's
-    /// own drop does - a live frame always holds it.
-    pub(super) fn vm(&self) -> Result<&SectionVm> {
-        self.vm.as_ref().ok_or(Error::internal(
-            "the section frame's VM lives until the frame's own drop",
-        ))
+    /// Infallible: only this frame's own [`Drop`] clears the slot, so a
+    /// live frame always holds its VM.
+    pub(super) fn vm(&self) -> &SectionVm {
+        live_vm(self.vm.as_ref())
     }
 
     /// The section entry's id: the value its Lua reads as `sys.id`, which
@@ -206,12 +202,11 @@ impl SectionContext {
     /// scheduler's pending prose, empty when no Markdown accumulated.
     ///
     /// # Errors
-    /// Returns [`Error::Lua`] if the guard cannot be installed, or
-    /// [`Error::Internal`] if the VM is gone.
+    /// Returns [`Error::Lua`] if the guard cannot be installed.
     pub(super) fn install_lazy_prose(&self, ctx: &RunState, template: &str) -> Result<()> {
         let template = template.to_owned();
         let render = prose_renderer(ctx, self.item.clone());
-        self.vm()?
+        self.vm()
             .install_lazy_prose(move |state: ProseState<'_>| render(&template, state))?;
         Ok(())
     }
@@ -246,11 +241,7 @@ impl SectionContext {
         let Self {
             vm, sys, counts, ..
         } = self;
-        let Some(vm) = vm.as_ref() else {
-            return Err(Error::internal(
-                "the section frame's VM lives until the frame's own drop",
-            ));
-        };
+        let vm = live_vm(vm.as_ref());
         let counts = match counts {
             Some(counts) => counts,
             None => counts.insert(install_first_call_state(vm, ctx, sys, ids)?),
@@ -278,6 +269,18 @@ impl SectionContext {
             call.listing = true;
         }
     }
+}
+
+/// The live VM a frame's slot holds: `Some` from construction until the
+/// frame's own [`Drop`] takes it for the teardown boundary, which is the
+/// only place the slot clears. Every accessor reads the slot through here,
+/// so the invariant is stated once.
+#[expect(
+    clippy::expect_used,
+    reason = "the slot clears only in this frame's own Drop, so a live frame always holds its VM"
+)]
+fn live_vm(vm: Option<&SectionVm>) -> &SectionVm {
+    vm.expect("a live frame holds its VM until drop")
 }
 
 /// The `{{ }}` renderer for one frame's prose templates, its own blocks'

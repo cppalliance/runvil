@@ -4,10 +4,14 @@
 use runvil_types::packs::PackId;
 use runvil_types::tools::ToolId;
 
+use serde_json::json;
+
 use super::*;
+use crate::execute::section_vm::VmSeed;
 use crate::execute::{UnavailablePack, UsablePack};
-use crate::lua::RosterEntry;
+use crate::lua::{Argv, RosterEntry};
 use crate::model::ThinkingMode;
+use crate::test_support::fresh_access;
 use crate::test_support::scenario::{TEST_SEED, test_model_with};
 
 fn test_prompt() -> Prompt {
@@ -67,6 +71,32 @@ fn derived_values_come_from_the_prompt_and_limits() {
         runvil_parser::detail::sections(&prompt).len()
     );
     assert_eq!(ctx.max_tool_iterations(), 24);
+}
+
+#[test]
+fn vm_setup_hands_the_vm_the_runs_argv_in_the_mode_the_caller_asks_for() {
+    let prompt = test_prompt();
+    let ctx = test_state(&prompt).with_args("{\"query\":\"papers\"}");
+    let sys = json!({});
+    let access = fresh_access();
+    let requested = ctx.argv().cloned();
+    let expected = requested.as_deref();
+    assert!(
+        expected.is_some(),
+        "the fixture's args must derive an argv, or neither mode is observable"
+    );
+    let frozen = ctx.vm_setup(&sys, VmSeed::default(), &access, "Only", false);
+    assert!(
+        matches!(frozen.argv, Argv::Frozen(value) if value == expected),
+        "an unprivileged constructor must get the run's argv frozen: {:?}",
+        frozen.argv
+    );
+    let writable = ctx.vm_setup(&sys, VmSeed::default(), &access, "Only", true);
+    assert!(
+        matches!(writable.argv, Argv::Writable(value) if value == expected),
+        "the H1 pass's flag must get the run's argv writable: {:?}",
+        writable.argv
+    );
 }
 
 #[test]

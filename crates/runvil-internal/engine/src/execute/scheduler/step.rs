@@ -75,7 +75,7 @@ fn settle_block(
     };
     match step {
         CoroStep::Yielded(coroutine, values) => {
-            let settled = match entered.frame.vm()?.request_from_yield(&values) {
+            let settled = match entered.frame.vm().request_from_yield(&values) {
                 YieldParse::Request(request) => Settled::Dispatch(request),
                 // An argument-validation failure is the call's answer:
                 // the shim raises it at the call site, so an author
@@ -158,7 +158,7 @@ impl Scheduler {
             };
             entered
                 .frame
-                .vm()?
+                .vm()
                 .resume_block_coro_answer(program, &coroutine, answer)
         } else {
             match entered.block_in(blocks) {
@@ -174,7 +174,7 @@ impl Scheduler {
                     }
                     entered
                         .frame
-                        .vm()?
+                        .vm()
                         .start_block_coro(program)
                         .map_err(Error::from)
                 }

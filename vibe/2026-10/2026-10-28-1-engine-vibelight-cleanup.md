@@ -267,7 +267,7 @@ Ten steps, one commit each. Order is by cause, not by file count. The Pack roste
 
 <step-3>
 
-### Step 3: Infallible VM access and an `Argv`-carrying setup
+### Step 3: Infallible VM access and an `Argv`-carrying setup [completed]
 
 - Component: Engine state
 - Tests: `cargo nextest run --locked -p runvil-engine -p runvil-lua`

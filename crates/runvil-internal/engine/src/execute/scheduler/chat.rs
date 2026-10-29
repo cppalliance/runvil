@@ -102,7 +102,7 @@ impl ChainOps<'_> {
         let chain = &*self.chain;
         let section = chain.section_name().to_owned();
         let frame = chain.frame()?;
-        let vm = frame.vm()?;
+        let vm = frame.vm();
         let binding = if let Some(binding) = binding {
             binding
         } else {
@@ -216,7 +216,7 @@ impl ChainOps<'_> {
     fn merge_render(&self, rendered: Vec<PackToolSets<ToolInfo>>) -> Result<MessageList> {
         let chain = &*self.chain;
         let frame = chain.frame()?;
-        let vm = frame.vm()?;
+        let vm = frame.vm();
         let set = chain.ctx.tool_set();
         let frozen = prepare_effective_scope(
             &SectionOffers::read(set, vm)?,
@@ -278,7 +278,7 @@ impl ChainOps<'_> {
                 // The sets are frozen before the round is issued; their
                 // absence is a scheduler fault, never an author-visible
                 // out-of-scope refusal.
-                let vm = chain.frame()?.vm()?;
+                let vm = chain.frame()?.vm();
                 let frozen = vm.rendered_tools().ok_or(Error::internal(
                     "a parked chat round's section holds its frozen sets",
                 ))?;

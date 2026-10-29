@@ -209,7 +209,7 @@ impl ChainOps<'_> {
         let binding = if let Some(binding) = binding {
             binding
         } else {
-            resolve_model_binding(chain.ctx.models(), chain.frame()?.vm()?.model_runtime())?
+            resolve_model_binding(chain.ctx.models(), chain.frame()?.vm().model_runtime())?
                 .ok_or_else(|| Error::ModelRequired {
                     section: chain.section_name().to_owned(),
                 })?

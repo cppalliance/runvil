@@ -20,7 +20,7 @@ use runvil_types::tools::{ToolId, ToolInfo};
 
 use super::{VmBinds, set_up_vm};
 use crate::execute::section_vm::VmSeed;
-use crate::lua::{SectionVm, ToolSet};
+use crate::lua::{Argv, SectionVm, ToolSet};
 use crate::model::ModelSet;
 use crate::test_support::scenario::test_binding;
 
@@ -62,20 +62,18 @@ fn offering() -> ToolSet {
 
 /// Builds a section VM through the real setup path with every conditional
 /// Engine global bound: a caller-supplied application-state snapshot
-/// (`ui`), a collection member (`item`), a non-nil `argv` (writable as in
-/// the H1 pass, or frozen as in every other section), a block's lazy
-/// `prose`, the model roles in [`ROLE_LABELS`], the tools of
+/// (`ui`), a collection member (`item`), a non-nil `argv` in the given
+/// mode (writable as in the H1 pass, or frozen as in every other section),
+/// a block's lazy `prose`, the model roles in [`ROLE_LABELS`], the tools of
 /// [`offering`], and a `require` whose resolver reaches no library.
-fn fully_bound_vm(argv_writable: bool) -> SectionVm {
-    let argv = json!({ "prose": "" });
+fn fully_bound_vm(argv: Argv<'_>) -> SectionVm {
     let item = json!("member");
     let ui = Arc::new(json!({}));
     let vm = set_up_vm(&VmBinds {
         section: "Globals",
         tools: &offering(),
         models: &roles(),
-        argv: Some(&argv),
-        argv_writable,
+        argv,
         seed: VmSeed {
             var: None,
             item: Some(&item),
@@ -101,15 +99,19 @@ fn raw_global_names(vm: &SectionVm) -> Vec<String> {
 
 #[test]
 fn every_global_section_setup_leaves_in_g_is_a_reserved_name() {
-    for argv_writable in [false, true] {
-        let vm = fully_bound_vm(argv_writable);
+    let argv = json!({ "prose": "" });
+    for (mode, argv) in [
+        ("frozen", Argv::Frozen(Some(&argv))),
+        ("writable", Argv::Writable(Some(&argv))),
+    ] {
+        let vm = fully_bound_vm(argv);
         for name in raw_global_names(&vm) {
             assert!(
                 matches!(
                     reserved_name(&name),
                     Some(Reserved::EngineGlobal | Reserved::LuaGlobal)
                 ),
-                "section setup (argv writable: {argv_writable}) installs the global `{name}`, \
+                "section setup (argv {mode}) installs the global `{name}`, \
                  which RESERVED_NAMES does not list as an Engine or Lua global; list it there"
             );
         }
@@ -118,8 +120,12 @@ fn every_global_section_setup_leaves_in_g_is_a_reserved_name() {
 
 #[test]
 fn every_reserved_global_is_present_after_section_setup() {
-    for argv_writable in [false, true] {
-        let vm = fully_bound_vm(argv_writable);
+    let argv = json!({ "prose": "" });
+    for (mode, argv) in [
+        ("frozen", Argv::Frozen(Some(&argv))),
+        ("writable", Argv::Writable(Some(&argv))),
+    ] {
+        let vm = fully_bound_vm(argv);
         let globals = vm.lua().globals();
         for (name, kind) in RESERVED_NAMES {
             if kind == Reserved::LuaKeyword {
@@ -129,7 +135,7 @@ fn every_reserved_global_is_present_after_section_setup() {
             assert!(
                 !value.is_nil(),
                 "RESERVED_NAMES lists `{name}` as {kind}, but a fully bound section VM \
-                 (argv writable: {argv_writable}) reads it as nil; drop it or install it"
+                 (argv {mode}) reads it as nil; drop it or install it"
             );
         }
     }
@@ -137,8 +143,12 @@ fn every_reserved_global_is_present_after_section_setup() {
 
 #[test]
 fn no_role_label_is_a_global_after_section_or_h1_setup() {
-    for argv_writable in [false, true] {
-        let vm = fully_bound_vm(argv_writable);
+    let argv = json!({ "prose": "" });
+    for (mode, argv) in [
+        ("frozen", Argv::Frozen(Some(&argv))),
+        ("writable", Argv::Writable(Some(&argv))),
+    ] {
+        let vm = fully_bound_vm(argv);
         let (writer, tools, call): (String, String, String) = vm
             .lua()
             .load("return type(writer), type(tools), type(tools.call)")
@@ -148,21 +158,25 @@ fn no_role_label_is_a_global_after_section_or_h1_setup() {
             (writer.as_str(), tools.as_str(), call.as_str()),
             ("nil", "table", "function"),
             "a role label installs no global and leaves a same-named Engine global in place \
-             (argv writable: {argv_writable})"
+             (argv {mode})"
         );
     }
 }
 
 #[test]
 fn no_offered_tool_is_a_global_after_section_or_h1_setup() {
-    for argv_writable in [false, true] {
-        let vm = fully_bound_vm(argv_writable);
+    let argv = json!({ "prose": "" });
+    for (mode, argv) in [
+        ("frozen", Argv::Frozen(Some(&argv))),
+        ("writable", Argv::Writable(Some(&argv))),
+    ] {
+        let vm = fully_bound_vm(argv);
         let names = raw_global_names(&vm);
         for wire_name in OFFERED_WIRE_NAMES {
             assert!(
                 !names.iter().any(|name| name == wire_name),
                 "the offered tool `{wire_name}` installs no global \
-                 (argv writable: {argv_writable})"
+                 (argv {mode})"
             );
         }
         let ids: String = vm
@@ -172,15 +186,19 @@ fn no_offered_tool_is_a_global_after_section_or_h1_setup() {
             .expect("the tool objects read");
         assert_eq!(
             ids, "gh/search,web/search",
-            "the tools read through `tools.get` (argv writable: {argv_writable})"
+            "the tools read through `tools.get` (argv {mode})"
         );
     }
 }
 
 #[test]
 fn models_get_returns_the_role_handle_after_section_or_h1_setup() {
-    for argv_writable in [false, true] {
-        let vm = fully_bound_vm(argv_writable);
+    let argv = json!({ "prose": "" });
+    for (mode, argv) in [
+        ("frozen", Argv::Frozen(Some(&argv))),
+        ("writable", Argv::Writable(Some(&argv))),
+    ] {
+        let vm = fully_bound_vm(argv);
         for label in ROLE_LABELS {
             let (kind, name, model_id): (String, String, String) = vm
                 .lua()
@@ -193,7 +211,7 @@ fn models_get_returns_the_role_handle_after_section_or_h1_setup() {
                 (kind.as_str(), name.as_str(), model_id.as_str()),
                 ("userdata", label, "test-model"),
                 "models.get({label:?}) hands back the role's handle \
-                 (argv writable: {argv_writable})"
+                 (argv {mode})"
             );
         }
     }

@@ -84,7 +84,7 @@ impl ChainOps<'_> {
         let frozen = self
             .chain
             .frame()?
-            .vm()?
+            .vm()
             .rendered_tools()
             .ok_or(Error::internal(
                 "a model call's section holds its frozen sets",
@@ -150,7 +150,7 @@ impl ChainOps<'_> {
         let adhoc = self
             .chain
             .frame()?
-            .vm()?
+            .vm()
             .adhoc_tools()
             .binding(&target.id().to_string())?;
         if let Some(adhoc) = adhoc {

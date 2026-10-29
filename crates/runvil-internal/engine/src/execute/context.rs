@@ -18,7 +18,7 @@ use runvil_types::untrusted::GuardNonce;
 use runvil_vfs::{Access, VfsRef};
 
 use crate::cancel::CancelHandle;
-use crate::lua::ToolSet;
+use crate::lua::{Argv, ToolSet};
 use crate::model::{ModelSet, ModelView};
 use crate::parser::Prompt;
 
@@ -343,18 +343,29 @@ impl RunState {
     /// the run-wide inputs from this context; the constructor supplies only
     /// its own deltas: the `sys` JSON, the seed, the chain step's access
     /// capability (the walk's own, a call chain's borrowed parent
-    /// capability, a task chain's spawned one), and the section name.
+    /// capability, a task chain's spawned one), the section name, and
+    /// whether `argv` installs writable.
+    ///
+    /// `argv_writable` is the H1 pass's one privilege: it is the only
+    /// production caller that passes `true`, so the [`Argv`] mode is
+    /// decided here at construction and a writable value cannot reach a
+    /// non-H1 section.
     pub(super) fn vm_setup<'a>(
         &'a self,
         sys: &'a serde_json::Value,
         seed: VmSeed<'a>,
         access: &'a Arc<Access>,
         section_name: &'a str,
+        argv_writable: bool,
     ) -> SectionVmSetup<'a> {
+        let argv = if argv_writable {
+            Argv::Writable(self.argv.as_deref())
+        } else {
+            Argv::Frozen(self.argv.as_deref())
+        };
         SectionVmSetup {
             args: &self.args,
-            argv: self.argv.as_deref(),
-            argv_writable: false,
+            argv,
             sys,
             access,
             seed,
