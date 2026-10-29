@@ -4,34 +4,34 @@ overview: Outline the runvil-internal/engine crate with vibelight, raise slop ca
 todos:
   - id: step-1
     content: "Step 1: One map for the Pack roster"
-    status: pending
+    status: completed
   - id: step-2
     content: "Step 2: Delete Effect::Chat's options field"
-    status: pending
+    status: completed
   - id: step-3
     content: "Step 3: Infallible VM access and an Argv-carrying setup"
-    status: pending
+    status: completed
   - id: step-4
     content: "Step 4: One producer for the Pack order and self-evidencing tool-set errors"
-    status: pending
+    status: completed
   - id: step-5
     content: "Step 5: Root-chain constructor, Admission names, ChainOps state, scheduler doc text"
-    status: pending
+    status: completed
   - id: step-6
     content: "Step 6: One owner for the empty-reply message, and a narrowed test-support"
-    status: pending
+    status: completed
   - id: step-7
     content: "Step 7: Engine doc sentences, one file at a time"
-    status: pending
+    status: completed
   - id: step-8
     content: "Step 8: Section docs and the three import surfaces"
-    status: pending
+    status: completed
   - id: step-9
     content: "Step 9: Engine repository drift, two files"
-    status: pending
+    status: completed
   - id: step-10
     content: "Step 10: runvil-docs checkout drift, three files"
-    status: pending
+    status: completed
 isProject: false
 ---
 
@@ -451,10 +451,10 @@ Doc edits only, in the engine repository, so they commit here rather than with t
 
 <step-10>
 
-### Step 10: `runvil-docs` checkout drift, three files
+### Step 10: `runvil-docs` checkout drift, three files [completed]
 
 - Component: Drift
-- Tests: `MDBOOK=<path> cargo xtask site --books-only` from the engine repository, then a chapter render check that the changed pages build
+- Tests: `RUNVIL_DOCS=<path> cargo xtask site --books-only` from the engine repository, then `node --test crates/workshop/ui/test/docs-claims.mjs`. `RUNVIL_DOCS` names the docs checkout; `MDBOOK` names the mdBook binary and defaults to `mdbook` on PATH.
 
 `runvil-docs` is its own git checkout at `c:\Users\Vinnie\cursor\runvil-docs`, latest edit 2026-10-27, so this is a separate commit in a separate repository. It cannot share a commit with any step above. All three edits are guide-side: the guide's own chapters settle each case, and code stays put.
 
