@@ -1,7 +1,7 @@
 //! The `models.loop` contract case no real round produces: an empty answer
 //! that names no empty detail, which the model client refuses before it
 //! can reach the loop. The loop's yields are driven by hand, each answer
-//! rendered through `Answer::into_envelope`. The loop's other contract
+//! rendered through `test_support::answer_envelope`. The loop's other contract
 //! cases run end to end in `execute/tests/models_loop_contract.rs`.
 
 use runvil_lua::Error;
@@ -13,11 +13,11 @@ use super::{parse_request, resume_with, scheduler_vm, start, test_models};
 /// A completed round with no reply, no tool calls, and no empty detail,
 /// ending for `finish_reason`.
 fn empty_round(finish_reason: Option<&str>) -> Answer<Error> {
-    Answer::Chat(Ok(Box::new(ChatResult {
+    Answer::Chat(Box::new(ChatResult {
         outcome: ChatOutcome::Empty(None),
         finish_reason: finish_reason.map(str::to_owned),
         turn: 1,
-    })))
+    }))
 }
 
 #[test]

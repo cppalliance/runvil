@@ -76,7 +76,7 @@ impl ChainOps<'_> {
     /// # Errors
     /// Returns [`Error::Internal`] when the chain has no suspended block
     /// to take the answer.
-    pub(super) fn answer(&mut self, answer: Answer<Error>) -> Result<()> {
+    pub(super) fn answer(&mut self, answer: Result<Answer<Error>>) -> Result<()> {
         self.chain.deliver(answer)?;
         self.answered += 1;
         Ok(())

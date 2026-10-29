@@ -108,8 +108,8 @@ impl ChainOps<'_> {
         match self.prepare_tool_call(alias, args, site) {
             // An issued call is parked on the effect table.
             Ok(Dispatched::Issued) => Ok(()),
-            Ok(Dispatched::Answered(answer)) => self.answer(answer),
-            Err(error) => self.answer(Answer::ToolCallResult(Err(error))),
+            Ok(Dispatched::Answered(answer)) => self.answer(Ok(answer)),
+            Err(error) => self.answer(Err(error)),
         }
     }
 
@@ -242,27 +242,33 @@ impl ChainOps<'_> {
     /// Returns [`Error::Internal`] when the chain holds no such slot,
     /// which only an answer the scheduler should have orphaned produces,
     /// or when the full batch finds no suspended block to answer.
-    pub(super) fn fill_batch_slot(&mut self, slot: usize, answer: Answer<Error>) -> Result<()> {
+    pub(super) fn fill_batch_slot(
+        &mut self,
+        slot: usize,
+        answer: Result<Answer<Error>>,
+    ) -> Result<()> {
         let landed = match answer {
-            Answer::ToolCallResult(Ok(ToolCallOutcome::Plain(text))) => Ok(text),
-            Answer::ToolCallResult(Err(error)) => Err(error),
-            Answer::ToolCallResult(Ok(
-                ToolCallOutcome::Structured(_) | ToolCallOutcome::Adhoc { .. },
-            ))
-            | Answer::Infer(_)
-            | Answer::Call(_)
-            | Answer::Spawn(_)
-            | Answer::Timer(_)
-            | Answer::JoinAny(_)
-            | Answer::Ready(_)
-            | Answer::Status(_)
-            | Answer::Pending(_)
-            | Answer::Concurrency(_)
-            | Answer::Note(_)
-            | Answer::Cancel(_)
-            | Answer::Chat(_)
-            | Answer::ToolCallsResult(_)
-            | Answer::Store(_) => Err(Error::internal(
+            Ok(Answer::ToolCallResult(ToolCallOutcome::Plain(text))) => Ok(text),
+            Err(error) => Err(error),
+            Ok(
+                Answer::ToolCallResult(
+                    ToolCallOutcome::Structured(_) | ToolCallOutcome::Adhoc { .. },
+                )
+                | Answer::Infer(_)
+                | Answer::Call(_)
+                | Answer::Spawn(_)
+                | Answer::Timer(_)
+                | Answer::JoinAny(_)
+                | Answer::Ready(_)
+                | Answer::Status(_)
+                | Answer::Pending(_)
+                | Answer::Concurrency(_)
+                | Answer::Note
+                | Answer::Cancel
+                | Answer::Chat(_)
+                | Answer::ToolCallsResult(_)
+                | Answer::Store(_),
+            ) => Err(Error::internal(
                 "a batched call lands as plain text or a failure",
             )),
         };
@@ -290,7 +296,7 @@ impl ChainOps<'_> {
             .into_iter()
             .flatten()
             .collect::<Result<Vec<String>>>();
-        self.answer(Answer::ToolCallsResult(answer))
+        self.answer(answer.map(Answer::ToolCallsResult))
     }
 
     /// The fallible half of tool-call dispatch, by the call's route: an

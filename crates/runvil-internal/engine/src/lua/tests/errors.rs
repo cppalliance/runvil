@@ -10,9 +10,10 @@ use std::num::NonZeroU32;
 
 use mlua::MultiValue;
 
+use runvil_lua::test_support::answer_envelope;
 use runvil_lua::{Error, ErrorKind, LuaProgram};
 
-use crate::lua::{Answer, CoroStep, LuaBlockResult};
+use crate::lua::{CoroStep, LuaBlockResult};
 use crate::model::ModelSet;
 use crate::test_support::recording::null_emitter;
 
@@ -128,7 +129,7 @@ fn a_failure_envelope_raises_a_table_holding_the_kind_and_fields() {
         };
         let display = error.to_string();
         match vm
-            .resume_block_coro_answer::<Error>(&program, &thread, Answer::Infer(Err(error)))
+            .resume_block_coro_answer::<Error>(&program, &thread, Err(error))
             .expect("the pcall'd block resumes")
         {
             CoroStep::Done(LuaBlockResult::Returned(Some(text))) => {
@@ -261,9 +262,9 @@ fn a_typed_error_substituted_at_the_coroutine_boundary_keeps_its_kind() {
         else {
             panic!("the shim yield must suspend the block");
         };
-        let answer = Answer::Infer(Err(Error::LuaQuota {
+        let answer = Err(Error::LuaQuota {
             resource: runvil_lua::QuotaResource::LogEvent,
-        }));
+        });
         match vm.resume_block_coro_answer::<Error>(&program, &thread, answer) {
             Err(Error::LuaQuota {
                 resource: runvil_lua::QuotaResource::LogEvent,
@@ -287,10 +288,12 @@ fn a_structured_raise_surfacing_as_the_coroutine_failure_keeps_its_table() {
     else {
         panic!("the shim yield must suspend the block");
     };
-    let (envelope, _retained) = Answer::<Error>::Infer(Err(Error::ContextExhausted {
-        reason: "precheck".to_owned(),
-    }))
-    .into_envelope(vm.lua())
+    let (envelope, _retained) = answer_envelope::<Error>(
+        vm.lua(),
+        Err(Error::ContextExhausted {
+            reason: "precheck".to_owned(),
+        }),
+    )
     .expect("the envelope renders");
     match vm.resume_block_coro(&program, &thread, envelope) {
         Err(Error::Raised(raised)) => {

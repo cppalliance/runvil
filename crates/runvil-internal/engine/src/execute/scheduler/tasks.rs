@@ -106,18 +106,6 @@ pub(crate) enum TaskState {
     Abandoned,
 }
 
-impl TaskState {
-    /// Whether the task ended well, once it has ended: a cancelled or
-    /// abandoned task did not.
-    pub(super) fn ok(self) -> Option<bool> {
-        match self {
-            TaskState::Running => None,
-            TaskState::Done { ok } | TaskState::Delivered { ok } => Some(ok),
-            TaskState::Cancelled | TaskState::Abandoned => Some(false),
-        }
-    }
-}
-
 /// One task's entry in the arena.
 #[derive(Debug)]
 pub(super) struct TaskEntry {

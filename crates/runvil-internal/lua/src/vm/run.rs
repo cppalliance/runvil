@@ -9,7 +9,7 @@ use crate::coro::{block_guard, take_failure};
 use crate::error::{Error, Result};
 use crate::error_value::ErrorKind;
 use crate::program::LuaProgram;
-use crate::protocol::{Answer, Request, Retained, YieldParse};
+use crate::protocol::{Answer, Request, Retained, YieldParse, render_envelope};
 use crate::section::LuaBlockResult;
 
 impl SectionVm {
@@ -99,7 +99,7 @@ impl SectionVm {
     /// corrupted yield. Author code cannot reach
     /// `coroutine.yield` (the global is stripped at shim install), so this
     /// strict validation is defense in depth. A well-formed call whose
-    /// argument fails validation is [`YieldParse::Call`]: the error is
+    /// argument fails validation is [`YieldParse::Refused`]: the error is
     /// returned as the answer so the shim raises it at the call site.
     #[must_use]
     pub fn request_from_yield(&self, values: &MultiValue) -> YieldParse {
@@ -130,12 +130,12 @@ impl SectionVm {
         &self,
         program: &LuaProgram,
         thread: &Thread,
-        answer: Answer<E>,
+        answer: std::result::Result<Answer<E>, E>,
     ) -> std::result::Result<CoroStep, E>
     where
         E: crate::ErrorValue + From<Error>,
     {
-        let (envelope, retained) = answer.render(&self.lua).map_err(Error::lua)?;
+        let (envelope, retained) = render_envelope(&self.lua, answer).map_err(Error::lua)?;
         let result = thread.resume::<MultiValue>(envelope);
         self.step_block_coro(program, thread.clone(), result, retained)
     }

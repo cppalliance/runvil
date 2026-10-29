@@ -87,22 +87,6 @@ fn classify_vfs_failure(op: &VfsOp, error: VfsError) -> Error {
     }
 }
 
-/// The cancelled answer for a chain parked on `resume`'s kind of effect:
-/// the protocol variant the chain's shim expects, holding the run's
-/// cancellation error, which for a render is the round's chat answer. A
-/// timer's drop is applied to its entry and its waiter instead, before
-/// this is reached.
-fn dropped_answer(resume: &Continuation) -> Answer<Error> {
-    match resume {
-        Continuation::Infer(_) => Answer::Infer(Err(Error::Interrupted)),
-        Continuation::Chat(_) | Continuation::Render(_) => Answer::Chat(Err(Error::Interrupted)),
-        Continuation::ToolCall(_) => Answer::ToolCallResult(Err(Error::Interrupted)),
-        // A timer's drop never reaches here; the cancelled store answer
-        // is the harmless stand-in should it ever do so.
-        Continuation::Vfs(_) | Continuation::Timer(_) => Answer::Store(Err(Error::Interrupted)),
-    }
-}
-
 impl Scheduler {
     /// Applies one performed effect's answer to `parked`, the entry
     /// `resume` took out of the effect table: turns the raw answer into the
@@ -144,10 +128,10 @@ impl Scheduler {
         };
         let answer = match (resume, answer) {
             (Continuation::Timer(task), EffectAnswer::Dropped) => return self.drop_timer(&task),
-            (resume, EffectAnswer::Dropped) => dropped_answer(&resume),
-            (Continuation::Infer(round), EffectAnswer::Chat(result)) => {
-                Answer::Infer(self.with_chain(chain, |ops| ops.accept_infer(round, result)))
-            }
+            (_, EffectAnswer::Dropped) => Err(Error::Interrupted),
+            (Continuation::Infer(round), EffectAnswer::Chat(result)) => self
+                .with_chain(chain, |ops| ops.accept_infer(round, result))
+                .map(Answer::Infer),
             (Continuation::Chat(round), EffectAnswer::Chat(result)) => self
                 .with_chain(chain, |ops| {
                     ops.accept_chat(round, result.map_err(Error::from))
@@ -155,18 +139,16 @@ impl Scheduler {
             (Continuation::Render(binding), EffectAnswer::Render(rendered)) => {
                 return self.with_chain(chain, |ops| ops.accept_render(binding, rendered));
             }
-            (Continuation::ToolCall(call), EffectAnswer::ToolCall(result)) => {
-                Answer::ToolCallResult(
-                    self.with_chain(chain, |ops| ops.accept_tool_call(&call, result)),
-                )
-            }
+            (Continuation::ToolCall(call), EffectAnswer::ToolCall(result)) => self
+                .with_chain(chain, |ops| ops.accept_tool_call(&call, result))
+                .map(Answer::ToolCallResult),
             (Continuation::Vfs(op), EffectAnswer::Vfs(result)) => {
                 match self.with_chain(chain, |ops| ops.accept_vfs(&op, result)) {
                     // A claims-model conflict is fatal: the suspended
                     // chains drop unarmed in the run's teardown, exactly
                     // as on the cancellation path.
                     Err(error @ Error::Determinism(_)) => return Err(error),
-                    result => Answer::Store(result),
+                    result => result.map(Answer::Store),
                 }
             }
             (Continuation::Timer(task), EffectAnswer::Timer) => return self.fire_timer(&task),
@@ -251,7 +233,7 @@ impl Scheduler {
         if self.ctx.cancel().is_cancelled() || !self.chains[owner].end_wait_for(task) {
             return Ok(());
         }
-        self.wake_from_wait(owner, Answer::JoinAny(Err(Error::Interrupted)))
+        self.wake_from_wait(owner, Err(Error::Interrupted))
     }
 }
 

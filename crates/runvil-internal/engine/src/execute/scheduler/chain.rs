@@ -232,7 +232,7 @@ impl Scheduler {
         }
         match parent {
             None => ChainStep::RunEnded(outcome),
-            Some(parent_id) => match self.answer_inline(parent_id, Answer::Call(outcome)) {
+            Some(parent_id) => match self.answer_inline(parent_id, outcome.map(Answer::Call)) {
                 Ok(()) => ChainStep::Continue,
                 Err(error) => ChainStep::RunEnded(Err(error)),
             },

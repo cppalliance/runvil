@@ -211,10 +211,10 @@ fn an_adhoc_tool_handler_runs_inside_the_block_coroutine() {
     let yielded = resume_with(
         &vm,
         &thread,
-        Answer::ToolCallResult(Ok(ToolCallOutcome::Adhoc {
+        Answer::ToolCallResult(ToolCallOutcome::Adhoc {
             alias: "grab".to_owned(),
             args: json!({ "value": "hi" }),
-        })),
+        }),
     );
     match parse_request(&vm, yielded) {
         Request::Store {
@@ -225,7 +225,7 @@ fn an_adhoc_tool_handler_runs_inside_the_block_coroutine() {
         }
         other => panic!("the handler's store call yields from the block, got {other:?}"),
     }
-    let yielded = resume_with(&vm, &thread, Answer::Store(Ok(VfsOutcome::Unit)));
+    let yielded = resume_with(&vm, &thread, Answer::Store(VfsOutcome::Unit));
     match parse_request(&vm, yielded) {
         Request::AdhocToolDone {
             outcome: AdhocToolOutcome::Returned(text),
@@ -235,7 +235,7 @@ fn an_adhoc_tool_handler_runs_inside_the_block_coroutine() {
     let returned = resume_with(
         &vm,
         &thread,
-        Answer::ToolCallResult(Ok(ToolCallOutcome::Plain("stored hi".to_owned()))),
+        Answer::ToolCallResult(ToolCallOutcome::Plain("stored hi".to_owned())),
     );
     let text: String = vm
         .lua()
@@ -263,7 +263,7 @@ fn the_loops_tool_call_yields_carry_the_turn_of_the_requesting_round() {
         finish_reason: Some("tool_calls".to_owned()),
         turn: 7,
     };
-    let yielded = resume_with(&vm, &thread, Answer::Chat(Ok(Box::new(round))));
+    let yielded = resume_with(&vm, &thread, Answer::Chat(Box::new(round)));
     match parse_request(&vm, yielded) {
         Request::ToolCalls { calls, turn } => {
             let ids: Vec<&str> = calls.iter().map(|call| call.id.as_str()).collect();
@@ -278,7 +278,7 @@ fn the_loops_tool_call_yields_carry_the_turn_of_the_requesting_round() {
     let yielded = resume_with(
         &vm,
         &thread,
-        Answer::ToolCallsResult(Ok(vec!["echoed".to_owned(), "echoed".to_owned()])),
+        Answer::ToolCallsResult(vec!["echoed".to_owned(), "echoed".to_owned()]),
     );
     assert!(matches!(parse_request(&vm, yielded), Request::Chat { .. }));
 }
@@ -322,8 +322,8 @@ fn tools_call_rejects_a_first_argument_that_is_neither_a_string_nor_a_tool() {
     let (_thread, yielded) = start(&vm, "return tools.call(42, {})");
     let value = yielded.into_iter().next().expect("one yielded value");
     match Request::from_yield(vm.lua(), &value) {
-        YieldParse::Call(answer) => {
-            let message = format!("{answer:?}");
+        YieldParse::Refused(error) => {
+            let message = format!("{error:?}");
             assert!(
                 message.contains("tools.call takes a tool id or a tool object, got integer"),
                 "the rejection names the expected forms: {message}"

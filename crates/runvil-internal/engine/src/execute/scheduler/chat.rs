@@ -71,8 +71,8 @@ impl ChainOps<'_> {
     ) -> Result<()> {
         match self.prepare_chat(list, binding) {
             Ok(Dispatched::Issued) => Ok(()),
-            Ok(Dispatched::Answered(answer)) => self.answer(answer),
-            Err(error) => self.answer(Answer::Chat(Err(error))),
+            Ok(Dispatched::Answered(answer)) => self.answer(Ok(answer)),
+            Err(error) => self.answer(Err(error)),
         }
     }
 
@@ -167,9 +167,9 @@ impl ChainOps<'_> {
         let anchor = chain.anchor.measured(binding.id());
         if let Err(reason) = precheck(&conversation, context, reserve, anchor) {
             emitter.report(&section, lifecycle::MODEL_TURN_FAILED);
-            return Ok(Dispatched::Answered(Answer::Chat(Ok(Box::new(
+            return Ok(Dispatched::Answered(Answer::Chat(Box::new(
                 overflow_result(reason, handles.turns.load(Ordering::Relaxed)),
-            )))));
+            ))));
         }
         chain
             .anchor
@@ -200,7 +200,7 @@ impl ChainOps<'_> {
     ) -> Result<()> {
         match self.merge_render(rendered) {
             Ok(list) => self.dispatch_chat(&list, Some(binding)),
-            Err(error) => self.answer(Answer::Chat(Err(error))),
+            Err(error) => self.answer(Err(error)),
         }
     }
 
@@ -253,7 +253,7 @@ impl ChainOps<'_> {
         &mut self,
         round: RoundId,
         result: Result<Box<Completion>>,
-    ) -> Result<Answer<Error>> {
+    ) -> Result<Result<Answer<Error>>> {
         let chain = &*self.chain;
         let round = ArrivedRound {
             id: round,
@@ -265,7 +265,7 @@ impl ChainOps<'_> {
             Err(error) => {
                 let failure = round.failed(error);
                 self.chain.anchor.settle(None);
-                return Ok(Answer::Chat(failure));
+                return Ok(failure.map(Answer::Chat));
             }
         };
         // A round trip that produced a reply is a turn, whether the reply
@@ -298,7 +298,7 @@ impl ChainOps<'_> {
             .as_ref()
             .and_then(|metrics| metrics.usage.as_ref());
         self.chain.anchor.settle(usage);
-        Ok(Answer::Chat(result.map(Box::new)))
+        Ok(result.map(|result| Answer::Chat(Box::new(result))))
     }
 }
 

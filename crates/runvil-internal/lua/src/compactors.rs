@@ -233,7 +233,7 @@ impl UsageAnchor {
 ///
 /// The estimate counts message text and tool-call argument characters; an
 /// image part contributes nothing (its token cost bears no relation to the
-/// data-URI length), and tool schemas and the system template are not
+/// URL's length), and tool schemas and the system template are not
 /// counted, so an image-heavy conversation can still overflow at the
 /// provider - the provider-overflow path covers it.
 ///

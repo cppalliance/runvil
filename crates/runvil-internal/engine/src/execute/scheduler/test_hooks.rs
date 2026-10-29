@@ -126,8 +126,8 @@ impl Scheduler {
     /// As [`name_before_first_entry_for_test`](Self::name_before_first_entry_for_test).
     pub(crate) fn answer_unsuspended_for_test(&mut self) -> Result<[Result<()>; 2]> {
         let id = self.start_probe_chain(0)?;
-        let inline = self.answer_inline(id, Answer::Note(Ok(())));
-        let woken = self.wake_from_wait(id, Answer::Note(Ok(())));
+        let inline = self.answer_inline(id, Ok(Answer::Note));
+        let woken = self.wake_from_wait(id, Ok(Answer::Note));
         Ok([inline, woken])
     }
 

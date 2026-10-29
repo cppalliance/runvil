@@ -24,6 +24,7 @@ use std::num::NonZeroU32;
 use std::sync::{Arc, Mutex};
 
 use mlua::{MultiValue, Thread};
+use runvil_lua::test_support::answer_envelope;
 use runvil_lua::{Error, LuaProgram};
 use runvil_types::tools::{ToolId, ToolInfo};
 use runvil_types::untrusted::GuardNonce;
@@ -180,12 +181,12 @@ fn parse_request(vm: &SectionVm, yielded: MultiValue) -> Request {
     }
 }
 
-/// Renders `answer` as the shim's envelope and resumes the thread with it.
+/// Renders the successful `answer` as the shim's envelope and resumes the
+/// thread with it.
 #[track_caller]
 fn resume_with(vm: &SectionVm, thread: &Thread, answer: Answer<Error>) -> MultiValue {
-    let (envelope, _retained) = answer
-        .into_envelope(vm.lua())
-        .expect("the envelope renders");
+    let (envelope, _retained) =
+        answer_envelope(vm.lua(), Ok(answer)).expect("the envelope renders");
     thread
         .resume::<MultiValue>(envelope)
         .expect("the coroutine accepts the answer")

@@ -30,8 +30,7 @@ fn answered(source: &str) -> std::result::Result<CoroStep, Error> {
     else {
         panic!("the infer shim must suspend the block");
     };
-    let ended =
-        vm.resume_block_coro_answer::<Error>(&program, &thread, Answer::Infer(Err(quota())));
+    let ended = vm.resume_block_coro_answer::<Error>(&program, &thread, Err(quota()));
     drop(thread);
     vm.teardown();
     ended

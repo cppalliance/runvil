@@ -142,7 +142,7 @@ pub(super) struct Running {
     /// The block's coroutine handle; a block that returns disposes of it.
     pub(super) coroutine: Thread,
     /// The answer delivered for the suspended coroutine, taken at resume.
-    pub(super) answer: Option<Answer<Error>>,
+    pub(super) answer: Option<Result<Answer<Error>>>,
 }
 
 /// The section a chain has entered: built at each section entry, the H1
@@ -423,7 +423,7 @@ impl Chain {
     /// Returns [`Error::Internal`] when the chain has no suspended block:
     /// every answer goes to a block that yielded for it.
     #[track_caller]
-    pub(super) fn deliver(&mut self, answer: Answer<Error>) -> Result<()> {
+    pub(super) fn deliver(&mut self, answer: Result<Answer<Error>>) -> Result<()> {
         let Some(running) = self
             .entered
             .as_mut()

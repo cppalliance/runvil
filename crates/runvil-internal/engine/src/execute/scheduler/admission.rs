@@ -402,7 +402,11 @@ impl Scheduler {
     /// # Errors
     /// Returns [`Error::Internal`] when the chain has no suspended block
     /// to take the answer.
-    pub(super) fn wake_from_wait(&mut self, id: ChainIndex, answer: Answer<Error>) -> Result<()> {
+    pub(super) fn wake_from_wait(
+        &mut self,
+        id: ChainIndex,
+        answer: Result<Answer<Error>>,
+    ) -> Result<()> {
         self.chains[id].deliver(answer)?;
         let tree = ChainTree {
             chains: &self.chains,

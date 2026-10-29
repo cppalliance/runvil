@@ -20,6 +20,7 @@ use crate::hardening::CancelHook;
 use crate::messages::MessageList;
 use crate::models::LuaModelHandle;
 use crate::protocol::{AdhocToolOutcome, Answer, ChatOutcome, ChatResult, Request, YieldParse};
+use crate::test_support::answer_envelope;
 
 /// A requested call named `echo`, its arguments naming its id.
 pub(super) fn echo_call(id: &str) -> ToolCallEvent {
@@ -240,9 +241,8 @@ fn a_step_failing_on_a_full_heap_after_an_overflow_leaves_no_flag_set() {
             outcome: ChatOutcome::Overflow(OverflowReason::Precheck),
             ..round()
         };
-        let (envelope, _) = Answer::<Error>::Chat(Ok(Box::new(overflowed)))
-            .into_envelope(&lua)
-            .unwrap();
+        let (envelope, _) =
+            answer_envelope(&lua, Ok(Answer::<Error>::Chat(Box::new(overflowed)))).unwrap();
         lua.gc_collect().unwrap();
         lua.set_memory_limit(lua.used_memory() + headroom).unwrap();
         let stepped = step.call::<MultiValue>(envelope);
@@ -294,9 +294,8 @@ fn a_chat_answer_resumes_as_a_chat_result_userdata_the_step_takes_whole() {
         finish_reason: Some("tool_calls".to_owned()),
         ..round()
     };
-    let (envelope, retained) = Answer::<Error>::Chat(Ok(Box::new(served.clone())))
-        .into_envelope(&lua)
-        .unwrap();
+    let (envelope, retained) =
+        answer_envelope(&lua, Ok(Answer::<Error>::Chat(Box::new(served.clone())))).unwrap();
     assert!(retained.is_none());
     let values = envelope.into_vec();
     let Some(Value::UserData(resumed)) = values.get(1).cloned() else {

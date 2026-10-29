@@ -151,7 +151,7 @@ fn a_tool_call_with_a_non_alias_alias_is_the_calls_error() {
     let lua = Lua::new();
     let table = lua_table(&lua, "{ op = 'tool_call', alias = 42 }");
     match Request::from_yield(&lua, &Value::Table(table)) {
-        YieldParse::Call(Answer::ToolCallResult(Err(Error::Lua(message)))) => {
+        YieldParse::Refused(Error::Lua(message)) => {
             assert_eq!(
                 message,
                 "tools.call takes a tool id or a tool object, got integer"
@@ -168,7 +168,7 @@ fn a_script_call_naming_a_string_without_a_slash_is_the_calls_error() {
     let lua = Lua::new();
     let table = lua_table(&lua, "{ op = 'tool_call', alias = 'grab' }");
     match Request::from_yield(&lua, &Value::Table(table)) {
-        YieldParse::Call(Answer::ToolCallResult(Err(Error::Lua(message)))) => {
+        YieldParse::Refused(Error::Lua(message)) => {
             assert_eq!(message, "tools.call: \"grab\" is not a tool id");
         }
         other => panic!("expected the id call error, got {other:?}"),
@@ -183,7 +183,7 @@ fn a_tool_call_with_a_non_table_args_is_the_calls_error() {
         "{ op = 'tool_call', alias = 'tools/echo', args = 42 }",
     );
     match Request::from_yield(&lua, &Value::Table(table)) {
-        YieldParse::Call(Answer::ToolCallResult(Err(Error::Lua(message)))) => {
+        YieldParse::Refused(Error::Lua(message)) => {
             assert_eq!(message, "args must be a table, got integer");
         }
         other => panic!("expected the args call error, got {other:?}"),
@@ -204,7 +204,7 @@ fn a_tool_call_with_an_unrepresentable_args_table_is_the_calls_error() {
         .from_value::<serde_json::Value>(args)
         .expect_err("a table holding a function has no JSON form");
     match Request::from_yield(&lua, &Value::Table(table)) {
-        YieldParse::Call(Answer::ToolCallResult(Err(Error::Lua(message)))) => {
+        YieldParse::Refused(Error::Lua(message)) => {
             assert_eq!(
                 message,
                 format!("args must be a JSON-representable table: {cause}")

@@ -19,7 +19,7 @@ use crate::error::{Error, Result};
 use crate::error_value::ErrorValue;
 use crate::models::ModelSelection;
 use crate::program::LuaProgram;
-use crate::protocol::Answer;
+use crate::protocol::{Answer, render_envelope};
 use crate::scope::Offers;
 use crate::section::LuaBlockResult;
 use crate::vm::{SectionVm, scalar_return};
@@ -124,19 +124,20 @@ impl ToolSet {
     }
 }
 
-impl<E: ErrorValue> Answer<E> {
-    /// Renders the `(ok, result)` resume envelope the driver resumes a
-    /// block with, for a test that resumes a coroutine by hand, handing
-    /// back the typed error the answer retains without the error table
-    /// that identifies its raise.
-    ///
-    /// # Errors
-    /// Returns an `mlua` error if a Lua string, userdata, or table cannot be
-    /// created on `lua`.
-    pub fn into_envelope(self, lua: &Lua) -> mlua::Result<(MultiValue, Option<E>)> {
-        let (envelope, retained) = self.render(lua)?;
-        Ok((envelope, retained.map(|retained| retained.error)))
-    }
+/// Renders the `(ok, result)` resume envelope the driver resumes a block
+/// with, for a test that resumes a coroutine by hand, handing back the
+/// typed error the answer retains without the error table that
+/// identifies its raise.
+///
+/// # Errors
+/// Returns an `mlua` error if a Lua string, userdata, or table cannot be
+/// created on `lua`.
+pub fn answer_envelope<E: ErrorValue>(
+    lua: &Lua,
+    answer: std::result::Result<Answer<E>, E>,
+) -> mlua::Result<(MultiValue, Option<E>)> {
+    let (envelope, retained) = render_envelope(lua, answer)?;
+    Ok((envelope, retained.map(|retained| retained.error)))
 }
 
 impl LuaProgram {

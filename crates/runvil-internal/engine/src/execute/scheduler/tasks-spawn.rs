@@ -47,9 +47,9 @@ impl Scheduler {
                 // spawner; the drain admits it when a slot frees up at
                 // its owner and every ancestor.
                 self.admission.enqueue_spawn(child, record);
-                self.answer_inline(id, Answer::Spawn(Ok(task)))
+                self.answer_inline(id, Ok(Answer::Spawn(task)))
             }
-            Err(error) => self.answer_inline(id, Answer::Spawn(Err(error))),
+            Err(error) => self.answer_inline(id, Err(error)),
         }
     }
 

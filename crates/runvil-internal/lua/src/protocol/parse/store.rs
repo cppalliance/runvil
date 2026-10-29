@@ -3,10 +3,9 @@
 
 use mlua::Value;
 
-use crate::Error;
 use crate::protocol::{Request, VfsOp};
 
-use super::{FieldFailure, call_string};
+use super::{FieldFailure, call_error, call_string};
 
 /// Reads one author-supplied optional line bound: absent or nil is `None`,
 /// an integer (or a float with an integral value, as Lua's own integer
@@ -30,10 +29,10 @@ fn call_optional_line(
             )]
             Ok(Some(line as i64))
         }
-        Ok(other) => Err(FieldFailure::Call(Error::Lua(format!(
+        Ok(other) => Err(call_error(format!(
             "{name} must be an integer, got {}",
             other.type_name()
-        )))),
+        ))),
         Err(_) => Err(FieldFailure::Malformed),
     }
 }
@@ -77,9 +76,7 @@ pub(super) fn parse_store(table: &mlua::Table) -> std::result::Result<Request, F
             path: call_string(table, "path")?,
         },
         other => {
-            return Err(FieldFailure::Call(Error::Lua(format!(
-                "unknown store operation {other:?}"
-            ))));
+            return Err(call_error(format!("unknown store operation {other:?}")));
         }
     };
     Ok(Request::Store { op })

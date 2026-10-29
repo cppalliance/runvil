@@ -51,12 +51,12 @@ impl ChainOps<'_> {
             report,
             listing: false,
         });
-        Ok(Dispatched::Answered(Answer::ToolCallResult(Ok(
+        Ok(Dispatched::Answered(Answer::ToolCallResult(
             ToolCallOutcome::Adhoc {
                 alias: binding.alias().to_owned(),
                 args,
             },
-        ))))
+        )))
     }
 
     /// Dispatches an `adhoc_tool_done` request: closes the chain's
@@ -113,6 +113,6 @@ impl ChainOps<'_> {
                 Ok(ToolCallOutcome::Plain(String::new()))
             }
         };
-        self.answer(Answer::ToolCallResult(answer))
+        self.answer(answer.map(Answer::ToolCallResult))
     }
 }

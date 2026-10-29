@@ -1,15 +1,16 @@
 //! Answer-to-envelope rendering: every [`Answer`] variant round-trips through
-//! Lua as the `(ok, result)` envelope and retains its typed error. The
-//! `chat` answer's error is in `answer_chat`.
+//! Lua as the `(ok, result)` envelope, and a failure retains its typed
+//! error. A successful `chat` answer resumes as an opaque userdata, which
+//! the `models.loop` adapter's tests read.
 
 use super::*;
 
 #[test]
 fn an_ok_infer_answer_round_trips_through_lua() {
     let lua = Lua::new();
-    let (envelope, retained) = Answer::<Error>::Infer(Ok("completion".to_owned()))
-        .into_envelope(&lua)
-        .expect("the envelope renders");
+    let (envelope, retained) =
+        answer_envelope(&lua, Ok(Answer::<Error>::Infer("completion".to_owned())))
+            .expect("the envelope renders");
     assert!(retained.is_none());
     let (ok, result) = echo_through_lua(&lua, envelope);
     assert!(ok);
@@ -22,9 +23,9 @@ fn an_ok_infer_answer_round_trips_through_lua() {
 #[test]
 fn an_ok_call_answer_round_trips_through_lua() {
     let lua = Lua::new();
-    let (envelope, retained) = Answer::<Error>::Call(Ok("chain text".to_owned()))
-        .into_envelope(&lua)
-        .expect("the envelope renders");
+    let (envelope, retained) =
+        answer_envelope(&lua, Ok(Answer::<Error>::Call("chain text".to_owned())))
+            .expect("the envelope renders");
     assert!(retained.is_none());
     let (ok, result) = echo_through_lua(&lua, envelope);
     assert!(ok);
@@ -38,9 +39,8 @@ fn an_ok_call_answer_round_trips_through_lua() {
 fn an_ok_spawn_answer_resumes_the_task_id_as_its_path_text() {
     let lua = Lua::new();
     let task: TaskId = "0.2".parse().expect("a task id parses");
-    let (envelope, retained) = Answer::<Error>::Spawn(Ok(task))
-        .into_envelope(&lua)
-        .expect("the envelope renders");
+    let (envelope, retained) =
+        answer_envelope(&lua, Ok(Answer::<Error>::Spawn(task))).expect("the envelope renders");
     assert!(retained.is_none());
     let (ok, result) = echo_through_lua(&lua, envelope);
     assert!(ok);
@@ -51,12 +51,14 @@ fn an_ok_spawn_answer_resumes_the_task_id_as_its_path_text() {
 }
 
 #[test]
-fn an_err_answer_round_trips_and_retains_the_typed_error() {
+fn a_failed_answer_round_trips_and_retains_the_typed_error() {
     let lua = Lua::new();
-    let (envelope, retained) = Answer::Call(Err(Error::LuaQuota {
-        resource: crate::QuotaResource::LogEvent,
-    }))
-    .into_envelope(&lua)
+    let (envelope, retained) = answer_envelope::<Error>(
+        &lua,
+        Err(Error::LuaQuota {
+            resource: crate::QuotaResource::LogEvent,
+        }),
+    )
     .expect("the envelope renders");
     match retained {
         Some(Error::LuaQuota {
@@ -79,13 +81,15 @@ fn a_join_any_delivery_of_a_failed_member_retains_the_members_typed_error() {
     // substitute the member's own error for the raised table.
     let lua = Lua::new();
     let task: TaskId = "0.1".parse().expect("a task id parses");
-    let (envelope, retained) = Answer::<Error>::JoinAny(Ok(TaskDelivery {
-        task,
-        outcome: Err(Error::LuaQuota {
-            resource: crate::QuotaResource::LogEvent,
-        }),
-    }))
-    .into_envelope(&lua)
+    let (envelope, retained) = answer_envelope(
+        &lua,
+        Ok(Answer::<Error>::JoinAny(TaskDelivery {
+            task,
+            outcome: Err(Error::LuaQuota {
+                resource: crate::QuotaResource::LogEvent,
+            }),
+        })),
+    )
     .expect("the envelope renders");
     match retained {
         Some(Error::LuaQuota {
@@ -111,11 +115,13 @@ fn a_join_any_delivery_of_a_failed_member_retains_the_members_typed_error() {
 fn a_join_any_delivery_of_a_finished_member_retains_nothing() {
     let lua = Lua::new();
     let task: TaskId = "0.1".parse().expect("a task id parses");
-    let (envelope, retained) = Answer::<Error>::JoinAny(Ok(TaskDelivery {
-        task,
-        outcome: Ok("done".to_owned()),
-    }))
-    .into_envelope(&lua)
+    let (envelope, retained) = answer_envelope(
+        &lua,
+        Ok(Answer::<Error>::JoinAny(TaskDelivery {
+            task,
+            outcome: Ok("done".to_owned()),
+        })),
+    )
     .expect("the envelope renders");
     assert!(retained.is_none(), "a success retains nothing");
     let (ok, member_ok, text): (bool, bool, String) = lua
@@ -128,12 +134,51 @@ fn a_join_any_delivery_of_a_finished_member_retains_nothing() {
 }
 
 #[test]
+fn a_status_answer_derives_ok_from_the_phase() {
+    // `ok` is absent while the task runs, the outcome once it is done,
+    // and false for a task that was cancelled or abandoned.
+    let lua = Lua::new();
+    for (state, expected) in [
+        (TaskPhase::Running, "nil"),
+        (TaskPhase::Done { ok: true }, "true"),
+        (TaskPhase::Done { ok: false }, "false"),
+        (TaskPhase::Cancelled, "false"),
+        (TaskPhase::Abandoned, "false"),
+    ] {
+        let status = TaskStatus {
+            target: "Child".to_owned(),
+            state,
+            section: None,
+            blocked: None,
+            turns: 0,
+            tasks: Vec::new(),
+            depth: 0,
+            note: None,
+        };
+        let (envelope, retained) =
+            answer_envelope(&lua, Ok(Answer::<Error>::Status(Box::new(status))))
+                .expect("the envelope renders");
+        assert!(retained.is_none());
+        let (ok, phase, status_ok): (bool, String, String) = lua
+            .load("local ok, status = ...; return ok, status.state, tostring(status.ok)")
+            .call(envelope)
+            .expect("the status table reads back through Lua");
+        assert!(ok);
+        assert_eq!(phase, state.tag(), "{state:?}");
+        assert_eq!(status_ok, expected, "{state:?}");
+    }
+}
+
+#[test]
 fn an_ok_plain_tool_call_answer_round_trips_as_a_string() {
     let lua = Lua::new();
-    let (envelope, retained) =
-        Answer::<Error>::ToolCallResult(Ok(ToolCallOutcome::Plain("echoed: hi".to_owned())))
-            .into_envelope(&lua)
-            .expect("the envelope renders");
+    let (envelope, retained) = answer_envelope(
+        &lua,
+        Ok(Answer::<Error>::ToolCallResult(ToolCallOutcome::Plain(
+            "echoed: hi".to_owned(),
+        ))),
+    )
+    .expect("the envelope renders");
     assert!(retained.is_none());
     let (ok, result) = echo_through_lua(&lua, envelope);
     assert!(ok);
@@ -147,8 +192,7 @@ fn an_ok_plain_tool_call_answer_round_trips_as_a_string() {
 fn an_ok_structured_tool_call_answer_round_trips_as_a_table() {
     let lua = Lua::new();
     let outcome = ToolCallOutcome::Structured(json!({ "text": "typed", "images": [] }));
-    let (envelope, retained) = Answer::<Error>::ToolCallResult(Ok(outcome))
-        .into_envelope(&lua)
+    let (envelope, retained) = answer_envelope(&lua, Ok(Answer::<Error>::ToolCallResult(outcome)))
         .expect("the envelope renders");
     assert!(retained.is_none());
     let (ok, text, images_len): (bool, String, i64) = lua
@@ -185,11 +229,13 @@ fn lua_with_adhoc_grab() -> Lua {
 #[test]
 fn an_adhoc_tool_call_answer_resumes_with_its_handler_and_args() {
     let lua = lua_with_adhoc_grab();
-    let (envelope, retained) = Answer::<Error>::ToolCallResult(Ok(ToolCallOutcome::Adhoc {
-        alias: "grab".to_owned(),
-        args: json!({ "value": "hi" }),
-    }))
-    .into_envelope(&lua)
+    let (envelope, retained) = answer_envelope(
+        &lua,
+        Ok(Answer::<Error>::ToolCallResult(ToolCallOutcome::Adhoc {
+            alias: "grab".to_owned(),
+            args: json!({ "value": "hi" }),
+        })),
+    )
     .expect("the envelope renders");
     assert!(retained.is_none());
     let (ok, result_is_nil, handler_is_fn, called): (bool, bool, bool, String) = lua
@@ -211,11 +257,13 @@ fn an_adhoc_tool_call_answer_resumes_with_its_handler_and_args() {
 #[test]
 fn an_adhoc_tool_call_answer_for_an_unregistered_alias_is_an_error() {
     let lua = lua_with_adhoc_grab();
-    let error = Answer::<Error>::ToolCallResult(Ok(ToolCallOutcome::Adhoc {
-        alias: "missing".to_owned(),
-        args: json!({}),
-    }))
-    .into_envelope(&lua)
+    let error = answer_envelope(
+        &lua,
+        Ok(Answer::<Error>::ToolCallResult(ToolCallOutcome::Adhoc {
+            alias: "missing".to_owned(),
+            args: json!({}),
+        })),
+    )
     .expect_err("an alias with no registered handler cannot render");
     assert!(
         error
@@ -226,11 +274,10 @@ fn an_adhoc_tool_call_answer_for_an_unregistered_alias_is_an_error() {
 }
 
 #[test]
-fn an_err_tool_call_answer_round_trips_and_retains_the_typed_error() {
+fn a_cancelled_answer_round_trips_as_the_cancelled_kind_and_retains_the_typed_error() {
     let lua = Lua::new();
-    let (envelope, retained) = Answer::ToolCallResult(Err(Error::Interrupted))
-        .into_envelope(&lua)
-        .expect("the envelope renders");
+    let (envelope, retained) =
+        answer_envelope::<Error>(&lua, Err(Error::Interrupted)).expect("the envelope renders");
     match retained {
         Some(Error::Interrupted) => {}
         other => panic!("expected the retained Interrupted error, got {other:?}"),

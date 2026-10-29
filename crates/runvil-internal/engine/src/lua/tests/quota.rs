@@ -39,7 +39,7 @@ const MEASURED_ROUNDS: i64 = 3;
 
 /// A completed round that requested one `tools_echo` call.
 fn tool_call_round() -> Answer<Error> {
-    Answer::Chat(Ok(Box::new(ChatResult {
+    Answer::Chat(Box::new(ChatResult {
         outcome: ChatOutcome::ToolCalls(vec![ToolCallEvent::new(
             "call_1",
             "tools_echo",
@@ -47,16 +47,16 @@ fn tool_call_round() -> Answer<Error> {
         )]),
         finish_reason: Some("tool_calls".to_owned()),
         turn: 1,
-    })))
+    }))
 }
 
 /// A completed round that produced the terminal reply.
 fn reply_round(text: &str) -> Answer<Error> {
-    Answer::Chat(Ok(Box::new(ChatResult {
+    Answer::Chat(Box::new(ChatResult {
         outcome: ChatOutcome::Reply(text.to_owned()),
         finish_reason: Some("stop".to_owned()),
         turn: 2,
-    })))
+    }))
 }
 
 #[test]
@@ -114,7 +114,7 @@ fn a_models_loop_round_costs_the_trampoline_a_few_lua_instructions_per_yield() {
         let yielded = resume_with(
             &vm,
             &thread,
-            Answer::ToolCallsResult(Ok(vec!["echoed".to_owned()])),
+            Answer::ToolCallsResult(vec!["echoed".to_owned()]),
         );
         assert!(
             matches!(parse_request(&vm, yielded), Request::Chat { .. }),

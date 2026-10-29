@@ -38,7 +38,7 @@ impl Scheduler {
     /// effect, and resumes the caller at once with the id. The wait shim
     /// raises a dispatch failure before any wait.
     pub(super) fn dispatch_timer(&mut self, id: ChainIndex, duration: Duration) -> Result<()> {
-        let answer = Answer::Timer(self.prepare_timer(id, duration));
+        let answer = self.prepare_timer(id, duration).map(Answer::Timer);
         self.answer_inline(id, answer)
     }
 

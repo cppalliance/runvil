@@ -135,9 +135,9 @@ impl ChainOps<'_> {
             &text,
             trust,
         );
-        Ok(Dispatched::Answered(Answer::ToolCallResult(Ok(
+        Ok(Dispatched::Answered(Answer::ToolCallResult(
             ToolCallOutcome::Plain(text),
-        ))))
+        )))
     }
 
     /// Hands a `CallDynamicTool` call's inner `args`, under the call's own

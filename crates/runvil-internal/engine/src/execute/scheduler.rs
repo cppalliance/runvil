@@ -241,7 +241,7 @@ impl Scheduler {
     /// # Errors
     /// Returns [`Error::Internal`] when the chain has no suspended block
     /// to take the answer.
-    fn answer_inline(&mut self, id: ChainIndex, answer: Answer<Error>) -> Result<()> {
+    fn answer_inline(&mut self, id: ChainIndex, answer: Result<Answer<Error>>) -> Result<()> {
         self.chains[id].deliver(answer)?;
         self.ready.push_back(id);
         Ok(())

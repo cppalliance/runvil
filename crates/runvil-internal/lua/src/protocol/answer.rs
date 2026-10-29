@@ -1,12 +1,5 @@
-//! The answer vocabulary: one dispatched request's outcome and the payload
-//! types its variants hold.
-//!
-//! An adhoc tool call is answered in two steps. The `tool_call` request's
-//! answer is [`ToolCallOutcome::Adhoc`], which resumes the shim with the
-//! handler itself so the shim runs it inside the calling coroutine. The
-//! shim then yields `adhoc_tool_done` with the handler's result, and that
-//! request's answer is an ordinary [`Answer::ToolCallResult`]: the text
-//! on success, the error for a rejected return.
+//! The answer vocabulary: one dispatched request's successful outcome and
+//! the payload types its variants hold.
 
 use runvil_types::ids::TaskId;
 use runvil_types::metrics::ToolCallEvent;
@@ -41,15 +34,15 @@ pub enum VfsOutcome {
     Bool(bool),
 }
 
-/// One dispatched `tools.call`'s successful output, classified by the
-/// binding's declared [`ToolOutputKind`] so the envelope resumes the right
-/// Lua shape: a plain binding's text resumes as a Lua string, a structured
-/// binding's parsed JSON resumes as a Lua table through the serde boundary.
-/// The Engine performs the one conversion.
+/// One dispatched `tools.call`'s successful answer: a bound tool's output,
+/// classified by the binding's declared [`ToolOutputKind`] so the envelope
+/// resumes the right Lua shape (plain text as a Lua string, structured
+/// JSON as a Lua table, the Engine performing the one conversion), or an
+/// adhoc tool's handler for the shim to run.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ToolCallOutcome {
-    /// A plain binding's output text, resumed as a Lua string - every
-    /// existing tool, byte-identical to the tool loop's echo.
+    /// A plain binding's output text, resumed as a Lua string -
+    /// byte-identical to the tool loop's echo.
     Plain(String),
     /// A structured binding's parsed JSON output, resumed as a Lua table.
     Structured(serde_json::Value),
@@ -140,13 +133,14 @@ impl mlua::UserData for ChatResult {}
 ///
 /// `outcome` is the task's final text, or its failure as the error value
 /// the shim hands back (`ok = false`): the task chain's own error, or the
-/// `cancelled` value for a task that was cancelled or abandoned. The
-/// delivery itself succeeded; a wait that fails outright (a task the
-/// caller does not own, a result already delivered) is the outer
-/// [`Answer::JoinAny`] error instead. A delivered failure is also the
-/// envelope's retained typed error, so a shim that re-raises the member's
-/// failure at once (the `fanout` shim's fatal-arm path) hands the driver
-/// the member's own typed error rather than its rendering.
+/// `cancelled` value for a task its owner cancelled (an abandoned task is
+/// never delivered, since its owner has ended). The delivery itself
+/// succeeded; a wait that fails outright (a task the caller does not own,
+/// a result already delivered) fails the request instead, with no
+/// [`Answer::JoinAny`]. A delivered failure is also the envelope's
+/// retained typed error, so a shim that re-raises the member's failure at
+/// once (the `fanout` shim's fatal-arm path) hands the driver the member's
+/// own typed error rather than its rendering.
 #[derive(Debug)]
 pub struct TaskDelivery<E> {
     /// The member that ended.
@@ -161,7 +155,10 @@ pub enum TaskPhase {
     /// The task's backing chain or request is still running.
     Running,
     /// The task ended with a result, whether or not a wait delivered it.
-    Done,
+    Done {
+        /// Whether the task returned rather than failed.
+        ok: bool,
+    },
     /// The owner cancelled the task.
     Cancelled,
     /// The task's owner ended while the task was live.
@@ -175,7 +172,7 @@ impl TaskPhase {
     pub(crate) fn tag(self) -> &'static str {
         match self {
             TaskPhase::Running => "running",
-            TaskPhase::Done => "done",
+            TaskPhase::Done { .. } => "done",
             TaskPhase::Cancelled => "cancelled",
             TaskPhase::Abandoned => "abandoned",
         }
@@ -225,9 +222,6 @@ pub struct TaskStatus {
     pub target: String,
     /// The lifecycle phase; a delivered task reports [`TaskPhase::Done`].
     pub state: TaskPhase,
-    /// Whether the task ended well: `None` while it runs, `Some(false)`
-    /// for a failed, cancelled, or abandoned task.
-    pub ok: Option<bool>,
     /// The section the backing chain is currently in, while it is live and
     /// inside one.
     pub section: Option<String>,
@@ -243,93 +237,66 @@ pub struct TaskStatus {
     pub note: Option<String>,
 }
 
-/// One dispatched request's outcome, rendered to the `(ok, result)` envelope
-/// at resume time.
+/// One dispatched request's successful outcome, one variant per request.
 ///
-/// On failure the envelope holds the error's structured table for the
-/// shim to raise, and the driver
+/// The driver answers a request with a `Result` over it, rendered to the
+/// `(ok, result)` envelope at resume time, and a failure is the `Err` side
+/// whatever the request. On failure the envelope holds the error's
+/// structured table for the shim to raise, and the driver
 /// ([`SectionVm::resume_block_coro_answer`](crate::SectionVm::resume_block_coro_answer))
 /// retains the typed error beside that very table. When the block fails
 /// by raising that table, the shim's own raise or the block's re-raise of
 /// the value it caught, the typed error is substituted back; any other
 /// failure, one carrying the same message included, stays the block's
-/// own. This holds uniformly for leaf and structural answers: the enum
-/// owns the typed error until the envelope is rendered, so a `Call` or
-/// `JoinAny` failure round-trips with its structure intact.
+/// own. This holds uniformly for leaf and structural requests: the
+/// `Result` owns the typed error until the envelope is rendered, so a
+/// `call` or `join_any` failure round-trips with its structure intact.
 ///
-/// The error type is the driver's: the Lua side produces
-/// `Answer<`[`Error`]`>` (argument-validation failures at the yield
-/// boundary), while the executor's scheduler drives `Answer` over its own
-/// error type so a dispatch failure (a gateway completion error, a binding
+/// The error type is the driver's, and only a [`TaskDelivery`] holds one:
+/// a `join_any` member's failure is part of a successful wait. The
+/// executor's scheduler drives `Answer` over its own error type so a
+/// member's dispatch failure (a gateway completion error, a binding
 /// failure) round-trips typed.
 #[derive(Debug)]
 pub enum Answer<E> {
     /// The completion text for an `infer` request.
-    Infer(std::result::Result<String, E>),
+    Infer(String),
     /// The contained chain's final text for a `call` request.
-    Call(std::result::Result<String, E>),
+    Call(String),
     /// The started task's id for a `spawn` request, resumed as its path
     /// text; the shim wraps it in the methodless `Task` table.
-    Spawn(std::result::Result<TaskId, E>),
+    Spawn(TaskId),
     /// The started timer's task id for a `timer` request, resumed as its
     /// path text; the wait shim keeps it to wait on and cancel.
-    Timer(std::result::Result<TaskId, E>),
+    Timer(TaskId),
     /// The member delivered for a `join_any` request.
-    JoinAny(std::result::Result<TaskDelivery<E>, E>),
+    JoinAny(TaskDelivery<E>),
     /// Whether the task has ended, for a `ready` request.
-    Ready(std::result::Result<bool, E>),
+    Ready(bool),
     /// The task's status table for a `status` request. Boxed so the
     /// field-heavy [`TaskStatus`] does not size every answer.
-    Status(std::result::Result<Box<TaskStatus>, E>),
+    Status(Box<TaskStatus>),
     /// The caller's live tasks in spawn order, for a `pending` request;
     /// the shim wraps each id in a `Task` handle.
-    Pending(std::result::Result<Vec<TaskId>, E>),
+    Pending(Vec<TaskId>),
     /// The chain's effective admission limit, for a `concurrency`
     /// request: the setter's clamped value, or the current one when the
     /// call gave no argument.
-    Concurrency(std::result::Result<usize, E>),
-    /// The unit outcome of a `note` request.
-    Note(std::result::Result<(), E>),
-    /// The unit outcome of a `cancel` request.
-    Cancel(std::result::Result<(), E>),
+    Concurrency(usize),
+    /// A `note` request recorded its text.
+    Note,
+    /// A `cancel` request ended its task, or found it already ended.
+    Cancel,
     /// The classified output for a `chat` request. Boxed so the field-heavy
     /// [`ChatResult`] does not size every answer the non-chat paths move.
-    Chat(std::result::Result<Box<ChatResult>, E>),
+    Chat(Box<ChatResult>),
     /// The classified output for a `tools.call` request.
-    ToolCallResult(std::result::Result<ToolCallOutcome, E>),
-    /// The texts of a `tool_calls` request's issued calls in call order,
-    /// or the first failure in call order. Fewer texts than calls means
-    /// the scheduler stopped at the call after the last one answered.
-    ToolCallsResult(std::result::Result<Vec<String>, E>),
+    ToolCallResult(ToolCallOutcome),
+    /// The texts of a `tool_calls` request's issued calls in call order;
+    /// the first failure in call order fails the request instead. Fewer
+    /// texts than calls means the scheduler stopped at the call after the
+    /// last one answered.
+    ToolCallsResult(Vec<String>),
     /// The outcome of a `store` request: the operation's return value.
-    Store(std::result::Result<VfsOutcome, E>),
-}
-
-impl<E> Answer<E> {
-    /// Maps the error type, leaving every success value untouched.
-    pub fn map_error<F>(self, map: impl FnOnce(E) -> F) -> Answer<F> {
-        match self {
-            Answer::Infer(result) => Answer::Infer(result.map_err(map)),
-            Answer::Call(result) => Answer::Call(result.map_err(map)),
-            Answer::Spawn(result) => Answer::Spawn(result.map_err(map)),
-            Answer::Timer(result) => Answer::Timer(result.map_err(map)),
-            Answer::JoinAny(result) => Answer::JoinAny(match result {
-                Ok(TaskDelivery { task, outcome }) => Ok(TaskDelivery {
-                    task,
-                    outcome: outcome.map_err(map),
-                }),
-                Err(error) => Err(map(error)),
-            }),
-            Answer::Ready(result) => Answer::Ready(result.map_err(map)),
-            Answer::Status(result) => Answer::Status(result.map_err(map)),
-            Answer::Pending(result) => Answer::Pending(result.map_err(map)),
-            Answer::Concurrency(result) => Answer::Concurrency(result.map_err(map)),
-            Answer::Note(result) => Answer::Note(result.map_err(map)),
-            Answer::Cancel(result) => Answer::Cancel(result.map_err(map)),
-            Answer::ToolCallResult(result) => Answer::ToolCallResult(result.map_err(map)),
-            Answer::ToolCallsResult(result) => Answer::ToolCallsResult(result.map_err(map)),
-            Answer::Chat(result) => Answer::Chat(result.map_err(map)),
-            Answer::Store(result) => Answer::Store(result.map_err(map)),
-        }
-    }
+    Store(VfsOutcome),
 }

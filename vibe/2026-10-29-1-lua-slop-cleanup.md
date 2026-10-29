@@ -543,7 +543,7 @@ None. Both questions were answered by the operator: the `Answer` restructure lan
 
 <step-4>
 
-### Step 4: the parse module, the `Answer` failure side, the task status phase, and the protocol docs
+### Step 4: the parse module, the `Answer` failure side, the task status phase, and the protocol docs [completed]
 
 - Component: Protocol types
 - Tests:

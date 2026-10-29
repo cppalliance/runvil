@@ -51,8 +51,7 @@ pub enum Request {
     /// `call(target, input?)`: run a contained chain over the target's
     /// slice.
     Call {
-        /// The heading string, validated with the `resolve_section_target`
-        /// rule so a non-string target keeps its byte-identical error.
+        /// The heading string.
         target: String,
         /// The optional input override; `None` runs under the run's own args.
         input: Option<String>,
@@ -65,8 +64,7 @@ pub enum Request {
     /// chain shares `call`'s target resolution and depth cap, and refuses a
     /// list section as the target (the worker-template check).
     Spawn {
-        /// The heading string, validated with the `resolve_section_target`
-        /// rule so a non-string target keeps its byte-identical error.
+        /// The heading string.
         target: String,
         /// `opts.input`: the chain's `args` override; `None` runs under the
         /// caller's own args.
@@ -182,27 +180,25 @@ pub enum Request {
         outcome: AdhocToolOutcome,
     },
     /// One stateless tool-capable model round over the section's list,
-    /// yielded by the `models.loop` shim once per round. The dispatch arm
-    /// first refuses an empty list; the round sends the section's Static
-    /// Set, which the dispatch arm freezes with the Dynamic Set from the
-    /// section's offers at the first round to reach the merge and
-    /// attaches to the list.
+    /// yielded by the `models.loop` shim once per round. The round sends
+    /// the section's Static Set, which the dispatch arm freezes with the
+    /// Dynamic Set from the section's offers at the first round to reach
+    /// the merge and attaches to the list.
     Chat {
         /// The list the round sends, which may be empty, since the
         /// dispatch, not the parse, refuses an empty list. Its records
         /// were validated as the list added them.
         list: MessageList,
-        /// The receiver of a handle's `loop`, as its frozen binding cloned
-        /// out of the userdata while the VM handle is live; `None` when
-        /// the round names no handle, and the driver resolves the
+        /// The receiver of a handle's `loop`, as its frozen binding; `None`
+        /// when the round names no handle, and the driver resolves the
         /// section's current model.
         binding: Option<ModelBinding>,
     },
     /// `store.*(...)`: one run-scoped store operation as a leaf yield.
-    /// Section VMs and the live H1 VM run the store shims. Every operation
-    /// takes this path uniformly - memory- and real-file-backed alike, with no
-    /// inline fast path - so interleaving behavior never depends on the
-    /// backend.
+    /// Once a VM's yield shims install, every operation takes this path,
+    /// memory- and real-file-backed alike, with no inline fast path, so
+    /// interleaving behavior never depends on the backend. Pack preludes
+    /// run before that and use the direct store closures.
     Store {
         /// The validated operation and its author-supplied arguments.
         op: VfsOp,
@@ -227,7 +223,8 @@ pub enum AdhocToolOutcome {
 /// One `store.*` call from a prompt script: which operation it is and the
 /// arguments the script passed.
 ///
-/// The Engine checks the arguments once, when it parses the call.
+/// The parse checks each argument's shape; the operation checks line
+/// ranges when it runs.
 ///
 /// This type carries the full arguments of one of the eight `store.*`
 /// calls. The separate `vfs::Op` names only the kind of file operation

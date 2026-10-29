@@ -40,7 +40,7 @@ fn chat_request_with_handle(lua: &Lua, records: &str, handle: impl IntoLua) -> m
 
 fn expect_chat_call_error(parse: YieldParse, expected: &str) {
     match parse {
-        YieldParse::Call(Answer::Chat(Err(Error::Lua(message)))) => {
+        YieldParse::Refused(Error::Lua(message)) => {
             assert_eq!(message, expected);
         }
         other => panic!("expected the chat call error {expected:?}, got {other:?}"),

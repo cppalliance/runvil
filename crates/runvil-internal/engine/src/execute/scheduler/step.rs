@@ -28,7 +28,7 @@ enum Settled {
     /// The block suspended on a request for its arm to dispatch.
     Dispatch(Request),
     /// The block suspended on a call answered on the spot.
-    Answer(Answer<Error>),
+    Answer(Result<Answer<Error>>),
     /// The block jumped to the heading.
     Jump(String),
     /// The block returned a scalar.
@@ -75,10 +75,7 @@ fn settle_block(
         CoroStep::Yielded(coroutine, values) => {
             let settled = match entered.frame.vm().request_from_yield(&values) {
                 YieldParse::Request(request) => Settled::Dispatch(request),
-                // An argument-validation failure is the call's answer:
-                // the shim raises it at the call site, so an author
-                // `pcall` catches it.
-                YieldParse::Call(answer) => Settled::Answer(answer.map_error(Error::from)),
+                YieldParse::Refused(error) => Settled::Answer(Err(Error::from(error))),
                 YieldParse::Malformed(error) => {
                     emitter.report(name, lifecycle::LUA_CHUNK_FAILED);
                     return Err(Error::from(error));

@@ -32,8 +32,7 @@ fn call_task(table: &mlua::Table) -> std::result::Result<TaskId, FieldFailure> {
     parse_task_id(&call_string(table, "task")?)
 }
 
-/// Parses a `spawn` request: the author-supplied `target` (validated with
-/// the `resolve_section_target` rule, as `call`'s is), the optional
+/// Parses a `spawn` request: the author-supplied `target`, the optional
 /// author-supplied `input`, `item`, and `index` seeds, plus the
 /// shim-produced `var` snapshot and `fanout` mark.
 pub(super) fn parse_spawn(

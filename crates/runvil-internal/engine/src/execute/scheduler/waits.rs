@@ -48,7 +48,7 @@ use super::{ChainIndex, Scheduler};
 fn task_phase(state: TaskState) -> TaskPhase {
     match state {
         TaskState::Running => TaskPhase::Running,
-        TaskState::Done { .. } | TaskState::Delivered { .. } => TaskPhase::Done,
+        TaskState::Done { ok } | TaskState::Delivered { ok } => TaskPhase::Done { ok },
         TaskState::Cancelled => TaskPhase::Cancelled,
         TaskState::Abandoned => TaskPhase::Abandoned,
     }
@@ -69,7 +69,7 @@ impl Scheduler {
         match self.tasks.first_terminal(id, &tasks) {
             Ok(Some(task)) => {
                 let delivery = self.deliver(&task);
-                self.answer_inline(id, Answer::JoinAny(Ok(delivery)))
+                self.answer_inline(id, Ok(Answer::JoinAny(delivery)))
             }
             Ok(None) => {
                 // Only a chain-backed task has an identity; a timer has none.
@@ -82,7 +82,7 @@ impl Scheduler {
                 self.admission.park(id, &tree, waits_on_tasks);
                 Ok(())
             }
-            Err(error) => self.answer_inline(id, Answer::JoinAny(Err(error))),
+            Err(error) => self.answer_inline(id, Err(error)),
         }
     }
 
@@ -109,7 +109,7 @@ impl Scheduler {
             return Ok(());
         }
         let delivery = self.deliver(task);
-        self.wake_from_wait(owner, Answer::JoinAny(Ok(delivery)))
+        self.wake_from_wait(owner, Ok(Answer::JoinAny(delivery)))
     }
 
     /// Dispatches a `ready` request: whether a task the chain owns has
@@ -119,14 +119,14 @@ impl Scheduler {
             .tasks
             .owned(id, task)
             .map(|entry| !entry.state.is_live());
-        self.answer_inline(id, Answer::Ready(answer))
+        self.answer_inline(id, answer.map(Answer::Ready))
     }
 
     /// Dispatches a `status` request over a task the chain owns or runs
     /// inside.
     pub(super) fn dispatch_status(&mut self, id: ChainIndex, task: &TaskId) -> Result<()> {
         let answer = self.task_status(id, task).map(Box::new);
-        self.answer_inline(id, Answer::Status(answer))
+        self.answer_inline(id, answer.map(Answer::Status))
     }
 
     /// Reads one task's status: the entry's facts and note, plus the backing
@@ -135,11 +135,9 @@ impl Scheduler {
     /// keeps after the chain ends.
     fn task_status(&self, id: ChainIndex, task: &TaskId) -> Result<TaskStatus> {
         let entry = self.tasks.visible(id, &self.chains[id].task, task)?;
-        let state = entry.state.view();
         let mut status = TaskStatus {
             target: entry.target.clone(),
-            state: task_phase(state),
-            ok: state.ok(),
+            state: task_phase(entry.state.view()),
             section: None,
             blocked: None,
             turns: 0,
@@ -167,7 +165,7 @@ impl Scheduler {
     /// order.
     pub(super) fn dispatch_pending(&mut self, id: ChainIndex) -> Result<()> {
         let tasks = self.tasks.live_author_tasks(id);
-        self.answer_inline(id, Answer::Pending(Ok(tasks)))
+        self.answer_inline(id, Ok(Answer::Pending(tasks)))
     }
 
     /// Dispatches a `concurrency` request: with a limit, the chain's
@@ -198,7 +196,7 @@ impl Scheduler {
         } else {
             self.chains[id].concurrency
         };
-        self.answer_inline(id, Answer::Concurrency(Ok(effective.get())))
+        self.answer_inline(id, Ok(Answer::Concurrency(effective.get())))
     }
 
     /// Dispatches a `note` request: the text becomes the latest note of the
@@ -207,13 +205,13 @@ impl Scheduler {
     /// main walk, task `0`, and its `call` children) records nothing.
     pub(super) fn dispatch_note(&mut self, id: ChainIndex, text: String) -> Result<()> {
         self.tasks.set_note(&self.chains[id].task, text);
-        self.answer_inline(id, Answer::Note(Ok(())))
+        self.answer_inline(id, Ok(Answer::Note))
     }
 
     /// Dispatches a `cancel` request over a task the chain owns.
     pub(super) fn dispatch_cancel(&mut self, id: ChainIndex, task: &TaskId) -> Result<()> {
         let answer = self.cancel_task(id, task);
-        self.answer_inline(id, Answer::Cancel(answer))
+        self.answer_inline(id, answer.map(|()| Answer::Cancel))
     }
 
     /// Cancels a live task `caller` owns: the entry moves to `Cancelled`, the

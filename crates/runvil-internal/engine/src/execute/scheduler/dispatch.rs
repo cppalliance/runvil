@@ -140,7 +140,7 @@ impl Scheduler {
                 self.ready.push_back(child);
                 Ok(())
             }
-            Err(error) => self.answer_inline(id, Answer::Call(Err(error))),
+            Err(error) => self.answer_inline(id, Err(error)),
         }
     }
 
@@ -202,7 +202,7 @@ impl ChainOps<'_> {
     fn dispatch_infer(&mut self, prompt: &str, binding: Option<ModelBinding>) -> Result<()> {
         match self.prepare_infer(prompt, binding) {
             Ok(()) => Ok(()),
-            Err(error) => self.answer(Answer::Infer(Err(error))),
+            Err(error) => self.answer(Err(error)),
         }
     }
 
