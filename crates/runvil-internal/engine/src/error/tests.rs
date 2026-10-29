@@ -321,7 +321,9 @@ fn a_poisoned_model_set_maps_to_an_internal_error_and_never_a_completion_error()
     })
     .join();
 
-    let failure = set.bindings().expect_err("a poisoned set cannot be read");
+    let failure = set
+        .binding("writer")
+        .expect_err("a poisoned set cannot be read");
     let error = Error::from(failure);
     assert!(
         matches!(&error, Error::Internal { message, .. } if message == "model set mutex was poisoned"),

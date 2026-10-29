@@ -39,10 +39,9 @@ use crate::test_support::scenario::{TEST_SEED, test_binding};
 
 #[track_caller]
 fn test_models() -> ModelSet {
-    ModelSet::from_parts(
-        vec![test_binding("fast", "a fast model", "test-model")],
-        None,
-    )
+    let mut set = ModelSet::default();
+    set.push(test_binding("fast", "a fast model", "test-model"));
+    set
 }
 
 /// A minimal tool info behind a bound alias, for handle-form

@@ -1,5 +1,12 @@
 //! The model failure vocabulary: the closed set of kinds a broker maps its
 //! failures into, and the error that carries one.
+//!
+//! The message is the kind's fixed phrase. A failure built from an HTTP
+//! status appends ` (status N)`, and a 401 or 403 is `Unavailable` with
+//! `the model backend did not accept the credentials`. Only
+//! `MalformedResponse`, `EmptyReply`, `Unavailable`, and `InvalidParts`
+//! extend it with `: ` and text this repository's own code wrote. Provider
+//! text never enters the message; it goes in `detail`.
 
 /// A type-erased owned error cause.
 type BoxedSource = Box<dyn std::error::Error + Send + Sync>;
@@ -52,15 +59,7 @@ impl CompletionErrorKind {
     /// Returns the fixed phrase for this kind: one lowercase phrase written
     /// for a model to read.
     ///
-    /// The caller builds a [`CompletionError`] message from this phrase. For
-    /// a failure that came from an HTTP status, it appends ` (status N)`. A
-    /// 401 or 403 is `Unavailable`, and its message uses the phrase
-    /// `the model backend did not accept the credentials`. Only
-    /// `MalformedResponse`, `EmptyReply`, `Unavailable`, and `InvalidParts`
-    /// may extend the phrase with `: ` and specific text that the caller's
-    /// own code wrote.
-    /// Provider text never enters the message. It goes in the
-    /// [`detail`](CompletionError::detail).
+    /// The module page gives the message shapes a caller builds from it.
     #[must_use]
     pub fn phrase(self) -> &'static str {
         match self {
@@ -136,18 +135,14 @@ impl CompletionErrorKind {
 /// detail is provider text that the caller bounded and control-escaped. It
 /// is an opt-in channel and never appears in `Display`.
 ///
-/// The caller builds one with [`new`](CompletionError::new) or
+/// The caller builds one with [`new`](CompletionError::new),
+/// [`empty_reply`](CompletionError::empty_reply), or
 /// [`context_overflow`](CompletionError::context_overflow) and adds the
-/// extras with the `with_` methods.
+/// extras with the `with_` methods. `empty_reply` is the builder that
+/// chooses between the bare phrase and the phrase extended with the
+/// reasoning-ignored text.
 ///
-/// The message is the kind's fixed phrase. For a failure that came from an
-/// HTTP status, the caller appends ` (status N)`. A 401 or 403 is
-/// `Unavailable`, and its message uses the phrase
-/// `the model backend did not accept the credentials`. `MalformedResponse`,
-/// `EmptyReply`, `Unavailable`, and `InvalidParts` may extend the message
-/// with `: ` and specific text that the caller's own code wrote, such as
-/// the byte limit that was hit. Provider text never enters the message. It goes in the
-/// [`detail`](CompletionError::detail).
+/// See the module page for the message shapes.
 #[derive(Debug)]
 #[non_exhaustive]
 pub struct CompletionError {
@@ -163,15 +158,9 @@ pub struct CompletionError {
 impl CompletionError {
     /// Builds a failure of `kind` with `message` as its display text.
     ///
-    /// The caller uses the kind's fixed
-    /// [`phrase`](CompletionErrorKind::phrase) as the message. For a failure
-    /// that came from an HTTP status, it appends ` (status N)`. A 401 or 403
-    /// is `Unavailable`, and its message uses the phrase
-    /// `the model backend did not accept the credentials`. For
-    /// `MalformedResponse`, `EmptyReply`, `Unavailable`, and `InvalidParts`,
-    /// the caller may extend the phrase with `: ` and specific text that its
-    /// own code wrote.
-    /// Provider text never enters the message. The caller passes it to
+    /// The caller passes the kind's fixed
+    /// [`phrase`](CompletionErrorKind::phrase); the extension rules live on
+    /// the module page. Provider text goes to
     /// [`with_detail`](CompletionError::with_detail).
     #[must_use]
     pub fn new(kind: CompletionErrorKind, message: impl Into<String>) -> CompletionError {

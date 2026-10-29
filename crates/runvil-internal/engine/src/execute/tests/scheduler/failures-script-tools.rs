@@ -231,14 +231,13 @@ fn a_first_tool_call_whose_model_step_fails_leaves_the_install_to_the_next_call(
         tools.call('tools/echo', { value = 'y' })\n\
         return sys.model\n\
         ```\n";
-    let unbound_default = ModelSet::from_parts(
-        vec![test_binding(
-            "writer",
-            "A general model for tests",
-            "test-model",
-        )],
-        Some("ghost".to_owned()),
-    );
+    let mut unbound_default = ModelSet::default();
+    unbound_default.push(test_binding(
+        "writer",
+        "A general model for tests",
+        "test-model",
+    ));
+    unbound_default.set_default_alias("ghost".to_owned());
     let trace = Scenario::new(md)
         .unprepared()
         .models(unbound_default)

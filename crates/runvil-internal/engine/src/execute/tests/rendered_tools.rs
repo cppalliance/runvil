@@ -241,14 +241,12 @@ fn a_first_round_refused_for_a_missing_model_renders_nothing() {
          models.get('writer'):loop()
          return tostring(err)",
     );
-    let unset = ModelSet::from_parts(
-        vec![test_binding(
-            "writer",
-            "A general model for tests",
-            "test-model",
-        )],
-        None,
-    );
+    let mut unset = ModelSet::default();
+    unset.push(test_binding(
+        "writer",
+        "A general model for tests",
+        "test-model",
+    ));
     let trace = loop_scenario(source)
         .models(unset)
         .offer("echo", echo_tool())

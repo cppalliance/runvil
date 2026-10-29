@@ -75,7 +75,7 @@ fn binding_construction_is_atomic_with_context() {
         ctx(64_000),
     );
     let opts = binding.completion_options();
-    assert_eq!(opts.model, "remote");
+    assert_eq!(opts.model(), "remote");
     assert_eq!(binding.context().get(), 64_000);
 }
 
@@ -96,13 +96,11 @@ fn a_model_set_grows_by_push_and_takes_its_default_alias_by_setter() {
         "push keeps declaration order"
     );
     assert_eq!(set.default_alias(), Some("writer"));
-    assert_eq!(
-        set,
-        ModelSet::from_parts(
-            vec![binding("writer"), binding("critic")],
-            Some("writer".to_owned())
-        )
-    );
+    let mut expected = ModelSet::default();
+    expected.push(binding("writer"));
+    expected.push(binding("critic"));
+    expected.set_default_alias("writer".to_owned());
+    assert_eq!(set, expected);
 }
 
 #[test]

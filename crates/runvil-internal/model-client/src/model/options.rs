@@ -42,14 +42,6 @@ impl Temperature {
     }
 }
 
-impl TryFrom<f64> for Temperature {
-    type Error = TemperatureError;
-
-    fn try_from(value: f64) -> std::result::Result<Temperature, TemperatureError> {
-        Temperature::new(value)
-    }
-}
-
 /// The reason a sampling temperature was rejected.
 #[derive(Debug, Clone, PartialEq, thiserror::Error)]
 #[non_exhaustive]
@@ -161,7 +153,8 @@ impl ModelBinding {
         }
     }
 
-    /// Sets the model's provider id.
+    /// Sets the provider id for a binding built without catalog info. A held
+    /// catalog's provider wins.
     #[must_use]
     pub fn with_provider(mut self, provider: impl Into<String>) -> Self {
         self.provider = Some(provider.into());
@@ -227,10 +220,17 @@ impl ModelBinding {
         self.context
     }
 
-    /// Returns the provider id, or `None` when the catalog names none.
+    /// Returns the provider id, or `None` when neither a held catalog nor the
+    /// binding's own field names one.
+    ///
+    /// A held catalog's provider wins, because the catalog is the record the
+    /// binding was filled from.
     #[must_use]
     pub fn provider(&self) -> Option<&str> {
-        self.provider.as_deref()
+        self.catalog
+            .as_ref()
+            .and_then(ModelInfo::provider)
+            .or(self.provider.as_deref())
     }
 
     /// Returns the model info a section entry's render receives for this
@@ -249,8 +249,8 @@ impl ModelBinding {
             self.context,
             ThinkingMode::Never,
         );
-        match &self.provider {
-            Some(provider) => info.with_provider(provider.clone()),
+        match self.provider() {
+            Some(provider) => info.with_provider(provider.to_owned()),
             None => info,
         }
     }
@@ -259,12 +259,7 @@ impl ModelBinding {
     /// binding, from the model's name and the binding's request settings.
     #[must_use]
     pub fn completion_options(&self) -> CompletionOptions {
-        CompletionOptions {
-            model: self.id.name().to_owned(),
-            temperature: self.invocation.temperature,
-            max_tokens: self.invocation.max_tokens,
-            thinking: self.invocation.thinking,
-        }
+        CompletionOptions::new(self.id.name()).with_invocation(self.invocation.clone())
     }
 }
 
@@ -275,13 +270,10 @@ impl ModelBinding {
 #[non_exhaustive]
 pub struct CompletionOptions {
     /// The caller-facing model name sent on the wire.
-    pub(super) model: String,
-    /// Sampling temperature (a validated [`Temperature`]).
-    temperature: Option<Temperature>,
-    /// Maximum generation tokens (always non-zero).
-    max_tokens: Option<NonZeroU32>,
-    /// When set, emits `chat_template_kwargs.enable_thinking`.
-    thinking: Option<bool>,
+    model: String,
+    /// Every request setting the options apply, held as one value so the
+    /// getters and the setters cannot disagree.
+    invocation: ModelInvocation,
 }
 
 impl CompletionOptions {
@@ -291,9 +283,7 @@ impl CompletionOptions {
     pub fn new(model: impl Into<String>) -> CompletionOptions {
         CompletionOptions {
             model: model.into(),
-            temperature: None,
-            max_tokens: None,
-            thinking: None,
+            invocation: ModelInvocation::new(),
         }
     }
 
@@ -307,7 +297,7 @@ impl CompletionOptions {
         mut self,
         temperature: f64,
     ) -> std::result::Result<CompletionOptions, TemperatureError> {
-        self.temperature = Some(Temperature::new(temperature)?);
+        self.invocation.temperature = Some(Temperature::new(temperature)?);
         Ok(self)
     }
 
@@ -316,14 +306,24 @@ impl CompletionOptions {
     /// The cap is a [`NonZeroU32`], so it always allows some output.
     #[must_use]
     pub fn with_max_tokens(mut self, max_tokens: NonZeroU32) -> CompletionOptions {
-        self.max_tokens = Some(max_tokens);
+        self.invocation.max_tokens = Some(max_tokens);
         self
     }
 
     /// Sets the thinking switch, sent as `chat_template_kwargs.enable_thinking`.
     #[must_use]
     pub fn with_thinking(mut self, thinking: bool) -> CompletionOptions {
-        self.thinking = Some(thinking);
+        self.invocation.thinking = Some(thinking);
+        self
+    }
+
+    /// Replaces the request settings the options carry.
+    ///
+    /// A binding passes its own frozen [`ModelInvocation`] here, so the
+    /// options apply exactly the settings the binding holds.
+    #[must_use]
+    pub fn with_invocation(mut self, invocation: ModelInvocation) -> CompletionOptions {
+        self.invocation = invocation;
         self
     }
 
@@ -344,27 +344,33 @@ impl CompletionOptions {
         &self.model
     }
 
+    /// Returns the request settings the options apply.
+    #[must_use]
+    pub fn invocation(&self) -> &ModelInvocation {
+        &self.invocation
+    }
+
     /// Returns the sampling temperature, when one was set.
     #[must_use]
     pub fn temperature(&self) -> Option<Temperature> {
-        self.temperature
+        self.invocation.temperature
     }
 
     /// Returns the maximum number of tokens to generate, when a cap was set.
     #[must_use]
     pub fn max_tokens(&self) -> Option<NonZeroU32> {
-        self.max_tokens
+        self.invocation.max_tokens
     }
 
     /// Returns the `enable_thinking` switch, when it was set.
     #[must_use]
     pub fn thinking(&self) -> Option<bool> {
-        self.thinking
+        self.invocation.thinking
     }
 }
 
-/// The run's model set: the prompt-level bindings produced by live H1
-/// execution plus the prompt-wide `default` alias.
+/// The run's model set: the prompt-level bindings built at run construction
+/// from prepare's role bindings plus the prompt-wide `default` alias.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct ModelSet {
     /// The bindings in declaration order.
@@ -376,13 +382,6 @@ pub struct ModelSet {
 }
 
 impl ModelSet {
-    /// Reassembles a set from owned snapshots of its two parts (the
-    /// [`ModelView`] read pair).
-    #[must_use]
-    pub fn from_parts(bindings: Vec<ModelBinding>, default: Option<String>) -> Self {
-        Self { bindings, default }
-    }
-
     /// Returns bindings in declaration order.
     #[must_use]
     pub fn bindings(&self) -> &[ModelBinding] {
@@ -426,23 +425,18 @@ pub struct ModelSetError;
 
 /// The read-only view over the run's [`ModelSet`].
 ///
-/// The run context shares the set as `Arc<dyn ModelView>`; the live H1 pass
-/// writes through its own concrete `Arc<Mutex<ModelSet>>` handle, and once
-/// that VM is dropped no write handle remains. The trait is read-only, so
-/// post-H1 frozenness is structural. Every method locks briefly and returns
-/// an owned snapshot: a mutex guard cannot outlive the call.
+/// The run holds one `ModelSet` behind a mutex and hands every section VM a
+/// handle to it. This trait exposes reads only, so a reader cannot change the
+/// set through it. The one write any Engine path performs is `models.default`,
+/// which sets the default once and refuses a second, different label. Every
+/// method locks briefly and returns an owned snapshot: a mutex guard cannot
+/// outlive the call.
 pub trait ModelView: Send + Sync {
-    /// Returns an owned snapshot of the bindings in declaration order.
-    ///
-    /// # Errors
-    /// Returns [`ModelSetError`] if the set's mutex is poisoned.
-    fn bindings(&self) -> Result<Vec<ModelBinding>, ModelSetError>;
-
     /// Returns the prompt-wide default alias set by `models.default`, if any.
     ///
     /// # Errors
     /// Returns [`ModelSetError`] if the set's mutex is poisoned.
-    fn default(&self) -> Result<Option<String>, ModelSetError>;
+    fn default_alias(&self) -> Result<Option<String>, ModelSetError>;
 
     /// Returns an owned clone of the binding for `alias`, if it was
     /// declared.
@@ -460,11 +454,7 @@ fn lock_model_set(
 }
 
 impl ModelView for Mutex<ModelSet> {
-    fn bindings(&self) -> Result<Vec<ModelBinding>, ModelSetError> {
-        Ok(lock_model_set(self)?.bindings.clone())
-    }
-
-    fn default(&self) -> Result<Option<String>, ModelSetError> {
+    fn default_alias(&self) -> Result<Option<String>, ModelSetError> {
         Ok(lock_model_set(self)?.default_alias().map(str::to_owned))
     }
 

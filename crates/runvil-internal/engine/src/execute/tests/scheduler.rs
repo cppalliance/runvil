@@ -22,14 +22,14 @@ use crate::test_support::scenario::{infer_prompt, test_binding};
 /// as the prompt-wide default. The scheduler's tests bypass H1, so they
 /// pre-fill the run's shared set directly.
 fn writer_models() -> ModelSet {
-    ModelSet::from_parts(
-        vec![test_binding(
-            "writer",
-            "A general model for tests",
-            "test-model",
-        )],
-        Some("writer".to_owned()),
-    )
+    let mut set = ModelSet::default();
+    set.push(test_binding(
+        "writer",
+        "A general model for tests",
+        "test-model",
+    ));
+    set.set_default_alias("writer".to_owned());
+    set
 }
 
 /// A run of `source` over the [`writer_models`], unprepared, so the run

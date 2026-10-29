@@ -58,7 +58,11 @@ fn bound_role(
 
 /// Shares a model set the way the run shares its own.
 fn shared_models(bindings: Vec<ModelBinding>) -> Arc<Mutex<ModelSet>> {
-    Arc::new(Mutex::new(ModelSet::from_parts(bindings, None)))
+    let mut set = ModelSet::default();
+    for binding in bindings {
+        set.push(binding);
+    }
+    Arc::new(Mutex::new(set))
 }
 
 /// Shares an empty tool set.

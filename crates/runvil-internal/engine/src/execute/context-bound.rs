@@ -59,7 +59,7 @@ pub(super) fn bound_model_set(prompt: &Prompt, bindings: &ModelBindings) -> Mode
                 _ => {}
             }
         }
-        let mut binding = ModelBinding::new(
+        let binding = ModelBinding::new(
             label,
             role.description().unwrap_or_else(|| info.description()),
             info.id().clone(),
@@ -74,9 +74,6 @@ pub(super) fn bound_model_set(prompt: &Prompt, bindings: &ModelBindings) -> Mode
                 .collect(),
         )
         .with_catalog_info(info.clone());
-        if let Some(provider) = info.provider() {
-            binding = binding.with_provider(provider);
-        }
         set.push(binding);
     }
     set

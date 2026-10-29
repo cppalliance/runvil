@@ -29,13 +29,15 @@ mod author_shapes;
 /// default, model `test-model`) and `other` (model `other-model`), so an
 /// explicit handle provably runs on its own frozen binding.
 pub(super) fn loop_models() -> ModelSet {
-    ModelSet::from_parts(
-        vec![
-            test_binding("writer", "A general model for tests", "test-model"),
-            test_binding("other", "A second model", "other-model"),
-        ],
-        Some("writer".to_owned()),
-    )
+    let mut set = ModelSet::default();
+    set.push(test_binding(
+        "writer",
+        "A general model for tests",
+        "test-model",
+    ));
+    set.push(test_binding("other", "A second model", "other-model"));
+    set.set_default_alias("writer".to_owned());
+    set
 }
 
 /// The name a tool call's origin gives a round on the loop model bound

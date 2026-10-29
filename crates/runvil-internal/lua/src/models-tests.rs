@@ -58,15 +58,10 @@ fn bound_role(label: &str, capabilities: &[&str]) -> ModelBinding {
 /// the `writer` and `critic` roles.
 #[track_caller]
 fn models_vm() -> BuiltVm {
-    TestVm::new()
-        .models(ModelSet::from_parts(
-            vec![
-                bound_role("writer", &["frontier", "thinking"]),
-                bound_role("critic", &["fast"]),
-            ],
-            None,
-        ))
-        .build()
+    let mut models = ModelSet::default();
+    models.push(bound_role("writer", &["frontier", "thinking"]));
+    models.push(bound_role("critic", &["fast"]));
+    TestVm::new().models(models).build()
 }
 
 #[test]

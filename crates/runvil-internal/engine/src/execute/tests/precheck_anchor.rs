@@ -310,14 +310,13 @@ fn a_return_to_the_first_model_uses_the_estimate() {
 fn run_with_max_tokens(lua: &str, max_tokens: u32) -> (String, ScriptedChat) {
     let loop_set = loop_models();
     let capped = ModelInvocation::new().with_max_tokens(NonZeroU32::new(max_tokens));
-    let models = ModelSet::from_parts(
-        loop_set
-            .bindings()
-            .iter()
-            .map(|binding| binding.clone().with_invocation(capped.clone()))
-            .collect(),
-        loop_set.default_alias().map(str::to_owned),
-    );
+    let mut models = ModelSet::default();
+    for binding in loop_set.bindings() {
+        models.push(binding.clone().with_invocation(capped.clone()));
+    }
+    if let Some(alias) = loop_set.default_alias() {
+        models.set_default_alias(alias.to_owned());
+    }
     run_over(models, lua, vec![text("ok")])
 }
 

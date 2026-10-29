@@ -226,16 +226,15 @@ fn the_chat_agent_shape_leaves_the_oldest_records_out_of_a_summary_past_its_budg
          return messages[#messages].content .. '|' .. tostring(messages[1].meta and messages[1].meta.summary)",
         chat_turns(&format!("{{ {} }}", inputs.join(", ")))
     ));
-    let wide = ModelSet::from_parts(
-        vec![ModelBinding::new(
-            "writer",
-            "A general model for tests",
-            ModelId::gateway("test-model").expect("the test model id is valid"),
-            ModelInvocation::new(),
-            NonZeroU32::new(131_072).expect("the window is non-zero"),
-        )],
-        Some("writer".to_owned()),
-    );
+    let mut wide = ModelSet::default();
+    wide.push(ModelBinding::new(
+        "writer",
+        "A general model for tests",
+        ModelId::gateway("test-model").expect("the test model id is valid"),
+        ModelInvocation::new(),
+        NonZeroU32::new(131_072).expect("the window is non-zero"),
+    ));
+    wide.set_default_alias("writer".to_owned());
     let trace = loop_scenario(source).models(wide).chat(&gateway).run();
     assert_eq!(trace.text(), "answer|true");
     let bodies = gateway.requests();

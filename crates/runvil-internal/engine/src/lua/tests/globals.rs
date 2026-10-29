@@ -30,13 +30,11 @@ const ROLE_LABELS: [&str; 2] = ["writer", "tools"];
 
 /// One role bound under each of [`ROLE_LABELS`].
 fn roles() -> ModelSet {
-    ModelSet::from_parts(
-        ROLE_LABELS
-            .iter()
-            .map(|label| test_binding(label, "a role", "test-model"))
-            .collect(),
-        None,
-    )
+    let mut set = ModelSet::default();
+    for label in ROLE_LABELS {
+        set.push(test_binding(label, "a role", "test-model"));
+    }
+    set
 }
 
 /// The default wire names of the tools in [`offering`]'s catalog.

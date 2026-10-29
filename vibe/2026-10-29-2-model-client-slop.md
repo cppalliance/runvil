@@ -236,7 +236,7 @@ Two pieces, built sequentially in this one step: argument storage first, then vi
 - Narrow three fields to private: `Completion.metadata_diagnostics` at `src/client/wire.rs:354`, and `ToolCall`'s `id` and `name` at lines 174 and 176. The first is `pub(crate)` today and the other two are `pub(super)`. Each is read only through its own getter, and the in-crate tests already read them that way.
 - Confirm the visibility rule before editing, because `pub(crate)` and private are not interchangeable. Rust narrows a field only to the module that declares it, so private is reachable only inside `client::wire`. `wire-canned.rs` is that module's `#[path]` sibling, so its `Completion` literal at lines 51-57 and its `ToolCall` literal at line 144 still compile with no edit.
 - Leave `Completion::result` (line 341) and `ToolCall::arguments` (line 180) at `pub(crate)`, because `src/detail.rs` reads both directly. Keep `ToolSchema`'s `name`, `description`, and `parameters` at lines 108-112 at `pub(crate)` too: `detail::tool_schema_new` at `src/detail.rs:87` builds them from outside `client`, so private there would not compile. This is why this step narrows three fields and not six.
-- `ToolSchema::name`'s doc at lines 117-118 says the name "holds one or more characters, all from `[A-Za-z0-9_.-]`", but `detail::tool_schema_new` at `src/detail.rs:74-79` requires a leading ASCII letter, then only letters, digits, `_`, and `-`, capped at 64 bytes. Replace that second sentence with: "Returns the tool's name as sent to the model. [`crate::detail::tool_schema_new`] is the only builder, and it accepts a leading ASCII letter followed by up to 63 letters, digits, `_`, or `-`."
+- `ToolSchema::name`'s doc at lines 117-118 says the name "holds one or more characters, all from `[A-Za-z0-9_.-]`", but `detail::tool_schema_new` at `src/detail.rs:74-79` requires a leading ASCII letter, then only letters, digits, `_`, and `-`, capped at 64 bytes. Replace that second sentence with: "Returns the tool's name as sent to the model. The `crate::detail::tool_schema_new` builder is the only one, and it accepts a leading ASCII letter followed by up to 63 letters, digits, `_`, or `-`." Note that the name is written without square brackets: `ToolSchema::name` is facade-visible, and `xtask api --check` rejects a doc link from a facade-visible item into a crate the facade does not re-export, so a bracketed link there fails the gate.
 - `Completion::model`'s doc at lines 393-395 ends with "A completion decoded from a response is built with the model the response body named, or an empty name when the body omits one." `crates/harness-gateway-client/src/wire/stream.rs:361-363` overwrites that with the requested model whenever the request body named one. Replace only that final sentence with: "A completion decoded from a response is labeled with the model the request body named, or, when the request body named none, with the model the response body named." Leave the preceding `with_model` sentence untouched; it is correct.
 
 **Piece 3, the `detail` module rule.**
@@ -250,7 +250,7 @@ Acceptance: the refusal text `tool call arguments were not a JSON object` still 
 
 <step-2>
 
-### Step 2: one provider, one invocation, and the model module's untrue docs
+### Step 2: one provider, one invocation, and the model module's untrue docs [completed]
 
 - Component: `model-client-model`
 - Tests: from the repository root, in order:

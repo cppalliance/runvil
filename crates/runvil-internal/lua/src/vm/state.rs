@@ -268,7 +268,7 @@ pub fn resolve_model_binding(
     };
     match selection {
         Some((alias, options)) => Ok(Some(options.apply(frozen(&alias)?))),
-        None => match bindings.default()? {
+        None => match bindings.default_alias()? {
             Some(alias) => Ok(Some(frozen(&alias)?)),
             None => Ok(None),
         },

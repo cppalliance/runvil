@@ -1,12 +1,14 @@
 //! Prompt-local model bindings: catalog, bind/use declarations, and invocation.
 //!
-//! The caller supplies the [`ModelCatalog`]; building it happens outside
-//! this crate. H1 `models.bind` resolves a description
-//! against that catalog under hard constraints, freezes invocation
-//! parameters, and stores the result in the Engine's run-scoped model
-//! bindings. H2 `models.use` selects at most one binding per section; H1
-//! `models.default` supplies the prompt-wide default for sections that omit
-//! `models.use`. Model-facing sections with neither binding fail with a
+//! The caller supplies the
+//! [`ModelCatalog`](runvil_types::models::ModelCatalog); building it happens
+//! outside this crate. The prompt's frontmatter declares each model role, prepare
+//! resolves every role against that catalog under the role's hard keywords
+//! and context minimum, and the run builds its binding set from those
+//! bindings before any Lua runs. H2 `models.use` selects at most one binding
+//! per section; `models.default` supplies the prompt-wide default,
+//! conventionally from H1, for sections that omit `models.use`. Model-facing
+//! sections with neither binding fail with a
 //! model-binding failure surfaced through the run error the caller receives.
 
 mod error;
@@ -17,12 +19,9 @@ pub use options::{
     CompletionOptions, ModelBinding, ModelInvocation, ModelSet, ModelSetError, ModelView,
     Temperature, TemperatureError,
 };
-// The model identity/catalog vocabulary is canonical in
-// `runvil-types` and re-exported here so existing
-// `runvil_model_client::model::` paths keep resolving.
-pub use runvil_types::models::{
-    ModelCatalog, ModelCatalogError, ModelId, ModelIdError, ModelInfo, ThinkingMode,
-};
+// `runvil-lua` names the model id through this path; the rest of the catalog
+// vocabulary is imported from `runvil-types` directly.
+pub use runvil_types::models::ModelId;
 
 #[cfg(test)]
 mod tests;

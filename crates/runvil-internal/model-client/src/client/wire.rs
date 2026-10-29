@@ -113,9 +113,10 @@ pub struct ToolSchema {
 }
 
 impl ToolSchema {
-    /// Returns the tool's name as sent to the model. [`crate::detail::tool_schema_new`]
-    /// is the only builder, and it accepts a leading ASCII letter followed
-    /// by up to 63 letters, digits, `_`, or `-`.
+    /// Returns the tool's name as sent to the model. The
+    /// `crate::detail::tool_schema_new` builder is the only one, and it
+    /// accepts a leading ASCII letter followed by up to 63 letters, digits,
+    /// `_`, or `-`.
     #[must_use]
     pub fn name(&self) -> &str {
         &self.name

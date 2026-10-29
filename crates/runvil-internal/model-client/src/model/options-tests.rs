@@ -20,8 +20,8 @@ fn poisoned_set() -> Mutex<ModelSet> {
 #[test]
 fn a_poisoned_model_set_reports_the_lock_error_from_every_view_method() {
     let set = poisoned_set();
-    assert_eq!(set.bindings(), Err(ModelSetError));
-    assert_eq!(ModelView::default(&set), Err(ModelSetError));
+    assert!(set.lock().is_err(), "a poisoned set cannot be read");
+    assert_eq!(ModelView::default_alias(&set), Err(ModelSetError));
     assert_eq!(set.binding("writer"), Err(ModelSetError));
     assert_eq!(ModelSetError.to_string(), "model set mutex was poisoned");
 }
@@ -29,8 +29,13 @@ fn a_poisoned_model_set_reports_the_lock_error_from_every_view_method() {
 #[test]
 fn a_healthy_model_set_answers_every_view_method() {
     let set = Mutex::new(ModelSet::default());
-    assert_eq!(set.bindings(), Ok(Vec::new()));
-    assert_eq!(ModelView::default(&set), Ok(None));
+    assert!(
+        set.lock()
+            .expect("a healthy set locks")
+            .bindings()
+            .is_empty()
+    );
+    assert_eq!(ModelView::default_alias(&set), Ok(None));
     assert_eq!(set.binding("writer"), Ok(None));
 }
 
@@ -95,6 +100,86 @@ fn a_binding_built_with_new_renders_a_never_thinking_info_from_its_own_parts() {
 }
 
 #[test]
+fn provider_prefers_the_catalog_and_falls_back_to_the_field() {
+    let info = ModelInfo::new(
+        ModelId::gateway("catalog-model").expect("a fixture model id"),
+        "The catalog's description",
+        window(65_536),
+        ThinkingMode::Switchable,
+    )
+    .with_provider("acme");
+    let from_catalog = ModelBinding::new(
+        "writer",
+        "The role's description",
+        info.id().clone(),
+        ModelInvocation::new(),
+        window(4096),
+    )
+    .with_catalog_info(info.clone());
+    assert_eq!(
+        from_catalog.provider(),
+        Some("acme"),
+        "a held catalog's provider answers even when with_provider was never called"
+    );
+    let from_field = ModelBinding::new(
+        "writer",
+        "The role's description",
+        ModelId::gateway("field-model").expect("a fixture model id"),
+        ModelInvocation::new(),
+        window(4096),
+    )
+    .with_provider("acme");
+    assert_eq!(
+        from_field.provider(),
+        Some("acme"),
+        "a catalog-less binding still reports the provider its setter stored"
+    );
+    let both = ModelBinding::new(
+        "writer",
+        "The role's description",
+        ModelId::gateway("both-model").expect("a fixture model id"),
+        ModelInvocation::new(),
+        window(4096),
+    )
+    .with_provider("field-provider")
+    .with_catalog_info(info);
+    assert_eq!(
+        both.provider(),
+        Some("acme"),
+        "the catalog outranks the field when a binding holds both, the order the accessor's docs state"
+    );
+}
+
+#[test]
+fn completion_options_reports_the_invocation_it_holds() {
+    let set = CompletionOptions::new("analyst")
+        .with_temperature(0.2)
+        .expect("0.2 is valid")
+        .with_thinking(true);
+    let invocation = set.invocation();
+    assert_eq!(
+        invocation.temperature,
+        Some(Temperature::new(0.2).expect("0.2 is valid")),
+        "the held invocation carries the temperature the setter validated"
+    );
+    assert_eq!(
+        invocation.thinking,
+        Some(true),
+        "the held invocation carries the thinking switch the setter stored"
+    );
+    assert_eq!(
+        set.temperature(),
+        invocation.temperature,
+        "the getter and the held invocation cannot disagree on temperature"
+    );
+    assert_eq!(
+        set.thinking(),
+        invocation.thinking,
+        "the getter and the held invocation cannot disagree on thinking"
+    );
+}
+
+#[test]
 fn with_temperature_rejects_non_finite_and_out_of_range() {
     let base = || CompletionOptions::new("m");
     assert_eq!(
@@ -118,7 +203,7 @@ fn with_temperature_rejects_non_finite_and_out_of_range() {
         base()
             .with_temperature(0.0)
             .expect("0.0 is valid")
-            .temperature
+            .temperature()
             .map(Temperature::get),
         Some(0.0)
     );
@@ -126,7 +211,7 @@ fn with_temperature_rejects_non_finite_and_out_of_range() {
         base()
             .with_temperature(TEMPERATURE_MAX)
             .expect("2.0 is valid")
-            .temperature
+            .temperature()
             .map(Temperature::get),
         Some(TEMPERATURE_MAX)
     );
@@ -134,7 +219,7 @@ fn with_temperature_rejects_non_finite_and_out_of_range() {
         base()
             .with_temperature(0.7)
             .expect("0.7 is valid")
-            .temperature
+            .temperature()
             .map(Temperature::get),
         Some(0.7)
     );
