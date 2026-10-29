@@ -1,10 +1,9 @@
 //! The model vocabulary a caller exchanges with a run: what a `Chat` effect
-//! includes ([`Message`], [`ToolSchema`], [`CompletionOptions`],
-//! [`ModelBinding`]) and what its answer returns ([`Completion`],
-//! [`CompletionResult`], [`CompletionError`]), plus the prompt-local
-//! binding vocabulary ([`ModelSet`], [`ModelView`], [`ModelInvocation`])
-//! and the model identity a run's roles are bound to ([`ModelInfo`],
-//! [`ModelId`]).
+//! includes ([`Message`], [`ToolSchema`], [`ModelBinding`]) and what its
+//! answer returns ([`Completion`], [`CompletionResult`],
+//! [`CompletionError`]), plus the prompt-local binding vocabulary
+//! ([`ModelSet`], [`ModelView`], [`ModelInvocation`]) and the model
+//! identity a run's roles are bound to ([`ModelInfo`], [`ModelId`]).
 //!
 //! `models.default` sets the prompt-wide default role, conventionally
 //! from the H1 body, and `models.use` sets a section entry's current
@@ -25,8 +24,8 @@ pub(crate) use runvil_model_client::client::{
     Completion, CompletionResult, Message, ToolCall, ToolSchema,
 };
 pub(crate) use runvil_model_client::model::{
-    CompletionError, CompletionErrorKind, CompletionOptions, ModelBinding, ModelInvocation,
-    ModelSet, ModelView, Temperature,
+    CompletionError, CompletionErrorKind, ModelBinding, ModelInvocation, ModelSet, ModelView,
+    Temperature,
 };
 pub(crate) use runvil_types::models::{ModelId, ModelInfo, ThinkingMode};
 

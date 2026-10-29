@@ -340,11 +340,11 @@ impl Driver {
                 binding,
                 messages,
                 tools,
-                options,
                 round,
                 ..
             } => {
                 let broker = Arc::clone(&self.performers.broker);
+                let options = binding.completion_options();
                 let round = async move {
                     let completion = broker.chat(binding, messages, tools, options, round).await;
                     EffectAnswer::Chat(completion)

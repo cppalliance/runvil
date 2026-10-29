@@ -9,7 +9,7 @@ use crate::test_support::fresh_access;
 use crate::test_support::recording::null_emitter;
 use crate::test_support::scenario::TEST_SEED;
 use crate::{Error, Result};
-use runvil_model_client::model::{CompletionOptions, ModelInvocation};
+use runvil_model_client::model::ModelInvocation;
 use runvil_types::emitter::Emitter;
 use runvil_types::untrusted::GuardNonce;
 use serde_json::json;

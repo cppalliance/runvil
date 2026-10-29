@@ -1,6 +1,7 @@
 //! `models.default` (label form) integration tests.
 
 use super::*;
+use runvil_model_client::model::CompletionOptions;
 
 #[test]
 fn models_default_takes_a_label_and_parks_the_prompt_wide_default() {

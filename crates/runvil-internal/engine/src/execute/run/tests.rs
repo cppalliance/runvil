@@ -45,7 +45,6 @@ fn binding() -> ModelBinding {
 fn a_chat_effect_records_its_round_alias_messages_tools_and_invocation() {
     let binding = binding();
     let effect = Effect::Chat {
-        options: binding.completion_options(),
         binding,
         messages: vec![Message::user("ask")],
         after: None,

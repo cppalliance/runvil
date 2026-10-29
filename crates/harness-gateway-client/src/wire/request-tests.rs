@@ -79,9 +79,9 @@ fn tool_round(offered: &[Offered]) -> Round {
         for IssuedEffect { id, effect, .. } in effects {
             let answer = match effect {
                 Effect::Chat {
+                    binding,
                     messages,
                     tools,
-                    options,
                     ..
                 } => {
                     let reply = if rounds.is_empty() {
@@ -98,7 +98,7 @@ fn tool_round(offered: &[Offered]) -> Round {
                     rounds.push(Round {
                         messages,
                         tools,
-                        options,
+                        options: binding.completion_options(),
                     });
                     EffectAnswer::Chat(Completion::from_result(reply, "m").map(Box::new))
                 }

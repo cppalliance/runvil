@@ -875,7 +875,6 @@ pub runvil::effect::Effect::Chat::after: core::option::Option<runvil::ids::Round
 pub runvil::effect::Effect::Chat::binding: runvil::model::ModelBinding
 pub runvil::effect::Effect::Chat::keep: u64
 pub runvil::effect::Effect::Chat::messages: alloc::vec::Vec<runvil::model::Message>
-pub runvil::effect::Effect::Chat::options: runvil::model::CompletionOptions
 pub runvil::effect::Effect::Chat::round: runvil::effect::Round
 pub runvil::effect::Effect::Chat::tools: alloc::vec::Vec<runvil::model::ToolSchema>
 pub runvil::effect::Effect::Render { .. }

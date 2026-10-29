@@ -94,15 +94,15 @@ fn run_once(prompt: &Prompt, chat: &ScriptedChat, context: u32) -> RunResult {
     let (result, _) = drive(run, |_, effect| {
         perform_locally(effect, &mut |round| {
             let Effect::Chat {
+                binding,
                 messages,
                 tools,
-                options,
                 ..
             } = round
             else {
                 unreachable!("perform_locally hands the model only chat effects");
             };
-            let answer = chat.complete_now(messages, tools, options);
+            let answer = chat.complete_now(messages, tools, &binding.completion_options());
             EffectAnswer::Chat(answer.map(Box::new))
         })
     });

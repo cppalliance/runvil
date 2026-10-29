@@ -219,7 +219,6 @@ impl ChainOps<'_> {
         // consumer.
         let round = self.number_round(ReplyOrigin::Infer);
         let effect = Effect::Chat {
-            options: binding.completion_options(),
             binding,
             messages: vec![Message::user(prompt)],
             after: None,

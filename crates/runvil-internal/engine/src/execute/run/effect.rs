@@ -39,7 +39,7 @@ use serde_json::Value;
 
 use crate::lua::{VfsOp, VfsOutcome};
 use crate::model::{Completion, CompletionError, Message, ToolSchema};
-use crate::model::{CompletionOptions, ModelBinding, Temperature};
+use crate::model::{ModelBinding, Temperature};
 
 pub use record::{
     AnswerRecord, ChatAnswerRecord, EffectRecord, FailureRecord, PackToolSets, ToolAnswerRecord,
@@ -106,9 +106,9 @@ impl Round {
 #[derive(Debug)]
 pub enum Effect {
     /// One model round: send `messages` to the model with `tools`
-    /// advertised, using the frozen `options` built from `binding`. A
-    /// nested `models.infer` round sends one user message with an empty
-    /// tool list, and the Engine consumes only its completed reply.
+    /// advertised, using the options `binding` freezes. A nested
+    /// `models.infer` round sends one user message with an empty tool
+    /// list, and the Engine consumes only its completed reply.
     Chat {
         /// The binding the round runs under.
         binding: ModelBinding,
@@ -123,8 +123,6 @@ pub enum Effect {
         keep: u64,
         /// The tool schemas advertised to the model for this round.
         tools: Vec<ToolSchema>,
-        /// The per-request completion options, built from `binding`.
-        options: CompletionOptions,
         /// The round's id and origin. The caller needs to forward live
         /// deltas only for a round whose origin is [`ReplyOrigin::Chat`].
         /// The effect's record keeps the id and drops the origin, because

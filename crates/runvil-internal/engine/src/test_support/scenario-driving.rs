@@ -63,13 +63,13 @@ impl Answers {
     fn perform(&self, effect: &Effect) -> EffectAnswer {
         match effect {
             Effect::Chat {
+                binding,
                 messages,
                 tools,
-                options,
                 ..
             } => match &self.chat {
                 Some(Chat::Script(chat)) => {
-                    let answer = chat.complete_now(messages, tools, options);
+                    let answer = chat.complete_now(messages, tools, &binding.completion_options());
                     EffectAnswer::Chat(answer.map(Box::new))
                 }
                 Some(Chat::Closure(answer)) => answer(effect),

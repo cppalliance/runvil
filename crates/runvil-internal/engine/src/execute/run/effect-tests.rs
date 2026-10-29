@@ -30,7 +30,6 @@ fn answer_round_trip(record: &AnswerRecord) -> AnswerRecord {
 fn chat_effect(messages: Vec<Message>, after: Option<RoundId>, keep: u64) -> Effect {
     let binding = test_binding("writer", "A general model for tests", "test-model");
     Effect::Chat {
-        options: binding.completion_options(),
         binding,
         messages,
         after,

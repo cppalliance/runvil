@@ -252,7 +252,7 @@ Ten steps, one commit each. Order is by cause, not by file count. The Pack roste
 
 <step-2>
 
-### Step 2: Delete `Effect::Chat`'s `options` field
+### Step 2: Delete `Effect::Chat`'s `options` field [completed]
 
 - Component: Engine state
 - Tests: `cargo nextest run --locked -p runvil-engine -p harness-runner -p harness-gateway-client`
