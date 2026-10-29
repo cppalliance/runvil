@@ -4,6 +4,10 @@
 /// A type-erased owned error cause.
 type BoxedSource = Box<dyn std::error::Error + Send + Sync>;
 
+/// The specific an empty reply adds to its phrase when the reader dropped a
+/// reasoning side channel that it could not use as answer text.
+const REASONING_IGNORED: &str = "reasoning content was present but ignored";
+
 /// The kind of failure a model round ended with.
 ///
 /// The kinds form a closed set, so a caller can branch on the kind alone.
@@ -179,6 +183,24 @@ impl CompletionError {
             finish_reason: None,
             detail: None,
             source: None,
+        }
+    }
+
+    /// Builds an [`EmptyReply`](CompletionErrorKind::EmptyReply) failure for a
+    /// turn that carried no text and no tool calls.
+    ///
+    /// The message is the kind's fixed phrase, extended with
+    /// `: reasoning content was present but ignored` when
+    /// `reasoning_present` says the turn's reasoning side channel was
+    /// dropped rather than used as answer text. A caller that knows the
+    /// backend's `finish_reason` adds it with
+    /// [`with_finish_reason`](CompletionError::with_finish_reason).
+    #[must_use]
+    pub fn empty_reply(reasoning_present: bool) -> CompletionError {
+        if reasoning_present {
+            CompletionError::specific(CompletionErrorKind::EmptyReply, REASONING_IGNORED)
+        } else {
+            CompletionError::phrased(CompletionErrorKind::EmptyReply)
         }
     }
 

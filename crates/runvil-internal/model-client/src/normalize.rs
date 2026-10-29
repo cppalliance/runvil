@@ -12,11 +12,11 @@ use std::collections::HashSet;
 use serde_json::Value;
 
 use crate::Result;
-use crate::model::{CompletionError, CompletionErrorKind};
+use crate::model::CompletionError;
 
 /// The empty-reply error for a turn with no product.
 pub(crate) fn empty_reply_error() -> CompletionError {
-    CompletionError::phrased(CompletionErrorKind::EmptyReply)
+    CompletionError::empty_reply(false)
 }
 
 /// Refuses a blank tool-call id.

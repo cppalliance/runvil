@@ -240,3 +240,26 @@ fn a_specific_extends_the_phrase_after_a_colon_and_never_adds_detail() {
     assert_eq!(empty.finish_reason(), Some("stop"));
     assert!(!empty.is_retryable());
 }
+
+#[test]
+fn the_shared_empty_reply_owner_builds_the_phrase_and_the_reasoning_specific() {
+    // One owner for the empty-reply message: the bare phrase when the turn
+    // carried no reasoning, the phrase plus the reasoning-ignored specific
+    // when one was dropped, and the caller's finish reason either way.
+    let plain = CompletionError::empty_reply(false);
+    assert_eq!(plain.kind(), CompletionErrorKind::EmptyReply);
+    assert_eq!(plain.to_string(), CompletionErrorKind::EmptyReply.phrase());
+    assert_eq!(plain.finish_reason(), None);
+    assert!(!plain.is_retryable());
+
+    let reasoned = CompletionError::empty_reply(true).with_finish_reason("stop");
+    assert_eq!(
+        reasoned.to_string(),
+        format!(
+            "{}: reasoning content was present but ignored",
+            CompletionErrorKind::EmptyReply.phrase()
+        )
+    );
+    assert_eq!(reasoned.finish_reason(), Some("stop"));
+    assert_eq!(reasoned.detail(), None);
+}

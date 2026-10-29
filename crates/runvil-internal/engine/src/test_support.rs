@@ -13,8 +13,11 @@
 //!
 //! The `test-support` feature compiles those three alone, for
 //! `benches/models_loop.rs`, its only consumer: a bench is a separate
-//! target that cannot see `#[cfg(test)]` code. The rest is this crate's
-//! own test plumbing. `scenario` builds a whole run from its setup as data
+//! target that cannot see `#[cfg(test)]` code. Only the items that bench
+//! names stay `pub`; the reply builders and the request accessors are
+//! `pub(crate)`, so the in-crate suites reach them and the bench cannot.
+//! The rest is this crate's own test plumbing. `scenario` builds a whole
+//! run from its setup as data
 //! and drives it on the serial driver, and `rig` drives a scenario's run
 //! with its effects tapped, its held effects released in the order a test
 //! chooses or its answers shuffled under a seed, and its scheduler in
@@ -38,6 +41,13 @@ pub mod recording;
 pub(crate) mod rig;
 #[cfg(test)]
 pub(crate) mod scenario;
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "the reply builders and the request accessors are read only by the in-crate suites; the non-test `test-support` build compiles this module for the bench, which names only `ScriptedChat`, `ScriptedReply`, its variant fields, `new`, `complete_now`, `call_count`, `drive`, and `perform_locally`"
+    )
+)]
 #[path = "test_support/scripted-chat.rs"]
 pub mod scripted_chat;
 #[cfg(test)]

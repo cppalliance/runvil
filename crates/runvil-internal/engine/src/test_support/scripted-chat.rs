@@ -3,13 +3,11 @@
 //! The Engine emits each round as a `Chat` effect for the caller to perform.
 //! [`ScriptedChat`] answers each round from a fixed script instead, with
 //! no HTTP and no wire code, and records what every round carried so a
-//! suite asserts on the effect rather than on a request body. The
-//! empty-reply wording copies the gateway client's reader, because the
-//! Engine cannot depend on the gateway client; the two copies change
-//! together. The reply constructors beside it -
-//! [`text`], [`text_finish`], [`calls`], and [`fail`] - write the script.
-//! The bench answers its rounds from the same model through the
-//! `test-support` feature.
+//! suite asserts on the effect rather than on a request body. The reply
+//! constructors beside it - `text`, `text_finish`, `calls`, and `fail` -
+//! write the script, and they stay crate-private because only the in-crate
+//! suites write one. The bench answers its rounds from the same model
+//! through the `test-support` feature.
 
 use std::sync::{Arc, Mutex, PoisonError};
 
@@ -18,24 +16,20 @@ use runvil_model_client::model::{CompletionError, CompletionErrorKind, Completio
 use runvil_types::metrics::CallMetrics;
 use serde_json::Value;
 
-/// The specific the reader adds to an empty reply whose reasoning it
-/// ignored as answer text.
-const REASONING_IGNORED: &str = "reasoning content was present but ignored";
-
 /// The model every scripted reply names as its server.
-pub const MOCK_MODEL: &str = "mock-model";
+pub(crate) const MOCK_MODEL: &str = "mock-model";
 
 /// A text reply naming [`MOCK_MODEL`], with no finish reason, reasoning,
 /// or metrics.
 #[must_use]
-pub fn text(content: &str) -> ScriptedReply {
+pub(crate) fn text(content: &str) -> ScriptedReply {
     mock_text(content, None)
 }
 
 /// A text reply naming [`MOCK_MODEL`] that the backend stopped with
 /// `finish_reason`.
 #[must_use]
-pub fn text_finish(content: &str, finish_reason: &str) -> ScriptedReply {
+pub(crate) fn text_finish(content: &str, finish_reason: &str) -> ScriptedReply {
     mock_text(content, Some(finish_reason))
 }
 
@@ -59,7 +53,7 @@ fn mock_text(content: &str, finish_reason: Option<&str>) -> ScriptedReply {
 /// When a call's arguments are not JSON.
 #[must_use]
 #[track_caller]
-pub fn calls(calls: &[(&str, &str, &str)]) -> ScriptedReply {
+pub(crate) fn calls(calls: &[(&str, &str, &str)]) -> ScriptedReply {
     let calls = calls
         .iter()
         .map(|&(id, name, arguments)| {
@@ -81,12 +75,11 @@ pub fn calls(calls: &[(&str, &str, &str)]) -> ScriptedReply {
 /// (no credentials wording for 401 and 403, no parsed overflow counts), so
 /// each test names its kind directly.
 #[must_use]
-pub fn fail(kind: CompletionErrorKind, status: u16, body: &str) -> ScriptedReply {
+pub(crate) fn fail(kind: CompletionErrorKind, status: u16, body: &str) -> ScriptedReply {
     ScriptedReply::Failure {
         kind,
         message: format!("{} (status {status})", kind.phrase()),
         detail: Some(body.to_owned()),
-        finish_reason: None,
     }
 }
 
@@ -126,8 +119,6 @@ pub enum ScriptedReply {
         message: String,
         /// The provider text behind the failure, when there is some.
         detail: Option<String>,
-        /// The backend's stop label, when it supplied one.
-        finish_reason: Option<String>,
     },
 }
 
@@ -139,7 +130,7 @@ impl ScriptedReply {
     /// Returns the scripted failure, the `EmptyReply` failure for an empty
     /// text reply, and the `InvalidParts` failure for a tool call the
     /// validating constructors refuse.
-    pub fn answer(&self) -> Result<Completion, CompletionError> {
+    pub(crate) fn answer(&self) -> Result<Completion, CompletionError> {
         match self {
             ScriptedReply::Text {
                 model,
@@ -148,9 +139,13 @@ impl ScriptedReply {
                 reasoning,
                 metrics,
             } => {
-                let reasoning = reasoning.as_deref().filter(|text| !text.is_empty());
+                let reasoning = reasoning.as_deref().filter(|text| !text.trim().is_empty());
                 if content.trim().is_empty() {
-                    return Err(empty_reply(reasoning.is_some(), finish_reason.as_deref()));
+                    let error = CompletionError::empty_reply(reasoning.is_some());
+                    return Err(match finish_reason {
+                        Some(reason) => error.with_finish_reason(reason),
+                        None => error,
+                    });
                 }
                 let mut completion =
                     Completion::from_result(CompletionResult::Text(content.clone()), model)?;
@@ -176,14 +171,10 @@ impl ScriptedReply {
                 kind,
                 message,
                 detail,
-                finish_reason,
             } => {
                 let mut error = CompletionError::new(*kind, message);
                 if let Some(detail) = detail {
                     error = error.with_detail(detail);
-                }
-                if let Some(reason) = finish_reason {
-                    error = error.with_finish_reason(reason);
                 }
                 Err(error)
             }
@@ -191,31 +182,15 @@ impl ScriptedReply {
     }
 }
 
-/// The empty-reply failure the reader raises for a turn with no text and
-/// no tool calls.
-fn empty_reply(reasoning_present: bool, finish_reason: Option<&str>) -> CompletionError {
-    let phrase = CompletionErrorKind::EmptyReply.phrase();
-    let message = if reasoning_present {
-        format!("{phrase}: {REASONING_IGNORED}")
-    } else {
-        phrase.to_owned()
-    };
-    let error = CompletionError::new(CompletionErrorKind::EmptyReply, message);
-    match finish_reason {
-        Some(reason) => error.with_finish_reason(reason),
-        None => error,
-    }
-}
-
 /// What one round's `Chat` effect carried.
 #[derive(Clone, Debug)]
-pub struct ScriptedCall {
+pub(crate) struct ScriptedCall {
     /// The conversation the round sent.
-    pub messages: Vec<Message>,
+    pub(crate) messages: Vec<Message>,
     /// The tools the round advertised, in order.
-    pub tools: Vec<ToolSchema>,
+    pub(crate) tools: Vec<ToolSchema>,
     /// The options the round ran under.
-    pub options: CompletionOptions,
+    pub(crate) options: CompletionOptions,
 }
 
 impl ScriptedCall {
@@ -225,14 +200,14 @@ impl ScriptedCall {
     /// # Panics
     /// When a message does not serialize.
     #[must_use]
-    pub fn messages_json(&self) -> Value {
+    pub(crate) fn messages_json(&self) -> Value {
         serde_json::to_value(&self.messages)
             .unwrap_or_else(|error| panic!("a message serializes to JSON: {error}"))
     }
 
     /// The wire names of the tools the round advertised, in order.
     #[must_use]
-    pub fn tool_names(&self) -> Vec<&str> {
+    pub(crate) fn tool_names(&self) -> Vec<&str> {
         self.tools.iter().map(ToolSchema::name).collect()
     }
 }
@@ -276,7 +251,7 @@ impl ScriptedChat {
 
     /// Every recorded round, in the order the rounds arrived.
     #[must_use]
-    pub fn requests(&self) -> Vec<ScriptedCall> {
+    pub(crate) fn requests(&self) -> Vec<ScriptedCall> {
         self.requests
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
@@ -285,7 +260,7 @@ impl ScriptedChat {
 
     /// The most recently recorded round, if any.
     #[must_use]
-    pub fn last_request(&self) -> Option<ScriptedCall> {
+    pub(crate) fn last_request(&self) -> Option<ScriptedCall> {
         self.requests
             .lock()
             .unwrap_or_else(PoisonError::into_inner)

@@ -346,7 +346,7 @@ Ten steps, one commit each. Order is by cause, not by file count. The Pack roste
 </step-5>
 <step-6>
 
-### Step 6: One owner for the empty-reply message, and a narrowed `test-support`
+### Step 6: One owner for the empty-reply message, and a narrowed `test-support` [completed]
 
 - Component: Test support
 - Tests: `cargo nextest run --locked -p runvil-engine -p runvil-model-client -p harness-gateway-client -p runvil`, then `cargo bench -p runvil-engine --features test-support --no-run`, then `cargo +<pinned nightly> xtask api --check`

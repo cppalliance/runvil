@@ -571,6 +571,7 @@ pub fn runvil::model::Completion::with_raw(self, raw: runvil::model::RawExchange
 pub fn runvil::model::Completion::with_reasoning_content(self, reasoning_content: impl core::convert::Into<alloc::string::String>) -> runvil::model::Completion
 pub fn runvil::model::CompletionError::context_overflow(prompt_tokens: core::option::Option<u32>, window: core::option::Option<u32>, message: impl core::convert::Into<alloc::string::String>) -> runvil::model::CompletionError
 pub fn runvil::model::CompletionError::detail(&self) -> core::option::Option<&str>
+pub fn runvil::model::CompletionError::empty_reply(reasoning_present: bool) -> runvil::model::CompletionError
 pub fn runvil::model::CompletionError::finish_reason(&self) -> core::option::Option<&str>
 pub fn runvil::model::CompletionError::is_retryable(&self) -> bool
 pub fn runvil::model::CompletionError::kind(&self) -> runvil::model::CompletionErrorKind

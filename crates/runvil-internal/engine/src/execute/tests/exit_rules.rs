@@ -371,3 +371,27 @@ fn an_empty_reply_that_ignored_reasoning_says_so_at_the_call_site() {
          reasoning content was present but ignored"
     );
 }
+
+#[test]
+fn an_empty_reply_with_whitespace_only_reasoning_keeps_the_plain_phrase() {
+    // The scripted model treats a whitespace-only reasoning channel as
+    // absent, as the gateway reader does, so the message carries no
+    // specific the reader would not have written.
+    let gateway = ScriptedChat::new(vec![ScriptedReply::Text {
+        model: MOCK_MODEL.to_owned(),
+        content: String::new(),
+        finish_reason: Some("stop".to_owned()),
+        reasoning: Some("   \n\t ".to_owned()),
+        metrics: None,
+    }]);
+    let source = one_section(
+        "messages:user('think blank')
+         local ok, err = pcall(models.loop)
+         return err.kind .. '|' .. tostring(err)",
+    );
+    let trace = loop_scenario(source).chat(&gateway).run();
+    assert_eq!(
+        trace.text(),
+        "empty_model_reply|the model replied with no text and no tool calls"
+    );
+}

@@ -5,6 +5,7 @@ use serde_json::json;
 
 use super::*;
 use crate::client::{Completion, CompletionResult, ToolCall};
+use crate::model::CompletionErrorKind;
 
 const EMPTY_REPLY_PHRASE: &str = "the model replied with no text and no tool calls";
 const INVALID_PARTS_PHRASE: &str = "the completion was built from invalid parts";

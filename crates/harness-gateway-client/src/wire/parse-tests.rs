@@ -2,6 +2,7 @@
 //! reasoning side channel.
 
 use super::*;
+use runvil::model::CompletionErrorKind;
 
 const EMPTY_REPLY_PHRASE: &str = "the model replied with no text and no tool calls";
 

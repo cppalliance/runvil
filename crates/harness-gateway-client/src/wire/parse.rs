@@ -24,15 +24,11 @@
 //! diagnostic naming it.
 
 use runvil::metrics::{CallMetrics, LlamaTimings, Usage, VllmMetrics};
-use runvil::model::{CompletionError, CompletionErrorKind, CompletionResult, ToolCall};
+use runvil::model::{CompletionError, CompletionResult, ToolCall};
 use serde::Deserialize;
 use serde_json::Value;
 
 use crate::failure::{decoded, malformed};
-
-/// The specific added to an empty reply when reasoning was present but
-/// ignored as answer text.
-const REASONING_IGNORED: &str = "reasoning content was present but ignored";
 
 /// A parsed assistant turn: outcome plus payload-free metadata.
 #[derive(Debug, Clone, PartialEq)]
@@ -94,23 +90,6 @@ fn turn_context(body: &Value) -> Result<TurnContext<'_>, CompletionError> {
     })
 }
 
-/// The empty-reply failure for a turn with no product: the kind's phrase,
-/// extended with [`REASONING_IGNORED`] when an ignored reasoning side
-/// channel was present, holding the choice's `finish_reason` so the tool
-/// loop can classify the empty turn.
-fn empty_reply(reasoning_present: bool, finish_reason: Option<String>) -> CompletionError {
-    let kind = CompletionErrorKind::EmptyReply;
-    let error = if reasoning_present {
-        CompletionError::new(kind, format!("{}: {REASONING_IGNORED}", kind.phrase()))
-    } else {
-        CompletionError::new(kind, kind.phrase())
-    };
-    match finish_reason {
-        Some(reason) => error.with_finish_reason(reason),
-        None => error,
-    }
-}
-
 /// Turns a chat-completions response body into a [`NormalizedTurn`].
 ///
 /// # Errors
@@ -157,7 +136,11 @@ pub(super) fn normalize(body: &Value) -> Result<NormalizedTurn, CompletionError>
         });
     }
 
-    Err(empty_reply(reasoning_content.is_some(), finish_reason))
+    let error = CompletionError::empty_reply(reasoning_content.is_some());
+    Err(match finish_reason {
+        Some(reason) => error.with_finish_reason(reason),
+        None => error,
+    })
 }
 
 /// Parses the OpenAI `message.tool_calls` array into [`ToolCall`]s.
