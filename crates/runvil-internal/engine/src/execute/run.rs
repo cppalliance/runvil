@@ -149,7 +149,7 @@ impl Run {
     /// filesystem declares no store, or when the store's backend fails its
     /// probe.
     #[must_use]
-    pub fn new(prompt: Arc<Prompt>, args: &serde_json::Value, config: RunContext) -> Run {
+    pub fn new(prompt: Arc<Prompt>, args: serde_json::Value, config: RunContext) -> Run {
         // The context's one flag, held here so a stillborn run still has
         // the handle `cancel` and `cancel_handle` name.
         let cancel = config.cancel.clone();
@@ -168,7 +168,7 @@ impl Run {
     #[cfg(test)]
     pub(crate) fn new_for_test(
         prompt: Arc<Prompt>,
-        args: &serde_json::Value,
+        args: serde_json::Value,
         config: RunContext,
         edit: impl FnOnce(RunState) -> RunState,
     ) -> Run {
@@ -311,7 +311,7 @@ impl Run {
 /// probe.
 fn prepare_state(
     prompt: Arc<Prompt>,
-    args: &serde_json::Value,
+    args: serde_json::Value,
     config: RunContext,
 ) -> Result<RunState> {
     match prompt.frontmatter().runvil() {

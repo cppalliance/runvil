@@ -79,7 +79,7 @@ async fn a_tool_writes_through_its_context_and_the_calling_script_reads_it_back(
     let recorder = Arc::new(MemoryRecorder::new());
     let prepared = prepare(
         CALLS_RECORD,
-        &"".into(),
+        "".into(),
         services(&recorder, building(CONTEXT)),
     )
     .await

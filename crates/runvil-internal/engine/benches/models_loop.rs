@@ -90,7 +90,7 @@ fn run_once(prompt: &Prompt, chat: &ScriptedChat, context: u32) -> RunResult {
     if let Some(refusal) = requirements.refusal() {
         return RunResult::Failure(refusal);
     }
-    let run = Run::new(Arc::new(prompt.clone()), &"".into(), ctx);
+    let run = Run::new(Arc::new(prompt.clone()), "".into(), ctx);
     let (result, _) = drive(run, |_, effect| {
         perform_locally(effect, &mut |round| {
             let Effect::Chat {

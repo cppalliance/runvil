@@ -236,7 +236,7 @@ impl Harness {
             model,
             ui: Some(host.ui()),
         };
-        let prepared = match prepare_noting_cancel(&source, &args, services).await {
+        let prepared = match prepare_noting_cancel(&source, args, services).await {
             Ok(prepared) => prepared,
             Err((PrepareError::Refused { run_id, .. }, true)) => {
                 return Ok(RunReport {

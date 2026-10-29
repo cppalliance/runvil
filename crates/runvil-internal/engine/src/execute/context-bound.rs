@@ -83,9 +83,9 @@ pub(super) fn bound_model_set(prompt: &Prompt, bindings: &ModelBindings) -> Mode
 
 /// The run's argument text for the arguments `args`: a JSON string as it
 /// stands, and any other value as its JSON text.
-pub(super) fn args_text(args: &serde_json::Value) -> String {
+pub(super) fn args_text(args: serde_json::Value) -> String {
     match args {
-        serde_json::Value::String(text) => text.clone(),
+        serde_json::Value::String(text) => text,
         value => value.to_string(),
     }
 }

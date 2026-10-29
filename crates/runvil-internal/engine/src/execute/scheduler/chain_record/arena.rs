@@ -65,7 +65,7 @@ impl Chain {
             .expect("the test prompt parses");
         let ctx = RunState::new(
             Arc::new(prompt),
-            &"".into(),
+            "".into(),
             RunContext::new("chain-test", TEST_SEED, TEST_STARTED_AT),
         );
         Chain {

@@ -103,7 +103,7 @@ pub fn greet() -> Result<String, Box<dyn Error>> {
 
     // 4. Create the run, and keep a cancel handle for anything that may
     //    need to stop it.
-    let mut run = Run::new(Arc::new(prompt), &"".into(), ctx);
+    let mut run = Run::new(Arc::new(prompt), "".into(), ctx);
     let cancel = run.cancel_handle();
 
     // 5. Step until Done, logging each step's events and answering each

@@ -53,7 +53,7 @@ fn infers_then_chats() -> Run {
         requirements.is_satisfied(),
         "the bound model satisfies the fixture's one role: {requirements:?}"
     );
-    Run::new(prompt, &"".into(), ctx)
+    Run::new(prompt, "".into(), ctx)
 }
 
 /// One round as the broker saw it: the last message's text and the round.

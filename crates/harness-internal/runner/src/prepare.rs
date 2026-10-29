@@ -211,7 +211,7 @@ impl PrepareError {
 /// refuses a write.
 pub async fn prepare(
     source: &str,
-    args: &serde_json::Value,
+    args: serde_json::Value,
     services: Services,
 ) -> Result<Prepared, PrepareError> {
     prepare_noting_cancel(source, args, services)
@@ -231,7 +231,7 @@ pub async fn prepare(
 )]
 pub(crate) async fn prepare_noting_cancel(
     source: &str,
-    args: &serde_json::Value,
+    args: serde_json::Value,
     services: Services,
 ) -> Result<Prepared, (PrepareError, bool)> {
     let Services {

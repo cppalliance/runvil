@@ -46,7 +46,7 @@ fn script_call(value: &str, section: &str, entry: &str) -> serde_json::Value {
 #[tokio::test]
 async fn a_preludes_tool_calls_are_recorded_as_script_calls_from_the_section_that_made_each() {
     let recorder = recorder();
-    let prepared = prepare(SPEAKS, &"".into(), services(&recorder, building(SPEAKER)))
+    let prepared = prepare(SPEAKS, "".into(), services(&recorder, building(SPEAKER)))
         .await
         .unwrap();
     let run_id = prepared.run_id;

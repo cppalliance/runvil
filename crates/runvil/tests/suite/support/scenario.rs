@@ -145,7 +145,7 @@ impl Scenario {
             return Err(refusal.into());
         }
         Ok(Driver {
-            run: Run::new(Arc::new(prompt), &self.args.as_str().into(), ctx),
+            run: Run::new(Arc::new(prompt), self.args.as_str().into(), ctx),
             replies: self.replies.into(),
             tool: self.tool,
             hold: self.hold,

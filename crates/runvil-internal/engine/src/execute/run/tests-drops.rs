@@ -58,7 +58,7 @@ fn bound_sections(sections: &str) -> Run {
         requirements.refusal().is_none(),
         "the model fills the prompt's role: {requirements:?}"
     );
-    Run::new(Arc::new(prompt), &"".into(), ctx)
+    Run::new(Arc::new(prompt), "".into(), ctx)
 }
 
 /// Steps `run` to its next effect and answers it `Dropped`, returning the

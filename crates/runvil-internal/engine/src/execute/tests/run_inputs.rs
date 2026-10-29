@@ -29,7 +29,7 @@ const DRAWS: u64 = 0x5EED;
 fn run_seeded(md: &str, seed: RunSeed) -> RunResult {
     let ctx = RunContext::new(EXECUTION, seed, STARTED_AT);
     let (result, _) = drive(
-        Run::new(Arc::new(parse(md)), &"".into(), ctx),
+        Run::new(Arc::new(parse(md)), "".into(), ctx),
         |_, effect| panic!("no effect is issued: {effect:?}"),
     );
     result
@@ -118,7 +118,7 @@ fn sys_when_is_timestamp_to_rfc3339_for_any_started_at() {
     let whole_second = Timestamp::from_unix_millis(1_700_000_000_000);
     let ctx = RunContext::new(EXECUTION, TEST_SEED, whole_second);
     let (result, _) = drive(
-        Run::new(Arc::new(parse(md)), &"".into(), ctx),
+        Run::new(Arc::new(parse(md)), "".into(), ctx),
         |_, effect| panic!("no effect is issued: {effect:?}"),
     );
     let when = text_of(result);
@@ -194,7 +194,7 @@ fn the_ui_global_serves_the_snapshot_taken_at_run_start() {
     let ctx =
         test_context(EXECUTION).with_ui(json!({ "selected_model": "m-1", "workspace_root": null }));
     let (result, _) = drive(
-        Run::new(Arc::new(parse(md)), &"".into(), ctx),
+        Run::new(Arc::new(parse(md)), "".into(), ctx),
         |_, effect| panic!("no effect is issued: {effect:?}"),
     );
     assert_eq!(

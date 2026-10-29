@@ -33,7 +33,7 @@ fn test_state(prompt: &Prompt) -> RunState {
 /// The state a run of `prompt` assembles from `config`, as `Run::new`
 /// assembles it.
 fn state_over(prompt: &Prompt, config: RunContext) -> RunState {
-    RunState::new(Arc::new(prompt.clone()), &"".into(), config)
+    RunState::new(Arc::new(prompt.clone()), "".into(), config)
 }
 
 #[test]
@@ -69,7 +69,7 @@ fn derived_values_come_from_the_prompt_and_limits() {
 }
 
 /// The args text and `argv` a run of `prompt` with `args` starts from.
-fn args_of(prompt: &str, args: &serde_json::Value) -> (String, Option<serde_json::Value>) {
+fn args_of(prompt: &str, args: serde_json::Value) -> (String, Option<serde_json::Value>) {
     let prompt = Prompt::parse(prompt, "run-context-test")
         .0
         .expect("the test prompt parses");
@@ -95,7 +95,7 @@ fn a_string_argument_is_the_args_text_as_it_stands() {
         "# Title\n\n## Only\n\ndone\n",
     );
     assert_eq!(
-        args_of(source, &serde_json::json!("two words")),
+        args_of(source, serde_json::json!("two words")),
         (
             "two words".to_owned(),
             Some(serde_json::json!({ "prose": "two words" }))
@@ -112,7 +112,7 @@ fn any_other_argument_is_its_json_text_and_a_structured_prompts_argv() {
     );
     let args = serde_json::json!({ "topic": "cats" });
     assert_eq!(
-        args_of(source, &args),
+        args_of(source, args.clone()),
         (r#"{"topic":"cats"}"#.to_owned(), Some(args))
     );
 }

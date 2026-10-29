@@ -92,7 +92,7 @@ fn run_of(sections: &str) -> Run {
         requirements.is_satisfied(),
         "the bound model and the catalog satisfy the fixture: {requirements:?}"
     );
-    Run::new(prompt, &"".into(), ctx)
+    Run::new(prompt, "".into(), ctx)
 }
 
 /// Parks every call until the test adds a permit to `gate`, then answers

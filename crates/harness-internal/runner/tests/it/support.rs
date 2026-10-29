@@ -78,7 +78,7 @@ fn prepared(prompt: Arc<Prompt>, vfs: VfsRef) -> Run {
         requirements.is_satisfied(),
         "the runner fixture prompt declares nothing the environment must supply: {requirements:?}"
     );
-    Run::new(prompt, &"".into(), ctx)
+    Run::new(prompt, "".into(), ctx)
 }
 
 /// A Pack-free run over `lua` with a fixed seed and start, over a
