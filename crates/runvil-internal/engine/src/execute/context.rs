@@ -290,13 +290,13 @@ impl RunState {
     /// call: the frontmatter's `max_tool_iterations` over the limits
     /// default.
     fn max_tool_iterations(&self) -> usize {
-        runvil_parser::detail::max_tool_iterations(self.prompt.frontmatter())
+        crate::parser::detail::max_tool_iterations(self.prompt.frontmatter())
             .resolve(self.limits.max_tool_iterations.get() as usize)
     }
 
     /// The run's top-level section count, reported as `sys.section_count`.
     fn section_count(&self) -> usize {
-        runvil_parser::detail::sections(&self.prompt).len()
+        crate::parser::detail::sections(&self.prompt).len()
     }
 
     /// The H1-to-walk handoff: the `argv` H1 left behind at the freeze,

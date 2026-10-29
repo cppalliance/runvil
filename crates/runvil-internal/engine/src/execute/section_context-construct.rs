@@ -3,9 +3,9 @@
 //! walked section (a spawned task's first entry included, seeded with its
 //! `item` and `sys.index`), the H1 pass (section 0) - and hands back
 //! a live [`SectionContext`] whose `Drop` is the teardown boundary. The
-//! setup half ([`section_vm::setup_section_vm`]) is shared; only the seed,
-//! the `sys` extras, the visible set behind the `prompt` reads, and the
-//! origin `require` resolves from differ.
+//! setup half ([`section_vm::setup_section_vm`]) is shared, and the deltas
+//! between the two constructors are the list on
+//! [`SectionContext::new_h1`].
 
 use std::sync::Arc;
 

@@ -7,14 +7,12 @@
 
 use std::collections::BTreeMap;
 
-use runvil_parser::ModelKeyword;
-use runvil_parser::detail::keyword_name;
 use runvil_types::packs::PackId;
 use runvil_types::tools::ToolCatalog;
 
 use crate::lua::{RosterEntry, ToolSet};
 use crate::model::{ModelBinding, ModelInvocation, ModelSet};
-use crate::parser::Prompt;
+use crate::parser::{ModelKeyword, Prompt, detail};
 
 use super::super::bindings::ModelBindings;
 
@@ -71,7 +69,7 @@ pub(super) fn bound_model_set(prompt: &Prompt, bindings: &ModelBindings) -> Mode
         .with_capabilities(
             role.keywords()
                 .iter()
-                .map(|keyword| keyword_name(*keyword))
+                .map(|keyword| detail::keyword_name(*keyword))
                 .map(str::to_owned)
                 .collect(),
         )

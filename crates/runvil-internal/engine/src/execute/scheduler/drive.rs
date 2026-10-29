@@ -128,8 +128,8 @@ impl Scheduler {
     /// with the generic completion.
     fn start(&mut self) -> Result<()> {
         let prompt = self.prompt();
-        if runvil_parser::detail::h1_blocks(&prompt).is_empty() {
-            if runvil_parser::detail::sections(&prompt).is_empty() {
+        if crate::parser::detail::h1_blocks(&prompt).is_empty() {
+            if crate::parser::detail::sections(&prompt).is_empty() {
                 self.end(Ok(GENERIC_COMPLETION.to_owned()));
                 return Ok(());
             }

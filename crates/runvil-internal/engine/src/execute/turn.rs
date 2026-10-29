@@ -4,14 +4,13 @@
 
 use std::sync::atomic::{AtomicU32, Ordering};
 
-use runvil_model_client::detail::completion_into_result;
 use runvil_types::emitter::Emitter;
 use runvil_types::event::lifecycle;
 use runvil_types::event::{Event, ReplyOrigin};
 use runvil_types::ids::RoundId;
 use runvil_types::metrics::CallMetrics;
 
-use crate::model::{Completion, CompletionResult};
+use crate::model::{Completion, CompletionResult, detail};
 
 /// Advances the shared turn counter, returning the 1-based index of the
 /// turn just started. The counter saturates at `u32::MAX`, so a run past
@@ -105,7 +104,7 @@ pub(super) fn report_model_turn(
         model,
         metrics,
     };
-    let outcome = completion_into_result(completion);
+    let outcome = detail::completion_into_result(completion);
     if let CompletionResult::Text(text) = &outcome {
         if served.finish_reason.as_deref() == Some("length") {
             emitter.report(section, lifecycle::MODEL_TURN_TRUNCATED);

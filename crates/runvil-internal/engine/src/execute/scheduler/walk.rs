@@ -47,7 +47,7 @@ impl Scheduler {
         // where the walk starts.
         let prompt = self.ctx.prompt();
         let blocks: &[Block] =
-            runvil_parser::detail::entry(prompt).map_or(&[], |section| section.blocks());
+            crate::parser::detail::entry(prompt).map_or(&[], |section| section.blocks());
         let origin = prompt_origin(prompt, prompt.title(), blocks);
         let access = self.ctx.vfs().acquire(origin).map_err(Error::store)?;
         self.scope = Some(runvil_vfs::detail::scope_handle(&access));

@@ -1,10 +1,7 @@
 //! Prepare's fill function: the trivial model fill.
 
-use runvil_parser::ModelKeyword;
-use runvil_parser::detail::keyword_name;
-
 use crate::model::ThinkingMode;
-use crate::parser::Prompt;
+use crate::parser::{ModelKeyword, Prompt, detail};
 
 use super::bindings::ModelBindings;
 use super::requirements::{RequirementCheck, Requirements, UnmetRequirement};
@@ -48,7 +45,7 @@ pub(super) fn fill_model_bindings(
                 requirements.unmet_models.push(UnmetRequirement {
                     role: label.to_owned(),
                     check: RequirementCheck::HardKeyword,
-                    required: keyword_name(*keyword).to_owned(),
+                    required: detail::keyword_name(*keyword).to_owned(),
                     actual: actual.to_owned(),
                 });
             }

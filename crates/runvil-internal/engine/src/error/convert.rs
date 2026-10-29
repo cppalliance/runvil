@@ -6,17 +6,17 @@
 use std::borrow::Cow;
 
 use runvil_lua::Error as LuaError;
-use runvil_model_client::model::ModelSetError;
 use runvil_parser::Error as ParserError;
 use runvil_types::ids::TaskId;
 use runvil_vfs::VfsError;
 
 use super::{BoxedSource, Error};
+use crate::model::ModelSetError;
 
 impl Error {
     /// Builds a parse failure with a stable classification and no source span.
     pub(crate) fn parse(kind: crate::parser::ParseErrorKind, message: impl Into<String>) -> Error {
-        Error::Parse(runvil_parser::detail::parse_error(kind, message))
+        Error::Parse(crate::parser::detail::parse_error(kind, message))
     }
 
     /// Stamps the prompt's frontmatter name onto a parse failure raised by
@@ -26,7 +26,7 @@ impl Error {
     pub(crate) fn with_prompt_name(self, name: &str) -> Error {
         match self {
             Error::Parse(error) => {
-                Error::Parse(runvil_parser::detail::with_prompt_name(error, name))
+                Error::Parse(crate::parser::detail::with_prompt_name(error, name))
             }
             other => other,
         }
@@ -132,10 +132,10 @@ impl From<crate::model::CompletionError> for Error {
 /// (the two crates version together), so this match is total.
 impl From<crate::parser::ParseError> for Error {
     fn from(error: crate::parser::ParseError) -> Self {
-        match runvil_parser::detail::parse_error_into_inner(error) {
+        match crate::parser::detail::parse_error_into_inner(error) {
             inner
             @ (ParserError::ParseFrontmatter { .. } | ParserError::ParseStructured { .. }) => {
-                Error::Parse(runvil_parser::detail::parse_error_from_inner(inner))
+                Error::Parse(crate::parser::detail::parse_error_from_inner(inner))
             }
             ParserError::Lua(lua) => Error::from(lua),
             ParserError::Internal(message) => Error::internal(message),

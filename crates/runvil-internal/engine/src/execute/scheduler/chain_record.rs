@@ -470,7 +470,7 @@ impl Chain {
     /// result outlives a mutable borrow of the chain.
     pub(super) fn blocks<'p>(&self, prompt: &'p Prompt) -> &'p [Block] {
         if self.kind.is_h1() {
-            runvil_parser::detail::h1_blocks(prompt)
+            crate::parser::detail::h1_blocks(prompt)
         } else {
             self.walk
                 .current()

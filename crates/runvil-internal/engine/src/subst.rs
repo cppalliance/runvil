@@ -51,7 +51,9 @@ enum SubstErrorKind {
     /// A key path found no value: under `var`, `sys`, `argv`, or a bare
     /// global.
     MissingKey,
-    /// The resolved value was JSON null.
+    /// The resolved value was JSON null, for a `var`, `sys`, `argv`, or bare
+    /// global source. A null `item` is not this: `{{ item }}` renders it as
+    /// the text `null`.
     NullValue,
     /// `{{ item }}` was used with no item seeded into this section.
     NilItem,
@@ -154,12 +156,11 @@ pub(crate) struct Sources<'a> {
 /// untouched.
 ///
 /// # Errors
-/// Returns [`Error::Substitution`](crate::Error::Substitution) for an unclosed
-/// `{{`, an unknown namespace or missing bare global, an empty or whitespace
-/// path segment, a bare `{{ var }}` or `{{ sys }}` with no key, a key path
-/// after `args` or `item`, a missing key, a null value, a non-JSON bare
-/// global, `{{ item }}` when `item` is `None`, or `{{ argv }}` when `argv` is
-/// `None`.
+/// Returns [`Error::Substitution`](crate::Error::Substitution) holding a
+/// [`SubstitutionError`] whose kind is a [`SubstErrorKind`] variant, which is
+/// the complete list of what a placeholder can fail with. The error carries
+/// the byte offset of the offending placeholder and a message with its
+/// bounded, control-escaped path preview.
 pub(crate) fn substitute(prose: &str, sources: &Sources<'_>) -> Result<String> {
     Ok(substitute_inner(prose, sources)?)
 }

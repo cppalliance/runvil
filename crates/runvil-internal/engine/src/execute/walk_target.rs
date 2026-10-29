@@ -16,7 +16,7 @@
 
 use crate::heading_address::{self, Reachable, SectionIndex, SectionPos, SlicePath, Visible};
 use crate::lua::{Library, LibraryBlock, LibraryKey, SectionText};
-use crate::parser::{Block, Prompt, Section};
+use crate::parser::{Block, Prompt, Section, detail};
 use crate::{Error, Result};
 
 /// The position of `target` in `slice`, matched on the parser-unique
@@ -31,7 +31,7 @@ pub(super) fn section_position(slice: &[Section], target: &Section) -> Option<Se
 /// The H1 pass's visible set: the whole top-level slice. H1 is
 /// section 0, so it excludes nothing and has no children.
 pub(super) fn h1_visible_sections(prompt: &Prompt) -> &[Section] {
-    runvil_parser::detail::sections(prompt)
+    detail::sections(prompt)
 }
 
 /// What a prompt read sees of the section `heading` names in a caller's
@@ -152,7 +152,7 @@ impl RequireOrigin {
 
     /// What a `require` from here can name in `prompt`.
     fn reach<'p>(&'p self, prompt: &'p Prompt) -> Reachable<'p> {
-        let root = runvil_parser::detail::sections(prompt);
+        let root = detail::sections(prompt);
         match self {
             Self::H1 => Reachable::top(root),
             Self::Section(pos) => Reachable::of(root, pos),

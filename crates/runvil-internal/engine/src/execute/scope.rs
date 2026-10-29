@@ -8,7 +8,6 @@
 
 use std::collections::BTreeMap;
 
-use runvil_model_client::detail;
 use runvil_types::emitter::Emitter;
 use runvil_types::event::lifecycle;
 use runvil_types::packs::PackId;
@@ -21,7 +20,7 @@ use crate::lua::{
     DiscoveryTool, NonEmpty, OfferMode, OfferedTool, RenderedTools, SectionVm, ToolBinding,
     ToolSet, current_catalog_packs, current_dynamic_set, current_tool_bindings, wire_name_of,
 };
-use crate::model::ToolSchema;
+use crate::model::{ToolSchema, detail};
 use crate::{Error, Result};
 
 /// The most Dynamic Set wire names the search tool's description lists.

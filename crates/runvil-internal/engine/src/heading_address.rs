@@ -21,7 +21,7 @@
 //! A chain and a section's `prompt` reads find their slice by path and
 //! read it in place.
 
-use crate::parser::{Prompt, Section};
+use crate::parser::{Prompt, Section, detail};
 use crate::{Error, Result};
 
 /// Where a sibling slice sits in the prompt tree: the index of each
@@ -55,7 +55,7 @@ impl SlicePath {
     /// always in range; an out-of-range index resolves to the empty slice,
     /// which the walk treats as exhausted rather than panicking.
     pub(crate) fn resolve<'p>(&self, prompt: &'p Prompt) -> &'p [Section] {
-        let mut slice = runvil_parser::detail::sections(prompt);
+        let mut slice = detail::sections(prompt);
         for &index in &self.0 {
             slice = slice.get(index).map_or(&[], Section::children);
         }
@@ -150,9 +150,9 @@ pub(crate) struct Visible<'a> {
 
 impl<'a> Visible<'a> {
     /// A walked section's set: `home` minus `home[caller]`, plus
-    /// `home[caller]`'s children. `caller` must index `home`; an
-    /// out-of-range one yields all of `home` and no children, the same set
-    /// as [`Visible::all`].
+    /// `home[caller]`'s children. `caller` must index `home`, which the
+    /// `debug_assert!` below enforces: a caller outside the slice is a
+    /// scheduler bug, not a case this view answers.
     pub(crate) fn of(home: &'a [Section], caller: SectionIndex) -> Visible<'a> {
         debug_assert!(
             caller.0 < home.len(),
@@ -390,9 +390,8 @@ fn not_found<'a>(heading: &str, available: impl Iterator<Item = &'a Section>) ->
 ///
 /// # Errors
 /// Returns [`Error::Lua`] for every [`find_visible`] error, and when no
-/// visible section matches the exact address. The not-found message lists the
-/// view's sections in its order and nothing else, so the error channel
-/// cannot leak the rest of the document's structure.
+/// visible section matches the exact address. The not-found rule is stated
+/// on [`not_found`], which owns it.
 pub(crate) fn resolve_visible<'a>(heading: &str, visible: Visible<'a>) -> Result<&'a Section> {
     find_visible(heading, visible)?.ok_or_else(|| not_found(heading, visible.iter()))
 }
@@ -402,8 +401,8 @@ pub(crate) fn resolve_visible<'a>(heading: &str, visible: Visible<'a>) -> Result
 ///
 /// # Errors
 /// Returns [`Error::Lua`] for every [`find_reachable`] error, and when no
-/// reachable section matches the exact address. The not-found message
-/// lists the reach in its order and nothing else.
+/// reachable section matches the exact address. The not-found rule is stated
+/// on [`not_found`], which owns it.
 pub(crate) fn resolve_reachable<'a>(heading: &str, reach: Reachable<'a>) -> Result<Reached<'a>> {
     find_reachable(heading, reach)?
         .ok_or_else(|| not_found(heading, reach.iter().map(|reached| reached.section)))

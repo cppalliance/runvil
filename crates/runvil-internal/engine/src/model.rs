@@ -11,21 +11,38 @@
 //! `models.loop` round with neither fails with a model-binding failure
 //! surfaced through [`crate::RunError`].
 //!
-//! The round and binding vocabulary comes from the private
-//! `runvil-model-client` crate, and [`ModelId`], [`ModelInfo`], and
-//! [`ThinkingMode`] from `runvil-types`; both are re-exported here. The
-//! transport codec a round's performer runs (the request body builder,
+//! This module is the executor's import surface for the private
+//! `runvil-model-client` crate, which holds the round and binding
+//! vocabulary, and for the model identity `runvil-types` defines. Production
+//! code reaches both through here: an item the Engine needs is re-exported,
+//! and a production module names `crate::model` rather than the dependency.
+//!
+//! Three groups still name the dependency crates themselves:
+//!
+//! - This crate's test support, which builds scripted replies from
+//!   `CompletionOptions` and the constructors a script names, none of which
+//!   the production surface re-exports.
+//! - The test suites, which build invocations and completions by hand for
+//!   the same reason.
+//! - The crate's bench, `benches/models_loop.rs`, a separate crate that
+//!   cannot see a `pub(crate)` surface.
+//!
+//! The transport codec a round's performer runs - the request body builder,
 //! the read loop over a transport's chunk source, and the error type it
-//! builds a [`CompletionError`] from) is not: the facade publishes it from
-//! `runvil-model-client` directly. The Engine itself never performs a
-//! completion.
+//! builds a [`CompletionError`] from - lives in the Harness gateway client
+//! crate, which is where a caller that performs a round takes it from. The
+//! Engine never performs a completion.
 
 pub(crate) use runvil_model_client::client::{
     Completion, CompletionResult, Message, ToolCall, ToolSchema,
 };
+// The helpers behind the validating constructors and the round's reply
+// checks, which the Engine calls where the rule each implements is
+// documented.
+pub(crate) use runvil_model_client::detail;
 pub(crate) use runvil_model_client::model::{
-    CompletionError, CompletionErrorKind, ModelBinding, ModelInvocation, ModelSet, ModelView,
-    Temperature,
+    CompletionError, CompletionErrorKind, ModelBinding, ModelInvocation, ModelSet, ModelSetError,
+    ModelView, Temperature,
 };
 pub(crate) use runvil_types::models::{ModelId, ModelInfo, ThinkingMode};
 

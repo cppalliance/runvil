@@ -1,8 +1,8 @@
 //! The crate's internal error type.
 //!
 //! [`Error`] is a `pub(crate)` internal error type, never part of the public API.
-//! The public boundary is [`crate::RunError`], and [`ParseError`](runvil_parser::ParseError),
-//! [`CompletionError`](runvil_model_client::model::CompletionError), and
+//! The public boundary is [`crate::RunError`], and [`ParseError`](crate::parser::ParseError),
+//! [`CompletionError`](crate::model::CompletionError), and
 //! [`runvil_types::tools::ToolError`] each reach it through `RunError`'s
 //! classification, which classifies this internal type and keeps its cause.
 //! See the module wrappers for the `From` bridges that let internal `?` keep
@@ -131,7 +131,7 @@ pub(crate) enum Error {
     /// A model round or a catalog fetch failed, as the broker that performed
     /// it reported.
     ///
-    /// Holds the broker's [`CompletionError`](runvil_model_client::model::CompletionError)
+    /// Holds the broker's [`CompletionError`](crate::model::CompletionError)
     /// whole, so the closed kind, the fixed message, the opt-in detail, and
     /// the cause chain survive the public wrappers. The Engine branches on
     /// its kind only: a context overflow takes the provider overflow path

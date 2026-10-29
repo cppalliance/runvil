@@ -58,7 +58,9 @@ pub(super) struct SectionSys {
     /// The nearest enclosing task: the main walk is task `0`, and a `call`
     /// child reports its caller's task.
     pub(super) taskid: TaskId,
-    /// The section's name, or the prompt's title for the H1 pass.
+    /// The section's name, or the prompt's title for the H1 pass. Fixed at
+    /// construction, and the name the frame's `Drop` reports the teardown
+    /// boundary and the completion observation under.
     pub(super) section_name: String,
     /// The run's execution identifier.
     pub(super) execution: Arc<str>,
@@ -117,8 +119,7 @@ pub(super) struct AdhocCall {
 /// section entry is one frame, regardless of arrival mode (fall-through,
 /// jump, call); a jump ends the current frame and the driver builds a
 /// fresh one for the target - only `var` crosses, as call data.
-/// No derives: the VM and the trait-object handles support neither `Clone`
-/// nor `Debug`.
+/// Not `Clone`: the frame owns the VM and its one teardown.
 pub(super) struct SectionContext {
     /// The frame's VM: the owned section VM, `Some` from construction
     /// until the frame's `Drop` takes it for the teardown boundary.
@@ -128,9 +129,7 @@ pub(super) struct SectionContext {
     /// only, so `Drop` fires `SECTION_FINISHED` on completion (a jump or
     /// return included) and never on an error.
     completed: bool,
-    /// The section's `sys`, whose `section_name` `Drop` reports the
-    /// teardown boundary and the completion observation under. The
-    /// first-call install sets its `model`.
+    /// The section's `sys`. The first-call install sets its `model`.
     sys: SectionSys,
     /// A spawned chain's `item` seed (a fanout arm's collection member) for
     /// `{{ item }}` substitution; `None` on every other entry.

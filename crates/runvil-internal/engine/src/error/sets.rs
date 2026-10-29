@@ -3,9 +3,10 @@
 //! [`Error::ToolSets`](super::Error::ToolSets) renders when the sets break
 //! one.
 
-use runvil_lua::{NonEmpty, OfferMode};
 use runvil_types::packs::PackId;
 use runvil_types::tools::ToolId;
+
+use crate::lua::{NonEmpty, OfferMode};
 
 /// A merge rule a section entry's frozen sets broke, among the rules that
 /// name the tools that broke them.

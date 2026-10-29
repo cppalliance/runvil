@@ -25,7 +25,6 @@
 
 use std::sync::atomic::Ordering;
 
-use runvil_model_client::detail::tool_call_arguments;
 use runvil_types::event::{ReplyOrigin, lifecycle};
 use runvil_types::ids::RoundId;
 use runvil_types::metrics::ToolCallEvent;
@@ -39,7 +38,9 @@ use crate::lua::{
     Answer, ChatOutcome, ChatResult, MessageList, OverflowReason, RenderedTools, ToolSet,
     output_reserve, precheck, project_messages, resolve_model_binding, wire_name_of,
 };
-use crate::model::{Completion, CompletionErrorKind, CompletionResult, ModelBinding, ToolCall};
+use crate::model::{
+    Completion, CompletionErrorKind, CompletionResult, ModelBinding, ToolCall, detail,
+};
 use crate::{Error, Result};
 
 use super::dispatch::Dispatched;
@@ -421,9 +422,13 @@ impl ArrivedRound {
                     .binding(call.name())
                     .map(|(binding, _)| binding.id());
                 let vendor = tool.and_then(|id| scope.tool_set.vendor_for(id));
-                ToolCallEvent::new(call.id(), call.name(), tool_call_arguments(call).clone())
-                    .with_tool(tool.cloned())
-                    .with_vendor(vendor.map(str::to_owned))
+                ToolCallEvent::new(
+                    call.id(),
+                    call.name(),
+                    detail::tool_call_arguments(call).clone(),
+                )
+                .with_tool(tool.cloned())
+                .with_vendor(vendor.map(str::to_owned))
             })
             .collect();
         self.reporting.emitter.assistant_tool_calls(

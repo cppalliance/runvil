@@ -413,7 +413,7 @@ Every bullet is replaced or appended prose plus one visibility token. No behavio
 
 <step-8>
 
-### Step 8: Section docs and the three import surfaces
+### Step 8: Section docs and the three import surfaces [completed]
 
 - Component: Doc text
 - Tests: `cargo nextest run --locked -p runvil-engine`, plus `cargo clippy --workspace --exclude workshop --exclude workshop-server --exclude workshop-server-api --all-targets --all-features` for the import moves

@@ -93,7 +93,10 @@ pub(crate) struct SectionVmSetup<'a> {
 /// Runs one section VM's setup sequence against a constructed, limited VM.
 ///
 /// The sequence is fixed and shared: Engine injection with the frame
-/// constructor's [`VmSeed`], [`SectionVm::install_engine_globals`], the
+/// constructor's [`VmSeed`], preceded by the raw-model-id opt-in when the run
+/// supplied a snapshot (Engine injection's `models` table install reads that
+/// flag, so the opt-in must land first), then
+/// [`SectionVm::install_engine_globals`], the
 /// `ui()` global when the run supplied a snapshot, the `item` global when
 /// the seed includes one, the control surface
 /// ([`SectionVm::install_scheduler_control_globals`] for `jump` and the
