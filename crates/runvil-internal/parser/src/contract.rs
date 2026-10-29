@@ -1,16 +1,17 @@
-//! Parses the frontmatter contract keys: `uses`, `args`, and `models`.
+//! Parses the frontmatter contract keys: `uses`, `inputSchema`, and
+//! `models`.
 //!
-//! The YAML is the whole contract: Packs install, models declare, args
-//! type. Parsing validates the static shape - each `uses:` entry a bare
-//! Pack id or vendor/name, no Pack id declared twice, the alias grammar
-//! on map keys, the closed
-//! model-keyword vocabulary, arg name and type sanity - and exposes the
+//! The YAML is the whole contract: Packs install, models declare, the
+//! input schema types. Parsing validates the static shape - each `uses:`
+//! entry a bare Pack id or vendor/name, no Pack id declared twice, the
+//! alias grammar on model labels, the closed model-keyword vocabulary, the
+//! input schema's object shape - and exposes the
 //! FULL declaration on the parsed [`Prompt`](crate::Prompt); satisfying
 //! the declaration against the caller's environment is prepare's job,
 //! never the parser's.
 //!
-//! `args` and `models` are defined in submodules; this root owns the
-//! duplicate-Pack check and the map deserializer the two map keys share.
+//! `inputSchema` and `models` are defined in submodules; this root owns
+//! the duplicate-Pack check and the contract map deserializer.
 
 use std::collections::btree_map::Entry;
 use std::collections::{BTreeMap, BTreeSet};
@@ -21,19 +22,17 @@ use runvil_types::packs::{PackId, PackRef};
 use serde::de::{self, MapAccess, Visitor};
 use serde::{Deserialize, Deserializer};
 
-mod args;
+pub(crate) mod input_schema;
 mod models;
 
 #[cfg(test)]
 mod tests;
 
-pub use args::{ArgDecl, ArgType, ArgsDecl, ArgsDeclIter};
 pub use models::{ModelKeyword, ModelRole, ModelRoles, ModelRolesIter};
 
 /// The prompt-local alias grammar: `[A-Za-z][A-Za-z0-9_-]{0,63}`.
 ///
-/// Model labels and args field names are prompt-local and never global
-/// names. (The same rule sits in `runvil-lua`'s `alias` module, the
+/// Model labels are prompt-local and never global names. (The same rule sits in `runvil-lua`'s `alias` module, the
 /// run-time counterpart to this parse-time check.)
 fn is_valid_alias(alias: &str) -> bool {
     let bytes = alias.as_bytes();
@@ -51,7 +50,7 @@ struct ContractKeys {
     what: &'static str,
 }
 
-/// Deserializes a contract map (`models`, `args`): string keys
+/// Deserializes a contract map (`models`): string keys
 /// validated against the alias grammar and `keys`, values deserialized as
 /// `T`, duplicates rejected.
 fn deserialize_contract_map<'de, D, T>(

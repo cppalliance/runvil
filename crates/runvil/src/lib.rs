@@ -133,10 +133,6 @@ pub mod prompt {
     //! What a prompt's frontmatter declares: its files, Packs,
     //! arguments, and model roles.
 
-    pub use runvil_parser::ArgDecl;
-    pub use runvil_parser::ArgType;
-    pub use runvil_parser::ArgsDecl;
-    pub use runvil_parser::ArgsDeclIter;
     pub use runvil_parser::FileDecl;
     pub use runvil_parser::Frontmatter;
     pub use runvil_parser::ModelKeyword;

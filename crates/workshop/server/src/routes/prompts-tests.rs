@@ -44,14 +44,19 @@ uses:
   - web
   - fs
   - acme/poop
-args:
-  topic:
-    type: string
-    description: the topic
-  count:
-    type: integer
-    optional: true
-    default: 3
+inputSchema:
+  type: object
+  properties:
+    topic:
+      type: string
+      description: the topic
+    count:
+      type: integer
+      default: 3
+    tags:
+      type: array
+      items: { type: string }
+  required: [topic]
 models:
   writer:
     keywords: [frontier, thinking]
@@ -99,6 +104,7 @@ async fn a_full_frontmatter_prompt_answers_every_contract_section() {
             "implicit": false,
             "fields": [
                 { "name": "count", "type": "integer", "optional": true, "default": 3, "description": null },
+                { "name": "tags", "type": "json", "optional": true, "default": null, "description": null },
                 { "name": "topic", "type": "string", "optional": false, "default": null, "description": "the topic" },
             ],
         })
@@ -126,8 +132,8 @@ async fn a_broken_yaml_key_answers_parse_frontmatter_with_the_line() {
 }
 
 #[tokio::test]
-async fn a_prompt_without_args_yields_the_implicit_prose_field() {
-    let text = "---\nname: plain\ndescription: no args\n---\n\n# Plain\n\n## S\n\np\n";
+async fn a_prompt_without_an_input_schema_yields_the_implicit_prose_field() {
+    let text = "---\nname: plain\ndescription: no schema\n---\n\n# Plain\n\n## S\n\np\n";
     let body = serde_json::json!({ "name": "plain", "text": text });
     let (status, json) = post_contract(body).await;
     assert_eq!(status, StatusCode::OK);
@@ -140,6 +146,25 @@ async fn a_prompt_without_args_yields_the_implicit_prose_field() {
             ],
         })
     );
+}
+
+#[tokio::test]
+async fn a_null_input_schema_is_implicit_and_a_bare_object_schema_has_no_fields() {
+    for (front, implicit, fields) in [
+        ("inputSchema: null", true, 1),
+        ("inputSchema: { type: object }", false, 0),
+    ] {
+        let text = format!("---\nname: s\ndescription: d\n{front}\n---\n\n# S\n\n## S\n\np\n");
+        let body = serde_json::json!({ "name": "s", "text": text });
+        let (status, json) = post_contract(body).await;
+        assert_eq!(status, StatusCode::OK, "{front}");
+        assert_eq!(json["args"]["implicit"], implicit, "{front}");
+        assert_eq!(
+            json["args"]["fields"].as_array().map(Vec::len),
+            Some(fields),
+            "{front}"
+        );
+    }
 }
 
 #[tokio::test]

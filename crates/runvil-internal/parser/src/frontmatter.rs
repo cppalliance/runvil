@@ -4,7 +4,8 @@ use std::num::NonZeroU32;
 
 use runvil_types::packs::PackRef;
 
-use crate::{ArgsDecl, Error, ModelRoles, ParseErrorKind, Result};
+use crate::contract::input_schema::{self, InputSchema};
+use crate::{Error, ModelRoles, ParseErrorKind, Result};
 
 /// A declared input or output file in a prompt's frontmatter.
 ///
@@ -71,10 +72,14 @@ pub struct Frontmatter {
     /// section.
     #[serde(default)]
     uses: Vec<PackRef>,
-    /// The typed args declaration; an absent `args:` key yields the default
-    /// declaration (one optional string field named `prose`).
-    #[serde(default)]
-    args: ArgsDecl,
+    /// The JSON Schema of the prompt's input; an absent or `null` key
+    /// declares none, and the input text wraps into `argv.prose`.
+    #[serde(
+        default,
+        rename = "inputSchema",
+        deserialize_with = "input_schema::deserialize"
+    )]
+    input_schema: Option<InputSchema>,
     /// Declared model roles: label to keywords, minimum, and description.
     #[serde(default)]
     models: ModelRoles,
@@ -199,13 +204,14 @@ impl Frontmatter {
         &self.uses
     }
 
-    /// Returns the typed args declaration.
+    /// Returns the JSON Schema the `inputSchema:` key declares for the
+    /// prompt's input, an object whose `type` is `"object"`.
     ///
-    /// A prompt that omits the `args:` key yields the default declaration
-    /// (one optional string field named `prose`).
+    /// Returns `None` when the key is absent or `null`; the input text then
+    /// arrives wrapped as `argv = { prose = "<text>" }`.
     #[must_use]
-    pub fn args(&self) -> &ArgsDecl {
-        &self.args
+    pub fn input_schema(&self) -> Option<&serde_json::Map<String, serde_json::Value>> {
+        self.input_schema.as_ref()
     }
 
     /// Returns the declared model roles, which map each label to a role.

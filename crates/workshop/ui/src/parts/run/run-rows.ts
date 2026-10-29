@@ -126,6 +126,9 @@ function argControl(arg: RunContractArg): HTMLElement {
     }
     return field;
   }
+  if (arg.type === "json") {
+    return textField(arg.default === null ? "" : JSON.stringify(arg.default));
+  }
   return textField(typeof arg.default === "string" ? arg.default : "");
 }
 

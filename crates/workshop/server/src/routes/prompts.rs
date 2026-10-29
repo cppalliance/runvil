@@ -15,7 +15,8 @@ use serde::{Deserialize, Serialize};
 
 use runvil::Prompt;
 use runvil::packs::PackRef;
-use runvil::prompt::{ArgDecl, ArgsDecl, FileDecl, Frontmatter, ModelKeyword, ModelRole};
+use runvil::prompt::{FileDecl, Frontmatter, ModelKeyword, ModelRole};
+use serde_json::{Map, Value};
 
 use crate::error::AppError;
 
@@ -53,7 +54,7 @@ struct ContractResponse {
     output: Option<FileDto>,
     /// The declared Packs, in declaration order.
     uses: Vec<PackDto>,
-    /// The typed args declaration.
+    /// The input fields, derived from the `inputSchema:` key.
     args: ArgsDto,
     /// The declared model roles, sorted by label.
     models: Vec<ModelDto>,
@@ -92,56 +93,94 @@ impl From<&PackRef> for PackDto {
     }
 }
 
-/// The typed args declaration.
+/// The input fields the Run window renders, derived from the prompt's
+/// input schema.
 #[derive(Debug, Serialize)]
 struct ArgsDto {
-    /// True when the declaration is the implicit default (no `args:` key).
+    /// True when the prompt has no input schema, so its input is the
+    /// single prose field.
     implicit: bool,
-    /// The declared fields, sorted by name.
+    /// The fields, sorted by name.
     fields: Vec<ArgDto>,
 }
 
-impl From<&ArgsDecl> for ArgsDto {
-    fn from(decl: &ArgsDecl) -> Self {
+impl ArgsDto {
+    /// Derives the fields from `schema`: one per top-level property, or
+    /// the single optional `prose` field when there is no schema.
+    fn new(schema: Option<&Map<String, Value>>) -> Self {
+        let Some(schema) = schema else {
+            return Self {
+                implicit: true,
+                fields: vec![ArgDto {
+                    name: "prose".to_owned(),
+                    kind: "string",
+                    optional: true,
+                    default: None,
+                    description: Some("Freeform input for this prompt".to_owned()),
+                }],
+            };
+        };
+        let required: Vec<&str> = schema
+            .get("required")
+            .and_then(Value::as_array)
+            .map(|names| names.iter().filter_map(Value::as_str).collect())
+            .unwrap_or_default();
+        let fields = schema
+            .get("properties")
+            .and_then(Value::as_object)
+            .map(|properties| {
+                properties
+                    .iter()
+                    .map(|(name, property)| {
+                        ArgDto::new(name, property, required.contains(&name.as_str()))
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
         Self {
-            implicit: decl.is_default(),
-            fields: decl
-                .iter()
-                .map(|(name, arg)| ArgDto::new(name, arg))
-                .collect(),
+            implicit: false,
+            fields,
         }
     }
 }
 
-/// One declared arg.
+/// One input field.
 #[derive(Debug, Serialize)]
 struct ArgDto {
-    /// The arg name.
+    /// The property name.
     name: String,
-    /// The declared type (`string`, `boolean`, `integer`, `number`).
+    /// The property's scalar type (`string`, `boolean`, `integer`,
+    /// `number`), or `json` for any other schema.
     #[serde(rename = "type")]
-    kind: String,
-    /// Whether a call may omit the field.
+    kind: &'static str,
+    /// Whether a call may omit the field, which holds when the schema's
+    /// `required` does not list it.
     optional: bool,
-    /// The declared default; `null` when absent.
-    default: Option<serde_json::Value>,
-    /// The human-readable description; `null` when absent.
+    /// The property's `default`; `null` when absent.
+    default: Option<Value>,
+    /// The property's `description`; `null` when absent.
     description: Option<String>,
 }
 
 impl ArgDto {
-    /// Builds the DTO for the arg declared under `name`.
-    fn new(name: &str, decl: &ArgDecl) -> Self {
+    /// Builds the field for the property `name` with the schema `property`.
+    fn new(name: &str, property: &Value, required: bool) -> Self {
+        let kind = match property.get("type").and_then(Value::as_str) {
+            Some("string") => "string",
+            Some("boolean") => "boolean",
+            Some("integer") => "integer",
+            Some("number") => "number",
+            _ => "json",
+        };
         Self {
             name: name.to_owned(),
-            kind: decl.kind().to_string(),
-            optional: decl.is_optional(),
-            // A declared default is validated against the declared type
-            // at parse, so it is always a JSON-representable scalar.
-            default: decl
-                .default()
-                .and_then(|value| serde_json::to_value(value).ok()),
-            description: decl.description().map(str::to_owned),
+            kind,
+            optional: !required,
+            default: property.get("default").cloned(),
+            description: property
+                .get("description")
+                .and_then(Value::as_str)
+                .map(str::to_owned),
         }
     }
 }
@@ -198,7 +237,7 @@ impl From<&Frontmatter> for ContractResponse {
             input: frontmatter.input().map(FileDto::from),
             output: frontmatter.output().map(FileDto::from),
             uses: frontmatter.uses().iter().map(PackDto::from).collect(),
-            args: ArgsDto::from(frontmatter.args()),
+            args: ArgsDto::new(frontmatter.input_schema()),
             models: frontmatter
                 .models()
                 .iter()

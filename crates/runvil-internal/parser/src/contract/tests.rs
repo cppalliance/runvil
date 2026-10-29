@@ -1,12 +1,16 @@
-//! Tests for the frontmatter contract keys: `uses`, `args`, and
+//! Tests for the frontmatter contract keys: `uses`, `inputSchema`, and
 //! `models`.
 
 use std::num::NonZeroU32;
 
-use super::{ArgType, ArgsDeclIter, ModelKeyword, ModelRolesIter};
+use serde_json::json;
+
+use super::{ModelKeyword, ModelRolesIter};
 use crate::ParseErrorKind;
 use crate::test_support::{assert_parse_error, parse_err, parse_ok, prompt};
 
+#[path = "tests-input-schema.rs"]
+mod input_schema;
 #[path = "tests-packs.rs"]
 mod packs;
 
@@ -15,8 +19,8 @@ fn the_full_contract_declaration_parses_and_round_trips() {
     let prompt = parse_ok(&prompt(
         "
         uses: [web, mcp]
-        args: { use_mcp: { type: boolean, default: true, \
-                description: Search MCP-connected private sources } }
+        inputSchema: { type: object, properties: { use_mcp: { type: boolean, default: true, \
+                description: Search MCP-connected private sources } } }
         models: { analyst: { keywords: [frontier, thinking], min_context: 200000, \
                   description: deep reasoning }, \
                   triage: { keywords: [fast, small], description: quick triage of search results } }
@@ -31,13 +35,14 @@ fn the_full_contract_declaration_parses_and_round_trips() {
     assert_eq!(packs[0].id().to_string(), "web");
     assert_eq!(packs[1].id().to_string(), "mcp");
 
-    let arg = fm.args().get("use_mcp").expect("the arg is declared");
-    assert_eq!(arg.kind(), ArgType::Boolean);
-    assert!(!arg.is_optional());
-    assert_eq!(arg.default(), Some(&serde_yaml_ng::Value::Bool(true)));
+    let schema = fm.input_schema().expect("the schema is declared");
     assert_eq!(
-        arg.description(),
-        Some("Search MCP-connected private sources")
+        schema["properties"]["use_mcp"],
+        json!({
+            "type": "boolean",
+            "default": true,
+            "description": "Search MCP-connected private sources",
+        })
     );
 
     let analyst = fm.models().get("analyst").expect("the role is declared");
@@ -64,27 +69,11 @@ fn a_prompt_without_contract_keys_behaves_exactly_as_today() {
 }
 
 #[test]
-fn an_omitted_args_key_yields_the_default_prose_declaration() {
-    // There are no freeform prompts: an absent `args:` key is the default
-    // declaration of one optional string field named `prose`.
-    let prompt = parse_ok(&prompt("", &[]));
-    let args = prompt.frontmatter().args();
-    assert_eq!(args.len(), 1);
-    let prose = args
-        .get("prose")
-        .expect("the default declaration names `prose`");
-    assert_eq!(prose.kind(), ArgType::String);
-    assert!(prose.is_optional());
-    assert_eq!(prose.default(), None);
-    assert_eq!(prose.description(), Some("Freeform input for this prompt"));
-}
-
-#[test]
 fn an_unknown_key_inside_a_contract_entry_is_rejected() {
     // `deny_unknown_fields` must hold inside each new key's entries too: a
     // typo'd field is an authoring error, not silently ignored.
     for front in [
-        "args: { flag: { tipe: boolean } }",
+        "argz: { flag: { type: boolean } }",
         "models: { analyst: { keyword: [fast] } }",
     ] {
         let error = parse_err(&prompt(front, &[]));
@@ -101,106 +90,6 @@ fn every_reserved_name_the_grammar_allows_parses_as_a_model_role_label() {
         let prompt = parse_ok(&prompt(&format!("models: {{ '{name}': {{}} }}"), &[]));
         assert!(prompt.frontmatter().models().get(name).is_some(), "{name}");
     }
-}
-
-#[test]
-fn an_arg_name_may_be_a_reserved_name_because_args_are_argv_fields() {
-    let front =
-        "args: { prose: { type: string }, store: { type: string }, end: { type: boolean } }";
-    let prompt = parse_ok(&prompt(front, &[]));
-    let args = prompt.frontmatter().args();
-    assert_eq!(args.len(), 3);
-    assert!(args.get("store").is_some() && args.get("end").is_some());
-}
-
-#[test]
-fn args_declarations_round_trip() {
-    let prompt = parse_ok(&prompt(
-        "args: { use_mcp: { type: boolean, default: true, description: Search private sources }, \
-         limit: { type: integer, optional: true }, query: { type: string } }",
-        &[],
-    ));
-    let args = prompt.frontmatter().args();
-    assert_eq!(args.len(), 3);
-    let limit = args.get("limit").expect("declared");
-    assert_eq!(limit.kind(), ArgType::Integer);
-    assert!(limit.is_optional());
-    assert_eq!(limit.description(), None);
-    assert_eq!(args.get("query").expect("declared").kind(), ArgType::String);
-}
-
-#[test]
-fn an_arg_default_must_match_the_declared_type() {
-    for (kind, default, actual) in [
-        ("boolean", "'true'", "string"),
-        ("integer", "1.5", "number"),
-        ("string", "42", "integer"),
-        ("number", "[1]", "sequence"),
-    ] {
-        let front = format!("args: {{ flag: {{ type: {kind}, default: {default} }} }}");
-        assert_parse_error(
-            &prompt(&front, &[]),
-            ParseErrorKind::Frontmatter,
-            &format!(
-                "the default has type `{actual}`, which does not match the declared type `{kind}`"
-            ),
-        );
-    }
-    // A matching default passes.
-    let prompt = parse_ok(&prompt(
-        "args: { limit: { type: integer, default: 3 } }",
-        &[],
-    ));
-    assert_eq!(
-        prompt
-            .frontmatter()
-            .args()
-            .get("limit")
-            .and_then(|a| a.default().cloned()),
-        Some(serde_yaml_ng::Value::Number(3.into()))
-    );
-}
-
-#[test]
-fn an_arg_name_must_match_the_alias_grammar() {
-    let error = parse_err(&prompt("args: { '1bad': { type: string } }", &[]));
-    assert_eq!(error.kind(), ParseErrorKind::Frontmatter);
-}
-
-#[test]
-fn an_absent_args_key_marks_the_default_declaration() {
-    // No `args:` key: the implicit default declaration, whose interface
-    // prose wraps into `argv.prose`.
-    assert!(
-        parse_ok(&prompt("", &[])).frontmatter().args().is_default(),
-        "an absent args key yields the default declaration"
-    );
-
-    // An explicit `args:` key is a structured declaration, which never
-    // wraps.
-    let explicit = parse_ok(&prompt("args: { query: { type: string } }", &[]));
-    assert!(!explicit.frontmatter().args().is_default());
-
-    // Even an explicit declaration identical to the default shape is
-    // structured: declared is not defaulted.
-    let shaped = parse_ok(&prompt(
-        "args: { prose: { type: string, optional: true, \
-         description: Freeform input for this prompt } }",
-        &[],
-    ));
-    let args = shaped.frontmatter().args();
-    assert!(!args.is_default());
-    assert_ne!(
-        *args,
-        super::ArgsDecl::default(),
-        "an explicit declaration never equals the implicit default"
-    );
-}
-
-#[test]
-fn an_unknown_arg_type_is_rejected() {
-    let error = parse_err(&prompt("args: { flag: { type: text } }", &[]));
-    assert_eq!(error.kind(), ParseErrorKind::Frontmatter);
 }
 
 #[test]
@@ -229,23 +118,9 @@ fn model_roles_round_trip_with_defaults() {
 }
 
 #[test]
-fn args_and_model_roles_iterate_in_name_order_through_named_iterators() {
-    let prompt = parse_ok(&prompt(
-        "args: { query: { type: string }, limit: { type: integer } }
-        models: { triage: {}, analyst: {} }",
-        &[],
-    ));
+fn model_roles_iterate_in_name_order_through_a_named_iterator() {
+    let prompt = parse_ok(&prompt("models: { triage: {}, analyst: {} }", &[]));
     let fm = prompt.frontmatter();
-
-    let args: ArgsDeclIter<'_> = fm.args().iter();
-    assert_eq!(args.len(), 2);
-    let names: Vec<&str> = args.map(|(name, _)| name).collect();
-    assert_eq!(names, ["limit", "query"]);
-    let mut kinds = Vec::new();
-    for (_, decl) in fm.args() {
-        kinds.push(decl.kind());
-    }
-    assert_eq!(kinds, [ArgType::Integer, ArgType::String]);
 
     let roles: ModelRolesIter<'_> = fm.models().iter();
     assert_eq!(roles.len(), 2);

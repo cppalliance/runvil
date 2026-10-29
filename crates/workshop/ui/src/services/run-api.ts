@@ -22,21 +22,24 @@ export interface RunContractPack {
   readonly id: string;
 }
 
-/** The declared arg types the wire format allows. */
-export type RunContractArgType = "string" | "boolean" | "integer" | "number";
+/**
+ * The input field types the wire format allows: a schema property's scalar
+ * type, or `json` for any other property schema.
+ */
+export type RunContractArgType = "string" | "boolean" | "integer" | "number" | "json";
 
-/** One declared arg. */
+/** One input field, derived from one input schema property. */
 export interface RunContractArg {
   readonly name: string;
   readonly type: RunContractArgType;
   readonly optional: boolean;
-  /** The declared default; null when absent. */
-  readonly default: string | number | boolean | null;
+  /** The property's default, any JSON value; null when absent. */
+  readonly default: unknown;
   /** The human-readable description; null when absent. */
   readonly description: string | null;
 }
 
-/** The typed args declaration; implicit names the single prose field. */
+/** The input fields; implicit names the single prose field of a prompt without an input schema. */
 export interface RunContractArgs {
   readonly implicit: boolean;
   readonly fields: readonly RunContractArg[];
@@ -88,7 +91,7 @@ function parsePack(value: unknown): RunContractPack | null {
   return { id };
 }
 
-const ARG_TYPES: readonly string[] = ["string", "boolean", "integer", "number"];
+const ARG_TYPES: readonly string[] = ["string", "boolean", "integer", "number", "json"];
 
 function parseArg(value: unknown): RunContractArg | null {
   if (!isRecord(value)) {
@@ -101,15 +104,7 @@ function parseArg(value: unknown): RunContractArg | null {
   if (typeof optional !== "boolean") {
     return null;
   }
-  const defaultValue = value.default;
-  if (
-    defaultValue !== null &&
-    typeof defaultValue !== "string" &&
-    typeof defaultValue !== "number" &&
-    typeof defaultValue !== "boolean"
-  ) {
-    return null;
-  }
+  const defaultValue: unknown = value.default ?? null;
   const description = value.description;
   if (description !== null && typeof description !== "string") {
     return null;

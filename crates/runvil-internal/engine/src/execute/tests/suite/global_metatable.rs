@@ -10,7 +10,8 @@ use crate::test_support::scenario::Scenario;
 
 /// One declared `query` string, so `argv` is the parsed JSON or nil.
 fn query_source() -> PromptSource {
-    PromptSource::new().front("args: { query: { type: string } }")
+    PromptSource::new()
+        .front("inputSchema: { type: object, properties: { query: { type: string } } }")
 }
 
 #[test]

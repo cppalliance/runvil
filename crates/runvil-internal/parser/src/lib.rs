@@ -39,9 +39,7 @@ mod sections;
 pub mod test_support;
 
 pub use body_text::BodyText;
-pub use contract::{
-    ArgDecl, ArgType, ArgsDecl, ArgsDeclIter, ModelKeyword, ModelRole, ModelRoles, ModelRolesIter,
-};
+pub use contract::{ModelKeyword, ModelRole, ModelRoles, ModelRolesIter};
 use error::Result;
 pub use error::{Error, ParseError, ParseErrorKind};
 #[cfg(test)]

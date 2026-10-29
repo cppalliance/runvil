@@ -10,7 +10,8 @@ const CONTRACT: &str = "
     input: { path: names.md, description: The names to greet }
     output: { path: note.md, description: The note the greeter leaves }
     uses: [text]
-    args: { times: { type: integer, optional: true, default: 1 }, name: { type: string } }
+    inputSchema: { type: object, properties: { times: { type: integer, default: 1 }, \
+        name: { type: string } }, required: [name] }
     models: { writer: { keywords: [fast] } }
 ";
 
@@ -53,12 +54,11 @@ fn the_frontmatter_lists_every_declaration_with_arguments_sorted_by_name() -> Te
         .collect();
     assert_eq!(roles, [("writer".to_owned(), None)]);
 
+    let schema = frontmatter.input_schema().expect("the schema is declared");
     assert!(
-        frontmatter
-            .args()
-            .iter()
-            .map(|(name, _)| name)
-            .eq(["name", "times"])
+        schema["properties"]
+            .as_object()
+            .is_some_and(|properties| properties.keys().eq(["name", "times"]))
     );
 
     let misspelled = source.replace("uses:", "use:");

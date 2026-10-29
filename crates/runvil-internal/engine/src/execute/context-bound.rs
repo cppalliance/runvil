@@ -82,13 +82,13 @@ pub(super) fn bound_model_set(prompt: &Prompt, bindings: &ModelBindings) -> Mode
 }
 
 /// Derives a section's `argv` from the args string under the prompt's
-/// declaration: a default-declared prompt wraps the interface prose into
-/// the default shape (`argv.prose`, with the empty string present, not
-/// absent); a structured declaration parses the string as JSON, and a parse
+/// `inputSchema`: a prompt without one wraps the interface prose into
+/// `argv.prose` (with the empty string present, not absent); a prompt with
+/// one parses the string as JSON, and a parse
 /// failure or a JSON `null` reads as nil (`if argv then` is the malformed
 /// check). The executor never hard-errors on shape.
 pub(super) fn derive_argv(prompt: &Prompt, args: &str) -> Option<serde_json::Value> {
-    if prompt.frontmatter().args().is_default() {
+    if prompt.frontmatter().input_schema().is_none() {
         return Some(serde_json::json!({ "prose": args }));
     }
     match serde_json::from_str(args) {

@@ -45,6 +45,7 @@ const CONTRACT = {
       { name: "topic", type: "string", optional: false, default: null, description: "the topic" },
       { name: "deep", type: "boolean", optional: true, default: false, description: null },
       { name: "limit", type: "integer", optional: true, default: 5, description: null },
+      { name: "tags", type: "json", optional: true, default: ["a"], description: null },
     ],
   },
   models: [
@@ -101,13 +102,15 @@ const json = (body, status = 200) => ({
   check(
     "arg fields narrow with defaults and descriptions",
     contract.args.implicit === false &&
-      contract.args.fields.length === 3 &&
+      contract.args.fields.length === 4 &&
       contract.args.fields[0].name === "topic" &&
       contract.args.fields[0].type === "string" &&
       contract.args.fields[0].optional === false &&
       contract.args.fields[1].default === false &&
       contract.args.fields[2].type === "integer" &&
-      contract.args.fields[2].default === 5,
+      contract.args.fields[2].default === 5 &&
+      contract.args.fields[3].type === "json" &&
+      JSON.stringify(contract.args.fields[3].default) === '["a"]',
   );
   // The Run window shows a described arg's text as a second line under its
   // label and draws no line for an undescribed one, so the narrowed
@@ -158,7 +161,7 @@ const json = (body, status = 200) => ({
       contract.output === null,
   );
   check(
-    "the implicit args declaration names the single prose field",
+    "the implicit args of a prompt without an input schema name the single prose field",
     contract.args.implicit === true &&
       contract.args.fields.length === 1 &&
       contract.args.fields[0].name === "prose" &&

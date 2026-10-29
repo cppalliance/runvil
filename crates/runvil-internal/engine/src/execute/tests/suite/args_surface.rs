@@ -1,7 +1,7 @@
 //! The args/argv surface: `args` is the exact passed string always; `argv`
 //! is the parsed JSON on success and nil otherwise (`if argv then` is the
-//! malformed check); a default-declared prompt wraps interface prose into
-//! `argv.prose`; `argv` is writable in H1 only and frozen when H1 completes,
+//! malformed check); a prompt without an `inputSchema` wraps interface
+//! prose into `argv.prose`; `argv` is writable in H1 only and frozen when H1 completes,
 //! so an H1 repair reaches every downstream section while an H2 assignment
 //! is an error; and `{{ argv }}` joins the prose substitution namespaces.
 
@@ -9,9 +9,9 @@ use runvil_parser::test_support::{PromptSource, prompt};
 
 use crate::test_support::scenario::Scenario;
 
-/// One declared (required) `query` string. The declaration advertises and
+/// An input schema with one `query` string. The schema advertises and
 /// documents; it never enforces - enforcement is the prompt's H1.
-const QUERY: &str = "args: { query: { type: string } }";
+const QUERY: &str = "inputSchema: { type: object, properties: { query: { type: string } } }";
 
 /// A prompt declaring [`QUERY`] whose one section `Only` runs `lua`.
 fn query_prompt(lua: &str) -> String {
@@ -177,7 +177,7 @@ fn absent_is_not_the_empty_string() {
     // An optional field omitted is nil; passed empty it is "". The two are
     // distinguishable in Lua.
     let source = prompt(
-        "args: { prose: { type: string, optional: true } }",
+        "inputSchema: { type: object, properties: { prose: { type: string } } }",
         &[(
             "Only",
             "
@@ -193,8 +193,8 @@ fn absent_is_not_the_empty_string() {
 }
 
 #[test]
-fn a_default_declared_prompt_wraps_interface_prose() {
-    // No `args:` key: the default declaration wraps prose into argv.prose,
+fn a_prompt_without_an_input_schema_wraps_interface_prose() {
+    // No `inputSchema:` key: the input text wraps into argv.prose,
     // and args still holds the exact passed string.
     let source = prompt(
         "",
@@ -211,7 +211,7 @@ fn a_default_declared_prompt_wraps_interface_prose() {
 }
 
 #[test]
-fn a_default_declared_prompt_wraps_empty_prose_as_present() {
+fn a_prompt_without_an_input_schema_wraps_empty_prose_as_present() {
     // Interface prose is always present, so empty prose wraps as the
     // present empty string, distinguishable from an absent field.
     let source = prompt(
