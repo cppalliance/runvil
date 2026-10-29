@@ -48,8 +48,8 @@ use runvil_vfs::detail;
 
 use crate::execute::run::{Effect, ToolCallOrigin, ToolCaller};
 use crate::lua::{
-    Answer, DiscoveryTool, OfferMode, ScriptReport, ToolBinding, ToolCallCounts, ToolCallOutcome,
-    ToolCallRecord, ToolSet, current_dynamic_set, current_static_set,
+    Answer, DiscoveryTool, ModelCall, OfferMode, ScriptReport, ToolBinding, ToolCallCounts,
+    ToolCallOutcome, ToolCallRecord, ToolSet, current_dynamic_set, current_static_set,
 };
 use crate::{Error, Result};
 
@@ -98,13 +98,11 @@ impl ChainOps<'_> {
         &mut self,
         alias: &str,
         args: serde_json::Value,
-        call_id: Option<String>,
-        turn: Option<u32>,
+        model: Option<ModelCall>,
     ) -> Result<()> {
-        let site = match call_id {
-            Some(call_id) => CallSite::Model { call_id, turn },
-            None => CallSite::Script { turn },
-        };
+        let site = model.map_or(CallSite::Script, |ModelCall { call_id, turn }| {
+            CallSite::Model { call_id, turn }
+        });
         match self.prepare_tool_call(alias, args, site) {
             // An issued call is parked on the effect table.
             Ok(Dispatched::Issued) => Ok(()),
@@ -191,7 +189,7 @@ impl ChainOps<'_> {
     }
 
     /// The turn every report of a call at `site` carries: the requesting
-    /// round's turn when the site names one, else the chain's turn
+    /// round's turn for a model-issued call, else the chain's turn
     /// counter at dispatch.
     fn call_turn(&self, site: &CallSite) -> u32 {
         site.turn()
@@ -307,9 +305,8 @@ impl ChainOps<'_> {
     ///
     /// Every report the call makes carries the turn of the model round
     /// that requested it, so an adhoc handler earlier in the same batch
-    /// that runs model rounds cannot shift it. A script call, or a
-    /// model-issued one yielded without a turn, reports the counter's
-    /// value at dispatch.
+    /// that runs model rounds cannot shift it. A script call reports the
+    /// counter's value at dispatch.
     fn prepare_tool_call(
         &mut self,
         alias: &str,
@@ -356,7 +353,7 @@ impl ChainOps<'_> {
         // one loop at a time, so no other round commits to the list
         // between a round's answer and the issue of its calls.
         let (caller, model) = match &site {
-            CallSite::Script { .. } => (ToolCaller::Script, None),
+            CallSite::Script => (ToolCaller::Script, None),
             CallSite::Model { .. } | CallSite::Batch { .. } => {
                 (ToolCaller::Model, frame.vm().messages().last_model())
             }

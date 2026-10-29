@@ -73,9 +73,6 @@ impl SectionVm {
     /// key and lists the keys held, and `tools` holds only run catalog and
     /// adhoc tool ids.
     ///
-    /// The installation itself sits in the `tools` module; this method only
-    /// supplies the VM's own state.
-    ///
     /// Returns the `ToolCallCounts` handle so the scheduler can increment
     /// it.
     ///

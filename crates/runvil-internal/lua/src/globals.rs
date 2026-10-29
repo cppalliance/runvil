@@ -113,16 +113,6 @@ pub(crate) fn freeze_argv(lua: &Lua, frozen: Value) -> Result<()> {
     state.raw_set("argv_frozen", true).map_err(Error::lua)
 }
 
-/// Installs `render` as the source of `prose` reads, replacing the
-/// previous block's.
-///
-/// # Errors
-/// Returns [`Error::Lua`] if the guard's slot table is missing or cannot
-/// be written.
-pub(crate) fn install_prose(lua: &Lua, render: Function) -> Result<()> {
-    state(lua)?.raw_set("prose", render).map_err(Error::lua)
-}
-
 /// Puts `render` in the `prose` slot, nil leaving `prose` reading nil, and
 /// returns the render it replaced, nil before the first install.
 ///

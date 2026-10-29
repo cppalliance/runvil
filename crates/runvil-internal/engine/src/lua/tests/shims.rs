@@ -165,16 +165,13 @@ fn tools_call_yields_a_well_formed_request() {
     // protocol's ToolCall variant with the author's args as JSON.
     let vm = scheduler_vm(&ModelSet::default(), None);
     match yielded_request(&vm, r#"return tools.call("tools/echo", { value = "hi" })"#) {
-        Request::ToolCall {
-            alias,
-            args,
-            call_id,
-            turn,
-        } => {
+        Request::ToolCall { alias, args, model } => {
             assert_eq!(alias, "tools/echo");
             assert_eq!(args, json!({ "value": "hi" }));
-            assert_eq!(call_id, None, "a script call leaves the call id unset");
-            assert_eq!(turn, None, "a script call leaves the turn unset");
+            assert_eq!(
+                model, None,
+                "a script call leaves the call id and turn unset"
+            );
         }
         other => panic!("expected a tool_call request, got {other:?}"),
     }
@@ -202,9 +199,9 @@ fn an_adhoc_tool_handler_runs_inside_the_block_coroutine() {
          return out .. '|' .. tostring(withheld) .. '|' .. tostring(jump ~= nil)",
     );
     match parse_request(&vm, yielded) {
-        Request::ToolCall { alias, call_id, .. } => {
+        Request::ToolCall { alias, model, .. } => {
             assert_eq!(alias, "adhoc/grab");
-            assert_eq!(call_id, None);
+            assert_eq!(model, None);
         }
         other => panic!("the block's first yield is the tool call, got {other:?}"),
     }

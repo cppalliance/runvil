@@ -233,7 +233,7 @@ fn a_name_that_is_no_catalog_id_is_unbound_and_lists_the_catalog_ids() {
 #[test]
 fn a_model_issued_call_never_resolves_an_id() {
     let source = one_section(
-        "local ok, err = pcall(tools.call_as_model, 'call_1', 'tools/echo', { value = 'hi' })\n\
+        "local ok, err = pcall(tools.call_as_model, 'call_1', 'tools/echo', { value = 'hi' }, 0)\n\
          assert(not ok, 'a model-issued id call is refused')\n\
          return err.kind .. ':' .. err.name",
     );

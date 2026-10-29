@@ -1,4 +1,4 @@
--- The `fanout` shim for a scheduler-mode section VM: Lua over the task
+-- The `fanout` shim for a section VM: Lua over the task
 -- protocol (`spawn`, `join_any`, `cancel`), so every wait inside a fanout
 -- is an ordinary yield and the scheduler keeps no fanout state of its own.
 --

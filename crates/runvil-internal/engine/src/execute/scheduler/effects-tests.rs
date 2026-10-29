@@ -56,7 +56,7 @@ fn issue_tool_call(table: &mut EffectTable, chain: ChainIndex) -> (EffectId, Exe
     let resume = Continuation::ToolCall(ToolCallContinuation {
         binding,
         report: ScriptReport { turn: 0 },
-        site: CallSite::Script { turn: None },
+        site: CallSite::Script,
         exec,
     });
     (table.issue(chain, provenance(), timer(), resume), exec)

@@ -3,7 +3,7 @@
 
 use mlua::{Lua, LuaSerdeExt, MultiValue, Value};
 
-use crate::protocol::{AdhocToolOutcome, Request, ToolCallRecord};
+use crate::protocol::{AdhocToolOutcome, ModelCall, Request, ToolCallRecord};
 use crate::tools::{model_tool_name, tool_id};
 use crate::vm::scalar_return;
 
@@ -18,7 +18,9 @@ struct ToolCallFields {
     turn: Option<u32>,
 }
 
-/// Parses a `tools.call` request from the fields [`read_tool_call`] reads.
+/// Parses a `tools.call` request from the fields [`read_tool_call`] reads:
+/// a model-issued call when `call_id` and `turn` are both present, a
+/// script call when both are absent, and a malformed yield otherwise.
 pub(super) fn parse_tool_call(
     lua: &Lua,
     table: &mlua::Table,
@@ -29,12 +31,12 @@ pub(super) fn parse_tool_call(
         call_id,
         turn,
     } = read_tool_call(lua, table)?;
-    Ok(Request::ToolCall {
-        alias,
-        args,
-        call_id,
-        turn,
-    })
+    let model = match (call_id, turn) {
+        (Some(call_id), Some(turn)) => Some(ModelCall { call_id, turn }),
+        (None, None) => None,
+        (Some(_), None) | (None, Some(_)) => return Err(FieldFailure::Malformed),
+    };
+    Ok(Request::ToolCall { alias, args, model })
 }
 
 /// Reads a `tool_call` table: the `alias` naming the tool and the

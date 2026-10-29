@@ -2,7 +2,7 @@
 //! resume to the classified end.
 
 use mlua::thread::ThreadStatus;
-use mlua::{IntoLuaMulti, MultiValue, Thread, Value};
+use mlua::{MultiValue, Thread, Value};
 
 use super::SectionVm;
 use crate::coro::{block_guard, take_failure};
@@ -51,8 +51,9 @@ impl SectionVm {
     /// programs, and the scalar-return rule applies to the return values.
     /// A coroutine that yields suspends with the shim's request table; the
     /// driver resumes it with
-    /// [`resume_block_coro`](Self::resume_block_coro). No observation
-    /// events fire here; the driver owns the chunk observation boundaries.
+    /// [`resume_block_coro_answer`](Self::resume_block_coro_answer). No
+    /// observation events fire here; the driver owns the chunk observation
+    /// boundaries.
     ///
     /// The coroutine body is the shim's block guard, resumed first with
     /// the block function: the guard runs the block under `xpcall`, whose
@@ -81,11 +82,12 @@ impl SectionVm {
     ///
     /// # Errors
     /// Same contract as [`start_block_coro`](Self::start_block_coro).
+    #[cfg(any(test, feature = "test-support"))]
     pub fn resume_block_coro(
         &self,
         program: &LuaProgram,
         thread: &Thread,
-        args: impl IntoLuaMulti,
+        args: impl mlua::IntoLuaMulti,
     ) -> Result<CoroStep> {
         let result = thread.resume::<MultiValue>(args);
         self.step_block_coro::<Error>(program, thread.clone(), result, None)
@@ -272,9 +274,9 @@ pub(crate) fn scalar_return(returned: MultiValue) -> Result<Option<String>> {
 /// One step of a Lua block running on a coroutine.
 ///
 /// Produced by [`SectionVm::start_block_coro`] and
-/// [`SectionVm::resume_block_coro`]; consumed by the scheduler's driver,
-/// which validates a [`Yielded`](CoroStep::Yielded) request, dispatches it,
-/// and resumes the thread with the answer.
+/// [`SectionVm::resume_block_coro_answer`]; consumed by the scheduler's
+/// driver, which validates a [`Yielded`](CoroStep::Yielded) request,
+/// dispatches it, and resumes the thread with the answer.
 #[derive(Debug)]
 pub enum CoroStep {
     /// The coroutine suspended on a shim yield; the yielded values are

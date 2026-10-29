@@ -56,10 +56,6 @@ pub(crate) const DEFAULT_LUA_MEMORY_BYTES: usize = 64 * 1024 * 1024;
 /// Default per-VM `log()` event budget, matching the executor's `RunLimits`.
 pub(crate) const DEFAULT_LUA_LOG_EVENTS: u32 = 1024;
 
-/// The failure of a `prose` read on a VM whose live `sys` slot was never
-/// filled, which Engine injection fills.
-pub(crate) const NOT_INJECTED: &str = "section VM Engine values have not been injected";
-
 /// The failure of a poisoned live `sys` slot.
 pub(crate) const SYS_LIVE_POISONED: &str = "sys live slot was poisoned";
 
@@ -82,16 +78,19 @@ fn pack_sequence<T: mlua::IntoLua>(lua: &Lua, values: Vec<T>) -> mlua::Result<ml
 }
 
 /// A section VM's stage before Engine injection: construction, the run's
-/// limits, the cancel flag, and the raw-model-id opt-in.
+/// limits, and the raw-model-id opt-in.
 #[derive(Debug)]
 pub struct Uninjected;
 
 /// A section VM's stage once Engine injection ran, holding the chain
-/// step's VFS access capability: the `store` table's closures share it, so
-/// every store op is attributed to the identity the executor installed.
+/// step's VFS access capability, which the `store` table's closures share,
+/// so every store op is attributed to the identity the executor installed,
+/// and the live `sys` mirror injection builds from the sealed `sys`.
 #[derive(Debug)]
 pub struct Injected {
     access: Arc<Access>,
+    /// Live sealed `sys` JSON, mirrored for prose snapshots.
+    sys_live: Arc<Mutex<Json>>,
 }
 
 /// One hardened, isolated Lua VM for a section's complete lifecycle.
@@ -142,8 +141,6 @@ pub struct SectionVm<S = Injected> {
     /// failure maps through them as well as through the started block, so
     /// library code reports its own location and prompt line.
     library_programs: Arc<Mutex<Vec<LuaProgram>>>,
-    /// Live sealed `sys` JSON, mirrored for prose snapshots.
-    sys_live: Arc<Mutex<Option<Json>>>,
     /// The slot the direct store closures record a claims-model conflict
     /// into while the Pack preludes install, for the executor to read
     /// once they return via
@@ -180,9 +177,10 @@ impl SectionVm<Uninjected> {
     /// run's `nonce`). Everything else - the run's
     /// limits, the Engine values, the persistent Engine globals, the control
     /// globals, and `require` - is a separate explicit step the caller
-    /// drives in that order (see the type-level docs). Every
-    /// lifecycle report goes through the emitter the caller hands each
-    /// step; the VM retains none.
+    /// drives in that order (see the type-level docs). Construction and
+    /// teardown report through the emitter the caller hands each step; the
+    /// persistent globals that `install_engine_globals` and
+    /// `install_require` install keep clones of theirs.
     ///
     /// The VM shares an empty tool and model set, so the validating
     /// `tools.offer` installed by
@@ -200,7 +198,7 @@ impl SectionVm<Uninjected> {
         #[cfg(any(test, feature = "test-support"))]
         crate::test_support::count_live_vm(&lua);
         // Bound the VM heap by default; `apply_lua_limits` may tighten or relax
-        // it to the caller's `RunLimits`. A safe non-env default keeps every VM
+        // it to the caller's `RunLimits`. A default keeps every VM
         // bounded even when the run installs no explicit limits.
         lua.set_memory_limit(DEFAULT_LUA_MEMORY_BYTES)
             .map_err(Error::lua)?;
@@ -216,7 +214,6 @@ impl SectionVm<Uninjected> {
             loop_running: Arc::new(AtomicBool::new(false)),
             library_load_depth: Arc::new(AtomicU32::new(0)),
             library_programs: Arc::new(Mutex::new(Vec::new())),
-            sys_live: Arc::new(Mutex::new(None)),
             store_conflict: Arc::new(Mutex::new(None)),
             log_budget: Arc::new(AtomicU32::new(DEFAULT_LUA_LOG_EVENTS)),
             log_byte_budget: Arc::new(AtomicUsize::new(log_byte_budget(DEFAULT_LUA_LOG_EVENTS))),
@@ -278,11 +275,12 @@ impl SectionVm<Uninjected> {
 
     /// Applies the run's Lua resource limits to this VM.
     ///
-    /// Sets the heap ceiling (`lua_memory_bytes`) and resets the `log()` event
-    /// budget (`lua_log_events`). Called by the executor right after
-    /// construction, ahead of the Pack preludes and every block, so they
-    /// already spend the caller's run limits rather than only the safe
-    /// non-env defaults installed in `SectionVm::new`.
+    /// Sets the heap ceiling (`lua_memory_bytes`), records it for the
+    /// conversion walk budget, and resets the `log()` event budget
+    /// (`lua_log_events`) and the byte budget derived from it. Called by
+    /// the executor right after construction, ahead of the Pack preludes and
+    /// every block, so they spend the run's limits rather than the defaults
+    /// `SectionVm::new` installs.
     ///
     /// # Errors
     /// Returns [`Error::LuaRuntime`] if the underlying VM rejects the memory

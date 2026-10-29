@@ -1,4 +1,4 @@
--- Coroutine-protocol shim prelude for a scheduler-mode section VM.
+-- Coroutine-protocol shim prelude for a section VM.
 --
 -- The Engine installs this after the Engine globals exist and before the
 -- Pack preludes. The chunk arguments are privileged captures, never
@@ -201,13 +201,15 @@ end
 
 -- The model-issued form of the same dispatch: `call_id` is the id the model
 -- attached to its tool call, and `turn` the turn of the round that
--- requested it. The driver always resumes a bound tool with content (a
--- tool's own failure becomes untrusted failure text) and fires ToolResult
--- under the id and that turn, however far an adhoc handler earlier in the
--- batch moved the counter. Only the test-only `tools.call_as_model` hook
--- calls it now, since the loop builds its `tool_call` requests in Rust;
--- authors never see it, and a hand-built yield including `call_id` or
--- `turn` is refused as a malformed request when its shape is wrong.
+-- requested it, both required, since the live turn counter lives in the
+-- Engine rather than in Lua. The driver always resumes a bound tool with
+-- content (a tool's own failure becomes untrusted failure text) and fires
+-- ToolResult under the id and that turn, however far an adhoc handler
+-- earlier in the batch moved the counter. Only the test-only
+-- `tools.call_as_model` hook calls it now, since the loop builds its
+-- `tool_call` requests in Rust; authors never see it, and a hand-built
+-- yield including `call_id` or `turn` is refused as a malformed request
+-- when its shape is wrong.
 local function tools_call_as_model(call_id, alias_or_tool, args, turn)
   return dispatch_tool({
     op = "tool_call",

@@ -19,8 +19,7 @@ use crate::vm::DEFAULT_LUA_MEMORY_BYTES;
 const BYTES_PER_NODE: usize = 8;
 
 /// The most table levels `check_value` descends, the top-level table being
-/// level 1. A table nested past it is not counted and converts as it does
-/// today.
+/// level 1. A table nested past it is not counted.
 const CHECK_DEPTH_LIMIT: usize = 200;
 
 /// The most keys one encode path may hold as Lua references at once:
@@ -103,7 +102,7 @@ impl WalkBudget {
                 }
                 path.push(pointer);
                 // An entry that cannot be read ends the walk of this table,
-                // and the conversion that follows reports it as it does today.
+                // and the conversion that follows reports it.
                 for (key, value) in table.pairs::<Value, Value>().map_while(Result::ok) {
                     if let Value::String(name) = &key {
                         self.charge_bytes(name.as_bytes().len())?;

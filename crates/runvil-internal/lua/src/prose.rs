@@ -28,7 +28,7 @@ use serde_json::Value as Json;
 
 use crate::error::{Error, Result};
 use crate::var::var_to_json;
-use crate::vm::{NOT_INJECTED, SYS_LIVE_POISONED};
+use crate::vm::SYS_LIVE_POISONED;
 
 /// The refusal an assignment of the `prose` global raises.
 pub(crate) const ASSIGNMENT_REFUSAL: &str =
@@ -70,12 +70,11 @@ impl fmt::Debug for ProseState<'_> {
 /// # Errors
 /// Returns [`Error::LuaRuntime`] if the read cannot be built or the guard cannot
 /// record it.
-pub(crate) fn install<F>(lua: &Lua, sys_live: &Arc<Mutex<Option<Json>>>, render: F) -> Result<()>
+pub(crate) fn install<F>(lua: &Lua, sys_live: &Arc<Mutex<Json>>, render: F) -> Result<()>
 where
     F: Fn(ProseState<'_>) -> mlua::Result<String> + Send + Sync + 'static,
 {
-    let read = lazy_read(lua, sys_live, render)?;
-    crate::globals::install_prose(lua, read)
+    swap(lua, sys_live, render).map(drop)
 }
 
 /// Installs a fresh lazy `prose` over `render`, as [`install`] does, and
@@ -87,7 +86,7 @@ where
 /// # Errors
 /// Returns [`Error::LuaRuntime`] if the read cannot be built or the guard cannot
 /// record it.
-pub(crate) fn swap<F>(lua: &Lua, sys_live: &Arc<Mutex<Option<Json>>>, render: F) -> Result<Value>
+pub(crate) fn swap<F>(lua: &Lua, sys_live: &Arc<Mutex<Json>>, render: F) -> Result<Value>
 where
     F: Fn(ProseState<'_>) -> mlua::Result<String> + Send + Sync + 'static,
 {
@@ -108,7 +107,7 @@ pub(crate) fn restore(lua: &Lua, saved: Value) -> Result<()> {
 ///
 /// # Errors
 /// Returns [`Error::LuaRuntime`] if the closure cannot be created.
-fn lazy_read<F>(lua: &Lua, sys_live: &Arc<Mutex<Option<Json>>>, render: F) -> Result<mlua::Function>
+fn lazy_read<F>(lua: &Lua, sys_live: &Arc<Mutex<Json>>, render: F) -> Result<mlua::Function>
 where
     F: Fn(ProseState<'_>) -> mlua::Result<String> + Send + Sync + 'static,
 {
@@ -124,14 +123,10 @@ where
             }
         }
         let var = var_to_json(lua).map_err(mlua::Error::external)?;
-        let sys = {
-            let guard = sys_live
-                .lock()
-                .map_err(|_| mlua::Error::external(Error::Internal(SYS_LIVE_POISONED.into())))?;
-            guard
-                .clone()
-                .ok_or_else(|| mlua::Error::external(Error::Internal(NOT_INJECTED.into())))?
-        };
+        let sys = sys_live
+            .lock()
+            .map_err(|_| mlua::Error::external(Error::Internal(SYS_LIVE_POISONED.into())))?
+            .clone();
         let globals_lookup = |name: &str| -> Result<Option<Json>> {
             if name == "prose" {
                 return Err(Error::Lua(

@@ -103,14 +103,9 @@ impl Scheduler {
             Request::Concurrency { limit } => self.dispatch_concurrency(id, limit),
             Request::Note { text } => self.dispatch_note(id, text),
             Request::Cancel { task } => self.dispatch_cancel(id, &task),
-            Request::ToolCall {
-                alias,
-                args,
-                call_id,
-                turn,
-            } => self.with_chain(id, |ops| {
-                ops.dispatch_tool_call(&alias, args, call_id, turn)
-            }),
+            Request::ToolCall { alias, args, model } => {
+                self.with_chain(id, |ops| ops.dispatch_tool_call(&alias, args, model))
+            }
             Request::ToolCalls { calls, turn } => {
                 self.with_chain(id, |ops| ops.dispatch_tool_calls(calls, turn))
             }

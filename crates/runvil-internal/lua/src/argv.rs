@@ -37,8 +37,7 @@ pub enum Argv<'a> {
 pub(crate) const ASSIGNMENT_REFUSAL: &str = "argv is frozen outside H1: assign it in H1 only";
 
 /// Installs `argv` as a plain writable global: the H1 pass's mode. `None`
-/// (malformed args, or JSON null) installs nil, so `if argv then` is the
-/// idiomatic malformed check.
+/// (malformed args, or JSON null) installs nil.
 ///
 /// # Errors
 /// Returns [`Error::LuaRuntime`] if the value cannot be bridged or installed.
@@ -50,8 +49,8 @@ pub(crate) fn install_writable(lua: &Lua, argv: Option<&Json>) -> Result<()> {
     lua.globals().raw_set("argv", value).map_err(Error::lua)
 }
 
-/// Installs `argv` frozen: reads work, every assignment raises. This is the
-/// mode of every section but H1 - the value H1 left behind at the freeze.
+/// Installs `argv` frozen, the mode of every section but H1: the value H1
+/// left behind at the freeze.
 ///
 /// # Errors
 /// Returns [`Error::LuaRuntime`] if the value cannot be bridged or the guard

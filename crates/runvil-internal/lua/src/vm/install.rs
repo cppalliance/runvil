@@ -77,7 +77,9 @@ impl SectionVm {
     /// and `prompt.list`) as persistent globals for the section's whole
     /// lifecycle.
     ///
-    /// Called once by `runvil-engine` after Engine injection. The
+    /// Test-only: production installs `jump` and the `prompt` reads through
+    /// [`install_scheduler_control_globals`](Self::install_scheduler_control_globals)
+    /// and `call` as a yield shim. The
     /// callbacks own their run context, so the closures stay valid across
     /// every chunk this VM runs without a live [`mlua::Scope`]. The `jump`
     /// closure captures a clone of the VM's jump slot; the slot is reset
@@ -108,8 +110,8 @@ impl SectionVm {
         self.install_prompt_table(&globals, read)
     }
 
-    /// Installs the scheduler-mode control surface: `jump` and the
-    /// `prompt` reads as Rust callbacks (none suspends).
+    /// Installs the control surface: `jump` and the `prompt` reads as Rust
+    /// callbacks (none suspends).
     ///
     /// The suspending calls (`models.infer`, `call`, `tasks.fanout`,
     /// `tools.call`, `tasks.*`) are the yield shims installed by
@@ -127,11 +129,12 @@ impl SectionVm {
         self.install_prompt_table(&globals, read)
     }
 
-    /// Installs the coroutine yield shims (`models.infer`, `call`,
-    /// `tasks.fanout`, `tools.call`, the `tasks` namespace).
-    /// `max_tool_iterations` is the run's resolved round cap for the
-    /// `models.loop` shim a section install adds afterward; a VM that never
-    /// installs the loop shim passes any value.
+    /// Installs the coroutine yield shims (`models.infer`, `models.loop`,
+    /// `models.compact`, `call`, `tasks.fanout`, `tools.call`, the `tasks`
+    /// namespace) through `install_shim_prelude`, which also puts
+    /// `models.loop` and `models.compact` on the `models` table.
+    /// `max_tool_iterations` is the run's resolved round cap, which every
+    /// `models.loop` and model handle `loop` call on this VM spends.
     ///
     /// # Errors
     /// Returns [`Error::LuaRuntime`] if the shim prelude cannot install.
@@ -190,7 +193,7 @@ impl SectionVm {
             section,
             &crate::require::VmShare {
                 depth: &self.library_load_depth,
-                sys_live: &self.sys_live,
+                sys_live: &self.state.sys_live,
                 programs: &self.library_programs,
             },
         )
@@ -272,10 +275,11 @@ impl SectionVm {
         let sys_table = seal_sys(&self.lua, sys)?;
         globals.raw_set("sys", sys_table).map_err(Error::lua)?;
         let mut live = self
+            .state
             .sys_live
             .lock()
             .map_err(|_| Error::Internal(SYS_LIVE_POISONED.into()))?;
-        *live = Some(sys.clone());
+        *live = sys.clone();
         Ok(())
     }
 
@@ -295,6 +299,6 @@ impl SectionVm {
     where
         F: Fn(ProseState<'_>) -> mlua::Result<String> + Send + Sync + 'static,
     {
-        crate::prose::install(&self.lua, &self.sys_live, render)
+        crate::prose::install(&self.lua, &self.state.sys_live, render)
     }
 }

@@ -157,15 +157,10 @@ fn a_prelude_function_called_from_a_block_yields_its_tool_call() {
         panic!("the block must suspend on the tool call");
     };
     match vm.request_from_yield(&values) {
-        YieldParse::Request(Request::ToolCall {
-            alias,
-            args,
-            call_id,
-            ..
-        }) => {
+        YieldParse::Request(Request::ToolCall { alias, args, model }) => {
             assert_eq!(alias, "kit/run");
             assert_eq!(args, json!({ "script": "ls" }));
-            assert_eq!(call_id, None, "a prelude's call is a script call");
+            assert_eq!(model, None, "a prelude's call is a script call");
         }
         other => panic!("expected a tool_call request, got {other:?}"),
     }

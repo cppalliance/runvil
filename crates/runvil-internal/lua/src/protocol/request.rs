@@ -144,19 +144,11 @@ pub enum Request {
         /// parses as the empty object.
         args: serde_json::Value,
         /// `Some`: a model-issued call, set by the loop shim from the
-        /// model's tool call. It always resumes with content (a tool's own
-        /// failure becomes untrusted failure text) and `ToolResult` fires
-        /// under this id. `None`: a script call, which keeps the
-        /// raise-at-call-site behavior. Shim-produced, never
-        /// author-supplied: a wrong shape is a malformed yield.
-        call_id: Option<String>,
-        /// `Some`: the turn of the chat round that requested a
-        /// model-issued call, passed back by the loop shim from the
-        /// round's result. `None`: a script call, or the test-only
-        /// `tools.call_as_model` hook, which report the live counter.
-        /// Shim-produced, never author-supplied: a wrong shape is a
-        /// malformed yield.
-        turn: Option<u32>,
+        /// model's tool call and its round. It always resumes with content
+        /// (a tool's own failure becomes untrusted failure text). `None`:
+        /// a script call, which keeps the raise-at-call-site behavior and
+        /// reports the live turn counter.
+        model: Option<ModelCall>,
     },
     /// The unanswered calls of one model round, yielded by the loop's
     /// step: the scheduler issues every catalog call up to the first call
@@ -203,6 +195,20 @@ pub enum Request {
         /// The validated operation and its author-supplied arguments.
         op: VfsOp,
     },
+}
+
+/// The model's side of a model-issued [`Request::ToolCall`]: the id the
+/// model attached to the call and the turn of the round that requested it.
+/// Shim-produced in both fields, never author-supplied, so a `call_id`
+/// without a `turn`, or a `turn` without a `call_id`, is a malformed yield.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ModelCall {
+    /// The id the model attached to its tool call; `ToolResult` fires
+    /// under it.
+    pub call_id: String,
+    /// The turn of the chat round that requested the call, which every
+    /// report of the call carries.
+    pub turn: u32,
 }
 
 /// How an adhoc tool's handler ended, as its `adhoc_tool_done` yield

@@ -101,8 +101,8 @@ pub(crate) struct SectionVmSetup<'a> {
 /// the seed includes one, the control surface
 /// ([`SectionVm::install_scheduler_control_globals`] for `jump` and the
 /// `prompt` reads, plus [`SectionVm::install_coro_shims`] for the
-/// suspending calls, which the scheduler drives as yield shims), the
-/// section's `models.loop` shim, the run's Pack preludes,
+/// suspending calls, which the scheduler drives as yield shims,
+/// `models.loop` and `models.compact` included), the run's Pack preludes,
 /// [`SectionVm::install_require`] over `resolve` and `render`, and the
 /// store yield shims. The caller applies the Lua limits itself before
 /// calling, so a limits failure propagates without touching the VM's
@@ -112,7 +112,7 @@ pub(crate) struct SectionVmSetup<'a> {
 /// Returns the [`Error`] of whichever step failed, after tearing the VM
 /// down under the setup's section: Engine injection, Engine global
 /// install, `ui()` install, `item` install, control-global install, the
-/// `models.loop` shim install, the prelude install (a
+/// yield shims' install, the prelude install (a
 /// prelude that fails to load, or whose global collides, or a store
 /// conflict a prelude's store call recorded), the `require` install, or
 /// the store shims' install.
@@ -179,7 +179,6 @@ where
     }
     vm.install_scheduler_control_globals(read)?;
     vm.install_coro_shims(setup.max_tool_iterations)?;
-    crate::lua::install_section_loop_shim(vm.lua())?;
     // The preludes read `tools` and `store` from `_G` as they install, so
     // they follow the yield shims.
     let installed = crate::lua::install_preludes(vm.lua(), setup.preludes);

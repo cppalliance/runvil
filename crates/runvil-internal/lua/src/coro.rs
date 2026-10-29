@@ -65,23 +65,15 @@ const FANOUT_CHUNK_NAME: &str = "@crates/runvil-internal/lua/src/__impl_fanout.l
 /// a captured cap, bounds how many arms run at once.
 const FANOUT_SOURCE: &str = include_str!("__impl_fanout.lua");
 
-/// The registry key for the shim's `loop`, stashed by the prelude install so
-/// the section setup can install it as `models.loop`.
-const LOOP_REGISTRY: &str = "runvil.impl_coro.loop";
-
-/// The registry key for the shim's `compact`, stashed by the prelude
-/// install so the section setup can install it as `models.compact`.
-const COMPACT_REGISTRY: &str = "runvil.impl_coro.compact";
-
 /// The registry key for the shim's model-handle methods, `infer` and
 /// `loop`, stashed by the prelude install for [`handle_method`].
 const HANDLE_METHODS_REGISTRY: &str = "runvil.impl_coro.handle_methods";
 
-/// The registry key for the shim's model-issued `tool_call` form, stashed
-/// by the prelude install so a test driver can install it as
-/// `tools.call_as_model` and drive the driver's `call_id` path from a
-/// fixture section. The registry is Rust-side only, and no VM ever
-/// installs it as a global.
+/// The registry key for the shim's model-issued `tool_call` form, which
+/// test builds stash for `install_model_tool_call_shim` to install as
+/// `tools.call_as_model`, so a fixture section can drive the driver's
+/// `call_id` path.
+#[cfg(any(test, feature = "test-support"))]
 pub(crate) const MODEL_TOOL_CALL_REGISTRY: &str = "runvil.impl_coro.model_tool_call";
 
 /// The registry key for the shim's store function table, stashed by the
@@ -121,8 +113,8 @@ static FANOUT_PROGRAM: LazyLock<std::result::Result<LuaProgram, SharedSource>> =
 
 /// Installs the yield shims on a VM whose Engine globals already exist.
 ///
-/// Scheduler-mode VMs load the coroutine standard library for the shim's
-/// `yield` capture (a VM without the shims keeps exactly
+/// The coroutine standard library loads for the shim's `yield` capture (a
+/// test VM that never installs the shims keeps exactly
 /// `STRING | TABLE | MATH | UTF8`); the `coroutine` global is stripped again
 /// before returning, so author code cannot yield directly and a hand-rolled
 /// yield fails the driver's strict validation. The `models` and `tools`
@@ -134,9 +126,9 @@ static FANOUT_PROGRAM: LazyLock<std::result::Result<LuaProgram, SharedSource>> =
 /// helpers, and installed as the `tasks` global; `fanout` is a third, run
 /// over the same captures plus the collection enumerator and the item
 /// renderer, and installed on the `tasks` table as `tasks.fanout`. The
-/// `models.loop` and `models.compact` shims are stashed in the registry
-/// for [`install_section_loop_shim`], and the chunk's `handle_methods`
-/// table, a model handle's `infer` and `loop`, for [`handle_method`].
+/// `models.loop` and `models.compact` shims are installed on the `models`
+/// table, and the chunk's `handle_methods` table, a model handle's `infer`
+/// and `loop`, is stashed in the registry for [`handle_method`].
 /// `max_tool_iterations`, the run's resolved round cap, the `compactors`
 /// table, and `loop_running`, the VM's flag that refuses a loop started
 /// while one runs, go to [`loop_begin`](crate::models_loop::loop_begin),
@@ -210,7 +202,7 @@ pub(crate) fn install_shim_prelude(
         .call((
             yield_fn.clone(),
             var_snapshot.clone(),
-            models,
+            models.clone(),
             tools,
             error_value,
             stash_failure,
@@ -240,6 +232,28 @@ pub(crate) fn install_shim_prelude(
         .call((yield_fn.clone(), var_snapshot.clone(), helpers.clone()))
         .map_err(Error::lua)?;
     globals.raw_set("tasks", &tasks).map_err(Error::lua)?;
+    let fanout = fanout_shim(lua, yield_fn, var_snapshot, helpers)?;
+    tasks.raw_set("fanout", fanout).map_err(Error::lua)?;
+    stash_shims(lua, &shims)?;
+    for name in ["loop", "compact"] {
+        let entry: Function = shims.raw_get(name).map_err(Error::lua)?;
+        models.raw_set(name, entry).map_err(Error::lua)?;
+    }
+    globals
+        .raw_set("coroutine", Value::Nil)
+        .map_err(Error::lua)?;
+    Ok(())
+}
+
+/// Runs the `fanout` chunk over the prelude's `yield` and `var_snapshot`
+/// captures and failure `helpers`, plus the collection enumerator and the
+/// item renderer, and returns the shim installed as `tasks.fanout`.
+fn fanout_shim(
+    lua: &Lua,
+    yield_fn: Function,
+    var_snapshot: Function,
+    helpers: Table,
+) -> Result<Function> {
     // The enumerator answers `(members)` or `(nil, message)` so the shim
     // raises the message as its own call error, exactly as the other
     // author-argument failures surface at the call site.
@@ -259,7 +273,7 @@ pub(crate) fn install_shim_prelude(
             crate::collection::render_item_value(lua, item).map_err(mlua::Error::external)
         })
         .map_err(Error::lua)?;
-    let fanout: Function = FANOUT_PROGRAM
+    FANOUT_PROGRAM
         .as_ref()
         .map_err(Error::shared)?
         .load(lua)?
@@ -270,30 +284,22 @@ pub(crate) fn install_shim_prelude(
             collection_members,
             render_item,
         ))
-        .map_err(Error::lua)?;
-    tasks.raw_set("fanout", fanout).map_err(Error::lua)?;
-    stash_shims(lua, &shims)?;
-    globals
-        .raw_set("coroutine", Value::Nil)
-        .map_err(Error::lua)?;
-    Ok(())
+        .map_err(Error::lua)
 }
 
-/// Stashes the shim chunk's `loop`, `compact`, `handle_methods`,
-/// `model_tool_call`, and `store` under their registry keys, for the
-/// installs and the handle getters that read them after the prelude.
+/// Stashes the shim chunk's `handle_methods` and `store` under their
+/// registry keys, for the installs and the handle getters that read them
+/// after the prelude.
 fn stash_shims(lua: &Lua, shims: &Table) -> Result<()> {
-    for (field, key) in [("loop", LOOP_REGISTRY), ("compact", COMPACT_REGISTRY)] {
-        let entry: Function = shims.raw_get(field).map_err(Error::lua)?;
-        lua.set_named_registry_value(key, entry)
-            .map_err(Error::lua)?;
-    }
     let handle_methods: Table = shims.raw_get("handle_methods").map_err(Error::lua)?;
     lua.set_named_registry_value(HANDLE_METHODS_REGISTRY, handle_methods)
         .map_err(Error::lua)?;
-    let model_tool_call: Function = shims.raw_get("model_tool_call").map_err(Error::lua)?;
-    lua.set_named_registry_value(MODEL_TOOL_CALL_REGISTRY, model_tool_call)
-        .map_err(Error::lua)?;
+    #[cfg(any(test, feature = "test-support"))]
+    {
+        let model_tool_call: Function = shims.raw_get("model_tool_call").map_err(Error::lua)?;
+        lua.set_named_registry_value(MODEL_TOOL_CALL_REGISTRY, model_tool_call)
+            .map_err(Error::lua)?;
+    }
     let store: Table = shims.raw_get("store").map_err(Error::lua)?;
     lua.set_named_registry_value(STORE_REGISTRY, store)
         .map_err(Error::lua)
@@ -333,24 +339,6 @@ fn adhoc_handler_captures(lua: &Lua, depth: &Arc<AtomicU32>) -> Result<(Function
 /// Returns [`Error::LuaRuntime`] if the shim prelude never ran on this VM.
 pub(crate) fn block_guard(lua: &Lua) -> Result<Function> {
     lua.named_registry_value(GUARD_REGISTRY).map_err(Error::lua)
-}
-
-/// Installs the `models.loop` and `models.compact` yield shims on a VM
-/// whose shim prelude already ran (`install_shim_prelude` stashed the
-/// shims in the registry).
-///
-/// The executor's section setup is the only caller.
-///
-/// # Errors
-/// Returns [`Error::Lua`] if the shim prelude was never installed on this
-/// VM, the `models` table is absent, or the install fails.
-pub fn install_section_loop_shim(lua: &Lua) -> Result<()> {
-    let models: Table = lua.globals().raw_get("models").map_err(Error::lua)?;
-    for (name, key) in [("loop", LOOP_REGISTRY), ("compact", COMPACT_REGISTRY)] {
-        let entry: Function = lua.named_registry_value(key).map_err(Error::lua)?;
-        models.raw_set(name, entry).map_err(Error::lua)?;
-    }
-    Ok(())
 }
 
 /// The shim's `name` method for a model handle, `infer` or `loop`, from

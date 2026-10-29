@@ -117,7 +117,7 @@ impl Scheduler {
                 self.end_tool_call(chain, call.exec);
                 match call.site {
                     CallSite::Batch { slot, .. } => Some(slot),
-                    CallSite::Script { .. } | CallSite::Model { .. } => None,
+                    CallSite::Script | CallSite::Model { .. } => None,
                 }
             }
             Continuation::Infer(_)
@@ -296,7 +296,7 @@ impl ChainOps<'_> {
                 .map(|outcome| ToolCallOutcome::Plain(outcome.into_content()))
                 .map_err(Error::from)
             }
-            CallSite::Script { .. } => match prepare_dispatch(
+            CallSite::Script => match prepare_dispatch(
                 &call.binding,
                 vendor,
                 result,

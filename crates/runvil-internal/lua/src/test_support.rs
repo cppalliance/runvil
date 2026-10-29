@@ -12,7 +12,9 @@ use runvil_types::emitter::Emitter;
 use runvil_types::event::lifecycle;
 use runvil_types::packs::PackId;
 use runvil_types::tools::ToolInfo;
+use runvil_vfs::Access;
 
+use crate::argv::Argv;
 use crate::bindings::{RosterEntry, ToolBinding, ToolSet};
 use crate::coro::MODEL_TOOL_CALL_REGISTRY;
 use crate::error::{Error, Result};
@@ -22,7 +24,7 @@ use crate::program::LuaProgram;
 use crate::protocol::{Answer, render_envelope};
 use crate::scope::Offers;
 use crate::section::LuaBlockResult;
-use crate::vm::{SectionVm, scalar_return};
+use crate::vm::{InjectFailure, SectionVm, Uninjected, scalar_return};
 
 /// A per-thread tally of live section VMs.
 ///
@@ -150,12 +152,29 @@ impl LuaProgram {
     }
 }
 
+impl SectionVm<Uninjected> {
+    /// Installs the section's Engine values, ahead of the Pack preludes,
+    /// with an empty `var` and a frozen nil `argv`.
+    ///
+    /// # Errors
+    /// Returns the [`InjectFailure`] holding the bridging failure if Engine
+    /// values cannot be bridged.
+    pub fn inject_values(
+        self,
+        args: &str,
+        sys: &serde_json::Value,
+        access: &Arc<Access>,
+    ) -> std::result::Result<SectionVm, InjectFailure> {
+        self.inject_values_with_var(args, sys, access, None, Argv::Frozen(None))
+    }
+}
+
 impl SectionVm {
     /// Executes a compiled Lua chunk in this VM's persistent environment.
     ///
-    /// The direct, scheduler-free path for running a section's Lua blocks;
-    /// the scheduler drives blocks through
-    /// [`start_block_coro`](Self::start_block_coro) instead. Store and
+    /// The test path that runs a section's Lua block without the scheduler;
+    /// production drives blocks through
+    /// [`start_block_coro`](Self::start_block_coro). Store and
     /// `log` reports go to the emitter captured by
     /// [`install_engine_globals`](Self::install_engine_globals); a nil or
     /// absent top-level return produces [`LuaBlockResult::Returned`]`(None)`.

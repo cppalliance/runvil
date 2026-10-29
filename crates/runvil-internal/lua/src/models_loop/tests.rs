@@ -341,18 +341,13 @@ fn act_yields_each_request_as_the_protocol_parses_it() {
         call: Box::new(echo_call("c1")),
         turn: 7,
     };
-    let Request::ToolCall {
-        alias,
-        args,
-        call_id,
-        turn,
-    } = parsed(&lua, tool_call)
-    else {
+    let Request::ToolCall { alias, args, model } = parsed(&lua, tool_call) else {
         panic!("a tool_call request");
     };
+    let model = model.expect("the loop's call is model-issued");
     assert_eq!(
-        (alias.as_str(), call_id.as_deref(), turn),
-        ("echo", Some("c1"), Some(7))
+        (alias.as_str(), model.call_id.as_str(), model.turn),
+        ("echo", "c1", 7)
     );
     assert_eq!(args, json!({ "id": "c1" }));
     let returned = Value::String(lua.create_string("text").unwrap());

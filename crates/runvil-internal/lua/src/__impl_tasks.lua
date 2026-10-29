@@ -1,4 +1,4 @@
--- The `tasks` namespace shims for a scheduler-mode section VM: spawn, the
+-- The `tasks` namespace shims for a section VM: spawn, the
 -- waits, the non-blocking checks, the progress note, cancel, and the
 -- admission limit.
 --

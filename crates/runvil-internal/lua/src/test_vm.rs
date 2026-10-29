@@ -354,8 +354,8 @@ impl<'a> TestVm<'a> {
         self
     }
 
-    /// The scheduler-mode control globals, whose prompt reads find no
-    /// section, and every coroutine yield shim.
+    /// The control globals, whose prompt reads find no section, and every
+    /// coroutine yield shim.
     #[track_caller]
     pub(crate) fn shims(mut self) -> Self {
         self.shims = true;

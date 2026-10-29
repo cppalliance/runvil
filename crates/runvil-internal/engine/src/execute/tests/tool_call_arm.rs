@@ -1,6 +1,6 @@
 //! Tests for the scheduler's `tool_call` arm: the model-issued form
-//! (`call_id: Some`), which always resumes with content and reports its
-//! `ToolResult` under the model's call id; the script form (`call_id:
+//! (`model: Some`), which always resumes with content and reports its
+//! `ToolResult` under the model's call id; the script form (`model:
 //! None`), which keeps the raise-at-call-site behavior; adhoc tools,
 //! whose handlers run inside the calling block coroutine - store calls,
 //! nested adhoc calls, and bound calls included - with no leaf work of
@@ -84,7 +84,7 @@ fn a_failing_bound_tool_with_a_call_id_resumes_with_untrusted_failure_text() {
         "tools.offer('tools/failing')
          messages:user('go')
          models.loop()
-         local out = tools.call_as_model('call_1', 'fail', {})
+         local out = tools.call_as_model('call_1', 'fail', {}, 1)
          assert(type(out) == 'string', 'a model-issued call always resumes with content')
          return out",
     );

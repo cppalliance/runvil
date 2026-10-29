@@ -14,16 +14,10 @@ fn tool_call_parses_alias_and_args() {
     );
     let request = expect_request(Request::from_yield(&lua, &Value::Table(table)));
     match request {
-        Request::ToolCall {
-            alias,
-            args,
-            call_id,
-            turn,
-        } => {
+        Request::ToolCall { alias, args, model } => {
             assert_eq!(alias, "tools/echo");
             assert_eq!(args, json!({ "value": "hi" }));
-            assert_eq!(call_id, None, "a script call omits the call id");
-            assert_eq!(turn, None, "a script call omits the turn");
+            assert_eq!(model, None, "a script call omits the call id and turn");
         }
         other => panic!("expected a tool_call request, got {other:?}"),
     }
@@ -37,13 +31,13 @@ fn tool_call_with_a_call_id_parses_it_as_a_model_issued_call() {
     let lua = Lua::new();
     let table = lua_table(
         &lua,
-        "{ op = 'tool_call', alias = 'echo', call_id = 'call_7' }",
+        "{ op = 'tool_call', alias = 'echo', call_id = 'call_7', turn = 1 }",
     );
     let request = expect_request(Request::from_yield(&lua, &Value::Table(table)));
     match request {
-        Request::ToolCall { alias, call_id, .. } => {
+        Request::ToolCall { alias, model, .. } => {
             assert_eq!(alias, "echo");
-            assert_eq!(call_id.as_deref(), Some("call_7"));
+            assert_eq!(model.map(|model| model.call_id).as_deref(), Some("call_7"));
         }
         other => panic!("expected a tool_call request, got {other:?}"),
     }
@@ -59,19 +53,24 @@ fn a_non_string_call_id_is_a_malformed_yield() {
 }
 
 #[test]
-fn a_tool_call_without_a_turn_parses_it_as_none() {
-    // A script call and the test-only `tools.call_as_model` hook leave
-    // `turn` out; the scheduler falls back to the live counter.
+fn a_model_issued_tool_call_without_a_turn_is_a_malformed_yield() {
+    // Every model-issued call names the turn of the round that requested
+    // it, so a `call_id` alone is a corrupted shim yield.
     let lua = Lua::new();
     let table = lua_table(
         &lua,
         "{ op = 'tool_call', alias = 'echo', call_id = 'call_7' }",
     );
-    let request = expect_request(Request::from_yield(&lua, &Value::Table(table)));
-    match request {
-        Request::ToolCall { turn, .. } => assert_eq!(turn, None),
-        other => panic!("expected a tool_call request, got {other:?}"),
-    }
+    assert_direct_yield(Request::from_yield(&lua, &Value::Table(table)));
+}
+
+#[test]
+fn a_script_tool_call_with_a_turn_is_a_malformed_yield() {
+    // Only a model-issued call carries a turn; a script call reports the
+    // live counter, so a `turn` without a `call_id` has no producer.
+    let lua = Lua::new();
+    let table = lua_table(&lua, "{ op = 'tool_call', alias = 'tools/echo', turn = 3 }");
+    assert_direct_yield(Request::from_yield(&lua, &Value::Table(table)));
 }
 
 #[test]
@@ -85,11 +84,38 @@ fn a_tool_call_with_a_turn_parses_the_requesting_round() {
     );
     let request = expect_request(Request::from_yield(&lua, &Value::Table(table)));
     match request {
-        Request::ToolCall { call_id, turn, .. } => {
-            assert_eq!(call_id.as_deref(), Some("call_7"));
-            assert_eq!(turn, Some(3));
-        }
+        Request::ToolCall { model, .. } => assert_eq!(
+            model,
+            Some(ModelCall {
+                call_id: "call_7".to_owned(),
+                turn: 3,
+            })
+        ),
         other => panic!("expected a tool_call request, got {other:?}"),
+    }
+}
+
+#[test]
+fn every_entry_of_a_tool_calls_batch_parses_under_the_batch_turn() {
+    // A batch entry carries no turn of its own: the loop's step names one
+    // turn for the whole round, and each entry's call id joins it.
+    let lua = Lua::new();
+    let table = lua_table(
+        &lua,
+        "{ op = 'tool_calls', turn = 4, calls = {\n\
+           { alias = 'echo', call_id = 'call_1', args = { value = 'a' } },\n\
+           { alias = 'grab', call_id = 'call_2' },\n\
+         } }",
+    );
+    match expect_request(Request::from_yield(&lua, &Value::Table(table))) {
+        Request::ToolCalls { calls, turn } => {
+            let entries: Vec<_> = calls
+                .iter()
+                .map(|call| (call.id.as_str(), call.name.as_str(), turn))
+                .collect();
+            assert_eq!(entries, [("call_1", "echo", 4), ("call_2", "grab", 4)]);
+        }
+        other => panic!("expected a tool_calls request, got {other:?}"),
     }
 }
 

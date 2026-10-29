@@ -89,14 +89,14 @@ pub(super) struct ToolCallContinuation {
 /// model-issued call carries a call id, and only a batched one a slot.
 #[derive(Debug)]
 pub(super) enum CallSite {
-    /// A script's `tools.call`, under the turn its request named, if any.
-    /// The answer resumes the chain directly, classified by the binding's
+    /// A script's `tools.call`, under the turn counter at dispatch. The
+    /// answer resumes the chain directly, classified by the binding's
     /// declared output kind, and reports under no call id.
-    Script { turn: Option<u32> },
+    Script,
     /// A model-issued call sent alone, under the turn of the round that
-    /// requested it, if the request named one. The answer resumes the
-    /// chain directly as content under the model's call id.
-    Model { call_id: String, turn: Option<u32> },
+    /// requested it. The answer resumes the chain directly as content
+    /// under the model's call id.
+    Model { call_id: String, turn: u32 },
     /// A model-issued call sent in a `tool_calls` batch, under the round's
     /// turn. The answer fills `slot` of the batch the chain is parked on.
     Batch {
@@ -110,16 +110,17 @@ impl CallSite {
     /// The model's call id, or `None` for a script call.
     pub(super) fn call_id(&self) -> Option<&str> {
         match self {
-            Self::Script { .. } => None,
+            Self::Script => None,
             Self::Model { call_id, .. } | Self::Batch { call_id, .. } => Some(call_id.as_str()),
         }
     }
 
-    /// The turn the request named, if any.
+    /// The turn of the round that requested a model-issued call, or
+    /// `None` for a script call.
     pub(super) fn turn(&self) -> Option<u32> {
         match self {
-            Self::Script { turn } | Self::Model { turn, .. } => *turn,
-            Self::Batch { turn, .. } => Some(*turn),
+            Self::Script => None,
+            Self::Model { turn, .. } | Self::Batch { turn, .. } => Some(*turn),
         }
     }
 }

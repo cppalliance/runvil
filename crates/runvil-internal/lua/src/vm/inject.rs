@@ -2,13 +2,13 @@
 //! an injected one, installing `args`, `argv`, `sys`, `var`, the `tools`,
 //! `models`, and `compactors` tables, and the VM's `messages` list.
 
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use runvil_types::emitter::Emitter;
 use runvil_vfs::Access;
 use serde_json::Value as Json;
 
-use super::{Injected, SYS_LIVE_POISONED, SectionVm, Uninjected};
+use super::{Injected, SectionVm, Uninjected};
 use crate::argv::Argv;
 use crate::compactors::install_compactors;
 use crate::error::{Error, Result};
@@ -44,21 +44,6 @@ impl InjectFailure {
 }
 
 impl SectionVm<Uninjected> {
-    /// Installs the section's Engine values, ahead of the Pack preludes,
-    /// with an empty `var` and a frozen nil `argv`.
-    ///
-    /// # Errors
-    /// Returns the [`InjectFailure`] holding the bridging failure if Engine
-    /// values cannot be bridged.
-    pub fn inject_values(
-        self,
-        args: &str,
-        sys: &Json,
-        access: &Arc<Access>,
-    ) -> std::result::Result<SectionVm, InjectFailure> {
-        self.inject_values_with_var(args, sys, access, None, Argv::Frozen(None))
-    }
-
     /// Installs Engine values while seeding `var` from an earlier VM, and
     /// gives back the injected VM.
     ///
@@ -102,7 +87,10 @@ impl SectionVm<Uninjected> {
                 error,
             });
         }
-        Ok(self.injected(Arc::clone(access)))
+        Ok(self.injected(Injected {
+            access: Arc::clone(access),
+            sys_live: Arc::new(Mutex::new(sys.clone())),
+        }))
     }
 
     #[expect(
@@ -124,13 +112,6 @@ impl SectionVm<Uninjected> {
         }
         let sys_table = seal_sys(&self.lua, sys)?;
         globals.raw_set("sys", sys_table).map_err(Error::lua)?;
-        {
-            let mut live = self
-                .sys_live
-                .lock()
-                .map_err(|_| Error::Internal(SYS_LIVE_POISONED.into()))?;
-            *live = Some(sys.clone());
-        }
         let var = guarded_var(&self.lua, initial_var)?;
         globals.raw_set("var", var).map_err(Error::lua)?;
         install_tools(
@@ -152,8 +133,8 @@ impl SectionVm<Uninjected> {
         install_compactors(&self.lua, &globals, &self.messages)
     }
 
-    /// The same VM at the injected stage, holding `access`.
-    fn injected(self, access: Arc<Access>) -> SectionVm {
+    /// The same VM at the injected stage, holding `state`.
+    fn injected(self, state: Injected) -> SectionVm {
         let SectionVm {
             lua,
             tool_set,
@@ -165,7 +146,6 @@ impl SectionVm<Uninjected> {
             loop_running,
             library_load_depth,
             library_programs,
-            sys_live,
             store_conflict,
             log_budget,
             log_byte_budget,
@@ -186,7 +166,6 @@ impl SectionVm<Uninjected> {
             loop_running,
             library_load_depth,
             library_programs,
-            sys_live,
             store_conflict,
             log_budget,
             log_byte_budget,
@@ -194,7 +173,7 @@ impl SectionVm<Uninjected> {
             cancel_hook,
             raw_model_ids,
             messages,
-            state: Injected { access },
+            state,
         }
     }
 }

@@ -96,7 +96,7 @@ fn a_script_calls_an_unoffered_adhoc_tool_by_id_or_object_before_and_after_the_r
 fn a_model_issued_adhoc_tool_call_reports_under_its_call_id() {
     let (scenario, gateway) = rendered_scenario(one_section(&format!(
         "{ADD_ADHOC_GRAB}{RENDER}\
-         return tools.call_as_model('call_7', 'grab', {{ value = 'hi' }})"
+         return tools.call_as_model('call_7', 'grab', {{ value = 'hi' }}, 1)"
     )));
     let trace = scenario.chat(&gateway).run();
     assert_eq!(trace.text(), "got hi");
@@ -169,7 +169,7 @@ fn a_nested_adhoc_call_reports_both_results_innermost_first() {
          tools.offer(tools.adhoc({{ name = 'outer', description = 'Outer', parameters = {{ value = 'string' }} }}, function(args)
            return 'outer ' .. tools.call('adhoc/inner', {{ value = args.value }})
          end))
-         {RENDER}return tools.call_as_model('call_1', 'outer', {{ value = 'hi' }})",
+         {RENDER}return tools.call_as_model('call_1', 'outer', {{ value = 'hi' }}, 1)",
     )));
     let trace = scenario.chat(&gateway).run();
     assert_eq!(trace.text(), "outer inner hi");
@@ -212,7 +212,7 @@ fn a_bound_failure_inside_a_model_issued_adhoc_call_raises_kind_tool_in_the_hand
            assert(not ok, 'the bound failure raises inside the handler')
            return err.kind
          end))
-         {RENDER}return tools.call_as_model('call_1', 'grab', {{}})",
+         {RENDER}return tools.call_as_model('call_1', 'grab', {{}}, 1)",
     )));
     let trace = scenario.offer("fail", failing_tool()).chat(&gateway).run();
     assert_eq!(

@@ -26,10 +26,11 @@
 //! from the executor, so every section
 //! in a run shares one set of virtual files even though contexts clear on each
 //! transition. A failed store op raises a structured error value of kind
-//! `store` carrying its `reason` and fields, which surfaces from
-//! `SectionVm::run_chunk` as a Lua-category error.
+//! `store` carrying its `reason` and fields, which surfaces from the
+//! block's coroutine (`SectionVm::start_block_coro` and its resumes) as a
+//! Lua-category error.
 //!
-//! In scheduler mode the VM also holds `tasks`, the shims for spawning,
+//! The VM also holds `tasks`, the shims for spawning,
 //! waiting on, checking, noting, and cancelling tasks. Pack preludes
 //! are the Lua source each Pack the prompt declares contributes: each
 //! runs once per VM in an environment of its own before `require`
@@ -116,7 +117,7 @@ pub use crate::collection::render_item;
 pub use crate::compactors::{
     OverflowReason, UsageAnchor, exhaustion_detail, output_reserve, precheck,
 };
-pub use crate::coro::{install_section_loop_shim, install_store_shims};
+pub use crate::coro::install_store_shims;
 pub use crate::dispatch::{
     ModelReport, ScriptReport, ToolDispatch, prepare_dispatch, prepare_model_dispatch,
 };
@@ -136,8 +137,8 @@ pub use crate::projection::project_messages;
 pub use crate::prose::ProseState;
 pub use crate::protocol::{
     AdhocToolOutcome, Answer, Blocked, ChatOutcome, ChatResult, ContentPart, MessageContent,
-    MessageRecord, NonEmpty, RecordRole, Request, SpawnVia, TaskDelivery, TaskPhase, TaskStatus,
-    ToolCallOutcome, ToolCallRecord, VfsOp, VfsOutcome, YieldParse,
+    MessageRecord, ModelCall, NonEmpty, RecordRole, Request, SpawnVia, TaskDelivery, TaskPhase,
+    TaskStatus, ToolCallOutcome, ToolCallRecord, VfsOp, VfsOutcome, YieldParse,
 };
 pub use crate::scope::{
     DiscoveryTool, Offer, OfferMode, OfferTarget, OfferedTool, Offers, RenderedTools,

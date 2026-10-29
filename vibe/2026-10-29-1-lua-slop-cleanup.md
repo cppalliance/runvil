@@ -614,7 +614,7 @@ None. Both questions were answered by the operator: the `Answer` restructure lan
 
 <step-5>
 
-### Step 5: the test-only hooks, one coroutine shim installer, the `sys` mirror at injection, and the VM docs
+### Step 5: the test-only hooks, one coroutine shim installer, the `sys` mirror at injection, and the VM docs [completed]
 
 - Component: VM setup and models loop
 - Tests:

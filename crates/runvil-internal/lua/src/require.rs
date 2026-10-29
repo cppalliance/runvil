@@ -52,7 +52,7 @@ pub(crate) struct VmShare<'a> {
     /// The counter `jump` reads, stepped while a library loads.
     pub(crate) depth: &'a Arc<AtomicU32>,
     /// The live `sys` mirror a library block's `prose` renders from.
-    pub(crate) sys_live: &'a Arc<Mutex<Option<Json>>>,
+    pub(crate) sys_live: &'a Arc<Mutex<Json>>,
     /// Every library block's program loaded into the VM, which a block
     /// failure maps through.
     pub(crate) programs: &'a Arc<Mutex<Vec<LuaProgram>>>,
@@ -193,7 +193,7 @@ fn begin_load_capture(
 fn prose_captures<P>(
     lua: &Lua,
     render: P,
-    sys_live: &Arc<Mutex<Option<Json>>>,
+    sys_live: &Arc<Mutex<Json>>,
 ) -> Result<(Function, Function)>
 where
     P: Fn(&str, ProseState<'_>) -> mlua::Result<String> + Send + Sync + 'static,

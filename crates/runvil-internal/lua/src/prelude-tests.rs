@@ -12,23 +12,19 @@ use super::install_preludes;
 use crate::test_vm::{BuiltVm, TEST_SECTION, TestVm};
 use crate::tests::recording::null_emitter;
 use crate::tests::refusal_line;
-use crate::{
-    Argv, CoroStep, LuaProgram, Request, SectionVm, YieldParse, install_section_loop_shim,
-    install_ui,
-};
+use crate::{Argv, CoroStep, LuaProgram, Request, SectionVm, YieldParse, install_ui};
 
 #[path = "prelude-tests-environment.rs"]
 mod environment;
 
 /// Builds a section VM through section setup up to where preludes install:
 /// Engine injection with a bound `argv`, the Engine globals, the control
-/// globals, and every coroutine yield shim, `models.loop`'s included.
+/// globals, and every coroutine yield shim, whose install puts
+/// `models.loop` on `models` too.
 #[track_caller]
 fn prelude_vm(setup: TestVm<'_>) -> BuiltVm {
     let argv = json!({ "mode": "argv" });
-    let vm = setup.argv(Argv::Frozen(Some(&argv))).shims().build();
-    install_section_loop_shim(vm.lua()).expect("the loop shim installs");
-    vm
+    setup.argv(Argv::Frozen(Some(&argv))).shims().build()
 }
 
 /// [`section_vm`] with the guarded `var` seeded from `var`.
