@@ -115,7 +115,7 @@ macro_rules! debug_variants {
 }
 
 /// Replays `events`, in order, onto `observer`, dropping the debug pair.
-pub fn forward(events: Vec<Event>, observer: &dyn Observer) {
+pub(crate) fn forward(events: Vec<Event>, observer: &dyn Observer) {
     forward_impl(events, observer, None);
 }
 

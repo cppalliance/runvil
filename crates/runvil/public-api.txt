@@ -39,8 +39,6 @@
 #[non_exhaustive] pub struct runvil::ParseError { /* private fields */ }
 #[non_exhaustive] pub struct runvil::Prompt { /* private fields */ }
 #[non_exhaustive] pub struct runvil::Requirements { .. }
-#[non_exhaustive] pub struct runvil::RunContext { /* private fields */ }
-#[non_exhaustive] pub struct runvil::RunError { /* private fields */ }
 #[non_exhaustive] pub struct runvil::RunLimits { .. }
 #[non_exhaustive] pub struct runvil::SourceLocation { .. }
 #[non_exhaustive] pub struct runvil::UnavailablePack { .. }
@@ -64,7 +62,6 @@
 #[non_exhaustive] pub struct runvil::model::CompletionError { /* private fields */ }
 #[non_exhaustive] pub struct runvil::model::CompletionOptions { /* private fields */ }
 #[non_exhaustive] pub struct runvil::model::Message { /* private fields */ }
-#[non_exhaustive] pub struct runvil::model::ModelBindings { /* private fields */ }
 #[non_exhaustive] pub struct runvil::model::ModelCatalog { /* private fields */ }
 #[non_exhaustive] pub struct runvil::model::ModelId { /* private fields */ }
 #[non_exhaustive] pub struct runvil::model::ModelIdError { /* private fields */ }
@@ -872,9 +869,8 @@ pub runvil::effect::ChatAnswerRecord::model: alloc::string::String
 pub runvil::effect::ChatAnswerRecord::reply: core::option::Option<alloc::string::String>
 pub runvil::effect::ChatAnswerRecord::tool_calls: alloc::vec::Vec<alloc::string::String>
 pub runvil::effect::Effect::Chat { .. }
-pub runvil::effect::Effect::Chat::after: core::option::Option<runvil::ids::RoundId>
+pub runvil::effect::Effect::Chat::after: core::option::Option<(runvil::ids::RoundId, u64)>
 pub runvil::effect::Effect::Chat::binding: runvil::model::ModelBinding
-pub runvil::effect::Effect::Chat::keep: u64
 pub runvil::effect::Effect::Chat::messages: alloc::vec::Vec<runvil::model::Message>
 pub runvil::effect::Effect::Chat::round: runvil::effect::Round
 pub runvil::effect::Effect::Chat::tools: alloc::vec::Vec<runvil::model::ToolSchema>
@@ -1497,6 +1493,8 @@ pub runvil::vfs::VfsOutcome::Unit
 pub runvil::vfs::Writability::ReadOnly
 pub runvil::vfs::Writability::ReadWrite
 pub struct runvil::Run { /* private fields */ }
+pub struct runvil::RunContext { /* private fields */ }
+pub struct runvil::RunError { /* private fields */ }
 pub struct runvil::RunSeed(/* private fields */)
 pub struct runvil::cancel::CancelHandle { /* private fields */ }
 pub struct runvil::cancel::Cancelled { /* private fields */ }
@@ -1507,6 +1505,7 @@ pub struct runvil::ids::RoundId(/* private fields */)
 pub struct runvil::ids::TaskId(/* private fields */)
 pub struct runvil::model::ArgumentNames<'a> { /* private fields */ }
 pub struct runvil::model::ModelBinding { /* private fields */ }
+pub struct runvil::model::ModelBindings { /* private fields */ }
 pub struct runvil::model::ParseRoleError { /* private fields */ }
 pub struct runvil::model::Temperature(/* private fields */)
 pub struct runvil::packs::GlobalName { /* private fields */ }

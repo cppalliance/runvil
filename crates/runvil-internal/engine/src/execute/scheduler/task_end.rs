@@ -9,8 +9,7 @@
 //! leaked ids. Tasks survive a section's fall-through and a `jump` - those
 //! move the walk within one chain - and end with the chain itself: the root
 //! walk, a `call` child, or another task (a fanout arm among them). The H1
-//! pass and the walk after it share the root lineage `0` and are two arena
-//! records, so the hand-off reassigns the pass's tasks to the walk.
+//! hand-off reassigns the pass's tasks to the walk (see the `h1` module).
 
 use std::sync::Arc;
 
@@ -204,11 +203,9 @@ impl Scheduler {
         }
     }
 
-    /// Moves every task `from` owns to `to`: the H1 hand-off, where the
-    /// pass and the walk share the root lineage `0` and are two arena
-    /// records, so a task the pass spawned is waited on, inspected,
-    /// cancelled, or leaked by the walk exactly as if the walk had spawned
-    /// it. The pass's admission
+    /// Moves every task `from` owns to `to`: the H1 hand-off, so a task the
+    /// pass spawned is waited on, inspected, cancelled, or leaked by the
+    /// walk exactly as if the walk had spawned it. The pass's admission
     /// accounting moves with the owner links: the slots the pass's tasks
     /// hold count against the walk from here, under the limit the walk
     /// inherited from the pass.

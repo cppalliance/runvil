@@ -20,9 +20,10 @@ use super::record::ToolCallRecord;
 use crate::Error;
 use crate::messages::MessageList;
 
-/// Which author-facing call started a task chain: the depth-cap refusal
-/// is named after it, so the typed error uses the wording the author
-/// reads.
+/// Which author-facing call started a task chain. The Engine reports a
+/// depth-cap refusal under the cap's name, not the call's: a `tasks.spawn`
+/// shares the `call` cap and reports `call`, and a fanout arm reports
+/// `tasks.fanout`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SpawnVia {
     /// `tasks.spawn`.

@@ -5,8 +5,7 @@
 //! [`CompletionError`](crate::model::CompletionError), and
 //! [`runvil_types::tools::ToolError`] each reach it through `RunError`'s
 //! classification, which classifies this internal type and keeps its cause.
-//! See the module wrappers for the `From` bridges that let internal `?` keep
-//! flowing through the error type.
+//! The `From` bridges that let internal `?` reach this type live in `convert`.
 //!
 //! A variant that keeps an originating error renders that error's text in
 //! its own `Display` and holds the error as a plain `cause` field behind
@@ -67,10 +66,7 @@ fn out_of_scope_message(
         ""
     };
     // A section whose Dynamic Set holds nothing freezes no discovery tool,
-    // so naming one would point the model at a tool it cannot call. The
-    // caller holds that fact; scanning `static_aliases` for the discovery
-    // wire names cannot recover it, because a catalog tool may take one of
-    // those names while no Dynamic Set holds a tool.
+    // so naming one would point the model at a tool it cannot call.
     let dynamic_set = if has_dynamic_set {
         format!(
             "; a Dynamic Set tool is reached through {} and {}",
@@ -87,12 +83,9 @@ fn out_of_scope_message(
 }
 
 /// The call name [`Error::CallDepthExceeded`] reports for a nesting that
-/// passed the call-depth cap: `tasks.fanout` for a fanout arm, and `call`
-/// for a `call` or a `tasks.spawn`, which shares its cap.
-///
-/// The name reported is the cap's, not the author's construct: a
-/// `tasks.spawn` that trips the cap reports `call`, because that is the cap
-/// it shares.
+/// passed the call-depth cap. The name is the cap's, not the author's
+/// construct: `tasks.fanout` for a fanout arm, and `call` for a `call` or a
+/// `tasks.spawn`, which shares its cap.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum DepthVia {
     /// A `call`, or a `tasks.spawn`.
@@ -113,10 +106,8 @@ impl std::fmt::Display for DepthVia {
 /// The crate's internal error type, spanning parsing, model, and execution
 /// failures.
 ///
-/// This type is `pub(crate)` and never appears in the public API; the public
-/// boundary errors wrap and classify it. The model variant holds the broker's
-/// closed error whole, so no HTTP client's error type leaks through the
-/// wrappers' `source()`.
+/// The model variant holds the broker's closed error whole, so no HTTP
+/// client's error type leaks through the wrappers' `source()`.
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum Error {
     /// The prompt failed to parse: invalid frontmatter YAML or a
@@ -139,8 +130,9 @@ pub(crate) enum Error {
     #[error(transparent)]
     Completion(crate::model::CompletionError),
 
-    /// The run was cancelled, or the caller dropped a call the run was
-    /// waiting on.
+    /// The run was cancelled, the caller dropped an effect the run was
+    /// waiting on, or a block raised a caught `cancelled` error value again
+    /// after another suspending call.
     #[error("interrupted: the run was cancelled or this call was stopped")]
     Interrupted,
 
@@ -230,7 +222,8 @@ pub(crate) enum Error {
     /// waited on nor cancelled is the author's bug: the chain's outcome
     /// becomes this error (the run's for the root walk, the call's answer
     /// for a `call` chain) and the leaked tasks are abandoned. The message
-    /// names the ids in spawn order; the Lua table lists them as `tasks`.
+    /// names the ids in spawn order, and the Lua table holds them as one
+    /// `tasks` string joined by `, `.
     #[error(
         "chain ended with tasks still live: {}; wait on or cancel every task a chain spawns before it ends",
         join_task_ids(.tasks)
@@ -242,9 +235,10 @@ pub(crate) enum Error {
 
     /// A task operation named a task the caller does not own.
     ///
-    /// Only the spawning chain may wait on, inspect, or cancel a task; a
-    /// chain may additionally read the status of, and annotate, the task
-    /// it runs inside. An id that names no task at all is refused the same
+    /// Only the task's owner - its spawner, or the root walk for a task the
+    /// H1 pass spawned - may wait on, inspect, or cancel it; a chain may
+    /// additionally read the status of, and annotate, the task it runs
+    /// inside. An id that names no task at all is refused the same
     /// way, so a caller learns nothing about tasks it never started.
     #[error("task `{task}` is not a task this chain owns")]
     TaskNotOwned {
@@ -329,10 +323,9 @@ pub(crate) enum Error {
     #[error("unsupported runvil version: {0} (this build supports major 0)")]
     UnsupportedVersion(u32),
 
-    /// The environment cannot satisfy the prompt: a required Pack is
-    /// missing, unavailable, or needs a service the run lacks, the filled
-    /// model fails a declared requirement (a context minimum or a hard
-    /// keyword), or an H1 block failed the prompt's hard gate.
+    /// The environment cannot satisfy the prompt, for any cause
+    /// [`RunErrorKind::RequirementsUnmet`](crate::RunErrorKind::RequirementsUnmet)
+    /// lists.
     ///
     /// The notice, followed by the cause's text when there is one, is the
     /// whole message, written to be read by a model.
@@ -365,22 +358,21 @@ pub(crate) enum Error {
     /// The Rust source position of the construction site is captured (via
     /// [`Error::internal`] or [`Error::internal_with_cause`], both
     /// `#[track_caller]`) so [`crate::RunError::location`] can point at the
-    /// broken invariant.
+    /// broken invariant. A Lua-crate internal failure brings its own
+    /// captured site.
     #[error("internal invariant violated: {message}{}", cause_suffix(.cause.as_ref()))]
     Internal {
-        /// The violated invariant, as a noun phrase; owned when it names a
-        /// value, as a Lua internal message passed through whole may.
+        /// The violated invariant, as a noun phrase.
         message: std::borrow::Cow<'static, str>,
-        /// The Rust source file of the construction site (from `file!()`).
+        /// The Rust source file of the construction site.
         file: &'static str,
-        /// The 1-based line of the construction site (from `line!()`).
+        /// The 1-based line of the construction site.
         line: u32,
         /// The failure that broke the invariant, when one did.
         cause: Option<BoxedSource>,
     },
 
-    /// A Lua quota ran out: a `log()` event or byte budget, or the
-    /// instruction-hook budget that keeps a block cancellable. This stable
+    /// A Lua quota ran out: a `log()` event or byte budget. This stable
     /// typed variant lets the caller tell quota exhaustion apart from an
     /// authoring error.
     #[error("lua {resource} quota exceeded")]

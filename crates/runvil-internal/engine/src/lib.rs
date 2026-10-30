@@ -2,11 +2,11 @@
 //! parsed prompt.
 //!
 //! A run executes the Lua under the `#` title once, then walks the sections
-//! top to bottom. It issues every model round, Pack render, catalog tool
-//! call, store operation, and timer as an [`Effect`] the Harness performs
-//! and answers, and reports every boundary as an event returned from
-//! `step`. Other crates reach these
-//! items through the `runvil` facade.
+//! top to bottom. It issues each model round, Pack render, Pack tool call,
+//! `store` call outside a prelude's install, and timer as an [`Effect`] the
+//! Harness performs and answers, and reports every boundary as an event
+//! returned from `step`. Other crates reach these items through the
+//! `runvil` facade.
 //!
 //! ## Invariants
 //!
@@ -15,7 +15,6 @@
 //!   `runvil-model-client`. `cargo test -p build-xtask` enforces the
 //!   product and container boundaries.
 
-mod cancel;
 mod error;
 mod execute;
 mod heading_address;

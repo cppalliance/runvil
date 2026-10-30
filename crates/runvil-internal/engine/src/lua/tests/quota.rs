@@ -1,7 +1,7 @@
-//! The loop trampoline's instruction cost. `models.loop` runs on the
-//! author's Lua instruction budget, but its rules run in Rust behind the
-//! loop shim's trampoline, so the every-Nth-instruction hook counts only
-//! the trampoline's own instructions: a handful per yield. This bounds
+//! The loop trampoline's instruction cost. `models.loop`'s rules run in
+//! Rust behind the loop shim's trampoline, so the every-Nth-instruction
+//! cancel hook counts only the trampoline's own instructions: a handful
+//! per yield. This bounds
 //! that cost, so the trampoline stays a dispatcher that holds no rule and
 //! the loop's bookkeeping never taxes an author's block.
 
@@ -30,7 +30,7 @@ const ROUND_INSTRUCTION_CEILING: u64 = 60;
 /// per yield in the measured span (the `tool_calls` and the next `chat`).
 /// A round under this floor means the hook is not firing on the loop
 /// thread, and the test would otherwise pass while showing nothing about
-/// the quota.
+/// the trampoline's cost.
 const ROUND_INSTRUCTION_FLOOR: u64 = 2;
 
 /// Rounds measured after the first, so the assertion reads steady-state

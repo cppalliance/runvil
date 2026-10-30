@@ -86,9 +86,8 @@ impl Scheduler {
         let spawner_section = chain.section_name().to_owned();
         // An explicit input forks the chain's args (and `argv` re-derives
         // from them), as a `call` with input does; otherwise the chain
-        // inherits the spawner's context whole. The turn counter is the
-        // task's own, so its turn numbers, and `tasks.status`'s `turns`,
-        // count only its own rounds.
+        // inherits the spawner's context whole, but for the turn counter,
+        // which `with_task` replaces below.
         let child_ctx = match input {
             Some(input) => chain.ctx.with_args(input),
             None => chain.ctx.clone(),
@@ -124,18 +123,16 @@ impl Scheduler {
         // moves into the chain: every delivery joins it, and the chain
         // end joins it last.
         let exec = detail::access_id(&access);
-        // The task's id is the spawner's next child index, shared with
-        // `call` children and the wait shims' timers, so it depends only on
-        // the spawner's own dispatch order; the task is its chain, named
-        // from the other side.
-        let chain_id = self.chains[id].next_child_id()?;
-        let task = TaskId::from(chain_id.clone());
+        // The task's id is the spawner's next child id; the task is its
+        // chain, named from the other side.
+        let lineage = self.chains[id].next_child_id()?;
+        let task = TaskId::from(lineage.clone());
         // The task's context reports under its own task id with its own
         // turn counter, so its events report its provenance and its turn
         // numbers, and `tasks.status`'s `turns`, count only its own rounds.
         let child_ctx = child_ctx.with_task(task.clone(), Arc::new(AtomicU32::new(0)));
         let child = self.start_chain(ChainStart {
-            lineage: chain_id,
+            lineage,
             counters: Counters::default(),
             ctx: child_ctx,
             access: Arc::new(access),

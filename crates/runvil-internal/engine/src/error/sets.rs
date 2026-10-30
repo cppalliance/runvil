@@ -36,9 +36,7 @@ pub(crate) enum SetEvidence {
     /// The Packs the render was asked about, in order, and the Packs it
     /// answered, in order.
     RenderedPacks {
-        /// The Packs the render was asked about, in order.
         asked: Vec<PackId>,
-        /// The Packs it answered, in order.
         answered: Vec<PackId>,
     },
     /// The rule that names tools, and the tools that broke it.
@@ -55,9 +53,7 @@ pub(crate) enum SetEvidence {
 /// Pack, and the set it sits in.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct SetTool {
-    /// The tool's id.
     pub(crate) id: ToolId,
-    /// The set the tool sits in.
     pub(crate) set: OfferMode,
 }
 

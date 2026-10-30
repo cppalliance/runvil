@@ -165,9 +165,15 @@ pub enum Error {
     /// invariant, a lifecycle step taken out of order, or a poisoned lock.
     /// Surfaced as a concrete error rather than silently skipping work, so an
     /// impossible state cannot masquerade as a successful fall-through. The
-    /// message is owned when it names a value.
-    #[error("internal invariant violated: {0}")]
-    Internal(Cow<'static, str>),
+    /// message is owned when it names a value, and `location` is the
+    /// construction site.
+    #[error("internal invariant violated: {message}")]
+    Internal {
+        /// The violated invariant, as a noun phrase.
+        message: Cow<'static, str>,
+        /// The Rust source position of the construction site.
+        location: &'static std::panic::Location<'static>,
+    },
 
     /// A structured error table raised in Lua surfaced as a block
     /// coroutine's failure with no retained typed error to substitute: the
@@ -236,6 +242,16 @@ impl Error {
         }
     }
 
+    /// Builds an [`Error::Internal`], capturing the call site as its
+    /// construction site. The message is owned when it names a value.
+    #[track_caller]
+    pub(crate) fn internal(message: impl Into<Cow<'static, str>>) -> Error {
+        Error::Internal {
+            message: message.into(),
+            location: std::panic::Location::caller(),
+        }
+    }
+
     /// Returns the originating error a cause-bearing variant keeps, whose
     /// text its `Display` already holds; `None` for every other variant.
     #[must_use]
@@ -249,7 +265,7 @@ impl Error {
             | Error::LuaQuota { .. }
             | Error::ContextExhausted { .. }
             | Error::Interrupted
-            | Error::Internal(_)
+            | Error::Internal { .. }
             | Error::Raised(_) => None,
         }
     }
@@ -262,11 +278,12 @@ pub(crate) fn author_refusal(message: String) -> mlua::Error {
 }
 
 /// Maps a poisoned model-set lock onto [`Error::Internal`], the mapping
-/// `runvil-engine` applies too: the lock is the run's own mutex
-/// failing, which no prompt author can cause, not a model failure.
+/// the Engine receives through its `From<runvil_lua::Error>`: the lock is
+/// the run's own mutex failing, which no prompt author can cause, not a
+/// model failure.
 impl From<ModelSetError> for Error {
     fn from(error: ModelSetError) -> Error {
-        Error::Internal(Cow::Owned(error.to_string()))
+        Error::internal(error.to_string())
     }
 }
 

@@ -277,7 +277,7 @@ impl SectionVm {
             .state
             .sys_live
             .lock()
-            .map_err(|_| Error::Internal(SYS_LIVE_POISONED.into()))?;
+            .map_err(|_| Error::internal(SYS_LIVE_POISONED))?;
         *live = sys.clone();
         Ok(())
     }

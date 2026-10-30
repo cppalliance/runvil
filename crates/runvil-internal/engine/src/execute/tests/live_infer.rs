@@ -1,11 +1,11 @@
 //! Tests for live `models.infer` against a scripted gateway, including H1 chunks and required libraries.
 
 use runvil_parser::test_support::{PromptSource, parse_ok};
+use runvil_types::cancel::CancelHandle;
 
 use super::context::test_context;
 use super::fixtures::echo_tool;
 use super::*;
-use crate::cancel::CancelHandle;
 use crate::test_support::scenario::{EXECUTION, TEST_MODEL, test_model};
 
 /// The prompt declaring the `writer` role, with no default parked.

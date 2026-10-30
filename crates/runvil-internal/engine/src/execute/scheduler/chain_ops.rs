@@ -32,15 +32,16 @@ pub(super) struct ChainOps<'a> {
     pub(super) chain: &'a mut Chain,
     /// The effect table the view's leaf arms issue into.
     effects: &'a mut EffectTable,
-    /// How many answers the view delivered to the chain: one requeue each.
-    answered: usize,
+    /// Whether the view delivered an answer to the chain, which
+    /// [`Scheduler::with_chain`] requeues once.
+    answered: bool,
 }
 
 impl Scheduler {
     /// Runs `f` in the view of chain `id`, then pushes the chain onto the
-    /// ready queue once for each answer the view delivered. The view
-    /// pushes nothing else, so no other chain enters the queue between an
-    /// answer and its requeue.
+    /// ready queue if the view delivered an answer. The view pushes nothing
+    /// else, so no other chain enters the queue between an answer and its
+    /// requeue.
     pub(super) fn with_chain<'s, T>(
         &'s mut self,
         id: ChainIndex,
@@ -50,10 +51,10 @@ impl Scheduler {
             id,
             chain: &mut self.chains[id],
             effects: &mut self.effects,
-            answered: 0,
+            answered: false,
         };
         let result = f(&mut ops);
-        for _ in 0..ops.answered {
+        if ops.answered {
             self.ready.push_back(id);
         }
         result
@@ -69,16 +70,16 @@ impl ChainOps<'_> {
         Arc::clone(self.chain.ctx.prompt())
     }
 
-    /// Resumes the chain at once with `answer`: the inline-answer path of
-    /// every request in the view. The requeue is recorded for
+    /// Delivers `answer` to the chain's suspended block: the inline-answer
+    /// path of every request in the view. The requeue is recorded for
     /// [`Scheduler::with_chain`] to perform.
     ///
     /// # Errors
     /// Returns [`Error::Internal`] when the chain has no suspended block
-    /// to take the answer.
+    /// to take the answer, or one that already holds an answer.
     pub(super) fn answer(&mut self, answer: Result<Answer<Error>>) -> Result<()> {
         self.chain.deliver(answer)?;
-        self.answered += 1;
+        self.answered = true;
         Ok(())
     }
 
@@ -91,8 +92,8 @@ impl ChainOps<'_> {
         self.effects.issue(self.id, provenance, effect, resume)
     }
 
-    /// Numbers the model round about to be issued with `origin`: the run's
-    /// next round id, in dispatch order.
+    /// Numbers the model round about to be issued, through
+    /// [`EffectTable::number_round`].
     pub(super) fn number_round(&mut self, origin: ReplyOrigin) -> Round {
         self.effects.number_round(origin)
     }

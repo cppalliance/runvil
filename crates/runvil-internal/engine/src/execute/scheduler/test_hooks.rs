@@ -131,6 +131,28 @@ impl Scheduler {
         Ok([inline, woken])
     }
 
+    /// Delivers `Note` and then `Concurrency(1)` to the chain at arena
+    /// index 0 with no resume between them, returning what each delivery
+    /// reported and whether the suspended block still holds the `Note`.
+    pub(crate) fn deliver_twice_for_test(&mut self) -> ([Result<()>; 2], bool) {
+        let (id, _) = self
+            .chains
+            .iter()
+            .next()
+            .expect("the run has started a chain");
+        let first = self.chains[id].deliver(Ok(Answer::Note));
+        let second = self.chains[id].deliver(Ok(Answer::Concurrency(1)));
+        let holds_first = matches!(
+            self.chains[id]
+                .entered
+                .as_ref()
+                .and_then(|entered| entered.running.as_ref())
+                .and_then(|running| running.answer.as_ref()),
+            Some(Ok(Answer::Note))
+        );
+        ([first, second], holds_first)
+    }
+
     /// Starts a root chain over the top-level slice at `index` under a
     /// fresh access, entering no section.
     fn start_probe_chain(&mut self, index: usize) -> Result<ChainIndex> {

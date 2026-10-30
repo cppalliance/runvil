@@ -154,7 +154,7 @@ fn a_task_holds_a_slot_at_its_owner_and_every_ancestor() {
         [],
         "the grandchild's slot counts against the root"
     );
-    admission.take_back(grandchild);
+    admission.release(grandchild);
     assert_eq!(plan(&mut admission, &tree), [Admitted::Started(sibling)]);
 }
 
@@ -178,7 +178,7 @@ fn a_task_wait_gives_its_slots_back_until_the_wake_takes_them_again() {
         [],
         "the slot is the queued task's now"
     );
-    admission.take_back(queued);
+    admission.release(queued);
     assert_eq!(plan(&mut admission, &tree), [Admitted::Resumed(waiter)]);
 }
 
@@ -212,7 +212,7 @@ fn a_call_chain_gives_slots_back_through_its_nearest_holding_ancestor() {
         "the task the nested call runs inside gave its slot back"
     );
     assert!(admission.wake(nested, &tree.view()));
-    admission.take_back(queued);
+    admission.release(queued);
     assert_eq!(plan(&mut admission, &tree), [Admitted::Resumed(nested)]);
     spawn(&mut admission, &mut tree, root);
     assert_eq!(

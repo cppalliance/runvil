@@ -112,12 +112,12 @@ fn a_refused_injection_hands_back_the_vm_for_its_teardown() {
         )
         .expect_err("a non-object var seed is refused");
     assert!(
-        matches!(failure.error(), Error::Internal(message) if message.contains("JSON object")),
+        matches!(failure.error(), Error::Internal { message, .. } if message.contains("JSON object")),
         "the refusal names the seed's shape: {:?}",
         failure.error()
     );
     let error = failure.teardown(recorder.emitter(), "Seed");
-    assert!(matches!(error, Error::Internal(_)));
+    assert!(matches!(error, Error::Internal { .. }));
     assert_eq!(
         recorder.observations(),
         [

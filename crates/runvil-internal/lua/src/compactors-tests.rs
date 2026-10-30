@@ -176,7 +176,7 @@ fn compactors_clear_removes_every_record_and_keeps_the_send_and_the_rendered_too
     );
     assert_eq!(
         list.commit(RoundId::new(1), "test-model", &sent),
-        (Some(RoundId::new(0)), 1),
+        Some((RoundId::new(0), 1)),
         "the last send stays, so the next send still compares with it"
     );
     list.push(user("two")).unwrap();

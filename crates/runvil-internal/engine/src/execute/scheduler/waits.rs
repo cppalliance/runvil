@@ -14,8 +14,7 @@
 //! the owner may wait on it, so no wait can reach the entry.
 //!
 //! Ownership is the rule for every arm: only the chain that owns a task -
-//! its spawner, or the root walk for a task the H1 pass spawned, since the
-//! pass and the walk share the root lineage `0` as two arena records - may
+//! its spawner, or the root walk for a task the H1 pass spawned - may
 //! wait on, check, list, or cancel it, and an id naming no task
 //! is refused the same way so a caller learns nothing about tasks it never
 //! started. `status` and `note` add the self exception: a chain may read

@@ -1,10 +1,8 @@
 //! The Engine's setup half: one section VM's lifecycle from Engine injection
 //! through the store yield shims' install.
 //!
-//! Both frame constructors - `SectionContext::new` for a walked section (a
-//! spawned task's first entry included) and `SectionContext::new_h1`
-//! for the H1 pass - run the sequence [`setup_section_vm`] lists. Only the
-//! deltas live at the call site: the constructor builds its own `sys` JSON
+//! Both frame constructors run the sequence [`setup_section_vm`] lists. Only
+//! the deltas live at the call site: the constructor builds its own `sys` JSON
 //! (both take the chain's next entry `id`; a task's first entry adds its
 //! `index`), picks the [`VmSeed`] (the chain's `var`, plus the item seeded
 //! into this section on a task's first entry), and supplies the `read`
@@ -51,7 +49,7 @@ pub(crate) struct VmSeed<'a> {
 pub(crate) struct SectionVmSetup<'a> {
     /// The run's argument string, installed as the `args` global.
     pub(crate) args: &'a str,
-    /// The run's `argv` (the parsed form of `args`; `None` installs nil),
+    /// The run's `argv` (`RunState::argv`; `None` installs nil),
     /// with its mode: writable for the H1 pass alone, so the repair pattern
     /// can assign it, and frozen for every other section. The caller picks
     /// the mode at construction, so a writable value cannot reach a
@@ -73,8 +71,8 @@ pub(crate) struct SectionVmSetup<'a> {
     pub(crate) emitter: &'a Emitter,
     /// The section name used in observations and error messages.
     pub(crate) section_name: &'a str,
-    /// The run's resolved tool-loop cap per `models.loop` or model handle
-    /// `loop` call, captured by the `models.loop` shim as its round cap.
+    /// The run's tool-loop cap, as `RunState::max_tool_iterations` resolves
+    /// it, captured by the `models.loop` shim as its round cap.
     pub(crate) max_tool_iterations: usize,
     /// The run's application-state snapshot, when the caller supplied one:
     /// its presence gives the section VM the `ui()` global and the
@@ -104,9 +102,7 @@ pub(crate) struct SectionVmSetup<'a> {
 /// suspending calls, which the scheduler drives as yield shims,
 /// `models.loop` and `models.compact` included), the run's Pack preludes,
 /// [`SectionVm::install_require`] over `resolve` and `render`, and the
-/// store yield shims. The caller applies the Lua limits itself before
-/// calling, so a limits failure propagates without touching the VM's
-/// teardown observation path.
+/// store yield shims.
 ///
 /// # Errors
 /// Returns the [`Error`] of whichever step failed, after tearing the VM

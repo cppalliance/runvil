@@ -448,5 +448,27 @@ fn an_answer_for_a_chain_with_no_suspended_block_fails_loudly() {
     }
 }
 
+#[test]
+fn a_second_delivery_before_resume_is_an_internal_error() {
+    // A suspended block takes one answer at its resume, so a second
+    // delivery before then is a scheduler bug: it fails loudly and leaves
+    // the first answer in place rather than overwrite it.
+    let md = "---\nname: t\ndescription: d\nrunvil: 0\n---\n\n\
+        # Title\n\n\
+        ## Only\n\n\
+        ```lua\nreturn models.infer('ask')\n```\n";
+    let mut rig =
+        Rig::start(scheduler_scenario(md).hold(|effect| matches!(effect, Effect::Chat { .. })));
+    rig.settle();
+    let ([first, second], holds_first) = rig.scheduler_for_test().deliver_twice_for_test();
+
+    assert!(first.is_ok(), "the first delivery lands: {first:?}");
+    assert!(
+        matches!(&second, Err(Error::Internal { .. })),
+        "a second delivery before resume is a loud invariant failure: {second:?}"
+    );
+    assert!(holds_first, "the block still holds the first answer");
+}
+
 #[path = "failures-script-tools.rs"]
 mod script_tools;

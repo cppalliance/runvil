@@ -147,8 +147,8 @@ pub(crate) fn messages(lua: &Lua) -> Result<AnyUserData> {
         .map_err(Error::lua)?
     {
         Value::UserData(list) => Ok(list),
-        _ => Err(Error::Internal(
-            "the section's messages list is not installed".into(),
+        _ => Err(Error::internal(
+            "the section's messages list is not installed",
         )),
     }
 }

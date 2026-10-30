@@ -4,14 +4,9 @@ use std::num::{NonZero, NonZeroU32, NonZeroUsize};
 
 /// Resource limits for one run.
 ///
-/// The limits cover tool iterations per `models.loop` or model handle
-/// `loop` call, task concurrency, Lua memory, and Lua log volume.
-///
 /// The defaults are built-in constants and are safe to use as they are. A
 /// caller changes one by setting its field:
 /// `let mut limits = RunLimits::default(); limits.max_concurrency = n;`.
-/// A prompt's frontmatter `max_tool_iterations` field, when present,
-/// overrides [`RunLimits::max_tool_iterations`] for that prompt.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[non_exhaustive]
 pub struct RunLimits {
@@ -25,9 +20,11 @@ pub struct RunLimits {
     /// The run's concurrency ceiling: the most tasks the scheduler admits
     /// at once across the whole run.
     ///
-    /// Each spawned task counts against its owner's limit and against every
-    /// ancestor's limit, so limits nest. A fanout started inside one arm of
-    /// another fanout runs within that arm's remaining share.
+    /// A chain's `tasks.concurrency` call sets its own limit, clamped to its
+    /// enclosing chain's limit, and this ceiling is the root's. Each spawned
+    /// task counts against its owner's limit and every ancestor's, so limits
+    /// nest: a fanout started inside one arm of another fanout runs within
+    /// that arm's remaining share.
     pub max_concurrency: NonZeroUsize,
     /// The memory ceiling for each Lua virtual machine, in bytes.
     pub lua_memory_bytes: NonZeroUsize,
@@ -40,9 +37,8 @@ pub struct RunLimits {
 }
 
 impl Default for RunLimits {
-    /// Returns limits with the default values: 24 tool iterations per
-    /// `models.loop` or model handle `loop` call, 8 concurrent tasks,
-    /// 64 MiB of Lua memory, and 1024 Lua log events.
+    /// Returns limits with the default values: 24 tool iterations, 8
+    /// concurrent tasks, 64 MiB of Lua memory, and 1024 Lua log events.
     fn default() -> RunLimits {
         RunLimits {
             max_tool_iterations: const { NonZero::new(24).unwrap() },

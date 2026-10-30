@@ -3,8 +3,9 @@
 //! When a section's Lua first reads the lazy `prose` value, the Engine
 //! resolves `{{ path }}` placeholders in the pending Markdown template. Lua
 //! source is never substituted. Five sources are available: `args` (the single
-//! raw input string), `argv` (its parsed JSON form, nil when the args did not
-//! parse), `item` (the item seeded into this section - a fanout arm's or a
+//! raw input string), `argv` (the chain's `argv`: the derived value in the H1
+//! pass, the value the H1 left behind on the walk; nil when it holds no
+//! value), `item` (the item seeded into this section - a fanout arm's or a
 //! `tasks.spawn` task's first entry - nil otherwise), `var` (values the
 //! section's Lua wrote), and `sys` (runtime-provided metadata). An unknown
 //! first segment resolves as a bare global: a section-local Lua global
@@ -57,10 +58,10 @@ enum SubstErrorKind {
     NullValue,
     /// `{{ item }}` was used with no item seeded into this section.
     NilItem,
-    /// `{{ argv }}` was used when the args string did not parse (or H1 left
-    /// `argv` nil).
+    /// An `argv` placeholder, bare or dotted, was used while `argv` was nil.
     NilArgv,
-    /// A bare global was not JSON data.
+    /// The bare-global lookup failed: the global cannot become JSON data, the
+    /// name is `prose` itself, or the lookup raised.
     Serialize,
 }
 
@@ -126,27 +127,25 @@ type SubstResult<T> = std::result::Result<T, SubstitutionError>;
 
 /// The value sources `{{ }}` placeholders resolve against.
 ///
-/// `var` and `sys` are JSON objects (`var` read back from the section's
-/// Lua, `sys` built by the runtime). `argv` is the parsed form of the args
-/// string - the run's frozen value on the walk - or `None` when the args
-/// did not parse; `{{ argv }}` renders the whole value and `{{ argv.key }}`
-/// indexes it, with a nil `argv` a hard error. `item` is the item seeded into
-/// this section (a fanout arm's or a `tasks.spawn` task's first entry), or
-/// `None` otherwise; it renders per [`render_item`](crate::lua::render_item).
-/// `globals` resolves a bare global by name: `Ok(None)` when unset,
-/// `Ok(Some(_))` with its JSON form when set.
+/// `var` and `sys` are JSON objects.
 pub(crate) struct Sources<'a> {
     /// The raw args string: `{{ args }}`.
     pub(crate) args: &'a str,
-    /// The parsed form of the args string: `{{ argv }}` and dotted paths.
+    /// The chain's `argv`, which the H1 pass may repair: `{{ argv }}` and
+    /// dotted paths.
     pub(crate) argv: Option<&'a Value>,
-    /// The item seeded into this section: `{{ item }}`.
+    /// The item seeded into this section on a fanout arm's or a
+    /// `tasks.spawn` task's first entry, rendered per
+    /// [`render_item`](crate::lua::render_item): `{{ item }}`. `None` on
+    /// every other entry.
     pub(crate) item: Option<&'a Value>,
     /// The section's `var` table, read back from its Lua.
     pub(crate) var: &'a Value,
     /// The runtime-provided metadata: `{{ sys.key }}`.
     pub(crate) sys: &'a Value,
-    /// The bare-global lookup for `{{ name }}` resolution.
+    /// The bare-global lookup for `{{ name }}` resolution: `Ok(None)` when
+    /// unset, `Ok(Some(_))` with its JSON form when set, and `Err` when the
+    /// lookup fails, which a placeholder reports as `Serialize`.
     pub(crate) globals: &'a dyn Fn(&str) -> Result<Option<Value>>,
 }
 
@@ -211,7 +210,7 @@ fn nil_argv<'a>(argv: Option<&'a Value>, path: &str, offset: usize) -> SubstResu
             SubstErrorKind::NilArgv,
             offset,
             format!(
-                "{{{{ {} }}}} is nil (the args string is not JSON)",
+                "{{{{ {} }}}} is nil (argv holds no value)",
                 path_preview(path)
             ),
         )
@@ -292,8 +291,6 @@ fn resolve(path: &str, offset: usize, sources: &Sources<'_>) -> SubstResult<Stri
         None => (path, None),
     };
 
-    // An unknown first segment resolves as a bare global: the caller's lookup
-    // reads the section-local Lua global and converts it to JSON.
     let global_value;
     let root = match namespace {
         "var" => sources.var,

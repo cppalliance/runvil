@@ -37,7 +37,7 @@ impl ToolCallCounts {
     fn lock(&self) -> Result<std::sync::MutexGuard<'_, BTreeMap<String, u64>>> {
         self.inner
             .lock()
-            .map_err(|_| Error::Internal("tool call counts mutex was poisoned".into()))
+            .map_err(|_| Error::internal("tool call counts mutex was poisoned"))
     }
 
     /// Ensures `id` is present in the map, seeding it at 0 when new.

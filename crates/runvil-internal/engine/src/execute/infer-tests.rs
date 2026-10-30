@@ -1,6 +1,9 @@
 //! The nested-inference answer: a round that comes back with tool calls,
 //! though none were advertised, fails as a malformed reply.
 
+use std::sync::Arc;
+use std::sync::atomic::AtomicU32;
+
 use runvil_types::ids::RoundId;
 use serde_json::json;
 
@@ -17,9 +20,11 @@ fn an_infer_round_answered_with_tool_calls_fails_as_a_retryable_malformed_reply(
     let error = accept_infer(
         Ok(Box::new(completion)),
         RoundId::new(0),
-        &null_emitter(),
+        &ReportingHandles {
+            emitter: Arc::new(null_emitter()),
+            turns: Arc::new(AtomicU32::new(0)),
+        },
         "Infer",
-        &AtomicU32::new(0),
     )
     .expect_err("no tools were advertised, so tool calls are refused");
     let Error::Completion(failure) = &error else {

@@ -2,18 +2,16 @@
 //!
 //! [`SectionContext`] is born at a section entry and dies at its teardown.
 //! It owns the section VM plus the state the block walk reads and writes -
-//! the section's [`SectionSys`], a spawned chain's `item`, and the tool-call counts -
-//! and it holds the frame's effective reporting handles
+//! the section's [`SectionSys`], a spawned chain's `item`, the tool-call
+//! counts, the stack of open [`AdhocCall`]s, and the completion flag its
+//! `Drop` reads - and it holds the frame's effective reporting handles
 //! (the task-scoped event emitter and the turn counter) seeded out of the
 //! run context; a task chain's context is the spawn's fork, so the handles
 //! reach the frame and the task's nested chains through the one value.
-//! Each section entry is one construct-run-teardown cycle: a frame
-//! constructor absorbs the VM construction and setup preamble
-//! ([`SectionContext::new`] for a walked section, a spawned task's first
-//! entry included, and [`SectionContext::new_h1`] for the H1 pass;
-//! the two sit in the `construct` sibling), the scheduler's chain
-//! steps run the blocks, and the frame's [`Drop`] impl is the single
-//! teardown boundary.
+//! Each section entry is one construct-run-teardown cycle: a constructor in
+//! the `construct` child builds the frame, the scheduler's chain steps run
+//! the blocks, and the frame's [`Drop`] impl is the single teardown
+//! boundary.
 //!
 //! The run-scoped inputs (bindings, models, limits, the shared tools)
 //! arrive through the [`RunState`].
@@ -53,10 +51,13 @@ pub(super) struct TaskSeed {
 pub(super) struct SectionSys {
     /// The run's `started_at` as RFC 3339, the same in every section.
     pub(super) when: Arc<str>,
-    /// The section entry's hierarchical id.
+    /// The section entry's hierarchical id: the entering chain's id
+    /// extended by its local entry counter, rendered as a dot-separated
+    /// path.
     pub(super) id: String,
     /// The nearest enclosing task: the main walk is task `0`, and a `call`
-    /// child reports its caller's task.
+    /// child reports its caller's task. A chain passes it to `tasks.*` to
+    /// speak about itself.
     pub(super) taskid: TaskId,
     /// The section's name, or the prompt's title for the H1 pass. Fixed at
     /// construction, and the name the frame's `Drop` reports the teardown
@@ -121,13 +122,10 @@ pub(super) struct AdhocCall {
 /// fresh one for the target - only `var` crosses, as call data.
 /// Not `Clone`: the frame owns the VM and its one teardown.
 pub(super) struct SectionContext {
-    /// The frame's VM: the owned section VM, `Some` from construction
-    /// until the frame's `Drop` takes it for the teardown boundary.
-    /// `SectionVm` is `runvil-lua`'s type, tested in that crate.
+    /// The frame's VM; [`live_vm`] states when the slot holds it.
     vm: Option<SectionVm>,
-    /// Armed by [`SectionContext::mark_completed`] on the success path
-    /// only, so `Drop` fires `SECTION_FINISHED` on completion (a jump or
-    /// return included) and never on an error.
+    /// Whether [`SectionContext::mark_completed`] armed the frame's
+    /// `SECTION_FINISHED`.
     completed: bool,
     /// The section's `sys`. The first-call install sets its `model`.
     sys: SectionSys,
@@ -154,9 +152,10 @@ impl SectionContext {
     /// goes through the live VM.
     ///
     /// # Errors
-    /// Returns [`Error::Lua`] if the VM's `var` cannot be
-    /// converted back to JSON (the write guard keeps this conversion from
-    /// failing in practice).
+    /// Returns [`Error::Lua`] when the section reassigned the `var` global,
+    /// which the walk relies on to fail the run, or when `var` cannot
+    /// convert back to JSON (the write guard keeps that second case from
+    /// happening in practice).
     pub(super) fn read_var(&self) -> Result<serde_json::Value> {
         Ok(self.vm().var()?)
     }
@@ -182,8 +181,7 @@ impl SectionContext {
     /// Borrows the frame's VM for the scheduler's coroutine driving (block
     /// start, yield validation, answer resume) and model resolution.
     ///
-    /// Infallible: only this frame's own [`Drop`] clears the slot, so a
-    /// live frame always holds its VM.
+    /// Infallible; [`live_vm`] states why.
     pub(super) fn vm(&self) -> &SectionVm {
         live_vm(self.vm.as_ref())
     }
@@ -194,11 +192,11 @@ impl SectionContext {
         &self.sys.id
     }
 
-    /// Installs the pending Markdown buffer as the VM's fresh read-only
-    /// lazy `prose` template before one Lua coroutine starts. The first
-    /// runtime read snapshots the section state, renders every `{{ }}`
-    /// substitution once, and memoizes the result; the buffer is the
-    /// scheduler's pending prose, empty when no Markdown accumulated.
+    /// Installs the scheduler's pending Markdown buffer, empty when no
+    /// Markdown accumulated, as the VM's lazy `prose` template before one
+    /// Lua coroutine starts, rendered through this frame's
+    /// [`prose_renderer`]; [`SectionVm::install_lazy_prose`] states when it
+    /// renders.
     ///
     /// # Errors
     /// Returns [`Error::Lua`] if the guard cannot be installed.
@@ -340,10 +338,8 @@ impl Drop for SectionContext {
     fn drop(&mut self) {
         // The single teardown boundary: every exit path - success, error,
         // or early return - drops the frame, so the VM tears down exactly
-        // once here. `SECTION_FINISHED` follows only on the armed
-        // (completed) path; an error reports the teardown pair alone. The
-        // `let-else` is defensive: `Drop` runs once, so the VM is always
-        // here, and the destructor stays infallible.
+        // once here. It uses `let-else` rather than `live_vm`, so the
+        // destructor never panics.
         let Some(vm) = self.vm.take() else {
             return;
         };

@@ -26,14 +26,14 @@ fn answer_round_trip(record: &AnswerRecord) -> AnswerRecord {
     serde_json::from_str(&text).expect("a serialized answer record deserializes")
 }
 
-/// Round 3's effect over `messages`, extending `after` by `keep` of them.
-fn chat_effect(messages: Vec<Message>, after: Option<RoundId>, keep: u64) -> Effect {
+/// Round 3's effect over `messages`, extending `after`, an earlier round
+/// with how many of the messages it shares.
+fn chat_effect(messages: Vec<Message>, after: Option<(RoundId, u64)>) -> Effect {
     let binding = test_binding("writer", "A general model for tests", "test-model");
     Effect::Chat {
         binding,
         messages,
         after,
-        keep,
         tools: Vec::new(),
         round: Round::new(RoundId::new(3), ReplyOrigin::Chat),
     }
@@ -50,7 +50,7 @@ fn three_messages() -> Vec<Message> {
 
 #[test]
 fn a_chat_record_copies_after_and_keep_and_logs_only_the_messages_after_keep() {
-    let effect = chat_effect(three_messages(), Some(RoundId::new(2)), 2);
+    let effect = chat_effect(three_messages(), Some((RoundId::new(2), 2)));
     let record = effect.record();
     let EffectRecord::Chat {
         round,
@@ -93,7 +93,7 @@ fn a_chat_record_copies_after_and_keep_and_logs_only_the_messages_after_keep() {
 
 #[test]
 fn a_keep_equal_to_the_message_count_logs_no_messages() {
-    let record = chat_effect(three_messages(), Some(RoundId::new(2)), 3).record();
+    let record = chat_effect(three_messages(), Some((RoundId::new(2), 3))).record();
     let EffectRecord::Chat {
         after,
         keep,
@@ -180,7 +180,7 @@ fn records_written_before_the_render_existed_read_unchanged() {
 
 #[test]
 fn a_first_send_records_no_after_and_logs_every_message() {
-    let record = chat_effect(three_messages(), None, 0).record();
+    let record = chat_effect(three_messages(), None).record();
     let EffectRecord::Chat {
         after,
         keep,

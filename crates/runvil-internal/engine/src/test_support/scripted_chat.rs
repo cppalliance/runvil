@@ -6,8 +6,9 @@
 //! suite asserts on the effect rather than on a request body. The reply
 //! constructors beside it - `text`, `text_finish`, `calls`, and `fail` -
 //! write the script, and they stay crate-private because only the in-crate
-//! suites write one. The bench answers its rounds from the same model
-//! through the `test-support` feature.
+//! suites use them; the bench builds its one reply from the variant
+//! directly. The bench answers its rounds from the same model through the
+//! `test-support` feature.
 
 use std::sync::{Arc, Mutex, PoisonError};
 
@@ -16,7 +17,7 @@ use runvil_model_client::model::{CompletionError, CompletionErrorKind, Completio
 use runvil_types::metrics::CallMetrics;
 use serde_json::Value;
 
-/// The model every scripted reply names as its server.
+/// The server model the reply builders name.
 pub(crate) const MOCK_MODEL: &str = "mock-model";
 
 /// A text reply naming [`MOCK_MODEL`], with no finish reason, reasoning,
@@ -71,9 +72,7 @@ pub(crate) fn calls(calls: &[(&str, &str, &str)]) -> ScriptedReply {
 /// A failed round of `kind`, with HTTP `status` and response `body`.
 ///
 /// For every kind it builds the kind's phrase with the status appended and
-/// the body as the detail, skipping the gateway client's classification
-/// (no credentials wording for 401 and 403, no parsed overflow counts), so
-/// each test names its kind directly.
+/// the body as the detail, so each test names its kind directly.
 #[must_use]
 pub(crate) fn fail(kind: CompletionErrorKind, status: u16, body: &str) -> ScriptedReply {
     ScriptedReply::Failure {
@@ -125,11 +124,6 @@ pub enum ScriptedReply {
 impl ScriptedReply {
     /// Answers a round with this reply: the answer
     /// [`ScriptedChat::complete_now`] gives.
-    ///
-    /// # Errors
-    /// Returns the scripted failure, the `EmptyReply` failure for an empty
-    /// text reply, and the `InvalidParts` failure for a tool call the
-    /// validating constructors refuse.
     pub(crate) fn answer(&self) -> Result<Completion, CompletionError> {
         match self {
             ScriptedReply::Text {

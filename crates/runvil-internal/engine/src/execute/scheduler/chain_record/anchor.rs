@@ -1,5 +1,4 @@
-//! What a chain's `chat` rounds taught the context precheck about token
-//! counts.
+//! The chain record's [`ChatAnchor`].
 
 use runvil_types::metrics::Usage;
 

@@ -312,20 +312,15 @@ fn parse_heading_address(heading: &str) -> Result<(usize, String)> {
 }
 
 /// Looks up a heading string like `"### Name"` in a caller's visible set,
-/// read in place through `visible`, returning the single matching section
-/// or `None`.
-///
-/// The heading is parsed into an exact `(level, name)` address; a section
-/// matches only when BOTH its level and name are equal. A heading outside the
-/// visible set and a heading that names no section anywhere are the same
-/// `None`, because only the visible set is ever searched. More than one match
-/// is rejected, so an ambiguous heading never resolves to an arbitrary first
-/// hit.
+/// returning the single section at its exact address or `None`. A heading
+/// outside the visible set and a heading that names no section anywhere are
+/// the same `None`, because only the visible set is ever searched.
 ///
 /// # Errors
 /// Returns [`Error::Lua`] when the heading is malformed (see
 /// [`parse_heading_address`]) or when more than one visible section matches
-/// the exact address.
+/// the exact address, so an ambiguous heading never resolves to an arbitrary
+/// first hit.
 pub(crate) fn find_visible<'a>(heading: &str, visible: Visible<'a>) -> Result<Option<&'a Section>> {
     find_one(heading, visible.iter(), |section| *section, "visible")
 }
@@ -389,9 +384,8 @@ fn not_found<'a>(heading: &str, available: impl Iterator<Item = &'a Section>) ->
 /// the surfaces that must reach a section, such as `call` and `jump`.
 ///
 /// # Errors
-/// Returns [`Error::Lua`] for every [`find_visible`] error, and when no
-/// visible section matches the exact address. The not-found rule is stated
-/// on [`not_found`], which owns it.
+/// Returns [`Error::Lua`] for every [`find_visible`] error, and, through
+/// [`not_found`], when no visible section matches the exact address.
 pub(crate) fn resolve_visible<'a>(heading: &str, visible: Visible<'a>) -> Result<&'a Section> {
     find_visible(heading, visible)?.ok_or_else(|| not_found(heading, visible.iter()))
 }
@@ -400,9 +394,8 @@ pub(crate) fn resolve_visible<'a>(heading: &str, visible: Visible<'a>) -> Result
 /// for `require`.
 ///
 /// # Errors
-/// Returns [`Error::Lua`] for every [`find_reachable`] error, and when no
-/// reachable section matches the exact address. The not-found rule is stated
-/// on [`not_found`], which owns it.
+/// Returns [`Error::Lua`] for every [`find_reachable`] error, and, through
+/// [`not_found`], when no reachable section matches the exact address.
 pub(crate) fn resolve_reachable<'a>(heading: &str, reach: Reachable<'a>) -> Result<Reached<'a>> {
     find_reachable(heading, reach)?
         .ok_or_else(|| not_found(heading, reach.iter().map(|reached| reached.section)))

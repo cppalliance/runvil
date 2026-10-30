@@ -117,6 +117,10 @@ fn nil_argv_is_an_error() {
         let e = substitute_inner(prose, &test_sources(&var, &sys)).unwrap_err();
         assert_eq!(e.kind, SubstErrorKind::NilArgv, "path {prose:?}");
         assert!(e.to_string().contains("argv"), "names argv: {e}");
+        assert!(
+            e.to_string().contains("is nil (argv holds no value)"),
+            "names the nil cause: {e}"
+        );
     }
 }
 

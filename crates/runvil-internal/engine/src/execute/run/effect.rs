@@ -114,13 +114,12 @@ pub enum Effect {
         binding: ModelBinding,
         /// The conversation to send, in wire order.
         messages: Vec<Message>,
-        /// The earlier round whose request this one extends: the previous
-        /// send of the same section's `messages` list. `None` on a
-        /// section's first send and on a nested `models.infer` round.
-        after: Option<RoundId>,
-        /// How many leading messages this request shares with `after`'s
-        /// request; 0 when `after` is `None`.
-        keep: u64,
+        /// The earlier round whose request this one extends, the previous
+        /// send of the same section's `messages` list, with how many
+        /// leading messages this request shares with that round's request.
+        /// `None` on a section's first send and on a nested `models.infer`
+        /// round.
+        after: Option<(RoundId, u64)>,
         /// The tool schemas advertised to the model for this round.
         tools: Vec<ToolSchema>,
         /// The round's id and origin. The caller needs to forward live
@@ -150,12 +149,9 @@ pub enum Effect {
     },
     /// One call to a Pack's tool: a run catalog tool, or a tool only the
     /// model sees, from the section entry's render. The caller resolves
-    /// `tool`, the tool's stable identity, to an implementation. `alias`
-    /// is the tool's wire name for a model call and its id for a script
-    /// call, and `origin` says who made the call and where. The effect's
-    /// record keeps both and leaves out `access`, a live handle, and
-    /// `survives_stop`, which the run catalog and the render's answer
-    /// already give.
+    /// `tool` to an implementation. The effect's record keeps every field
+    /// but `access`, a live handle, and `survives_stop`, which the run
+    /// catalog and the render's answer already give.
     ToolCall {
         /// The tool's stable live identity.
         tool: ToolId,
@@ -184,15 +180,15 @@ pub enum Effect {
     ///
     /// `access` is an ordinary access that the Engine derives from the
     /// chain's capability at dispatch. It is rooted at the store declared
-    /// by the handle that the chain's access came from. Only the `store.*`
-    /// calls produce this effect. A tool reaches files through the access
-    /// its [`ToolCall`](Effect::ToolCall) effect carries.
+    /// by the handle that the chain's access came from. A tool reaches
+    /// files through the access its [`ToolCall`](Effect::ToolCall) effect
+    /// carries.
     ///
     /// The caller must use the access exactly as given and within the
-    /// scope it carries. Correctness holds whenever the caller drops the
-    /// access. Store claims follow happens-before order within the
-    /// run's scope. The run ends that scope at `Done` or when the run is
-    /// dropped, and after that the view refuses every operation.
+    /// scope it carries. When the caller drops the access does not affect
+    /// the run's correctness. Store claims follow happens-before order
+    /// within the run's scope. The run ends that scope at `Done` or when
+    /// the run is dropped, and after that the view refuses every operation.
     Vfs {
         /// The chain's store view: an access with the chain's identity
         /// that reaches only the store root.
@@ -242,18 +238,21 @@ impl Effect {
                 binding,
                 messages,
                 after,
-                keep,
                 tools,
                 round,
                 ..
             } => {
                 let invocation = binding.invocation();
-                let kept = usize::try_from(*keep).unwrap_or(usize::MAX);
+                let (after, keep) = match *after {
+                    Some((after, keep)) => (Some(after), keep),
+                    None => (None, 0),
+                };
+                let kept = usize::try_from(keep).unwrap_or(usize::MAX);
                 EffectRecord::Chat {
                     round: round.id,
                     alias: binding.alias().to_owned(),
-                    after: *after,
-                    keep: *keep,
+                    after,
+                    keep,
                     messages: messages.iter().skip(kept).map(wire_value).collect(),
                     tools: tools
                         .iter()

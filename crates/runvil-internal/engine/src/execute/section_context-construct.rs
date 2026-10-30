@@ -17,11 +17,11 @@ use crate::execute::context::RunState;
 use crate::execute::section_vm::{self, VmSeed};
 use crate::execute::walk_target::{self, RequireOrigin};
 use crate::heading_address::{SectionPos, Visible};
-use crate::lua::{Library, LibraryKey, SectionVm};
+use crate::lua::{Library, LibraryKey, SectionVm, Uninjected};
 use crate::parser::Prompt;
 use crate::{Error, Result};
 
-use super::{SectionContext, TaskSeed};
+use super::{SectionContext, SectionSys, TaskSeed};
 
 /// The resolver behind a frame's `require`: each heading resolves in
 /// `prompt` from the position a loading library's key names, or from
@@ -33,6 +33,30 @@ fn library_resolver(
     move |heading: String, key: Option<LibraryKey>| {
         walk_target::resolve_library(&prompt, &origin, &heading, key.as_ref())
     }
+}
+
+/// Builds the section VM for `name` over the run's shared sets, with the
+/// run's cancel flag and Lua limits applied.
+///
+/// # Errors
+/// Returns the [`Error`] of the VM construction or the limits install.
+fn limited_vm(ctx: &RunState, name: &str) -> Result<SectionVm<Uninjected>> {
+    let vm = SectionVm::new_for_section(
+        ctx.nonce(),
+        ctx.tool_set(),
+        &ctx.model_set(),
+        ctx.emitter(),
+        name,
+    )?;
+    // The run's cancel flag reaches every block coroutine's hook.
+    vm.set_cancel(ctx.cancel().clone());
+    // A limits failure propagates bare: no teardown runs here, so no
+    // LUA_TEARDOWN_* observation fires on this path.
+    vm.apply_lua_limits(
+        ctx.limits().lua_memory_bytes.get(),
+        ctx.limits().lua_log_events.get(),
+    )?;
+    Ok(vm)
 }
 
 impl SectionContext {
@@ -56,10 +80,8 @@ impl SectionContext {
     ///
     /// # Errors
     /// Returns [`Error::Internal`] when `pos` is past its slice, and
-    /// otherwise the [`Error`] of whichever step failed. A VM
-    /// construction or limits failure propagates bare, before any teardown
-    /// observation exists; a setup failure tears the fresh VM down first, so
-    /// the teardown boundary still fires exactly once on that path.
+    /// otherwise the [`Error`] of whichever step failed (see [`section_vm`]
+    /// for which failures tear the VM down).
     pub(crate) fn new(
         ctx: &RunState,
         access: &Arc<Access>,
@@ -79,21 +101,7 @@ impl SectionContext {
         sys.index = seed.index;
         ctx.emitter()
             .report(section.name(), lifecycle::SECTION_STARTED);
-        let vm = SectionVm::new_for_section(
-            ctx.nonce(),
-            ctx.tool_set(),
-            &ctx.model_set(),
-            ctx.emitter(),
-            section.name(),
-        )?;
-        // The run's cancel flag reaches every block coroutine's hook.
-        vm.set_cancel(ctx.cancel().clone());
-        // A limits failure propagates bare: no teardown runs here, so no
-        // LUA_TEARDOWN_* observation fires on this path.
-        vm.apply_lua_limits(
-            ctx.limits().lua_memory_bytes.get(),
-            ctx.limits().lua_log_events.get(),
-        )?;
+        let vm = limited_vm(ctx, section.name())?;
         let resolve = library_resolver(
             Arc::clone(ctx.prompt()),
             RequireOrigin::Section(pos.clone()),
@@ -124,15 +132,7 @@ impl SectionContext {
         // Setup runs on the bare VM and tears it down itself on failure:
         // the frame does not exist yet, so its `Drop` cannot own this path.
         let vm = section_vm::setup_section_vm(vm, &setup, read, resolve, render)?;
-        Ok(Self {
-            vm: Some(vm),
-            completed: false,
-            sys,
-            item: seed.item,
-            counts: None,
-            adhoc_calls: Vec::new(),
-            reporting: ctx.reporting().clone(),
-        })
+        Ok(Self::assemble(vm, sys, seed.item, ctx))
     }
 
     /// Constructs the frame for the H1 pass - section 0 - through the same
@@ -144,18 +144,17 @@ impl SectionContext {
     /// ([`section_vm::setup_section_vm`]).
     ///
     /// H1's only deltas from a walked section: no `SECTION_STARTED`
-    /// observation (the pass is not a walked section), an empty `var` seed
-    /// (it runs first and is never re-entered), `argv` installed writable
-    /// so the repair pattern can assign it, [`walk_target::h1_visible_sections`]
-    /// as the visible set behind the `prompt` reads, and
-    /// [`RequireOrigin::H1`], which reaches every top-level section, behind
-    /// `require`.
+    /// observation, and no `SECTION_FINISHED` since the scheduler never arms
+    /// the pass's completion (the pass is not a walked section), an empty
+    /// `var` seed (it runs first and is never re-entered), `argv` installed
+    /// writable so the repair pattern can assign it,
+    /// [`walk_target::h1_visible_sections`] as the visible set behind the
+    /// `prompt` reads, and [`RequireOrigin::H1`], which reaches every
+    /// top-level section, behind `require`.
     ///
     /// # Errors
-    /// Returns the [`Error`] of whichever step failed. A VM
-    /// construction or limits failure propagates bare, before any teardown
-    /// observation exists; a setup failure tears the fresh VM down first, so
-    /// the teardown boundary still fires exactly once on that path.
+    /// Returns the [`Error`] of whichever step failed (see [`section_vm`]
+    /// for which failures tear the VM down).
     pub(crate) fn new_h1(
         ctx: &RunState,
         access: &Arc<Access>,
@@ -164,20 +163,7 @@ impl SectionContext {
     ) -> Result<Self> {
         let title = ctx.prompt().title();
         let sys = ctx.section_sys(section_id, task_id, title);
-        let vm = SectionVm::new_for_section(
-            ctx.nonce(),
-            ctx.tool_set(),
-            &ctx.model_set(),
-            ctx.emitter(),
-            title,
-        )?;
-        vm.set_cancel(ctx.cancel().clone());
-        // A limits failure propagates bare: no teardown runs here, so no
-        // LUA_TEARDOWN_* observation fires on this path.
-        vm.apply_lua_limits(
-            ctx.limits().lua_memory_bytes.get(),
-            ctx.limits().lua_log_events.get(),
-        )?;
+        let vm = limited_vm(ctx, title)?;
         let resolve = library_resolver(Arc::clone(ctx.prompt()), RequireOrigin::H1);
         let render = super::prose_renderer(ctx, None);
         let prompt = Arc::clone(ctx.prompt());
@@ -187,22 +173,33 @@ impl SectionContext {
                 Visible::all(walk_target::h1_visible_sections(&prompt)),
             )
         };
-        // H1's one privilege: `argv` installs writable, so the repair
-        // pattern can assign it; the executor reads the value back at the
-        // freeze (see the scheduler's H1-to-walk handoff).
+        // `argv` installs writable, the H1 delta `SectionVmSetup::argv`
+        // describes; the executor reads the value back at the freeze (see
+        // the scheduler's H1-to-walk handoff).
         let sys_json = sys.to_json();
         let setup = ctx.vm_setup(&sys_json, VmSeed::default(), access, title, true);
         // Setup runs on the bare VM and tears it down itself on failure:
         // the frame does not exist yet, so its `Drop` cannot own this path.
         let vm = section_vm::setup_section_vm(vm, &setup, read, resolve, render)?;
-        Ok(Self {
+        Ok(Self::assemble(vm, sys, None, ctx))
+    }
+
+    /// The live frame over a set-up `vm`: not yet completed, with no
+    /// tool-call counts and no open adhoc call.
+    fn assemble(
+        vm: SectionVm,
+        sys: SectionSys,
+        item: Option<serde_json::Value>,
+        ctx: &RunState,
+    ) -> Self {
+        Self {
             vm: Some(vm),
             completed: false,
             sys,
-            item: None,
+            item,
             counts: None,
             adhoc_calls: Vec::new(),
             reporting: ctx.reporting().clone(),
-        })
+        }
     }
 }

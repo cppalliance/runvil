@@ -26,14 +26,8 @@ use crate::{Error, Result};
 /// The most Dynamic Set wire names the search tool's description lists.
 const LISTED_NAMES: usize = 100;
 
-/// What the search tool does, before the Dynamic Set's names.
-const SEARCH_USAGE: &str = "Lists and searches the dynamic tools, which CallDynamicTool calls: \
-                            pass toolName for one tool's description and input schema, pattern \
-                            for a regex search of their names, or neither to list them all";
-
-/// What the call tool does.
-const CALL_USAGE: &str = "Calls a dynamic tool: pass its name from GetDynamicTools as toolName \
-                          and its arguments as arguments.";
+/// The longest `pattern` a search compiles, in characters.
+pub(super) const PATTERN_LIMIT: usize = 256;
 
 /// One Pack's tools for `set`.
 fn set_of(sets: &PackToolSets<ToolInfo>, set: OfferMode) -> &[ToolInfo] {
@@ -67,15 +61,15 @@ pub(super) struct SectionOffers {
 }
 
 impl SectionOffers {
-    /// Reads the offers `vm`'s section has made, expanded against `set`.
+    /// Reads the offers `vm`'s section has made, expanded against `tool_set`.
     ///
     /// # Errors
     /// Returns the expansion's error.
-    pub(super) fn read(set: &ToolSet, vm: &SectionVm) -> Result<Self> {
+    pub(super) fn read(tool_set: &ToolSet, vm: &SectionVm) -> Result<Self> {
         let (runtime, adhoc) = (vm.offers(), vm.adhoc_tools());
-        let static_tools = current_static_set(set, runtime, adhoc)?;
-        let dynamic_tools = current_dynamic_set(set, runtime, adhoc, &static_tools)?;
-        let packs = current_catalog_packs(set, runtime, adhoc)?;
+        let static_tools = current_static_set(tool_set, runtime, adhoc)?;
+        let dynamic_tools = current_dynamic_set(tool_set, runtime, adhoc, &static_tools)?;
+        let packs = current_catalog_packs(tool_set, runtime, adhoc)?;
         Ok(Self {
             static_tools,
             dynamic_tools,
@@ -139,7 +133,7 @@ pub(super) fn offered_packs(offers: &SectionOffers) -> Vec<PackToolSets<ToolInfo
 ///
 /// # Errors
 /// Returns the merge's error.
-pub(super) fn prepare_effective_scope(
+pub(super) fn freeze_tool_sets(
     offers: &SectionOffers,
     rendered: Vec<PackToolSets<ToolInfo>>,
     catalog: &ToolCatalog,
@@ -364,10 +358,12 @@ fn discovery_tools(dynamic_set: &[Laid]) -> Result<Vec<Laid>> {
         .map(|tool| tool.binding.alias())
         .collect();
     names.sort_unstable();
+    let search = DiscoveryTool::Search.wire_name();
+    let call = DiscoveryTool::Call.wire_name();
     let shown = names[..names.len().min(LISTED_NAMES)].join(", ");
     let listed = if names.len() > LISTED_NAMES {
         let more = names.len() - LISTED_NAMES;
-        format!("{shown}, and {more} more; call GetDynamicTools to search")
+        format!("{shown}, and {more} more; call {search} to search")
     } else {
         shown
     };
@@ -375,10 +371,21 @@ fn discovery_tools(dynamic_set: &[Laid]) -> Result<Vec<Laid>> {
         .into_iter()
         .map(|tool| {
             let (description, parameters) = match tool {
-                DiscoveryTool::Search => {
-                    (format!("{SEARCH_USAGE} ({listed})"), search_parameters())
-                }
-                DiscoveryTool::Call => (CALL_USAGE.to_owned(), call_parameters()),
+                DiscoveryTool::Search => (
+                    format!(
+                        "Lists and searches the dynamic tools, which {call} calls: pass toolName \
+                         for one tool's description and input schema, pattern for a regex \
+                         search of their names, or neither to list them all ({listed})"
+                    ),
+                    search_parameters(),
+                ),
+                DiscoveryTool::Call => (
+                    format!(
+                        "Calls a dynamic tool: pass its name from {search} as toolName and its \
+                         arguments as arguments."
+                    ),
+                    call_parameters(),
+                ),
             };
             let id = ToolId::parse(tool.id())
                 .map_err(|_| Error::internal("a discovery tool's id is a tool id"))?;
@@ -402,8 +409,10 @@ fn search_parameters() -> Value {
             },
             "pattern": {
                 "type": "string",
-                "description": "A regex of at most 256 characters matched against dynamic tool \
-                                names; (?i) makes it case-insensitive."
+                "description": format!(
+                    "A regex of at most {PATTERN_LIMIT} characters matched against dynamic tool \
+                     names; (?i) makes it case-insensitive."
+                )
             }
         }
     })
@@ -411,12 +420,13 @@ fn search_parameters() -> Value {
 
 /// The call tool's parameters: the target's name, and its arguments.
 fn call_parameters() -> Value {
+    let search = DiscoveryTool::Search.wire_name();
     json!({
         "type": "object",
         "properties": {
             "toolName": {
                 "type": "string",
-                "description": "The dynamic tool's name, from GetDynamicTools."
+                "description": format!("The dynamic tool's name, from {search}.")
             },
             "arguments": {
                 "type": "object",

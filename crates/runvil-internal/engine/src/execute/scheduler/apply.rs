@@ -247,13 +247,7 @@ impl ChainOps<'_> {
         result: std::result::Result<Box<Completion>, CompletionError>,
     ) -> Result<String> {
         let chain = &*self.chain;
-        accept_infer(
-            result,
-            round,
-            chain.ctx.emitter(),
-            chain.section_name(),
-            chain.ctx.turns(),
-        )
+        accept_infer(result, round, chain.ctx.reporting(), chain.section_name())
     }
 
     /// Applies a bound tool call's own answer through the shared dispatch

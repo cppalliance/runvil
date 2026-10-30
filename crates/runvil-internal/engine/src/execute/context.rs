@@ -10,6 +10,7 @@ use std::fmt;
 use std::sync::atomic::AtomicU32;
 use std::sync::{Arc, Mutex};
 
+use runvil_types::cancel::CancelHandle;
 use runvil_types::emitter::{Emitter, EventSink};
 use runvil_types::event::Event;
 use runvil_types::ids::{ChainId, TaskId};
@@ -17,7 +18,6 @@ use runvil_types::packs::Prelude;
 use runvil_types::untrusted::GuardNonce;
 use runvil_vfs::{Access, VfsRef};
 
-use crate::cancel::CancelHandle;
 use crate::lua::{Argv, ToolSet};
 use crate::model::{ModelSet, ModelView};
 use crate::parser::Prompt;
@@ -67,10 +67,10 @@ pub(crate) struct RunState {
     execution: Arc<str>,
     /// The run's argument string for `{{ args }}` substitution.
     args: Arc<str>,
-    /// The run's `argv`: the parsed form of `args` (`None` installs nil).
-    /// At construction this is the derived value the H1 pass starts from;
-    /// the walk's fork holds the value H1 left behind at the freeze, so
-    /// an H1 repair reaches every downstream section.
+    /// The run's `argv`, as `bound::derive_argv` derives it from `args`. At
+    /// construction this is the value the H1 pass starts from; the walk's
+    /// fork holds the value H1 left behind at the freeze, so an H1 repair
+    /// reaches every downstream section.
     argv: Option<Arc<serde_json::Value>>,
     /// The run's resource limits.
     limits: RunLimits,
@@ -101,9 +101,7 @@ pub(crate) struct RunState {
     /// The run's `started_at` rendered as RFC 3339, stamped into every
     /// section's `sys.when`, the H1 pass included.
     when: Arc<str>,
-    /// The run's application-state snapshot; its presence gives every
-    /// section VM the `ui()` global and the raw-model-id `models.get`
-    /// fallback.
+    /// The run's application-state snapshot, when the caller supplied one.
     ui: Option<Arc<serde_json::Value>>,
     /// The run's Pack preludes, in install order: every section VM
     /// installs each one before `require`.
@@ -143,12 +141,12 @@ impl RunState {
             preludes,
             ..
         } = config;
-        let tool_set = Arc::new(bound::bound_tool_set(&prompt, tools, packs));
+        let tool_set = Arc::new(bound::run_tool_set(&prompt, tools, packs));
         let model_set = Arc::new(Mutex::new(bound::bound_model_set(&prompt, &model_bindings)));
         let execution: Arc<str> = Arc::from(name);
-        // The root task's counter starts at the context's `provenance_start`:
-        // past any parse events the caller put in the stream ahead of the
-        // run, or at zero.
+        // The root task's event sequence starts at the context's
+        // `provenance_start`: past any parse events the caller put in the
+        // stream ahead of the run, or at zero.
         let events = EventSink::seeded(provenance_start);
         // The root chain - the main walk - is task `0`.
         let emitter = Arc::new(Emitter::new(
@@ -233,9 +231,8 @@ impl RunState {
         &self.args
     }
 
-    /// The run's `argv`: the parsed form of the args string, or `None`
-    /// (nil) when it did not parse. On the walk this is the value H1 left
-    /// behind at the freeze.
+    /// The run's `argv`, as `bound::derive_argv` derives it; on the walk,
+    /// the value H1 left behind at the freeze.
     pub(super) fn argv(&self) -> Option<&Arc<serde_json::Value>> {
         self.argv.as_ref()
     }
@@ -317,7 +314,7 @@ impl RunState {
     /// run's own, because a `call`, a `tasks.spawn`, or a `tasks.fanout`
     /// arm that was given an input overrides the run's args for the chain -
     /// and `argv` re-derives from the chain's args, so the chain sees the
-    /// parsed form of what it was passed.
+    /// `argv` of what it was passed.
     #[must_use]
     pub(super) fn with_args(&self, args: &str) -> Self {
         let mut ctx = self.clone();
@@ -347,10 +344,9 @@ impl RunState {
     /// capability, a task chain's spawned one), the section name, and
     /// whether `argv` installs writable.
     ///
-    /// `argv_writable` is the H1 pass's one privilege: it is the only
-    /// production caller that passes `true`, so the [`Argv`] mode is
-    /// decided here at construction and a writable value cannot reach a
-    /// non-H1 section.
+    /// `argv_writable` picks the [`Argv`] mode that
+    /// [`SectionVmSetup::argv`] describes; the H1 pass is the only
+    /// production caller that passes `true`.
     pub(super) fn vm_setup<'a>(
         &'a self,
         sys: &'a serde_json::Value,
@@ -385,14 +381,6 @@ impl RunState {
     /// section entry's hierarchical id, the entering chain's task id, and
     /// the section name. A task's first entry sets `index` at its own call
     /// site.
-    ///
-    /// `when` is the run's `started_at` rendered as RFC 3339, the same
-    /// string in every section; `id` is the section entry's hierarchical id
-    /// (the entering chain's id extended by its local entry counter),
-    /// rendered as a dot-separated path; `taskid` is the id of the nearest
-    /// enclosing task (the main walk is task `0`; a `call` child reports
-    /// its caller's task), the handle a chain passes to `tasks.*` to speak
-    /// about itself.
     pub(super) fn section_sys(&self, id: &str, task_id: &TaskId, section_name: &str) -> SectionSys {
         SectionSys {
             when: Arc::clone(&self.when),

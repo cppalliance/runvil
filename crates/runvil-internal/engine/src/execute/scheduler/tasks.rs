@@ -112,8 +112,7 @@ pub(super) struct TaskEntry {
     /// Where the task's work runs.
     pub(super) backing: TaskBacking,
     /// The chain that owns the task: its spawner, or the root walk for a
-    /// task the H1 pass spawned, since the pass and the walk share the root
-    /// lineage `0` as two arena records. The only chain allowed to wait on,
+    /// task the H1 pass spawned. The only chain allowed to wait on,
     /// inspect, or cancel the task, and the chain whose end ends it.
     /// Recorded only here: admission reads it as the task chain's
     /// enclosing chain.
@@ -278,26 +277,21 @@ impl TaskArena {
         let Some(entry) = self.entries.get_mut(task) else {
             return Err(Error::internal("a delivered task has an entry"));
         };
-        let ok = matches!(entry.state, EntryState::Done(Ok(_)));
-        // Every state but `Done` goes back as it was.
-        match std::mem::replace(&mut entry.state, EntryState::Delivered { ok }) {
-            EntryState::Done(outcome) => outcome,
-            EntryState::Cancelled => {
-                entry.state = EntryState::Cancelled;
-                Err(Error::TaskCancelled { task: task.clone() })
+        match &mut entry.state {
+            EntryState::Done(outcome) => {
+                let outcome = std::mem::replace(outcome, Ok(String::new()));
+                entry.state = EntryState::Delivered {
+                    ok: outcome.is_ok(),
+                };
+                outcome
             }
-            EntryState::Abandoned => {
-                entry.state = EntryState::Abandoned;
-                Err(Error::internal(
-                    "an abandoned task's owner ended, so no wait can deliver it",
-                ))
-            }
-            state @ (EntryState::Running | EntryState::Delivered { .. }) => {
-                entry.state = state;
-                Err(Error::internal(
-                    "only a terminal, undelivered entry is delivered",
-                ))
-            }
+            EntryState::Cancelled => Err(Error::TaskCancelled { task: task.clone() }),
+            EntryState::Abandoned => Err(Error::internal(
+                "an abandoned task's owner ended, so no wait can deliver it",
+            )),
+            EntryState::Running | EntryState::Delivered { .. } => Err(Error::internal(
+                "only a terminal, undelivered entry is delivered",
+            )),
         }
     }
 

@@ -25,9 +25,9 @@ use serde_json::Value;
 mod forward;
 mod observation;
 
-pub use forward::forward;
+pub(crate) use forward::forward;
 pub(crate) use forward::forward_one;
-pub use observation::Observation;
+pub(crate) use observation::Observation;
 #[cfg(test)]
 pub(crate) use observation::detail;
 
@@ -35,7 +35,7 @@ pub(crate) use observation::detail;
 ///
 /// Each method has a default body that discards the report, so a recorder
 /// pays only for the hooks it overrides.
-pub trait Observer: Send + Sync {
+pub(crate) trait Observer: Send + Sync {
     /// Records one typed [`Observation`] for `execution` and `section`.
     fn observe(&self, execution: &str, section: &str, event: Observation);
 
@@ -59,75 +59,75 @@ pub trait Observer: Send + Sync {
 /// One completed assistant reply, as [`Observer::on_assistant_reply`]
 /// receives it.
 #[derive(Debug, Clone, Copy)]
-pub struct ReplyReport<'a> {
+pub(crate) struct ReplyReport<'a> {
     /// The caller-chosen run identifier.
-    pub execution: &'a str,
+    pub(crate) execution: &'a str,
     /// The event's reporting scope.
-    pub section: &'a str,
+    pub(crate) section: &'a str,
     /// The model-turn counter the reply was produced under.
-    pub turn: u32,
+    pub(crate) turn: u32,
     /// The reply text.
-    pub text: &'a str,
+    pub(crate) text: &'a str,
     /// The provider's stop label, when it sent one.
-    pub finish_reason: Option<&'a str>,
+    pub(crate) finish_reason: Option<&'a str>,
     /// The model that produced the reply.
-    pub model: &'a str,
+    pub(crate) model: &'a str,
     /// The call's measurements, when any were reported.
-    pub metrics: Option<&'a CallMetrics>,
+    pub(crate) metrics: Option<&'a CallMetrics>,
     /// The kind of round that produced the reply.
-    pub origin: ReplyOrigin,
+    pub(crate) origin: ReplyOrigin,
 }
 
 /// One batch of tool calls the model requested, as
 /// [`Observer::on_assistant_tool_calls`] receives it.
 #[derive(Debug, Clone, Copy)]
-pub struct ToolCallsReport<'a> {
+pub(crate) struct ToolCallsReport<'a> {
     /// The caller-chosen run identifier.
-    pub execution: &'a str,
+    pub(crate) execution: &'a str,
     /// The event's reporting scope.
-    pub section: &'a str,
+    pub(crate) section: &'a str,
     /// The model-turn counter the batch was requested under.
-    pub turn: u32,
+    pub(crate) turn: u32,
     /// The model that requested the calls.
-    pub model: &'a str,
+    pub(crate) model: &'a str,
     /// The calls, unexecuted.
-    pub calls: &'a [ToolCallEvent],
+    pub(crate) calls: &'a [ToolCallEvent],
 }
 
 /// One dispatched tool call's result, as [`Observer::on_tool_result`]
 /// receives it.
 #[derive(Debug, Clone, Copy)]
-pub struct ToolResultReport<'a> {
+pub(crate) struct ToolResultReport<'a> {
     /// The caller-chosen run identifier.
-    pub execution: &'a str,
+    pub(crate) execution: &'a str,
     /// The event's reporting scope.
-    pub section: &'a str,
+    pub(crate) section: &'a str,
     /// The model-turn counter the call was dispatched under.
-    pub turn: u32,
+    pub(crate) turn: u32,
     /// The provider-issued tool-call id the result answers.
-    pub tool_call_id: &'a str,
+    pub(crate) tool_call_id: &'a str,
     /// The alias the call named.
-    pub alias: &'a str,
+    pub(crate) alias: &'a str,
     /// The tool's output.
-    pub content: &'a str,
+    pub(crate) content: &'a str,
     /// Whether the dispatch treated the tool's output as trusted.
-    pub trust: OutputTrust,
+    pub(crate) trust: OutputTrust,
 }
 
 /// One completed block of model thinking, as [`Observer::on_thinking`]
 /// receives it.
 #[derive(Debug, Clone, Copy)]
-pub struct ThinkingReport<'a> {
+pub(crate) struct ThinkingReport<'a> {
     /// The caller-chosen run identifier.
-    pub execution: &'a str,
+    pub(crate) execution: &'a str,
     /// The event's reporting scope.
-    pub section: &'a str,
+    pub(crate) section: &'a str,
     /// The model-turn counter the block was produced under.
-    pub turn: u32,
+    pub(crate) turn: u32,
     /// The model that produced it.
-    pub model: &'a str,
+    pub(crate) model: &'a str,
     /// The thinking text.
-    pub text: &'a str,
+    pub(crate) text: &'a str,
 }
 
 /// An emitter over a sink nobody drains: the silent stand-in a suite

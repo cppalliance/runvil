@@ -444,8 +444,9 @@ fn truthy(value: &Value) -> bool {
 
 /// The adapter failure for a value the shim chunk or the renderer never
 /// produces: a crate bug, raised as an mlua callback error.
+#[track_caller]
 fn malformed(what: &'static str) -> mlua::Error {
-    mlua::Error::external(Error::Internal(what.into()))
+    mlua::Error::external(Error::internal(what))
 }
 
 /// Lua's `type()` name for `value`, with an integer named `integer`, as

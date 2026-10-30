@@ -420,7 +420,7 @@ fn a_poisoned_model_set_reaches_the_caller_as_an_internal_error() {
     let error = crate::resolve_model_binding(vm.models.as_ref(), vm.model_selection())
         .expect_err("a poisoned model set cannot resolve a binding");
     assert!(
-        matches!(&error, crate::Error::Internal(message) if message == "model set mutex was poisoned"),
+        matches!(&error, crate::Error::Internal { message, .. } if message == "model set mutex was poisoned"),
         "the lock failure is Engine misuse, neither an authoring nor a model failure: {error:?}"
     );
 }

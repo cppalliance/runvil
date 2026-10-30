@@ -125,7 +125,7 @@ where
         let var = var_to_json(lua).map_err(mlua::Error::external)?;
         let sys = sys_live
             .lock()
-            .map_err(|_| mlua::Error::external(Error::Internal(SYS_LIVE_POISONED.into())))?
+            .map_err(|_| mlua::Error::external(Error::internal(SYS_LIVE_POISONED)))?
             .clone();
         let globals_lookup = |name: &str| -> Result<Option<Json>> {
             if name == "prose" {
@@ -159,6 +159,7 @@ where
 }
 
 /// Returns the failure of a poisoned memo slot.
+#[track_caller]
 fn memo_poisoned() -> mlua::Error {
-    mlua::Error::external(Error::Internal("prose memo slot was poisoned".into()))
+    mlua::Error::external(Error::internal("prose memo slot was poisoned"))
 }

@@ -18,11 +18,9 @@ use crate::model::{Completion, CompletionResult, detail};
 /// small ones.
 pub(super) fn advance_turn(turns: &AtomicU32) -> u32 {
     turns
-        .try_update(Ordering::Relaxed, Ordering::Relaxed, |current| {
-            Some(current.saturating_add(1))
+        .update(Ordering::Relaxed, Ordering::Relaxed, |current| {
+            current.saturating_add(1)
         })
-        // The closure always returns `Some`, so the fallback never applies.
-        .unwrap_or(u32::MAX)
         .saturating_add(1)
 }
 

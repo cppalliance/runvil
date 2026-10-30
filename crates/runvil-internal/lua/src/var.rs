@@ -1,7 +1,5 @@
 //! The guarded `var` proxy that sandboxed author code reads and writes.
 
-use std::borrow::Cow;
-
 use mlua::{Lua, LuaSerdeExt, Value};
 use serde_json::Value as Json;
 
@@ -162,10 +160,10 @@ pub(crate) fn guarded_var(lua: &Lua, initial: Option<&Json>) -> Result<mlua::Tab
     let initial = match initial {
         Some(Json::Object(values)) => Json::Object(values.clone()),
         Some(other) => {
-            return Err(Error::Internal(Cow::Owned(format!(
+            return Err(Error::internal(format!(
                 "var must seed from a JSON object, got {}",
                 lua.to_value(other).map_err(Error::lua)?.type_name()
-            ))));
+            )));
         }
         None => Json::Object(serde_json::Map::new()),
     };
@@ -173,13 +171,13 @@ pub(crate) fn guarded_var(lua: &Lua, initial: Option<&Json>) -> Result<mlua::Tab
     let Value::Table(proxy) =
         guarded_json_value(lua, &initial, "var", &guarded_data).map_err(Error::lua)?
     else {
-        return Err(Error::Internal("guarded var root was not a table".into()));
+        return Err(Error::internal("guarded var root was not a table"));
     };
     let Value::Table(data) = guarded_data
         .raw_get::<Value>(proxy.clone())
         .map_err(Error::lua)?
     else {
-        return Err(Error::Internal("guarded var data table was missing".into()));
+        return Err(Error::internal("guarded var data table was missing"));
     };
     // The named registry entries keep the data table alive and reachable for
     // Engine read-back, and the proxy reachable for the reassignment check in
@@ -227,9 +225,7 @@ pub(crate) fn var_snapshot_table(lua: &Lua) -> Result<mlua::Table> {
     match materialize_guarded_value(lua, Value::Table(data), &guarded_data).map_err(Error::lua)? {
         Value::Table(plain) => Ok(plain),
         // The root data value is always a table; `guarded_var` builds it.
-        _ => Err(Error::Internal(
-            "guarded var data table was not a table".into(),
-        )),
+        _ => Err(Error::internal("guarded var data table was not a table")),
     }
 }
 

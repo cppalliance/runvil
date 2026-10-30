@@ -5,8 +5,8 @@
 //! state rolling forward across block coroutines.
 
 use runvil_lua::{Error, LuaProgram};
+use runvil_types::cancel::CancelHandle;
 
-use crate::cancel::CancelHandle;
 use crate::lua::{CoroStep, LuaBlockResult, Request, YieldParse};
 use crate::model::ModelSet;
 

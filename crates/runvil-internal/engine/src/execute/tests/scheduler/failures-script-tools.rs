@@ -46,7 +46,7 @@ fn a_script_tools_call_with_a_tool_object_dispatches_its_binding() {
 fn a_script_tools_call_with_an_unbound_name_lists_the_offered_ids() {
     // Script-initiated resolution runs against the run's whole offering,
     // so the unknown-name error lists every offered id, not the section's
-    // effective scope.
+    // frozen sets.
     let md = "---\nname: t\ndescription: d\nrunvil: 0\n---\n\n\
         # ToolCall\n\n\
         ## Only\n\n\

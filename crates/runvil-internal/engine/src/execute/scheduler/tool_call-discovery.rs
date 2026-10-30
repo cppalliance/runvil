@@ -29,14 +29,12 @@ use runvil_types::tools::OutputTrust;
 use serde::Serialize;
 use serde_json::{Map, Value};
 
+use crate::execute::scope::PATTERN_LIMIT;
 use crate::lua::{Answer, DiscoveryTool, OfferMode, RenderedTools, ToolBinding, ToolCallOutcome};
 use crate::{Error, Result};
 
 use super::super::dispatch::Dispatched;
 use super::super::{CallSite, ChainOps};
-
-/// The longest `pattern` a search compiles, in characters.
-const PATTERN_LIMIT: usize = 256;
 
 /// The longest description a search result keeps whole, in characters.
 const DESCRIPTION_LIMIT: usize = 200;
@@ -96,8 +94,9 @@ impl ChainOps<'_> {
             Some(DiscoveryTool::Search) => search(&frozen, &args)?,
             Some(DiscoveryTool::Call) => reach(&frozen, args),
             None => Discovered::Refused(format!(
-                "{name:?} is a dynamic tool; call it through CallDynamicTool with toolName {name:?}",
-                name = binding.alias()
+                "{name:?} is a dynamic tool; call it through {call} with toolName {name:?}",
+                name = binding.alias(),
+                call = DiscoveryTool::Call.wire_name(),
             )),
         };
         let (text, trust, boundary) = match discovered {
@@ -219,7 +218,8 @@ fn reach(frozen: &RenderedTools, mut args: Value) -> Discovered {
     let target = match text_arg(tool, &args, "toolName") {
         Ok(Some(name)) => dynamic_target(tool, frozen, name).cloned(),
         Ok(None) => Err(format!(
-            "{tool}: toolName is required; pass a name from GetDynamicTools"
+            "{tool}: toolName is required; pass a name from {search}",
+            search = DiscoveryTool::Search.wire_name(),
         )),
         Err(refusal) => Err(refusal),
     };
@@ -267,8 +267,9 @@ fn dynamic_target<'a>(
             "{tool}: {name:?} is in your tool list, not a dynamic tool; call it directly"
         )),
         None => Err(format!(
-            "{tool}: no dynamic tool is named {name:?}; call GetDynamicTools with a pattern or \
-             no arguments to find the names"
+            "{tool}: no dynamic tool is named {name:?}; call {search} with a pattern or \
+             no arguments to find the names",
+            search = DiscoveryTool::Search.wire_name(),
         )),
     }
 }
@@ -277,10 +278,11 @@ fn dynamic_target<'a>(
 /// [`PATTERN_LIMIT`] characters or that is no regex, naming the parser's
 /// reason, the last line of its report.
 fn compiled(pattern: &str) -> std::result::Result<Regex, String> {
+    let tool = DiscoveryTool::Search.wire_name();
     let length = pattern.chars().count();
     if length > PATTERN_LIMIT {
         return Err(format!(
-            "GetDynamicTools: pattern is {length} characters, over the limit of \
+            "{tool}: pattern is {length} characters, over the limit of \
              {PATTERN_LIMIT}; shorten it"
         ));
     }
@@ -289,7 +291,7 @@ fn compiled(pattern: &str) -> std::result::Result<Regex, String> {
         let reason = report.lines().next_back().unwrap_or_default().trim();
         let reason = reason.strip_prefix("error: ").unwrap_or(reason);
         format!(
-            "GetDynamicTools: pattern {pattern:?} is not a valid regex: {reason}; fix it, or \
+            "{tool}: pattern {pattern:?} is not a valid regex: {reason}; fix it, or \
              omit it to list every tool"
         )
     })

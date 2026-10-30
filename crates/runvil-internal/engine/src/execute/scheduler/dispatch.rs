@@ -170,13 +170,10 @@ impl Scheduler {
         // `chain`'s arena borrow ends here; the resolution names the
         // target's slice by path, so nothing borrows the arena across it.
         let resolved = self.with_chain(id, |ops| ops.resolve_chain_target(target))?;
-        // The child's id is the caller's next child index: `call` children,
-        // spawned tasks, and the wait shims' timers share the caller's
-        // counter, so the id depends only on the caller's own dispatch
-        // order.
-        let chain_id = self.chains[id].next_child_id()?;
+        // The child's id is the caller's next child id.
+        let lineage = self.chains[id].next_child_id()?;
         self.start_chain(ChainStart {
-            lineage: chain_id,
+            lineage,
             counters: Counters::default(),
             ctx: child_ctx,
             access,
@@ -222,7 +219,6 @@ impl ChainOps<'_> {
             binding,
             messages: vec![Message::user(prompt)],
             after: None,
-            keep: 0,
             tools: Vec::new(),
             round,
         };

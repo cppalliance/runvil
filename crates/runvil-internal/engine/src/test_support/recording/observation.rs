@@ -93,7 +93,7 @@ pub(crate) mod detail {
 /// rendering is the stable trace string the suites compare.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
-pub enum Observation {
+pub(crate) enum Observation {
     /// Prompt parsing began.
     ParseStarted,
     /// Prompt parsing and parse-time compilation completed successfully.
@@ -250,7 +250,7 @@ impl Observation {
     /// Returns `None` for [`Observation::Lua`] and [`Observation::Other`],
     /// which hold a message.
     #[must_use]
-    pub fn label(&self) -> Option<&'static str> {
+    pub(crate) fn label(&self) -> Option<&'static str> {
         let label = match self {
             Observation::ParseStarted => "Parse started",
             Observation::ParseSucceeded => "Parse succeeded",

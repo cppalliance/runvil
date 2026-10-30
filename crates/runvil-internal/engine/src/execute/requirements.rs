@@ -8,6 +8,9 @@ use runvil_types::packs::PackId;
 #[path = "requirements-tests.rs"]
 mod tests;
 
+/// The first line of every refusal notice.
+pub(super) const NOTICE_HEADER: &str = "the environment cannot satisfy this prompt:";
+
 /// A report of what the caller must still satisfy before a prompt can run.
 ///
 /// [`RunContext::prepare`](super::RunContext::prepare) returns one
@@ -120,7 +123,7 @@ impl Requirements {
         // Writing to a String is infallible, so each `write!` result is
         // discarded under the denied `unwrap_used`/`expect_used` lints.
         use std::fmt::Write as _;
-        let mut notice = String::from("the environment cannot satisfy this prompt:");
+        let mut notice = String::from(NOTICE_HEADER);
         for id in &self.missing_packs {
             let _ = write!(notice, "\n- missing required Pack: {id}");
         }

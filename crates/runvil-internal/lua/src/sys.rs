@@ -1,7 +1,5 @@
 //! The sealed `sys` table that sandboxed author code reads.
 
-use std::borrow::Cow;
-
 use mlua::{Lua, LuaSerdeExt, Value};
 use serde_json::Value as Json;
 
@@ -16,9 +14,7 @@ pub(crate) fn seal_sys(lua: &Lua, sys: &Json) -> Result<mlua::Table> {
     let data = match sys {
         Json::Object(map) => map.clone(),
         other => {
-            return Err(Error::Internal(Cow::Owned(format!(
-                "sys must be a table, got {other}"
-            ))));
+            return Err(Error::internal(format!("sys must be a table, got {other}")));
         }
     };
 

@@ -250,7 +250,7 @@ impl ErrorValue for Error {
             Error::Interrupted => ErrorKind::Cancelled,
             Error::Tool { .. } => ErrorKind::Tool,
             Error::Store { .. } => ErrorKind::Store,
-            Error::Internal(_) => ErrorKind::Internal,
+            Error::Internal { .. } => ErrorKind::Internal,
             Error::Raised(raised) => raised.kind,
         }
     }
@@ -272,7 +272,7 @@ impl ErrorValue for Error {
             | Error::LuaQuota { .. }
             | Error::Interrupted
             | Error::Tool { .. }
-            | Error::Internal(_) => Vec::new(),
+            | Error::Internal { .. } => Vec::new(),
         }
     }
 }
@@ -374,7 +374,7 @@ pub(crate) fn error_table(lua: &Lua, error: &impl ErrorValue) -> mlua::Result<Ta
 pub(crate) fn install_error_value(lua: &Lua) -> mlua::Result<Function> {
     lua.create_function(|lua, (tag, fields): (String, Option<Table>)| {
         let kind = tag.parse::<ErrorKind>().map_err(|error| {
-            mlua::Error::external(Error::Internal(format!("the shim raised {error}").into()))
+            mlua::Error::external(Error::internal(format!("the shim raised {error}")))
         })?;
         let fields = match fields {
             Some(fields) => fields,

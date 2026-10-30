@@ -6,6 +6,7 @@ use std::fmt;
 #[path = "config-limits.rs"]
 mod limits;
 
+use runvil_types::cancel::CancelHandle;
 use runvil_types::emitter::DebugMode;
 use runvil_types::packs::{PackId, Prelude};
 use runvil_types::replay::Flags;
@@ -16,7 +17,6 @@ use runvil_vfs::VfsRef;
 
 pub use limits::RunLimits;
 
-use crate::cancel::CancelHandle;
 use crate::lua::RosterEntry;
 use crate::model::ModelInfo;
 use crate::parser::Prompt;
@@ -43,7 +43,6 @@ use super::requirements::{Requirements, UnavailablePack, UsablePack};
 /// the caller from `step`.
 ///
 /// The caller supplies the run's clock and randomness through `new`.
-#[non_exhaustive]
 pub struct RunContext {
     /// The caller's run label, moved into `RunState::execution` at start and
     /// read nowhere else.
@@ -62,15 +61,13 @@ pub struct RunContext {
     pub(super) report_debug: DebugMode,
     /// The run's cancel flag, minted by `new` and replaced by `with_cancel`.
     pub(super) cancel: CancelHandle,
-    pub(crate) limits: RunLimits,
+    /// The run's resource limits; set by `with_limits`.
+    pub(super) limits: RunLimits,
     /// The application-state snapshot the `ui()` global serves; set by `with_ui`.
     pub(super) ui: Option<serde_json::Value>,
     /// The run's whole filesystem; set by `with_vfs`.
     pub(super) vfs: VfsRef,
-    /// The run's model bindings, written by
-    /// [`prepare`](RunContext::prepare)'s fill function: which concrete
-    /// model each declared role is bound to, and the info of every model a
-    /// role is bound to.
+    /// The run's model bindings; filled by [`prepare`](RunContext::prepare).
     pub(super) model_bindings: ModelBindings,
     /// The run's tool catalog; set by `with_tools`.
     pub(super) tools: ToolCatalog,
@@ -193,12 +190,10 @@ impl RunContext {
     /// that every section's `store` table operates on. The default is a
     /// fresh memory store at `/`.
     ///
-    /// [`prepare`](RunContext::prepare) keeps a handle
-    /// set here as given. Every tool call effect carries an access to this
-    /// same filesystem, so the tools and the run share one set of files.
-    /// The caller seeds files before the run and extracts output after it
-    /// through the prepared handle, returned by
-    /// [`vfs`](RunContext::vfs).
+    /// Every tool call effect carries an access to this same filesystem, so
+    /// the tools and the run share one set of files. The caller seeds files
+    /// before the run and extracts output after it through the prepared
+    /// handle, returned by [`vfs`](RunContext::vfs).
     #[must_use]
     pub fn with_vfs(mut self, vfs: VfsRef) -> RunContext {
         self.vfs = vfs;
@@ -285,11 +280,9 @@ impl RunContext {
     /// which the caller chooses, and reports what the caller must still
     /// satisfy, returning the context beside the report.
     ///
-    /// `prepare` uses the context's filesystem as given, because the caller
-    /// builds the run's whole filesystem, including its real directories and
-    /// the declared store. The caller checks before `prepare` that each
-    /// Pack the prompt declares can serve, and merges that report into the
-    /// one `prepare` returns.
+    /// `prepare` leaves the filesystem as given. The caller checks before
+    /// `prepare` that each Pack the prompt declares can serve, and merges
+    /// that report into the one `prepare` returns.
     ///
     /// Every declared model role binds to `model`. `prepare` then checks
     /// each role's hard keywords (`thinking`, `no-thinking`) and context
@@ -322,22 +315,14 @@ impl RunContext {
         (self, requirements)
     }
 
-    /// Returns the run's VFS handle, which is the run's whole filesystem.
-    ///
-    /// The filesystem includes the real directories and the declared
-    /// store. The caller seeds files through this handle before the run and
-    /// extracts output through it after the run. Set the handle with
-    /// [`with_vfs`](RunContext::with_vfs).
+    /// Returns the run's VFS handle, set with [`with_vfs`](RunContext::with_vfs).
     #[must_use]
     pub fn vfs(&self) -> &VfsRef {
         &self.vfs
     }
 
-    /// Returns the run's model bindings, which map each declared role to a
-    /// concrete model.
-    ///
-    /// The bindings also hold the `ModelInfo` of every model a role is bound
-    /// to. [`prepare`](RunContext::prepare)'s fill function writes them.
+    /// Returns the run's [`ModelBindings`], which
+    /// [`prepare`](RunContext::prepare) fills.
     #[must_use]
     pub fn model_bindings(&self) -> &ModelBindings {
         &self.model_bindings

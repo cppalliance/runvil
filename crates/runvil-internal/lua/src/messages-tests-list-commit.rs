@@ -15,10 +15,7 @@ fn the_first_commit_extends_nothing() {
     let vm = TestVm::new().build();
     let list = vm.messages();
     vm.exec("messages:system('s'):user('u')");
-    assert_eq!(
-        list.commit(RoundId::new(0), MODEL, &request(list)),
-        (None, 0)
-    );
+    assert_eq!(list.commit(RoundId::new(0), MODEL, &request(list)), None);
 }
 
 #[test]
@@ -30,7 +27,7 @@ fn a_resend_with_no_changes_keeps_every_message() {
     let _ = list.commit(RoundId::new(0), MODEL, &sent);
     assert_eq!(
         list.commit(RoundId::new(1), MODEL, &request(list)),
-        (Some(RoundId::new(0)), 2)
+        Some((RoundId::new(0), 2))
     );
 }
 
@@ -45,7 +42,7 @@ fn appends_keep_the_whole_previous_request() {
     assert_eq!(next.len(), 4);
     assert_eq!(
         list.commit(RoundId::new(1), MODEL, &next),
-        (Some(RoundId::new(0)), 2)
+        Some((RoundId::new(0), 2))
     );
 }
 
@@ -61,7 +58,7 @@ fn a_replace_in_the_middle_keeps_the_messages_before_the_first_change() {
     vm.exec("messages:replace(4, 4, { role = 'user', content = 'changed' })");
     assert_eq!(
         list.commit(RoundId::new(1), MODEL, &request(list)),
-        (Some(RoundId::new(0)), 3)
+        Some((RoundId::new(0), 3))
     );
 }
 
@@ -75,7 +72,7 @@ fn a_system_edit_keeps_nothing() {
     vm.exec("messages:replace(1, 1, { role = 'system', content = 'other' })");
     assert_eq!(
         list.commit(RoundId::new(1), MODEL, &request(list)),
-        (Some(RoundId::new(0)), 0)
+        Some((RoundId::new(0), 0))
     );
 }
 
@@ -91,7 +88,7 @@ fn removing_the_terminal_reply_keeps_all_but_the_last_message() {
     vm.exec("messages:replace(#messages, #messages)");
     assert_eq!(
         list.commit(RoundId::new(1), MODEL, &request(list)),
-        (Some(RoundId::new(0)), 2)
+        Some((RoundId::new(0), 2))
     );
 }
 
@@ -100,18 +97,15 @@ fn each_commit_records_its_round_for_the_next_one() {
     let vm = TestVm::new().build();
     let list = vm.messages();
     vm.exec("messages:user('u')");
-    assert_eq!(
-        list.commit(RoundId::new(3), MODEL, &request(list)),
-        (None, 0)
-    );
+    assert_eq!(list.commit(RoundId::new(3), MODEL, &request(list)), None);
     vm.exec("messages:assistant('a'):user('again')");
     assert_eq!(
         list.commit(RoundId::new(7), MODEL, &request(list)),
-        (Some(RoundId::new(3)), 1)
+        Some((RoundId::new(3), 1))
     );
     assert_eq!(
         list.commit(RoundId::new(9), MODEL, &request(list)),
-        (Some(RoundId::new(7)), 3)
+        Some((RoundId::new(7), 3))
     );
 }
 

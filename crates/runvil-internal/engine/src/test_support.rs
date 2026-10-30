@@ -36,7 +36,7 @@ use crate::execute::{
 use crate::lua::run_store_op;
 
 #[cfg(test)]
-pub mod recording;
+pub(crate) mod recording;
 #[cfg(test)]
 pub(crate) mod rig;
 #[cfg(test)]
@@ -48,7 +48,6 @@ pub(crate) mod scenario;
         reason = "the reply builders and the request accessors are read only by the in-crate suites; the non-test `test-support` build compiles this module for the bench, which names only `ScriptedChat`, `ScriptedReply`, its variant fields, `new`, `complete_now`, `call_count`, `drive`, and `perform_locally`"
     )
 )]
-#[path = "test_support/scripted-chat.rs"]
 pub mod scripted_chat;
 #[cfg(test)]
 pub(crate) mod seeded;
@@ -58,7 +57,7 @@ pub(crate) mod temp_root;
 mod tools;
 
 #[cfg(test)]
-pub use recording::forward;
+pub(crate) use recording::forward;
 #[cfg(test)]
 pub(crate) use tools::FnTool;
 

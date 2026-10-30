@@ -1,5 +1,5 @@
-//! The run-scoped sets built from the prepared bindings, and the `argv`
-//! derivation: the pieces `RunState::new` assembles once per run.
+//! The run-scoped tool and model sets and the `argv` derivation: the pieces
+//! `RunState::new` assembles once per run.
 //!
 //! The sets are built once. [`derive_argv`] is not: `RunState::new` calls it
 //! for the run's own args, and every args fork calls it again, so a
@@ -20,7 +20,7 @@ use super::super::bindings::ModelBindings;
 /// and the run catalog and roster, all moved out of the context. Nothing
 /// is bound here: each section entry binds the tools it offers when it
 /// freezes its sets.
-pub(super) fn bound_tool_set(
+pub(super) fn run_tool_set(
     prompt: &Prompt,
     tools: ToolCatalog,
     packs: BTreeMap<PackId, RosterEntry>,

@@ -268,7 +268,7 @@ fn an_adhoc_tool_defined_after_the_render_has_no_seeded_count() {
 #[test]
 fn tool_calls_count_zero_for_uncalled_alias_fails_epilog_assert() {
     // The first script dispatch installs the counts seeded from the
-    // effective scope, so an offered but uncalled tool reads as 0 and an
+    // frozen sets, so an offered but uncalled tool reads as 0 and an
     // author assert on it fails the run with its own message.
     let source = setup_prompt(PromptSource::new().front("uses: [tools]").prose(
         "Only",

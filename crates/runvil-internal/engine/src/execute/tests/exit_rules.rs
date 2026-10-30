@@ -375,8 +375,7 @@ fn an_empty_reply_that_ignored_reasoning_says_so_at_the_call_site() {
 #[test]
 fn an_empty_reply_with_whitespace_only_reasoning_keeps_the_plain_phrase() {
     // The scripted model treats a whitespace-only reasoning channel as
-    // absent, as the gateway reader does, so the message carries no
-    // specific the reader would not have written.
+    // absent, so the message keeps the plain phrase.
     let gateway = ScriptedChat::new(vec![ScriptedReply::Text {
         model: MOCK_MODEL.to_owned(),
         content: String::new(),

@@ -208,10 +208,10 @@ impl Scheduler {
             self.join_owned_tasks(id, access);
         }
         drop(access);
-        // A task chain that was holding admission slots gives them back at
+        // A task chain that was holding admission slots releases them at
         // its end, before its owner is woken: the owner's re-acquire and
         // any queued sibling need the freed capacity.
-        self.admission.take_back(id);
+        self.admission.release(id);
         // A determinism violation is fatal to the run on the spot and
         // never resumes into Lua as a catchable member failure: a shim
         // that re-raises it after its own cleanup yields would flatten
@@ -274,7 +274,7 @@ impl Scheduler {
             chain.access.take()
         };
         // A queued chain aborted before admission leaves both queues, and
-        // a running task's held slots are given back.
+        // a running task's held slots are released.
         self.admission.drop_aborted(id);
         // The chain-end join: the aborted chain's final clock still
         // transitively covers its tasks, for whoever joins the aborted
@@ -284,16 +284,12 @@ impl Scheduler {
         }
     }
 
-    /// Orphans one in-flight leaf effect whose chain is going away: its
-    /// entry in the effect table becomes orphaned, so the caller's answer,
-    /// when it arrives, is discarded rather than failing the run. A tool
-    /// call's identity ends here as its answer would end it, so what the
-    /// tool already did is joined into the parked chain and anything it
-    /// tries later is refused. A tool call is also listed as withdrawn,
-    /// for the step to report. The caller still owes the answer: `Done`
-    /// waits for every issued effect, so the run ends only once the
-    /// caller has answered all of them. An id with no entry is left
-    /// unknown, so an answer for it still fails loudly.
+    /// Orphans one in-flight leaf effect whose chain is going away, as
+    /// [`EffectTable::orphan`](super::effects::EffectTable::orphan)
+    /// describes, and ends a tool call's identity through
+    /// [`Scheduler::end_tool_call`] as its answer would, so what the tool
+    /// already did is joined into the parked chain and anything it tries
+    /// later is refused.
     pub(super) fn abort_effect(&mut self, effect: EffectId) {
         if let Some((chain, exec)) = self.effects.orphan(effect) {
             self.end_tool_call(chain, exec);

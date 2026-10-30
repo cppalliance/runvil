@@ -288,7 +288,12 @@ fn the_call_depth_cap_is_a_quota_that_lua_still_reads_as_lua() {
 #[test]
 fn an_owned_lua_internal_message_reaches_the_engine_error_whole() {
     let message = format!("tool call counts: id {:?} could not be read", "web/fetch");
-    let error = Error::from(LuaError::Internal(std::borrow::Cow::Owned(message.clone())));
+    let expected_line = line!() + 1;
+    let site = std::panic::Location::caller();
+    let error = Error::from(LuaError::Internal {
+        message: std::borrow::Cow::Owned(message.clone()),
+        location: site,
+    });
     match &error {
         Error::Internal {
             message: carried, ..
@@ -299,10 +304,17 @@ fn an_owned_lua_internal_message_reaches_the_engine_error_whole() {
         error.to_string(),
         format!("internal invariant violated: {message}")
     );
+    let run_error = crate::RunError::from(error);
+    assert_eq!(run_error.kind(), crate::RunErrorKind::Internal);
+    let location = run_error
+        .location()
+        .expect("an internal fault reports a location");
     assert_eq!(
-        crate::RunError::from(error).kind(),
-        crate::RunErrorKind::Internal
+        location.path,
+        file!(),
+        "the path is the construction site's file"
     );
+    assert_eq!(location.line, Some(expected_line));
 }
 
 #[test]
@@ -324,7 +336,7 @@ fn a_poisoned_model_set_maps_to_an_internal_error_and_never_a_completion_error()
     let failure = set
         .binding("writer")
         .expect_err("a poisoned set cannot be read");
-    let error = Error::from(failure);
+    let error = Error::from(runvil_lua::Error::from(failure));
     assert!(
         matches!(&error, Error::Internal { message, .. } if message == "model set mutex was poisoned"),
         "the lock failure is an internal error: {error:?}"
@@ -332,11 +344,11 @@ fn a_poisoned_model_set_maps_to_an_internal_error_and_never_a_completion_error()
     assert!(!crate::RunError::from(error).is_retryable());
 }
 
-#[test]
-fn every_store_failure_rebuilds_from_its_raised_table_under_its_own_tag() {
+/// One failure of each store variant, with fields a table can carry.
+fn one_failure_per_store_variant() -> Vec<runvil_vfs::VfsError> {
     use runvil_vfs::{PathReason, VfsError};
     let path = || "notes.md".to_owned();
-    let failures = [
+    vec![
         VfsError::NotFound { path: path() },
         VfsError::AlreadyExists { path: path() },
         VfsError::NotADirectory { path: path() },
@@ -396,8 +408,13 @@ fn every_store_failure_rebuilds_from_its_raised_table_under_its_own_tag() {
         VfsError::Backend {
             message: "gone".to_owned(),
         },
-    ];
-    for failure in failures {
+    ]
+}
+
+#[test]
+fn every_store_failure_rebuilds_from_its_raised_table_under_its_own_tag() {
+    use runvil_vfs::VfsError;
+    for failure in one_failure_per_store_variant() {
         let raised = runvil_lua::Raised {
             kind: runvil_lua::ErrorKind::Store,
             message: failure.to_string(),
@@ -411,12 +428,21 @@ fn every_store_failure_rebuilds_from_its_raised_table_under_its_own_tag() {
         assert_eq!(source.tag(), failure.tag(), "{failure:?}");
         match (&source, &failure) {
             (
-                VfsError::NotUtf8 { valid_up_to, .. },
-                VfsError::NotUtf8 {
-                    valid_up_to: raised_offset,
-                    ..
-                },
-            ) => assert_eq!(valid_up_to, raised_offset, "the offset survives"),
+                _,
+                VfsError::NotFound { .. }
+                | VfsError::AlreadyExists { .. }
+                | VfsError::NotADirectory { .. }
+                | VfsError::IsADirectory { .. }
+                | VfsError::DirectoryNotEmpty { .. }
+                | VfsError::ScopeEnded { .. }
+                | VfsError::ReadOnly { .. }
+                | VfsError::RootProtected { .. }
+                | VfsError::NotUtf8 { .. }
+                | VfsError::InvalidPath { .. }
+                | VfsError::InvalidRange { .. }
+                | VfsError::Anchor { .. }
+                | VfsError::NoStore,
+            ) => assert_eq!(source, failure, "{failure:?}"),
             (
                 VfsError::Io {
                     kind, raw_os_error, ..

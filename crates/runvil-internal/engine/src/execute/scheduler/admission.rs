@@ -5,10 +5,8 @@
 //! and at every enclosing ancestor, held until the task ends - except
 //! while it, or a `call` chain it is blocked on, is parked on a task
 //! wait, which gives the slot back so its descendants can run - and a
-//! chain admits at most its effective limit at once. The root's limit is the run's
-//! [`RunLimits::max_concurrency`](crate::execute::RunLimits::max_concurrency)
-//! ceiling; a spawned task and a call chain start with their parent's,
-//! and `tasks.concurrency` sets it, clamped to the parent's. Queue
+//! chain admits at most its effective limit at once. Each chain's limit
+//! is its [`Chain::concurrency`](super::Chain::concurrency). Queue
 //! order is spawn order, with resumptions first. The task's start event
 //! fires at admission, when the task first runs.
 //!
@@ -33,9 +31,10 @@ use super::{ChainIndex, Scheduler};
 
 /// A queued task chain's spawn record, held from spawn until its
 /// admission: the input override and the spawning section the start event
-/// reports. The `var` snapshot lives in the chain's `var` slot from spawn
-/// on, moved once out of the yield - never copied - so a queued chain
-/// shares it until admission installs it into the first section.
+/// reports. The `var` snapshot is not in the record: it moves out of the
+/// yield into the chain's `var` slot at spawn, the start event reports a
+/// copy of it at admission, and the chain's first section entry seeds from
+/// the slot.
 #[derive(Debug)]
 pub(super) struct SpawnRecord {
     /// The `opts.input` override, reported in the start event.
@@ -48,7 +47,7 @@ pub(super) struct SpawnRecord {
 
 /// One chain an admission pass admitted, for the scheduler to apply.
 #[derive(Debug)]
-pub(super) enum Admit {
+enum Admit {
     /// A chain parked on a task wait took its slots back: it resumes with
     /// the answer its wake delivered.
     Resumed(ChainIndex),
@@ -72,7 +71,7 @@ pub(super) struct ChainTree<'a> {
 
 impl ChainTree<'_> {
     /// What kind of chain `id` is.
-    pub(super) fn kind(&self, id: ChainIndex) -> &ChainKind {
+    fn kind(&self, id: ChainIndex) -> &ChainKind {
         &self.chains[id].kind
     }
 
@@ -82,7 +81,7 @@ impl ChainTree<'_> {
     }
 
     /// The call parent blocked on `id`, when it is a `call` child.
-    pub(super) fn call_parent(&self, id: ChainIndex) -> Option<ChainIndex> {
+    fn call_parent(&self, id: ChainIndex) -> Option<ChainIndex> {
         self.chains[id].kind.parent()
     }
 
@@ -100,7 +99,7 @@ impl ChainTree<'_> {
 
     /// The chains a slot the task chain `id` holds counts against: its
     /// owner and every enclosing ancestor.
-    pub(super) fn ancestors(&self, id: ChainIndex) -> impl Iterator<Item = ChainIndex> + '_ {
+    fn ancestors(&self, id: ChainIndex) -> impl Iterator<Item = ChainIndex> + '_ {
         std::iter::successors(self.enclosing(id), |at| self.enclosing(*at))
     }
 }
@@ -108,11 +107,8 @@ impl ChainTree<'_> {
 /// The run's admission state: the chains waiting for slots and the chains
 /// holding them.
 ///
-/// A task holds a slot at its owner and at every ancestor. A task wait
-/// gives those slots back, and a call chain gives them back through its
-/// nearest ancestor that holds slots. Resumed chains are admitted before
-/// fresh spawns. Slot counts are computed from the holders, never stored,
-/// so no count can drift from them.
+/// Slot counts are computed from the holders, never stored, so no count
+/// can drift from them.
 #[derive(Debug, Default)]
 pub(super) struct Admission {
     /// Chains parked on a task wait that gave their admission slots back,
@@ -163,7 +159,7 @@ impl Admission {
     /// no admitted task, or a queued spawn is not a task chain. A failed
     /// pass leaves admission as it found it: both queues, the holders, and
     /// the given-back slots.
-    pub(super) fn plan(&mut self, tree: &ChainTree<'_>) -> Result<Vec<Admit>> {
+    fn plan(&mut self, tree: &ChainTree<'_>) -> Result<Vec<Admit>> {
         let mut admitted = Vec::new();
         if self.resuming.is_empty() && self.spawned.is_empty() {
             return Ok(admitted);
@@ -247,7 +243,7 @@ impl Admission {
     /// call chain that gave back its ancestor's, are admitted again ahead
     /// of fresh starts, while the main walk and a chain that kept its
     /// slots (a timer-only wait) resume at once.
-    pub(super) fn wake(&mut self, id: ChainIndex, tree: &ChainTree<'_>) -> bool {
+    fn wake(&mut self, id: ChainIndex, tree: &ChainTree<'_>) -> bool {
         let requeue = match tree.kind(id) {
             ChainKind::Call { .. } => self.gave_back.contains_key(&id),
             ChainKind::Task => !self.holding.contains(&id),
@@ -259,16 +255,16 @@ impl Admission {
         requeue
     }
 
-    /// Takes back `id`'s slots at its chain end, giving them up so a queued
-    /// sibling or a resumption can have them. A chain that holds none, or
-    /// holds only slots it already gave back while parked, changes nothing.
-    pub(super) fn take_back(&mut self, id: ChainIndex) {
+    /// Releases `id`'s slots at its chain end, so a queued sibling or a
+    /// resumption can have them. A chain that holds none, or whose slots
+    /// are given back while it is parked, changes nothing.
+    pub(super) fn release(&mut self, id: ChainIndex) {
         self.holding.remove(&id);
     }
 
     /// Drops an aborted chain: it leaves both queues - no admission can
     /// start it, and no wake can requeue it - and the slots it still holds
-    /// are given back. The chain's own `gave_back` record goes too, since
+    /// are released. The chain's own `gave_back` record goes too, since
     /// no resumption will read it.
     pub(super) fn drop_aborted(&mut self, id: ChainIndex) {
         self.resuming.retain(|queued| *queued != id);
@@ -393,15 +389,13 @@ impl Scheduler {
         Ok(())
     }
 
-    /// Resumes a chain parked on a task wait with its delivered answer: a
-    /// chain that gave its admission slots back waits to take them again,
-    /// reading `queued` exactly as a fresh spawn's wait does, while the
-    /// main walk, and a chain that kept its slots (a timer-only wait),
-    /// resume inline.
+    /// Delivers its answer to a chain parked on a task wait: the chain is
+    /// parked on [`Parked::Queued`] when [`Admission::wake`] requeues it for
+    /// its slots, else pushed onto the ready queue at once.
     ///
     /// # Errors
     /// Returns [`Error::Internal`] when the chain has no suspended block
-    /// to take the answer.
+    /// to take the answer, or one that already holds an answer.
     pub(super) fn wake_from_wait(
         &mut self,
         id: ChainIndex,

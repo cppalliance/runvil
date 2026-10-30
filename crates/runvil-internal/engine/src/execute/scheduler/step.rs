@@ -7,6 +7,7 @@
 use runvil_types::emitter::Emitter;
 use runvil_types::event::lifecycle;
 
+use crate::execute::requirements::NOTICE_HEADER;
 use crate::heading_address::{SectionIndex, SectionPos};
 use crate::lua::{Answer, CoroStep, LuaBlockResult, Request, YieldParse};
 use crate::parser::{Block, BodyText};
@@ -15,10 +16,6 @@ use crate::{Error, Result};
 use super::chain::ChainStep;
 use super::chain_record::{Entered, Running};
 use super::{ChainIndex, ChainOps, Scheduler};
-
-/// The notice a failed H1 gate ends the run with; the chunk's own failure
-/// follows it as the cause.
-const H1_GATE_FAILED: &str = "the environment cannot satisfy this prompt:\n- the H1 gate failed";
 
 /// What a Lua block's coroutine step leaves the chain to do, settled under
 /// the borrow of its entered section so the action can touch the
@@ -64,7 +61,7 @@ fn settle_block(
             // keep their own classification either way.
             return Err(match error {
                 error @ Error::Lua { .. } if is_h1 => Error::RequirementsUnmet {
-                    notice: H1_GATE_FAILED.to_owned(),
+                    notice: format!("{NOTICE_HEADER}\n- the H1 gate failed"),
                     cause: Some(Box::new(error)),
                 },
                 other => other,

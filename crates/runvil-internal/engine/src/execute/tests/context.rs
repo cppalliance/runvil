@@ -88,7 +88,7 @@ const fn _public_execution_types_are_send_sync_static() {
     assert_send_sync_static::<RunErrorKind>();
 }
 
-/// Lua-only prompts never build the gateway client, so these run offline.
+/// Parses `md`, adding a `# Test prompt` title when the source has none.
 pub(super) fn parse(md: &str) -> Prompt {
     let source = if md.lines().any(|line| line.starts_with("# ")) {
         md.to_string()

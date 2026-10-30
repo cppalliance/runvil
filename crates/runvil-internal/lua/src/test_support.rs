@@ -231,7 +231,7 @@ impl SectionVm {
         let models = self
             .bound_models
             .lock()
-            .map_err(|_| Error::Internal("model set mutex was poisoned".into()))?
+            .map_err(|_| Error::internal("model set mutex was poisoned"))?
             .clone();
         Ok((models, Arc::clone(self.model_selection())))
     }

@@ -48,7 +48,6 @@ fn a_chat_effect_records_its_round_alias_messages_tools_and_invocation() {
         binding,
         messages: vec![Message::user("ask")],
         after: None,
-        keep: 0,
         tools: vec![
             tool_schema_new("grab", "Grab a value", json!({ "type": "object" }))
                 .expect("a valid schema"),

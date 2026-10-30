@@ -11,7 +11,6 @@ use runvil_types::ids::TaskId;
 use runvil_vfs::VfsError;
 
 use super::{BoxedSource, Error};
-use crate::model::ModelSetError;
 
 impl Error {
     /// Builds a parse failure with a stable classification and no source span.
@@ -38,6 +37,21 @@ impl Error {
     #[track_caller]
     pub(crate) fn internal(message: impl Into<Cow<'static, str>>) -> Error {
         let location = std::panic::Location::caller();
+        Error::Internal {
+            message: message.into(),
+            file: location.file(),
+            line: location.line(),
+            cause: None,
+        }
+    }
+
+    /// Builds an internal-invariant failure at a construction site the
+    /// caller already captured, such as the one a Lua-crate internal
+    /// failure brings.
+    pub(crate) fn internal_at(
+        message: impl Into<Cow<'static, str>>,
+        location: &'static std::panic::Location<'static>,
+    ) -> Error {
         Error::Internal {
             message: message.into(),
             file: location.file(),
@@ -109,15 +123,6 @@ impl From<crate::subst::SubstitutionError> for Error {
     }
 }
 
-/// Maps a poisoned model-set lock onto [`Error::Internal`]. The lock is the
-/// run's own mutex failing, which no prompt author can cause and which is
-/// not a model failure, so it never becomes an [`Error::Completion`].
-impl From<ModelSetError> for Error {
-    fn from(_: ModelSetError) -> Error {
-        Error::internal("model set mutex was poisoned")
-    }
-}
-
 impl From<crate::model::CompletionError> for Error {
     fn from(error: crate::model::CompletionError) -> Error {
         Error::Completion(error)
@@ -126,10 +131,9 @@ impl From<crate::model::CompletionError> for Error {
 
 /// Maps a parse failure onto this internal type: a frontmatter or
 /// structured failure stays a parse failure whole, and a Lua compile or
-/// internal failure maps onto its own variant, so `Display`, `source()`
-/// chains, and `RunError` classification are unchanged by the parser
-/// extraction. The parser crate's error type is not `#[non_exhaustive]`
-/// (the two crates version together), so this match is total.
+/// internal failure maps onto its own variant. The parser crate's error
+/// type is not `#[non_exhaustive]` (the two crates version together), so
+/// this match is total.
 impl From<crate::parser::ParseError> for Error {
     fn from(error: crate::parser::ParseError) -> Self {
         match crate::parser::detail::parse_error_into_inner(error) {
@@ -143,11 +147,10 @@ impl From<crate::parser::ParseError> for Error {
     }
 }
 
-/// Maps the Lua crate's internal type back onto this one variant for
-/// variant, so `Display`, `source()` chains, and `RunError`/`CompletionError`
-/// classification are unchanged by the extraction. The Lua crate's error type
-/// is not `#[non_exhaustive]` (the two crates version together), so this match
-/// is total.
+/// Maps the Lua crate's internal type onto this one variant for variant,
+/// and rebuilds a raised error table through [`Error::from_raised`]. The
+/// Lua crate's error type is not `#[non_exhaustive]` (the two crates
+/// version together), so this match is total.
 impl From<LuaError> for Error {
     fn from(error: LuaError) -> Error {
         match error {
@@ -174,7 +177,7 @@ impl From<LuaError> for Error {
             LuaError::Interrupted => Error::Interrupted,
             LuaError::Tool { message, cause } => Error::Tool { message, cause },
             LuaError::Store { message, cause } => Error::Store { message, cause },
-            LuaError::Internal(message) => Error::internal(message),
+            LuaError::Internal { message, location } => Error::internal_at(message, location),
             LuaError::Raised(raised) => Error::from_raised(raised),
         }
     }
@@ -199,8 +202,8 @@ fn raised_field<'a>(raised: &'a runvil_lua::Raised, name: &str) -> Option<&'a st
 
 /// Rebuilds the structured [`runvil_vfs::VfsError`] a raised store
 /// error table stands in for, from its `reason`, its fields, and its
-/// message. The table was built from the same variant by this crate's own
-/// [`ErrorValue`](runvil_lua::ErrorValue) rendering, so the
+/// message. The table was built from the same variant by
+/// [`store_error_value_fields`](runvil_lua::store_error_value_fields), so the
 /// reconstruction is exact where the fields round-trip; a malformed table
 /// degrades to the closest variant rather than panicking.
 fn raised_store_error(raised: &runvil_lua::Raised) -> VfsError {
@@ -289,9 +292,12 @@ fn raised_store_error(raised: &runvil_lua::Raised) -> VfsError {
 impl Error {
     /// Maps a structured error table that surfaced as a block's failure
     /// onto the variant its kind names, so a Lua-side raise classifies as
-    /// the Rust-raised error it stands in for. A kind whose variant needs
-    /// structure the table does not hold (the tool-scope errors, the task
-    /// errors, `model_failure`, `model_required`, `internal`) keeps its
+    /// the Rust-raised error it stands in for. A `task_not_owned` or
+    /// `task_consumed` table rebuilds its variant from its `task` field, and
+    /// every `cancelled` table maps to [`Error::Interrupted`]. A kind whose
+    /// variant needs structure the table does not hold (the tool-scope
+    /// errors, `tasks_live`, `model_failure`, `model_required`, `internal`),
+    /// or a `context_exhausted` or task table missing its field, keeps its
     /// message as a Lua failure.
     fn from_raised(raised: runvil_lua::Raised) -> Error {
         match raised.kind {

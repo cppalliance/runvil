@@ -111,14 +111,10 @@ impl ChainOps<'_> {
         }
     }
 
-    /// Dispatches a `tool_calls` request: the unanswered calls of one
-    /// model round, in the model's order. Each call before the first
-    /// whose route is not the catalog is issued as a `CallSite::Batch`
-    /// under the round's `turn` and its own slot, so every catalog call
-    /// issues in this step, and the loop sends the call it stopped at
-    /// alone. A call that fails to route or to prepare
-    /// fills its slot with the error and stops the batch. The slots park
-    /// on the chain, which is answered at once when none is open.
+    /// Dispatches a `tool_calls` request, the unanswered calls of one
+    /// model round, under the batch rule in the module doc: each catalog
+    /// call is issued as a `CallSite::Batch` under the round's `turn` and
+    /// its own slot, and the slots park on the chain.
     pub(super) fn dispatch_tool_calls(
         &mut self,
         calls: Vec<ToolCallRecord>,

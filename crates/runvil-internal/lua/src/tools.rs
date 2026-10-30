@@ -88,8 +88,8 @@ pub(crate) fn adhoc_handler(lua: &Lua, name: &str) -> mlua::Result<Function> {
     };
     match handler {
         Value::Function(handler) => Ok(handler),
-        _ => Err(mlua::Error::external(Error::Internal(
-            "an adhoc tool answer names a registered handler".into(),
+        _ => Err(mlua::Error::external(Error::internal(
+            "an adhoc tool answer names a registered handler",
         ))),
     }
 }
@@ -255,9 +255,9 @@ fn adhoc_info(lua: &Lua, attrs: &Table, adhoc: &AdhocTools) -> mlua::Result<(Str
     tool_schema_new(name.clone(), description.clone(), parameters.clone())
         .map_err(|error| mlua::Error::external(format!("tools.adhoc: {error}")))?;
     let id = ToolId::parse(&id).map_err(|error| {
-        mlua::Error::external(Error::Internal(
-            format!("an adhoc tool's id is a tool id: {error}").into(),
-        ))
+        mlua::Error::external(Error::internal(format!(
+            "an adhoc tool's id is a tool id: {error}"
+        )))
     })?;
     Ok((name, ToolInfo::new(id, description, parameters)))
 }

@@ -106,10 +106,6 @@ use chain_record::{Chain, ChainArena, ChainIndex, ChatAnchor, Counters};
 use effects::{CallSite, Continuation, EffectTable, Pending, ToolCallContinuation};
 use tasks::TaskArena;
 
-/// The deepest nesting a chain may run at, counting `call` children and
-/// spawned tasks, fanout arms included; the first level counts.
-const MAX_CALL_DEPTH: usize = 8;
-
 /// The run's final result when no section produced a reply, which three
 /// fallback sites share: a prompt with neither H1 blocks nor sections, a
 /// top-level walk that ends without a scalar, and an H1 pass with no walk
@@ -165,13 +161,8 @@ pub(crate) struct Scheduler {
     /// The effect table: every issued effect the caller has not answered
     /// yet, and the step's outgoing queue of issued and withdrawn effects.
     effects: EffectTable,
-    /// The task arena: one entry per task the run has started, keyed by the
-    /// task's id: its backing chain's id, or, for an internal timer, the id
-    /// it took from its owner's child counter. An entry outlives its chain:
-    /// it holds the terminal state and the undelivered outcome at least
-    /// until the owner takes the result or ends, and in fact for the run -
-    /// the arena is append-only like the chain arena, so `status` can report
-    /// a terminal state at any later time.
+    /// The task arena; [`TaskArena`] and the `tasks` module state its
+    /// lifecycle.
     tasks: TaskArena,
     /// Admission: the task chains waiting for slots - resumed chains,
     /// admitted first, and fresh spawns with their spawn records - and the
@@ -229,18 +220,19 @@ impl Scheduler {
         Arc::clone(self.ctx.prompt())
     }
 
-    /// Whether the run's outcome is decided: the end boundary is reported
-    /// and only the orphans' answers stand between the run and `Done`.
+    /// Whether the run's outcome is decided: its end boundary is reported,
+    /// so at most the orphans' answers stand between the run and `Done`.
     pub(super) fn decided(&self) -> bool {
         matches!(self.phase, Phase::Ending(_) | Phase::Done)
     }
 
-    /// Resumes `id` at once with `answer`: the inline-answer path of every
-    /// request the core keeps, and of a chain end answering another chain.
+    /// Answers `id` at once with `answer` and queues it to resume: the
+    /// inline-answer path of every request the core keeps, and of a chain
+    /// end answering another chain.
     ///
     /// # Errors
     /// Returns [`Error::Internal`] when the chain has no suspended block
-    /// to take the answer.
+    /// to take the answer, or one that already holds an answer.
     fn answer_inline(&mut self, id: ChainIndex, answer: Result<Answer<Error>>) -> Result<()> {
         self.chains[id].deliver(answer)?;
         self.ready.push_back(id);

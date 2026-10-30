@@ -14,7 +14,7 @@
 //! for the normative statement), and hands the pass's tasks to the walk as
 //! their owner.
 //!
-//! [`Chain::counters`]: super::Chain
+//! [`Chain::counters`]: super::Chain::counters
 
 use std::sync::Arc;
 
@@ -44,10 +44,9 @@ impl Scheduler {
         );
         let access = self.ctx.vfs().acquire(origin).map_err(Error::store)?;
         self.scope = Some(runvil_vfs::detail::scope_handle(&access));
-        // The pass is the root lineage's first record: its one frame takes
-        // entry 0, and the walk that follows, a second record under the
-        // same lineage, continues its counters. Its admission limit is the
-        // run's ceiling.
+        // The pass's one frame takes the root lineage's entry 0, and the
+        // walk that follows continues its counters (see `Chain::lineage`).
+        // Its admission limit is the run's ceiling.
         self.start_root_chain(
             ChainKind::H1,
             Counters::default(),
@@ -90,12 +89,11 @@ impl Scheduler {
         // with the walk, and a task the pass spawned joins the one root
         // identity.
         let walk_access = Arc::clone(chain.access()?);
-        // The walk shares the root lineage with the pass, so it continues
-        // the pass's counters (see `Chain::counters` for the normative
-        // statement): the pass took entry 0, the first walked section
-        // takes entry 1, and a child the pass started keeps its index. Its
-        // admission limit continues too: the pass may have lowered it with
-        // `tasks.concurrency`.
+        // The walk continues the pass's counters (see `Chain::counters` for
+        // the normative statement): the pass took entry 0, the first walked
+        // section takes entry 1, and a child the pass started keeps its
+        // index. Its admission limit continues too: the pass may have
+        // lowered it with `tasks.concurrency`.
         let counters = chain.counters;
         let concurrency = chain.concurrency;
         if crate::parser::detail::sections(self.ctx.prompt()).is_empty() {

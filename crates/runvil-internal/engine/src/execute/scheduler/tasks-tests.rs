@@ -107,6 +107,24 @@ fn a_completed_task_is_done_and_its_outcome_is_taken_once() {
 }
 
 #[test]
+fn a_refused_delivery_leaves_the_entry_unchanged() {
+    let mut arena = TaskArena::default();
+    let (cancelled, _) = spawn(&mut arena, chain(0), 0);
+    let (abandoned, _) = spawn(&mut arena, chain(0), 1);
+    let (running, _) = spawn(&mut arena, chain(0), 2);
+    assert!(arena.stop(&cancelled, Stop::Cancelled).is_some());
+    assert!(arena.stop(&abandoned, Stop::Abandoned).is_some());
+    for (task, state) in [
+        (&cancelled, TaskState::Cancelled),
+        (&abandoned, TaskState::Abandoned),
+        (&running, TaskState::Running),
+    ] {
+        assert!(arena.take_delivery(task).is_err(), "{task}");
+        assert_eq!(arena.state_of(task), Some(state), "{task}");
+    }
+}
+
+#[test]
 fn completing_a_task_that_is_not_live_changes_nothing() {
     let mut arena = TaskArena::default();
     let (cancelled, _) = spawn(&mut arena, chain(0), 0);

@@ -2,7 +2,6 @@
 //! counts, the frozen sets' entries, the section's offered tools and the
 //! catalog Packs they come from, and its effective model binding.
 
-use std::borrow::Cow;
 use std::sync::{Arc, Mutex};
 
 use mlua::{LuaSerdeExt, Value};
@@ -204,7 +203,7 @@ fn expanded(
 ) -> Result<Vec<OfferedTool>> {
     let runtime = runtime
         .lock()
-        .map_err(|_| Error::Internal("section offers lock was poisoned".into()))?;
+        .map_err(|_| Error::internal("section offers lock was poisoned"))?;
     let mut tools = Vec::new();
     let offers = runtime
         .offers
@@ -218,9 +217,11 @@ fn expanded(
                 } else {
                     set.catalog().get(id).cloned().map(OfferedTool::Catalog)
                 };
-                tools.push(tool.ok_or_else(|| {
-                    Error::Internal(Cow::Owned(format!("offered tool {id} names no tool")))
-                })?);
+                tools.push(
+                    tool.ok_or_else(|| {
+                        Error::internal(format!("offered tool {id} names no tool"))
+                    })?,
+                );
             }
             OfferTarget::Pack(pack) if is_adhoc(pack) => {
                 tools.extend(adhoc.bindings()?.into_iter().map(OfferedTool::Adhoc));
@@ -254,17 +255,15 @@ pub fn resolve_model_binding(
     let selection = {
         let runtime = runtime
             .lock()
-            .map_err(|_| Error::Internal("model selection lock was poisoned".into()))?;
+            .map_err(|_| Error::internal("model selection lock was poisoned"))?;
         runtime
             .selection()
             .map(|(alias, options)| (alias.as_str().to_owned(), options))
     };
     let frozen = |alias: &str| -> Result<ModelBinding> {
-        bindings.binding(alias)?.ok_or_else(|| {
-            Error::Internal(Cow::Owned(format!(
-                "model alias {alias:?} has no frozen binding"
-            )))
-        })
+        bindings
+            .binding(alias)?
+            .ok_or_else(|| Error::internal(format!("model alias {alias:?} has no frozen binding")))
     };
     match selection {
         Some((alias, options)) => Ok(Some(options.apply(frozen(&alias)?))),

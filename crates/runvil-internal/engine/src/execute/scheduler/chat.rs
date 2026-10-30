@@ -32,7 +32,7 @@ use runvil_types::tools::ToolInfo;
 
 use crate::execute::context::ReportingHandles;
 use crate::execute::run::{Effect, PackToolSets};
-use crate::execute::scope::{SectionOffers, offered_packs, prepare_effective_scope, tool_schema};
+use crate::execute::scope::{SectionOffers, freeze_tool_sets, offered_packs, tool_schema};
 use crate::execute::turn::{Served, advance_turn, report_model_turn};
 use crate::lua::{
     Answer, ChatOutcome, ChatResult, MessageList, OverflowReason, RenderedTools, ToolSet,
@@ -120,8 +120,8 @@ impl ChainOps<'_> {
         let rendered = if let Some(rendered) = list.rendered_tools() {
             rendered
         } else {
-            let set = chain.ctx.tool_set();
-            let offers = SectionOffers::read(set, vm)?;
+            let tool_set = chain.ctx.tool_set();
+            let offers = SectionOffers::read(tool_set, vm)?;
             let offered = offered_packs(&offers);
             if !offered.is_empty() {
                 let effect = Effect::Render {
@@ -132,10 +132,10 @@ impl ChainOps<'_> {
                 self.issue(effect, Continuation::Render(binding));
                 return Ok(Dispatched::Issued);
             }
-            let frozen = prepare_effective_scope(
+            let frozen = freeze_tool_sets(
                 &offers,
                 offered,
-                set.catalog(),
+                tool_set.catalog(),
                 emitter.as_ref(),
                 &section,
             )?;
@@ -175,12 +175,11 @@ impl ChainOps<'_> {
             .anchor
             .sending(binding.id().clone(), conversation.clone());
         let round = self.number_round(ReplyOrigin::Chat);
-        let (after, keep) = list.commit(round.id, binding.id().name(), &conversation);
+        let after = list.commit(round.id, binding.id().name(), &conversation);
         let effect = Effect::Chat {
             binding,
             messages: conversation,
             after,
-            keep,
             tools,
             round,
         };
@@ -217,11 +216,11 @@ impl ChainOps<'_> {
         let chain = &*self.chain;
         let frame = chain.frame()?;
         let vm = frame.vm();
-        let set = chain.ctx.tool_set();
-        let frozen = prepare_effective_scope(
-            &SectionOffers::read(set, vm)?,
+        let tool_set = chain.ctx.tool_set();
+        let frozen = freeze_tool_sets(
+            &SectionOffers::read(tool_set, vm)?,
             rendered,
-            set.catalog(),
+            tool_set.catalog(),
             frame.reporting_handles().emitter.as_ref(),
             chain.section_name(),
         )?;
@@ -323,9 +322,7 @@ impl Scope<'_> {
 }
 
 /// One arrived round's reporting context: the round's id, the chain's
-/// section label, and its reporting handles, whose turn counter is a task
-/// chain's own, so its turn numbers, and `tasks.status`'s `turns`, count
-/// only its own rounds.
+/// section label, and its task's reporting handles.
 #[derive(Debug)]
 struct ArrivedRound {
     id: RoundId,

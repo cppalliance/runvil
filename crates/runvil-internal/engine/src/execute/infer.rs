@@ -1,6 +1,6 @@
 //! The nested-inference round a section's `models.infer` yields resolve to.
 //!
-//! One `infer` shape only: a single direct, tool-free gateway round on a
+//! One `infer` shape only: a single direct, tool-free model round on a
 //! fresh conversation. `h:infer(prompt)` runs it with the handle's
 //! frozen binding; `models.infer(prompt)` resolves the section's
 //! current model and runs the same path. Neither form sends tools, reads or
@@ -12,9 +12,6 @@
 //! reports the round and renders its text, and the yielding chain resumes
 //! with the outcome.
 
-use std::sync::atomic::AtomicU32;
-
-use runvil_types::emitter::Emitter;
 use runvil_types::event::ReplyOrigin;
 use runvil_types::event::lifecycle;
 use runvil_types::ids::RoundId;
@@ -22,6 +19,7 @@ use runvil_types::ids::RoundId;
 use crate::Error;
 use crate::model::{Completion, CompletionError, CompletionErrorKind, CompletionResult};
 
+use super::context::ReportingHandles;
 use super::turn;
 
 /// Reports one completed infer round through [`turn::report_model_turn`],
@@ -31,13 +29,12 @@ use super::turn;
 fn accept_infer_completion(
     completion: Completion,
     round: RoundId,
-    emitter: &Emitter,
+    reporting: &ReportingHandles,
     section: &str,
-    turns: &AtomicU32,
 ) -> Result<String, Error> {
-    let turn = turn::advance_turn(turns);
+    let turn = turn::advance_turn(&reporting.turns);
     let (outcome, _) = turn::report_model_turn(
-        emitter,
+        &reporting.emitter,
         section,
         turn,
         round,
@@ -69,14 +66,14 @@ fn malformed_reply(specific: &str) -> Error {
     ))
 }
 
-/// Applies one infer round's answer - the completion the performer
-/// obtained, or its failure - reporting it exactly like a prose round
-/// through `turn::report_model_turn` on the chain's `emitter` under
-/// `section`, and renders its text.
+/// Applies one infer round's answer, the completion the caller obtained
+/// or its failure: it reports the round exactly like a prose round,
+/// through `turn::report_model_turn` on the chain's reporting handles
+/// under `section`, and renders its text.
 ///
-/// A failed completion is a failed turn and the call's error. The
-/// performer's task is aborted on cancellation before any answer lands,
-/// so no `MODEL_TURN_FAILED` fires for an aborted round.
+/// A failed completion is a failed turn and the call's error. A round the
+/// caller drops never reaches here: the drop resumes the chain with a
+/// cancellation, so no `MODEL_TURN_FAILED` fires for it.
 ///
 /// # Errors
 /// Returns the completion's failure, or an [`Error::Completion`] of kind
@@ -85,18 +82,19 @@ fn malformed_reply(specific: &str) -> Error {
 pub(super) fn accept_infer(
     result: std::result::Result<Box<Completion>, CompletionError>,
     round: RoundId,
-    emitter: &Emitter,
+    reporting: &ReportingHandles,
     section: &str,
-    turns: &AtomicU32,
 ) -> Result<String, Error> {
     let completion = match result {
         Ok(completion) => completion,
         Err(error) => {
-            emitter.report(section, lifecycle::MODEL_TURN_FAILED);
+            reporting
+                .emitter
+                .report(section, lifecycle::MODEL_TURN_FAILED);
             return Err(Error::from(error));
         }
     };
-    accept_infer_completion(*completion, round, emitter, section, turns)
+    accept_infer_completion(*completion, round, reporting, section)
 }
 
 #[cfg(test)]

@@ -1,10 +1,10 @@
-//! What kind of chain a record is: the main walk, the H1 pass, a
-//! `call` child, or a task's backing chain, each with the links only that
-//! kind has.
+//! The chain record's [`ChainKind`].
 
 use super::ChainIndex;
 
-/// What kind of chain a record is.
+/// What kind of chain a record is: the main walk, the H1 pass, a `call`
+/// child, or a task's backing chain, each with the links only that kind
+/// has.
 #[derive(Debug)]
 pub(in crate::execute::scheduler) enum ChainKind {
     /// The main walk.

@@ -15,8 +15,8 @@ use crate::Error;
 #[non_exhaustive]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum RunErrorKind {
-    /// Parsing the prompt failed: invalid frontmatter YAML, or a failure the
-    /// parser classified as structural.
+    /// Parsing the prompt failed: invalid frontmatter YAML, a failure the
+    /// parser classified as structural, or a Lua block that did not compile.
     Parse,
     /// The prompt declared a `runvil:` major version outside the set
     /// this build supports.
@@ -38,28 +38,30 @@ pub enum RunErrorKind {
     /// deterministic. Lua code cannot catch this failure.
     Determinism,
     /// A section's Lua phase failed to run or return a usable value, or the
-    /// author's program broke where the Engine cannot fix it: Lua source
-    /// that did not compile, a chain that ended with tasks still live, a
+    /// author's program broke where the Engine cannot fix it: a Pack prelude
+    /// that did not load, a chain that ended with tasks still live, a
     /// task reached for by a chain that does not own it, a task result
     /// waited on twice, a wait delivering a cancelled task that surfaced
     /// uncaught, and a failed `{{ }}` substitution.
     Lua,
-    /// A Lua quota ran out: the `log()` event budget, the `log()` byte
-    /// budget, or the instruction-hook budget that keeps a block
-    /// cancellable. Also the `call`, `tasks.spawn`, or `tasks.fanout` arm
-    /// that would have nested past the call-depth cap.
+    /// A Lua quota ran out: the `log()` event budget or the `log()` byte
+    /// budget. Also the `call`, `tasks.spawn`, or `tasks.fanout` arm that
+    /// would have nested past the call-depth cap.
     Quota,
     /// `compactors.fail` raised context exhaustion: a request overflowed the
     /// model's context window and the selected compactor left it over the
     /// limit, or a section's Lua raised it with its own reason.
     ContextExhausted,
-    /// An internal invariant failed.
+    /// An internal invariant failed, or the caller broke the `step` and
+    /// `resume` contract: a `step` after `Done`, an answer of the wrong
+    /// kind, an answer for an id the run never issued, or a second answer
+    /// for one effect.
     Internal,
-    /// The environment falls short of a requirement the prompt states: a
-    /// missing or unavailable required Pack, a service the caller left out,
-    /// a model requirement a bound model fails to meet (a context minimum
-    /// or a hard keyword), or an H1 block that failed the prompt's hard
-    /// gate.
+    /// The environment falls short of what the prompt needs: a missing or
+    /// unavailable required Pack, a service the caller left out, a model
+    /// requirement a bound model fails to meet (a context minimum or a hard
+    /// keyword), a reserved Pack id that the run's tool catalog or Pack
+    /// roster names, or an H1 block that failed the prompt's hard gate.
     RequirementsUnmet,
 }
 
@@ -97,40 +99,6 @@ pub struct SourceLocation {
     pub span: Option<Range<usize>>,
 }
 
-impl SourceLocation {
-    /// Builds a location in `path` with no line, column, or span.
-    #[must_use]
-    pub(crate) fn new(path: impl Into<String>) -> SourceLocation {
-        SourceLocation {
-            path: path.into(),
-            line: None,
-            column: None,
-            span: None,
-        }
-    }
-
-    /// Sets the 1-based line.
-    #[must_use]
-    pub(crate) fn with_line(mut self, line: Option<u32>) -> SourceLocation {
-        self.line = line;
-        self
-    }
-
-    /// Sets the 1-based column.
-    #[must_use]
-    pub(crate) fn with_column(mut self, column: Option<u32>) -> SourceLocation {
-        self.column = column;
-        self
-    }
-
-    /// Sets the byte span of the offending region in the document body.
-    #[must_use]
-    pub(crate) fn with_span(mut self, span: Option<Range<usize>>) -> SourceLocation {
-        self.span = span;
-        self
-    }
-}
-
 /// The error a failed prompt run reports.
 ///
 /// A run that fails ends with [`Step::Done`](super::Step::Done), whose
@@ -142,7 +110,6 @@ impl SourceLocation {
 /// itself. A failure whose message does not hold its underlying error, such
 /// as a model round's, keeps it behind [`std::error::Error::source`] instead.
 #[derive(Debug)]
-#[non_exhaustive]
 pub struct RunError {
     inner: Error,
 }
@@ -192,19 +159,15 @@ impl RunError {
         &self.inner
     }
 
-    /// Returns the originating error this failure keeps, when it has one.
-    ///
-    /// Eight variants can answer one. Seven hold it in a `cause` field: a
+    /// Returns the error this failure originated from, when it keeps one: a
     /// Lua runtime failure keeps the `mlua` error, a Lua compile failure the
     /// compiler diagnostic, a schema binding failure the validation error, a
     /// tool failure the tool's own error, a store failure the store's
     /// structured error, an unmet requirement the failure it stands in for,
-    /// and an internal fault the failure that broke the invariant. The
-    /// eighth, `Parse`, is transparent and answers the parser's cause.
-    ///
-    /// `Completion` and `Substitution` are transparent too, and both answer
-    /// `None`: whatever cause each holds belongs to the error it wraps, not
-    /// to this one.
+    /// an internal fault the failure that broke the invariant, and a parse
+    /// failure the parser's cause. A model round's failure and a failed
+    /// `{{ }}` substitution answer `None`: whatever cause each holds belongs
+    /// to the error it wraps.
     ///
     /// The message already holds the cause's text, so
     /// [`std::error::Error::source`] does not return it again, and a printer
@@ -259,15 +222,18 @@ impl RunError {
     #[must_use]
     pub fn location(&self) -> Option<SourceLocation> {
         match &self.inner {
-            Error::Parse(error) => Some(
-                SourceLocation::new(error.name().unwrap_or("<prompt>"))
-                    .with_line(error.line().map(NonZeroU32::get))
-                    .with_column(error.column().map(NonZeroU32::get))
-                    .with_span(error.span()),
-            ),
-            Error::Internal { file, line, .. } => {
-                Some(SourceLocation::new(*file).with_line(Some(*line)))
-            }
+            Error::Parse(error) => Some(SourceLocation {
+                path: error.name().unwrap_or("<prompt>").to_owned(),
+                line: error.line().map(NonZeroU32::get),
+                column: error.column().map(NonZeroU32::get),
+                span: error.span(),
+            }),
+            Error::Internal { file, line, .. } => Some(SourceLocation {
+                path: (*file).to_owned(),
+                line: Some(*line),
+                column: None,
+                span: None,
+            }),
             Error::Completion(_)
             | Error::Interrupted
             | Error::Lua { .. }

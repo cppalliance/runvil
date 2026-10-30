@@ -218,7 +218,7 @@ pub(crate) fn install_pack_list(lua: &Lua, tools: &Table, names: PackNames) -> R
     let proxy = read_only_walk(lua, index, step, "tools.packs").map_err(Error::lua)?;
     let meta = proxy
         .metatable()
-        .ok_or_else(|| Error::Internal("tools.packs was built without a metatable".into()))?;
+        .ok_or_else(|| Error::internal("tools.packs was built without a metatable"))?;
     meta.raw_set("__len", len).map_err(Error::lua)?;
     tools.raw_set("packs", proxy).map_err(Error::lua)
 }

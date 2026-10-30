@@ -12,6 +12,7 @@
 use std::fmt;
 use std::sync::Arc;
 
+use runvil_types::cancel::CancelHandle;
 use runvil_types::event::Event;
 use runvil_types::ids::Provenance;
 
@@ -22,7 +23,6 @@ pub use effect::{
     PackToolSets, Round, ToolAnswerRecord, ToolCallOrigin, ToolCaller,
 };
 
-use crate::cancel::CancelHandle;
 use crate::parser::{ParseErrorKind, Prompt};
 use crate::{Error, Result};
 
@@ -40,24 +40,20 @@ use super::scheduler::Scheduler;
 #[derive(Debug)]
 pub enum Step {
     /// The run continues.
-    ///
-    /// `effects` lists the effects this step issued for the caller to
-    /// perform, in issue order. Each comes with the provenance of the task
-    /// that built it. An empty list means every chain is waiting on an
-    /// effect that an earlier step issued. `events` lists the events the
-    /// step reported, in order. `withdrawn` lists the tool calls the step
-    /// orphaned while the run goes on. It may name a call that `effects`
-    /// lists, because one step can issue a call and then orphan it.
     Pending {
-        /// The effects the caller must perform and answer through
-        /// [`Run::resume`].
+        /// The effects this step issued, in issue order, each with the
+        /// provenance of the task that built it, for the caller to perform
+        /// and answer through [`Run::resume`]. An empty list means every
+        /// chain is waiting on an effect that an earlier step issued.
         effects: Vec<IssuedEffect>,
-        /// The events the step reported.
+        /// The events the step reported, in order.
         events: Vec<Event>,
         /// The tool-call effects this step orphaned, in effect-id order.
         /// Their answers will be discarded, so the caller may drop each one
         /// it still holds; it still owes each one answer. Empty once the
         /// run is decided, when the caller may drop everything it holds.
+        /// It may name a call that `effects` lists, because one step can
+        /// issue a call and then orphan it.
         withdrawn: Vec<EffectId>,
     },
     /// The run is over.
@@ -177,11 +173,9 @@ impl Run {
         }
     }
 
-    /// Builds the run over an assembled context: the constructor the
-    /// in-crate drivers and the suites use when they shape the context
-    /// themselves.
+    /// Builds the live run over a state that passed `prepare_state`.
     #[must_use]
-    pub(crate) fn from_state(state: RunState) -> Run {
+    fn from_state(state: RunState) -> Run {
         let cancel = state.cancel().clone();
         Run {
             start: Start::Live(Box::new(Scheduler::new(state))),

@@ -116,8 +116,9 @@ pub fn perform_vfs_op(
 pub enum RunResult {
     /// The run completed with its final text.
     Completed(String),
-    /// The caller cancelled the run, or dropped an effect the run was
-    /// waiting on and the cancelled error went uncaught.
+    /// The caller cancelled the run or dropped an effect the run was waiting
+    /// on and the cancelled error went uncaught, or a block raised a caught
+    /// `cancelled` error value again after another suspending call.
     Cancelled,
     /// The run failed. The error's kind classifies the failure.
     Failure(RunError),

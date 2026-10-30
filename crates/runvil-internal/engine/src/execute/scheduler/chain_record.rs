@@ -1,8 +1,7 @@
 //! The chain record and the arena that holds it. A record is one chain's
 //! identity, kind, walk stack, entered section, task bookkeeping, and
 //! walk-scoped slots. The [`ChainArena`] holds one per chain the run has
-//! started, indexed by [`ChainIndex`]; the H1 pass and the walk after it
-//! share the root lineage `0` and are two records.
+//! started, indexed by [`ChainIndex`].
 
 use std::fmt;
 use std::num::NonZeroUsize;
@@ -20,8 +19,6 @@ use crate::heading_address::SectionPos;
 use crate::lua::{Answer, Blocked};
 use crate::parser::{Block, BodyText, Prompt, Section};
 use crate::{Error, Result};
-
-use super::MAX_CALL_DEPTH;
 
 mod anchor;
 mod arena;
@@ -59,6 +56,10 @@ impl BlockIndex {
         BlockIndex(self.0 + 1)
     }
 }
+
+/// The deepest nesting a chain may run at, counting `call` children and
+/// spawned tasks, fanout arms included; the first level counts.
+const MAX_CALL_DEPTH: usize = 8;
 
 /// A chain's call nesting depth: each `call` child and each spawned task
 /// runs one level deeper than the chain that started it, so the cap holds
@@ -250,12 +251,10 @@ impl Walk {
 /// [`Entered`]; the fall-through advance tears the old one down and the
 /// next entry constructs the next.
 pub(super) struct Chain {
-    /// The chain's hierarchical id: the parent chain's id extended by the
-    /// parent's local child counter (the root lineage is `0`, which the H1
-    /// pass and the walk that follows it share as two arena records).
-    /// Every id the chain hands out - its children's, its section
-    /// entries' - extends this path, so two runs of one prompt allocate
-    /// identical ids however their chains interleave.
+    /// The chain's hierarchical [`ChainId`], allocated under the scheme
+    /// [`runvil_types::ids`] states: every id the chain hands out extends
+    /// it. The H1 pass and the walk after it are two arena records under
+    /// the root lineage `0`.
     pub(super) lineage: ChainId,
     /// The chain's local child and entry counters under `lineage`. This is
     /// the normative `0.1` statement for the run: the root chain's entry 0
@@ -366,10 +365,7 @@ impl Chain {
             .ok_or(Error::internal("a live chain holds its access capability"))
     }
 
-    /// Hands out the chain's next child id: its id extended by its local
-    /// child counter, which `call` children, spawned tasks, and the wait
-    /// shims' timers share, so the ids a chain hands out depend only on
-    /// the order of its own dispatches.
+    /// Hands out the chain's next child id, under [`Counters::next_child`].
     ///
     /// # Errors
     /// Returns [`Error::Internal`] when one chain has started `u32::MAX`
@@ -382,9 +378,8 @@ impl Chain {
         Ok(self.lineage.child(index))
     }
 
-    /// Hands out the chain's next section-entry id: its id extended by its
-    /// local entry counter, the value the entered section reads as
-    /// `sys.id`.
+    /// Hands out the chain's next section-entry id, under
+    /// [`Counters::next_entry`].
     ///
     /// # Errors
     /// Returns [`Error::Internal`] when one chain has entered `u32::MAX`
@@ -420,8 +415,9 @@ impl Chain {
     /// the block resumes.
     ///
     /// # Errors
-    /// Returns [`Error::Internal`] when the chain has no suspended block:
-    /// every answer goes to a block that yielded for it.
+    /// Returns [`Error::Internal`] when the chain has no suspended block, or
+    /// when its block already holds an answer: every answer goes to a block
+    /// that yielded for it, once, and the first answer stays.
     #[track_caller]
     pub(super) fn deliver(&mut self, answer: Result<Answer<Error>>) -> Result<()> {
         let Some(running) = self
@@ -433,6 +429,11 @@ impl Chain {
                 "a delivered answer implies a suspended block",
             ));
         };
+        if running.answer.is_some() {
+            return Err(Error::internal(
+                "a suspended block holds at most one delivered answer",
+            ));
+        }
         running.answer = Some(answer);
         Ok(())
     }

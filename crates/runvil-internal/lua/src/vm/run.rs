@@ -22,7 +22,7 @@ impl SectionVm {
         let mut slot = self
             .jump_slot
             .lock()
-            .map_err(|_| Error::Internal(JUMP_SLOT_POISONED.into()))?;
+            .map_err(|_| Error::internal(JUMP_SLOT_POISONED))?;
         Ok(slot.take())
     }
 
@@ -235,7 +235,7 @@ impl SectionVm {
         }
         match self.library_programs.lock() {
             Ok(libraries) => program.map_runtime_error_among(error, &libraries),
-            Err(_) => Error::Internal("require's loaded library programs were poisoned".into()),
+            Err(_) => Error::internal("require's loaded library programs were poisoned"),
         }
     }
 }

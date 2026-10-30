@@ -51,8 +51,8 @@ fn calls_slow_tool(effect: &Effect) -> bool {
 
 #[test]
 fn run_with_a_pre_cancelled_handle_fails_as_cancelled() {
-    use crate::cancel::CancelHandle;
     use runvil_parser::test_support::prompt;
+    use runvil_types::cancel::CancelHandle;
 
     // The explicit-cancel wiring of the public entry point: a handle passed
     // through `RunContext::with_cancel` is installed around the whole run body, so

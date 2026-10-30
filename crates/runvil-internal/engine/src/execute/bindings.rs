@@ -13,7 +13,6 @@ use crate::model::{ModelId, ModelInfo};
 /// A lookup goes from a role label to a model identity, and from that
 /// identity to the model's info.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
-#[non_exhaustive]
 pub struct ModelBindings {
     /// The decision: role label to the bound model's identity.
     roles: BTreeMap<String, ModelId>,
@@ -23,7 +22,7 @@ pub struct ModelBindings {
 
 impl ModelBindings {
     /// Binds the role `label` to `model`, recording the model info under
-    /// its identity. The fill function's only writer.
+    /// its identity.
     pub(super) fn bind(&mut self, label: &str, model: ModelInfo) {
         self.roles.insert(label.to_owned(), model.id().clone());
         self.models.entry(model.id().clone()).or_insert(model);

@@ -192,18 +192,18 @@ impl MessageList {
 
     /// Records `sent` as the list's send in `round` to the model named
     /// `model`, and returns the previous send's round and how many leading
-    /// messages `sent` shares with that send; `(None, 0)` on the first.
+    /// messages `sent` shares with that send; `None` on the first.
     #[must_use]
-    pub fn commit(&self, round: RoundId, model: &str, sent: &[Message]) -> (Option<RoundId>, u64) {
+    pub fn commit(&self, round: RoundId, model: &str, sent: &[Message]) -> Option<(RoundId, u64)> {
         let latest = (round, model.to_owned(), sent.to_vec());
         let previous = self.state().last.replace(latest);
-        previous.map_or((None, 0), |(after, _, earlier)| {
+        previous.map(|(after, _, earlier)| {
             let keep = earlier
                 .iter()
                 .zip(sent)
                 .take_while(|(earlier, now)| earlier == now)
                 .count();
-            (Some(after), u64::try_from(keep).unwrap_or(u64::MAX))
+            (after, u64::try_from(keep).unwrap_or(u64::MAX))
         })
     }
 

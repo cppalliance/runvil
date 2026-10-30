@@ -230,8 +230,8 @@ fn end_load_capture(
     let section = section.to_owned();
     lua.create_function(move |_, finished: bool| {
         let Some((_, heading)) = lock(&loading, "library-load state")?.pop() else {
-            return Err(mlua::Error::external(Error::Internal(
-                "require ended a library load that never began".into(),
+            return Err(mlua::Error::external(Error::internal(
+                "require ended a library load that never began",
             )));
         };
         depth.fetch_sub(1, Ordering::Relaxed);
@@ -250,9 +250,7 @@ fn end_load_capture(
 /// to an internal error.
 fn lock<'a, T>(slot: &'a Mutex<T>, what: &str) -> mlua::Result<MutexGuard<'a, T>> {
     slot.lock().map_err(|_| {
-        mlua::Error::external(Error::Internal(
-            format!("require's {what} was poisoned").into(),
-        ))
+        mlua::Error::external(Error::internal(format!("require's {what} was poisoned")))
     })
 }
 
