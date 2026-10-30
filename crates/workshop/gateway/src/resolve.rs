@@ -11,7 +11,7 @@
 use std::fmt;
 use std::path::Path;
 
-use gateway_api_discovery::{Resolution, SidecarError, StaleReason, ValidatedConnection};
+use crate::discovery::{Resolution, SidecarError, StaleReason, ValidatedConnection};
 
 use workshop_protocol::Activity;
 use workshop_registry::Push;
@@ -184,15 +184,15 @@ impl ResolveError {
 /// config names no explicit gateway.
 pub fn resolve(config: &GatewayConfig) -> Result<ResolvedGateway, ResolveError> {
     resolve_with(
-        gateway_api_discovery::default_run_dir().as_deref(),
+        crate::discovery::default_run_dir().as_deref(),
         config,
         probe,
     )
 }
 
-/// The production probe: `gateway_api_discovery`'s stale-detecting resolve.
+/// The production probe: the fork's stale-detecting resolve.
 fn probe(run_dir: &Path) -> Result<Resolution, SidecarError> {
-    gateway_api_discovery::resolve(run_dir)
+    crate::discovery::resolve(run_dir)
 }
 
 /// `resolve` against an explicit run directory and probe, so tests point
@@ -248,7 +248,7 @@ fn resolve_with(
 /// Reifies the shared resolver's live result as the capability stored in
 /// the workshop's immutable gateway snapshot.
 fn validate_resolved(
-    file: gateway_api_discovery::GatewayDiscoveryFile,
+    file: crate::discovery::GatewayDiscoveryFile,
 ) -> Result<ValidatedConnection, StaleReason> {
     ValidatedConnection::validate(file)
 }

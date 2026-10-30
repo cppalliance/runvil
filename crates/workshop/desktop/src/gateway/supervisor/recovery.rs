@@ -2,7 +2,7 @@
 
 use std::time::{Duration, Instant};
 
-use gateway_api_discovery::{ShutdownError, ValidatedConnection};
+use workshop_server_api::discovery::{ShutdownError, ValidatedConnection};
 
 use super::super::identity::same_gateway_identity;
 use super::SupervisedGatewayIdentity;
@@ -61,7 +61,7 @@ impl RecoveryCandidate {
         debug_assert_eq!(self.child_pid, self.validated.pid());
         self.published = true;
         let deadline = Instant::now() + LATE_CHILD_SHUTDOWN_BUDGET;
-        gateway_api_discovery::request_shutdown_before(&self.validated, deadline)
+        workshop_server_api::discovery::request_shutdown_before(&self.validated, deadline)
     }
 }
 
@@ -80,7 +80,7 @@ impl Drop for RecoveryCandidate {
             .spawn(move || {
                 let deadline = Instant::now() + LATE_CHILD_SHUTDOWN_BUDGET;
                 if let Err(error) =
-                    gateway_api_discovery::request_shutdown_before(&validated, deadline)
+                    workshop_server_api::discovery::request_shutdown_before(&validated, deadline)
                 {
                     // The detached signal has no error return channel, so
                     // diagnostics are the only place this cleanup failure

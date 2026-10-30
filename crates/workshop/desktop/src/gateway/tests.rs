@@ -6,7 +6,9 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use gateway_api_discovery::{GatewayDiscoveryFile, Resolution, SidecarError, ValidatedConnection};
+use workshop_server_api::discovery::{
+    GatewayDiscoveryFile, Resolution, SidecarError, ValidatedConnection,
+};
 
 use super::boot as gateway_boot;
 use super::supervisor::{
@@ -71,13 +73,15 @@ fn probe_own_image(run_dir: &Path) -> Result<Resolution, SidecarError> {
         .expect("the exe has a file name")
         .to_string_lossy()
         .into_owned();
-    gateway_api_discovery::resolve_for_test(run_dir, &image)
+    workshop_server_api::discovery::resolve_for_test(run_dir, &image)
 }
 
 /// Plants an unreadable discovery-file path before resolving.
 fn probe_read_failure(run_dir: &Path) -> Result<Resolution, SidecarError> {
-    std::fs::create_dir(gateway_api_discovery::gateway_discovery_file_path(run_dir))
-        .expect("plant the unreadable file");
+    std::fs::create_dir(workshop_server_api::discovery::gateway_discovery_file_path(
+        run_dir,
+    ))
+    .expect("plant the unreadable file");
     probe_own_image(run_dir)
 }
 

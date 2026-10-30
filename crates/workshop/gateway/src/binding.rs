@@ -28,7 +28,7 @@ pub struct GatewaySnapshot {
     /// Monotonic generation assigned before this snapshot is published.
     generation: u64,
     /// Proven local gateway boot, absent for an explicitly configured endpoint.
-    identity: Option<gateway_api_discovery::ValidatedConnection>,
+    identity: Option<crate::discovery::ValidatedConnection>,
 }
 
 impl fmt::Debug for GatewaySnapshot {
@@ -123,7 +123,7 @@ impl GatewayBinding {
     pub fn new_with_identity(
         base_url: &str,
         api_key: &str,
-        identity: Option<gateway_api_discovery::ValidatedConnection>,
+        identity: Option<crate::discovery::ValidatedConnection>,
     ) -> Result<Self, GatewayError> {
         Ok(Self::from_snapshot(build_snapshot(
             base_url, api_key, identity,
@@ -189,7 +189,7 @@ impl GatewayBinding {
         &self,
         base_url: &str,
         api_key: &str,
-        identity: Option<gateway_api_discovery::ValidatedConnection>,
+        identity: Option<crate::discovery::ValidatedConnection>,
     ) -> Result<(), GatewayPublicationError> {
         let snapshot = build_snapshot(base_url, api_key, identity)?;
         self.publish_snapshot(snapshot)
@@ -275,7 +275,7 @@ impl GatewayUpdater {
     #[cfg(any(test, feature = "test-fixtures"))]
     pub fn replace_sidecar(
         &self,
-        connection: &gateway_api_discovery::ValidatedConnection,
+        connection: &crate::discovery::ValidatedConnection,
     ) -> Result<(), GatewayPublicationError> {
         self.binding.replace_with_identity(
             &format!("http://127.0.0.1:{}", connection.port()),
@@ -318,7 +318,7 @@ impl GatewayUpdater {
 fn build_snapshot(
     base_url: &str,
     api_key: &str,
-    identity: Option<gateway_api_discovery::ValidatedConnection>,
+    identity: Option<crate::discovery::ValidatedConnection>,
 ) -> Result<GatewaySnapshot, GatewayError> {
     Ok(GatewaySnapshot {
         client: GatewayClient::new(base_url, api_key)?,

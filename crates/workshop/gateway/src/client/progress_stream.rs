@@ -12,8 +12,8 @@
 
 use std::pin::Pin;
 
+use super::super::progress::Progress;
 use futures_util::Stream;
-use gateway_api_types::Progress;
 
 use super::GatewayError;
 

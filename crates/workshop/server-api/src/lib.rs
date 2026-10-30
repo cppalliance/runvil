@@ -18,7 +18,7 @@
 
 pub use workshop_server::{
     AgentsConfig, Config, GatewayConfig, GatewayPublicationError, GatewayUpdater, ServerConfig,
-    ServerHandle, SpawnError, Termination, spawn,
+    ServerHandle, SpawnError, Termination, discovery, spawn,
 };
 
 /// The server's integration-test seams, forwarded to the desktop app's tests.

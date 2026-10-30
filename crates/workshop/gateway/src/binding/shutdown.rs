@@ -21,13 +21,13 @@ impl GatewaySnapshot {
     /// runs it off the executor.
     ///
     /// # Errors
-    /// Returns [`gateway_api_discovery::ShutdownError`] when the local gateway
+    /// Returns [`crate::discovery::ShutdownError`] when the local gateway
     /// refuses the request or cannot be reached.
-    pub fn request_shutdown(&self) -> Result<bool, gateway_api_discovery::ShutdownError> {
+    pub fn request_shutdown(&self) -> Result<bool, crate::discovery::ShutdownError> {
         let Some(identity) = self.identity.as_ref() else {
             return Ok(false);
         };
-        gateway_api_discovery::request_shutdown(identity)?;
+        crate::discovery::request_shutdown(identity)?;
         Ok(true)
     }
 }
@@ -42,9 +42,9 @@ impl GatewayUpdater {
     /// authority.
     ///
     /// # Errors
-    /// Returns [`gateway_api_discovery::ShutdownError`] when the current local
+    /// Returns [`crate::discovery::ShutdownError`] when the current local
     /// gateway refuses the request or cannot be reached.
-    pub fn request_shutdown(&self) -> Result<bool, gateway_api_discovery::ShutdownError> {
+    pub fn request_shutdown(&self) -> Result<bool, crate::discovery::ShutdownError> {
         self.binding.snapshot().request_shutdown()
     }
 }

@@ -5,7 +5,7 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, mpsc};
 use std::time::Duration;
 
-use gateway_api_discovery::Resolution;
+use workshop_server_api::discovery::Resolution;
 
 use super::{TestIdentity, assert_bounded_supervisor_shutdown, live_file, test_identity};
 use crate::gateway::supervisor::{
@@ -112,7 +112,7 @@ fn exit_joins_a_supervisor_blocked_in_health_wait_before_resolve() {
             |_, _, cancellation| {
                 entered.send(()).expect("announce blocked health wait");
                 let _ = cancellation.wait_timeout(Duration::from_secs(30));
-                Err(gateway_api_discovery::HealthError::Cancelled)
+                Err(workshop_server_api::discovery::HealthError::Cancelled)
             },
             |_, _| {
                 worker_resolves.fetch_add(1, Ordering::SeqCst);
@@ -139,8 +139,9 @@ fn exit_joins_a_supervisor_blocked_in_health_wait_before_resolve() {
 #[test]
 fn exit_joins_a_supervisor_blocked_in_launch_race_before_spawn() {
     let run = tempfile::TempDir::new().expect("tempdir");
-    let decision = gateway_api_discovery::launch_or_attach(run.path(), Duration::from_secs(1))
-        .expect("acquire a launch decision");
+    let decision =
+        workshop_server_api::discovery::launch_or_attach(run.path(), Duration::from_secs(1))
+            .expect("acquire a launch decision");
     let run_dir = run.path().to_owned();
     let (entered, blocked) = mpsc::channel();
     let launches = Arc::new(AtomicUsize::new(0));
@@ -183,8 +184,9 @@ fn exit_joins_a_supervisor_blocked_in_launch_race_before_spawn() {
 #[test]
 fn exit_joins_a_supervisor_blocked_inside_launch_without_process_creation() {
     let run = tempfile::TempDir::new().expect("tempdir");
-    let decision = gateway_api_discovery::launch_or_attach(run.path(), Duration::from_secs(1))
-        .expect("acquire a launch decision");
+    let decision =
+        workshop_server_api::discovery::launch_or_attach(run.path(), Duration::from_secs(1))
+            .expect("acquire a launch decision");
     let run_dir = run.path().to_owned();
     let (entered, blocked) = mpsc::channel();
     let launches = Arc::new(AtomicUsize::new(0));

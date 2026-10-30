@@ -3,7 +3,7 @@
 use std::time::{Duration, Instant};
 
 use anyhow::Context as _;
-use gateway_api_discovery::CancellationToken;
+use workshop_server_api::discovery::CancellationToken;
 
 use super::signals::{Completion, StopSignal};
 

@@ -13,15 +13,15 @@ impl GatewayBinding {
         &self,
         base_url: &str,
         api_key: &str,
-        identity: gateway_api_discovery::ValidatedConnection,
-        cancellation: &gateway_api_discovery::CancellationToken,
+        identity: crate::discovery::ValidatedConnection,
+        cancellation: &crate::discovery::CancellationToken,
     ) -> Result<bool, GatewayPublicationError> {
         self.replace_with_identity_cancellable_with_wait(
             base_url,
             api_key,
             identity,
             cancellation,
-            gateway_api_discovery::CancellationToken::wait_timeout,
+            crate::discovery::CancellationToken::wait_timeout,
         )
     }
 
@@ -29,9 +29,9 @@ impl GatewayBinding {
         &self,
         base_url: &str,
         api_key: &str,
-        identity: gateway_api_discovery::ValidatedConnection,
-        cancellation: &gateway_api_discovery::CancellationToken,
-        mut wait: impl FnMut(&gateway_api_discovery::CancellationToken, Duration) -> bool,
+        identity: crate::discovery::ValidatedConnection,
+        cancellation: &crate::discovery::CancellationToken,
+        mut wait: impl FnMut(&crate::discovery::CancellationToken, Duration) -> bool,
     ) -> Result<bool, GatewayPublicationError> {
         if cancellation.is_cancelled() {
             return if self.publication_closed() {
@@ -82,8 +82,8 @@ impl GatewayUpdater {
     /// replacement publication.
     pub fn replace_sidecar_cancellable(
         &self,
-        connection: &gateway_api_discovery::ValidatedConnection,
-        cancellation: &gateway_api_discovery::CancellationToken,
+        connection: &crate::discovery::ValidatedConnection,
+        cancellation: &crate::discovery::CancellationToken,
     ) -> Result<bool, GatewayPublicationError> {
         self.binding.replace_with_identity_cancellable(
             &format!("http://127.0.0.1:{}", connection.port()),

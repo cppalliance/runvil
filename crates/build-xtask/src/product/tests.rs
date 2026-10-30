@@ -311,27 +311,31 @@ fn an_unparseable_manifest_is_reported() {
 }
 
 #[test]
-fn a_workshop_crate_depending_on_the_public_gateway_pair_passes() {
-    let root = tempfile::TempDir::new().expect("tempdir");
-    write_crate(
-        root.path(),
-        "workshop-server",
-        "workshop-server",
-        "[dependencies]\ngateway-api-types = { path = \"../gateway-api-types\" }\n\
-         gateway-api-discovery = { path = \"../gateway-api-discovery\" }\n",
-    );
-    write_crate(root.path(), "gateway-api-types", "gateway-api-types", "");
-    write_crate(
-        root.path(),
+fn a_workshop_crate_depending_on_a_gateway_crate_is_reported() {
+    // The Workshop family has no gateway dependency at all: Workshop reaches
+    // a running Gateway through its own discovery and HTTP clients, never
+    // through a Gateway crate. The two former exceptions are covered.
+    for gateway in [
+        "gateway-api-types",
         "gateway-api-discovery",
-        "gateway-api-discovery",
-        "",
-    );
-    let violations = product_boundary_violations(root.path());
-    assert!(
-        violations.is_empty(),
-        "the public gateway pair is legal for workshop crates: {violations:?}"
-    );
+        "gateway-routing",
+    ] {
+        let root = tempfile::TempDir::new().expect("tempdir");
+        write_crate(
+            root.path(),
+            "workshop-server",
+            "workshop-server",
+            &format!("[dependencies]\n{gateway} = {{ path = \"../{gateway}\" }}\n"),
+        );
+        write_crate(root.path(), gateway, gateway, "");
+        let violations = product_boundary_violations(root.path());
+        assert_eq!(violations.len(), 1, "{gateway}: {violations:?}");
+        assert!(
+            violations[0].starts_with(&format!("workshop-server depends on {gateway}:"))
+                && violations[0].contains("workshop crates must not depend on gateway crates"),
+            "{gateway} is refused for a workshop crate: {violations:?}"
+        );
+    }
 }
 
 #[test]

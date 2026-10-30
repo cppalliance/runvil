@@ -8,9 +8,8 @@ use super::*;
 
 use futures_util::StreamExt as _;
 
-use gateway_api_types::Progress;
-
 use crate::client::progress_stream::MAX_EVENT_BLOCK;
+use crate::progress::Progress;
 
 /// Serializes a wire-format progress snapshot by hand, so the tests pin
 /// the JSON shape the gateway emits rather than the types crate's

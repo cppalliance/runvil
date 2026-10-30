@@ -9,9 +9,7 @@
 //!   workshop, or Harness crates.
 //! - `gateway`/`gateway-*` crates must not depend on runvil,
 //!   workshop, or Harness crates.
-//! - `workshop`/`workshop-*` crates must not depend on gateway crates,
-//!   except the family's public pair (`gateway-api-types`,
-//!   `gateway-api-discovery`).
+//! - `workshop`/`workshop-*` crates must not depend on gateway crates.
 //! - `harness`/`harness-*` crates must not depend on gateway, shared, or
 //!   workshop crates; outside their own family they may name only
 //!   `runvil` and `runvil-plugin`, which rules out `build-*`
@@ -141,9 +139,6 @@ const SERVER: &str = "workshop-server";
 /// The runvil-family crates outside crates may depend on directly:
 /// the Engine facade and the Plugin contract.
 const PUBLIC_RUNVIL: [&str; 2] = ["runvil", "runvil-plugin"];
-/// The gateway family's public pair: the only gateway crates workshop
-/// crates may name.
-const PUBLIC_GATEWAY: [&str; 2] = ["gateway-api-types", "gateway-api-discovery"];
 /// The Harness family's facade: the one outside crate permitted into
 /// `crates/harness-internal/`.
 const HARNESS_FACADE: &str = "harness";
@@ -204,7 +199,6 @@ fn boundary_breach(package: &CrateInfo, dep: &CrateInfo) -> Option<String> {
         return Some(reason.to_owned());
     }
     let (from, to) = (family(&package.package), family(&dep.package));
-    let public_gateway = PUBLIC_GATEWAY.contains(&dep.package.as_str());
     let family_rule = match (from, to) {
         (Family::Runvil, Family::Gateway | Family::Workshop | Family::Harness) => {
             Some("runvil crates must not depend on gateway, workshop, or harness crates")
@@ -212,7 +206,7 @@ fn boundary_breach(package: &CrateInfo, dep: &CrateInfo) -> Option<String> {
         (Family::Gateway, Family::Runvil | Family::Workshop | Family::Harness) => {
             Some("gateway crates must not depend on runvil, workshop, or harness crates")
         }
-        (Family::Workshop, Family::Gateway) if !public_gateway => {
+        (Family::Workshop, Family::Gateway) => {
             Some("workshop crates must not depend on gateway crates")
         }
         (Family::Harness, Family::Workshop) => {

@@ -4,7 +4,9 @@ use std::path::Path;
 use std::time::Duration;
 
 use anyhow::Context as _;
-use gateway_api_discovery::{CancellationToken, Resolution, SidecarError, ValidatedConnection};
+use workshop_server_api::discovery::{
+    CancellationToken, Resolution, SidecarError, ValidatedConnection,
+};
 
 use super::boot;
 use super::identity::GatewayAttachment;
@@ -73,8 +75,8 @@ pub(crate) fn supervise(
     let Some(initial) = attachment.sidecar_identity().cloned() else {
         return Ok(None);
     };
-    let run_dir =
-        gateway_api_discovery::default_run_dir().context("locate the sidecar run directory")?;
+    let run_dir = workshop_server_api::discovery::default_run_dir()
+        .context("locate the sidecar run directory")?;
     let exe_dir = std::env::current_exe()
         .context("locate the executable")?
         .parent()
@@ -85,7 +87,7 @@ pub(crate) fn supervise(
     GatewaySupervisor::spawn_with_publication(supervisor_publication, move |cancellation| {
         run_supervision(
             RecoveryIdentity::Stable(initial),
-            |_, cancellation| match gateway_api_discovery::resolve_cancellable(
+            |_, cancellation| match workshop_server_api::discovery::resolve_cancellable(
                 &run_dir,
                 cancellation,
             ) {

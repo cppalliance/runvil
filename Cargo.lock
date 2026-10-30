@@ -699,6 +699,7 @@ version = "0.0.0"
 dependencies = [
  "anyhow",
  "build-ceiling",
+ "gateway-api-discovery",
  "proc-macro2",
  "pulldown-cmark",
  "rustdoc-types",
@@ -706,6 +707,7 @@ dependencies = [
  "syn 3.0.3",
  "tempfile",
  "toml 1.1.4+spec-1.1.0",
+ "workshop-gateway-discovery",
 ]
 
 [[package]]
@@ -8578,7 +8580,6 @@ version = "0.3.0"
 dependencies = [
  "anyhow",
  "build-ceiling",
- "gateway-api-discovery",
  "reqwest",
  "serde",
  "serde_json",
@@ -8623,8 +8624,6 @@ dependencies = [
  "axum",
  "build-ceiling",
  "futures-util",
- "gateway-api-discovery",
- "gateway-api-types",
  "reqwest",
  "serde",
  "serde_json",
@@ -8634,9 +8633,25 @@ dependencies = [
  "tokio-tungstenite",
  "tracing",
  "url",
+ "workshop-gateway-discovery",
  "workshop-protocol",
  "workshop-registry",
  "workshop-support",
+]
+
+[[package]]
+name = "workshop-gateway-discovery"
+version = "0.3.0"
+dependencies = [
+ "build-ceiling",
+ "libc",
+ "serde",
+ "serde_json",
+ "shared-error-source",
+ "tempfile",
+ "thiserror 2.0.19",
+ "windows-sys 0.61.2",
+ "workshop-gateway-discovery",
 ]
 
 [[package]]
@@ -8699,7 +8714,6 @@ dependencies = [
  "build-ceiling",
  "build-ui",
  "futures-util",
- "gateway-api-discovery",
  "harness",
  "harness-gateway-client",
  "plugin-mcp",
@@ -8712,7 +8726,6 @@ dependencies = [
  "rust-embed",
  "serde",
  "serde_json",
- "shared-loopback",
  "socket2",
  "tempfile",
  "thiserror 2.0.19",

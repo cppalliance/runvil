@@ -11,7 +11,7 @@ fn validated_connection(
     api_key: &str,
     epoch: u64,
     started_at: &str,
-) -> gateway_api_discovery::ValidatedConnection {
+) -> crate::discovery::ValidatedConnection {
     gateway.validate(api_key, epoch, started_at)
 }
 

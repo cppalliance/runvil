@@ -9,7 +9,9 @@ use std::sync::{Arc, mpsc};
 use std::time::{Duration, Instant};
 
 use anyhow::Context as _;
-use gateway_api_discovery::{CancellationToken, GatewayDiscoveryFile, ValidatedConnection};
+use workshop_server_api::discovery::{
+    CancellationToken, GatewayDiscoveryFile, ValidatedConnection,
+};
 
 use super::{
     TestIdentity, assert_bounded_supervisor_shutdown, get, live_file, test_identity,
@@ -219,7 +221,10 @@ fn explicit_candidate_shutdown_reports_a_delivery_failure() {
         .shutdown()
         .expect_err("a dead child cannot accept the shutdown");
     assert!(
-        matches!(error, gateway_api_discovery::ShutdownError::Io { .. }),
+        matches!(
+            error,
+            workshop_server_api::discovery::ShutdownError::Io { .. }
+        ),
         "the explicit path reports the delivery failure: {error}"
     );
 }
@@ -310,7 +315,7 @@ fn a_mismatched_spawned_pid_never_claims_or_cleans_the_validated_process() {
         "an uncertain process never receives destructive cleanup"
     );
     assert!(
-        gateway_api_discovery::gateway_discovery_file_path(run.path()).exists(),
+        workshop_server_api::discovery::gateway_discovery_file_path(run.path()).exists(),
         "uncertain cleanup retains the connection record"
     );
 }
@@ -337,8 +342,9 @@ fn successful_publication_disarms_late_child_cleanup() {
 #[test]
 fn launched_recovery_retains_the_spawned_pid_and_releases_launch_lock() {
     let run = tempfile::TempDir::new().expect("create run directory");
-    let decision = gateway_api_discovery::launch_or_attach(run.path(), Duration::from_secs(1))
-        .expect("acquire launch election");
+    let decision =
+        workshop_server_api::discovery::launch_or_attach(run.path(), Duration::from_secs(1))
+            .expect("acquire launch election");
     let file = live_file(54_375, "candidate-key");
     let cancellation = CancellationToken::new();
 
@@ -364,9 +370,9 @@ fn launched_recovery_retains_the_spawned_pid_and_releases_launch_lock() {
     }
     assert!(
         matches!(
-            gateway_api_discovery::launch_or_attach(run.path(), Duration::from_secs(1))
+            workshop_server_api::discovery::launch_or_attach(run.path(), Duration::from_secs(1))
                 .expect("reacquire launch election"),
-            gateway_api_discovery::LaunchDecision::Launch(_)
+            workshop_server_api::discovery::LaunchDecision::Launch(_)
         ),
         "returning the candidate releases LaunchLock"
     );
@@ -395,7 +401,7 @@ fn failed_validation_never_claims_or_removes_a_spawned_process_record() {
         "failed validation creates no owned candidate"
     );
     assert!(
-        gateway_api_discovery::gateway_discovery_file_path(run.path()).exists(),
+        workshop_server_api::discovery::gateway_discovery_file_path(run.path()).exists(),
         "failed validation retains an uncertain process record"
     );
 }

@@ -30,6 +30,7 @@ type Tiered = (&'static str, &'static str);
 
 /// Tier 0: vocabulary crates. No internal `workshop-*` dependencies.
 const VOCABULARY: &[Tiered] = &[
+    ("workshop-gateway-discovery", "gateway-discovery"),
     ("workshop-protocol", "protocol"),
     ("workshop-registry", "registry"),
     ("workshop-support", "support"),

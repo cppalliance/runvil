@@ -12,11 +12,12 @@
 
 use std::time::Duration;
 
-use gateway_api_types::Progress;
 use tokio::time::Instant;
 
 use workshop_protocol::Activity;
 use workshop_registry::Push;
+
+use super::Progress;
 
 /// How long the gateway must stay busy before the barberpole appears;
 /// work shorter than this never disturbs the status bar.

@@ -45,7 +45,7 @@ Seven terms have exactly one meaning each, everywhere in this repository: code c
 - Behavior changes ship with tests in the same change. Preserve product and behavior tests during refactors.
 - A Cargo feature gates a real constraint such as a toolchain requirement or heavy native build. It does not describe product shape. Feature-disabled builds must not leak optional types into core paths.
 - Runtime and serve paths never compile native dependencies or invoke build tools.
-- Long-running gateway work reports through `gateway-progress`, a private gateway family crate: a producer begins an activity with a text, replaces the text as work moves, and drops the guard when done. Consumers outside the family read only the `Progress` wire type from `gateway-api-types`.
+- Long-running gateway work reports through `gateway-progress`, a private gateway family crate: a producer begins an activity with a text, replaces the text as work moves, and drops the guard when done. Consumers outside the family read only the same `{ busy, text }` wire shape, which each side declares for itself: the Gateway sends it, and a Host that shows it pins the field names with a golden JSON test.
 - Unsafe code stays in its explicitly owned boundary.
 - Comments explain a non-obvious constraint, ordering requirement, or workaround. Every platform or external-bug workaround cites its upstream issue URL in the explanatory comment.
 - JSON that reaches a recorder or a replay comparison round-trips exactly - `to_value`, `to_string`, `from_str` yield an identical value, object keys stay canonical (sorted), numbers must be finite. Exact parsing (`float_roundtrip`) carries that guarantee; a value derived and then logged is additionally rounded to its meaningful precision at the source.

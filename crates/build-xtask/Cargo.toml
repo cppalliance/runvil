@@ -17,6 +17,13 @@ toml.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
+# The cross-half discovery conformance check (tests/discovery_conformance.rs):
+# it runs the Gateway's real writer and Workshop's forked reader against each
+# other while both halves still live in this workspace. This is the one
+# place allowed to name both, and it disappears when the Gateway moves to
+# its own repository.
+gateway-api-discovery = { workspace = true, features = ["test-fixtures"] }
+workshop-gateway-discovery = { workspace = true, features = ["test-fixtures"] }
 
 [build-dependencies]
 build-ceiling.workspace = true

@@ -5,10 +5,10 @@ use std::process::ExitStatus;
 use std::sync::{Arc, OnceLock};
 
 use anyhow::Context as _;
-use gateway_api_discovery::{
+use workshop_server_api::Config;
+use workshop_server_api::discovery::{
     CancellationToken, GatewayDiscoveryFile, Resolution, SidecarError, ValidatedConnection,
 };
-use workshop_server_api::Config;
 
 use super::identity::GatewayAttachment;
 use super::supervisor::{RecoveryCandidate, RecoveryOwnership, launch_and_attach_cancellable};
@@ -71,14 +71,19 @@ pub(crate) fn ensure_gateway(config: &Config) -> anyhow::Result<GatewayAttachmen
                 .context("the executable has no parent directory")
         })?;
     let explicit = !config.gateway.base_url.is_empty();
-    let Some(run_dir) = gateway_api_discovery::default_run_dir() else {
+    let Some(run_dir) = workshop_server_api::discovery::default_run_dir() else {
         return if explicit {
             Ok(GatewayAttachment::Config)
         } else {
             Err(no_gateway_error())
         };
     };
-    match plan_gateway(&run_dir, &exe_dir, explicit, gateway_api_discovery::resolve) {
+    match plan_gateway(
+        &run_dir,
+        &exe_dir,
+        explicit,
+        workshop_server_api::discovery::resolve,
+    ) {
         GatewayPlan::Attach(file) => validated_attachment(file),
         GatewayPlan::ConfigOnly => Ok(GatewayAttachment::Config),
         GatewayPlan::Fail => Err(no_gateway_error()),

@@ -6,7 +6,9 @@ use super::product_boundary_violations;
 use super::test_support::write_crate;
 
 #[test]
-fn a_harness_crate_depending_on_the_gateway_public_types_is_reported() {
+fn a_harness_crate_depending_on_a_gateway_crate_is_reported() {
+    // No gateway crate is reachable from the Harness family, the former
+    // `gateway-api-types` exception included.
     let root = tempfile::TempDir::new().expect("tempdir");
     write_crate(
         root.path(),
@@ -20,7 +22,7 @@ fn a_harness_crate_depending_on_the_gateway_public_types_is_reported() {
     assert!(
         violations[0].starts_with("harness-sessions depends on gateway-api-types:")
             && violations[0].contains("harness crates must not depend on gateway crates"),
-        "the gateway public pair is closed to harness crates: {violations:?}"
+        "every gateway crate is closed to harness crates: {violations:?}"
     );
 }
 

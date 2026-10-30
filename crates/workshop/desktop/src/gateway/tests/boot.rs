@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use std::sync::{Arc, OnceLock};
 use std::time::{Duration, Instant};
 
-use gateway_api_discovery::GatewayDiscoveryFile;
+use workshop_server_api::discovery::GatewayDiscoveryFile;
 
 use super::{
     dead_pid, exe_dir, fixture_gateway, live_file, owned_candidate, probe_own_image,
@@ -197,7 +197,7 @@ fn a_stale_file_is_cleaned_and_the_sibling_exe_launches() {
         "a stale file must not block the relaunch: {plan:?}"
     );
     assert!(
-        !gateway_api_discovery::gateway_discovery_file_path(run.path()).exists(),
+        !workshop_server_api::discovery::gateway_discovery_file_path(run.path()).exists(),
         "the stale file was cleaned"
     );
 }
@@ -219,7 +219,7 @@ fn a_stale_file_with_no_sibling_exe_falls_through_to_explicit_config() {
         "a stale file must not wedge the LAN fallback"
     );
     assert!(
-        !gateway_api_discovery::gateway_discovery_file_path(run.path()).exists(),
+        !workshop_server_api::discovery::gateway_discovery_file_path(run.path()).exists(),
         "the stale file was cleaned"
     );
 }

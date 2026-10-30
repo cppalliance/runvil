@@ -6,8 +6,6 @@
 
 use super::*;
 
-use gateway_api_types::Progress;
-
 /// A presenter under the production policy, its push, and the recorder.
 fn wired() -> (Presenter, Recorder) {
     (Presenter::new(Policy::DEFAULT), recorder())

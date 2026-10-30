@@ -18,6 +18,8 @@
 //! dropped stream cannot flash it.
 
 mod presenter;
+#[path = "progress-wire.rs"]
+mod wire;
 
 use std::future::Future;
 use std::time::Duration;
@@ -31,6 +33,7 @@ use workshop_registry::Push;
 use crate::binding::{GatewayBinding, GatewaySnapshot};
 use crate::client::ProgressStream;
 use crate::heartbeat::GatewayHealth;
+pub(crate) use wire::Progress;
 
 #[cfg(test)]
 use presenter::{MIN_VISIBLE, SHOW_DELAY};

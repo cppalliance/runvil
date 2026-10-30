@@ -7,18 +7,19 @@ license.workspace = true
 repository.workspace = true
 
 [features]
-test-fixtures = ["dep:tempfile", "workshop-support/test-fixtures"]
+test-fixtures = [
+    "dep:tempfile",
+    "workshop-gateway-discovery/test-fixtures",
+    "workshop-support/test-fixtures",
+]
 
 [dependencies]
 arc-swap.workspace = true
 futures-util.workspace = true
-# The gateway's public wire vocabulary: the progress snapshot the
-# `GET /admin/progress` stream sends.
-gateway-api-types.workspace = true
 reqwest.workspace = true
 serde.workspace = true
 serde_json.workspace = true
-gateway-api-discovery.workspace = true
+workshop-gateway-discovery.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
 tokio-tungstenite.workspace = true
@@ -31,16 +32,15 @@ tempfile = { workspace = true, optional = true }
 
 [dev-dependencies]
 axum.workspace = true
-# The test-fixtures feature exposes `resolve_for_test`, so the resolution
-# tests can run the real liveness gauntlet against the test binary's own
-# process image.
-gateway-api-discovery = { workspace = true, features = ["test-fixtures"] }
 tempfile.workspace = true
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 # The gateway's tests call `workshop_support::fixtures::serve`; enabling the
 # feature here (not only through the crate's own `test-fixtures` feature)
 # keeps `cargo test -p workshop-gateway` compiling without `--all-features`.
 workshop-support = { workspace = true, features = ["test-fixtures"] }
+# The discovery fork's `test-fixtures` feature supplies the `gateway.json`
+# writer and the process lease Workshop's test doubles need.
+workshop-gateway-discovery = { workspace = true, features = ["test-fixtures"] }
 
 [build-dependencies]
 build-ceiling.workspace = true

@@ -6,7 +6,7 @@ use std::sync::{Arc, OnceLock};
 use std::time::{Duration, Instant};
 
 use anyhow::Context as _;
-use gateway_api_discovery::{
+use workshop_server_api::discovery::{
     CancellationToken, GatewayDiscoveryFile, LaunchDecision, Resolution, SidecarError,
 };
 
@@ -56,7 +56,7 @@ pub(in crate::gateway) fn launch_and_attach_cancellable(
         run_dir,
         exe,
         cancellation,
-        gateway_api_discovery::launch_or_attach_cancellable,
+        workshop_server_api::discovery::launch_or_attach_cancellable,
         |exe, _| boot::spawn_detached(exe, Arc::clone(&exit)),
         |run_dir, timeout, cancellation| {
             wait_for_launched_file_cancellable(run_dir, timeout, cancellation, || {
@@ -128,8 +128,8 @@ fn wait_for_launched_file_cancellable(
         timeout,
         cancellation,
         &SystemClock,
-        gateway_api_discovery::wait_for_health_cancellable,
-        gateway_api_discovery::resolve_cancellable,
+        workshop_server_api::discovery::wait_for_health_cancellable,
+        workshop_server_api::discovery::resolve_cancellable,
         exited,
     )
 }
@@ -149,8 +149,11 @@ pub(in crate::gateway) fn wait_for_launched_file_cancellable_with<Clock, Health,
 ) -> anyhow::Result<GatewayDiscoveryFile>
 where
     Clock: WaitClock,
-    Health:
-        FnMut(&str, Duration, &CancellationToken) -> Result<(), gateway_api_discovery::HealthError>,
+    Health: FnMut(
+        &str,
+        Duration,
+        &CancellationToken,
+    ) -> Result<(), workshop_server_api::discovery::HealthError>,
     Resolve: FnMut(&Path, &CancellationToken) -> Result<Resolution, SidecarError>,
     Exited: FnMut() -> Option<ExitStatus>,
 {
@@ -197,7 +200,7 @@ where
                         Ok(_) => {}
                     }
                 }
-                Err(gateway_api_discovery::HealthError::Cancelled) => {
+                Err(workshop_server_api::discovery::HealthError::Cancelled) => {
                     anyhow::bail!("the launched gateway wait was cancelled");
                 }
                 Err(error) => {
@@ -212,7 +215,7 @@ where
             anyhow::bail!(
                 "the launched gateway exited ({status}) without writing a gateway discovery \
                  file; see the gateway log at {}",
-                gateway_api_discovery::gateway_log_path(state_dir).display()
+                workshop_server_api::discovery::gateway_log_path(state_dir).display()
             );
         }
         if cancellation.is_cancelled() {

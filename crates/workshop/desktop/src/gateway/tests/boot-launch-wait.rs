@@ -5,7 +5,9 @@ use std::path::Path;
 use std::process::ExitStatus;
 use std::time::{Duration, Instant};
 
-use gateway_api_discovery::{CancellationToken, GatewayDiscoveryFile, HealthError, ProbeError};
+use workshop_server_api::discovery::{
+    CancellationToken, GatewayDiscoveryFile, HealthError, ProbeError,
+};
 
 use super::super::{fixture_gateway, live_file, probe_own_image};
 use crate::gateway::supervisor::{
@@ -127,7 +129,7 @@ fn launch_wait(run_dir: &Path, budget: Duration) -> anyhow::Result<GatewayDiscov
         run_dir,
         budget,
         &SystemClock,
-        gateway_api_discovery::wait_for_health_cancellable,
+        workshop_server_api::discovery::wait_for_health_cancellable,
     )
 }
 
@@ -146,7 +148,7 @@ fn the_launch_wait_returns_once_the_file_appears_and_answers() {
         run.path(),
         Duration::from_secs(5),
         &clock,
-        gateway_api_discovery::wait_for_health_cancellable,
+        workshop_server_api::discovery::wait_for_health_cancellable,
     )
     .expect("the validated file lands and answers");
 
@@ -218,7 +220,7 @@ fn the_launch_wait_completes_when_a_dead_port_file_is_replaced_by_a_live_one() {
                 return Err(probe_timeout(url, "HTTP/1.1 503 Unavailable".to_owned()));
             }
             assert_eq!(url, format!("http://127.0.0.1:{}", live.port));
-            gateway_api_discovery::wait_for_health_cancellable(url, budget, cancellation)
+            workshop_server_api::discovery::wait_for_health_cancellable(url, budget, cancellation)
         },
     )
     .expect("the wait polls past the stale file and attaches to the live gateway");
@@ -301,7 +303,7 @@ fn the_launch_wait_fails_at_the_first_poll_after_the_gateway_exits_without_a_fil
         message.contains(&format!("exited ({})", exit_status(1))),
         "the error names the exit status: {message}"
     );
-    let log = gateway_api_discovery::gateway_log_path(state.path());
+    let log = workshop_server_api::discovery::gateway_log_path(state.path());
     assert!(
         message.contains(&log.display().to_string()),
         "the error names the gateway log: {message}"
@@ -320,7 +322,7 @@ fn the_launch_wait_attaches_to_the_owner_a_launched_gateway_handed_off_to() {
         run.path(),
         Duration::from_secs(5),
         &FakeClock::new(),
-        gateway_api_discovery::wait_for_health_cancellable,
+        workshop_server_api::discovery::wait_for_health_cancellable,
         || Some(exit_status(0)),
     )
     .expect("an exited launch still attaches to the owner's file");

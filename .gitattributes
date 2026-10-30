@@ -19,3 +19,6 @@ crates/workshop/look/**/*.png binary
 # The event-log schema canary pins the version-1 file exactly as the log
 # writer emits it (LF); autocrlf must not rewrite it on Windows checkouts.
 crates/workshop/server/tests/it/observer/*.jsonl text eol=lf
+# The Gateway discovery contract's golden fixtures are compared byte for
+# byte against what the writer emits (LF); a checkout must not rewrite them.
+crates/workshop/gateway-discovery/fixtures/*.json text eol=lf

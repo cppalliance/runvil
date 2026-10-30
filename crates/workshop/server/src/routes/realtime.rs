@@ -1,4 +1,9 @@
 //! Same-origin, payload-opaque relay for Gateway Realtime transcription.
+//!
+//! The one route a browser page reaches with credentials gets a stricter
+//! Origin rule than the cross-site guard applies to the rest of the socket:
+//! a browser `Origin` must match the request's own authority. That rule
+//! lives in the private `origin` child module.
 
 use std::time::Duration;
 
@@ -15,6 +20,9 @@ use tokio_tungstenite::tungstenite::protocol::CloseFrame as GatewayCloseFrame;
 
 use crate::app::AppState;
 use workshop_gateway::GatewayRealtimeSocket;
+
+#[path = "realtime-origin.rs"]
+mod origin;
 
 const RELAY_IO_DEADLINE: Duration = Duration::from_millis(500);
 
@@ -58,9 +66,8 @@ fn same_origin_allowed(uri: &Uri, headers: &HeaderMap) -> bool {
             Err(()) => return false,
         },
     };
-    shared_loopback::workshop_same_origin_authority_allowed(origin, authority)
+    origin::same_origin_authority_allowed(origin, authority)
 }
-
 fn single_header(headers: &HeaderMap, name: header::HeaderName) -> Result<Option<&str>, ()> {
     let mut values = headers.get_all(name).iter();
     let Some(first) = values.next() else {

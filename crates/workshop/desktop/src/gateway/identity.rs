@@ -1,6 +1,6 @@
 //! Local Gateway attachment and validated process identity.
 
-use gateway_api_discovery::ValidatedConnection;
+use workshop_server_api::discovery::ValidatedConnection;
 
 use super::supervisor::RecoveryCandidate;
 

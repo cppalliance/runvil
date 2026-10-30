@@ -26,7 +26,8 @@
 //! ## Invariants
 //!
 //! - Tier: server; may depend on: the vocabulary crates
-//!   (`workshop-protocol`, `workshop-registry`, `workshop-support`),
+//!   (`workshop-gateway-discovery`, `workshop-protocol`,
+//!   `workshop-registry`, `workshop-support`),
 //!   the service crates (`workshop-gateway`, `workshop-menu`,
 //!   `workshop-status`), the feature crates (`workshop-agents`,
 //!   `workshop-run-log`, `workshop-user-state`, `workshop-workspace`),
@@ -81,6 +82,7 @@ pub mod fixtures;
 
 pub use app::{AppState, router};
 pub use serve::{ServerHandle, SpawnError, Termination, spawn};
+pub use workshop_gateway::discovery;
 pub use workshop_gateway::{GatewayPublicationError, GatewayUpdater, ResolvedGateway};
 pub use workshop_protocol::InputResponse;
 pub use workshop_support::{AgentsConfig, Config, GatewayConfig, ServerConfig};

@@ -23,9 +23,10 @@
 //!   the gateway drives the menu through its
 //!   [`MenuPush`](workshop_registry::MenuPush) face, so this crate never
 //!   names another subsystem's bus.
-//! - The gateway's progress reaches this crate as the public wire type
-//!   `gateway_api_types::Progress` alone: no progress machinery is
-//!   shared with the gateway family.
+//! - The gateway's progress reaches this crate as one wire type defined in
+//!   `progress-wire.rs`: no progress machinery is shared with the gateway
+//!   family, and its field names are pinned by a golden JSON test so drift
+//!   is caught.
 
 mod binding;
 mod client;
@@ -46,3 +47,14 @@ pub use handles::{GatewayHandles, GatewayTaskRegistrations, register, register_t
 pub use heartbeat::{GatewayHealth, Heartbeat, join_status, spawn as spawn_heartbeat};
 pub use refresh::{refresh_catalog, refresh_profiles};
 pub use resolve::{GatewaySource, ResolveError, ResolvedGateway, report, resolve};
+
+/// The Gateway discovery contract as Workshop reads it, re-exported whole
+/// from the fork that owns it.
+///
+/// The desktop app may name only `workshop-server-api` among workshop crates,
+/// and the server and its facade are re-exports, so this module binding is
+/// what carries the contract out to the desktop app:
+/// `workshop_server_api::discovery::resolve` and friends. Naming the crate
+/// once here rather than listing its twenty items at each level keeps one
+/// name for one thing.
+pub use workshop_gateway_discovery as discovery;
