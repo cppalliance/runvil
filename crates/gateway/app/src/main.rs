@@ -26,6 +26,7 @@ use tracing_subscriber::util::SubscriberInitExt;
 use crate::cli::parse_args;
 
 mod cli;
+mod supervisor;
 
 /// The log filter when `RUST_LOG` is unset: the gateway crates at `info`
 /// (a download or a switch must say what it is doing), the chatty HTTP
@@ -99,11 +100,10 @@ fn main() -> ExitCode {
     // loser, recovery, bind, or publication. The lease holder re-resolves the
     // connection record; a loser waits only for the holder's validated record
     // and exits through this console-only path.
-    let _instance_lease = match settle_gateway_startup(
-        &app_options.serve,
-        OWNER_PUBLICATION_TIMEOUT,
-    ) {
+    // An ordinary launch obtains a launch lock and hands it off to `supervisor::run`
+    let _instance_lease = match settle_gateway_startup(&app_options, OWNER_PUBLICATION_TIMEOUT) {
         Ok(GatewayStartup::Boot(lease)) => lease,
+
         Ok(GatewayStartup::OpenSettings(url)) => {
             if app_options.print_url {
                 println!("{url}");
@@ -119,10 +119,16 @@ fn main() -> ExitCode {
             }
             return ExitCode::SUCCESS;
         }
+
+        Ok(GatewayStartup::Supervise(lock)) => {
+            return supervisor::run(&app_options, lock);
+        }
+
         Ok(_) => {
             eprintln!("error: unrecognized gateway startup decision");
             return ExitCode::FAILURE;
         }
+
         Err(error) => {
             print_error_chain(&error);
             return ExitCode::FAILURE;

@@ -8,10 +8,16 @@
 //! A lease loser reads without cleanup until the owner publishes a validated
 //! record, then hands off. It never deletes stale state or initializes
 //! canonical logging.
-
+//!
+//! An ordinary launch, neither `--supervised` nor `--print-url`, runs the
+//! launch election instead: its winner supervises the serving Gateway and
+//! holds the launch lock for its lifetime, and a loser hands off to the
+//! live Gateway.
 use std::time::{Duration, Instant};
 
-use crate::runner::ServeOptions;
+use gateway_api_discovery::LaunchDecision;
+
+use crate::AppOptions;
 
 const OWNER_POLL_INTERVAL: Duration = Duration::from_millis(25);
 
@@ -30,6 +36,11 @@ enum Relaunch {
 pub enum GatewayStartup {
     /// This process owns the lifetime lease and may boot.
     Boot(gateway_api_discovery::GatewayInstanceLease),
+
+    /// This process won the launch election and supervises the serving
+    /// Gateway as its child, holding the launch lock for its lifetime.
+    Supervise(gateway_api_discovery::LaunchLock),
+
     /// Another validated Gateway owns the lease, so this process hands off.
     OpenSettings(String),
 }
@@ -41,12 +52,15 @@ pub enum GatewayStartupError {
     /// No run directory exists in which process ownership can be established.
     #[error("no user profile directory found for the Gateway process lease")]
     NoRunDirectory,
+
     /// The operating-system lease could not be opened or attempted.
     #[error("establish Gateway process ownership")]
     Lease(#[source] gateway_api_discovery::SidecarError),
+
     /// The lease holder could not resolve existing shared connection state.
     #[error("resolve existing Gateway connection before startup")]
     Resolve(#[source] gateway_api_discovery::SidecarError),
+
     /// The lease owner did not publish a validated record in time.
     #[error("the Gateway process owner published no validated connection within {timeout:?}")]
     #[non_exhaustive]
@@ -54,6 +68,10 @@ pub enum GatewayStartupError {
         /// The bounded wait that elapsed.
         timeout: Duration,
     },
+
+    /// The launch election failed or found no attachable Gateway in time.
+    #[error("settle which process launches the Gateway")]
+    Launch(#[source] gateway_api_discovery::SidecarError),
 }
 
 /// Maps a gateway discovery file resolution to the relaunch decision. Only a
@@ -64,7 +82,7 @@ fn decide(resolution: &gateway_api_discovery::Resolution) -> Relaunch {
             // The file records the real port of the loopback bind; URLs
             // normalize to a literal 127.0.0.1, never localhost.
             Relaunch::OpenSettings(crate::auth::primitives::auth_url(
-                &format!("http://127.0.0.1:{}", file.port),
+                &file.local_addr(),
                 &file.api_key,
             ))
         }
@@ -86,32 +104,50 @@ fn settings_url(connection: &gateway_api_discovery::ValidatedConnection) -> Stri
 /// state. A lease loser only reads and validates, waiting up to `timeout` for
 /// the owner to publish. It never mutates shared state.
 ///
+/// A launch that will supervise settles the launch election instead,
+/// returning [GatewayStartup::Supervise] with the held lock, or
+/// [GatewayStartup::OpenSettings] for a live Gateway.
+///
 /// # Errors
-/// Returns [`GatewayStartupError`] when no run directory is available, the
-/// operating-system lease cannot be attempted, existing shared connection
-/// state cannot be resolved, or the owner publishes no validated connection
-/// within `timeout`.
+/// Returns [`GatewayStartupError`] when:
+///   - There is no run directory available
+///   - The lease attempt fails at the operating-system level
+///   - Existing shared connection state cannot be resolved
+///   - The owner publishes no validated connection within `timeout`
+///   - The launch election fails
 pub fn settle_gateway_startup(
-    options: &ServeOptions,
+    options: &AppOptions,
     timeout: Duration,
 ) -> Result<GatewayStartup, GatewayStartupError> {
     let run_dir = options
+        .serve
         .run_dir
         .clone()
         .or_else(gateway_api_discovery::default_run_dir)
         .ok_or(GatewayStartupError::NoRunDirectory)?;
-    match gateway_api_discovery::GatewayInstanceLease::try_acquire(&run_dir)
-        .map_err(GatewayStartupError::Lease)?
-    {
-        Some(lease) => {
-            let resolution =
-                gateway_api_discovery::resolve(&run_dir).map_err(GatewayStartupError::Resolve)?;
-            match decide(&resolution) {
-                Relaunch::OpenSettings(url) => Ok(GatewayStartup::OpenSettings(url)),
-                Relaunch::Boot => Ok(GatewayStartup::Boot(lease)),
+
+    if options.serve.supervised || options.print_url {
+        return match gateway_api_discovery::GatewayInstanceLease::try_acquire(&run_dir)
+            .map_err(GatewayStartupError::Lease)?
+        {
+            Some(lease) => {
+                let resolution = gateway_api_discovery::resolve(&run_dir)
+                    .map_err(GatewayStartupError::Resolve)?;
+                match decide(&resolution) {
+                    Relaunch::OpenSettings(url) => Ok(GatewayStartup::OpenSettings(url)),
+                    Relaunch::Boot => Ok(GatewayStartup::Boot(lease)),
+                }
             }
-        }
-        None => wait_for_owner(&run_dir, timeout),
+            None => wait_for_owner(&run_dir, timeout),
+        };
+    }
+
+    match LaunchDecision::decide_launch(&run_dir, timeout).map_err(GatewayStartupError::Launch)? {
+        LaunchDecision::Launch(lock) => Ok(GatewayStartup::Supervise(lock)),
+
+        LaunchDecision::Attach(file) => Ok(GatewayStartup::OpenSettings(
+            crate::auth::primitives::auth_url(&file.local_addr(), &file.api_key),
+        )),
     }
 }
 
@@ -150,6 +186,8 @@ fn wait_for_owner_with(
 
 #[cfg(test)]
 mod tests {
+    use crate::{LaunchCommand, ServeOptions};
+
     use super::*;
 
     /// A gateway discovery file as a live gateway would write it.
@@ -161,6 +199,16 @@ mod tests {
             epoch: 1_757_000_000,
             version: "0.2.0".to_owned(),
             started_at: "2026-09-03T12:00:00Z".to_owned(),
+        }
+    }
+
+    fn app_options(serve: ServeOptions) -> AppOptions {
+        AppOptions {
+            command: LaunchCommand::Serve,
+            serve,
+            tray: false,
+            login: false,
+            print_url: true,
         }
     }
 
@@ -212,8 +260,10 @@ mod tests {
     #[test]
     fn an_empty_run_dir_settles_to_boot_with_the_lease_held() {
         let temp = tempfile::TempDir::new().expect("tempdir");
-        let options = ServeOptions::new(None, None::<crate::ProfileName>)
-            .with_run_dir(temp.path().to_path_buf());
+        let options = app_options(
+            ServeOptions::new(None, None::<crate::ProfileName>)
+                .with_run_dir(temp.path().to_path_buf()),
+        );
         assert!(
             matches!(
                 settle_gateway_startup(&options, Duration::from_millis(100))
@@ -239,8 +289,10 @@ mod tests {
         drop(child);
         let file = gateway_api_discovery::GatewayDiscoveryFile { pid, ..live_file() };
         file.write_to(temp.path()).expect("write fixture");
-        let options = ServeOptions::new(None, None::<crate::ProfileName>)
-            .with_run_dir(temp.path().to_path_buf());
+        let options = app_options(
+            ServeOptions::new(None, None::<crate::ProfileName>)
+                .with_run_dir(temp.path().to_path_buf()),
+        );
 
         assert!(
             matches!(
@@ -261,8 +313,10 @@ mod tests {
         let temp = tempfile::TempDir::new().expect("tempdir");
         let connection_path = gateway_api_discovery::gateway_discovery_file_path(temp.path());
         std::fs::create_dir_all(&connection_path).expect("create unreadable connection fixture");
-        let options = ServeOptions::new(None, None::<crate::ProfileName>)
-            .with_run_dir(temp.path().to_path_buf());
+        let options = app_options(
+            ServeOptions::new(None, None::<crate::ProfileName>)
+                .with_run_dir(temp.path().to_path_buf()),
+        );
 
         let error = settle_gateway_startup(&options, Duration::from_millis(100))
             .expect_err("an unreadable connection record blocks startup");

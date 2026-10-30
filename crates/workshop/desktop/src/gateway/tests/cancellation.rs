@@ -5,7 +5,7 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, mpsc};
 use std::time::Duration;
 
-use gateway_api_discovery::Resolution;
+use gateway_api_discovery::{LaunchDecision, Resolution};
 
 use super::{TestIdentity, assert_bounded_supervisor_shutdown, live_file, test_identity};
 use crate::gateway::supervisor::{
@@ -139,7 +139,7 @@ fn exit_joins_a_supervisor_blocked_in_health_wait_before_resolve() {
 #[test]
 fn exit_joins_a_supervisor_blocked_in_launch_race_before_spawn() {
     let run = tempfile::TempDir::new().expect("tempdir");
-    let decision = gateway_api_discovery::launch_or_attach(run.path(), Duration::from_secs(1))
+    let decision = LaunchDecision::decide_launch(run.path(), Duration::from_secs(1))
         .expect("acquire a launch decision");
     let run_dir = run.path().to_owned();
     let (entered, blocked) = mpsc::channel();
@@ -183,7 +183,7 @@ fn exit_joins_a_supervisor_blocked_in_launch_race_before_spawn() {
 #[test]
 fn exit_joins_a_supervisor_blocked_inside_launch_without_process_creation() {
     let run = tempfile::TempDir::new().expect("tempdir");
-    let decision = gateway_api_discovery::launch_or_attach(run.path(), Duration::from_secs(1))
+    let decision = LaunchDecision::decide_launch(run.path(), Duration::from_secs(1))
         .expect("acquire a launch decision");
     let run_dir = run.path().to_owned();
     let (entered, blocked) = mpsc::channel();

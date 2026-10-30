@@ -21,7 +21,7 @@
 //!    includes a boot identity. Anything else is stale and the file is
 //!    deleted. [`ValidatedConnection`] holds that point-in-time proof without
 //!    exposing a forgeable constructor.
-//! 3. Launch races take [`launch_or_attach`]: the `gateway.json.lock`
+//! 3. Launch races take [`LaunchDecision::decide_launch`]: the `gateway.json.lock`
 //!    advisory lock elects one parent launcher; losers attach to the winner.
 //! 4. Every Gateway process holds [`GatewayInstanceLease`] from before
 //!    startup side effects until process exit, independently of that parent
@@ -50,10 +50,7 @@ pub use crate::cancellation::CancellationToken;
 pub use crate::error::SidecarError;
 pub use crate::file::{GatewayDiscoveryFile, remove_if_mine};
 pub use crate::health::{HealthError, ProbeError, wait_for_health, wait_for_health_cancellable};
-pub use crate::lock::{
-    GatewayInstanceLease, LaunchDecision, LaunchLock, launch_or_attach,
-    launch_or_attach_cancellable,
-};
+pub use crate::lock::{GatewayInstanceLease, LaunchDecision, LaunchLock};
 pub use crate::paths::{
     GATEWAY_DISCOVERY_FILE_NAME, GATEWAY_LOG_FILE_NAME, INSTANCE_LOCK_FILE_NAME, LOCK_FILE_NAME,
     default_run_dir, gateway_discovery_file_path, gateway_log_path, instance_lock_file_path,

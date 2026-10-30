@@ -10,8 +10,8 @@ use std::time::Duration;
 
 use gateway_api_discovery::{
     GatewayDiscoveryFile, GatewayInstanceLease, LaunchDecision, Resolution, SidecarError,
-    StaleReason, gateway_discovery_file_path, instance_lock_file_path, launch_or_attach,
-    lock_file_path, resolve, wait_for_health,
+    StaleReason, gateway_discovery_file_path, instance_lock_file_path, lock_file_path, resolve,
+    wait_for_health,
 };
 
 const LEASE_CHILD_RUN_DIR: &str = "RUNVIL_LEASE_CHILD_RUN_DIR";
@@ -175,7 +175,8 @@ fn resolve_cleans_a_dead_pid_file() {
 #[test]
 fn launch_or_attach_elects_one_launcher_and_times_out_the_loser() {
     let dir = tempfile::TempDir::new().expect("tempdir");
-    let decision = launch_or_attach(dir.path(), Duration::from_secs(5)).expect("the race settles");
+    let decision = LaunchDecision::decide_launch(dir.path(), Duration::from_secs(5))
+        .expect("the race settles");
     assert!(
         matches!(decision, LaunchDecision::Launch(_)),
         "an empty run dir elects a launcher"
@@ -185,7 +186,7 @@ fn launch_or_attach_elects_one_launcher_and_times_out_the_loser() {
         "the lock file was created"
     );
 
-    let error = launch_or_attach(dir.path(), Duration::from_millis(150))
+    let error = LaunchDecision::decide_launch(dir.path(), Duration::from_millis(150))
         .expect_err("a held lock with no live file starves the loser");
     assert!(
         matches!(error, SidecarError::LaunchTimeout { .. }),

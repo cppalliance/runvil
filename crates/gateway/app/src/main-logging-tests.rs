@@ -10,7 +10,7 @@ use std::time::Duration;
 use base64::Engine as _;
 #[cfg(feature = "stt")]
 use futures_util::{SinkExt as _, StreamExt as _};
-use gateway::ServeOptions;
+use gateway::{AppOptions, LaunchCommand, ServeOptions};
 #[cfg(feature = "stt")]
 use gateway::{Config, Gateway, ProfilesContext};
 #[cfg(feature = "stt")]
@@ -127,7 +127,13 @@ fn a_process_lease_loser_leaves_the_canonical_log_untouched() {
     let connection_path = gateway_api_discovery::gateway_discovery_file_path(&run_dir);
     std::fs::write(&connection_path, b"owner-is-still-publishing")
         .expect("seed an unreadable owner record");
-    let options = ServeOptions::new(None, None::<gateway::ProfileName>).with_run_dir(run_dir);
+    let options = AppOptions {
+        command: LaunchCommand::Serve,
+        serve: ServeOptions::new(None, None::<gateway::ProfileName>).with_run_dir(run_dir),
+        tray: false,
+        login: false,
+        print_url: true,
+    };
 
     let error = gateway::settle_gateway_startup(&options, Duration::from_millis(150))
         .expect_err("the process lease loser times out before logging");
@@ -162,7 +168,13 @@ fn a_lease_holder_resolution_failure_leaves_the_canonical_log_untouched() {
     std::fs::write(&log_path, "owner-log-sentinel").expect("seed the canonical log");
     let connection_path = gateway_api_discovery::gateway_discovery_file_path(&run_dir);
     std::fs::create_dir_all(&connection_path).expect("create unreadable connection fixture");
-    let options = ServeOptions::new(None, None::<gateway::ProfileName>).with_run_dir(run_dir);
+    let options = AppOptions {
+        command: LaunchCommand::Serve,
+        serve: ServeOptions::new(None, None::<gateway::ProfileName>).with_run_dir(run_dir),
+        tray: false,
+        login: false,
+        print_url: true,
+    };
 
     let error = gateway::settle_gateway_startup(&options, Duration::from_millis(150))
         .expect_err("connection resolution fails before logging");

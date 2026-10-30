@@ -77,50 +77,52 @@ impl GatewayInstanceLease {
     }
 }
 
-/// What [`launch_or_attach`] decided.
+/// Represents the decision to launch a new Gateway or attach to a running one
 #[derive(Debug)]
-#[non_exhaustive]
 pub enum LaunchDecision {
     /// This caller holds the launch lock and no live gateway exists:
     /// launch one. The lock stays held until the returned guard drops, so
     /// a concurrent racer attaches to the launched gateway instead of
     /// launching its own.
     Launch(LaunchLock),
+
     /// A live gateway already exists: attach to it.
     Attach(GatewayDiscoveryFile),
 }
 
-/// Settles a launch race in `run_dir`: returns [`LaunchDecision::Launch`]
-/// with the held lock when no live gateway exists, or
-/// [`LaunchDecision::Attach`] when one does - either already running, or
-/// launched by the race winner while this caller waited. A loser waits up
-/// to `timeout` for the winner's gateway to become attachable, and takes
-/// the lock itself when the winner dies without writing one.
-///
-/// # Errors
-/// Returns [`SidecarError::CreateDir`] when the run directory cannot be
-/// created, [`SidecarError::Lock`] when the lock file cannot be opened or
-/// an unexpected lock error occurs, [`SidecarError::LaunchTimeout`] when
-/// no winner became attachable within `timeout`, and the [`crate::resolve`]
-/// errors when the lock holder's own re-validation fails.
-pub fn launch_or_attach(run_dir: &Path, timeout: Duration) -> Result<LaunchDecision, SidecarError> {
-    launch_or_attach_named(run_dir, GATEWAY_IMAGE_NAME, timeout)
+impl LaunchDecision {
+    /// Settles a launch race in `run_dir`: returns [`Self::Launch`]
+    /// with the held lock when no live gateway exists, or
+    /// [`Self::Attach`] when one does - either already running, or
+    /// launched by the race winner while this caller waited. A loser waits up
+    /// to `timeout` for the winner's gateway to become attachable, and takes
+    /// the lock itself when the winner dies without writing one.
+    ///
+    /// # Errors
+    /// Returns [`SidecarError::CreateDir`] when the run directory cannot be
+    /// created, [`SidecarError::Lock`] when the lock file cannot be opened or
+    /// an unexpected lock error occurs, [`SidecarError::LaunchTimeout`] when
+    /// no winner became attachable within `timeout`, and the [`crate::resolve`]
+    /// errors when the lock holder's own re-validation fails.
+    pub fn decide_launch(run_dir: &Path, timeout: Duration) -> Result<Self, SidecarError> {
+        launch_or_attach_named(run_dir, GATEWAY_IMAGE_NAME, timeout)
+    }
+
+    /// Settles a launch race while observing caller cancellation.
+    ///
+    /// # Errors
+    /// Returns [`SidecarError::Cancelled`] when cancellation wins, plus the
+    /// file, lock, and timeout failures documented by [`Self::decide_launch`].
+    pub fn decide_launch_cancellable(
+        run_dir: &Path,
+        timeout: Duration,
+        cancellation: &CancellationToken,
+    ) -> Result<Self, SidecarError> {
+        launch_or_attach_named_cancellable(run_dir, GATEWAY_IMAGE_NAME, timeout, cancellation)
+    }
 }
 
-/// Settles a launch race while observing caller cancellation.
-///
-/// # Errors
-/// Returns [`SidecarError::Cancelled`] when cancellation wins, plus the
-/// file, lock, and timeout failures documented by [`launch_or_attach`].
-pub fn launch_or_attach_cancellable(
-    run_dir: &Path,
-    timeout: Duration,
-    cancellation: &CancellationToken,
-) -> Result<LaunchDecision, SidecarError> {
-    launch_or_attach_named_cancellable(run_dir, GATEWAY_IMAGE_NAME, timeout, cancellation)
-}
-
-/// [`launch_or_attach`] against a caller-named process image, so tests
+/// [`LaunchDecision::decide_launch`] against a caller-named process image, so tests
 /// can run the full liveness gauntlet from a test binary, which is never
 /// named `runvil-gateway`.
 fn launch_or_attach_named(

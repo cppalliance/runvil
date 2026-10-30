@@ -76,6 +76,31 @@ impl GatewayProcess {
         Self { child }
     }
 
+    /// Starts the production binary as an ordinary headless launch, which
+    /// supervises the serving Gateway as its `--supervised` child. Output is
+    /// discarded: the supervisor forwards the child's, and an unread pipe
+    /// would eventually block both.
+    pub(crate) fn spawn_headless_launch(config: &Path, home: &Path, args: &[&str]) -> Self {
+        let mut command = Command::new(env!("CARGO_BIN_EXE_runvil-gateway"));
+        command
+            .arg("--config")
+            .arg(config)
+            .args(["--profile", "main", "--no-tray"])
+            .args(args)
+            .env("USERPROFILE", home)
+            .env("HOME", home)
+            .env_remove("RUST_LOG")
+            .env_remove("RUNVIL_PROFILE")
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null());
+
+        command
+            .spawn()
+            .map(|child| Self { child })
+            .expect("the Gateway launch spawns")
+    }
+
     fn spawn_command(config: &Path, home: &Path) -> Command {
         Self::command_selecting(config, home, Some("main"))
     }

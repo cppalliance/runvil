@@ -157,11 +157,13 @@ fn simultaneous_direct_launches_leave_one_owner_and_one_clean_handoff() {
 #[cfg(feature = "test-fixtures")]
 #[test]
 fn workshop_launch_lock_and_direct_launch_do_not_deadlock_or_double_boot() {
+    use gateway_api_discovery::LaunchDecision;
+
     let temp = tempfile::tempdir().unwrap();
     let config = race_config(&temp);
     let run_dir = temp.path().join(".runvil").join("run");
     let gateway_api_discovery::LaunchDecision::Launch(workshop_lock) =
-        gateway_api_discovery::launch_or_attach(&run_dir, Duration::from_secs(5))
+        LaunchDecision::decide_launch(&run_dir, Duration::from_secs(5))
             .expect("Workshop wins the parent launch election")
     else {
         panic!("an empty run directory elects the Workshop launcher");

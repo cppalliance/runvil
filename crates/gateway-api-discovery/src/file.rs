@@ -137,6 +137,14 @@ impl GatewayDiscoveryFile {
         write_atomic_owner_only(&path, &bytes)
             .map_err(|source| SidecarError::Write { path, source })
     }
+
+    /// Builds a string containing the local address the gateway is running on,
+    /// for example if the gateway is running on port `12345` this would
+    /// give `http://127.0.0.1:12345`
+    #[must_use]
+    pub fn local_addr(&self) -> String {
+        format!("http://127.0.0.1:{}", self.port)
+    }
 }
 
 /// Removes the gateway discovery file in `run_dir` when it still belongs to

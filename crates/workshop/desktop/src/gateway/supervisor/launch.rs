@@ -56,7 +56,7 @@ pub(in crate::gateway) fn launch_and_attach_cancellable(
         run_dir,
         exe,
         cancellation,
-        gateway_api_discovery::launch_or_attach_cancellable,
+        LaunchDecision::decide_launch_cancellable,
         |exe, _| boot::spawn_detached(exe, Arc::clone(&exit)),
         |run_dir, timeout, cancellation| {
             wait_for_launched_file_cancellable(run_dir, timeout, cancellation, || {
@@ -100,7 +100,6 @@ where
             drop(lock);
             Ok(boot::RecoveryLaunch::Launched { child_pid, file })
         }
-        decision => anyhow::bail!("an unknown launch decision: {decision:?}"),
     }
 }
 

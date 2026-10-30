@@ -11,6 +11,7 @@ mod in_process;
 mod lease;
 mod ownership;
 mod restart;
+mod supervisor;
 
 /// Writes the config and returns its path; the profile selects every model
 /// the body declares.
@@ -302,10 +303,13 @@ fn the_workshop_package_smoke_profile_boots_without_cli_arguments() {
     let file = gateway_api_discovery::GatewayDiscoveryFile::read(&profile.join("run"))
         .expect("read package connection")
         .expect("package connection exists");
+    let publisher = sysinfo::Pid::from_u32(file.pid);
+    let mut system = sysinfo::System::new();
+    system.refresh_processes(sysinfo::ProcessesToUpdate::Some(&[publisher]), true);
     assert_eq!(
-        file.pid,
-        child.id(),
-        "the launched Gateway owns publication"
+        system.process(publisher).and_then(sysinfo::Process::parent),
+        Some(sysinfo::Pid::from_u32(child.id())),
+        "the launched Gateway's supervised child owns publication"
     );
     let _ = child.kill();
     let _ = child.wait();
