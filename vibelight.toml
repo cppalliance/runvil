@@ -12,3 +12,5 @@ exclude = [
     "crates/harness-internal/test-plugin",  # a test fixture or helper
 ]
 out = ".vibelight"
+# Doc text that repeats on purpose, so the doc-text leads ignore it.
+boilerplate = ["cargo test -p build-xtask"]
