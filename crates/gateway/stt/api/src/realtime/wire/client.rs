@@ -4,7 +4,7 @@ use serde_json::{Map, Value};
 
 use super::vocabulary::{
     AUDIO_RATE, AUDIO_TYPE, ClientError, ClientEvent, Correlation, HYPOTHESIS_INCLUDE,
-    HYPOTHESIS_RANGES_INCLUDE, HypothesisInclude, MODEL, SESSION_TYPE, SessionPatch,
+    HypothesisInclude, MODEL, SESSION_TYPE, SessionPatch,
 };
 
 pub(in crate::realtime) fn parse_client_event(text: &str) -> Result<ClientEvent, ClientError> {
@@ -350,16 +350,9 @@ fn parse_include(
     let message = match tokens.as_slice() {
         [] => return Ok(HypothesisInclude::Off),
         [Some(HYPOTHESIS_INCLUDE)] => return Ok(HypothesisInclude::Snapshots),
-        [Some(HYPOTHESIS_INCLUDE), Some(HYPOTHESIS_RANGES_INCLUDE)]
-        | [Some(HYPOTHESIS_RANGES_INCLUDE), Some(HYPOTHESIS_INCLUDE)] => {
-            return Ok(HypothesisInclude::Ranges);
-        }
-        [Some(HYPOTHESIS_RANGES_INCLUDE)] => {
-            format!("Include value {HYPOTHESIS_RANGES_INCLUDE} requires {HYPOTHESIS_INCLUDE}")
-        }
         _ => match tokens
             .iter()
-            .find(|token| !matches!(token, Some(HYPOTHESIS_INCLUDE | HYPOTHESIS_RANGES_INCLUDE)))
+            .find(|token| !matches!(token, Some(HYPOTHESIS_INCLUDE)))
         {
             Some(token) => format!(
                 "Unsupported include value {}",

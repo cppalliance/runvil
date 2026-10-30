@@ -18,7 +18,6 @@ use crate::realtime::session::InterimEpoch;
 mod interim;
 
 const HYPOTHESIS: &str = "item.input_audio_transcription.hypothesis";
-const RANGES: &str = "item.input_audio_transcription.hypothesis.ranges";
 
 #[test]
 fn sample_milliseconds_are_exact_across_the_prior_multiplication_overflow() {
@@ -157,29 +156,6 @@ fn a_new_input_after_clear_or_commit_starts_again_at_revision_one() {
         accept(&mut session, epoch, 0..16_000, "alpha beta"),
         Some(1)
     );
-}
-
-#[test]
-fn range_fields_appear_only_for_a_ranges_input_and_report_the_finalized_text() {
-    let mut base = hypothesis_session();
-    let epoch = base.begin_interim().expect("epoch begins");
-    let event = accept_event(&mut base, epoch, 0..16_000, "alpha beta")
-        .expect("base hypothesis is emitted");
-    assert!(event.get("finalized_through_ms").is_none());
-    assert!(event.get("finalized_seq").is_none());
-
-    let mut ranges = session_including(&[HYPOTHESIS, RANGES]);
-    ranges
-        .input()
-        .expect("input exists")
-        .take()
-        .record_finalized_through("ask not", Some(16_000));
-    let epoch = ranges.begin_interim().expect("epoch begins");
-    let event = accept_event(&mut ranges, epoch, 16_000..32_000, "what you")
-        .expect("ranges hypothesis is emitted");
-    assert_eq!(event["finalized"], "ask not");
-    assert_eq!(event["finalized_through_ms"], 1_000);
-    assert_eq!(event["finalized_seq"], 1);
 }
 
 fn accept_delta(
@@ -413,27 +389,24 @@ fn a_landed_final_streams_its_appended_words_to_a_plain_client() {
 }
 
 #[test]
-fn only_a_ranges_session_advances_the_revision_for_a_range_only_change() {
-    for (include, expected) in [(&[HYPOTHESIS][..], 2), (&[HYPOTHESIS, RANGES][..], 3)] {
-        let mut session = session_including(include);
-        let epoch = session.begin_interim().expect("epoch begins");
-        assert_eq!(
-            accept(&mut session, epoch, 0..16_000, "alpha beta"),
-            Some(1)
-        );
-        assert_eq!(
-            accept(&mut session, epoch, 0..24_000, "alpha beta"),
-            Some(2)
-        );
-        session
-            .input()
-            .expect("input exists")
-            .take()
-            .record_finalized_through("", None);
-        assert_eq!(
-            accept(&mut session, epoch, 0..32_000, "alpha beta"),
-            Some(expected),
-            "{include:?}"
-        );
-    }
+fn an_unchanged_hypothesis_keeps_its_revision_for_a_new_window() {
+    let mut session = hypothesis_session();
+    let epoch = session.begin_interim().expect("epoch begins");
+    assert_eq!(
+        accept(&mut session, epoch, 0..16_000, "alpha beta"),
+        Some(1)
+    );
+    assert_eq!(
+        accept(&mut session, epoch, 0..24_000, "alpha beta"),
+        Some(2)
+    );
+    session
+        .input()
+        .expect("input exists")
+        .take()
+        .record_finalized_through("", None);
+    assert_eq!(
+        accept(&mut session, epoch, 0..32_000, "alpha beta"),
+        Some(2)
+    );
 }

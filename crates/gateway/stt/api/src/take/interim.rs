@@ -47,11 +47,9 @@ impl Take {
     }
 }
 
-/// Absolute sample watermark of finalized text and the count of final
-/// outcomes applied to the take.
+/// The count of final outcomes applied to the take.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct FinalizedRange {
-    pub(crate) through_samples: u64,
     pub(crate) seq: u64,
 }
 

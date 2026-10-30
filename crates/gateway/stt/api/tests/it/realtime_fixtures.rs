@@ -90,12 +90,8 @@ fn assert_session(value: &Value, context: &str) {
         matches!(
             include.as_slice(),
             [] | ["item.input_audio_transcription.hypothesis"]
-                | [
-                    "item.input_audio_transcription.hypothesis",
-                    "item.input_audio_transcription.hypothesis.ranges"
-                ]
         ),
-        "{context} include is empty, the hypothesis token, or the hypothesis token then ranges"
+        "{context} include is empty or the hypothesis token"
     );
 
     let audio = object(
@@ -211,26 +207,6 @@ fn assert_server_event_fields(value: &Value, context: &str) {
         "conversation.item.input_audio_transcription.failed" => {
             &["content_index", "error", "event_id", "item_id", "type"][..]
         }
-        "conversation.item.input_audio_transcription.hypothesis"
-            if event.contains_key("finalized_through_ms")
-                || event.contains_key("finalized_seq") =>
-        {
-            &[
-                "agreed",
-                "audio_end_ms",
-                "audio_start_ms",
-                "content_index",
-                "event_id",
-                "finalized",
-                "finalized_seq",
-                "finalized_through_ms",
-                "item_id",
-                "revision",
-                "tentative",
-                "transcript",
-                "type",
-            ][..]
-        }
         "conversation.item.input_audio_transcription.hypothesis" => &[
             "agreed",
             "audio_end_ms",
@@ -253,11 +229,6 @@ fn assert_server_event_fields(value: &Value, context: &str) {
     }
     if let Some(content_index) = event.get("content_index") {
         assert_eq!(content_index, 0, "{context}.content_index is zero");
-    }
-    for field in ["finalized_through_ms", "finalized_seq"] {
-        if let Some(value) = event.get(field) {
-            assert!(value.as_u64().is_some(), "{context}.{field} is unsigned");
-        }
     }
     if let Some(previous) = event.get("previous_item_id") {
         assert!(

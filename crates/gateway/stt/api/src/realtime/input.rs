@@ -56,10 +56,6 @@ impl InputSnapshot {
     pub(crate) const fn include_hypothesis(&self) -> bool {
         !matches!(self.include, HypothesisInclude::Off)
     }
-
-    pub(crate) const fn include_ranges(&self) -> bool {
-        matches!(self.include, HypothesisInclude::Ranges)
-    }
 }
 
 /// The terms every decode of a take is guided by: the generation's

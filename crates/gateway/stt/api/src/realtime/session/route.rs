@@ -5,7 +5,7 @@ use crate::audio::AudioError;
 use crate::realtime::input::UncommittedInput;
 use crate::realtime::result_mailbox::ItemResult;
 use crate::realtime::session::state::InterimTaskOutput;
-use crate::realtime::wire::{HypothesisRanges, ServerEvent};
+use crate::realtime::wire::ServerEvent;
 use crate::take::{FinalizedRange, InterimSnapshot, token_spans};
 use gateway_stt_engine::{DecodeMode, DecodeRequest, EnginePolicy, TranscribeError};
 
@@ -210,31 +210,22 @@ impl Session {
             self.hypothesis_window_end = end;
         }
         let input = self.input.as_ref().ok_or(SessionError::NoInput)?;
-        let include_ranges = input.snapshot().include_ranges();
         if !input.snapshot().include_hypothesis() {
             return Ok(self.standard_delta(item_id, snapshot));
         }
-        let shown = (
-            snapshot,
-            include_ranges.then(|| HypothesisRanges {
-                finalized_through_ms: sample_millis(finalized.through_samples),
-                finalized_seq: finalized.seq,
-            }),
-        );
         let changed = self
             .last_hypothesis
             .as_ref()
-            .map_or(!shown.0.is_empty(), |last| last != &shown);
+            .map_or(!snapshot.is_empty(), |last| last != &snapshot);
         if changed {
             self.hypothesis_revision = self
                 .hypothesis_revision
                 .checked_add(1)
                 .ok_or(SessionError::EpochExhausted)?;
-            self.last_hypothesis = Some(shown.clone());
+            self.last_hypothesis = Some(snapshot.clone());
         } else if window.is_none() || self.last_hypothesis.is_none() {
             return Ok(None);
         }
-        let (snapshot, ranges) = shown;
         let end = self.hypothesis_window_end;
         let (audio_start, audio_end) = window.unwrap_or((end, end));
         Ok(Some(ServerEvent::hypothesis(
@@ -244,7 +235,6 @@ impl Session {
             snapshot,
             sample_millis(audio_start),
             sample_millis(audio_end),
-            ranges,
         )))
     }
 

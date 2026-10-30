@@ -36,21 +36,6 @@ fn update(prompt: &str, include: bool) -> String {
     .to_string()
 }
 
-fn update_with_ranges(prompt: &str) -> String {
-    serde_json::json!({
-        "type": "session.update",
-        "session": {
-            "type": "transcription",
-            "audio": {"input": {"transcription": {"prompt": prompt}}},
-            "include": [
-                "item.input_audio_transcription.hypothesis",
-                "item.input_audio_transcription.hypothesis.ranges"
-            ]
-        }
-    })
-    .to_string()
-}
-
 fn session() -> Session {
     let registration = SessionRegistry::default()
         .register()
@@ -122,32 +107,6 @@ fn first_successful_append_freezes_configuration_until_clear() {
     assert_ne!(input.item_id(), first_item);
     assert_eq!(input.snapshot().prompt(), "second");
     assert!(!input.snapshot().include_hypothesis());
-}
-
-#[test]
-fn first_successful_append_freezes_the_ranges_include_until_clear() {
-    let mut session = session();
-    session
-        .update_text(&update_with_ranges("first"))
-        .expect("ranges update applies");
-    session
-        .append_base64(&encoded(&[1, 2, 3]))
-        .expect("first append succeeds");
-
-    session
-        .update_text(&update("second", true))
-        .expect("base hypothesis update applies");
-    let input = session.input().expect("input remains");
-    assert!(input.snapshot().include_hypothesis());
-    assert!(input.snapshot().include_ranges());
-
-    session.clear().expect("clear succeeds");
-    session
-        .append_base64(&encoded(&[4, 5, 6]))
-        .expect("next input appends");
-    let input = session.input().expect("replacement input exists");
-    assert!(input.snapshot().include_hypothesis());
-    assert!(!input.snapshot().include_ranges());
 }
 
 #[test]

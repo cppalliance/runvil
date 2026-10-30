@@ -3,8 +3,8 @@
 //! `/v1/realtime` route at real-time pace and records every server event it
 //! receives, for measuring what a dictation shows and when.
 //!
-//! The session negotiates the hypothesis and ranges includes the way
-//! Workshop does, and the gateway loads the packaged interim and final
+//! The session negotiates the hypothesis include the way Workshop does,
+//! and the gateway loads the packaged interim and final
 //! `[[stt_model]]` pair at its default `[stt]` window and interval. The clip
 //! is appended in 100 ms chunks on a wall-clock schedule, and the commit
 //! follows the last chunk.
@@ -30,7 +30,6 @@ use super::{Socket, audio_samples, connect, server};
 
 const CAPTURE_VARIABLE: &str = "RUNVIL_REALTIME_CAPTURE";
 const HYPOTHESIS_INCLUDE: &str = "item.input_audio_transcription.hypothesis";
-const RANGES_INCLUDE: &str = "item.input_audio_transcription.hypothesis.ranges";
 const HYPOTHESIS: &str = "conversation.item.input_audio_transcription.hypothesis";
 const COMPLETED: &str = "conversation.item.input_audio_transcription.completed";
 const FAILED: &str = "conversation.item.input_audio_transcription.failed";
@@ -132,7 +131,7 @@ async fn send(sink: &mut Sink, event: &Value) {
         .expect("client event sends");
 }
 
-/// Requests hypotheses with ranges in the session update Workshop sends.
+/// Requests hypotheses in the session update Workshop sends.
 pub(super) async fn negotiate(sink: &mut Sink, recorder: &mut Recorder) {
     recorder.expect("session.created").await;
     send(
@@ -148,7 +147,7 @@ pub(super) async fn negotiate(sink: &mut Sink, recorder: &mut Recorder) {
                     "transcription": {"model": "realtime-transcribe", "prompt": ""},
                     "turn_detection": null
                 }},
-                "include": [HYPOTHESIS_INCLUDE, RANGES_INCLUDE]
+                "include": [HYPOTHESIS_INCLUDE]
             }
         }),
     )
@@ -156,8 +155,8 @@ pub(super) async fn negotiate(sink: &mut Sink, recorder: &mut Recorder) {
     let updated = recorder.expect("session.updated").await;
     assert_eq!(
         updated["session"]["include"],
-        json!([HYPOTHESIS_INCLUDE, RANGES_INCLUDE]),
-        "the route negotiates hypotheses with ranges"
+        json!([HYPOTHESIS_INCLUDE]),
+        "the route negotiates hypotheses"
     );
 }
 

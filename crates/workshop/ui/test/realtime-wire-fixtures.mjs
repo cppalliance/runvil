@@ -32,9 +32,7 @@ const fixtureDir = path.join(
 
 const minimumCommitAudioBytes = (24_000 * 2) / 10;
 const hypothesisInclude = "item.input_audio_transcription.hypothesis";
-const rangesInclude = "item.input_audio_transcription.hypothesis.ranges";
 const negotiableIncludes = [[], [hypothesisInclude]];
-const rangeFields = ["finalized_seq", "finalized_through_ms"];
 
 async function fixture(name) {
   const parsed = JSON.parse(await readFile(path.join(fixtureDir, name), "utf8"));
@@ -89,24 +87,6 @@ function valueAt(value, path) {
 
 function pathName(path) {
   return path.map(String).join(".");
-}
-
-function carriesRanges(event) {
-  if (event.type === "session.created" || event.type === "session.updated") {
-    return event.session.include.includes(rangesInclude);
-  }
-  return rangeFields.some((field) => field in event);
-}
-
-function withoutRangesInclude(session) {
-  return { ...session, include: session.include.filter((value) => value !== rangesInclude) };
-}
-
-function withoutRanges(event) {
-  const base = structuredClone(event);
-  if ("session" in base) base.session = withoutRangesInclude(base.session);
-  for (const field of rangeFields) delete base[field];
-  return base;
 }
 
 function isOptionalErrorField(path) {
@@ -296,17 +276,15 @@ test("canonical Realtime event fixtures satisfy the browser wire contract", asyn
   );
 
   const sessions = await fixture("effective-sessions.json");
-  assert.deepEqual(sortedKeys(sessions), ["default", "ranges", "updated"]);
+  assert.deepEqual(sortedKeys(sessions), ["default", "updated"]);
   assertSession(sessions.default, "default session");
   assertSession(sessions.updated, "updated session");
-  assert.deepEqual(sessions.ranges.include, [hypothesisInclude, rangesInclude]);
-  assertSession(withoutRangesInclude(sessions.ranges), "ranges session without ranges");
 
   const servers = await fixture("server-events.json");
   for (const [name, event] of Object.entries(servers)) {
     assertNonemptyString(event.event_id, `${name}.event_id`);
     assertNonemptyString(event.type, `${name}.type`);
-    assertServerEventFields(carriesRanges(event) ? withoutRanges(event) : event, name);
+    assertServerEventFields(event, name);
   }
   assert.deepEqual(servers.session_created.session, sessions.default);
   assert.deepEqual(servers.session_updated.session, sessions.updated);
@@ -327,32 +305,17 @@ test("canonical Realtime event fixtures satisfy the browser wire contract", asyn
   assert.ok(hypothesis.audio_end_ms >= hypothesis.audio_start_ms);
 });
 
-test("the production decoder rejects range fields and the ranges include", async () => {
+test("the production decoder rejects an include the session did not negotiate", async () => {
   const servers = await fixture("server-events.json");
-  const ranged = Object.keys(servers).filter((name) => carriesRanges(servers[name]));
-  assert.deepEqual(ranged, ["transcription_hypothesis_ranges"]);
-  for (const name of ranged) {
-    const event = servers[name];
-    assert.equal(decodeRealtimeEvent(event), null, `${name} is rejected`);
-    const base = withoutRanges(event);
-    assert.deepEqual(decodeRealtimeEvent(base), base, `${name} without ranges decodes unchanged`);
-    for (const field of rangeFields) {
-      const lone = structuredClone(event);
-      delete lone[field];
-      assert.equal(decodeRealtimeEvent(lone), null, `${name} rejects a lone range field`);
-    }
-  }
-
   const sessions = await fixture("effective-sessions.json");
   for (const include of [
-    sessions.ranges.include,
-    [rangesInclude],
-    [rangesInclude, hypothesisInclude],
+    ["item.input_audio_transcription.logprobs"],
+    [hypothesisInclude, "item.input_audio_transcription.logprobs"],
   ]) {
     assert.equal(
       decodeRealtimeEvent({
         ...servers.session_updated,
-        session: { ...sessions.ranges, include },
+        session: { ...sessions.updated, include },
       }),
       null,
       `include ${JSON.stringify(include)} is rejected`,
@@ -363,7 +326,6 @@ test("the production decoder rejects range fields and the ranges include", async
 test("the production decoder rejects every canonical field mutation", async () => {
   const servers = await fixture("server-events.json");
   for (const [name, event] of Object.entries(servers)) {
-    if (carriesRanges(event)) continue;
     assert.deepEqual(decodeRealtimeEvent(event), event, `${name} decodes unchanged`);
     for (const fieldPath of fieldPaths(event)) {
       const mutated = structuredClone(event);
@@ -471,7 +433,6 @@ test("the production decoder rejects every canonical field mutation", async () =
 
 test("canonical Realtime sequences cover every frozen contract path", async () => {
   const valid = await fixture("valid-sequences.json");
-  const rangedSequences = new Set();
   for (const [name, sequence] of Object.entries(valid)) {
     assertExactKeys(sequence, ["events", "invariants"], name);
     assert.ok(sequence.events.length > 0, `${name} has events`);
@@ -484,33 +445,16 @@ test("canonical Realtime sequences cover every frozen contract path", async () =
         assertNonemptyString(entry.message.event_id, `${name} event ID`);
       }
       if (entry.direction === "server") {
-        if (carriesRanges(entry.message)) {
-          rangedSequences.add(name);
-          const base = withoutRanges(entry.message);
-          assertServerEventFields(base, `${name} server event without ranges`);
-          assert.equal(
-            decodeRealtimeEvent(entry.message),
-            null,
-            `${name} range server event is rejected`,
-          );
-          assert.deepEqual(
-            decodeRealtimeEvent(base),
-            base,
-            `${name} server event without ranges decodes`,
-          );
-        } else {
-          assertServerEventFields(entry.message, `${name} server event`);
-          assert.deepEqual(
-            decodeRealtimeEvent(entry.message),
-            entry.message,
-            `${name} server event decodes`,
-          );
-        }
+        assertServerEventFields(entry.message, `${name} server event`);
+        assert.deepEqual(
+          decodeRealtimeEvent(entry.message),
+          entry.message,
+          `${name} server event decodes`,
+        );
       }
     }
     assertValidCommitAudio(name, sequence.events);
   }
-  assert.deepEqual([...rangedSequences], ["hypothesis_ranges_negotiation"]);
   assert.deepEqual(
     valid.hypothesis_negotiation.events
       .filter(

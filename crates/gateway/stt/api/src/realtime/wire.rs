@@ -13,7 +13,7 @@ pub(in crate::realtime) use client::parse_client_event;
     reason = "no code in the realtime module reads these re-exports"
 )]
 pub(in crate::realtime) use server::{
-    ConversationItem, DurationUsage, EffectiveSession, HypothesisRanges, ServerEvent, WireError,
+    ConversationItem, DurationUsage, EffectiveSession, ServerEvent, WireError,
 };
 pub(in crate::realtime) use vocabulary::{
     ClientError, ClientEvent, HypothesisInclude, IdGenerator,

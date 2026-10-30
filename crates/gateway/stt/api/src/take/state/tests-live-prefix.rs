@@ -112,13 +112,9 @@ fn the_live_prefix_counts_applied_final_outcomes_beside_the_finalized_watermark(
         &[],
         &ShownHypotheses::default(),
     );
-    assert_eq!(
-        state.live_prefix_snapshot().finalized_range(),
-        FinalizedRange {
-            through_samples: 16_000,
-            seq: 1
-        }
-    );
+    let snapshot = state.live_prefix_snapshot();
+    assert_eq!(snapshot.finalized_range(), FinalizedRange { seq: 1 });
+    assert_eq!(snapshot.finalized_samples(), 16_000);
 
     state.record_final_outcome(
         FinalRangeOutcome::forced(
@@ -128,13 +124,16 @@ fn the_live_prefix_counts_applied_final_outcomes_beside_the_finalized_watermark(
         &[],
         &ShownHypotheses::default(),
     );
+    let snapshot = state.live_prefix_snapshot();
     assert_eq!(
-        state.live_prefix_snapshot().finalized_range(),
-        FinalizedRange {
-            through_samples: 16_000,
-            seq: 2
-        },
-        "pending forced text counts as applied without moving the finalized watermark"
+        snapshot.finalized_range(),
+        FinalizedRange { seq: 2 },
+        "pending forced text counts as applied"
+    );
+    assert_eq!(
+        snapshot.finalized_samples(),
+        16_000,
+        "pending forced text does not move the finalized watermark"
     );
 
     state.record_final_outcome(
@@ -143,12 +142,11 @@ fn the_live_prefix_counts_applied_final_outcomes_beside_the_finalized_watermark(
         &ShownHypotheses::default(),
     );
     assert!(state.pending_failure().is_some());
+    let snapshot = state.live_prefix_snapshot();
     assert_eq!(
-        state.live_prefix_snapshot().finalized_range(),
-        FinalizedRange {
-            through_samples: 16_000,
-            seq: 2
-        },
+        snapshot.finalized_range(),
+        FinalizedRange { seq: 2 },
         "a rejected outcome is not counted"
     );
+    assert_eq!(snapshot.finalized_samples(), 16_000);
 }

@@ -6,7 +6,7 @@ use crate::realtime::input::UncommittedInput;
 use crate::realtime::item::{CommittedItem, FinalizationError};
 use crate::realtime::registry::SessionRegistration;
 use crate::realtime::result_mailbox::{MailboxError, ResultMailbox};
-use crate::realtime::wire::{EffectiveSession, HypothesisRanges, IdGenerator};
+use crate::realtime::wire::{EffectiveSession, IdGenerator};
 use crate::take::{InterimSnapshot, TakeFailure};
 use gateway_stt_engine::{DecodeOutput, TranscribeError};
 use std::collections::HashMap;
@@ -79,7 +79,7 @@ pub(crate) struct Session {
     pub(super) standard_interim_sent: String,
     pub(super) standard_interim_committed: String,
     pub(super) hypothesis_revision: u64,
-    pub(super) last_hypothesis: Option<(InterimSnapshot, Option<HypothesisRanges>)>,
+    pub(super) last_hypothesis: Option<InterimSnapshot>,
     /// Final outcomes applied to the take when its latest update was composed.
     pub(super) shown_finalized_seq: u64,
     /// End of the latest accepted interim window, where an update for landed

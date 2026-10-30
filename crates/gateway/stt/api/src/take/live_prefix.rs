@@ -70,7 +70,6 @@ impl LivePrefixSnapshot {
 
     pub(super) const fn finalized_range(&self) -> FinalizedRange {
         FinalizedRange {
-            through_samples: self.finalized_samples,
             seq: self.applied_outcomes,
         }
     }

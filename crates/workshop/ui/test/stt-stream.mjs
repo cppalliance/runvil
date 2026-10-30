@@ -1027,7 +1027,7 @@ await assertNoLeaks(lifecycle, async () => {
   assert.deepEqual(
     sockets[0].sent,
     [client.session_update],
-    "the production service requests hypotheses without finalized ranges",
+    "the production service requests hypotheses",
   );
   sockets[0].message(server.session_updated);
   assert.equal(service.state, "ready");
@@ -1087,13 +1087,17 @@ await assertNoLeaks(lifecycle, async () => {
     const errors = [];
     service.onEvent((value) => events.push(value));
     service.onError((value) => errors.push(value));
-    const rangesSessionUpdated = {
+    const unnegotiatedSessionUpdated = {
       ...server.session_updated,
       session: {
         ...server.session_updated.session,
-        include: client.session_update_ranges.session.include,
+        include: [
+          ...client.session_update.session.include,
+          "item.input_audio_transcription.logprobs",
+        ],
       },
     };
+    const malformedHypothesis = { ...server.transcription_hypothesis, revision: "3" };
     const invalidEventGenerations = () =>
       errors
         .filter(({ code }) => code === "invalid_server_event")
@@ -1108,24 +1112,24 @@ await assertNoLeaks(lifecycle, async () => {
       assert.deepEqual(
         socket.sent.map(({ session }) => session.include),
         [client.session_update.session.include],
-        `generation ${generation} requests hypotheses without ranges`,
+        `generation ${generation} requests hypotheses`,
       );
-      socket.message(rangesSessionUpdated);
-      assert.equal(service.state, "connecting", "the two-token effective session is rejected");
+      socket.message(unnegotiatedSessionUpdated);
+      assert.equal(service.state, "connecting", "a session with an unnegotiated include is rejected");
       socket.message(server.session_updated);
       assert.equal(service.state, "ready");
       socket.message(server.transcription_delta);
-      socket.message(server.transcription_hypothesis_ranges);
+      socket.message(malformedHypothesis);
       socket.message(server.transcription_hypothesis);
       assert.deepEqual(
         events.map(({ event }) => event),
         [server.session_created, server.session_updated, server.transcription_hypothesis],
-        `generation ${generation} publishes no range fields and drops deltas`,
+        `generation ${generation} publishes the valid events and drops deltas`,
       );
       assert.deepEqual(
         invalidEventGenerations(),
         Array.from({ length: generation }, (_, earlier) => [earlier + 1, earlier + 1]).flat(),
-        `generation ${generation} reports the ranges session and the range event as invalid`,
+        `generation ${generation} reports the unnegotiated session and the malformed hypothesis as invalid`,
       );
       if (index === 0) {
         socket.close();
