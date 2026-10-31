@@ -25,15 +25,17 @@
 mod failure;
 
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
-use std::sync::{Arc, LazyLock};
+use std::sync::{Arc, LazyLock, Mutex};
 
 use mlua::{Function, Lua, StdLib, Table, Value};
+use runvil_model_client::model::ModelBinding;
 
 use crate::engine_globals::route_store_to_shims;
 use crate::error::SharedSource;
 use crate::error::{Error, Result};
 use crate::error_value::{install_error_value, install_normalize_failure};
 use crate::hardening::CancelHook;
+use crate::models::{LuaModelHandle, selection_poisoned};
 use crate::program::LuaProgram;
 use crate::var::var_snapshot_table;
 
@@ -129,6 +131,8 @@ static FANOUT_PROGRAM: LazyLock<std::result::Result<LuaProgram, SharedSource>> =
 /// `models.loop` and `models.compact` shims are installed on the `models`
 /// table, and the chunk's `handle_methods` table, a model handle's `infer`
 /// and `loop`, is stashed in the registry for [`handle_method`].
+/// `selection`, the chain's current model, is what the `fanout` chunk's
+/// `get_selection` and `set_selection` captures read and write.
 /// `max_tool_iterations`, the run's resolved round cap, the `compactors`
 /// table, and `loop_running`, the VM's flag that refuses a loop started
 /// while one runs, go to [`loop_begin`](crate::models_loop::loop_begin),
@@ -162,6 +166,7 @@ static FANOUT_PROGRAM: LazyLock<std::result::Result<LuaProgram, SharedSource>> =
 pub(crate) fn install_shim_prelude(
     lua: &Lua,
     max_tool_iterations: usize,
+    selection: &Arc<Mutex<Option<ModelBinding>>>,
     adhoc_handler_depth: &Arc<AtomicU32>,
     loop_running: &Arc<AtomicBool>,
     cancel_hook: &CancelHook,
@@ -210,7 +215,7 @@ pub(crate) fn install_shim_prelude(
             enter_adhoc_handler,
             leave_adhoc_handler,
             cancel_requested,
-            is_model_handle,
+            is_model_handle.clone(),
             loop_begin,
             compact_begin,
         ))
@@ -232,7 +237,14 @@ pub(crate) fn install_shim_prelude(
         .call((yield_fn.clone(), var_snapshot.clone(), helpers.clone()))
         .map_err(Error::lua)?;
     globals.raw_set("tasks", &tasks).map_err(Error::lua)?;
-    let fanout = fanout_shim(lua, yield_fn, var_snapshot, helpers)?;
+    let fanout = fanout_shim(
+        lua,
+        yield_fn,
+        var_snapshot,
+        helpers,
+        selection,
+        is_model_handle,
+    )?;
     tasks.raw_set("fanout", fanout).map_err(Error::lua)?;
     stash_shims(lua, &shims)?;
     for name in ["loop", "compact"] {
@@ -246,13 +258,17 @@ pub(crate) fn install_shim_prelude(
 }
 
 /// Runs the `fanout` chunk over the prelude's `yield` and `var_snapshot`
-/// captures and failure `helpers`, plus the collection enumerator and the
-/// item renderer, and returns the shim installed as `tasks.fanout`.
+/// captures and failure `helpers`, plus the collection enumerator, the item
+/// renderer, the two captures over the chain's current model `selection`,
+/// and the prelude's `is_model_handle`, and returns the shim installed as
+/// `tasks.fanout`.
 fn fanout_shim(
     lua: &Lua,
     yield_fn: Function,
     var_snapshot: Function,
     helpers: Table,
+    selection: &Arc<Mutex<Option<ModelBinding>>>,
+    is_model_handle: Function,
 ) -> Result<Function> {
     // The enumerator answers `(members)` or `(nil, message)` so the shim
     // raises the message as its own call error, exactly as the other
@@ -273,6 +289,7 @@ fn fanout_shim(
             crate::collection::render_item_value(lua, item).map_err(mlua::Error::external)
         })
         .map_err(Error::lua)?;
+    let (get_selection, set_selection) = selection_captures(lua, selection)?;
     FANOUT_PROGRAM
         .as_ref()
         .map_err(Error::shared)?
@@ -283,8 +300,56 @@ fn fanout_shim(
             helpers,
             collection_members,
             render_item,
+            get_selection,
+            set_selection,
+            is_model_handle,
         ))
         .map_err(Error::lua)
+}
+
+/// Builds the `fanout` chunk's `get_selection()` and `set_selection(value)`
+/// captures over the chain's current model `selection`.
+///
+/// `get_selection` returns the current model's handle, or nil when the
+/// caller supplied no model. `set_selection` stores the binding of a model
+/// handle, clears the selection on nil, and refuses any other value. Both
+/// are passed to the chunk and are not reachable from author code.
+fn selection_captures(
+    lua: &Lua,
+    selection: &Arc<Mutex<Option<ModelBinding>>>,
+) -> Result<(Function, Function)> {
+    let read = Arc::clone(selection);
+    let get = lua
+        .create_function(move |lua, ()| -> mlua::Result<Value> {
+            let held = read.lock().map_err(|_| selection_poisoned())?.clone();
+            match held {
+                Some(binding) => lua
+                    .create_userdata(LuaModelHandle::from_binding(binding))
+                    .map(Value::UserData),
+                None => Ok(Value::Nil),
+            }
+        })
+        .map_err(Error::lua)?;
+    let write = Arc::clone(selection);
+    let set = lua
+        .create_function(move |_, value: Value| -> mlua::Result<()> {
+            let binding = match &value {
+                Value::Nil => None,
+                Value::UserData(userdata) if userdata.is::<LuaModelHandle>() => {
+                    Some(userdata.borrow::<LuaModelHandle>()?.binding().clone())
+                }
+                other => {
+                    return Err(mlua::Error::external(format!(
+                        "set_selection takes a model handle or nil, got {}",
+                        crate::models::lua_type_name(other)
+                    )));
+                }
+            };
+            *write.lock().map_err(|_| selection_poisoned())? = binding;
+            Ok(())
+        })
+        .map_err(Error::lua)?;
+    Ok((get, set))
 }
 
 /// Stashes the shim chunk's `handle_methods` and `store` under their

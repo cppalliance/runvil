@@ -134,7 +134,9 @@ impl SectionVm {
     /// namespace) through `install_shim_prelude`, which also puts
     /// `models.loop` and `models.compact` on the `models` table.
     /// `max_tool_iterations` is the run's resolved round cap, which every
-    /// `models.loop` and model handle `loop` call on this VM spends.
+    /// `models.loop` and model handle `loop` call on this VM spends. The
+    /// `tasks.fanout` shim reads and writes the chain's current model
+    /// through captures over the selection injection received.
     ///
     /// # Errors
     /// Returns [`Error::LuaRuntime`] if the shim prelude cannot install.
@@ -142,6 +144,7 @@ impl SectionVm {
         install_shim_prelude(
             &self.lua,
             max_tool_iterations,
+            &self.state.selection,
             &self.adhoc_handler_depth,
             &self.loop_running,
             &self.cancel_hook,

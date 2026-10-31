@@ -61,13 +61,13 @@ fn raw_gateway_binding(alias: &str) -> mlua::Result<ModelBinding> {
 }
 
 /// The error every selection read or write raises when its lock is poisoned.
-fn selection_poisoned() -> mlua::Error {
+pub(crate) fn selection_poisoned() -> mlua::Error {
     mlua::Error::external("model selection lock was poisoned")
 }
 
 /// The Lua type name of `value`, as `type(value)` reports it: an integer is a
 /// `number`.
-fn lua_type_name(value: &Value) -> &'static str {
+pub(crate) fn lua_type_name(value: &Value) -> &'static str {
     match value {
         Value::Integer(_) | Value::Number(_) => "number",
         other => other.type_name(),

@@ -620,7 +620,7 @@ Make each chain own the selection that its sections' VMs share, so a switch last
 
 <step-7>
 
-### Step 7: Model-first tasks.fanout, then the commit gate
+### Step 7: Model-first tasks.fanout, then the commit gate [completed]
 
 - Component: Model-first fanout
 - Tests:

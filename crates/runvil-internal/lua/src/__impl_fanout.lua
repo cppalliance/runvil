@@ -13,15 +13,20 @@
 -- `collection_members(collection)` enumerates a collection as `(members)`
 -- or `(nil, message)` - the array part in order, then the hash part as
 -- `{ key, value }` pairs sorted by key - and `render_item(item)` renders a
--- member as `{{ item }}` would.
+-- member as `{{ item }}` would. The last three captures reach the chain's
+-- current model: `get_selection()` returns its handle, or nil when the
+-- caller supplied no model, `set_selection(handle_or_nil)` sets it (nil
+-- clears it) and refuses any other value, and `is_model_handle(value)`
+-- reports whether a value is a model handle.
 local yield, var_snapshot, helpers,
-  collection_members, render_item = ...
+  collection_members, render_item,
+  get_selection, set_selection, is_model_handle = ...
 
 local raise, fail = helpers.raise, helpers.fail
 
--- setmetatable, captured at install so the shim's behavior does not move
--- when author code rebinds the base globals.
-local setmetatable = setmetatable
+-- The base functions the shim uses, captured at install so its behavior does
+-- not move when author code rebinds the base globals.
+local setmetatable, type, select = setmetatable, type, select
 
 -- One fanout arm's result: a frozen, methodless object whose fields
 -- are `text`, `ok`, `item`, and `exhausted`, with `tostring` giving the
@@ -51,8 +56,16 @@ local function exhausted_stub(item)
   return "## " .. render_item(item) .. "\n\nUNKNOWN\n\n(section incomplete: tool loop exhausted)"
 end
 
--- tasks.fanout(worker, collection): run `worker` once per collection
--- member as a task chain and return the results in collection order. The
+-- tasks.fanout(worker, collection) and tasks.fanout(model, worker,
+-- collection): run `worker` once per collection member as a task chain and
+-- return the results in collection order. The model-first form takes a
+-- model handle first and runs every arm on it: it sets the chain's
+-- current model to the handle before the spawns, so each arm copies it when
+-- it is dispatched, and puts the saved model back before the first join and
+-- before a spawn failure is re-raised. No author code runs in the parent
+-- between the switch and the restore, and a model switch is not an event,
+-- so the switch cannot be observed. The first argument is checked before
+-- anything is switched. The
 -- members enumerate (array part in order, then the hash part as
 -- `{ key, value }` pairs sorted by key), an empty collection raises before
 -- any spawn, and every arm is spawned up front - before any join - so no
@@ -68,7 +81,23 @@ end
 -- failure cancels the live arms and re-raises. No arm outlives the call:
 -- every arm is delivered or cancelled before the function returns or
 -- raises.
-local function fanout(worker, collection)
+local function fanout(...)
+  local argc = select("#", ...)
+  local model, worker, collection
+  if argc == 2 then
+    worker, collection = ...
+  elseif argc == 3 then
+    model, worker, collection = ...
+    if not is_model_handle(model) then
+      raise("lua", {
+        message = "tasks.fanout: the first argument must be a model handle, got " .. type(model),
+      })
+    end
+  else
+    raise("lua", {
+      message = "tasks.fanout takes (worker, collection) or (model, worker, collection)",
+    })
+  end
   local members, message = collection_members(collection)
   if not members then
     raise("lua", { message = message })
@@ -95,6 +124,21 @@ local function fanout(worker, collection)
     live, slot_of = {}, {}
   end
 
+  -- The model-first form switches the chain's current model for the spawns
+  -- and puts it back once, whichever path gets there first.
+  local switched, saved = false, nil
+  if model ~= nil then
+    saved = get_selection()
+    set_selection(model)
+    switched = true
+  end
+  local function restore()
+    if switched then
+      switched = false
+      set_selection(saved)
+    end
+  end
+
   -- Every arm is spawned up front, before the first join: the waits
   -- deliver and join the arms one by one, and a late arm that joined an
   -- earlier one's writes would be ordered after it, making its reads
@@ -111,12 +155,14 @@ local function fanout(worker, collection)
       fanout = true,
     })
     if not ok then
+      restore()
       cancel_live()
       fail(result)
     end
     slot_of[result] = index
     live[#live + 1] = result
   end
+  restore()
   while #live > 0 do
     local ok, task, arm_ok, result = yield({ op = "join_any", tasks = live })
     if not ok then

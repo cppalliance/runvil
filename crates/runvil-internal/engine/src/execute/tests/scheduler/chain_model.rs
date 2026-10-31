@@ -7,38 +7,6 @@
 use super::*;
 use crate::execute::tests::fixtures::echo_tool;
 
-/// The model set a chain test runs over: `default` on `test-model`,
-/// `strong` on `model-b`, and `fast` on `model-c`.
-fn three_models() -> ModelSet {
-    let mut set = ModelSet::default();
-    set.push(test_binding(
-        "default",
-        "A general model for tests",
-        "test-model",
-    ));
-    set.push(test_binding("strong", "A second model", "model-b"));
-    set.push(test_binding("fast", "A third model", "model-c"));
-    set
-}
-
-/// A run of `md` over the [`three_models`], unprepared, so the run starts
-/// with that set and no catalog.
-fn chain_scenario(md: &str) -> Scenario {
-    Scenario::new(md).unprepared().models(three_models())
-}
-
-/// A prompt with the given sections, each `(heading, lua)`, under one title.
-fn sections(sections: &[(&str, &str)]) -> String {
-    let mut md = String::from("---\nname: t\ndescription: d\nrunvil: 0\n---\n\n# Chain\n\n");
-    for (heading, lua) in sections {
-        md.push_str(heading);
-        md.push_str("\n\n```lua\n");
-        md.push_str(lua);
-        md.push_str("\n```\n\n");
-    }
-    md
-}
-
 #[test]
 fn a_switch_in_one_section_is_still_in_effect_in_the_next() {
     let gateway = ScriptedChat::new(vec![text("r")]);
