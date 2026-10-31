@@ -52,6 +52,9 @@ pub struct ToolBinding {
     /// Whether the tool's output lists tools, which a script's call
     /// receives as plain text.
     describes_tools: bool,
+    /// Whether only a model may call the tool, so a script's `tools.call`
+    /// refuses it.
+    model_only_call: bool,
     /// Whether a stop leaves a call to the tool in flight.
     survives_stop: bool,
 }
@@ -74,6 +77,7 @@ impl ToolBinding {
                 ToolOutputKind::Plain
             },
             describes_tools: info.describes_tools,
+            model_only_call: info.model_only_call,
             survives_stop: info.survives_stop,
         }
     }
@@ -113,6 +117,13 @@ impl ToolBinding {
     #[must_use]
     pub fn describes_tools(&self) -> bool {
         self.describes_tools
+    }
+
+    /// Returns whether only a model may call the tool, so a script's
+    /// `tools.call` refuses it.
+    #[must_use]
+    pub fn model_only_call(&self) -> bool {
+        self.model_only_call
     }
 
     /// Returns whether a stop leaves a call to the tool in flight.

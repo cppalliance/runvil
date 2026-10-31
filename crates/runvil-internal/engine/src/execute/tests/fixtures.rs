@@ -33,6 +33,18 @@ pub(super) fn echo_tool() -> FnTool {
     .description("Echo the value argument back to the caller.")
 }
 
+/// The fixture Pack's `tools/replace`, which echoes its `value` argument
+/// and which only a model may call.
+#[track_caller]
+pub(super) fn model_only_tool() -> FnTool {
+    FnTool::new("tools/replace", value_schema(), |args| {
+        let value = require_string_arg(&args, "value")?;
+        Ok(ToolOutput::trusted(format!("replaced: {value}")))
+    })
+    .description("Replace text the model names.")
+    .model_only_call()
+}
+
 /// The fixture Pack's `tools/untrusted_echo`, which echoes its `value`
 /// argument as untrusted external data, so its output is guard-wrapped.
 #[track_caller]

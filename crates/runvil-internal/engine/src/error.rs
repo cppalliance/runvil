@@ -306,6 +306,23 @@ pub(crate) enum Error {
         ids: Vec<String>,
     },
 
+    /// A `tools.call` named a catalog tool that only a model may call.
+    ///
+    /// A Pack marks a tool model-only when a render gives its arguments a
+    /// script cannot know, so the tool stays in the catalog and a section
+    /// offers it, while only a model's call can supply arguments that fit.
+    #[error(
+        "tool {name:?} ({id}) is model-only: a render shapes its arguments for the model that \
+         receives them, so a script cannot call it; offer it with tools.offer and let the model \
+         call it"
+    )]
+    ModelOnlyToolCall {
+        /// The name the call tried to dispatch.
+        name: String,
+        /// The catalog tool's id.
+        id: String,
+    },
+
     /// A `models.infer` or `models.loop` round found no `models.use`
     /// selection and no prompt-wide `models.default`.
     #[error("model binding required for section {section}")]
@@ -460,6 +477,7 @@ impl Error {
             | Error::TaskCancelled { .. }
             | Error::OutOfScopeToolCall { .. }
             | Error::UnboundToolCall { .. }
+            | Error::ModelOnlyToolCall { .. }
             | Error::ModelRequired { .. }
             | Error::UnsupportedVersion(_)
             | Error::LuaQuota { .. }

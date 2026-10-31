@@ -296,7 +296,8 @@ impl Error {
     /// `task_consumed` table rebuilds its variant from its `task` field, and
     /// every `cancelled` table maps to [`Error::Interrupted`]. A kind whose
     /// variant needs structure the table does not hold (the tool-scope
-    /// errors, `tasks_live`, `model_failure`, `model_required`, `internal`),
+    /// errors, `model_only_tool`, `tasks_live`, `model_failure`,
+    /// `model_required`, `internal`),
     /// or a `context_exhausted` or task table missing its field, keeps its
     /// message as a Lua failure.
     fn from_raised(raised: runvil_lua::Raised) -> Error {
@@ -343,6 +344,7 @@ impl Error {
             },
             runvil_lua::ErrorKind::OutOfScopeTool
             | runvil_lua::ErrorKind::UnboundTool
+            | runvil_lua::ErrorKind::ModelOnlyTool
             | runvil_lua::ErrorKind::TasksLive
             | runvil_lua::ErrorKind::Lua
             | runvil_lua::ErrorKind::ModelFailure

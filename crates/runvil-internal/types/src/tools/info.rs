@@ -11,12 +11,14 @@ use super::ids::ToolId;
 /// A `ToolInfo` holds the tool's stable id, the name the model calls it by
 /// when one is set, the description the model reads, its parameter schema,
 /// whether its output is structured, whether a stop leaves its calls
-/// running, and whether its output lists tools.
+/// running, whether its output lists tools, and whether only a model may
+/// call it.
 ///
 /// The caller collects the `ToolInfo` values of every Pack it can serve
 /// into a [`ToolCatalog`](super::ToolCatalog). The implementations stay with
 /// the caller, keyed by [`ToolId`]. Every catalog tool is available to the
-/// prompt's Lua, which calls one by id, and a section offers one to its
+/// prompt's Lua, which calls one by id unless the tool is model-only, and a
+/// section offers one to its
 /// model with `tools.offer`. The Engine issues each tool call as an effect
 /// that names the tool's id. The caller resolves that id to the
 /// implementation.
@@ -30,6 +32,10 @@ use super::ids::ToolId;
 /// cannot see or call.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[non_exhaustive]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "the four flags are independent: each answers a different question about one tool, so no state machine or enum expresses them"
+)]
 pub struct ToolInfo {
     /// The tool's stable identity. The catalog uses it as the key.
     pub id: ToolId,
@@ -62,6 +68,18 @@ pub struct ToolInfo {
     /// `false`.
     #[serde(default)]
     pub describes_tools: bool,
+    /// Whether only a model may call the tool, so a script's `tools.call`
+    /// refuses it.
+    ///
+    /// A Pack sets it when a render gives the tool arguments a script
+    /// cannot know: a script names a tool by id and passes JSON it wrote,
+    /// while the arguments a model sends follow whatever schema the
+    /// section's render answered for that model. The tool stays in the
+    /// catalog, so Lua names it and a section offers it with
+    /// `tools.offer`; only the call is refused. A `ToolInfo` serialized
+    /// without the field reads as `false`.
+    #[serde(default)]
+    pub model_only_call: bool,
 }
 
 impl ToolInfo {
@@ -77,6 +95,7 @@ impl ToolInfo {
             structured_output: false,
             survives_stop: false,
             describes_tools: false,
+            model_only_call: false,
         }
     }
 
@@ -108,6 +127,14 @@ impl ToolInfo {
     #[must_use]
     pub fn describes_tools(mut self, describes: bool) -> ToolInfo {
         self.describes_tools = describes;
+        self
+    }
+
+    /// Sets whether only a model may call the tool (`true`), so a script's
+    /// `tools.call` refuses it, or a script may call it too (`false`).
+    #[must_use]
+    pub fn model_only_call(mut self, model_only: bool) -> ToolInfo {
+        self.model_only_call = model_only;
         self
     }
 }

@@ -41,6 +41,24 @@ fn a_plain_tool_info_binds_with_plain_output() {
 }
 
 #[test]
+fn a_new_tool_info_binds_callable_by_a_script() {
+    assert!(
+        !ToolBinding::from_info("fetch_alias", &tool_info(false)).model_only_call(),
+        "a tool info the Pack did not mark stays callable from a script"
+    );
+}
+
+#[test]
+fn a_model_only_tool_info_binds_with_the_flag_set() {
+    let info = tool_info(false).model_only_call(true);
+    let binding = ToolBinding::from_info("fetch_alias", &info);
+    assert!(
+        binding.model_only_call(),
+        "the binding carries the catalog's refusal"
+    );
+}
+
+#[test]
 fn the_test_seam_overrides_only_the_description() {
     let info = tool_info(true);
     let binding = ToolBinding::for_test("fetch_alias", "test double", &info);

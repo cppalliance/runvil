@@ -158,15 +158,16 @@ fn survives_stop_sets_the_flag_and_round_trips_through_serde() {
 }
 
 #[test]
-fn a_tool_info_logged_before_wire_name_existed_reads_it_as_absent_and_logs_the_same_line() {
-    let line = r#"{"id":"fixtures/tools/inspect","description":"Inspect a fixture.","parameters_schema":{"properties":{"path":{"type":"string"}},"required":["path"],"type":"object"},"structured_output":false,"survives_stop":false,"describes_tools":false}"#;
+fn a_tool_info_logged_before_wire_name_existed_reads_absent_flags_as_false() {
+    let line = r#"{"id":"fixtures/tools/inspect","description":"Inspect a fixture.","parameters_schema":{"properties":{"path":{"type":"string"}},"required":["path"],"type":"object"},"structured_output":false,"survives_stop":false}"#;
     let info: ToolInfo =
         serde_json::from_str(line).expect("a tool info from before the field deserializes");
     assert_eq!(
         info.wire_name, None,
         "an absent wire name reads as none, so the model sees the default"
     );
-    assert_wire(&info, line);
+    assert!(!info.describes_tools, "an absent flag reads as false");
+    assert!(!info.model_only_call, "an absent flag reads as false");
 }
 
 #[test]
@@ -176,11 +177,24 @@ fn a_wire_name_its_builder_sets_round_trips_exactly_in_canonical_key_order() {
     let canonical = serde_json::to_value(&info).expect("a tool info converts to a JSON value");
     assert_wire(
         &canonical,
-        r#"{"describes_tools":false,"description":"Inspect a fixture.","id":"fixtures/tools/inspect","parameters_schema":{"properties":{"path":{"type":"string"}},"required":["path"],"type":"object"},"structured_output":false,"survives_stop":false,"wire_name":"inspect"}"#,
+        r#"{"describes_tools":false,"description":"Inspect a fixture.","id":"fixtures/tools/inspect","model_only_call":false,"parameters_schema":{"properties":{"path":{"type":"string"}},"required":["path"],"type":"object"},"structured_output":false,"survives_stop":false,"wire_name":"inspect"}"#,
     );
     let back: ToolInfo = serde_json::from_value(canonical).expect("the canonical form reads back");
     assert_eq!(back, info);
     assert_eq!(round_trip(&info), info);
+}
+
+#[test]
+fn model_only_call_sets_the_flag_and_round_trips_through_serde() {
+    assert!(
+        !inspect_info().model_only_call,
+        "a new tool info is callable by a script"
+    );
+    let info = inspect_info().model_only_call(true);
+    assert!(info.model_only_call);
+    assert_eq!(round_trip(&info), info);
+    let canonical = serde_json::to_value(&info).expect("a tool info converts to a JSON value");
+    assert_eq!(canonical["model_only_call"], json!(true));
 }
 
 #[test]

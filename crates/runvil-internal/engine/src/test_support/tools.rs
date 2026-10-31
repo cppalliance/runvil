@@ -26,6 +26,7 @@ pub(crate) struct FnTool {
     schema: serde_json::Value,
     structured: bool,
     describes_tools: bool,
+    model_only_call: bool,
     handler: Arc<FnToolHandler>,
 }
 
@@ -46,6 +47,7 @@ impl FnTool {
             schema,
             structured: false,
             describes_tools: false,
+            model_only_call: false,
             handler: Arc::new(handler),
         }
     }
@@ -77,6 +79,13 @@ impl FnTool {
         self
     }
 
+    /// Marks the tool as one only a model may call, so a script's
+    /// `tools.call` refuses it.
+    pub(crate) fn model_only_call(mut self) -> FnTool {
+        self.model_only_call = true;
+        self
+    }
+
     /// The tool's stable identity: the catalog key and what a `ToolCall`
     /// effect names.
     pub(crate) fn id(&self) -> ToolId {
@@ -88,7 +97,8 @@ impl FnTool {
     pub(crate) fn info(&self) -> ToolInfo {
         let info = ToolInfo::new(self.id(), &self.description, self.schema.clone())
             .structured(self.structured)
-            .describes_tools(self.describes_tools);
+            .describes_tools(self.describes_tools)
+            .model_only_call(self.model_only_call);
         match &self.wire_name {
             Some(wire_name) => info.wire_name(wire_name),
             None => info,

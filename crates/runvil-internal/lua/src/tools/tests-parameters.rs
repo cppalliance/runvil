@@ -39,12 +39,19 @@ fn search_tool() -> ToolInfo {
     )
 }
 
-/// A set declaring `web`, whose catalog holds `web/search`.
+/// A set declaring `web`, whose catalog holds `web/search` and
+/// `web/replace`, the second marked model-only.
 pub(super) fn search_set() -> ToolSet {
+    let model_only = ToolInfo::new(
+        ToolId::parse("web/replace").expect("a static valid tool id"),
+        "Replace text the model names",
+        search_schema(),
+    )
+    .model_only_call(true);
     ToolSet::new(
         vec![PackId::parse("web").expect("`web` is a valid Pack id")],
         BTreeMap::new(),
-        ToolCatalog::new([search_tool()]).expect("one tool"),
+        ToolCatalog::new([search_tool(), model_only]).expect("two tools"),
     )
 }
 
@@ -111,16 +118,31 @@ fn assigning_parameters_raises() {
 }
 
 #[test]
-fn a_tool_object_holds_exactly_id_description_parameters_and_pack() {
+fn a_model_only_tool_reads_true_and_stays_named_in_the_catalog() {
     let vm = lua_over(search_set());
-    let fields: (String, bool, bool, String) = vm.eval(
+    let read: (bool, String) = vm.eval(
+        "local tool = tools.get('web/replace')\n\
+         return tool.model_only_call, tool.id",
+    );
+    assert_eq!(
+        read,
+        (true, "web/replace".to_owned()),
+        "a script sees the flag before it tries to call the tool"
+    );
+}
+
+#[test]
+fn a_tool_object_holds_exactly_id_description_parameters_pack_and_model_only_call() {
+    let vm = lua_over(search_set());
+    let fields: (String, bool, bool, String, bool) = vm.eval(
         "local tool = tools.get('web/search')\n\
          return tool.id, type(tool.description) == 'string', \
-           type(tool.parameters) == 'table', tool.pack.name",
+           type(tool.parameters) == 'table', tool.pack.name, tool.model_only_call",
     );
     assert_eq!(
         fields,
-        ("web/search".to_owned(), true, true, "web".to_owned())
+        ("web/search".to_owned(), true, true, "web".to_owned(), false),
+        "a catalog tool a Pack did not mark model-only reads false"
     );
     let extra: Option<String> = vm.eval(
         "local tool = tools.get('web/search')\n\
@@ -131,7 +153,7 @@ fn a_tool_object_holds_exactly_id_description_parameters_and_pack() {
          end\n\
          return nil",
     );
-    assert_eq!(extra, None, "a tool object reads no field beyond its four");
+    assert_eq!(extra, None, "a tool object reads no field beyond its five");
 }
 
 /// Every string in `value`, keys included, depth first.

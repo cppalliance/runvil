@@ -151,7 +151,7 @@ fn a_render_answer_records_each_rendered_tool_whole() {
     let canonical = serde_json::to_value(&record).expect("a render answer record converts");
     assert_eq!(
         canonical.to_string(),
-        r#"{"Render":[{"dynamic_set":[],"pack":"tools","static_set":[{"describes_tools":false,"description":"Shout the value.","id":"tools/echo","parameters_schema":{"type":"object"},"structured_output":false,"survives_stop":false,"wire_name":"shout"}]}]}"#
+        r#"{"Render":[{"dynamic_set":[],"pack":"tools","static_set":[{"describes_tools":false,"description":"Shout the value.","id":"tools/echo","model_only_call":false,"parameters_schema":{"type":"object"},"structured_output":false,"survives_stop":false,"wire_name":"shout"}]}]}"#
     );
     let back: AnswerRecord =
         serde_json::from_value(canonical).expect("the canonical form reads back");
