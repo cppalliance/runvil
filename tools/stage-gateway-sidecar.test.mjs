@@ -7,6 +7,9 @@ import test from "node:test";
 import {
   gatewayBinaryName,
   gatewaySidecarName,
+  gatewaySidecarPath,
+  markGatewaySidecarPinned,
+  readGatewaySidecarPin,
   removeGatewaySidecar,
   stageGatewaySidecar,
 } from "./stage-gateway-sidecar.mjs";
@@ -56,6 +59,32 @@ test("maps other valid Windows targets with an executable extension", () => {
 
 test("rejects a malformed target triple", () => {
   assert.throws(() => gatewaySidecarName("../outside"), /invalid target triple/);
+});
+
+test("reports the one path tauri.conf.json's externalBin resolves", () => {
+  const root = join("repo");
+  assert.equal(
+    gatewaySidecarPath({ root, target: "x86_64-pc-windows-msvc" }),
+    join(
+      root,
+      "crates",
+      "workshop",
+      "desktop",
+      "binaries",
+      "runvil-gateway-x86_64-pc-windows-msvc.exe",
+    ),
+  );
+  assert.equal(
+    gatewaySidecarPath({ root, target: "aarch64-apple-darwin" }),
+    join(
+      root,
+      "crates",
+      "workshop",
+      "desktop",
+      "binaries",
+      "runvil-gateway-aarch64-apple-darwin",
+    ),
+  );
 });
 
 test("rejects a missing source binary", () => {
@@ -128,6 +157,7 @@ test("stages and removes the real source file under Tauri's target name", () => 
       staged,
     );
     assert.throws(() => readFileSync(staged), /ENOENT/);
+    assert.throws(() => readFileSync(`${staged}.pinned`), /ENOENT/);
     assert.equal(
       removeGatewaySidecar({
         root,
@@ -135,6 +165,60 @@ test("stages and removes the real source file under Tauri's target name", () => 
       }),
       staged,
     );
+  } finally {
+    rmSync(root, { force: true, recursive: true });
+  }
+});
+
+test("marking a staged sidecar pinned records which kind it was", () => {
+  const root = mkdtempSync(join(tmpdir(), "runvil-sidecar-"));
+  const source = join(root, "target", "debug", "runvil-gateway");
+  try {
+    mkdirSync(join(root, "target", "debug"), { recursive: true });
+    writeFileSync(source, "downloaded gateway");
+    const target = "x86_64-unknown-linux-gnu";
+    const staged = stageGatewaySidecar({ root, target, source });
+    const marker = markGatewaySidecarPinned({ root, target, kind: "release", tag: "gateway-v0.4.0" });
+    assert.equal(marker, `${staged}.pinned`);
+    assert.deepEqual(readGatewaySidecarPin({ root, target }), {
+      kind: "release",
+      tag: "gateway-v0.4.0",
+    });
+    // Removal takes the marker with the sidecar, so a later build is free
+    // to refresh from the workspace again.
+    removeGatewaySidecar({ root, target });
+    assert.throws(() => readFileSync(marker), /ENOENT/);
+    assert.equal(readGatewaySidecarPin({ root, target }), null);
+  } finally {
+    rmSync(root, { force: true, recursive: true });
+  }
+});
+
+test("a stub marker is distinguishable from a release marker", () => {
+  const root = mkdtempSync(join(tmpdir(), "runvil-sidecar-"));
+  const source = join(root, "target", "debug", "runvil-gateway");
+  const target = "x86_64-apple-darwin";
+  try {
+    mkdirSync(join(root, "target", "debug"), { recursive: true });
+    writeFileSync(source, "placeholder");
+    stageGatewaySidecar({ root, target, source });
+    markGatewaySidecarPinned({ root, target, kind: "stub" });
+    assert.equal(readGatewaySidecarPin({ root, target }).kind, "stub");
+  } finally {
+    rmSync(root, { force: true, recursive: true });
+  }
+});
+
+test("a hand-written or corrupt marker reads as unknown, not as a release", () => {
+  const root = mkdtempSync(join(tmpdir(), "runvil-sidecar-"));
+  const source = join(root, "target", "debug", "runvil-gateway");
+  const target = "x86_64-apple-darwin";
+  try {
+    mkdirSync(join(root, "target", "debug"), { recursive: true });
+    writeFileSync(source, "placeholder");
+    const staged = stageGatewaySidecar({ root, target, source });
+    writeFileSync(`${staged}.pinned`, "this sidecar came from somewhere\n");
+    assert.equal(readGatewaySidecarPin({ root, target }).kind, "unknown");
   } finally {
     rmSync(root, { force: true, recursive: true });
   }

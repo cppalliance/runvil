@@ -8,6 +8,8 @@ use super::*;
 
 #[path = "tests-failures.rs"]
 mod failures;
+#[path = "tests-gateway-source.rs"]
+mod source;
 
 #[derive(Debug)]
 enum FakeResponse {
@@ -120,6 +122,7 @@ fn environment() -> TestEnvironment {
             target_root,
             cargo: PathBuf::from("selected-cargo"),
             node: PathBuf::from("selected-node"),
+            gateway_sidecar: None,
         },
     }
 }
@@ -138,8 +141,69 @@ fn command(
         program: PathBuf::from(program),
         args: strings(args),
         current_dir: environment.workspace_root.clone(),
+        env: Vec::new(),
         output_mode,
     }
+}
+
+/// The staging script's absolute path, as the pipeline passes it.
+fn staging_script(environment: &BuildEnvironment) -> String {
+    environment
+        .workspace_root
+        .join("tools")
+        .join("stage-gateway-sidecar.mjs")
+        .to_str()
+        .expect("UTF-8 script")
+        .to_owned()
+}
+
+/// The `stage` command's arguments, spelled once for both order tests.
+fn stage_arguments(environment: &BuildEnvironment, target: &str, source: &str) -> Vec<String> {
+    vec![
+        staging_script(environment),
+        "stage".to_owned(),
+        "--target".to_owned(),
+        target.to_owned(),
+        "--source".to_owned(),
+        source.to_owned(),
+    ]
+}
+
+/// The `remove` command's arguments.
+fn remove_arguments(environment: &BuildEnvironment, target: &str) -> Vec<String> {
+    vec![
+        staging_script(environment),
+        "remove".to_owned(),
+        "--target".to_owned(),
+        target.to_owned(),
+    ]
+}
+
+/// A command spec from owned argument strings.
+fn owned_command(
+    environment: &BuildEnvironment,
+    program: &str,
+    args: &[String],
+    output_mode: OutputMode,
+) -> CommandSpec {
+    CommandSpec {
+        program: PathBuf::from(program),
+        args: args.iter().map(OsString::from).collect(),
+        current_dir: environment.workspace_root.clone(),
+        env: Vec::new(),
+        output_mode,
+    }
+}
+
+/// The Workshop build's spec: the one command that carries the sidecar
+/// path in its environment.
+fn workshop_command(environment: &BuildEnvironment, target: &str, args: &[&str]) -> CommandSpec {
+    let mut spec = command(environment, "selected-cargo", args, OutputMode::Inherit);
+    spec.env = vec![(
+        OsString::from(GATEWAY_SIDECAR_VARIABLE),
+        super::pipeline::sidecar_path(environment, target).into_os_string(),
+    )];
+    spec
 }
 
 #[test]
@@ -149,6 +213,7 @@ fn parses_only_the_documented_profile_and_target_options() {
         BuildRequest {
             profile: Profile::Debug,
             target: None,
+            gateway_binary: None,
         }
     );
     assert_eq!(
@@ -156,11 +221,14 @@ fn parses_only_the_documented_profile_and_target_options() {
             "--target".to_owned(),
             "aarch64-apple-darwin".to_owned(),
             "--release".to_owned(),
+            "--gateway-binary".to_owned(),
+            "../gateway/target/debug/runvil-gateway".to_owned(),
         ])
         .expect("release target request"),
         BuildRequest {
             profile: Profile::Release,
             target: Some("aarch64-apple-darwin".to_owned()),
+            gateway_binary: Some(PathBuf::from("../gateway/target/debug/runvil-gateway")),
         }
     );
 }
@@ -191,6 +259,13 @@ fn rejects_duplicate_or_incomplete_options() {
             "--target".to_owned(),
             "x86_64-unknown-linux-gnu".to_owned(),
         ],
+        vec!["--gateway-binary".to_owned()],
+        vec![
+            "--gateway-binary".to_owned(),
+            "a/runvil-gateway".to_owned(),
+            "--gateway-binary".to_owned(),
+            "b/runvil-gateway".to_owned(),
+        ],
     ] {
         assert!(parse_arguments(&args).is_err(), "{args:?}");
     }
@@ -212,6 +287,7 @@ fn default_build_derives_host_and_cleans_up_in_order() {
         &BuildRequest {
             profile: Profile::Debug,
             target: None,
+            gateway_binary: None,
         },
         environment,
         &mut runner,
@@ -232,44 +308,25 @@ fn default_build_derives_host_and_cleans_up_in_order() {
                 &["build", "-p", "gateway"],
                 OutputMode::Inherit,
             ),
-            command(
+            owned_command(
                 environment,
                 "selected-node",
-                &[
-                    environment
-                        .workspace_root
-                        .join("tools")
-                        .join("stage-gateway-sidecar.mjs")
-                        .to_str()
-                        .expect("UTF-8 script"),
-                    "stage",
-                    "--target",
+                &stage_arguments(
+                    environment,
                     "x86_64-pc-windows-msvc",
-                    "--source",
                     source.to_str().expect("UTF-8 source"),
-                ],
+                ),
                 OutputMode::Inherit,
             ),
-            command(
+            workshop_command(
                 environment,
-                "selected-cargo",
+                "x86_64-pc-windows-msvc",
                 &["build", "-p", "workshop"],
-                OutputMode::Inherit,
             ),
-            command(
+            owned_command(
                 environment,
                 "selected-node",
-                &[
-                    environment
-                        .workspace_root
-                        .join("tools")
-                        .join("stage-gateway-sidecar.mjs")
-                        .to_str()
-                        .expect("UTF-8 script"),
-                    "remove",
-                    "--target",
-                    "x86_64-pc-windows-msvc",
-                ],
+                &remove_arguments(environment, "x86_64-pc-windows-msvc"),
                 OutputMode::Inherit,
             ),
         ]
@@ -288,6 +345,7 @@ fn explicit_release_target_uses_target_output_without_a_host_probe() {
         &BuildRequest {
             profile: Profile::Release,
             target: Some(triple.to_owned()),
+            gateway_binary: None,
         },
         environment,
         &mut runner,
@@ -308,44 +366,21 @@ fn explicit_release_target_uses_target_output_without_a_host_probe() {
                 &["build", "-p", "gateway", "--release", "--target", triple,],
                 OutputMode::Inherit,
             ),
-            command(
+            owned_command(
                 environment,
                 "selected-node",
-                &[
-                    environment
-                        .workspace_root
-                        .join("tools")
-                        .join("stage-gateway-sidecar.mjs")
-                        .to_str()
-                        .expect("UTF-8 script"),
-                    "stage",
-                    "--target",
-                    triple,
-                    "--source",
-                    source.to_str().expect("UTF-8 source"),
-                ],
+                &stage_arguments(environment, triple, source.to_str().expect("UTF-8 source")),
                 OutputMode::Inherit,
             ),
-            command(
+            workshop_command(
                 environment,
-                "selected-cargo",
+                triple,
                 &["build", "-p", "workshop", "--release", "--target", triple,],
-                OutputMode::Inherit,
             ),
-            command(
+            owned_command(
                 environment,
                 "selected-node",
-                &[
-                    environment
-                        .workspace_root
-                        .join("tools")
-                        .join("stage-gateway-sidecar.mjs")
-                        .to_str()
-                        .expect("UTF-8 script"),
-                    "remove",
-                    "--target",
-                    triple,
-                ],
+                &remove_arguments(environment, triple),
                 OutputMode::Inherit,
             ),
         ]

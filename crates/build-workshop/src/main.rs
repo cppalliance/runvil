@@ -1,5 +1,11 @@
-//! Builds the Runvil Gateway, stages it for Tauri, builds Workshop,
-//! and removes the temporary staged sidecar.
+//! Builds Workshop and stages its Gateway sidecar for Tauri.
+//!
+//! The sidecar comes from one of four places, in this order: the
+//! `--gateway-binary` flag, the `RUNVIL_GATEWAY_SIDECAR` environment
+//! variable, a sidecar already staged under `crates/workshop/desktop/binaries/`,
+//! or a Gateway built from this workspace. Only the last compiles the
+//! Gateway, so a machine with a downloaded or hand-staged Gateway builds
+//! Workshop without touching Gateway source.
 
 use std::ffi::OsString;
 use std::fmt;
@@ -17,16 +23,27 @@ mod runner;
 use pipeline::build_workshop;
 use runner::install_interrupt_handler;
 
+/// The environment variable naming a Gateway binary to stage, so CI can
+/// point at a staged file without passing a flag through Tauri.
+const GATEWAY_SIDECAR_VARIABLE: &str = "RUNVIL_GATEWAY_SIDECAR";
+
 const USAGE: &str = "\
-Build Runvil Gateway and Workshop together.
+Build Workshop, staging its Gateway sidecar.
 
 USAGE:
-    cargo workshop [--release] [--target <triple>]
+    cargo workshop [--release] [--target <triple>] [--gateway-binary <path>]
 
 OPTIONS:
-    --release           Build both products with Cargo's release profile
-    --target <triple>   Build both products for this target triple
-    -h, --help          Print this help
+    --release                 Build Workshop with Cargo's release profile
+    --target <triple>         Build for this target triple
+    --gateway-binary <path>   Stage this Gateway binary instead of building one
+    -h, --help                Print this help
+
+The Gateway sidecar comes from --gateway-binary, then the
+RUNVIL_GATEWAY_SIDECAR environment variable, then a sidecar already staged
+under crates/workshop/desktop/binaries/, and only otherwise from
+`cargo build -p gateway`. A sidecar that was already staged is left in
+place, so the next build reuses it.
 ";
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -48,6 +65,7 @@ impl Profile {
 struct BuildRequest {
     profile: Profile,
     target: Option<String>,
+    gateway_binary: Option<PathBuf>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -61,6 +79,7 @@ struct CommandSpec {
     program: PathBuf,
     args: Vec<OsString>,
     current_dir: PathBuf,
+    env: Vec<(OsString, OsString)>,
     output_mode: OutputMode,
 }
 
@@ -113,6 +132,10 @@ struct BuildEnvironment {
     target_root: PathBuf,
     cargo: PathBuf,
     node: PathBuf,
+    /// The Gateway binary named by `RUNVIL_GATEWAY_SIDECAR`, when set: the
+    /// path a CI job stages and points the build at, so no flag has to pass
+    /// through Tauri.
+    gateway_sidecar: Option<PathBuf>,
 }
 
 impl BuildEnvironment {
@@ -152,11 +175,21 @@ impl BuildEnvironment {
             .ok_or_else(|| {
                 anyhow::anyhow!("Cargo did not provide the executable used for this command")
             })?;
+        let gateway_sidecar = match std::env::var_os(GATEWAY_SIDECAR_VARIABLE) {
+            Some(value) if value.is_empty() => {
+                return Err(anyhow::anyhow!(
+                    "{GATEWAY_SIDECAR_VARIABLE} must not be empty"
+                ));
+            }
+            Some(value) => Some(PathBuf::from(value)),
+            None => None,
+        };
         Ok(Self {
             workspace_root,
             target_root,
             cargo,
             node: PathBuf::from("node"),
+            gateway_sidecar,
         })
     }
 }
@@ -188,6 +221,7 @@ fn parse_arguments(args: &[String]) -> Result<BuildRequest, anyhow::Error> {
     let mut profile = Profile::Debug;
     let mut release_seen = false;
     let mut target = None;
+    let mut gateway_binary = None;
     let mut index = 0;
     while index < args.len() {
         match args[index].as_str() {
@@ -214,6 +248,23 @@ fn parse_arguments(args: &[String]) -> Result<BuildRequest, anyhow::Error> {
                 target = Some(value.clone());
                 index += 2;
             }
+            "--gateway-binary" if gateway_binary.is_some() => {
+                return Err(anyhow::anyhow!(
+                    "duplicate argument `--gateway-binary`\n\n{USAGE}"
+                ));
+            }
+            "--gateway-binary" => {
+                let value = args.get(index + 1).ok_or_else(|| {
+                    anyhow::anyhow!("argument `--gateway-binary` needs a path\n\n{USAGE}")
+                })?;
+                if value.starts_with('-') || value.trim().is_empty() {
+                    return Err(anyhow::anyhow!(
+                        "argument `--gateway-binary` needs a path, got `{value}`\n\n{USAGE}"
+                    ));
+                }
+                gateway_binary = Some(PathBuf::from(value));
+                index += 2;
+            }
             argument => {
                 return Err(anyhow::anyhow!(
                     "unsupported argument `{argument}`\n\n{USAGE}"
@@ -221,7 +272,11 @@ fn parse_arguments(args: &[String]) -> Result<BuildRequest, anyhow::Error> {
             }
         }
     }
-    Ok(BuildRequest { profile, target })
+    Ok(BuildRequest {
+        profile,
+        target,
+        gateway_binary,
+    })
 }
 
 fn valid_target_triple(target: &str) -> bool {

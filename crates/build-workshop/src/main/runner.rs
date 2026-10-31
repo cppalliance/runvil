@@ -144,7 +144,8 @@ impl CommandRunner for ProcessRunner {
         let mut process = Command::new(&command.program);
         process
             .args(&command.args)
-            .current_dir(&command.current_dir);
+            .current_dir(&command.current_dir)
+            .envs(command.env.iter().map(|(key, value)| (key, value)));
         if command.output_mode == OutputMode::Capture {
             process.stdout(Stdio::piped()).stderr(Stdio::piped());
         }

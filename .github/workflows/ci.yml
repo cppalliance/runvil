@@ -149,11 +149,8 @@ jobs:
           npm ci --prefix crates/workshop
           npm ci --prefix crates/gateway/config-ui/ui
 
-      - name: Build featureless Gateway
-        run: cargo build --locked -p gateway --no-default-features
-
-      - name: Stage Gateway sidecar
-        run: node tools/stage-gateway-sidecar.mjs stage --target x86_64-pc-windows-msvc --source target/debug/runvil-gateway.exe
+      - name: Stage a stub Gateway sidecar
+        run: node tools/fetch-gateway-sidecar.mjs --stub --target x86_64-pc-windows-msvc
 
       # workshop-server-api is the desktop app's re-export view of workshop-server,
       # so it runs in this partition with the crates it fronts and stays
@@ -228,11 +225,8 @@ jobs:
           npm ci --prefix crates/workshop
           npm ci --prefix crates/gateway/config-ui/ui
 
-      - name: Build featureless Gateway
-        run: cargo build --locked -p gateway --no-default-features
-
-      - name: Stage Gateway sidecar
-        run: node tools/stage-gateway-sidecar.mjs stage --target x86_64-unknown-linux-gnu --source target/debug/runvil-gateway
+      - name: Stage a stub Gateway sidecar
+        run: node tools/fetch-gateway-sidecar.mjs --stub --target x86_64-unknown-linux-gnu
 
       - name: Build (workshop, Linux)
         run: cargo build --locked -p workshop
@@ -317,7 +311,9 @@ jobs:
       # crypto backend, aws-lc-rs. This fails when `ring` re-enters its
       # normal-edge closure (through a reqwest bump or a Tauri plugin default)
       # and when `cargo tree` itself cannot run; only a successful, ring-free
-      # result passes.
+      # result passes. This is a Gateway-side check: it reads the Gateway
+      # crate's dependency closure, which moves with the Gateway, so it stays
+      # here until that check moves too.
       - name: One rustls crypto backend in the gateway
         shell: bash
         run: |

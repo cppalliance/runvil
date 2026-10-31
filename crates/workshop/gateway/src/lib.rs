@@ -37,6 +37,7 @@ mod refresh;
 mod resolve;
 #[cfg(any(test, feature = "test-fixtures"))]
 pub mod test_gateway;
+mod version;
 
 pub use binding::{GatewayBinding, GatewayPublicationError, GatewaySnapshot, GatewayUpdater};
 pub use client::{
@@ -47,6 +48,9 @@ pub use handles::{GatewayHandles, GatewayTaskRegistrations, register, register_t
 pub use heartbeat::{GatewayHealth, Heartbeat, join_status, spawn as spawn_heartbeat};
 pub use refresh::{refresh_catalog, refresh_profiles};
 pub use resolve::{GatewaySource, ResolveError, ResolvedGateway, report, resolve};
+pub use version::{
+    MIN_GATEWAY, Version, VersionCheck, announce as announce_version, report as report_version,
+};
 
 /// The Gateway discovery contract as Workshop reads it, re-exported whole
 /// from the fork that owns it.

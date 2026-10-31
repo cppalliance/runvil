@@ -44,6 +44,7 @@ workshop-gateway-discovery = { workspace = true, features = ["test-fixtures"] }
 
 [build-dependencies]
 build-ceiling.workspace = true
+serde_json.workspace = true
 
 [lints]
 workspace = true

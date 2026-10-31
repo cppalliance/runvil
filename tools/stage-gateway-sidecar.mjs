@@ -3,7 +3,9 @@ import {
   existsSync,
   lstatSync,
   mkdirSync,
+  readFileSync,
   rmSync,
+  writeFileSync,
 } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -29,7 +31,12 @@ export function gatewaySidecarName(target) {
   return targetNames(target).sidecar;
 }
 
-function sidecarPath(root, target) {
+/**
+ * The file tauri.conf.json's `externalBin` entry resolves for `target`.
+ * This is the one owner of that naming rule: the fetch script, the build
+ * pipeline, and CI all ask for the path rather than spelling it again.
+ */
+export function gatewaySidecarPath({ root = REPOSITORY_ROOT, target }) {
   return join(
     root,
     "crates",
@@ -55,22 +62,74 @@ export function stageGatewaySidecar({ root = REPOSITORY_ROOT, target, source }) 
     );
   }
 
-  const destination = sidecarPath(root, target);
+  const destination = gatewaySidecarPath({ root, target });
   mkdirSync(dirname(destination), { recursive: true });
   copyFileSync(sourcePath, destination);
   return destination;
 }
 
+/**
+ * Marks the staged sidecar as authoritative: the desktop build script then
+ * leaves it alone instead of refreshing it from a workspace-built Gateway.
+ * Without this, a stale `target/<profile>/runvil-gateway` silently replaces
+ * a downloaded and checksummed release binary.
+ *
+ * `kind` records which of the two it was, `release` or `stub`, so a
+ * developer running `cargo workshop` can be told when the sidecar it reuses
+ * is only a placeholder.
+ */
+export function markGatewaySidecarPinned({ root = REPOSITORY_ROOT, target, kind = "release", tag = null }) {
+  const marker = gatewaySidecarPinMarkerPath({ root, target });
+  mkdirSync(dirname(marker), { recursive: true });
+  writeFileSync(
+    marker,
+    `${JSON.stringify({ kind, tag }, null, 2)}\n`,
+  );
+  return marker;
+}
+
+/**
+ * The marker's record, or `null` when the sidecar was not staged by the
+ * fetch script. A malformed marker still counts as a marker: the desktop
+ * build script only needs to know the file is not its to refresh, and an
+ * unknown kind is reported as unknown rather than assumed to be a release.
+ */
+export function readGatewaySidecarPin({ root = REPOSITORY_ROOT, target }) {
+  const marker = gatewaySidecarPinMarkerPath({ root, target });
+  let text;
+  try {
+    text = readFileSync(marker, "utf8");
+  } catch {
+    return null;
+  }
+  try {
+    const parsed = JSON.parse(text);
+    return { kind: typeof parsed["kind"] === "string" ? parsed["kind"] : "unknown", tag: parsed["tag"] ?? null };
+  } catch {
+    return { kind: "unknown", tag: null };
+  }
+}
+
+/**
+ * The marker beside the staged sidecar saying it is authoritative. Named
+ * so the sidecar's own name stays exactly what Tauri expects; the marker
+ * sits next to it and is never bundled.
+ */
+export function gatewaySidecarPinMarkerPath({ root = REPOSITORY_ROOT, target }) {
+  return `${gatewaySidecarPath({ root, target })}.pinned`;
+}
+
 export function removeGatewaySidecar({ root = REPOSITORY_ROOT, target }) {
-  const destination = sidecarPath(root, target);
+  const destination = gatewaySidecarPath({ root, target });
   rmSync(destination, { force: true });
+  rmSync(gatewaySidecarPinMarkerPath({ root, target }), { force: true });
   return destination;
 }
 
 function parseArguments(args) {
   const [action, ...options] = args;
-  if (action !== "stage" && action !== "remove") {
-    throw new Error("usage: stage-gateway-sidecar.mjs <stage|remove> --target <triple> [--source <path>]");
+  if (action !== "stage" && action !== "remove" && action !== "path") {
+    throw new Error("usage: stage-gateway-sidecar.mjs <stage|remove|path> --target <triple> [--source <path>]");
   }
 
   const values = new Map();
@@ -94,14 +153,18 @@ function parseArguments(args) {
   if (action === "stage" && source === undefined) {
     throw new Error("missing required sidecar argument: --source");
   }
-  if (action === "remove" && source !== undefined) {
-    throw new Error("remove does not accept --source");
+  if (action !== "stage" && source !== undefined) {
+    throw new Error(`${action} does not accept --source`);
   }
   return { action, source, target };
 }
 
 function main(args) {
   const { action, source, target } = parseArguments(args);
+  if (action === "path") {
+    console.log(gatewaySidecarPath({ target }));
+    return;
+  }
   const path =
     action === "stage"
       ? stageGatewaySidecar({ source, target })

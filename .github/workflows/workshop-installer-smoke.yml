@@ -7,6 +7,10 @@ on:
       - crates/build-workshop/**
       - crates/workshop/desktop/installer.nsi
       - crates/workshop/desktop/tauri*.conf.json
+      - gateway-pin/**
+      - tools/fetch-gateway-sidecar.mjs
+      - tools/gateway-archive.mjs
+      - tools/gateway-pin.mjs
       - tools/stage-gateway-sidecar.mjs
   workflow_dispatch:
 
@@ -31,11 +35,12 @@ jobs:
         working-directory: crates/workshop
         run: npm ci
 
-      - name: Build featureless Gateway
-        run: cargo build --locked -p gateway --no-default-features
-
-      - name: Stage Gateway sidecar
-        run: node tools/stage-gateway-sidecar.mjs stage --target x86_64-pc-windows-msvc --source target/debug/runvil-gateway.exe
+      # This job compiles the unsigned NSIS installer and installs and runs
+      # nothing, so the sidecar only has to exist: tauri-build needs a file
+      # at the externalBin path, and the bundler needs one to package. A
+      # stub costs nothing and needs no Gateway release.
+      - name: Stage a stub Gateway sidecar
+        run: node tools/fetch-gateway-sidecar.mjs --stub --target x86_64-pc-windows-msvc
 
       - name: Compile unsigned debug NSIS installer
         uses: tauri-apps/tauri-action@84b9d35b5fc46c1e45415bdb6144030364f7ebc5 # v0

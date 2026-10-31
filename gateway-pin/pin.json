@@ -1,0 +1,45 @@
+{
+  "pin_format": 1,
+  "repository": "cppalliance/runvil-gateway",
+  "tag": "PLACEHOLDER",
+  "version": "PLACEHOLDER",
+  "executable": "runvil-gateway",
+  "min_gateway": "PLACEHOLDER",
+  "spec": {
+    "openapi": {
+      "path": "gateway-pin/openapi.yaml",
+      "sha256": "PLACEHOLDER"
+    },
+    "asyncapi": {
+      "path": "gateway-pin/asyncapi.yaml",
+      "sha256": "PLACEHOLDER"
+    }
+  },
+  "targets": {
+    "x86_64-pc-windows-msvc": {
+      "asset": "PLACEHOLDER",
+      "sha256": "PLACEHOLDER",
+      "size": 0
+    },
+    "aarch64-apple-darwin": {
+      "asset": "PLACEHOLDER",
+      "sha256": "PLACEHOLDER",
+      "size": 0
+    },
+    "x86_64-apple-darwin": {
+      "asset": "PLACEHOLDER",
+      "sha256": "PLACEHOLDER",
+      "size": 0
+    },
+    "x86_64-unknown-linux-gnu": {
+      "asset": "PLACEHOLDER",
+      "sha256": "PLACEHOLDER",
+      "size": 0
+    },
+    "aarch64-unknown-linux-gnu": {
+      "asset": "PLACEHOLDER",
+      "sha256": "PLACEHOLDER",
+      "size": 0
+    }
+  }
+}

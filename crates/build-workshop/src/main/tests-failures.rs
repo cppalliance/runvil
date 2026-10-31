@@ -13,6 +13,7 @@ fn gateway_failure_still_removes_any_staged_sidecar() {
         &BuildRequest {
             profile: Profile::Debug,
             target: Some(triple.to_owned()),
+            gateway_binary: None,
         },
         environment,
         &mut runner,
@@ -60,6 +61,7 @@ fn workshop_failure_is_primary_when_cleanup_also_fails() {
         &BuildRequest {
             profile: Profile::Release,
             target: Some(triple.to_owned()),
+            gateway_binary: None,
         },
         environment,
         &mut runner,
@@ -84,6 +86,7 @@ fn stage_failure_is_followed_by_cleanup() {
         &BuildRequest {
             profile: Profile::Debug,
             target: Some("x86_64-unknown-linux-gnu".to_owned()),
+            gateway_binary: None,
         },
         environment,
         &mut runner,
@@ -108,6 +111,7 @@ fn interruption_before_staging_does_not_run_removal() {
         &BuildRequest {
             profile: Profile::Debug,
             target: Some("x86_64-pc-windows-msvc".to_owned()),
+            gateway_binary: None,
         },
         environment,
         &mut runner,
@@ -133,6 +137,7 @@ fn interruption_after_gateway_completion_does_not_run_removal() {
         &BuildRequest {
             profile: Profile::Debug,
             target: Some(triple.to_owned()),
+            gateway_binary: None,
         },
         environment,
         &mut runner,
@@ -168,6 +173,7 @@ fn interruption_during_staging_runs_target_cleanup_once() {
         &BuildRequest {
             profile: Profile::Debug,
             target: Some(triple.to_owned()),
+            gateway_binary: None,
         },
         environment,
         &mut runner,
@@ -204,6 +210,7 @@ fn interruption_raced_with_completion_runs_cleanup_once() {
         &BuildRequest {
             profile: Profile::Debug,
             target: Some(triple.to_owned()),
+            gateway_binary: None,
         },
         environment,
         &mut runner,
@@ -237,6 +244,7 @@ fn interruption_preserves_cleanup_failure_diagnostics() {
         &BuildRequest {
             profile: Profile::Debug,
             target: Some("x86_64-unknown-linux-gnu".to_owned()),
+            gateway_binary: None,
         },
         environment,
         &mut runner,
@@ -270,6 +278,7 @@ fn cleanup_failure_after_success_fails_the_command_clearly() {
         &BuildRequest {
             profile: Profile::Debug,
             target: Some("x86_64-unknown-linux-gnu".to_owned()),
+            gateway_binary: None,
         },
         environment,
         &mut runner,
@@ -294,6 +303,7 @@ fn malformed_host_output_fails_before_building() {
         &BuildRequest {
             profile: Profile::Debug,
             target: None,
+            gateway_binary: None,
         },
         environment,
         &mut runner,
