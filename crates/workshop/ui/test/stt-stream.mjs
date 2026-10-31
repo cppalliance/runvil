@@ -10,7 +10,9 @@ import { JSDOM } from "jsdom";
 import { assertNoLeaks } from "./helpers/leak-check.mjs";
 
 const uiDir = path.dirname(fileURLToPath(import.meta.url));
-const fixtures = path.join(uiDir, "..", "..", "..", "gateway", "stt", "api", "tests", "fixtures", "realtime");
+// Workshop's own copy of the canonical wire fixtures, beside the Rust test
+// that reads the same files, the way `agent-frames.json` is shared.
+const fixtures = path.join(uiDir, "..", "..", "server", "tests", "fixtures", "realtime");
 const bundle = await esbuild.build({
   stdin: {
     contents: `

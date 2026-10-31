@@ -31,9 +31,8 @@ const UPDATE_VARIABLE: &str = "RUNVIL_REPLAY_UPDATE";
 const SCRIPTED_PREFIX: &str = "scripted-";
 const NATIVE_FIXTURE: &str = "jfk-native-recaptured";
 /// Sections no replay produces, kept as written: the native interim decode
-/// timing and the Workshop take reducer's rendered-text metrics, which
-/// `crates/workshop/ui/test/stt-replay.mjs` owns.
-const FOREIGN_SECTIONS: [&str; 2] = ["native", "ui"];
+/// timing that the ignored native capture tests record.
+const FOREIGN_SECTIONS: [&str; 1] = ["native"];
 const SUMMARY_FILES: [&str; 2] = ["baseline", "metrics"];
 
 fn fixture_dir() -> PathBuf {

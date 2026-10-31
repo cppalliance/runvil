@@ -7,16 +7,9 @@ import { fileURLToPath } from "node:url";
 
 const testDir = path.dirname(fileURLToPath(import.meta.url));
 const uiDir = path.join(testDir, "..");
-const fixturePath = path.join(
-  uiDir,
-  "..",
-  "..",
-  "gateway", "stt", "api",
-  "tests",
-  "fixtures",
-  "audio",
-  "pcm16le-24khz.json",
-);
+// Workshop's own copy of the shared PCM16 fixture, beside the other test
+// fixtures the UI suite owns.
+const fixturePath = path.join(uiDir, "test", "fixtures", "audio", "pcm16le-24khz.json");
 
 async function loadProcessor(
   name = "pcm16-capture",

@@ -21,12 +21,13 @@ import { JSDOM } from "jsdom";
 import { assertNoLeaks } from "./helpers/leak-check.mjs";
 
 const testDir = path.dirname(fileURLToPath(import.meta.url));
+// The canonical Realtime fixtures Workshop owns, under the server's test
+// fixtures. The Gateway keeps its own copies.
 const fixtureDir = path.join(
   testDir,
   "..",
   "..",
-  "..",
-  "gateway", "stt", "api",
+  "server",
   "tests",
   "fixtures",
   "realtime",

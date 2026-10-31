@@ -49,10 +49,12 @@ struct FixtureUpstream {
 }
 
 fn canonical_server_frames() -> Vec<String> {
-    let fixtures: serde_json::Value = serde_json::from_slice(include_bytes!(
-        "../../../../gateway/stt/api/tests/fixtures/realtime/valid-sequences.json"
-    ))
-    .expect("canonical Realtime sequences parse");
+    // Workshop's own copy of the canonical sequences, under this crate's
+    // test fixtures. The Gateway keeps its own copy; `build-xtask`'s
+    // `realtime_wire_conformance` test reports drift between the two.
+    let fixtures: serde_json::Value =
+        serde_json::from_slice(include_bytes!("../fixtures/realtime/valid-sequences.json"))
+            .expect("canonical Realtime sequences parse");
     [
         "first_event_readiness",
         "hypothesis_negotiation",

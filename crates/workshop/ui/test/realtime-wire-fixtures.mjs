@@ -19,12 +19,13 @@ const decoderBundle = await esbuild.build({
 const { decodeRealtimeEvent } = await import(
   `data:text/javascript;base64,${Buffer.from(decoderBundle.outputFiles[0].text).toString("base64")}`
 );
+// The canonical Realtime fixtures Workshop owns, under the server's test
+// fixtures beside `agent-frames.json`. The Gateway keeps its own copies.
 const fixtureDir = path.join(
   testDir,
   "..",
   "..",
-  "..",
-  "gateway", "stt", "api",
+  "server",
   "tests",
   "fixtures",
   "realtime",

@@ -1,7 +1,15 @@
-// Speech-sandbox replay through the take reducer. The gateway replay test
-// owns every section of baseline.json and metrics.json except `ui`; this
-// file reads them but rewrites only `ui`, keeping every other byte, so the
-// Rust writers' float literals such as `550.0` survive.
+// Speech-sandbox replay through the take reducer. Workshop owns every file
+// this test reads: the frozen snapshot streams and the two rendered-text
+// baselines under `test/fixtures/replay/`. The Gateway's own replay test
+// reads its speech-sandbox fixtures from its own tree, and neither suite
+// writes a file the other reads.
+//
+// These snapshots are a frozen copy, not a conformance copy. The test guards
+// how Workshop's take reducer renders a fixed sequence of transcription
+// events, and its baseline records how well that reduced to what was said. A
+// Gateway developer who edits a fixture is not changing Workshop's rendering,
+// so a drift check here would fail the wrong suite; the frozen input is what
+// makes this a regression guard rather than a moving target.
 
 import assert from "node:assert/strict";
 import { readdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -11,9 +19,10 @@ import { fileURLToPath } from "node:url";
 import { applyEdits, createTakeRegistry, reduceTakeRegistry } from "./take-reducer-loader.mjs";
 
 const testDir = path.dirname(fileURLToPath(import.meta.url));
-const replayDir = path.resolve(testDir, "../../../gateway/stt/api/tests/fixtures/replay");
+const replayDir = path.join(testDir, "fixtures", "replay");
 const UPDATE_VARIABLE = "RUNVIL_REPLAY_UPDATE";
-const UI_SECTION = "ui";
+const METRICS_FILE = "ui-metrics.json";
+const BASELINE_FILE = "ui-baseline.json";
 const SNAPSHOTS_SUFFIX = ".snapshots.json";
 const ITEM_ID = "replay";
 
@@ -29,13 +38,8 @@ function sorted(record) {
   return Object.fromEntries(Object.entries(record).sort(byKey));
 }
 
-function rewriteSection(file, value) {
-  const target = path.join(replayDir, file);
-  const sections = JSON.parse(readFileSync(target, "utf8"), (_key, parsed, context) =>
-    typeof parsed === "number" ? JSON.rawJSON(context.source) : parsed,
-  );
-  const next = sorted({ ...sections, [UI_SECTION]: value });
-  writeFileSync(target, `${JSON.stringify(next, null, 2)}\n`);
+function writeJson(file, value) {
+  writeFileSync(path.join(replayDir, file), `${JSON.stringify(value, null, 2)}\n`);
 }
 
 function fixtures() {
@@ -63,7 +67,7 @@ function ratio(numerator, denominator) {
   return denominator === 0 ? 0 : numerator / denominator;
 }
 
-/** Counts the editor text sequence the way the gateway replay counts transcripts. */
+/** Counts the editor text sequence the way the Gateway replay counts transcripts. */
 function renderedMetrics(rendered) {
   const counts = rendered
     .slice(1)
@@ -81,12 +85,12 @@ function renderedMetrics(rendered) {
   };
 }
 
-/** The gateway replay's UPWR rule, compared without division. */
+/** The Gateway replay's UPWR rule, compared without division. */
 function thresholdViolations(current, baseline) {
   return Object.entries(current).flatMap(([name, metrics]) => {
     const base = baseline[name];
     if (base === undefined) {
-      return [`${name} has no ui baseline section`];
+      return [`${name} has no recorded baseline`];
     }
     return metrics.changed_words * base.completed_words >
       base.changed_words * metrics.completed_words
@@ -198,29 +202,29 @@ test("every replay fixture renders through the take reducer within its ui baseli
   }
 
   if (update) {
-    rewriteSection("metrics.json", current);
+    writeJson(METRICS_FILE, current);
   } else {
     assert.deepEqual(
-      readJson("metrics.json")[UI_SECTION],
+      readJson(METRICS_FILE),
       current,
-      `metrics.json ui section drifted; run with ${UPDATE_VARIABLE}=1 to regenerate it`,
+      `${METRICS_FILE} drifted; run with ${UPDATE_VARIABLE}=1 to regenerate it`,
     );
   }
 
-  const recorded = readJson("baseline.json")[UI_SECTION] ?? {};
+  const recorded = readJson(BASELINE_FILE);
   const unrecorded = Object.keys(current).filter((name) => !(name in recorded));
   const baseline = { ...recorded };
   if (update && unrecorded.length > 0) {
     for (const name of unrecorded) {
       baseline[name] = current[name];
     }
-    rewriteSection("baseline.json", sorted(baseline));
+    writeJson(BASELINE_FILE, sorted(baseline));
   }
   const violations = thresholdViolations(current, baseline);
   assert.deepEqual(violations, [], `rendered-text thresholds are broken:\n${violations.join("\n")}`);
   assert.ok(
     aggregateUpwrBelowBaseline(current, baseline),
-    "aggregate rendered UPWR across fixtures is below the ui baseline aggregate",
+    "aggregate rendered UPWR across fixtures is below the recorded baseline aggregate",
   );
 });
 

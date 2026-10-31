@@ -102,7 +102,13 @@ test("rulebooks use Engine, Harness, Host, and Plugin as the root AGENTS.md defi
     if (/\bhost(s|ed|ing)?\b|\bhost-/.test(text.replace(HOST_ALLOWED, " "))) {
       offenders.push(`${where} (lowercase "host": required "Host" for the application, another word for any other sense)`);
     }
-    const terms = file.startsWith("crates/gateway/stt/") ? /(?<![-_/:\w])harness(?![-_/:\w])/ : /(?<![-_/:\w])(engine|harness)(?![-_/:\w])/;
+    // The Gateway's speech tree once carried its own exemption here, because
+    // the root AGENTS.md lets a bare "engine" mean the speech engine inside
+    // that tree. Workshop no longer reads Gateway test data, and no rulebook
+    // there says a bare "engine" today, so the scan applies the one rule
+    // everywhere. A Gateway rulebook that needs the looser sense gets it from
+    // the allowlisted "speech engine" wording.
+    const terms = /(?<![-_/:\w])(engine|harness)(?![-_/:\w])/;
     if (terms.test(text.replace(TERM_ALLOWED, " "))) {
       offenders.push(`${where} (lowercase "engine" or "harness": required "Engine" or "Harness" for the defined term)`);
     }
