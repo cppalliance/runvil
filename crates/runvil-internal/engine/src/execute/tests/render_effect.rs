@@ -80,7 +80,7 @@ fn a_section_with_catalog_offers_renders_once_before_its_first_chat_and_every_ro
     let EffectRecord::Render { alias, offered, .. } = &rig.issued()[0] else {
         panic!("the first effect is the render: {:?}", rig.issued());
     };
-    assert_eq!(alias, "writer", "the render names the round's slot");
+    assert_eq!(alias, "default", "the render names the round's slot");
     assert_eq!(
         *offered,
         vec![PackToolSets::new(
@@ -218,7 +218,7 @@ fn a_handle_round_renders_and_then_chats_on_the_handles_binding() {
     let source = one_section(
         "tools.offer('tools/echo')
          messages:user('go')
-         models.get('other'):loop()
+         models.get('strong'):loop()
          return messages[#messages].content",
     );
     let rig = Rig::run(
@@ -238,12 +238,12 @@ fn a_handle_round_renders_and_then_chats_on_the_handles_binding() {
         .collect();
     assert_eq!(
         slots,
-        [("render", "other"), ("chat", "other")],
+        [("render", "strong"), ("chat", "strong")],
         "the round keeps the handle's binding, never the section's model"
     );
     assert_eq!(
         gateway.requests()[0].options.model(),
-        loop_model_name("other")
+        loop_model_name("strong")
     );
 }
 

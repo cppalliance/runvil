@@ -134,7 +134,7 @@ fn a_non_function_compactor_is_the_calls_error_in_the_engines_type_names() {
     let gateway = ScriptedChat::new(vec![text("unreachable")]);
     let source = one_section(
         "messages:user('hello')
-         local writer = models.get('writer')
+         local writer = models.get('default')
          local function refusal(entry, ...)
            local ok, err = pcall(entry, ...)
            assert(not ok, 'a non-function compactor raises')

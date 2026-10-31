@@ -237,8 +237,7 @@ impl ChainOps<'_> {
                 .map(|tool| tool.id().clone())
                 .collect()
         };
-        let ctx = chain.ctx.clone();
-        chain.frame_mut()?.tool_call_counts(&ctx, &ids)
+        chain.frame_mut()?.tool_call_counts(&ids)
     }
 
     /// Fills `slot` of the batch the chain is parked on with a landed

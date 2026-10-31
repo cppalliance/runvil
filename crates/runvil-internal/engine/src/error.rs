@@ -323,8 +323,8 @@ pub(crate) enum Error {
         id: String,
     },
 
-    /// A `models.infer` or `models.loop` round found no `models.use`
-    /// selection and no prompt-wide `models.default`.
+    /// A `models.infer` or `models.loop` round found no current model,
+    /// because the caller supplied none.
     #[error("model binding required for section {section}")]
     ModelRequired {
         /// The name of the section whose round had no binding, or the

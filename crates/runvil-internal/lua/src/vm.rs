@@ -24,7 +24,7 @@ use std::sync::atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
 use mlua::{Lua, LuaOptions, StdLib};
-use runvil_model_client::model::ModelSet;
+use runvil_model_client::model::{ModelBinding, ModelSet};
 use runvil_types::emitter::Emitter;
 use runvil_types::event::lifecycle;
 use runvil_types::untrusted::GuardNonce;
@@ -37,7 +37,7 @@ use crate::error::{Error, Result};
 use crate::hardening::{CancelHook, harden, install_cancel_hook};
 use crate::iteration::install_deterministic_iteration;
 use crate::messages::MessageList;
-use crate::models::{ModelSelection, RawModelIds};
+use crate::models::RawModelIds;
 use crate::program::LuaProgram;
 use crate::scope::Offers;
 use crate::walk_budget::HeapCeiling;
@@ -46,9 +46,7 @@ pub use adhoc::AdhocTools;
 pub use inject::InjectFailure;
 pub use run::CoroStep;
 pub(crate) use run::scalar_return;
-pub use state::{
-    current_catalog_packs, current_dynamic_set, current_static_set, resolve_model_binding,
-};
+pub use state::{current_catalog_packs, current_dynamic_set, current_static_set};
 
 /// Default per-VM Lua heap ceiling, matching the executor's `RunLimits`.
 pub(crate) const DEFAULT_LUA_MEMORY_BYTES: usize = 64 * 1024 * 1024;
@@ -85,12 +83,16 @@ pub struct Uninjected;
 /// A section VM's stage once Engine injection ran, holding the chain
 /// step's VFS access capability, which the `store` table's closures share,
 /// so every store op is attributed to the identity the executor installed,
-/// and the live `sys` mirror injection builds from the sealed `sys`.
+/// the live `sys` mirror injection builds from the sealed `sys`, and the
+/// selection that holds the chain's current model.
 #[derive(Debug)]
 pub struct Injected {
     access: Arc<Access>,
     /// Live sealed `sys` JSON, mirrored for prose snapshots.
     sys_live: Arc<Mutex<Json>>,
+    /// The current model: what `models.use` stored, starting on the chain's
+    /// starting value.
+    selection: Arc<Mutex<Option<ModelBinding>>>,
 }
 
 /// One hardened, isolated Lua VM for a section's complete lifecycle.
@@ -120,13 +122,11 @@ pub struct SectionVm<S = Injected> {
     /// run catalog. Shared with the run, not snapshotted; nothing writes
     /// it during a run.
     pub(crate) tool_set: Arc<ToolSet>,
-    /// The run's shared model set: the frontmatter's filled roles plus the
-    /// prompt-wide default. Shared for the same reason (`models.default`).
-    pub(crate) bound_models: Arc<Mutex<ModelSet>>,
+    /// The run's shared model set: the five filled roles, built once by
+    /// prepare and never written during a run.
+    pub(crate) bound_models: Arc<ModelSet>,
     /// The section's offers, read by the executor's scope path.
     offers: Arc<Mutex<Offers>>,
-    /// The section's model selection, read by the executor's scope path.
-    model_selection: Arc<Mutex<ModelSelection>>,
     /// Set by Lua `jump` before it aborts the current chunk.
     jump_slot: Arc<Mutex<Option<String>>>,
     /// How many adhoc tool handlers are running on this VM; `jump` refuses
@@ -158,7 +158,7 @@ pub struct SectionVm<S = Injected> {
     cancel_hook: CancelHook,
     /// The raw-model-id fallback, resolved whenever the caller passes an
     /// application-state snapshot (`RunContext::with_ui`): then `models.get`
-    /// resolves an undeclared alias as a raw gateway catalog model id. Set
+    /// resolves a label outside the five roles as a raw gateway model id. Set
     /// by [`allow_raw_model_ids`](SectionVm::allow_raw_model_ids) before
     /// Engine injection; refused everywhere else.
     raw_model_ids: RawModelIds,
@@ -206,9 +206,8 @@ impl SectionVm<Uninjected> {
         let mut vm = Self {
             lua,
             tool_set: Arc::new(ToolSet::default()),
-            bound_models: Arc::new(Mutex::new(ModelSet::default())),
+            bound_models: Arc::new(ModelSet::default()),
             offers: Arc::new(Mutex::new(Offers::default())),
-            model_selection: Arc::new(Mutex::new(ModelSelection::new())),
             jump_slot: Arc::new(Mutex::new(None)),
             adhoc_handler_depth: Arc::new(AtomicU32::new(0)),
             loop_running: Arc::new(AtomicBool::new(false)),
@@ -243,17 +242,16 @@ impl SectionVm<Uninjected> {
     ///
     /// The sets are the run's own handles, not snapshots: the run catalog
     /// and the filled roles back the validating `tools`/`models` tables that
-    /// [`inject_values_with_var`](Self::inject_values_with_var) installs,
-    /// and the prompt-wide fact a section records (`models.default`) lands
-    /// where every later section sees it. Nothing writes the tool set
-    /// during a run. H1 is section 0 on this same path.
+    /// [`inject_values_with_var`](Self::inject_values_with_var) installs.
+    /// Nothing writes either set during a run. H1 is section 0 on this same
+    /// path.
     ///
     /// # Errors
     /// Returns [`Error::LuaRuntime`] if the VM cannot be built or hardened.
     pub fn new_for_section(
         nonce: &GuardNonce,
         tools: &Arc<ToolSet>,
-        models: &Arc<Mutex<ModelSet>>,
+        models: &Arc<ModelSet>,
         emitter: &Emitter,
         section: &str,
     ) -> Result<Self> {
@@ -265,10 +263,10 @@ impl SectionVm<Uninjected> {
 
     /// Opts the VM into the raw-model-id fallback, on whenever the caller
     /// passes an application-state snapshot (`RunContext::with_ui`): `models.get`
-    /// resolves an undeclared alias as a raw gateway catalog model id.
-    /// Engine injection's `models` table install reads the flag, so only an
-    /// uninjected VM takes it. A run without a snapshot never calls it, so
-    /// it keeps strict declared-alias resolution.
+    /// resolves a label outside the five roles as a raw gateway catalog model
+    /// id. Engine injection's `models` table install reads the flag, so only
+    /// an uninjected VM takes it. A run without a snapshot never calls it, so
+    /// `models.get` accepts only the five roles.
     pub fn allow_raw_model_ids(&mut self) {
         self.raw_model_ids = RawModelIds::Resolved;
     }
@@ -329,12 +327,6 @@ impl<S> SectionVm<S> {
     #[must_use]
     pub fn adhoc_tools(&self) -> &AdhocTools {
         &self.adhoc_tools
-    }
-
-    /// The section's model selection: what `models.use` recorded.
-    #[must_use]
-    pub fn model_selection(&self) -> &Arc<Mutex<ModelSelection>> {
-        &self.model_selection
     }
 
     /// The section's one conversation, which the `messages` global holds

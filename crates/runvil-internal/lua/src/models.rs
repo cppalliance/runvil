@@ -1,13 +1,11 @@
-//! The Lua `models` Engine global: `use` / `default` / `get`.
+//! The Lua `models` Engine global: `use` / `get`.
 //!
-//! Binding is frontmatter: the run's roles arrive pre-filled from prepare in
-//! the shared [`ModelSet`], and the table selects among them by label.
-//! `models.use` records the section's selection with its optional sampling
-//! options, `models.default` parks the prompt-wide default, and `models.get`
-//! inspects a bound role without selecting it. The suspending
-//! `models.infer`, `models.loop`, and `models.compact` are coroutine shims
-//! added to this table afterward.
-
+//! The five roles arrive pre-filled from prepare in the shared [`ModelSet`],
+//! and the table selects among them by role name. `models.use` stores the
+//! binding it selects, with its optional sampling options applied, as the
+//! section's current model, and `models.get` inspects a role without
+//! selecting it. The suspending `models.infer`, `models.loop`, and
+//! `models.compact` are coroutine shims added to this table afterward.
 use std::num::NonZeroU32;
 use std::sync::Arc;
 use std::sync::Mutex;
@@ -17,8 +15,8 @@ use mlua::{Lua, MultiValue, Table, Value};
 use runvil_model_client::model::{
     ModelBinding, ModelId, ModelInvocation, ModelSet, Temperature, TemperatureError,
 };
+use runvil_types::models::ModelRole;
 
-use crate::alias::Alias;
 use crate::error::{Error, Result};
 
 #[path = "models-userdata.rs"]
@@ -26,13 +24,13 @@ mod userdata;
 
 pub(crate) use userdata::{LuaModelHandle, is_handle};
 
-/// Whether `models.get` resolves an alias no role declares as a raw
+/// Whether `models.get` resolves a label outside the five roles as a raw
 /// gateway catalog model id.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum RawModelIds {
-    /// An undeclared alias is an error.
+    /// A label outside the five roles is an error.
     Refused,
-    /// An undeclared alias resolves as a raw gateway catalog model id.
+    /// A label outside the five roles resolves as a raw gateway catalog model id.
     Resolved,
 }
 
@@ -44,9 +42,9 @@ const RAW_ID_CONTEXT: NonZeroU32 = match NonZeroU32::new(8192) {
     None => unreachable!(),
 };
 
-/// Builds the raw-model-id fallback's binding: an undeclared `models.get`
-/// alias resolved as a raw gateway catalog model id, with no invocation
-/// overrides and the fallback context window.
+/// Builds the raw-model-id fallback's binding: a `models.get` label outside
+/// the five roles, resolved as a raw gateway catalog model id with no
+/// invocation overrides and the fallback context window.
 fn raw_gateway_binding(alias: &str) -> mlua::Result<ModelBinding> {
     let id = ModelId::gateway(alias).map_err(|error| {
         mlua::Error::external(format!("models.get model id {alias:?} is invalid: {error}"))
@@ -60,13 +58,41 @@ fn raw_gateway_binding(alias: &str) -> mlua::Result<ModelBinding> {
     ))
 }
 
-/// Locks the run's shared model set, mapping a poisoned lock to the Lua
-/// boundary error every Engine function uses.
-fn lock_models(set: &Mutex<ModelSet>) -> mlua::Result<std::sync::MutexGuard<'_, ModelSet>> {
-    set.lock()
-        .map_err(|_| mlua::Error::external("model set mutex was poisoned"))
+/// The five role names as a sentence tail: `default, strong, small, fast or
+/// creative`.
+fn role_list() -> String {
+    let names: Vec<&str> = ModelRole::ALL.iter().map(|role| role.as_str()).collect();
+    match names.split_last() {
+        Some((last, rest)) => format!("{} or {last}", rest.join(", ")),
+        None => String::new(),
+    }
 }
 
+/// The role `label` names, if it names one.
+fn find_role(label: &str) -> Option<ModelRole> {
+    ModelRole::ALL
+        .into_iter()
+        .find(|role| role.as_str() == label)
+}
+
+/// The `function` rejection of a label that is not a role, listing the five.
+fn not_a_role(function: &str, label: &str) -> mlua::Error {
+    mlua::Error::external(format!(
+        "{function} label {label:?} is not a model role: expected {}",
+        role_list()
+    ))
+}
+
+/// The binding that fills `role`, or the error saying the caller supplied
+/// no model for it.
+fn role_binding(set: &ModelSet, role: ModelRole) -> mlua::Result<ModelBinding> {
+    set.binding(role.as_str()).cloned().ok_or_else(|| {
+        mlua::Error::external(format!(
+            "the caller supplied no model for the {} role",
+            role.as_str()
+        ))
+    })
+}
 /// The sampling options a `models.use` call sets on its selection. An
 /// omitted field keeps the role's own value.
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
@@ -195,52 +221,21 @@ fn parse_use_options(options: Value, rest: &MultiValue) -> mlua::Result<UseOptio
     Ok(parsed)
 }
 
-/// Section model-selection state: the current `models.use` label and the
-/// options it set.
-#[derive(Debug)]
-pub struct ModelSelection {
-    selection: Option<(Alias, UseOptions)>,
-}
-
-impl ModelSelection {
-    pub(crate) fn new() -> Self {
-        ModelSelection { selection: None }
-    }
-
-    /// Returns the current `models.use` label and its options, if any.
-    pub(crate) fn selection(&self) -> Option<(&Alias, UseOptions)> {
-        self.selection
-            .as_ref()
-            .map(|(label, options)| (label, *options))
-    }
-
-    /// Records a `models.use` selection, replacing any prior label and
-    /// options: the selection is read at call time, so the latest call
-    /// steers the next model round.
-    fn select(&mut self, alias: Alias, options: UseOptions) {
-        self.selection = Some((alias, options));
-    }
-}
-
 /// Installs the `models` table into one section VM (H1 included: there is
 /// one install path for every section).
 ///
-/// The table reads and writes the run's shared [`ModelSet`]:
-/// `models.use(label, options?)` records the section's own selection in
-/// `runtime`, with an optional `temperature` / `max_tokens` table that
-/// applies to rounds on that selection and to the handle it returns, while
-/// `models.default(label)` records the prompt-wide default in the shared
-/// set - a static prompt-wide fact, conventionally called from H1 but not
-/// privileged to it. Re-selecting the same label is a no-op, so a library
-/// section that every section loads with `require` may name the default;
-/// naming a different label errors. There is no `models.bind`: binding is the
-/// frontmatter's, and an unknown label is a hard error.
+/// `models.use(label, options?)` looks the role `label` up in the shared
+/// [`ModelSet`], applies the optional `temperature` / `max_tokens` table to
+/// its binding, stores the result in `selection` as the section's current
+/// model, and returns the handle. `models.get(label)` returns the handle for
+/// a role without selecting it. A label outside the five roles is an error,
+/// and a role the caller gave no model fails saying so.
 ///
 /// `raw_ids` is the raw-model-id fallback, resolved whenever the caller
 /// passes an application-state snapshot (`RunContext::with_ui`): then
-/// `models.get` resolves an undeclared alias as a raw gateway catalog model
-/// id, so the built-in chat prompt can run `models.get(ui().selected_model)`
-/// without declaring its model. Refused, an undeclared alias is the usual
+/// `models.get` resolves a label outside the five roles as a raw gateway
+/// catalog model id, so the built-in chat prompt can run
+/// `models.get(ui().selected_model)`. Refused, such a label is the usual
 /// error.
 ///
 /// The coroutine shim layer installs the suspending `models.infer`,
@@ -253,100 +248,52 @@ impl ModelSelection {
 pub(crate) fn install_models(
     lua: &Lua,
     globals: &Table,
-    set: &Arc<Mutex<ModelSet>>,
-    runtime: &Arc<Mutex<ModelSelection>>,
+    set: &Arc<ModelSet>,
+    selection: &Arc<Mutex<Option<ModelBinding>>>,
     raw_ids: RawModelIds,
 ) -> Result<()> {
     let models = lua.create_table().map_err(Error::lua)?;
 
     let frozen = Arc::clone(set);
-    let state = Arc::clone(runtime);
+    let current = Arc::clone(selection);
     let use_fn = lua
         .create_function(
             move |_,
                   (label, options, rest): (String, Value, MultiValue)|
                   -> mlua::Result<LuaModelHandle> {
-                let label = Alias::parse(label).map_err(mlua::Error::external)?;
-                let binding = lock_models(&frozen)?
-                    .binding(label.as_str())
-                    .cloned()
-                    .ok_or_else(|| {
-                        mlua::Error::external(format!(
-                            "models.use label {:?} is not a bound model role",
-                            label.as_str()
-                        ))
-                    })?;
+                let role = find_role(&label).ok_or_else(|| not_a_role("models.use", &label))?;
+                let binding = role_binding(&frozen, role)?;
                 let options = parse_use_options(options, &rest)?;
-                let mut state = state
+                let binding = options.apply(binding);
+                *current
                     .lock()
-                    .map_err(|_| mlua::Error::external("model selection lock was poisoned"))?;
-                state.select(label, options);
-                Ok(LuaModelHandle::from_binding(options.apply(binding)))
+                    .map_err(|_| mlua::Error::external("model selection lock was poisoned"))? =
+                    Some(binding.clone());
+                Ok(LuaModelHandle::from_binding(binding))
             },
         )
         .map_err(Error::lua)?;
     models.set("use", use_fn).map_err(Error::lua)?;
 
     let frozen = Arc::clone(set);
-    let default_fn = lua
-        .create_function(move |_, label: String| -> mlua::Result<LuaModelHandle> {
-            let label = Alias::parse(label).map_err(mlua::Error::external)?;
-            let mut set = lock_models(&frozen)?;
-            let binding = set
-                .binding(label.as_str())
-                .cloned()
-                .ok_or_else(|| {
-                    mlua::Error::external(format!(
-                        "models.default label {:?} is not a bound model role",
-                        label.as_str()
-                    ))
-                })?;
-            match set.default_alias() {
-                // Idempotent under `require`: every section that requires
-                // a library re-runs it, so naming the same default again is
-                // a no-op.
-                Some(existing) if existing == label.as_str() => {}
-                Some(existing) => {
-                    return Err(mlua::Error::external(format!(
-                        "models.default is already {existing:?}: the prompt-wide default cannot change mid-run"
-                    )));
-                }
-                None => set.set_default_alias(label.into()),
-            }
-            Ok(LuaModelHandle::from_binding(binding))
-        })
-        .map_err(Error::lua)?;
-    models.set("default", default_fn).map_err(Error::lua)?;
-
-    let frozen = Arc::clone(set);
     let get_fn = lua
-        .create_function(move |_, alias: String| -> mlua::Result<LuaModelHandle> {
-            if let Some(binding) = lock_models(&frozen)?.binding(&alias).cloned() {
-                return Ok(LuaModelHandle::from_binding(binding));
-            }
-            // The raw-model-id fallback: with raw ids resolved, an
-            // undeclared alias resolves as a raw gateway catalog model id
-            // under the fallback context window. The alias grammar does not
-            // apply - gateway ids include `/`, `.`, and `:` - so the id's own
-            // validation is the only gate.
-            match raw_ids {
-                RawModelIds::Resolved => {
-                    return Ok(LuaModelHandle::from_binding(raw_gateway_binding(&alias)?));
-                }
-                RawModelIds::Refused => {}
-            }
-            let alias = Alias::parse(alias).map_err(mlua::Error::external)?;
-            Err(mlua::Error::external(format!(
-                "models.get alias {:?} is not a bound model role",
-                alias.as_str()
-            )))
+        .create_function(move |_, label: String| -> mlua::Result<LuaModelHandle> {
+            // The raw-model-id fallback: with raw ids resolved, a label
+            // outside the five roles resolves as a raw gateway catalog model
+            // id under the fallback context window. Gateway ids include `/`,
+            // `.`, and `:`, so the id's own validation is the only gate.
+            let binding = match (find_role(&label), raw_ids) {
+                (Some(role), _) => role_binding(&frozen, role)?,
+                (None, RawModelIds::Resolved) => raw_gateway_binding(&label)?,
+                (None, RawModelIds::Refused) => return Err(not_a_role("models.get", &label)),
+            };
+            Ok(LuaModelHandle::from_binding(binding))
         })
         .map_err(Error::lua)?;
     models.set("get", get_fn).map_err(Error::lua)?;
 
     globals.raw_set("models", models).map_err(Error::lua)
 }
-
 #[cfg(test)]
 #[path = "models-tests.rs"]
 mod tests;

@@ -317,33 +317,6 @@ fn an_owned_lua_internal_message_reaches_the_engine_error_whole() {
     assert_eq!(location.line, Some(expected_line));
 }
 
-#[test]
-fn a_poisoned_model_set_maps_to_an_internal_error_and_never_a_completion_error() {
-    // The run's own model-set mutex failing is not a model failure and no
-    // prompt author can cause it: it maps to an internal error, and a
-    // caller never sees it as a retryable completion kind.
-    use crate::model::{ModelSet, ModelView};
-    use std::sync::{Arc, Mutex};
-
-    let set = Arc::new(Mutex::new(ModelSet::default()));
-    let poisoner = Arc::clone(&set);
-    let _ = std::thread::spawn(move || {
-        let _guard = poisoner.lock();
-        panic!("poison the model set");
-    })
-    .join();
-
-    let failure = set
-        .binding("writer")
-        .expect_err("a poisoned set cannot be read");
-    let error = Error::from(runvil_lua::Error::from(failure));
-    assert!(
-        matches!(&error, Error::Internal { message, .. } if message == "model set mutex was poisoned"),
-        "the lock failure is an internal error: {error:?}"
-    );
-    assert!(!crate::RunError::from(error).is_retryable());
-}
-
 /// One failure of each store variant, with fields a table can carry.
 fn one_failure_per_store_variant() -> Vec<runvil_vfs::VfsError> {
     use runvil_vfs::{PathReason, VfsError};

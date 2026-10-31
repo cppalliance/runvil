@@ -25,7 +25,7 @@ pub(crate) use runvil_lua::{
     UsageAnchor, VfsOp, VfsOutcome, YieldParse, current_catalog_packs, current_dynamic_set,
     current_static_set, exhaustion_detail, install_preludes, install_store_shims, install_ui,
     output_reserve, precheck, prepare_dispatch, prepare_model_dispatch, project_messages,
-    render_item, resolve_model_binding, wire_name_of,
+    render_item, wire_name_of,
 };
 
 // The store operation behind `execute::perform_vfs_op`, the entry point

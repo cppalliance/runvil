@@ -1,10 +1,10 @@
-//! Tests for resolving a section's model binding through the VM and shared model set.
+//! Tests for reading a section's current model through the VM and the shared model set.
 
 use std::num::NonZeroU32;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use super::*;
-use crate::lua::{SectionVm, ToolSet, resolve_model_binding};
+use crate::lua::{SectionVm, ToolSet};
 use crate::test_support::fresh_access;
 use crate::test_support::recording::null_emitter;
 use crate::test_support::scenario::TEST_SEED;
@@ -57,12 +57,12 @@ fn bound_role(
 }
 
 /// Shares a model set the way the run shares its own.
-fn shared_models(bindings: Vec<ModelBinding>) -> Arc<Mutex<ModelSet>> {
+fn shared_models(bindings: Vec<ModelBinding>) -> Arc<ModelSet> {
     let mut set = ModelSet::default();
     for binding in bindings {
         set.push(binding);
     }
-    Arc::new(Mutex::new(set))
+    Arc::new(set)
 }
 
 /// Shares an empty tool set.
@@ -72,7 +72,7 @@ fn shared_tools() -> Arc<ToolSet> {
 
 /// A section VM over `models` with empty Engine values injected.
 fn section_vm_with_models(
-    models: &Arc<Mutex<ModelSet>>,
+    models: &Arc<ModelSet>,
     emitter: &Emitter,
     section: &str,
 ) -> Result<SectionVm> {
@@ -87,11 +87,9 @@ fn section_vm_with_models(
     .map_err(|failure| Error::from(failure.teardown(emitter, section)))
 }
 
-/// Reads the section's effective model binding through a view over the VM's
-/// shared set, mirroring the Engine's read path.
+/// Reads the section's current model the way the Engine's read path does.
 fn resolve_section_model(vm: &SectionVm) -> Result<Option<ModelBinding>> {
-    let (models, runtime) = vm.model_bag_handles()?;
-    resolve_model_binding(&Mutex::new(models), &runtime).map_err(Error::from)
+    vm.current_model().map_err(Error::from)
 }
 
 #[path = "tests-always.rs"]

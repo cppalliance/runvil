@@ -313,7 +313,7 @@ fn meta_reaches_a_tool_through_a_view_but_never_the_model() {
 fn both_loop_entries_take_only_a_compactor_and_check_it_before_a_running_loop() {
     let source = PromptSource::new().section(
         "Only",
-        "local other = models.get('other')
+        "local other = models.get('strong')
          local refusals = {}
          local function refuse(call)
            local ok, err = pcall(call)

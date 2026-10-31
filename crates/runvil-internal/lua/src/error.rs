@@ -16,8 +16,6 @@
 
 use std::borrow::Cow;
 
-use runvil_model_client::model::ModelSetError;
-
 /// A type-erased owned error cause used by the internal error type.
 type BoxedSource = Box<dyn std::error::Error + Send + Sync>;
 
@@ -275,16 +273,6 @@ impl Error {
 /// [`Error::Lua`], which `pcall` reports as kind `lua`.
 pub(crate) fn author_refusal(message: String) -> mlua::Error {
     mlua::Error::external(Error::Lua(message))
-}
-
-/// Maps a poisoned model-set lock onto [`Error::Internal`], the mapping
-/// the Engine receives through its `From<runvil_lua::Error>`: the lock is
-/// the run's own mutex failing, which no prompt author can cause, not a
-/// model failure.
-impl From<ModelSetError> for Error {
-    fn from(error: ModelSetError) -> Error {
-        Error::internal(error.to_string())
-    }
 }
 
 /// Crate-internal result alias over [`Error`].

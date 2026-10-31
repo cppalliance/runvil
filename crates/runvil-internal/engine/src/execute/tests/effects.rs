@@ -45,7 +45,7 @@ fn models_infer_issues_exactly_one_chat_effect_over_one_user_message() {
         rig.issued(),
         vec![EffectRecord::Chat {
             round: RoundId::new(0),
-            alias: "writer".to_owned(),
+            alias: "default".to_owned(),
             after: None,
             keep: 0,
             messages: vec![json!({ "role": "user", "content": "ask" })],
@@ -87,7 +87,7 @@ fn a_models_loop_round_issues_one_chat_effect_and_one_tool_call_effect_per_call(
     assert_eq!(
         records[0],
         EffectRecord::Render {
-            alias: "writer".to_owned(),
+            alias: "default".to_owned(),
             entry: "0.1".to_owned(),
             offered: vec![PackToolSets::new(
                 PackId::parse("tools").expect("a valid Pack id"),
@@ -109,7 +109,7 @@ fn a_models_loop_round_issues_one_chat_effect_and_one_tool_call_effect_per_call(
             tool: ToolId::parse("tools/echo").expect("a valid id"),
             alias: "echo".to_owned(),
             args: json!({ "value": "hi" }),
-            origin: origin("Only", "0.1", ToolCaller::Model).with_model(loop_model_name("writer")),
+            origin: origin("Only", "0.1", ToolCaller::Model).with_model(loop_model_name("default")),
         },
         "the model's call is one tool_call effect naming the bound identity and the model"
     );

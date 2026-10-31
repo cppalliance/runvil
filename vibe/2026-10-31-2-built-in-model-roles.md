@@ -95,7 +95,7 @@ The author-facing surface is five fixed roles, optional requirements in front ma
 
     -- READ the chain's current model (a chain starts on the `default` role)
     local m = models.current()           -- handle: m.label, m.model_id, m.description, m.context, m.thinking, m.provider
-                                         -- errors "the Host supplied no model" when the Host map is empty
+                                         -- errors "the caller supplied no model" when the Host map is empty
 
     -- SWITCH the chain's current model (persists across this chain's sections)
     local m = models.use("strong")       -- returns the handle
@@ -126,7 +126,7 @@ The author-facing surface is five fixed roles, optional requirements in front ma
 - States and validation:
   - Parse time: an unknown role name, an unknown field, a duplicate role key, or `min_context: 0` is a parse error. The unknown-role error lists the five names.
   - `prepare` time: each declared role's requirements are checked against the model that fills it, fallbacks included.
-  - Run time: `models.use` and `models.get` reject a label that is not one of the five, except that `models.get` resolves a raw gateway model id when the run has an application-state snapshot (`crates/runvil-internal/lua/src/models.rs`). `models.use`, `models.get` and `models.current` on a role with no model fail with "the Host supplied no model".
+  - Run time: `models.use` and `models.get` reject a label that is not one of the five, except that `models.get` resolves a raw gateway model id when the run has an application-state snapshot (`crates/runvil-internal/lua/src/models.rs`). `models.use`, `models.get` and `models.current` on a role with no model fail with "the caller supplied no model".
 - Errors and recovery:
   - `prepare` reports unmet requirements, and a non-empty map without `default`, in `Requirements`. The caller refuses the run before it starts, as it does for other unmet requirements (`crates/runvil-internal/engine/src/execute/requirements.rs`). The Host recovers by supplying a model that meets the requirement, or a `default` entry.
   - With an empty map, using a model raises `ModelRequired`, and a prompt that never calls a model still runs.
@@ -423,7 +423,7 @@ Change `RunContext::prepare` to take the Host's role map, so five roles exist fo
 
 <step-3>
 
-### Step 3: Immutable model set with the default role as baseline
+### Step 3: Immutable model set with the default role as baseline [completed]
 
 - Component: Fixed roles and Host map
 - Tests:
@@ -443,7 +443,7 @@ Make the run's model set immutable, and make the `default` role the baseline a s
   - Each section VM's injection takes the selection as an argument, of type `Arc<Mutex<Option<ModelBinding>>>`. The engine builds it per section as `Arc::new(Mutex::new(ctx.default_binding()))`, so a section starts on the `default` binding, or on `None` when the caller's map was empty.
   - `models.use(label, options?)` accepts a role name. It looks the role up in the set and stores `options.apply(binding)` as the selection, then returns the handle. The option checks and their error texts stay as they are (for example `models.use option temperature must be a number, got string`).
   - `models.get(label)` returns the handle for a role without selecting it. For a label that is not one of the five roles it resolves a raw gateway model id when the run has an application-state snapshot (`RunContext::with_ui`), as it does today with the 8192-token fallback context, and otherwise fails.
-  - Error texts: a label outside the five fails with `models.use label "reviewer" is not a model role: expected default, strong, small, fast or creative`, and `models.get label "reviewer" ...` with the same tail. A role with no model (the caller's map was empty) fails with an error that contains `the Host supplied no model`, for `models.use` and `models.get`.
+  - Error texts: a label outside the five fails with `models.use label "reviewer" is not a model role: expected default, strong, small, fast or creative`, and `models.get label "reviewer" ...` with the same tail. A role with no model (the caller's map was empty) fails with an error that contains `the caller supplied no model`, for `models.use` and `models.get`.
   - The engine reads the current model for inference, chat rounds and a section's first tool call through the new `SectionVm::current_model(&self) -> Result<Option<ModelBinding>>`. It returns an `Error::internal` with `model selection lock was poisoned` on a poisoned lock.
 - Artifacts (model-client):
   - `crates/runvil-internal/model-client/src/model/options.rs`: `ModelSet` keeps `bindings()`, `binding(alias)` and `push`. Delete its `default` field, `default_alias()` and `set_default_alias()`, plus `ModelSetError`, `ModelView`, `lock_model_set` and the `ModelView` impl for `Mutex<ModelSet>`. Rewrite the `ModelSet` doc to say it is built once at prepare and shared.
@@ -465,7 +465,7 @@ Make the run's model set immutable, and make the `default` role the baseline a s
   - `models.use('strong')` makes the next `models.infer` run on B, and `models.use('fast')` runs it on A;
   - `models.use('strong', { temperature = 0.2, max_tokens = 512 })` applies both options to the next round, and the existing option-validation tests keep their texts;
   - `models.use('reviewer')` fails with `models.use label "reviewer" is not a model role: expected default, strong, small, fast or creative`, and `models.get('reviewer')` with no UI snapshot fails with the `models.get` form of the same text;
-  - with an empty caller map, `models.use('default')` and `models.get('default')` fail with an error containing `the Host supplied no model`, `models.infer` raises `ModelRequired`, and a prompt that never calls a model still runs;
+  - with an empty caller map, `models.use('default')` and `models.get('default')` fail with an error containing `the caller supplied no model`, `models.infer` raises `ModelRequired`, and a prompt that never calls a model still runs;
   - with a UI snapshot, `models.get('vendor/raw-model')` resolves a raw gateway model id with the 8192-token fallback context;
   - `SectionVm::current_model()` returns the `default` binding on a new section VM and the selected binding after `models.use('strong')`.
 - Rules: nothing you write (code, comments, docs, error messages, test names) says "replaces", "formerly", "previously", "no longer", "legacy", "removed" or "migrated", or notes what a name used to be, and no test asserts that a deleted name is gone. Do not edit `vibe/` or `.vibelight/`.
@@ -491,7 +491,7 @@ Finish the author-facing Lua surface for model roles: `models.current()`, `model
 - Placement: last step of the "Host map to model set" piece. It adds behavior on top of the selection that step 3 made hold a whole binding, so it comes after it. It stays out of the front matter piece because nothing here reads the parser.
 - Build state: the workspace builds and passes after this step. The facade listing changes (`ModelBinding::capabilities` and `with_capabilities` go), so regenerate `crates/runvil/public-api.txt` with `cargo +nightly-2026-09-05 xtask api --bless`.
 - Behavior:
-  - `models.current()` returns the handle for the section's current selection, which starts on the `default` role. With an empty caller map it fails with an error containing `the Host supplied no model`.
+  - `models.current()` returns the handle for the section's current selection, which starts on the `default` role. With an empty caller map it fails with an error containing `the caller supplied no model`.
   - `models.use(role_or_handle, options?)` returns the handle. Given a handle (from `models.current()`, `models.get(...)`, or an earlier `models.use`, including a raw-id handle) it stores `options.apply(handle's binding)` as the selection, so options apply on top of the handle. Any other argument type fails with `models.use takes a model role name or a model handle, got number` (the Lua type name replaces `number`).
   - The handle exposes `label`, `name`, `model_id`, `description`, `context`, `thinking` and `provider`, plus the methods `infer` and `loop`. The `capabilities` field goes. Leave the duplicate `name` and `label` fields and the handle methods as they are.
   - A handle's description is the model info's description, because a role has no description of its own.
@@ -507,7 +507,7 @@ Finish the author-facing Lua surface for model roles: `models.current()`, `model
   - `models.use(prev, { temperature = 0.2 })` applies the temperature on top of the handle's binding, so the next request names the handle's model and its `options.temperature()` is `Some` of 0.2;
   - with a UI snapshot, a raw-id handle from `models.get('vendor/raw-model')` is accepted by `models.use`, and the next `models.infer` request names `vendor/raw-model`'s gateway model name;
   - `models.use(5)` fails with `models.use takes a model role name or a model handle, got number`;
-  - with an empty caller map, `models.current()` fails with an error containing `the Host supplied no model`;
+  - with an empty caller map, `models.current()` fails with an error containing `the caller supplied no model`;
   - a handle exposes `label`, `model_id`, `description`, `context`, `thinking` and `provider`, and its `infer` and `loop` methods keep working in the existing tests.
 - Rules: nothing you write (code, comments, docs, error messages, test names) says "replaces", "formerly", "previously", "no longer", "legacy", "removed" or "migrated", or notes what a name used to be, and no test asserts that a deleted name is gone. Do not edit `vibe/` or `.vibelight/`.
 
@@ -674,7 +674,7 @@ Rewrite the models part and the task descriptions of `design/architect-runvil-pr
 - Behavior to document (present tense, no history):
   - Every prompt has exactly five roles: `default`, `strong`, `small`, `fast`, `creative`. There are no custom roles. Front matter `models:` is optional and holds only requirements per role, `min_context` (a positive token count) and `thinking` (`true` requires a model that can think and turns thinking on for that role's requests, `false` requires one that can run without thinking and turns it off). An unknown role name or field is a parse error.
   - The Host passes a role-to-model map to `prepare`. A role with no entry uses the `default` entry. An empty map means the Host has no model, and a prompt fails only when it calls a model. A non-empty map without `default` is refused before the run starts. Requirements are checked against the model that fills the role, fallbacks included.
-  - The Lua surface: a chain starts on the `default` role. `models.use(role_or_handle, options?)` switches the chain's current model and returns the handle, and the switch lasts across that chain's sections until the next switch. `models.current()` returns the current handle, `models.get(role)` inspects without switching, and `models.infer` and `models.loop` run on the current model or an explicit handle. A handle exposes `label`, `model_id`, `description`, `context`, `thinking` and `provider`, plus `infer` and `loop`. Error texts: `models.use label "reviewer" is not a model role: expected default, strong, small, fast or creative`, and `the Host supplied no model`.
+  - The Lua surface: a chain starts on the `default` role. `models.use(role_or_handle, options?)` switches the chain's current model and returns the handle, and the switch lasts across that chain's sections until the next switch. `models.current()` returns the current handle, `models.get(role)` inspects without switching, and `models.infer` and `models.loop` run on the current model or an explicit handle. A handle exposes `label`, `model_id`, `description`, `context`, `thinking` and `provider`, plus `infer` and `loop`. Error texts: `models.use label "reviewer" is not a model role: expected default, strong, small, fast or creative`, and `the caller supplied no model`.
   - `call` children, `tasks.spawn` tasks and fanout arms start with a copy of the parent's current model, taken when the call or spawn is dispatched. The root walk starts with the model the H1 pass ended on. A child's switch never reaches its parent or its siblings.
   - The save-and-restore pattern is `local prev = models.current(); models.use('creative'); ...; models.use(prev)`. A `models.use('strong')` for one expensive step leaves every later section of that chain on `strong`, which is a cost to plan for, and the save-and-restore pattern undoes it.
   - `tasks.fanout(worker, items)` runs every arm on the chain's current model. `tasks.fanout(model, worker, items)` takes a model handle first and runs every arm on it, without switching the parent: the parent's model after the call is what it was before, including when a spawn fails part-way. Example: `tasks.fanout(models.get('fast'), worker, items)`. Inside an arm, `models.use('strong')` affects only that arm and its children, and `models.use('default')` selects the `default` role. Error texts: `tasks.fanout: the first argument must be a model handle, got nil` and `tasks.fanout takes (worker, collection) or (model, worker, collection)`. The save-and-restore example with a 2-argument fanout stays valid: `local prev = models.current(); models.use('creative'); local drafts = tasks.fanout(worker, items); models.use(prev)`.

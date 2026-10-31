@@ -7,7 +7,7 @@
 //! between the two constructors are the list on
 //! [`SectionContext::new_h1`].
 
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use runvil_types::event::lifecycle;
 use runvil_types::ids::TaskId;
@@ -119,6 +119,7 @@ impl SectionContext {
         // only the seed, the `sys` extras, and the callbacks' position are
         // the walk's own.
         let sys_json = sys.to_json();
+        let selection = Arc::new(Mutex::new(ctx.default_binding()));
         let setup = ctx.vm_setup(
             &sys_json,
             VmSeed {
@@ -126,6 +127,7 @@ impl SectionContext {
                 item: seed.item.as_ref(),
             },
             access,
+            &selection,
             section.name(),
             false,
         );
@@ -177,7 +179,15 @@ impl SectionContext {
         // describes; the executor reads the value back at the freeze (see
         // the scheduler's H1-to-walk handoff).
         let sys_json = sys.to_json();
-        let setup = ctx.vm_setup(&sys_json, VmSeed::default(), access, title, true);
+        let selection = Arc::new(Mutex::new(ctx.default_binding()));
+        let setup = ctx.vm_setup(
+            &sys_json,
+            VmSeed::default(),
+            access,
+            &selection,
+            title,
+            true,
+        );
         // Setup runs on the bare VM and tears it down itself on failure:
         // the frame does not exist yet, so its `Drop` cannot own this path.
         let vm = section_vm::setup_section_vm(vm, &setup, read, resolve, render)?;

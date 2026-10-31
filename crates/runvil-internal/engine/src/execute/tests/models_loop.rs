@@ -25,18 +25,17 @@ mod arguments;
 #[path = "models_loop-author-shapes.rs"]
 mod author_shapes;
 
-/// The model set a loop test's run uses: `writer` (the prompt-wide
-/// default, model `test-model`) and `other` (model `other-model`), so an
+/// The model set a loop test's run uses: `default` (the role every section
+/// starts on, model `test-model`) and `strong` (model `other-model`), so an
 /// explicit handle provably runs on its own frozen binding.
 pub(super) fn loop_models() -> ModelSet {
     let mut set = ModelSet::default();
     set.push(test_binding(
-        "writer",
+        "default",
         "A general model for tests",
         "test-model",
     ));
-    set.push(test_binding("other", "A second model", "other-model"));
-    set.set_default_alias("writer".to_owned());
+    set.push(test_binding("strong", "A second model", "other-model"));
     set
 }
 
@@ -281,7 +280,7 @@ fn an_offer_after_the_first_loop_raises_and_the_second_loop_sends_the_same_empty
 fn a_handles_loop_runs_on_its_frozen_binding() {
     let gateway = ScriptedChat::new(vec![text("first"), text("second")]);
     let source = one_section(
-        "local other = models.get('other')
+        "local other = models.get('strong')
          messages:user('one')
          other:loop()
          messages:user('two')

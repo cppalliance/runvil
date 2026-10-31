@@ -15,7 +15,7 @@
 )]
 
 use std::num::NonZeroU32;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use criterion::{BatchSize, Criterion, criterion_group, criterion_main};
 use runvil_lua::{
@@ -42,7 +42,7 @@ fn builder_vm() -> SectionVm {
     SectionVm::new_for_section(
         &GuardNonce::from_seed(&RunSeed::from_bytes([1; 32])),
         &Arc::new(ToolSet::default()),
-        &Arc::new(Mutex::new(ModelSet::default())),
+        &Arc::new(ModelSet::default()),
         &emitter(),
         SECTION,
     )

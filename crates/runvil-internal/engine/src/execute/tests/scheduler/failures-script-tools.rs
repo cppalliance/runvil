@@ -302,36 +302,31 @@ fn a_script_tools_call_before_infer_keeps_the_model_install() {
 }
 
 #[test]
-fn a_first_tool_call_whose_model_step_fails_leaves_the_install_to_the_next_call() {
-    // The set's default names no binding, so the first call's model step
-    // fails after its counts install. The install is not done until the
-    // model step succeeds, so the second call runs it again, under the
-    // selection `models.use` made in between, and `sys.model` lands.
+fn a_first_tool_call_sets_sys_model_to_the_model_models_use_selected() {
+    // The first tool call takes the section's current model, so the switch
+    // `models.use` made before it is what `sys.model` names.
     let md = "---\nname: t\ndescription: d\nrunvil: 0\n---\n\n\
         # ToolCall\n\n\
         ## Only\n\n\
         ```lua\n\
-        local ok = pcall(tools.call, 'tools/echo', { value = 'x' })\n\
-        assert(not ok, 'the first call fails in its model step')\n\
-        models.use('writer')\n\
+        models.use('strong')\n\
         tools.call('tools/echo', { value = 'y' })\n\
         return sys.model\n\
         ```\n";
-    let mut unbound_default = ModelSet::default();
-    unbound_default.push(test_binding(
-        "writer",
+    let mut models = ModelSet::default();
+    models.push(test_binding(
+        "default",
         "A general model for tests",
         "test-model",
     ));
-    unbound_default.set_default_alias("ghost".to_owned());
+    models.push(test_binding("strong", "A second model", "other-model"));
     let trace = Scenario::new(md)
         .unprepared()
-        .models(unbound_default)
+        .models(models)
         .offer("echo", echo_tool())
         .run();
-    assert_eq!(trace.text(), "test-model");
+    assert_eq!(trace.text(), "other-model");
 }
-
 #[test]
 fn a_document_prompt_without_tools_call_is_unaffected() {
     // Bindings installed, shim present, `tools.call` never called: the

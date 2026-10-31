@@ -10,7 +10,7 @@
 //! [`ModelCatalog`](runvil_types::models::ModelCatalog) the
 //! caller supplies, the validated [`ModelId`](runvil_types::models::ModelId)
 //! identity, and the
-//! [`model::ModelBinding`]/[`model::ModelSet`]/[`model::ModelView`] types
+//! [`model::ModelBinding`]/[`model::ModelSet`] types
 //! model selections resolve and freeze through, with
 //! [`model::CompletionError`] as the failure a round reports.
 //!

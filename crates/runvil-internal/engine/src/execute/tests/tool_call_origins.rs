@@ -109,7 +109,7 @@ fn a_model_calls_origin_names_its_rounds_model_and_a_script_calls_names_none() {
         vec![
             ToolCallOrigin::new(EXECUTION, "Only", ToolCaller::Model)
                 .with_entry("0.1")
-                .with_model(loop_model_name("writer")),
+                .with_model(loop_model_name("default")),
             script_call("Only", "0.1"),
         ],
         "the model call names its round's model, and the script call after that round names none"
@@ -122,7 +122,7 @@ fn a_section_that_switches_models_between_rounds_reports_each_rounds_model() {
         "tools.offer('tools/echo')\n\
          messages:user('first')\n\
          models.loop()\n\
-         models.use('other')\n\
+         models.use('strong')\n\
          messages:user('second')\n\
          models.loop()\n\
          return messages[#messages].content",
@@ -140,8 +140,8 @@ fn a_section_that_switches_models_between_rounds_reports_each_rounds_model() {
     assert_eq!(
         models(&rig),
         vec![
-            Some(loop_model_name("writer")),
-            Some(loop_model_name("other"))
+            Some(loop_model_name("default")),
+            Some(loop_model_name("strong"))
         ],
         "each call names the model of the round that requested it"
     );
@@ -150,7 +150,7 @@ fn a_section_that_switches_models_between_rounds_reports_each_rounds_model() {
 #[test]
 fn an_adhoc_handlers_infer_on_another_model_leaves_the_batchs_later_call_on_its_rounds_model() {
     let (rig, gateway) = run_echo(
-        &grab_then_loop("return models.get('other'):infer('aside')"),
+        &grab_then_loop("return models.get('strong'):infer('aside')"),
         vec![grab_then_echo(), text("aside reply"), text("final answer")],
     );
     assert_eq!(rig.trace().text(), "final answer");
@@ -161,7 +161,7 @@ fn an_adhoc_handlers_infer_on_another_model_leaves_the_batchs_later_call_on_its_
     );
     assert_eq!(
         models(&rig),
-        vec![Some(loop_model_name("writer"))],
+        vec![Some(loop_model_name("default"))],
         "the call after the handler names the batch round's model"
     );
 }
@@ -169,7 +169,7 @@ fn an_adhoc_handlers_infer_on_another_model_leaves_the_batchs_later_call_on_its_
 #[test]
 fn an_adhoc_handlers_model_switch_leaves_the_batchs_later_call_on_its_rounds_model() {
     let (rig, gateway) = run_echo(
-        &grab_then_loop("models.use('other')\nreturn 'switched'"),
+        &grab_then_loop("models.use('strong')\nreturn 'switched'"),
         vec![grab_then_echo(), text("final answer")],
     );
     assert_eq!(rig.trace().text(), "final answer");
@@ -180,7 +180,7 @@ fn an_adhoc_handlers_model_switch_leaves_the_batchs_later_call_on_its_rounds_mod
     );
     assert_eq!(
         models(&rig),
-        vec![Some(loop_model_name("writer"))],
+        vec![Some(loop_model_name("default"))],
         "the call after the handler names the batch round's model"
     );
 }

@@ -113,7 +113,7 @@ fn a_section_offer_by_id_scopes_the_tool_and_dispatches_it() {
     let vm = SectionVm::new_for_section(
         &GuardNonce::from_seed(&TEST_SEED),
         &Arc::new(tools),
-        &Arc::new(Mutex::new(ModelSet::default())),
+        &Arc::new(ModelSet::default()),
         &null_emitter(),
         "Only",
     )

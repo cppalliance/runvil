@@ -1,43 +1,7 @@
-//! Tests for the model set's read view and the temperature range: the
-//! poisoned and healthy view methods, and the finite range check.
+//! Tests for the model set's total equivalence, the binding accessors, and the
+//! finite temperature range check.
 
 use super::*;
-
-/// A model set whose mutex a panicking thread poisoned.
-fn poisoned_set() -> Mutex<ModelSet> {
-    let set = Mutex::new(ModelSet::default());
-    std::thread::scope(|scope| {
-        let _ = scope
-            .spawn(|| {
-                let _guard = set.lock();
-                panic!("poison the set");
-            })
-            .join();
-    });
-    set
-}
-
-#[test]
-fn a_poisoned_model_set_reports_the_lock_error_from_every_view_method() {
-    let set = poisoned_set();
-    assert!(set.lock().is_err(), "a poisoned set cannot be read");
-    assert_eq!(ModelView::default_alias(&set), Err(ModelSetError));
-    assert_eq!(set.binding("writer"), Err(ModelSetError));
-    assert_eq!(ModelSetError.to_string(), "model set mutex was poisoned");
-}
-
-#[test]
-fn a_healthy_model_set_answers_every_view_method() {
-    let set = Mutex::new(ModelSet::default());
-    assert!(
-        set.lock()
-            .expect("a healthy set locks")
-            .bindings()
-            .is_empty()
-    );
-    assert_eq!(ModelView::default_alias(&set), Ok(None));
-    assert_eq!(set.binding("writer"), Ok(None));
-}
 
 #[test]
 fn a_model_set_compares_as_a_total_equivalence() {

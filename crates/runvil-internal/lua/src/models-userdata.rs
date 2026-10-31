@@ -1,5 +1,4 @@
-//! Inspectable Lua userdata returned by `models.use` / `models.default` /
-//! `models.get`.
+//! Inspectable Lua userdata returned by `models.use` and `models.get`.
 //!
 //! The userdata exposes a frozen [`ModelBinding`]'s fields to Lua, and it
 //! carries `infer` and `loop`, run as `h:infer(prompt)` and

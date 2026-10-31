@@ -7,7 +7,6 @@ use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
 
 use mlua::{Function, Lua, MultiValue, Table};
-use runvil_model_client::model::ModelSet;
 use runvil_types::emitter::Emitter;
 use runvil_types::event::lifecycle;
 use runvil_types::packs::PackId;
@@ -19,7 +18,6 @@ use crate::bindings::{RosterEntry, ToolBinding, ToolSet};
 use crate::coro::MODEL_TOOL_CALL_REGISTRY;
 use crate::error::{Error, Result};
 use crate::error_value::ErrorValue;
-use crate::models::ModelSelection;
 use crate::program::LuaProgram;
 use crate::protocol::{Answer, render_envelope};
 use crate::scope::Offers;
@@ -154,7 +152,8 @@ impl LuaProgram {
 
 impl SectionVm<Uninjected> {
     /// Installs the section's Engine values, ahead of the Pack preludes,
-    /// with an empty `var` and a frozen nil `argv`.
+    /// with an empty `var`, a frozen nil `argv`, and a selection that starts
+    /// on the `default` binding, if the model set has one.
     ///
     /// # Errors
     /// Returns the [`InjectFailure`] holding the bridging failure if Engine
@@ -165,7 +164,8 @@ impl SectionVm<Uninjected> {
         sys: &serde_json::Value,
         access: &Arc<Access>,
     ) -> std::result::Result<SectionVm, InjectFailure> {
-        self.inject_values_with_var(args, sys, access, None, Argv::Frozen(None))
+        let selection = Arc::new(Mutex::new(self.bound_models.binding("default").cloned()));
+        self.inject_values_with_var(args, sys, access, None, Argv::Frozen(None), &selection)
     }
 }
 
@@ -219,20 +219,5 @@ impl SectionVm {
     #[must_use]
     pub fn tool_bag_handles(&self) -> (Arc<ToolSet>, Arc<Mutex<Offers>>) {
         (Arc::clone(&self.tool_set), Arc::clone(self.offers()))
-    }
-
-    /// Returns a snapshot of the shared model set and the live section
-    /// model selection. Production reads the run's shared set through the
-    /// model view instead.
-    ///
-    /// # Errors
-    /// Returns [`Error::Internal`] if the shared model set's mutex is poisoned.
-    pub fn model_bag_handles(&self) -> Result<(ModelSet, Arc<Mutex<ModelSelection>>)> {
-        let models = self
-            .bound_models
-            .lock()
-            .map_err(|_| Error::internal("model set mutex was poisoned"))?
-            .clone();
-        Ok((models, Arc::clone(self.model_selection())))
     }
 }

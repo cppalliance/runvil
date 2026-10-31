@@ -32,12 +32,6 @@ impl Alias {
             )))
         }
     }
-
-    /// Returns the alias text.
-    #[must_use]
-    pub(crate) fn as_str(&self) -> &str {
-        &self.0
-    }
 }
 
 impl From<Alias> for String {
@@ -61,7 +55,7 @@ mod tests {
             &"z".repeat(64),
         ] {
             let parsed = Alias::parse(alias.to_owned()).expect("the alias validates");
-            assert_eq!(parsed.as_str(), alias, "{alias:?} keeps its text");
+            assert_eq!(String::from(parsed), alias, "{alias:?} keeps its text");
         }
     }
 

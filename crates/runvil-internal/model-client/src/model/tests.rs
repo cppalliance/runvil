@@ -80,29 +80,30 @@ fn binding_construction_is_atomic_with_context() {
 }
 
 #[test]
-fn a_model_set_grows_by_push_and_takes_its_default_alias_by_setter() {
+fn a_model_set_grows_by_push_and_finds_a_binding_by_alias() {
     let mut set = ModelSet::default();
     assert!(set.bindings().is_empty());
-    assert_eq!(set.default_alias(), None);
-    set.push(binding("writer"));
-    set.push(binding("critic"));
-    set.set_default_alias("writer".to_owned());
+    assert_eq!(set.binding("default"), None);
+    set.push(binding("default"));
+    set.push(binding("strong"));
     assert_eq!(
         set.bindings()
             .iter()
             .map(ModelBinding::alias)
             .collect::<Vec<_>>(),
-        ["writer", "critic"],
-        "push keeps declaration order"
+        ["default", "strong"],
+        "push keeps the order bindings were added"
     );
-    assert_eq!(set.default_alias(), Some("writer"));
+    assert_eq!(
+        set.binding("strong").map(ModelBinding::alias),
+        Some("strong")
+    );
+    assert_eq!(set.binding("fast"), None);
     let mut expected = ModelSet::default();
-    expected.push(binding("writer"));
-    expected.push(binding("critic"));
-    expected.set_default_alias("writer".to_owned());
+    expected.push(binding("default"));
+    expected.push(binding("strong"));
     assert_eq!(set, expected);
 }
-
 #[test]
 fn completion_options_read_back_every_field_they_were_built_with() {
     let bare = CompletionOptions::new("analyst");

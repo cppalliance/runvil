@@ -4,6 +4,7 @@
 
 use std::sync::{Arc, Mutex};
 
+use runvil_model_client::model::ModelBinding;
 use runvil_types::emitter::Emitter;
 use runvil_vfs::Access;
 use serde_json::Value as Json;
@@ -66,6 +67,9 @@ impl SectionVm<Uninjected> {
     /// executor reads back with [`argv_json`](SectionVm::argv_json)), frozen
     /// for every other section.
     ///
+    /// `selection` holds the current model: `models.use` writes it, and
+    /// [`current_model`](SectionVm::current_model) reads it.
+    ///
     /// # Errors
     /// Returns the [`InjectFailure`] holding the bridging failure if Engine
     /// values cannot be bridged.
@@ -80,8 +84,9 @@ impl SectionVm<Uninjected> {
         access: &Arc<Access>,
         initial_var: Option<&Json>,
         argv: Argv<'_>,
+        selection: &Arc<Mutex<Option<ModelBinding>>>,
     ) -> std::result::Result<SectionVm, InjectFailure> {
-        if let Err(error) = self.install_values(args, sys, initial_var, argv) {
+        if let Err(error) = self.install_values(args, sys, initial_var, argv, selection) {
             return Err(InjectFailure {
                 vm: Box::new(self),
                 error,
@@ -90,6 +95,7 @@ impl SectionVm<Uninjected> {
         Ok(self.injected(Injected {
             access: Arc::clone(access),
             sys_live: Arc::new(Mutex::new(sys.clone())),
+            selection: Arc::clone(selection),
         }))
     }
 
@@ -103,6 +109,7 @@ impl SectionVm<Uninjected> {
         sys: &Json,
         initial_var: Option<&Json>,
         argv: Argv<'_>,
+        selection: &Arc<Mutex<Option<ModelBinding>>>,
     ) -> Result<()> {
         let globals = self.lua.globals();
         globals.raw_set("args", args).map_err(Error::lua)?;
@@ -126,7 +133,7 @@ impl SectionVm<Uninjected> {
             &self.lua,
             &globals,
             &self.bound_models,
-            &self.model_selection,
+            selection,
             self.raw_model_ids,
         )?;
         install_messages(&self.lua, &self.messages)?;
@@ -140,7 +147,6 @@ impl SectionVm<Uninjected> {
             tool_set,
             bound_models,
             offers,
-            model_selection,
             jump_slot,
             adhoc_handler_depth,
             loop_running,
@@ -160,7 +166,6 @@ impl SectionVm<Uninjected> {
             tool_set,
             bound_models,
             offers,
-            model_selection,
             jump_slot,
             adhoc_handler_depth,
             loop_running,

@@ -19,7 +19,7 @@ use runvil_types::untrusted::GuardNonce;
 use runvil_vfs::{Access, VfsRef};
 
 use crate::lua::{Argv, ToolSet};
-use crate::model::{ModelSet, ModelView};
+use crate::model::{ModelBinding, ModelRole, ModelSet};
 use crate::parser::Prompt;
 
 use super::config::{RunContext, RunLimits};
@@ -94,10 +94,10 @@ pub(crate) struct RunState {
     /// copy.
     tool_set: Arc<ToolSet>,
     /// The run's model set: the one [`RunContext::prepare`](super::RunContext::prepare)
-    /// filled, shared with every section VM (H1 included). The
-    /// only writer is `models.default` (a prompt-wide fact); readers
-    /// outside the VM layer go through [`models`](Self::models).
-    model_set: Arc<Mutex<ModelSet>>,
+    /// filled, shared with every section VM (H1 included) and changed by
+    /// nothing during the run, so every reader shares it with no lock and no
+    /// copy.
+    model_set: Arc<ModelSet>,
     /// The run's `started_at` rendered as RFC 3339, stamped into every
     /// section's `sys.when`, the H1 pass included.
     when: Arc<str>,
@@ -142,7 +142,7 @@ impl RunState {
             ..
         } = config;
         let tool_set = Arc::new(bound::run_tool_set(&prompt, tools, packs));
-        let model_set = Arc::new(Mutex::new(model_set));
+        let model_set = Arc::new(model_set);
         let execution: Arc<str> = Arc::from(name);
         // The root task's event sequence starts at the context's
         // `provenance_start`: past any parse events the caller put in the
@@ -188,16 +188,13 @@ impl RunState {
         self.raw_shims = true;
     }
 
-    /// Replaces the run's model set with `set`, as the H1 pass would
-    /// leave it, so a test can skip the pass. Call it before the run
-    /// starts: every section VM shares the set it finds here.
+    /// Sets the run's model set to `set`, so a test can run a prompt
+    /// over bindings it builds by hand. Call it before the run starts: every
+    /// section VM shares the set it finds here.
     #[cfg(test)]
     #[must_use]
-    pub(crate) fn with_models_for_test(self, set: ModelSet) -> Self {
-        *self
-            .model_set
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner) = set;
+    pub(crate) fn with_models_for_test(mut self, set: ModelSet) -> Self {
+        self.model_set = Arc::new(set);
         self
     }
 
@@ -272,14 +269,15 @@ impl RunState {
         &self.tool_set
     }
 
-    /// The run's model set, read-only.
-    pub(super) fn models(&self) -> &dyn ModelView {
-        &*self.model_set
+    /// The binding of the `default` role: the model a section starts on.
+    /// It is `None` when the caller supplied no model.
+    pub(super) fn default_binding(&self) -> Option<ModelBinding> {
+        self.model_set.binding(ModelRole::Default.as_str()).cloned()
     }
 
-    /// The run's model set as the concrete handle, shared with every
-    /// section VM the run constructs.
-    pub(super) fn model_set(&self) -> Arc<Mutex<ModelSet>> {
+    /// The run's model set, shared with every section VM the run
+    /// constructs.
+    pub(super) fn model_set(&self) -> Arc<ModelSet> {
         Arc::clone(&self.model_set)
     }
 
@@ -298,11 +296,9 @@ impl RunState {
 
     /// The H1-to-walk handoff: the `argv` H1 left behind at the freeze,
     /// set on a cheap clone so the context H1 saw stays untouched. The
-    /// tool and model sets need no delta: they were built at construction,
-    /// nothing writes the tool set during the run, and H1's prompt-wide
-    /// `models.default` landed in the one shared model set. `when` needs
-    /// none either: it is the run's `started_at`, the same for the pass and
-    /// the walk.
+    /// tool and model sets need no delta: they were built at construction
+    /// and nothing writes either during the run. `when` needs none either:
+    /// it is the run's `started_at`, the same for the pass and the walk.
     #[must_use]
     pub(super) fn with_walk_state(&self, argv: Option<serde_json::Value>) -> Self {
         let mut ctx = self.clone();
@@ -341,8 +337,8 @@ impl RunState {
     /// the run-wide inputs from this context; the constructor supplies only
     /// its own deltas: the `sys` JSON, the seed, the chain step's access
     /// capability (the walk's own, a call chain's borrowed parent
-    /// capability, a task chain's spawned one), the section name, and
-    /// whether `argv` installs writable.
+    /// capability, a task chain's spawned one), the section's current-model
+    /// selection, the section name, and whether `argv` installs writable.
     ///
     /// `argv_writable` picks the [`Argv`] mode that
     /// [`SectionVmSetup::argv`] describes; the H1 pass is the only
@@ -352,6 +348,7 @@ impl RunState {
         sys: &'a serde_json::Value,
         seed: VmSeed<'a>,
         access: &'a Arc<Access>,
+        selection: &'a Arc<Mutex<Option<ModelBinding>>>,
         section_name: &'a str,
         argv_writable: bool,
     ) -> SectionVmSetup<'a> {
@@ -365,6 +362,7 @@ impl RunState {
             argv,
             sys,
             access,
+            selection,
             seed,
             emitter: &self.reporting.emitter,
             section_name,

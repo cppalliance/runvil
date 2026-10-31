@@ -16,7 +16,7 @@ use super::*;
 fn refusals(calls: &str) -> String {
     let gateway = ScriptedChat::new(vec![text("unreachable")]);
     let source = one_section(&format!(
-        "local other = models.get('other')
+        "local other = models.get('strong')
          messages:user('hello')
          local out = {{}}
          for _, call in ipairs({{ {calls} }}) do
@@ -39,7 +39,7 @@ fn refusals(calls: &str) -> String {
 fn every_argument_form_runs_over_the_sections_list() {
     let gateway = ScriptedChat::new(vec![text("r1"), text("r2"), text("r3"), text("r4")]);
     let source = one_section(
-        "local other = models.get('other')
+        "local other = models.get('strong')
          messages:user('one')
          models.loop()
          messages:user('two')

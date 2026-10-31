@@ -17,13 +17,14 @@
 //! consumes the uninjected VM, so a setup failure tears it down here, the
 //! one place a VM that never reached its frame is torn down.
 
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use runvil_types::emitter::Emitter;
 use runvil_types::packs::Prelude;
 use runvil_vfs::Access;
 
 use crate::lua::{Library, LibraryKey, ProseState, SectionText, SectionVm, Uninjected};
+use crate::model::ModelBinding;
 use crate::{Error, Result};
 
 /// What a section VM is seeded with beyond the shared Engine values.
@@ -63,6 +64,10 @@ pub(crate) struct SectionVmSetup<'a> {
     /// (a fanout arm included). The store closures share it, so every
     /// store op is attributed to the chain step's identity.
     pub(crate) access: &'a Arc<Access>,
+    /// The section's current-model selection: it starts on the `default`
+    /// binding, or on nothing when the caller supplied no model, and
+    /// `models.use` rewrites it.
+    pub(crate) selection: &'a Arc<Mutex<Option<ModelBinding>>>,
     /// The frame constructor's seed: the chain's `var`, plus the item
     /// seeded into this section on a spawned task's first entry.
     pub(crate) seed: VmSeed<'a>,
@@ -139,6 +144,7 @@ where
             setup.access,
             setup.seed.var,
             setup.argv,
+            setup.selection,
         )
         .map_err(|failure| Error::from(failure.teardown(setup.emitter, setup.section_name)))?;
     match install_after_injection(&mut vm, setup, read, resolve, render) {

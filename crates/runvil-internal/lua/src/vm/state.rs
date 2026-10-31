@@ -1,11 +1,11 @@
 //! Section VM state reads: `var`, bare globals, `argv`, the tool call
 //! counts, the frozen sets' entries, the section's offered tools and the
-//! catalog Packs they come from, and its effective model binding.
+//! catalog Packs they come from, and its current model.
 
 use std::sync::{Arc, Mutex};
 
 use mlua::{LuaSerdeExt, Value};
-use runvil_model_client::model::{ModelBinding, ModelView};
+use runvil_model_client::model::ModelBinding;
 use runvil_types::packs::PackId;
 use runvil_types::tools::{ToolId, ToolInfo};
 use serde_json::Value as Json;
@@ -13,7 +13,6 @@ use serde_json::Value as Json;
 use super::{AdhocTools, SectionVm};
 use crate::bindings::{ToolBinding, ToolSet};
 use crate::error::{Error, Result};
-use crate::models::ModelSelection;
 use crate::packs::is_adhoc;
 use crate::scope::{OfferMode, OfferTarget, OfferedTool, Offers, RenderedTools, ToolCallCounts};
 use crate::tools::install_tool_call_counts as install_tool_call_counts_impl;
@@ -109,6 +108,20 @@ impl SectionVm {
     #[must_use]
     pub fn rendered_tools(&self) -> Option<Arc<RenderedTools>> {
         self.messages.rendered_tools()
+    }
+
+    /// Returns the section's current model: the binding `models.use` last
+    /// stored, else the model the section started on. `None` means the caller
+    /// supplied no model.
+    ///
+    /// # Errors
+    /// Returns [`Error::Internal`] if the selection's mutex is poisoned.
+    pub fn current_model(&self) -> Result<Option<ModelBinding>> {
+        self.state
+            .selection
+            .lock()
+            .map(|selection| selection.clone())
+            .map_err(|_| Error::internal("model selection lock was poisoned"))
     }
 }
 
@@ -239,37 +252,4 @@ fn expanded(
         }
     }
     Ok(tools)
-}
-
-/// Reads the section's effective model binding through the run's model view
-/// without mutating the model selection: the H2 `models.use` selection with
-/// its options applied, else the prompt-wide `models.default` baseline.
-///
-/// # Errors
-/// Returns [`Error::Internal`] if the model selection's mutex or the shared
-/// model set is poisoned, or the selected alias has no frozen binding.
-pub fn resolve_model_binding(
-    bindings: &dyn ModelView,
-    runtime: &Mutex<ModelSelection>,
-) -> Result<Option<ModelBinding>> {
-    let selection = {
-        let runtime = runtime
-            .lock()
-            .map_err(|_| Error::internal("model selection lock was poisoned"))?;
-        runtime
-            .selection()
-            .map(|(alias, options)| (alias.as_str().to_owned(), options))
-    };
-    let frozen = |alias: &str| -> Result<ModelBinding> {
-        bindings
-            .binding(alias)?
-            .ok_or_else(|| Error::internal(format!("model alias {alias:?} has no frozen binding")))
-    };
-    match selection {
-        Some((alias, options)) => Ok(Some(options.apply(frozen(&alias)?))),
-        None => match bindings.default_alias()? {
-            Some(alias) => Ok(Some(frozen(&alias)?)),
-            None => Ok(None),
-        },
-    }
 }

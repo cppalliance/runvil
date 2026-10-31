@@ -75,7 +75,7 @@ fn a_light_userdata_compactor_is_named_userdata_as_lua_names_it() {
     let source = one_section(
         "tools.offer('tools/structured')
          local null = tools.call('tools/structured', {}).none
-         local other = models.get('other')
+         local other = models.get('strong')
          messages:user('hello')
          local ok, err = pcall(other.loop, other, null)
          assert(not ok, 'a light userdata compactor is refused')
@@ -170,7 +170,7 @@ fn each_loop_entry_returns_exactly_one_value() {
         "messages:user('first')
          local n = select('#', models.loop())
          messages:user('second')
-         local other = models.get('other')
+         local other = models.get('strong')
          local m = select('#', other:loop())
          return n .. '|' .. m .. '|' .. #messages",
     );

@@ -230,18 +230,14 @@ impl SectionContext {
     /// # Errors
     /// Returns the [`Error`] of the first-call install or the
     /// id seeding.
-    pub(super) fn tool_call_counts(
-        &mut self,
-        ctx: &RunState,
-        ids: &[ToolId],
-    ) -> Result<ToolCallCounts> {
+    pub(super) fn tool_call_counts(&mut self, ids: &[ToolId]) -> Result<ToolCallCounts> {
         let Self {
             vm, sys, counts, ..
         } = self;
         let vm = live_vm(vm.as_ref());
         let counts = match counts {
             Some(counts) => counts,
-            None => counts.insert(install_first_call_state(vm, ctx, sys, ids)?),
+            None => counts.insert(install_first_call_state(vm, sys, ids)?),
         };
         for id in ids {
             counts.ensure(&id.to_string())?;
@@ -305,11 +301,11 @@ fn prose_renderer(
 }
 
 /// Installs what a section's first tool call fixes: the counts behind
-/// `tools.stats` and the model binding (`sys.model`).
+/// `tools.stats` and the current model (`sys.model`).
 ///
 /// The counts install backs the Lua `tools.stats` table, seeded with
-/// `ids`, and the model resolution freezes the section's binding and
-/// sets `sys.model` to the bound model's name. The caller stores the
+/// `ids`, and the model read takes the section's current model and
+/// sets `sys.model` to its name. The caller stores the
 /// returned counts, so its slot is set only once every step has
 /// succeeded, and a failed install runs again on the section's next tool
 /// call. `sys` changes only once the VM's re-seal succeeds.
@@ -319,12 +315,11 @@ fn prose_renderer(
 /// the `sys` re-seal.
 fn install_first_call_state(
     vm: &SectionVm,
-    ctx: &RunState,
     sys: &mut SectionSys,
     ids: &[ToolId],
 ) -> Result<ToolCallCounts> {
     let counts = vm.install_tool_call_counts(ids)?;
-    let resolved_model = crate::lua::resolve_model_binding(ctx.models(), vm.model_selection())?;
+    let resolved_model = vm.current_model()?;
     if let Some(binding) = resolved_model.as_ref() {
         let mut enriched = sys.clone();
         enriched.model = Some(binding.id().name().to_owned());

@@ -36,7 +36,7 @@ use crate::execute::scope::{SectionOffers, freeze_tool_sets, offered_packs, tool
 use crate::execute::turn::{Served, advance_turn, report_model_turn};
 use crate::lua::{
     Answer, ChatOutcome, ChatResult, MessageList, OverflowReason, RenderedTools, ToolSet,
-    output_reserve, precheck, project_messages, resolve_model_binding, wire_name_of,
+    output_reserve, precheck, project_messages, wire_name_of,
 };
 use crate::model::{
     Completion, CompletionErrorKind, CompletionResult, ModelBinding, ToolCall, detail,
@@ -108,7 +108,7 @@ impl ChainOps<'_> {
         let binding = if let Some(binding) = binding {
             binding
         } else {
-            let current = resolve_model_binding(chain.ctx.models(), vm.model_selection())?;
+            let current = vm.current_model()?;
             current.ok_or_else(|| Error::ModelRequired {
                 section: section.clone(),
             })?

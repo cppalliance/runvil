@@ -151,7 +151,7 @@ fn an_engine_callback_failure_caught_by_pcall_is_the_same_error_table() {
     let vm = scheduler_vm(&test_models(), None);
     let program = compile_block(
         r#"local ok, err = pcall(models.get, "missing")
-           assert(not ok, "an unbound alias must fail")
+           assert(not ok, "a label outside the five roles must fail")
            local first = type(err) .. "|" .. tostring(err.kind) .. "|" .. tostring(err)
            local ok2, err2 = pcall(function() return sys.nothing end)
            assert(not ok2, "an unknown sys field must fail")
@@ -166,7 +166,7 @@ fn an_engine_callback_failure_caught_by_pcall_is_the_same_error_table() {
         CoroStep::Done(LuaBlockResult::Returned(Some(text))) => {
             assert_eq!(
                 text,
-                "table|lua|models.get alias \"missing\" is not a bound model role\n\
+                "table|lua|models.get label \"missing\" is not a model role: expected default, strong, small, fast or creative\n\
                  table|lua|runtime error: unknown sys field 'nothing'\n\
                  table|lua"
             );

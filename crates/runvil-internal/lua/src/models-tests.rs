@@ -1,46 +1,13 @@
-//! Tests for the `models` namespace: `use`, `default`, `get`, and the model runtime selection.
-
-use std::sync::Arc;
+//! Tests for the `models` namespace: `use`, `get`, and the section's current model.
 
 use mlua::Value;
 use runvil_model_client::model::{ModelBinding, ModelId, ModelInvocation, ModelSet, Temperature};
 
-use super::{ModelSelection, UseOptions, option_check_order};
-use crate::alias::Alias;
+use super::option_check_order;
 use crate::test_vm::{BuiltVm, TestVm};
 
-/// The validated alias `text` names.
-#[track_caller]
-fn alias(text: &str) -> Alias {
-    Alias::parse(text.to_owned()).expect("a valid alias")
-}
-
-/// The runtime's selected label, if any.
-fn used(runtime: &ModelSelection) -> Option<&str> {
-    runtime.selection().map(|(label, _)| label.as_str())
-}
-
-#[test]
-fn model_runtime_select_allows_reselection() {
-    // Selections are read at call time, so a later `models.use` replaces the
-    // earlier one and steers the next model round.
-    let mut runtime = ModelSelection::new();
-    assert!(used(&runtime).is_none());
-    runtime.select(alias("writer"), UseOptions::default());
-    assert_eq!(used(&runtime), Some("writer"));
-    runtime.select(alias("other"), UseOptions::default());
-    assert_eq!(
-        used(&runtime),
-        Some("other"),
-        "a second select must replace the first"
-    );
-}
-
-#[test]
-fn model_runtime_starts_with_no_selection() {
-    let runtime = ModelSelection::new();
-    assert!(used(&runtime).is_none(), "fresh runtime has no selection");
-}
+/// The role-name list every label rejection ends with.
+const ROLE_LIST: &str = "expected default, strong, small, fast or creative";
 
 /// A bound role for the shared set: `label`, with the keyword set recorded.
 fn bound_role(label: &str, capabilities: &[&str]) -> ModelBinding {
@@ -55,28 +22,33 @@ fn bound_role(label: &str, capabilities: &[&str]) -> ModelBinding {
 }
 
 /// A fresh VM with the `models` table installed over a shared set holding
-/// the `writer` and `critic` roles.
+/// the `default` and `strong` roles.
 #[track_caller]
 fn models_vm() -> BuiltVm {
     let mut models = ModelSet::default();
-    models.push(bound_role("writer", &["frontier", "thinking"]));
-    models.push(bound_role("critic", &["fast"]));
+    models.push(bound_role("default", &["frontier", "thinking"]));
+    models.push(bound_role("strong", &["fast"]));
     TestVm::new().models(models).build()
 }
 
+/// The label of the section's current model, if it has one.
+#[track_caller]
+fn current_label(vm: &BuiltVm) -> Option<String> {
+    vm.current_model()
+        .expect("the current model is readable")
+        .map(|binding| binding.alias().to_owned())
+}
+
 #[test]
-fn the_models_namespace_has_no_bind() {
+fn the_models_namespace_offers_use_and_get_and_leaves_infer_to_the_shims() {
     // `models.infer` suspends, so only the coroutine shim layer defines it.
     let vm = models_vm();
-    let (bind_is_nil, has_use, has_default, has_get, infer_is_nil): (bool, bool, bool, bool, bool) =
-        vm.eval(
-            "return models.bind == nil, \
-                    type(models.use) == 'function', \
-                    type(models.default) == 'function', \
-                    type(models.get) == 'function', \
-                    models.infer == nil",
-        );
-    assert!(bind_is_nil && has_use && has_default && has_get);
+    let (has_use, has_get, infer_is_nil): (bool, bool, bool) = vm.eval(
+        "return type(models.use) == 'function', \
+                type(models.get) == 'function', \
+                models.infer == nil",
+    );
+    assert!(has_use && has_get);
     assert!(
         infer_is_nil,
         "install_models alone must not define models.infer"
@@ -87,7 +59,7 @@ fn the_models_namespace_has_no_bind() {
 fn a_handle_reads_nil_methods_where_the_shim_prelude_never_ran() {
     let vm = models_vm();
     let (infer_is_nil, loop_is_nil): (bool, bool) =
-        vm.eval("local h = models.get('writer'); return h.infer == nil, h.loop == nil");
+        vm.eval("local h = models.get('default'); return h.infer == nil, h.loop == nil");
     assert!(
         infer_is_nil && loop_is_nil,
         "with no shim prelude a handle's infer and loop must read nil"
@@ -95,28 +67,77 @@ fn a_handle_reads_nil_methods_where_the_shim_prelude_never_ran() {
 }
 
 #[test]
-fn models_use_selects_a_bound_role_by_label() {
-    let vm = models_vm();
-    let handle: String = vm.eval("local h = models.use('writer'); return h.label .. '|' .. h.name");
-    assert_eq!(handle, "writer|writer");
+fn a_new_section_vm_starts_on_the_default_role() {
     assert_eq!(
-        used(
-            &vm.model_selection()
-                .lock()
-                .expect("the model runtime mutex is not poisoned")
-        ),
-        Some("writer")
+        current_label(&models_vm()).as_deref(),
+        Some("default"),
+        "a section starts on the default role's binding"
     );
 }
 
 #[test]
-fn models_use_rejects_an_unbound_label() {
-    let error = models_vm().eval_err("models.use('ghost')");
+fn a_section_vm_with_no_models_has_no_current_model() {
+    let vm = TestVm::new().build();
+    assert_eq!(
+        current_label(&vm),
+        None,
+        "an empty set leaves the section with no model"
+    );
+}
+
+#[test]
+fn models_use_selects_a_role_by_label() {
+    let vm = models_vm();
+    let handle: String = vm.eval("local h = models.use('strong'); return h.label .. '|' .. h.name");
+    assert_eq!(handle, "strong|strong");
+    assert_eq!(current_label(&vm).as_deref(), Some("strong"));
+}
+
+#[test]
+fn models_use_rejects_a_label_outside_the_five_roles() {
+    let vm = models_vm();
+    let error = vm.eval_err("models.use('reviewer')");
     assert!(
-        error
-            .to_string()
-            .contains("models.use label \"ghost\" is not a bound model role"),
-        "the rejection names the label: {error}"
+        error.to_string().contains(&format!(
+            "models.use label \"reviewer\" is not a model role: {ROLE_LIST}"
+        )),
+        "the rejection names the label and the five roles: {error}"
+    );
+    assert_eq!(
+        current_label(&vm).as_deref(),
+        Some("default"),
+        "a rejected call must not select"
+    );
+}
+
+#[test]
+fn models_get_rejects_a_label_outside_the_five_roles() {
+    let error = models_vm().eval_err("models.get('reviewer')");
+    assert!(
+        error.to_string().contains(&format!(
+            "models.get label \"reviewer\" is not a model role: {ROLE_LIST}"
+        )),
+        "the rejection names the label and the five roles: {error}"
+    );
+}
+
+#[test]
+fn a_role_with_no_model_fails_with_the_caller_supplied_none_message() {
+    for chunk in ["models.use('default')", "models.get('default')"] {
+        let error = TestVm::new().build().eval_err(chunk);
+        assert!(
+            error.to_string().contains("the caller supplied no model"),
+            "{chunk}: the failure says the caller supplied no model: {error}"
+        );
+    }
+}
+
+#[test]
+fn a_role_the_set_lacks_fails_with_the_caller_supplied_none_message() {
+    let error = models_vm().eval_err("models.use('fast')");
+    assert!(
+        error.to_string().contains("the caller supplied no model"),
+        "a valid role with no binding says the caller supplied no model: {error}"
     );
 }
 
@@ -124,25 +145,18 @@ fn models_use_rejects_an_unbound_label() {
 fn models_use_options_reach_the_returned_handle() {
     let vm = models_vm();
     let (temperature, max_tokens): (f64, u32) = vm.eval(
-        "local h = models.use('writer', { temperature = 0.3, max_tokens = 256 }); \
+        "local h = models.use('default', { temperature = 0.3, max_tokens = 256 }); \
          return h.temperature, h.max_tokens",
     );
     assert!((temperature - 0.3).abs() < f64::EPSILON);
     assert_eq!(max_tokens, 256);
-    assert_eq!(
-        used(
-            &vm.model_selection()
-                .lock()
-                .expect("the model runtime mutex is not poisoned")
-        ),
-        Some("writer")
-    );
+    assert_eq!(current_label(&vm).as_deref(), Some("default"));
 }
 
 #[test]
 fn models_use_accepts_an_integer_temperature_and_leaves_omitted_fields_nil() {
     let (temperature, max_tokens_is_nil): (f64, bool) = models_vm().eval(
-        "local h = models.use('writer', { temperature = 0 }); return h.temperature, h.max_tokens == nil",
+        "local h = models.use('default', { temperature = 0 }); return h.temperature, h.max_tokens == nil",
     );
     assert!(temperature.abs() < f64::EPSILON);
     assert!(
@@ -155,51 +169,51 @@ fn models_use_accepts_an_integer_temperature_and_leaves_omitted_fields_nil() {
 fn models_use_rejects_invalid_options_without_selecting() {
     let cases = [
         (
-            "models.use('writer', { temperature = 2.5 })",
+            "models.use('strong', { temperature = 2.5 })",
             "models.use option temperature 2.5 is outside the supported range [0.0, 2.0]",
         ),
         (
-            "models.use('writer', { temperature = -0.1 })",
+            "models.use('strong', { temperature = -0.1 })",
             "models.use option temperature -0.1 is outside the supported range [0.0, 2.0]",
         ),
         (
-            "models.use('writer', { temperature = 0/0 })",
+            "models.use('strong', { temperature = 0/0 })",
             "models.use option temperature must be finite, got NaN",
         ),
         (
-            "models.use('writer', { temperature = 'hot' })",
+            "models.use('strong', { temperature = 'hot' })",
             "models.use option temperature must be a number, got string",
         ),
         (
-            "models.use('writer', { max_tokens = 0 })",
+            "models.use('strong', { max_tokens = 0 })",
             "models.use option max_tokens must be an integer in [1, 4294967295], got 0",
         ),
         (
-            "models.use('writer', { max_tokens = -1 })",
+            "models.use('strong', { max_tokens = -1 })",
             "models.use option max_tokens must be an integer in [1, 4294967295], got -1",
         ),
         (
-            "models.use('writer', { max_tokens = 1.5 })",
+            "models.use('strong', { max_tokens = 1.5 })",
             "models.use option max_tokens must be an integer in [1, 4294967295], got 1.5",
         ),
         (
-            "models.use('writer', { max_tokens = 'many' })",
+            "models.use('strong', { max_tokens = 'many' })",
             "models.use option max_tokens must be an integer in [1, 4294967295], got string",
         ),
         (
-            "models.use('writer', { top_p = 0.9 })",
+            "models.use('strong', { top_p = 0.9 })",
             "models.use option \"top_p\" is unknown: expected temperature or max_tokens",
         ),
         (
-            "models.use('writer', { 0.5 })",
+            "models.use('strong', { 0.5 })",
             "models.use option names must be strings, got integer",
         ),
         (
-            "models.use('writer', 'fast')",
+            "models.use('strong', 'fast')",
             "models.use options must be a table, got string",
         ),
         (
-            "models.use('writer', {}, 1)",
+            "models.use('strong', {}, 1)",
             "models.use takes at most 2 arguments, got 3",
         ),
     ];
@@ -210,13 +224,9 @@ fn models_use_rejects_invalid_options_without_selecting() {
             error.to_string().contains(expected),
             "{chunk}: expected {expected:?} in {error}"
         );
-        assert!(
-            used(
-                &vm.model_selection()
-                    .lock()
-                    .expect("the model runtime mutex is not poisoned")
-            )
-            .is_none(),
+        assert_eq!(
+            current_label(&vm).as_deref(),
+            Some("default"),
             "{chunk}: a rejected call must not select"
         );
     }
@@ -250,7 +260,7 @@ fn models_use_reports_the_first_bad_option_in_key_order_on_every_state() {
             expected.contains(check_order[0]),
             "{options}: the expected rejection {expected:?} names the first key in check order"
         );
-        let chunk = format!("models.use('writer', {options})");
+        let chunk = format!("models.use('strong', {options})");
         for state in 0..32 {
             let vm = models_vm();
             let table: mlua::Table = vm.eval(&format!("return {options}"));
@@ -279,11 +289,12 @@ fn models_use_reports_the_first_bad_option_in_key_order_on_every_state() {
     }
 }
 
-/// The section's effective binding's `(temperature, max_tokens)`, read the
-/// way the Engine's Chat-effect sites read it.
+/// The section's current model's `(temperature, max_tokens)`, read the way
+/// the Engine's Chat-effect sites read it.
 #[track_caller]
 fn effective_sampling(vm: &BuiltVm) -> (Option<f64>, Option<u32>) {
-    let binding = crate::resolve_model_binding(vm.models.as_ref(), vm.model_selection())
+    let binding = vm
+        .current_model()
         .expect("the model state is readable")
         .expect("a selection resolves");
     let invocation = binding.invocation();
@@ -296,11 +307,11 @@ fn effective_sampling(vm: &BuiltVm) -> (Option<f64>, Option<u32>) {
 #[test]
 fn the_selection_carries_its_options_until_a_later_models_use_replaces_them() {
     let vm = models_vm();
-    vm.eval::<()>("models.use('writer', { temperature = 0.5, max_tokens = 64 })");
+    vm.eval::<()>("models.use('default', { temperature = 0.5, max_tokens = 64 })");
     assert_eq!(effective_sampling(&vm), (Some(0.5), Some(64)));
 
-    let (temperature_is_nil, max_tokens_is_nil): (bool, bool) =
-        vm.eval("local h = models.use('writer'); return h.temperature == nil, h.max_tokens == nil");
+    let (temperature_is_nil, max_tokens_is_nil): (bool, bool) = vm
+        .eval("local h = models.use('default'); return h.temperature == nil, h.max_tokens == nil");
     assert!(temperature_is_nil && max_tokens_is_nil);
     assert_eq!(
         effective_sampling(&vm),
@@ -310,72 +321,26 @@ fn the_selection_carries_its_options_until_a_later_models_use_replaces_them() {
 }
 
 #[test]
-fn a_models_get_handle_for_the_selected_label_keeps_the_role_defaults() {
+fn a_models_get_handle_for_the_selected_role_keeps_the_role_defaults() {
     let (temperature_is_nil, max_tokens_is_nil): (bool, bool) = models_vm().eval(
-        "models.use('writer', { temperature = 0.5, max_tokens = 64 }); \
-         local h = models.get('writer'); \
+        "models.use('default', { temperature = 0.5, max_tokens = 64 }); \
+         local h = models.get('default'); \
          return h.temperature == nil, h.max_tokens == nil",
     );
     assert!(temperature_is_nil && max_tokens_is_nil);
 }
 
 #[test]
-fn models_default_takes_a_label_and_parks_the_prompt_wide_default() {
-    let vm = models_vm();
-    vm.eval::<()>("models.default('writer')");
-    assert_eq!(
-        vm.models
-            .lock()
-            .expect("the model set mutex is not poisoned")
-            .default_alias(),
-        Some("writer")
-    );
-}
-
-#[test]
-fn models_default_is_idempotent_for_the_same_label_and_refuses_a_change() {
-    let vm = models_vm();
-    // A library every section requires re-runs in each, so re-naming the
-    // same default must be a no-op.
-    vm.eval::<()>("models.default('writer'); models.default('writer')");
-    assert_eq!(
-        vm.models
-            .lock()
-            .expect("the model set mutex is not poisoned")
-            .default_alias(),
-        Some("writer")
-    );
-    let error = vm.eval_err("models.default('critic')");
-    assert!(
-        error
-            .to_string()
-            .contains("models.default is already \"writer\""),
-        "the refusal names the parked default: {error}"
-    );
-}
-
-#[test]
-fn models_default_rejects_an_unbound_label() {
-    let error = models_vm().eval_err("models.default('ghost')");
-    assert!(
-        error
-            .to_string()
-            .contains("models.default label \"ghost\" is not a bound model role"),
-        "the rejection names the label: {error}"
-    );
-}
-
-#[test]
 fn the_handle_exposes_label_and_the_full_keyword_set() {
     let inspected: String = models_vm().eval(
-        "local h = models.get('writer'); \
+        "local h = models.get('default'); \
          return h.label .. '|' .. h.model_id .. '|' .. table.concat(h.capabilities, ',')",
     );
-    assert_eq!(inspected, "writer|m1|frontier,thinking");
+    assert_eq!(inspected, "default|m1|frontier,thinking");
 }
 
 #[test]
-fn models_get_resolves_an_undeclared_alias_as_a_raw_gateway_id_only_when_permitted() {
+fn models_get_resolves_a_label_outside_the_roles_as_a_raw_gateway_id_only_when_permitted() {
     let resolved: String = TestVm::new().raw_model_ids().build().eval(
         "local h = models.get('qwen/qwen3-8b'); return h.name .. '|' .. h.model_id .. '|' .. h.context",
     );
@@ -386,8 +351,8 @@ fn models_get_resolves_an_undeclared_alias_as_a_raw_gateway_id_only_when_permitt
 
     let error = TestVm::new().build().eval_err("models.get('ghost')");
     assert!(
-        error.to_string().contains("is not a bound model role"),
-        "the strict path names the bound-role rule: {error}"
+        error.to_string().contains("is not a model role"),
+        "the strict path names the role rule: {error}"
     );
 }
 
@@ -399,28 +364,25 @@ fn the_raw_id_fallback_still_validates_the_gateway_id() {
         .eval_err("models.get('bad\\nid')");
     assert!(
         error.to_string().contains("is invalid"),
-        "the raw path validates as a gateway id, not as an alias: {error}"
+        "the raw path validates as a gateway id, not as a role label: {error}"
     );
 }
 
 #[test]
-fn a_poisoned_model_set_reaches_the_caller_as_an_internal_error() {
+fn a_poisoned_selection_reaches_the_caller_as_an_internal_error() {
     let vm = models_vm();
-    vm.model_selection()
-        .lock()
-        .expect("the model runtime mutex is not poisoned")
-        .select(alias("writer"), UseOptions::default());
-    let poisoner = Arc::clone(&vm.models);
+    let poisoner = std::sync::Arc::clone(&vm.selection);
     let _ = std::thread::spawn(move || {
         let _guard = poisoner.lock();
-        panic!("poison the model set");
+        panic!("poison the model selection");
     })
     .join();
 
-    let error = crate::resolve_model_binding(vm.models.as_ref(), vm.model_selection())
-        .expect_err("a poisoned model set cannot resolve a binding");
+    let error = vm
+        .current_model()
+        .expect_err("a poisoned selection cannot be read");
     assert!(
-        matches!(&error, crate::Error::Internal { message, .. } if message == "model set mutex was poisoned"),
+        matches!(&error, crate::Error::Internal { message, .. } if message == "model selection lock was poisoned"),
         "the lock failure is Engine misuse, neither an authoring nor a model failure: {error:?}"
     );
 }

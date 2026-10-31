@@ -178,21 +178,21 @@ fn a_merged_history_falls_back_to_the_estimate() {
     assert_eq!(gateway.call_count(), 1, "only the first round ran");
 }
 
-/// [`run_rounds`] with a third binding, `twin`: the default model under
-/// other invocation settings, so it shares `writer`'s tokenizer. `other`
+/// [`run_rounds`] with a third binding, `small`: the default model under
+/// other invocation settings, so it shares `default`'s tokenizer. `strong`
 /// names a different model.
 #[track_caller]
-fn run_rounds_with_twin(lua: &str, replies: Vec<ScriptedReply>) -> (String, ScriptedChat) {
+fn run_rounds_with_small(lua: &str, replies: Vec<ScriptedReply>) -> (String, ScriptedChat) {
     let mut models = loop_models();
-    let writer = models.bindings()[0].clone();
-    let twin = ModelBinding::new(
-        "twin",
+    let default = models.bindings()[0].clone();
+    let small = ModelBinding::new(
+        "small",
         "The default model with other settings",
-        writer.id().clone(),
+        default.id().clone(),
         ModelInvocation::new().with_thinking(Some(false)),
-        writer.context(),
+        default.context(),
     );
-    models.push(twin);
+    models.push(small);
     run_over(models, lua, replies)
 }
 
@@ -207,14 +207,14 @@ fn request_models(gateway: &ScriptedChat) -> Vec<String> {
 
 #[test]
 fn a_model_switch_leaves_the_second_round_on_the_estimate() {
-    // The first round on `writer` anchors at 3500 tokens, which would
+    // The first round on `default` anchors at 3500 tokens, which would
     // refuse the second request (3604 plus the 512 reserve). The second
-    // request goes to `other`, a different model, so another tokenizer's
+    // request goes to `strong`, a different model, so another tokenizer's
     // count does not apply and the estimate of about 113 tokens admits it.
     let section = "messages:user('xxxxx')\n\
          models.loop()\n\
          messages:user(string.rep('y', 400))\n\
-         models.use('other')\n\
+         models.use('strong')\n\
          local ok, err = pcall(models.loop)\n\
          if ok then return 'sent' end\n\
          return err.kind .. ':' .. err.reason";
@@ -229,33 +229,33 @@ fn a_model_switch_leaves_the_second_round_on_the_estimate() {
 
 #[test]
 fn another_alias_of_the_same_model_keeps_the_anchor() {
-    // `twin` is a different alias with different settings, but it names the
-    // model that `writer` named, so the 3500-token anchor still refuses the
+    // `small` is a different alias with different settings, but it names the
+    // model that `default` named, so the 3500-token anchor still refuses the
     // second request.
     let section = "messages:user('xxxxx')\n\
          models.loop()\n\
          messages:user(string.rep('y', 400))\n\
-         models.use('twin')\n\
+         models.use('small')\n\
          local ok, err = pcall(models.loop)\n\
          if ok then return 'sent' end\n\
          return err.kind .. ':' .. err.reason";
     let (out, gateway) =
-        run_rounds_with_twin(section, vec![reply_with_usage("ok", 3400, 100, None)]);
+        run_rounds_with_small(section, vec![reply_with_usage("ok", 3400, 100, None)]);
     assert_eq!(out, "context_exhausted:precheck");
     assert_eq!(gateway.call_count(), 1, "only the first round ran");
 }
 
 #[test]
 fn the_next_served_round_anchors_on_the_new_model() {
-    // The switch to `other` runs on the estimate, because the first
+    // The switch to `strong` runs on the estimate, because the first
     // round's 3500 tokens would refuse it. That round reports 3500 tokens
-    // of its own. The third request stays on `other` and extends the
+    // of its own. The third request stays on `strong` and extends the
     // second round, so the new measurement anchors it and refuses it. The
     // estimate of the third request is about 220 tokens.
     let section = "messages:user('xxxxx')\n\
          models.loop()\n\
          messages:user(string.rep('y', 400))\n\
-         models.use('other')\n\
+         models.use('strong')\n\
          models.loop()\n\
          messages:user(string.rep('z', 400))\n\
          local ok, err = pcall(models.loop)\n\
@@ -275,16 +275,16 @@ fn the_next_served_round_anchors_on_the_new_model() {
 
 #[test]
 fn a_return_to_the_first_model_uses_the_estimate() {
-    // The second round on `other` replaced the measurement, so the third
-    // request back on `writer` meets another model's anchor and counts by
+    // The second round on `strong` replaced the measurement, so the third
+    // request back on `default` meets another model's anchor and counts by
     // the estimate.
     let section = "messages:user('xxxxx')\n\
          models.loop()\n\
          messages:user('yyyy')\n\
-         models.use('other')\n\
+         models.use('strong')\n\
          models.loop()\n\
          messages:user(string.rep('z', 400))\n\
-         models.use('writer')\n\
+         models.use('default')\n\
          local ok, err = pcall(models.loop)\n\
          if ok then return 'sent' end\n\
          return err.kind .. ':' .. err.reason";
@@ -313,9 +313,6 @@ fn run_with_max_tokens(lua: &str, max_tokens: u32) -> (String, ScriptedChat) {
     let mut models = ModelSet::default();
     for binding in loop_set.bindings() {
         models.push(binding.clone().with_invocation(capped.clone()));
-    }
-    if let Some(alias) = loop_set.default_alias() {
-        models.set_default_alias(alias.to_owned());
     }
     run_over(models, lua, vec![text("ok")])
 }

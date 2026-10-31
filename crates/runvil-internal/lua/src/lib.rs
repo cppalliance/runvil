@@ -131,7 +131,6 @@ pub use crate::error_value::{
 };
 pub use crate::globals::{RESERVED_NAMES, Reserved, reserved_name};
 pub use crate::messages::MessageList;
-pub use crate::models::ModelSelection;
 pub use crate::prelude::install_preludes;
 pub use crate::program::LuaProgram;
 pub use crate::projection::project_messages;
@@ -148,5 +147,5 @@ pub use crate::scope::{
 pub use crate::section::{Library, LibraryBlock, LibraryKey, LuaBlockResult, SectionText};
 pub use crate::vm::{
     AdhocTools, CoroStep, InjectFailure, Injected, SectionVm, Uninjected, current_catalog_packs,
-    current_dynamic_set, current_static_set, resolve_model_binding,
+    current_dynamic_set, current_static_set,
 };

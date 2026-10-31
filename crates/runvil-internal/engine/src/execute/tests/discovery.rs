@@ -132,7 +132,7 @@ fn issued_calls(rig: &RigTrace) -> Vec<EffectRecord> {
 fn model_origin() -> ToolCallOrigin {
     ToolCallOrigin::new(EXECUTION, "Only", ToolCaller::Model)
         .with_entry("0.1")
-        .with_model(loop_model_name("writer"))
+        .with_model(loop_model_name("default"))
 }
 
 /// A model call of the catalog tool `id` under `alias` with `value`.

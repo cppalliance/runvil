@@ -18,24 +18,23 @@ use crate::execute::EffectRecord;
 use crate::test_support::rig::RigTrace;
 use crate::test_support::scenario::{infer_prompt, test_binding};
 
-/// The model set the H1 pass would leave behind: one `writer` binding
-/// as the prompt-wide default. The scheduler's tests bypass H1, so they
-/// pre-fill the run's shared set directly.
-fn writer_models() -> ModelSet {
+/// The model set a prepared run holds: one `default` binding, which every
+/// section starts on. The scheduler's tests skip prepare, so they pre-fill
+/// the run's shared set directly.
+fn default_models() -> ModelSet {
     let mut set = ModelSet::default();
     set.push(test_binding(
-        "writer",
+        "default",
         "A general model for tests",
         "test-model",
     ));
-    set.set_default_alias("writer".to_owned());
     set
 }
 
-/// A run of `source` over the [`writer_models`], unprepared, so the run
+/// A run of `source` over the [`default_models`], unprepared, so the run
 /// starts with that set and no catalog.
 pub(super) fn scheduler_scenario(source: impl Into<String>) -> Scenario {
-    Scenario::new(source).unprepared().models(writer_models())
+    Scenario::new(source).unprepared().models(default_models())
 }
 
 /// The run's concurrency ceiling narrowed to `n` admitted tasks.

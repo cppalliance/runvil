@@ -87,13 +87,14 @@ fn vm_setup_hands_the_vm_the_runs_argv_in_the_mode_the_caller_asks_for() {
         expected.is_some(),
         "the fixture's args must derive an argv, or neither mode is observable"
     );
-    let frozen = ctx.vm_setup(&sys, VmSeed::default(), &access, "Only", false);
+    let selection = Arc::new(Mutex::new(None));
+    let frozen = ctx.vm_setup(&sys, VmSeed::default(), &access, &selection, "Only", false);
     assert!(
         matches!(frozen.argv, Argv::Frozen(value) if value == expected),
         "an unprivileged constructor must get the run's argv frozen: {:?}",
         frozen.argv
     );
-    let writable = ctx.vm_setup(&sys, VmSeed::default(), &access, "Only", true);
+    let writable = ctx.vm_setup(&sys, VmSeed::default(), &access, &selection, "Only", true);
     assert!(
         matches!(writable.argv, Argv::Writable(value) if value == expected),
         "the H1 pass's flag must get the run's argv writable: {:?}",
@@ -173,7 +174,6 @@ fn a_filled_role_binds_with_the_catalog_info_its_render_receives() {
     );
     let state = state_over(&prompt, ctx);
     let set = state.model_set();
-    let set = set.lock().expect("the run's model set is not poisoned");
     let binding = set.binding("default").expect("the filled role binds");
     assert_eq!(binding.render_info(), info);
 }

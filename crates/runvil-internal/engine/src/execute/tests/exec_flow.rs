@@ -199,8 +199,10 @@ fn fanout_arm_model_infer_with_an_unknown_alias_errors_loudly() {
         .run();
     let rendered = trace.error().to_string();
     assert!(
-        rendered.contains("models.get alias \"ghost\" is not a bound model role"),
-        "the unknown alias must be named: {rendered}"
+        rendered.contains(
+            "models.get label \"ghost\" is not a model role: expected default, strong, small, fast or creative"
+        ),
+        "the unknown label must be named: {rendered}"
     );
 }
 

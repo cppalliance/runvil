@@ -17,12 +17,12 @@ use crate::test_support::scenario::test_binding;
 const FIXED: &str = "the section's tool list is fixed at its first models.loop round; make \
                      every offer before the first loop, or offer in another section";
 
-/// The loop models plus `wide`, a model whose window is large enough for
-/// a request the 4096-token `writer` refuses.
+/// The loop models plus `creative`, a model whose window is large enough for
+/// a request the 4096-token `default` refuses.
 fn wide_models() -> ModelSet {
     let mut models = loop_models();
     models.push(ModelBinding::new(
-        "wide",
+        "creative",
         "A model with a wide window",
         ModelId::gateway("wide-model").expect("the test model id is valid"),
         ModelInvocation::new(),
@@ -51,7 +51,7 @@ fn a_first_round_the_precheck_refuses_still_fixes_the_tool_list() {
            return ''
          end))
          assert(not offered, 'the refused round fixed the list')
-         models.use('wide')
+         models.use('creative')
          models.loop()
          return refusal.kind .. ':' .. tostring(refusal)",
     );
@@ -86,7 +86,7 @@ fn every_later_round_sends_the_same_tool_bytes_across_a_model_change() {
          messages:user('one')
          models.loop()
          messages:user('two')
-         models.get('other'):loop()
+         models.get('strong'):loop()
          return messages[#messages].content",
     );
     let trace = loop_scenario(source)
@@ -238,12 +238,12 @@ fn a_first_round_refused_for_a_missing_model_renders_nothing() {
          local ok, err = pcall(models.loop)
          assert(not ok, 'a section with no model is refused')
          tools.offer('tools/echo')
-         models.get('writer'):loop()
+         models.get('strong'):loop()
          return tostring(err)",
     );
     let mut unset = ModelSet::default();
     unset.push(test_binding(
-        "writer",
+        "strong",
         "A general model for tests",
         "test-model",
     ));

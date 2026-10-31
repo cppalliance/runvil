@@ -24,9 +24,8 @@ use crate::lua::{Argv, SectionVm, ToolSet};
 use crate::model::ModelSet;
 use crate::test_support::scenario::test_binding;
 
-/// The role labels every fully bound VM fills: one plain label, and one
-/// that names an Engine global.
-const ROLE_LABELS: [&str; 2] = ["writer", "tools"];
+/// The role labels every fully bound VM fills.
+const ROLE_LABELS: [&str; 2] = ["default", "strong"];
 
 /// One role bound under each of [`ROLE_LABELS`].
 fn roles() -> ModelSet {
@@ -147,15 +146,15 @@ fn no_role_label_is_a_global_after_section_or_h1_setup() {
         ("writable", Argv::Writable(Some(&argv))),
     ] {
         let vm = fully_bound_vm(argv);
-        let (writer, tools, call): (String, String, String) = vm
+        let (default, strong, call): (String, String, String) = vm
             .lua()
-            .load("return type(writer), type(tools), type(tools.call)")
+            .load("return type(default), type(strong), type(tools.call)")
             .eval()
             .expect("the globals probe evaluates");
         assert_eq!(
-            (writer.as_str(), tools.as_str(), call.as_str()),
-            ("nil", "table", "function"),
-            "a role label installs no global and leaves a same-named Engine global in place \
+            (default.as_str(), strong.as_str(), call.as_str()),
+            ("nil", "nil", "function"),
+            "a role label installs no global and leaves the Engine globals in place \
              (argv {mode})"
         );
     }

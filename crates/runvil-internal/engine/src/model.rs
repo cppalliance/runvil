@@ -2,7 +2,7 @@
 //! includes ([`Message`], [`ToolSchema`], [`ModelBinding`]) and what its
 //! answer returns ([`Completion`], [`CompletionResult`],
 //! [`CompletionError`]), plus the prompt-local binding vocabulary
-//! ([`ModelSet`], [`ModelView`], [`ModelInvocation`]) and the model
+//! ([`ModelSet`], [`ModelInvocation`]) and the model
 //! identity a run's roles are bound to ([`ModelInfo`], [`ModelId`]).
 //!
 //! This module is the executor's import surface for the private
@@ -30,8 +30,7 @@ pub(crate) use runvil_model_client::client::{
 // documented.
 pub(crate) use runvil_model_client::detail;
 pub(crate) use runvil_model_client::model::{
-    CompletionError, CompletionErrorKind, ModelBinding, ModelInvocation, ModelSet, ModelView,
-    Temperature,
+    CompletionError, CompletionErrorKind, ModelBinding, ModelInvocation, ModelSet, Temperature,
 };
 pub(crate) use runvil_types::models::{ModelId, ModelInfo, ModelRole, ThinkingMode};
 

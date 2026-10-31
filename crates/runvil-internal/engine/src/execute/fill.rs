@@ -78,7 +78,6 @@ pub(super) fn fill_model_set(
         .with_catalog_info(info);
         set.push(binding);
     }
-    set.set_default_alias(ModelRole::Default.as_str().to_owned());
     set
 }
 

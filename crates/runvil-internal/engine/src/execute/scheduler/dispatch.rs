@@ -21,7 +21,7 @@ use runvil_types::event::ReplyOrigin;
 use crate::error::DepthVia;
 use crate::execute::run::Effect;
 use crate::execute::section_context::TaskSeed;
-use crate::lua::{Answer, Request, VfsOp, resolve_model_binding};
+use crate::lua::{Answer, Request, VfsOp};
 use crate::model::{Message, ModelBinding};
 use crate::{Error, Result};
 
@@ -206,7 +206,10 @@ impl ChainOps<'_> {
         let binding = if let Some(binding) = binding {
             binding
         } else {
-            resolve_model_binding(chain.ctx.models(), chain.frame()?.vm().model_selection())?
+            chain
+                .frame()?
+                .vm()
+                .current_model()?
                 .ok_or_else(|| Error::ModelRequired {
                     section: chain.section_name().to_owned(),
                 })?

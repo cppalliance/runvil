@@ -113,18 +113,20 @@ fn set_up_vm(binds: &VmBinds<'_>) -> SectionVm {
     let vm = SectionVm::new_for_section(
         &GuardNonce::from_seed(&TEST_SEED),
         &Arc::new(binds.tools.clone()),
-        &Arc::new(Mutex::new(binds.models.clone())),
+        &Arc::new(binds.models.clone()),
         &emitter,
         binds.section,
     )
     .expect("the section VM builds");
     let sys = json!({});
     let access = fresh_access();
+    let selection = Arc::new(Mutex::new(binds.models.binding("default").cloned()));
     let setup = SectionVmSetup {
         args: "",
         argv: binds.argv,
         sys: &sys,
         access: &access,
+        selection: &selection,
         seed: binds.seed,
         emitter: &emitter,
         section_name: binds.section,

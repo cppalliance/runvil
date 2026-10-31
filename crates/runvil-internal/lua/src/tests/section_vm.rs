@@ -109,6 +109,7 @@ fn a_refused_injection_hands_back_the_vm_for_its_teardown() {
             &fresh_access(),
             Some(&json!(5)),
             Argv::Frozen(None),
+            &Arc::new(Mutex::new(None)),
         )
         .expect_err("a non-object var seed is refused");
     assert!(
@@ -169,7 +170,7 @@ fn section_vm_value_injection_bypasses_chunk_global_metatables() {
     let vm = SectionVm::new_for_section(
         &test_nonce(),
         &Arc::new(bindings),
-        &Arc::new(Mutex::new(ModelSet::default())),
+        &Arc::new(ModelSet::default()),
         &null_emitter(),
         "Test",
     )

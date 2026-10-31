@@ -2,7 +2,6 @@
 //! prompt-local bindings, and completion options.
 
 use std::num::NonZeroU32;
-use std::sync::Mutex;
 
 use runvil_types::models::{ModelId, ModelInfo, ThinkingMode};
 
@@ -369,100 +368,32 @@ impl CompletionOptions {
     }
 }
 
-/// The run's model set: the prompt-level bindings built at run construction
-/// from prepare's role bindings plus the prompt-wide `default` alias.
+/// The run's model set: the five role bindings that prepare builds once,
+/// shared unchanged by every section VM.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct ModelSet {
-    /// The bindings in declaration order.
+    /// The bindings in the order they were pushed.
     bindings: Vec<ModelBinding>,
-    /// The prompt-wide default alias set by `models.default`, if any; read
-    /// through [`default_alias`](ModelSet::default_alias), since an
-    /// inherent `default()` would shadow `Default::default()`.
-    default: Option<String>,
 }
 
 impl ModelSet {
-    /// Returns bindings in declaration order.
+    /// Returns bindings in the order they were pushed.
     #[must_use]
     pub fn bindings(&self) -> &[ModelBinding] {
         &self.bindings
     }
 
-    /// Returns the binding for `alias`, if it was declared.
+    /// Returns the binding for `alias`, if the set holds one.
     #[must_use]
     pub fn binding(&self, alias: &str) -> Option<&ModelBinding> {
         self.bindings.iter().find(|binding| binding.alias == alias)
     }
 
-    /// Returns the prompt-wide default alias set by `models.default`, if
-    /// any.
-    #[must_use]
-    pub fn default_alias(&self) -> Option<&str> {
-        self.default.as_deref()
-    }
-
-    /// Appends `binding` after every binding already declared.
+    /// Appends `binding` after every binding already in the set.
     pub fn push(&mut self, binding: ModelBinding) {
         self.bindings.push(binding);
     }
-
-    /// Sets the prompt-wide default alias, replacing any set before.
-    pub fn set_default_alias(&mut self, alias: String) {
-        self.default = Some(alias);
-    }
 }
-
-/// The run's model-set lock was poisoned.
-///
-/// This is the run's own mutex failing, not a model failure, so it has no
-/// [`CompletionErrorKind`](crate::model::CompletionErrorKind) and no retry
-/// advice. The Engine and Lua crates map it to their Lua error, and the
-/// facade does not re-export it.
-#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
-#[error("model set mutex was poisoned")]
-#[non_exhaustive]
-pub struct ModelSetError;
-
-/// The read-only view over the run's [`ModelSet`].
-///
-/// The run holds one `ModelSet` behind a mutex and hands every section VM a
-/// handle to it. This trait exposes reads only, so a reader cannot change the
-/// set through it. The one write any Engine path performs is `models.default`,
-/// which sets the default once and refuses a second, different label. Every
-/// method locks briefly and returns an owned snapshot: a mutex guard cannot
-/// outlive the call.
-pub trait ModelView: Send + Sync {
-    /// Returns the prompt-wide default alias set by `models.default`, if any.
-    ///
-    /// # Errors
-    /// Returns [`ModelSetError`] if the set's mutex is poisoned.
-    fn default_alias(&self) -> Result<Option<String>, ModelSetError>;
-
-    /// Returns an owned clone of the binding for `alias`, if it was
-    /// declared.
-    ///
-    /// # Errors
-    /// Returns [`ModelSetError`] if the set's mutex is poisoned.
-    fn binding(&self, alias: &str) -> Result<Option<ModelBinding>, ModelSetError>;
-}
-
-/// Maps a poisoned set lock to [`ModelSetError`].
-fn lock_model_set(
-    set: &Mutex<ModelSet>,
-) -> Result<std::sync::MutexGuard<'_, ModelSet>, ModelSetError> {
-    set.lock().map_err(|_| ModelSetError)
-}
-
-impl ModelView for Mutex<ModelSet> {
-    fn default_alias(&self) -> Result<Option<String>, ModelSetError> {
-        Ok(lock_model_set(self)?.default_alias().map(str::to_owned))
-    }
-
-    fn binding(&self, alias: &str) -> Result<Option<ModelBinding>, ModelSetError> {
-        Ok(lock_model_set(self)?.binding(alias).cloned())
-    }
-}
-
 #[cfg(test)]
 #[path = "options-tests.rs"]
 mod tests;

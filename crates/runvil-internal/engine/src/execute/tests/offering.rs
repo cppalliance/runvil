@@ -247,7 +247,7 @@ fn rounds_and_calls(records: &[EffectRecord]) -> (Vec<Vec<String>>, Vec<EffectRe
 fn model_origin(section: &str) -> ToolCallOrigin {
     ToolCallOrigin::new(EXECUTION, section, ToolCaller::Model)
         .with_entry("0.1")
-        .with_model(loop_model_name("writer"))
+        .with_model(loop_model_name("default"))
 }
 
 /// A model call of `id` under `alias` with `value`, from the one section.

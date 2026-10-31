@@ -10,7 +10,7 @@ use std::ops::Deref;
 use std::sync::{Arc, Mutex};
 
 use mlua::{FromLuaMulti, MultiValue};
-use runvil_model_client::model::ModelSet;
+use runvil_model_client::model::{ModelBinding, ModelSet};
 use runvil_types::emitter::Emitter;
 use runvil_types::seed::RunSeed;
 use runvil_types::tools::{ToolCatalog, ToolId, ToolInfo};
@@ -239,6 +239,8 @@ pub(crate) fn dynamic(vm: &SectionVm) -> Vec<String> {
         .collect()
 }
 
+type Selection = Arc<Mutex<Option<ModelBinding>>>;
+
 /// A section VM's setup as data. Unset, the VM shares an empty tool and
 /// model set, reports nowhere under [`TEST_SECTION`], gets a fresh store,
 /// empty `args` and `sys`, a frozen nil `argv`, and an empty `var`.
@@ -378,7 +380,7 @@ impl<'a> TestVm<'a> {
     /// Builds the VM, failing the test at the first setup step that fails.
     #[track_caller]
     pub(crate) fn build(mut self) -> BuiltVm {
-        let (mut vm, models, access) = self.run_injection();
+        let (mut vm, selection, access) = self.run_injection();
         vm.install_engine_globals(&self.emitter, self.section)
             .expect("the Engine globals install");
         if self.shims {
@@ -391,7 +393,7 @@ impl<'a> TestVm<'a> {
         }
         BuiltVm {
             vm,
-            models,
+            selection,
             access,
             emitter: self.emitter,
             section: self.section.to_owned(),
@@ -399,12 +401,13 @@ impl<'a> TestVm<'a> {
     }
 
     /// Construction, the limits, the raw-model-id opt-in, and Engine
-    /// injection, handing back the injected VM beside the model set and
-    /// access it shares.
+    /// injection, handing back the VM beside its selection (which starts on
+    /// the default binding, if any) and the access it shares.
     #[track_caller]
-    fn run_injection(&mut self) -> (SectionVm, Arc<Mutex<ModelSet>>, Arc<Access>) {
+    fn run_injection(&mut self) -> (SectionVm, Selection, Arc<Access>) {
         let tools = Arc::new(std::mem::take(&mut self.tools));
-        let models = Arc::new(Mutex::new(std::mem::take(&mut self.models)));
+        let models = Arc::new(std::mem::take(&mut self.models));
+        let selection = Arc::new(Mutex::new(models.binding("default").cloned()));
         let access = self.access.take().unwrap_or_else(fresh_access);
         let mut fresh =
             SectionVm::new_for_section(&test_nonce(), &tools, &models, &self.emitter, self.section)
@@ -425,18 +428,19 @@ impl<'a> TestVm<'a> {
                 &access,
                 self.var,
                 self.argv,
+                &selection,
             )
             .expect("the Engine values inject");
-        (vm, models, access)
+        (vm, selection, access)
     }
 }
 
-/// A built test VM: the section VM, which it derefs to, beside the model
-/// set and access it shares.
+/// A built test VM: the section VM, which it derefs to, beside the selection
+/// and access it shares.
 pub(crate) struct BuiltVm {
     vm: SectionVm,
-    /// The run's model set the VM shares.
-    pub(crate) models: Arc<Mutex<ModelSet>>,
+    /// The section's current-model selection, which injection received.
+    pub(crate) selection: Selection,
     /// The access the VM's `store` table operates through.
     pub(crate) access: Arc<Access>,
     emitter: Emitter,
