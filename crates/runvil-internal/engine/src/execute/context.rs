@@ -93,8 +93,8 @@ pub(crate) struct RunState {
     /// section VM (H1 included) among them, shares it with no lock and no
     /// copy.
     tool_set: Arc<ToolSet>,
-    /// The run's model set: built from the prepared bindings at
-    /// construction and shared with every section VM (H1 included). The
+    /// The run's model set: the one [`RunContext::prepare`](super::RunContext::prepare)
+    /// filled, shared with every section VM (H1 included). The
     /// only writer is `models.default` (a prompt-wide fact); readers
     /// outside the VM layer go through [`models`](Self::models).
     model_set: Arc<Mutex<ModelSet>>,
@@ -117,10 +117,10 @@ pub(crate) struct RunState {
 impl RunState {
     /// Builds the context for one run of `prompt` over `config`, which it
     /// consumes. The turn counter is minted here (starting at zero), as are
-    /// the run's shared tool and model sets - built from the catalog, the
-    /// roster, and the model bindings (only the bindings come
-    /// from [`RunContext::prepare`](super::RunContext::prepare), and they
-    /// stay empty on a caller-built context that skipped it); the nonce
+    /// the run's shared tool and model sets - the tool set built from the
+    /// catalog and the roster, the model set taken from the context (only
+    /// [`RunContext::prepare`](super::RunContext::prepare) fills it, and it
+    /// stays empty on a caller-built context that skipped it); the nonce
     /// derives from `config`'s seed and `when` renders `config`'s
     /// `started_at`, so two contexts over the same inputs agree on both.
     #[must_use]
@@ -135,14 +135,14 @@ impl RunState {
             limits,
             ui,
             vfs,
-            model_bindings,
+            model_set,
             tools,
             packs,
             preludes,
             ..
         } = config;
         let tool_set = Arc::new(bound::run_tool_set(&prompt, tools, packs));
-        let model_set = Arc::new(Mutex::new(bound::bound_model_set(&prompt, &model_bindings)));
+        let model_set = Arc::new(Mutex::new(model_set));
         let execution: Arc<str> = Arc::from(name);
         // The root task's event sequence starts at the context's
         // `provenance_start`: past any parse events the caller put in the

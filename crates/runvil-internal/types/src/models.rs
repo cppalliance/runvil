@@ -151,7 +151,7 @@ pub enum ThinkingMode {
 
 /// One of the five fixed model tiers a prompt can ask for.
 ///
-/// Each role is a tier the Host maps to a model. A role with no model of its
+/// Each role is a tier the caller maps to a model. A role with no model of its
 /// own uses the model mapped to [`ModelRole::Default`]. The names are
 /// lowercase on the wire, and [`ModelRole::ALL`] lists them in a fixed order.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Deserialize)]

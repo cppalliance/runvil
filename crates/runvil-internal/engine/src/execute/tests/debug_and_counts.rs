@@ -4,25 +4,26 @@
 use runvil_parser::test_support::{PromptSource, one_section};
 use runvil_types::emitter::DebugMode;
 
-use super::context::{arm_fanout, setup_prompt, with_writer};
+use super::context::arm_fanout;
 use super::fixtures::{echo_tool, failing_tool, scoped_tool};
 use super::models_loop::loop_scenario;
 use super::*;
 use crate::test_support::recording::DebugEvent;
 use crate::test_support::scenario::EXECUTION;
 
-/// The prompt whose one section, `Only`, asks the `writer` role about its
+/// The prompt whose one section, `Only`, asks the `default` role about its
 /// prose.
 fn ask_the_model() -> String {
-    with_writer(PromptSource::new().prose(
-        "Only",
-        "Ask the model.
+    PromptSource::new()
+        .prose(
+            "Only",
+            "Ask the model.
 
          ```lua
          return models.infer(prose)
          ```",
-    ))
-    .build()
+        )
+        .build()
 }
 
 /// A bound run of `source` whose context turns debug reporting on.
@@ -77,11 +78,13 @@ fn nested_model_infer_capture_reaches_the_debug_sink() {
     // A nested infer called from Lua must route its request/response
     // capture to the run's owned debug sink instead of dropping it.
     let gateway = ScriptedChat::new(vec![text("final answer")]);
-    let source = setup_prompt(PromptSource::new().section(
-        "Only",
-        "local text = models.get('writer'):infer('say hello')
+    let source = PromptSource::new()
+        .section(
+            "Only",
+            "local text = models.get('default'):infer('say hello')
          return text",
-    ));
+        )
+        .build();
     let trace = debugged(source).chat(&gateway).run();
     assert_eq!(trace.text(), "final answer");
 
@@ -110,14 +113,16 @@ fn fanout_arm_debug_events_reach_the_run_sink() {
     // the run's own debug sink, so an arm's model-turn events land on the
     // run's sink under the worker's section name.
     let gateway = ScriptedChat::new(vec![text("arm reply")]);
-    let source = setup_prompt(arm_fanout().prose(
-        "### Worker",
-        "Reply about {{ item }}.
+    let source = arm_fanout()
+        .prose(
+            "### Worker",
+            "Reply about {{ item }}.
 
          ```lua
          return models.infer(prose)
          ```",
-    ));
+        )
+        .build();
     let trace = debugged(source).chat(&gateway).run();
     assert_eq!(trace.text(), "arm reply");
 
@@ -152,12 +157,12 @@ fn debug_capture_none_changes_nothing() {
 #[test]
 fn tool_calls_count_increments_on_successful_dispatch() {
     let (tool, called) = scoped_tool("echo", "Echo a test value.");
-    let source = setup_prompt(PromptSource::new().front("uses: [tools]").section(
+    let source = PromptSource::new().front("uses: [tools]").section(
         "Only",
         "tools.call('tools/echo', { value = 'x' })
          assert(tools.stats.tools['tools/echo'] == 1, 'expected 1 call, got ' .. tostring(tools.stats.tools['tools/echo']))
          return 'ok'",
-    ));
+    ).build();
     let trace = Scenario::new(source).bound().tool(tool).run();
     assert_eq!(trace.text(), "ok");
     assert_eq!(called.load(Ordering::SeqCst), 1);
@@ -192,7 +197,7 @@ fn tool_calls_count_increments_even_when_tool_errors() {
 
 #[test]
 fn before_the_freeze_a_dynamically_offered_tool_counts_from_zero_and_packs_holds_no_dynamic() {
-    let source = setup_prompt(PromptSource::new().front("uses: [tools]").section(
+    let source = PromptSource::new().front("uses: [tools]").section(
         "Only",
         "assert(tools.stats == nil, 'tools.stats appears at the first tool call')
          tools.offer('tools/echo')
@@ -200,7 +205,7 @@ fn before_the_freeze_a_dynamically_offered_tool_counts_from_zero_and_packs_holds
          tools.call('tools/echo', { value = 'x' })
          local ok = pcall(function() return tools.stats.packs.dynamic end)
          return tools.stats.total .. '|' .. tools.stats.packs.tools .. '|' .. tools.stats.tools['tools/lookup'] .. '|' .. tostring(ok)",
-    ));
+    ).build();
     let (echo, _) = scoped_tool("echo", "Echo a test value.");
     let (lookup, _) = scoped_tool("lookup", "Look up a value.");
     let trace = Scenario::new(source).bound().tool(echo).tool(lookup).run();
@@ -270,9 +275,11 @@ fn tool_calls_count_zero_for_uncalled_alias_fails_epilog_assert() {
     // The first script dispatch installs the counts seeded from the
     // frozen sets, so an offered but uncalled tool reads as 0 and an
     // author assert on it fails the run with its own message.
-    let source = setup_prompt(PromptSource::new().front("uses: [tools]").prose(
-        "Only",
-        "```lua
+    let source = PromptSource::new()
+        .front("uses: [tools]")
+        .prose(
+            "Only",
+            "```lua
          tools.offer('tools/search')
          local _ = tools.call('tools/other', { value = 'x' })
          ```
@@ -281,7 +288,8 @@ fn tool_calls_count_zero_for_uncalled_alias_fails_epilog_assert() {
          assert(tools.stats.tools['tools/search'] > 0, 'search was never called')
          return 'unreached'
          ```",
-    ));
+        )
+        .build();
     let (search, _) = scoped_tool("search", "Search for things.");
     let (other, _) = scoped_tool("other", "Other things.");
     let trace = Scenario::new(source).bound().tool(search).tool(other).run();
@@ -294,9 +302,11 @@ fn tool_calls_count_zero_for_uncalled_alias_fails_epilog_assert() {
 
 #[test]
 fn tool_calls_typo_alias_is_a_hard_error_with_seeded_set() {
-    let source = setup_prompt(PromptSource::new().front("uses: [tools]").prose(
-        "Only",
-        "```lua
+    let source = PromptSource::new()
+        .front("uses: [tools]")
+        .prose(
+            "Only",
+            "```lua
          tools.offer('tools/search')
          local _ = tools.call('tools/search', { value = 'x' })
          ```
@@ -305,7 +315,8 @@ fn tool_calls_typo_alias_is_a_hard_error_with_seeded_set() {
          local _ = tools.stats.tools['tools/serach']
          return 'unreached'
          ```",
-    ));
+        )
+        .build();
     let (tool, _) = scoped_tool("search", "Search for things.");
     let trace = Scenario::new(source).bound().tool(tool).run();
     let msg = trace.error().to_string();
@@ -325,16 +336,18 @@ fn handle_infer_returns_text_without_touching_reply_or_sys() {
     // The one infer shape: `handle:infer(...)` returns the round's text and never
     // sets `reply` or `sys.reply_finish_reason`.
     let gateway = ScriptedChat::new(vec![text("pong")]);
-    let source = setup_prompt(PromptSource::new().section(
-        "Only",
-        "local text = models.get('writer'):infer('say hello')
+    let source = PromptSource::new()
+        .section(
+            "Only",
+            "local text = models.get('default'):infer('say hello')
          assert(type(text) == 'string', 'infer must return text')
          assert(text == 'pong')
          assert(reply == nil, 'infer must not set reply')
          assert(not pcall(function() return sys.reply_finish_reason end),
              'infer must not touch sys')
          return text",
-    ));
+        )
+        .build();
     let trace = Scenario::new(source).bound().chat(&gateway).run();
     assert_eq!(trace.text(), "pong");
     let body = gateway

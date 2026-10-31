@@ -156,8 +156,8 @@ const WRITES_TWICE: &str = "---\nname: writes\ndescription: d\nrunvil: 0\n---\n\
 /// A prompt that writes a store file, infers once through its one role,
 /// and returns the reply beside the file.
 const INFERS_AND_STORES: &str = "---\nname: infers\ndescription: d\nrunvil: 0\n\
-    models:\n  writer: {}\n---\n\n\
-    # Title\n\n```lua\nmodels.default('writer')\n```\n\n## Only\n\n```lua\n\
+    ---\n\n\
+    # Title\n\n## Only\n\n```lua\n\
     store.write('note.md', 'kept')\n\
     return models.infer('asked') .. '|' .. store.read('note.md')\n```\n";
 

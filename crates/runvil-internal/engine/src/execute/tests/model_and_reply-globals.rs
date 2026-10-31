@@ -8,7 +8,6 @@
 use runvil_parser::test_support::one_section;
 
 use super::*;
-use crate::execute::tests::context::{setup_prompt, with_writer};
 use crate::execute::tests::fixtures::echo_tool;
 
 /// The prompt `source` builds over the fixture tools Pack, run under the
@@ -16,13 +15,13 @@ use crate::execute::tests::fixtures::echo_tool;
 /// `tools.call` runs is what `sys.model` reads after.
 #[track_caller]
 fn under_tools(source: PromptSource) -> Trace {
-    let source = setup_prompt(source.front("uses: [tools]"));
+    let source = source.front("uses: [tools]").build();
     Scenario::new(source).bound().tool(echo_tool()).run()
 }
 
 #[test]
 fn a_library_function_sees_sys_model_unknown_before_scope_close() {
-    let source = with_writer(PromptSource::new())
+    let source = PromptSource::new()
         .prose(
             "Only",
             "
@@ -50,8 +49,7 @@ fn a_library_function_sees_sys_model_unknown_before_scope_close() {
 
 #[test]
 fn prologue_sys_model_unknown_before_scope_close() {
-    let source =
-        with_writer(PromptSource::new()).prose("Only", "```lua\nreturn sys.model\n```\n\nprose");
+    let source = PromptSource::new().prose("Only", "```lua\nreturn sys.model\n```\n\nprose");
     let trace = Scenario::new(source.build()).bound().run();
     let error = trace.error();
     assert!(
@@ -127,7 +125,7 @@ fn fanout_arm_sees_the_model_name_in_sys_model_after_the_scope_install() {
 /// member reaches the model as compact JSON.
 #[test]
 fn fanout_item_substitution_renders_a_table_member_as_compact_json() {
-    let source = with_writer(PromptSource::new())
+    let source = PromptSource::new()
         .section(
             "Parent",
             "

@@ -38,9 +38,8 @@ const ASKS: &str = concat!(
 /// when the round fails.
 const PATIENT: &str = concat!(
     "---\nname: patient\ndescription: Waits on the model\nrunvil: 0\n",
-    "models: { writer: {} }\n",
     "---\n\n# Patient\n\n## Only\n\n```lua\n",
-    "local writer = models.get('writer')\n",
+    "local writer = models.get('default')\n",
     "local ok, err = pcall(writer.infer, writer, 'Take your time.')\n",
     "return ok and 'answered' or err.kind\n",
     "```\n",
@@ -49,10 +48,9 @@ const PATIENT: &str = concat!(
 /// Runs one section round and returns the model's reply.
 const CHATS: &str = concat!(
     "---\nname: chats\ndescription: Says hello to the model\nrunvil: 0\n",
-    "models: { writer: {} }\n",
     "---\n\n# Chats\n\n## Only\n\n```lua\n",
     "messages:user('Hello, desk.')\n",
-    "models.get('writer'):loop()\n",
+    "models.get('default'):loop()\n",
     "return messages[#messages].content\n",
     "```\n",
 );

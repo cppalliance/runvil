@@ -1,24 +1,22 @@
 //! Tests for live `models.infer` against a scripted gateway, including H1 chunks and required libraries.
 
+use std::collections::BTreeMap;
+
 use runvil_parser::test_support::{PromptSource, parse_ok};
 use runvil_types::cancel::CancelHandle;
 
 use super::context::test_context;
 use super::fixtures::echo_tool;
 use super::*;
+use crate::model::ModelRole;
 use crate::test_support::scenario::{EXECUTION, TEST_MODEL, test_model};
 
-/// The prompt declaring the `writer` role, with no default parked.
-fn writer_role() -> PromptSource {
-    PromptSource::new().front("models: { writer: {} }")
-}
-
-/// The prompt whose H1 infers once through the `writer` handle into
+/// The prompt whose H1 infers once through the `default` handle into
 /// `var.answer`, which its `Result` section returns.
 fn h1_handle_infer() -> String {
-    writer_role()
+    PromptSource::new()
         .h1("
-            local writer = models.default('writer')
+            local writer = models.get('default')
             var.answer = writer:infer('answer once')")
         .section("Result", "return var.answer")
         .build()
@@ -49,7 +47,7 @@ fn unread_h1_prose_stays_inert_and_explicit_infer_requires_a_model() {
     // whose substitution would fail or stay empty - discards at the pass's
     // end without requiring a model. Only an explicit `models.infer` of the
     // prose requires a binding.
-    let unread = writer_role()
+    let unread = PromptSource::new()
         .h1("var.omit = ''")
         .h1_prose("{{ var.omit }}")
         .section("Result", "return 'ok'");
@@ -60,7 +58,7 @@ fn unread_h1_prose_stays_inert_and_explicit_infer_requires_a_model() {
         "unread H1 prose must not require a model"
     );
 
-    let reading = writer_role()
+    let reading = PromptSource::new()
         .h1_prose("ask")
         .h1("return models.infer(prose)");
     let trace = Scenario::new(reading.build()).run();
@@ -78,7 +76,7 @@ fn unread_h1_prose_stays_inert_and_explicit_infer_requires_a_model() {
 
 #[test]
 fn a_library_function_resolves_engine_globals_when_called() {
-    let source = writer_role()
+    let source = PromptSource::new()
         .section("Result", "require '## helpers'\nreturn read_args()")
         .section("helpers", "function read_args() return args end");
     let trace = Scenario::new(source.build())
@@ -94,7 +92,7 @@ fn a_library_calls_engine_globals_at_load_time() {
     // A library loads into the requiring section's environment with every
     // Engine global installed, so its top-level code may use `store`,
     // `log`, and `args` at load.
-    let source = writer_role()
+    let source = PromptSource::new()
         .section(
             "Result",
             "require '## loader'\nreturn store.read('loaded.txt')",
@@ -106,8 +104,10 @@ fn a_library_calls_engine_globals_at_load_time() {
             log('library loaded')",
         )
         .build();
-    let (_, requirements) =
-        test_context(EXECUTION).prepare(&parse_ok(&source), Some(test_model(TEST_MODEL)));
+    let (_, requirements) = test_context(EXECUTION).prepare(
+        &parse_ok(&source),
+        BTreeMap::from([(ModelRole::Default, test_model(TEST_MODEL))]),
+    );
     assert!(
         requirements.is_satisfied(),
         "the fixture declares nothing: {requirements:?}"
@@ -128,7 +128,7 @@ fn tool_objects_and_roles_reach_section_call_and_fanout_vms() {
     // The offering arrives from the catalog: the Pack installs the tool,
     // and every section VM reads its tool object by id - H1 never runs a
     // bind.
-    let source = writer_role()
+    let source = PromptSource::new()
         .front("uses: [tools]")
         .section(
             "Parent",
@@ -147,7 +147,7 @@ fn tool_objects_and_roles_reach_section_call_and_fanout_vms() {
         .section("Called", "require '## bindings'\nreturn binding_names()")
         .section(
             "bindings",
-            "function binding_names() return tools.get('tools/echo').id .. ':' .. models.get('writer').name end",
+            "function binding_names() return tools.get('tools/echo').id .. ':' .. models.get('default').name end",
         );
     // The fixture tool's info goes into the catalog and its
     // implementation answers the run's calls; the run offers every
@@ -159,7 +159,7 @@ fn tool_objects_and_roles_reach_section_call_and_fanout_vms() {
 
     assert_eq!(
         trace.text(),
-        "tools/echo:writer|tools/echo:writer|tools/echo:writer:one,tools/echo:writer:two"
+        "tools/echo:default|tools/echo:default|tools/echo:default:one,tools/echo:default:two"
     );
 }
 
@@ -169,9 +169,9 @@ fn nested_lua_infer_emits_a_model_turn_observation() {
     // run's observer, proving owned-observer propagation reaches the nested
     // inference path.
     let gateway = ScriptedChat::new(vec![text("pong")]);
-    let source = writer_role()
+    let source = PromptSource::new()
         .h1("
-            local writer = models.default('writer')
+            local writer = models.get('default')
             var.answer = writer:infer('ping')")
         .section("Result", "return var.answer");
     let trace = Scenario::new(source.build()).bound().chat(&gateway).run();
@@ -201,8 +201,8 @@ fn nested_lua_infer_emits_a_model_turn_observation() {
 #[test]
 fn cancelled_nested_infer_does_not_report_model_turn_failed() {
     let gateway = ScriptedChat::new(vec![text("too late")]);
-    let source = writer_role().h1("
-        local writer = models.default('writer')
+    let source = PromptSource::new().h1("
+        local writer = models.get('default')
         return writer:infer('must cancel')");
     let cancel = CancelHandle::new();
     let canceller = cancel.clone();
@@ -240,8 +240,8 @@ fn cancelled_nested_infer_does_not_report_model_turn_failed() {
 #[test]
 fn handle_infer_tool_call_violation_uses_entry_point_neutral_wording() {
     let gateway = ScriptedChat::new(vec![calls(&[("call_1", "ghost", "{}")])]);
-    let source = writer_role().h1("
-        local writer = models.default('writer')
+    let source = PromptSource::new().h1("
+        local writer = models.get('default')
         return writer:infer('answer without tools')");
     let trace = Scenario::new(source.build()).bound().chat(&gateway).run();
     let rendered = trace.error().to_string();
@@ -260,10 +260,8 @@ fn h1_prose_infers_explicitly_and_var_accumulates_into_the_walk() {
     // The H1 pass reads its pending buffer only through an explicit
     // infer, and `var` writes accumulate across the pass into the walk.
     let gateway = ScriptedChat::new(vec![text("final answer")]);
-    let source = writer_role()
-        .h1("
-            models.default('writer')
-            var.executions = (var.executions or 0) + 1")
+    let source = PromptSource::new()
+        .h1("var.executions = (var.executions or 0) + 1")
         .h1_prose("Ask for one round.")
         .h1("
             var.first = models.infer(prose)
@@ -280,8 +278,7 @@ fn h1_and_h2_prose_each_infer_explicitly_in_source_order() {
     // The H1 pass and the H2 section each read their own pending
     // buffer into an explicit infer: two completions, in source order.
     let gateway = ScriptedChat::new(vec![text("h1 reply"), text("h2 reply")]);
-    let source = writer_role()
-        .h1("models.default('writer')")
+    let source = PromptSource::new()
         .h1_prose("h1 prose turn")
         .h1("var.h1 = models.infer(prose)")
         .prose(

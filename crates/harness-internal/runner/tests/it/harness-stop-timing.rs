@@ -27,8 +27,8 @@ use crate::support::registry;
 /// ends, the main infers once, joins the child for the operator's answer,
 /// and returns how the wait ended, the reply, and the answer.
 const STOPS_TIMED_JOIN: &str = "---\nname: timed\ndescription: d\nrunvil: 0\n\
-    uses:\n  - tests/user-input\nmodels:\n  writer: {}\n---\n\n\
-    # Timed\n\n```lua\nmodels.default('writer')\n```\n\n\
+    uses:\n  - tests/user-input\n---\n\n\
+    # Timed\n\n\
     ## Main\n\n```lua\n\
     local asker = tasks.spawn('## Asker')\n\
     local ok, err = pcall(tasks.join_any, { asker }, { timeout = 30 })\n\
@@ -41,8 +41,8 @@ const STOPS_TIMED_JOIN: &str = "---\nname: timed\ndescription: d\nrunvil: 0\n\
 /// round, writes a store file, and then only waits on the child, returning
 /// the child's report of how its round ended.
 const STOPS_BEFORE_A_STEP: &str = "---\nname: before-step\ndescription: d\nrunvil: 0\n\
-    models:\n  writer: {}\n---\n\n\
-    # BeforeStep\n\n```lua\nmodels.default('writer')\n```\n\n\
+    ---\n\n\
+    # BeforeStep\n\n\
     ## Main\n\n```lua\n\
     local child = tasks.spawn('## Child')\n\
     store.write('note.md', 'kept')\n\
@@ -54,14 +54,14 @@ const STOPS_BEFORE_A_STEP: &str = "---\nname: before-step\ndescription: d\nrunvi
 
 /// A prompt that hands the operator's answer to one model round.
 const ASKS_THEN_INFERS: &str = "---\nname: asks-infers\ndescription: d\nrunvil: 0\n\
-    uses:\n  - tests/user-input\nmodels:\n  writer: {}\n---\n\n\
-    # AsksInfers\n\n```lua\nmodels.default('writer')\n```\n\n\
+    uses:\n  - tests/user-input\n---\n\n\
+    # AsksInfers\n\n\
     ## Only\n\n```lua\nreturn models.infer((input.ask()))\n```\n";
 
 /// A prompt that writes a store file, then runs one model round.
 const WRITES_THEN_INFERS: &str = "---\nname: writes-infers\ndescription: d\nrunvil: 0\n\
-    models:\n  writer: {}\n---\n\n\
-    # WritesInfers\n\n```lua\nmodels.default('writer')\n```\n\n\
+    ---\n\n\
+    # WritesInfers\n\n\
     ## Only\n\n```lua\nstore.write('note.md', 'kept')\nreturn models.infer('after')\n```\n";
 
 /// A Host that built only the fixture ask Pack, as `user-input`, beside

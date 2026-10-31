@@ -1,6 +1,6 @@
 //! Reading what a prompt declares before it runs.
 
-use runvil::model::ThinkingMode;
+use runvil::model::{ModelRole, ThinkingMode};
 use runvil::prompt::ModelKeyword;
 use runvil::{ParseErrorKind, Prompt, RequirementCheck};
 
@@ -11,7 +11,7 @@ const CONTRACT: &str = "
     output: { path: note.md, description: The note the greeter leaves }
     uses: [text]
     args: { times: { type: integer, optional: true, default: 1 }, name: { type: string } }
-    models: { writer: { keywords: [fast] } }
+    models: { fast: {} }
 ";
 
 #[test]
@@ -51,7 +51,7 @@ fn the_frontmatter_lists_every_declaration_with_arguments_sorted_by_name() -> Te
         .iter()
         .map(|(label, role)| (label.to_string(), role.min_context()))
         .collect();
-    assert_eq!(roles, [("writer".to_owned(), None)]);
+    assert_eq!(roles, [("fast".to_owned(), None)]);
 
     assert!(
         frontmatter
@@ -73,7 +73,7 @@ fn the_frontmatter_lists_every_declaration_with_arguments_sorted_by_name() -> Te
 #[test]
 fn a_role_check_by_hand_finds_the_same_shortfall_prepare_reports() -> TestResult {
     let source = prompt(
-        "models: { writer: { keywords: [fast] }, checker: { keywords: [no-thinking], min_context: 100000 } }",
+        "models: { fast: {}, small: { keywords: [no-thinking], min_context: 100000 } }",
         &[("Greet", "return 'done'")],
     );
     let model = model("canned", 200_000, ThinkingMode::Always)?;
@@ -95,13 +95,13 @@ fn a_role_check_by_hand_finds_the_same_shortfall_prepare_reports() -> TestResult
             misses.push((label, keyword_miss, context_miss));
         }
     }
-    assert_eq!(misses, [("checker", true, false)]);
+    assert_eq!(misses, [("small", true, false)]);
 
     let [unmet] = requirements.unmet_models.as_slice() else {
-        return Err("only the checker falls short".into());
+        return Err("only the small role falls short".into());
     };
-    assert_eq!(unmet.role, "checker");
-    assert_eq!(unmet.check, RequirementCheck::HardKeyword);
-    assert_eq!(unmet.required, "no-thinking");
+    assert_eq!(unmet.role, ModelRole::Small);
+    assert_eq!(unmet.check, RequirementCheck::Thinking);
+    assert_eq!(unmet.required, "thinking: false");
     Ok(())
 }

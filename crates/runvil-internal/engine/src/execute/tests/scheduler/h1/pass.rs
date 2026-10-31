@@ -12,10 +12,10 @@ fn h1_infer_runs_once() {
     // The H1 pass selects the default model by label, a handle's `infer`
     // yields through the shim, and the H1 `var` hand-off seeds the walk.
     let gateway = ScriptedChat::new(vec![text("h1 answer")]);
-    let md = "---\nname: live-h1\ndescription: d\nrunvil: 0\nmodels:\n  writer: {}\n---\n\n\
+    let md = "---\nname: live-h1\ndescription: d\nrunvil: 0\n---\n\n\
         # Live H1\n\n\
         ```lua\n\
-        local writer = models.default('writer')\n\
+        local writer = models.get('default')\n\
         var.answer = writer:infer('answer once')\n\
         ```\n\n\
         ## Result\n\n\
@@ -32,10 +32,9 @@ fn h1_models_infer_resolves_the_default_model_without_touching_sys() {
     // shared set and runs the one infer shape - a single tool-free
     // round on a fresh conversation that leaves `sys` untouched.
     let gateway = ScriptedChat::new(vec![text("h1 answer")]);
-    let md = "---\nname: live-h1-models-infer\ndescription: d\nrunvil: 0\nmodels:\n  writer: {}\n---\n\n\
+    let md = "---\nname: live-h1-models-infer\ndescription: d\nrunvil: 0\n---\n\n\
         # Live H1 Models Infer\n\n\
         ```lua\n\
-        models.default('writer')\n\
         var.answer = models.infer('answer once')\n\
         var.sys_untouched = not pcall(function() return sys.reply_finish_reason end)\n\
         ```\n\n\

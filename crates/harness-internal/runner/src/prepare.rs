@@ -36,7 +36,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use runvil::cancel::CancelHandle;
 use runvil::event::Event;
-use runvil::model::ModelInfo;
+use runvil::model::{ModelInfo, ModelRole};
 use runvil::prompt::FileDecl;
 use runvil::timestamp::Timestamp;
 use runvil::vfs::VfsRef;
@@ -80,8 +80,8 @@ pub struct Services {
     /// The run's name: the run metadata's `name` and every event's
     /// `execution`.
     pub name: String,
-    /// The Host's current model, when one is selected; prepare binds
-    /// every declared role to it and checks each role's requirements.
+    /// The Host's default model, when one is selected; prepare fills all
+    /// five roles with it and checks each declared role's requirements.
     pub model: Option<ModelInfo>,
     /// The Host snapshot the `ui()` global serves, when the run has
     /// one.
@@ -135,7 +135,7 @@ pub enum PrepareError {
     },
     /// The environment cannot satisfy the prompt: a Pack the prompt
     /// declares is missing, unavailable, or lacks a service it needs, or
-    /// the current model falls short of a role's requirements. The Engine's
+    /// the model filling a role falls short of its requirements. The Engine's
     /// model-readable notice, one line per gap, is the source; the run is
     /// ended as failed with that notice, or as cancelled when the run's
     /// cancel had fired.
@@ -357,7 +357,8 @@ pub(crate) async fn prepare_noting_cancel(
 
 /// Sets `snapshot`'s catalog, roster with each usable Pack's vendor, and
 /// declared preludes on `ctx`, then prepares it for `prompt` under the
-/// current `model`.
+/// Host's default `model`: an empty role map for `None`, and a map holding
+/// the `default` role alone for `Some`.
 fn prepare_from_snapshot(
     ctx: RunContext,
     snapshot: &HostRunContext,
@@ -368,7 +369,13 @@ fn prepare_from_snapshot(
     ctx.with_tools(snapshot.catalog())
         .with_packs(usable, unavailable)
         .with_preludes(snapshot.preludes(prompt))
-        .prepare(prompt, model)
+        .prepare(
+            prompt,
+            model
+                .into_iter()
+                .map(|model| (ModelRole::Default, model))
+                .collect(),
+        )
 }
 
 /// The failed outcome of a run that ended in preparation: `kind` names the

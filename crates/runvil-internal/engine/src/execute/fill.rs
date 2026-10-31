@@ -1,56 +1,124 @@
-//! Prepare's fill function: the trivial model fill.
+//! Prepare's fill function: the caller's role map becomes the run's model set.
 
-use crate::model::ThinkingMode;
+use std::collections::BTreeMap;
+
+use crate::model::{ModelBinding, ModelInfo, ModelInvocation, ModelRole, ModelSet, ThinkingMode};
 use crate::parser::{ModelKeyword, Prompt, detail};
 
-use super::bindings::ModelBindings;
 use super::requirements::{RequirementCheck, Requirements, UnmetRequirement};
 
-/// The trivial model fill: binds every declared role to the run's
-/// current model and checks each role's hard keywords and context
-/// minimum against its model info, reporting required versus actual into
-/// [`Requirements::unmet_models`]. With no current model there is nothing
-/// to fill or check.
-pub(super) fn fill_model_bindings(
+/// Builds the run's model set from the caller's role map and checks what the
+/// prompt declares against the models that fill the roles.
+///
+/// A role's model is its own entry in `models`, else the `default` entry.
+/// The set holds one binding for each of the five roles, in
+/// [`ModelRole::ALL`] order, for every prompt whether or not it declares the
+/// role. Each declared role's context minimum and hard keywords are checked
+/// against its model's info, reporting required versus actual into
+/// [`Requirements::unmet_models`]. A label that is not one of the five roles
+/// is not read.
+///
+/// An empty map means the caller has no model, so the set stays empty and
+/// nothing is checked. A non-empty map with no `default` entry reports one
+/// [`RequirementCheck::Unbound`] entry, and the set stays empty.
+pub(super) fn fill_model_set(
     prompt: &Prompt,
-    model: Option<crate::model::ModelInfo>,
+    mut models: BTreeMap<ModelRole, ModelInfo>,
     requirements: &mut Requirements,
-) -> ModelBindings {
-    let mut bindings = ModelBindings::default();
-    let Some(model) = model else {
-        return bindings;
+) -> ModelSet {
+    let mut set = ModelSet::default();
+    if models.is_empty() {
+        return set;
+    }
+    let Some(default) = models.remove(&ModelRole::Default) else {
+        requirements.unmet_models.push(UnmetRequirement {
+            role: ModelRole::Default,
+            check: RequirementCheck::Unbound,
+            required: "a model".to_owned(),
+            actual: "none".to_owned(),
+        });
+        return set;
     };
-    for (label, role) in prompt.frontmatter().models() {
-        if let Some(minimum) = role.min_context()
-            && model.context() < minimum
+    for role in ModelRole::ALL {
+        let info = models.remove(&role).unwrap_or_else(|| default.clone());
+        let (keywords, minimum, declared_description) =
+            match prompt.frontmatter().models().get(role.as_str()) {
+                Some(declared) => (
+                    declared.keywords(),
+                    declared.min_context(),
+                    declared.description(),
+                ),
+                None => (&[][..], None, None),
+            };
+        if let Some(minimum) = minimum
+            && info.context() < minimum
         {
             requirements.unmet_models.push(UnmetRequirement {
-                role: label.to_owned(),
+                role,
                 check: RequirementCheck::ContextMinimum,
                 required: minimum.to_string(),
-                actual: model.context().to_string(),
+                actual: info.context().to_string(),
             });
         }
-        for keyword in role.keywords() {
-            // Soft keywords document author intent; only the hard
-            // keywords have a model info property to check against.
-            let actual = match keyword {
-                ModelKeyword::Thinking if model.thinking() == ThinkingMode::Never => Some("Never"),
-                ModelKeyword::NoThinking if model.thinking() == ThinkingMode::Always => {
-                    Some("Always")
-                }
-                _ => None,
-            };
-            if let Some(actual) = actual {
-                requirements.unmet_models.push(UnmetRequirement {
-                    role: label.to_owned(),
-                    check: RequirementCheck::HardKeyword,
-                    required: detail::keyword_name(*keyword).to_owned(),
-                    actual: actual.to_owned(),
-                });
-            }
-        }
-        bindings.bind(label, model.clone());
+        check_thinking(role, keywords, &info, requirements);
+        let description = declared_description.unwrap_or_else(|| info.description());
+        let binding = ModelBinding::new(
+            role.as_str(),
+            description,
+            info.id().clone(),
+            ModelInvocation::new().with_thinking(thinking_switch(keywords)),
+            info.context(),
+        )
+        .with_capabilities(
+            keywords
+                .iter()
+                .map(|keyword| detail::keyword_name(*keyword).to_owned())
+                .collect(),
+        )
+        .with_catalog_info(info);
+        set.push(binding);
     }
-    bindings
+    set.set_default_alias(ModelRole::Default.as_str().to_owned());
+    set
+}
+
+/// Reports each hard keyword of `role` that `info`'s thinking mode fails.
+/// Soft keywords document author intent; only the hard keywords have a model
+/// info property to check against.
+fn check_thinking(
+    role: ModelRole,
+    keywords: &[ModelKeyword],
+    info: &ModelInfo,
+    requirements: &mut Requirements,
+) {
+    for keyword in keywords {
+        let failed = match keyword {
+            ModelKeyword::Thinking if info.thinking() == ThinkingMode::Never => {
+                Some(("thinking: true", "Never"))
+            }
+            ModelKeyword::NoThinking if info.thinking() == ThinkingMode::Always => {
+                Some(("thinking: false", "Always"))
+            }
+            _ => None,
+        };
+        if let Some((required, actual)) = failed {
+            requirements.unmet_models.push(UnmetRequirement {
+                role,
+                check: RequirementCheck::Thinking,
+                required: required.to_owned(),
+                actual: actual.to_owned(),
+            });
+        }
+    }
+}
+
+/// The thinking switch the hard keywords of a role set: `Some(true)` for
+/// `thinking`, `Some(false)` for `no-thinking`, and the later one when a
+/// role names both.
+fn thinking_switch(keywords: &[ModelKeyword]) -> Option<bool> {
+    keywords.iter().fold(None, |switch, keyword| match keyword {
+        ModelKeyword::Thinking => Some(true),
+        ModelKeyword::NoThinking => Some(false),
+        _ => switch,
+    })
 }

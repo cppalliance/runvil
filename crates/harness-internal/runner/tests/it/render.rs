@@ -45,10 +45,10 @@ const SECRET: &str = "render/secret";
 const SEEN: ServiceKey<Seen> = ServiceKey::new("tests/render-seen");
 
 /// The frontmatter and H1 every prompt here shares: the render Pack
-/// declared and one role bound as the default.
+/// declared and a title.
 const PREAMBLE: &str = "---\nname: renders\ndescription: d\nrunvil: 0\n\
-    uses:\n  - tests/render\nmodels:\n  writer: {}\n---\n\n\
-    # Renders\n\n```lua\nmodels.default('writer')\n```\n\n";
+    uses:\n  - tests/render\n---\n\n\
+    # Renders\n\n";
 
 /// One render as the render Pack saw it.
 #[derive(Debug, Clone, PartialEq)]

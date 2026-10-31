@@ -13,6 +13,7 @@
 //! effects, its store, and its trace in `driving`.
 
 use std::cell::Cell;
+use std::collections::BTreeMap;
 use std::num::NonZeroU32;
 use std::sync::Arc;
 use std::sync::mpsc;
@@ -31,7 +32,9 @@ use super::scripted_chat::ScriptedChat;
 use crate::Error;
 use crate::execute::{Effect, EffectAnswer, Run, RunContext, RunError, RunLimits, RunResult};
 use crate::lua::ToolBinding;
-use crate::model::{CompletionErrorKind, ModelBinding, ModelId, ModelInfo, ModelSet, ThinkingMode};
+use crate::model::{
+    CompletionErrorKind, ModelBinding, ModelId, ModelInfo, ModelRole, ModelSet, ThinkingMode,
+};
 use crate::parser::Prompt;
 
 #[path = "scenario-driving.rs"]
@@ -55,7 +58,7 @@ pub(crate) const EXECUTION: &str = "execute-test";
 pub(crate) const TEST_SEED: RunSeed = RunSeed::from_bytes([1; 32]);
 pub(crate) const TEST_STARTED_AT: Timestamp = Timestamp::from_unix_millis(1_700_000_000_000);
 
-/// The gateway model a bound scenario's roles resolve to.
+/// The gateway model a bound scenario's `default` role resolves to.
 pub(crate) const TEST_MODEL: &str = "claude-sonnet-4-6";
 
 /// The gateway model `id` as the tests bind it: a 131072-token window and
@@ -137,9 +140,8 @@ pub(crate) struct Scenario {
     hold: Option<Matcher>,
     signal: Option<Matcher>,
     prepare: bool,
-    /// The current model the prepare binds every declared role to.
-    model: Option<ModelInfo>,
-    bind_roles: bool,
+    /// The role map the prepare fills the model set from.
+    roles: BTreeMap<ModelRole, ModelInfo>,
 }
 
 impl Scenario {
@@ -162,8 +164,7 @@ impl Scenario {
             hold: None,
             signal: None,
             prepare: true,
-            model: None,
-            bind_roles: false,
+            roles: BTreeMap::new(),
         }
     }
 
@@ -185,25 +186,22 @@ impl Scenario {
         self
     }
 
-    /// Makes the [`TEST_MODEL`] the run's current model, so the prepare's
-    /// trivial fill binds every role the prompt declares to it.
+    /// Makes the [`TEST_MODEL`] the run's `default` model, so the prepare
+    /// fills all five roles with it.
     pub(crate) fn bound(self) -> Scenario {
         self.current_model(test_model(TEST_MODEL))
     }
 
-    /// Makes `model` the run's current model, which the prepare binds
-    /// every role the prompt declares to.
-    pub(crate) fn current_model(mut self, model: ModelInfo) -> Scenario {
-        self.model = Some(model);
-        self
+    /// Makes `model` the run's `default` model, which fills every role the
+    /// map gives no model of its own.
+    pub(crate) fn current_model(self, model: ModelInfo) -> Scenario {
+        self.role_model(ModelRole::Default, model)
     }
 
-    /// Binds every role the prompt declares to the [`TEST_MODEL`] in the
-    /// context's model bindings, as the prepare's fill would, without making
-    /// it the current model, so the run's model set starts empty for the
-    /// H1 pass to fill.
-    pub(crate) fn bind_roles(mut self) -> Scenario {
-        self.bind_roles = true;
+    /// Gives `role` its own model in the role map the prepare fills the
+    /// model set from.
+    pub(crate) fn role_model(mut self, role: ModelRole, model: ModelInfo) -> Scenario {
+        self.roles.insert(role, model);
         self
     }
 
@@ -230,7 +228,7 @@ impl Scenario {
     }
 
     /// Starts the run over the context as given, with no prepare: no model
-    /// role is bound and no requirement is checked.
+    /// role is filled and no requirement is checked.
     pub(crate) fn unprepared(mut self) -> Scenario {
         self.prepare = false;
         self
@@ -243,7 +241,7 @@ impl Scenario {
     }
 
     /// Fills the run's model set with `set` before the run starts, as the
-    /// H1 pass would leave it, in place of the set the prepare binds.
+    /// H1 pass would leave it, in place of the set the prepare fills.
     pub(crate) fn models(mut self, set: ModelSet) -> Scenario {
         self.prefill.models = Some(set);
         self
@@ -414,15 +412,10 @@ impl Scenario {
         }
         let edit = std::mem::replace(&mut self.context, Box::new(|ctx| ctx));
         let mut ctx = edit(ctx);
-        if self.bind_roles {
-            for (label, _) in prompt.frontmatter().models() {
-                ctx.bind_role_for_test(label, test_model(TEST_MODEL));
-            }
-        }
         let mut refused = None;
         if self.prepare {
             let requirements;
-            (ctx, requirements) = ctx.prepare(&prompt, self.model.take());
+            (ctx, requirements) = ctx.prepare(&prompt, std::mem::take(&mut self.roles));
             refused = requirements.refusal().map(RunResult::Failure);
         }
         (prompt, events, ctx, refused)

@@ -9,13 +9,13 @@
 //! The run's outcome type ([`RunResult`]) is defined here; the rest lives in
 //! focused private children:
 //!
-//! - `bindings` - the run's model bindings, [`ModelBindings`].
-//! - `config` - the public [`RunContext`], whose `prepare` binds model
-//!   roles, and [`RunLimits`]; installing Packs and taking each run's
+//! - `config` - the public [`RunContext`], whose `prepare` fills the five
+//!   model roles, and [`RunLimits`]; installing Packs and taking each run's
 //!   catalog from them is the Harness's job.
 //! - `context` - the ambient `RunState` run state.
 //! - `error` - the public [`RunError`] and its stable [`RunErrorKind`].
-//! - `fill` - prepare's model-role fill function.
+//! - `fill` - prepare's fill function, which builds the model set from the
+//!   caller's role map.
 //! - `infer` - the nested-inference round's answer.
 //! - `requirements` - the preflight [`Requirements`] report.
 //! - `run` - the boundary with the caller: the `Run` state machine with its
@@ -37,7 +37,6 @@
 //!   completion goes through.
 //! - `walk_target` - the walk-target resolution helpers.
 
-mod bindings;
 mod config;
 pub(crate) mod context;
 mod error;
@@ -53,7 +52,6 @@ mod turn;
 mod walk_target;
 
 // Public API surface.
-pub use bindings::ModelBindings;
 pub use config::{RunContext, RunLimits};
 pub use error::{RunError, RunErrorKind, SourceLocation};
 pub use requirements::{

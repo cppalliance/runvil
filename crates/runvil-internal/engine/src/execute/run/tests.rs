@@ -3,6 +3,7 @@
 //! handles. Then the run's boundary with its caller: `Done` waits on
 //! outstanding effects, a drop is an answer, and the run is `Send`.
 
+use std::collections::BTreeMap;
 use std::num::NonZeroU32;
 use std::sync::Arc;
 
@@ -410,7 +411,7 @@ fn a_context_without_a_caller_handle_shares_its_one_flag_with_prepare_and_the_ru
         .0
         .expect("the run test prompt parses");
     // The flag `prepare` hands the Packs is the context's own.
-    let (ctx, _) = run_context().prepare(&prompt, None);
+    let (ctx, _) = run_context().prepare(&prompt, BTreeMap::new());
     let packs_flag = ctx.cancel.clone();
     let mut run = Run::new(Arc::new(prompt), "", ctx);
     assert!(!packs_flag.is_cancelled());

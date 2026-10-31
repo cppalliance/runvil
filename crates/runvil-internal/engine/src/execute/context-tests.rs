@@ -1,6 +1,8 @@
 //! Tests for `RunContext` construction, forking, task sequence seeding,
 //! and the model set a run binds from its filled roles.
 
+use std::collections::BTreeMap;
+
 use runvil_types::packs::PackId;
 use runvil_types::tools::ToolId;
 
@@ -10,7 +12,7 @@ use super::*;
 use crate::execute::section_vm::VmSeed;
 use crate::execute::{UnavailablePack, UsablePack};
 use crate::lua::{Argv, RosterEntry};
-use crate::model::ThinkingMode;
+use crate::model::{ModelRole, ThinkingMode};
 use crate::test_support::fresh_access;
 use crate::test_support::scenario::{TEST_SEED, test_model_with};
 
@@ -157,23 +159,22 @@ fn a_task_fork_reports_into_the_shared_buffer_under_its_own_task() {
 
 #[test]
 fn a_filled_role_binds_with_the_catalog_info_its_render_receives() {
-    let source = concat!(
-        "---\nname: t\ndescription: d\nrunvil: 0\nmodels:\n  writer: {}\n---\n\n",
-        "# Title\n\n## Only\n\ndone\n",
-    );
-    let prompt = Prompt::parse(source, "run-context-test")
-        .0
-        .expect("the test prompt parses");
+    let prompt = test_prompt();
     let info =
         test_model_with("catalog-model", 65_536, ThinkingMode::Switchable).with_provider("acme");
-    let mut ctx = RunContext::new(
+    let (ctx, _) = RunContext::new(
         "run-context-test",
         TEST_SEED,
         runvil_types::timestamp::Timestamp::UNIX_EPOCH,
+    )
+    .prepare(
+        &prompt,
+        BTreeMap::from([(ModelRole::Default, info.clone())]),
     );
-    ctx.bind_role_for_test("writer", info.clone());
-    let set = bound::bound_model_set(&prompt, ctx.model_bindings());
-    let binding = set.binding("writer").expect("the filled role binds");
+    let state = state_over(&prompt, ctx);
+    let set = state.model_set();
+    let set = set.lock().expect("the run's model set is not poisoned");
+    let binding = set.binding("default").expect("the filled role binds");
     assert_eq!(binding.render_info(), info);
 }
 

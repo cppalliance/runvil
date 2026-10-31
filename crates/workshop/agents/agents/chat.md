@@ -6,9 +6,8 @@ uses:
   - web
   - user-input
 models:
-  chat:
+  default:
     min_context: 32768
-    description: "A conversational frontier model suitable for long-lived operator sessions"
 ---
 
 # Chat
@@ -19,10 +18,6 @@ retained across turns; the model is the dropdown's selection bound at run
 launch, so a selection change takes effect on the next run. When the
 conversation outgrows the model's context window, older turns are
 summarized so the conversation continues.
-
-```lua
-models.default("chat")
-```
 
 ## Conversation
 

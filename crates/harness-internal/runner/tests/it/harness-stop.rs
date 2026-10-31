@@ -33,8 +33,8 @@ const ASK_TOOL: &str = "user-input/ask";
 /// then joins both children and returns how its own wait ended beside
 /// both children's reports.
 const STOPS_ALL: &str = "---\nname: stops\ndescription: d\nrunvil: 0\n\
-    uses:\n  - tests/harness\nmodels:\n  writer: {}\n---\n\n\
-    # Stops\n\n```lua\nmodels.default('writer')\n```\n\n\
+    uses:\n  - tests/harness\n---\n\n\
+    # Stops\n\n\
     ## Main\n\n```lua\n\
     local chat = tasks.spawn('## Chat')\n\
     local tool = tasks.spawn('## Tool')\n\
@@ -50,16 +50,16 @@ const STOPS_ALL: &str = "---\nname: stops\ndescription: d\nrunvil: 0\n\
 
 /// A prompt whose one round sits under nothing that catches.
 const STOPS_UNCAUGHT: &str = "---\nname: uncaught\ndescription: d\nrunvil: 0\n\
-    models:\n  writer: {}\n---\n\n\
-    # Uncaught\n\n```lua\nmodels.default('writer')\n```\n\n\
+    ---\n\n\
+    # Uncaught\n\n\
     ## Only\n\n```lua\nreturn models.infer('held')\n```\n";
 
 /// The built-in chat's shape: ask the operator, run the model loop under
 /// a `pcall`, and ask again, with the held tool advertised to the model.
 const CHATS: &str = "---\nname: chats\ndescription: d\nrunvil: 0\n\
     uses:\n  - tests/harness\n  - tests/user-input\n\
-    models:\n  writer: {}\n---\n\n\
-    # Chats\n\n```lua\nmodels.default('writer')\n```\n\n\
+    ---\n\n\
+    # Chats\n\n\
     ## Conversation\n\n```lua\n\
     tools.offer('harness/hold')\n\
     while true do\n\
@@ -72,8 +72,8 @@ const CHATS: &str = "---\nname: chats\ndescription: d\nrunvil: 0\n\
 /// how the loop call ended.
 const LOOPS_ONCE: &str = "---\nname: loops\ndescription: d\nrunvil: 0\n\
     uses:\n  - tests/harness\n\
-    models:\n  writer: {}\n---\n\n\
-    # Loops\n\n```lua\nmodels.default('writer')\n```\n\n\
+    ---\n\n\
+    # Loops\n\n\
     ## Only\n\n```lua\n\
     tools.offer('harness/hold')\n\
     messages:user('hold twice')\n\

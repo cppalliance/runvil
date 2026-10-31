@@ -6,11 +6,12 @@
 //! A `Timer` drop is covered for the timed `tasks.join_any` and
 //! `tasks.join` waits, and under a run cancel, where the drop wakes no one.
 
+use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use runvil_types::event::{Event, ReplyOrigin};
 use runvil_types::ids::RoundId;
-use runvil_types::models::ThinkingMode;
+use runvil_types::models::{ModelRole, ThinkingMode};
 use runvil_types::tools::{ToolCatalog, ToolId, ToolInfo};
 use serde_json::json;
 
@@ -24,23 +25,20 @@ use crate::parser::Prompt;
 use crate::test_support::scenario::{chat_answer, only_effect, test_model_with};
 use crate::test_support::scripted_chat::text;
 
-/// A run over one section whose Lua is `body`, with the `writer` role
-/// bound to `test-model` and `tools/echo` in the catalog.
+/// A run over one section whose Lua is `body`, on the `default` role
+/// filled by `test-model`, and `tools/echo` in the catalog.
 #[track_caller]
 fn bound_run(body: &str) -> Run {
     bound_sections(&format!(
-        "## Only\n\n```lua\nmodels.use('writer')\n{body}\n```\n"
+        "## Only\n\n```lua\nmodels.use('default')\n{body}\n```\n"
     ))
 }
 
-/// A run over `sections`, the prompt's H2 sections, with the `writer` role
-/// bound to `test-model` and `tools/echo` in the catalog.
+/// A run over `sections`, the prompt's H2 sections, on the `default` role
+/// filled by `test-model`, and `tools/echo` in the catalog.
 #[track_caller]
 fn bound_sections(sections: &str) -> Run {
-    let source = format!(
-        "---\nname: t\ndescription: d\nrunvil: 0\nmodels:\n  writer: {{}}\n\
-         ---\n\n# Run\n\n{sections}"
-    );
+    let source = format!("---\nname: t\ndescription: d\nrunvil: 0\n---\n\n# Run\n\n{sections}");
     let prompt = Prompt::parse(&source, "run-test")
         .0
         .expect("the drop test prompt parses");
@@ -53,7 +51,7 @@ fn bound_sections(sections: &str) -> Run {
     let catalog = ToolCatalog::new([echo]).expect("one tool is a valid catalog");
     let (ctx, requirements) = run_context()
         .with_tools(catalog)
-        .prepare(&prompt, Some(model));
+        .prepare(&prompt, BTreeMap::from([(ModelRole::Default, model)]));
     assert!(
         requirements.refusal().is_none(),
         "the model fills the prompt's role: {requirements:?}"
@@ -222,8 +220,8 @@ fn an_uncaught_dropped_chat_or_tool_call_ends_the_run_cancelled() {
 #[track_caller]
 fn timed_run(main: &str) -> Run {
     bound_sections(&format!(
-        "## Main\n\n```lua\nmodels.use('writer')\n{main}\n```\n\n\
-         ## Child\n\n```lua\nmodels.use('writer')\nreturn models.infer('child')\n```\n"
+        "## Main\n\n```lua\nmodels.use('default')\n{main}\n```\n\n\
+         ## Child\n\n```lua\nmodels.use('default')\nreturn models.infer('child')\n```\n"
     ))
 }
 

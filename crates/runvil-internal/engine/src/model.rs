@@ -33,7 +33,7 @@ pub(crate) use runvil_model_client::model::{
     CompletionError, CompletionErrorKind, ModelBinding, ModelInvocation, ModelSet, ModelView,
     Temperature,
 };
-pub(crate) use runvil_types::models::{ModelId, ModelInfo, ThinkingMode};
+pub(crate) use runvil_types::models::{ModelId, ModelInfo, ModelRole, ThinkingMode};
 
 #[cfg(test)]
 mod tests;

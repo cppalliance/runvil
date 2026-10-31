@@ -18,10 +18,9 @@ use runvil_vfs::VfsRef;
 pub use limits::RunLimits;
 
 use crate::lua::RosterEntry;
-use crate::model::ModelInfo;
+use crate::model::{ModelInfo, ModelRole, ModelSet};
 use crate::parser::Prompt;
 
-use super::bindings::ModelBindings;
 use super::fill;
 use super::requirements::{Requirements, UnavailablePack, UsablePack};
 
@@ -32,8 +31,8 @@ use super::requirements::{Requirements, UnavailablePack, UsablePack};
 /// ([`with_tools`](RunContext::with_tools)), Pack roster
 /// ([`with_packs`](RunContext::with_packs)), and Pack preludes
 /// ([`with_preludes`](RunContext::with_preludes)). Then it calls
-/// [`prepare`](RunContext::prepare), which binds the prompt's model roles
-/// to the current model and reports what the caller must still satisfy. The
+/// [`prepare`](RunContext::prepare), which fills the five model roles from
+/// the caller's role map and reports what the caller must still satisfy. The
 /// Engine owns the context for the run. Each context belongs to exactly one
 /// run.
 ///
@@ -67,8 +66,9 @@ pub struct RunContext {
     pub(super) ui: Option<serde_json::Value>,
     /// The run's whole filesystem; set by `with_vfs`.
     pub(super) vfs: VfsRef,
-    /// The run's model bindings; filled by [`prepare`](RunContext::prepare).
-    pub(super) model_bindings: ModelBindings,
+    /// The run's model set: one binding for each of the five roles, filled
+    /// by [`prepare`](RunContext::prepare).
+    pub(super) model_set: ModelSet,
     /// The run's tool catalog; set by `with_tools`.
     pub(super) tools: ToolCatalog,
     /// Each roster Pack by name, with its vendor when it can serve and the
@@ -105,7 +105,7 @@ impl RunContext {
             limits: RunLimits::default(),
             ui: None,
             vfs: VfsRef::default(),
-            model_bindings: ModelBindings::default(),
+            model_set: ModelSet::default(),
             tools: ToolCatalog::default(),
             packs: BTreeMap::new(),
             preludes: Vec::new(),
@@ -149,11 +149,11 @@ impl RunContext {
     /// With a snapshot set, every section VM gets a `ui()` global that
     /// returns it. The caller takes the snapshot at run start, so a change
     /// to application state takes effect on the next run. A snapshot also
-    /// makes `models.get` resolve an alias outside the prompt's declarations
-    /// as a raw model id. So a prompt can run
-    /// `models.get(ui().selected_model):loop()` and skip
-    /// declaring its model. The default is `None`, which leaves the `ui`
-    /// global absent and limits `models.get` to declared aliases.
+    /// makes `models.get` resolve a label outside the five roles as a raw
+    /// gateway model id. So a prompt can run
+    /// `models.get(ui().selected_model):loop()` and run on the model the
+    /// user picked. The default is `None`, which leaves the `ui` global
+    /// absent and limits `models.get` to the five roles.
     #[must_use]
     pub fn with_ui(mut self, snapshot: serde_json::Value) -> RunContext {
         self.ui = Some(snapshot);
@@ -276,22 +276,31 @@ impl RunContext {
         self
     }
 
-    /// Binds `prompt`'s model roles to `model`, the run's current model,
-    /// which the caller chooses, and reports what the caller must still
-    /// satisfy, returning the context beside the report.
+    /// Fills the run's five model roles (`default`, `strong`, `small`,
+    /// `fast` and `creative`) from `models`, the caller's role map, and
+    /// reports what the caller must still satisfy, returning the context
+    /// beside the report.
     ///
     /// `prepare` leaves the filesystem as given. The caller checks before
     /// `prepare` that each Pack the prompt declares can serve, and merges
     /// that report into the one `prepare` returns.
     ///
-    /// Every declared model role binds to `model`. `prepare` then checks
-    /// each role's hard keywords (`thinking`, `no-thinking`) and context
-    /// minimum against the model's info. Each failed check is listed in
+    /// A role's model is its own entry in `models`, else the `default`
+    /// entry, so one entry for `default` fills all five roles. Every prompt
+    /// gets all five roles, whether or not it declares them. `prepare` then
+    /// checks each declared role's hard keywords (`thinking`,
+    /// `no-thinking`) and context minimum against the info of the model that
+    /// fills it. Each failed check is listed in
     /// [`Requirements::unmet_models`] with the required and actual values,
-    /// and the role stays bound to `model`. Soft keywords record the
-    /// author's intent only, so `prepare` skips them. When `model` is
-    /// `None`, `prepare` skips the fill and the checks, the model bindings
-    /// stay empty, and selecting a declared role at run time fails.
+    /// and the role stays filled. Soft keywords record the author's intent
+    /// only, so `prepare` skips them, and so it does a declared label that is
+    /// not one of the five roles.
+    ///
+    /// An empty `models` means the caller has no model: `prepare` skips the
+    /// fill and the checks, the roles stay empty, and a model round at run
+    /// time fails. A non-empty `models` with no `default` entry lists one
+    /// `Unbound` entry for the `default` role in
+    /// [`Requirements::unmet_models`] and leaves the roles empty.
     ///
     /// `prepare` also lists in [`Requirements::reserved`] each reserved
     /// Pack id, such as `adhoc`, that a tool of the catalog or a Pack of
@@ -300,10 +309,10 @@ impl RunContext {
     pub fn prepare(
         mut self,
         prompt: &Prompt,
-        model: Option<ModelInfo>,
+        models: BTreeMap<ModelRole, ModelInfo>,
     ) -> (RunContext, Requirements) {
         let mut requirements = Requirements::default();
-        self.model_bindings = fill::fill_model_bindings(prompt, model, &mut requirements);
+        self.model_set = fill::fill_model_set(prompt, models, &mut requirements);
         requirements.reserved = self
             .tools
             .tools()
@@ -319,20 +328,6 @@ impl RunContext {
     #[must_use]
     pub fn vfs(&self) -> &VfsRef {
         &self.vfs
-    }
-
-    /// Returns the run's [`ModelBindings`], which
-    /// [`prepare`](RunContext::prepare) fills.
-    #[must_use]
-    pub fn model_bindings(&self) -> &ModelBindings {
-        &self.model_bindings
-    }
-
-    /// Binds the role `label` to `model` as the prepare's fill would, for a
-    /// test that starts the run without the prepare.
-    #[cfg(test)]
-    pub(crate) fn bind_role_for_test(&mut self, label: &str, model: ModelInfo) {
-        self.model_bindings.bind(label, model);
     }
 
     /// Returns the run's tool catalog, set with
@@ -386,7 +381,7 @@ impl fmt::Debug for RunContext {
             .field("limits", &self.limits)
             .field("ui", &self.ui)
             .field("vfs", &self.vfs)
-            .field("model_bindings", &self.model_bindings)
+            .field("model_set", &self.model_set)
             .field("tools", &self.tools)
             .field("packs", &self.packs)
             .field(

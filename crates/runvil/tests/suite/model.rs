@@ -8,10 +8,9 @@ use super::support::{Reply, Scenario, TestResult, fail, model, prompt};
 fn asking() -> String {
     let lua = "
         store.write('note.md', 'hello')
-        models.use('writer')
         return models.infer(store.read('note.md'))
     ";
-    prompt("models: { writer: {}, checker: {} }", &[("Greet", lua)])
+    prompt("", &[("Greet", lua)])
 }
 
 fn run_asking(reply: Reply) -> TestResult<RunResult> {

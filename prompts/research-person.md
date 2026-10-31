@@ -5,15 +5,9 @@ runvil: 0
 max_tool_iterations: 20
 uses:
   - web
-models:
-  researcher: {}
 ---
 
 # Research a Person
-
-```lua
-models.default("researcher")
-```
 
 ## Research
 

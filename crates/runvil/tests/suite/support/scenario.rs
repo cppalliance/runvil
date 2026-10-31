@@ -12,13 +12,13 @@
 //! that reports `Done` while it still holds an effect, because `Done`
 //! waits for every issued effect's answer.
 
-use std::collections::VecDeque;
+use std::collections::{BTreeMap, VecDeque};
 use std::sync::Arc;
 
 use runvil::effect::{AnswerRecord, Effect, EffectAnswer, EffectId, EffectRecord, IssuedEffect};
 use runvil::event::Event;
 use runvil::ids::Provenance;
-use runvil::model::{Completion, ModelInfo};
+use runvil::model::{Completion, ModelInfo, ModelRole};
 use runvil::timestamp::Timestamp;
 use runvil::tools::ToolCatalog;
 use runvil::vfs::perform_vfs_op;
@@ -32,14 +32,15 @@ type Edit = Box<dyn Fn(RunContext) -> RunContext>;
 /// The seed every scenario's run takes.
 const TEST_SEED: RunSeed = RunSeed::from_bytes([7; 32]);
 
-/// One test's setup. Every scenario sets [`canned`] unless it names a
-/// model, numbers run events on from the parse events, and fails to start
+/// One test's setup. Every scenario gives the `default` role [`canned`]
+/// unless it names a model or a role map, numbers run events on from the parse events, and fails to start
 /// when prepare reports a gap.
 #[derive(Default)]
 pub(crate) struct Scenario {
     args: String,
     started_at: Timestamp,
     model: Option<ModelInfo>,
+    roles: Option<BTreeMap<ModelRole, ModelInfo>>,
     tool: Option<Tool>,
     replies: Vec<Reply>,
     hold: Option<fn(&Effect) -> bool>,
@@ -85,9 +86,17 @@ impl Scenario {
         self
     }
 
-    /// Sets `model` as the run's current model, in place of [`canned`].
+    /// Sets `model` as the `default` role's model, in place of [`canned`].
     pub(crate) fn model(mut self, model: ModelInfo) -> Self {
         self.model = Some(model);
+        self
+    }
+
+    /// Sets the whole role map prepare fills the roles from, in place of the
+    /// one-model map [`model`](Self::model) and [`canned`] make. The map may
+    /// leave `default` out.
+    pub(crate) fn roles(mut self, roles: impl IntoIterator<Item = (ModelRole, ModelInfo)>) -> Self {
+        self.roles = Some(roles.into_iter().collect());
         self
     }
 
@@ -110,9 +119,10 @@ impl Scenario {
     pub(crate) fn prepare(&self, source: &str) -> TestResult<Prepared> {
         let (parsed, events) = Prompt::parse(source, "greeter");
         let prompt = parsed?;
-        let model = match &self.model {
-            Some(model) => model.clone(),
-            None => canned()?,
+        let roles = match (&self.roles, &self.model) {
+            (Some(roles), _) => roles.clone(),
+            (None, Some(model)) => BTreeMap::from([(ModelRole::Default, model.clone())]),
+            (None, None) => BTreeMap::from([(ModelRole::Default, canned()?)]),
         };
         let mut ctx = RunContext::new("greeter", TEST_SEED, self.started_at)
             .with_provenance_start(u32::try_from(events.len())?);
@@ -123,7 +133,7 @@ impl Scenario {
         if let Some(edit) = &self.context {
             ctx = edit(ctx);
         }
-        let (ctx, requirements) = ctx.prepare(&prompt, Some(model));
+        let (ctx, requirements) = ctx.prepare(&prompt, roles);
         Ok(Prepared {
             prompt,
             ctx,

@@ -34,8 +34,8 @@ const STORES: &str = "---\nname: stores\ndescription: d\nrunvil: 0\n---\n\n\
 /// A prompt whose one round sits under a `pcall` that reports how it
 /// ended.
 const CATCHES_A_ROUND: &str = "---\nname: catches\ndescription: d\nrunvil: 0\n\
-    models:\n  writer: {}\n---\n\n\
-    # Title\n\n```lua\nmodels.default('writer')\n```\n\n## Only\n\n```lua\n\
+    ---\n\n\
+    # Title\n\n## Only\n\n```lua\n\
     local ok, err = pcall(models.infer, 'asked')\n\
     return tostring(ok) .. ':' .. err.kind\n```\n";
 

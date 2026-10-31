@@ -107,9 +107,8 @@ pub(super) fn shout() -> Tool {
     }
 }
 
-/// The model every scenario sets before prepare unless it names its own.
-/// It fills only roles a prompt declares, so a prompt without roles
-/// ignores it.
+/// The model every scenario gives the `default` role before prepare unless
+/// it names its own, and so the model every other role falls back to.
 pub(super) fn canned() -> TestResult<ModelInfo> {
     model("canned", 8_192, ThinkingMode::Never)
 }

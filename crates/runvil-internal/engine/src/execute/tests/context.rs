@@ -7,26 +7,6 @@ use runvil_types::ids::TaskId;
 use super::*;
 use crate::test_support::scenario::{EXECUTION, TEST_SEED, TEST_STARTED_AT};
 
-/// Declares the `writer` role in `source`'s frontmatter and parks it as the
-/// prompt-wide default in its H1, so a bound scenario runs its sections
-/// under the test model.
-pub(super) fn with_writer(source: PromptSource) -> PromptSource {
-    source
-        .front("models: { writer: {} }")
-        .h1("models.default('writer')")
-}
-
-/// The prompt `source` builds, declaring the `writer` role and requiring
-/// `## setup` from its H1: the library, after `source`'s sections, that
-/// parks the role as the prompt-wide default.
-pub(super) fn setup_prompt(source: PromptSource) -> String {
-    source
-        .front("models: { writer: {} }")
-        .h1("require '## setup'")
-        .section("setup", "models.default('writer')")
-        .build()
-}
-
 /// The scaffold the fanout-arm capability tests share: a `## Parent` that
 /// fans `### Worker` out over one `alpha` member and returns the first arm's
 /// text. The worker body and its sibling sections follow.
@@ -53,19 +33,6 @@ pub(super) fn sequence(trace: &Trace) -> Vec<(String, String)> {
         .into_iter()
         .map(|record| (record.section, record.detail))
         .collect()
-}
-
-/// The context edit binding the role `label` to `model` by hand, for a run
-/// that skips the prepare.
-pub(super) fn bind_role(
-    label: &str,
-    model: ModelInfo,
-) -> impl FnOnce(RunContext) -> RunContext + 'static {
-    let label = label.to_owned();
-    move |mut ctx| {
-        ctx.model_bindings.bind(&label, model);
-        ctx
-    }
 }
 
 /// A [`RunContext`] for the run `name` under the fixed test inputs.

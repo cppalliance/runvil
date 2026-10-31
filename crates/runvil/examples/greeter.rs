@@ -5,32 +5,30 @@
 //! The facade suite includes this file as a module and runs `greet`, so
 //! the items it reaches are `pub`.
 
+use std::collections::BTreeMap;
 use std::error::Error;
 use std::num::NonZeroU32;
 use std::sync::Arc;
 
 use runvil::effect::{Effect, EffectAnswer, IssuedEffect};
 use runvil::event::Event;
-use runvil::model::{Completion, CompletionResult, ModelId, ModelInfo, ThinkingMode};
+use runvil::model::{Completion, CompletionResult, ModelId, ModelInfo, ModelRole, ThinkingMode};
 use runvil::timestamp::Timestamp;
 use runvil::tools::{ToolCatalog, ToolId, ToolInfo, ToolOutput};
 use runvil::vfs::perform_vfs_op;
 use runvil::{Prompt, Run, RunContext, RunResult, RunSeed, Step};
 
-/// Writes a note, asks the `writer` role to reply, and shouts the reply.
+/// Writes a note, asks the default model to reply, and shouts the reply.
 pub const GREETER: &str = concat!(
     "---\n",
     "name: greeter\n",
     "description: Writes a note, asks a model to reply, and shouts the reply.\n",
     "runvil: 0\n",
-    "models:\n",
-    "  writer: {}\n",
     "---\n\n",
     "# Greeter\n\n",
     "## Greet\n\n",
     "```lua\n",
     "store.write('note.md', 'hello')\n",
-    "models.use('writer')\n",
     "local reply = models.infer(store.read('note.md'))\n",
     "return tools.call('example/text/shout', { text = reply })\n",
     "```\n",
@@ -82,8 +80,8 @@ pub fn greet() -> Result<String, Box<dyn Error>> {
     )
     .with_provenance_start(u32::try_from(parse_events.len())?);
 
-    // 3. Offer the shout tool, prepare under the current model, and refuse
-    //    to run when prepare reports a gap.
+    // 3. Offer the shout tool, prepare with the canned model as the
+    //    `default` role, and refuse to run when prepare reports a gap.
     let shout = ToolInfo::new(
         ToolId::parse("example/text/shout")?,
         "Returns the text in capital letters.",
@@ -96,7 +94,9 @@ pub fn greet() -> Result<String, Box<dyn Error>> {
         NonZeroU32::new(8_192).ok_or("a context window is never zero")?,
         ThinkingMode::Never,
     );
-    let (ctx, requirements) = ctx.with_tools(catalog).prepare(&prompt, Some(model));
+    let (ctx, requirements) = ctx
+        .with_tools(catalog)
+        .prepare(&prompt, BTreeMap::from([(ModelRole::Default, model)]));
     if let Some(refusal) = requirements.refusal() {
         return Err(refusal.into());
     }

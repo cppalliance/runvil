@@ -19,6 +19,7 @@
     reason = "bench setup panics on construction failure, which is the desired behavior"
 )]
 
+use std::collections::BTreeMap;
 use std::num::NonZeroU32;
 use std::sync::Arc;
 
@@ -27,7 +28,7 @@ use runvil_engine::test_support::scripted_chat::{ScriptedChat, ScriptedReply};
 use runvil_engine::test_support::{drive, perform_locally};
 use runvil_engine::{Effect, EffectAnswer, Run, RunContext, RunResult};
 use runvil_parser::Prompt;
-use runvil_types::models::{ModelCatalog, ModelId, ModelInfo, ThinkingMode};
+use runvil_types::models::{ModelCatalog, ModelId, ModelInfo, ModelRole, ThinkingMode};
 use runvil_types::seed::RunSeed;
 use runvil_types::timestamp::Timestamp;
 
@@ -61,11 +62,8 @@ fn bench_catalog(context: u32) -> ModelCatalog {
 }
 
 /// One section driving `models.loop` over its `messages` list.
-const LOOP_PROMPT: &str = "---\nname: bench_loop\ndescription: d\nrunvil: 0\nmodels:\n  writer: {}\n---\n\n\
+const LOOP_PROMPT: &str = "---\nname: bench_loop\ndescription: d\nrunvil: 0\n---\n\n\
     # Bench\n\n\
-    ```lua\n\
-    models.default('writer')\n\
-    ```\n\n\
     ## Only\n\n\
     ```lua\n\
     messages:user('hi')\n\
@@ -86,7 +84,7 @@ fn parse_loop_prompt() -> Prompt {
 fn run_once(prompt: &Prompt, chat: &ScriptedChat, context: u32) -> RunResult {
     let ctx = RunContext::new(EXECUTION, SEED, Timestamp::UNIX_EPOCH);
     let model = bench_catalog(context).models()[0].clone();
-    let (ctx, requirements) = ctx.prepare(prompt, Some(model));
+    let (ctx, requirements) = ctx.prepare(prompt, BTreeMap::from([(ModelRole::Default, model)]));
     if let Some(refusal) = requirements.refusal() {
         return RunResult::Failure(refusal);
     }

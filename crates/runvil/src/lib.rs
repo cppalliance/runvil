@@ -6,7 +6,8 @@
 //! The caller performs each effect and hands its answer to [`Run::resume`].
 //! The run ends at [`Step::Done`] with its [`RunResult`].
 //! Before the run starts, the caller puts the tools a run may offer on its
-//! [`RunContext`], and [`RunContext::prepare`] binds the prompt's model roles.
+//! [`RunContext`], and [`RunContext::prepare`] fills the five model roles
+//! from the caller's role map.
 //!
 //! The crate's `greeter` example is that whole loop in one program.
 
@@ -72,7 +73,6 @@ pub mod model {
     //! Model descriptions and catalogs, the models a prompt's roles are
     //! bound to, and the chat vocabulary of a model round.
 
-    pub use runvil_engine::ModelBindings;
     pub use runvil_model_client::client::ArgumentNames;
     pub use runvil_model_client::client::Completion;
     pub use runvil_model_client::client::CompletionResult;
@@ -95,6 +95,7 @@ pub mod model {
     pub use runvil_types::models::ModelId;
     pub use runvil_types::models::ModelIdError;
     pub use runvil_types::models::ModelInfo;
+    pub use runvil_types::models::ModelRole;
     pub use runvil_types::models::ThinkingMode;
 }
 

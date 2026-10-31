@@ -17,16 +17,14 @@ fn effect_case(source: &PromptSource, chat: &ScriptedChat) -> Scenario {
         .bound()
 }
 
-/// The fixture tools Pack and the `writer` role every effect case
-/// declares.
+/// The fixture tools Pack every effect case declares.
 fn effect_source() -> PromptSource {
-    PromptSource::new().front("uses: [tools]\nmodels: { writer: {} }")
+    PromptSource::new().front("uses: [tools]")
 }
 
 #[test]
 fn library_code_makes_store_model_and_tool_calls_while_it_loads() {
     let source = effect_source()
-        .h1("models.default('writer')")
         .section("Main", "return require '## loader'")
         .section(
             "loader",
@@ -53,16 +51,16 @@ fn an_h1_library_sets_prompt_wide_state_every_later_section_sees() {
             require '## offers'
             messages:user('ping')
             models.loop()
-            return messages[#messages].content",
+            return var.tag .. ':' .. messages[#messages].content",
         )
-        .section("setup", "models.default('writer')")
+        .section("setup", "var.tag = 'ready'")
         .section("offers", "tools.offer('tools/echo')");
     let gateway = ScriptedChat::new(vec![text("pong")]);
     let trace = effect_case(&source, &gateway).run();
     assert_eq!(
         trace.text(),
-        "pong",
-        "the loop runs under the H1 library's default"
+        "ready:pong",
+        "the loop runs after the H1 library set the state the section reads"
     );
     let round = gateway
         .last_request()

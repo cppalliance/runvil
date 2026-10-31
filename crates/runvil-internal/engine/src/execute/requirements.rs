@@ -2,6 +2,7 @@
 
 use std::collections::BTreeSet;
 
+use runvil_types::models::ModelRole;
 use runvil_types::packs::PackId;
 
 #[cfg(test)]
@@ -19,13 +20,14 @@ pub(super) const NOTICE_HEADER: &str = "the environment cannot satisfy this prom
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct Requirements {
-    /// The model requirements that the bound models fall short of.
+    /// The model requirements that the models filling the roles fall short
+    /// of, and the `default` role a non-empty role map leaves unfilled.
     ///
     /// Each entry names the role, the check that failed, and what was
-    /// required versus what the model provides. Examples are a
+    /// required versus what the caller provided. Examples are a
     /// `min_context` of 200000 against a model with a 32k context, and
     /// `thinking` against a model whose thinking mode is `Never`. Only
-    /// model binding in `RunContext::prepare` adds these.
+    /// `RunContext::prepare` adds these.
     pub unmet_models: Vec<UnmetRequirement>,
     /// The required Packs that the run lacks.
     ///
@@ -149,18 +151,25 @@ impl Requirements {
             );
         }
         for unmet in &self.unmet_models {
+            let role = unmet.role.as_str();
             let _ = match unmet.check {
                 RequirementCheck::ContextMinimum => write!(
                     notice,
-                    "\n- role '{}': requires a context of at least {} tokens; \
-                     the current model provides {}",
-                    unmet.role, unmet.required, unmet.actual
+                    "\n- role '{role}': requires a context of at least {} tokens; \
+                     the model filling it provides {}",
+                    unmet.required, unmet.actual
                 ),
-                RequirementCheck::HardKeyword => write!(
+                RequirementCheck::Thinking => write!(
                     notice,
-                    "\n- role '{}': requires '{}'; \
-                     the current model's thinking capability is {}",
-                    unmet.role, unmet.required, unmet.actual
+                    "\n- role '{role}': requires '{}'; \
+                     the thinking capability of the model filling it is {}",
+                    unmet.required, unmet.actual
+                ),
+                RequirementCheck::Unbound => write!(
+                    notice,
+                    "\n- role '{role}': requires {}; \
+                     the caller's role map has no '{role}' entry",
+                    unmet.required
                 ),
             };
         }
@@ -271,22 +280,24 @@ impl MissingService {
     }
 }
 
-/// A model requirement that the model bound to a role falls short of.
+/// A model requirement that the model filling a role falls short of, or a
+/// role the caller left without a model.
 ///
 /// It names the role, the check that failed, and what the prompt required
-/// versus what the bound model provides.
+/// versus what the caller provided.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct UnmetRequirement {
-    /// The declared role label whose requirement failed.
-    pub role: String,
+    /// The role whose requirement failed.
+    pub role: ModelRole,
     /// Which requirement check failed.
     pub check: RequirementCheck,
-    /// What the prompt required, such as a context minimum of `200000` or
-    /// the `thinking` keyword.
+    /// What the prompt required, such as a context minimum of `200000`, a
+    /// thinking switch of `thinking: true`, or `a model`.
     pub required: String,
-    /// What the bound model provides, such as a context of `32000` or a
-    /// thinking mode of `Never`.
+    /// What the filling model provides, such as a context of `32000` or a
+    /// thinking mode of `Never`, or `none` when the caller gave the role no
+    /// model.
     pub actual: String,
 }
 
@@ -294,10 +305,13 @@ pub struct UnmetRequirement {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum RequirementCheck {
-    /// The role's context minimum exceeds the context of the model bound
-    /// to the role.
+    /// The role's context minimum exceeds the context of the model that
+    /// fills the role.
     ContextMinimum,
     /// The role declares a hard keyword, `thinking` or `no-thinking`, that
-    /// the bound model's info fails to satisfy.
-    HardKeyword,
+    /// the filling model's info fails to satisfy.
+    Thinking,
+    /// The caller's role map holds entries but none for the `default`
+    /// role, which every role without its own entry falls back to.
+    Unbound,
 }

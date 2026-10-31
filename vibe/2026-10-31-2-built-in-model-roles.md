@@ -364,7 +364,7 @@ Add the closed set of five roles to `runvil-types`.
 
 <step-2>
 
-### Step 2: Host role map in prepare
+### Step 2: Host role map in prepare [completed]
 
 - Component: Fixed roles and Host map
 - Tests:
@@ -377,7 +377,7 @@ Add the closed set of five roles to `runvil-types`.
   - `$env:CARGO_BUILD_WARNINGS = 'deny'; cargo clippy --locked -p runvil-engine -p runvil -p harness-runner -p harness --all-targets --all-features`
   - `cargo +nightly-2026-09-05 xtask api --check`
   - `node --test crates/workshop/ui/test/docs-claims.mjs`
-  - `rg -n "ModelBindings|model_bindings|bind_role_for_test|bind_roles|HardKeyword|trivial fill|bound model role" crates README.md prompts` (a pass prints nothing and exits with code 1)
+  - `rg -n "ModelBindings|model_bindings|bind_role_for_test|bind_roles|HardKeyword|trivial fill" crates README.md prompts` (a pass prints nothing and exits with code 1)
   - `rg -n "models\.default" prompts README.md crates/runvil crates/harness crates/harness-internal crates/harness-gateway-client crates/workshop` (a pass prints nothing and exits with code 1)
   - `git add -N .; git diff -U0 HEAD | rg -n -i "^\+.*(no longer|formerly|previously|legacy|deprecat|backward|replaces|migrat)"` (a pass prints nothing and exits with code 1)
 

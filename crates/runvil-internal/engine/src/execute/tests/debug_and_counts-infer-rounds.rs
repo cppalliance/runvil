@@ -5,7 +5,6 @@
 use runvil_parser::test_support::PromptSource;
 
 use super::*;
-use crate::execute::tests::context::setup_prompt;
 use crate::test_support::recording::{ReplyReport, ThinkingReport};
 
 /// Records an infer round's boundary observations and content hooks as one
@@ -82,9 +81,9 @@ fn line_index(lines: &[String], needle: &str) -> usize {
 #[track_caller]
 fn run_infer_round(reply: ScriptedReply) -> (String, Vec<String>) {
     let gateway = ScriptedChat::new(vec![reply]);
-    let source = setup_prompt(
-        PromptSource::new().section("Only", "return models.get('writer'):infer('say hello')"),
-    );
+    let source = PromptSource::new()
+        .section("Only", "return models.get('default'):infer('say hello')")
+        .build();
     let trace = Scenario::new(source).bound().chat(&gateway).run();
     let recorder = InferRoundRecorder::default();
     trace.replay(&recorder);

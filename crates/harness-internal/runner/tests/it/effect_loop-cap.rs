@@ -3,6 +3,7 @@
 //! waiting call that a withdrawal, a task cancel, or a run cancel reaches
 //! is answered `Dropped` without ever starting.
 
+use std::collections::BTreeMap;
 use std::future::Future;
 use std::num::{NonZeroU32, NonZeroUsize};
 use std::sync::Arc;
@@ -15,7 +16,8 @@ use harness_runner::recorder::{MemoryRecorder, RecordKind, RunId, RunOutcome};
 use runvil::cancel::CancelHandle;
 use runvil::effect::ToolCallOrigin;
 use runvil::model::{
-    Completion, CompletionError, CompletionResult, ModelId, ModelInfo, ThinkingMode, ToolCall,
+    Completion, CompletionError, CompletionResult, ModelId, ModelInfo, ModelRole, ThinkingMode,
+    ToolCall,
 };
 use runvil::timestamp::Timestamp;
 use runvil::tools::{ToolCatalog, ToolError, ToolId, ToolInfo, ToolOutput};
@@ -37,11 +39,10 @@ const TOOL: &str = "tests/cap/park";
 /// [`TOOL`]'s wire name, as the model calls it.
 const WIRE: &str = "tests_cap_park";
 
-/// The frontmatter and setup every run here shares: one model role bound
-/// as the default.
+/// The frontmatter and title every run here shares.
 const PREAMBLE: &str = "---\nname: runner-cap\ndescription: caps tool calls\nrunvil: 0\n\
-    models:\n  writer: {}\n---\n\n\
-    # Cap\n\n```lua\nmodels.default('writer')\n```\n\n";
+    ---\n\n\
+    # Cap\n\n";
 
 /// Main spawns Child and waits on a `wait` round while Child's loop asks
 /// its round, then cancels Child and lingers on a second round.
@@ -68,8 +69,8 @@ fn looping(section: &str, user: &str, result: &str) -> String {
     )
 }
 
-/// A run over [`PREAMBLE`] and `sections`, with the one role bound to one
-/// current model and [`TOOL`] in its catalog.
+/// A run over [`PREAMBLE`] and `sections`, with the `default` role filled by
+/// one model and [`TOOL`] in its catalog.
 fn run_of(sections: &str) -> Run {
     let source = format!("{PREAMBLE}{sections}");
     let (prompt, _parse_events) = Prompt::parse(&source, EXECUTION);
@@ -87,7 +88,7 @@ fn run_of(sections: &str) -> Run {
     );
     let catalog = ToolCatalog::new([tool]).expect("the one-tool catalog is valid");
     let ctx = RunContext::new(EXECUTION, TEST_SEED, Timestamp::UNIX_EPOCH).with_tools(catalog);
-    let (ctx, requirements) = ctx.prepare(&prompt, Some(model));
+    let (ctx, requirements) = ctx.prepare(&prompt, BTreeMap::from([(ModelRole::Default, model)]));
     assert!(
         requirements.is_satisfied(),
         "the bound model and the catalog satisfy the fixture: {requirements:?}"

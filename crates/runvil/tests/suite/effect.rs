@@ -15,7 +15,7 @@ const GREET: &str = "
 ";
 
 fn greeter() -> String {
-    let ask = "models.use('writer')\nreturn models.infer('hello')";
+    let ask = "return models.infer('hello')";
     let shout = "return tools.call('example/text/shout', { text = 'hi there' })";
     let sections = [
         ("Greet", GREET),
@@ -23,7 +23,7 @@ fn greeter() -> String {
         ("Shout", shout),
         ("Quick", "return 'quick'"),
     ];
-    prompt("models: { writer: {} }", &sections)
+    prompt("", &sections)
 }
 
 fn scenario() -> Scenario {

@@ -78,7 +78,7 @@ async fn a_panicking_render_answers_dropped_and_the_log_holds_the_render_and_its
         answered(&records, "Render"),
         [(
             json!({
-                "alias": "writer",
+                "alias": "default",
                 "entry": entry,
                 "offered": [{ "pack": "render", "static_set": [ECHO], "dynamic_set": [] }],
             }),

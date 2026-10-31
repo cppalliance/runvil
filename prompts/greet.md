@@ -2,15 +2,9 @@
 name: greet
 description: Greet the named input using a Lua-computed value
 runvil: 0
-models:
-  writer: {}
 ---
 
 # Greet
-
-```lua
-models.default("writer")
-```
 
 Computes a greeting from the input in Lua, substitutes it into the prose, and
 has the model echo it.

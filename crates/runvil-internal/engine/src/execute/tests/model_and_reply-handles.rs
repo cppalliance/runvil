@@ -1,41 +1,31 @@
 //! `models.get` and a handle's `infer`: a handle leaves the section
 //! model alone, `models.infer` uses the section model and never binds
-//! `reply`, `models.use` re-selection steers the next round, and a
-//! section with no current model fails `models.infer` but still infers
-//! through a handle, and a handle's `provider` reads the catalog's.
+//! `reply`, `models.use` re-selection steers the next round, a run whose
+//! caller gave no model fails `models.infer`, and a handle's `provider` reads
+//! the catalog's.
 
 use super::*;
-use crate::execute::tests::context::{bind_role, with_writer};
+use crate::model::ModelRole;
 use crate::test_support::scenario::test_model;
 
-/// The prompt declaring the `writer` and `analyst` roles and parking
-/// `writer` as the prompt-wide default.
-fn writer_and_analyst() -> PromptSource {
-    PromptSource::new()
-        .front("models: { writer: {}, analyst: {} }")
-        .h1("models.default('writer')")
-}
-
-/// A run of `source` with the `writer` and `analyst` roles bound by hand to
-/// `writer-model` and `analyst-model` and no prepare: the multi-model shape
-/// the trivial fill cannot produce (it binds every role to the one current
-/// model), exercising the runtime's label resolution directly.
+/// A run of `source` whose caller maps the `default` role to `main-model` and
+/// the `strong` role to `strong-model`: the two-model shape a one-model
+/// caller cannot produce, exercising the runtime's role resolution.
 #[track_caller]
-fn bound_by_hand(source: &PromptSource) -> Scenario {
+fn two_models(source: &PromptSource) -> Scenario {
     Scenario::new(source.build())
-        .unprepared()
-        .context(bind_role("writer", test_model("writer-model")))
-        .context(bind_role("analyst", test_model("analyst-model")))
+        .current_model(test_model("main-model"))
+        .role_model(ModelRole::Strong, test_model("strong-model"))
 }
 
 #[test]
 fn models_get_returns_a_handle_without_changing_the_section_model() {
     let gateway = ScriptedChat::new(vec![text("hello from the mock")]);
-    let source = writer_and_analyst().prose(
+    let source = PromptSource::new().prose(
         "Only",
         "
             ```lua
-            store.write('handle.txt', models.get('analyst').name)
+            store.write('handle.txt', models.get('strong').name)
             ```
 
             Ask the model.
@@ -44,20 +34,20 @@ fn models_get_returns_a_handle_without_changing_the_section_model() {
             return models.infer(prose)
             ```",
     );
-    let trace = bound_by_hand(&source).chat(&gateway).run();
+    let trace = two_models(&source).chat(&gateway).run();
 
     assert_eq!(trace.text(), "hello from the mock");
     assert_eq!(
         trace.read("handle.txt").unwrap(),
-        "analyst",
-        "models.get must return the analyst handle"
+        "strong",
+        "models.get must return the strong handle"
     );
     let body = gateway
         .last_request()
         .expect("complete must reach the gateway");
     assert_eq!(
         body.options.model(),
-        "writer-model",
+        "main-model",
         "models.get must not change the section's model"
     );
 }
@@ -65,7 +55,7 @@ fn models_get_returns_a_handle_without_changing_the_section_model() {
 #[test]
 fn models_infer_uses_the_section_model_without_touching_reply() {
     let gateway = ScriptedChat::new(vec![text("pong")]);
-    let source = with_writer(PromptSource::new()).prose(
+    let source = PromptSource::new().prose(
         "Only",
         "
         ```lua
@@ -101,15 +91,15 @@ fn models_infer_uses_the_section_model_without_touching_reply() {
 #[test]
 fn handle_infer_uses_that_model_regardless_of_the_section_model() {
     let gateway = ScriptedChat::new(vec![text("pong")]);
-    let source = writer_and_analyst().section("Only", "return models.get('analyst'):infer('ping')");
-    let trace = bound_by_hand(&source).chat(&gateway).run();
+    let source = PromptSource::new().section("Only", "return models.get('strong'):infer('ping')");
+    let trace = two_models(&source).chat(&gateway).run();
     assert_eq!(trace.text(), "pong");
     let body = gateway
         .last_request()
         .expect("complete must reach the gateway");
     assert_eq!(
         body.options.model(),
-        "analyst-model",
+        "strong-model",
         "a handle's infer must use the handle's model, not the section default"
     );
 }
@@ -117,15 +107,15 @@ fn handle_infer_uses_that_model_regardless_of_the_section_model() {
 #[test]
 fn models_use_reselection_steers_the_next_round() {
     let gateway = ScriptedChat::new(vec![text("first"), text("second")]);
-    let source = writer_and_analyst().section(
+    let source = PromptSource::new().section(
         "Only",
         "
-        models.use('writer')
+        models.use('default')
         models.infer('ping')
-        models.use('analyst')
+        models.use('strong')
         return models.infer('ping')",
     );
-    let trace = bound_by_hand(&source).chat(&gateway).run();
+    let trace = two_models(&source).chat(&gateway).run();
     assert_eq!(
         trace.text(),
         "second",
@@ -139,31 +129,20 @@ fn models_use_reselection_steers_the_next_round() {
     );
     assert_eq!(
         requests[0].options.model(),
-        "writer-model",
+        "main-model",
         "the first round uses the initial selection"
     );
     assert_eq!(
         requests[1].options.model(),
-        "analyst-model",
+        "strong-model",
         "the second round uses the re-selected model"
     );
 }
 
-/// The prompt declaring only the `analyst` role, with no prompt-wide
-/// default, whose `Only` section runs `lua`.
-fn analyst_only(lua: &str) -> String {
-    PromptSource::new()
-        .front("models: { analyst: {} }")
-        .section("Only", lua)
-        .build()
-}
-
 #[test]
-fn models_infer_without_use_or_default_errors() {
-    let trace = Scenario::new(analyst_only("return models.infer('ping')"))
-        .unprepared()
-        .context(bind_role("analyst", test_model("analyst-model")))
-        .run();
+fn models_infer_without_a_caller_model_errors() {
+    let source = PromptSource::new().section("Only", "return models.infer('ping')");
+    let trace = Scenario::new(source.build()).run();
     let error = trace.error();
     assert!(
         error
@@ -175,32 +154,14 @@ fn models_infer_without_use_or_default_errors() {
 
 #[test]
 fn a_handles_provider_is_the_catalog_provider_or_nil() {
-    let source = PromptSource::new()
-        .front("models: { writer: {}, analyst: {} }")
-        .section(
-            "Only",
-            "return tostring(models.get('writer').provider) .. ':' .. tostring(models.get('analyst').provider)",
-        );
-    let writer = test_model("writer-model").with_provider("xai");
+    let source = PromptSource::new().section(
+        "Only",
+        "return tostring(models.get('default').provider) .. ':' .. tostring(models.get('strong').provider)",
+    );
+    let main = test_model("main-model").with_provider("xai");
     let trace = Scenario::new(source.build())
-        .unprepared()
-        .context(bind_role("writer", writer))
-        .context(bind_role("analyst", test_model("analyst-model")))
+        .current_model(main)
+        .role_model(ModelRole::Strong, test_model("strong-model"))
         .run();
     assert_eq!(trace.text(), "xai:nil");
-}
-
-#[test]
-fn models_get_infer_works_without_any_section_model() {
-    let gateway = ScriptedChat::new(vec![text("pong")]);
-    let trace = Scenario::new(analyst_only("return models.get('analyst'):infer('ping')"))
-        .unprepared()
-        .context(bind_role("analyst", test_model("analyst-model")))
-        .chat(&gateway)
-        .run();
-    assert_eq!(trace.text(), "pong");
-    let body = gateway
-        .last_request()
-        .expect("complete must reach the gateway");
-    assert_eq!(body.options.model(), "analyst-model");
 }

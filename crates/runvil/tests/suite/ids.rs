@@ -15,7 +15,6 @@ const GREET: &str = "
 ";
 
 const REPLY: &str = "
-    models.use('writer')
     return models.infer(args)
 ";
 
@@ -23,10 +22,7 @@ type Groups = BTreeMap<TaskId, Vec<Provenance>>;
 
 /// Returns the started tasks beside the run's groups.
 fn run_greeter() -> TestResult<(Vec<TaskId>, Groups)> {
-    let source = prompt(
-        "models: { writer: {} }",
-        &[("Greet", GREET), ("Reply", REPLY)],
-    );
+    let source = prompt("", &[("Greet", GREET), ("Reply", REPLY)]);
     let trace = Scenario::replies([text("hi there"), text("hi there")]).run(&source)?;
     assert_eq!(trace.text()?, "hi there hi there");
     let mut groups = Groups::new();

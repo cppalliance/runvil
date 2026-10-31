@@ -124,10 +124,9 @@ fn the_h1_decision_tool_idiom_runs_before_the_walk() {
         calls(&[("call_1", "decide", "{\"choice\":\"use_mcp\"}")]),
         text("decided"),
     ]);
-    let md = "---\nname: h1-decision\ndescription: d\nrunvil: 0\nmodels:\n  writer: {}\n---\n\n\
+    let md = "---\nname: h1-decision\ndescription: d\nrunvil: 0\n---\n\n\
         # Decide\n\n\
         ```lua\n\
-        models.default('writer')\n\
         tools.offer(tools.adhoc({ name = 'decide', description = 'Record the verdict', parameters = { choice = 'string' } }, function(args)\n\
           var.verdict = args.choice\n\
           return 'recorded'\n\

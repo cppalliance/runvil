@@ -3,12 +3,15 @@
 //! drive the run fixture in `runvil-engine`'s test support, so they
 //! sit in that crate's own suite.
 
-use runvil::model::ThinkingMode;
+use runvil::event::Event;
+use runvil::model::{ModelRole, ThinkingMode};
 use runvil::tools::{ToolCatalog, ToolInfo};
 use runvil::vfs::{MemoryBackend, Origin, RealBackend, VfsError, VfsRef};
-use runvil::{RequirementCheck, Requirements, UnmetRequirement};
+use runvil::{RequirementCheck, Requirements, RunErrorKind, UnmetRequirement};
 
-use super::support::{Prepared, Scenario, TempRoot, TestResult, greeter, model, prompt, tool_info};
+use super::support::{
+    Prepared, Scenario, TempRoot, TestResult, Trace, greeter, model, prompt, text, tool_info,
+};
 
 fn declaring(front: &str) -> String {
     prompt(front, &[("Only", "return 'done'")])
@@ -53,36 +56,104 @@ fn two_runs_writing_the_same_real_file_through_the_shared_base_conflict() -> Tes
     Ok(())
 }
 
-const ANALYST: &str = "models: { analyst: { keywords: [frontier, thinking], min_context: 200000, description: Deep analysis } }";
+const STRONG: &str = "models: { strong: { keywords: [thinking], min_context: 200000 } }";
+
+/// The five roles a prompt can pick with `models.use`.
+const ROLES: [&str; 5] = ["default", "strong", "small", "fast", "creative"];
+
+/// A prompt that asks each of the five roles one question and returns the
+/// answers joined by commas.
+fn asking_every_role(front: &str) -> String {
+    let lua = format!(
+        "local out = {{}}\nfor _, role in ipairs({{'{}'}}) do\nmodels.use(role)\nout[#out + 1] = models.infer(role)\nend\nreturn table.concat(out, ',')",
+        ROLES.join("','")
+    );
+    prompt(front, &[("Only", &lua)])
+}
+
+/// The models the replies of `trace` name, in order.
+fn replying_models(trace: &Trace) -> Vec<&str> {
+    trace
+        .events
+        .iter()
+        .filter_map(|event| match event {
+            Event::AssistantReply { model, .. } => Some(model.as_str()),
+            _ => None,
+        })
+        .collect()
+}
 
 #[test]
-fn every_declared_role_resolves_to_the_current_model() -> TestResult {
+fn one_model_fills_every_role_and_soft_keywords_are_never_checked() -> TestResult {
     // Soft keywords document author intent, and are never checked.
-    let source = declaring(
-        "models: { scout: { keywords: [frontier, fast] }, sprinter: { keywords: [small, creative, chat] } }",
+    let source = asking_every_role(
+        "models: { fast: { keywords: [fast] }, creative: { keywords: [small, creative, chat] } }",
     );
     let model = model("current", 32_000, ThinkingMode::Never)?;
-    let Prepared {
-        ctx, requirements, ..
-    } = Scenario::default().model(model.clone()).prepare(&source)?;
-    assert!(requirements.is_satisfied());
-    let bindings = ctx.model_bindings();
-    assert_eq!(bindings.len(), 2);
-    assert_eq!(bindings.role_id("scout"), Some(model.id()));
-    assert_eq!(bindings.resolve("scout"), Some(&model));
-    assert_eq!(bindings.resolve("sprinter"), Some(&model));
-    assert_eq!(bindings.model(model.id()), Some(&model));
-    assert!(bindings.resolve("undeclared").is_none());
+    let replies = ["a", "b", "c", "d", "e"].map(text);
+    let trace = Scenario::replies(replies).model(model).run(&source)?;
+    assert_eq!(trace.text()?, "a,b,c,d,e");
+    assert_eq!(replying_models(&trace), ["current"; 5]);
     Ok(())
 }
 
 #[test]
-fn a_context_minimum_above_the_current_models_is_reported() -> TestResult {
-    let requirements = report(ANALYST, 32_000, ThinkingMode::Always)?;
+fn a_strong_entry_fills_strong_and_the_default_fills_every_other_role() -> TestResult {
+    let source = asking_every_role("");
+    let (default, strong) = (
+        model("default-model", 32_000, ThinkingMode::Switchable)?,
+        model("strong-model", 200_000, ThinkingMode::Switchable)?,
+    );
+    let replies = ["a", "b", "c", "d", "e"].map(text);
+    let trace = Scenario::replies(replies)
+        .roles([(ModelRole::Default, default), (ModelRole::Strong, strong)])
+        .run(&source)?;
+    assert_eq!(trace.text()?, "a,b,c,d,e");
+    assert_eq!(
+        replying_models(&trace),
+        [
+            "default-model",
+            "strong-model",
+            "default-model",
+            "default-model",
+            "default-model"
+        ],
+        "the rounds ran in the order of {ROLES:?}"
+    );
+    Ok(())
+}
+
+#[test]
+fn a_role_map_with_models_but_no_default_is_refused_with_one_unbound_entry() -> TestResult {
+    let strong = model("strong-model", 200_000, ThinkingMode::Switchable)?;
+    let Prepared { requirements, .. } = Scenario::default()
+        .roles([(ModelRole::Strong, strong)])
+        .prepare(&declaring(""))?;
+    let unmet = only_unmet(&requirements)?;
+    assert_eq!(unmet.role, ModelRole::Default);
+    assert_eq!(unmet.check, RequirementCheck::Unbound);
+    assert_eq!(unmet.required, "a model");
+    assert_eq!(unmet.actual, "none");
+    let refusal = requirements
+        .refusal()
+        .ok_or("a missing default refuses the run")?;
+    assert_eq!(refusal.kind(), RunErrorKind::RequirementsUnmet);
+    assert!(
+        refusal.to_string().contains(
+            "- role 'default': requires a model; the caller's role map has no 'default' entry"
+        ),
+        "{refusal}"
+    );
+    Ok(())
+}
+
+#[test]
+fn a_context_minimum_above_the_filling_models_is_reported() -> TestResult {
+    let requirements = report(STRONG, 32_000, ThinkingMode::Always)?;
     assert!(!requirements.is_satisfied());
     assert_eq!(requirements.missing_packs, []);
     let unmet = only_unmet(&requirements)?;
-    assert_eq!(unmet.role, "analyst");
+    assert_eq!(unmet.role, ModelRole::Strong);
     assert_eq!(unmet.check, RequirementCheck::ContextMinimum);
     assert_eq!(unmet.required, "200000");
     assert_eq!(unmet.actual, "32000");
@@ -90,21 +161,21 @@ fn a_context_minimum_above_the_current_models_is_reported() -> TestResult {
 }
 
 #[test]
-fn a_hard_keyword_the_current_model_fails_is_reported() -> TestResult {
-    // The context minimum is met, so only the keyword check fires.
-    let requirements = report(ANALYST, 200_000, ThinkingMode::Never)?;
+fn a_hard_keyword_the_filling_model_fails_is_reported() -> TestResult {
+    // The context minimum is met, so only the thinking check fires.
+    let requirements = report(STRONG, 200_000, ThinkingMode::Never)?;
     let unmet = only_unmet(&requirements)?;
-    assert_eq!(unmet.role, "analyst");
-    assert_eq!(unmet.check, RequirementCheck::HardKeyword);
-    assert_eq!(unmet.required, "thinking");
+    assert_eq!(unmet.role, ModelRole::Strong);
+    assert_eq!(unmet.check, RequirementCheck::Thinking);
+    assert_eq!(unmet.required, "thinking: true");
     assert_eq!(unmet.actual, "Never");
 
-    let triage = "models: { triage: { keywords: [no-thinking] } }";
-    let requirements = report(triage, 32_000, ThinkingMode::Always)?;
+    let small = "models: { small: { keywords: [no-thinking] } }";
+    let requirements = report(small, 32_000, ThinkingMode::Always)?;
     let unmet = only_unmet(&requirements)?;
-    assert_eq!(unmet.role, "triage");
-    assert_eq!(unmet.check, RequirementCheck::HardKeyword);
-    assert_eq!(unmet.required, "no-thinking");
+    assert_eq!(unmet.role, ModelRole::Small);
+    assert_eq!(unmet.check, RequirementCheck::Thinking);
+    assert_eq!(unmet.required, "thinking: false");
     assert_eq!(unmet.actual, "Always");
     Ok(())
 }

@@ -6,7 +6,6 @@
 
 use runvil_parser::test_support::PromptSource;
 
-use super::context::with_writer;
 use super::fixtures::echo_tool;
 use super::*;
 
@@ -18,7 +17,7 @@ fn finite_pipeline_runs_the_unified_surface_end_to_end() {
         text("refined text"),
     ]);
 
-    let source = with_writer(PromptSource::new().front("uses: [tools]"))
+    let source = PromptSource::new().front("uses: [tools]")
         .prose(
             "Draft",
             "

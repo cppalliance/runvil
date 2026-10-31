@@ -11,12 +11,11 @@ use super::support::{Scenario, TestResult, note, prompt, shout, text};
 
 const SHOUT: &str = "
     store.write('note.md', 'hello ' .. args)
-    models.use('writer')
     return tools.call('example/text/shout', { text = models.infer(store.read('note.md')) })
 ";
 
 fn shouting() -> (String, Scenario) {
-    let source = prompt("models: { writer: {} }", &[("Greet", SHOUT)]);
+    let source = prompt("", &[("Greet", SHOUT)]);
     (
         source,
         Scenario::tool(shout(), [text("hi there")]).args("world"),

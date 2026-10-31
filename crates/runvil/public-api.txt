@@ -12,6 +12,7 @@
 #[non_exhaustive] pub enum runvil::model::CompletionErrorKind
 #[non_exhaustive] pub enum runvil::model::CompletionResult
 #[non_exhaustive] pub enum runvil::model::ModelCatalogError
+#[non_exhaustive] pub enum runvil::model::ModelRole
 #[non_exhaustive] pub enum runvil::model::Role
 #[non_exhaustive] pub enum runvil::model::TemperatureError
 #[non_exhaustive] pub enum runvil::model::ThinkingMode
@@ -146,13 +147,13 @@ auto runvil::model::CompletionOptions: Freeze, RefUnwindSafe, Send, Sync, Unpin,
 auto runvil::model::CompletionResult: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::model::Message: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::model::ModelBinding: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
-auto runvil::model::ModelBindings: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::model::ModelCatalog: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::model::ModelCatalogError: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::model::ModelId: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::model::ModelIdError: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::model::ModelInfo: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::model::ModelInvocation: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
+auto runvil::model::ModelRole: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::model::ParseRoleError: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::model::RawExchange: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::model::Role: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
@@ -273,13 +274,13 @@ derives runvil::model::CompletionOptions: Clone, Debug, Eq, PartialEq
 derives runvil::model::CompletionResult: Clone, Debug, Eq, PartialEq
 derives runvil::model::Message: Clone, Debug, Eq, PartialEq, Serialize
 derives runvil::model::ModelBinding: Clone, Debug, Eq, PartialEq
-derives runvil::model::ModelBindings: Clone, Debug, Default, Eq, PartialEq
 derives runvil::model::ModelCatalog: Clone, Debug, Default, Eq, PartialEq
 derives runvil::model::ModelCatalogError: Clone, Debug, Eq, PartialEq
 derives runvil::model::ModelId: Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd
 derives runvil::model::ModelIdError: Clone, Debug, Eq, PartialEq
 derives runvil::model::ModelInfo: Clone, Debug, Eq, PartialEq
 derives runvil::model::ModelInvocation: Clone, Debug, Default, Eq, PartialEq
+derives runvil::model::ModelRole: Clone, Copy, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd
 derives runvil::model::ParseRoleError: Clone, Debug, Eq, PartialEq
 derives runvil::model::RawExchange: Clone, Debug, Eq, PartialEq
 derives runvil::model::Role: Clone, Copy, Debug, Deserialize, Eq, Hash, PartialEq, Serialize
@@ -449,6 +450,7 @@ pub const fn runvil::RunSeed::from_bytes(bytes: [u8; 32]) -> runvil::RunSeed
 pub const fn runvil::effect::EffectId::get(self) -> u64
 pub const fn runvil::ids::RoundId::get(self) -> u64
 pub const fn runvil::ids::RoundId::new(id: u64) -> Self
+pub const fn runvil::model::ModelRole::as_str(self) -> &'static str
 pub const fn runvil::replay::Flags::bits(self) -> u32
 pub const fn runvil::replay::Flags::contains(self, other: runvil::replay::Flags) -> bool
 pub const fn runvil::replay::Flags::from_bits(bits: u32) -> Self
@@ -456,6 +458,7 @@ pub const fn runvil::replay::Flags::is_empty(self) -> bool
 pub const fn runvil::timestamp::Timestamp::from_unix_millis(millis: i64) -> Self
 pub const fn runvil::timestamp::Timestamp::unix_millis(self) -> i64
 pub const runvil::model::ModelId::GATEWAY: &'static str
+pub const runvil::model::ModelRole::ALL: [runvil::model::ModelRole; 5]
 pub const runvil::model::Role::ALL: &'static [runvil::model::Role]
 pub const runvil::replay::Flags::EMPTY: runvil::replay::Flags
 pub const runvil::timestamp::Timestamp::UNIX_EPOCH: runvil::timestamp::Timestamp
@@ -483,9 +486,8 @@ pub fn runvil::Run::new(prompt: alloc::sync::Arc<runvil::Prompt>, args: &str, co
 pub fn runvil::Run::resume(&mut self, id: runvil::effect::EffectId, answer: runvil::effect::EffectAnswer)
 pub fn runvil::Run::step(&mut self) -> runvil::Step
 pub fn runvil::RunContext::flags(&self) -> runvil::replay::Flags
-pub fn runvil::RunContext::model_bindings(&self) -> &runvil::model::ModelBindings
 pub fn runvil::RunContext::new(name: impl core::convert::Into<alloc::string::String>, seed: runvil::RunSeed, started_at: runvil::timestamp::Timestamp) -> runvil::RunContext
-pub fn runvil::RunContext::prepare(self, prompt: &runvil::Prompt, model: core::option::Option<runvil::model::ModelInfo>) -> (runvil::RunContext, runvil::Requirements)
+pub fn runvil::RunContext::prepare(self, prompt: &runvil::Prompt, models: alloc::collections::btree::map::BTreeMap<runvil::model::ModelRole, runvil::model::ModelInfo>) -> (runvil::RunContext, runvil::Requirements)
 pub fn runvil::RunContext::seed(&self) -> runvil::RunSeed
 pub fn runvil::RunContext::started_at(&self) -> runvil::timestamp::Timestamp
 pub fn runvil::RunContext::tools(&self) -> &runvil::tools::ToolCatalog
@@ -608,11 +610,6 @@ pub fn runvil::model::ModelBinding::with_capabilities(self, capabilities: alloc:
 pub fn runvil::model::ModelBinding::with_catalog_info(self, info: runvil::model::ModelInfo) -> Self
 pub fn runvil::model::ModelBinding::with_invocation(self, invocation: runvil::model::ModelInvocation) -> Self
 pub fn runvil::model::ModelBinding::with_provider(self, provider: impl core::convert::Into<alloc::string::String>) -> Self
-pub fn runvil::model::ModelBindings::is_empty(&self) -> bool
-pub fn runvil::model::ModelBindings::len(&self) -> usize
-pub fn runvil::model::ModelBindings::model(&self, id: &runvil::model::ModelId) -> core::option::Option<&runvil::model::ModelInfo>
-pub fn runvil::model::ModelBindings::resolve(&self, label: &str) -> core::option::Option<&runvil::model::ModelInfo>
-pub fn runvil::model::ModelBindings::role_id(&self, label: &str) -> core::option::Option<&runvil::model::ModelId>
 pub fn runvil::model::ModelCatalog::contains(&self, id: &runvil::model::ModelId) -> bool
 pub fn runvil::model::ModelCatalog::empty() -> Self
 pub fn runvil::model::ModelCatalog::get(&self, id: &runvil::model::ModelId) -> core::option::Option<&runvil::model::ModelInfo>
@@ -809,7 +806,8 @@ pub runvil::ParseErrorKind::List
 pub runvil::ParseErrorKind::Lua
 pub runvil::ParseErrorKind::Structure
 pub runvil::RequirementCheck::ContextMinimum
-pub runvil::RequirementCheck::HardKeyword
+pub runvil::RequirementCheck::Thinking
+pub runvil::RequirementCheck::Unbound
 pub runvil::Requirements::missing_packs: alloc::vec::Vec<runvil::packs::PackId>
 pub runvil::Requirements::missing_services: alloc::vec::Vec<runvil::MissingService>
 pub runvil::Requirements::reserved: alloc::collections::btree::set::BTreeSet<runvil::packs::PackId>
@@ -852,7 +850,7 @@ pub runvil::UnavailablePack::reason: alloc::string::String
 pub runvil::UnmetRequirement::actual: alloc::string::String
 pub runvil::UnmetRequirement::check: runvil::RequirementCheck
 pub runvil::UnmetRequirement::required: alloc::string::String
-pub runvil::UnmetRequirement::role: alloc::string::String
+pub runvil::UnmetRequirement::role: runvil::model::ModelRole
 pub runvil::UsablePack::pack: runvil::packs::PackId
 pub runvil::UsablePack::vendor: alloc::string::String
 pub runvil::effect::AnswerRecord::Chat(..)
@@ -1310,6 +1308,11 @@ pub runvil::model::ModelCatalogError::DuplicateId::server: alloc::string::String
 pub runvil::model::ModelInvocation::max_tokens: core::option::Option<core::num::nonzero::NonZeroU32>
 pub runvil::model::ModelInvocation::temperature: core::option::Option<runvil::model::Temperature>
 pub runvil::model::ModelInvocation::thinking: core::option::Option<bool>
+pub runvil::model::ModelRole::Creative
+pub runvil::model::ModelRole::Default
+pub runvil::model::ModelRole::Fast
+pub runvil::model::ModelRole::Small
+pub runvil::model::ModelRole::Strong
 pub runvil::model::Role::Assistant
 pub runvil::model::Role::System
 pub runvil::model::Role::Tool
@@ -1507,7 +1510,6 @@ pub struct runvil::ids::RoundId(/* private fields */)
 pub struct runvil::ids::TaskId(/* private fields */)
 pub struct runvil::model::ArgumentNames<'a> { /* private fields */ }
 pub struct runvil::model::ModelBinding { /* private fields */ }
-pub struct runvil::model::ModelBindings { /* private fields */ }
 pub struct runvil::model::ParseRoleError { /* private fields */ }
 pub struct runvil::model::Temperature(/* private fields */)
 pub struct runvil::packs::GlobalName { /* private fields */ }

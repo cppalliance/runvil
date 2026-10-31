@@ -11,7 +11,6 @@ use runvil_types::untrusted::GuardNonce;
 use runvil_vfs::{Access, VfsError};
 use serde_json::{Value, json};
 
-use self::context::setup_prompt;
 use self::fixtures::untrusted_echo_tool;
 use super::turn::advance_turn;
 use super::*;
@@ -119,10 +118,13 @@ fn untrusted_nonce_differs_across_runs_under_different_seeds() {
     // different nonces, so an envelope's tag stays unguessable from one run
     // to the next as long as the caller draws each seed afresh. (Under one
     // seed the two runs agree byte for byte, which `run_inputs` pins.)
-    let source = setup_prompt(PromptSource::new().front("uses: [tools]").section(
-        "Only",
-        "return tools.call('tools/untrusted_echo', { value = 'hi' })",
-    ));
+    let source = PromptSource::new()
+        .front("uses: [tools]")
+        .section(
+            "Only",
+            "return tools.call('tools/untrusted_echo', { value = 'hi' })",
+        )
+        .build();
     let mut rng = Seeded::new(0x5EED);
     let mut run_nonces = Vec::new();
     for seed in [rng.run_seed(), rng.run_seed()] {

@@ -3,12 +3,10 @@
 
 use super::*;
 
-/// A run of `source` for a scheduler H1 test: unprepared, with every
-/// declared role bound to the test model the way prepare's trivial fill
-/// binds it, and the shared model set empty - the H1 pass under test
-/// records its own bindings.
+/// A run of `source` for a scheduler H1 test: prepared under the test
+/// model, which fills all five roles.
 fn h1_scenario(source: &str) -> Scenario {
-    Scenario::new(source).unprepared().bind_roles()
+    Scenario::new(source).bound()
 }
 
 mod control_flow;

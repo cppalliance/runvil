@@ -126,14 +126,14 @@ fn a_prelude_global_named_like_an_offered_tools_wire_name_installs() {
 
 #[test]
 fn a_prelude_global_named_like_a_model_role_label_installs() {
-    let md = "---\nname: t\ndescription: d\nrunvil: 0\nmodels:\n  writer: {}\n---\n\n\
+    let md = "---\nname: t\ndescription: d\nrunvil: 0\n---\n\n\
         # Preludes\n\n\
         ## Only\n\n\
-        ```lua\nreturn writer .. '|' .. models.get('writer').name\n```\n";
-    let trace = prelude_run(md, vec![prelude("writer", "writer = 'mine'")]);
+        ```lua\nreturn strong .. '|' .. models.get('strong').name\n```\n";
+    let trace = prelude_run(md, vec![prelude("strong", "strong = 'mine'")]);
     assert_eq!(
         trace.text(),
-        "mine|writer",
+        "mine|strong",
         "the prelude's global and the role's handle sit side by side"
     );
 }

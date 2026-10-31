@@ -5,12 +5,15 @@
 //! constructor, so [`tool_round`] takes both from a facade `Run` that went
 //! through one tool round.
 
+use std::collections::BTreeMap;
 use std::fmt::Write as _;
 use std::num::NonZeroU32;
 use std::sync::Arc;
 
 use runvil::effect::{Effect, EffectAnswer, IssuedEffect};
-use runvil::model::{Completion, CompletionResult, ModelId, ModelInfo, ThinkingMode, ToolCall};
+use runvil::model::{
+    Completion, CompletionResult, ModelId, ModelInfo, ModelRole, ThinkingMode, ToolCall,
+};
 use runvil::timestamp::Timestamp;
 use runvil::tools::{ToolCatalog, ToolId, ToolInfo, ToolOutput};
 use runvil::{Prompt, Run, RunContext, RunResult, RunSeed, Step};
@@ -45,8 +48,8 @@ fn tool_round(offered: &[Offered]) -> Round {
     }
     let source = format!(
         "---\nname: round\ndescription: One tool round.\nrunvil: 0\n\
-         models:\n  writer: {{}}\n---\n\n# Round\n\n## Ask\n\n\
-         ```lua\nmodels.use('writer')\n{offers}messages:user('echo once')\n\
+         ---\n\n# Round\n\n## Ask\n\n\
+         ```lua\n{offers}messages:user('echo once')\n\
          models.loop()\nreturn messages[#messages].content\n```\n"
     );
     let first_wire_name = format!("example_test_{}", offered[0].0);
@@ -67,7 +70,9 @@ fn tool_round(offered: &[Offered]) -> Round {
     );
     let ctx = RunContext::new("round", RunSeed::from_bytes([7; 32]), Timestamp::UNIX_EPOCH);
     let catalog = ToolCatalog::new(tools).expect("the offered tools are distinct");
-    let (ctx, requirements) = ctx.with_tools(catalog).prepare(&prompt, Some(model));
+    let (ctx, requirements) = ctx
+        .with_tools(catalog)
+        .prepare(&prompt, BTreeMap::from([(ModelRole::Default, model)]));
     assert!(requirements.refusal().is_none(), "the round prepares");
     let mut run = Run::new(Arc::new(prompt), "", ctx);
     let mut rounds = Vec::new();

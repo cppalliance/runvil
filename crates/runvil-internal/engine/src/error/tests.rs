@@ -253,14 +253,14 @@ fn requirements_unmet_classifies_and_reports_the_notice_as_its_message() {
     // it for code. Retrying cannot help: the
     // environment, not the transport, is what falls short.
     let error = Error::RequirementsUnmet {
-        notice: "the environment cannot satisfy this prompt:\n- role 'analyst': requires a context of at least 200000 tokens; the current model provides 32000".to_owned(),
+        notice: "the environment cannot satisfy this prompt:\n- role 'strong': requires a context of at least 200000 tokens; the model filling it provides 32000".to_owned(),
         cause: None,
     };
     let run_error = crate::RunError::from(error);
     assert_eq!(run_error.kind(), crate::RunErrorKind::RequirementsUnmet);
     assert!(!run_error.is_retryable());
     assert!(run_error.location().is_none());
-    assert!(run_error.to_string().contains("analyst"));
+    assert!(run_error.to_string().contains("strong"));
 }
 
 #[test]

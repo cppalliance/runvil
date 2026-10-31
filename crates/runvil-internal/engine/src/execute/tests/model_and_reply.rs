@@ -4,9 +4,9 @@
 
 use runvil_parser::test_support::{PromptSource, parse_ok};
 
+use crate::model::ModelRole;
 use crate::test_support::scenario::{Trace, test_model};
 
-use super::context::{bind_role, with_writer};
 use super::*;
 
 /// The run's observations as section and detail pairs, from its start on:
@@ -25,17 +25,16 @@ fn models_use_forwards_binding_completion_options_to_the_gateway() {
     // models.use -> completion_options -> GatewayChat::complete must set
     // the binding's model, the hard-keyword thinking switch, and the
     // section's `models.use` sampling options on the chat body. Roles
-    // declare no sampling fields, so a section on the prompt-wide default
+    // declare no sampling fields, so a section on the `default` role
     // sends none.
     let gateway = ScriptedChat::new(vec![text("hello from the mock"), text("hello again")]);
     let source = PromptSource::new()
-        .front("models: { analyst: { keywords: [no-thinking] } }")
-        .h1("models.default('analyst')")
+        .front("models: { small: { keywords: [no-thinking] } }")
         .prose(
             "Only",
             "
             ```lua
-            models.use('analyst', { temperature = 0, max_tokens = 256 })
+            models.use('small', { temperature = 0, max_tokens = 256 })
             ```
 
             Ask the model.
@@ -54,8 +53,8 @@ fn models_use_forwards_binding_completion_options_to_the_gateway() {
             ```",
         );
     let trace = Scenario::new(source.build())
-        .unprepared()
-        .context(bind_role("analyst", test_model("analyst")))
+        .current_model(test_model("main-model"))
+        .role_model(ModelRole::Small, test_model("small-model"))
         .chat(&gateway)
         .run();
     assert_eq!(trace.text(), "hello again");
@@ -63,7 +62,7 @@ fn models_use_forwards_binding_completion_options_to_the_gateway() {
     let requests = gateway.requests();
     assert_eq!(requests.len(), 2, "one round per section: {requests:?}");
     let selected = &requests[0];
-    assert_eq!(selected.options.model(), "analyst");
+    assert_eq!(selected.options.model(), "small-model");
     assert_eq!(selected.options.thinking(), Some(false));
     assert_eq!(
         selected
@@ -77,20 +76,18 @@ fn models_use_forwards_binding_completion_options_to_the_gateway() {
         Some(256)
     );
     let defaulted = &requests[1];
-    assert_eq!(defaulted.options.model(), "analyst");
-    assert_eq!(defaulted.options.thinking(), Some(false));
+    assert_eq!(defaulted.options.model(), "main-model");
+    assert_eq!(defaulted.options.thinking(), None);
     assert!(
         defaulted.options.temperature().is_none() && defaulted.options.max_tokens().is_none(),
-        "a section on the prompt-wide default sends neither option: {defaulted:?}"
+        "a section on the `default` role sends neither option: {defaulted:?}"
     );
 }
 
 /// One section that infers its prose, `Say something.`, then runs `epilog`.
 fn say_something(epilog: &str) -> String {
     let body = format!("Say something.\n\n```lua\n{epilog}\n```");
-    with_writer(PromptSource::new())
-        .prose("Only", &body)
-        .build()
+    PromptSource::new().prose("Only", &body).build()
 }
 
 #[test]
@@ -109,22 +106,6 @@ fn an_explicit_client_is_used_instead_of_the_environment() {
         run_events(&trace),
         vec![
             ("Test prompt".to_string(), detail::RUN_STARTED.to_string()),
-            (
-                "Test prompt".to_string(),
-                detail::LUA_CHUNK_STARTED.to_string(),
-            ),
-            (
-                "Test prompt".to_string(),
-                detail::LUA_CHUNK_SUCCEEDED.to_string(),
-            ),
-            (
-                "Test prompt".to_string(),
-                detail::LUA_TEARDOWN_STARTED.to_string(),
-            ),
-            (
-                "Test prompt".to_string(),
-                detail::LUA_TEARDOWN_SUCCEEDED.to_string(),
-            ),
             ("Only".to_string(), detail::SECTION_STARTED.to_string()),
             ("Only".to_string(), detail::LUA_CHUNK_STARTED.to_string()),
             ("Only".to_string(), detail::MODEL_TURN_COMPLETED.to_string(),),
@@ -162,22 +143,6 @@ fn epilog_runs_after_prose_and_can_return() {
         run_events(&trace),
         vec![
             ("Test prompt".to_string(), detail::RUN_STARTED.to_string()),
-            (
-                "Test prompt".to_string(),
-                detail::LUA_CHUNK_STARTED.to_string(),
-            ),
-            (
-                "Test prompt".to_string(),
-                detail::LUA_CHUNK_SUCCEEDED.to_string(),
-            ),
-            (
-                "Test prompt".to_string(),
-                detail::LUA_TEARDOWN_STARTED.to_string(),
-            ),
-            (
-                "Test prompt".to_string(),
-                detail::LUA_TEARDOWN_SUCCEEDED.to_string(),
-            ),
             ("Only".to_string(), detail::SECTION_STARTED.to_string()),
             ("Only".to_string(), detail::LUA_CHUNK_STARTED.to_string()),
             ("Only".to_string(), detail::MODEL_TURN_COMPLETED.to_string()),
@@ -260,7 +225,7 @@ fn prologue_return_skips_model_and_epilog() {
 #[test]
 fn a_required_helper_survives_prologue_model_and_epilog() {
     let gateway = ScriptedChat::new(vec![text("hello from the mock")]);
-    let source = with_writer(PromptSource::new())
+    let source = PromptSource::new()
         .prose(
             "Only",
             "
@@ -290,22 +255,6 @@ fn a_required_helper_survives_prologue_model_and_epilog() {
         run_events(&trace),
         [
             ("Test prompt".to_owned(), detail::RUN_STARTED.to_string()),
-            (
-                "Test prompt".to_owned(),
-                detail::LUA_CHUNK_STARTED.to_string(),
-            ),
-            (
-                "Test prompt".to_owned(),
-                detail::LUA_CHUNK_SUCCEEDED.to_string(),
-            ),
-            (
-                "Test prompt".to_owned(),
-                detail::LUA_TEARDOWN_STARTED.to_string(),
-            ),
-            (
-                "Test prompt".to_owned(),
-                detail::LUA_TEARDOWN_SUCCEEDED.to_string(),
-            ),
             ("Only".to_owned(), detail::SECTION_STARTED.to_string()),
             ("Only".to_owned(), detail::LUA_CHUNK_STARTED.to_string()),
             (

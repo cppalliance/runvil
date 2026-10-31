@@ -2,7 +2,7 @@
 
 use runvil_parser::test_support::{PromptSource, synthetic_section};
 
-use super::context::{arm_fanout, with_writer};
+use super::context::arm_fanout;
 use super::*;
 
 /// Alternating lua/prose blocks run in order; each Lua block that wants the
@@ -11,7 +11,7 @@ use super::*;
 #[test]
 fn section_with_alternating_blocks_executes_in_order() {
     let gateway = ScriptedChat::new(vec![text("reply-1"), text("reply-2")]);
-    let source = with_writer(PromptSource::new()).prose(
+    let source = PromptSource::new().prose(
         "Only",
         r"
         ```lua
@@ -48,7 +48,7 @@ fn call_runs_named_section_as_subroutine() {
     // The subroutine sits after its run-ending caller: a contained chain
     // falls through like any walk, so a subroutine placed before later
     // sections would pull them into the chain.
-    let source = with_writer(PromptSource::new())
+    let source = PromptSource::new()
         .section(
             "Main",
             "
@@ -82,7 +82,7 @@ fn call_runs_named_section_as_subroutine() {
 #[test]
 fn nested_call_without_input_inherits_the_chains_args() {
     let gateway = ScriptedChat::new(vec![text("inner-reply")]);
-    let source = with_writer(PromptSource::new())
+    let source = PromptSource::new()
         .section(
             "Main",
             "
@@ -139,23 +139,20 @@ fn duplicate_top_level_section_names_error_loudly() {
     assert!(rendered.contains("ambiguous"), "error was: {rendered}");
 }
 
-/// [`arm_fanout`] under the `writer` role, with a `### Worker` whose Lua is
-/// `worker`.
-fn writer_arm(worker: &str) -> String {
-    with_writer(arm_fanout())
-        .section("### Worker", worker)
-        .build()
+/// [`arm_fanout`] with a `### Worker` whose Lua is `worker`.
+fn default_arm(worker: &str) -> String {
+    arm_fanout().section("### Worker", worker).build()
 }
 
-/// The worker Lua that asks the model through the `writer` handle.
-const HANDLE_INFER: &str = "return models.get('writer'):infer('ping about ' .. item)";
+/// The worker Lua that asks the model through the `default` handle.
+const HANDLE_INFER: &str = "return models.get('default'):infer('ping about ' .. item)";
 
 /// `handle:infer(...)` works inside an arm, so a worker's Lua can call the model
 /// directly.
 #[test]
 fn fanout_arm_model_infer_works_inside_an_arm() {
     let gateway = ScriptedChat::new(vec![text("pong")]);
-    let trace = Scenario::new(writer_arm(HANDLE_INFER))
+    let trace = Scenario::new(default_arm(HANDLE_INFER))
         .bound()
         .chat(&gateway)
         .run();
@@ -186,7 +183,7 @@ fn fanout_arm_model_infer_without_a_client_surfaces_the_disabled_gateway() {
     // A scenario without a model answers every `Chat` with the disabled
     // gateway's failure: the round fails with that error and nothing
     // reaches the network, however the process environment is configured.
-    let trace = Scenario::new(writer_arm(HANDLE_INFER)).bound().run();
+    let trace = Scenario::new(default_arm(HANDLE_INFER)).bound().run();
     let rendered = trace.error().to_string();
     assert!(
         rendered.contains("model access is turned off or not configured"),
@@ -197,7 +194,7 @@ fn fanout_arm_model_infer_without_a_client_surfaces_the_disabled_gateway() {
 /// An unknown model alias errors loudly inside an arm, same as on the walk.
 #[test]
 fn fanout_arm_model_infer_with_an_unknown_alias_errors_loudly() {
-    let trace = Scenario::new(writer_arm("return models.get('ghost'):infer('ping')"))
+    let trace = Scenario::new(default_arm("return models.get('ghost'):infer('ping')"))
         .bound()
         .run();
     let rendered = trace.error().to_string();

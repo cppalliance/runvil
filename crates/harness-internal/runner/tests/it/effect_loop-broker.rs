@@ -3,6 +3,7 @@
 //! for a nested `models.infer` and `Chat` for a section's own round, and
 //! the run resumes with the broker's completion as each round's answer.
 
+use std::collections::BTreeMap;
 use std::num::NonZeroU32;
 use std::sync::{Arc, Mutex};
 
@@ -15,7 +16,7 @@ use runvil::event::ReplyOrigin;
 use runvil::ids::RoundId;
 use runvil::model::{
     Completion, CompletionError, CompletionOptions, CompletionResult, Message, ModelBinding,
-    ModelCatalog, ModelId, ModelInfo, ThinkingMode, ToolSchema,
+    ModelCatalog, ModelId, ModelInfo, ModelRole, ThinkingMode, ToolSchema,
 };
 use runvil::timestamp::Timestamp;
 use runvil::{Prompt, Run, RunContext};
@@ -27,8 +28,8 @@ use crate::support::{EXECUTION, TEST_SEED, unused};
 /// A program that infers once and then chats once: the nested round
 /// first, then the section's own round over its message list.
 const INFERS_THEN_CHATS: &str = "---\nname: runner-broker\ndescription: infers then chats\n\
-    runvil: 0\nmodels:\n  writer: {}\n---\n\n\
-    # Broker\n\n```lua\nmodels.default('writer')\n```\n\n\
+    runvil: 0\n---\n\n\
+    # Broker\n\n\
     ## Only\n\n```lua\n\
     local inferred = models.infer('infer round')\n\
     messages:user('chat round')\n\
@@ -36,7 +37,7 @@ const INFERS_THEN_CHATS: &str = "---\nname: runner-broker\ndescription: infers t
     return inferred .. '|' .. messages[#messages].content\n\
     ```\n";
 
-/// A run over [`INFERS_THEN_CHATS`] with every declared role bound to one
+/// A run over [`INFERS_THEN_CHATS`] with the `default` role filled by one
 /// current model.
 fn infers_then_chats() -> Run {
     let (prompt, _parse_events) = Prompt::parse(INFERS_THEN_CHATS, EXECUTION);
@@ -48,10 +49,10 @@ fn infers_then_chats() -> Run {
         ThinkingMode::Never,
     );
     let ctx = RunContext::new(EXECUTION, TEST_SEED, Timestamp::UNIX_EPOCH);
-    let (ctx, requirements) = ctx.prepare(&prompt, Some(model));
+    let (ctx, requirements) = ctx.prepare(&prompt, BTreeMap::from([(ModelRole::Default, model)]));
     assert!(
         requirements.is_satisfied(),
-        "the bound model satisfies the fixture's one role: {requirements:?}"
+        "the model filling the default role satisfies the fixture: {requirements:?}"
     );
     Run::new(prompt, "", ctx)
 }

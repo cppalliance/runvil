@@ -48,10 +48,9 @@ fn h1_prose_inferred_explicitly_is_the_run_result() {
     // infer ends the run with the inferred text: the scalar return
     // short-circuits the (empty) walk.
     let gateway = ScriptedChat::new(vec![text("h1 reply")]);
-    let md = "---\nname: t\ndescription: d\nrunvil: 0\nmodels:\n  writer: {}\n---\n\n\
+    let md = "---\nname: t\ndescription: d\nrunvil: 0\n---\n\n\
         # Only Prose\n\n\
         ```lua\n\
-        models.default('writer')\n\
         ```\n\n\
         say something\n\n\
         ```lua\n\
@@ -68,10 +67,9 @@ fn h1_and_h2_prose_each_infer_explicitly_in_source_order() {
     // The H1 pass and the H2 section each read their own pending
     // buffer into an explicit infer - two completions, in source order.
     let gateway = ScriptedChat::new(vec![text("h1 reply"), text("h2 reply")]);
-    let md = "---\nname: shared-loop\ndescription: d\nrunvil: 0\nmodels:\n  writer: {}\n---\n\n\
+    let md = "---\nname: shared-loop\ndescription: d\nrunvil: 0\n---\n\n\
         # Shared Loop\n\n\
         ```lua\n\
-        models.default('writer')\n\
         ```\n\n\
         h1 prose turn\n\n\
         ```lua\n\
@@ -115,13 +113,13 @@ fn unread_h1_prose_stays_inert_and_explicit_infer_requires_a_model() {
         {{ var.omit }}\n\n\
         ## Result\n\n\
         ```lua\nreturn 'ok'\n```\n";
-    assert_eq!(h1_scenario(unread).run().text(), "ok");
+    assert_eq!(Scenario::new(unread).run().text(), "ok");
 
     let reading = "---\nname: read-h1\ndescription: d\nrunvil: 0\n---\n\n\
         # Read H1\n\n\
         ask\n\n\
         ```lua\nreturn models.infer(prose)\n```\n";
-    let trace = h1_scenario(reading).run();
+    let trace = Scenario::new(reading).run();
     let error = trace.error();
     assert!(
         matches!(error.inner(), Error::ModelRequired { .. }),
@@ -134,10 +132,9 @@ fn h1_prose_infers_explicitly_and_var_accumulates_into_the_walk() {
     // The pass reads its pending buffer only through an explicit infer, and
     // `var` writes accumulate across the pass into the walk.
     let gateway = ScriptedChat::new(vec![text("final answer")]);
-    let md = "---\nname: live-h1-prose\ndescription: d\nrunvil: 0\nmodels:\n  writer: {}\n---\n\n\
+    let md = "---\nname: live-h1-prose\ndescription: d\nrunvil: 0\n---\n\n\
         # Live H1 Prose\n\n\
         ```lua\n\
-        models.default('writer')\n\
         var.executions = (var.executions or 0) + 1\n\
         ```\n\n\
         Ask for one round.\n\n\

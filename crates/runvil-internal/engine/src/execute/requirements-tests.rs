@@ -1,14 +1,17 @@
 //! Tests for the preflight report's missing services, unavailable
 //! Packs, and the reserved Pack ids `adhoc` and `dynamic`.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
+use runvil_types::models::ModelRole;
 use runvil_types::packs::PackId;
 use runvil_types::timestamp::Timestamp;
 use runvil_types::tools::{ToolCatalog, ToolId, ToolInfo};
 use serde_json::json;
 
-use super::{MissingService, Requirements, UnavailablePack, UsablePack};
+use super::{
+    MissingService, RequirementCheck, Requirements, UnavailablePack, UnmetRequirement, UsablePack,
+};
 use crate::execute::{RunContext, RunErrorKind};
 use crate::parser::Prompt;
 use crate::test_support::scenario::TEST_SEED;
@@ -73,7 +76,7 @@ fn a_catalog_or_roster_naming_a_reserved_pack_id_refuses_the_run_naming_the_id_o
             ),
         ];
         for (named_by, ctx) in contexts {
-            let (_, requirements) = ctx.prepare(&declares_nothing(), None);
+            let (_, requirements) = ctx.prepare(&declares_nothing(), BTreeMap::new());
             assert_eq!(
                 requirements.reserved,
                 BTreeSet::from([id(reserved)]),
@@ -111,7 +114,7 @@ fn a_context_naming_both_reserved_pack_ids_lists_them_sorted_each_once() {
             vec![UsablePack::new(id("dynamic"), "acme")],
             vec![UnavailablePack::new(id("adhoc"), "the server is down")],
         );
-    let (_, requirements) = ctx.prepare(&declares_nothing(), None);
+    let (_, requirements) = ctx.prepare(&declares_nothing(), BTreeMap::new());
     assert_eq!(
         requirements.reserved,
         BTreeSet::from([id("adhoc"), id("dynamic")])
@@ -134,7 +137,7 @@ fn a_context_naming_no_reserved_pack_id_leaves_the_reservations_empty() {
             vec![UsablePack::new(id("web"), "runvil")],
             vec![UnavailablePack::new(id("mcp"), "the server is down")],
         );
-    let (_, requirements) = ctx.prepare(&declares_nothing(), None);
+    let (_, requirements) = ctx.prepare(&declares_nothing(), BTreeMap::new());
     assert!(requirements.reserved.is_empty(), "{requirements:?}");
     assert!(requirements.is_satisfied(), "{requirements:?}");
 }
@@ -298,6 +301,65 @@ fn the_notice_names_the_pack_and_the_service_it_lacks() {
         "the environment cannot satisfy this prompt:\n\
          - user-input needs an input broker, and the environment provides none"
     );
+}
+
+fn unmet(
+    role: ModelRole,
+    check: RequirementCheck,
+    required: &str,
+    actual: &str,
+) -> UnmetRequirement {
+    UnmetRequirement {
+        role,
+        check,
+        required: required.to_owned(),
+        actual: actual.to_owned(),
+    }
+}
+
+#[test]
+fn the_notice_gives_each_model_requirement_as_a_line_naming_the_role() {
+    let mut requirements = Requirements::default();
+    requirements.unmet_models.extend([
+        unmet(
+            ModelRole::Strong,
+            RequirementCheck::ContextMinimum,
+            "200000",
+            "32000",
+        ),
+        unmet(
+            ModelRole::Strong,
+            RequirementCheck::Thinking,
+            "thinking: true",
+            "Never",
+        ),
+        unmet(
+            ModelRole::Default,
+            RequirementCheck::Unbound,
+            "a model",
+            "none",
+        ),
+    ]);
+    let expected = [
+        "the environment cannot satisfy this prompt:",
+        "- role 'strong': requires a context of at least 200000 tokens; the model filling it provides 32000",
+        "- role 'strong': requires 'thinking: true'; the thinking capability of the model filling it is Never",
+        "- role 'default': requires a model; the caller's role map has no 'default' entry",
+    ];
+    assert_eq!(requirements.notice(), expected.join("\n"));
+}
+
+#[test]
+fn an_unbound_default_leaves_the_report_unsatisfied() {
+    let mut requirements = Requirements::default();
+    requirements.unmet_models.push(unmet(
+        ModelRole::Default,
+        RequirementCheck::Unbound,
+        "a model",
+        "none",
+    ));
+    assert!(!requirements.is_satisfied());
+    assert!(requirements.refusal().is_some());
 }
 
 #[test]

@@ -18,7 +18,6 @@ use example::{GREETER, answer};
 
 const REPLY: &str = "
     store.write('note.md', 'hello')
-    models.use('writer')
     return models.infer(store.read('note.md'))
 ";
 
@@ -46,8 +45,9 @@ fn the_example_answers_a_timer_as_fired_at_once() {
 }
 
 #[test]
-fn prepare_fills_the_writer_role_and_the_canned_reply_becomes_the_result() -> TestResult {
-    let source = prompt("models: { writer: {} }", &[("Greet", REPLY)]);
+fn a_prompt_declaring_no_models_runs_on_the_default_model_and_the_canned_reply_becomes_the_result()
+-> TestResult {
+    let source = prompt("", &[("Greet", REPLY)]);
     let trace = Scenario::replies([text("hi there")]).run(&source)?;
     assert_eq!(trace.text()?, "hi there");
     Ok(())

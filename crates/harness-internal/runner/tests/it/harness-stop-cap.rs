@@ -37,8 +37,8 @@ fn loops_offering(tools: &[&str]) -> String {
     }
     format!(
         "---\nname: loops\ndescription: d\nrunvil: 0\nuses:\n{packs}\
-         models:\n  writer: {{}}\n---\n\n\
-         # Loops\n\n```lua\nmodels.default('writer')\n```\n\n\
+         ---\n\n\
+         # Loops\n\n\
          ## Only\n\n```lua\n{offers}messages:user('hold')\n\
          local ok, err = pcall(models.loop)\n\
          return tostring(ok) .. ':' .. err.kind\n```\n"
@@ -77,8 +77,8 @@ async fn settle() {
 /// Main spawns Child, which asks the operator; Main then waits on a
 /// `wait` round, cancels Child, and waits on an `after` round.
 const CANCELS_AN_ASKER: &str = "---\nname: cancels\ndescription: d\nrunvil: 0\n\
-    uses:\n  - tests/user-input\nmodels:\n  writer: {}\n---\n\n\
-    # Cancels\n\n```lua\nmodels.default('writer')\n```\n\n\
+    uses:\n  - tests/user-input\n---\n\n\
+    # Cancels\n\n\
     ## Main\n\n```lua\n\
     local t = tasks.spawn('## Child')\n\
     models.infer('wait')\n\
