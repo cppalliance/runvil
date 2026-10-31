@@ -1,8 +1,0 @@
-# PLACEHOLDER - the committed OpenAPI spec copy
-
-This file is a placeholder. `gateway-pin/pin.json` records the sha256 this
-file must have, and `tools/bump-gateway.mjs` replaces both the file and that
-hash from a published Gateway release. Nothing reads this file until the pin
-is filled in.
-
-Do not hand-edit it. Run `node tools/bump-gateway.mjs <tag>`.

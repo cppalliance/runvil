@@ -1,17 +1,21 @@
 // Moves the Gateway pin to a published release.
 //
-// Given a release tag, this script asks `gh` for the release, downloads its
-// `sidecar.json` manifest and the two spec files, checks the specs against
-// the manifest's recorded hashes, and only then rewrites `gateway-pin/pin.json`
-// and the committed spec copies. Nothing is written until every download and
-// check has succeeded, so a wrong tag or a missing asset leaves the pin
-// exactly as it was.
+// Given a release tag, this script asks `gh` for the release and reads the
+// two files cargo-dist publishes: `sha256.sum`, its list of asset checksums,
+// and `dist-manifest.json`, its build record. The two must agree on every
+// target's archive name and sha256 before anything is written, and the
+// release's own asset list must state the size. The tag alone supplies the
+// version, so `min_gateway` is always derivable.
 //
-// The manifest is the `sidecar.json` the Gateway repository attaches to each
-// release. It must record, for each of the five release targets, an asset
-// name, its sha256, and its size, plus the version, `min_gateway`, the
-// executable's name, and the two spec hashes. A release without one cannot
-// be pinned.
+// The spec files are optional. The Gateway repository publishes none, so a
+// release that has them gets them copied into `gateway-pin/` and recorded by
+// sha256, and a release without them records no spec entry at all. An
+// absent entry says the release publishes no spec, which is a different
+// thing from a hash nobody has filled in, so absence is written by leaving
+// the entry out rather than by writing a placeholder.
+//
+// Nothing is written until every download and check has succeeded, so a
+// wrong tag or a mismatched checksum leaves the pin exactly as it was.
 //
 // Usage:
 //   node tools/bump-gateway.mjs <tag> [--repo <owner/name>] [--dry-run]
@@ -37,10 +41,16 @@ import {
 
 const REPOSITORY_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
-/** The manifest every pinnable Gateway release attaches. */
-export const MANIFEST_ASSET = "sidecar.json";
+/** The checksum asset: one line of sha256 and asset name per released file. */
+export const CHECKSUM_ASSET = "sha256.sum";
 
-/** The spec files every pinnable Gateway release attaches, and their pin keys. */
+/** The build record cargo-dist publishes beside the archives. */
+export const DIST_MANIFEST_ASSET = "dist-manifest.json";
+
+/**
+ * The spec files a release may attach, and the pin keys they fill. A
+ * release that publishes none of them is still pinnable.
+ */
 export const SPEC_ASSETS = [
   { name: "openapi.yaml", key: "openapi" },
   { name: "asyncapi.yaml", key: "asyncapi" },
@@ -64,72 +74,192 @@ function runGh(args) {
   return result.stdout;
 }
 
-/**
- * Refuses a manifest that cannot produce a usable pin, naming every field
- * that is missing or mistyped. A short manifest is a bug in the Gateway's
- * release, not something to paper over here.
- */
-export function validateManifest(manifest, tag) {
-  const problems = [];
-  const named = (value) => typeof value === "string" && value.length > 0;
-  if (!named(manifest["version"])) {
-    problems.push("version");
-  } else if (!tag.endsWith(manifest["version"])) {
-    problems.push(`version ${manifest["version"]} does not match tag ${tag}`);
-  }
-  for (const field of ["min_gateway", "executable"]) {
-    if (!named(manifest[field])) {
-      problems.push(field);
-    }
-  }
-  for (const { key } of SPEC_ASSETS) {
-    if (!named(manifest["spec"]?.[key]?.["sha256"])) {
-      problems.push(`spec.${key}.sha256`);
-    }
-  }
-  for (const target of TARGETS) {
-    const entry = manifest["targets"]?.[target];
-    if (!named(entry?.["asset"])) {
-      problems.push(`targets.${target}.asset`);
-    }
-    if (!named(entry?.["sha256"])) {
-      problems.push(`targets.${target}.sha256`);
-    }
-    if (!Number.isInteger(entry?.["size"]) || entry["size"] <= 0) {
-      problems.push(`targets.${target}.size`);
-    }
-  }
-  if (problems.length > 0) {
-    throw new Error(`${MANIFEST_ASSET} for ${tag} cannot be pinned: ${problems.join(", ")}`);
-  }
-  return manifest;
+/** Whether `value` reads as a lowercase or uppercase sha256 in hex. */
+function isSha256(value) {
+  return typeof value === "string" && /^[0-9a-fA-F]{64}$/.test(value);
 }
 
-/** Builds the pin object for `tag` from a validated manifest. */
-export function buildPin(manifest, tag, repository) {
+/**
+ * Reads `sha256.sum` into a map of asset name to lowercase sha256. A line
+ * that does not read as a checksum names its number rather than being
+ * skipped, because a skipped line is an asset that would pin with no check.
+ */
+export function parseChecksumSum(text, source = CHECKSUM_ASSET) {
+  const checksums = new Map();
+  const lines = text.split("\n");
+  for (const [index, raw] of lines.entries()) {
+    const line = raw.trim();
+    if (line === "") {
+      continue;
+    }
+    const match = /^([0-9a-fA-F]{64}) [ *](.+)$/.exec(line);
+    if (match === null) {
+      throw new Error(
+        `${source} line ${index + 1} does not read as "<sha256> <asset>": ${line}`,
+      );
+    }
+    const asset = match[2].trim();
+    if (asset === "") {
+      throw new Error(`${source} line ${index + 1} names no asset: ${line}`);
+    }
+    checksums.set(asset, match[1].toLowerCase());
+  }
+  if (checksums.size === 0) {
+    throw new Error(`${source} lists no asset checksums`);
+  }
+  return checksums;
+}
+
+/** The version a release tag carries: `gateway-v0.3.0` becomes `0.3.0`. */
+export function versionFromTag(tag) {
+  const match = /(\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?)$/.exec(tag);
+  if (match === null) {
+    throw new Error(`the tag ${tag} does not end in a version like 0.3.0`);
+  }
+  return match[1];
+}
+
+/**
+ * The release's version, taken from the tag and checked against the version
+ * `dist-manifest.json` records. The tag is the authority: a person names it
+ * on the command line, so a manifest that disagrees is a broken release
+ * rather than a reason to pin a version nobody asked for.
+ */
+export function releaseVersion(manifest, tag) {
+  const version = versionFromTag(tag);
+  const stated = manifest?.["releases"]?.[0]?.["app_version"];
+  if (typeof stated === "string" && stated !== "" && stated !== version) {
+    throw new Error(
+      `${DIST_MANIFEST_ASSET} for ${tag} records app_version ${stated}, so the tag does not name the release it points at`,
+    );
+  }
+  return version;
+}
+
+/**
+ * The executable's name inside the archives, which `dist-manifest.json`
+ * records once per archive. Every archive must name the same executable, so
+ * a mixed release fails here rather than after the first fetch.
+ */
+export function executableName(manifest) {
+  const names = new Set();
+  for (const artifact of Object.values(manifest?.["artifacts"] ?? {})) {
+    if (artifact?.["kind"] !== "executable-zip") {
+      continue;
+    }
+    for (const asset of artifact["assets"] ?? []) {
+      if (asset?.["kind"] === "executable" && typeof asset["name"] === "string") {
+        names.add(asset["name"]);
+      }
+    }
+  }
+  if (names.size !== 1) {
+    const described = names.size === 0 ? "no" : [...names].join(" and ");
+    throw new Error(
+      `${DIST_MANIFEST_ASSET} names ${described} executable` +
+        `${names.size === 1 ? "" : "s"} for the released archives; expected exactly one`,
+    );
+  }
+  return [...names][0];
+}
+
+/**
+ * One pin target entry per released triple: the archive's name, its sha256,
+ * and its size. The name and hash come from `dist-manifest.json` and must
+ * also appear in `sha256.sum` with the same hash, and the release's own
+ * asset digest must agree when GitHub states one. `sizes` and `digests` come
+ * from the release's asset list, because neither checksum file records a
+ * size.
+ *
+ * Every disagreement is collected and reported together, by pin field, so a
+ * release that is wrong in several places says so in one run.
+ */
+export function selectTargets({ manifest, checksums, sizes, digests = new Map() }) {
+  const artifacts = manifest?.["artifacts"];
+  if (artifacts === null || typeof artifacts !== "object" || Array.isArray(artifacts)) {
+    throw new Error(`${DIST_MANIFEST_ASSET} holds no artifacts object`);
+  }
+  const problems = [];
   const targets = {};
   for (const target of TARGETS) {
-    const entry = manifest["targets"][target];
-    targets[target] = {
-      asset: entry["asset"],
-      sha256: entry["sha256"],
-      size: entry["size"],
-    };
+    const matches = Object.entries(artifacts).filter(
+      ([, artifact]) =>
+        artifact?.["kind"] === "executable-zip" &&
+        (artifact?.["target_triples"] ?? []).includes(target),
+    );
+    if (matches.length === 0) {
+      problems.push(`targets.${target}.asset is absent from ${DIST_MANIFEST_ASSET}`);
+      continue;
+    }
+    if (matches.length > 1) {
+      const named = matches.map(([name]) => name).join(", ");
+      problems.push(`targets.${target}.asset is ambiguous in ${DIST_MANIFEST_ASSET}: ${named}`);
+      continue;
+    }
+    const [asset, artifact] = matches[0];
+    const recorded = artifact?.["checksums"]?.["sha256"];
+    if (!isSha256(recorded)) {
+      problems.push(`targets.${target}.sha256 is absent from ${DIST_MANIFEST_ASSET} for ${asset}`);
+      continue;
+    }
+    const listed = checksums.get(asset);
+    if (listed === undefined) {
+      problems.push(`targets.${target}.asset ${asset} is absent from ${CHECKSUM_ASSET}`);
+      continue;
+    }
+    if (listed !== recorded.toLowerCase()) {
+      problems.push(
+        `targets.${target}.sha256 is ${recorded.toLowerCase()} in ${DIST_MANIFEST_ASSET} ` +
+          `but ${listed} in ${CHECKSUM_ASSET}`,
+      );
+      continue;
+    }
+    const digest = digests.get(asset);
+    if (digest !== undefined && digest.toLowerCase() !== recorded.toLowerCase()) {
+      problems.push(
+        `targets.${target}.sha256 is ${recorded.toLowerCase()} in ${DIST_MANIFEST_ASSET} ` +
+          `but the release states ${digest.toLowerCase()}`,
+      );
+      continue;
+    }
+    const size = sizes.get(asset);
+    if (!Number.isInteger(size) || size <= 0) {
+      problems.push(`targets.${target}.size is absent from the release's asset list for ${asset}`);
+      continue;
+    }
+    targets[target] = { asset, sha256: recorded.toLowerCase(), size };
   }
+  if (problems.length > 0) {
+    throw new Error(`the release cannot be pinned: ${problems.join(", ")}`);
+  }
+  return targets;
+}
+
+/**
+ * Builds the pin object. `min_gateway` is the release's own version: this
+ * release has every operation Workshop calls, so it is the lowest Gateway
+ * that does.
+ *
+ * `specs` holds the spec files the release published, keyed by pin key. A
+ * key that is missing leaves that entry out of `spec`, so a consumer reads
+ * absence rather than a hash that means nothing.
+ */
+export function buildPin({ tag, repository, version, executable, targets, specs }) {
   const spec = {};
   for (const { key } of SPEC_ASSETS) {
-    spec[key] = {
-      path: `gateway-pin/${SPEC_ASSETS.find((asset) => asset.key === key).name}`,
-      sha256: manifest["spec"][key]["sha256"],
-    };
+    const found = specs[key];
+    if (found === undefined) {
+      continue;
+    }
+    spec[key] = { path: `gateway-pin/${found.name}`, sha256: found.sha256 };
   }
   return {
     pin_format: 1,
     repository,
     tag,
-    version: manifest["version"],
-    executable: manifest["executable"],
-    min_gateway: manifest["min_gateway"],
+    version,
+    executable,
+    min_gateway: version,
     spec,
     targets,
   };
@@ -195,15 +325,69 @@ function readIfPresent(path) {
 }
 
 /**
- * Downloads a release's manifest and specs and returns the new pin text and
- * the spec texts, without touching the repository. `gh` is a seam for the
- * tests.
+ * Reads the release's asset list, returning each asset's size and the
+ * sha256 GitHub states for it. `gh` prints the digest as `sha256:<hex>`, and
+ * the field is absent on an older release, so a missing digest is reported
+ * as no digest rather than as a mismatch.
  */
-export function downloadRelease({ tag, repository = DEFAULT_RELEASE_REPOSITORY, gh = runGh }) {
+export function readReleaseAssets(release) {
+  const sizes = new Map();
+  const digests = new Map();
+  for (const asset of release?.["assets"] ?? []) {
+    const name = asset?.["name"];
+    if (typeof name !== "string" || name.length === 0) {
+      continue;
+    }
+    if (Number.isInteger(asset["size"])) {
+      sizes.set(name, asset["size"]);
+    }
+    const digest = asset["digest"];
+    if (isSha256(digest)) {
+      digests.set(name, digest);
+    } else if (typeof digest === "string" && digest.startsWith("sha256:")) {
+      const hex = digest.slice("sha256:".length);
+      if (isSha256(hex)) {
+        digests.set(name, hex);
+      }
+    }
+  }
+  return { sizes, digests };
+}
+
+/** Names of the release's assets, in the order `gh` listed them. */
+export function releaseAssetNames(release) {
+  return (release?.["assets"] ?? [])
+    .map((asset) => asset?.["name"])
+    .filter((name) => typeof name === "string" && name.length > 0);
+}
+
+/**
+ * Downloads a release's checksum list and build record, plus any spec files
+ * it publishes, and returns the new pin text and the spec texts, without
+ * touching the repository. `gh` and `download` are seams for the tests.
+ */
+export function downloadRelease({
+  tag,
+  repository = DEFAULT_RELEASE_REPOSITORY,
+  gh = runGh,
+  download,
+}) {
+  const fetch = download ?? gh;
+
   const scratch = mkdtempSync(join(tmpdir(), "runvil-bump-gateway-"));
   try {
+    let release;
     try {
-      gh(["release", "view", tag, "--repo", repository, "--json", "tagName,assets"]);
+      const text = gh([
+        "release",
+        "view",
+        tag,
+        "--repo",
+        repository,
+        "--json",
+        "tagName,name,assets",
+      ]);
+      release = typeof text === "string" && text.trim() !== "" ? JSON.parse(text) : {};
     } catch (error) {
       throw new Error(
         `Gateway release ${tag} was not found in ${repository}: ${error.message}\n` +
@@ -211,64 +395,132 @@ export function downloadRelease({ tag, repository = DEFAULT_RELEASE_REPOSITORY, 
           `\`gh release list --repo ${repository}\``,
       );
     }
-    const names = [MANIFEST_ASSET, ...SPEC_ASSETS.map((spec) => spec.name)];
-    const patterns = names.flatMap((name) => ["--pattern", name]);
-    gh(["release", "download", tag, "--repo", repository, "--dir", scratch, ...patterns]);
+    const published = releaseAssetNames(release);
+    if (!published.includes(CHECKSUM_ASSET)) {
+      throw new Error(
+        `Gateway release ${tag} in ${repository} publishes no ${CHECKSUM_ASSET} asset, ` +
+          "so the archive checksums cannot be checked; nothing was written",
+      );
+    }
+    if (!published.includes(DIST_MANIFEST_ASSET)) {
+      throw new Error(
+        `Gateway release ${tag} in ${repository} publishes no ${DIST_MANIFEST_ASSET} asset, ` +
+          "so the archive names cannot be cross-checked; nothing was written",
+      );
+    }
+
+    const wanted = [CHECKSUM_ASSET, DIST_MANIFEST_ASSET];
+    const specsToFetch = SPEC_ASSETS.filter((spec) => published.includes(spec.name));
+    wanted.push(...specsToFetch.map((spec) => spec.name));
+    const patterns = wanted.flatMap((name) => ["--pattern", name]);
+    fetch(["release", "download", tag, "--repo", repository, "--dir", scratch, ...patterns]);
+
+    const checksums = parseChecksumSum(readFileSync(join(scratch, CHECKSUM_ASSET), "utf8"));
     let manifest;
     try {
-      manifest = JSON.parse(readFileSync(join(scratch, MANIFEST_ASSET), "utf8"));
+      manifest = JSON.parse(readFileSync(join(scratch, DIST_MANIFEST_ASSET), "utf8"));
     } catch (error) {
-      throw new Error(`${MANIFEST_ASSET} for ${tag} is not valid JSON: ${error.message}`);
+      throw new Error(`${DIST_MANIFEST_ASSET} for ${tag} is not valid JSON: ${error.message}`);
     }
-    validateManifest(manifest, tag);
+    const version = releaseVersion(manifest, tag);
+    const executable = executableName(manifest);
+    const { sizes, digests } = readReleaseAssets(release);
+    const targets = selectTargets({ manifest, checksums, sizes, digests });
+
     const specs = {};
-    for (const { name, key } of SPEC_ASSETS) {
-      const bytes = readFileSync(join(scratch, name));
-      const actual = sha256Hex(bytes);
-      const recorded = manifest["spec"][key]["sha256"];
-      if (actual !== recorded) {
+    for (const spec of SPEC_ASSETS) {
+      if (!specsToFetch.includes(spec)) {
+        continue;
+      }
+      const bytes = readFileSync(join(scratch, spec.name));
+      const sha256 = sha256Hex(bytes);
+      const listed = checksums.get(spec.name);
+      if (listed !== undefined && listed !== sha256) {
         throw new Error(
-          `${name} for ${tag} has sha256 ${actual}, but ${MANIFEST_ASSET} records ${recorded}`,
+          `${spec.name} for ${tag} has sha256 ${sha256}, but ${CHECKSUM_ASSET} records ${listed}`,
         );
       }
-      specs[key] = { name, text: bytes.toString("utf8") };
+      specs[spec.key] = { name: spec.name, sha256, text: bytes.toString("utf8") };
     }
-    const pin = buildPin(manifest, tag, repository);
-    if (Object.values(pin["targets"]).some((entry) => entry["sha256"] === PLACEHOLDER)) {
-      throw new Error(`${MANIFEST_ASSET} for ${tag} still names a placeholder checksum`);
+
+    const pin = buildPin({ tag, repository, version, executable, targets, specs });
+    const placeholders = placeholderValues(pin);
+    if (placeholders.length > 0) {
+      throw new Error(
+        `the pin for ${tag} still holds a placeholder in ${placeholders.join(", ")}; ` +
+          "a release must state every field",
+      );
     }
-    return { pin, pinText: renderPin(pin), specs };
+    return { pin, pinText: renderPin(pin), specs, published };
   } finally {
     rmSync(scratch, { force: true, recursive: true });
   }
 }
 
+/** Every path in `pin` whose value is `PLACEHOLDER`, as dotted names. */
+function placeholderValues(pin) {
+  const found = [];
+  const walk = (value, path) => {
+    if (value === PLACEHOLDER) {
+      found.push(path);
+      return;
+    }
+    if (value !== null && typeof value === "object") {
+      for (const [key, child] of Object.entries(value)) {
+        walk(child, path === "" ? key : `${path}.${key}`);
+      }
+    }
+  };
+  walk(pin, "");
+  return found;
+}
+
 /**
  * Runs the bump: downloads, checks, prints the diff, and writes the spec
  * copies and then the pin. `dryRun` stops before the writes.
+ *
+ * A spec copy the release no longer publishes is left in place rather than
+ * deleted: the pin stops naming it, and a person decides whether the file
+ * stays as a reference.
  */
 export function bumpGateway({
   root = REPOSITORY_ROOT,
   tag,
   repository = DEFAULT_RELEASE_REPOSITORY,
   gh = runGh,
+  download,
   dryRun = false,
+  log = console.log,
 }) {
   if (typeof tag !== "string" || tag.length === 0) {
     throw new Error("bump-gateway needs a release tag, for example `gateway-v0.4.0`");
   }
-  const { pin, pinText, specs } = downloadRelease({ tag, repository, gh });
+  const { pin, pinText, specs } = downloadRelease({
+    tag,
+    repository,
+    gh,
+    download: download ?? gh,
+  });
+  const written = Object.values(specs).map(({ name, text }) => ({
+    path: specPath(root, name),
+    text,
+  }));
   const diffs = [
     renderDiff(pinPath(root), readIfPresent(pinPath(root)), pinText),
-    ...SPEC_ASSETS.map(({ name, key }) =>
-      renderDiff(specPath(root, name), readIfPresent(specPath(root, name)), specs[key].text),
-    ),
+    ...written.map((file) => renderDiff(file.path, readIfPresent(file.path), file.text)),
   ];
+  const absent = SPEC_ASSETS.filter(({ key }) => specs[key] === undefined).map(({ name }) => name);
+  if (absent.length > 0) {
+    log(
+      `notice: ${tag} publishes no ${absent.join(" and ")}, so the pin records no spec because ` +
+        "the release publishes none; no file was invented",
+    );
+  }
   if (!dryRun) {
     // The spec copies land first: the pin is the authority that says they
     // are current, so it never names a spec that is not yet written.
-    for (const { name, key } of SPEC_ASSETS) {
-      writeAtomic(specPath(root, name), specs[key].text);
+    for (const file of written) {
+      writeAtomic(file.path, file.text);
     }
     writeAtomic(pinPath(root), pinText);
   }

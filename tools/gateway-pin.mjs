@@ -6,6 +6,11 @@
 // rewrites it from a published release. Both refuse a placeholder: a pin
 // that names nothing must fail loudly, because a silent empty download
 // would ship a Workshop without its Gateway.
+//
+// The `spec` object may hold no entry. The Gateway repository publishes no
+// OpenAPI or AsyncAPI document with its releases, so a pin for those
+// releases records none, and an absent entry is a complete pin. An entry
+// that is present must carry a path and a real hash.
 
 import { readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
@@ -33,6 +38,9 @@ export const TARGETS = [
 
 /** The repository that publishes Gateway releases. */
 export const DEFAULT_RELEASE_REPOSITORY = "cppalliance/runvil-gateway";
+
+/** The spec keys a pin may record. A release publishes none of them today. */
+export const SPEC_KEYS = ["openapi", "asyncapi"];
 
 /** The absolute path of the pin file for the repository at `root`. */
 export function pinPath(root = REPOSITORY_ROOT) {
@@ -69,6 +77,11 @@ function requireNumber(value, field, source) {
  * Parses and shape-checks pin text. Shape checks only: a placeholder
  * value passes here and is refused later by the consumer that would have
  * used it, so a fresh pin stays readable while nobody can fetch from it.
+ *
+ * A spec entry may be absent. The Gateway repository publishes no spec, so
+ * a pin for its releases records none, and an absent entry says exactly
+ * that. An entry that is present must carry a path and a hash: a half
+ * entry would read as a spec nobody can verify.
  */
 export function parsePin(text, source = PIN_FILE_NAME) {
   let pin;
@@ -87,10 +100,19 @@ export function parsePin(text, source = PIN_FILE_NAME) {
   requireString(pin["executable"], "executable", source);
   requireString(pin["min_gateway"], "min_gateway", source);
   const spec = requireObject(pin["spec"], "spec", source);
-  for (const name of ["openapi", "asyncapi"]) {
-    const entry = requireObject(spec[name], `spec.${name}`, source);
+  for (const name of SPEC_KEYS) {
+    const entry = spec[name];
+    if (entry === undefined) {
+      continue;
+    }
+    requireObject(entry, `spec.${name}`, source);
     requireString(entry["path"], `spec.${name}.path`, source);
     requireString(entry["sha256"], `spec.${name}.sha256`, source);
+  }
+  for (const name of Object.keys(spec)) {
+    if (!SPEC_KEYS.includes(name)) {
+      throw new Error(`${source}: spec.${name} is not one of ${SPEC_KEYS.join(", ")}`);
+    }
   }
   const targets = requireObject(pin["targets"], "targets", source);
   for (const target of TARGETS) {
@@ -138,6 +160,11 @@ export function targetEntry(pin, target) {
 /**
  * Every field of `pin` that is still a placeholder, as dotted paths. An
  * empty list means the pin names a release a consumer may use.
+ *
+ * An absent spec entry is not a placeholder. The Gateway repository
+ * publishes no spec, so a pin for its releases records none, and that is a
+ * complete pin. An entry that is present and still holds `PLACEHOLDER` is
+ * reported, because a half-filled spec would read as a hash nobody checked.
  */
 export function placeholderFields(pin) {
   const found = [];
@@ -146,9 +173,15 @@ export function placeholderFields(pin) {
       found.push(field);
     }
   }
-  for (const name of ["openapi", "asyncapi"]) {
-    if (pin["spec"]?.[name]?.["sha256"] === PLACEHOLDER) {
-      found.push(`spec.${name}.sha256`);
+  for (const name of SPEC_KEYS) {
+    const entry = pin["spec"]?.[name];
+    if (entry === undefined) {
+      continue;
+    }
+    for (const field of ["path", "sha256"]) {
+      if (entry[field] === PLACEHOLDER) {
+        found.push(`spec.${name}.${field}`);
+      }
     }
   }
   for (const [target, entry] of Object.entries(pin["targets"] ?? {})) {

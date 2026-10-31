@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -65,18 +65,31 @@ test("the committed pin records all five release targets", () => {
   assert.equal(pin["executable"], "runvil-gateway");
 });
 
-test("the committed pin is still a placeholder and says which fields are unfilled", () => {
-  const fields = placeholderFields(committedPin());
-  assert.ok(fields.includes("tag"), `${fields}`);
-  assert.ok(fields.includes("min_gateway"), `${fields}`);
-  for (const target of TARGETS) {
-    assert.ok(fields.includes(`targets.${target}.sha256`), `${fields}`);
-  }
-  assert.ok(fields.includes("spec.openapi.sha256"), `${fields}`);
+test("the committed pin is complete and names a published release", () => {
+  const pin = committedPin();
+  assert.deepEqual(placeholderFields(pin), []);
+  assert.equal(requireFilledPin(pin, { source: "gateway-pin/pin.json" }), undefined);
+});
+
+test("a pin with no spec entry is complete, because the release publishes none", () => {
+  const pin = filledPin();
+  pin["spec"] = {};
+  assert.deepEqual(placeholderFields(pin), []);
+  assert.equal(requireFilledPin(pin, { source: "gateway-pin/pin.json" }), undefined);
+});
+
+test("a spec entry that still holds a placeholder is refused by name", () => {
+  const pin = filledPin();
+  pin["spec"]["openapi"]["sha256"] = PLACEHOLDER;
+  assert.deepEqual(placeholderFields(pin), ["spec.openapi.sha256"]);
+  assert.throws(() => requireFilledPin(pin, { source: "gateway-pin/pin.json" }), /spec\.openapi\.sha256/);
 });
 
 test("a placeholder pin is refused by name, not fetched", () => {
-  const pin = committedPin();
+  const pin = filledPin();
+  pin["tag"] = PLACEHOLDER;
+  pin["min_gateway"] = PLACEHOLDER;
+  pin["targets"][WINDOWS] = { asset: PLACEHOLDER, sha256: PLACEHOLDER, size: 0 };
   assert.throws(
     () => requireFilledPin(pin, { source: "gateway-pin/pin.json" }),
     /still holds placeholders/,
@@ -160,10 +173,7 @@ test("a missing pin file reports the path it looked at", () => {
   }
 });
 
-test("the committed spec copies exist where the pin says they are", () => {
+test("the committed pin records no spec, because the release publishes none", () => {
   const pin = committedPin();
-  for (const name of ["openapi", "asyncapi"]) {
-    const path = specPath(undefined, pin["spec"][name]["path"].split("/").at(-1));
-    assert.ok(readFileSync(path, "utf8").includes("PLACEHOLDER"), path);
-  }
+  assert.deepEqual(pin["spec"], {}, "the Gateway repository publishes no spec to record");
 });

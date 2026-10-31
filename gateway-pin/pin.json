@@ -1,45 +1,36 @@
 {
   "pin_format": 1,
   "repository": "cppalliance/runvil-gateway",
-  "tag": "PLACEHOLDER",
-  "version": "PLACEHOLDER",
+  "tag": "gateway-v0.3.0",
+  "version": "0.3.0",
   "executable": "runvil-gateway",
-  "min_gateway": "PLACEHOLDER",
-  "spec": {
-    "openapi": {
-      "path": "gateway-pin/openapi.yaml",
-      "sha256": "PLACEHOLDER"
-    },
-    "asyncapi": {
-      "path": "gateway-pin/asyncapi.yaml",
-      "sha256": "PLACEHOLDER"
-    }
-  },
+  "min_gateway": "0.3.0",
+  "spec": {},
   "targets": {
     "x86_64-pc-windows-msvc": {
-      "asset": "PLACEHOLDER",
-      "sha256": "PLACEHOLDER",
-      "size": 0
+      "asset": "gateway-x86_64-pc-windows-msvc.zip",
+      "sha256": "70d763448f5dd8bef5b2d19267c0111253a9bccb0380f837f561f5d981bd7f9d",
+      "size": 6324499
     },
     "aarch64-apple-darwin": {
-      "asset": "PLACEHOLDER",
-      "sha256": "PLACEHOLDER",
-      "size": 0
+      "asset": "gateway-aarch64-apple-darwin.tar.xz",
+      "sha256": "edf4eb63de83e229901b3475468ba0f23bfabfd7c2c4a8904a5c43923e4034a0",
+      "size": 4211836
     },
     "x86_64-apple-darwin": {
-      "asset": "PLACEHOLDER",
-      "sha256": "PLACEHOLDER",
-      "size": 0
+      "asset": "gateway-x86_64-apple-darwin.tar.xz",
+      "sha256": "c517e6140e73e1348fdb7b5855bff56bb72e1f60cd39cd9e58ac4331094812f9",
+      "size": 4598732
     },
     "x86_64-unknown-linux-gnu": {
-      "asset": "PLACEHOLDER",
-      "sha256": "PLACEHOLDER",
-      "size": 0
+      "asset": "gateway-x86_64-unknown-linux-gnu.tar.xz",
+      "sha256": "154a41ab51be4673ec0c82e61347f49f9189ec916ebada716ec8c23a29ef3eab",
+      "size": 5626420
     },
     "aarch64-unknown-linux-gnu": {
-      "asset": "PLACEHOLDER",
-      "sha256": "PLACEHOLDER",
-      "size": 0
+      "asset": "gateway-aarch64-unknown-linux-gnu.tar.xz",
+      "sha256": "9dd63d769d0120465433f1a4f4c33f81f3f671a57271c14bb05cce9d6998306f",
+      "size": 5253280
     }
   }
 }
