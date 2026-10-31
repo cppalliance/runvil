@@ -76,9 +76,9 @@ fn stage_fake(fake: &FakeGuide, out: &Path) -> Result<(), crate::AssembleError> 
 fn stage_writes_one_tree_per_book() {
     let fake = fake_guide();
     let src = fake.docs.join("src");
-    fs::write(src.join("gateway").join("index.md"), "# Stale\n").expect("stale index");
-    fs::create_dir_all(src.join("gateway").join("img")).expect("mkdir img");
-    fs::write(src.join("gateway").join("img").join("flow.svg"), "<svg/>").expect("asset");
+    fs::write(src.join("language").join("index.md"), "# Stale\n").expect("stale index");
+    fs::create_dir_all(src.join("language").join("img")).expect("mkdir img");
+    fs::write(src.join("language").join("img").join("flow.svg"), "<svg/>").expect("asset");
     let out = tempfile::tempdir().expect("tempdir");
     stage_fake(&fake, out.path()).expect("stage");
 
@@ -110,8 +110,8 @@ fn stage_writes_one_tree_per_book() {
     let workshop = out.path().join("workshop").join("src");
     assert!(workshop.join("01-the-window.md").is_file());
     assert!(workshop.join("02-the-editor.md").is_file());
-    let gateway = out.path().join("gateway").join("src");
-    assert_eq!(read(&gateway.join("img").join("flow.svg")), "<svg/>");
+    let language = out.path().join("language").join("src");
+    assert_eq!(read(&language.join("img").join("flow.svg")), "<svg/>");
 }
 
 #[test]
@@ -143,21 +143,21 @@ fn stage_writes_each_books_export_beside_the_trees() {
 #[test]
 fn staging_reads_chapters_from_the_docs_root_it_is_given() {
     let fake = fake_guide();
-    let old_copy = fake.guide.join("src").join("gateway");
+    let old_copy = fake.guide.join("src").join("language");
     fs::create_dir_all(&old_copy).expect("mkdir old copy");
     fs::write(old_copy.join("01-start.md"), "# Start\n\nOld copy.\n").expect("old chapter");
     let chapter = "# Start\n\nFrom the docs root.\n";
     fs::write(
-        fake.docs.join("src").join("gateway").join("01-start.md"),
+        fake.docs.join("src").join("language").join("01-start.md"),
         chapter,
     )
     .expect("chapter");
     let out = tempfile::tempdir().expect("tempdir");
     stage_fake(&fake, out.path()).expect("stage");
 
-    let staged = out.path().join("gateway").join("src").join("01-start.md");
+    let staged = out.path().join("language").join("src").join("01-start.md");
     assert_eq!(read(&staged), chapter);
-    let export = read(&out.path().join("runvil-gateway-guide.md"));
+    let export = read(&out.path().join("runvil-language-guide.md"));
     assert!(
         export.contains("From the docs root.") && !export.contains("Old copy."),
         "{export}"
@@ -230,14 +230,14 @@ fn stage_rejects_a_summary_link_that_does_not_resolve() {
     let chapter = fake
         .docs
         .join("src")
-        .join("gateway")
+        .join("language")
         .join("02-proxy (draft).md");
     fs::write(chapter, "# Proxy\n").expect("chapter");
     let out = tempfile::tempdir().expect("tempdir");
     let error = stage_fake(&fake, out.path()).expect_err("must reject");
     let message = error.to_string();
     assert!(message.contains("02-proxy (draft"), "{message}");
-    assert!(message.contains("gateway book"), "{message}");
+    assert!(message.contains("language book"), "{message}");
 }
 
 #[test]

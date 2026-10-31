@@ -66,7 +66,7 @@ fn the_engine_crate_set_is_the_root_crates_plus_every_container_member() {
         "pub struct Store;\n",
     );
     write_crate(root.path(), "harness/runner", "", "pub struct Runner;\n");
-    write_crate(root.path(), "gateway-api-types", "", "pub struct Api;\n");
+    write_crate(root.path(), "shared-crypto", "", "pub struct Digest;\n");
     let mut names: Vec<String> = engine_crates(root.path())
         .iter()
         .map(|dir| {
@@ -85,7 +85,7 @@ fn the_engine_crate_set_is_the_root_crates_plus_every_container_member() {
             "runvil-internal/store",
             "runvil-plugin",
         ],
-        "harness and gateway crates are outside the engine"
+        "harness and shared crates are outside the engine"
     );
 }
 

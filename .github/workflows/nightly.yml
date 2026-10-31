@@ -2,10 +2,22 @@ name: Nightly
 
 # Phase 1 (fork testing): triggered on push and dispatch so we iterate
 # fast. Phase 2 (upstream): swap the trigger to schedule + fork guard.
+#
+# Builds the five Workshop installers and publishes them as the rolling
+# `nightly` release. The Gateway is a separate product with its own
+# releases; each installer here carries the binary `gateway-pin/pin.json`
+# names.
 on:
   push:
     branches: [master]
+  # A plain dispatch still no-ops when `nightly` already points at HEAD.
+  # Set `force` to rebuild the same commit anyway.
   workflow_dispatch:
+    inputs:
+      force:
+        description: Build even when HEAD already carries the nightly tag
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -18,7 +30,8 @@ env:
   RUSTUP_TOOLCHAIN: stable
 
 jobs:
-  # Exit early when master hasn't moved since the last nightly.
+  # Exit early when master hasn't moved since the last nightly, unless the
+  # dispatch asked for a rebuild.
   check:
     runs-on: ubuntu-latest
     outputs:
@@ -30,6 +43,10 @@ jobs:
         with:
           fetch-depth: 0
       - id: compare
+        env:
+          # A dispatch sets this to the string `true` or `false`; every other
+          # trigger leaves it empty, so an empty value reads as "not forced".
+          FORCE: ${{ github.event.inputs.force }}
         run: |
           nightly_sha=$(git rev-parse nightly^{} 2>/dev/null || echo "none")
           head_sha=$(git rev-parse HEAD)
@@ -37,81 +54,16 @@ jobs:
           date=$(date -u +%Y-%m-%d)
           echo "short-sha=$short" >> "$GITHUB_OUTPUT"
           echo "date=$date" >> "$GITHUB_OUTPUT"
-          if [ "$nightly_sha" = "$head_sha" ]; then
+          if [ "$FORCE" = "true" ]; then
+            echo "Forced rebuild of $head_sha; the nightly tag is ignored."
+            echo "should-build=true" >> "$GITHUB_OUTPUT"
+          elif [ "$nightly_sha" = "$head_sha" ]; then
             echo "No new commits since the last nightly ($short), skipping."
             echo "should-build=false" >> "$GITHUB_OUTPUT"
           else
             echo "New commits: nightly was $nightly_sha, HEAD is $head_sha"
             echo "should-build=true" >> "$GITHUB_OUTPUT"
           fi
-
-  # -- Gateway: Linux x86_64 and aarch64 --------------------------------
-
-  gateway-x64:
-    needs: check
-    if: needs.check.outputs.should-build == 'true'
-    runs-on: ubuntu-22.04
-    env:
-      ARTIFACT: gateway-nightly-${{ needs.check.outputs.date }}-${{ needs.check.outputs.short-sha }}-linux-x64
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-          cache-dependency-path: |
-            crates/workshop/package-lock.json
-            crates/gateway/*/ui/package-lock.json
-      - name: Install UI dependencies
-        run: |
-          npm ci --prefix crates/workshop
-          npm ci --prefix crates/gateway/config-ui/ui
-      - name: Build
-        run: cargo build --release --locked -p gateway
-      - name: Package
-        run: |
-          mkdir -p "$ARTIFACT"
-          cp target/release/runvil-gateway "$ARTIFACT/"
-          tar czf "${ARTIFACT}.tar.gz" "$ARTIFACT"
-      - uses: actions/upload-artifact@v4
-        with:
-          name: ${{ env.ARTIFACT }}
-          path: ${{ env.ARTIFACT }}.tar.gz
-
-  gateway-arm64:
-    needs: check
-    if: needs.check.outputs.should-build == 'true'
-    runs-on: ubuntu-22.04-arm
-    env:
-      ARTIFACT: gateway-nightly-${{ needs.check.outputs.date }}-${{ needs.check.outputs.short-sha }}-linux-arm64
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-          cache-dependency-path: |
-            crates/workshop/package-lock.json
-            crates/gateway/*/ui/package-lock.json
-      - name: Install UI dependencies
-        run: |
-          npm ci --prefix crates/workshop
-          npm ci --prefix crates/gateway/config-ui/ui
-      - name: Build
-        run: cargo build --release --locked -p gateway
-      - name: Package
-        run: |
-          mkdir -p "$ARTIFACT"
-          cp target/release/runvil-gateway "$ARTIFACT/"
-          tar czf "${ARTIFACT}.tar.gz" "$ARTIFACT"
-      - uses: actions/upload-artifact@v4
-        with:
-          name: ${{ env.ARTIFACT }}
-          path: ${{ env.ARTIFACT }}.tar.gz
 
   # -- Workshop: Windows, macOS ARM, macOS Intel, Linux x64 and ARM64 ----
 
@@ -156,9 +108,7 @@ jobs:
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: |
-            crates/workshop/package-lock.json
-            crates/gateway/*/ui/package-lock.json
+          cache-dependency-path: crates/workshop/package-lock.json
 
       - name: Install UI dependencies
         working-directory: crates/workshop
@@ -216,7 +166,7 @@ jobs:
   # -- Publish: rolling nightly release ----------------------------------
 
   publish:
-    needs: [check, gateway-x64, gateway-arm64, workshop]
+    needs: [check, workshop]
     if: needs.check.outputs.should-build == 'true'
     runs-on: ubuntu-latest
     env:
@@ -238,7 +188,7 @@ jobs:
         working-directory: dist
         run: |
           shopt -s globstar nullglob
-          sha256sum **/*.tar.gz **/*.exe **/*.dmg **/*.deb **/*.AppImage 2>/dev/null > SHA256SUMS || true
+          sha256sum **/*.exe **/*.dmg **/*.deb **/*.AppImage 2>/dev/null > SHA256SUMS || true
           cat SHA256SUMS
 
       - name: Delete the previous nightly release
@@ -254,6 +204,6 @@ jobs:
             --prerelease \
             --target "$GITHUB_SHA" \
             --notes "Automated nightly build from master at $SHORT_SHA ($DATE). Not a stable release." \
-            dist/**/*.tar.gz dist/**/*.exe dist/**/*.dmg dist/**/*.deb dist/**/*.AppImage dist/SHA256SUMS
+            dist/**/*.exe dist/**/*.dmg dist/**/*.deb dist/**/*.AppImage dist/SHA256SUMS
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

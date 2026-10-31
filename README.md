@@ -15,7 +15,7 @@ Workshop is the desktop app. You open your folders in it, edit files, and work w
 
 Installers for Windows, macOS (Apple Silicon and Intel), and Linux (AppImage and .deb, x86_64 and ARM64) are on the [nightly release](https://github.com/cppalliance/runvil/releases/tag/nightly). Nightly is a prerelease built from the latest code, and it doesn't update itself, so install a newer nightly to upgrade.
 
-Every installer includes the gateway. Workshop connects to a gateway that's already running or starts its own, and the gateway stays in the system tray after you close the window, so your loaded models stay loaded.
+Every installer includes the Gateway. Workshop connects to a Gateway that's already running or starts its own, and the Gateway stays in the system tray after you close the window, so your loaded models stay loaded. The Gateway is its own product with its own releases, at [cppalliance/runvil-gateway](https://github.com/cppalliance/runvil-gateway).
 
 ## What a prompt looks like
 
@@ -58,11 +58,11 @@ The frontmatter declares one model role, `writer`, and the Lua under the title m
 
 The Engine and the Harness are Rust libraries. The Engine parses a prompt and steps through it, and whenever the run needs a model reply, a Pack's render of the tools a section offers, a Pack tool's result, a timer, or a file outside a prelude's install, it asks for one and waits. The Harness answers each of those requests and records the run. A Host is any application that runs prompts through the Harness. Workshop is one, and your own program becomes one when it embeds the Harness.
 
-The gateway is the one process that holds model credentials, so no other process ever sees a vendor key. It serves an OpenAI-compatible API and routes each request to a cloud provider or to a model running on your own machine. It also provides web search, speech-to-text, text-to-speech, and a settings page in your browser, and you can run it on its own, on a desktop or a server.
+The Gateway is the one process that holds model credentials, so no other process ever sees a vendor key. It serves an OpenAI-compatible API and routes each request to a cloud provider or to a model running on your own machine. It also provides web search, speech-to-text, text-to-speech, and a settings page in your browser, and you can run it on its own, on a desktop or a server. It is developed and released separately, in [cppalliance/runvil-gateway](https://github.com/cppalliance/runvil-gateway).
 
 ## Documentation
 
-The documentation site, [runvil.org](https://runvil.org), has the [Language guide](https://gh.cppalliance.org/runvil/language/) for writing prompts, the [Gateway guide](https://gh.cppalliance.org/runvil/gateway/) for installing and configuring the gateway, and the API references for embedding the Engine and the Harness in your own program.
+The documentation site, [runvil.org](https://runvil.org), has the [Language guide](https://gh.cppalliance.org/runvil/language/) for writing prompts, the [Gateway guide](https://runvil.org/gateway/) for installing and configuring the Gateway, and the API references for embedding the Engine and the Harness in your own program. The Gateway's guide and its API reference live with the Gateway, in [its own repository](https://github.com/cppalliance/runvil-gateway).
 
 ## Contributing
 

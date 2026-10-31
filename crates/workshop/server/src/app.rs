@@ -269,8 +269,8 @@ pub enum Omit {
 /// from the route vector.
 ///
 /// # Errors
-/// Returns [`StateError::Gateway`] if the HTTP client cannot be built,
-/// and [`StateError::Composition`] when a required contribution is
+/// Returns `StateError::Gateway` if the HTTP client cannot be built,
+/// and `StateError::Composition` when a required contribution is
 /// absent after every subsystem has registered.
 #[cfg_attr(
     not(any(test, feature = "test-fixtures")),
@@ -291,8 +291,8 @@ pub fn state_with_gateway(
 /// waiting out the production value.
 ///
 /// # Errors
-/// Returns [`StateError::Gateway`] if the HTTP client cannot be built,
-/// and [`StateError::Composition`] when a required contribution is
+/// Returns `StateError::Gateway` if the HTTP client cannot be built,
+/// and `StateError::Composition` when a required contribution is
 /// absent after every subsystem has registered.
 #[cfg(feature = "test-fixtures")]
 pub fn state_with_gateway_and_restart_bound(
@@ -308,8 +308,8 @@ pub fn state_with_gateway_and_restart_bound(
 /// fails boot with a typed error naming it.
 ///
 /// # Errors
-/// Returns [`StateError::Gateway`] if the HTTP client cannot be built,
-/// and [`StateError::Composition`] naming the omitted subsystem's
+/// Returns `StateError::Gateway` if the HTTP client cannot be built,
+/// and `StateError::Composition` naming the omitted subsystem's
 /// contribution.
 #[cfg(any(test, feature = "test-fixtures"))]
 pub fn state_with_gateway_omitting(

@@ -2,7 +2,7 @@
 
 The Gateway and Workshop meet through a file plus three HTTP calls. Nothing else is shared. This document is the whole of that meeting point: the file format, the two lock files, the stale rule, the shutdown route, the three calls, and the fixtures that pin them.
 
-Both sides are written against this text. Workshop's reader is [`workshop-gateway-discovery`](src/lib.rs), and the Gateway's writer is the `gateway-api-discovery` crate, which is the same protocol spelled once from the other side. When the two disagree, this document is right and one of them has a bug.
+Both sides are written against this text. Workshop's reader is [`workshop-gateway-discovery`](src/lib.rs), and the Gateway's writer lives in the `runvil-gateway` repository, which spells the same protocol from the other side. When the two disagree, this document is right and one of them has a bug.
 
 - Names in the file: `gateway.json`, `gateway.json.lock`, `gateway.instance.lock`, `gateway.log`
 - Endpoints: `GET /health`, `GET /v1/models`, `POST /shutdown`

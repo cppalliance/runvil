@@ -1,6 +1,6 @@
 # Runvil
 
-Multi-crate Rust workspace for the Engine, the Harness that runs it, the Gateway, and Workshop, a Host.
+Multi-crate Rust workspace for the Engine, the Harness that runs it, and Workshop, a Host. The Gateway is a separate product in its own repository, `cppalliance/runvil-gateway`.
 
 ## Definitions
 
@@ -22,9 +22,9 @@ Seven terms have exactly one meaning each, everywhere in this repository: code c
   - "machine" for the computer something runs on
   - the part's own name for a program or UI part that embeds another, such as "the desktop app" or "the container element"
   - "run", "serve", "embed", or "hold" for the verb
-- "Engine", "Harness", and "Plugin" mean only the defined terms. Anything else gets a qualified lowercase name: the gateway's speech engine, the database, Rust's built-in test harness, a Tauri or ProseMirror plugin. Inside `crates/gateway/stt/`, a bare "engine" means the speech engine. This repository's own checks and test scaffolding are "structural checks", "test support", or "fixtures".
+- "Engine", "Harness", and "Plugin" mean only the defined terms. Anything else gets a qualified lowercase name: the Gateway's speech engine, the database, Rust's built-in test harness, a Tauri or ProseMirror plugin. This repository's own checks and test scaffolding are "structural checks", "test support", or "fixtures".
 - Engine crates (`crates/runvil` and `crates/runvil-internal`: docs, comments, tests, strings, and code names) call the code that steps a run and answers its effects "the caller", and never mention the Host or a Host application. They name the Harness only to say that a responsibility belongs to it, never how the Harness performs it or which of its crates or types does. `crates/workshop/ui/test/docs-claims.mjs` enforces the parts a scan can see.
-- Names defined outside this repository are used exactly as defined: the HTTP `Host` header and URL host names, the gateway config key `max_per_host`, Cargo's host and target vocabulary and `harness = false`, GitHub's self-hosted runners, cargo-dist's `host` step and `host-jobs`, CSS `:host`, and the DOM's `ShadowRoot.host`.
+- Names defined outside this repository are used exactly as defined: the HTTP `Host` header and URL host names, Cargo's host and target vocabulary and `harness = false`, GitHub's self-hosted runners, cargo-dist's `host` step and `host-jobs`, CSS `:host`, and the DOM's `ShadowRoot.host`.
 - Crate names are written as they are, such as `harness-runner` and `runvil-engine`. Code names follow the same terms.
 - Quotations of people stay verbatim.
 - `crates/workshop/ui/test/docs-claims.mjs` enforces these rules in every `AGENTS.md`, every `## Invariants` crate doc, and every `.cursor/rules` file.
@@ -45,7 +45,6 @@ Seven terms have exactly one meaning each, everywhere in this repository: code c
 - Behavior changes ship with tests in the same change. Preserve product and behavior tests during refactors.
 - A Cargo feature gates a real constraint such as a toolchain requirement or heavy native build. It does not describe product shape. Feature-disabled builds must not leak optional types into core paths.
 - Runtime and serve paths never compile native dependencies or invoke build tools.
-- Long-running gateway work reports through `gateway-progress`, a private gateway family crate: a producer begins an activity with a text, replaces the text as work moves, and drops the guard when done. Consumers outside the family read only the same `{ busy, text }` wire shape, which each side declares for itself: the Gateway sends it, and a Host that shows it pins the field names with a golden JSON test.
 - Unsafe code stays in its explicitly owned boundary.
 - Comments explain a non-obvious constraint, ordering requirement, or workaround. Every platform or external-bug workaround cites its upstream issue URL in the explanatory comment.
 - JSON that reaches a recorder or a replay comparison round-trips exactly - `to_value`, `to_string`, `from_str` yield an identical value, object keys stay canonical (sorted), numbers must be finite. Exact parsing (`float_roundtrip`) carries that guarantee; a value derived and then logged is additionally rounded to its meaningful precision at the source.
@@ -53,7 +52,7 @@ Seven terms have exactly one meaning each, everywhere in this repository: code c
 ## Verification
 
 - Full suite: `cargo nextest run --locked --workspace --exclude workshop --exclude workshop-server --exclude workshop-server-api --all-features`; workshop crates separately: `cargo nextest run --locked -p workshop -p workshop-server -p workshop-server-api`.
-- Linter: `cargo clippy --workspace --exclude workshop --exclude workshop-server --exclude workshop-server-api --all-targets --all-features` (workshop: `cargo clippy -p workshop -p workshop-server -p workshop-server-api --all-targets`); the gate runs both with `CARGO_BUILD_WARNINGS=deny`. Clippy reports everything `cargo check` does, so never run a standalone `cargo check --workspace` beside the clippy runs; the one exception is the headless feature-combination gate `cargo check -p gateway --no-default-features`, which checks a build shape clippy --all-features does not cover.
+- Linter: `cargo clippy --workspace --exclude workshop --exclude workshop-server --exclude workshop-server-api --all-targets --all-features` (workshop: `cargo clippy -p workshop -p workshop-server -p workshop-server-api --all-targets`); the gate runs both with `CARGO_BUILD_WARNINGS=deny`. Clippy reports everything `cargo check` does, so never run a standalone `cargo check --workspace` beside the clippy runs.
 - Formatter: `cargo fmt --all --check`.
 - Docs: `cargo doc --workspace --no-deps --all-features --exclude workshop --exclude workshop-server --exclude workshop-server-api` with `RUSTDOCFLAGS="-D warnings"`. Rustdoc lints are not covered by clippy; never skip the docs gate.
 - Facade docs: `RUSTDOCFLAGS="-D warnings" cargo doc -p runvil --no-deps`, without `--all-features`, so the facade's docs build with default features.

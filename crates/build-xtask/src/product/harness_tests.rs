@@ -7,8 +7,9 @@ use super::test_support::write_crate;
 
 #[test]
 fn a_harness_crate_depending_on_a_gateway_crate_is_reported() {
-    // No gateway crate is reachable from the Harness family, the former
-    // `gateway-api-types` exception included.
+    // The Gateway is its own repository now, so a package named like one of
+    // its crates is an unaffiliated crate, and those are closed to the
+    // Harness family as well.
     let root = tempfile::TempDir::new().expect("tempdir");
     write_crate(
         root.path(),
@@ -21,7 +22,7 @@ fn a_harness_crate_depending_on_a_gateway_crate_is_reported() {
     assert_eq!(violations.len(), 1, "{violations:?}");
     assert!(
         violations[0].starts_with("harness-sessions depends on gateway-api-types:")
-            && violations[0].contains("harness crates must not depend on gateway crates"),
+            && violations[0].contains("harness crates must not depend on unaffiliated crates"),
         "every gateway crate is closed to harness crates: {violations:?}"
     );
 }

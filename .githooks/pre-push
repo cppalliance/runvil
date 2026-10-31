@@ -5,9 +5,6 @@ set -e
 echo "==> Running docs-claims wording scan..."
 node --test crates/workshop/ui/test/docs-claims.mjs
 
-echo "==> Checking headless gateway (AGENTS.md rule)..."
-cargo check -p gateway --no-default-features
-
 echo "==> Running Clippy on workspace..."
 CARGO_BUILD_WARNINGS=deny cargo clippy --workspace --exclude workshop --exclude workshop-server --exclude workshop-server-api --all-targets --all-features
 

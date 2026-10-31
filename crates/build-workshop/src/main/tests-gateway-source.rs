@@ -28,7 +28,6 @@ fn repository() -> TempDir {
 fn environment_at(temp: &TempDir) -> BuildEnvironment {
     BuildEnvironment {
         workspace_root: temp.path().to_path_buf(),
-        target_root: temp.path().join("cargo-target"),
         cargo: PathBuf::from("selected-cargo"),
         node: PathBuf::from("selected-node"),
         gateway_sidecar: None,
@@ -213,24 +212,31 @@ fn a_staged_sidecar_is_reused_for_the_host_target_too() {
 }
 
 #[test]
-fn no_staged_sidecar_and_no_binary_falls_back_to_building_the_gateway() {
+fn no_staged_sidecar_and_no_binary_stops_and_names_the_fetch_script() {
     let temp = repository();
     let environment = environment_at(&temp);
     let triple = "x86_64-unknown-linux-gnu";
-    let mut runner =
-        FakeRunner::with_responses(vec![success(""), success(""), success(""), success("")]);
+    let mut runner = FakeRunner::with_responses(vec![success(""), success("")]);
 
-    build_workshop(
+    let error = build_workshop(
         &request(Profile::Debug, Some(triple), None),
         &environment,
         &mut runner,
     )
-    .expect("Workshop build");
+    .expect_err("no sidecar anywhere");
 
+    assert!(
+        error.primary.contains("fetch-gateway-sidecar.mjs"),
+        "the message names the fetch script: {error}"
+    );
+    assert!(
+        error.primary.contains(triple),
+        "the message names the target it read: {error}"
+    );
     assert_eq!(
-        runner.commands[0].args,
-        strings(&["build", "-p", "gateway", "--target", triple]),
-        "the absent case still builds the Gateway when nothing is staged"
+        runner.commands.len(),
+        0,
+        "no command runs at all: the missing sidecar is refused before anything starts"
     );
 }
 

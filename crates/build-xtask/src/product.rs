@@ -5,19 +5,18 @@
 //! family, and its dependencies of every kind (normal, dev, build, and
 //! target-specific) are checked against the matrix:
 //!
-//! - `runvil`/`runvil-*` crates must not depend on gateway,
-//!   workshop, or Harness crates.
-//! - `gateway`/`gateway-*` crates must not depend on runvil,
-//!   workshop, or Harness crates.
-//! - `workshop`/`workshop-*` crates must not depend on gateway crates.
-//! - `harness`/`harness-*` crates must not depend on gateway, shared, or
+//! - `runvil`/`runvil-*` crates must not depend on workshop or Harness
+//!   crates.
+//! - `workshop`/`workshop-*` crates must not depend on Harness crates,
+//!   except through the Harness family's two public crates.
+//! - `harness`/`harness-*` crates must not depend on shared or
 //!   workshop crates; outside their own family they may name only
 //!   `runvil` and `runvil-plugin`, which rules out `build-*`
 //!   and other unaffiliated crates.
 //! - `plugin-*` crates may depend only on `runvil-plugin`, `shared-*`
-//!   crates, and outside libraries. `runvil`, gateway, and Harness
-//!   crates must not depend on `plugin-*` crates, except
-//!   `harness-gateway-client`, which implements web's `SearchProvider`.
+//!   crates, and outside libraries. `runvil` and Harness crates must not
+//!   depend on `plugin-*` crates, except `harness-gateway-client`, which
+//!   implements web's `SearchProvider`.
 //! - `shared-*` crates must not depend on any product crate.
 //! - Public API: a crate outside the runvil family may depend on
 //!   the family only through its two public crates, `runvil` and
@@ -25,19 +24,20 @@
 //!   family only through its two public crates, `harness` and
 //!   `harness-gateway-client`. The `build-*` crates are bound too.
 //! - Container privacy: the manifestless `crates/runvil-internal/`,
-//!   `crates/gateway/`, `crates/workshop/`, and `crates/harness-internal/`
-//!   directories are private to their families; only the crates inside a
-//!   container and the container's named outside exceptions (`runvil`
-//!   and `runvil-plugin` for `crates/runvil-internal/`, `harness`
-//!   for `crates/harness-internal/`; the gateway and workshop containers
-//!   name none) may depend on the crates it holds. Containers nest:
-//!   `crates/gateway/stt/` is a subsystem private to the gateway family,
-//!   with `gateway-stt` as its public member - the one crate inside the
-//!   family outside the subsystem may name.
+//!   `crates/workshop/`, and `crates/harness-internal/` directories are
+//!   private to their families; only the crates inside a container and the
+//!   container's named outside exceptions (`runvil` and `runvil-plugin`
+//!   for `crates/runvil-internal/`, `harness` for
+//!   `crates/harness-internal/`; the workshop container names none) may
+//!   depend on the crates it holds.
 //! - Desktop-app boundary: the `workshop` desktop app may depend on no
 //!   workshop crate except `workshop-server-api`, and `workshop-server-api`
 //!   on none except `workshop-server`. A crate's dependency on itself is
 //!   not an edge.
+//!
+//! The Gateway is a separate product in its own repository, so no crate
+//! here is classified into a gateway family: a dependency on a crate this
+//! workspace does not hold is outside the matrix's reach.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -49,7 +49,6 @@ const DEP_KINDS: [&str; 3] = ["dependencies", "dev-dependencies", "build-depende
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Family {
     Runvil,
-    Gateway,
     Workshop,
     Harness,
     Plugin,
@@ -63,8 +62,6 @@ enum Family {
 fn family(package: &str) -> Family {
     if package == "runvil" || package.starts_with("runvil-") {
         Family::Runvil
-    } else if package == "gateway" || package.starts_with("gateway-") {
-        Family::Gateway
     } else if package == "workshop" || package.starts_with("workshop-") {
         Family::Workshop
     } else if package == "harness" || package.starts_with("harness-") {
@@ -167,9 +164,8 @@ fn boundary_breach(package: &CrateInfo, dep: &CrateInfo) -> Option<String> {
     if let Some(container) = container_of(&dep.dir) {
         // Inside is physical containment: a crate anywhere under
         // crates/<container>/ may name the container's crates, so nested
-        // subsystems see their parent family's crates (gateway-stt depends
-        // on gateway-config) while the family cannot name the subsystem's
-        // private crates back.
+        // subsystems see their parent family's crates while the family
+        // cannot name the subsystem's private crates back.
         let inside = package
             .dir
             .starts_with(Path::new("crates").join(&container));
@@ -177,14 +173,7 @@ fn boundary_breach(package: &CrateInfo, dep: &CrateInfo) -> Option<String> {
         // The build-* crates are meta tooling, not a product family: they
         // may depend into any container.
         let meta = family(&package.package) == Family::Build;
-        // A container's public member is visible one level higher: to the
-        // crates under the container's parent scope only.
-        let public = container_public_member(&container) == Some(dep.package.as_str())
-            && match parent_scope(&container) {
-                Some(parent) => package.dir.starts_with(Path::new("crates").join(parent)),
-                None => package.dir.starts_with("crates"),
-            };
-        if !inside && !named && !meta && !public {
+        if !inside && !named && !meta {
             return Some(match container_face(&container) {
                 Some(face) => format!(
                     "crates/{container} is private to its family; only {face} may depend into it"
@@ -200,20 +189,11 @@ fn boundary_breach(package: &CrateInfo, dep: &CrateInfo) -> Option<String> {
     }
     let (from, to) = (family(&package.package), family(&dep.package));
     let family_rule = match (from, to) {
-        (Family::Runvil, Family::Gateway | Family::Workshop | Family::Harness) => {
-            Some("runvil crates must not depend on gateway, workshop, or harness crates")
-        }
-        (Family::Gateway, Family::Runvil | Family::Workshop | Family::Harness) => {
-            Some("gateway crates must not depend on runvil, workshop, or harness crates")
-        }
-        (Family::Workshop, Family::Gateway) => {
-            Some("workshop crates must not depend on gateway crates")
+        (Family::Runvil, Family::Workshop | Family::Harness) => {
+            Some("runvil crates must not depend on workshop or harness crates")
         }
         (Family::Harness, Family::Workshop) => {
             Some("harness crates must not depend on workshop crates")
-        }
-        (Family::Harness, Family::Gateway) => {
-            Some("harness crates must not depend on gateway crates")
         }
         (Family::Harness, Family::Shared) => {
             Some("harness crates must not depend on shared crates")
@@ -224,10 +204,9 @@ fn boundary_breach(package: &CrateInfo, dep: &CrateInfo) -> Option<String> {
         (Family::Harness, Family::Unaffiliated) => Some(
             "harness crates must not depend on unaffiliated crates; outside their family they may name only runvil and runvil-plugin",
         ),
-        (
-            Family::Shared,
-            Family::Runvil | Family::Gateway | Family::Workshop | Family::Harness | Family::Plugin,
-        ) => Some("shared crates must not depend on product crates"),
+        (Family::Shared, Family::Runvil | Family::Workshop | Family::Harness | Family::Plugin) => {
+            Some("shared crates must not depend on product crates")
+        }
         _ => None,
     };
     family_rule.map(str::to_owned).or_else(|| {
@@ -255,8 +234,8 @@ fn boundary_breach(package: &CrateInfo, dep: &CrateInfo) -> Option<String> {
 
 /// The reason an edge from `package` to `dep` breaches the Plugin family's
 /// rules, or `None` when they allow it: a Plugin crate names only its
-/// allow-list, and no runvil, gateway, or Harness crate but the
-/// gateway client names a Plugin crate.
+/// allow-list, and no runvil or Harness crate but the gateway client names
+/// a Plugin crate.
 fn plugin_breach(package: &CrateInfo, dep: &CrateInfo) -> Option<&'static str> {
     let (from, to) = (family(&package.package), family(&dep.package));
     let allowed = to == Family::Shared
@@ -265,11 +244,9 @@ fn plugin_breach(package: &CrateInfo, dep: &CrateInfo) -> Option<&'static str> {
         (Family::Plugin, _) if !allowed => Some(
             "plugin crates may depend only on runvil-plugin, shared-* crates, and outside libraries",
         ),
-        (Family::Runvil | Family::Gateway | Family::Harness, Family::Plugin)
-            if package.package != GATEWAY_CLIENT =>
-        {
+        (Family::Runvil | Family::Harness, Family::Plugin) if package.package != GATEWAY_CLIENT => {
             Some(
-                "runvil, gateway, and harness crates must not depend on plugin crates; only harness-gateway-client may",
+                "runvil and harness crates must not depend on plugin crates; only harness-gateway-client may",
             )
         }
         _ => None,
@@ -288,8 +265,8 @@ fn desktop_boundary_face(package: &str) -> Option<&'static str> {
 
 /// The root-relative path of the deepest manifestless `crates/<container>/`
 /// directory holding the crate whose root-relative manifest directory is
-/// `dir` (`crates/gateway/stt/engine` is in `gateway/stt`), or `None` for a
-/// crate directly under `crates/`.
+/// `dir` (`crates/runvil-internal/engine` is in `runvil-internal`), or
+/// `None` for a crate directly under `crates/`.
 fn container_of(dir: &Path) -> Option<String> {
     let mut components = dir.components();
     if components.next()?.as_os_str() != "crates" {
@@ -304,13 +281,6 @@ fn container_of(dir: &Path) -> Option<String> {
     }
 }
 
-/// The scope one level above a container: the container path with its last
-/// component dropped, or `None` when the container sits directly under
-/// `crates/`.
-fn parent_scope(container: &str) -> Option<&str> {
-    container.rsplit_once('/').map(|(parent, _)| parent)
-}
-
 /// The crates outside a container permitted to depend into it; empty when
 /// the container names none.
 fn container_named_exception(container: &str) -> &'static [&'static str] {
@@ -321,20 +291,12 @@ fn container_named_exception(container: &str) -> &'static [&'static str] {
     }
 }
 
-/// The container's public member: the one crate inside the container that
-/// crates under the parent scope may name.
-fn container_public_member(container: &str) -> Option<&'static str> {
-    match container {
-        "gateway/stt" => Some("gateway-stt"),
-        _ => None,
-    }
-}
-
 /// The crates a container-privacy violation names as the legal way in: the
-/// named outside exceptions, or the public member when there are none.
+/// named outside exceptions, or none when the container names none, which
+/// makes the message say no outside crate may depend into it.
 fn container_face(container: &str) -> Option<String> {
     match container_named_exception(container) {
-        [] => container_public_member(container).map(str::to_owned),
+        [] => None,
         named => Some(named.join(" or ")),
     }
 }
@@ -343,8 +305,7 @@ fn container_face(container: &str) -> Option<String> {
 /// package names, plus the directories and violations for manifests that
 /// could not be read or parsed. A directory under `crates/` containing a
 /// `Cargo.toml` is a crate and is not descended into; any other directory
-/// is a container and the walk descends, so containers may nest
-/// (`crates/gateway/stt/`).
+/// is a container and the walk descends, so containers may nest.
 pub(crate) fn workspace_crates(root: &Path) -> CrateWalk {
     let mut walk = CrateWalk {
         crates: Vec::new(),

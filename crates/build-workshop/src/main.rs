@@ -1,11 +1,13 @@
 //! Builds Workshop and stages its Gateway sidecar for Tauri.
 //!
-//! The sidecar comes from one of four places, in this order: the
+//! The sidecar comes from one of three places, in this order: the
 //! `--gateway-binary` flag, the `RUNVIL_GATEWAY_SIDECAR` environment
-//! variable, a sidecar already staged under `crates/workshop/desktop/binaries/`,
-//! or a Gateway built from this workspace. Only the last compiles the
-//! Gateway, so a machine with a downloaded or hand-staged Gateway builds
-//! Workshop without touching Gateway source.
+//! variable, or a sidecar already staged under
+//! `crates/workshop/desktop/binaries/`. The Gateway is its own product in
+//! `cppalliance/runvil-gateway`, so nothing here compiles it: with no
+//! sidecar anywhere, the run stops and names
+//! `node tools/fetch-gateway-sidecar.mjs`, which downloads the release
+//! `gateway-pin/pin.json` names.
 
 use std::ffi::OsString;
 use std::fmt;
@@ -36,29 +38,21 @@ USAGE:
 OPTIONS:
     --release                 Build Workshop with Cargo's release profile
     --target <triple>         Build for this target triple
-    --gateway-binary <path>   Stage this Gateway binary instead of building one
+    --gateway-binary <path>   Stage this Gateway binary
     -h, --help                Print this help
 
 The Gateway sidecar comes from --gateway-binary, then the
 RUNVIL_GATEWAY_SIDECAR environment variable, then a sidecar already staged
-under crates/workshop/desktop/binaries/, and only otherwise from
-`cargo build -p gateway`. A sidecar that was already staged is left in
-place, so the next build reuses it.
+under crates/workshop/desktop/binaries/. The Gateway is a separate product,
+so this never builds it: run `node tools/fetch-gateway-sidecar.mjs` to stage
+the release gateway-pin/pin.json names. A sidecar that was already staged is
+left in place, so the next build reuses it.
 ";
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum Profile {
     Debug,
     Release,
-}
-
-impl Profile {
-    fn directory(self) -> &'static str {
-        match self {
-            Self::Debug => "debug",
-            Self::Release => "release",
-        }
-    }
 }
 
 #[derive(Debug, Eq, PartialEq)]
@@ -129,7 +123,6 @@ struct InterruptState {
 #[derive(Debug)]
 struct BuildEnvironment {
     workspace_root: PathBuf,
-    target_root: PathBuf,
     cargo: PathBuf,
     node: PathBuf,
     /// The Gateway binary named by `RUNVIL_GATEWAY_SIDECAR`, when set: the
@@ -151,24 +144,6 @@ impl BuildEnvironment {
                 )
             })?
             .to_path_buf();
-        let target_root = match std::env::var_os("CARGO_TARGET_DIR") {
-            Some(value) if value.is_empty() => {
-                return Err(anyhow::anyhow!("CARGO_TARGET_DIR must not be empty"));
-            }
-            Some(value) => {
-                let path = PathBuf::from(value);
-                if path.is_absolute() {
-                    path
-                } else {
-                    std::env::current_dir()
-                        .map_err(|error| {
-                            anyhow::anyhow!("cannot read the current directory: {error}")
-                        })?
-                        .join(path)
-                }
-            }
-            None => workspace_root.join("target"),
-        };
         let cargo = std::env::var_os("CARGO")
             .or_else(|| option_env!("CARGO").map(OsString::from))
             .map(PathBuf::from)
@@ -186,7 +161,6 @@ impl BuildEnvironment {
         };
         Ok(Self {
             workspace_root,
-            target_root,
             cargo,
             node: PathBuf::from("node"),
             gateway_sidecar,

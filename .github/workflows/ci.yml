@@ -30,17 +30,10 @@ jobs:
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: |
-            crates/workshop/package-lock.json
-            crates/gateway/*/ui/package-lock.json
+          cache-dependency-path: crates/workshop/package-lock.json
 
       - name: Install UI dependencies
-        run: |
-          npm ci --prefix crates/workshop
-          npm ci --prefix crates/gateway/config-ui/ui
-
-      - name: Build Gateway without Workshop UI tooling
-        run: cargo build --locked -p gateway
+        run: npm ci --prefix crates/workshop
 
       - name: Clippy
         env:
@@ -62,20 +55,13 @@ jobs:
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: |
-            crates/workshop/package-lock.json
-            crates/gateway/*/ui/package-lock.json
+          cache-dependency-path: crates/workshop/package-lock.json
 
       - name: Install UI dependencies
-        run: |
-          npm ci --prefix crates/workshop
-          npm ci --prefix crates/gateway/config-ui/ui
+        run: npm ci --prefix crates/workshop
 
       - name: Test (concurrent via nextest)
         run: cargo nextest run --locked --workspace --exclude workshop --exclude workshop-server --exclude workshop-server-api --all-features
-
-      - name: Check headless gateway
-        run: cargo check -p gateway --no-default-features
 
       # No build step may write into the repository (the UI bundles build
       # into OUT_DIR now); catch a regression here rather than in a diff.
@@ -102,14 +88,10 @@ jobs:
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: |
-            crates/workshop/package-lock.json
-            crates/gateway/*/ui/package-lock.json
+          cache-dependency-path: crates/workshop/package-lock.json
 
       - name: Install UI dependencies
-        run: |
-          npm ci --prefix crates/workshop
-          npm ci --prefix crates/gateway/config-ui/ui
+        run: npm ci --prefix crates/workshop
 
       - name: Docs
         run: cargo doc --workspace --no-deps --all-features --exclude workshop --exclude workshop-server --exclude workshop-server-api
@@ -140,14 +122,10 @@ jobs:
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: |
-            crates/workshop/package-lock.json
-            crates/gateway/*/ui/package-lock.json
+          cache-dependency-path: crates/workshop/package-lock.json
 
       - name: Install UI dependencies
-        run: |
-          npm ci --prefix crates/workshop
-          npm ci --prefix crates/gateway/config-ui/ui
+        run: npm ci --prefix crates/workshop
 
       - name: Stage a stub Gateway sidecar
         run: node tools/fetch-gateway-sidecar.mjs --stub --target x86_64-pc-windows-msvc
@@ -160,23 +138,15 @@ jobs:
           CARGO_BUILD_WARNINGS: deny
         run: cargo clippy -p workshop -p workshop-server -p workshop-server-api --all-targets
 
-      # One build runs every Windows-only test: the Workshop crates' suites
-      # (the workspace jail's Windows paths included) and the gateway's
-      # process-ownership races, the only tests the filter selects from the
-      # gateway and gateway-api-discovery suites.
+      # The Workshop crates' suites, including the workspace jail's Windows
+      # paths.
       - name: Test (Windows)
         shell: bash
         run: >-
-          cargo nextest run --locked --no-default-features --features gateway/test-fixtures
+          cargo nextest run --locked
           -p workshop -p workshop-server -p workshop-server-api -p workshop-workspace
-          -p gateway-api-discovery -p gateway
           -E 'package(workshop) | package(workshop-server) | package(workshop-server-api)
-          | package(workshop-workspace)
-          | (package(gateway-api-discovery) & test(a_process_lifetime_lease_recovers_after_its_owner_is_terminated))
-          | (package(gateway) & binary(it) & (test(simultaneous_direct_launches_leave_one_owner_and_one_clean_handoff)
-          | test(workshop_launch_lock_and_direct_launch_do_not_deadlock_or_double_boot)
-          | test(a_direct_launch_recovers_the_lease_from_a_terminated_owner)
-          | test(a_silent_process_lease_owner_causes_a_bounded_console_only_failure)))'
+          | package(workshop-workspace)'
 
       - name: Docs (workshop-server, private items)
         env:
@@ -216,14 +186,10 @@ jobs:
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: |
-            crates/workshop/package-lock.json
-            crates/gateway/*/ui/package-lock.json
+          cache-dependency-path: crates/workshop/package-lock.json
 
       - name: Install UI dependencies
-        run: |
-          npm ci --prefix crates/workshop
-          npm ci --prefix crates/gateway/config-ui/ui
+        run: npm ci --prefix crates/workshop
 
       - name: Stage a stub Gateway sidecar
         run: node tools/fetch-gateway-sidecar.mjs --stub --target x86_64-unknown-linux-gnu
@@ -256,9 +222,7 @@ jobs:
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: |
-            crates/workshop/package-lock.json
-            crates/gateway/*/ui/package-lock.json
+          cache-dependency-path: crates/workshop/package-lock.json
 
       - name: Install UI dependencies
         working-directory: crates/workshop
@@ -276,22 +240,6 @@ jobs:
         working-directory: crates/workshop
         run: npm test --workspaces --if-present
 
-      - name: Install config UI dependencies
-        working-directory: crates/gateway/config-ui/ui
-        run: npm ci
-
-      - name: Typecheck config UI
-        working-directory: crates/gateway/config-ui/ui
-        run: npm run typecheck
-
-      - name: Build config UI
-        working-directory: crates/gateway/config-ui/ui
-        run: npm run build
-
-      - name: Test config UI
-        working-directory: crates/gateway/config-ui/ui
-        run: npm test
-
   supply-chain:
     runs-on: ubuntu-latest
     steps:
@@ -307,24 +255,22 @@ jobs:
       - name: cargo audit
         run: cargo audit
 
-      # The gateway holds vendor credentials, so it links exactly one rustls
-      # crypto backend, aws-lc-rs. This fails when `ring` re-enters its
-      # normal-edge closure (through a reqwest bump or a Tauri plugin default)
-      # and when `cargo tree` itself cannot run; only a successful, ring-free
-      # result passes. This is a Gateway-side check: it reads the Gateway
-      # crate's dependency closure, which moves with the Gateway, so it stays
-      # here until that check moves too.
-      - name: One rustls crypto backend in the gateway
+      # The Workshop binary links exactly one rustls crypto backend,
+      # aws-lc-rs. This fails when `ring` re-enters its normal-edge closure
+      # (through a reqwest bump or a Tauri plugin default) and when
+      # `cargo tree` itself cannot run; only a successful, ring-free result
+      # passes. The Gateway has its own repository and its own checks.
+      - name: One rustls crypto backend in the Workshop
         shell: bash
         run: |
           set -euo pipefail
-          if ! out="$(cargo tree --locked -p gateway -e normal -i ring --depth 0 2>&1)"; then
+          if ! out="$(cargo tree --locked -p workshop -e normal -i ring --depth 0 2>&1)"; then
             echo "cargo tree failed:"
             printf '%s\n' "$out"
             exit 1
           fi
           if printf '%s\n' "$out" | grep -v '^warning: nothing to print' | grep -q '^ring v'; then
-            echo "ring is linked into the gateway; aws-lc-rs is the only permitted rustls backend"
+            echo "ring is linked into the workshop; aws-lc-rs is the only permitted rustls backend"
             printf '%s\n' "$out"
             exit 1
           fi

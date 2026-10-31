@@ -1,5 +1,13 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -165,6 +173,40 @@ test("stages and removes the real source file under Tauri's target name", () => 
       }),
       staged,
     );
+  } finally {
+    rmSync(root, { force: true, recursive: true });
+  }
+});
+
+test("the staged sidecar keeps an executable mode for the Linux bundlers", () => {
+  // `copyFileSync` writes the destination with the default mode, so without
+  // an explicit `chmodSync` the staged Gateway is 0644 and Tauri's deb and
+  // AppImage bundlers carry that through to `usr/bin`. The assertion is
+  // skipped on Windows, where `chmodSync` only toggles the read-only flag and
+  // `statSync().mode` reports 0666 for any writable file. CI runs these tools'
+  // tests on Linux and Windows, so the assertion is live on the platform that
+  // ships the deb.
+  const root = mkdtempSync(join(tmpdir(), "runvil-sidecar-"));
+  const source = join(root, "target", "debug", "runvil-gateway");
+  const target = "x86_64-unknown-linux-gnu";
+  try {
+    mkdirSync(join(root, "target", "debug"), { recursive: true });
+    writeFileSync(source, "downloaded gateway");
+    // Start from a mode with no execute bits at all, so a passing assertion
+    // cannot come from the umask or from the source file's own mode.
+    chmodSync(source, 0o644);
+
+    const staged = stageGatewaySidecar({ root, target, source });
+
+    if (process.platform === "win32") {
+      assert.equal(
+        statSync(staged).mode & 0o777,
+        0o666,
+        "Windows reports 0666 for any writable file, so the execute bit cannot be asserted here",
+      );
+      return;
+    }
+    assert.equal(statSync(staged).mode & 0o777, 0o755);
   } finally {
     rmSync(root, { force: true, recursive: true });
   }

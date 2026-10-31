@@ -1,12 +1,11 @@
 //! Shared build-script helper that bundles a UI package's TypeScript
 //! sources with esbuild into the Cargo build output directory.
 //!
-//! Both UI crates drive their entire UI build through this crate:
-//! `gateway-config-ui` keeps its package nested at `<crate>/ui/` and calls
-//! [`build`]; `workshop-server` builds its sibling package at
-//! `crates/workshop/ui/` through [`build_sibling`]. Either way the bundle
-//! and copies of the static files land in `$OUT_DIR/ui-dist/`, which git
-//! never tracks, so no build step can dirty the repository. Cargo's own
+//! The workshop server drives its entire UI build through this crate: it
+//! keeps its package at `crates/workshop/ui/` and calls [`build_sibling`].
+//! The bundle and copies of the static files land in `$OUT_DIR/ui-dist/`,
+//! which git never tracks, so no build step can dirty the repository.
+//! Cargo's
 //! change detection decides when the bundle is rebuilt. Splitting builds
 //! content-hash every bundle file and emit a `manifest.json` plus a
 //! stamped `index.html`; non-splitting builds keep the unversioned
@@ -26,13 +25,6 @@ pub const WORKSHOP_STATIC_FILES: &[&str] = &[
     "icons/runvil-icon@2x.png",
 ];
 
-/// Static files copied next to the config UI bundle, relative to `ui/`.
-pub const CONFIG_UI_STATIC_FILES: &[&str] = &[
-    "index.html",
-    "icons/runvil-icon.png",
-    "icons/runvil-icon@2x.png",
-];
-
 /// One crate's UI build configuration.
 #[derive(Clone, Copy, Debug)]
 pub struct UiBuild {
@@ -48,32 +40,16 @@ pub struct UiBuild {
     /// The build then writes `manifest.json` (the logical-to-hashed name
     /// map the workshop server's asset routes resolve through) and stamps
     /// the dist copy of `index.html` with the hashed URLs. The workshop
-    /// UI splits (its panel registry lazy-loads feature directories); the
-    /// config UI does not, and keeps its unversioned `app.js`.
+    /// UI splits because its panel registry lazy-loads feature
+    /// directories; a non-splitting build keeps the unversioned `app.js`.
     pub splitting: bool,
 }
 
-/// Runs the UI build: declares the watched inputs, bundles
-/// `ui/src/main.ts` with esbuild into `$OUT_DIR/ui-dist/` (minified
-/// in the release profile), and copies the static files next to the
-/// bundle. Splitting builds finish with `finalize_hashing`: the
-/// manifest and the stamped index page.
-///
-/// # Errors
-/// Returns an error when not run through Cargo, when `<crate>/ui/` is not
-/// a directory, when a `package.json` at or above it up to its install
-/// root exists but cannot be read or parsed, when no esbuild install is
-/// found there or esbuild fails, or when a static file cannot be copied.
-pub fn build(config: UiBuild) -> anyhow::Result<()> {
-    build_sibling("ui", config)
-}
-
-/// The general form of [`build`]: `relative` is joined onto
-/// `CARGO_MANIFEST_DIR` to locate the UI package, so it serves both the
-/// nested layout (`"ui"`, which [`build`] passes) and a package outside
-/// the crate (the workshop server passes `"../ui"` for its sibling at
-/// `crates/workshop/ui/`). Output lands in `$OUT_DIR/ui-dist/` either
-/// way.
+/// The one entry point: `relative` is joined onto
+/// `CARGO_MANIFEST_DIR` to locate the UI package, so it serves a package
+/// nested in the crate and a package outside it (the workshop server
+/// passes `"../ui"` for its sibling at `crates/workshop/ui/`). Output
+/// lands in `$OUT_DIR/ui-dist/` either way.
 ///
 /// # Errors
 /// Returns an error when not run through Cargo, when the resolved
@@ -102,7 +78,8 @@ pub fn build_sibling(relative: &str, config: UiBuild) -> anyhow::Result<()> {
     build_in(&ui_dir, &dist_dir, config)
 }
 
-/// Path-explicit variant of [`build`]: bundles `ui_dir/src/main.ts` into
+/// Path-explicit variant of [`build_sibling`]: bundles `ui_dir/src/main.ts`
+/// into
 /// `dist_dir` without reading Cargo's environment. Tests use it to run
 /// the Rust implementer against a scratch output directory (setting
 /// process environment would require `unsafe`), and to compare the

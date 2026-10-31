@@ -18,10 +18,7 @@ use syn::{Meta, Token};
 
 /// The crate directories, relative to the workspace root, that own an
 /// unsafe boundary and may relax `unsafe_code` in the module that holds it.
-const OWNED: [&str; 7] = [
-    "crates/gateway/app",
-    "crates/gateway/stt/whisper-ffi",
-    "crates/gateway-api-discovery",
+const OWNED: [&str; 4] = [
     "crates/workshop/desktop",
     "crates/workshop/gateway-discovery",
     "crates/harness-internal/plugin-loader",

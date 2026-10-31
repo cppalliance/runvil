@@ -94,13 +94,13 @@ fn a_desktop_dependency_on_a_workshop_crate_other_than_the_facade_is_reported() 
         root.path(),
         "workshop",
         "workshop",
-        "[dependencies]\nworkshop-gateway = { path = \"../workshop-gateway\" }\n",
+        "[dependencies]\nworkshop-status = { path = \"../workshop-status\" }\n",
     );
-    write_crate(root.path(), "workshop-gateway", "workshop-gateway", "");
+    write_crate(root.path(), "workshop-status", "workshop-status", "");
     let violations = product_boundary_violations(root.path());
     assert_eq!(violations.len(), 1, "{violations:?}");
     assert!(
-        violations[0].starts_with("workshop depends on workshop-gateway:")
+        violations[0].starts_with("workshop depends on workshop-status:")
             && violations[0].ends_with("only through workshop-server-api"),
         "the violation names the desktop app, the forbidden dep, and the facade: {violations:?}"
     );
@@ -183,20 +183,25 @@ fn an_outside_crate_depending_on_the_plugin_contract_passes() {
 }
 
 #[test]
-fn a_gateway_crate_depending_on_the_runvil_facade_is_reported() {
+fn a_crate_named_like_the_former_gateway_family_is_an_outside_crate() {
+    // The Gateway moved to its own repository, so no crate here is
+    // classified into a gateway family. A package that would have been one
+    // is an ordinary outside crate and reaches runvil only through the
+    // facade.
     let root = tempfile::TempDir::new().expect("tempdir");
     write_crate(
         root.path(),
         "gateway-routing",
         "gateway-routing",
-        "[dependencies]\nrunvil = { path = \"../runvil\" }\n",
+        "[dependencies]\nrunvil-lua = { path = \"../runvil-lua\" }\n",
     );
-    write_crate(root.path(), "runvil", "runvil", "");
+    write_crate(root.path(), "runvil-lua", "runvil-lua", "");
     let violations = product_boundary_violations(root.path());
     assert_eq!(violations.len(), 1, "{violations:?}");
     assert!(
-        violations[0].contains("gateway-routing"),
-        "the violation names the gateway crate: {violations:?}"
+        violations[0].starts_with("gateway-routing depends on runvil-lua:")
+            && violations[0].contains("only through runvil or runvil-plugin"),
+        "the outside-crate rule binds it as it binds any other: {violations:?}"
     );
 }
 
@@ -205,15 +210,15 @@ fn a_shared_crate_depending_on_a_product_crate_is_reported() {
     let root = tempfile::TempDir::new().expect("tempdir");
     write_crate(
         root.path(),
-        "shared-loopback",
-        "shared-loopback",
+        "shared-crypto",
+        "shared-crypto",
         "[dependencies]\nworkshop-protocol = { path = \"../workshop-protocol\" }\n",
     );
     write_crate(root.path(), "workshop-protocol", "workshop-protocol", "");
     let violations = product_boundary_violations(root.path());
     assert_eq!(violations.len(), 1, "{violations:?}");
     assert!(
-        violations[0].contains("shared-loopback") && violations[0].contains("workshop-protocol"),
+        violations[0].contains("shared-crypto") && violations[0].contains("workshop-protocol"),
         "the violation names both crates: {violations:?}"
     );
 }
@@ -226,10 +231,10 @@ fn dev_build_and_target_dependencies_are_checked() {
         "workshop-server",
         "workshop-server",
         "[dev-dependencies]\nrunvil-parser = { path = \"../runvil-parser\" }\n\
-         [target.'cfg(windows)'.dependencies]\ngateway-protocol = { path = \"../gateway-protocol\" }\n",
+         [target.'cfg(windows)'.dependencies]\nharness-runner = { path = \"../harness-runner\" }\n",
     );
     write_crate(root.path(), "runvil-parser", "runvil-parser", "");
-    write_crate(root.path(), "gateway-protocol", "gateway-protocol", "");
+    write_crate(root.path(), "harness-runner", "harness-runner", "");
     let violations = product_boundary_violations(root.path());
     assert_eq!(
         violations.len(),
@@ -257,21 +262,40 @@ fn package_renames_are_resolved_before_classification() {
 }
 
 #[test]
-fn a_runvil_crate_depending_on_gateway_or_workshop_is_reported() {
+fn a_runvil_crate_depending_on_a_workshop_crate_is_reported() {
     let root = tempfile::TempDir::new().expect("tempdir");
     write_crate(
         root.path(),
         "runvil-internal/engine",
         "runvil-engine",
-        "[dependencies]\ngateway-protocol = { path = \"../../gateway-protocol\" }\nworkshop-protocol = { path = \"../../workshop-protocol\" }\n",
+        "[dependencies]\nworkshop-protocol = { path = \"../../workshop-protocol\" }\n",
     );
-    write_crate(root.path(), "gateway-protocol", "gateway-protocol", "");
     write_crate(root.path(), "workshop-protocol", "workshop-protocol", "");
     let violations = product_boundary_violations(root.path());
-    assert_eq!(violations.len(), 2, "{violations:?}");
+    assert_eq!(violations.len(), 1, "{violations:?}");
     assert!(
-        violations.iter().all(|v| v.contains("runvil-engine")),
-        "the violations name the runvil crate: {violations:?}"
+        violations.iter().all(|v| v.contains("runvil-engine"))
+            && violations[0]
+                .contains("runvil crates must not depend on workshop or harness crates"),
+        "the violation names the runvil crate and the workshop ban: {violations:?}"
+    );
+}
+
+#[test]
+fn a_runvil_crate_depending_on_the_harness_facade_is_reported() {
+    let root = tempfile::TempDir::new().expect("tempdir");
+    write_crate(
+        root.path(),
+        "runvil-internal/engine",
+        "runvil-engine",
+        "[dependencies]\nharness = { path = \"../../harness\" }\n",
+    );
+    write_crate(root.path(), "harness", "harness", "");
+    let violations = product_boundary_violations(root.path());
+    assert_eq!(violations.len(), 1, "{violations:?}");
+    assert!(
+        violations[0].contains("runvil crates must not depend on workshop or harness crates"),
+        "the violation names the harness ban: {violations:?}"
     );
 }
 
@@ -311,34 +335,6 @@ fn an_unparseable_manifest_is_reported() {
 }
 
 #[test]
-fn a_workshop_crate_depending_on_a_gateway_crate_is_reported() {
-    // The Workshop family has no gateway dependency at all: Workshop reaches
-    // a running Gateway through its own discovery and HTTP clients, never
-    // through a Gateway crate. The two former exceptions are covered.
-    for gateway in [
-        "gateway-api-types",
-        "gateway-api-discovery",
-        "gateway-routing",
-    ] {
-        let root = tempfile::TempDir::new().expect("tempdir");
-        write_crate(
-            root.path(),
-            "workshop-server",
-            "workshop-server",
-            &format!("[dependencies]\n{gateway} = {{ path = \"../{gateway}\" }}\n"),
-        );
-        write_crate(root.path(), gateway, gateway, "");
-        let violations = product_boundary_violations(root.path());
-        assert_eq!(violations.len(), 1, "{gateway}: {violations:?}");
-        assert!(
-            violations[0].starts_with(&format!("workshop-server depends on {gateway}:"))
-                && violations[0].contains("workshop crates must not depend on gateway crates"),
-            "{gateway} is refused for a workshop crate: {violations:?}"
-        );
-    }
-}
-
-#[test]
 fn a_harness_crate_depending_on_the_runvil_facade_passes() {
     let root = tempfile::TempDir::new().expect("tempdir");
     write_crate(
@@ -375,21 +371,23 @@ fn a_harness_crate_depending_on_a_workshop_crate_is_reported() {
 }
 
 #[test]
-fn a_harness_crate_depending_on_a_private_gateway_crate_is_reported() {
+fn a_harness_crate_depending_on_a_private_product_crate_is_reported() {
     let root = tempfile::TempDir::new().expect("tempdir");
     write_crate(
         root.path(),
         "harness-internal/plugins",
         "harness-plugins",
-        "[dependencies]\ngateway-routing = { path = \"../../gateway-routing\" }\n",
+        "[dependencies]\nrunvil-engine = { path = \"../../runvil-engine\" }\n",
     );
-    write_crate(root.path(), "gateway-routing", "gateway-routing", "");
+    write_crate(root.path(), "runvil-engine", "runvil-engine", "");
     let violations = product_boundary_violations(root.path());
     assert_eq!(violations.len(), 1, "{violations:?}");
     assert!(
-        violations[0].starts_with("harness-plugins depends on gateway-routing:")
-            && violations[0].contains("harness crates must not depend on gateway crates"),
-        "the violation names the harness crate and the gateway ban: {violations:?}"
+        violations[0].starts_with("harness-plugins depends on runvil-engine:")
+            && violations[0].contains(
+                "outside crates may depend on the runvil family only through runvil or runvil-plugin"
+            ),
+        "the violation names the harness crate and the facade rule: {violations:?}"
     );
 }
 
@@ -448,16 +446,15 @@ fn a_workshop_crate_depending_on_a_harness_crate_other_than_the_facade_is_report
 }
 
 #[test]
-fn runvil_gateway_and_shared_crates_depending_on_harness_are_reported() {
+fn runvil_and_shared_crates_depending_on_harness_are_reported() {
     let root = tempfile::TempDir::new().expect("tempdir");
     let dep = "[dependencies]\nharness = { path = \"../harness\" }\n";
     write_crate(root.path(), "harness", "harness", "");
     write_crate(root.path(), "runvil", "runvil", dep);
-    write_crate(root.path(), "gateway-routing", "gateway-routing", dep);
-    write_crate(root.path(), "shared-loopback", "shared-loopback", dep);
+    write_crate(root.path(), "shared-crypto", "shared-crypto", dep);
     let violations = product_boundary_violations(root.path());
-    assert_eq!(violations.len(), 3, "{violations:?}");
-    for package in ["runvil", "gateway-routing", "shared-loopback"] {
+    assert_eq!(violations.len(), 2, "{violations:?}");
+    for package in ["runvil", "shared-crypto"] {
         assert!(
             violations
                 .iter()
@@ -470,11 +467,9 @@ fn runvil_gateway_and_shared_crates_depending_on_harness_are_reported() {
 #[test]
 fn family_classification_follows_the_naming_rules() {
     assert_eq!(family("runvil-engine"), Family::Runvil);
-    assert_eq!(family("gateway"), Family::Gateway);
-    assert_eq!(family("gateway-config"), Family::Gateway);
     assert_eq!(family("workshop"), Family::Workshop);
     assert_eq!(family("workshop-server"), Family::Workshop);
-    assert_eq!(family("shared-loopback"), Family::Shared);
+    assert_eq!(family("shared-crypto"), Family::Shared);
     assert_eq!(family("build-xtask"), Family::Build);
     assert_eq!(family("serde"), Family::Unaffiliated);
 }

@@ -1,22 +1,17 @@
 [workspace]
 resolver = "3"
-members = ["crates/*", "crates/runvil-internal/types", "crates/runvil-internal/engine", "crates/runvil-internal/lua", "crates/runvil-internal/parser", "crates/runvil-internal/vfs", "crates/runvil-internal/model-client", "crates/gateway/app", "crates/gateway/cloud-providers", "crates/gateway/config", "crates/gateway/config-ui", "crates/gateway/local", "crates/gateway/logging", "crates/gateway/progress", "crates/gateway/protocol", "crates/gateway/routing", "crates/gateway/web-search", "crates/gateway/stt/api", "crates/gateway/stt/engine", "crates/gateway/stt/backend-whisper", "crates/gateway/stt/whisper-ffi", "crates/workshop/desktop", "crates/workshop/server", "crates/workshop/server-api", "crates/workshop/gateway", "crates/workshop/gateway-discovery", "crates/workshop/menu", "crates/workshop/protocol", "crates/workshop/registry", "crates/workshop/status", "crates/workshop/support", "crates/workshop/user-state", "crates/workshop/workspace", "crates/workshop/run-log", "crates/workshop/agents", "crates/harness-internal/runner", "crates/harness-internal/plugin-loader", "crates/harness-internal/test-plugin"]
-# crates/shared-ui is not a Rust crate: it is the TypeScript+CSS package
-# the Gateway config UI consumes (the Workshop uses its fork in
-# crates/workshop/look), so the crates/* glob skips it.
-# crates/runvil-internal, crates/gateway, crates/workshop, and
-# crates/harness-internal are manifestless containers holding their
-# families' private crates (the gateway's STT subsystem nests one level
-# deeper under crates/gateway/stt).
-# Cargo prunes excluded subtrees from member globs, so a "crates/gateway/*"
+members = ["crates/*", "crates/runvil-internal/types", "crates/runvil-internal/engine", "crates/runvil-internal/lua", "crates/runvil-internal/parser", "crates/runvil-internal/vfs", "crates/runvil-internal/model-client", "crates/workshop/desktop", "crates/workshop/server", "crates/workshop/server-api", "crates/workshop/gateway", "crates/workshop/gateway-discovery", "crates/workshop/menu", "crates/workshop/protocol", "crates/workshop/registry", "crates/workshop/status", "crates/workshop/support", "crates/workshop/user-state", "crates/workshop/workspace", "crates/workshop/run-log", "crates/workshop/agents", "crates/harness-internal/runner", "crates/harness-internal/plugin-loader", "crates/harness-internal/test-plugin"]
+# crates/runvil-internal, crates/workshop, and crates/harness-internal
+# are manifestless containers holding their families' private crates.
+# Cargo prunes excluded subtrees from member globs, so a "crates/workshop/*"
 # glob beside the exclude below would match nothing; the container crates
 # are enumerated explicitly instead.
-exclude = ["crates/shared-ui", "crates/runvil-internal", "crates/gateway", "crates/gateway/stt", "crates/workshop", "crates/harness-internal"]
-# Plain `cargo build`/`cargo test` build only the gateway: it compiles on a
-# fresh macOS or Linux clone with no CUDA toolkit and no Tauri system
-# packages. The desktop app is an explicit choice:
-# `cargo build -p workshop`.
-default-members = ["crates/gateway/app"]
+exclude = ["crates/runvil-internal", "crates/workshop", "crates/harness-internal"]
+# Plain `cargo build`/`cargo test` build the Engine and its facades: they
+# compile on a fresh macOS or Linux clone with no native toolkit, no
+# CUDA, and no Tauri system packages. The desktop app is an explicit
+# choice: `cargo build -p workshop`.
+default-members = ["crates/runvil", "crates/runvil-plugin", "crates/harness", "crates/harness-gateway-client"]
 
 [workspace.package]
 version = "0.3.0"
@@ -28,23 +23,14 @@ license = "BSL-1.0"
 repository = "https://github.com/cppalliance/runvil"
 
 [workspace.dependencies]
-base64 = "0.22"
 bytes = "1"
 build-ceiling = { path = "crates/build-ceiling" }
 runvil = { path = "crates/runvil" }
 runvil-engine = { path = "crates/runvil-internal/engine" }
 runvil-plugin = { path = "crates/runvil-plugin" }
 runvil-types = { path = "crates/runvil-internal/types" }
-gateway-api-types = { path = "crates/gateway-api-types" }
-gateway-config = { path = "crates/gateway/config" }
-gateway-config-ui = { path = "crates/gateway/config-ui" }
-gateway-local = { path = "crates/gateway/local" }
-gateway-logging = { path = "crates/gateway/logging" }
-shared-error-source = { path = "crates/shared-error-source" }
-shared-loopback = { path = "crates/shared-loopback" }
-gateway-protocol = { path = "crates/gateway/protocol" }
-gateway-api-discovery = { path = "crates/gateway-api-discovery" }
 workshop-gateway-discovery = { path = "crates/workshop/gateway-discovery" }
+shared-error-source = { path = "crates/shared-error-source" }
 harness = { path = "crates/harness" }
 harness-gateway-client = { path = "crates/harness-gateway-client" }
 harness-runner = { path = "crates/harness-internal/runner" }
@@ -53,16 +39,10 @@ plugin-user-input = { path = "crates/plugin-user-input" }
 plugin-web = { path = "crates/plugin-web" }
 plugin-std = { path = "crates/plugin-std" }
 plugin-mcp = { path = "crates/plugin-mcp" }
-gateway-routing = { path = "crates/gateway/routing" }
 runvil-lua = { path = "crates/runvil-internal/lua" }
 runvil-model-client = { path = "crates/runvil-internal/model-client" }
 runvil-parser = { path = "crates/runvil-internal/parser" }
-gateway-progress = { path = "crates/gateway/progress" }
-gateway-stt = { path = "crates/gateway/stt/api" }
 runvil-vfs = { path = "crates/runvil-internal/vfs" }
-gateway-stt-engine = { path = "crates/gateway/stt/engine" }
-gateway-stt-backend-whisper = { path = "crates/gateway/stt/backend-whisper" }
-gateway-web-search = { path = "crates/gateway/web-search" }
 workshop-server = { path = "crates/workshop/server" }
 workshop-server-api = { path = "crates/workshop/server-api" }
 workshop-gateway = { path = "crates/workshop/gateway" }
@@ -75,7 +55,6 @@ workshop-workspace = { path = "crates/workshop/workspace" }
 workshop-run-log = { path = "crates/workshop/run-log" }
 workshop-agents = { path = "crates/workshop/agents" }
 workshop-user-state = { path = "crates/workshop/user-state" }
-gateway-whisper-ffi = { path = "crates/gateway/stt/whisper-ffi" }
 # default-features off: both users (the parser and build-xtask's doctest
 # scan) read only the core event stream, never the `html` renderer or the
 # `getopts` binary.
@@ -88,10 +67,10 @@ serde_json = { version = "1", features = ["float_roundtrip"] }
 # 0.13 rather than 0.12 so the tree links exactly one rustls crypto backend:
 # aws-lc-rs, the one Tauri already selects. 0.13 has no `ring`
 # option, so a bump cannot re-enable it; CI checks that `ring` stays out of
-# the gateway's normal closure. Root certificates come from the OS trust
+# each Rust binary's normal closure. Root certificates come from the OS trust
 # store through the platform verifier (the `rustls` feature's default), not
 # from a bundled Mozilla list. `query` became opt-in in 0.13.
-# `system-proxy` keeps the gateway honoring Windows registry and macOS proxies.
+# `system-proxy` makes reqwest honor Windows registry and macOS proxies.
 reqwest = { version = "0.13", default-features = false, features = ["json", "query", "rustls", "stream", "system-proxy"] }
 rand = "0.9"
 readabilityrs = "0.1"
@@ -104,9 +83,6 @@ percent-encoding = "2"
 ipnet = "2"
 dunce = "1"
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "time", "sync"] }
-# default-features off: the `sync` module (CancellationToken) is ungated in
-# tokio-util 0.7, so no features are required for it.
-tokio-util = { version = "0.7", default-features = false }
 thiserror = "2"
 anyhow = "1"
 axum = { version = "0.8", features = ["multipart", "ws"] }
@@ -139,7 +115,6 @@ proc-macro2 = { version = "1", features = ["span-locations"] }
 # nightly in build-xtask's `api/toolchain.rs`.
 rustdoc-types = "=0.61.0"
 tracing = "0.1"
-tracing-subscriber = "0.3"
 tower = { version = "0.5", features = ["util"] }
 arc-swap = "1"
 # Serves the UIs: reads $OUT_DIR/ui-dist from disk in debug builds, embeds it
@@ -157,87 +132,20 @@ tempfile = "3"
 turso = { version = "=0.7.2", default-features = false }
 time = { version = "0.3", features = ["formatting"] }
 sha2 = "0.11"
-hmac = "0.13"
-subtle = "2.6"
-dotenvy = "0.15"
-clap = { version = "4.6", features = ["derive"] }
-tar = { version = "0.4.46", default-features = false }
-zip = { version = "9.0.4", default-features = false, features = ["deflate-flate2"] }
-# Loads the packaged whisper.cpp runtime without linking it into Cargo builds.
+# Loads plugin dynamic libraries without linking them into Cargo builds.
 libloading = "0.8"
-# WAV parsing for STT uploads and transcription test fixtures.
-hound = "3.5"
 socket2 = { version = "0.6", features = ["all"] }
-# Machine metrics for `GET /admin/system`. default-features off keeps only the
-# CPU/RAM (`system`) and disk probes; the component, network, and user
-# probes and the rayon-backed `multithread` refresh are never used.
-sysinfo = { version = "0.38", default-features = false, features = ["system", "disk"] }
-# GPU name and VRAM for `GET /admin/system`. Loads NVML dynamically at
-# runtime via libloading, so machines without an NVIDIA driver degrade to an
-# absent GPU field rather than a link failure.
-nvml-wrapper = "0.12"
-# Opens a URL in the system browser for the windowless server frame.
-open = "5"
-# The Linux tray backend: a pure StatusNotifierItem over D-Bus, no GTK.
-# default-features off drops ksni's tokio feature; async-io runs the service
-# on ksni's own executor thread, so the tray never depends on which runtime
-# polls it (the tokio feature's runtime coupling is the documented panic
-# class). 0.3.6 is the floor for assume_sni_available and watcher
-# re-registration.
-ksni = { version = "0.3.6", default-features = false, features = ["async-io"] }
-# The session-bus probes beside ksni (watcher presence, the first-run
-# notification); the same zbus major ksni builds on, on the same async-io
-# executor model.
-zbus = { version = "5", default-features = false, features = ["async-io"] }
-# The gateway's system tray on Windows and macOS.
-# 0.24.1+ is required: it re-registers the icon on TaskbarCreated and keeps
-# a hidden icon hidden across Explorer restarts.
-tray-icon = "0.24.1"
-# The macOS tray backend: the NSApplication run loop owns the main thread and
-# SMAppService backs Launch at Login. objc2 is the maintained successor to the
-# objc crate family; the framework crates are feature-gated per class so the
-# build links only what the backend uses.
-objc2 = "0.6"
-objc2-app-kit = { version = "0.3", default-features = false, features = [
-    "std",
-    "NSApplication",
-    # setActivationPolicy and NSApplicationActivationPolicy live behind the
-    # NSRunningApplication feature (they are declared in its header).
-    "NSRunningApplication",
-] }
-objc2-foundation = { version = "0.3", default-features = false, features = [
-    "std",
-    "NSTimer",
-    # The block-based NSTimer initializer is gated on NSDate + block2.
-    "NSDate",
-    "block2",
-    # NSProcessInfo.operatingSystemVersion gates SMAppService to macOS 13+.
-    "NSProcessInfo",
-] }
-objc2-service-management = { version = "0.3", default-features = false, features = [
-    "std",
-    # The SMAppService class binding is a per-class feature.
-    "SMAppService",
-    "objc2",
-    "objc2-foundation",
-] }
-block2 = "0.6"
-# Thin process-image shims for gateway-api-discovery's stale detection; both are
-# already in the tree transitively.
-libc = "0.2"
-windows-sys = { version = "0.61", default-features = false }
 # Cross-platform console interruption for the Workshop build orchestrator.
 ctrlc = "3.5"
+# Thin process-image shims for the Workshop gateway discovery reader's stale
+# detection; both are already in the tree transitively.
+libc = "0.2"
+windows-sys = { version = "0.61", default-features = false }
 # Benchmark framework for the executor and Lua-boundary benches; dev-only.
 criterion = "0.5"
 # The Engine's GetDynamicTools pattern search; already in the tree through
 # criterion, readabilityrs, and turso.
 regex = "1"
-# Compiles the gateway exe's Windows icon resource in its build script;
-# already in the tree through tauri-build (via tauri-winres).
-embed-resource = "3"
-# Encodes PNG fixtures in the gateway's integration tests.
-png = "0.18"
 # Tauri v2 desktop framework for workshop. tauri is pinned to the
 # minor because `with_webview` exposes webview2-com/webkit2gtk types that may
 # shift in a Tauri minor release (the upstream guidance for `with_webview`).
@@ -260,19 +168,6 @@ tauri-plugin-process = "2.3.1"
 # macOS `.app.tar.gz` path uses `tar` and `flate2` with no feature.
 tauri-plugin-updater = { version = "2.11.0", default-features = false, features = ["system-proxy"] }
 tauri-plugin-single-instance = "2.4.4"
-# Test-only Jinja2 compatibility oracle for bundled chat templates. Members
-# inherit these only from their dev-dependency tables.
-minijinja = { version = "2.24", default-features = false, features = [
-    "builtins",
-    "debug",
-    "deserialization",
-    "macros",
-    "multi_template",
-    "preserve_order",
-    "serde",
-    "std_collections",
-] }
-minijinja-contrib = { version = "2.24", default-features = false, features = ["pycompat"] }
 
 [workspace.lints.rust]
 unsafe_code = "deny"

@@ -1,4 +1,5 @@
 import {
+  chmodSync,
   copyFileSync,
   existsSync,
   lstatSync,
@@ -65,6 +66,15 @@ export function stageGatewaySidecar({ root = REPOSITORY_ROOT, target, source }) 
   const destination = gatewaySidecarPath({ root, target });
   mkdirSync(dirname(destination), { recursive: true });
   copyFileSync(sourcePath, destination);
+  if (process.platform !== "win32") {
+    // `copyFileSync` writes the destination with the default mode, so the
+    // source's executable bit is lost and a bundled Gateway lands in the deb
+    // at 0644. Tauri's deb bundler copies this file with `fs::copy` and then
+    // writes the tar header in `HeaderMode::Deterministic`, which keeps only
+    // the owner execute bit: 0755 here becomes 0755 in `usr/bin`, and 0644
+    // here becomes 0644 there. Windows has no such bit to set.
+    chmodSync(destination, 0o755);
+  }
   return destination;
 }
 

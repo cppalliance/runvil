@@ -136,12 +136,16 @@ use std::fmt::{{self, {BARE}List, Write}};
 fn a_crate_whose_manifest_does_not_parse_is_still_scanned() {
     let root = tempfile::TempDir::new().expect("tempdir");
     let lib = format!("impl {DEBUG_PATH} for Seam {{}}\n");
-    write_crate(root.path(), "gateway/local", &[("lib.rs", lib.as_str())]);
+    write_crate(
+        root.path(),
+        "runvil-internal/vfs",
+        &[("lib.rs", lib.as_str())],
+    );
     std::fs::write(
         root.path()
             .join("crates")
-            .join("gateway")
-            .join("local")
+            .join("runvil-internal")
+            .join("vfs")
             .join("Cargo.toml"),
         "not [valid toml",
     )
@@ -149,7 +153,9 @@ fn a_crate_whose_manifest_does_not_parse_is_still_scanned() {
     let violations = debug_spelling_violations(root.path());
     assert_eq!(violations.len(), 1, "{violations:?}");
     assert!(
-        violations[0].starts_with(&format!("crates/gateway/local/src/lib.rs:1: {RULE}: ")),
+        violations[0].starts_with(&format!(
+            "crates/runvil-internal/vfs/src/lib.rs:1: {RULE}: "
+        )),
         "a crate whose manifest was never read cannot be shown clean: {violations:?}"
     );
 }

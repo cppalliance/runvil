@@ -216,13 +216,7 @@ mod tests {
     /// A wired workspace: a crate in each form and the ceiling's own crate.
     fn write_wired(root: &Path) {
         let local = Some(CALLS_CHECK);
-        write_built(
-            root,
-            "gateway/local",
-            "gateway-local",
-            BUILD_DEPENDENCY,
-            local,
-        );
+        write_built(root, "runvil", "runvil", BUILD_DEPENDENCY, local);
         let web = includes("../build-ceiling/src/lib.rs");
         write_built(root, "plugin-web", "plugin-web", "", Some(&web));
         let runner = includes("../../build-ceiling/src/lib.rs");
@@ -251,9 +245,9 @@ mod tests {
     #[test]
     fn a_build_script_that_names_the_call_only_in_a_comment_fails() {
         let build = Some("// build_ceiling::check()\nfn main() {}\n");
-        let violations = wiring_with("gateway/config", "gateway-config", BUILD_DEPENDENCY, build);
+        let violations = wiring_with("plugin-mcp", "plugin-mcp", BUILD_DEPENDENCY, build);
         assert_eq!(violations.len(), 1, "{violations:?}");
-        assert!(violations[0].contains("config") && violations[0].contains("does not call"));
+        assert!(violations[0].contains("plugin-mcp") && violations[0].contains("does not call"));
     }
 
     #[test]
@@ -282,7 +276,7 @@ mod tests {
     fn a_package_build_key_fails_because_cargo_skips_the_wired_build_rs() {
         let tail = format!("build = false\n{BUILD_DEPENDENCY}");
         let build = Some(CALLS_CHECK);
-        let violations = wiring_with("gateway/routing", "gateway-routing", &tail, build);
+        let violations = wiring_with("workshop/status", "workshop-status", &tail, build);
         assert_eq!(violations.len(), 1, "{violations:?}");
         assert!(violations[0].contains("package.build"));
     }

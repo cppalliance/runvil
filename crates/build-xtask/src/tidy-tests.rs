@@ -157,7 +157,7 @@ fn the_workshop_desktop_app_without_the_marker_passes() {
 #[test]
 fn an_unmarked_crate_outside_the_families_is_left_alone() {
     let root = tempfile::TempDir::new().expect("tempdir");
-    write_crate(root.path(), "gateway/local", "gateway-local", UNMARKED);
+    write_crate(root.path(), "runvil-internal/vfs", "runvil-vfs", UNMARKED);
     assert!(marker_violations(root.path()).is_empty());
 }
 
@@ -175,7 +175,7 @@ fn write_root_manifest(root: &Path) {
 fn crates_that_inherit_the_workspace_lints_pass_with_or_without_the_marker() {
     let root = tempfile::TempDir::new().expect("tempdir");
     write_root_manifest(root.path());
-    write_crate(root.path(), "gateway/local", "gateway-local", UNMARKED);
+    write_crate(root.path(), "runvil-internal/vfs", "runvil-vfs", UNMARKED);
     write_crate(root.path(), "harness/runner", "harness-runner", MARKED);
     let violations = lint_inheritance_violations(root.path());
     assert!(violations.is_empty(), "{violations:?}");
@@ -185,20 +185,20 @@ fn crates_that_inherit_the_workspace_lints_pass_with_or_without_the_marker() {
 fn an_unmarked_crate_with_its_own_lint_table_is_reported() {
     let root = tempfile::TempDir::new().expect("tempdir");
     write_root_manifest(root.path());
-    write_crate(root.path(), "gateway/local", "gateway-local", UNMARKED);
+    write_crate(root.path(), "runvil-internal/vfs", "runvil-vfs", UNMARKED);
     std::fs::write(
         root.path()
             .join("crates")
-            .join("gateway")
-            .join("local")
+            .join("runvil-internal")
+            .join("vfs")
             .join("Cargo.toml"),
-        "[package]\nname = \"gateway-local\"\n[lints.clippy]\npedantic = \"warn\"\n",
+        "[package]\nname = \"runvil-vfs\"\n[lints.clippy]\npedantic = \"warn\"\n",
     )
     .expect("the manifest rewrites");
     let violations = lint_inheritance_violations(root.path());
     assert_eq!(violations.len(), 1, "{violations:?}");
     assert!(
-        violations[0].contains("local") && violations[0].contains("[lints] workspace = true"),
+        violations[0].contains("vfs") && violations[0].contains("[lints] workspace = true"),
         "every crate, not only a marked one, must inherit: {violations:?}"
     );
 }
@@ -220,7 +220,7 @@ fn a_lint_inheritance_scan_that_finds_no_crate_fails() {
 fn a_crate_whose_manifest_does_not_parse_is_held_to_lint_inheritance_not_skipped() {
     let root = tempfile::TempDir::new().expect("tempdir");
     write_root_manifest(root.path());
-    write_crate(root.path(), "gateway/local", "gateway-local", UNMARKED);
+    write_crate(root.path(), "runvil-internal/vfs", "runvil-vfs", UNMARKED);
     let dir = root.path().join("crates").join("broken");
     std::fs::create_dir_all(&dir).expect("the crate directory creates");
     std::fs::write(dir.join("Cargo.toml"), "not [valid toml").expect("the manifest writes");
@@ -229,79 +229,6 @@ fn a_crate_whose_manifest_does_not_parse_is_held_to_lint_inheritance_not_skipped
     assert!(
         violations[0].contains("broken") && violations[0].contains("[lints] workspace = true"),
         "a crate that was never read cannot be shown to inherit: {violations:?}"
-    );
-}
-
-/// Writes `text` into `crates/gateway/app/src/<relative>`, creating the
-/// gateway app crate's source tree as needed.
-fn write_app_file(root: &Path, relative: &str, text: &str) {
-    let path = root
-        .join("crates")
-        .join("gateway")
-        .join("app")
-        .join("src")
-        .join(relative);
-    std::fs::create_dir_all(path.parent().expect("the file has a parent"))
-        .expect("the source directory creates");
-    std::fs::write(&path, text).expect("the source file writes");
-}
-
-/// A spelled tier path in code, the shape the rule is meant to catch.
-const NAMES_TIER: &str = "use crate::admin::walled::hf::HfProxy;\n";
-
-#[test]
-fn a_file_outside_the_walled_tier_naming_a_tier_module_is_reported() {
-    let root = tempfile::TempDir::new().expect("tempdir");
-    write_app_file(root.path(), "speech.rs", NAMES_TIER);
-    let violations = walled_tier_violations(root.path());
-    assert_eq!(violations.len(), 1, "{violations:?}");
-    assert!(
-        violations[0].contains("speech.rs") && violations[0].contains(WALLED_PATH),
-        "the file and the path it names are reported: {violations:?}"
-    );
-}
-
-#[test]
-fn each_allowlisted_assembly_site_may_name_the_walled_tier() {
-    for allowed in WALLED_ALLOWLIST {
-        let root = tempfile::TempDir::new().expect("tempdir");
-        let relative = allowed
-            .strip_prefix("crates/gateway/app/src/")
-            .expect("the allowlist keys files in the gateway app's source tree");
-        write_app_file(root.path(), relative, NAMES_TIER);
-        let violations = walled_tier_violations(root.path());
-        assert!(
-            violations.is_empty(),
-            "{allowed} assembles the tier's own state and may name it: {violations:?}"
-        );
-    }
-}
-
-#[test]
-fn a_comment_line_that_spells_the_tier_path_is_not_a_dependency() {
-    let root = tempfile::TempDir::new().expect("tempdir");
-    write_app_file(
-        root.path(),
-        "commands-apply.rs",
-        "//! The route side lives in `crate::admin::walled::config_apply`.\n\
-         /// See [`crate::admin::walled::config`].\n\
-         pub(crate) fn apply() {}\n",
-    );
-    let violations = walled_tier_violations(root.path());
-    assert!(
-        violations.is_empty(),
-        "prose naming a module path is documentation, not a dependency: {violations:?}"
-    );
-}
-
-#[test]
-fn the_walled_tiers_own_modules_may_name_each_other() {
-    let root = tempfile::TempDir::new().expect("tempdir");
-    write_app_file(root.path(), "admin/walled/system.rs", NAMES_TIER);
-    let violations = walled_tier_violations(root.path());
-    assert!(
-        violations.is_empty(),
-        "a module inside the tier is not outside it: {violations:?}"
     );
 }
 
@@ -333,16 +260,6 @@ fn an_undecodable_path_component_keeps_its_place_in_the_relative_path() {
         4,
         "a component that does not decode must not vanish and let the path \
          collide with an allowlist entry: {relative}"
-    );
-}
-
-#[test]
-fn no_file_outside_the_walled_tier_names_its_modules() {
-    let violations = walled_tier_violations(&workspace_root());
-    assert!(
-        violations.is_empty(),
-        "walled tier violations:\n{}",
-        violations.join("\n")
     );
 }
 

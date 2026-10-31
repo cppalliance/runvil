@@ -113,13 +113,11 @@ struct TestEnvironment {
 fn environment() -> TestEnvironment {
     let temp = tempfile::tempdir().expect("temporary workspace");
     let workspace_root = temp.path().join("repo");
-    let target_root = temp.path().join("cargo-target");
     std::fs::create_dir_all(&workspace_root).expect("workspace root");
     TestEnvironment {
         _temp: temp,
         environment: BuildEnvironment {
             workspace_root,
-            target_root,
             cargo: PathBuf::from("selected-cargo"),
             node: PathBuf::from("selected-node"),
             gateway_sidecar: None,
@@ -280,41 +278,31 @@ fn default_build_derives_host_and_cleans_up_in_order() {
         success(""),
         success(""),
         success(""),
-        success(""),
     ]);
+    let given = PathBuf::from("/ci/staged/runvil-gateway.exe");
 
     build_workshop(
         &BuildRequest {
             profile: Profile::Debug,
             target: None,
-            gateway_binary: None,
+            gateway_binary: Some(given.clone()),
         },
         environment,
         &mut runner,
     )
     .expect("Workshop build");
 
-    let source = environment
-        .target_root
-        .join("debug")
-        .join("runvil-gateway.exe");
     assert_eq!(
         runner.commands,
         vec![
             command(environment, "selected-cargo", &["-vV"], OutputMode::Capture),
-            command(
-                environment,
-                "selected-cargo",
-                &["build", "-p", "gateway"],
-                OutputMode::Inherit,
-            ),
             owned_command(
                 environment,
                 "selected-node",
                 &stage_arguments(
                     environment,
                     "x86_64-pc-windows-msvc",
-                    source.to_str().expect("UTF-8 source"),
+                    given.to_str().expect("UTF-8 source"),
                 ),
                 OutputMode::Inherit,
             ),
@@ -338,38 +326,27 @@ fn explicit_release_target_uses_target_output_without_a_host_probe() {
     let test_environment = environment();
     let environment = &test_environment.environment;
     let triple = "aarch64-unknown-linux-gnu";
-    let mut runner =
-        FakeRunner::with_responses(vec![success(""), success(""), success(""), success("")]);
+    let mut runner = FakeRunner::with_responses(vec![success(""), success(""), success("")]);
+    let given = PathBuf::from("/ci/staged/runvil-gateway");
 
     build_workshop(
         &BuildRequest {
             profile: Profile::Release,
             target: Some(triple.to_owned()),
-            gateway_binary: None,
+            gateway_binary: Some(given),
         },
         environment,
         &mut runner,
     )
     .expect("Workshop build");
 
-    let source = environment
-        .target_root
-        .join(triple)
-        .join("release")
-        .join("runvil-gateway");
     assert_eq!(
         runner.commands,
         vec![
-            command(
-                environment,
-                "selected-cargo",
-                &["build", "-p", "gateway", "--release", "--target", triple,],
-                OutputMode::Inherit,
-            ),
             owned_command(
                 environment,
                 "selected-node",
-                &stage_arguments(environment, triple, source.to_str().expect("UTF-8 source")),
+                &stage_arguments(environment, triple, "/ci/staged/runvil-gateway"),
                 OutputMode::Inherit,
             ),
             workshop_command(

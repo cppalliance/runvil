@@ -73,12 +73,12 @@ fn unknown_or_extra_arguments_are_refused_with_the_usage() {
 #[test]
 fn staged_books_are_the_sorted_subfolders() {
     let staged = tempfile::tempdir().expect("tempdir");
-    for book in ["workshop", "gateway", "language"] {
+    for book in ["workshop", "language", "prompts"] {
         fs::create_dir_all(staged.path().join(book).join("src")).expect("book dir");
     }
     fs::write(staged.path().join("stray.txt"), "not a book").expect("stray file");
     let books = staged_books(staged.path()).expect("discovery");
-    assert_eq!(books, ["gateway", "language", "workshop"]);
+    assert_eq!(books, ["language", "prompts", "workshop"]);
 }
 
 #[test]
@@ -330,8 +330,8 @@ fn the_encoded_flags_join_on_the_unit_separator_and_keep_a_spaced_path_whole() {
 #[test]
 fn the_crate_page_uses_the_underscored_crate_name() {
     assert_eq!(
-        crate_page("gateway-api-types"),
-        "gateway_api_types/index.html"
+        crate_page("harness-gateway-client"),
+        "harness_gateway_client/index.html"
     );
     assert_eq!(crate_page("harness"), "harness/index.html");
     assert_eq!(crate_page("runvil"), "runvil/index.html");

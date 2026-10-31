@@ -16,14 +16,15 @@ const TARGET: &str = "x86_64-pc-windows-msvc";
 const TARGET: &str = "x86_64-unknown-linux-gnu";
 
 #[cfg(windows)]
-const GATEWAY_NAME: &str = "runvil-gateway.exe";
-#[cfg(not(windows))]
-const GATEWAY_NAME: &str = "runvil-gateway";
-
-#[cfg(windows)]
 const SIDECAR_NAME: &str = "runvil-gateway-x86_64-pc-windows-msvc.exe";
 #[cfg(not(windows))]
 const SIDECAR_NAME: &str = "runvil-gateway-x86_64-unknown-linux-gnu";
+
+/// The name the staging script requires a source binary to carry.
+#[cfg(windows)]
+const GATEWAY_SOURCE_NAME: &str = "runvil-gateway.exe";
+#[cfg(not(windows))]
+const GATEWAY_SOURCE_NAME: &str = "runvil-gateway";
 
 struct StagingGuard {
     path: PathBuf,
@@ -74,11 +75,18 @@ fn platform_interrupt_after_staging_kills_child_cleans_and_fails() {
     let stderr_path = temp.path().join("orchestrator.stderr");
     let stdout = File::create(&stdout_path).expect("stdout file");
     let stderr = File::create(&stderr_path).expect("stderr file");
+    // The Gateway is a separate product, so the run stages a binary it is
+    // given rather than building one. The staging script requires the
+    // source to carry the Gateway's own binary name; nothing here runs it.
+    let gateway_binary = temp.path().join(GATEWAY_SOURCE_NAME);
+    fs::write(&gateway_binary, b"gateway").expect("given gateway binary");
 
     let mut command = Command::new(env!("CARGO_BIN_EXE_build-workshop"));
     command
         .arg("--target")
         .arg(TARGET)
+        .arg("--gateway-binary")
+        .arg(&gateway_binary)
         .env("CARGO", fake_cargo)
         .env("CARGO_TARGET_DIR", &target_root)
         .env("BUILD_WORKSHOP_TEST_TARGET", TARGET)
@@ -156,20 +164,13 @@ fn write_fake_cargo(temp: &TempDir) -> PathBuf {
     let path = temp.path().join("fake-cargo");
     if let Err(error) = fs::write(
         &path,
-        format!(
-            r#"#!/bin/sh
-if [ "$1" = "build" ] && [ "$3" = "gateway" ]; then
-  mkdir -p "$CARGO_TARGET_DIR/$BUILD_WORKSHOP_TEST_TARGET/debug"
-  printf gateway > "$CARGO_TARGET_DIR/$BUILD_WORKSHOP_TEST_TARGET/debug/{GATEWAY_NAME}"
-  exit 0
-fi
+        r#"#!/bin/sh
 if [ "$1" = "build" ] && [ "$3" = "workshop" ]; then
   printf blocked > "$BUILD_WORKSHOP_BLOCKED_MARKER"
   while :; do sleep 1; done
 fi
 exit 91
-"#
-        ),
+"#,
     ) {
         panic!("could not write fake Cargo: {error}");
     }
@@ -184,22 +185,15 @@ fn write_fake_cargo(temp: &TempDir) -> PathBuf {
     let path = temp.path().join("fake-cargo.cmd");
     if let Err(error) = fs::write(
         &path,
-        format!(
-            r#"@echo off
-if "%1"=="build" if "%3"=="gateway" goto gateway
+        r#"@echo off
 if "%1"=="build" if "%3"=="workshop" goto workshop
 exit /b 91
-:gateway
-if not exist "%CARGO_TARGET_DIR%\%BUILD_WORKSHOP_TEST_TARGET%\debug" mkdir "%CARGO_TARGET_DIR%\%BUILD_WORKSHOP_TEST_TARGET%\debug"
-> "%CARGO_TARGET_DIR%\%BUILD_WORKSHOP_TEST_TARGET%\debug\{GATEWAY_NAME}" echo gateway
-exit /b 0
 :workshop
 > "%BUILD_WORKSHOP_BLOCKED_MARKER%" echo blocked
 :blocked
 ping -n 2 127.0.0.1 >nul
 goto blocked
-"#
-        ),
+"#,
     ) {
         panic!("could not write fake Cargo: {error}");
     }

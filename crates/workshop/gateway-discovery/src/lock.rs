@@ -6,7 +6,7 @@
 //! deciding, because a previous winner may have written it and released
 //! the lock; a loser never deletes anything, it waits for the winner's
 //! file to go live and attaches. Cleanup is the lock holder's privilege.
-//! The OS-file-lock pattern mirrors gateway-local's `lock_artifact`: an
+//! The OS-file-lock pattern mirrors the Gateway's own artifact lock: an
 //! `OpenOptions` create plus a `std::fs::File` advisory lock, released by
 //! dropping the handle.
 

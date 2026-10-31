@@ -290,7 +290,7 @@ fn files_outside_the_facades_and_containers_are_not_scanned() {
     let mut files = BANNED_DIR_LIBS.to_vec();
     files.extend([
         ("crates/workshop/server/src/lib.rs", HIDDEN),
-        ("crates/gateway-api-discovery/src/lib.rs", HIDDEN),
+        ("crates/shared-crypto/src/lib.rs", HIDDEN),
         ("crates/runvil-internal-old/src/lib.rs", HIDDEN),
         ("crates/harness-internal-old/src/lib.rs", HIDDEN),
         ("crates/runvil-internal/target/debug/out.rs", HIDDEN),

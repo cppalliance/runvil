@@ -233,11 +233,11 @@ fn every_rs_file_in_every_workspace_crate_is_scanned() {
         "crates/tool/tests/it/main.rs",
         "crates/tool/benches/bench.rs",
         "crates/tool/examples/demo.rs",
-        "crates/gateway/stt/api/src/lib.rs",
+        "crates/plugin-mcp/src/lib.rs",
     ];
     let mut files = vec![
         ("crates/tool/Cargo.toml", MANIFEST),
-        ("crates/gateway/stt/api/Cargo.toml", MANIFEST),
+        ("crates/plugin-mcp/Cargo.toml", MANIFEST),
     ];
     files.extend(doctests.iter().map(|path| (*path, DOCTEST)));
     let root = tree(&files);

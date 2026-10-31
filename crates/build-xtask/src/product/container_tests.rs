@@ -102,43 +102,6 @@ fn a_root_runvil_crate_other_than_the_named_ones_depending_into_the_engine_conta
 }
 
 #[test]
-fn an_outside_crate_depending_into_the_gateway_container_is_reported() {
-    let root = tempfile::TempDir::new().expect("tempdir");
-    write_crate(
-        root.path(),
-        "runvil",
-        "runvil",
-        "[dependencies]\ngateway-protocol = { path = \"../gateway/protocol\" }\n",
-    );
-    write_crate(root.path(), "gateway/protocol", "gateway-protocol", "");
-    let violations = product_boundary_violations(root.path());
-    assert_eq!(violations.len(), 1, "{violations:?}");
-    assert!(
-        violations[0].contains("runvil depends on gateway-protocol")
-            && violations[0].contains("crates/gateway is private to its family")
-            && violations[0].contains("no outside crate"),
-        "the violation includes the gateway container privacy message: {violations:?}"
-    );
-}
-
-#[test]
-fn gateway_container_siblings_may_depend_on_each_other() {
-    let root = tempfile::TempDir::new().expect("tempdir");
-    write_crate(
-        root.path(),
-        "gateway/app",
-        "gateway",
-        "[dependencies]\ngateway-protocol = { path = \"../protocol\" }\n",
-    );
-    write_crate(root.path(), "gateway/protocol", "gateway-protocol", "");
-    let violations = product_boundary_violations(root.path());
-    assert!(
-        violations.is_empty(),
-        "gateway container siblings may depend on each other: {violations:?}"
-    );
-}
-
-#[test]
 fn an_outside_crate_depending_into_the_workshop_container_is_reported() {
     let root = tempfile::TempDir::new().expect("tempdir");
     write_crate(
@@ -193,58 +156,26 @@ fn a_build_crate_depending_into_a_container_passes() {
 }
 
 #[test]
-fn a_workshop_crate_depending_into_the_gateway_container_is_reported() {
+fn a_crate_outside_the_harness_container_cannot_reach_a_nested_one() {
     let root = tempfile::TempDir::new().expect("tempdir");
     write_crate(
         root.path(),
         "workshop-server",
         "workshop-server",
-        "[dependencies]\ngateway-local = { path = \"../gateway/local\" }\n",
+        "[dependencies]\nharness-runner = { path = \"../harness-internal/nested/runner\" }\n",
     );
-    write_crate(root.path(), "gateway/local", "gateway-local", "");
+    write_crate(
+        root.path(),
+        "harness-internal/nested/runner",
+        "harness-runner",
+        "",
+    );
     let violations = product_boundary_violations(root.path());
     assert_eq!(violations.len(), 1, "{violations:?}");
     assert!(
-        violations[0].contains("workshop-server depends on gateway-local")
-            && violations[0].contains("crates/gateway is private to its family"),
-        "the violation includes the gateway container privacy message: {violations:?}"
-    );
-}
-
-#[test]
-fn a_family_crate_depending_into_the_stt_subsystem_is_reported() {
-    let root = tempfile::TempDir::new().expect("tempdir");
-    write_crate(
-        root.path(),
-        "gateway/app",
-        "gateway",
-        "[dependencies]\ngateway-stt-engine = { path = \"../stt/engine\" }\n",
-    );
-    write_crate(root.path(), "gateway/stt/engine", "gateway-stt-engine", "");
-    let violations = product_boundary_violations(root.path());
-    assert_eq!(violations.len(), 1, "{violations:?}");
-    assert!(
-        violations[0].contains("gateway depends on gateway-stt-engine")
-            && violations[0].contains("crates/gateway/stt is private to its family")
-            && violations[0].contains("gateway-stt"),
-        "the violation names the subsystem and its public member: {violations:?}"
-    );
-}
-
-#[test]
-fn the_stt_public_member_is_visible_to_the_gateway_family() {
-    let root = tempfile::TempDir::new().expect("tempdir");
-    write_crate(
-        root.path(),
-        "gateway/app",
-        "gateway",
-        "[dependencies]\ngateway-stt = { path = \"../stt/api\" }\n",
-    );
-    write_crate(root.path(), "gateway/stt/api", "gateway-stt", "");
-    let violations = product_boundary_violations(root.path());
-    assert!(
-        violations.is_empty(),
-        "the subsystem's public member is visible one level higher: {violations:?}"
+        violations[0].contains("crates/harness-internal/nested is private to its family")
+            && violations[0].contains("no outside crate"),
+        "the violation names the nested container and refuses every outside crate: {violations:?}"
     );
 }
 
@@ -312,22 +243,5 @@ fn harness_container_siblings_may_depend_on_each_other() {
     assert!(
         violations.is_empty(),
         "harness container siblings may depend on each other: {violations:?}"
-    );
-}
-
-#[test]
-fn stt_subsystem_siblings_may_depend_on_each_other() {
-    let root = tempfile::TempDir::new().expect("tempdir");
-    write_crate(
-        root.path(),
-        "gateway/stt/backend-whisper",
-        "gateway-stt-backend-whisper",
-        "[dependencies]\ngateway-stt-engine = { path = \"../engine\" }\n",
-    );
-    write_crate(root.path(), "gateway/stt/engine", "gateway-stt-engine", "");
-    let violations = product_boundary_violations(root.path());
-    assert!(
-        violations.is_empty(),
-        "subsystem siblings may depend on each other: {violations:?}"
     );
 }

@@ -1,27 +1,40 @@
 //! Unit tests for failure, interruption, and sidecar cleanup paths.
+//!
+//! With the Gateway a separate product, every case here names its sidecar
+//! up front, so the first command a run issues is the staging script. The
+//! cleanup that follows is the run's own: a sidecar it staged is removed,
+//! a sidecar it found already in place is left alone.
 
 use super::*;
 
+/// A binary path the run stages from, so no case needs a Gateway build.
+fn given() -> PathBuf {
+    PathBuf::from("/ci/staged/runvil-gateway")
+}
+
 #[test]
-fn gateway_failure_still_removes_any_staged_sidecar() {
+fn a_staging_failure_still_removes_any_staged_sidecar() {
     let test_environment = environment();
     let environment = &test_environment.environment;
     let triple = "x86_64-pc-windows-msvc";
-    let mut runner = FakeRunner::with_responses(vec![failure("gateway broke"), success("")]);
+    let mut runner = FakeRunner::with_responses(vec![failure("copy broke"), success("")]);
 
     let error = build_workshop(
         &BuildRequest {
             profile: Profile::Debug,
             target: Some(triple.to_owned()),
-            gateway_binary: None,
+            gateway_binary: Some(given()),
         },
         environment,
         &mut runner,
     )
-    .expect_err("Gateway failure");
+    .expect_err("staging failure");
 
-    assert!(error.primary.contains("Gateway build failed"), "{error}");
-    assert!(error.primary.contains("gateway broke"), "{error}");
+    assert!(
+        error.primary.contains("Gateway sidecar staging failed"),
+        "{error}"
+    );
+    assert!(error.primary.contains("copy broke"), "{error}");
     assert_eq!(error.cleanup, None);
     assert_eq!(runner.commands.len(), 2);
     assert_eq!(
@@ -52,7 +65,6 @@ fn workshop_failure_is_primary_when_cleanup_also_fails() {
     let triple = "x86_64-unknown-linux-gnu";
     let mut runner = FakeRunner::with_responses(vec![
         success(""),
-        success(""),
         failure("workshop broke"),
         FakeResponse::SpawnFailed(io::ErrorKind::NotFound, "node disappeared"),
     ]);
@@ -61,7 +73,7 @@ fn workshop_failure_is_primary_when_cleanup_also_fails() {
         &BuildRequest {
             profile: Profile::Release,
             target: Some(triple.to_owned()),
-            gateway_binary: None,
+            gateway_binary: Some(given()),
         },
         environment,
         &mut runner,
@@ -79,14 +91,13 @@ fn workshop_failure_is_primary_when_cleanup_also_fails() {
 fn stage_failure_is_followed_by_cleanup() {
     let test_environment = environment();
     let environment = &test_environment.environment;
-    let mut runner =
-        FakeRunner::with_responses(vec![success(""), failure("copy failed"), success("")]);
+    let mut runner = FakeRunner::with_responses(vec![failure("copy failed"), success("")]);
 
     let error = build_workshop(
         &BuildRequest {
             profile: Profile::Debug,
             target: Some("x86_64-unknown-linux-gnu".to_owned()),
-            gateway_binary: None,
+            gateway_binary: Some(given()),
         },
         environment,
         &mut runner,
@@ -94,9 +105,9 @@ fn stage_failure_is_followed_by_cleanup() {
     .expect_err("staging failure");
 
     assert!(error.primary.contains("Gateway sidecar staging failed"));
-    assert_eq!(runner.commands.len(), 3);
+    assert_eq!(runner.commands.len(), 2);
     assert_eq!(
-        runner.commands[2].args[1..],
+        runner.commands[1].args[1..],
         strings(&["remove", "--target", "x86_64-unknown-linux-gnu"])
     );
 }
@@ -111,38 +122,12 @@ fn interruption_before_staging_does_not_run_removal() {
         &BuildRequest {
             profile: Profile::Debug,
             target: Some("x86_64-pc-windows-msvc".to_owned()),
-            gateway_binary: None,
+            gateway_binary: Some(given()),
         },
         environment,
         &mut runner,
     )
-    .expect_err("Gateway interruption");
-
-    assert!(
-        error.primary.contains("Gateway build interrupted"),
-        "{error}"
-    );
-    assert_eq!(error.cleanup, None);
-    assert_eq!(runner.commands.len(), 1);
-}
-
-#[test]
-fn interruption_after_gateway_completion_does_not_run_removal() {
-    let test_environment = environment();
-    let environment = &test_environment.environment;
-    let triple = "x86_64-pc-windows-msvc";
-    let mut runner = FakeRunner::with_responses(vec![FakeResponse::CompletedAndInterrupted]);
-
-    let error = build_workshop(
-        &BuildRequest {
-            profile: Profile::Debug,
-            target: Some(triple.to_owned()),
-            gateway_binary: None,
-        },
-        environment,
-        &mut runner,
-    )
-    .expect_err("pre-staging interruption");
+    .expect_err("staging interruption");
 
     assert!(
         error
@@ -150,11 +135,51 @@ fn interruption_after_gateway_completion_does_not_run_removal() {
             .contains("Gateway sidecar staging interrupted"),
         "{error}"
     );
+    assert_eq!(error.cleanup, None);
+    assert_eq!(runner.commands.len(), 1);
+}
+
+#[test]
+fn a_given_sidecar_is_never_built_and_the_target_is_reported() {
+    let test_environment = environment();
+    let environment = &test_environment.environment;
+    let triple = "x86_64-unknown-linux-gnu";
+    let mut runner = FakeRunner::with_responses(vec![success(""), success(""), success("")]);
+
+    build_workshop(
+        &BuildRequest {
+            profile: Profile::Debug,
+            target: Some(triple.to_owned()),
+            gateway_binary: Some(given()),
+        },
+        environment,
+        &mut runner,
+    )
+    .expect("Workshop build");
+
     assert!(
-        runner
-            .commands
-            .iter()
-            .all(|command| { command.args[1..] != strings(&["remove", "--target", triple]) })
+        runner.commands.iter().all(|command| {
+            !(command.args.len() > 2 && command.args[0] == "build" && command.args[2] == "gateway")
+        }),
+        "no Gateway build runs: {:?}",
+        runner.commands
+    );
+    assert_eq!(
+        runner.commands[0].args,
+        strings(&[
+            environment
+                .workspace_root
+                .join("tools")
+                .join("stage-gateway-sidecar.mjs")
+                .to_str()
+                .expect("UTF-8 script"),
+            "stage",
+            "--target",
+            triple,
+            "--source",
+            "/ci/staged/runvil-gateway",
+        ]),
+        "the first command stages the given binary"
     );
 }
 
@@ -163,17 +188,14 @@ fn interruption_during_staging_runs_target_cleanup_once() {
     let test_environment = environment();
     let environment = &test_environment.environment;
     let triple = "x86_64-pc-windows-msvc";
-    let mut runner = FakeRunner::with_responses(vec![
-        success(""),
-        FakeResponse::InterruptedAfterStart,
-        success(""),
-    ]);
+    let mut runner =
+        FakeRunner::with_responses(vec![FakeResponse::InterruptedAfterStart, success("")]);
 
     let error = build_workshop(
         &BuildRequest {
             profile: Profile::Debug,
             target: Some(triple.to_owned()),
-            gateway_binary: None,
+            gateway_binary: Some(given()),
         },
         environment,
         &mut runner,
@@ -201,7 +223,6 @@ fn interruption_raced_with_completion_runs_cleanup_once() {
     let triple = "x86_64-pc-windows-msvc";
     let mut runner = FakeRunner::with_responses(vec![
         success(""),
-        success(""),
         FakeResponse::CompletedAndInterrupted,
         success(""),
     ]);
@@ -210,7 +231,7 @@ fn interruption_raced_with_completion_runs_cleanup_once() {
         &BuildRequest {
             profile: Profile::Debug,
             target: Some(triple.to_owned()),
-            gateway_binary: None,
+            gateway_binary: Some(given()),
         },
         environment,
         &mut runner,
@@ -235,7 +256,6 @@ fn interruption_preserves_cleanup_failure_diagnostics() {
     let environment = &test_environment.environment;
     let mut runner = FakeRunner::with_responses(vec![
         success(""),
-        success(""),
         FakeResponse::InterruptedAfterStart,
         failure("remove broke"),
     ]);
@@ -244,7 +264,7 @@ fn interruption_preserves_cleanup_failure_diagnostics() {
         &BuildRequest {
             profile: Profile::Debug,
             target: Some("x86_64-unknown-linux-gnu".to_owned()),
-            gateway_binary: None,
+            gateway_binary: Some(given()),
         },
         environment,
         &mut runner,
@@ -267,18 +287,14 @@ fn interruption_preserves_cleanup_failure_diagnostics() {
 fn cleanup_failure_after_success_fails_the_command_clearly() {
     let test_environment = environment();
     let environment = &test_environment.environment;
-    let mut runner = FakeRunner::with_responses(vec![
-        success(""),
-        success(""),
-        success(""),
-        failure("remove failed"),
-    ]);
+    let mut runner =
+        FakeRunner::with_responses(vec![success(""), success(""), failure("remove failed")]);
 
     let error = build_workshop(
         &BuildRequest {
             profile: Profile::Debug,
             target: Some("x86_64-unknown-linux-gnu".to_owned()),
-            gateway_binary: None,
+            gateway_binary: Some(given()),
         },
         environment,
         &mut runner,

@@ -12,19 +12,20 @@ use super::{
 /// Where the staged Gateway sidecar comes from this run.
 #[derive(Debug, PartialEq, Eq)]
 pub(super) enum GatewaySource {
-    /// Build the Gateway from this workspace, then stage what Cargo wrote.
-    /// The default when nothing else supplies a binary.
-    Build,
     /// Stage the binary at this path: `--gateway-binary`, or the
     /// `RUNVIL_GATEWAY_SIDECAR` environment variable a CI job sets.
     Given(PathBuf),
     /// A sidecar file is already in place; use it untouched. Nothing is
-    /// built, staged, or removed, so a downloaded or hand-staged Gateway
+    /// staged or removed, so a downloaded or hand-staged Gateway
     /// survives the run and the next `cargo workshop` reuses it too.
     ///
     /// The flag is true when that file is a compile-only stub, so the run
     /// says so instead of quietly producing an app with no Gateway.
     Staged { stub: bool },
+    /// No sidecar is staged and none was named. The Gateway is its own
+    /// product in `cppalliance/runvil-gateway`, so there is nothing here
+    /// to build: the run stops and names the fetch script.
+    Missing,
 }
 
 pub(super) fn build_workshop(
@@ -76,7 +77,10 @@ pub(super) fn build_workshop(
     // Cleanup removes only what this run put there. A sidecar that was
     // already staged belongs to whoever staged it, and deleting it would
     // undo the download the next build is meant to reuse.
-    let cleanup = if matches!(source, GatewaySource::Staged { .. }) {
+    let cleanup = if matches!(
+        source,
+        GatewaySource::Staged { .. } | GatewaySource::Missing
+    ) {
         Ok(())
     } else {
         run_checked(
@@ -109,9 +113,8 @@ pub(super) fn build_workshop(
 }
 
 /// Decides where this run's sidecar comes from: the CLI flag, then the
-/// environment variable, then a sidecar already in place, then a build.
-/// The last resort is a build, so a checkout with no Gateway anywhere
-/// still works the way it always has.
+/// environment variable, then a sidecar already in place. There is no
+/// build fallback, because the Gateway is its own product.
 pub(super) fn gateway_source(
     request: &BuildRequest,
     environment: &BuildEnvironment,
@@ -132,7 +135,7 @@ pub(super) fn gateway_source(
         let stub = sidecar_pin_is_stub(environment, target);
         return GatewaySource::Staged { stub };
     }
-    GatewaySource::Build
+    GatewaySource::Missing
 }
 
 /// Whether the staged sidecar's marker says it is a compile-only stub.
@@ -207,14 +210,16 @@ fn build_products(
             return build_workshop_product(request, environment, runner, None);
         }
         GatewaySource::Given(path) => path.clone(),
-        GatewaySource::Build => {
-            run_checked(
-                runner,
-                &cargo_build_command(environment, request, "gateway"),
-                "Gateway build",
-                InterruptPolicy::RejectExisting,
-            )?;
-            built_gateway_path(request, target, environment)
+        GatewaySource::Missing => {
+            return Err(StepError {
+                message: format!(
+                    "no Gateway sidecar for {target}; the Gateway is a separate product, so run \
+                     `node tools/fetch-gateway-sidecar.mjs --target {target}` to stage the release \
+                     gateway-pin/pin.json names, or pass --gateway-binary"
+                ),
+                interrupted: false,
+                command_started: false,
+            });
         }
     };
 
@@ -237,22 +242,6 @@ fn build_products(
     build_workshop_product(request, environment, runner, Some(staged))
 }
 
-/// The path Cargo wrote the Gateway binary to for this request's profile
-/// and target.
-fn built_gateway_path(
-    request: &BuildRequest,
-    target: &str,
-    environment: &BuildEnvironment,
-) -> PathBuf {
-    let mut source = environment.target_root.clone();
-    if request.target.is_some() {
-        source.push(target);
-    }
-    source.push(request.profile.directory());
-    source.push(gateway_binary_name(target));
-    source
-}
-
 fn build_workshop_product(
     request: &BuildRequest,
     environment: &BuildEnvironment,
@@ -273,14 +262,6 @@ fn build_workshop_product(
         InterruptPolicy::RejectExisting,
     )?;
     Ok(())
-}
-
-fn cargo_build_command(
-    environment: &BuildEnvironment,
-    request: &BuildRequest,
-    package: &str,
-) -> CommandSpec {
-    cargo_command(environment, request, package, Vec::new())
 }
 
 /// A `cargo build -p <package>` spec, with `env` passed to the child.
@@ -342,14 +323,6 @@ fn sidecar_command(
 
 fn is_windows(target: &str) -> bool {
     target.split('-').any(|part| part == "windows")
-}
-
-fn gateway_binary_name(target: &str) -> &'static str {
-    if is_windows(target) {
-        "runvil-gateway.exe"
-    } else {
-        "runvil-gateway"
-    }
 }
 
 fn run_checked(

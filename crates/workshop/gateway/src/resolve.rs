@@ -1,9 +1,10 @@
 //! Gateway endpoint resolution: a live gateway discovery file in the run
 //! directory first, explicit `[gateway]` config second.
 //!
-//! The sidecar gateway writes `gateway.json` after a successful bind (see
-//! `gateway-api-discovery`), so a workshop that finds a live file attaches to
-//! that gateway - loopback, WSL, or LAN become one topology. A stale file
+//! The Gateway writes `gateway.json` after a successful bind (its own
+//! `runvil-gateway` repository owns the writer), so a workshop that finds a
+//! live file attaches to that gateway - loopback, WSL, or LAN become one
+//! topology. A stale file
 //! is removed by the probe with its reason reported, and explicit config
 //! takes over; with no live file and no explicit config there is nothing
 //! to connect to, which is the plain [`ResolveError`].

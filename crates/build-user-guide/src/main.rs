@@ -24,7 +24,6 @@ mod stage;
 /// one set, named like the book, so `src/<book>/` in the docs checkout is
 /// its source. This is the only list of books; nothing else names them.
 const BOOKS: &[(&str, &str)] = &[
-    ("gateway", "The Gateway"),
     ("workshop", "The Workshop"),
     ("language", "The Prompt Language"),
 ];

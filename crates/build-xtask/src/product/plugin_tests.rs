@@ -71,10 +71,9 @@ fn naming_plugin_web(dir: &str, package: &str, table: &str) -> Vec<String> {
 }
 
 #[test]
-fn engine_gateway_and_harness_crates_naming_a_plugin_crate_are_reported() {
+fn engine_and_harness_crates_naming_a_plugin_crate_are_reported() {
     for (dir, package, table) in [
         ("runvil", "runvil", "dependencies"),
-        ("gateway/app", "gateway", "dependencies"),
         ("harness", "harness", "dev-dependencies"),
         ("harness-internal/runner", "harness-runner", "dependencies"),
     ] {
@@ -82,9 +81,8 @@ fn engine_gateway_and_harness_crates_naming_a_plugin_crate_are_reported() {
         assert_eq!(violations.len(), 1, "{package}: {violations:?}");
         assert!(
             violations[0].starts_with(&format!("{package} depends on plugin-web:"))
-                && violations[0].contains(
-                    "runvil, gateway, and harness crates must not depend on plugin crates"
-                ),
+                && violations[0]
+                    .contains("runvil and harness crates must not depend on plugin crates"),
             "{package}: {violations:?}"
         );
     }
