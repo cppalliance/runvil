@@ -149,6 +149,50 @@ pub enum ThinkingMode {
     Switchable,
 }
 
+/// One of the five fixed model tiers a prompt can ask for.
+///
+/// Each role is a tier the Host maps to a model. A role with no model of its
+/// own uses the model mapped to [`ModelRole::Default`]. The names are
+/// lowercase on the wire, and [`ModelRole::ALL`] lists them in a fixed order.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+#[non_exhaustive]
+pub enum ModelRole {
+    /// The model every other role falls back to.
+    Default,
+    /// The most capable tier, for hard reasoning.
+    Strong,
+    /// A compact tier, for light work.
+    Small,
+    /// The lowest-latency tier.
+    Fast,
+    /// The tier for open-ended writing.
+    Creative,
+}
+
+impl ModelRole {
+    /// Every role, in declaration order.
+    pub const ALL: [ModelRole; 5] = [
+        ModelRole::Default,
+        ModelRole::Strong,
+        ModelRole::Small,
+        ModelRole::Fast,
+        ModelRole::Creative,
+    ];
+
+    /// Returns the role's lowercase name, the text a prompt writes.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            ModelRole::Default => "default",
+            ModelRole::Strong => "strong",
+            ModelRole::Small => "small",
+            ModelRole::Fast => "fast",
+            ModelRole::Creative => "creative",
+        }
+    }
+}
+
 /// Describes one catalogued model.
 ///
 /// It holds the model's identity, description, context window, thinking
@@ -369,5 +413,62 @@ mod tests {
             .expect_err("a catalog with duplicate ids must be rejected");
         assert!(matches!(err, ModelCatalogError::DuplicateId { .. }));
         assert!(ModelCatalog::new([info("a"), info("b")]).is_ok());
+    }
+
+    #[test]
+    fn each_model_role_name_deserializes_to_its_variant() {
+        let cases = [
+            ("default", ModelRole::Default),
+            ("strong", ModelRole::Strong),
+            ("small", ModelRole::Small),
+            ("fast", ModelRole::Fast),
+            ("creative", ModelRole::Creative),
+        ];
+        for (name, expected) in cases {
+            let role: ModelRole = serde_json::from_str(&format!("\"{name}\""))
+                .expect("a model role name deserializes");
+            assert_eq!(role, expected, "model_role name {name}");
+        }
+    }
+
+    #[test]
+    fn model_role_all_lists_the_five_roles_in_order_and_round_trips_through_as_str() {
+        assert_eq!(
+            ModelRole::ALL,
+            [
+                ModelRole::Default,
+                ModelRole::Strong,
+                ModelRole::Small,
+                ModelRole::Fast,
+                ModelRole::Creative,
+            ]
+        );
+        for role in ModelRole::ALL {
+            let back: ModelRole = serde_json::from_str(&format!("\"{}\"", role.as_str()))
+                .expect("a model_role as_str text deserializes");
+            assert_eq!(back, role);
+        }
+    }
+
+    #[test]
+    fn an_unknown_model_role_name_fails_and_the_error_names_all_five_roles() {
+        let err = serde_json::from_str::<ModelRole>("\"reviewer\"")
+            .expect_err("an unknown model_role name must be rejected")
+            .to_string();
+        for name in ["default", "strong", "small", "fast", "creative"] {
+            assert!(err.contains(name), "model_role error {err:?} omits {name}");
+        }
+    }
+
+    #[test]
+    fn a_model_role_works_as_a_btree_map_key_ordered_like_all() {
+        let map: std::collections::BTreeMap<ModelRole, usize> = ModelRole::ALL
+            .iter()
+            .rev()
+            .enumerate()
+            .map(|(index, role)| (*role, index))
+            .collect();
+        let keys: Vec<ModelRole> = map.keys().copied().collect();
+        assert_eq!(keys, ModelRole::ALL, "model_role keys follow the ALL order");
     }
 }
