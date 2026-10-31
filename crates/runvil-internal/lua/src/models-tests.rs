@@ -9,16 +9,15 @@ use crate::test_vm::{BuiltVm, TestVm};
 /// The role-name list every label rejection ends with.
 const ROLE_LIST: &str = "expected default, strong, small, fast or creative";
 
-/// A bound role for the shared set: `label`, with the keyword set recorded.
-fn bound_role(label: &str, capabilities: &[&str]) -> ModelBinding {
+/// A bound role for the shared set, under `label`, on the model `model`.
+fn bound_role(label: &str, model: &str) -> ModelBinding {
     ModelBinding::new(
         label,
         "A general model for tests",
-        ModelId::gateway("m1").expect("a static model id is valid"),
+        ModelId::gateway(model).expect("a static model id is valid"),
         ModelInvocation::new(),
         std::num::NonZeroU32::new(8192).expect("8192 is non-zero"),
     )
-    .with_capabilities(capabilities.iter().map(|word| (*word).to_owned()).collect())
 }
 
 /// A fresh VM with the `models` table installed over a shared set holding
@@ -26,8 +25,8 @@ fn bound_role(label: &str, capabilities: &[&str]) -> ModelBinding {
 #[track_caller]
 fn models_vm() -> BuiltVm {
     let mut models = ModelSet::default();
-    models.push(bound_role("default", &["frontier", "thinking"]));
-    models.push(bound_role("strong", &["fast"]));
+    models.push(bound_role("default", "m1"));
+    models.push(bound_role("strong", "m2"));
     TestVm::new().models(models).build()
 }
 
@@ -331,14 +330,97 @@ fn a_models_get_handle_for_the_selected_role_keeps_the_role_defaults() {
 }
 
 #[test]
-fn the_handle_exposes_label_and_the_full_keyword_set() {
-    let inspected: String = models_vm().eval(
-        "local h = models.get('default'); \
-         return h.label .. '|' .. h.model_id .. '|' .. table.concat(h.capabilities, ',')",
+fn the_handle_exposes_label_model_id_description_context_thinking_and_provider() {
+    let mut models = ModelSet::default();
+    models.push(
+        bound_role("default", "m1")
+            .with_invocation(ModelInvocation::new().with_thinking(Some(true)))
+            .with_provider("acme"),
     );
-    assert_eq!(inspected, "default|m1|frontier,thinking");
+    let inspected: String = TestVm::new().models(models).build().eval(
+        "local h = models.get('default'); \
+         return h.label .. '|' .. h.model_id .. '|' .. h.description .. '|' .. h.context \
+         .. '|' .. tostring(h.thinking) .. '|' .. h.provider",
+    );
+    assert_eq!(
+        inspected,
+        "default|m1|A general model for tests|8192|true|acme"
+    );
 }
 
+#[test]
+fn models_current_returns_the_default_handle_before_any_use() {
+    let (label, model_id): (String, String) =
+        models_vm().eval("local h = models.current(); return h.label, h.model_id");
+    assert_eq!((label.as_str(), model_id.as_str()), ("default", "m1"));
+}
+
+#[test]
+fn models_current_follows_models_use() {
+    let (label, model_id): (String, String) = models_vm()
+        .eval("models.use('strong'); local h = models.current(); return h.label, h.model_id");
+    assert_eq!((label.as_str(), model_id.as_str()), ("strong", "m2"));
+}
+
+#[test]
+fn models_current_with_no_models_fails_with_the_caller_supplied_none_message() {
+    let error = TestVm::new().build().eval_err("models.current()");
+    assert!(
+        error.to_string().contains("the caller supplied no model"),
+        "the failure says the caller supplied no model: {error}"
+    );
+}
+
+#[test]
+fn models_use_of_a_saved_handle_puts_the_section_back_on_it() {
+    let vm = models_vm();
+    vm.eval::<()>("local prev = models.current(); models.use('strong'); models.use(prev)");
+    assert_eq!(current_label(&vm).as_deref(), Some("default"));
+}
+
+#[test]
+fn models_use_of_a_handle_returns_that_handle() {
+    let (label, model_id): (String, String) =
+        models_vm().eval("local h = models.use(models.get('strong')); return h.label, h.model_id");
+    assert_eq!((label.as_str(), model_id.as_str()), ("strong", "m2"));
+}
+
+#[test]
+fn models_use_applies_its_options_on_top_of_a_handle() {
+    let vm = models_vm();
+    vm.eval::<()>("local prev = models.current(); models.use(prev, { temperature = 0.2 })");
+    assert_eq!(current_label(&vm).as_deref(), Some("default"));
+    assert_eq!(effective_sampling(&vm), (Some(0.2), None));
+}
+
+#[test]
+fn models_use_accepts_a_raw_id_handle_from_models_get() {
+    let vm = TestVm::new().raw_model_ids().build();
+    vm.eval::<()>("models.use(models.get('vendor/raw-model'))");
+    let binding = vm
+        .current_model()
+        .expect("the current model is readable")
+        .expect("a selection resolves");
+    assert_eq!(binding.alias(), "vendor/raw-model");
+    assert_eq!(binding.id().name(), "vendor/raw-model");
+}
+
+#[test]
+fn models_use_rejects_an_argument_that_is_neither_a_role_nor_a_handle() {
+    let vm = models_vm();
+    let error = vm.eval_err("models.use(5)");
+    assert!(
+        error
+            .to_string()
+            .contains("models.use takes a model role name or a model handle, got number"),
+        "the rejection names the argument's Lua type: {error}"
+    );
+    assert_eq!(
+        current_label(&vm).as_deref(),
+        Some("default"),
+        "a rejected call must not select"
+    );
+}
 #[test]
 fn models_get_resolves_a_label_outside_the_roles_as_a_raw_gateway_id_only_when_permitted() {
     let resolved: String = TestVm::new().raw_model_ids().build().eval(

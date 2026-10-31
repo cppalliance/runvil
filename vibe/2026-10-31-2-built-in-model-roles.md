@@ -474,7 +474,7 @@ Make the run's model set immutable, and make the `default` role the baseline a s
 
 <step-4>
 
-### Step 4: models.use with a handle, models.current, handle fields
+### Step 4: models.use with a handle, models.current, handle fields [completed]
 
 - Component: Fixed roles and Host map
 - Tests:

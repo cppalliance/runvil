@@ -597,7 +597,6 @@ pub fn runvil::model::Message::role(&self) -> runvil::model::Role
 pub fn runvil::model::Message::tool(tool_call_id: impl core::convert::Into<alloc::string::String>, content: impl core::convert::Into<alloc::string::String>) -> runvil::model::Message
 pub fn runvil::model::Message::user(content: impl core::convert::Into<alloc::string::String>) -> runvil::model::Message
 pub fn runvil::model::ModelBinding::alias(&self) -> &str
-pub fn runvil::model::ModelBinding::capabilities(&self) -> &[alloc::string::String]
 pub fn runvil::model::ModelBinding::completion_options(&self) -> runvil::model::CompletionOptions
 pub fn runvil::model::ModelBinding::context(&self) -> core::num::nonzero::NonZeroU32
 pub fn runvil::model::ModelBinding::description(&self) -> &str
@@ -606,7 +605,6 @@ pub fn runvil::model::ModelBinding::invocation(&self) -> &runvil::model::ModelIn
 pub fn runvil::model::ModelBinding::new(alias: impl core::convert::Into<alloc::string::String>, description: impl core::convert::Into<alloc::string::String>, id: runvil::model::ModelId, invocation: runvil::model::ModelInvocation, context: core::num::nonzero::NonZeroU32) -> Self
 pub fn runvil::model::ModelBinding::provider(&self) -> core::option::Option<&str>
 pub fn runvil::model::ModelBinding::render_info(&self) -> runvil::model::ModelInfo
-pub fn runvil::model::ModelBinding::with_capabilities(self, capabilities: alloc::vec::Vec<alloc::string::String>) -> Self
 pub fn runvil::model::ModelBinding::with_catalog_info(self, info: runvil::model::ModelInfo) -> Self
 pub fn runvil::model::ModelBinding::with_invocation(self, invocation: runvil::model::ModelInvocation) -> Self
 pub fn runvil::model::ModelBinding::with_provider(self, provider: impl core::convert::Into<alloc::string::String>) -> Self

@@ -201,7 +201,7 @@ fn a_hard_thinking_keyword_the_filling_model_fails_is_a_thinking_check() {
 }
 
 #[test]
-fn a_soft_keyword_and_a_description_are_never_checked() {
+fn a_soft_keyword_and_a_declared_description_are_never_checked() {
     let prompt = parse_ok(&declaring(
         "models: { strong: { keywords: [frontier, fast], description: Deep analysis } }",
         "return 'x'",
@@ -218,7 +218,11 @@ fn a_soft_keyword_and_a_description_are_never_checked() {
         .model_set
         .binding("strong")
         .expect("the strong role is bound");
-    assert_eq!(strong.description(), "Deep analysis");
+    assert_eq!(
+        strong.description(),
+        "A model for the prepare tests",
+        "a role's description is the model's own"
+    );
 }
 
 #[test]
@@ -398,5 +402,86 @@ fn a_strong_round_attributes_its_request_and_its_events_to_the_strong_model() {
     );
 }
 
+/// The model each request named, in the order the rounds left.
+fn served(gateway: &ScriptedChat) -> Vec<String> {
+    gateway
+        .requests()
+        .iter()
+        .map(|body| body.options.model().to_owned())
+        .collect()
+}
+
+/// A scenario over `lua`, with `default` on model A and `strong` on model B.
+fn two_role_scenario(lua: &str) -> Scenario {
+    Scenario::new(declaring("", lua))
+        .current_model(model_named("model-a", 32_000, ThinkingMode::Switchable))
+        .role_model(
+            ModelRole::Strong,
+            model_named("model-b", 32_000, ThinkingMode::Switchable),
+        )
+}
+
+#[test]
+fn a_saved_handle_puts_a_later_round_back_on_its_model() {
+    let gateway = ScriptedChat::new(vec![text("a"), text("b")]);
+    let trace = two_role_scenario(
+        "
+        local prev = models.current()
+        models.use('strong')
+        local first = models.infer('one')
+        models.use(prev)
+        return first .. '|' .. models.infer('two')",
+    )
+    .chat(&gateway)
+    .run();
+    assert_eq!(trace.text(), "a|b");
+    assert_eq!(
+        served(&gateway),
+        ["model-b", "model-a"],
+        "the saved handle returns the section to the default model A"
+    );
+}
+
+#[test]
+fn models_use_of_a_handle_applies_its_options_on_top_of_the_handles_model() {
+    let gateway = ScriptedChat::new(vec![text("a")]);
+    let trace = two_role_scenario(
+        "
+        local prev = models.current()
+        models.use(prev, { temperature = 0.2 })
+        return models.infer('one')",
+    )
+    .chat(&gateway)
+    .run();
+    assert_eq!(trace.text(), "a");
+    assert_eq!(served(&gateway), ["model-a"]);
+    assert_eq!(
+        gateway.requests()[0]
+            .options
+            .temperature()
+            .map(crate::model::Temperature::get),
+        Some(0.2),
+        "the temperature applies on top of the handle's own binding"
+    );
+}
+
+#[test]
+fn a_raw_id_handle_runs_the_next_round_on_its_gateway_model() {
+    let gateway = ScriptedChat::new(vec![text("a")]);
+    let trace = two_role_scenario(
+        "
+        models.use(models.get('vendor/raw-model'))
+        return models.infer('one')",
+    )
+    .context(|ctx| ctx.with_ui(serde_json::json!({})))
+    .chat(&gateway)
+    .run();
+    assert_eq!(trace.text(), "a");
+    assert_eq!(
+        served(&gateway),
+        ["vendor/raw-model"],
+        "a raw-id handle from models.get is accepted by models.use"
+    );
+}
 #[path = "prepare-refusals.rs"]
 mod refusals;

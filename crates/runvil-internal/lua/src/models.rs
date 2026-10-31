@@ -1,11 +1,13 @@
-//! The Lua `models` Engine global: `use` / `get`.
+//! The Lua `models` Engine global: `use` / `get` / `current`.
 //!
 //! The five roles arrive pre-filled from prepare in the shared [`ModelSet`],
-//! and the table selects among them by role name. `models.use` stores the
-//! binding it selects, with its optional sampling options applied, as the
-//! section's current model, and `models.get` inspects a role without
-//! selecting it. The suspending `models.infer`, `models.loop`, and
-//! `models.compact` are coroutine shims added to this table afterward.
+//! and the table selects among them by role name. `models.use` takes a role
+//! name or a model handle and stores the binding it selects, with its
+//! optional sampling options applied, as the section's current model.
+//! `models.get` inspects a role without selecting it, and `models.current`
+//! returns the handle for the current model. The suspending `models.infer`,
+//! `models.loop`, and `models.compact` are coroutine shims added to this
+//! table afterward.
 use std::num::NonZeroU32;
 use std::sync::Arc;
 use std::sync::Mutex;
@@ -56,6 +58,20 @@ fn raw_gateway_binding(alias: &str) -> mlua::Result<ModelBinding> {
         ModelInvocation::new(),
         RAW_ID_CONTEXT,
     ))
+}
+
+/// The error every selection read or write raises when its lock is poisoned.
+fn selection_poisoned() -> mlua::Error {
+    mlua::Error::external("model selection lock was poisoned")
+}
+
+/// The Lua type name of `value`, as `type(value)` reports it: an integer is a
+/// `number`.
+fn lua_type_name(value: &Value) -> &'static str {
+    match value {
+        Value::Integer(_) | Value::Number(_) => "number",
+        other => other.type_name(),
+    }
 }
 
 /// The five role names as a sentence tail: `default, strong, small, fast or
@@ -224,12 +240,14 @@ fn parse_use_options(options: Value, rest: &MultiValue) -> mlua::Result<UseOptio
 /// Installs the `models` table into one section VM (H1 included: there is
 /// one install path for every section).
 ///
-/// `models.use(label, options?)` looks the role `label` up in the shared
-/// [`ModelSet`], applies the optional `temperature` / `max_tokens` table to
-/// its binding, stores the result in `selection` as the section's current
+/// `models.use(role_or_handle, options?)` takes a role name, which it looks up
+/// in the shared [`ModelSet`], or a model handle, whose binding it uses as it
+/// is. It applies the optional `temperature` / `max_tokens` table on top of
+/// that binding, stores the result in `selection` as the section's current
 /// model, and returns the handle. `models.get(label)` returns the handle for
-/// a role without selecting it. A label outside the five roles is an error,
-/// and a role the caller gave no model fails saying so.
+/// a role without selecting it, and `models.current()` returns the handle
+/// for the current model. A label outside the five roles is an error, and a
+/// role the caller gave no model fails saying so.
 ///
 /// `raw_ids` is the raw-model-id fallback, resolved whenever the caller
 /// passes an application-state snapshot (`RunContext::with_ui`): then
@@ -259,16 +277,28 @@ pub(crate) fn install_models(
     let use_fn = lua
         .create_function(
             move |_,
-                  (label, options, rest): (String, Value, MultiValue)|
+                  (target, options, rest): (Value, Value, MultiValue)|
                   -> mlua::Result<LuaModelHandle> {
-                let role = find_role(&label).ok_or_else(|| not_a_role("models.use", &label))?;
-                let binding = role_binding(&frozen, role)?;
+                let binding = match &target {
+                    Value::String(text) => {
+                        let label = text.to_string_lossy();
+                        let role =
+                            find_role(&label).ok_or_else(|| not_a_role("models.use", &label))?;
+                        role_binding(&frozen, role)?
+                    }
+                    Value::UserData(userdata) if userdata.is::<LuaModelHandle>() => {
+                        userdata.borrow::<LuaModelHandle>()?.binding().clone()
+                    }
+                    other => {
+                        return Err(mlua::Error::external(format!(
+                            "models.use takes a model role name or a model handle, got {}",
+                            lua_type_name(other)
+                        )));
+                    }
+                };
                 let options = parse_use_options(options, &rest)?;
                 let binding = options.apply(binding);
-                *current
-                    .lock()
-                    .map_err(|_| mlua::Error::external("model selection lock was poisoned"))? =
-                    Some(binding.clone());
+                *current.lock().map_err(|_| selection_poisoned())? = Some(binding.clone());
                 Ok(LuaModelHandle::from_binding(binding))
             },
         )
@@ -291,6 +321,17 @@ pub(crate) fn install_models(
         })
         .map_err(Error::lua)?;
     models.set("get", get_fn).map_err(Error::lua)?;
+
+    let current = Arc::clone(selection);
+    let current_fn = lua
+        .create_function(move |_, ()| -> mlua::Result<LuaModelHandle> {
+            let binding = current.lock().map_err(|_| selection_poisoned())?.clone();
+            binding
+                .map(LuaModelHandle::from_binding)
+                .ok_or_else(|| mlua::Error::external("the caller supplied no model"))
+        })
+        .map_err(Error::lua)?;
+    models.set("current", current_fn).map_err(Error::lua)?;
 
     globals.raw_set("models", models).map_err(Error::lua)
 }

@@ -5,14 +5,13 @@ use super::*;
 #[test]
 fn models_use_selects_a_role_by_label() {
     let models = shared_models(vec![
-        bound_role("default", "A tiny model", "small", 8_192, None, &[]),
+        bound_role("default", "A tiny model", "small", 8_192, None),
         bound_role(
             "strong",
             "A careful analysis model",
             "analyst",
             131_072,
             Some(true),
-            &["thinking", "frontier"],
         ),
     ]);
     let vm =
@@ -27,10 +26,6 @@ fn models_use_selects_a_role_by_label() {
     let model = model.expect("a selection resolves");
     assert_eq!(model.alias(), "strong");
     assert_eq!(model.invocation().thinking, Some(true));
-    assert_eq!(
-        model.capabilities(),
-        &["thinking".to_owned(), "frontier".to_owned()]
-    );
     vm.teardown(&null_emitter(), "Section");
 }
 
@@ -52,7 +47,6 @@ fn models_use_rejects_a_label_outside_the_five_roles() {
         "small",
         8_192,
         None,
-        &[],
     )]);
     let vm =
         section_vm_with_models(&models, &null_emitter(), "Section").expect("the section VM builds");

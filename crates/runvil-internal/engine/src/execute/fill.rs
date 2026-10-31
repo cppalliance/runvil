@@ -3,7 +3,7 @@
 use std::collections::BTreeMap;
 
 use crate::model::{ModelBinding, ModelInfo, ModelInvocation, ModelRole, ModelSet, ThinkingMode};
-use crate::parser::{ModelKeyword, Prompt, detail};
+use crate::parser::{ModelKeyword, Prompt};
 
 use super::requirements::{RequirementCheck, Requirements, UnmetRequirement};
 
@@ -41,15 +41,10 @@ pub(super) fn fill_model_set(
     };
     for role in ModelRole::ALL {
         let info = models.remove(&role).unwrap_or_else(|| default.clone());
-        let (keywords, minimum, declared_description) =
-            match prompt.frontmatter().models().get(role.as_str()) {
-                Some(declared) => (
-                    declared.keywords(),
-                    declared.min_context(),
-                    declared.description(),
-                ),
-                None => (&[][..], None, None),
-            };
+        let (keywords, minimum) = match prompt.frontmatter().models().get(role.as_str()) {
+            Some(declared) => (declared.keywords(), declared.min_context()),
+            None => (&[][..], None),
+        };
         if let Some(minimum) = minimum
             && info.context() < minimum
         {
@@ -61,19 +56,12 @@ pub(super) fn fill_model_set(
             });
         }
         check_thinking(role, keywords, &info, requirements);
-        let description = declared_description.unwrap_or_else(|| info.description());
         let binding = ModelBinding::new(
             role.as_str(),
-            description,
+            info.description(),
             info.id().clone(),
             ModelInvocation::new().with_thinking(thinking_switch(keywords)),
             info.context(),
-        )
-        .with_capabilities(
-            keywords
-                .iter()
-                .map(|keyword| detail::keyword_name(*keyword).to_owned())
-                .collect(),
         )
         .with_catalog_info(info);
         set.push(binding);

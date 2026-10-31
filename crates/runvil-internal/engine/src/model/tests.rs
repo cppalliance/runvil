@@ -36,15 +36,13 @@ fn gateway_id(name: &str) -> ModelId {
 }
 
 /// A bound role as prepare's fill records it: label, description, resolved
-/// identity, the hard-keyword thinking switch as the frozen invocation, and
-/// the role's keyword set.
+/// identity, and the hard-keyword thinking switch as the frozen invocation.
 fn bound_role(
     label: &str,
     description: &str,
     model: &str,
     window: u32,
     thinking: Option<bool>,
-    capabilities: &[&str],
 ) -> ModelBinding {
     ModelBinding::new(
         label,
@@ -53,7 +51,6 @@ fn bound_role(
         ModelInvocation::new().with_thinking(thinking),
         ctx(window),
     )
-    .with_capabilities(capabilities.iter().map(|word| (*word).to_owned()).collect())
 }
 
 /// Shares a model set the way the run shares its own.

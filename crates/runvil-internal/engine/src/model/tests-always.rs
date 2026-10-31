@@ -11,7 +11,6 @@ fn a_section_starts_on_the_default_role_without_use() {
         "small",
         8_192,
         Some(false),
-        &["no-thinking"],
     )]);
     let vm =
         section_vm_with_models(&models, &null_emitter(), "Section").expect("the section VM builds");
@@ -26,21 +25,13 @@ fn a_section_starts_on_the_default_role_without_use() {
 #[test]
 fn models_get_returns_an_inspectable_handle_without_selecting() {
     let models = shared_models(vec![
-        bound_role(
-            "default",
-            "A tiny model",
-            "small",
-            8_192,
-            Some(false),
-            &["no-thinking", "fast"],
-        ),
+        bound_role("default", "A tiny model", "small", 8_192, Some(false)),
         bound_role(
             "strong",
             "A careful analysis model",
             "analyst",
             131_072,
             None,
-            &[],
         ),
     ]);
     let vm =
@@ -54,15 +45,12 @@ fn models_get_returns_an_inspectable_handle_without_selecting() {
                assert(model.description == "A tiny model")
                assert(model.context == 8192)
                assert(model.thinking == false)
-               assert(#model.capabilities == 2)
-               assert(model.capabilities[1] == "no-thinking")
-               assert(model.capabilities[2] == "fast")
                models.get("strong")"#,
         ),
         &null_emitter(),
         "Section",
     )
-    .expect("the handle exposes the role label and the full keyword set");
+    .expect("the handle exposes the role label and its fields");
     let current = resolve_section_model(&vm)
         .expect("the resolution reads the shared set")
         .expect("the section has a current model");

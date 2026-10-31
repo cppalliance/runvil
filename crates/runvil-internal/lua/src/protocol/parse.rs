@@ -157,10 +157,6 @@ fn call_target(table: &mlua::Table) -> std::result::Result<String, FieldFailure>
 
 /// How one yielded value parsed at the resume boundary.
 #[derive(Debug)]
-#[expect(
-    clippy::large_enum_variant,
-    reason = "a parse lives only until the driver matches it, and most yields are requests"
-)]
 pub enum YieldParse {
     /// A well-formed request, ready to dispatch.
     Request(Request),

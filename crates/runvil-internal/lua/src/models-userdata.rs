@@ -38,12 +38,6 @@ impl LuaModelHandle {
         self.binding.alias()
     }
 
-    /// Returns the bound role's full keyword set.
-    #[must_use]
-    fn capabilities(&self) -> &[String] {
-        self.binding.capabilities()
-    }
-
     /// Returns the name of the bound model, without the server namespace
     /// its id also holds.
     #[must_use]
@@ -51,7 +45,7 @@ impl LuaModelHandle {
         self.binding.id().name()
     }
 
-    /// Returns the capability description of the bound role.
+    /// Returns the description of the bound model.
     #[must_use]
     fn description(&self) -> &str {
         self.binding.description()
@@ -69,13 +63,13 @@ impl LuaModelHandle {
         self.binding.provider().map(str::to_owned)
     }
 
-    /// Returns the frozen thinking switch, when the role declared one.
+    /// Returns the frozen thinking switch, when the role set one.
     #[must_use]
     fn thinking(&self) -> Option<bool> {
         self.binding.invocation().thinking
     }
 
-    /// Returns the frozen sampling temperature, when the role declared one.
+    /// Returns the frozen sampling temperature, when one was set.
     #[must_use]
     fn temperature(&self) -> Option<f64> {
         self.binding
@@ -84,7 +78,7 @@ impl LuaModelHandle {
             .map(runvil_model_client::model::Temperature::get)
     }
 
-    /// Returns the frozen max generation tokens, when the role declared one.
+    /// Returns the frozen max generation tokens, when one was set.
     #[must_use]
     fn max_tokens(&self) -> Option<u32> {
         self.binding
@@ -98,9 +92,6 @@ impl UserData for LuaModelHandle {
     fn add_fields<F: UserDataFields<Self>>(fields: &mut F) {
         fields.add_field_method_get("name", |_, this| Ok(this.name().to_owned()));
         fields.add_field_method_get("label", |_, this| Ok(this.name().to_owned()));
-        fields.add_field_method_get("capabilities", |lua, this| {
-            lua.create_sequence_from(this.capabilities().to_vec())
-        });
         fields.add_field_method_get("model_id", |_, this| Ok(this.model_id().to_owned()));
         fields.add_field_method_get("description", |_, this| Ok(this.description().to_owned()));
         fields.add_field_method_get("context", |_, this| Ok(this.context()));
