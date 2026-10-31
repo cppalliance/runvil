@@ -146,6 +146,51 @@ fn a_satisfied_check_says_nothing_on_the_status_bar() {
 }
 
 #[test]
+fn an_unfilled_pin_warns_on_the_status_bar_in_a_release_build() {
+    let (push, mut rx, _sink) = status_recorder();
+    announce_for(&VersionCheck::NoMinimumRecorded, &push, Build::Release);
+    let frame = rx.try_recv().expect("the unfilled pin is pushed");
+    assert_eq!(frame.label, "Gateway version unchecked");
+    assert!(
+        frame.description.contains("no minimum version"),
+        "the description names the cause: {}",
+        frame.description
+    );
+    assert!(
+        frame.description.contains("nothing checks"),
+        "the description names the consequence: {}",
+        frame.description
+    );
+}
+
+#[test]
+fn an_unfilled_pin_stays_off_the_status_bar_in_a_debug_build() {
+    let (push, mut rx, _sink) = status_recorder();
+    announce_for(&VersionCheck::NoMinimumRecorded, &push, Build::Debug);
+    assert!(
+        rx.try_recv().is_err(),
+        "a developer's checkout must not repeat this line on every launch"
+    );
+}
+
+#[test]
+fn the_public_entry_point_follows_the_build_it_was_compiled_into() {
+    let (push, mut rx, _sink) = status_recorder();
+    announce(&VersionCheck::NoMinimumRecorded, &push);
+    if cfg!(debug_assertions) {
+        assert!(
+            rx.try_recv().is_err(),
+            "this test build is a debug build, so the pin reaches the log only"
+        );
+    } else {
+        let frame = rx
+            .try_recv()
+            .expect("a release build shows the unfilled pin");
+        assert_eq!(frame.label, "Gateway version unchecked");
+    }
+}
+
+#[test]
 fn the_pin_minimum_is_the_compiled_default() {
     // Whatever the pin holds, the constant is its value, never a guess. A
     // placeholder becomes an empty minimum, which the comparison reads as

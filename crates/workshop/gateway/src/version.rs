@@ -12,6 +12,13 @@
 //! phase uses. The versions are compared as dotted numbers, never as
 //! strings: `0.10.0` is newer than `0.9.0`, and a string compare says the
 //! opposite.
+//!
+//! A pin that records no minimum turns the check off, which is a problem
+//! with the build rather than with the Gateway. A release build says so on
+//! the status bar: nothing then guards the Gateway it ships. A debug build
+//! says so in the log only, because it reaches that state on every launch
+//! while the pin is still a placeholder, and a status line for it would be
+//! noise a developer learns to ignore.
 
 use std::cmp::Ordering;
 use std::fmt;
@@ -155,12 +162,54 @@ pub fn report(running: &str, push: &Push) {
 /// Logs `check` and warns on the status bar when it is a problem. Split
 /// from [`report`] so a test can drive any outcome, including one the
 /// committed pin cannot currently produce.
+///
+/// An unfilled pin reaches the status bar in a release build only; see
+/// [`announce_for`].
 pub fn announce(check: &VersionCheck, push: &Push) {
+    announce_for(check, push, Build::current());
+}
+
+/// Which kind of build is asking. An unfilled pin is a defect in a
+/// shipped build and a normal state in a developer's checkout, so the
+/// status bar is told about the first and not the second.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Build {
+    /// A debug build: the developer's own `cargo build` or `cargo test`.
+    Debug,
+    /// A release build, which is what an installer ships.
+    Release,
+}
+
+impl Build {
+    /// The build this code was compiled into.
+    fn current() -> Self {
+        if cfg!(debug_assertions) {
+            Self::Debug
+        } else {
+            Self::Release
+        }
+    }
+}
+
+/// Logs `check` and warns on the status bar when it is a problem. `build`
+/// selects whether an unfilled pin also reaches the status bar.
+fn announce_for(check: &VersionCheck, push: &Push, build: Build) {
     match check {
         VersionCheck::NoMinimumRecorded => {
-            tracing::info!(
-                "the Gateway pin records no minimum version; skipping the version check"
-            );
+            tracing::warn!("the Gateway pin records no minimum version; the version check is off");
+            // A release build is what an installer ships. An unfilled pin
+            // there leaves the app with no version guard at all, so the
+            // user sees it. A debug build is a developer's own checkout,
+            // where the pin stays a placeholder until a Gateway release
+            // exists, so it stays in the log.
+            if build == Build::Release {
+                push.push_status_update(
+                    "Gateway version unchecked",
+                    "this Workshop was built from a pin with no minimum version, so nothing \
+                     checks the Gateway it attaches to",
+                    Activity::General,
+                );
+            }
         }
         VersionCheck::Satisfied { running, minimum } => {
             tracing::info!(
