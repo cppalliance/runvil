@@ -18,6 +18,7 @@ use crate::execute::section_vm::{self, VmSeed};
 use crate::execute::walk_target::{self, RequireOrigin};
 use crate::heading_address::{SectionPos, Visible};
 use crate::lua::{Library, LibraryKey, SectionVm, Uninjected};
+use crate::model::ModelBinding;
 use crate::parser::Prompt;
 use crate::{Error, Result};
 
@@ -82,9 +83,14 @@ impl SectionContext {
     /// Returns [`Error::Internal`] when `pos` is past its slice, and
     /// otherwise the [`Error`] of whichever step failed (see [`section_vm`]
     /// for which failures tear the VM down).
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "the frame takes the two chain-owned handles (access and selection) beside the section entry's own deltas, and each stays a separate borrow"
+    )]
     pub(crate) fn new(
         ctx: &RunState,
         access: &Arc<Access>,
+        selection: &Arc<Mutex<Option<ModelBinding>>>,
         pos: &SectionPos,
         section_id: &str,
         task_id: &TaskId,
@@ -119,7 +125,6 @@ impl SectionContext {
         // only the seed, the `sys` extras, and the callbacks' position are
         // the walk's own.
         let sys_json = sys.to_json();
-        let selection = Arc::new(Mutex::new(ctx.default_binding()));
         let setup = ctx.vm_setup(
             &sys_json,
             VmSeed {
@@ -127,7 +132,7 @@ impl SectionContext {
                 item: seed.item.as_ref(),
             },
             access,
-            &selection,
+            selection,
             section.name(),
             false,
         );
@@ -160,6 +165,7 @@ impl SectionContext {
     pub(crate) fn new_h1(
         ctx: &RunState,
         access: &Arc<Access>,
+        selection: &Arc<Mutex<Option<ModelBinding>>>,
         section_id: &str,
         task_id: &TaskId,
     ) -> Result<Self> {
@@ -179,15 +185,7 @@ impl SectionContext {
         // describes; the executor reads the value back at the freeze (see
         // the scheduler's H1-to-walk handoff).
         let sys_json = sys.to_json();
-        let selection = Arc::new(Mutex::new(ctx.default_binding()));
-        let setup = ctx.vm_setup(
-            &sys_json,
-            VmSeed::default(),
-            access,
-            &selection,
-            title,
-            true,
-        );
+        let setup = ctx.vm_setup(&sys_json, VmSeed::default(), access, selection, title, true);
         // Setup runs on the bare VM and tears it down itself on failure:
         // the frame does not exist yet, so its `Drop` cannot own this path.
         let vm = section_vm::setup_section_vm(vm, &setup, read, resolve, render)?;

@@ -1,6 +1,7 @@
 //! Scheduler-side tests, split by seam into the `walk`, `h1`, `fanout`,
-//! `concurrency`, and `failures` submodules. The model set `writer_models`,
-//! its scenario `scheduler_scenario`, the concurrency ceiling `ceiling`,
+//! `concurrency`, `chain_model`, and `failures` submodules. The model
+//! set `default_models`, its scenario `scheduler_scenario`, the concurrency
+//! ceiling `ceiling`,
 //! the round and timer matchers `asks` and `is_timer`, the prompt readers
 //! `request_prompts` and `issued_prompts`, the replaying `recorded`, and
 //! the task-lifecycle counter `terminal_count` with its event matchers live
@@ -125,6 +126,7 @@ fn terminal_count(trace: &Trace, is: fn(&Event) -> bool) -> usize {
     trace.events().iter().filter(|event| is(event)).count()
 }
 
+mod chain_model;
 mod concurrency;
 mod failures;
 mod fanout;

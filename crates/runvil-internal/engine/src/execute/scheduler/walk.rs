@@ -56,6 +56,7 @@ impl Scheduler {
             ChainKind::Root,
             after_h1,
             self.ctx.clone(),
+            self.ctx.default_binding(),
             Arc::new(access),
             SectionPos::top(SectionIndex::FIRST),
             serde_json::json!({}),
@@ -106,8 +107,13 @@ impl ChainOps<'_> {
             // section - and no SECTION_STARTED, the pass is not a walked
             // section. Its id is the root chain's entry 0.
             let section_id = chain.next_entry_id()?;
-            let frame =
-                SectionContext::new_h1(&chain.ctx, chain.access()?, &section_id, &chain.task)?;
+            let frame = SectionContext::new_h1(
+                &chain.ctx,
+                chain.access()?,
+                &chain.selection,
+                &section_id,
+                &chain.task,
+            )?;
             chain.entered = Some(Entered::new(frame));
             return Ok(true);
         }
@@ -124,6 +130,7 @@ impl ChainOps<'_> {
         let frame = SectionContext::new(
             &chain.ctx,
             chain.access()?,
+            &chain.selection,
             chain.walk.current(),
             &section_id,
             &task,

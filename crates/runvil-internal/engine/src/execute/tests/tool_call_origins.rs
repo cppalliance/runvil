@@ -56,15 +56,6 @@ fn script_call(section: &str, entry: &str) -> ToolCallOrigin {
     ToolCallOrigin::new(EXECUTION, section, ToolCaller::Script).with_entry(entry)
 }
 
-/// The model each round asked for, in the order the rounds left.
-fn request_models(gateway: &ScriptedChat) -> Vec<String> {
-    gateway
-        .requests()
-        .iter()
-        .map(|body| body.options.model().to_owned())
-        .collect()
-}
-
 /// A section that offers `echo` and an adhoc `grab` whose handler runs
 /// `handler`, then loops once and returns the final record's text.
 fn grab_then_loop(handler: &str) -> String {
@@ -155,7 +146,7 @@ fn an_adhoc_handlers_infer_on_another_model_leaves_the_batchs_later_call_on_its_
     );
     assert_eq!(rig.trace().text(), "final answer");
     assert_eq!(
-        request_models(&gateway),
+        gateway.requested_models(),
         ["test-model", "other-model", "test-model"],
         "the handler's round goes to another model between the loop's rounds"
     );
@@ -174,7 +165,7 @@ fn an_adhoc_handlers_model_switch_leaves_the_batchs_later_call_on_its_rounds_mod
     );
     assert_eq!(rig.trace().text(), "final answer");
     assert_eq!(
-        request_models(&gateway),
+        gateway.requested_models(),
         ["test-model", "other-model"],
         "the switch steers the loop's next round"
     );

@@ -5,7 +5,7 @@
 //! transitively blocks on or owns.
 
 use std::num::NonZeroUsize;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use runvil_types::ids::{AbandonReason, ChainId, TaskId};
 use runvil_vfs::Access;
@@ -15,6 +15,7 @@ use crate::execute::run::EffectId;
 use crate::execute::section_context::TaskSeed;
 use crate::heading_address::SectionPos;
 use crate::lua::Answer;
+use crate::model::ModelBinding;
 use crate::{Error, Result};
 
 use super::chain_record::{CallDepth, ChainKind, Walk};
@@ -31,6 +32,21 @@ pub(super) enum ChainStep {
     RunEnded(Result<String>),
 }
 
+impl Chain {
+    /// Returns the chain's current model: the binding `models.use` last
+    /// stored, else the model the chain started on. `None` means the caller
+    /// supplied no model.
+    ///
+    /// # Errors
+    /// Returns [`Error::Internal`] when the selection's lock is poisoned.
+    pub(super) fn current_model(&self) -> Result<Option<ModelBinding>> {
+        self.selection
+            .lock()
+            .map(|selection| selection.clone())
+            .map_err(|_| Error::internal("model selection lock was poisoned"))
+    }
+}
+
 /// Everything a new chain starts from.
 pub(super) struct ChainStart {
     /// The chain's hierarchical id.
@@ -40,6 +56,12 @@ pub(super) struct ChainStart {
     pub(super) counters: Counters,
     /// The chain's fork of the run state.
     pub(super) ctx: RunState,
+    /// The model the chain's current model starts on: the `default` binding
+    /// for the H1 pass and a root walk with no pass before it, the H1
+    /// pass's ending model for the walk that follows it, and a copy of the
+    /// parent's current model, taken when the call or spawn was dispatched,
+    /// for a `call` child or a task.
+    pub(super) model: Option<ModelBinding>,
     /// The chain's VFS access capability: the root identity for the H1
     /// pass and the walk, the caller's for a `call` child, a fork of the
     /// spawner's for a task.
@@ -86,6 +108,7 @@ impl Scheduler {
             seed: TaskSeed::default(),
             parked: None,
             ctx: start.ctx,
+            selection: Arc::new(Mutex::new(start.model)),
             access: Some(start.access),
             entered: None,
             walk: Walk::new(start.start),
@@ -111,13 +134,14 @@ impl Scheduler {
     /// `u32`, leaving the ready queue unchanged.
     #[expect(
         clippy::too_many_arguments,
-        reason = "a root start inlines the `ChainStart` it would build, so no caller can set `lineage` or `call_depth`, and the four values it forwards verbatim from its site stay explicit"
+        reason = "a root start inlines the `ChainStart` it would build, so no caller can set `lineage` or `call_depth`, and the five values it forwards verbatim from its site stay explicit"
     )]
     pub(super) fn start_root_chain(
         &mut self,
         kind: ChainKind,
         counters: Counters,
         ctx: RunState,
+        model: Option<ModelBinding>,
         access: Arc<Access>,
         start: SectionPos,
         var: serde_json::Value,
@@ -127,6 +151,7 @@ impl Scheduler {
             lineage: ChainId::root(),
             counters,
             ctx,
+            model,
             access,
             start,
             kind,

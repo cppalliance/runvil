@@ -51,6 +51,7 @@ impl Scheduler {
             ChainKind::H1,
             Counters::default(),
             self.ctx.clone(),
+            self.ctx.default_binding(),
             Arc::new(access),
             SectionPos::top(SectionIndex::FIRST),
             serde_json::json!({}),
@@ -96,6 +97,8 @@ impl Scheduler {
         // lowered it with `tasks.concurrency`.
         let counters = chain.counters;
         let concurrency = chain.concurrency;
+        // The walk starts on the model the pass ended on.
+        let model = chain.current_model()?;
         if crate::parser::detail::sections(self.ctx.prompt()).is_empty() {
             // No walk follows, so the pass's end is the run's end: a task
             // the pass spawned and left live ends here under the same
@@ -112,6 +115,7 @@ impl Scheduler {
             ChainKind::Root,
             counters,
             walk_ctx,
+            model,
             walk_access,
             start,
             var,

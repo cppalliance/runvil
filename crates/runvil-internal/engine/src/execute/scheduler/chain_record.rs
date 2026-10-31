@@ -5,7 +5,7 @@
 
 use std::fmt;
 use std::num::NonZeroUsize;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use mlua::Thread;
 use runvil_types::ids::{ChainId, TaskId};
@@ -286,6 +286,9 @@ pub(super) struct Chain {
     /// fork also reports under its own task id with its own turn counter
     /// (`with_task`).
     pub(super) ctx: RunState,
+    /// The chain's current model, shared with each section VM it enters:
+    /// it starts on the chain's starting model; `models.use` rewrites it.
+    pub(super) selection: Arc<Mutex<Option<crate::model::ModelBinding>>>,
     /// The chain's VFS access capability, installed into each section VM
     /// the chain enters: the walk and the H1 pass share one root
     /// identity, a call chain borrows its parent's (a blocking child is

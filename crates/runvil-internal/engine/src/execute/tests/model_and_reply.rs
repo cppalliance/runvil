@@ -25,8 +25,9 @@ fn models_use_forwards_binding_completion_options_to_the_gateway() {
     // models.use -> completion_options -> GatewayChat::complete must set
     // the binding's model, the thinking switch, and the
     // section's `models.use` sampling options on the chat body. Roles
-    // declare no sampling fields, so a section on the `default` role
-    // sends none.
+    // declare no sampling fields, so a round on the `default` role sends
+    // none, and the second section switches back to it explicitly because
+    // the first section's switch lasts across the chain.
     let gateway = ScriptedChat::new(vec![text("hello from the mock"), text("hello again")]);
     let source = PromptSource::new()
         .front("models: { small: { thinking: false } }")
@@ -49,6 +50,7 @@ fn models_use_forwards_binding_completion_options_to_the_gateway() {
             Ask again.
 
             ```lua
+            models.use('default')
             return models.infer(prose)
             ```",
         );
@@ -80,7 +82,7 @@ fn models_use_forwards_binding_completion_options_to_the_gateway() {
     assert_eq!(defaulted.options.thinking(), None);
     assert!(
         defaulted.options.temperature().is_none() && defaulted.options.max_tokens().is_none(),
-        "a section on the `default` role sends neither option: {defaulted:?}"
+        "a round on the `default` role sends neither option: {defaulted:?}"
     );
 }
 

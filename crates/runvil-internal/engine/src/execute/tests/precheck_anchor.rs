@@ -196,15 +196,6 @@ fn run_rounds_with_small(lua: &str, replies: Vec<ScriptedReply>) -> (String, Scr
     run_over(set, lua, replies)
 }
 
-/// The model each request named, in the order they left.
-fn request_models(gateway: &ScriptedChat) -> Vec<String> {
-    gateway
-        .requests()
-        .iter()
-        .map(|body| body.options.model().to_owned())
-        .collect()
-}
-
 #[test]
 fn a_model_switch_leaves_the_second_round_on_the_estimate() {
     // The first round on `default` anchors at 3500 tokens, which would
@@ -224,7 +215,7 @@ fn a_model_switch_leaves_the_second_round_on_the_estimate() {
     );
     assert_eq!(out, "sent");
     assert_eq!(gateway.call_count(), 2, "both rounds left");
-    assert_eq!(request_models(&gateway), ["test-model", "other-model"]);
+    assert_eq!(gateway.requested_models(), ["test-model", "other-model"]);
 }
 
 #[test]
@@ -270,7 +261,7 @@ fn the_next_served_round_anchors_on_the_new_model() {
     );
     assert_eq!(out, "context_exhausted:precheck");
     assert_eq!(gateway.call_count(), 2, "only the first two rounds ran");
-    assert_eq!(request_models(&gateway), ["test-model", "other-model"]);
+    assert_eq!(gateway.requested_models(), ["test-model", "other-model"]);
 }
 
 #[test]
@@ -299,7 +290,7 @@ fn a_return_to_the_first_model_uses_the_estimate() {
     assert_eq!(out, "sent");
     assert_eq!(gateway.call_count(), 3);
     assert_eq!(
-        request_models(&gateway),
+        gateway.requested_models(),
         ["test-model", "other-model", "test-model"]
     );
 }

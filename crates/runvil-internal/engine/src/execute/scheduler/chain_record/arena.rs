@@ -45,7 +45,7 @@ impl Chain {
         kind: super::ChainKind,
         concurrency: std::num::NonZeroUsize,
     ) -> Chain {
-        use std::sync::Arc;
+        use std::sync::{Arc, Mutex};
 
         use runvil_types::ids::TaskId;
 
@@ -77,6 +77,7 @@ impl Chain {
             seed: TaskSeed::default(),
             parked: None,
             ctx,
+            selection: Arc::new(Mutex::new(None)),
             access: None,
             entered: None,
             walk: Walk::new(SectionPos::top(SectionIndex::FIRST)),

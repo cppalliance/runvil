@@ -167,6 +167,9 @@ impl Scheduler {
         // A call chain's effective limit starts with its caller's: the
         // tasks it spawns run within the caller's share.
         let child_concurrency = chain.concurrency;
+        // The child starts on a copy of the caller's current model, taken
+        // now, at dispatch.
+        let model = chain.current_model()?;
         // `chain`'s arena borrow ends here; the resolution names the
         // target's slice by path, so nothing borrows the arena across it.
         let resolved = self.with_chain(id, |ops| ops.resolve_chain_target(target))?;
@@ -176,6 +179,7 @@ impl Scheduler {
             lineage,
             counters: Counters::default(),
             ctx: child_ctx,
+            model,
             access,
             start: resolved.pos,
             kind: ChainKind::Call { parent: id },

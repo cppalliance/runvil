@@ -252,6 +252,15 @@ impl ScriptedChat {
             .clone()
     }
 
+    /// The model each recorded round named, in the order the rounds arrived.
+    #[must_use]
+    pub(crate) fn requested_models(&self) -> Vec<String> {
+        self.requests()
+            .iter()
+            .map(|body| body.options.model().to_owned())
+            .collect()
+    }
+
     /// The most recently recorded round, if any.
     #[must_use]
     pub(crate) fn last_request(&self) -> Option<ScriptedCall> {

@@ -95,6 +95,10 @@ impl Scheduler {
         // A spawned chain's effective limit starts with its spawner's:
         // its tasks run within the spawner's share and every ancestor's.
         let child_concurrency = chain.concurrency;
+        // The task starts on a copy of its spawner's current model, taken
+        // now, at dispatch: a queued task holds no VM until it is admitted,
+        // so a copy taken then would see a later switch.
+        let model = chain.current_model()?;
         let spawner_access = Arc::clone(chain.access()?);
         // `chain`'s arena borrow ends here; the resolution names the
         // target's slice by path, resolved against the shared tree.
@@ -135,6 +139,7 @@ impl Scheduler {
             lineage,
             counters: Counters::default(),
             ctx: child_ctx,
+            model,
             access: Arc::new(access),
             start: resolved.pos,
             kind: ChainKind::Task,

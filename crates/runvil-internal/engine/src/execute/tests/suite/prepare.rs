@@ -406,15 +406,6 @@ fn a_strong_round_attributes_its_request_and_its_events_to_the_strong_model() {
     );
 }
 
-/// The model each request named, in the order the rounds left.
-fn served(gateway: &ScriptedChat) -> Vec<String> {
-    gateway
-        .requests()
-        .iter()
-        .map(|body| body.options.model().to_owned())
-        .collect()
-}
-
 /// A scenario over `lua`, with `default` on model A and `strong` on model B.
 fn two_role_scenario(lua: &str) -> Scenario {
     Scenario::new(declaring("", lua))
@@ -440,7 +431,7 @@ fn a_saved_handle_puts_a_later_round_back_on_its_model() {
     .run();
     assert_eq!(trace.text(), "a|b");
     assert_eq!(
-        served(&gateway),
+        gateway.requested_models(),
         ["model-b", "model-a"],
         "the saved handle returns the section to the default model A"
     );
@@ -458,7 +449,7 @@ fn models_use_of_a_handle_applies_its_options_on_top_of_the_handles_model() {
     .chat(&gateway)
     .run();
     assert_eq!(trace.text(), "a");
-    assert_eq!(served(&gateway), ["model-a"]);
+    assert_eq!(gateway.requested_models(), ["model-a"]);
     assert_eq!(
         gateway.requests()[0]
             .options
@@ -482,7 +473,7 @@ fn a_raw_id_handle_runs_the_next_round_on_its_gateway_model() {
     .run();
     assert_eq!(trace.text(), "a");
     assert_eq!(
-        served(&gateway),
+        gateway.requested_models(),
         ["vendor/raw-model"],
         "a raw-id handle from models.get is accepted by models.use"
     );

@@ -572,7 +572,7 @@ Make `models:` front matter optional and limited to requirements on the five rol
 
 <step-6>
 
-### Step 6: Chains own the current model and children inherit it, then the commit gate
+### Step 6: Chains own the current model and children inherit it, then the commit gate [completed]
 
 - Component: Chain-level current model
 - Tests:
