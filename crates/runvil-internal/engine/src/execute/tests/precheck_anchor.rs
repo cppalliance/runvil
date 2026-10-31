@@ -183,8 +183,8 @@ fn a_merged_history_falls_back_to_the_estimate() {
 /// names a different model.
 #[track_caller]
 fn run_rounds_with_small(lua: &str, replies: Vec<ScriptedReply>) -> (String, ScriptedChat) {
-    let mut models = loop_models();
-    let default = models.bindings()[0].clone();
+    let mut set = loop_models();
+    let default = set.bindings()[0].clone();
     let small = ModelBinding::new(
         "small",
         "The default model with other settings",
@@ -192,8 +192,8 @@ fn run_rounds_with_small(lua: &str, replies: Vec<ScriptedReply>) -> (String, Scr
         ModelInvocation::new().with_thinking(Some(false)),
         default.context(),
     );
-    models.push(small);
-    run_over(models, lua, replies)
+    set.push(small);
+    run_over(set, lua, replies)
 }
 
 /// The model each request named, in the order they left.

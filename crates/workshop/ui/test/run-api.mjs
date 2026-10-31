@@ -48,7 +48,7 @@ const CONTRACT = {
     ],
   },
   models: [
-    { label: "main", keywords: ["thinking", "frontier"], min_context: 32000, description: null },
+    { label: "strong", min_context: 32000, thinking: true },
   ],
 };
 
@@ -122,9 +122,9 @@ const json = (body, status = 200) => ({
   check(
     "model roles narrow",
     contract.models.length === 1 &&
-      contract.models[0].label === "main" &&
-      contract.models[0].keywords.join(",") === "thinking,frontier" &&
-      contract.models[0].minContext === 32000,
+      contract.models[0].label === "strong" &&
+      contract.models[0].minContext === 32000 &&
+      contract.models[0].thinking === true,
   );
 }
 
@@ -163,6 +163,44 @@ const json = (body, status = 200) => ({
       contract.args.fields.length === 1 &&
       contract.args.fields[0].name === "prose" &&
       contract.args.fields[0].type === "string",
+  );
+}
+
+// --- Model requirements: null forms narrow to null, a bad shape is refused ---
+
+{
+  scriptFetch(() =>
+    json({
+      ...CONTRACT,
+      models: [{ label: "fast", min_context: null, thinking: null }],
+    }),
+  );
+  const contract = await fetchPromptContract("p.md", "text");
+  check(
+    "a role with no requirements narrows both to null",
+    contract.models.length === 1 &&
+      contract.models[0].label === "fast" &&
+      contract.models[0].minContext === null &&
+      contract.models[0].thinking === null,
+  );
+}
+
+{
+  scriptFetch(() =>
+    json({
+      ...CONTRACT,
+      models: [{ label: "strong", min_context: null, thinking: "yes" }],
+    }),
+  );
+  let caught = null;
+  try {
+    await fetchPromptContract("p.md", "text");
+  } catch (error) {
+    caught = error;
+  }
+  check(
+    "a model entry whose thinking is a string is a shape failure",
+    caught !== null && caught.code === "unexpected_shape",
   );
 }
 

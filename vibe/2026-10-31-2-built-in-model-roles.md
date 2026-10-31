@@ -515,7 +515,7 @@ Finish the author-facing Lua surface for model roles: `models.current()`, `model
 
 <step-5>
 
-### Step 5: Requirements-only front matter, Workshop contract and UI, then the commit gate
+### Step 5: Requirements-only front matter, Workshop contract and UI, then the commit gate [completed]
 
 - Component: Fixed roles and Host map
 - Tests:

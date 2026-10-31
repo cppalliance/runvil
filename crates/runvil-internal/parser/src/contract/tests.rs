@@ -3,7 +3,9 @@
 
 use std::num::NonZeroU32;
 
-use super::{ArgType, ArgsDeclIter, ModelKeyword, ModelRolesIter};
+use runvil_types::models::ModelRole;
+
+use super::{ArgType, ArgsDeclIter};
 use crate::ParseErrorKind;
 use crate::test_support::{assert_parse_error, parse_err, parse_ok, prompt};
 
@@ -17,9 +19,8 @@ fn the_full_contract_declaration_parses_and_round_trips() {
         uses: [web, mcp]
         args: { use_mcp: { type: boolean, default: true, \
                 description: Search MCP-connected private sources } }
-        models: { analyst: { keywords: [frontier, thinking], min_context: 200000, \
-                  description: deep reasoning }, \
-                  triage: { keywords: [fast, small], description: quick triage of search results } }
+        models: { strong: { min_context: 200000, thinking: true }, \
+                  fast: { thinking: false } }
         ",
         &[],
     ));
@@ -40,19 +41,16 @@ fn the_full_contract_declaration_parses_and_round_trips() {
         Some("Search MCP-connected private sources")
     );
 
-    let analyst = fm.models().get("analyst").expect("the role is declared");
-    assert_eq!(
-        analyst.keywords(),
-        &[ModelKeyword::Frontier, ModelKeyword::Thinking]
-    );
-    assert_eq!(analyst.min_context(), NonZeroU32::new(200_000));
-    assert_eq!(analyst.description(), Some("deep reasoning"));
-    let triage = fm.models().get("triage").expect("the role is declared");
-    assert_eq!(
-        triage.keywords(),
-        &[ModelKeyword::Fast, ModelKeyword::Small]
-    );
-    assert_eq!(triage.min_context(), None);
+    let strong = fm
+        .role_requirements(ModelRole::Strong)
+        .expect("the role is declared");
+    assert_eq!(strong.min_context(), NonZeroU32::new(200_000));
+    assert_eq!(strong.thinking(), Some(true));
+    let fast = fm
+        .role_requirements(ModelRole::Fast)
+        .expect("the role is declared");
+    assert_eq!(fast.min_context(), None);
+    assert_eq!(fast.thinking(), Some(false));
 }
 
 #[test]
@@ -60,7 +58,12 @@ fn a_prompt_without_contract_keys_behaves_exactly_as_today() {
     let prompt = parse_ok(&prompt("", &[]));
     let fm = prompt.frontmatter();
     assert!(fm.uses().is_empty());
-    assert!(fm.models().is_empty());
+    for role in ModelRole::ALL {
+        assert!(
+            fm.role_requirements(role).is_none(),
+            "a prompt with no models key declares nothing for {role:?}"
+        );
+    }
 }
 
 #[test]
@@ -85,21 +88,10 @@ fn an_unknown_key_inside_a_contract_entry_is_rejected() {
     // typo'd field is an authoring error, not silently ignored.
     for front in [
         "args: { flag: { tipe: boolean } }",
-        "models: { analyst: { keyword: [fast] } }",
+        "models: { strong: { tier: 1 } }",
     ] {
         let error = parse_err(&prompt(front, &[]));
         assert_eq!(error.kind(), ParseErrorKind::Frontmatter, "{error}");
-    }
-}
-
-#[test]
-fn every_reserved_name_the_grammar_allows_parses_as_a_model_role_label() {
-    for (name, _) in runvil_lua::RESERVED_NAMES {
-        if name.starts_with('_') {
-            continue;
-        }
-        let prompt = parse_ok(&prompt(&format!("models: {{ '{name}': {{}} }}"), &[]));
-        assert!(prompt.frontmatter().models().get(name).is_some(), "{name}");
     }
 }
 
@@ -204,35 +196,44 @@ fn an_unknown_arg_type_is_rejected() {
 }
 
 #[test]
-fn model_roles_round_trip_with_defaults() {
-    let prompt = parse_ok(&prompt(
-        "models: { analyst: { keywords: [no-thinking, creative, chat], min_context: 32000, \
-         description: deep reasoning }, spare: {} }",
-        &[],
-    ));
-    let roles = prompt.frontmatter().models();
-    assert_eq!(roles.len(), 2);
-    let analyst = roles.get("analyst").expect("declared");
-    assert_eq!(
-        analyst.keywords(),
-        &[
-            ModelKeyword::NoThinking,
-            ModelKeyword::Creative,
-            ModelKeyword::Chat
-        ]
-    );
-    assert_eq!(analyst.min_context(), NonZeroU32::new(32_000));
-    let spare = roles.get("spare").expect("declared");
-    assert!(spare.keywords().is_empty());
-    assert_eq!(spare.min_context(), None);
-    assert_eq!(spare.description(), None);
+fn each_role_declared_with_both_requirements_reads_them_back() {
+    for role in ModelRole::ALL {
+        let front = format!(
+            "models: {{ {}: {{ min_context: 4096, thinking: true }} }}",
+            role.as_str()
+        );
+        let prompt = parse_ok(&prompt(&front, &[]));
+        let declared = prompt
+            .frontmatter()
+            .role_requirements(role)
+            .expect("the role is declared");
+        assert_eq!(declared.min_context(), NonZeroU32::new(4096), "{role:?}");
+        assert_eq!(declared.thinking(), Some(true), "{role:?}");
+    }
 }
 
 #[test]
-fn args_and_model_roles_iterate_in_name_order_through_named_iterators() {
+fn an_empty_role_declares_neither_requirement() {
+    let prompt = parse_ok(&prompt("models: { fast: {} }", &[]));
+    let fast = prompt
+        .frontmatter()
+        .role_requirements(ModelRole::Fast)
+        .expect("an empty entry still declares the role");
+    assert_eq!(fast.min_context(), None);
+    assert_eq!(fast.thinking(), None);
+    assert!(
+        prompt
+            .frontmatter()
+            .role_requirements(ModelRole::Strong)
+            .is_none(),
+        "a role the prompt does not name has no entry"
+    );
+}
+
+#[test]
+fn args_iterate_in_name_order_through_a_named_iterator() {
     let prompt = parse_ok(&prompt(
-        "args: { query: { type: string }, limit: { type: integer } }
-        models: { triage: {}, analyst: {} }",
+        "args: { query: { type: string }, limit: { type: integer } }",
         &[],
     ));
     let fm = prompt.frontmatter();
@@ -246,35 +247,38 @@ fn args_and_model_roles_iterate_in_name_order_through_named_iterators() {
         kinds.push(decl.kind());
     }
     assert_eq!(kinds, [ArgType::Integer, ArgType::String]);
-
-    let roles: ModelRolesIter<'_> = fm.models().iter();
-    assert_eq!(roles.len(), 2);
-    let labels: Vec<&str> = roles.map(|(label, _)| label).collect();
-    assert_eq!(labels, ["analyst", "triage"]);
-    let by_reference: Vec<&str> = fm.models().into_iter().map(|(label, _)| label).collect();
-    assert_eq!(by_reference, labels);
 }
 
 #[test]
-fn an_unknown_model_keyword_is_a_parse_error() {
-    // The keyword vocabulary is closed; `multimodal` is a non-goal and a
-    // typo must fail at parse rather than being silently ignored.
+fn an_unknown_role_name_is_a_parse_error_that_lists_the_five_roles() {
+    assert_parse_error(
+        &prompt("models: { reviewer: {} }", &[]),
+        ParseErrorKind::Frontmatter,
+        "expected one of `default`, `strong`, `small`, `fast`, `creative`",
+    );
+}
+
+#[test]
+fn an_unknown_field_in_a_role_is_a_parse_error_that_names_the_two_fields() {
+    assert_parse_error(
+        &prompt("models: { strong: { tier: 1 } }", &[]),
+        ParseErrorKind::Frontmatter,
+        "unknown field `tier`, expected `min_context` or `thinking`",
+    );
+}
+
+#[test]
+fn a_duplicate_role_key_is_rejected() {
     let error = parse_err(&prompt(
-        "models: { analyst: { keywords: [multimodal] } }",
+        "models: { strong: { min_context: 1 }, strong: { thinking: true } }",
         &[],
     ));
-    assert_eq!(error.kind(), ParseErrorKind::Frontmatter);
-}
-
-#[test]
-fn model_role_labels_must_match_the_alias_grammar() {
-    let error = parse_err(&prompt("models: { '1analyst': { keywords: [fast] } }", &[]));
-    assert_eq!(error.kind(), ParseErrorKind::Frontmatter);
+    assert_eq!(error.kind(), ParseErrorKind::Frontmatter, "{error}");
 }
 
 #[test]
 fn a_zero_min_context_is_rejected() {
-    let error = parse_err(&prompt("models: { analyst: { min_context: 0 } }", &[]));
+    let error = parse_err(&prompt("models: { strong: { min_context: 0 } }", &[]));
     assert_eq!(error.kind(), ParseErrorKind::Frontmatter);
 }
 

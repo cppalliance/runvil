@@ -42,13 +42,14 @@ export interface RunContractArgs {
   readonly fields: readonly RunContractArg[];
 }
 
-/** One declared model role. */
+/** The requirements a prompt declares for one model role. */
 export interface RunContractModel {
+  /** The role name. */
   readonly label: string;
-  readonly keywords: readonly string[];
   /** The minimum context window in tokens; null when absent. */
   readonly minContext: number | null;
-  readonly description: string | null;
+  /** The thinking requirement; null when absent. */
+  readonly thinking: boolean | null;
 }
 
 /** The Run-window contract: everything the panel renders. */
@@ -146,25 +147,20 @@ function parseModel(value: unknown): RunContractModel | null {
   if (!isRecord(value)) {
     return null;
   }
-  const { label, keywords, min_context } = value;
+  const { label, min_context, thinking } = value;
   if (typeof label !== "string") {
-    return null;
-  }
-  if (!Array.isArray(keywords) || !keywords.every((keyword) => typeof keyword === "string")) {
     return null;
   }
   if (min_context !== null && typeof min_context !== "number") {
     return null;
   }
-  const description = value.description;
-  if (description !== null && typeof description !== "string") {
+  if (thinking !== null && typeof thinking !== "boolean") {
     return null;
   }
   return {
     label,
-    keywords,
     minContext: min_context ?? null,
-    description: description ?? null,
+    thinking: thinking ?? null,
   };
 }
 

@@ -120,7 +120,8 @@ fn set_up_vm(binds: &VmBinds<'_>) -> SectionVm {
     .expect("the section VM builds");
     let sys = json!({});
     let access = fresh_access();
-    let selection = Arc::new(Mutex::new(binds.models.binding("default").cloned()));
+    let set = binds.models;
+    let selection = Arc::new(Mutex::new(set.binding("default").cloned()));
     let setup = SectionVmSetup {
         args: "",
         argv: binds.argv,

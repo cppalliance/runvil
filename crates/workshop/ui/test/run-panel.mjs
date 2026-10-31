@@ -134,7 +134,9 @@ function contractFor(name) {
       ],
     },
     models: [
-      { label: "main", keywords: ["thinking", "frontier"], min_context: 32000, description: null },
+      { label: "strong", min_context: 32000, thinking: true },
+      { label: "small", min_context: null, thinking: false },
+      { label: "fast", min_context: null, thinking: null },
     ],
   };
 }
@@ -436,12 +438,18 @@ check(
   "the ready panel renders no tool row",
   rows.length > 0 && filledEl.querySelector(".ws-run-panel__row--tool") === null,
 );
-const modelRow = rowText("main");
+const modelRow = rowText("strong");
 check(
-  "a model role renders keywords and min_context read-only",
-  modelRow?.textContent.includes("thinking") === true &&
-    modelRow?.textContent.includes("frontier") === true &&
-    modelRow?.textContent.includes("32000"),
+  "a model role renders min_context and thinking read-only",
+  modelRow?.textContent.includes("min context 32000, thinking") === true,
+);
+check(
+  "a role that requires no thinking reads no thinking",
+  rowText("small")?.textContent.includes("no thinking") === true,
+);
+check(
+  "a role with no requirements shows only its label",
+  rowText("fast")?.textContent === "fast",
 );
 const iterationsField = rowText("max_tool_iterations")?.querySelector('input[type="number"]');
 check("max_tool_iterations prefills from the contract", iterationsField?.value === "12");

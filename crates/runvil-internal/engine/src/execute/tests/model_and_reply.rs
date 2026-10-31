@@ -23,13 +23,13 @@ fn run_events(trace: &Trace) -> Vec<(String, String)> {
 #[test]
 fn models_use_forwards_binding_completion_options_to_the_gateway() {
     // models.use -> completion_options -> GatewayChat::complete must set
-    // the binding's model, the hard-keyword thinking switch, and the
+    // the binding's model, the thinking switch, and the
     // section's `models.use` sampling options on the chat body. Roles
     // declare no sampling fields, so a section on the `default` role
     // sends none.
     let gateway = ScriptedChat::new(vec![text("hello from the mock"), text("hello again")]);
     let source = PromptSource::new()
-        .front("models: { small: { keywords: [no-thinking] } }")
+        .front("models: { small: { thinking: false } }")
         .prose(
             "Only",
             "

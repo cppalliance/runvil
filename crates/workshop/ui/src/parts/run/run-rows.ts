@@ -182,10 +182,14 @@ export function renderContractRows(
   }
 
   for (const model of contract.models) {
-    const details =
-      model.minContext === null
-        ? model.keywords.join(", ")
-        : `${model.keywords.join(", ")} (min context ${model.minContext})`;
+    const parts: string[] = [];
+    if (model.minContext !== null) {
+      parts.push(`min context ${model.minContext}`);
+    }
+    if (model.thinking !== null) {
+      parts.push(model.thinking ? "thinking" : "no thinking");
+    }
+    const details = parts.join(", ");
     const modelRow = row(model.label, [readOnly(details)]);
     modelRow.classList.add("ws-run-panel__row--model");
     rows.appendChild(modelRow);

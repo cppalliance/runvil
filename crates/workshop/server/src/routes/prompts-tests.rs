@@ -53,10 +53,10 @@ args:
     optional: true
     default: 3
 models:
-  writer:
-    keywords: [frontier, thinking]
-    min_context: 128000
-    description: writes prose
+  strong:
+    min_context: 200000
+    thinking: true
+  fast: {}
 ---
 
 # Full
@@ -106,7 +106,8 @@ async fn a_full_frontmatter_prompt_answers_every_contract_section() {
     assert_eq!(
         json["models"],
         serde_json::json!([
-            { "label": "writer", "keywords": ["frontier", "thinking"], "min_context": 128_000, "description": "writes prose" },
+            { "label": "strong", "min_context": 200_000, "thinking": true },
+            { "label": "fast", "min_context": null, "thinking": null },
         ])
     );
 }
@@ -139,6 +140,11 @@ async fn a_prompt_without_args_yields_the_implicit_prose_field() {
                 { "name": "prose", "type": "string", "optional": true, "default": null, "description": "Freeform input for this prompt" },
             ],
         })
+    );
+    assert_eq!(
+        json["models"],
+        serde_json::json!([]),
+        "a prompt with no models key declares no role requirements"
     );
 }
 

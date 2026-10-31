@@ -56,7 +56,7 @@ fn two_runs_writing_the_same_real_file_through_the_shared_base_conflict() -> Tes
     Ok(())
 }
 
-const STRONG: &str = "models: { strong: { keywords: [thinking], min_context: 200000 } }";
+const STRONG: &str = "models: { strong: { thinking: true, min_context: 200000 } }";
 
 /// The five roles a prompt can pick with `models.use`.
 const ROLES: [&str; 5] = ["default", "strong", "small", "fast", "creative"];
@@ -84,11 +84,9 @@ fn replying_models(trace: &Trace) -> Vec<&str> {
 }
 
 #[test]
-fn one_model_fills_every_role_and_soft_keywords_are_never_checked() -> TestResult {
-    // Soft keywords document author intent, and are never checked.
-    let source = asking_every_role(
-        "models: { fast: { keywords: [fast] }, creative: { keywords: [small, creative, chat] } }",
-    );
+fn one_model_fills_every_role_and_an_empty_declaration_adds_no_requirement() -> TestResult {
+    // A role declared with no requirement checks nothing.
+    let source = asking_every_role("models: { fast: {}, creative: {} }");
     let model = model("current", 32_000, ThinkingMode::Never)?;
     let replies = ["a", "b", "c", "d", "e"].map(text);
     let trace = Scenario::replies(replies).model(model).run(&source)?;
@@ -161,7 +159,7 @@ fn a_context_minimum_above_the_filling_models_is_reported() -> TestResult {
 }
 
 #[test]
-fn a_hard_keyword_the_filling_model_fails_is_reported() -> TestResult {
+fn a_thinking_requirement_the_filling_model_fails_is_reported() -> TestResult {
     // The context minimum is met, so only the thinking check fires.
     let requirements = report(STRONG, 200_000, ThinkingMode::Never)?;
     let unmet = only_unmet(&requirements)?;
@@ -170,7 +168,7 @@ fn a_hard_keyword_the_filling_model_fails_is_reported() -> TestResult {
     assert_eq!(unmet.required, "thinking: true");
     assert_eq!(unmet.actual, "Never");
 
-    let small = "models: { small: { keywords: [no-thinking] } }";
+    let small = "models: { small: { thinking: false } }";
     let requirements = report(small, 32_000, ThinkingMode::Always)?;
     let unmet = only_unmet(&requirements)?;
     assert_eq!(unmet.role, ModelRole::Small);

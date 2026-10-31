@@ -3,11 +3,10 @@
 //! The YAML is the whole contract: Packs install, models declare, args
 //! type. Parsing validates the static shape - each `uses:` entry a bare
 //! Pack id or vendor/name, no Pack id declared twice, the alias grammar
-//! on map keys, the closed
-//! model-keyword vocabulary, arg name and type sanity - and exposes the
-//! FULL declaration on the parsed [`Prompt`](crate::Prompt); satisfying
-//! the declaration against the caller's environment is prepare's job,
-//! never the parser's.
+//! on arg names, the five model role names, arg name and type sanity - and
+//! exposes the FULL declaration on the parsed [`Prompt`](crate::Prompt);
+//! satisfying the declaration against the caller's environment is prepare's
+//! job, never the parser's.
 //!
 //! `args` and `models` are defined in submodules; this root owns the
 //! duplicate-Pack check and the map deserializer the two map keys share.
@@ -17,6 +16,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::marker::PhantomData;
 
+use runvil_types::models::ModelRole;
 use runvil_types::packs::{PackId, PackRef};
 use serde::de::{self, MapAccess, Visitor};
 use serde::{Deserialize, Deserializer};
@@ -28,13 +28,14 @@ mod models;
 mod tests;
 
 pub use args::{ArgDecl, ArgType, ArgsDecl, ArgsDeclIter};
-pub use models::{ModelKeyword, ModelRole, ModelRoles, ModelRolesIter};
+pub(crate) use models::RoleMap;
+pub use models::RoleRequirements;
 
 /// The prompt-local alias grammar: `[A-Za-z][A-Za-z0-9_-]{0,63}`.
 ///
-/// Model labels and args field names are prompt-local and never global
-/// names. (The same rule sits in `runvil-lua`'s `alias` module, the
-/// run-time counterpart to this parse-time check.)
+/// Args field names are prompt-local and never global names. (The same rule
+/// sits in `runvil-lua`'s `alias` module, the run-time counterpart to this
+/// parse-time check.)
 fn is_valid_alias(alias: &str) -> bool {
     let bytes = alias.as_bytes();
     (1..=64).contains(&bytes.len())
@@ -47,19 +48,55 @@ fn is_valid_alias(alias: &str) -> bool {
 /// How one contract map's keys are described in its errors.
 #[derive(Clone, Copy)]
 struct ContractKeys {
-    /// The key kind (`model role label`), for error messages.
+    /// The key kind (`model role`), for error messages.
     what: &'static str,
 }
 
-/// Deserializes a contract map (`models`, `args`): string keys
-/// validated against the alias grammar and `keys`, values deserialized as
-/// `T`, duplicates rejected.
-fn deserialize_contract_map<'de, D, T>(
+/// A key of a contract map: how it is checked and how an error names it.
+trait ContractKey: Ord {
+    /// Refuses a key the map's grammar does not allow.
+    fn check(&self, what: &str) -> Result<(), String>;
+
+    /// The key as an error names it.
+    fn shown(&self) -> String;
+}
+
+impl ContractKey for String {
+    fn check(&self, what: &str) -> Result<(), String> {
+        if is_valid_alias(self) {
+            Ok(())
+        } else {
+            Err(format!(
+                "invalid {what} `{self}`: expected [A-Za-z][A-Za-z0-9_-]{{0,63}}"
+            ))
+        }
+    }
+
+    fn shown(&self) -> String {
+        self.clone()
+    }
+}
+
+impl ContractKey for ModelRole {
+    /// A role name is checked while it deserializes, against the five names.
+    fn check(&self, _what: &str) -> Result<(), String> {
+        Ok(())
+    }
+
+    fn shown(&self) -> String {
+        self.as_str().to_owned()
+    }
+}
+
+/// Deserializes a contract map (`models`, `args`): keys of type `K` checked
+/// by [`ContractKey`], values deserialized as `T`, duplicates rejected.
+fn deserialize_contract_map<'de, D, K, T>(
     deserializer: D,
     keys: ContractKeys,
-) -> Result<BTreeMap<String, T>, D::Error>
+) -> Result<BTreeMap<K, T>, D::Error>
 where
     D: Deserializer<'de>,
+    K: ContractKey + Deserialize<'de>,
     T: Deserialize<'de>,
 {
     deserializer.deserialize_map(MapVisitor {
@@ -70,18 +107,19 @@ where
 
 /// The visitor behind [`deserialize_contract_map`]: a streaming map walk so
 /// rejections keep their source position.
-struct MapVisitor<T> {
+struct MapVisitor<K, T> {
     /// The checks the map's keys get.
     keys: ContractKeys,
-    /// The value type, without ownership or variance claims.
-    _marker: PhantomData<fn() -> T>,
+    /// The key and value types, without ownership or variance claims.
+    _marker: PhantomData<fn() -> (K, T)>,
 }
 
-impl<'de, T> Visitor<'de> for MapVisitor<T>
+impl<'de, K, T> Visitor<'de> for MapVisitor<K, T>
 where
+    K: ContractKey + Deserialize<'de>,
     T: Deserialize<'de>,
 {
-    type Value = BTreeMap<String, T>;
+    type Value = BTreeMap<K, T>;
 
     fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
@@ -96,18 +134,14 @@ where
         A: MapAccess<'de>,
     {
         let ContractKeys { what } = self.keys;
-        let mut entries: BTreeMap<String, T> = BTreeMap::new();
-        while let Some(key) = map.next_key::<String>()? {
-            if !is_valid_alias(&key) {
-                return Err(de::Error::custom(format!(
-                    "invalid {what} `{key}`: expected [A-Za-z][A-Za-z0-9_-]{{0,63}}"
-                )));
-            }
+        let mut entries: BTreeMap<K, T> = BTreeMap::new();
+        while let Some(key) = map.next_key::<K>()? {
+            key.check(what).map_err(de::Error::custom)?;
             match entries.entry(key) {
                 Entry::Occupied(entry) => {
                     return Err(de::Error::custom(format!(
                         "duplicate {what} `{}`: contract map keys must be unique",
-                        entry.key()
+                        entry.key().shown()
                     )));
                 }
                 Entry::Vacant(entry) => {

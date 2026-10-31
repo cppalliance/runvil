@@ -14,8 +14,9 @@ use axum::routing::post;
 use serde::{Deserialize, Serialize};
 
 use runvil::Prompt;
+use runvil::model::ModelRole;
 use runvil::packs::PackRef;
-use runvil::prompt::{ArgDecl, ArgsDecl, FileDecl, Frontmatter, ModelKeyword, ModelRole};
+use runvil::prompt::{ArgDecl, ArgsDecl, FileDecl, Frontmatter, RoleRequirements};
 
 use crate::error::AppError;
 
@@ -146,43 +147,25 @@ impl ArgDto {
     }
 }
 
-/// One declared model role.
+/// The requirements a prompt declares for one model role.
 #[derive(Debug, Serialize)]
 struct ModelDto {
-    /// The prompt-local role label.
+    /// The role name.
     label: String,
-    /// The declared keywords (kebab-case wire vocabulary).
-    keywords: Vec<&'static str>,
     /// The minimum context window in tokens; `null` when absent.
     min_context: Option<u32>,
-    /// The role's prose description; `null` when absent.
-    description: Option<String>,
+    /// The thinking requirement; `null` when absent.
+    thinking: Option<bool>,
 }
 
 impl ModelDto {
-    /// Builds the DTO for the role declared under `label`.
-    fn new(label: &str, role: &ModelRole) -> Self {
+    /// Builds the DTO for the requirements declared for `role`.
+    fn new(role: ModelRole, declared: RoleRequirements) -> Self {
         Self {
-            label: label.to_owned(),
-            keywords: role.keywords().iter().copied().map(keyword_wire).collect(),
-            min_context: role.min_context().map(std::num::NonZeroU32::get),
-            description: role.description().map(str::to_owned),
+            label: role.as_str().to_owned(),
+            min_context: declared.min_context().map(std::num::NonZeroU32::get),
+            thinking: declared.thinking(),
         }
-    }
-}
-
-/// The kebab-case wire form of a model keyword.
-fn keyword_wire(keyword: ModelKeyword) -> &'static str {
-    match keyword {
-        ModelKeyword::Thinking => "thinking",
-        ModelKeyword::NoThinking => "no-thinking",
-        ModelKeyword::Frontier => "frontier",
-        ModelKeyword::Fast => "fast",
-        ModelKeyword::Small => "small",
-        ModelKeyword::Creative => "creative",
-        ModelKeyword::Chat => "chat",
-        // Any other keyword has no wire form of its own.
-        _ => "unknown",
     }
 }
 
@@ -199,10 +182,13 @@ impl From<&Frontmatter> for ContractResponse {
             output: frontmatter.output().map(FileDto::from),
             uses: frontmatter.uses().iter().map(PackDto::from).collect(),
             args: ArgsDto::from(frontmatter.args()),
-            models: frontmatter
-                .models()
-                .iter()
-                .map(|(label, role)| ModelDto::new(label, role))
+            models: ModelRole::ALL
+                .into_iter()
+                .filter_map(|role| {
+                    frontmatter
+                        .role_requirements(role)
+                        .map(|declared| ModelDto::new(role, *declared))
+                })
                 .collect(),
         }
     }

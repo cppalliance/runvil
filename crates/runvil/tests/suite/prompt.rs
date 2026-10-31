@@ -1,7 +1,6 @@
 //! Reading what a prompt declares before it runs.
 
 use runvil::model::{ModelRole, ThinkingMode};
-use runvil::prompt::ModelKeyword;
 use runvil::{ParseErrorKind, Prompt, RequirementCheck};
 
 use super::support::{Prepared, Scenario, TestResult, model, prompt};
@@ -46,12 +45,15 @@ fn the_frontmatter_lists_every_declaration_with_arguments_sorted_by_name() -> Te
         .map(|entry| (entry.vendor(), entry.id().to_string()))
         .collect();
     assert_eq!(packs, [("runvil", "text".to_owned())]);
-    let roles: Vec<_> = frontmatter
-        .models()
-        .iter()
-        .map(|(label, role)| (label.to_string(), role.min_context()))
+    let roles: Vec<_> = ModelRole::ALL
+        .into_iter()
+        .filter_map(|role| {
+            frontmatter
+                .role_requirements(role)
+                .map(|declared| (role, declared.min_context()))
+        })
         .collect();
-    assert_eq!(roles, [("fast".to_owned(), None)]);
+    assert_eq!(roles, [(ModelRole::Fast, None)]);
 
     assert!(
         frontmatter
@@ -73,7 +75,7 @@ fn the_frontmatter_lists_every_declaration_with_arguments_sorted_by_name() -> Te
 #[test]
 fn a_role_check_by_hand_finds_the_same_shortfall_prepare_reports() -> TestResult {
     let source = prompt(
-        "models: { fast: {}, small: { keywords: [no-thinking], min_context: 100000 } }",
+        "models: { fast: {}, small: { thinking: false, min_context: 100000 } }",
         &[("Greet", "return 'done'")],
     );
     let model = model("canned", 200_000, ThinkingMode::Always)?;
@@ -84,18 +86,23 @@ fn a_role_check_by_hand_finds_the_same_shortfall_prepare_reports() -> TestResult
     } = Scenario::default().model(model.clone()).prepare(&source)?;
 
     let mut misses = Vec::new();
-    for (label, role) in prompt.frontmatter().models() {
-        let keyword_miss = role.keywords().iter().any(|keyword| match keyword {
-            ModelKeyword::Thinking => model.thinking() == ThinkingMode::Never,
-            ModelKeyword::NoThinking => model.thinking() == ThinkingMode::Always,
-            _ => false,
-        });
-        let context_miss = role.min_context().is_some_and(|min| min > model.context());
-        if keyword_miss || context_miss {
-            misses.push((label, keyword_miss, context_miss));
+    for role in ModelRole::ALL {
+        let Some(declared) = prompt.frontmatter().role_requirements(role) else {
+            continue;
+        };
+        let thinking_miss = match declared.thinking() {
+            Some(true) => model.thinking() == ThinkingMode::Never,
+            Some(false) => model.thinking() == ThinkingMode::Always,
+            None => false,
+        };
+        let context_miss = declared
+            .min_context()
+            .is_some_and(|min| min > model.context());
+        if thinking_miss || context_miss {
+            misses.push((role, thinking_miss, context_miss));
         }
     }
-    assert_eq!(misses, [("small", true, false)]);
+    assert_eq!(misses, [(ModelRole::Small, true, false)]);
 
     let [unmet] = requirements.unmet_models.as_slice() else {
         return Err("only the small role falls short".into());

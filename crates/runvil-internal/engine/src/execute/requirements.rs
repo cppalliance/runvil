@@ -308,8 +308,8 @@ pub enum RequirementCheck {
     /// The role's context minimum exceeds the context of the model that
     /// fills the role.
     ContextMinimum,
-    /// The role declares a hard keyword, `thinking` or `no-thinking`, that
-    /// the filling model's info fails to satisfy.
+    /// The role's thinking requirement, `thinking: true` or
+    /// `thinking: false`, is one the filling model's info fails to satisfy.
     Thinking,
     /// The caller's role map holds entries but none for the `default`
     /// role, which every role without its own entry falls back to.

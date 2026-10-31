@@ -19,5 +19,5 @@
 
 pub(crate) use runvil_parser::detail;
 pub(crate) use runvil_parser::{
-    Block, BodyText, ModelKeyword, ParseError, ParseErrorKind, Prompt, Section,
+    Block, BodyText, ParseError, ParseErrorKind, Prompt, RoleRequirements, Section,
 };

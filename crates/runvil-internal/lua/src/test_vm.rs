@@ -406,11 +406,11 @@ impl<'a> TestVm<'a> {
     #[track_caller]
     fn run_injection(&mut self) -> (SectionVm, Selection, Arc<Access>) {
         let tools = Arc::new(std::mem::take(&mut self.tools));
-        let models = Arc::new(std::mem::take(&mut self.models));
-        let selection = Arc::new(Mutex::new(models.binding("default").cloned()));
+        let set = Arc::new(std::mem::take(&mut self.models));
+        let selection = Arc::new(Mutex::new(set.binding("default").cloned()));
         let access = self.access.take().unwrap_or_else(fresh_access);
         let mut fresh =
-            SectionVm::new_for_section(&test_nonce(), &tools, &models, &self.emitter, self.section)
+            SectionVm::new_for_section(&test_nonce(), &tools, &set, &self.emitter, self.section)
                 .expect("the test VM builds");
         if let Some((memory_bytes, log_events)) = self.limits {
             fresh

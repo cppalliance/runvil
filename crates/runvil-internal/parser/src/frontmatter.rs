@@ -2,9 +2,11 @@
 
 use std::num::NonZeroU32;
 
+use runvil_types::models::ModelRole;
 use runvil_types::packs::PackRef;
 
-use crate::{ArgsDecl, Error, ModelRoles, ParseErrorKind, Result};
+use crate::contract::RoleMap;
+use crate::{ArgsDecl, Error, ParseErrorKind, Result, RoleRequirements};
 
 /// A declared input or output file in a prompt's frontmatter.
 ///
@@ -75,9 +77,9 @@ pub struct Frontmatter {
     /// declaration (one optional string field named `prose`).
     #[serde(default)]
     args: ArgsDecl,
-    /// Declared model roles: label to keywords, minimum, and description.
+    /// The requirements declared per model role.
     #[serde(default)]
-    models: ModelRoles,
+    models: RoleMap,
 }
 
 /// The largest explicit `max_tool_iterations` a prompt may declare.
@@ -208,10 +210,11 @@ impl Frontmatter {
         &self.args
     }
 
-    /// Returns the declared model roles, which map each label to a role.
+    /// Returns the requirements the prompt declares for `role`, or `None`
+    /// when it does not name the role.
     #[must_use]
-    pub fn models(&self) -> &ModelRoles {
-        &self.models
+    pub fn role_requirements(&self, role: ModelRole) -> Option<&RoleRequirements> {
+        self.models.get(role)
     }
 }
 

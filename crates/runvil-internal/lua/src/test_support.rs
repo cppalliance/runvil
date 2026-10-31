@@ -164,7 +164,8 @@ impl SectionVm<Uninjected> {
         sys: &serde_json::Value,
         access: &Arc<Access>,
     ) -> std::result::Result<SectionVm, InjectFailure> {
-        let selection = Arc::new(Mutex::new(self.bound_models.binding("default").cloned()));
+        let set = &self.bound_models;
+        let selection = Arc::new(Mutex::new(set.binding("default").cloned()));
         self.inject_values_with_var(args, sys, access, None, Argv::Frozen(None), &selection)
     }
 }

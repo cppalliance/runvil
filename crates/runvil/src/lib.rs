@@ -140,10 +140,7 @@ pub mod prompt {
     pub use runvil_parser::ArgsDeclIter;
     pub use runvil_parser::FileDecl;
     pub use runvil_parser::Frontmatter;
-    pub use runvil_parser::ModelKeyword;
-    pub use runvil_parser::ModelRole;
-    pub use runvil_parser::ModelRoles;
-    pub use runvil_parser::ModelRolesIter;
+    pub use runvil_parser::RoleRequirements;
 }
 
 pub mod vfs {

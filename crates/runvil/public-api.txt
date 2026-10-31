@@ -18,7 +18,6 @@
 #[non_exhaustive] pub enum runvil::model::ThinkingMode
 #[non_exhaustive] pub enum runvil::packs::PackIdErrorKind
 #[non_exhaustive] pub enum runvil::prompt::ArgType
-#[non_exhaustive] pub enum runvil::prompt::ModelKeyword
 #[non_exhaustive] pub enum runvil::tools::OutputTrust
 #[non_exhaustive] pub enum runvil::tools::ToolCatalogError
 #[non_exhaustive] pub enum runvil::tools::ToolCatalogErrorKind
@@ -79,8 +78,7 @@
 #[non_exhaustive] pub struct runvil::prompt::ArgsDecl { /* private fields */ }
 #[non_exhaustive] pub struct runvil::prompt::FileDecl { /* private fields */ }
 #[non_exhaustive] pub struct runvil::prompt::Frontmatter { /* private fields */ }
-#[non_exhaustive] pub struct runvil::prompt::ModelRole { /* private fields */ }
-#[non_exhaustive] pub struct runvil::prompt::ModelRoles { /* private fields */ }
+#[non_exhaustive] pub struct runvil::prompt::RoleRequirements { /* private fields */ }
 #[non_exhaustive] pub struct runvil::tools::ToolCatalog { /* private fields */ }
 #[non_exhaustive] pub struct runvil::tools::ToolError { /* private fields */ }
 #[non_exhaustive] pub struct runvil::tools::ToolId(/* private fields */)
@@ -176,10 +174,7 @@ auto runvil::prompt::ArgsDecl: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindS
 auto runvil::prompt::ArgsDeclIter: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::prompt::FileDecl: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::prompt::Frontmatter: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
-auto runvil::prompt::ModelKeyword: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
-auto runvil::prompt::ModelRole: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
-auto runvil::prompt::ModelRoles: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
-auto runvil::prompt::ModelRolesIter: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
+auto runvil::prompt::RoleRequirements: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::replay::Flags: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::timestamp::Timestamp: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::tools::OutputTrust: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
@@ -303,10 +298,7 @@ derives runvil::prompt::ArgsDecl: Clone, Debug, Default, Deserialize, Eq, Partia
 derives runvil::prompt::ArgsDeclIter: Clone, Debug
 derives runvil::prompt::FileDecl: Clone, Debug, Deserialize, Eq, PartialEq
 derives runvil::prompt::Frontmatter: Clone, Debug, Deserialize, Eq, PartialEq
-derives runvil::prompt::ModelKeyword: Clone, Copy, Debug, Deserialize, Eq, Ord, PartialEq, PartialOrd
-derives runvil::prompt::ModelRole: Clone, Debug, Deserialize, Eq, PartialEq
-derives runvil::prompt::ModelRoles: Clone, Debug, Default, Deserialize, Eq, PartialEq
-derives runvil::prompt::ModelRolesIter: Clone, Debug
+derives runvil::prompt::RoleRequirements: Clone, Copy, Debug, Deserialize, Eq, PartialEq
 derives runvil::replay::Flags: Clone, Copy, Debug, Default, Deserialize, Eq, Hash, PartialEq, Serialize
 derives runvil::timestamp::Timestamp: Clone, Copy, Debug, Default, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize
 derives runvil::tools::OutputTrust: Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize
@@ -395,7 +387,6 @@ impl core::fmt::Display for runvil::vfs::VfsPathBuf
 impl core::future::future::Future for runvil::cancel::Cancelled
 impl core::future::future::Future for runvil::cancel::Cancelled { type Output = () }
 impl core::iter::traits::exact_size::ExactSizeIterator for runvil::prompt::ArgsDeclIter<'_>
-impl core::iter::traits::exact_size::ExactSizeIterator for runvil::prompt::ModelRolesIter<'_>
 impl core::ops::bit::BitOr for runvil::replay::Flags
 impl core::ops::bit::BitOr for runvil::replay::Flags { type Output = runvil::replay::Flags }
 impl core::ops::bit::BitOrAssign for runvil::replay::Flags
@@ -422,15 +413,10 @@ impl runvil::vfs::Vfs for runvil::vfs::VfsRef
 impl<'a> core::iter::traits::collect::IntoIterator for &'a runvil::prompt::ArgsDecl
 impl<'a> core::iter::traits::collect::IntoIterator for &'a runvil::prompt::ArgsDecl { type IntoIter = runvil::prompt::ArgsDeclIter<'a> }
 impl<'a> core::iter::traits::collect::IntoIterator for &'a runvil::prompt::ArgsDecl { type Item = (&'a str, &'a runvil::prompt::ArgDecl) }
-impl<'a> core::iter::traits::collect::IntoIterator for &'a runvil::prompt::ModelRoles
-impl<'a> core::iter::traits::collect::IntoIterator for &'a runvil::prompt::ModelRoles { type IntoIter = runvil::prompt::ModelRolesIter<'a> }
-impl<'a> core::iter::traits::collect::IntoIterator for &'a runvil::prompt::ModelRoles { type Item = (&'a str, &'a runvil::prompt::ModelRole) }
 impl<'a> core::iter::traits::iterator::Iterator for runvil::model::ArgumentNames<'a>
 impl<'a> core::iter::traits::iterator::Iterator for runvil::model::ArgumentNames<'a> { type Item = &'a str }
 impl<'a> core::iter::traits::iterator::Iterator for runvil::prompt::ArgsDeclIter<'a>
 impl<'a> core::iter::traits::iterator::Iterator for runvil::prompt::ArgsDeclIter<'a> { type Item = (&'a str, &'a runvil::prompt::ArgDecl) }
-impl<'a> core::iter::traits::iterator::Iterator for runvil::prompt::ModelRolesIter<'a>
-impl<'a> core::iter::traits::iterator::Iterator for runvil::prompt::ModelRolesIter<'a> { type Item = (&'a str, &'a runvil::prompt::ModelRole) }
 impl<'a> runvil::vfs::OpEvent<'a>
 impl<'de, T> serde_core::de::Deserialize<'de> for runvil::effect::PackToolSets<T> where T: serde_core::de::Deserialize<'de>
 impl<T: core::clone::Clone> core::clone::Clone for runvil::effect::PackToolSets<T>
@@ -670,18 +656,13 @@ pub fn runvil::prompt::Frontmatter::args(&self) -> &runvil::prompt::ArgsDecl
 pub fn runvil::prompt::Frontmatter::description(&self) -> &str
 pub fn runvil::prompt::Frontmatter::input(&self) -> core::option::Option<&runvil::prompt::FileDecl>
 pub fn runvil::prompt::Frontmatter::max_tool_iterations(&self) -> core::option::Option<core::num::nonzero::NonZeroU32>
-pub fn runvil::prompt::Frontmatter::models(&self) -> &runvil::prompt::ModelRoles
 pub fn runvil::prompt::Frontmatter::name(&self) -> &str
 pub fn runvil::prompt::Frontmatter::output(&self) -> core::option::Option<&runvil::prompt::FileDecl>
+pub fn runvil::prompt::Frontmatter::role_requirements(&self, role: runvil::model::ModelRole) -> core::option::Option<&runvil::prompt::RoleRequirements>
 pub fn runvil::prompt::Frontmatter::runvil(&self) -> core::option::Option<u32>
 pub fn runvil::prompt::Frontmatter::uses(&self) -> &[runvil::packs::PackRef]
-pub fn runvil::prompt::ModelRole::description(&self) -> core::option::Option<&str>
-pub fn runvil::prompt::ModelRole::keywords(&self) -> &[runvil::prompt::ModelKeyword]
-pub fn runvil::prompt::ModelRole::min_context(&self) -> core::option::Option<core::num::nonzero::NonZeroU32>
-pub fn runvil::prompt::ModelRoles::get(&self, label: &str) -> core::option::Option<&runvil::prompt::ModelRole>
-pub fn runvil::prompt::ModelRoles::is_empty(&self) -> bool
-pub fn runvil::prompt::ModelRoles::iter(&self) -> runvil::prompt::ModelRolesIter<'_>
-pub fn runvil::prompt::ModelRoles::len(&self) -> usize
+pub fn runvil::prompt::RoleRequirements::min_context(&self) -> core::option::Option<core::num::nonzero::NonZeroU32>
+pub fn runvil::prompt::RoleRequirements::thinking(&self) -> core::option::Option<bool>
 pub fn runvil::timestamp::Timestamp::to_rfc3339(self) -> alloc::string::String
 pub fn runvil::tools::ToolCatalog::get(&self, id: &runvil::tools::ToolId) -> core::option::Option<&runvil::tools::ToolInfo>
 pub fn runvil::tools::ToolCatalog::new(tools: impl core::iter::traits::collect::IntoIterator<Item = runvil::tools::ToolInfo>) -> core::result::Result<Self, runvil::tools::ToolCatalogError>
@@ -1328,13 +1309,6 @@ pub runvil::prompt::ArgType::Boolean
 pub runvil::prompt::ArgType::Integer
 pub runvil::prompt::ArgType::Number
 pub runvil::prompt::ArgType::String
-pub runvil::prompt::ModelKeyword::Chat
-pub runvil::prompt::ModelKeyword::Creative
-pub runvil::prompt::ModelKeyword::Fast
-pub runvil::prompt::ModelKeyword::Frontier
-pub runvil::prompt::ModelKeyword::NoThinking
-pub runvil::prompt::ModelKeyword::Small
-pub runvil::prompt::ModelKeyword::Thinking
 pub runvil::tools::OutputTrust::Trusted
 pub runvil::tools::OutputTrust::Untrusted
 pub runvil::tools::ToolCatalogError::DuplicateId::id: runvil::tools::ToolId
@@ -1514,7 +1488,6 @@ pub struct runvil::packs::GlobalName { /* private fields */ }
 pub struct runvil::packs::PackRef { /* private fields */ }
 pub struct runvil::packs::Prelude { /* private fields */ }
 pub struct runvil::prompt::ArgsDeclIter<'a> { /* private fields */ }
-pub struct runvil::prompt::ModelRolesIter<'a> { /* private fields */ }
 pub struct runvil::replay::Flags(/* private fields */)
 pub struct runvil::timestamp::Timestamp(/* private fields */)
 pub struct runvil::vfs::Access { /* private fields */ }

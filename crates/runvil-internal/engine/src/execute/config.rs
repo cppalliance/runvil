@@ -288,13 +288,10 @@ impl RunContext {
     /// A role's model is its own entry in `models`, else the `default`
     /// entry, so one entry for `default` fills all five roles. Every prompt
     /// gets all five roles, whether or not it declares them. `prepare` then
-    /// checks each declared role's hard keywords (`thinking`,
-    /// `no-thinking`) and context minimum against the info of the model that
-    /// fills it. Each failed check is listed in
-    /// [`Requirements::unmet_models`] with the required and actual values,
-    /// and the role stays filled. Soft keywords record the author's intent
-    /// only, so `prepare` skips them, and so it does a declared label that is
-    /// not one of the five roles.
+    /// checks each declared role's `min_context` and `thinking` requirements
+    /// against the info of the model that fills it. Each failed check is
+    /// listed in [`Requirements::unmet_models`] with the required and actual
+    /// values, and the role stays filled.
     ///
     /// An empty `models` means the caller has no model: `prepare` skips the
     /// fill and the checks, the roles stay empty, and a model round at run

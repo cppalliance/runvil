@@ -8,8 +8,8 @@ use super::{current_model, under_model};
 use crate::RunErrorKind;
 use crate::test_support::scripted_chat::{ScriptedChat, text};
 
-/// A prompt declaring one model role with a hard keyword and a context
-/// minimum.
+/// A prompt declaring one model role with a thinking requirement and a
+/// context minimum.
 const DECLARES_STRONG: &str = concat!(
     "---\n",
     "name: declares-strong\n",
@@ -17,9 +17,8 @@ const DECLARES_STRONG: &str = concat!(
     "runvil: 0\n",
     "models:\n",
     "  strong:\n",
-    "    keywords: [frontier, thinking]\n",
+    "    thinking: true\n",
     "    min_context: 200000\n",
-    "    description: Deep analysis\n",
     "---\n\n",
     "# Title\n\n",
     "## Only\n\n",
@@ -66,8 +65,8 @@ fn run_with_fixture_prepares_implicitly_and_runs_a_satisfiable_prompt() {
     assert_eq!(trace.text(), "done");
 }
 
-/// A prompt declaring one `no-thinking` role whose section asks it one
-/// question.
+/// A prompt declaring one role that requires no thinking, whose section
+/// asks it one question.
 const DECLARES_NO_THINKING: &str = concat!(
     "---\n",
     "name: declares-no-thinking\n",
@@ -75,7 +74,7 @@ const DECLARES_NO_THINKING: &str = concat!(
     "runvil: 0\n",
     "models:\n",
     "  small:\n",
-    "    keywords: [no-thinking]\n",
+    "    thinking: false\n",
     "---\n\n",
     "# Title\n\n",
     "## Only\n\n",

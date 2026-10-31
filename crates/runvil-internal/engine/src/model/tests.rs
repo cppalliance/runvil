@@ -36,7 +36,7 @@ fn gateway_id(name: &str) -> ModelId {
 }
 
 /// A bound role as prepare's fill records it: label, description, resolved
-/// identity, and the hard-keyword thinking switch as the frozen invocation.
+/// identity, and the thinking switch as the frozen invocation.
 fn bound_role(
     label: &str,
     description: &str,

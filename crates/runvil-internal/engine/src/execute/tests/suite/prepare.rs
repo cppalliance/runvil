@@ -170,9 +170,9 @@ fn a_context_minimum_above_the_filling_models_is_one_unmet_entry_for_that_role()
 }
 
 #[test]
-fn a_hard_thinking_keyword_the_filling_model_fails_is_a_thinking_check() {
+fn a_thinking_requirement_the_filling_model_fails_is_a_thinking_check() {
     let prompt = parse_ok(&declaring(
-        "models: { strong: { keywords: [thinking] }, small: { keywords: [no-thinking] } }",
+        "models: { strong: { thinking: true }, small: { thinking: false } }",
         "return 'x'",
     ));
     let never = model_named("never", 32_000, ThinkingMode::Never);
@@ -201,12 +201,9 @@ fn a_hard_thinking_keyword_the_filling_model_fails_is_a_thinking_check() {
 }
 
 #[test]
-fn a_soft_keyword_and_a_declared_description_are_never_checked() {
-    let prompt = parse_ok(&declaring(
-        "models: { strong: { keywords: [frontier, fast], description: Deep analysis } }",
-        "return 'x'",
-    ));
-    let (ctx, requirements) = test_context("soft").prepare(
+fn a_role_binding_carries_the_description_of_the_model_that_fills_it() {
+    let prompt = parse_ok(&declaring("models: { strong: {} }", "return 'x'"));
+    let (ctx, requirements) = test_context("description").prepare(
         &prompt,
         role_map([(
             ModelRole::Default,
@@ -218,29 +215,36 @@ fn a_soft_keyword_and_a_declared_description_are_never_checked() {
         .model_set
         .binding("strong")
         .expect("the strong role is bound");
-    assert_eq!(
-        strong.description(),
-        "A model for the prepare tests",
-        "a role's description is the model's own"
-    );
+    assert_eq!(strong.description(), "A model for the prepare tests");
+    assert_eq!(ctx.model_set.bindings().len(), 5);
 }
 
 #[test]
-fn a_declared_label_outside_the_five_roles_is_ignored() {
-    let prompt = parse_ok(&declaring(
-        "models: { reviewer: { min_context: 900000 } }",
-        "return 'x'",
-    ));
-    let (ctx, requirements) = test_context("ignored").prepare(
-        &prompt,
-        role_map([(
-            ModelRole::Default,
-            current_model(32_000, ThinkingMode::Never),
-        )]),
+fn thinking_true_on_strong_turns_thinking_on_for_strong_rounds_only() {
+    let source = declaring(
+        "models: { strong: { thinking: true } }",
+        "
+        models.use('strong')
+        local first = models.infer('one')
+        models.use('fast')
+        return first .. '|' .. models.infer('two')",
     );
-    assert!(requirements.is_satisfied(), "{requirements:?}");
-    assert!(ctx.model_set.binding("reviewer").is_none());
-    assert_eq!(ctx.model_set.bindings().len(), 5);
+    let gateway = ScriptedChat::new(vec![text("a"), text("b")]);
+    let trace = Scenario::new(source)
+        .current_model(model_named("model-a", 32_000, ThinkingMode::Switchable))
+        .chat(&gateway)
+        .run();
+    assert_eq!(trace.text(), "a|b");
+    let thinking: Vec<Option<bool>> = gateway
+        .requests()
+        .iter()
+        .map(|body| body.options.thinking())
+        .collect();
+    assert_eq!(
+        thinking,
+        [Some(true), None],
+        "the strong round asks for thinking and the fast round does not"
+    );
 }
 
 #[test]
