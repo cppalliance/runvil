@@ -1,11 +1,16 @@
 import assert from "node:assert/strict";
-import { gzipSync } from "node:zlib";
+import { spawnSync } from "node:child_process";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import test from "node:test";
+import { gzipSync } from "node:zlib";
 
 import {
   ARCHIVE_FORMATS,
   extractExecutable,
   extractTarGz,
+  extractTarXz,
   extractZip,
 } from "./gateway-archive.mjs";
 
@@ -80,6 +85,42 @@ function storedZip(files) {
   return Buffer.concat([localBytes, directory, end]);
 }
 
+/**
+ * A temporary directory, removed when `body` returns. The xz fixtures are
+ * built by the system `tar`, because Node cannot write xz and the reader
+ * under test is `tar` itself.
+ */
+function withScratch(body) {
+  const base = mkdtempSync(join(tmpdir(), "runvil-archive-test-"));
+  try {
+    return body(base);
+  } finally {
+    rmSync(base, { force: true, recursive: true });
+  }
+}
+
+/** Runs `tar` in `cwd`, failing the test with its stderr when it fails. */
+function tar(cwd, args) {
+  const result = spawnSync("tar", args, { cwd, encoding: "utf8" });
+  assert.equal(
+    result.status,
+    0,
+    `tar ${args.join(" ")} failed: ${result.error?.message ?? result.stderr}`,
+  );
+  return result.stdout;
+}
+
+/** An xz-compressed tar of `names` under `base`, each file holding its base name. */
+function tarXz(base, names) {
+  for (const name of names) {
+    const path = join(base, ...name.split("/"));
+    mkdirSync(join(path, ".."), { recursive: true });
+    writeFileSync(path, name.split("/").at(-1));
+  }
+  tar(base, ["-cJf", "fixture.tar.xz", "--", ...names]);
+  return readFileSync(join(base, "fixture.tar.xz"));
+}
+
 test("reads the executable out of a gzipped tar by its base name", () => {
   const bytes = tarGz([
     { name: "runvil-gateway-x86_64-unknown-linux-gnu/README.md", content: "read me" },
@@ -112,7 +153,57 @@ test("the extension picks the reader", () => {
 
 test("an unsupported archive extension is refused by name", () => {
   assert.throws(() => extractExecutable("x.7z", Buffer.alloc(0), "runvil-gateway"), /unsupported Gateway archive x\.7z/);
-  assert.deepEqual(ARCHIVE_FORMATS, [".tar.gz", ".tgz", ".zip"]);
+  assert.deepEqual(ARCHIVE_FORMATS, [".tar.gz", ".tgz", ".tar.xz", ".zip"]);
+});
+
+test("reads the executable out of an xz tar and ignores a decoy", () => {
+  withScratch((base) => {
+    // A directory whose own name matches the wanted file, at a different
+    // path: a listing ends it with a slash, and a matcher that trimmed the
+    // slash would pick it and then fail to read it as a file.
+    mkdirSync(join(base, "gateway-extras", "runvil-gateway"), { recursive: true });
+    const bytes = tarXz(base, [
+      "gateway-aarch64-apple-darwin/README.md",
+      "gateway-extras/runvil-gateway/decoy.txt",
+      "gateway-aarch64-apple-darwin/runvil-gateway.bak",
+      "gateway-aarch64-apple-darwin/runvil-gateway",
+    ]);
+    const extracted = extractTarXz("gateway-aarch64-apple-darwin.tar.xz", bytes, "runvil-gateway");
+    assert.equal(extracted.toString("utf8"), "runvil-gateway");
+    assert.equal(
+      extractExecutable("gateway-aarch64-apple-darwin.tar.xz", bytes, "runvil-gateway").toString("utf8"),
+      "runvil-gateway",
+    );
+  });
+});
+
+test("an xz tar without the wanted member throws and names both", () => {
+  withScratch((base) => {
+    const bytes = tarXz(base, ["gateway-x86_64-unknown-linux-gnu/README.md"]);
+    assert.throws(
+      () => extractTarXz("gateway-x86_64-unknown-linux-gnu.tar.xz", bytes, "runvil-gateway"),
+      (error) => {
+        assert.match(error.message, /gateway-x86_64-unknown-linux-gnu\.tar\.xz/);
+        assert.match(error.message, /runvil-gateway/);
+        return true;
+      },
+    );
+  });
+});
+
+test("a corrupt xz tar throws instead of returning empty bytes", () => {
+  withScratch((base) => {
+    const bytes = tarXz(base, ["pkg/runvil-gateway"]);
+    const truncated = bytes.subarray(0, bytes.length - 64);
+    assert.throws(
+      () => extractTarXz("gateway.tar.xz", truncated, "runvil-gateway"),
+      /cannot read gateway\.tar\.xz: tar exited with status \d+/,
+    );
+    assert.throws(
+      () => extractTarXz("gateway.tar.xz", Buffer.from("not an xz archive at all"), "runvil-gateway"),
+      /cannot read gateway\.tar\.xz: tar exited with status \d+/,
+    );
+  });
 });
 
 test("a non-zip buffer is refused rather than read as garbage", () => {

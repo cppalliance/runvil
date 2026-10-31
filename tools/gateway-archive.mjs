@@ -1,13 +1,18 @@
 // Reading one executable out of a release archive.
 //
 // The Gateway's releases are built by cargo-dist, which publishes a zip for
-// Windows and a gzipped tar elsewhere. Node ships no tar or zip reader, and
-// adding a dependency to run one build step is not worth it, so this module
-// reads exactly the two shapes cargo-dist writes and refuses everything
-// else by name.
+// Windows and an xz-compressed tar for the macOS and Linux targets. Node
+// ships no tar, zip, or xz reader, and adding a dependency to run one build
+// step is not worth it, so the zip and the gzipped tar are read by hand and
+// the xz tar is handed to the system `tar`, which every platform the
+// Workshop builds on ships: bsdtar on macOS and Windows, GNU tar on Linux.
+// Every other shape is refused by name.
 
+import { spawnSync } from "node:child_process";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { basename, join } from "node:path";
 import { gunzipSync, inflateRawSync } from "node:zlib";
-import { basename } from "node:path";
 
 const TAR_BLOCK = 512;
 const ZIP_LOCAL_HEADER = 0x04034b50;
@@ -18,12 +23,15 @@ const ZIP_DEFLATED = 8;
 const ZIP64_SENTINEL = 0xffffffff;
 
 /** The archive formats a Gateway release asset may use, by extension. */
-export const ARCHIVE_FORMATS = [".tar.gz", ".tgz", ".zip"];
+export const ARCHIVE_FORMATS = [".tar.gz", ".tgz", ".tar.xz", ".zip"];
 
 /**
  * Extracts the file named `wanted` (matched on its base name) from `bytes`,
  * choosing the reader by the asset's extension. Returns `null` when the
- * archive holds no such file, so the caller names what it expected.
+ * archive holds no such file for the formats read here, so the caller names
+ * what it expected. An xz tar reports the same case by throwing, because
+ * `tar` treats a member it cannot find as an error rather than an empty
+ * answer, and that error already names both the archive and the member.
  */
 export function extractExecutable(assetName, bytes, wanted) {
   const lower = assetName.toLowerCase();
@@ -32,6 +40,9 @@ export function extractExecutable(assetName, bytes, wanted) {
   }
   if (lower.endsWith(".tar.gz") || lower.endsWith(".tgz")) {
     return extractTarGz(bytes, wanted);
+  }
+  if (lower.endsWith(".tar.xz")) {
+    return extractTarXz(assetName, bytes, wanted);
   }
   throw new Error(
     `unsupported Gateway archive ${assetName}; expected one of ${ARCHIVE_FORMATS.join(", ")}`,
@@ -73,6 +84,109 @@ export function extractTarGz(bytes, wanted) {
     }
   }
   return null;
+}
+
+/**
+ * Extracts the file named `wanted` from an xz-compressed tar archive by
+ * running the system `tar`, which reads xz on every platform the Workshop
+ * builds on. The bytes go to a temporary file because `tar` reads a file
+ * rather than a pipe, and the temporary directory is removed whatever the
+ * outcome, so a failure leaves nothing behind.
+ *
+ * The member is named to `tar` as the exact path it carries, read from a
+ * `-tJf` listing first. cargo-dist nests the executable under a release
+ * directory, as in `gateway-aarch64-apple-darwin/runvil-gateway`, and a bare
+ * base name is not a member path: both bsdtar and GNU tar answer "Not found
+ * in archive" for it. A leading `./` is not needed, and the exact path
+ * works whether or not the writer stored one.
+ */
+export function extractTarXz(assetName, bytes, wanted) {
+  const scratch = mkdtempSync(join(tmpdir(), "runvil-gateway-archive-"));
+  try {
+    const archive = join(scratch, "archive.tar.xz");
+    writeFileSync(archive, bytes);
+    const member = tarMemberPath(archive, assetName, wanted);
+    if (member === null) {
+      throw new Error(`cannot read ${assetName}: the archive holds no ${wanted}`);
+    }
+    const output = join(scratch, "out");
+    mkdirSync(output, { recursive: true });
+    runTar(["-xJf", archive, "-C", output, "--", member], assetName);
+    const extracted = join(output, ...member.split("/"));
+    if (!existsSync(extracted)) {
+      throw new Error(`cannot read ${assetName}: tar reported success but wrote no ${member}`);
+    }
+    return readFileSync(extracted);
+  } finally {
+    rmSync(scratch, { force: true, recursive: true });
+  }
+}
+
+/**
+ * The exact path inside `archive` whose base name is `wanted`, or `null`
+ * when no member matches. Reads the listing rather than guessing a name,
+ * because the writer's member naming is not this module's to assume.
+ *
+ * A member that would escape the extraction directory is refused: such a
+ * path is not an executable to read but an archive to distrust, and reading
+ * it would mean trusting the writer's idea of where the file sits.
+ */
+function tarMemberPath(archive, assetName, wanted) {
+  const listing = runTar(["-tJf", archive], assetName);
+  for (const line of listing.split(/\r?\n/)) {
+    // A listing ends a directory's path with a slash, and a directory is not
+    // the executable even when its own name matches, so it is skipped rather
+    // than extracted and read as a file.
+    if (line === "" || line.endsWith("/")) {
+      continue;
+    }
+    const member = line.replace(/^\.\//, "");
+    if (basename(member) !== wanted) {
+      continue;
+    }
+    if (member.startsWith("/") || member.split("/").includes("..")) {
+      throw new Error(
+        `cannot read ${assetName}: member ${member} leaves the extraction directory`,
+      );
+    }
+    return member;
+  }
+  return null;
+}
+
+/**
+ * Runs `tar` with `args`, refusing a non-zero exit with the archive's name
+ * and whatever `tar` wrote to stderr. The arguments are an array and no
+ * shell is involved, so a path holding spaces or metacharacters reaches
+ * `tar` as a single argument. A missing executable is reported as such,
+ * because an absent `tar` is the one environment where this path cannot
+ * work.
+ */
+function runTar(args, assetName) {
+  // A listing of a release archive is a handful of lines, but the cap is
+  // raised well past the 1 MiB default so a larger archive's `-tJf` listing
+  // cannot truncate into a failed spawn.
+  const result = spawnSync("tar", args, { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
+  if (result.error !== undefined && result.error !== null) {
+    if (result.error.code === "ENOENT") {
+      throw new Error(
+        `cannot read ${assetName}: the system tar is not on PATH, and unpacking an ` +
+          "xz-compressed archive needs it",
+      );
+    }
+    throw new Error(`cannot read ${assetName}: could not run tar: ${result.error.message}`);
+  }
+  if (result.status !== 0) {
+    const detail = (result.stderr ?? "").trim();
+    const ending =
+      result.status === null
+        ? `tar was killed by signal ${result.signal ?? "unknown"}`
+        : `tar exited with status ${result.status}`;
+    throw new Error(
+      `cannot read ${assetName}: ${ending}${detail === "" ? "" : `: ${detail}`}`,
+    );
+  }
+  return result.stdout ?? "";
 }
 
 /** Extracts the file named `wanted` from a zip archive. */
