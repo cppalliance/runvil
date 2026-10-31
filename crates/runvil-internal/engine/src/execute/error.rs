@@ -140,6 +140,7 @@ impl RunError {
             Error::ToolLoopExhausted
             | Error::OutOfScopeToolCall { .. }
             | Error::UnboundToolCall { .. }
+            | Error::ModelOnlyToolCall { .. }
             | Error::Tool { .. } => RunErrorKind::Tool,
             // A cancelled run ends as `RunResult::Cancelled`, so an
             // interruption that reaches a failure is an Engine fault.
@@ -197,6 +198,7 @@ impl RunError {
             | Error::TaskCancelled { .. }
             | Error::OutOfScopeToolCall { .. }
             | Error::UnboundToolCall { .. }
+            | Error::ModelOnlyToolCall { .. }
             | Error::ModelRequired { .. }
             | Error::UnsupportedVersion(_)
             | Error::RequirementsUnmet { .. }
@@ -248,6 +250,7 @@ impl RunError {
             | Error::TaskCancelled { .. }
             | Error::OutOfScopeToolCall { .. }
             | Error::UnboundToolCall { .. }
+            | Error::ModelOnlyToolCall { .. }
             | Error::ModelRequired { .. }
             | Error::UnsupportedVersion(_)
             | Error::RequirementsUnmet { .. }

@@ -64,6 +64,9 @@ pub enum ErrorKind {
     OutOfScopeTool,
     /// A script `tools.call` named an alias with no binding in the run.
     UnboundTool,
+    /// A script `tools.call` named a catalog tool that only a model may
+    /// call, because a render shapes its arguments for the model.
+    ModelOnlyTool,
     /// A dispatched tool's own failure.
     Tool,
     /// A task operation named a task the caller does not own.
@@ -97,6 +100,7 @@ impl ErrorKind {
         ErrorKind::ModelRequired,
         ErrorKind::OutOfScopeTool,
         ErrorKind::UnboundTool,
+        ErrorKind::ModelOnlyTool,
         ErrorKind::Tool,
         ErrorKind::TaskNotOwned,
         ErrorKind::TaskConsumed,
@@ -118,6 +122,7 @@ impl ErrorKind {
             ErrorKind::ModelRequired => "model_required",
             ErrorKind::OutOfScopeTool => "out_of_scope_tool",
             ErrorKind::UnboundTool => "unbound_tool",
+            ErrorKind::ModelOnlyTool => "model_only_tool",
             ErrorKind::Tool => "tool",
             ErrorKind::TaskNotOwned => "task_not_owned",
             ErrorKind::TaskConsumed => "task_consumed",
@@ -140,6 +145,7 @@ impl ErrorKind {
             "model_required" => Some(ErrorKind::ModelRequired),
             "out_of_scope_tool" => Some(ErrorKind::OutOfScopeTool),
             "unbound_tool" => Some(ErrorKind::UnboundTool),
+            "model_only_tool" => Some(ErrorKind::ModelOnlyTool),
             "tool" => Some(ErrorKind::Tool),
             "task_not_owned" => Some(ErrorKind::TaskNotOwned),
             "task_consumed" => Some(ErrorKind::TaskConsumed),

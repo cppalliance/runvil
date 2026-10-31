@@ -4,7 +4,9 @@
 //! wrapping, and the model install around a call.
 
 use super::*;
-use crate::execute::tests::fixtures::{echo_tool, structured_tool, untrusted_echo_tool};
+use crate::execute::tests::fixtures::{
+    echo_tool, model_only_tool, structured_tool, untrusted_echo_tool,
+};
 
 #[test]
 fn a_script_tools_call_dispatches_and_resumes_as_a_string() {
@@ -76,6 +78,90 @@ fn a_script_tools_call_reaches_an_offered_tool_outside_the_section_scope() {
         ```\n";
     let trace = scheduler_scenario(md).offer("echo", echo_tool()).run();
     assert_eq!(trace.text(), "echoed: hi|1");
+}
+
+#[test]
+fn a_script_tools_call_of_a_model_only_tool_is_refused_naming_it() {
+    // The Pack marked the tool model-only, so the catalog still names it
+    // and a section may offer it, while a script's call fails at
+    // dispatch: only a model receives arguments that suit the schema a
+    // render answered.
+    let md = "---\nname: t\ndescription: d\nrunvil: 0\n---\n\n\
+        # ToolCall\n\n\
+        ## Only\n\n\
+        ```lua\n\
+        tools.offer('tools/echo')\n\
+        return tools.call('tools/replace', { value = 'hi' })\n\
+        ```\n";
+    let trace = scheduler_scenario(md)
+        .offer("echo", echo_tool())
+        .offer("replace", model_only_tool())
+        .run();
+    match trace.error().inner() {
+        Error::ModelOnlyToolCall { name, id } => {
+            assert_eq!(name, "tools/replace");
+            assert_eq!(id, "tools/replace");
+        }
+        other => panic!("expected the typed model-only error, got {other:?}"),
+    }
+}
+
+#[test]
+fn a_script_pcall_catches_the_model_only_refusal_and_the_run_goes_on() {
+    // The refusal is a Lua error like any other failed `tools.call`, so
+    // an author can catch it and offer the tool instead.
+    let md = "---\nname: t\ndescription: d\nrunvil: 0\n---\n\n\
+        # ToolCall\n\n\
+        ## Only\n\n\
+        ```lua\n\
+        tools.offer('tools/replace')\n\
+        local ok = pcall(tools.call, 'tools/replace', { value = 'hi' })\n\
+        assert(not ok, 'the model-only call is refused')\n\
+        return 'caught'\n\
+        ```\n";
+    let trace = scheduler_scenario(md)
+        .offer("replace", model_only_tool())
+        .run();
+    assert_eq!(trace.text(), "caught", "the run continues after the catch");
+}
+
+#[test]
+fn a_script_tools_call_of_a_model_only_tool_by_its_object_is_refused_the_same_way() {
+    // The object form resolves through the same lookup as the id, so the
+    // refusal cannot be skipped by holding the tool object.
+    let md = "---\nname: t\ndescription: d\nrunvil: 0\n---\n\n\
+        # ToolCall\n\n\
+        ## Only\n\n\
+        ```lua\n\
+        tools.offer('tools/replace')\n\
+        local tool = tools.get('tools/replace')\n\
+        return tools.call(tool, { value = 'hi' })\n\
+        ```\n";
+    let trace = scheduler_scenario(md)
+        .offer("replace", model_only_tool())
+        .run();
+    match trace.error().inner() {
+        Error::ModelOnlyToolCall { id, .. } => assert_eq!(id, "tools/replace"),
+        other => panic!("expected the typed model-only error, got {other:?}"),
+    }
+}
+
+#[test]
+fn a_model_only_tool_is_still_offerable_alone_and_with_its_pack() {
+    // The flag forbids the call, never the offer: a prompt offers the
+    // tool and the model calls it.
+    let md = "---\nname: t\ndescription: d\nrunvil: 0\n---\n\n\
+        # ToolCall\n\n\
+        ## Only\n\n\
+        ```lua\n\
+        tools.offer('tools/replace')\n\
+        tools.offer('tools')\n\
+        return 'offered'\n\
+        ```\n";
+    let trace = scheduler_scenario(md)
+        .offer("replace", model_only_tool())
+        .run();
+    assert_eq!(trace.text(), "offered");
 }
 
 #[test]

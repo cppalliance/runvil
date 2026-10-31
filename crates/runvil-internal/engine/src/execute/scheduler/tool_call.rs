@@ -157,7 +157,8 @@ impl ChainOps<'_> {
     ///
     /// # Errors
     /// Returns [`Error::UnboundToolCall`] for a name that resolves to no
-    /// tool.
+    /// tool, and [`Error::ModelOnlyToolCall`] for a script's call of a
+    /// catalog tool marked model-only.
     fn tool_route(&self, name: &str, site: &CallSite) -> Result<ToolRoute> {
         let chain = &*self.chain;
         let vm = chain.frame()?.vm();
@@ -177,11 +178,25 @@ impl ChainOps<'_> {
         {
             return Ok(ToolRoute::Adhoc(binding));
         }
-        ToolId::parse(name)
+        let Some(info) = ToolId::parse(name)
             .ok()
             .and_then(|tool| tool_set.catalog().get(&tool))
-            .map(|info| ToolRoute::Catalog(ToolBinding::from_info(&info.id.to_string(), info)))
-            .ok_or_else(|| unbound_tool_call(tool_set, name))
+        else {
+            return Err(unbound_tool_call(tool_set, name));
+        };
+        // A script cannot know the arguments a render shapes for a model,
+        // so a model-only tool refuses the call while the catalog keeps
+        // naming it.
+        if info.model_only_call {
+            return Err(crate::Error::ModelOnlyToolCall {
+                name: name.to_owned(),
+                id: info.id.to_string(),
+            });
+        }
+        Ok(ToolRoute::Catalog(ToolBinding::from_info(
+            &info.id.to_string(),
+            info,
+        )))
     }
 
     /// The turn every report of a call at `site` carries: the requesting

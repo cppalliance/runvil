@@ -34,6 +34,7 @@ impl runvil_lua::ErrorValue for Error {
             Error::TaskConsumed { .. } => ErrorKind::TaskConsumed,
             Error::OutOfScopeToolCall { .. } => ErrorKind::OutOfScopeTool,
             Error::UnboundToolCall { .. } => ErrorKind::UnboundTool,
+            Error::ModelOnlyToolCall { .. } => ErrorKind::ModelOnlyTool,
             Error::Tool { .. } => ErrorKind::Tool,
             Error::Store { .. } => ErrorKind::Store,
             Error::Parse(_)
@@ -61,7 +62,9 @@ impl runvil_lua::ErrorValue for Error {
                     )]
                 })
                 .unwrap_or_default(),
-            Error::OutOfScopeToolCall { name, .. } | Error::UnboundToolCall { name, .. } => {
+            Error::OutOfScopeToolCall { name, .. }
+            | Error::UnboundToolCall { name, .. }
+            | Error::ModelOnlyToolCall { name, .. } => {
                 vec![("name".to_owned(), ErrorField::String(name.clone()))]
             }
             Error::TasksLive { tasks } => {

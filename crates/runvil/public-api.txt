@@ -706,6 +706,7 @@ pub fn runvil::tools::ToolId::pack(&self) -> runvil::packs::PackId
 pub fn runvil::tools::ToolId::parse(id: &str) -> core::result::Result<runvil::tools::ToolId, runvil::tools::ToolIdError>
 pub fn runvil::tools::ToolIdError::kind(&self) -> runvil::tools::ToolIdErrorKind
 pub fn runvil::tools::ToolInfo::describes_tools(self, describes: bool) -> runvil::tools::ToolInfo
+pub fn runvil::tools::ToolInfo::model_only_call(self, model_only: bool) -> runvil::tools::ToolInfo
 pub fn runvil::tools::ToolInfo::new(id: runvil::tools::ToolId, description: impl core::convert::Into<alloc::string::String>, parameters_schema: serde_json::value::Value) -> runvil::tools::ToolInfo
 pub fn runvil::tools::ToolInfo::structured(self, structured: bool) -> runvil::tools::ToolInfo
 pub fn runvil::tools::ToolInfo::survives_stop(self, survives: bool) -> runvil::tools::ToolInfo
@@ -1349,6 +1350,7 @@ pub runvil::tools::ToolIdErrorKind::SegmentCount
 pub runvil::tools::ToolInfo::describes_tools: bool
 pub runvil::tools::ToolInfo::description: alloc::string::String
 pub runvil::tools::ToolInfo::id: runvil::tools::ToolId
+pub runvil::tools::ToolInfo::model_only_call: bool
 pub runvil::tools::ToolInfo::parameters_schema: serde_json::value::Value
 pub runvil::tools::ToolInfo::structured_output: bool
 pub runvil::tools::ToolInfo::survives_stop: bool

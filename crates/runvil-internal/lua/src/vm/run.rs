@@ -213,6 +213,7 @@ impl SectionVm {
                 | ErrorKind::ModelRequired
                 | ErrorKind::OutOfScopeTool
                 | ErrorKind::UnboundTool
+                | ErrorKind::ModelOnlyTool
                 | ErrorKind::Tool
                 | ErrorKind::TaskNotOwned
                 | ErrorKind::TaskConsumed

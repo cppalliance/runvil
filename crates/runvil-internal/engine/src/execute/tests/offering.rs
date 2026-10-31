@@ -5,7 +5,7 @@
 
 use runvil_parser::test_support::{PromptSource, one_section, prompt};
 
-use super::fixtures::echo_tool;
+use super::fixtures::{echo_tool, model_only_tool};
 use super::models_loop::{catalog_scenario, loop_model_name};
 use super::*;
 use crate::execute::run::{EffectRecord, ToolCallOrigin, ToolCaller};
@@ -133,6 +133,40 @@ fn a_script_offers_the_extras_and_the_model_calls_an_offered_tool_by_its_wire_na
             origin: model_origin("Only"),
         }]
     );
+}
+
+#[test]
+fn a_model_only_tool_is_advertised_and_called_by_the_model() {
+    // The flag gates a script's call alone: a section offers the tool and
+    // a model round calls it by its wire name, which is the whole point of
+    // keeping the tool in the catalog.
+    let gateway = ScriptedChat::new(vec![
+        calls(&[("call_1", "tools_replace", r#"{"value":"hi"}"#)]),
+        text("done"),
+    ]);
+    let source = one_section(
+        "tools.offer('tools/replace')\n\
+         messages:user('go')\n\
+         models.loop()\n\
+         return 'ok'",
+    );
+    let rig = Rig::run(
+        catalog_scenario(source)
+            .tool(model_only_tool())
+            .chat(&gateway),
+    );
+    assert_eq!(rig.trace().text(), "ok");
+    let records = rig.issued();
+    let calls: Vec<&EffectRecord> = records
+        .iter()
+        .filter(|record| matches!(record, EffectRecord::ToolCall { .. }))
+        .collect();
+    assert_eq!(calls.len(), 1, "the model's call reached the tool");
+    assert!(matches!(
+        calls[0],
+        EffectRecord::ToolCall { tool, alias, .. }
+            if tool.to_string() == "tools/replace" && alias == "tools_replace"
+    ));
 }
 
 /// Every key on a section's `tools` table, sorted, each with its Lua type.
