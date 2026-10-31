@@ -163,8 +163,8 @@ pub fn report(running: &str, push: &Push) {
 /// from [`report`] so a test can drive any outcome, including one the
 /// committed pin cannot currently produce.
 ///
-/// An unfilled pin reaches the status bar in a release build only; see
-/// [`announce_for`].
+/// An unfilled pin reaches the status bar in a release build only; the
+/// build split lives in `announce_for`.
 pub fn announce(check: &VersionCheck, push: &Push) {
     announce_for(check, push, Build::current());
 }
