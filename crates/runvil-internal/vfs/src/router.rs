@@ -7,6 +7,12 @@
 //! longest-prefix mount per operation, strips the mount prefix so each
 //! backend sees a rooted path within its own mount, and acquires each
 //! backend's access lazily on first touch.
+//!
+//! A directory that exists only because a mount sits beneath it, such as
+//! `/a` for a mount at `/a/b`, is reported as a directory: it exists,
+//! stats as a directory, and lists the mount's next path segment beside
+//! whatever its serving backend holds, so a listing from the root walks
+//! down to every mount.
 
 #[path = "router-access.rs"]
 mod access;

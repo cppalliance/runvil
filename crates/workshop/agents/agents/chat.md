@@ -3,8 +3,9 @@ name: chat
 description: The built-in Workshop chat agent on the unified runtime.
 runvil: 0
 uses:
-  - web
   - user-input
+  - std
+  - web
 models:
   default:
     min_context: 32768
@@ -12,16 +13,13 @@ models:
 
 # Chat
 
-The built-in chat agent: a transparent pass-through between the operator
-and the selected model. The conversation is the section's `messages` list,
-retained across turns; the model is the dropdown's selection bound at run
-launch, so a selection change takes effect on the next run. When the
-conversation outgrows the model's context window, older turns are
-summarized so the conversation continues.
+The built-in chat agent: a pass-through between the operator and the selected model, whose one system message says where the Runvil prompting language documentation is mounted. The conversation is the section's `messages` list, retained across turns; the model is the dropdown's selection bound at run launch, so a selection change takes effect on the next run. When the conversation outgrows the model's context window, older turns are summarized so the conversation continues.
 
 ## Conversation
 
 ```lua
+tools.offer("user-input")
+tools.offer("std")
 tools.offer("web")
 tools.offer(tools.packs.extras())
 local function compact(reason)
@@ -53,6 +51,7 @@ local function compact(reason)
     meta = { summary = true },
   })
 end
+--messages:system("Runvil prompting language documentation can be found in /_runvil/language-guide")
 while true do
     local text = input.ask()
     messages:user(text)

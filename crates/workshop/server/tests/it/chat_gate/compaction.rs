@@ -4,7 +4,8 @@
 use super::*;
 
 /// The most messages the compacting mock admits in one request; a longer
-/// one is refused as a context overflow.
+/// one is refused as a context overflow. System messages do not count, so
+/// the gate is the same whether or not the chat agent opens with one.
 const MESSAGE_LIMIT: usize = 4;
 
 /// The opening of the chat compactor's summary request.
@@ -53,7 +54,11 @@ fn compacting_completions(captured: &CapturedRequests, body: &str) -> Response {
     let messages = request["messages"]
         .as_array()
         .expect("the request includes a messages array");
-    if messages.len() > MESSAGE_LIMIT {
+    let counted = messages
+        .iter()
+        .filter(|message| message["role"] != "system")
+        .count();
+    if counted > MESSAGE_LIMIT {
         let refusal = json!({ "error": {
             "message": "This request exceeds the model's maximum context length.",
             "code": "context_length_exceeded",

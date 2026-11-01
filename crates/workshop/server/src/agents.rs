@@ -15,7 +15,10 @@
 //! the built-in subagents, and the conversation's own services, which
 //! hold its input broker. The Harness reaches the gateway
 //! only through that broker, which follows the live gateway binding and
-//! sends each round to the dropdown's current pick. The
+//! sends each round to the dropdown's current pick. Each run's
+//! filesystem is an in-memory root, with the language guide demo's
+//! read-only mount beside it while that demo's switch is on
+//! (`language_guide`). The
 //! run's request carries the Host snapshot ([`bindings`]): the menu's
 //! pick and the workspace's granted roots, read once the menu's catalog
 //! holds a chat-capable model. Status-bar reporting stays in the server
@@ -31,6 +34,7 @@
 mod bindings;
 mod broker;
 mod gateway;
+mod language_guide;
 mod relay;
 mod search;
 mod socket;
@@ -46,7 +50,6 @@ use std::sync::Arc;
 
 use harness::pack::{HostContext, HostServices, PackRegistry};
 use harness::record::RunId;
-use harness::vfs::VfsRef;
 use harness::{Harness, RunRequest};
 use plugin_web::SEARCH_PROVIDER;
 use runvil::tools::ToolId;
@@ -326,7 +329,7 @@ impl AgentSessions {
             source,
             args: String::new(),
             input_text: None,
-            vfs: VfsRef::default(),
+            vfs: language_guide::run_vfs(),
             host: host_snapshot(&self.inner.registry),
         };
         conversation

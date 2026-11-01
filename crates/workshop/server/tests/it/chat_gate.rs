@@ -182,12 +182,16 @@ async fn assert_chat_quiet(socket: &mut JsonSocket) {
     );
 }
 
-/// The `(role, content)` pairs of one captured request's message list.
+/// The `(role, content)` pairs of one captured request's message list,
+/// without its leading system messages: these gates pin the conversation,
+/// so they read the same whether or not the chat agent opens with a
+/// system message.
 fn role_content_pairs(request: &serde_json::Value) -> Vec<(String, String)> {
     request["messages"]
         .as_array()
         .expect("a captured request includes a messages array")
         .iter()
+        .skip_while(|message| message["role"] == "system")
         .map(|message| {
             (
                 message["role"]

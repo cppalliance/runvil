@@ -3,13 +3,13 @@
 //! backend's session lazily on first touch.
 
 use std::cell::RefCell;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
 use super::{Mounts, lock, rejoin, resolve, strip_mount};
 use crate::error::VfsError;
 use crate::path::{VfsPath, VfsPathBuf, canonicalize_absolute};
-use crate::stat::{Entry, Stat};
+use crate::stat::{Entry, FileType, Stat};
 use crate::traits::{AcquireContext, VfsAccess};
 
 /// One identity's session with the router. Resolves the longest-prefix
@@ -55,6 +55,31 @@ impl RoutingAccess {
                 path: path.to_string(),
             })?;
         canonicalize_absolute(strip_mount(prefix.as_str(), path.as_str()))
+    }
+
+    /// The names of the directories that `path` has only because a mount
+    /// sits beneath it: the next path segment of every mount prefix below
+    /// `path`, sorted and without repeats. A mount at `/a/b` gives `/` the
+    /// name `a` and `/a` the name `b`, and gives `/a/b` and `/a/b/c` none.
+    fn mount_children(&self, path: &VfsPath) -> Vec<String> {
+        let below = path.as_str();
+        let mut names = BTreeSet::new();
+        for prefix in self.mounts.keys() {
+            let rest = if below == "/" {
+                prefix.as_str().strip_prefix('/')
+            } else {
+                prefix
+                    .as_str()
+                    .strip_prefix(below)
+                    .and_then(|rest| rest.strip_prefix('/'))
+            };
+            if let Some(name) = rest.and_then(|rest| rest.split('/').next())
+                && !name.is_empty()
+            {
+                names.insert(name.to_owned());
+            }
+        }
+        names.into_iter().collect()
     }
 
     /// Rejects mutations on read-only mounts before anything is
@@ -154,7 +179,10 @@ impl VfsAccess for RoutingAccess {
 
     fn exists(&self, path: &VfsPath) -> Result<bool, VfsError> {
         let stripped = self.strip(path)?;
-        self.with_mount(path, |session| session.exists(&stripped))
+        let served = self.with_mount(path, |session| session.exists(&stripped))?;
+        // A directory a mount sits under exists, whatever its serving
+        // backend says.
+        Ok(served || !self.mount_children(path).is_empty())
     }
 
     fn glob(&self, pattern: &str) -> Result<Vec<String>, VfsError> {
@@ -173,12 +201,39 @@ impl VfsAccess for RoutingAccess {
 
     fn list(&self, path: &VfsPath) -> Result<Vec<Entry>, VfsError> {
         let stripped = self.strip(path)?;
-        self.with_mount(path, |session| session.list(&stripped))
+        let served = self.with_mount(path, |session| session.list(&stripped));
+        let children = self.mount_children(path);
+        if children.is_empty() {
+            return served;
+        }
+        // A directory a mount sits under lists the mount's next segment
+        // as a directory, beside what its serving backend holds, and
+        // exists as an empty directory when that backend holds nothing.
+        let mut entries = match served {
+            Ok(entries) => entries,
+            Err(VfsError::NotFound { .. }) => Vec::new(),
+            Err(other) => return Err(other),
+        };
+        let before = entries.len();
+        for name in children {
+            if entries.iter().all(|entry| entry.name != name) {
+                entries.push(Entry::new(name, Stat::new(FileType::Directory, 0)));
+            }
+        }
+        if entries.len() != before {
+            entries.sort_by(|left, right| left.name.cmp(&right.name));
+        }
+        Ok(entries)
     }
 
     fn stat(&self, path: &VfsPath) -> Result<Stat, VfsError> {
         let stripped = self.strip(path)?;
-        self.with_mount(path, |session| session.stat(&stripped))
+        match self.with_mount(path, |session| session.stat(&stripped)) {
+            Err(VfsError::NotFound { .. }) if !self.mount_children(path).is_empty() => {
+                Ok(Stat::new(FileType::Directory, 0))
+            }
+            served => served,
+        }
     }
 
     fn mkdir(&mut self, path: &VfsPath, recursive: bool) -> Result<(), VfsError> {

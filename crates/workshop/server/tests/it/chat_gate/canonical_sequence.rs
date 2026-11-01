@@ -114,6 +114,36 @@ async fn gate_history_accumulates_across_three_turns_byte_exact() {
     socket.close().await;
 }
 
+/// GATE 13 - file tools. The chat offers the extra Packs, so its rounds
+/// advertise the `std` file tools the model reads the language guide with.
+#[tokio::test]
+async fn gate_a_conversation_round_advertises_the_file_tools() {
+    let server = spawn_chat_server(&["test-model"]).await;
+    let mut socket = connect_chat(&server.ws_base).await;
+    let _session = launch_chat(&mut socket).await;
+
+    let token = next_wait_token(&mut socket).await;
+    answer(&mut socket, &token, "ping").await;
+    let turn = collect_turn(&mut socket).await;
+    assert_eq!(delta_text(&turn), "echo:ping");
+    {
+        let requests = server.captured.lock().expect("the capture lock is healthy");
+        let names: Vec<&str> = requests[0]["tools"]
+            .as_array()
+            .expect("the conversation round advertises tools")
+            .iter()
+            .filter_map(|tool| tool["function"]["name"].as_str())
+            .collect();
+        for wire in ["Read", "ListDir", "Grep"] {
+            assert!(
+                names.contains(&wire),
+                "the conversation round advertises {wire}, got {names:?}"
+            );
+        }
+    }
+    socket.close().await;
+}
+
 /// GATE 12 - web tools. The chat's `## Conversation` section offers the
 /// `web` Pack, so the rounds its model loop sends advertise the
 /// Pack's fetch and search tools; an offer in the H1 would not reach

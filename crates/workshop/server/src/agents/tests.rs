@@ -68,9 +68,20 @@ impl InferenceBroker for OfflineBroker {
     }
 }
 
-/// Runs the prompt `source` as one conversation over `host`, then reads
-/// the conversation's state and the outcome of its one run.
+/// Runs the prompt `source` as one conversation over `host` and the
+/// default in-memory filesystem, then reads the conversation's state and
+/// the outcome of its one run.
 async fn run_prompt(host: &Arc<HostContext>, source: String) -> Option<RunOutcome> {
+    run_prompt_over(host, source, VfsRef::default()).await
+}
+
+/// Runs the prompt `source` as [`run_prompt`] does, over the filesystem
+/// `vfs`.
+pub(super) async fn run_prompt_over(
+    host: &Arc<HostContext>,
+    source: String,
+    vfs: VfsRef,
+) -> Option<RunOutcome> {
     let recorder = Arc::new(MemoryRecorder::new());
     let conversation = Conversations::new().open("browses");
     let harness = Harness::new(
@@ -85,7 +96,7 @@ async fn run_prompt(host: &Arc<HostContext>, source: String) -> Option<RunOutcom
         source,
         args: String::new(),
         input_text: None,
-        vfs: VfsRef::default(),
+        vfs,
         host: HostSnapshot::default(),
     };
     tokio::time::timeout(Duration::from_secs(10), conversation.run(harness, request))

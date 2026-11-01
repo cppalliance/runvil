@@ -4,6 +4,7 @@ use super::{Mounts, Router};
 use crate::error::VfsError;
 use crate::handle::VfsRef;
 use crate::memory::MemoryBackend;
+use crate::stat::FileType;
 use crate::test_support::{Call, TestFs, access, context, handle, path, test_origin};
 use crate::traits::{Op, Vfs};
 
@@ -361,6 +362,84 @@ fn one_handle_serves_several_mounts_and_an_overlay_simultaneously() -> Result<()
         reader.read("/overlay/x.txt"),
         Err(VfsError::NotFound { .. })
     ));
+    Ok(())
+}
+
+#[test]
+fn a_directory_a_mount_sits_under_exists_and_lists_the_mount() -> Result<(), VfsError> {
+    let base = TestFs::seeded(&[("/z.txt", "z")]);
+    let guide = TestFs::seeded(&[("/page.md", "page")]);
+    let vfs = VfsRef::builder()
+        .mount("/", base)
+        .mount("/_runvil/guide", guide)
+        .build();
+    let access = access(&vfs)?;
+    let names = |path: &str| -> Result<Vec<String>, VfsError> {
+        Ok(access
+            .list(path)?
+            .into_iter()
+            .map(|entry| entry.name)
+            .collect())
+    };
+
+    // No backend holds /_runvil, but a mount sits under it, so it is a
+    // directory.
+    assert!(access.exists("/_runvil")?);
+    assert_eq!(access.stat("/_runvil")?.file_type, FileType::Directory);
+    // Each level lists the mount's next segment, in name order beside
+    // what the serving backend holds.
+    assert_eq!(names("/")?, ["_runvil", "z.txt"]);
+    assert_eq!(names("/_runvil")?, ["guide"]);
+    assert_eq!(names("/_runvil/guide")?, ["page.md"]);
+    assert_eq!(
+        access.list("/_runvil")?[0].stat.file_type,
+        FileType::Directory
+    );
+    // A sibling that no mount sits under is still absent.
+    assert!(!access.exists("/_runvil/other")?);
+    assert!(matches!(
+        access.stat("/_runvil/other"),
+        Err(VfsError::NotFound { .. })
+    ));
+    Ok(())
+}
+
+#[test]
+fn a_mount_name_the_serving_backend_already_lists_is_listed_once() -> Result<(), VfsError> {
+    let base = TestFs::seeded(&[
+        ("/_runvil/guide/shadowed.txt", "shadowed"),
+        ("/_runvil/old.txt", "old"),
+    ]);
+    let guide = TestFs::seeded(&[("/page.md", "page")]);
+    let vfs = VfsRef::builder()
+        .mount("/", base)
+        .mount("/_runvil/guide", guide)
+        .build();
+    let access = access(&vfs)?;
+
+    let names: Vec<String> = access
+        .list("/_runvil")?
+        .into_iter()
+        .map(|entry| entry.name)
+        .collect();
+    assert_eq!(names, ["guide", "old.txt"]);
+    Ok(())
+}
+
+#[test]
+fn an_overlay_mount_makes_its_ancestors_visible_over_a_base_that_lacks_them() -> Result<(), VfsError>
+{
+    let base = VfsRef::builder().mount("/", TestFs::default()).build();
+    let overlay = base.overlay("/_runvil/guide", TestFs::seeded(&[("/page.md", "page")]));
+    let access = access(&overlay)?;
+
+    let root: Vec<String> = access
+        .list("/")?
+        .into_iter()
+        .map(|entry| entry.name)
+        .collect();
+    assert_eq!(root, ["_runvil"]);
+    assert_eq!(access.read_string("/_runvil/guide/page.md")?, "page");
     Ok(())
 }
 
