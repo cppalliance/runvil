@@ -1,39 +1,56 @@
 //! Tests for the Pack identity vocabulary.
 
-use super::{PackId, PackIdErrorKind, RESERVED_PACK_IDS};
+use super::{PackId, RESERVED_PACK_IDS};
 use crate::test_support::assert_wire;
 use crate::tools::ToolId;
+
+const SEGMENT_COUNT: &str = "invalid Pack id: a Pack id is one segment, such as `web`, with no '/'";
+const EMPTY: &str = "invalid Pack id: segments must not be empty";
+const CONTROL: &str = "invalid Pack id: segments must not contain a control character";
+const CHARSET: &str =
+    "invalid Pack id: segments may contain only lowercase ASCII letters, digits, '-', '_', '.'";
+
+fn message_of(input: &str, why: &str) -> String {
+    PackId::parse(input).expect_err(why).to_string()
+}
 
 #[test]
 fn pack_id_requires_exactly_one_segment() {
     let id = PackId::parse("web").expect("one segment parses");
     assert_eq!(id.to_string(), "web");
 
-    let two = PackId::parse("runvil/web")
-        .expect_err("a vendor/name pair is a fully qualified name, not a Pack id");
-    assert_eq!(two.kind(), PackIdErrorKind::SegmentCount);
-
-    let tool = PackId::parse("web/fetch").expect_err("two segments are a tool id");
-    assert_eq!(tool.kind(), PackIdErrorKind::SegmentCount);
+    assert_eq!(
+        message_of(
+            "runvil/web",
+            "a vendor/name pair is a fully qualified name, not a Pack id"
+        ),
+        SEGMENT_COUNT
+    );
+    assert_eq!(
+        message_of("web/fetch", "two segments are a tool id"),
+        SEGMENT_COUNT
+    );
 }
 
 #[test]
 fn pack_id_rejects_empty_and_control_segments() {
-    let empty = PackId::parse("").expect_err("an empty id is rejected");
-    assert_eq!(empty.kind(), PackIdErrorKind::Empty);
-
-    let upper = PackId::parse("Web")
-        .expect_err("comparison is case-sensitive: uppercase is outside the charset");
-    assert_eq!(upper.kind(), PackIdErrorKind::Charset);
-
-    let versioned = PackId::parse("web@2").expect_err("v1 is unversioned: '@' is a parse error");
-    assert_eq!(versioned.kind(), PackIdErrorKind::Charset);
-
-    let accented = PackId::parse("w\u{e9}b").expect_err("non-ASCII is outside the charset");
-    assert_eq!(accented.kind(), PackIdErrorKind::Charset);
-
-    let control = PackId::parse("we\tb").expect_err("a control byte is rejected");
-    assert_eq!(control.kind(), PackIdErrorKind::Control);
+    assert_eq!(message_of("", "an empty id is rejected"), EMPTY);
+    assert_eq!(
+        message_of(
+            "Web",
+            "comparison is case-sensitive: uppercase is outside the charset"
+        ),
+        CHARSET
+    );
+    assert_eq!(
+        message_of("web@2", "v1 is unversioned: '@' is a parse error"),
+        CHARSET
+    );
+    assert_eq!(
+        message_of("w\u{e9}b", "non-ASCII is outside the charset"),
+        CHARSET
+    );
+    assert_eq!(message_of("we\tb", "a control byte is rejected"), CONTROL);
 }
 
 #[test]
@@ -43,7 +60,11 @@ fn pack_id_from_str_parses_like_parse() {
     let error = "web/fetch"
         .parse::<PackId>()
         .expect_err("two segments are a tool id");
-    assert_eq!(error.kind(), PackIdErrorKind::SegmentCount);
+    assert_eq!(
+        error,
+        PackId::parse("web/fetch").expect_err("two segments are a tool id")
+    );
+    assert_eq!(error.to_string(), SEGMENT_COUNT);
 }
 
 #[test]

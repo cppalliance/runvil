@@ -70,6 +70,9 @@ fn parsed_task_ids_compare_as_values_and_a_damaged_id_reports_its_whole_text() -
         .parse::<TaskId>()
         .err()
         .ok_or("0..1 is not a task id")?;
-    assert_eq!(error.input(), "0..1");
+    assert_eq!(
+        error.to_string(),
+        "invalid chain id `0..1`: required a dot-separated path of decimal components"
+    );
     Ok(())
 }

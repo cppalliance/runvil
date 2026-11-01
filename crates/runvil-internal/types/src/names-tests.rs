@@ -1,11 +1,16 @@
-//! Tests for `GlobalName` parsing and its rejection kinds.
+//! Tests for `GlobalName` parsing and its rejection messages.
 
-use super::{GlobalName, GlobalNameErrorKind};
+use super::GlobalName;
 
-fn kind_of(input: &str) -> GlobalNameErrorKind {
+const EMPTY: &str = "invalid global name: segments must not be empty";
+const CONTROL: &str = "invalid global name: segments must not contain a control character";
+const CHARSET: &str =
+    "invalid global name: segments may contain only lowercase ASCII letters, digits, '-', '_', '.'";
+
+fn message_of(input: &str) -> String {
     GlobalName::parse(input)
         .expect_err("the input must be rejected")
-        .kind()
+        .to_string()
 }
 
 #[test]
@@ -53,44 +58,44 @@ fn dashes_underscores_and_dots_are_legal_segment_characters() {
 
 #[test]
 fn an_empty_string_is_rejected_as_an_empty_error() {
-    assert_eq!(kind_of(""), GlobalNameErrorKind::Empty);
+    assert_eq!(message_of(""), EMPTY);
 }
 
 #[test]
 fn an_empty_middle_segment_is_rejected_as_an_empty_error() {
-    assert_eq!(kind_of("runvil//web"), GlobalNameErrorKind::Empty);
+    assert_eq!(message_of("runvil//web"), EMPTY);
 }
 
 #[test]
 fn a_leading_separator_is_rejected_as_an_empty_error() {
-    assert_eq!(kind_of("/web"), GlobalNameErrorKind::Empty);
+    assert_eq!(message_of("/web"), EMPTY);
 }
 
 #[test]
 fn a_trailing_separator_is_rejected_as_an_empty_error() {
-    assert_eq!(kind_of("web/"), GlobalNameErrorKind::Empty);
+    assert_eq!(message_of("web/"), EMPTY);
 }
 
 #[test]
 fn uppercase_is_rejected_as_a_charset_error_because_comparison_is_case_sensitive() {
-    assert_eq!(kind_of("Web"), GlobalNameErrorKind::Charset);
-    assert_eq!(kind_of("web/Fetch"), GlobalNameErrorKind::Charset);
+    assert_eq!(message_of("Web"), CHARSET);
+    assert_eq!(message_of("web/Fetch"), CHARSET);
 }
 
 #[test]
 fn an_at_sign_is_rejected_as_a_charset_error_because_v1_is_unversioned() {
-    assert_eq!(kind_of("web@2"), GlobalNameErrorKind::Charset);
+    assert_eq!(message_of("web@2"), CHARSET);
 }
 
 #[test]
 fn a_control_character_is_rejected_as_a_control_error() {
-    assert_eq!(kind_of("we\tb"), GlobalNameErrorKind::Control);
-    assert_eq!(kind_of("web\u{7f}"), GlobalNameErrorKind::Control);
+    assert_eq!(message_of("we\tb"), CONTROL);
+    assert_eq!(message_of("web\u{7f}"), CONTROL);
 }
 
 #[test]
 fn non_ascii_is_rejected_as_a_charset_error() {
-    assert_eq!(kind_of("w\u{e9}b"), GlobalNameErrorKind::Charset);
+    assert_eq!(message_of("w\u{e9}b"), CHARSET);
 }
 
 #[test]
@@ -103,5 +108,9 @@ fn from_str_parses_like_parse() {
     let error = "Web"
         .parse::<GlobalName>()
         .expect_err("uppercase is rejected");
-    assert_eq!(error.kind(), GlobalNameErrorKind::Charset);
+    assert_eq!(
+        error,
+        GlobalName::parse("Web").expect_err("uppercase is rejected")
+    );
+    assert_eq!(error.to_string(), CHARSET);
 }

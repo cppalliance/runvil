@@ -9,6 +9,8 @@ use std::num::NonZeroU32;
 
 use serde::Deserialize;
 
+use crate::names::IdError;
+
 /// The stable identity of one catalogued model.
 ///
 /// An identity pairs a server namespace with a model name. A model the
@@ -33,12 +35,12 @@ impl ModelId {
     /// Builds an identity from its server namespace and model name.
     ///
     /// # Errors
-    /// Returns [`ModelIdError`] if `server` or `name` is empty or contains a
+    /// Returns [`IdError`] if `server` or `name` is empty or contains a
     /// control character, so every `ModelId` is usable.
     pub fn new(
         server: impl Into<String>,
         name: impl Into<String>,
-    ) -> std::result::Result<ModelId, ModelIdError> {
+    ) -> std::result::Result<ModelId, IdError> {
         let server = server.into();
         let name = name.into();
         Self::validate("server", &server)?;
@@ -51,9 +53,9 @@ impl ModelId {
     /// `name` is the name the gateway lists the model under.
     ///
     /// # Errors
-    /// Returns [`ModelIdError`] if `name` is empty or contains a control
+    /// Returns [`IdError`] if `name` is empty or contains a control
     /// character.
-    pub fn gateway(name: impl Into<String>) -> std::result::Result<ModelId, ModelIdError> {
+    pub fn gateway(name: impl Into<String>) -> std::result::Result<ModelId, IdError> {
         Self::new(Self::GATEWAY, name)
     }
 
@@ -62,20 +64,15 @@ impl ModelId {
     /// Rejection is by Unicode scalar, not raw byte: every control
     /// character is refused, including C1 controls such as U+0085 (NEL) whose
     /// UTF-8 encoding a byte-range scan would miss.
-    fn validate(field: &'static str, value: &str) -> std::result::Result<(), ModelIdError> {
-        if value.is_empty() {
-            return Err(ModelIdError {
-                field,
-                reason: "must not be empty",
-            });
-        }
-        if value.chars().any(char::is_control) {
-            return Err(ModelIdError {
-                field,
-                reason: "must not contain a control character",
-            });
-        }
-        Ok(())
+    fn validate(field: &'static str, value: &str) -> std::result::Result<(), IdError> {
+        let reason = if value.is_empty() {
+            "must not be empty"
+        } else if value.chars().any(char::is_control) {
+            "must not contain a control character"
+        } else {
+            return Ok(());
+        };
+        Err(IdError::new(format!("invalid model id: {field} {reason}")))
     }
 
     /// Returns the server namespace.
@@ -90,51 +87,6 @@ impl ModelId {
         &self.name
     }
 }
-
-/// The reason building a [`ModelId`] from its components failed.
-#[derive(Debug, Clone, PartialEq, Eq)]
-#[non_exhaustive]
-pub struct ModelIdError {
-    /// Which component was rejected (`server` or `name`).
-    field: &'static str,
-    /// Why it was rejected.
-    reason: &'static str,
-}
-
-impl std::fmt::Display for ModelIdError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "invalid model id: {} {}", self.field, self.reason)
-    }
-}
-
-impl std::error::Error for ModelIdError {}
-
-/// The reason building a [`ModelCatalog`] from its `ModelInfo` values failed.
-#[derive(Debug, Clone, PartialEq, Eq)]
-#[non_exhaustive]
-pub enum ModelCatalogError {
-    /// Two `ModelInfo` values shared one stable [`ModelId`], which would make
-    /// lookups ambiguous.
-    #[non_exhaustive]
-    DuplicateId {
-        /// The repeated identity's server namespace.
-        server: String,
-        /// The repeated identity's model name.
-        name: String,
-    },
-}
-
-impl std::fmt::Display for ModelCatalogError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ModelCatalogError::DuplicateId { server, name } => {
-                write!(f, "duplicate model identity in catalog: {server}/{name}")
-            }
-        }
-    }
-}
-
-impl std::error::Error for ModelCatalogError {}
 
 /// Whether a catalogued model can emit thinking tokens.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
@@ -286,19 +238,20 @@ impl ModelCatalog {
     /// given in.
     ///
     /// # Errors
-    /// Returns [`ModelCatalogError::DuplicateId`] when two `ModelInfo` values
-    /// share one stable [`ModelId`], so each identity in the catalog names
-    /// exactly one model info.
+    /// Returns [`IdError`] when two `ModelInfo` values share one stable
+    /// [`ModelId`], so each identity in the catalog names exactly one model
+    /// info.
     pub fn new(
         models: impl IntoIterator<Item = ModelInfo>,
-    ) -> std::result::Result<ModelCatalog, ModelCatalogError> {
+    ) -> std::result::Result<ModelCatalog, IdError> {
         let models: Vec<ModelInfo> = models.into_iter().collect();
         for (index, model) in models.iter().enumerate() {
             if models[..index].iter().any(|prior| prior.id() == model.id()) {
-                return Err(ModelCatalogError::DuplicateId {
-                    server: model.id().server().to_owned(),
-                    name: model.id().name().to_owned(),
-                });
+                return Err(IdError::new(format!(
+                    "duplicate model identity in catalog: {}/{}",
+                    model.id().server(),
+                    model.id().name()
+                )));
             }
         }
         Ok(Self { models })
@@ -349,10 +302,27 @@ mod tests {
 
     #[test]
     fn model_id_rejects_empty_and_control_characters() {
-        assert!(ModelId::gateway("").is_err());
-        assert!(ModelId::new("", "name").is_err());
-        assert!(ModelId::new("server", "").is_err());
-        assert!(ModelId::new("server", "na\nme").is_err());
+        let message = |result: std::result::Result<ModelId, IdError>| {
+            result
+                .expect_err("the model id must be rejected")
+                .to_string()
+        };
+        assert_eq!(
+            message(ModelId::gateway("")),
+            "invalid model id: name must not be empty"
+        );
+        assert_eq!(
+            message(ModelId::new("", "name")),
+            "invalid model id: server must not be empty"
+        );
+        assert_eq!(
+            message(ModelId::new("server", "")),
+            "invalid model id: name must not be empty"
+        );
+        assert_eq!(
+            message(ModelId::new("server", "na\nme")),
+            "invalid model id: name must not contain a control character"
+        );
         assert!(ModelId::gateway("valid-alias").is_ok());
     }
 
@@ -411,7 +381,10 @@ mod tests {
         };
         let err = ModelCatalog::new([info("dup"), info("dup")])
             .expect_err("a catalog with duplicate ids must be rejected");
-        assert!(matches!(err, ModelCatalogError::DuplicateId { .. }));
+        assert_eq!(
+            err.to_string(),
+            "duplicate model identity in catalog: gateway/dup"
+        );
         assert!(ModelCatalog::new([info("a"), info("b")]).is_ok());
     }
 

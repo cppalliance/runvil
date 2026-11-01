@@ -101,9 +101,9 @@ pub use registry::{InstallError, PackOrigin, PackRegistry};
 pub use service::{HostServices, ServiceError, ServiceId, ServiceKey, TOKIO_RUNTIME};
 
 pub use runvil_types::models::{ModelId, ModelInfo, ThinkingMode};
-pub use runvil_types::packs::{PackId, PackIdError, PackIdErrorKind};
+pub use runvil_types::names::IdError;
+pub use runvil_types::packs::PackId;
 pub use runvil_types::tools::{
-    OutputTrust, ToolCallOrigin, ToolCaller, ToolError, ToolErrorKind, ToolId, ToolIdError,
-    ToolIdErrorKind, ToolInfo, ToolOutput,
+    OutputTrust, ToolCallOrigin, ToolCaller, ToolError, ToolErrorKind, ToolId, ToolInfo, ToolOutput,
 };
 pub use runvil_vfs::{Access, Entry, FileType, PathReason, Stat, VfsError};

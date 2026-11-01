@@ -29,6 +29,8 @@ use std::str::FromStr;
 
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
+use crate::names::IdError;
+
 #[cfg(test)]
 #[path = "ids-tests.rs"]
 mod tests;
@@ -81,43 +83,16 @@ impl fmt::Display for ChainId {
     }
 }
 
-/// The error returned when text fails to parse as a [`ChainId`] or
-/// [`TaskId`] path.
-///
-/// A valid path is one or more components joined by dots, such as `0.2.0`.
-/// Each component is plain decimal digits that fit in a `u32`.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ParseIdError {
-    /// The rejected text.
-    input: String,
-}
-
-impl ParseIdError {
-    /// Returns the rejected text.
-    #[must_use]
-    pub fn input(&self) -> &str {
-        &self.input
-    }
-}
-
-impl fmt::Display for ParseIdError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "invalid chain id `{}`: required a dot-separated path of decimal components",
-            self.input
-        )
-    }
-}
-
-impl std::error::Error for ParseIdError {}
-
 impl FromStr for ChainId {
-    type Err = ParseIdError;
+    type Err = IdError;
 
+    /// Parses a path: one or more components joined by dots, such as
+    /// `0.2.0`, each plain decimal digits that fit in a `u32`.
     fn from_str(input: &str) -> Result<Self, Self::Err> {
-        let reject = || ParseIdError {
-            input: input.to_owned(),
+        let reject = || {
+            IdError::new(format!(
+                "invalid chain id `{input}`: required a dot-separated path of decimal components"
+            ))
         };
         if input.is_empty() {
             return Err(reject());
@@ -133,7 +108,7 @@ impl FromStr for ChainId {
                 }
                 component.parse::<u32>().map_err(|_| reject())
             })
-            .collect::<Result<Vec<u32>, ParseIdError>>()
+            .collect::<Result<Vec<u32>, IdError>>()
             .map(Self)
     }
 }
@@ -173,7 +148,7 @@ impl fmt::Display for TaskId {
 }
 
 impl FromStr for TaskId {
-    type Err = ParseIdError;
+    type Err = IdError;
 
     fn from_str(input: &str) -> Result<Self, Self::Err> {
         input.parse().map(Self)

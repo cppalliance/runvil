@@ -1,6 +1,6 @@
 //! Describing models and answering their rounds.
 
-use runvil::model::{CompletionErrorKind, ModelCatalog, ModelCatalogError, ModelId, ThinkingMode};
+use runvil::model::{CompletionErrorKind, ModelCatalog, ModelId, ThinkingMode};
 use runvil::{RunErrorKind, RunOutcome};
 
 use super::support::{Reply, Scenario, TestResult, fail, model, prompt};
@@ -31,12 +31,13 @@ fn a_catalog_finds_a_model_by_id_and_refuses_a_repeated_id_as_a_whole() -> TestR
     assert_eq!(found.context().get(), 200_000);
     assert_eq!(found.thinking(), ThinkingMode::Always);
 
-    let Err(ModelCatalogError::DuplicateId { server, name, .. }) =
-        ModelCatalog::new([fast.clone(), fast])
-    else {
-        return Err("a repeated id is refused with DuplicateId".into());
-    };
-    assert_eq!((server.as_str(), name.as_str()), ("gateway", "fast"));
+    let error = ModelCatalog::new([fast.clone(), fast])
+        .err()
+        .ok_or("a repeated id is refused")?;
+    assert_eq!(
+        error.to_string(),
+        "duplicate model identity in catalog: gateway/fast"
+    );
     Ok(())
 }
 

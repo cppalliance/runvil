@@ -1,11 +1,11 @@
-//! The caller-supplied [`ToolCatalog`] of `ToolInfo` values and the catalog's
-//! construction error.
+//! The caller-supplied [`ToolCatalog`] of `ToolInfo` values.
 
 use std::fmt;
 use std::sync::Arc;
 
 use super::ids::ToolId;
 use super::info::ToolInfo;
+use crate::names::IdError;
 
 /// A catalog of the tools a run may offer, given as `ToolInfo` values.
 ///
@@ -45,16 +45,16 @@ impl ToolCatalog {
     /// This is the only place the catalog checks identities.
     ///
     /// # Errors
-    /// Returns [`ToolCatalogError::DuplicateId`] if two `ToolInfo` values
-    /// share a [`ToolId`].
-    pub fn new(tools: impl IntoIterator<Item = ToolInfo>) -> Result<Self, ToolCatalogError> {
+    /// Returns [`IdError`] if two `ToolInfo` values share a [`ToolId`].
+    pub fn new(tools: impl IntoIterator<Item = ToolInfo>) -> Result<Self, IdError> {
         let tools: Vec<ToolInfo> = tools.into_iter().collect();
         let mut seen = std::collections::BTreeSet::new();
         for tool in &tools {
             if !seen.insert(&tool.id) {
-                return Err(ToolCatalogError::DuplicateId {
-                    id: tool.id.clone(),
-                });
+                return Err(IdError::new(format!(
+                    "duplicate tool identity `{}` in the tool catalog",
+                    tool.id
+                )));
             }
         }
         Ok(Self {
@@ -76,56 +76,3 @@ impl ToolCatalog {
         &self.tools
     }
 }
-
-/// A stable, matchable classification of a [`ToolCatalogError`].
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[non_exhaustive]
-pub enum ToolCatalogErrorKind {
-    /// Two supplied tools shared a stable [`ToolId`].
-    DuplicateId,
-}
-
-/// Reports why building a [`ToolCatalog`] failed.
-///
-/// Building fails when two tools share an identity. Call
-/// [`kind`](Self::kind) to get a stable classification you can match on.
-#[derive(Debug, Clone, PartialEq, Eq)]
-#[non_exhaustive]
-pub enum ToolCatalogError {
-    /// The same stable identity was supplied by more than one tool.
-    #[non_exhaustive]
-    DuplicateId {
-        /// The stable identity supplied more than once.
-        id: ToolId,
-    },
-}
-
-impl ToolCatalogError {
-    /// Returns the stable classification of this error.
-    #[must_use]
-    pub fn kind(&self) -> ToolCatalogErrorKind {
-        match self {
-            ToolCatalogError::DuplicateId { .. } => ToolCatalogErrorKind::DuplicateId,
-        }
-    }
-
-    /// Returns the duplicated identity when this is a [`Self::DuplicateId`].
-    #[must_use]
-    pub fn duplicate_id(&self) -> Option<&ToolId> {
-        match self {
-            ToolCatalogError::DuplicateId { id } => Some(id),
-        }
-    }
-}
-
-impl std::fmt::Display for ToolCatalogError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ToolCatalogError::DuplicateId { id } => {
-                write!(f, "duplicate tool identity `{id}` in the tool catalog")
-            }
-        }
-    }
-}
-
-impl std::error::Error for ToolCatalogError {}

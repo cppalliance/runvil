@@ -48,7 +48,12 @@ fn malformed_paths_are_rejected() {
         let error = input
             .parse::<ChainId>()
             .expect_err("a malformed path is rejected");
-        assert_eq!(error.input(), input);
+        assert_eq!(
+            error.to_string(),
+            format!(
+                "invalid chain id `{input}`: required a dot-separated path of decimal components"
+            )
+        );
     }
 }
 

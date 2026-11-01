@@ -47,15 +47,16 @@ pub mod event {
 }
 
 pub mod ids {
-    //! Task, chain, and round ids, and the provenance that orders a run's
-    //! records.
+    //! Task, chain, and round ids, the provenance that orders a run's
+    //! records, and the error an invalid id, or a catalog that repeats one,
+    //! reports.
 
     pub use runvil_types::ids::AbandonReason;
     pub use runvil_types::ids::ChainId;
-    pub use runvil_types::ids::ParseIdError;
     pub use runvil_types::ids::Provenance;
     pub use runvil_types::ids::RoundId;
     pub use runvil_types::ids::TaskId;
+    pub use runvil_types::names::IdError;
 }
 
 pub mod model {
@@ -80,9 +81,7 @@ pub mod model {
     pub use runvil_model_client::model::Temperature;
     pub use runvil_model_client::model::TemperatureError;
     pub use runvil_types::models::ModelCatalog;
-    pub use runvil_types::models::ModelCatalogError;
     pub use runvil_types::models::ModelId;
-    pub use runvil_types::models::ModelIdError;
     pub use runvil_types::models::ModelInfo;
     pub use runvil_types::models::ModelRole;
     pub use runvil_types::models::ThinkingMode;
@@ -94,13 +93,9 @@ pub mod tools {
 
     pub use runvil_types::tools::OutputTrust;
     pub use runvil_types::tools::ToolCatalog;
-    pub use runvil_types::tools::ToolCatalogError;
-    pub use runvil_types::tools::ToolCatalogErrorKind;
     pub use runvil_types::tools::ToolError;
     pub use runvil_types::tools::ToolErrorKind;
     pub use runvil_types::tools::ToolId;
-    pub use runvil_types::tools::ToolIdError;
-    pub use runvil_types::tools::ToolIdErrorKind;
     pub use runvil_types::tools::ToolInfo;
     pub use runvil_types::tools::ToolOutput;
 }
@@ -112,10 +107,7 @@ pub mod packs {
 
     pub use runvil_lua::RosterEntry;
     pub use runvil_types::names::GlobalName;
-    pub use runvil_types::names::GlobalNameError;
     pub use runvil_types::packs::PackId;
-    pub use runvil_types::packs::PackIdError;
-    pub use runvil_types::packs::PackIdErrorKind;
     pub use runvil_types::packs::PackRef;
     pub use runvil_types::packs::Prelude;
 }

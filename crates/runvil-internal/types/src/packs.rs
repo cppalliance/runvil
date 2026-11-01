@@ -1,4 +1,4 @@
-//! The Pack identity vocabulary: [`PackId`] and its parse error, the
+//! The Pack identity vocabulary: [`PackId`], the
 //! [`RESERVED_PACK_IDS`] no Pack may take, [`PackRef`], one entry of a
 //! prompt's `uses:` list, and [`Prelude`], the Lua source a declared Pack
 //! hands the Engine.
@@ -16,7 +16,7 @@
 
 use std::str::FromStr;
 
-use crate::names::{GlobalName, GlobalNameErrorKind};
+use crate::names::{GlobalName, IdError};
 use crate::tools::ToolId;
 
 #[cfg(test)]
@@ -45,20 +45,20 @@ impl PackId {
     /// Parses a Pack identity, requiring exactly one segment.
     ///
     /// # Errors
-    /// Returns [`PackIdError`] when the id has more than one segment
-    /// ([`PackIdErrorKind::SegmentCount`]), is empty or has an empty
-    /// segment ([`PackIdErrorKind::Empty`]), a segment contains a control
-    /// byte ([`PackIdErrorKind::Control`]), or a segment contains any
-    /// other character than a lowercase ASCII letter, a digit, `-`, `_`,
-    /// or `.` ([`PackIdErrorKind::Charset`]).
-    pub fn parse(name: &str) -> Result<PackId, PackIdError> {
-        let name =
-            GlobalName::parse(name).map_err(|e| PackIdError::from_global_name_kind(e.kind()))?;
+    /// Returns [`IdError`] when the id has more than one segment, is empty
+    /// or has an empty segment, a segment contains a control byte, or a
+    /// segment contains any other character than a lowercase ASCII letter,
+    /// a digit, `-`, `_`, or `.`.
+    pub fn parse(name: &str) -> Result<PackId, IdError> {
+        PackId::validate(name).map_err(|reason| IdError::new(format!("invalid Pack id: {reason}")))
+    }
+
+    /// Parses `name` as [`PackId::parse`] does, but returns only the reason
+    /// it is invalid.
+    fn validate(name: &str) -> Result<PackId, &'static str> {
+        let name = GlobalName::validate(name)?;
         if name.segments().len() != 1 {
-            return Err(PackIdError {
-                kind: PackIdErrorKind::SegmentCount,
-                reason: "a Pack id is one segment, such as `web`, with no '/'",
-            });
+            return Err("a Pack id is one segment, such as `web`, with no '/'");
         }
         Ok(PackId(name))
     }
@@ -92,9 +92,9 @@ impl PackId {
 }
 
 impl FromStr for PackId {
-    type Err = PackIdError;
+    type Err = IdError;
 
-    fn from_str(name: &str) -> Result<PackId, PackIdError> {
+    fn from_str(name: &str) -> Result<PackId, IdError> {
         PackId::parse(name)
     }
 }
@@ -136,8 +136,8 @@ impl serde::de::Visitor<'_> for PackIdVisitor {
     }
 
     fn visit_str<E: serde::de::Error>(self, text: &str) -> Result<PackId, E> {
-        PackId::parse(text)
-            .map_err(|error| E::custom(format!("invalid Pack id `{text}`: {}", error.reason)))
+        PackId::validate(text)
+            .map_err(|reason| E::custom(format!("invalid Pack id `{text}`: {reason}")))
     }
 }
 
@@ -177,8 +177,7 @@ impl PackRef {
 
     /// Parses one entry: one or two valid segments.
     fn parse(text: &str) -> Result<PackRef, &'static str> {
-        let name = GlobalName::parse(text)
-            .map_err(|error| PackIdError::from_global_name_kind(error.kind()).reason)?;
+        let name = GlobalName::validate(text)?;
         let (vendor, id) = match name.segments() {
             [id] => (RUNVIL_VENDOR, id),
             [vendor, id] => (vendor.as_str(), id),
@@ -220,64 +219,6 @@ impl serde::de::Visitor<'_> for PackRefVisitor {
             .map_err(|reason| E::custom(format!("invalid uses entry `{text}`: {reason}")))
     }
 }
-
-/// Classifies a [`PackIdError`] so callers can handle each kind of failure.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[non_exhaustive]
-pub enum PackIdErrorKind {
-    /// The id had more than one segment.
-    SegmentCount,
-    /// A segment was empty.
-    Empty,
-    /// A segment contained a control byte.
-    Control,
-    /// A segment contained a character other than a lowercase ASCII letter,
-    /// a digit, `-`, `_`, or `.` that is not a control byte, such as an
-    /// uppercase letter, `@`, or a non-ASCII character.
-    Charset,
-}
-
-/// The reason a [`PackId`] failed to parse.
-#[derive(Debug, Clone, PartialEq, Eq)]
-#[non_exhaustive]
-pub struct PackIdError {
-    /// A stable classification of why the id was rejected.
-    kind: PackIdErrorKind,
-    /// A human-readable reason.
-    reason: &'static str,
-}
-
-impl PackIdError {
-    /// Returns the stable classification of this error.
-    #[must_use]
-    pub fn kind(&self) -> PackIdErrorKind {
-        self.kind
-    }
-
-    /// Maps a global-name rejection onto the Pack-id error vocabulary.
-    fn from_global_name_kind(global_kind: GlobalNameErrorKind) -> PackIdError {
-        let (kind, reason) = match global_kind {
-            GlobalNameErrorKind::Empty => (PackIdErrorKind::Empty, "segments must not be empty"),
-            GlobalNameErrorKind::Control => (
-                PackIdErrorKind::Control,
-                "segments must not contain a control character",
-            ),
-            GlobalNameErrorKind::Charset => (
-                PackIdErrorKind::Charset,
-                "segments may contain only lowercase ASCII letters, digits, '-', '_', '.'",
-            ),
-        };
-        PackIdError { kind, reason }
-    }
-}
-
-impl std::fmt::Display for PackIdError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "invalid Pack id: {}", self.reason)
-    }
-}
-
-impl std::error::Error for PackIdError {}
 
 /// Holds the Lua source a declared Pack adds to every section's VM.
 ///

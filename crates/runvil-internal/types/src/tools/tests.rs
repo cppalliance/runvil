@@ -2,7 +2,7 @@
 
 use serde_json::json;
 
-use super::{ToolCatalog, ToolCatalogErrorKind, ToolId, ToolInfo};
+use super::{ToolCatalog, ToolId, ToolInfo};
 use crate::packs::PackId;
 use crate::test_support::{assert_send_sync, assert_wire, round_trip};
 
@@ -267,22 +267,23 @@ fn catalog_preserves_order_and_first_match_lookup() {
 fn catalog_rejects_duplicate_tool_ids() {
     let error = ToolCatalog::new([catalog_info("inspect"), catalog_info("inspect")])
         .expect_err("a repeated tool identity must be rejected at catalog construction");
-    assert_eq!(error.kind(), ToolCatalogErrorKind::DuplicateId);
-    assert_eq!(
-        error.duplicate_id(),
-        Some(&inspect_id()),
-        "the error must name the duplicated identity"
-    );
     assert_eq!(
         error.to_string(),
-        "duplicate tool identity `fixtures/tools/inspect` in the tool catalog"
+        "duplicate tool identity `fixtures/tools/inspect` in the tool catalog",
+        "the error must name the duplicated identity"
     );
 }
 
-fn tool_id_error_kind(input: &str) -> super::ToolIdErrorKind {
+const SEGMENT_COUNT: &str = "invalid tool id: a tool id has two or more segments, its Pack's name first, such as `web/fetch`";
+const EMPTY: &str = "invalid tool id: segments must not be empty";
+const CONTROL: &str = "invalid tool id: segments must not contain a control character";
+const CHARSET: &str =
+    "invalid tool id: segments may contain only lowercase ASCII letters, digits, '-', '_', '.'";
+
+fn tool_id_error(input: &str) -> String {
     ToolId::parse(input)
         .expect_err("the input must be rejected")
-        .kind()
+        .to_string()
 }
 
 #[test]
@@ -317,57 +318,48 @@ fn four_segments_parse_as_a_tool_id() {
 
 #[test]
 fn a_single_segment_is_rejected_as_a_tool_id() {
-    use super::ToolIdErrorKind;
-    assert_eq!(tool_id_error_kind("web"), ToolIdErrorKind::SegmentCount);
+    assert_eq!(tool_id_error("web"), SEGMENT_COUNT);
 }
 
 #[test]
 fn an_empty_tool_id_is_rejected_as_an_empty_error() {
-    use super::ToolIdErrorKind;
-    assert_eq!(tool_id_error_kind(""), ToolIdErrorKind::Empty);
+    assert_eq!(tool_id_error(""), EMPTY);
 }
 
 #[test]
 fn an_empty_segment_is_rejected_as_an_empty_error() {
-    use super::ToolIdErrorKind;
-    assert_eq!(tool_id_error_kind("web//fetch"), ToolIdErrorKind::Empty);
+    assert_eq!(tool_id_error("web//fetch"), EMPTY);
 }
 
 #[test]
 fn a_control_character_is_rejected_as_a_control_error() {
-    use super::ToolIdErrorKind;
-    assert_eq!(tool_id_error_kind("we\tb/fetch"), ToolIdErrorKind::Control);
-    assert_eq!(
-        tool_id_error_kind("web/fe\u{7f}tch"),
-        ToolIdErrorKind::Control
-    );
+    assert_eq!(tool_id_error("we\tb/fetch"), CONTROL);
+    assert_eq!(tool_id_error("web/fe\u{7f}tch"), CONTROL);
 }
 
 #[test]
 fn an_uppercase_segment_is_rejected_as_a_charset_error_because_comparison_is_case_sensitive() {
-    use super::ToolIdErrorKind;
-    assert_eq!(tool_id_error_kind("Web/fetch"), ToolIdErrorKind::Charset);
+    assert_eq!(tool_id_error("Web/fetch"), CHARSET);
 }
 
 #[test]
 fn an_at_sign_or_non_ascii_segment_is_rejected_as_a_charset_error() {
-    use super::ToolIdErrorKind;
-    assert_eq!(tool_id_error_kind("web@2/fetch"), ToolIdErrorKind::Charset);
-    assert_eq!(
-        tool_id_error_kind("web/f\u{e9}tch"),
-        ToolIdErrorKind::Charset
-    );
+    assert_eq!(tool_id_error("web@2/fetch"), CHARSET);
+    assert_eq!(tool_id_error("web/f\u{e9}tch"), CHARSET);
 }
 
 #[test]
 fn a_tool_id_from_str_parses_like_parse() {
-    use super::ToolIdErrorKind;
     let parsed: ToolId = "web/fetch".parse().expect("a valid tool id parses");
     assert_eq!(parsed, ToolId::parse("web/fetch").expect("a valid tool id"));
     let error = "web"
         .parse::<ToolId>()
         .expect_err("one segment is rejected");
-    assert_eq!(error.kind(), ToolIdErrorKind::SegmentCount);
+    assert_eq!(
+        error,
+        ToolId::parse("web").expect_err("one segment is rejected")
+    );
+    assert_eq!(error.to_string(), SEGMENT_COUNT);
 }
 
 #[test]

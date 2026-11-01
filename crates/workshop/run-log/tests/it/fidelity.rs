@@ -7,7 +7,7 @@
 
 use harness::record::RunSeed;
 use runvil::event::{Event, ReplyOrigin};
-use runvil::ids::{ParseIdError, Provenance, RoundId, TaskId};
+use runvil::ids::{IdError, Provenance, RoundId, TaskId};
 use runvil::metrics::{CallMetrics, ClientTiming, LlamaTimings, Usage, VllmMetrics};
 use serde_json::{Map, Value, json};
 use workshop_run_log::{Record, RecordFilter, RecordKind, RunLog, RunMeta};
@@ -34,7 +34,7 @@ fn meta() -> RunMeta {
 }
 
 /// The replay key every fidelity event carries.
-fn provenance() -> Result<Provenance, ParseIdError> {
+fn provenance() -> Result<Provenance, IdError> {
     Ok(Provenance::new("0".parse::<TaskId>()?, 0))
 }
 

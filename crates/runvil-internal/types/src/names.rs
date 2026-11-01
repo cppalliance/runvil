@@ -7,6 +7,9 @@
 //! two or more, its Pack's id first (`web/fetch`). Segments are lowercase ASCII
 //! alphanumeric plus `-`, `_`, `.`, and comparison is case-sensitive. A
 //! name carries no version, so a `@` is a parse error.
+//!
+//! [`IdError`] is the error every id type and every catalog of ids returns,
+//! whether the id is built on a name or not.
 
 use std::fmt;
 use std::str::FromStr;
@@ -40,12 +43,20 @@ impl GlobalName {
     ///
     /// # Errors
     ///
-    /// Returns [`GlobalNameError`] when:
+    /// Returns [`IdError`] when:
     ///
     /// - a segment is empty, including the whole string being empty;
     /// - a segment contains a control byte;
     /// - a segment contains any other character outside the set.
-    pub fn parse(s: &str) -> Result<GlobalName, GlobalNameError> {
+    pub fn parse(s: &str) -> Result<GlobalName, IdError> {
+        GlobalName::validate(s)
+            .map_err(|reason| IdError::new(format!("invalid global name: {reason}")))
+    }
+
+    /// Parses `s` as [`GlobalName::parse`] does, but returns only the
+    /// reason it is invalid, so each id type built on a name can name
+    /// itself in its own error.
+    pub(crate) fn validate(s: &str) -> Result<GlobalName, &'static str> {
         let segments: Vec<&str> = s.split('/').collect();
         for segment in &segments {
             validate_segment(segment)?;
@@ -82,9 +93,9 @@ impl GlobalName {
 }
 
 impl FromStr for GlobalName {
-    type Err = GlobalNameError;
+    type Err = IdError;
 
-    fn from_str(s: &str) -> Result<GlobalName, GlobalNameError> {
+    fn from_str(s: &str) -> Result<GlobalName, IdError> {
         GlobalName::parse(s)
     }
 }
@@ -104,74 +115,57 @@ impl fmt::Display for GlobalName {
 /// Validates one segment against the charset rule.
 ///
 /// A segment must be non-empty and contain only lowercase ASCII
-/// alphanumeric characters plus `-`, `_`, `.`. A control byte is a
-/// `Control` error; anything else outside the set - including uppercase
-/// (comparison is case-sensitive), `@`, and non-ASCII - is a `Charset`
-/// error.
-fn validate_segment(segment: &str) -> Result<(), GlobalNameError> {
+/// alphanumeric characters plus `-`, `_`, `.`. A control byte has its own
+/// reason; anything else outside the set - including uppercase
+/// (comparison is case-sensitive), `@`, and non-ASCII - shares the
+/// charset reason.
+fn validate_segment(segment: &str) -> Result<(), &'static str> {
     if segment.is_empty() {
-        return Err(GlobalNameError {
-            kind: GlobalNameErrorKind::Empty,
-            reason: "segments must not be empty",
-        });
+        return Err("segments must not be empty");
     }
     for byte in segment.bytes() {
         if byte < 0x20 || byte == 0x7f {
-            return Err(GlobalNameError {
-                kind: GlobalNameErrorKind::Control,
-                reason: "segments must not contain a control character",
-            });
+            return Err("segments must not contain a control character");
         }
         if !matches!(byte, b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.') {
-            return Err(GlobalNameError {
-                kind: GlobalNameErrorKind::Charset,
-                reason: "segments may contain only lowercase ASCII letters, digits, '-', '_', '.'",
-            });
+            return Err("segments may contain only lowercase ASCII letters, digits, '-', '_', '.'");
         }
     }
     Ok(())
 }
 
-/// A stable classification of a [`GlobalNameError`].
+/// The error returned when an id, or a catalog of ids, is invalid.
 ///
-/// `GlobalNameError::kind` returns it. Match on it to branch on why a name
-/// was rejected.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[non_exhaustive]
-pub enum GlobalNameErrorKind {
-    /// A segment was empty.
-    Empty,
-    /// A segment contained a control byte.
-    Control,
-    /// A segment contained a character other than a lowercase ASCII letter, a
-    /// digit, `-`, `_`, or `.` that is not a control byte.
-    ///
-    /// This covers uppercase letters, `@`, and non-ASCII characters.
-    Charset,
-}
-
-/// The error returned when a [`GlobalName`] fails to parse.
+/// Parsing a [`GlobalName`], a [`PackId`], a [`ToolId`], a [`ChainId`] or a
+/// [`TaskId`], or building a [`ModelId`], returns it for a malformed id.
+/// Building a [`ToolCatalog`] or a [`ModelCatalog`] returns it when two
+/// entries share an id. Its message names what was rejected and why, such
+/// as `invalid Pack id: segments must not be empty`.
+///
+/// [`PackId`]: crate::packs::PackId
+/// [`ToolId`]: crate::tools::ToolId
+/// [`ChainId`]: crate::ids::ChainId
+/// [`TaskId`]: crate::ids::TaskId
+/// [`ModelId`]: crate::models::ModelId
+/// [`ToolCatalog`]: crate::tools::ToolCatalog
+/// [`ModelCatalog`]: crate::models::ModelCatalog
 #[derive(Debug, Clone, PartialEq, Eq)]
-#[non_exhaustive]
-pub struct GlobalNameError {
-    /// A stable classification of why the name was rejected.
-    kind: GlobalNameErrorKind,
-    /// A human-readable reason.
-    reason: &'static str,
+pub struct IdError {
+    /// The rendered message.
+    message: String,
 }
 
-impl GlobalNameError {
-    /// Returns the stable classification of this error.
-    #[must_use]
-    pub(crate) fn kind(&self) -> GlobalNameErrorKind {
-        self.kind
+impl IdError {
+    /// Builds an error that renders as `message`.
+    pub(crate) fn new(message: String) -> IdError {
+        IdError { message }
     }
 }
 
-impl fmt::Display for GlobalNameError {
+impl fmt::Display for IdError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "invalid global name: {}", self.reason)
+        f.write_str(&self.message)
     }
 }
 
-impl std::error::Error for GlobalNameError {}
+impl std::error::Error for IdError {}

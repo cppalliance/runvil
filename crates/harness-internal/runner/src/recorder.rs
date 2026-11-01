@@ -133,7 +133,7 @@ pub struct RunMeta {
     /// The seed the Harness drew and passed to the Engine. A replay passes
     /// it back, and the run's id derives from it.
     pub seed: RunSeed,
-    /// The Engine's behavior flags, as a bitset.
+    /// Reserved. No flag is defined, and the Harness records 0.
     pub flags: u32,
     /// When the run started, in UTC milliseconds since the Unix epoch.
     /// The Engine receives the same value as `started_at`, so the record
