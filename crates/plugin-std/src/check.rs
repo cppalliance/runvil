@@ -4,6 +4,9 @@
 use runvil_plugin::{ToolError, ToolErrorKind};
 use serde_json::Value;
 
+use crate::matcher::PatternError;
+use crate::text::clip_to_boundary;
+
 /// Checks that `args` matches the `schema`, which is the `object` schema a
 /// tool's definition file holds.
 ///
@@ -170,6 +173,36 @@ pub(crate) fn refuse_blank(tool: &str, name: &str, value: &str) -> Result<(), To
         ));
     }
     Ok(())
+}
+
+/// The most bytes of a refused pattern the error echoes.
+const PATTERN_ECHO_BYTES: usize = 80;
+
+/// The invalid-arguments error for the pattern `pattern`, which the
+/// matcher refused with `error`, passed under the parameter `name`.
+///
+/// The error echoes the pattern, cut to 80 bytes on a character boundary
+/// with `...` added when it was cut, so a long pattern does not fill the
+/// message.
+pub(crate) fn invalid_pattern(
+    tool: &str,
+    name: &str,
+    pattern: &str,
+    error: PatternError,
+) -> ToolError {
+    let shown = clip_to_boundary(pattern, 0, PATTERN_ECHO_BYTES);
+    let dots = if shown.len() < pattern.len() {
+        "..."
+    } else {
+        ""
+    };
+    invalid_arguments(
+        tool,
+        format!(
+            "`{name}` is invalid: \"{shown}{dots}\" does not parse: {}.",
+            error.reason()
+        ),
+    )
 }
 
 /// `{n} {noun}` for a count, with `s` added to the noun for any `n` but 1.

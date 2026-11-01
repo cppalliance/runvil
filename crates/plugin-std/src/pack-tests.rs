@@ -47,11 +47,14 @@ fn the_stub_says_what_is_missing_before_it_says_anything_else() {
 }
 
 #[test]
-fn the_specs_are_the_six_the_crate_names_in_order() {
+fn the_specs_are_the_seven_the_crate_names_in_order() {
     let segments: Vec<&str> = spec::all()
         .expect("every embedded definition parses")
         .iter()
         .map(|definition| definition.segment)
         .collect();
-    assert_eq!(segments, ["read", "write", "replace", "rm", "glob", "grep"]);
+    assert_eq!(
+        segments,
+        ["read", "write", "replace", "rm", "glob", "grep", "dir"]
+    );
 }

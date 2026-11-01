@@ -5,7 +5,7 @@ use std::io::ErrorKind;
 
 use runvil_plugin::{PathReason, VfsError};
 
-use super::{neither_file_nor_directory, refusal};
+use super::{missing_root, neither_file_nor_directory, not_a_directory, refusal};
 
 /// The path the model wrote, and the canonical path every error below
 /// carries, which differs so a test can tell which one a sentence echoes.
@@ -280,6 +280,53 @@ fn no_message_names_a_tool_other_than_the_one_called() {
         }
     }
     assert!(!neither_file_nor_directory("p").contains("Shell"));
+}
+
+#[test]
+fn a_root_that_does_not_exist_says_the_path_does_not_exist() {
+    assert_eq!(
+        missing_root("/home/dev/gone"),
+        "Path does not exist: /home/dev/gone"
+    );
+    assert_eq!(missing_root("gone"), "Path does not exist: gone");
+}
+
+#[test]
+fn a_missing_root_is_worded_apart_from_a_missing_file() {
+    // The `NotFound` sentence says file, which is wrong for a directory
+    // the model named, so the listing and search tools word the root
+    // themselves.
+    let error = VfsError::NotFound {
+        path: CANONICAL.to_owned(),
+    };
+    assert_eq!(say(&error), "File not found: notes/a.md");
+    assert_eq!(missing_root(WRITTEN), "Path does not exist: notes/a.md");
+}
+
+#[test]
+fn the_not_a_directory_sentence_is_the_one_the_refusal_gives() {
+    let error = VfsError::NotADirectory {
+        path: CANONICAL.to_owned(),
+    };
+    assert_eq!(say(&error), not_a_directory(WRITTEN));
+    assert_eq!(not_a_directory("/a/b"), "Path is not a directory: /a/b");
+}
+
+#[test]
+fn the_root_sentences_name_no_tool() {
+    for text in [missing_root("/p"), not_a_directory("/p")] {
+        for tool in [
+            "Read",
+            "Write",
+            "StrReplace",
+            "Delete",
+            "Glob",
+            "Grep",
+            "Shell",
+        ] {
+            assert!(!text.contains(tool), "{text}");
+        }
+    }
 }
 
 #[test]

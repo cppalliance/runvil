@@ -15,7 +15,7 @@ pub(crate) fn refusal(tool: &str, path: &str, error: &VfsError) -> String {
     match error {
         VfsError::NotFound { .. } => format!("File not found: {path}"),
         VfsError::IsADirectory { .. } => format!("Path is a directory, not a file: {path}"),
-        VfsError::NotADirectory { .. } => format!("Path is not a directory: {path}"),
+        VfsError::NotADirectory { .. } => not_a_directory(path),
         VfsError::Conflict { .. } => format!(
             "{path} was changed, or is being changed, by another call in this round, so it \
              cannot be read in this round. Call {tool} again in your next message."
@@ -34,6 +34,20 @@ fn without_label(text: &str) -> String {
     text.split_once(": ")
         .map_or(text, |(_, rest)| rest)
         .to_owned()
+}
+
+/// The sentence for a root the model named that does not exist.
+///
+/// A tool that starts from a directory words its own missing root, because
+/// the `NotFound` sentence above says a file was not found.
+pub(crate) fn missing_root(path: &str) -> String {
+    format!("Path does not exist: {path}")
+}
+
+/// The sentence for a path that names something other than a directory
+/// where a directory was needed.
+pub(crate) fn not_a_directory(path: &str) -> String {
+    format!("Path is not a directory: {path}")
 }
 
 /// The sentence for a path that is neither a file nor a directory, such

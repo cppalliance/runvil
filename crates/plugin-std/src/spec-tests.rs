@@ -5,13 +5,14 @@ use super::all;
 
 /// The wire name each id segment must carry, which is Cursor's name for
 /// the same tool.
-const WIRE_NAMES: [(&str, &str); 6] = [
+const WIRE_NAMES: [(&str, &str); 7] = [
     ("read", "Read"),
     ("write", "Write"),
     ("replace", "StrReplace"),
     ("rm", "Delete"),
     ("glob", "Glob"),
     ("grep", "Grep"),
+    ("dir", "ListDir"),
 ];
 
 #[test]
@@ -109,6 +110,62 @@ fn the_read_description_holds_the_limits_the_code_uses_and_no_unfilled_placehold
         assert!(
             !text.contains(placeholder),
             "{placeholder} is filled in: {text}"
+        );
+    }
+}
+
+#[test]
+fn the_dir_description_holds_the_body_cap_and_no_unfilled_placeholder() {
+    let definitions = all().expect("every embedded definition parses");
+    let dir = definitions
+        .iter()
+        .find(|definition| definition.segment == "dir")
+        .expect("the dir definition exists");
+    let text = &dir.description;
+    assert!(text.contains("15000"), "the body cap is named: {text}");
+    assert!(
+        !text.contains("{body_cap}"),
+        "{{body_cap}} is filled in: {text}"
+    );
+}
+
+#[test]
+fn the_dir_schema_requires_the_target_and_takes_an_array_of_strings_for_the_ignores() {
+    let definitions = all().expect("every embedded definition parses");
+    let dir = definitions
+        .iter()
+        .find(|definition| definition.segment == "dir")
+        .expect("the dir definition exists");
+    let properties = &dir.parameters["properties"];
+    assert_eq!(properties["target_directory"]["type"], "string");
+    assert_eq!(properties["ignore_globs"]["type"], "array");
+    assert_eq!(properties["ignore_globs"]["items"]["type"], "string");
+    assert_eq!(
+        dir.parameters["required"],
+        serde_json::json!(["target_directory"])
+    );
+}
+
+#[test]
+fn the_dir_description_states_the_behavior_the_tool_has() {
+    let definitions = all().expect("every embedded definition parses");
+    let dir = definitions
+        .iter()
+        .find(|definition| definition.segment == "dir")
+        .expect("the dir definition exists");
+    let text = &dir.description;
+    for phrase in [
+        "breadth first",
+        "`.git`",
+        "dotfile",
+        "link",
+        "ignore_globs",
+        "any depth",
+        "byte order",
+    ] {
+        assert!(
+            text.contains(phrase),
+            "the description names {phrase}: {text}"
         );
     }
 }

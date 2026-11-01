@@ -1,0 +1,19 @@
+{
+  "wire_name": "ListDir",
+  "description": "Lists a directory of the run's filesystem as a tree. Each entry is a bullet line, `- name`, the entries of a directory are indented two spaces under it, and a directory's name ends in `/`.\n\nUsage:\n- Files and directories share one list, in byte order of the name with `/` added to a directory's name, so `B` comes before `a`.\n- The walk is breadth first, so the entries closest to target_directory come first. The output holds at most {body_cap} bytes of lines. When it stops early, a directory that was not expanded ends in `...`, and a note at the end says the listing is too large. Call again with a more specific target_directory or with ignore_globs to see the rest.\n- Entries named `.git` are skipped. Every other dotfile is listed.\n- A link is listed by its name and is not entered.\n- ignore_globs leave entries out. A pattern with no leading `/` matches at any depth, so `node_modules` or `*.log` leaves out every match below target_directory. A pattern with a leading `/` is a full path from the root of the run's filesystem. Only `*` and `**` are special.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "target_directory": {
+        "type": "string",
+        "description": "The absolute path of the directory to list"
+      },
+      "ignore_globs": {
+        "type": "array",
+        "items": { "type": "string" },
+        "description": "Globs of entries to leave out of the listing. A pattern with no leading `/` matches at any depth, and only `*` and `**` are special."
+      }
+    },
+    "required": ["target_directory"]
+  }
+}

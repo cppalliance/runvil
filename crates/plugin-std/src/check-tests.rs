@@ -4,7 +4,8 @@
 use runvil_plugin::ToolErrorKind;
 use serde_json::json;
 
-use super::{check, plural, refuse_blank, refuse_unknown};
+use super::{check, invalid_pattern, plural, refuse_blank, refuse_unknown};
+use crate::matcher::PatternError;
 
 /// The schema the `StrReplace` tool ships, which has a required string, an
 /// optional string, and an optional boolean.
@@ -288,4 +289,66 @@ fn plural_turns_a_consonant_then_y_into_ies_and_keeps_a_vowel_then_y() {
     assert_eq!(plural(0, "entry"), "0 entries");
     assert_eq!(plural(3, "key"), "3 keys");
     assert_eq!(plural(5, "day"), "5 days");
+}
+
+#[test]
+fn a_bad_pattern_names_the_parameter_echoes_the_pattern_and_gives_the_reason() {
+    let error = invalid_pattern("ListDir", "ignore_globs", "a***", PatternError::StarRun);
+    assert_eq!(
+        error.to_string(),
+        "std_ListDir: `ignore_globs` is invalid: \"a***\" does not parse: \
+         more than two consecutive '*' are not supported."
+    );
+    assert_eq!(error.kind(), ToolErrorKind::InvalidArguments);
+}
+
+#[test]
+fn a_bad_pattern_gives_each_reason_text_as_the_matcher_words_it() {
+    for error in [
+        PatternError::Empty,
+        PatternError::TooLong,
+        PatternError::Control,
+        PatternError::Backslash,
+        PatternError::StarRun,
+        PatternError::PartialDoubleStar,
+    ] {
+        let text = invalid_pattern("Grep", "glob", "x", error).to_string();
+        assert_eq!(
+            text,
+            format!(
+                "std_Grep: `glob` is invalid: \"x\" does not parse: {}.",
+                error.reason()
+            )
+        );
+    }
+}
+
+#[test]
+fn a_pattern_over_80_bytes_is_echoed_cut_with_dots_and_80_bytes_exactly_is_not() {
+    let eighty = "a".repeat(80);
+    let kept = invalid_pattern("ListDir", "ignore_globs", &eighty, PatternError::Empty);
+    assert!(
+        kept.to_string().contains(&format!("\"{eighty}\" does")),
+        "{kept}"
+    );
+    let long = "a".repeat(81);
+    let cut = invalid_pattern("ListDir", "ignore_globs", &long, PatternError::Empty);
+    assert!(
+        cut.to_string().contains(&format!("\"{eighty}...\" does")),
+        "{cut}"
+    );
+}
+
+#[test]
+fn a_pattern_is_cut_on_a_character_boundary() {
+    // 79 ASCII bytes and then a 4-byte emoji: byte 80 is inside the emoji,
+    // so the echo stops at byte 79 rather than splitting it.
+    let pattern = format!("{}\u{1f4e6}tail", "a".repeat(79));
+    let text =
+        invalid_pattern("ListDir", "ignore_globs", &pattern, PatternError::Empty).to_string();
+    assert!(
+        text.contains(&format!("\"{}...\" does", "a".repeat(79))),
+        "{text}"
+    );
+    assert!(!text.contains('\u{1f4e6}'), "{text}");
 }

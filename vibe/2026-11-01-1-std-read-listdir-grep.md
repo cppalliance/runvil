@@ -406,7 +406,7 @@ Commit: one commit holding the shared code, the Read tool, `read.json`, `EDITS.m
 
 <step-3>
 
-### Step 3: Glob matcher and real ListDir
+### Step 3: Glob matcher and real ListDir [completed]
 
 - Component: `dir-tool`
 - Tests:

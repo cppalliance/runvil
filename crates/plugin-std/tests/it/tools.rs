@@ -1,5 +1,5 @@
 //! The `std` Pack through the crate's `install`: the one Pack it inserts
-//! with its config, the six tools `construct` names under the Pack id it
+//! with its config, the seven tools `construct` names under the Pack id it
 //! receives, and what a call answers.
 
 use std::future::Future;
@@ -127,7 +127,7 @@ fn install_returns_the_registrys_refusal() {
 }
 
 #[test]
-fn construct_names_six_tools_under_the_pack_id_it_receives() {
+fn construct_names_seven_tools_under_the_pack_id_it_receives() {
     let Ok(pack) = construct("files", Value::Null) else {
         panic!("construct succeeds with no configuration");
     };
@@ -144,7 +144,8 @@ fn construct_names_six_tools_under_the_pack_id_it_receives() {
             "files/replace",
             "files/rm",
             "files/glob",
-            "files/grep"
+            "files/grep",
+            "files/dir"
         ]
     );
 }
@@ -166,6 +167,7 @@ fn every_tool_carries_cursors_name_for_it_as_its_wire_name() {
             ("std/rm".to_owned(), Some("Delete".to_owned())),
             ("std/glob".to_owned(), Some("Glob".to_owned())),
             ("std/grep".to_owned(), Some("Grep".to_owned())),
+            ("std/dir".to_owned(), Some("ListDir".to_owned())),
         ]
     );
 }
@@ -284,6 +286,43 @@ fn read_answers_the_numbered_lines_of_a_seeded_file_as_untrusted_output() {
     .expect("a seeded file reads");
     assert_eq!(output.text(), "     1|hello\n     2|world\n");
     assert_eq!(output.trust(), OutputTrust::Untrusted);
+}
+
+#[test]
+fn list_dir_answers_the_tree_of_a_seeded_directory_as_untrusted_output() {
+    let output = call_seeded(
+        "dir",
+        &[
+            ("/proj/README.md", b"hello"),
+            ("/proj/src/lib.rs", b"fn main() {}"),
+            ("/proj/.git/HEAD", b"ref"),
+        ],
+        json!({ "target_directory": "/proj" }),
+    )
+    .expect("a seeded directory lists");
+    assert_eq!(
+        output.text(),
+        "/proj/\n  - README.md\n  - src/\n    - lib.rs"
+    );
+    assert_eq!(output.trust(), OutputTrust::Untrusted);
+}
+
+#[test]
+fn list_dir_of_a_missing_path_fails_with_the_does_not_exist_text() {
+    let error =
+        call("dir", json!({ "target_directory": "/nope" })).expect_err("the directory is missing");
+    assert_eq!(error.to_string(), "Path does not exist: /nope");
+}
+
+#[test]
+fn list_dir_leaves_out_what_ignore_globs_match() {
+    let output = call_seeded(
+        "dir",
+        &[("/proj/a.md", b"x"), ("/proj/b.log", b"y")],
+        json!({ "target_directory": "/proj", "ignore_globs": ["*.log"] }),
+    )
+    .expect("a seeded directory lists");
+    assert_eq!(output.text(), "/proj/\n  - a.md");
 }
 
 #[test]

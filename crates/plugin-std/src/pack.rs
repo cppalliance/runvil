@@ -1,6 +1,6 @@
 //! The crate's Plugin, [`install`], the `std` Pack's `PackInfo`, the
 //! `construct` that builds its one shared object, and the stub that every
-//! tool but Read still answers with in this build.
+//! tool but Read and ListDir still answers with in this build.
 
 use std::sync::Arc;
 
@@ -13,7 +13,8 @@ use serde_json::{Value, json};
 use crate::spec::{self, Definition};
 
 /// What a call to a tool that is still a stub answers in this build, when
-/// its arguments match the schema. Read is real and never answers this.
+/// its arguments match the schema. Read and ListDir are real and never
+/// answer this.
 ///
 /// The text says the implementation is missing rather than that the call
 /// was wrong, because a model that reads it should stop calling the tool.
@@ -121,6 +122,7 @@ impl Pack for Std {
             crate::check::check(&definition.wire_name, &definition.parameters, &args)?;
             match definition.segment {
                 "read" => crate::read::call(cx.access(), definition, &args),
+                "dir" => crate::dir::call(cx.access(), definition, &args),
                 _ => Ok(ToolOutput::trusted(stub(&definition.wire_name))),
             }
         })

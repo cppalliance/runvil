@@ -1,7 +1,7 @@
 //! Unit tests for the text module: the decode ladder, the binary sniff,
 //! the line splitter, and the boundary clip.
 
-use super::{MAX_FILE_BYTES, clip_to_boundary, decode, sniff_binary, split_lines};
+use super::{BODY_CAP, MAX_FILE_BYTES, clip_to_boundary, decode, sniff_binary, split_lines};
 
 /// The UTF-16 little-endian bytes of `text`, behind the `FF FE` mark.
 fn utf16_le(text: &str) -> Vec<u8> {
@@ -25,6 +25,11 @@ fn utf16_be(text: &str) -> Vec<u8> {
 fn the_file_ceiling_is_sixteen_mebibytes() {
     assert_eq!(MAX_FILE_BYTES, 16 * 1024 * 1024);
     assert_eq!(MAX_FILE_BYTES, 16_777_216);
+}
+
+#[test]
+fn the_body_cap_the_listing_and_search_tools_share_is_fifteen_thousand_bytes() {
+    assert_eq!(BODY_CAP, 15_000);
 }
 
 #[test]

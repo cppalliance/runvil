@@ -9,6 +9,10 @@
 /// The largest file, in bytes, a file tool reads: 16 MiB.
 pub(crate) const MAX_FILE_BYTES: u64 = 16_777_216;
 
+/// The most bytes of tree or match lines a listing or search returns:
+/// 15,000. ListDir and Grep share it.
+pub(crate) const BODY_CAP: usize = 15_000;
+
 /// How many leading bytes [`sniff_binary`] looks at.
 const SNIFF_BYTES: usize = 8_192;
 

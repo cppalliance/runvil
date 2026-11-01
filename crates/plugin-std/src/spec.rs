@@ -1,10 +1,11 @@
-//! The six tool definitions this crate ships, each an embedded JSON file.
+//! The seven tool definitions this crate ships, each an embedded JSON file.
 //!
 //! A file holds the name the model calls the tool by, the description the
 //! model reads, and the JSON Schema its arguments must match. The names,
 //! descriptions, and schemas are Cursor's own, with the lines that
-//! describe behavior this Pack does not have removed; `schemas/EDITS.md`
-//! records each of those edits.
+//! describe behavior this Pack does not have removed, except for
+//! `dir.json`, which is this crate's own; `schemas/EDITS.md` records each
+//! of those edits and why `dir.json` is new.
 
 use std::sync::LazyLock;
 
@@ -38,13 +39,14 @@ struct File {
 }
 
 /// Each tool's id segment beside the source of the file it reads.
-const SOURCES: [(&str, &str); 6] = [
+const SOURCES: [(&str, &str); 7] = [
     ("read", include_str!("../schemas/read.json")),
     ("write", include_str!("../schemas/write.json")),
     ("replace", include_str!("../schemas/replace.json")),
     ("rm", include_str!("../schemas/rm.json")),
     ("glob", include_str!("../schemas/glob.json")),
     ("grep", include_str!("../schemas/grep.json")),
+    ("dir", include_str!("../schemas/dir.json")),
 ];
 
 /// The parsed definitions, one per [`SOURCES`] entry in order.
@@ -79,6 +81,7 @@ fn fill(segment: &str, description: &str) -> String {
         "read" => description
             .replace("{byte_cap}", &crate::read::BYTE_CAP.to_string())
             .replace("{file_ceiling}", &crate::text::MAX_FILE_BYTES.to_string()),
+        "dir" => description.replace("{body_cap}", &crate::text::BODY_CAP.to_string()),
         _ => description.to_owned(),
     }
 }
