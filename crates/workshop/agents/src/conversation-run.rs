@@ -75,9 +75,7 @@ impl Conversation {
     fn take_report(&self, result: Result<RunReport, HarnessError>) {
         let message = match result {
             Ok(report) => {
-                if let Some(run) = report.run_id {
-                    self.note_run(run);
-                }
+                self.note_run(report.run_id);
                 match report.outcome {
                     RunOutcome::Completed { .. } => return,
                     RunOutcome::Cancelled => {

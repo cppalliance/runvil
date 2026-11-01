@@ -161,7 +161,7 @@ async fn a_close_with_a_question_open_cancels_it_and_reports_the_interrupt() {
 }
 
 #[tokio::test]
-async fn a_close_before_the_run_starts_ends_it_with_no_run() {
+async fn a_close_before_the_run_starts_ends_its_recorded_run_cancelled() {
     let table = Conversations::new();
     let conversation = table.open("early");
     let recorder = Arc::new(MemoryRecorder::new());
@@ -170,10 +170,11 @@ async fn a_close_before_the_run_starts_ends_it_with_no_run() {
     conversation.close();
     ended(start(&conversation, &recorder, "return 'never'")).await;
 
-    assert_eq!(
-        conversation.run_id(),
-        None,
-        "the recorder never began a run"
+    let run = conversation.run_id().expect("the recorder began the run");
+    assert_eq!(recorder.outcome(run), Some(RunOutcome::Cancelled));
+    assert!(
+        recorder.records(run).is_empty(),
+        "the run ended before its prompt was parsed"
     );
     assert_eq!(
         reports(&mut errors)

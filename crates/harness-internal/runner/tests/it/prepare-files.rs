@@ -13,13 +13,13 @@ use std::sync::Arc;
 use harness_runner::display_chain;
 use harness_runner::effect_loop::drive_run;
 use harness_runner::files::{InputFileError, read_output};
-use harness_runner::prepare::{PrepareError, Prepared, prepare};
+use harness_runner::prepare::{PrepareError, Prepared};
 use harness_runner::recorder::{MemoryRecorder, RunErrorKind, RunOutcome};
 use runvil::cancel::CancelHandle;
 use runvil::event::Event;
 use runvil::vfs::{MemoryBackend, Mode, ModePolicy, Origin, VfsError, VfsRef};
 
-use super::{PLAIN, bare, completed, recorded_parse_events, recorder, services};
+use super::{PLAIN, bare, begin_and_prepare, completed, recorded_parse_events, recorder, services};
 
 /// A prompt declaring `paper.md` as its input and `report.md` as its
 /// output, whose one section writes the output from the input.
@@ -39,7 +39,7 @@ async fn prepare_over(
     let mut services = services(&recorder, bare());
     services.vfs = vfs.clone();
     services.input_text = input_text.map(str::to_owned);
-    let prepared = prepare(source, "", services).await;
+    let prepared = begin_and_prepare(source, services).await;
     (recorder, prepared)
 }
 

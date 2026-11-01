@@ -1,19 +1,20 @@
-//! What `run` returns when the run cannot reach an outcome of its own: a
-//! model list the broker cannot fetch is `HarnessError::Model`, a cancel
-//! before `run` or while the broker holds its list is a cancelled report
-//! with no run, a
-//! recorder that refuses a write is `HarnessError::Recorder` holding the
-//! run id it issued, and a broker that panics answers its round
-//! `Dropped`.
+//! How `run` ends a run that never reaches the Engine, and what it
+//! returns when the recorder refuses: a model list the broker cannot
+//! fetch ends the recorded run as a `Completion` failure, a list without
+//! the selection as a `RequirementsUnmet` failure, and a cancel before
+//! `run` or while the broker holds its list as cancelled, each before the
+//! prompt is parsed; a recorder that refuses a write is
+//! `HarnessError::Recorder` holding the run id it issued; and a broker
+//! that panics answers its round `Dropped`.
 
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
 use std::task::Poll;
 
 use harness_runner::display_chain;
-use harness_runner::environment::CurrentModelError;
-use harness_runner::recorder::MemoryRecorder;
-use harness_runner::{Harness, HarnessError, HostContext};
+use harness_runner::environment::{CurrentModelError, HostSnapshot};
+use harness_runner::recorder::{MemoryRecorder, RunErrorKind};
+use harness_runner::{Harness, HarnessError, HostContext, RunReport, RunRequest};
 use runvil::model::{Completion, CompletionError, CompletionErrorKind};
 use runvil_plugin::{HostServices, PackRegistry};
 
@@ -51,32 +52,74 @@ fn harness_over(recorder: &Arc<FailingRecorder>, broker: ScriptedBroker) -> Harn
     )
 }
 
-#[tokio::test]
-async fn a_model_list_the_broker_cannot_fetch_returns_the_model_error_and_begins_no_run() {
-    let recorder = Arc::new(FailingRecorder::never_failing());
-    let broker = ScriptedBroker::replying().listing(Listing::Fails(CompletionErrorKind::Transport));
-
-    let error = harness_over(&recorder, broker)
-        .run(request(PLAIN))
-        .await
-        .expect_err("a failed listing is the run's error");
-    assert!(
-        matches!(
-            error,
-            HarnessError::Model(CurrentModelError::CatalogFetchFailed(_))
-        ),
-        "{error:?}"
+/// Asserts that `report` is of a run that ended before its prompt was
+/// parsed: the recorder began it, ended it with the reported outcome, and
+/// holds no record between, and the report has no output.
+#[track_caller]
+fn assert_ended_before_the_parse(recorder: &FailingRecorder, report: &RunReport) {
+    assert_eq!(recorder.begun(), [report.run_id], "the run began");
+    assert_eq!(
+        recorder.inner().outcome(report.run_id),
+        Some(report.outcome.clone()),
+        "the recorder ends the run with the reported outcome"
     );
     assert!(
-        display_chain(&error).contains(CompletionErrorKind::Transport.phrase()),
-        "the chain carries the broker's message: {}",
-        display_chain(&error)
+        recorder.inner().records(report.run_id).is_empty(),
+        "the run ended before its prompt was parsed"
     );
-    assert_eq!(recorder.calls(), 0, "the run never reached the recorder");
+    assert_eq!(recorder.calls(), 2, "the run's begin and its end");
+    assert_eq!(report.output, Err(OutputError::NotCompleted));
 }
 
 #[tokio::test]
-async fn a_cancel_while_the_broker_holds_its_list_returns_a_cancelled_report_with_no_run() {
+async fn a_model_list_the_broker_cannot_fetch_ends_the_recorded_run_as_a_completion_failure() {
+    let recorder = Arc::new(FailingRecorder::never_failing());
+    let kind = CompletionErrorKind::Transport;
+    let broker = ScriptedBroker::replying().listing(Listing::Fails(kind));
+
+    let report = harness_over(&recorder, broker)
+        .run(request(PLAIN))
+        .await
+        .expect("a failed listing is the run's outcome");
+    let lookup = CurrentModelError::CatalogFetchFailed(CompletionError::new(kind, kind.phrase()));
+    assert_eq!(
+        report.outcome,
+        RunOutcome::Failed {
+            kind: RunErrorKind::Completion,
+            message: display_chain(&lookup),
+        },
+        "the message is the lookup's cause chain, the broker's message included"
+    );
+    assert_ended_before_the_parse(&recorder, &report);
+}
+
+#[tokio::test]
+async fn a_selection_absent_from_the_model_list_ends_the_recorded_run_as_an_unmet_requirement() {
+    let recorder = Arc::new(FailingRecorder::never_failing());
+    let request = RunRequest {
+        host: HostSnapshot {
+            selected_model: Some("absent".to_owned()),
+            ..HostSnapshot::default()
+        },
+        ..request(PLAIN)
+    };
+
+    let report = harness_over(&recorder, ScriptedBroker::replying())
+        .run(request)
+        .await
+        .expect("a selection the list lacks is the run's outcome");
+    assert_eq!(
+        report.outcome,
+        RunOutcome::Failed {
+            kind: RunErrorKind::RequirementsUnmet,
+            message: "the selected model `absent` is absent from the fetched catalog".to_owned(),
+        }
+    );
+    assert_ended_before_the_parse(&recorder, &report);
+}
+
+#[tokio::test]
+async fn a_cancel_while_the_broker_holds_its_list_ends_the_recorded_run_cancelled() {
     let recorder = Arc::new(FailingRecorder::never_failing());
     let broker = ScriptedBroker::replying().listing(Listing::Holds);
     let listings = broker.listings();
@@ -93,15 +136,13 @@ async fn a_cancel_while_the_broker_holds_its_list_returns_a_cancelled_report_wit
         },
     )
     .await
-    .expect("a cancel before the run begins is an outcome");
-    assert_eq!(report.run_id, None, "no run began");
+    .expect("a cancel during the model lookup is an outcome");
     assert_eq!(report.outcome, RunOutcome::Cancelled);
-    assert_eq!(report.output, Err(OutputError::NotCompleted));
-    assert_eq!(recorder.calls(), 0, "the run never reached the recorder");
+    assert_ended_before_the_parse(&recorder, &report);
 }
 
 #[tokio::test]
-async fn a_cancel_before_run_returns_a_cancelled_report_with_no_run_against_a_ready_listing() {
+async fn a_cancel_before_run_ends_the_recorded_run_cancelled_against_a_ready_listing() {
     let recorder = Arc::new(FailingRecorder::never_failing());
     let harness = harness_over(&recorder, ScriptedBroker::replying());
     harness.control().cancel();
@@ -110,10 +151,8 @@ async fn a_cancel_before_run_returns_a_cancelled_report_with_no_run_against_a_re
         .run(request(PLAIN))
         .await
         .expect("a cancel before the run begins is an outcome");
-    assert_eq!(report.run_id, None, "no run began");
     assert_eq!(report.outcome, RunOutcome::Cancelled);
-    assert_eq!(report.output, Err(OutputError::NotCompleted));
-    assert_eq!(recorder.calls(), 0, "the run never reached the recorder");
+    assert_ended_before_the_parse(&recorder, &report);
 }
 
 #[tokio::test]
@@ -127,6 +166,25 @@ async fn a_recorder_failure_returns_the_recorder_error_holding_the_issued_run_id
         panic!("the refusal is the recorder's: {error:?}");
     };
     assert_eq!(run, None, "a refused begin issued no run");
+
+    // A run that ends before its prompt is parsed has one write after its
+    // begin: its end.
+    let refuses_end = Arc::new(FailingRecorder::failing_on(2));
+    let harness = harness_over(&refuses_end, ScriptedBroker::replying());
+    harness.control().cancel();
+    let error = harness
+        .run(request(STORES))
+        .await
+        .expect_err("a refused end is the run's error");
+    let HarnessError::Recorder { run, .. } = error else {
+        panic!("the refusal is the recorder's: {error:?}");
+    };
+    assert_eq!(
+        run,
+        Some(refuses_end.begun()[0]),
+        "the error holds the issued run id"
+    );
+    assert_eq!(refuses_end.inner().outcome(refuses_end.begun()[0]), None);
 
     // Every later call names the run the recorder issued: the parse's
     // events in preparation, the loop's records, and the run's end.
@@ -190,7 +248,7 @@ async fn a_panicking_broker_answers_its_round_dropped() {
             },
             "a panic in the {what}: the pcall caught the dropped round"
         );
-        let records = recorder.records(report.run_id.expect("the run began"));
+        let records = recorder.records(report.run_id);
         assert_eq!(
             answers_to(&records, "Chat"),
             [serde_json::json!("Dropped")],

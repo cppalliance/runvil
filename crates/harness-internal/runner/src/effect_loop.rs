@@ -40,7 +40,10 @@
 //! performer can never leave the run waiting forever. A Vfs operation that
 //! panics is caught where it runs and answered `Dropped` the same way.
 //!
-//! The run's `Done` ends the run with its outcome at the recorder.
+//! The run's `Done` ends the run with its outcome at the recorder. A run
+//! that is pending with nothing issued and nothing in flight ends there as
+//! an internal failure: the run reports a stall itself, so reaching this
+//! means the loop lost an effect.
 
 use std::future::{Future, poll_fn};
 use std::panic::{AssertUnwindSafe, catch_unwind};
@@ -57,49 +60,41 @@ use runvil::{Run, Step};
 
 use crate::harness::StopSignal;
 use crate::performers::{BoxFuture, Performers};
-use crate::recorder::{Record, RecordKind, RecorderError, RunId, RunOutcome, RunRecorder};
+use crate::recorder::{
+    Record, RecordKind, RecorderError, RunErrorKind, RunId, RunOutcome, RunRecorder,
+};
 
 #[path = "effect_loop-flight.rs"]
 mod flight;
 
 use flight::{Flights, Reach};
 
-/// Why the loop stopped without an outcome.
-#[derive(Debug, thiserror::Error)]
-#[non_exhaustive]
-pub enum DriveError {
-    /// The recorder refused a write; the run cannot be recorded, so it is
-    /// not driven further.
-    #[error(transparent)]
-    Recorder(#[from] RecorderError),
-    /// The run is pending with nothing issued and nothing in flight: the
-    /// run reports a stall itself, so reaching this means the loop lost an
-    /// effect.
-    #[error("the effect loop has nothing to await for a pending run")]
-    Stalled,
-}
+/// The message of the failure a stalled run ends with.
+const STALLED: &str = "the effect loop has nothing to await for a pending run";
 
 /// Drives `run` to its end inside the returned future: performs its
 /// effects through `performers`, hands every event, effect, and answer to
 /// `recorder` under `run_id`, and cancels the run when `cancel` fires.
-/// Ends the run at the recorder with its outcome and returns it.
+/// Ends the run at the recorder with its one outcome and returns it.
+///
+/// A run that is pending with nothing to await ends as failed with the
+/// kind `Internal`, once every future the loop still holds is torn down.
 ///
 /// The future is boxed internally: the step machinery is large, and the
 /// caller's own future stays small. It is `Send`, and it needs no runtime
 /// of its own: every performer future is polled inside it.
 ///
 /// # Errors
-/// Returns [`DriveError::Recorder`] when the recorder refuses a write and
-/// [`DriveError::Stalled`] when the run pends with nothing to await. In
-/// either case every effect still in flight is torn down with the future,
-/// the run is abandoned mid-flight, and the recorder is not told it ended.
+/// Returns the recorder's error when it refuses a write. That is the only
+/// error: every effect still in flight is torn down with the future, the
+/// run is abandoned mid-flight, and the recorder is not told it ended.
 pub async fn drive_run(
     run: Run,
     performers: Performers,
     recorder: Arc<dyn RunRecorder>,
     run_id: RunId,
     cancel: CancelHandle,
-) -> Result<RunOutcome, DriveError> {
+) -> Result<RunOutcome, RecorderError> {
     drive(run, performers, recorder, run_id, cancel, Arc::default()).await
 }
 
@@ -112,7 +107,7 @@ pub(crate) async fn drive(
     run_id: RunId,
     cancel: CancelHandle,
     stop: Arc<StopSignal>,
-) -> Result<RunOutcome, DriveError> {
+) -> Result<RunOutcome, RecorderError> {
     let cap = performers.tool.max_in_flight();
     let mut driver = Driver {
         run,
@@ -151,15 +146,14 @@ enum Woken {
 }
 
 impl Driver {
-    async fn drive(&mut self) -> Result<RunOutcome, DriveError> {
+    async fn drive(&mut self) -> Result<RunOutcome, RecorderError> {
         loop {
             match self.run.step() {
                 Step::Done { outcome, events } => {
                     self.commit_events(events).await?;
                     // `Done` is returned only once every effect is
                     // answered, so nothing is in flight.
-                    self.recorder.end_run(self.run_id, outcome.clone()).await?;
-                    return Ok(outcome);
+                    return self.end(outcome).await;
                 }
                 Step::Pending {
                     effects,
@@ -218,12 +212,26 @@ impl Driver {
                         continue;
                     }
                     if self.flights.is_empty() {
-                        return Err(DriveError::Stalled);
+                        // Nothing is owed an answer, but the set may still
+                        // hold aborted futures it has not polled.
+                        self.flights.clear();
+                        return self
+                            .end(RunOutcome::Failed {
+                                kind: RunErrorKind::Internal,
+                                message: STALLED.to_owned(),
+                            })
+                            .await;
                     }
                     self.await_answer().await?;
                 }
             }
         }
+    }
+
+    /// Ends the run at the recorder with `outcome` and returns it.
+    async fn end(&mut self, outcome: RunOutcome) -> Result<RunOutcome, RecorderError> {
+        self.recorder.end_run(self.run_id, outcome.clone()).await?;
+        Ok(outcome)
     }
 
     /// Waits for the next answer, then answers every effect already

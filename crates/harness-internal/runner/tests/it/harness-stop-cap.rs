@@ -144,7 +144,7 @@ async fn a_stop_drops_waiting_calls_without_starting_them() {
     );
     assert_eq!(held.started(), 10, "the waiting call never started");
     assert_eq!(held.dropped(), 10, "the stop tore down the ten in flight");
-    let records = recorder.records(report.run_id.expect("the run began"));
+    let records = recorder.records(report.run_id);
     assert_eq!(
         answers_to(&records, "ToolCall"),
         vec![json!("Dropped"); 11],
@@ -200,7 +200,7 @@ async fn a_stop_starts_a_waiting_call_that_survives_stops() {
     );
     assert_eq!(held.started(), 10);
     assert_eq!(held.dropped(), 10, "the stop tore down the ten holds");
-    let records = recorder.records(report.run_id.expect("the run began"));
+    let records = recorder.records(report.run_id);
     assert_eq!(
         answers_where(&records, "ToolCall", calls(HOLD_TOOL)),
         vec![json!("Dropped"); 10]
@@ -241,7 +241,7 @@ async fn cancelling_a_task_drops_its_question_to_the_operator() {
         1,
         "cancelling the task tore its question down"
     );
-    let records = recorder.records(report.run_id.expect("the run began"));
+    let records = recorder.records(report.run_id);
     assert_eq!(
         answers_where(&records, "ToolCall", calls(ASK_TOOL)),
         vec![json!("Dropped")],

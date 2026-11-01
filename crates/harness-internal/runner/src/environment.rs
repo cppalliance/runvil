@@ -12,6 +12,7 @@ use std::path::PathBuf;
 use runvil::model::{CompletionError, ModelId, ModelInfo};
 
 use crate::performers::InferenceBroker;
+use crate::recorder::RunErrorKind;
 
 /// The Host state a run reads when it launches.
 ///
@@ -43,8 +44,8 @@ impl HostSnapshot {
 
 /// The reason a run failed to resolve its model at launch.
 ///
-/// Each variant becomes the run's error, ends the launch, and is reported
-/// to the operator.
+/// Each variant ends the recorded run as failed, with the error's cause
+/// chain as the message.
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
 pub enum CurrentModelError {
@@ -55,6 +56,18 @@ pub enum CurrentModelError {
     /// The selected id is absent from the fetched catalog.
     #[error("the selected model `{0}` is absent from the fetched catalog")]
     SelectionAbsent(String),
+}
+
+impl CurrentModelError {
+    /// The Engine's kind for the run this failure ends: a model list the
+    /// broker cannot fetch is a completion failure, and a selection the
+    /// list lacks is an unmet requirement.
+    pub(crate) fn kind(&self) -> RunErrorKind {
+        match self {
+            CurrentModelError::CatalogFetchFailed(_) => RunErrorKind::Completion,
+            CurrentModelError::SelectionAbsent(_) => RunErrorKind::RequirementsUnmet,
+        }
+    }
 }
 
 /// Resolves the Host's current model for one run's context: lists

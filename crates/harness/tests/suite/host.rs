@@ -239,15 +239,30 @@ async fn stopping_an_in_flight_round_drops_the_call_and_the_prompts_pcall_catche
 }
 
 #[tokio::test]
-async fn a_run_cancelled_before_it_begins_ends_cancelled_and_is_never_recorded() {
-    let (harness, _round_started) = stuck_harness(stub_catalog().expect("the stub catalog builds"));
+async fn a_run_cancelled_before_it_begins_is_recorded_as_cancelled_before_its_parse() {
+    let recorder = Arc::new(MemoryRecorder::new());
+    let harness = Harness::new(
+        recorder.clone(),
+        Arc::new(Offline),
+        Arc::new(Clock),
+        Arc::new(HostContext::new(PackRegistry::new(), HostServices::new())),
+        HostServices::new(),
+    );
     harness.control().cancel();
     let report = harness
         .run(request("desk-patient", PATIENT))
         .await
         .expect("the run reaches an outcome");
     assert_eq!(report.outcome, RunOutcome::Cancelled);
-    assert_eq!(report.run_id, None);
+    assert_eq!(
+        recorder.outcome(report.run_id),
+        Some(RunOutcome::Cancelled),
+        "the recorder holds the cancelled run"
+    );
+    assert!(
+        recorder.records(report.run_id).is_empty(),
+        "the run ended before its prompt was parsed"
+    );
 }
 
 #[tokio::test]
@@ -270,7 +285,7 @@ async fn a_hosts_own_broker_streams_a_section_round_under_the_round_id_the_run_r
         .await
         .expect("the run reaches an outcome");
 
-    let records = recorder.records(report.run_id.expect("the run began"));
+    let records = recorder.records(report.run_id);
     let reply = records
         .iter()
         .filter(|record| record.kind == RecordKind::Event)

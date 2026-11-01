@@ -1,14 +1,15 @@
-//! The per-run Harness: `run` resolves the launch model through the
-//! Host's broker, prepares the request's source, drives the run as one
-//! future, and reads the declared output; source that fails to parse is a
-//! recorded failed run; a Vfs effect is answered inline as it is issued;
-//! and one run completes under a thread-parking executor with no runtime
-//! behind it. How a stop and a cancel reach the effects in flight sits in
-//! the `stop` child module, how a stop reaches the tool calls waiting for
-//! a slot and how a task's early end drops its stop-surviving call while
-//! the run goes on in the `stop_cap` child module, how what a stop
-//! reaches depends on when the loop sees it in the `stop_timing` child
-//! module, and every error `run` returns in the `errors` child module.
+//! The per-run Harness: `run` begins the run's record, resolves the
+//! launch model through the Host's broker, prepares the request's source,
+//! drives the run as one future, and reads the declared output; source
+//! that fails to parse is a recorded failed run; a Vfs effect is answered
+//! inline as it is issued; and one run completes under a thread-parking
+//! executor with no runtime behind it. How a stop and a cancel reach the
+//! effects in flight sits in the `stop` child module, how a stop reaches
+//! the tool calls waiting for a slot and how a task's early end drops its
+//! stop-surviving call while the run goes on in the `stop_cap` child
+//! module, how what a stop reaches depends on when the loop sees it in the
+//! `stop_timing` child module, and the runs that end before the prompt is
+//! parsed and the one error `run` returns in the `errors` child module.
 
 use std::future::Future;
 use std::pin::Pin;
@@ -179,7 +180,7 @@ async fn run_returns_the_declared_output_and_the_outcome_under_the_requests_name
         }
     );
     assert_eq!(report.output, Ok("seen: # Paper".to_owned()));
-    let run_id = report.run_id.expect("the run began at the recorder");
+    let run_id = report.run_id;
     assert_eq!(
         recorder.outcome(run_id),
         Some(report.outcome.clone()),
@@ -233,9 +234,7 @@ async fn source_that_fails_to_parse_ends_as_a_recorded_failed_run_with_its_parse
         .await
         .expect("a parse failure is the run's outcome, not an error");
 
-    let run_id = report
-        .run_id
-        .expect("the run began before its source parsed");
+    let run_id = report.run_id;
     let RunOutcome::Failed { kind, .. } = &report.outcome else {
         panic!("the run failed: {:?}", report.outcome);
     };
@@ -289,7 +288,7 @@ async fn a_vfs_effect_is_answered_inline_on_the_thread_that_polls_the_run() {
         vec![thread::current().id(); 2],
         "both writes ran inline, on the thread that polls the run"
     );
-    let records = recorder.records(report.run_id.expect("the run began"));
+    let records = recorder.records(report.run_id);
     for (position, effect) in records.iter().enumerate() {
         if effect.kind == RecordKind::Effect {
             let answer = &records[position + 1];

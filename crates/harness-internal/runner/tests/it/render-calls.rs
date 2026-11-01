@@ -199,7 +199,7 @@ async fn two_models_get_their_own_renders_and_a_stop_spares_only_the_surviving_c
         ],
         "each entry renders for its own round's model"
     );
-    let records = recorder.records(report.run_id.expect("the run began"));
+    let records = recorder.records(report.run_id);
     let mut rendered: Vec<Value> = answered(&records, "Render")
         .into_iter()
         .map(|(_, answer)| answer["Render"][0]["static_set"].clone())

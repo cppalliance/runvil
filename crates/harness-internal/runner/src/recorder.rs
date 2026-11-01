@@ -15,9 +15,12 @@
 //! the failure inside its recorder and returns `Ok`.
 //!
 //! A run's end is the Engine's [`RunOutcome`], as the run's last step
-//! returned it. A run that ends before the Engine runs it, because its
-//! prompt does not parse or its input cannot be put in place, ends with a
-//! failed outcome of the Engine's kind for that failure.
+//! returned it. A run that ends before the Engine runs it ends with an
+//! outcome of the same type: cancelled, when a cancel comes before or
+//! during the model lookup, or failed with the Engine's kind for the
+//! failure, when the model lookup fails, the prompt does not parse, or its
+//! input cannot be put in place. A run the effect loop loses track of
+//! ends as failed with the kind `Internal`.
 
 use std::error::Error;
 use std::fmt;

@@ -10,6 +10,12 @@
 //! goes on, the Host steers it through the [`RunControl`] it took from
 //! `Harness::control` before the run started.
 //!
+//! Every run gets a record and ends with one outcome: completed, failed
+//! with a kind and a message, or cancelled. The record begins before
+//! anything else, so a run cancelled before it starts, or one whose model
+//! cannot be resolved, is recorded too. The only [`HarnessError`] is a
+//! recorder that refuses a write.
+//!
 //! The crate's `run-prompt` example runs one prompt from start to end.
 
 pub use harness_runner::Harness;
@@ -18,7 +24,6 @@ pub use harness_runner::RunControl;
 pub use harness_runner::RunReport;
 pub use harness_runner::RunRequest;
 pub use harness_runner::display_chain;
-pub use harness_runner::environment::CurrentModelError;
 pub use harness_runner::environment::HostSnapshot;
 pub use harness_runner::files::OutputError;
 pub use harness_runner::performers::BoxFuture;

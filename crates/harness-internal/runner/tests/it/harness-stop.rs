@@ -128,7 +128,7 @@ async fn a_stop_drops_a_chat_round_a_tool_call_and_a_timer_and_a_pcall_keeps_the
         assert_eq!(held.started(), 1, "the {what} started once");
         assert_eq!(held.dropped(), 1, "the stopped {what} was torn down");
     }
-    let records = recorder.records(report.run_id.expect("the run began"));
+    let records = recorder.records(report.run_id);
     for kind in ["Chat", "ToolCall", "Timer"] {
         assert_eq!(
             answers_to(&records, kind),
@@ -159,7 +159,7 @@ async fn an_uncaught_stopped_round_ends_the_run_cancelled() {
     .expect("the run reaches an outcome");
 
     assert_eq!(report.outcome, RunOutcome::Cancelled);
-    let run_id = report.run_id.expect("the run began");
+    let run_id = report.run_id;
     assert_eq!(recorder.outcome(run_id), Some(RunOutcome::Cancelled));
     assert_eq!(
         answers_to(&recorder.records(run_id), "Chat"),
@@ -227,7 +227,7 @@ async fn two_calls_in_one_round_are_in_flight_at_once_and_a_stop_drops_both() {
         "the loop's pcall caught the dropped batch"
     );
     assert_eq!(held.dropped(), 2, "the stop tore both calls down");
-    let records = recorder.records(report.run_id.expect("the run began"));
+    let records = recorder.records(report.run_id);
     assert_eq!(
         answers_to(&records, "ToolCall"),
         [json!("Dropped"), json!("Dropped")],
@@ -281,7 +281,7 @@ async fn a_chat_shaped_prompt_returns_to_its_question_after_a_stop_during_a_tool
         1,
         "the cancel tore down the second question"
     );
-    let records = recorder.records(report.run_id.expect("the run began"));
+    let records = recorder.records(report.run_id);
     assert_eq!(
         answers_where(&records, "ToolCall", calls("harness/hold")),
         [json!("Dropped")],
@@ -346,7 +346,7 @@ async fn a_stop_leaves_a_question_to_the_operator_open() {
         },
         "the question survived the stop and its answer ended the run"
     );
-    let records = recorder.records(report.run_id.expect("the run began"));
+    let records = recorder.records(report.run_id);
     assert_eq!(answers_to(&records, "ToolCall").len(), 1);
     assert_ne!(answers_to(&records, "ToolCall")[0], json!("Dropped"));
 }
@@ -410,6 +410,6 @@ async fn a_cancel_drops_a_question_to_the_operator() {
         1,
         "the cancel tore the question down"
     );
-    let records = recorder.records(report.run_id.expect("the run began"));
+    let records = recorder.records(report.run_id);
     assert_eq!(answers_to(&records, "ToolCall"), [json!("Dropped")]);
 }

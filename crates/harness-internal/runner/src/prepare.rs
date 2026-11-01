@@ -1,18 +1,19 @@
 //! Run preparation: everything between a prompt's source text and a `Run`
 //! the effect loop can drive.
 //!
-//! Here the Harness draws the inputs the Engine refuses to draw itself:
-//! the run's seed from the OS CSPRNG and its `started_at` from the wall
-//! clock, both handed to the recorder when the run begins, before anything
-//! else, so the record holds them verbatim. Then the steps that build the
-//! run: parse; put the prompt's declared `input:` file in place in the
-//! store (`files::stage_input`); hand the run's whole filesystem, real
-//! directories and the declared store, to the context as given; wait for
-//! every built Pack to be ready, or for the run's cancel; take the
-//! run's snapshot of the Host's Packs with the run's own services,
-//! which yields the catalog, the roster, the preludes, and the tool
-//! performer; set the first three and the Host's model on the context;
-//! and build the `Run` beside its performers.
+//! [`begin`] draws the inputs the Engine refuses to draw itself: the
+//! run's seed from the OS CSPRNG and its `started_at` from the wall
+//! clock, both handed to the recorder as the run begins, so the record
+//! holds them verbatim. `Harness::run_to_end` begins the run before
+//! anything else, so every run has a record. Then [`prepare`] takes the
+//! steps that build the run: parse; put the prompt's declared `input:`
+//! file in place in the store (`files::stage_input`); hand the run's
+//! whole filesystem, real directories and the declared store, to the
+//! context as given; wait for every built Pack to be ready, or for the
+//! run's cancel; take the run's snapshot of the Host's Packs with the
+//! run's own services, which yields the catalog, the roster, the
+//! preludes, and the tool performer; set the first three and the Host's
+//! model on the context; and build the `Run` beside its performers.
 //!
 //! A prompt that fails to parse, or an input file that cannot be put in
 //! place, is a run that ended before it began: the recorder ends it as
@@ -71,13 +72,14 @@ pub struct Services {
     /// The run's cancel flag: handed to the context and polled by the
     /// Engine.
     pub cancel: CancelHandle,
-    /// The recorder the run begins at and the loop will write to.
+    /// The recorder the run began at, which preparation and the loop
+    /// write to.
     pub recorder: Arc<dyn RunRecorder>,
     /// Performs the run's `Chat` effects.
     pub broker: Arc<dyn InferenceBroker>,
     /// Performs the run's `Timer` effects.
     pub timer: Arc<dyn Timer>,
-    /// The run's name: the run metadata's `name` and every event's
+    /// The run's name, the one it began under: every event's
     /// `execution`.
     pub name: String,
     /// The Host's default model, when one is selected: the run fills all
@@ -99,6 +101,17 @@ impl fmt::Debug for Services {
             .field("ui", &self.ui)
             .finish_non_exhaustive()
     }
+}
+
+/// A run begun at its recorder, with the seed and start its record holds.
+#[derive(Debug, Clone, Copy)]
+pub struct Begun {
+    /// The run's id at the recorder, begun and still open.
+    pub run_id: RunId,
+    /// The seed the Harness drew for the run.
+    pub seed: RunSeed,
+    /// When the run started, as the Harness read the wall clock.
+    pub started_at: Timestamp,
 }
 
 /// A run ready for the effect loop, whose seed, start, and parse events are
@@ -148,12 +161,11 @@ pub enum PrepareError {
         source: InputFileError,
     },
     /// The recorder refused a write; the run cannot be recorded, so it is
-    /// not prepared. `run` is the run the recorder issued, `None` when it
-    /// refused to begin one.
+    /// not prepared.
     #[error("the run could not be recorded")]
     Recorder {
-        /// The run the recorder issued before it refused.
-        run: Option<RunId>,
+        /// The run the recorder refused a write for.
+        run: RunId,
         /// The recorder's refusal.
         #[source]
         source: RecorderError,
@@ -161,27 +173,52 @@ pub enum PrepareError {
 }
 
 impl PrepareError {
-    /// The run this failure ended at the recorder, beside the failed
-    /// outcome it was ended with, or, for a recorder refusal, which ends
-    /// nothing, the run the recorder issued and its refusal.
-    pub(crate) fn ended(self) -> Result<(RunId, RunOutcome), (Option<RunId>, RecorderError)> {
+    /// The failed outcome this failure ended the run with, or, for a
+    /// recorder refusal, which ends nothing, the refusal.
+    pub(crate) fn ended(self) -> Result<RunOutcome, RecorderError> {
         match self {
-            PrepareError::Parse { run_id, source } => {
-                Ok((run_id, failed(RunErrorKind::Parse, &source)))
-            }
-            PrepareError::Input { run_id, source } => Ok((run_id, failed(source.kind(), &source))),
-            PrepareError::Recorder { run, source } => Err((run, source)),
+            PrepareError::Parse { source, .. } => Ok(failed(RunErrorKind::Parse, &source)),
+            PrepareError::Input { source, .. } => Ok(failed(source.kind(), &source)),
+            PrepareError::Recorder { source, .. } => Err(source),
         }
     }
 }
 
-/// Prepares the prompt `source` for one run with `args`: draws the run's
-/// seed and start and begins the run at its recorder, parses the prompt,
-/// puts its declared input file in place, waits for every built Pack
-/// to be ready or for the run's cancel, takes the run's snapshot of the
-/// Host's Packs, sets the snapshot's catalog, roster, and declared
-/// preludes and the Host's model on the context, and builds the `Run` and
-/// its performers.
+/// Begins one run named `name` of the prompt `source` at `recorder`: draws
+/// the run's seed and start and hands both to the recorder with the
+/// prompt's hash.
+///
+/// # Errors
+/// Returns the recorder's refusal to begin the run.
+pub async fn begin(
+    recorder: &dyn RunRecorder,
+    name: &str,
+    source: &str,
+) -> Result<Begun, RecorderError> {
+    let seed = RunSeed::from_bytes(rand::random());
+    let started_at = now_timestamp();
+    let run_id = recorder
+        .begin_run(RunMeta {
+            name: name.to_owned(),
+            prompt_hash: prompt_hash(source),
+            seed,
+            flags: 0,
+            started_at: started_at.unix_millis(),
+        })
+        .await?;
+    Ok(Begun {
+        run_id,
+        seed,
+        started_at,
+    })
+}
+
+/// Prepares the prompt `source` for the run `begun` with `args`: parses
+/// the prompt, puts its declared input file in place, waits for every
+/// built Pack to be ready or for the run's cancel, takes the run's
+/// snapshot of the Host's Packs, sets the snapshot's catalog, roster, and
+/// declared preludes and the Host's model on the context, and builds the
+/// `Run` and its performers.
 ///
 /// A Pack whose `ready` fails is unavailable to this run, with its
 /// error as the reason. A cancel ends the wait, and each Pack is
@@ -199,6 +236,7 @@ impl PrepareError {
 pub async fn prepare(
     source: &str,
     args: &str,
+    begun: Begun,
     services: Services,
 ) -> Result<Prepared, PrepareError> {
     let Services {
@@ -214,23 +252,13 @@ pub async fn prepare(
         model,
         ui,
     } = services;
-
-    // The inputs the Engine leaves to the Harness, recorded before the
-    // run exists so the record has them however the run ends.
-    let seed = RunSeed::from_bytes(rand::random());
-    let started_at = now_timestamp();
-    let run_id = recorder
-        .begin_run(RunMeta {
-            name: name.clone(),
-            prompt_hash: prompt_hash(source),
-            seed,
-            flags: 0,
-            started_at: started_at.unix_millis(),
-        })
-        .await
-        .map_err(|source| PrepareError::Recorder { run: None, source })?;
+    let Begun {
+        run_id,
+        seed,
+        started_at,
+    } = begun;
     let recorded = |source| PrepareError::Recorder {
-        run: Some(run_id),
+        run: run_id,
         source,
     };
 

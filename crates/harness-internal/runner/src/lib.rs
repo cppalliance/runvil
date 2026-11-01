@@ -1,13 +1,15 @@
 //! harness-runner - the per-run Harness and the effect loop it drives: a
-//! [`Harness`] resolves the launch model through the Host's broker,
-//! prepares an Engine `Run` from the prompt's source (drawing the inputs
-//! the Engine refuses to draw itself, putting the declared input file in
-//! place, taking the run's snapshot of the [`HostContext`]'s Packs,
-//! beginning the run at its recorder), steps it, performs each chat,
-//! render, tool-call, and timer effect through its performer and answers
-//! each Vfs effect inline, feeds the answers back, hands every event,
-//! effect, and answer to the run's recorder, and reads the declared output
-//! file, all inside the one future [`Harness::run`] returns.
+//! [`Harness`] begins the run at its recorder with the inputs the Engine
+//! refuses to draw itself, resolves the launch model through the Host's
+//! broker, prepares an Engine `Run` from the prompt's source (putting the
+//! declared input file in place, taking the run's snapshot of the
+//! [`HostContext`]'s Packs), steps it, performs each chat, render,
+//! tool-call, and timer effect through its performer and answers each Vfs
+//! effect inline, feeds the answers back, hands every event, effect, and
+//! answer to the run's recorder, ends the run there with its one outcome,
+//! and reads the declared output file, all inside the one future
+//! [`Harness::run`] returns. A recorder that refuses a write is the only
+//! way a run ends without a recorded outcome.
 //!
 //! ## Invariants
 //!

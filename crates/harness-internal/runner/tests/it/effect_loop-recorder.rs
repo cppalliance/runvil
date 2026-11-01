@@ -1,5 +1,5 @@
 //! A recorder that refuses a write ends the drive: whichever call it
-//! refuses, the loop returns `DriveError::Recorder` and sends the recorder
+//! refuses, the loop returns the recorder's error and sends the recorder
 //! nothing more, and a refusal mid-run aborts the performers still out.
 
 use std::sync::Arc;
@@ -7,7 +7,7 @@ use std::sync::atomic::AtomicBool;
 use std::time::Duration;
 
 use harness_runner::display_chain;
-use harness_runner::effect_loop::{DriveError, drive_run};
+use harness_runner::effect_loop::drive_run;
 use harness_runner::recorder::{RecordKind, RunRecorder};
 use runvil::cancel::CancelHandle;
 use runvil::vfs::VfsRef;
@@ -56,10 +56,6 @@ async fn a_recorder_that_refuses_its_nth_call_ends_the_drive_with_a_recorder_err
         .await
         .expect_err("a refused call ends the drive");
 
-        assert!(
-            matches!(error, DriveError::Recorder(_)),
-            "call {call} of {total}: {error:?}"
-        );
         assert!(
             display_chain(&error).contains(&format!("refuses call {call}")),
             "call {call} of {total}: {}",
@@ -133,7 +129,11 @@ async fn a_recorder_that_refuses_an_answer_aborts_the_performers_still_out() {
     .await
     .expect_err("the refused answer ends the drive");
 
-    assert!(matches!(error, DriveError::Recorder(_)), "got {error:?}");
+    assert!(
+        display_chain(&error).contains(&format!("refuses call {}", first_answer + 1)),
+        "the chain names the recorder's reason: {}",
+        display_chain(&error)
+    );
     assert!(
         answers(&recorder.inner().records(run_id)).is_empty(),
         "the refused answer was not recorded"

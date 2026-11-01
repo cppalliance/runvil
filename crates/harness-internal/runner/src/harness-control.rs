@@ -62,9 +62,9 @@ impl RunControl {
     /// Every effect in flight, tool calls that survive stops included, is
     /// answered `Dropped`, and the run ends cancelled. Every tool call
     /// waiting for a slot is answered `Dropped` too, unstarted. A cancel
-    /// raised before the run begins ends the run before it reaches the
-    /// recorder. Calling `cancel` more than once is the same as calling it
-    /// once.
+    /// raised before the run begins still gives the run a record, which
+    /// ends cancelled before the prompt is parsed. Calling `cancel` more
+    /// than once is the same as calling it once.
     pub fn cancel(&self) {
         self.cancel.cancel();
     }

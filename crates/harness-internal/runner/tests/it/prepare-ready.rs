@@ -212,10 +212,13 @@ async fn a_pack_whose_ready_resolves_late_has_its_tools_in_the_run() {
     let (host, moves, startup) = slow_host(Phase::Starting);
     let recorder = recorder();
     let (prepared, ()) = tokio::time::timeout(PATIENCE, async {
-        tokio::join!(prepare(CALLS_SLOW, "", services(&recorder, host)), async {
-            startup.asked.notified().await;
-            moves.send(Phase::Ready).unwrap();
-        })
+        tokio::join!(
+            begin_and_prepare(CALLS_SLOW, services(&recorder, host)),
+            async {
+                startup.asked.notified().await;
+                moves.send(Phase::Ready).unwrap();
+            }
+        )
     })
     .await
     .expect("the Harness waits on the Pack's ready");
@@ -238,7 +241,7 @@ async fn every_starting_pack_is_asked_to_be_ready_before_any_of_them_answers() {
     let recorder = recorder();
     let (prepared, ()) = tokio::time::timeout(PATIENCE, async {
         tokio::join!(
-            prepare(COUNTS_OFFERED, "", services(&recorder, host)),
+            begin_and_prepare(COUNTS_OFFERED, services(&recorder, host)),
             async {
                 for (_, startup) in &handles {
                     startup.asked.notified().await;
@@ -375,11 +378,8 @@ async fn a_cancel_while_a_declared_pack_is_still_starting_ends_the_run_cancelled
     let report = report.expect("a cancelled run is reported");
     assert_eq!(report.outcome, RunOutcome::Cancelled);
     assert_eq!(report.output, Err(OutputError::NotCompleted));
-    let run_id = report
-        .run_id
-        .expect("the run began at the recorder before the wait");
     assert_eq!(
-        recorder.outcome(run_id),
+        recorder.outcome(report.run_id),
         Some(RunOutcome::Cancelled),
         "the recorder holds the cancel, not a refusal of the unready Pack"
     );
@@ -414,9 +414,7 @@ async fn a_refusal_after_a_cancel_cut_the_wait_short_ends_the_run_cancelled_with
         RunOutcome::Cancelled,
         "the missing web Pack would refuse the run, but the cancel came first"
     );
-    let run_id = report
-        .run_id
-        .expect("the run began at the recorder before the wait");
+    let run_id = report.run_id;
     assert_eq!(recorder.outcome(run_id), Some(RunOutcome::Cancelled));
     let events = recorded_parse_events(&recorder, run_id);
     assert!(
@@ -446,9 +444,7 @@ async fn a_cancel_that_lands_while_a_refusal_is_recorded_leaves_the_report_holdi
         .await
         .expect("a refused run ends at once")
         .expect("a refused run is reported");
-    let run_id = report
-        .run_id
-        .expect("the run began at the recorder before the refusal");
+    let run_id = report.run_id;
     assert!(
         matches!(
             report.outcome,

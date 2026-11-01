@@ -122,6 +122,14 @@ impl Flights {
         self.effects.len() + self.waiting.len()
     }
 
+    /// Tears down every future the set holds, aborted ones not yet polled
+    /// included, and every waiting call, with no answer for any of them.
+    pub(super) fn clear(&mut self) {
+        self.futures.clear();
+        self.effects.clear();
+        self.waiting.clear();
+    }
+
     /// Puts `answer`, the future of chat, render, or timer effect `id`, in
     /// flight under `provenance`. It never waits and never counts toward
     /// the cap.

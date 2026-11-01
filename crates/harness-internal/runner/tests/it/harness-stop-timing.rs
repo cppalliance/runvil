@@ -125,7 +125,7 @@ async fn a_stop_interrupts_a_timed_join_any_and_its_pcall_resumes_while_the_join
         0,
         "the stop left the child's question open"
     );
-    let records = recorder.records(report.run_id.expect("the run began"));
+    let records = recorder.records(report.run_id);
     assert_eq!(answers_to(&records, "Timer"), [json!("Dropped")]);
     let asks = answers_where(&records, "ToolCall", calls("user-input/ask"));
     assert_eq!(asks.len(), 1, "one question: {asks:?}");
@@ -168,7 +168,7 @@ async fn a_stop_seen_before_a_steps_effects_start_drops_the_round_in_flight_and_
         },
         "the child's pcall caught its dropped round, and the main joined the child"
     );
-    let records = recorder.records(report.run_id.expect("the run began"));
+    let records = recorder.records(report.run_id);
     assert_eq!(
         answers_to(&records, "Chat"),
         [json!("Dropped")],
@@ -218,7 +218,7 @@ async fn a_stop_with_only_a_question_open_spares_the_round_after_its_answer() {
         "the round reached the broker"
     );
     assert_eq!(operator.abandoned.load(Ordering::SeqCst), 0);
-    let records = recorder.records(report.run_id.expect("the run began"));
+    let records = recorder.records(report.run_id);
     let chats = answers_to(&records, "Chat");
     assert_eq!(chats.len(), 1, "one round: {chats:?}");
     assert_ne!(
@@ -257,7 +257,7 @@ async fn a_stop_raised_with_nothing_in_flight_changes_nothing_for_the_next_effec
         1,
         "the round reached the broker"
     );
-    let records = recorder.records(report.run_id.expect("the run began"));
+    let records = recorder.records(report.run_id);
     let chats = answers_to(&records, "Chat");
     assert_eq!(chats.len(), 1, "one round: {chats:?}");
     assert_ne!(

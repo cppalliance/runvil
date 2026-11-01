@@ -309,9 +309,8 @@ async fn an_ask_is_answered_when_the_registry_receives_the_text() {
         },
         "the operator's text is the section's return value, byte-exact"
     );
-    let run = report.run_id.expect("the recorder began the run");
     assert_eq!(
-        recorder.outcome(run),
+        recorder.outcome(report.run_id),
         Some(report.outcome),
         "the recorder holds the operator's text in the run's outcome"
     );

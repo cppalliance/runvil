@@ -87,8 +87,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 4. The report says how the run ended and what it left at its output
     //    file, and the recorder holds the run's outcome.
     assert!(matches!(report.outcome, RunOutcome::Completed { .. }));
-    let run_id = report.run_id.ok_or("the run began")?;
-    assert!(recorder.outcome(run_id).is_some());
+    assert!(recorder.outcome(report.run_id).is_some());
     let greeting = report.output?;
     assert_eq!(greeting, "Hello, desk.");
     println!("{greeting}");

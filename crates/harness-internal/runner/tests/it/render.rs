@@ -338,10 +338,7 @@ async fn run(
         RunOutcome::Completed { final_text } => final_text,
         other => panic!("the run completes: {other:?}"),
     };
-    (
-        final_text,
-        recorder.records(report.run_id.expect("the run began")),
-    )
+    (final_text, recorder.records(report.run_id))
 }
 
 /// Each effect whose record is keyed by `kind`, as its body beside its

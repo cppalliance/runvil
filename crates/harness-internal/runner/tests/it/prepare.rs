@@ -2,8 +2,8 @@
 //! meet is prepared, and its run's first step ends it as failed with the
 //! Engine's own notice; a prompt that does not parse fails preparation
 //! under the `Parse` kind; each leaves only its parse events at the
-//! recorder; each preparation draws a fresh seed and start, both handed
-//! to the recorder when the run begins under the run's name; and the
+//! recorder; each run's begin draws a fresh seed and start, both handed
+//! to the recorder under the run's name; and the
 //! prepared tool performer sends a `ToolCall` effect to the Pack its id
 //! names. The run's optional input broker - one of its own services, lent
 //! to every tool call and behind the fixture ask Pack - sits in the
@@ -17,7 +17,7 @@ use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use harness_runner::effect_loop::drive_run;
-use harness_runner::prepare::{PrepareError, Prepared, Services, prepare};
+use harness_runner::prepare::{PrepareError, Prepared, Services, begin, prepare};
 use harness_runner::recorder::{MemoryRecorder, RecordKind, RunErrorKind, RunId, RunOutcome};
 use harness_runner::{HostContext, display_chain};
 use runvil::cancel::CancelHandle;
@@ -111,6 +111,18 @@ pub(crate) fn services(recorder: &Arc<MemoryRecorder>, host: HostContext) -> Ser
         model: None,
         ui: None,
     }
+}
+
+/// Begins a run of `source` under the name `services` holds at the
+/// recorder it holds, then prepares the run with no arguments.
+pub(crate) async fn begin_and_prepare(
+    source: &str,
+    services: Services,
+) -> Result<Prepared, PrepareError> {
+    let begun = begin(&*services.recorder, &services.name, source)
+        .await
+        .expect("the memory recorder begins the run");
+    prepare(source, "", begun, services).await
 }
 
 /// The fixture Pack `tools`: one tool, `tools/echo`, echoing its
@@ -213,7 +225,7 @@ async fn an_unmet_requirement_ends_the_prepared_run_as_failed_with_the_engines_n
 #[tokio::test]
 async fn a_prompt_that_does_not_parse_fails_preparation_and_its_run_ends_as_a_parse_failure() {
     let recorder = recorder();
-    let error = prepare(UNCLOSED, "", services(&recorder, bare()))
+    let error = begin_and_prepare(UNCLOSED, services(&recorder, bare()))
         .await
         .expect_err("a prompt without a closed frontmatter does not parse");
 
@@ -240,10 +252,10 @@ async fn a_prompt_that_does_not_parse_fails_preparation_and_its_run_ends_as_a_pa
 async fn two_prepared_runs_draw_different_seeds_and_both_begin_at_the_recorder() {
     let recorder = recorder();
     let before = unix_millis_now();
-    let first = prepare(PLAIN, "", services(&recorder, bare()))
+    let first = begin_and_prepare(PLAIN, services(&recorder, bare()))
         .await
         .unwrap();
-    let second = prepare(PLAIN, "", services(&recorder, bare()))
+    let second = begin_and_prepare(PLAIN, services(&recorder, bare()))
         .await
         .unwrap();
     let after = unix_millis_now();
@@ -302,7 +314,7 @@ async fn a_prepared_run_drives_to_its_end_under_its_own_performers() {
         run_id,
         performers,
         ..
-    } = prepare(PLAIN, "", services(&recorder, bare()))
+    } = begin_and_prepare(PLAIN, services(&recorder, bare()))
         .await
         .unwrap();
     let outcome = drive_run(
@@ -326,7 +338,7 @@ async fn a_prepared_run_drives_to_its_end_under_its_own_performers() {
 /// returning the run's id at the recorder beside its outcome.
 pub(crate) async fn prepare_and_drive(source: &str, services: Services) -> (RunId, RunOutcome) {
     let recorder = Arc::clone(&services.recorder);
-    let prepared = prepare(source, "", services).await.unwrap();
+    let prepared = begin_and_prepare(source, services).await.unwrap();
     let outcome = drive_run(
         prepared.run,
         prepared.performers,

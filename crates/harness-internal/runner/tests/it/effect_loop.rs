@@ -2,6 +2,7 @@
 //! record stream is events, then effects, then answers per step; a cancel
 //! drops every outstanding effect with one `Dropped` answer each; a
 //! performer that panics drops its effect rather than stranding the run;
+//! a run left with nothing to await ends recorded as an internal failure;
 //! and a refused recorder write ends the drive with the recorder's error
 //! and tears down the performers still out. The Vfs effect the loop
 //! answers inline has its own module, `vfs`, the `Chat` effect the
@@ -12,10 +13,11 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use harness_runner::display_chain;
-use harness_runner::effect_loop::{DriveError, drive_run};
+use harness_runner::effect_loop::drive_run;
 use harness_runner::recorder::{
-    MemoryRecorder, Record, RecordKind, RunId, RunMeta, RunOutcome, RunRecorder,
+    MemoryRecorder, Record, RecordKind, RunErrorKind, RunId, RunMeta, RunOutcome, RunRecorder,
 };
+use runvil::Step;
 use runvil::cancel::CancelHandle;
 use runvil::vfs::{MemoryBackend, Origin, VfsRef};
 use serde_json::json;
@@ -328,10 +330,6 @@ async fn a_refused_recorder_write_returns_the_recorder_error_and_aborts_the_park
     .await
     .expect_err("a refused write ends the drive");
     assert!(
-        matches!(error, DriveError::Recorder(_)),
-        "the recorder's refusal is returned as is: {error:?}"
-    );
-    assert!(
         display_chain(&error).contains(&format!("run {run_id} has ended")),
         "the chain names the recorder's reason: {}",
         display_chain(&error)
@@ -378,6 +376,49 @@ async fn an_ended_run_refuses_the_first_write_before_any_performer_starts() {
     )
     .await
     .expect_err("an ended run refuses its first write");
-    assert!(matches!(error, DriveError::Recorder(_)), "got {error:?}");
+    assert!(
+        display_chain(&error).contains(&format!("run {run_id} has ended")),
+        "the chain names the recorder's reason: {}",
+        display_chain(&error)
+    );
     assert!(recorder.records(run_id).is_empty());
+}
+
+#[tokio::test]
+async fn a_run_left_with_nothing_to_await_ends_recorded_as_an_internal_failure() {
+    let (recorder, run_id) = begun_log().await;
+    // The test steps the run once and keeps its tool call from the loop:
+    // the run waits on an effect the loop never saw, the fault a lost
+    // effect would leave.
+    let mut lost = run(WAITS);
+    let Step::Pending { effects, .. } = lost.step() else {
+        panic!("the run parks on its tool call");
+    };
+    assert_eq!(effects.len(), 1, "the one tool call the loop never sees");
+
+    let outcome = drive_run(
+        lost,
+        unused(),
+        recorder.clone(),
+        run_id,
+        CancelHandle::new(),
+    )
+    .await
+    .expect("a stall is the run's outcome");
+    assert_eq!(
+        outcome,
+        RunOutcome::Failed {
+            kind: RunErrorKind::Internal,
+            message: "the effect loop has nothing to await for a pending run".to_owned(),
+        }
+    );
+    assert_eq!(
+        recorder.outcome(run_id),
+        Some(outcome),
+        "the recorder ends the stalled run with its outcome"
+    );
+    assert!(
+        recorder.records(run_id).is_empty(),
+        "the stalled step reported nothing and issued nothing"
+    );
 }
