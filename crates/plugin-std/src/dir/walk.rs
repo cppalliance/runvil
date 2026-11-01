@@ -2,19 +2,16 @@
 //! cap, so a huge tree is never read whole.
 //!
 //! The walk returns a [`Tree`] and writes no text. Each directory's
-//! entries are sorted here, by name with `/` added to a directory's name,
-//! because `Access::list` promises no order. That order equals the order
-//! `Access::glob` gives, which sorts full path strings bytewise.
+//! entries are sorted in the shared walk order (`crate::order`), because
+//! `Access::list` promises no order. That order equals the order
+//! `Access::glob` gives.
 
 use std::collections::VecDeque;
 
 use runvil_plugin::{Entry, FileType, VfsError};
 
 use crate::matcher::Matcher;
-
-/// The name of the entry the walk skips, a file or a directory, at any
-/// depth.
-const GIT: &str = ".git";
+use crate::order::{GIT, sorted};
 
 /// One line of the tree: a name under its parent.
 #[derive(Debug)]
@@ -169,21 +166,13 @@ fn is_gone(error: &VfsError) -> bool {
 }
 
 /// The entries of one directory the tree shows, in order: everything but
-/// `.git` and what `ignore` matches, sorted by name with `/` added to a
-/// directory's name.
+/// `.git` and what `ignore` matches, in the shared walk order.
 fn visible(entries: Vec<Entry>, directory: &str, ignore: &[Matcher]) -> Vec<Entry> {
-    let mut kept: Vec<Entry> = entries
+    let kept: Vec<Entry> = entries
         .into_iter()
         .filter(|entry| entry.name != GIT && !is_ignored(directory, &entry.name, ignore))
         .collect();
-    kept.sort_by_cached_key(|entry| {
-        if matches!(entry.stat.file_type, FileType::Directory) {
-            format!("{}/", entry.name)
-        } else {
-            entry.name.clone()
-        }
-    });
-    kept
+    sorted(kept)
 }
 
 /// Whether a pattern in `ignore` matches the entry `name` of `directory`,

@@ -56,7 +56,7 @@ fn construct(name: &str, config: Value) -> Result<Arc<dyn Pack>, ToolError> {
 }
 
 /// The Pack built under `std`.
-fn built() -> Arc<dyn Pack> {
+pub(crate) fn built() -> Arc<dyn Pack> {
     let Ok(pack) = construct("std", Value::Null) else {
         panic!("construct succeeds with no configuration");
     };
@@ -64,7 +64,7 @@ fn built() -> Arc<dyn Pack> {
 }
 
 /// The tool id `segment` under the Pack id `std`.
-fn id(segment: &str) -> ToolId {
+pub(crate) fn id(segment: &str) -> ToolId {
     ToolId::parse(&format!("std/{segment}")).expect("a two-segment tool id parses")
 }
 
@@ -203,7 +203,6 @@ fn every_tool_answers_the_not_implemented_text_naming_itself() {
         ("replace", "StrReplace"),
         ("rm", "Delete"),
         ("glob", "Glob"),
-        ("grep", "Grep"),
     ] {
         let args = match segment {
             "rm" => json!({ "path": "/notes.md" }),
@@ -213,8 +212,7 @@ fn every_tool_answers_the_not_implemented_text_naming_itself() {
                 "old_string": "a",
                 "new_string": "b"
             }),
-            "glob" => json!({ "glob_pattern": "**/*.md" }),
-            _ => json!({ "pattern": "TODO" }),
+            _ => json!({ "glob_pattern": "**/*.md" }),
         };
         let output = call(segment, args).expect("a matching call succeeds");
         let expected = NOT_IMPLEMENTED.replace("<name>", wire_name);
@@ -341,4 +339,50 @@ fn read_answers_file_is_empty_for_a_zero_byte_file() {
 fn read_of_a_missing_path_fails_with_the_not_found_text() {
     let error = call("read", json!({ "path": "/nope.md" })).expect_err("the file is missing");
     assert_eq!(error.to_string(), "File not found: /nope.md");
+}
+
+#[test]
+fn grep_answers_the_matching_lines_of_a_seeded_tree_as_untrusted_output() {
+    let output = call_seeded(
+        "grep",
+        &[
+            (
+                "/src/a.ts",
+                b"// one\n// two\nconst alpha = 1\nlet beta = 2\n// five\n// six\n// seven\n\
+                  // eight\nconst gamma = 3\nexport default gamma\n",
+            ),
+            ("/src/b.ts", b"const first = 0\n"),
+        ],
+        json!({ "pattern": "const", "-A": 1 }),
+    )
+    .expect("a seeded tree searches");
+    assert_eq!(
+        output.text(),
+        "/src/a.ts\n  3:const alpha = 1\n  4-let beta = 2\n  --\n  9:const gamma = 3\n  \
+         10-export default gamma\n\n/src/b.ts\n  1:const first = 0"
+    );
+    assert_eq!(output.trust(), OutputTrust::Untrusted);
+}
+
+#[test]
+fn grep_of_a_missing_path_fails_with_the_does_not_exist_text() {
+    let error =
+        call("grep", json!({ "pattern": "x", "path": "/nope" })).expect_err("the path is missing");
+    assert_eq!(error.to_string(), "Path does not exist: /nope");
+}
+
+#[test]
+fn grep_refuses_an_undeclared_key_by_name_while_the_stubs_let_it_through() {
+    let error = call("grep", json!({ "pattern": "x", "context": 3 }))
+        .expect_err("context is not a parameter");
+    assert_eq!(error.kind(), ToolErrorKind::InvalidArguments);
+    assert!(
+        error
+            .to_string()
+            .starts_with("std_Grep: `context` is not a parameter of this tool."),
+        "{error}"
+    );
+    let stub = call("glob", json!({ "glob_pattern": "*.md", "extra": 1 }))
+        .expect("a stub ignores an undeclared key");
+    assert_eq!(stub.text(), NOT_IMPLEMENTED.replace("<name>", "Glob"));
 }

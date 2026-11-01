@@ -198,3 +198,133 @@ fn no_definition_names_behavior_this_build_does_not_have() {
         }
     }
 }
+
+/// The `grep` definition.
+fn grep_definition() -> &'static super::Definition {
+    all()
+        .expect("every embedded definition parses")
+        .iter()
+        .find(|definition| definition.segment == "grep")
+        .expect("the grep definition exists")
+}
+
+#[test]
+fn the_grep_description_names_the_dialect_the_limits_and_what_is_skipped() {
+    let text = &grep_definition().description;
+    for phrase in [
+        "Rust regex",
+        "literal",
+        "15000",
+        "16777216",
+        "100000",
+        "skipped",
+        ".gitignore",
+        "1000 bytes",
+        "absolute",
+        "N:",
+        "N-",
+        "Read shows",
+        "no look-around",
+        "no back-references",
+    ] {
+        assert!(
+            text.contains(phrase),
+            "the description names {phrase}: {text}"
+        );
+    }
+    for absent in ["ripgrep", "rg ", "several thousand", "Shell"] {
+        assert!(
+            !text.contains(absent),
+            "the description no longer names {absent}: {text}"
+        );
+    }
+    for placeholder in ["{body_cap}", "{file_ceiling}"] {
+        assert!(
+            !text.contains(placeholder),
+            "{placeholder} is filled in: {text}"
+        );
+    }
+}
+
+#[test]
+fn the_grep_schema_has_the_thirteen_parameters_in_order_with_their_types() {
+    let properties = grep_definition().parameters["properties"]
+        .as_object()
+        .expect("the schema has properties");
+    // The parsed object is sorted by name, so the order the file declares
+    // them in is read from the file's own text.
+    let declared = [
+        "pattern",
+        "path",
+        "glob",
+        "output_mode",
+        "-B",
+        "-A",
+        "-C",
+        "-i",
+        "type",
+        "head_limit",
+        "offset",
+        "multiline",
+        "literal",
+    ];
+    let source = include_str!("../schemas/grep.json");
+    let positions: Vec<usize> = declared
+        .iter()
+        .map(|name| {
+            source
+                .find(&format!("\n      \"{name}\": {{"))
+                .unwrap_or_else(|| panic!("{name} is declared"))
+        })
+        .collect();
+    assert!(
+        positions.windows(2).all(|pair| pair[0] < pair[1]),
+        "the parameters are declared in order: {positions:?}"
+    );
+    assert_eq!(properties.len(), declared.len());
+    for name in declared {
+        assert!(properties.contains_key(name), "{name}");
+    }
+    assert!(!properties.contains_key("-n"));
+    assert!(!properties.contains_key("context"));
+    for name in ["pattern", "path", "glob", "type", "output_mode"] {
+        assert_eq!(properties[name]["type"], "string", "{name}");
+    }
+    for name in ["-B", "-A", "-C", "head_limit", "offset"] {
+        assert_eq!(properties[name]["type"], "number", "{name}");
+    }
+    for name in ["-i", "multiline", "literal"] {
+        assert_eq!(properties[name]["type"], "boolean", "{name}");
+    }
+    assert_eq!(
+        properties["output_mode"]["enum"],
+        serde_json::json!(["content", "files_with_matches", "count"])
+    );
+    assert_eq!(properties["output_mode"]["default"], "content");
+    assert_eq!(properties["literal"]["default"], false);
+    assert_eq!(properties["head_limit"]["minimum"], 0);
+    assert!(properties["head_limit"].get("default").is_none());
+    assert_eq!(
+        grep_definition().parameters["required"],
+        serde_json::json!(["pattern"])
+    );
+}
+
+#[test]
+fn the_grep_glob_and_path_texts_say_what_they_take() {
+    let properties = &grep_definition().parameters["properties"];
+    let glob = properties["glob"]["description"]
+        .as_str()
+        .expect("glob has a description");
+    assert!(glob.contains("\"*.js\""), "{glob}");
+    assert!(glob.contains("\"**/*.tsx\""), "{glob}");
+    assert!(!glob.contains('{'), "{glob}");
+    let path = properties["path"]["description"]
+        .as_str()
+        .expect("path has a description");
+    assert!(path.contains("absolute"), "{path}");
+    let head_limit = properties["head_limit"]["description"]
+        .as_str()
+        .expect("head_limit has a description");
+    assert!(head_limit.contains("0 for no limit"), "{head_limit}");
+}

@@ -476,7 +476,7 @@ Commit: one commit holding the matcher, ListDir, `dir.json`, `EDITS.md`, `spec.r
 
 <step-4>
 
-### Step 4: Real Grep, the real-directory test, and the full gate set
+### Step 4: Real Grep, the real-directory test, and the full gate set [completed]
 
 - Component: `grep-tool`
 - Tests:

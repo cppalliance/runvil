@@ -82,6 +82,9 @@ fn fill(segment: &str, description: &str) -> String {
             .replace("{byte_cap}", &crate::read::BYTE_CAP.to_string())
             .replace("{file_ceiling}", &crate::text::MAX_FILE_BYTES.to_string()),
         "dir" => description.replace("{body_cap}", &crate::text::BODY_CAP.to_string()),
+        "grep" => description
+            .replace("{body_cap}", &crate::text::BODY_CAP.to_string())
+            .replace("{file_ceiling}", &crate::text::MAX_FILE_BYTES.to_string()),
         _ => description.to_owned(),
     }
 }

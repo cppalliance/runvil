@@ -50,7 +50,16 @@
 //! and a listing that reaches that says so. Names come back as untrusted
 //! output.
 //!
-//! Write, StrReplace, Delete, Glob, and Grep are still stubs: a call with
+//! Grep is real. It searches the files under a path with a Rust regular
+//! expression, in path order, and prints each matching line as `N:text`
+//! with optional context lines as `N-text`, where `N` is the line number
+//! Read shows. Output stops at 15,000 bytes, a call with an `offset`
+//! pages through the same result, and a binary file, a link, an over-size
+//! file, and an entry that cannot be read are skipped and counted, never
+//! a failure. A search yields to the executor now and then, so a cancel
+//! or a stop can drop it. File text comes back as untrusted output.
+//!
+//! Write, StrReplace, Delete, and Glob are still stubs: a call with
 //! arguments that match the schema answers [`NOT_IMPLEMENTED`]. For every
 //! tool, a call whose arguments do not match fails with an
 //! invalid-arguments [`ToolError`](runvil_plugin::ToolError) naming the
@@ -86,10 +95,16 @@
 //!   failure that names the parameter. No other outcome reports the
 //!   arguments, so a model can tell a bad call from a missing
 //!   implementation.
+//! - A key the schema does not declare is refused by name, with the
+//!   parameters listed, by the three real tools, Read, ListDir, and
+//!   Grep. The stubs let it through. Grep alone accepts `-n` when it is
+//!   `true`, because Cursor's definition once declared it.
 
 mod check;
 mod dir;
+mod grep;
 mod matcher;
+mod order;
 mod pack;
 mod read;
 mod refusal;

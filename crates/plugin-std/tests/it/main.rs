@@ -6,4 +6,5 @@
     reason = "test helpers panic on setup failure, which is the desired behavior"
 )]
 
+mod grep;
 mod tools;

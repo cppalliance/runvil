@@ -80,11 +80,46 @@ describes behavior this Pack does not have. `dir.json` is this crate's own.
 
 ## grep.json
 
-- Removed the sentence pointing at `rg`, since the tool searches the run's
-  filesystem itself.
-- Removed the sentence pointing at the `Shell` tool for piping, because this
-  Pack offers no `Shell`.
-- The `path` parameter's default, `Cursor workspace root`, became `the
-  run's filesystem root`.
-- Every parameter, type, description, enum, and the `required` list is
-  otherwise Cursor's.
+- The parameter set is now Cursor's bundle schema plus `literal`: `pattern`,
+  `path`, `glob`, `output_mode`, `-B`, `-A`, `-C`, `-i`, `type`, `head_limit`,
+  `offset`, `multiline`, and `literal`, in that order. The hyphenated names
+  are kept and no alias is added.
+- Deleted `-n` and `context`. `-n` is gone because Grep always shows line
+  numbers, and a call that still passes `-n: true` is accepted while any
+  other `-n` value is refused. `-C` now takes the text `context` had, "Number
+  of lines to show before and after each match. Requires output_mode:
+  "content", ignored otherwise.", and `context` is refused as an undeclared
+  key.
+- Added `literal`, a boolean that defaults to false: the pattern is matched as
+  plain text, so a pattern such as `foo(` needs no escape.
+- `output_mode` now defaults to `content`, where the earlier snapshot said
+  `files_with_matches`. Its text no longer mentions `-n`, and its enum is
+  unchanged.
+- `head_limit` has no default and `"minimum": 0`. Cursor's text said it
+  defaults to 250 and that 0 is unlimited, and this one says that 0 means no
+  limit and so does leaving it out. Its text says it counts matching lines in
+  `content` mode, files in `files_with_matches`, and file rows in `count`.
+- `path` reads `File or directory to search in, as an absolute path. Defaults
+  to the run's filesystem root.`, where Cursor's text said `Cursor workspace
+  root`, so the earlier edit to that default still holds.
+- `glob` reads `Glob pattern to filter files, for example "*.js" or
+  "**/*.tsx". Only * and ** are special, and matching is case-sensitive. A
+  pattern that does not start with "/" is matched at any depth. A pattern
+  that starts with "/" is a full path.`, because `{ts,tsx}` and the other
+  shell forms are not special in this Pack's matcher.
+- The description is new and states what this Pack's Grep does: Rust regex
+  syntax with no look-around and no back-references, and how to escape or set
+  `literal`; path order, the order Glob uses; output that stops at
+  `{body_cap}` bytes; at most 100000 files considered; a file over
+  `{file_ceiling}` bytes not searched; binary files, symbolic links, over-size
+  files, and unreadable entries skipped and counted in the result; only
+  entries named `.git` skipped, with `.gitignore` rules not applied, so
+  `target/` and `node_modules/` are searched when they lie under `path`; the
+  `N:` and `N-` line prefixes and that `N` is the number Read shows; a line
+  over 1000 bytes shown as a window around its first match; and that paths
+  are absolute and work as the `path` argument of the other file tools. The
+  two placeholders are filled when the definition is built, from the
+  constants the code enforces, so the text and the limits cannot drift apart.
+- The removals from the earlier snapshot still hold: the sentence that
+  pointed at `rg` and the sentence that pointed at the `Shell` tool for
+  piping are gone, and the new text names neither.
