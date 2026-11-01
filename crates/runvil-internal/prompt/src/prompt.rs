@@ -161,20 +161,6 @@ impl Prompt {
         &self.title
     }
 
-    /// Returns the ordered live Lua and prose blocks from the H1; the Engine
-    /// reaches them through [`crate::detail::h1_blocks`].
-    #[must_use]
-    pub(crate) fn h1_blocks(&self) -> &[Block] {
-        &self.h1_blocks
-    }
-
-    /// Returns the top-level H2 sections in file order; the Engine reaches
-    /// them through [`crate::detail::sections`].
-    #[must_use]
-    pub(crate) fn sections(&self) -> &[Section] {
-        &self.sections
-    }
-
     /// The entry-point section: the first top-level section in file order;
     /// the Engine reaches it through [`crate::detail::entry`].
     #[must_use]

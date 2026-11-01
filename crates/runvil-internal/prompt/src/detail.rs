@@ -41,13 +41,13 @@ pub fn with_prompt_name(error: ParseError, name: &str) -> ParseError {
 /// Returns the ordered live Lua and prose blocks from the H1.
 #[must_use]
 pub fn h1_blocks(prompt: &Prompt) -> &[Block] {
-    prompt.h1_blocks()
+    &prompt.h1_blocks
 }
 
 /// Returns the top-level H2 sections in file order.
 #[must_use]
 pub fn sections(prompt: &Prompt) -> &[Section] {
-    prompt.sections()
+    &prompt.sections
 }
 
 /// The entry-point section: the first top-level section in file order.
