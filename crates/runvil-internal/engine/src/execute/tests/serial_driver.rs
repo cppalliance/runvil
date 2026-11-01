@@ -1,7 +1,7 @@
 //! The serial sans-IO driver over `Run`, and the properties it makes
 //! testable without a runtime or a gateway: a literal prompt that issues no
 //! effect, a three-arm fanout whose answers arrive in reverse order,
-//! determinism (two runs under the same context and answers produce
+//! determinism (two runs under the same config and answers produce
 //! identical effects, events, provenances, and `sys.id`s), the
 //! batching-pairing property (answers delivered one per step, all at once,
 //! and shuffled within a batch produce identical per-task effects and
@@ -9,7 +9,7 @@
 
 use runvil_types::event::Event;
 
-use super::context::{parse, test_context};
+use super::context::{parse, test_config};
 use super::scheduler::scheduler_scenario;
 use super::*;
 use crate::execute::run::{Effect, Run, Step};
@@ -56,7 +56,7 @@ fn the_driver_runs_a_literal_prompt_with_no_effect() {
     // A literal return issues nothing, so the performer never runs, and the
     // events open and close with the run's boundaries.
     let md = "---\nname: t\ndescription: d\nrunvil: 0\n---\n\n# Title\n\n## Only\n\n```lua\nreturn 'hello'\n```\n";
-    let run = Run::new(Arc::new(parse(md)), "", test_context(EXECUTION));
+    let run = Run::new(Arc::new(parse(md)), "", test_config(EXECUTION));
     let (outcome, events) = drive(run, |_, effect| panic!("no effect is issued: {effect:?}"));
     assert_eq!(text_of(outcome), "hello");
     assert!(
@@ -138,8 +138,8 @@ fn a_three_arm_fanout_fed_its_answers_in_reverse_order_packs_results_in_collecti
 }
 
 #[test]
-fn two_runs_under_the_same_context_and_answers_are_identical() {
-    // The determinism property: the same prompt, context, and answers
+fn two_runs_under_the_same_config_and_answers_are_identical() {
+    // The determinism property: the same prompt, config, and answers
     // produce the same text (the `sys.id`s in it), the same events in the
     // same order with the same provenances, and the same effects.
     let first = drive_batched(model_run(FANOUT), Batching::AllAtOnce);

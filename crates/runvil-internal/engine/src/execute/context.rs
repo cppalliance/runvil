@@ -25,7 +25,7 @@ use crate::lua::{Argv, ToolSet};
 use crate::model::{ModelBinding, ModelRole, ModelSet};
 use crate::parser::Prompt;
 
-use super::config::{RunContext, RunLimits};
+use super::config::{RunConfig, RunLimits};
 use super::fill;
 use super::requirements::Requirements;
 use super::section_context::SectionSys;
@@ -69,21 +69,22 @@ struct SharedState {
     /// returned to the caller.
     events: EventSink,
     /// The run's cancel flag: polled between chain steps and installed on
-    /// every section VM's instruction hook. The context's one handle, the
-    /// same flag the caller watches and the run's `cancel` sets.
+    /// every section VM's instruction hook. It is the config's one handle,
+    /// the flag the caller supplies with `RunConfig::with_cancel` and keeps
+    /// its own clone of.
     cancel: CancelHandle,
-    /// The run's tool set: built from the context's catalog at construction
+    /// The run's tool set: built from the config's catalog at construction
     /// and changed by nothing during the run, so every reader, every
     /// section VM (H1 included) among them, shares it with no lock and no
     /// copy.
     tool_set: Arc<ToolSet>,
-    /// The run's model set: filled from the context's role map at
+    /// The run's model set: filled from the config's role map at
     /// construction, shared with every section VM (H1 included) and changed
     /// by nothing during the run, so every reader shares it with no lock and
     /// no copy.
     model_set: Arc<ModelSet>,
     /// The refusal notice the run's first step fails with: what the prompt
-    /// requires that the context lacks, or `None` when it lacks nothing.
+    /// requires that the config lacks, or `None` when it lacks nothing.
     refusal: Option<Arc<str>>,
     /// The run's `started_at` rendered as RFC 3339, stamped into every
     /// section's `sys.when`, the H1 pass included.
@@ -141,8 +142,8 @@ impl ChainState {
     /// renders `config`'s `started_at`, so two states over the same inputs
     /// agree on both.
     #[must_use]
-    pub(super) fn root(prompt: Arc<Prompt>, args: &str, config: RunContext) -> Self {
-        let RunContext {
+    pub(super) fn root(prompt: Arc<Prompt>, args: &str, config: RunConfig) -> Self {
+        let RunConfig {
             name,
             seed,
             started_at,
@@ -167,7 +168,7 @@ impl ChainState {
             packs.unwrap_or_default(),
         ));
         let execution: Arc<str> = Arc::from(name);
-        // The root task's event sequence starts at the context's
+        // The root task's event sequence starts at the config's
         // `provenance_start`: past any parse events the caller put in the
         // stream ahead of the run, or at zero.
         let events = EventSink::seeded(provenance_start);
@@ -323,7 +324,7 @@ impl ChainState {
     }
 
     /// The refusal notice the run's first step fails with, or `None` when
-    /// the context lacks nothing the prompt requires.
+    /// the config lacks nothing the prompt requires.
     pub(super) fn refusal(&self) -> Option<&str> {
         self.shared.refusal.as_deref()
     }

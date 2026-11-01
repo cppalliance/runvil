@@ -174,7 +174,7 @@ fn a_thinking_requirement_the_filling_model_fails_is_refused() -> TestResult {
 /// `scenario` with its catalog replaced by one that holds `info` alone.
 fn over_catalog(scenario: Scenario, info: &ToolInfo) -> TestResult<Scenario> {
     let catalog = ToolCatalog::new([info.clone()])?;
-    Ok(scenario.context(move |ctx| ctx.with_tools(catalog.clone())))
+    Ok(scenario.config(move |ctx| ctx.with_tools(catalog.clone())))
 }
 
 #[test]

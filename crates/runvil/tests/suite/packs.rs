@@ -6,12 +6,12 @@ use super::prepare::refusal;
 use super::support::{Scenario, TestResult, greeter, prompt};
 
 #[test]
-fn two_runs_whose_contexts_carry_different_rosters_each_see_their_own() -> TestResult {
+fn two_runs_whose_configs_carry_different_rosters_each_see_their_own() -> TestResult {
     let source = greeter("return tostring(tools.packs.get('kit') ~= nil)");
     let kit = PackId::parse("kit")?;
     let usable = {
         let kit = kit.clone();
-        Scenario::default().context(move |ctx| {
+        Scenario::default().config(move |ctx| {
             ctx.with_packs([(
                 kit.clone(),
                 RosterEntry::Usable {
@@ -20,7 +20,7 @@ fn two_runs_whose_contexts_carry_different_rosters_each_see_their_own() -> TestR
             )])
         })
     };
-    let unavailable = Scenario::default().context(move |ctx| {
+    let unavailable = Scenario::default().config(move |ctx| {
         ctx.with_packs([(
             kit.clone(),
             RosterEntry::Unavailable {
@@ -39,7 +39,7 @@ fn two_runs_whose_contexts_carry_different_rosters_each_see_their_own() -> TestR
 fn a_declared_pack_the_roster_lacks_or_cannot_use_refuses_the_run() -> TestResult {
     let source = prompt("uses: [kit, web]", &[("Only", "return 'done'")]);
     let kit = PackId::parse("kit")?;
-    let scenario = Scenario::default().context(move |ctx| {
+    let scenario = Scenario::default().config(move |ctx| {
         ctx.with_packs([(
             kit.clone(),
             RosterEntry::Unavailable {

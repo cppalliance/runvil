@@ -9,7 +9,7 @@
 //! The run's outcome type ([`RunOutcome`]) is defined here; the rest lives in
 //! focused private children:
 //!
-//! - `config` - the public [`RunContext`], which carries the caller's
+//! - `config` - the public [`RunConfig`], which carries the caller's
 //!   role map for the five model roles, and [`RunLimits`]; installing
 //!   Packs and taking each run's catalog from them is the Harness's job.
 //! - `context` - the ambient run state: the run-wide `SharedState` and
@@ -19,7 +19,7 @@
 //! - `fill` - the fill function, which builds the model set from the
 //!   caller's role map when the run is built.
 //! - `infer` - the nested-inference round's answer.
-//! - `requirements` - what a run's context lacks for its prompt, which the
+//! - `requirements` - what a run's config lacks for its prompt, which the
 //!   run's first step reports as its refusal notice.
 //! - `run` - the boundary with the caller: the `Run` state machine with its
 //!   `step`, `resume`, and `cancel`, the `Step` it returns, and the effect
@@ -55,7 +55,7 @@ mod turn;
 mod walk_target;
 
 // Public API surface.
-pub use config::{RunContext, RunLimits};
+pub use config::{RunConfig, RunLimits};
 pub use error::RunErrorKind;
 #[cfg(test)]
 pub(crate) use run::{AnswerRecord, ChatAnswerRecord, EffectRecord};

@@ -25,11 +25,11 @@ fn ask_the_model() -> String {
         .build()
 }
 
-/// A bound run of `source` whose context turns debug reporting on.
+/// A bound run of `source` whose config turns debug reporting on.
 fn debugged(source: String) -> Scenario {
     Scenario::new(source)
         .bound()
-        .context(|ctx| ctx.with_report_debug(true))
+        .config(|ctx| ctx.with_report_debug(true))
 }
 
 #[test]

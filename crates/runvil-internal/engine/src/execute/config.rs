@@ -1,4 +1,4 @@
-//! Per-run context and resource limits: [`RunContext`] and [`RunLimits`].
+//! Per-run config and resource limits: [`RunConfig`] and [`RunLimits`].
 
 use std::collections::BTreeMap;
 use std::fmt;
@@ -20,23 +20,23 @@ use crate::model::{ModelInfo, ModelRole};
 
 /// The inputs for one run of a prompt.
 ///
-/// The caller builds a context with `new` and the `with_*` builder
+/// The caller builds a config with `new` and the `with_*` builder
 /// methods, among them the run's tool catalog
-/// ([`with_tools`](RunContext::with_tools)), Pack roster
-/// ([`with_packs`](RunContext::with_packs)), Pack preludes
-/// ([`with_preludes`](RunContext::with_preludes)), and role map
-/// ([`with_models`](RunContext::with_models)). Building the run fills the
+/// ([`with_tools`](RunConfig::with_tools)), Pack roster
+/// ([`with_packs`](RunConfig::with_packs)), Pack preludes
+/// ([`with_preludes`](RunConfig::with_preludes)), and role map
+/// ([`with_models`](RunConfig::with_models)). Building the run fills the
 /// five model roles from the role map, and the run's first step checks
-/// the context against what the prompt requires. The Engine owns the
-/// context for the run. Each context belongs to exactly one run.
+/// the config against what the prompt requires. The Engine owns the
+/// config for the run. Each config belongs to exactly one run.
 ///
-/// The context holds only the Engine's input. The observer, client, tool
+/// The config holds only the Engine's input. The observer, client, tool
 /// implementations, broker, and capture belong to the caller. The Engine
 /// reports events and issues effects as values, and returns each one to
 /// the caller from `step`.
 ///
 /// The caller supplies the run's clock and randomness through `new`.
-pub struct RunContext {
+pub struct RunConfig {
     /// The caller's run label, moved into `SharedState::execution` at start
     /// and read nowhere else.
     pub(super) name: String,
@@ -71,11 +71,11 @@ pub struct RunContext {
     pub(super) preludes: Vec<Prelude>,
 }
 
-impl RunContext {
-    /// Builds a context for a run named `name`, with the given `seed` and
+impl RunConfig {
+    /// Builds a config for a run named `name`, with the given `seed` and
     /// `started_at`.
     ///
-    /// The new context has a fresh cancel flag, a `ui` snapshot of `None`,
+    /// The new config has a fresh cancel flag, a `ui` snapshot of `None`,
     /// debug reporting off, default [`RunLimits`], and the default
     /// filesystem, which is a fresh memory store at `/`.
     ///
@@ -85,8 +85,8 @@ impl RunContext {
     /// the instant every section reads as `sys.when`. The caller records
     /// both values, and a replay passes them back verbatim.
     #[must_use]
-    pub fn new(name: impl Into<String>, seed: RunSeed, started_at: Timestamp) -> RunContext {
-        RunContext {
+    pub fn new(name: impl Into<String>, seed: RunSeed, started_at: Timestamp) -> RunConfig {
+        RunConfig {
             name: name.into(),
             seed,
             started_at,
@@ -110,7 +110,7 @@ impl RunContext {
     /// clone a body for them. A caller that wants the pair in the event
     /// stream, such as for a debug capture, passes `true`.
     #[must_use]
-    pub fn with_report_debug(mut self, report: bool) -> RunContext {
+    pub fn with_report_debug(mut self, report: bool) -> RunConfig {
         self.report_debug = report;
         self
     }
@@ -133,14 +133,14 @@ impl RunContext {
     /// A caller that cancels through an awaitable token must bridge the
     /// token to this flag by setting the flag when the token fires.
     #[must_use]
-    pub fn with_cancel(mut self, handle: CancelHandle) -> RunContext {
+    pub fn with_cancel(mut self, handle: CancelHandle) -> RunConfig {
         self.cancel = handle;
         self
     }
 
     /// Sets the resource limits honored across the run.
     #[must_use]
-    pub fn with_limits(mut self, limits: RunLimits) -> RunContext {
+    pub fn with_limits(mut self, limits: RunLimits) -> RunConfig {
         self.limits = limits;
         self
     }
@@ -157,7 +157,7 @@ impl RunContext {
     /// user picked. The default is `None`, which leaves the `ui` global
     /// absent and limits `models.get` to the five roles.
     #[must_use]
-    pub fn with_ui(mut self, snapshot: serde_json::Value) -> RunContext {
+    pub fn with_ui(mut self, snapshot: serde_json::Value) -> RunConfig {
         self.ui = Some(snapshot);
         self
     }
@@ -171,7 +171,7 @@ impl RunContext {
     /// past them and every `(task, seq)` in the stream stays unique.
     /// Spawned tasks count from zero.
     #[must_use]
-    pub fn with_provenance_start(mut self, start: u32) -> RunContext {
+    pub fn with_provenance_start(mut self, start: u32) -> RunConfig {
         self.provenance_start = start;
         self
     }
@@ -187,7 +187,7 @@ impl RunContext {
     /// before the run and extracts output after it through its own clone of
     /// `vfs`.
     #[must_use]
-    pub fn with_vfs(mut self, vfs: VfsRef) -> RunContext {
+    pub fn with_vfs(mut self, vfs: VfsRef) -> RunConfig {
         self.vfs = vfs;
         self
     }
@@ -198,7 +198,7 @@ impl RunContext {
     /// and a section offers one to its model with `tools.offer`. The caller
     /// performs every call.
     #[must_use]
-    pub fn with_tools(mut self, tools: ToolCatalog) -> RunContext {
+    pub fn with_tools(mut self, tools: ToolCatalog) -> RunConfig {
         self.tools = tools;
         self
     }
@@ -225,7 +225,7 @@ impl RunContext {
     pub fn with_packs(
         mut self,
         roster: impl IntoIterator<Item = (PackId, RosterEntry)>,
-    ) -> RunContext {
+    ) -> RunConfig {
         self.packs = Some(roster.into_iter().collect());
         self
     }
@@ -247,7 +247,7 @@ impl RunContext {
     /// The failure happens when the first section VM is set up, before the
     /// run issues any effect.
     #[must_use]
-    pub fn with_preludes(mut self, preludes: Vec<Prelude>) -> RunContext {
+    pub fn with_preludes(mut self, preludes: Vec<Prelude>) -> RunConfig {
         self.preludes = preludes;
         self
     }
@@ -272,15 +272,15 @@ impl RunContext {
     /// fails. A non-empty `models` with no `default` entry leaves the roles
     /// empty and fails the run's first step.
     #[must_use]
-    pub fn with_models(mut self, models: BTreeMap<ModelRole, ModelInfo>) -> RunContext {
+    pub fn with_models(mut self, models: BTreeMap<ModelRole, ModelInfo>) -> RunConfig {
         self.models = models;
         self
     }
 }
 
-impl fmt::Debug for RunContext {
+impl fmt::Debug for RunConfig {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let mut state = f.debug_struct("RunContext");
+        let mut state = f.debug_struct("RunConfig");
         state
             .field("name", &self.name)
             .field("started_at", &self.started_at)

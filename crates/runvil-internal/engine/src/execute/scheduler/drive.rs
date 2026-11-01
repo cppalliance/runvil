@@ -180,14 +180,14 @@ impl Scheduler {
     }
 
     /// Checks that the run can start: the version gate, then the declared
-    /// store, then what the prompt requires of the context.
+    /// store, then what the prompt requires of the config.
     ///
     /// # Errors
     /// Returns [`Error::UnsupportedVersion`] or a structural parse error for
     /// a prompt that is not a supported runvil prompt, [`Error::Store`]
     /// when the handle declares no store or the store's backend fails the
     /// probe, or [`Error::RequirementsUnmet`] with the refusal notice when
-    /// the context lacks a declared Pack or a model the prompt's roles
+    /// the config lacks a declared Pack or a model the prompt's roles
     /// require, or names a Pack id the Engine reserves.
     fn check_start(&self) -> Result<()> {
         let frontmatter = self.ctx.prompt().frontmatter();

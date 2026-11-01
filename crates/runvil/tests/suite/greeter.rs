@@ -67,7 +67,7 @@ fn a_cancel_from_another_thread_ends_the_run_cancelled_once_held_effects_drop() 
     let handed = cancel.clone();
     let mut driver = Scenario::tool(shout(), [])
         .hold(|effect| matches!(effect, Effect::Chat { .. }))
-        .context(move |ctx| ctx.with_cancel(handed.clone()))
+        .config(move |ctx| ctx.with_cancel(handed.clone()))
         .start(GREETER)?;
     driver.pump_until_held()?;
 

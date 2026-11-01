@@ -1,4 +1,4 @@
-//! Shared context builders, prompt sources, parsers, stores, task ids, and
+//! Shared config builders, prompt sources, parsers, stores, task ids, and
 //! recorders for the execution suites.
 
 use runvil_parser::test_support::PromptSource;
@@ -35,20 +35,20 @@ pub(super) fn sequence(trace: &Trace) -> Vec<(String, String)> {
         .collect()
 }
 
-/// A [`RunContext`] for the run `name` under the fixed test inputs.
-pub(super) fn test_context(name: impl Into<String>) -> RunContext {
-    RunContext::new(name, TEST_SEED, TEST_STARTED_AT)
+/// A [`RunConfig`] for the run `name` under the fixed test inputs.
+pub(super) fn test_config(name: impl Into<String>) -> RunConfig {
+    RunConfig::new(name, TEST_SEED, TEST_STARTED_AT)
 }
 
 /// Compile-time proof that the public execution types are thread-safe.
 ///
-/// `RunContext` holds `Arc<dyn Observer>` / `Arc<dyn DebugCapture>` (shared
+/// `RunConfig` holds `Arc<dyn Observer>` / `Arc<dyn DebugCapture>` (shared
 /// trait objects) and must be `Send + Sync + 'static` to cross the run's task
 /// boundaries; the typed error/limit/result surfaces must be too.
 const fn _public_execution_types_are_send_sync_static() {
     const fn assert_send_sync_static<T: Send + Sync + 'static>() {}
     const fn assert_send_sync<T: Send + Sync>() {}
-    assert_send_sync_static::<RunContext>();
+    assert_send_sync_static::<RunConfig>();
     assert_send_sync_static::<RunLimits>();
     assert_send_sync_static::<RunOutcome>();
     assert_send_sync_static::<RunErrorKind>();

@@ -34,7 +34,7 @@ impl Counter {
 
 /// Compile-time proof that a handle can cross thread boundaries and live for
 /// the whole program: a caller may move clones onto other threads, and the
-/// Engine keeps one in `RunContext` while `Run` itself is `Send`.
+/// Engine keeps one in `RunConfig` while `Run` itself is `Send`.
 const _: () = assert_send_sync::<CancelHandle>();
 
 #[test]

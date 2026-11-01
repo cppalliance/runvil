@@ -23,12 +23,12 @@ use runvil::model::{Completion, ModelInfo, ModelRole};
 use runvil::timestamp::Timestamp;
 use runvil::tools::ToolCatalog;
 use runvil::vfs::perform_vfs_op;
-use runvil::{Prompt, Run, RunContext, RunOutcome, RunSeed, Step};
+use runvil::{Prompt, Run, RunConfig, RunOutcome, RunSeed, Step};
 use serde_json::{Value, json};
 
 use super::{Reply, TestResult, Tool, canned, tool_info};
 
-type Edit = Box<dyn Fn(RunContext) -> RunContext>;
+type Edit = Box<dyn Fn(RunConfig) -> RunConfig>;
 
 /// The seed every scenario's run takes.
 const TEST_SEED: RunSeed = RunSeed::from_bytes([7; 32]);
@@ -46,7 +46,7 @@ pub(crate) struct Scenario {
     replies: Vec<Reply>,
     hold: Option<fn(&Effect) -> bool>,
     reverse: bool,
-    context: Option<Edit>,
+    config: Option<Edit>,
 }
 
 impl Scenario {
@@ -107,14 +107,14 @@ impl Scenario {
         self
     }
 
-    /// Edits the run's context after the scenario sets its own, so an edit
+    /// Edits the run's config after the scenario sets its own, so an edit
     /// can also undo one of them.
-    pub(crate) fn context(mut self, edit: impl Fn(RunContext) -> RunContext + 'static) -> Self {
-        self.context = Some(Box::new(edit));
+    pub(crate) fn config(mut self, edit: impl Fn(RunConfig) -> RunConfig + 'static) -> Self {
+        self.config = Some(Box::new(edit));
         self
     }
 
-    /// Parses `source` as the run `greeter` and builds its context.
+    /// Parses `source` as the run `greeter` and builds its config.
     pub(crate) fn build(&self, source: &str) -> TestResult<Built> {
         let (parsed, events) = Prompt::parse(source, "greeter");
         let prompt = parsed?;
@@ -123,14 +123,14 @@ impl Scenario {
             (None, Some(model)) => BTreeMap::from([(ModelRole::Default, model.clone())]),
             (None, None) => BTreeMap::from([(ModelRole::Default, canned()?)]),
         };
-        let mut ctx = RunContext::new("greeter", TEST_SEED, self.started_at)
+        let mut ctx = RunConfig::new("greeter", TEST_SEED, self.started_at)
             .with_provenance_start(u32::try_from(events.len())?)
             .with_models(roles);
         if let Some(tool) = &self.tool {
             let info = tool_info(tool.id, json!({ "type": "object" }))?;
             ctx = ctx.with_tools(ToolCatalog::new([info])?);
         }
-        if let Some(edit) = &self.context {
+        if let Some(edit) = &self.config {
             ctx = edit(ctx);
         }
         Ok(Built {
@@ -140,7 +140,7 @@ impl Scenario {
         })
     }
 
-    /// Builds `source`'s context and creates its run, not yet stepped.
+    /// Builds `source`'s config and creates its run, not yet stepped.
     pub(crate) fn start(self, source: &str) -> TestResult<Driver> {
         let Built {
             prompt,
@@ -167,7 +167,7 @@ impl Scenario {
 
 pub(crate) struct Built {
     pub(crate) prompt: Prompt,
-    pub(crate) ctx: RunContext,
+    pub(crate) ctx: RunConfig,
     /// The parse events.
     pub(crate) events: Vec<Event>,
 }

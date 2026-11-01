@@ -16,7 +16,7 @@ use super::*;
 #[track_caller]
 fn run_with_preludes(source: &str, preludes: Vec<Prelude>) -> Trace {
     require_case(source.to_owned())
-        .context(|ctx| ctx.with_preludes(preludes))
+        .config(|ctx| ctx.with_preludes(preludes))
         .run()
 }
 

@@ -250,7 +250,7 @@ fn parse_use_options(options: Value, rest: &MultiValue) -> mlua::Result<UseOptio
 /// role the caller gave no model fails saying so.
 ///
 /// `raw_ids` is the raw-model-id fallback, resolved whenever the caller
-/// passes an application-state snapshot (`RunContext::with_ui`): then
+/// passes an application-state snapshot (`RunConfig::with_ui`): then
 /// `models.get` resolves a label outside the five roles as a raw gateway
 /// catalog model id, so the built-in chat prompt can run
 /// `models.get(ui().selected_model)`. Refused, such a label is the usual

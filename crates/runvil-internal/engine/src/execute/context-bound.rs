@@ -14,7 +14,7 @@ use crate::lua::{RosterEntry, ToolSet};
 use crate::parser::Prompt;
 
 /// Builds the run's shared tool set: the frontmatter's declared Packs,
-/// and the run catalog and roster, all moved out of the context. Nothing
+/// and the run catalog and roster, all moved out of the config. Nothing
 /// is bound here: each section entry binds the tools it offers when it
 /// freezes its sets.
 pub(super) fn run_tool_set(

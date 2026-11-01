@@ -38,7 +38,7 @@ fn every_event_round_trips_as_a_json_line_and_no_two_share_a_provenance() -> Tes
     assert_eq!(keys.len(), trace.events.len());
     let quiet = Scenario::default()
         .args("world")
-        .context(|ctx| ctx.with_provenance_start(0))
+        .config(|ctx| ctx.with_provenance_start(0))
         .run(&source)?;
     assert_eq!(quiet.text()?, "hello world");
     Ok(())
@@ -52,7 +52,7 @@ fn content_events_pair_each_tool_result_with_its_caller_into_a_transcript() -> T
         vendor: "acme".to_owned(),
     };
     let trace = scenario
-        .context(move |ctx| ctx.with_packs([(example.clone(), usable.clone())]))
+        .config(move |ctx| ctx.with_packs([(example.clone(), usable.clone())]))
         .run(&source)?;
     assert_eq!(trace.text()?, "HI THERE");
 
@@ -105,7 +105,7 @@ fn content_events_pair_each_tool_result_with_its_caller_into_a_transcript() -> T
 fn debug_mode_alone_adds_one_request_and_one_response_per_model_round() -> TestResult {
     let (source, scenario) = shouting();
     let captured = scenario
-        .context(|ctx| ctx.with_report_debug(true))
+        .config(|ctx| ctx.with_report_debug(true))
         .run(&source)?;
 
     let (mut requests, mut responses) = (Vec::new(), Vec::new());

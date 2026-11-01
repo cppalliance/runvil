@@ -1,4 +1,4 @@
-//! Tests for the run's start checks against its context: each declared
+//! Tests for the run's start checks against its config: each declared
 //! Pack against the roster, the reserved Pack ids `adhoc` and `dynamic`,
 //! and the order of the refusal notice's lines. The model role checks sit
 //! in the execution suite's `prepare` module.
@@ -12,7 +12,7 @@ use runvil_types::timestamp::Timestamp;
 use runvil_types::tools::{ToolCatalog, ToolId, ToolInfo};
 use serde_json::json;
 
-use crate::execute::{Run, RunContext, RunErrorKind, RunOutcome, Step};
+use crate::execute::{Run, RunConfig, RunErrorKind, RunOutcome, Step};
 use crate::lua::RosterEntry;
 use crate::parser::Prompt;
 use crate::test_support::scenario::{TEST_SEED, test_model_with};
@@ -42,8 +42,8 @@ fn prompt(front: &str) -> Prompt {
         .expect("the requirements test prompt parses")
 }
 
-fn context() -> RunContext {
-    RunContext::new("requirements-test", TEST_SEED, Timestamp::UNIX_EPOCH)
+fn config() -> RunConfig {
+    RunConfig::new("requirements-test", TEST_SEED, Timestamp::UNIX_EPOCH)
 }
 
 fn catalog(ids: &[&str]) -> ToolCatalog {
@@ -81,7 +81,7 @@ fn unavailable(pack: &str, reason: &str) -> (PackId, RosterEntry) {
 /// fails with, after asserting the step reported no run events, or
 /// `None` when the run passes its start checks and completes.
 #[track_caller]
-fn refusal(prompt: Prompt, ctx: RunContext) -> Option<String> {
+fn refusal(prompt: Prompt, ctx: RunConfig) -> Option<String> {
     let mut run = Run::new(Arc::new(prompt), "", ctx);
     let Step::Done { outcome, events } = run.step() else {
         panic!("the fixture run is done at its first step");
@@ -107,21 +107,18 @@ fn refusal(prompt: Prompt, ctx: RunContext) -> Option<String> {
 fn a_catalog_or_roster_naming_a_reserved_pack_id_refuses_the_run_naming_the_id_once() {
     for reserved in ["adhoc", "dynamic"] {
         let (grab, put) = (format!("{reserved}/grab"), format!("{reserved}/put"));
-        let contexts = [
+        let configs = [
             (
                 "the catalog",
-                context().with_tools(catalog(&["web/fetch", &grab, &put])),
+                config().with_tools(catalog(&["web/fetch", &grab, &put])),
             ),
-            (
-                "the usable roster",
-                context().with_packs([usable(reserved)]),
-            ),
+            ("the usable roster", config().with_packs([usable(reserved)])),
             (
                 "the unavailable roster",
-                context().with_packs([unavailable(reserved, "the server is down")]),
+                config().with_packs([unavailable(reserved, "the server is down")]),
             ),
         ];
-        for (named_by, ctx) in contexts {
+        for (named_by, ctx) in configs {
             assert_eq!(
                 refusal(prompt(""), ctx),
                 Some(format!(
@@ -135,9 +132,9 @@ fn a_catalog_or_roster_naming_a_reserved_pack_id_refuses_the_run_naming_the_id_o
 }
 
 #[test]
-fn a_context_naming_both_reserved_pack_ids_lists_them_sorted_each_once() {
+fn a_config_naming_both_reserved_pack_ids_lists_them_sorted_each_once() {
     // Two catalog tools and the roster all name `dynamic`.
-    let ctx = context()
+    let ctx = config()
         .with_tools(catalog(&[
             "dynamic/search",
             "web/fetch",
@@ -159,8 +156,8 @@ fn a_context_naming_both_reserved_pack_ids_lists_them_sorted_each_once() {
 }
 
 #[test]
-fn a_context_naming_no_reserved_pack_id_passes_the_start_checks() {
-    let ctx = context()
+fn a_config_naming_no_reserved_pack_id_passes_the_start_checks() {
+    let ctx = config()
         .with_tools(catalog(&["web/fetch", "dynamics/search", "adhoc2/grab"]))
         .with_packs([usable("web"), unavailable("mcp", "the server is down")]);
     assert_eq!(refusal(prompt(""), ctx), None);
@@ -168,7 +165,7 @@ fn a_context_naming_no_reserved_pack_id_passes_the_start_checks() {
 
 #[test]
 fn a_declared_pack_the_roster_lists_as_unavailable_is_refused_with_its_reason_not_as_missing() {
-    let ctx = context().with_packs([unavailable("web", "the search provider is missing")]);
+    let ctx = config().with_packs([unavailable("web", "the search provider is missing")]);
     assert_eq!(
         refusal(prompt("uses: [web]\n"), ctx),
         Some(
@@ -181,7 +178,7 @@ fn a_declared_pack_the_roster_lists_as_unavailable_is_refused_with_its_reason_no
 
 #[test]
 fn declared_packs_the_roster_lacks_are_missing_and_list_before_the_unavailable_ones() {
-    let ctx = context().with_packs([
+    let ctx = config().with_packs([
         unavailable("web", "the search provider is missing"),
         unavailable("mcp", "the server is down"),
         usable("kit"),
@@ -203,12 +200,12 @@ fn declared_packs_the_roster_lacks_are_missing_and_list_before_the_unavailable_o
 #[test]
 fn a_run_given_no_roster_checks_no_declared_pack_and_an_empty_roster_lacks_every_one() {
     assert_eq!(
-        refusal(prompt("uses: [web]\n"), context()),
+        refusal(prompt("uses: [web]\n"), config()),
         None,
         "a run given no roster checks no declared Pack"
     );
     assert_eq!(
-        refusal(prompt("uses: [web]\n"), context().with_packs([])),
+        refusal(prompt("uses: [web]\n"), config().with_packs([])),
         Some(
             "the environment cannot satisfy this prompt:\n- missing required Pack: web".to_owned()
         ),
@@ -218,7 +215,7 @@ fn a_run_given_no_roster_checks_no_declared_pack_and_an_empty_roster_lacks_every
 
 #[test]
 fn the_notice_lists_missing_then_unavailable_packs_then_reserved_ids_then_model_lines() {
-    let ctx = context()
+    let ctx = config()
         .with_tools(catalog(&["adhoc/grab"]))
         .with_packs([unavailable("kit", "the kit server is down")])
         .with_models(BTreeMap::from([(

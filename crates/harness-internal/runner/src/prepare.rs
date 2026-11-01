@@ -9,11 +9,11 @@
 //! steps that build the run: parse; put the prompt's declared `input:`
 //! file in place in the store (`files::stage_input`); hand the run's
 //! whole filesystem, real directories and the declared store, to the
-//! context as given; wait for every built Pack to be ready, or for the
+//! config as given; wait for every built Pack to be ready, or for the
 //! run's cancel; take the run's snapshot of the Host's Packs with the
 //! run's own services, which yields the catalog, the roster, the
 //! preludes, and the tool performer; set the first three and the Host's
-//! model on the context; and build the `Run` beside its performers.
+//! model on the config; and build the `Run` beside its performers.
 //!
 //! A prompt that fails to parse, or an input file that cannot be put in
 //! place, is a run that ended before it began: the recorder ends it as
@@ -40,7 +40,7 @@ use runvil::model::{ModelInfo, ModelRole};
 use runvil::prompt::FileDecl;
 use runvil::timestamp::Timestamp;
 use runvil::vfs::VfsRef;
-use runvil::{ParseError, Prompt, Run, RunContext, RunSeed};
+use runvil::{ParseError, Prompt, Run, RunConfig, RunSeed};
 use runvil_plugin::HostServices;
 use sha2::{Digest as _, Sha256};
 
@@ -64,12 +64,12 @@ pub struct Services {
     /// of the run is lent them.
     pub services: HostServices,
     /// The run's whole filesystem: the real directories and the declared store,
-    /// passed straight to the context's VFS.
+    /// passed straight to the config's VFS.
     pub vfs: VfsRef,
     /// The text staged at the prompt's declared `input:` path before the
     /// run, when the launch supplied one.
     pub input_text: Option<String>,
-    /// The run's cancel flag: handed to the context and polled by the
+    /// The run's cancel flag: handed to the config and polled by the
     /// Engine.
     pub cancel: CancelHandle,
     /// The recorder the run began at, which preparation and the loop
@@ -118,7 +118,7 @@ pub struct Begun {
 /// already at the recorder.
 #[derive(Debug)]
 pub struct Prepared {
-    /// The run, built over the prepared context.
+    /// The run, built over the prepared config.
     pub run: Run,
     /// The run's id at the recorder, begun and still open, for
     /// `Harness::run_to_end` to drive; the run's events, its parse events
@@ -217,7 +217,7 @@ pub async fn begin(
 /// the prompt, puts its declared input file in place, waits for every
 /// built Pack to be ready or for the run's cancel, takes the run's
 /// snapshot of the Host's Packs, sets the snapshot's catalog, roster, and
-/// declared preludes and the Host's model on the context, and builds the
+/// declared preludes and the Host's model on the config, and builds the
 /// `Run` and its performers.
 ///
 /// A Pack whose `ready` fails is unavailable to this run, with its
@@ -299,14 +299,14 @@ pub async fn prepare(
     // root task continues the sequence past them, so `(task_id, task_seq)`
     // is unique across every record of the run.
     let provenance_start = u32::try_from(parse_events.len()).unwrap_or(u32::MAX);
-    let mut ctx = RunContext::new(name, seed, started_at)
+    let mut ctx = RunConfig::new(name, seed, started_at)
         .with_cancel(cancel.clone())
         .with_provenance_start(provenance_start);
     if let Some(ui) = ui {
         ctx = ctx.with_ui(ui);
     }
     // The pick-wait-snapshot ceremony: the run's whole filesystem, the
-    // real directories and the declared store, goes to the context as
+    // real directories and the declared store, goes to the config as
     // given; the run's Packs are picked from the prompt's `uses:` entries;
     // the snapshot is taken once each of them is ready or the run is
     // cancelled, its catalog is what the run offers, its roster gives each

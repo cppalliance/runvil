@@ -1,5 +1,5 @@
 //! The run-level test driver. A [`Scenario`] holds a run's setup as data:
-//! its source, args, run name, seed, context edits, store, tools, model,
+//! its source, args, run name, seed, config edits, store, tools, model,
 //! the sets it fills in before the run starts, the effects it holds, and
 //! the effect that cancels it. It parses the source, builds the run, and
 //! steps it on the calling thread, answering every effect it does not hold
@@ -31,7 +31,7 @@ use runvil_vfs::VfsRef;
 use super::FnTool;
 use super::scripted_chat::ScriptedChat;
 use crate::Error;
-use crate::execute::{Effect, EffectAnswer, Run, RunContext, RunLimits};
+use crate::execute::{Effect, EffectAnswer, Run, RunConfig, RunLimits};
 use crate::lua::ToolBinding;
 use crate::model::{
     CompletionErrorKind, ModelBinding, ModelId, ModelInfo, ModelRole, ModelSet, ThinkingMode,
@@ -55,7 +55,7 @@ pub(crate) const EXECUTION: &str = "execute-test";
 
 /// The fixed caller inputs every test run shares: a seed and a start instant
 /// a test that does not care about them never has to choose. The tests of
-/// the inputs themselves (`run_inputs`) build their contexts directly.
+/// the inputs themselves (`run_inputs`) build their configs directly.
 pub(crate) const TEST_SEED: RunSeed = RunSeed::from_bytes([1; 32]);
 pub(crate) const TEST_STARTED_AT: Timestamp = Timestamp::from_unix_millis(1_700_000_000_000);
 
@@ -107,9 +107,9 @@ pub(crate) fn assert_model_failure(error: &Error, kind: CompletionErrorKind, mes
     );
 }
 
-/// The edit a scenario applies to its run's context before the run is
+/// The edit a scenario applies to its run's config before the run is
 /// built.
-type ContextEdit = Box<dyn FnOnce(RunContext) -> RunContext>;
+type ConfigEdit = Box<dyn FnOnce(RunConfig) -> RunConfig>;
 
 /// A test over an effect: which effects a scenario holds, or which answer
 /// signals its canceller.
@@ -131,7 +131,7 @@ pub(crate) struct Scenario {
     args: String,
     name: String,
     seed: RunSeed,
-    context: ContextEdit,
+    config: ConfigEdit,
     store: TestStore,
     /// The catalog's tools.
     tools: Vec<FnTool>,
@@ -143,7 +143,7 @@ pub(crate) struct Scenario {
     signal: Option<Matcher>,
     /// The role map the run fills its model set from.
     roles: BTreeMap<ModelRole, ModelInfo>,
-    /// The cancel flag the run's context takes, which the scenario keeps.
+    /// The cancel flag the run's config takes, which the scenario keeps.
     cancel: CancelHandle,
 }
 
@@ -157,7 +157,7 @@ impl Scenario {
             args: String::new(),
             name: EXECUTION.to_owned(),
             seed: TEST_SEED,
-            context: Box::new(|ctx| ctx),
+            config: Box::new(|ctx| ctx),
             store: TestStore::new(),
             tools: Vec::new(),
             listed: Vec::new(),
@@ -209,21 +209,21 @@ impl Scenario {
 
     /// Runs under `limits` in place of the default limits.
     pub(crate) fn limits(self, limits: RunLimits) -> Scenario {
-        self.context(move |ctx| ctx.with_limits(limits))
+        self.config(move |ctx| ctx.with_limits(limits))
     }
 
-    /// Adds `edit` to the edits applied to the run's context, after the
+    /// Adds `edit` to the edits applied to the run's config, after the
     /// scenario's own settings, its role map and cancel flag included. An
     /// edit that replaces the cancel flag leaves [`cancel_when`] and
     /// [`Driving::cancel`] setting a flag the run never reads.
     ///
     /// [`cancel_when`]: Scenario::cancel_when
-    pub(crate) fn context(
+    pub(crate) fn config(
         mut self,
-        edit: impl FnOnce(RunContext) -> RunContext + 'static,
+        edit: impl FnOnce(RunConfig) -> RunConfig + 'static,
     ) -> Scenario {
-        let earlier = self.context;
-        self.context = Box::new(move |ctx| edit(earlier(ctx)));
+        let earlier = self.config;
+        self.config = Box::new(move |ctx| edit(earlier(ctx)));
         self
     }
 
@@ -323,7 +323,7 @@ impl Scenario {
     /// When the source fails to parse, naming the error.
     #[track_caller]
     pub(crate) fn start(mut self) -> Driving {
-        let (prompt, events, ctx) = self.context_of();
+        let (prompt, events, ctx) = self.config_of();
         let (signal, signalled) = match self.signal {
             Some(signal) => {
                 let (sender, receiver) = mpsc::channel();
@@ -383,20 +383,20 @@ impl Scenario {
     /// When the source fails to parse, naming the error.
     #[track_caller]
     pub(crate) fn into_run(mut self) -> Run {
-        let (prompt, _, ctx) = self.context_of();
+        let (prompt, _, ctx) = self.config_of();
         self.prefill.start(Arc::new(prompt), &self.args, ctx)
     }
 
-    /// Parses the source and builds the run's context, beside the parse
+    /// Parses the source and builds the run's config, beside the parse
     /// events.
     #[track_caller]
-    fn context_of(&mut self) -> (Prompt, Vec<Event>, RunContext) {
+    fn config_of(&mut self) -> (Prompt, Vec<Event>, RunConfig) {
         let (parsed, events) = Prompt::parse(&self.source, &self.name);
         let prompt = match parsed {
             Ok(prompt) => prompt,
             Err(error) => panic!("expected the scenario source to parse, got {error}"),
         };
-        let mut ctx = RunContext::new(self.name.clone(), self.seed, TEST_STARTED_AT)
+        let mut ctx = RunConfig::new(self.name.clone(), self.seed, TEST_STARTED_AT)
             .with_vfs(self.store.vfs())
             .with_models(std::mem::take(&mut self.roles))
             .with_cancel(self.cancel.clone());
@@ -406,7 +406,7 @@ impl Scenario {
                 .expect("the scenario's tool ids differ");
             ctx = ctx.with_tools(catalog);
         }
-        let edit = std::mem::replace(&mut self.context, Box::new(|ctx| ctx));
+        let edit = std::mem::replace(&mut self.config, Box::new(|ctx| ctx));
         (prompt, events, edit(ctx))
     }
 }
@@ -422,7 +422,7 @@ struct Prefill {
 impl Prefill {
     /// Builds the run of `prompt` under `config` with the state filled in,
     /// or as [`Run::new`] builds it when there is nothing to fill.
-    fn start(self, prompt: Arc<Prompt>, args: &str, config: RunContext) -> Run {
+    fn start(self, prompt: Arc<Prompt>, args: &str, config: RunConfig) -> Run {
         if self.models.is_none() && !self.raw_shims {
             return Run::new(prompt, args, config);
         }

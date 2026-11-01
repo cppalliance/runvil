@@ -5,7 +5,7 @@ use runvil::timestamp::Timestamp;
 use super::support::{Scenario, TestResult, note};
 
 #[test]
-fn the_prompt_reads_the_contexts_start_time_as_sys_when() -> TestResult {
+fn the_prompt_reads_the_configs_start_time_as_sys_when() -> TestResult {
     let source = note("sys.when");
     let stamp = Timestamp::from_unix_millis(1_700_000_000_000);
 

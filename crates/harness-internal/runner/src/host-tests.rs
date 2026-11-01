@@ -13,7 +13,7 @@ use runvil::effect::{ToolCallOrigin, ToolCaller};
 use runvil::packs::RosterEntry;
 use runvil::timestamp::Timestamp;
 use runvil::vfs::{Origin, VfsRef};
-use runvil::{Prompt, Run, RunContext, RunOutcome, RunSeed, Step};
+use runvil::{Prompt, Run, RunConfig, RunOutcome, RunSeed, Step};
 use runvil_plugin::{
     HostServices, Pack, PackFuture, PackId, PackInfo, PackRegistry, ServiceId, ServiceKey,
     ToolContext, ToolError, ToolId, ToolInfo, ToolOutput,
@@ -227,7 +227,7 @@ fn unavailable_for(reason: &str) -> RosterEntry {
 /// The refusal notice the first step of a run of `prompt` over `run`'s
 /// roster fails with.
 fn refusal(run: &HostRunContext, prompt: &Prompt) -> String {
-    let ctx = RunContext::new(
+    let ctx = RunConfig::new(
         "host-test",
         RunSeed::from_bytes([0; 32]),
         Timestamp::UNIX_EPOCH,

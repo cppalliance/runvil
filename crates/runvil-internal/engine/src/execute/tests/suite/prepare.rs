@@ -10,8 +10,8 @@ use std::sync::{Arc, Mutex};
 
 use crate::RunErrorKind;
 use crate::execute::context::ChainState;
-use crate::execute::tests::context::test_context;
-use crate::execute::{Effect, EffectAnswer, RunContext};
+use crate::execute::tests::context::test_config;
+use crate::execute::{Effect, EffectAnswer, RunConfig};
 use crate::model::ModelBinding;
 use crate::parser::Prompt;
 use crate::test_support::scenario::Scenario;
@@ -36,7 +36,7 @@ const DECLARES_NOTHING: &str = concat!(
 
 #[test]
 fn two_runs_writing_the_same_store_path_do_not_conflict() {
-    let (ctx_a, ctx_b) = (test_context("run-a"), test_context("run-b"));
+    let (ctx_a, ctx_b) = (test_config("run-a"), test_config("run-b"));
     let access_a = ctx_a
         .vfs
         .acquire(Origin::new("run-a"))
@@ -100,7 +100,7 @@ fn declaring(front: &str, lua: &str) -> String {
 
 /// The state a run of `prompt` builds over `config`, as `Run::new` builds
 /// it.
-fn state_of(prompt: &Prompt, config: RunContext) -> ChainState {
+fn state_of(prompt: &Prompt, config: RunConfig) -> ChainState {
     ChainState::root(Arc::new(prompt.clone()), "", config)
 }
 
@@ -126,7 +126,7 @@ fn a_one_model_map_gives_all_five_roles_that_model() {
     let model = model_named("only", 32_000, ThinkingMode::Switchable);
     let state = state_of(
         &parse_ok(DECLARES_NOTHING),
-        test_context("one-model").with_models(role_map([(ModelRole::Default, model.clone())])),
+        test_config("one-model").with_models(role_map([(ModelRole::Default, model.clone())])),
     );
     assert_eq!(state.refusal(), None);
     let set = state.model_set();
@@ -147,7 +147,7 @@ fn a_map_with_a_strong_entry_gives_strong_that_model_and_the_other_roles_the_def
     let strong = model_named("strong-model", 200_000, ThinkingMode::Always);
     let state = state_of(
         &parse_ok(DECLARES_NOTHING),
-        test_context("two-models").with_models(role_map([
+        test_config("two-models").with_models(role_map([
             (ModelRole::Default, default.clone()),
             (ModelRole::Strong, strong.clone()),
         ])),
@@ -211,7 +211,7 @@ fn a_role_binding_carries_the_description_of_the_model_that_fills_it() {
     let prompt = parse_ok(&declaring("models: { strong: {} }", "return 'x'"));
     let state = state_of(
         &prompt,
-        test_context("description").with_models(role_map([(
+        test_config("description").with_models(role_map([(
             ModelRole::Default,
             current_model(32_000, ThinkingMode::Never),
         )])),
@@ -256,7 +256,7 @@ fn a_non_empty_map_without_a_default_entry_leaves_the_roles_empty_and_refuses_th
     let strong = model_named("strong-model", 200_000, ThinkingMode::Switchable);
     let state = state_of(
         &parse_ok(DECLARES_NOTHING),
-        test_context("unbound").with_models(role_map([(ModelRole::Strong, strong.clone())])),
+        test_config("unbound").with_models(role_map([(ModelRole::Strong, strong.clone())])),
     );
     assert!(
         state.model_set().bindings().is_empty(),
@@ -274,7 +274,7 @@ fn a_non_empty_map_without_a_default_entry_leaves_the_roles_empty_and_refuses_th
 fn an_empty_map_leaves_the_model_set_empty_and_a_model_call_raises_model_required() {
     let state = state_of(
         &parse_ok(DECLARES_NOTHING),
-        test_context("empty").with_models(BTreeMap::new()),
+        test_config("empty").with_models(BTreeMap::new()),
     );
     assert_eq!(state.refusal(), None);
     assert!(state.model_set().bindings().is_empty());
@@ -462,7 +462,7 @@ fn a_raw_id_handle_runs_the_next_round_on_its_gateway_model() {
         models.use(models.get('vendor/raw-model'))
         return models.infer('one')",
     )
-    .context(|ctx| ctx.with_ui(serde_json::json!({})))
+    .config(|ctx| ctx.with_ui(serde_json::json!({})))
     .chat(&gateway)
     .run();
     assert_eq!(trace.text(), "a");

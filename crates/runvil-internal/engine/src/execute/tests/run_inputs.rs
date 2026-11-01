@@ -1,4 +1,4 @@
-//! The caller-drawn inputs on `RunContext`: `seed` (the untrusted-envelope
+//! The caller-drawn inputs on `RunConfig`: `seed` (the untrusted-envelope
 //! nonce derives from it), `started_at` (rendered as `sys.when` for the H1
 //! pass and every walked section alike), and `ui` (the snapshot the `ui()`
 //! global serves). Two runs under the same inputs agree byte for byte, and
@@ -7,7 +7,7 @@
 use runvil_types::seed::RunSeed;
 use runvil_types::timestamp::Timestamp;
 
-use super::context::{parse, test_context};
+use super::context::{parse, test_config};
 use super::*;
 use crate::execute::run::Run;
 use crate::test_support::drive;
@@ -26,7 +26,7 @@ const DRAWS: u64 = 0x5EED;
 /// Runs `md` with no effects under `seed` and [`STARTED_AT`], returning
 /// the run's text.
 fn run_seeded(md: &str, seed: RunSeed) -> RunOutcome {
-    let ctx = RunContext::new(EXECUTION, seed, STARTED_AT);
+    let ctx = RunConfig::new(EXECUTION, seed, STARTED_AT);
     let (outcome, _) = drive(Run::new(Arc::new(parse(md)), "", ctx), |_, effect| {
         panic!("no effect is issued: {effect:?}")
     });
@@ -62,7 +62,7 @@ fn two_runs_with_the_same_seed_and_started_at_produce_identical_nonces_and_sys_w
     );
     assert!(
         first.starts_with(&format!("{STARTED_AT_RFC3339}|")),
-        "sys.when is the context's started_at rendered as RFC 3339: {first}"
+        "sys.when is the config's started_at rendered as RFC 3339: {first}"
     );
     assert_eq!(
         nonce_in(&first).len(),
@@ -114,7 +114,7 @@ fn sys_when_is_timestamp_to_rfc3339_for_any_started_at() {
         return sys.when\n\
         ```\n";
     let whole_second = Timestamp::from_unix_millis(1_700_000_000_000);
-    let ctx = RunContext::new(EXECUTION, TEST_SEED, whole_second);
+    let ctx = RunConfig::new(EXECUTION, TEST_SEED, whole_second);
     let (result, _) = drive(Run::new(Arc::new(parse(md)), "", ctx), |_, effect| {
         panic!("no effect is issued: {effect:?}")
     });
@@ -127,10 +127,10 @@ fn sys_when_is_timestamp_to_rfc3339_for_any_started_at() {
 }
 
 #[test]
-fn a_run_contexts_debug_shows_no_seed() {
+fn a_run_configs_debug_shows_no_seed() {
     let mut rng = Seeded::new(DRAWS);
     let seed = rng.run_seed();
-    let ctx = RunContext::new(EXECUTION, seed, STARTED_AT);
+    let ctx = RunConfig::new(EXECUTION, seed, STARTED_AT);
     let debug = format!("{ctx:?}");
     rng.check(
         !debug.contains(&seed.to_string()) && !debug.to_lowercase().contains("seed"),
@@ -165,7 +165,7 @@ fn the_ui_global_serves_the_snapshot_taken_at_run_start() {
         return ui().selected_model .. '/' .. tostring(ui().workspace_root)\n\
         ```\n";
     let ctx =
-        test_context(EXECUTION).with_ui(json!({ "selected_model": "m-1", "workspace_root": null }));
+        test_config(EXECUTION).with_ui(json!({ "selected_model": "m-1", "workspace_root": null }));
     let (result, _) = drive(Run::new(Arc::new(parse(md)), "", ctx), |_, effect| {
         panic!("no effect is issued: {effect:?}")
     });
