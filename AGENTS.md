@@ -70,17 +70,6 @@ Seven terms have exactly one meaning each, everywhere in this repository: code c
 - Temporary directory names come from the test's name, the process id, and a counter.
 - A module with more than one file keeps its files in a directory named after it, in the standard module layout (`foo.rs` beside `foo/bar.rs`). A directory may hold any number of files, one included, and a module's unit tests are one of them (`foo/tests.rs`). Never move files between a flat sibling form and a directory because of how many files a group holds, and never change a group's layout only to bring it in line with this rule. Existing `foo-bar.rs` siblings wired with `#[path = "foo-bar.rs"] mod bar;` stay as they are, and new code adds no path attribute for layout. Top-level `tests/` and `benches/` trees follow Cargo target conventions.
 
-## Surfaces
-
-Test code is `#[cfg(test)]` code, `tests/`, `benches/`, `examples/`, and code gated on the `test-support` or `test-fixtures` feature. For every item in the surface of a crate directly under `crates/`, re-exported items included, a program outside this repository counts as another crate. Add no violation of these rules in a change, and fix an existing violation in a change of its own, so each review covers one purpose.
-
-- Make an item `pub` only when another crate names it, and gate it behind `test-support` or `test-fixtures` when every crate that names it does so in test code, adding `test-support` to a crate that has neither. Leave `pub` an item that only this crate's own `tests/` names. Make every other item `pub(crate)` or private, and delete what the `dead_code` lint then reports.
-- Add no second reader of a field to the surface; a dependent that needs the value in another form derives it at its call site. A reader is the field itself when it is `pub`, or a function whose only parameter is the value holding the field, by value or by reference, and whose result depends on that field alone. Trait impls, and functions a workspace lint requires beside a reader, are not readers.
-- Re-export another crate's item only when a rule that `cargo test -p build-xtask` enforces forbids the dependent that needs it from depending on the crate that defines it.
-- Remove a dependency that no code in the crate names, and move a dependency to `[dev-dependencies]` when only `#[cfg(test)]` code, `tests/`, `benches/`, or `examples/` names it. Keep a dependency that only sets another dependency's features, with a comment that says so.
-- Put new items in a new crate when a crate that will name them names nothing else in the crate you meant to extend. Extend that crate instead when the two would depend on each other. Treat a new crate as a smaller change than widening an existing crate's surface.
-- Remove an edge between two crates by moving items, not by merging the crates, because a merge deletes the boundary review relies on.
-
 ## SPA and CSS Rules
 
 - No raw color, size, or spacing values in Workshop UI component CSS; use the custom properties defined in `@workshop/look` and `ui/src/tokens/component.css`.
