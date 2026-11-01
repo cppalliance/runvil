@@ -4,16 +4,16 @@ overview: Make std Read and Grep real and add a seventh tool, std/dir (wire name
 todos:
   - id: vfs-read-range
     content: "Add Access::read_range in runvil-vfs (gate, claim_read, fire event, delegate to the existing VfsAccess::read_range) with VFS tests and a regenerated public-api.txt, in its own commit"
-    status: pending
+    status: completed
   - id: read-tool
     content: "Add the shared plugin-std code (regex workspace dependency, refusal text, argument helpers, plural, text module) and implement Read in src/read/ with the new read.json; dispatch Read and flip its integration tests"
-    status: pending
+    status: completed
   - id: dir-tool
     content: "Add the glob matcher and implement ListDir in src/dir/ with the new dir.json; embed it in spec.rs, move the tool-count tests from six to seven, dispatch ListDir, and flip its integration tests"
-    status: pending
+    status: completed
   - id: grep-tool
     content: "Change schemas/grep.json to the bundle schema plus literal, implement Grep in src/grep/ with its yield test, dispatch Grep, flip its integration tests, and finish with the full gate set"
-    status: pending
+    status: completed
 isProject: false
 ---
 
