@@ -10,7 +10,7 @@ use std::sync::{Arc, Mutex};
 use runvil_types::ids::{AbandonReason, ChainId, TaskId};
 use runvil_vfs::Access;
 
-use crate::execute::context::RunState;
+use crate::execute::context::ChainState;
 use crate::execute::run::EffectId;
 use crate::execute::section_context::TaskSeed;
 use crate::heading_address::SectionPos;
@@ -55,7 +55,7 @@ pub(super) struct ChainStart {
     /// the H1 pass's for the root walk that follows it.
     pub(super) counters: Counters,
     /// The chain's fork of the run state.
-    pub(super) ctx: RunState,
+    pub(super) ctx: ChainState,
     /// The model the chain's current model starts on: the `default` binding
     /// for the H1 pass and a root walk with no pass before it, the H1
     /// pass's ending model for the walk that follows it, and a copy of the
@@ -140,7 +140,7 @@ impl Scheduler {
         &mut self,
         kind: ChainKind,
         counters: Counters,
-        ctx: RunState,
+        ctx: ChainState,
         model: Option<ModelBinding>,
         access: Arc<Access>,
         start: SectionPos,

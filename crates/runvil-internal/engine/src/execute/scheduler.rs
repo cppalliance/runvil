@@ -26,10 +26,10 @@
 //! `Error::Internal` from a scheduler method marks a state the scheduler's
 //! own invariants rule out: a scheduler or shim bug.
 //!
-//! [`RunState`] stays the ambient shared read-mostly context, cloned into
-//! chains and callbacks; the scheduler owns the run's copy and is the
-//! exclusively owned mutable counterpart. The two are deliberately not
-//! merged: `RunState` is cloned into callbacks, while the scheduler must
+//! [`ChainState`] stays the ambient shared read-mostly context, cloned into
+//! chains and callbacks; the scheduler owns the root chain's copy and is
+//! the exclusively owned mutable counterpart. The two are deliberately not
+//! merged: `ChainState` is cloned into callbacks, while the scheduler must
 //! stay unreachable from the callback layer. The prompt tree is shared
 //! through the context's `Arc`, so a chain names its position in it by
 //! path ([`SectionPos`](crate::heading_address::SectionPos)) rather than by
@@ -98,7 +98,7 @@ use crate::lua::Answer;
 use crate::parser::{Block, Prompt};
 use crate::{Error, Result};
 
-use super::context::RunState;
+use super::context::ChainState;
 use super::run::EffectAnswer;
 use admission::Admission;
 use chain_ops::ChainOps;
@@ -152,9 +152,10 @@ enum Phase {
 /// The coroutine protocol's driver: the chain arena, ready queue, effect
 /// table, task arena, and admission, owned outright by the run.
 pub(crate) struct Scheduler {
-    /// The ambient run context, cloned into chains and forked by call
-    /// chains.
-    ctx: RunState,
+    /// The root chain's state: cloned to start the H1 pass and the walk,
+    /// forked at the handoff between them, and read for the root task's
+    /// emitter, which reports the run's end.
+    ctx: ChainState,
     /// The chain arena: append-only, indexed by [`ChainIndex`].
     chains: ChainArena,
     /// Chains eligible to resume (FIFO); empty whenever a step returns,
@@ -193,7 +194,7 @@ impl Drop for Scheduler {
 impl Scheduler {
     /// Builds the scheduler for one run over `ctx`'s prompt. Nothing runs
     /// or reports until the first step.
-    pub(super) fn new(ctx: RunState) -> Self {
+    pub(super) fn new(ctx: ChainState) -> Self {
         Self {
             ctx,
             chains: ChainArena::new(),

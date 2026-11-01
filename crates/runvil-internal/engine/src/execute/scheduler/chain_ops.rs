@@ -64,7 +64,7 @@ impl Scheduler {
 impl ChainOps<'_> {
     /// The prompt's shared handle: the chain resolves its walk position
     /// against this clone so the tree borrow never pins the chain. The
-    /// chain's own context fork is the source, which is the one `RunState`
+    /// chain's own context fork is the source, which is the one `ChainState`
     /// the chain reads the prompt from.
     pub(super) fn prompt(&self) -> Arc<Prompt> {
         Arc::clone(self.chain.ctx.prompt())

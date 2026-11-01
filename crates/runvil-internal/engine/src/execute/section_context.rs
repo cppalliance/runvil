@@ -14,7 +14,7 @@
 //! boundary.
 //!
 //! The run-scoped inputs (bindings, models, limits, the shared tools)
-//! arrive through the [`RunState`].
+//! arrive through the [`ChainState`].
 
 #[path = "section_context-construct.rs"]
 mod construct;
@@ -28,7 +28,7 @@ use runvil_types::tools::ToolId;
 use crate::lua::{ProseState, ScriptReport, SectionVm, ToolCallCounts};
 use crate::{Error, Result, subst};
 
-use super::context::{ReportingHandles, RunState};
+use super::context::{ChainState, ReportingHandles};
 
 /// The seeds a spawned task chain's first section entry receives beyond the
 /// shared Engine values: `tasks.spawn`'s `opts.item` (installed as the
@@ -200,7 +200,7 @@ impl SectionContext {
     ///
     /// # Errors
     /// Returns [`Error::Lua`] if the guard cannot be installed.
-    pub(super) fn install_lazy_prose(&self, ctx: &RunState, template: &str) -> Result<()> {
+    pub(super) fn install_lazy_prose(&self, ctx: &ChainState, template: &str) -> Result<()> {
         let template = template.to_owned();
         let render = prose_renderer(ctx, self.item.clone());
         self.vm()
@@ -281,7 +281,7 @@ fn live_vm(vm: Option<&SectionVm>) -> &SectionVm {
 /// the run's `args` and `argv`, shared with the run rather than copied,
 /// the frame's `item`, and the section state the first read snapshots.
 fn prose_renderer(
-    ctx: &RunState,
+    ctx: &ChainState,
     item: Option<serde_json::Value>,
 ) -> impl Fn(&str, ProseState<'_>) -> mlua::Result<String> + Send + Sync + 'static {
     let raw_args = Arc::clone(ctx.args());

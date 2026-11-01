@@ -50,7 +50,7 @@ pub(crate) struct VmSeed<'a> {
 pub(crate) struct SectionVmSetup<'a> {
     /// The run's argument string, installed as the `args` global.
     pub(crate) args: &'a str,
-    /// The run's `argv` (`RunState::argv`; `None` installs nil),
+    /// The run's `argv` (`ChainState::argv`; `None` installs nil),
     /// with its mode: writable for the H1 pass alone, so the repair pattern
     /// can assign it, and frozen for every other section. The caller picks
     /// the mode at construction, so a writable value cannot reach a
@@ -76,8 +76,8 @@ pub(crate) struct SectionVmSetup<'a> {
     pub(crate) emitter: &'a Emitter,
     /// The section name used in observations and error messages.
     pub(crate) section_name: &'a str,
-    /// The run's tool-loop cap, as `RunState::max_tool_iterations` resolves
-    /// it, captured by the `models.loop` shim as its round cap.
+    /// The run's tool-loop cap, as `ChainState::max_tool_iterations`
+    /// resolves it, captured by the `models.loop` shim as its round cap.
     pub(crate) max_tool_iterations: usize,
     /// The run's application-state snapshot, when the caller supplied one:
     /// its presence gives the section VM the `ui()` global and the

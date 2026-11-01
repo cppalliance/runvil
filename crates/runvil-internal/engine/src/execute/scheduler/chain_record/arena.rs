@@ -51,7 +51,7 @@ impl Chain {
 
         use super::{CallDepth, ChatAnchor, Counters, Walk};
         use crate::execute::RunContext;
-        use crate::execute::context::RunState;
+        use crate::execute::context::ChainState;
         use crate::execute::section_context::TaskSeed;
         use crate::heading_address::{SectionIndex, SectionPos};
         use crate::parser::Prompt;
@@ -64,7 +64,7 @@ impl Chain {
         let prompt = Prompt::parse(source, "chain-test")
             .0
             .expect("the test prompt parses");
-        let ctx = RunState::new(
+        let ctx = ChainState::root(
             Arc::new(prompt),
             "",
             RunContext::new("chain-test", TEST_SEED, TEST_STARTED_AT),

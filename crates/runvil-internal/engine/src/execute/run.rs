@@ -26,7 +26,7 @@ use crate::parser::Prompt;
 
 use super::RunOutcome;
 use super::config::RunContext;
-use super::context::RunState;
+use super::context::ChainState;
 use super::scheduler::Scheduler;
 
 /// The outcome of one call to [`Run::step`]: the run either continues or
@@ -132,7 +132,7 @@ impl Run {
     /// instead.
     #[must_use]
     pub fn new(prompt: Arc<Prompt>, args: &str, config: RunContext) -> Run {
-        Self::from_state(RunState::new(prompt, args, config))
+        Self::from_state(ChainState::root(prompt, args, config))
     }
 
     /// [`Run::new`], with `edit` applied to the assembled state before the
@@ -143,14 +143,14 @@ impl Run {
         prompt: Arc<Prompt>,
         args: &str,
         config: RunContext,
-        edit: impl FnOnce(RunState) -> RunState,
+        edit: impl FnOnce(ChainState) -> ChainState,
     ) -> Run {
-        Self::from_state(edit(RunState::new(prompt, args, config)))
+        Self::from_state(edit(ChainState::root(prompt, args, config)))
     }
 
     /// Builds the run over its assembled state.
     #[must_use]
-    fn from_state(state: RunState) -> Run {
+    fn from_state(state: ChainState) -> Run {
         Run {
             scheduler: Box::new(Scheduler::new(state)),
         }

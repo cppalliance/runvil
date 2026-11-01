@@ -1,9 +1,9 @@
 //! The run-scoped tool set and the `argv` derivation: the pieces
-//! `RunState::new` assembles once per run.
+//! `ChainState::root` assembles once per run.
 //!
-//! The tool set is built once. [`derive_argv`] is not: `RunState::new` calls
-//! it for the run's own args, and every args fork calls it again, so a
-//! contained chain parses the input it was given.
+//! The tool set is built once. [`derive_argv`] is not: `ChainState::root`
+//! calls it for the run's own args, and every args fork calls it again, so
+//! a contained chain parses the input it was given.
 
 use std::collections::BTreeMap;
 

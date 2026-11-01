@@ -37,8 +37,8 @@ use crate::model::{ModelInfo, ModelRole};
 ///
 /// The caller supplies the run's clock and randomness through `new`.
 pub struct RunContext {
-    /// The caller's run label, moved into `RunState::execution` at start and
-    /// read nowhere else.
+    /// The caller's run label, moved into `SharedState::execution` at start
+    /// and read nowhere else.
     pub(super) name: String,
     /// The run's seed, as the caller supplied it: the source of the
     /// untrusted-envelope nonce and every other in-run random choice.

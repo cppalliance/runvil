@@ -9,7 +9,7 @@ use std::num::NonZeroU32;
 use std::sync::{Arc, Mutex};
 
 use crate::RunErrorKind;
-use crate::execute::context::RunState;
+use crate::execute::context::ChainState;
 use crate::execute::tests::context::test_context;
 use crate::execute::{Effect, EffectAnswer, RunContext};
 use crate::model::ModelBinding;
@@ -100,8 +100,8 @@ fn declaring(front: &str, lua: &str) -> String {
 
 /// The state a run of `prompt` builds over `config`, as `Run::new` builds
 /// it.
-fn state_of(prompt: &Prompt, config: RunContext) -> RunState {
-    RunState::new(Arc::new(prompt.clone()), "", config)
+fn state_of(prompt: &Prompt, config: RunContext) -> ChainState {
+    ChainState::root(Arc::new(prompt.clone()), "", config)
 }
 
 /// The refusal notice of `scenario`'s run, after asserting that its first

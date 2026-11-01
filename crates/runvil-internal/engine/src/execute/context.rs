@@ -1,10 +1,13 @@
 //! The execute subtree's ambient run state.
 //!
-//! [`RunState`] is built once in [`run`](super::run) and travels through
-//! the execute subtree as parameter one (`ctx: &RunState`). The
-//! invariant: a new run-scoped concern becomes a field here, never a new
-//! parameter. Per-call data (a section, a `var` snapshot) stays
-//! in parameters or on the per-section frame.
+//! [`ChainState`] is built once in [`run`](super::run), as the root
+//! chain's state, and travels through the execute subtree as parameter one
+//! (`ctx: &ChainState`). It holds the run's one [`SharedState`] and the
+//! fields a chain's fork replaces. The invariant: a new run-scoped concern
+//! becomes a field here, never a new parameter: a field of
+//! [`SharedState`] when it is the same for every chain, and a field of
+//! [`ChainState`] when a fork replaces it. Per-call data (a section, a
+//! `var` snapshot) stays in parameters or on the per-section frame.
 
 use std::fmt;
 use std::sync::atomic::AtomicU32;
@@ -42,20 +45,12 @@ pub(super) struct ReportingHandles {
     pub(super) turns: Arc<AtomicU32>,
 }
 
-/// The ambient state one run shares across the execute subtree.
+/// The run-wide state every chain of one run shares: one `Arc` per run,
+/// built with the root chain's state and never forked.
 ///
-/// Shared by every chain of the run and cheap to clone: every field is
-/// shared ownership or `Copy`, so a clone points at the same run state.
-/// Its handles are fixed for the run, though the cancel flag, the event
-/// buffer, the turn counter, and the model set's prompt-wide default
-/// change behind them.
-/// The three sanctioned forks: [`with_walk_state`](Self::with_walk_state)
-/// at the H1-to-walk handoff, [`with_task`](Self::with_task) giving a
-/// spawned chain its own task emitter and turn counter, and
-/// [`with_args`](Self::with_args) passing a `call` or task-spawning arm's
-/// input override into its contained chain.
-#[derive(Clone)]
-pub(crate) struct RunState {
+/// Every field is the same for every chain. Its handles are fixed for the
+/// run, though the cancel flag and the event buffer change behind them.
+struct SharedState {
     /// The prompt this run executes.
     prompt: Arc<Prompt>,
     /// The untrusted-envelope nonce, derived once here from the run's seed
@@ -67,25 +62,12 @@ pub(crate) struct RunState {
     vfs: VfsRef,
     /// The execution identifier stamped on every observation.
     execution: Arc<str>,
-    /// The run's argument string for `{{ args }}` substitution.
-    args: Arc<str>,
-    /// The run's `argv`, as `bound::derive_argv` derives it from `args`. At
-    /// construction this is the value the H1 pass starts from; the walk's
-    /// fork holds the value H1 left behind at the freeze, so an H1 repair
-    /// reaches every downstream section.
-    argv: Option<Arc<serde_json::Value>>,
     /// The run's resource limits.
     limits: RunLimits,
     /// The run's event buffer, shared by every chain's emitter, spawned
     /// task chains' included, and drained once per `step` into the batch
     /// returned to the caller.
     events: EventSink,
-    /// This context's reporting handles: the root task's at construction,
-    /// a spawned chain's own after [`with_task`](Self::with_task). The Lua
-    /// layer's seams (`require`'s library loads, `log`, teardown, the
-    /// shared tool-dispatch body) take the emitter too, so their reports
-    /// land in the buffer in order with the scheduler's own.
-    reporting: ReportingHandles,
     /// The run's cancel flag: polled between chain steps and installed on
     /// every section VM's instruction hook. The context's one handle, the
     /// same flag the caller watches and the run's `cancel` sets.
@@ -119,17 +101,47 @@ pub(crate) struct RunState {
     raw_shims: bool,
 }
 
-impl RunState {
-    /// Builds the context for one run of `prompt` over `config`, which it
-    /// consumes. The turn counter is minted here (starting at zero), as are
-    /// the run's shared tool and model sets - the tool set built from the
-    /// catalog and the roster, the model set filled from the role map (it
-    /// stays empty for an empty map) - and the refusal notice of what the
-    /// prompt requires that `config` lacks; the nonce derives from
-    /// `config`'s seed and `when` renders `config`'s `started_at`, so two
-    /// contexts over the same inputs agree on both.
+/// One chain's state: the run's [`SharedState`] and the fields a chain's
+/// fork replaces.
+///
+/// Cheap to clone: a clone shares the run's state and this chain's
+/// reporting handles, so it advances the same turn counter.
+/// The three sanctioned forks: [`with_walk_state`](Self::with_walk_state)
+/// at the H1-to-walk handoff, [`with_task`](Self::with_task) giving a
+/// spawned chain its own task emitter and turn counter, and
+/// [`with_args`](Self::with_args) passing a `call` or task-spawning arm's
+/// input override into its contained chain.
+#[derive(Clone)]
+pub(crate) struct ChainState {
+    /// The run-wide state every chain of the run shares.
+    shared: Arc<SharedState>,
+    /// This context's reporting handles: the root task's at construction,
+    /// a spawned chain's own after [`with_task`](Self::with_task). The Lua
+    /// layer's seams (`require`'s library loads, `log`, teardown, the
+    /// shared tool-dispatch body) take the emitter too, so their reports
+    /// land in the buffer in order with the scheduler's own.
+    reporting: ReportingHandles,
+    /// The run's argument string for `{{ args }}` substitution.
+    args: Arc<str>,
+    /// The run's `argv`, as `bound::derive_argv` derives it from `args`. At
+    /// construction this is the value the H1 pass starts from; the walk's
+    /// fork holds the value H1 left behind at the freeze, so an H1 repair
+    /// reaches every downstream section.
+    argv: Option<Arc<serde_json::Value>>,
+}
+
+impl ChainState {
+    /// Builds the run's shared state and the root chain's state for one
+    /// run of `prompt` over `config`, which it consumes. The turn counter
+    /// is minted here (starting at zero), as are the run's shared tool and
+    /// model sets - the tool set built from the catalog and the roster,
+    /// the model set filled from the role map (it stays empty for an empty
+    /// map) - and the refusal notice of what the prompt requires that
+    /// `config` lacks; the nonce derives from `config`'s seed and `when`
+    /// renders `config`'s `started_at`, so two states over the same inputs
+    /// agree on both.
     #[must_use]
-    pub(super) fn new(prompt: Arc<Prompt>, args: &str, config: RunContext) -> Self {
+    pub(super) fn root(prompt: Arc<Prompt>, args: &str, config: RunContext) -> Self {
         let RunContext {
             name,
             seed,
@@ -168,28 +180,42 @@ impl RunState {
         ));
         let derived_argv = bound::derive_argv(&prompt, args).map(Arc::from);
         Self {
-            prompt,
-            nonce: GuardNonce::from_seed(&seed),
-            vfs,
-            execution,
-            args: Arc::from(args),
-            argv: derived_argv,
-            limits,
-            events,
+            shared: Arc::new(SharedState {
+                prompt,
+                nonce: GuardNonce::from_seed(&seed),
+                vfs,
+                execution,
+                limits,
+                events,
+                cancel,
+                tool_set,
+                model_set,
+                refusal,
+                when: Arc::from(started_at.to_rfc3339()),
+                ui: ui.map(Arc::new),
+                preludes: preludes.into(),
+                #[cfg(test)]
+                raw_shims: false,
+            }),
             reporting: ReportingHandles {
                 emitter,
                 turns: Arc::new(AtomicU32::new(0)),
             },
-            cancel,
-            tool_set,
-            model_set,
-            refusal,
-            when: Arc::from(started_at.to_rfc3339()),
-            ui: ui.map(Arc::new),
-            preludes: preludes.into(),
-            #[cfg(test)]
-            raw_shims: false,
+            args: Arc::from(args),
+            argv: derived_argv,
         }
+    }
+
+    /// The run-wide state, for a test hook that writes it.
+    ///
+    /// # Panics
+    /// Panics once the state has been cloned, because every clone shares
+    /// the one [`SharedState`]. The hooks run before the run starts, when
+    /// nothing has cloned it yet.
+    #[cfg(test)]
+    fn shared_mut_for_test(&mut self) -> &mut SharedState {
+        Arc::get_mut(&mut self.shared)
+            .expect("a test hook writes the run-wide state before anything clones it")
     }
 
     /// Exposes the raw `tools.call_as_model` shim in every section VM this
@@ -197,7 +223,7 @@ impl RunState {
     /// arm with one model-issued call.
     #[cfg(test)]
     pub(crate) fn expose_raw_shims_for_test(&mut self) {
-        self.raw_shims = true;
+        self.shared_mut_for_test().raw_shims = true;
     }
 
     /// Sets the run's model set to `set`, so a test can run a prompt
@@ -206,33 +232,33 @@ impl RunState {
     #[cfg(test)]
     #[must_use]
     pub(crate) fn with_models_for_test(mut self, set: ModelSet) -> Self {
-        self.model_set = Arc::new(set);
+        self.shared_mut_for_test().model_set = Arc::new(set);
         self
     }
 
     /// The prompt this run executes.
     pub(super) fn prompt(&self) -> &Arc<Prompt> {
-        &self.prompt
+        &self.shared.prompt
     }
 
     /// The run's cancel flag.
     pub(super) fn cancel(&self) -> &CancelHandle {
-        &self.cancel
+        &self.shared.cancel
     }
 
     /// The run's untrusted-envelope nonce.
     pub(super) fn nonce(&self) -> &GuardNonce {
-        &self.nonce
+        &self.shared.nonce
     }
 
     /// The run's VFS handle.
     pub(super) fn vfs(&self) -> &VfsRef {
-        &self.vfs
+        &self.shared.vfs
     }
 
     /// The execution identifier stamped on every observation.
     pub(super) fn execution(&self) -> &str {
-        &self.execution
+        &self.shared.execution
     }
 
     /// The run's argument string.
@@ -248,7 +274,7 @@ impl RunState {
 
     /// The run's resource limits.
     pub(super) fn limits(&self) -> RunLimits {
-        self.limits
+        self.shared.limits
     }
 
     /// This context's reporting handles: its task-scoped emitter and its
@@ -267,7 +293,7 @@ impl RunState {
     /// drain, in push order. The run's `step` calls this once per step and
     /// returns the batch to the caller.
     pub(super) fn take_events(&self) -> Vec<Event> {
-        self.events.take()
+        self.shared.events.take()
     }
 
     /// The model-turn counter this context advances.
@@ -278,45 +304,48 @@ impl RunState {
     /// The run's shared tool set, the one every section VM the run
     /// constructs holds.
     pub(super) fn tool_set(&self) -> &Arc<ToolSet> {
-        &self.tool_set
+        &self.shared.tool_set
     }
 
     /// The binding of the `default` role: the model a section starts on.
     /// It is `None` when the caller supplied no model.
     pub(super) fn default_binding(&self) -> Option<ModelBinding> {
-        self.model_set.binding(ModelRole::Default.as_str()).cloned()
+        self.shared
+            .model_set
+            .binding(ModelRole::Default.as_str())
+            .cloned()
     }
 
     /// The run's model set, shared with every section VM the run
     /// constructs.
     pub(super) fn model_set(&self) -> Arc<ModelSet> {
-        Arc::clone(&self.model_set)
+        Arc::clone(&self.shared.model_set)
     }
 
     /// The refusal notice the run's first step fails with, or `None` when
     /// the context lacks nothing the prompt requires.
     pub(super) fn refusal(&self) -> Option<&str> {
-        self.refusal.as_deref()
+        self.shared.refusal.as_deref()
     }
 
     /// The resolved tool-loop cap per `models.loop` or model handle `loop`
     /// call: the frontmatter's `max_tool_iterations` over the limits
     /// default.
     fn max_tool_iterations(&self) -> usize {
-        crate::parser::detail::max_tool_iterations(self.prompt.frontmatter())
-            .resolve(self.limits.max_tool_iterations.get() as usize)
+        crate::parser::detail::max_tool_iterations(self.shared.prompt.frontmatter())
+            .resolve(self.shared.limits.max_tool_iterations.get() as usize)
     }
 
     /// The run's top-level section count, reported as `sys.section_count`.
     fn section_count(&self) -> usize {
-        crate::parser::detail::sections(&self.prompt).len()
+        crate::parser::detail::sections(&self.shared.prompt).len()
     }
 
     /// The H1-to-walk handoff: the `argv` H1 left behind at the freeze,
-    /// set on a cheap clone so the context H1 saw stays untouched. The
-    /// tool and model sets need no delta: they were built at construction
-    /// and nothing writes either during the run. `when` needs none either:
-    /// it is the run's `started_at`, the same for the pass and the walk.
+    /// set on a cheap clone so the state H1 saw stays untouched. The
+    /// run-wide state needs no delta: the tool and model sets were built at
+    /// construction and nothing writes either during the run, and `when`
+    /// is the run's `started_at`, the same for the pass and the walk.
     #[must_use]
     pub(super) fn with_walk_state(&self, argv: Option<serde_json::Value>) -> Self {
         let mut ctx = self.clone();
@@ -332,7 +361,7 @@ impl RunState {
     #[must_use]
     pub(super) fn with_args(&self, args: &str) -> Self {
         let mut ctx = self.clone();
-        ctx.argv = bound::derive_argv(&self.prompt, args).map(Arc::from);
+        ctx.argv = bound::derive_argv(&self.shared.prompt, args).map(Arc::from);
         ctx.args = Arc::from(args);
         ctx
     }
@@ -385,10 +414,10 @@ impl RunState {
             emitter: &self.reporting.emitter,
             section_name,
             max_tool_iterations: self.max_tool_iterations(),
-            ui: self.ui.as_ref(),
-            preludes: &self.preludes,
+            ui: self.shared.ui.as_ref(),
+            preludes: &self.shared.preludes,
             #[cfg(test)]
-            raw_shims: self.raw_shims,
+            raw_shims: self.shared.raw_shims,
         }
     }
 
@@ -399,11 +428,11 @@ impl RunState {
     /// site.
     pub(super) fn section_sys(&self, id: &str, task_id: &TaskId, section_name: &str) -> SectionSys {
         SectionSys {
-            when: Arc::clone(&self.when),
+            when: Arc::clone(&self.shared.when),
             id: id.to_owned(),
             taskid: task_id.clone(),
             section_name: section_name.to_owned(),
-            execution: Arc::clone(&self.execution),
+            execution: Arc::clone(&self.shared.execution),
             section_count: self.section_count(),
             index: None,
             model: None,
@@ -411,9 +440,20 @@ impl RunState {
     }
 }
 
-impl fmt::Debug for RunState {
+impl fmt::Debug for ChainState {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let mut state = f.debug_struct("RunState");
+        f.debug_struct("ChainState")
+            .field("shared", &self.shared)
+            .field("reporting", &self.reporting)
+            .field("args", &self.args)
+            .field("argv", &self.argv)
+            .finish()
+    }
+}
+
+impl fmt::Debug for SharedState {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut state = f.debug_struct("SharedState");
         #[cfg(test)]
         state.field("raw_shims", &self.raw_shims);
         state
@@ -421,11 +461,8 @@ impl fmt::Debug for RunState {
             .field("nonce", &self.nonce)
             .field("vfs", &"<VfsRef>")
             .field("execution", &self.execution)
-            .field("args", &self.args)
-            .field("argv", &self.argv)
             .field("limits", &self.limits)
             .field("events", &self.events)
-            .field("reporting", &self.reporting)
             .field("cancel", &self.cancel)
             .field("tool_set", &self.tool_set)
             .field("model_set", &self.model_set)

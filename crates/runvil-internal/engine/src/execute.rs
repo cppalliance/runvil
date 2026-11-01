@@ -12,7 +12,8 @@
 //! - `config` - the public [`RunContext`], which carries the caller's
 //!   role map for the five model roles, and [`RunLimits`]; installing
 //!   Packs and taking each run's catalog from them is the Harness's job.
-//! - `context` - the ambient `RunState` run state.
+//! - `context` - the ambient run state: the run-wide `SharedState` and
+//!   each chain's `ChainState`.
 //! - `error` - the stable [`RunErrorKind`] of a failed outcome, and the
 //!   kind and message the Engine's own error ends a run with.
 //! - `fill` - the fill function, which builds the model set from the

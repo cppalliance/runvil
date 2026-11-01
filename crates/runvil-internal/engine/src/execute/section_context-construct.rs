@@ -13,7 +13,7 @@ use runvil_types::event::lifecycle;
 use runvil_types::ids::TaskId;
 use runvil_vfs::Access;
 
-use crate::execute::context::RunState;
+use crate::execute::context::ChainState;
 use crate::execute::section_vm::{self, VmSeed};
 use crate::execute::walk_target::{self, RequireOrigin};
 use crate::heading_address::{SectionPos, Visible};
@@ -41,7 +41,7 @@ fn library_resolver(
 ///
 /// # Errors
 /// Returns the [`Error`] of the VM construction or the limits install.
-fn limited_vm(ctx: &RunState, name: &str) -> Result<SectionVm<Uninjected>> {
+fn limited_vm(ctx: &ChainState, name: &str) -> Result<SectionVm<Uninjected>> {
     let vm = SectionVm::new_for_section(
         ctx.nonce(),
         ctx.tool_set(),
@@ -88,7 +88,7 @@ impl SectionContext {
         reason = "the frame takes the two chain-owned handles (access and selection) beside the section entry's own deltas, and each stays a separate borrow"
     )]
     pub(crate) fn new(
-        ctx: &RunState,
+        ctx: &ChainState,
         access: &Arc<Access>,
         selection: &Arc<Mutex<Option<ModelBinding>>>,
         pos: &SectionPos,
@@ -163,7 +163,7 @@ impl SectionContext {
     /// Returns the [`Error`] of whichever step failed (see [`section_vm`]
     /// for which failures tear the VM down).
     pub(crate) fn new_h1(
-        ctx: &RunState,
+        ctx: &ChainState,
         access: &Arc<Access>,
         selection: &Arc<Mutex<Option<ModelBinding>>>,
         section_id: &str,
@@ -198,7 +198,7 @@ impl SectionContext {
         vm: SectionVm,
         sys: SectionSys,
         item: Option<serde_json::Value>,
-        ctx: &RunState,
+        ctx: &ChainState,
     ) -> Self {
         Self {
             vm: Some(vm),

@@ -12,7 +12,7 @@ use runvil_types::ids::{ChainId, TaskId};
 use runvil_vfs::Access;
 
 use crate::error::DepthVia;
-use crate::execute::context::RunState;
+use crate::execute::context::ChainState;
 use crate::execute::section_context::{SectionContext, TaskSeed};
 use crate::execute::walk_target::JumpTarget;
 use crate::heading_address::SectionPos;
@@ -285,7 +285,7 @@ pub(super) struct Chain {
     /// through `with_args` when the call or spawn gave an input. A task's
     /// fork also reports under its own task id with its own turn counter
     /// (`with_task`).
-    pub(super) ctx: RunState,
+    pub(super) ctx: ChainState,
     /// The chain's current model, shared with each section VM it enters:
     /// it starts on the chain's starting model; `models.use` rewrites it.
     pub(super) selection: Arc<Mutex<Option<crate::model::ModelBinding>>>,

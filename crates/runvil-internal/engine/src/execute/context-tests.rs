@@ -1,4 +1,4 @@
-//! Tests for `RunContext` construction, forking, task sequence seeding,
+//! Tests for `ChainState` construction, forking, task sequence seeding,
 //! and the model set a run binds from its filled roles.
 
 use std::collections::BTreeMap;
@@ -25,7 +25,7 @@ fn test_prompt() -> Prompt {
         .expect("the test prompt parses")
 }
 
-fn test_state(prompt: &Prompt) -> RunState {
+fn test_state(prompt: &Prompt) -> ChainState {
     state_over(
         prompt,
         RunContext::new(
@@ -38,12 +38,12 @@ fn test_state(prompt: &Prompt) -> RunState {
 
 /// The state a run of `prompt` assembles from `config`, as `Run::new`
 /// assembles it.
-fn state_over(prompt: &Prompt, config: RunContext) -> RunState {
-    RunState::new(Arc::new(prompt.clone()), "", config)
+fn state_over(prompt: &Prompt, config: RunContext) -> ChainState {
+    ChainState::root(Arc::new(prompt.clone()), "", config)
 }
 
 #[test]
-fn new_builds_a_context_over_the_prompt() {
+fn root_builds_a_context_over_the_prompt() {
     let prompt = test_prompt();
     let ctx = test_state(&prompt);
     assert_eq!(ctx.prompt().title(), prompt.title());
@@ -60,7 +60,7 @@ fn accessor_returns_the_run_prompt() {
 fn clones_share_the_prompt_allocation() {
     let ctx = test_state(&test_prompt());
     let clone = ctx.clone();
-    assert!(Arc::ptr_eq(&ctx.prompt, &clone.prompt));
+    assert!(Arc::ptr_eq(ctx.prompt(), clone.prompt()));
 }
 
 #[test]
@@ -106,14 +106,14 @@ fn forks_swap_only_their_own_fields() {
     let ctx = test_state(&test_prompt());
     let chain = ctx.with_args("chain-args");
     assert_eq!(&**chain.args(), "chain-args");
-    assert!(Arc::ptr_eq(&ctx.prompt, &chain.prompt));
+    assert!(Arc::ptr_eq(&ctx.shared, &chain.shared));
     assert_eq!(&**ctx.args(), "");
 
     let turns = Arc::new(AtomicU32::new(7));
     let task: TaskId = "0.4".parse().expect("a task id parses");
     let arm = ctx.with_task(task.clone(), Arc::clone(&turns));
     assert!(Arc::ptr_eq(arm.turns(), &turns));
-    assert!(Arc::ptr_eq(&ctx.prompt, &arm.prompt));
+    assert!(Arc::ptr_eq(&ctx.shared, &arm.shared));
     assert_eq!(arm.emitter().task(), &task);
     assert_eq!(ctx.emitter().task(), &TaskId::from(ChainId::root()));
 }
@@ -150,7 +150,7 @@ fn a_task_fork_reports_into_the_shared_buffer_under_its_own_task() {
     arm.emitter()
         .report("Only", runvil_types::event::lifecycle::SECTION_STARTED);
     // Both emitters share one buffer, drained through either context.
-    let events = arm.events.take();
+    let events = arm.take_events();
     assert_eq!(events.len(), 2);
     assert_eq!(events[0].provenance().task, TaskId::from(ChainId::root()));
     assert_eq!(events[1].provenance().task, task);
