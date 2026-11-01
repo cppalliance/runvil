@@ -333,8 +333,14 @@ impl ChainState {
     /// call: the frontmatter's `max_tool_iterations` over the limits
     /// default.
     fn max_tool_iterations(&self) -> usize {
-        crate::parser::detail::max_tool_iterations(self.shared.prompt.frontmatter())
-            .resolve(self.shared.limits.max_tool_iterations.get() as usize)
+        self.shared
+            .prompt
+            .frontmatter()
+            .max_tool_iterations()
+            .map_or(
+                self.shared.limits.max_tool_iterations.get() as usize,
+                |cap| cap.get() as usize,
+            )
     }
 
     /// The run's top-level section count, reported as `sys.section_count`.

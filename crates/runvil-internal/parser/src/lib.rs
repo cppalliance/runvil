@@ -42,7 +42,7 @@ use error::Result;
 pub use error::{Error, ParseError, ParseErrorKind};
 #[cfg(test)]
 use frontmatter::MAX_TOOL_ITERATIONS;
-pub use frontmatter::{FileDecl, Frontmatter, MaxToolIterations};
+pub use frontmatter::{FileDecl, Frontmatter};
 pub use prompt::{Block, Prompt, Section};
 
 #[cfg(test)]

@@ -4,9 +4,7 @@
 //! The `runvil` facade never re-exports this module, so only Engine
 //! crates reach it.
 
-use crate::{
-    Block, Error, Frontmatter, MaxToolIterations, ParseError, ParseErrorKind, Prompt, Section,
-};
+use crate::{Block, Error, ParseError, ParseErrorKind, Prompt, Section};
 
 /// Unwraps a parse failure into the internal error it classifies, so the
 /// Engine can map it onto its own internal error type variant for variant.
@@ -56,11 +54,4 @@ pub fn sections(prompt: &Prompt) -> &[Section] {
 #[must_use]
 pub fn entry(prompt: &Prompt) -> Option<&Section> {
     prompt.entry()
-}
-
-/// Returns the frontmatter's tool-loop cap in the form the Engine resolves
-/// against its own default.
-#[must_use]
-pub fn max_tool_iterations(frontmatter: &Frontmatter) -> MaxToolIterations {
-    frontmatter.max_tool_iterations
 }

@@ -57,11 +57,12 @@ pub struct Frontmatter {
     pub(crate) runvil: Option<u32>,
     /// Maximum model round trips a section's tool-call loop may take.
     ///
-    /// A non-optional [`MaxToolIterations`]: an absent value deserializes to
-    /// [`MaxToolIterations::Default`] (the runtime applies its own cap) and any
-    /// explicit value is a positive, bounded count. Zero is unrepresentable.
-    #[serde(default)]
-    pub(crate) max_tool_iterations: MaxToolIterations,
+    /// An absent value leaves the runtime's own cap in force. A declared
+    /// value is a positive, bounded count: deserialization rejects `0`,
+    /// negatives, and values above [`MAX_TOOL_ITERATIONS`], so no invalid
+    /// cap can reach execution.
+    #[serde(default, deserialize_with = "max_tool_iterations")]
+    pub(crate) max_tool_iterations: Option<NonZeroU32>,
     /// A file the prompt expects to find in the store when it starts.
     #[serde(default)]
     input: Option<FileDecl>,
@@ -85,65 +86,33 @@ pub struct Frontmatter {
 /// The largest explicit `max_tool_iterations` a prompt may declare.
 pub(crate) const MAX_TOOL_ITERATIONS: u32 = 1000;
 
-/// A frontmatter tool-loop cap: absent or a positive, bounded count.
+/// Deserializes the `max_tool_iterations` cap: absent, or a positive count no
+/// larger than [`MAX_TOOL_ITERATIONS`].
 ///
-/// An omitted cap leaves the runtime's own default in force. Deserialization
-/// rejects `0`, negatives, and values above `MAX_TOOL_ITERATIONS`, so no
-/// invalid cap can reach execution.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-#[non_exhaustive]
-pub enum MaxToolIterations {
-    /// No explicit cap; the runtime applies its own default.
-    #[default]
-    Default,
-    /// An explicit, positive, bounded cap.
-    Limit(NonZeroU32),
-}
-
-impl MaxToolIterations {
-    /// Resolves to a concrete iteration cap, using `default` when none was set.
-    #[must_use]
-    pub fn resolve(self, default: usize) -> usize {
-        match self {
-            MaxToolIterations::Default => default,
-            MaxToolIterations::Limit(limit) => limit.get() as usize,
-        }
+/// Deserialization reads an `i64` so negatives and values above `u32` are
+/// rejected instead of wrapped, and rejects `0` so every accepted value is a
+/// [`NonZeroU32`] and no invalid cap can reach execution.
+fn max_tool_iterations<'de, D>(deserializer: D) -> std::result::Result<Option<NonZeroU32>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let Some(raw) = <Option<i64> as serde::Deserialize>::deserialize(deserializer)? else {
+        return Ok(None);
+    };
+    if raw <= 0 {
+        return Err(serde::de::Error::custom(format!(
+            "max_tool_iterations must be a positive integer (>= 1), got {raw}"
+        )));
     }
-
-    /// Returns the explicit limit when one was declared.
-    #[must_use]
-    pub(crate) fn limit(self) -> Option<NonZeroU32> {
-        match self {
-            MaxToolIterations::Default => None,
-            MaxToolIterations::Limit(limit) => Some(limit),
-        }
+    if raw > i64::from(MAX_TOOL_ITERATIONS) {
+        return Err(serde::de::Error::custom(format!(
+            "max_tool_iterations must be <= {MAX_TOOL_ITERATIONS}, got {raw}"
+        )));
     }
-}
-
-impl<'de> serde::Deserialize<'de> for MaxToolIterations {
-    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        // Deserialize as i64 so negatives and > u32 values are caught, not wrapped.
-        let raw = i64::deserialize(deserializer)?;
-        if raw <= 0 {
-            return Err(serde::de::Error::custom(format!(
-                "max_tool_iterations must be a positive integer (>= 1), got {raw}"
-            )));
-        }
-        if raw > i64::from(MAX_TOOL_ITERATIONS) {
-            return Err(serde::de::Error::custom(format!(
-                "max_tool_iterations must be <= {MAX_TOOL_ITERATIONS}, got {raw}"
-            )));
-        }
-        // 1 <= raw <= MAX_TOOL_ITERATIONS, so both conversions are infallible.
-        let value = u32::try_from(raw)
-            .map_err(|_| serde::de::Error::custom("max_tool_iterations is out of range"))?;
-        let limit = NonZeroU32::new(value)
-            .ok_or_else(|| serde::de::Error::custom("max_tool_iterations must be non-zero"))?;
-        Ok(MaxToolIterations::Limit(limit))
-    }
+    // 1 <= raw <= MAX_TOOL_ITERATIONS, so both conversions are infallible.
+    let value = u32::try_from(raw)
+        .map_err(|_| serde::de::Error::custom("max_tool_iterations is out of range"))?;
+    Ok(NonZeroU32::new(value))
 }
 
 impl Frontmatter {
@@ -173,7 +142,7 @@ impl Frontmatter {
     /// applies.
     #[must_use]
     pub fn max_tool_iterations(&self) -> Option<NonZeroU32> {
-        self.max_tool_iterations.limit()
+        self.max_tool_iterations
     }
 
     /// Returns the declared input file, when present.

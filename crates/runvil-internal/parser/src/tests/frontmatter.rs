@@ -33,18 +33,15 @@ fn unknown_frontmatter_field_is_rejected() {
 }
 
 #[test]
-fn max_tool_iterations_parses_positive_and_defaults_when_absent() {
+fn max_tool_iterations_parses_positive_and_is_absent_when_unset() {
     let p = parse_ok(&prompt("max_tool_iterations: 20", &[]));
     assert_eq!(
         p.frontmatter.max_tool_iterations,
-        MaxToolIterations::Limit(std::num::NonZeroU32::new(20).unwrap())
+        Some(std::num::NonZeroU32::new(20).unwrap())
     );
 
     let p = parse_ok(&prompt("", &[]));
-    assert_eq!(
-        p.frontmatter.max_tool_iterations,
-        MaxToolIterations::Default
-    );
+    assert_eq!(p.frontmatter.max_tool_iterations, None);
 }
 
 #[test]
@@ -67,16 +64,7 @@ fn max_tool_iterations_accepts_the_upper_boundary() {
     ));
     assert_eq!(
         p.frontmatter.max_tool_iterations,
-        MaxToolIterations::Limit(std::num::NonZeroU32::new(MAX_TOOL_ITERATIONS).unwrap())
-    );
-}
-
-#[test]
-fn max_tool_iterations_resolve_uses_default_only_when_absent() {
-    assert_eq!(MaxToolIterations::Default.resolve(24), 24);
-    assert_eq!(
-        MaxToolIterations::Limit(std::num::NonZeroU32::new(3).unwrap()).resolve(24),
-        3
+        Some(std::num::NonZeroU32::new(MAX_TOOL_ITERATIONS).unwrap())
     );
 }
 

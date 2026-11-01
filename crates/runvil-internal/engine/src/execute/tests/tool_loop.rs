@@ -108,14 +108,18 @@ fn run_resolves_cap_from_frontmatter_else_default() {
         "---\nname: t\ndescription: d\nmax_tool_iterations: 5\n---\n\n# T\n\n## S\n\np\n";
     let p = Prompt::parse(declared, EXECUTION).0.unwrap();
     assert_eq!(
-        runvil_parser::detail::max_tool_iterations(p.frontmatter()).resolve(default_cap),
+        p.frontmatter()
+            .max_tool_iterations()
+            .map_or(default_cap, |cap| cap.get() as usize),
         5
     );
 
     let absent = "---\nname: t\ndescription: d\n---\n\n# T\n\n## S\n\np\n";
     let p = Prompt::parse(absent, EXECUTION).0.unwrap();
     assert_eq!(
-        runvil_parser::detail::max_tool_iterations(p.frontmatter()).resolve(default_cap),
+        p.frontmatter()
+            .max_tool_iterations()
+            .map_or(default_cap, |cap| cap.get() as usize),
         default_cap
     );
 }
