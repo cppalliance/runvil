@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use super::{DebugMode, Emitter, EventSink, LibraryLoad};
+use super::{Emitter, EventSink, LibraryLoad};
 use crate::event::{Event, lifecycle};
 use crate::ids::{AbandonReason, ChainId, Provenance, RoundId, TaskId};
 use crate::tools::{OutputTrust, ToolId};
@@ -12,7 +12,7 @@ fn root() -> TaskId {
 }
 
 fn emitter(sink: &EventSink, task: TaskId) -> Emitter {
-    Emitter::new(sink.clone(), task, Arc::from("run-1"), DebugMode::Off)
+    Emitter::new(sink.clone(), task, Arc::from("run-1"), false)
 }
 
 #[test]
@@ -241,7 +241,7 @@ fn an_untrusted_tool_result_reports_the_event_with_trusted_false() {
 #[test]
 fn the_root_emitter_reports_under_task_zero_with_its_execution() {
     let sink = EventSink::default();
-    let emitter = Emitter::root(sink.clone(), "parse-1", DebugMode::On);
+    let emitter = Emitter::root(sink.clone(), "parse-1", true);
     assert!(emitter.captures_debug());
     assert_eq!(emitter.execution(), "parse-1");
     assert_eq!(emitter.task(), &root());

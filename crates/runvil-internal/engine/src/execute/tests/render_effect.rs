@@ -298,7 +298,7 @@ fn rendered_run(
             }
             other => panic!("only the render and the round are issued: {other:?}"),
         };
-        log.push((effect.record(), answer.record()));
+        log.push((effect.to_record(), answer.to_record()));
         answer
     });
     assert_eq!(text_of(result), "done");
@@ -369,7 +369,7 @@ fn a_dropped_render_answers_its_round_as_cancelled_and_fixes_no_tools() {
     let run = loop_scenario(source).offer("echo", echo_tool()).into_run();
     let mut issued = Vec::new();
     let (result, _) = drive(run, |_, effect| {
-        issued.push(effect.record());
+        issued.push(effect.to_record());
         match effect {
             Effect::Render { .. } if issued.len() == 1 => EffectAnswer::Dropped,
             Effect::Render { offered, .. } => EffectAnswer::Render(offered.clone()),

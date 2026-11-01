@@ -2,7 +2,6 @@
 //! infer-round reporting cases sit in `infer_rounds`.
 
 use runvil_parser::test_support::{PromptSource, one_section};
-use runvil_types::emitter::DebugMode;
 
 use super::context::arm_fanout;
 use super::fixtures::{echo_tool, failing_tool, scoped_tool};
@@ -30,7 +29,7 @@ fn ask_the_model() -> String {
 fn debugged(source: String) -> Scenario {
     Scenario::new(source)
         .bound()
-        .context(|ctx| ctx.with_report_debug(DebugMode::On))
+        .context(|ctx| ctx.with_report_debug(true))
 }
 
 #[test]

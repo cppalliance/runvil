@@ -70,8 +70,6 @@ pub enum ToolErrorKind {
     /// The request failed at the transport layer, such as a network error or a
     /// timeout.
     Transport,
-    /// The run was cancelled before or during the call.
-    Cancelled,
     /// Any other tool failure.
     Other,
 }
@@ -85,7 +83,6 @@ impl ToolErrorKind {
             ToolErrorKind::InvalidArguments => "invalid_arguments",
             ToolErrorKind::Backend => "backend",
             ToolErrorKind::Transport => "transport",
-            ToolErrorKind::Cancelled => "cancelled",
             ToolErrorKind::Other => "other",
         }
     }
@@ -146,18 +143,6 @@ impl ToolError {
     #[must_use]
     pub fn kind(&self) -> ToolErrorKind {
         self.kind
-    }
-
-    /// Returns whether the failure was a cancellation.
-    #[must_use]
-    pub fn is_cancelled(&self) -> bool {
-        matches!(self.kind, ToolErrorKind::Cancelled)
-    }
-
-    /// Returns whether retrying the same call could plausibly succeed.
-    #[must_use]
-    pub fn is_retryable(&self) -> bool {
-        matches!(self.kind, ToolErrorKind::Transport)
     }
 }
 

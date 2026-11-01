@@ -30,9 +30,9 @@ fn an_infer_round_answered_with_tool_calls_fails_as_a_retryable_malformed_reply(
     let Error::Completion(failure) = &error else {
         panic!("required a completion failure, actual {error:?}");
     };
-    assert_eq!(failure.kind(), CompletionErrorKind::MalformedResponse);
-    assert!(
-        failure.is_retryable(),
-        "a reply that broke protocol may come back well formed"
+    assert_eq!(
+        failure.kind(),
+        CompletionErrorKind::MalformedResponse,
+        "a reply that broke protocol is malformed, so it may come back well formed"
     );
 }

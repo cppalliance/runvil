@@ -22,8 +22,8 @@
 //!   run's first step reports as its refusal notice.
 //! - `run` - the boundary with the caller: the `Run` state machine with its
 //!   `step`, `resume`, and `cancel`, the `Step` it returns, and the effect
-//!   vocabulary (the `Effect` a leaf arm issues, its serializable
-//!   `EffectRecord`, and the `EffectAnswer` the caller returns).
+//!   vocabulary (the `Effect` a leaf arm issues, its JSON record, and the
+//!   `EffectAnswer` the caller returns).
 //! - `scheduler` - the chain scheduler driving the coroutine protocol:
 //!   the H1 pass, the walk, call chains, fanout, and the `chat` and
 //!   `tool_call` rounds that `models.loop`
@@ -56,9 +56,11 @@ mod walk_target;
 // Public API surface.
 pub use config::{RunContext, RunLimits};
 pub use error::RunErrorKind;
+#[cfg(test)]
+pub(crate) use run::{AnswerRecord, ChatAnswerRecord, EffectRecord};
 pub use run::{
-    AnswerRecord, ChatAnswerRecord, Effect, EffectAnswer, EffectId, EffectRecord, FailureRecord,
-    IssuedEffect, PackToolSets, Round, Run, Step, ToolAnswerRecord, ToolCallOrigin, ToolCaller,
+    Effect, EffectAnswer, EffectId, IssuedEffect, PackToolSets, Round, Run, Step, ToolCallOrigin,
+    ToolCaller,
 };
 // The store vocabulary a `Vfs` effect holds and its answer returns, for
 // the Engine's own store handling; other crates name it from `runvil_lua`.

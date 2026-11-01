@@ -9,7 +9,7 @@
 
 use std::sync::Mutex;
 
-use runvil_types::emitter::{DebugMode, Emitter, EventSink};
+use runvil_types::emitter::{Emitter, EventSink};
 use runvil_types::event::Event;
 use runvil_types::tools::ToolId;
 
@@ -145,7 +145,7 @@ impl Recorder {
     /// A recorder whose emitter reports under `execution`.
     pub(super) fn for_execution(execution: &str) -> Self {
         let sink = EventSink::default();
-        let emitter = Emitter::root(sink.clone(), execution, DebugMode::Off);
+        let emitter = Emitter::root(sink.clone(), execution, false);
         Self {
             sink,
             emitter,
@@ -161,7 +161,7 @@ impl Recorder {
     /// A second emitter over the same sink reporting under another
     /// execution id, for a test that interleaves runs.
     pub(super) fn emitter_for(&self, execution: &str) -> Emitter {
-        Emitter::root(self.sink.clone(), execution, DebugMode::Off)
+        Emitter::root(self.sink.clone(), execution, false)
     }
 
     /// Every event reported so far, in order.
@@ -261,5 +261,5 @@ impl Recorder {
 /// An emitter whose events nobody reads: the silent stand-in a test passes
 /// where it has nothing to assert about the boundaries.
 pub(crate) fn null_emitter() -> Emitter {
-    Emitter::root(EventSink::default(), "lua-test", DebugMode::Off)
+    Emitter::root(EventSink::default(), "lua-test", false)
 }

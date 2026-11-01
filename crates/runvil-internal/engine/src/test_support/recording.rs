@@ -135,11 +135,7 @@ pub(crate) struct ThinkingReport<'a> {
 #[cfg(test)]
 #[must_use]
 pub(crate) fn null_emitter() -> runvil_types::emitter::Emitter {
-    runvil_types::emitter::Emitter::root(
-        runvil_types::emitter::EventSink::default(),
-        "test",
-        runvil_types::emitter::DebugMode::Off,
-    )
+    runvil_types::emitter::Emitter::root(runvil_types::emitter::EventSink::default(), "test", false)
 }
 
 /// An [`Observer`] that discards every report: what a suite installs when

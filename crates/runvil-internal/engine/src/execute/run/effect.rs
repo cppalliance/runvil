@@ -14,14 +14,14 @@
 //! the round.
 //!
 //! An [`Effect`] may hold a live handle (a filesystem access) and so does
-//! not serialize itself. [`Effect::record`] projects it onto an
-//! [`EffectRecord`], the effect minus its handles, which round-trips
-//! through serde: a run log stores records, and a later replay compares a
-//! re-executed run's records against them. An [`EffectAnswer`] likewise
-//! contains values a log cannot hold whole (a completion's bodies, an
-//! error's boxed cause); [`EffectAnswer::record`] projects it onto an
-//! [`AnswerRecord`], the answer's outcome as a log stores it. The record
-//! types sit in the `record` child module and are re-exported here.
+//! not serialize itself. [`Effect::record`] projects it onto a JSON value,
+//! the effect minus its handles, which round-trips exactly: a run log
+//! stores records, and a later replay compares a re-executed run's records
+//! against them. An [`EffectAnswer`] likewise contains values a log cannot
+//! hold whole (a completion's bodies, an error's boxed cause);
+//! [`EffectAnswer::record`] projects it onto the answer's outcome as a log
+//! stores it. Both values serialize the crate-private record types in the
+//! `record` child module, [`EffectRecord`] and [`AnswerRecord`].
 
 #[path = "effect-record.rs"]
 mod record;
@@ -41,8 +41,9 @@ use crate::lua::{VfsOp, VfsOutcome};
 use crate::model::{Completion, CompletionError, Message, ToolSchema};
 use crate::model::{ModelBinding, Temperature};
 
-pub use record::{
-    AnswerRecord, ChatAnswerRecord, EffectRecord, FailureRecord, PackToolSets, ToolAnswerRecord,
+pub use record::PackToolSets;
+pub(crate) use record::{
+    AnswerRecord, ChatAnswerRecord, EffectRecord, FailureRecord, ToolAnswerRecord,
 };
 
 /// The identifier of one in-flight effect, which pairs an issued
@@ -230,9 +231,25 @@ fn offered_ids(sets: &PackToolSets<ToolInfo>) -> PackToolSets<ToolId> {
 
 impl Effect {
     /// Returns the effect's record: the same request with its live handles
-    /// removed, in a form that a run log stores and a replay compares.
+    /// removed, as the JSON value that a run log stores and a replay
+    /// compares.
+    ///
+    /// The value is one object keyed by the effect's kind, such as
+    /// `{"Timer":{"seconds":0.5}}`, and it round-trips exactly through
+    /// `serde_json`. A `Chat` record holds the round's id, the alias of the
+    /// model slot it ran under, the frozen invocation settings, the
+    /// advertised tool names, and the request's messages in wire form after
+    /// the first `keep`, which repeat round `after`'s request. So a caller
+    /// that logs records must record every `Chat` effect a step returns,
+    /// including ones it drops, for each `after` to name a recorded round.
     #[must_use]
-    pub fn record(&self) -> EffectRecord {
+    pub fn record(&self) -> Value {
+        wire_value(&self.to_record())
+    }
+
+    /// Returns the effect's record in the typed form that
+    /// [`record`](Self::record) serializes.
+    pub(crate) fn to_record(&self) -> EffectRecord {
         match self {
             Effect::Chat {
                 binding,
@@ -332,13 +349,25 @@ pub enum EffectAnswer {
 
 impl EffectAnswer {
     /// Returns the answer's record: the parts of its outcome that a log can
-    /// hold whole. A failure is recorded as a [`FailureRecord`]: its kind's
+    /// hold whole, as a JSON value.
+    ///
+    /// The value is keyed by the answer's kind, such as
+    /// `{"ToolCall":{"Ok":{"text":"done","trust":"trusted"}}}` or
+    /// `"Dropped"`, and it round-trips exactly through `serde_json`. A
+    /// failure is recorded as `{"kind":..,"message":..}`: its kind's stable
     /// tag and its display text. A completion is recorded as its reply or
-    /// its requested tool names, and a render as its rendered tools whole.
-    /// The round's request and response bodies travel as debug events, and
-    /// its metrics travel in the turn's event.
+    /// its requested tool names beside the model and finish reason, and a
+    /// render as its rendered tools whole. The round's request and response
+    /// bodies travel as debug events, and its metrics travel in the turn's
+    /// event.
     #[must_use]
-    pub fn record(&self) -> AnswerRecord {
+    pub fn record(&self) -> Value {
+        wire_value(&self.to_record())
+    }
+
+    /// Returns the answer's record in the typed form that
+    /// [`record`](Self::record) serializes.
+    pub(crate) fn to_record(&self) -> AnswerRecord {
         match self {
             EffectAnswer::Chat(result) => AnswerRecord::Chat(match result {
                 Ok(completion) => Ok(ChatAnswerRecord::from(completion.as_ref())),

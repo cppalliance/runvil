@@ -143,7 +143,7 @@ impl Driving {
         let mut moved = false;
         let mut answered = |effect: &Effect, answer: &EffectAnswer| {
             moved = true;
-            effects.push((effect.record(), answer.record()));
+            effects.push((effect.to_record(), answer.to_record()));
         };
         let holding = self.held.len();
         let kept: Vec<EffectId> = self.held.iter().map(|(id, _)| *id).collect();
@@ -170,7 +170,7 @@ impl Driving {
             match self.answers.answer(&effect) {
                 Some(answer) => {
                     moved = true;
-                    self.effects.push((effect.record(), answer.record()));
+                    self.effects.push((effect.to_record(), answer.to_record()));
                     run.resume(id, answer);
                 }
                 None => self.held.push((id, effect)),
@@ -191,7 +191,7 @@ impl Driving {
         };
         let (id, effect) = self.held.remove(at);
         let answer = self.answers.perform(&effect);
-        self.effects.push((effect.record(), answer.record()));
+        self.effects.push((effect.to_record(), answer.to_record()));
         self.run.resume(id, answer);
     }
 

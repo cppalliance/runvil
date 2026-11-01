@@ -5,13 +5,11 @@
 
 use runvil::event::Event;
 use runvil::model::{ModelRole, ThinkingMode};
-use runvil::tools::{ToolCatalog, ToolInfo};
+use runvil::tools::{ToolCatalog, ToolInfo, ToolOutput};
 use runvil::vfs::{MemoryBackend, Origin, RealBackend, VfsError, VfsRef};
 use runvil::{RunErrorKind, RunOutcome};
 
-use super::support::{
-    Built, Scenario, TempRoot, TestResult, Trace, greeter, model, prompt, text, tool_info,
-};
+use super::support::{Scenario, TempRoot, TestResult, Tool, Trace, model, prompt, text, tool_info};
 
 fn declaring(front: &str) -> String {
     prompt(front, &[("Only", "return 'done'")])
@@ -50,12 +48,10 @@ fn two_runs_writing_the_same_real_file_through_the_shared_base_conflict() -> Tes
         .mount("/", RealBackend::rooted(temp.path())?)
         .store("/my/store", MemoryBackend::new())
         .build();
-    let scenario = Scenario::default().context(move |ctx| ctx.with_vfs(vfs.clone()));
-    let source = greeter("return 'done'");
-    let (run_a, run_b) = (scenario.build(&source)?, scenario.build(&source)?);
-    let access_a = run_a.ctx.vfs().acquire(Origin::new("run-a"))?;
+    let (run_a, run_b) = (vfs.clone(), vfs);
+    let access_a = run_a.acquire(Origin::new("run-a"))?;
     access_a.write("/shared.txt", b"from a")?;
-    let access_b = run_b.ctx.vfs().acquire(Origin::new("run-b"))?;
+    let access_b = run_b.acquire(Origin::new("run-b"))?;
     let error = access_b
         .write("/shared.txt", b"from b")
         .expect_err("run b conflicts with run a's live claim");
@@ -175,25 +171,29 @@ fn a_thinking_requirement_the_filling_model_fails_is_refused() -> TestResult {
     Ok(())
 }
 
-/// The scenario whose catalog holds `info` alone, beside the context it
-/// builds for a prompt declaring `web`.
-fn over_catalog(info: &ToolInfo) -> TestResult<(Scenario, Built)> {
+/// `scenario` with its catalog replaced by one that holds `info` alone.
+fn over_catalog(scenario: Scenario, info: &ToolInfo) -> TestResult<Scenario> {
     let catalog = ToolCatalog::new([info.clone()])?;
-    let scenario = Scenario::default().context(move |ctx| ctx.with_tools(catalog.clone()));
-    let built = scenario.build(&declaring("uses: [web]"))?;
-    Ok((scenario, built))
+    Ok(scenario.context(move |ctx| ctx.with_tools(catalog.clone())))
 }
 
 #[test]
-fn a_context_keeps_the_caller_supplied_catalog() -> TestResult {
+fn a_run_calls_its_tools_as_the_caller_supplied_catalog_describes_them() -> TestResult {
+    // Only the caller's entry marks the output structured, so the script
+    // reads a table field only when the run uses that entry.
     let info = tool_info(
         "web/fetch",
         serde_json::json!({"type": "object", "properties": {"url": {"type": "string"}}}),
     )?
     .structured(true);
-    let (scenario, built) = over_catalog(&info)?;
-    assert_eq!(built.ctx.tools().tools(), [info]);
-    assert_eq!(scenario.run(&declaring("uses: [web]"))?.text()?, "done");
+    let fetch = Tool {
+        id: "web/fetch",
+        handler: Box::new(|_| Ok(ToolOutput::trusted(r#"{"title":"Ada"}"#))),
+    };
+    let scenario = over_catalog(Scenario::tool(fetch, []), &info)?;
+    let lua = "return tools.call('web/fetch', { url = 'https://example.com' }).title";
+    let source = prompt("uses: [web]", &[("Only", lua)]);
+    assert_eq!(scenario.run(&source)?.text()?, "Ada");
     Ok(())
 }
 
@@ -203,8 +203,7 @@ fn a_run_given_no_roster_checks_no_declared_pack_against_the_catalog() -> TestRe
         "other/search",
         serde_json::json!({"type": "object", "properties": {}}),
     )?;
-    let (scenario, built) = over_catalog(&other)?;
-    assert_eq!(built.ctx.tools().tools(), [other]);
+    let scenario = over_catalog(Scenario::default(), &other)?;
     assert_eq!(
         scenario.run(&declaring("uses: [web]"))?.text()?,
         "done",

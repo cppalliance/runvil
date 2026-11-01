@@ -1,6 +1,6 @@
 //! Answering every kind of effect, and logging each with its answer.
 
-use runvil::effect::{AnswerRecord, EffectRecord, ToolCallOrigin, ToolCaller};
+use runvil::effect::{ToolCallOrigin, ToolCaller};
 use serde_json::{Value, json};
 
 use super::support::{Scenario, TestResult, prompt, shout, text};
@@ -59,11 +59,9 @@ fn a_tool_calls_origin_is_named_at_runvil_effect() -> TestResult {
     let origin = trace
         .effects
         .iter()
-        .find_map(|logged| match &logged.effect {
-            EffectRecord::ToolCall { origin, .. } => Some(origin.clone()),
-            _ => None,
-        })
+        .find_map(|logged| logged.effect_of("ToolCall"))
         .ok_or("the greeter calls its shout tool before it ends")?;
+    let origin: ToolCallOrigin = serde_json::from_value(origin["origin"].clone())?;
     let expected = ToolCallOrigin::new("greeter", "Shout", ToolCaller::Script).with_entry("0.1.0");
     assert_eq!(origin, expected);
     Ok(())
@@ -91,9 +89,15 @@ fn each_effect_and_its_answer_log_as_one_json_line_that_parses_back() -> TestRes
         .map(|line| serde_json::from_str(line))
         .collect::<Result<_, _>>()?;
     assert_eq!(lines.len(), trace.effects.len());
-    for line in &lines {
-        let _: EffectRecord = serde_json::from_value(line["effect"].clone())?;
-        let _: AnswerRecord = serde_json::from_value(line["answer"].clone())?;
+    for (line, logged) in lines.iter().zip(&trace.effects) {
+        assert_eq!(
+            line["effect"], logged.effect,
+            "the effect reads back exactly"
+        );
+        assert_eq!(
+            line["answer"], logged.answer,
+            "the answer reads back exactly"
+        );
     }
 
     let write = lines

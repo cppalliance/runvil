@@ -144,10 +144,11 @@ pub struct RunMeta {
 /// Which side of the effect loop a record came from.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum RecordKind {
-    /// An effect the Engine issued. The record's payload is an
-    /// `EffectRecord`.
+    /// An effect the Engine issued. The record's payload is the JSON
+    /// `Effect::record` returns.
     Effect,
-    /// The answer to an effect. The record's payload is an `EffectAnswer`.
+    /// The answer to an effect. The record's payload is the JSON
+    /// `EffectAnswer::record` returns.
     Answer,
     /// An event the Engine emitted. The record's payload is an `Event`.
     Event,
@@ -194,6 +195,6 @@ pub struct Record {
     pub kind: RecordKind,
     /// The in-flight effect handle, for effects and their answers.
     pub effect_id: Option<u64>,
-    /// The serialized `EffectRecord`, `EffectAnswer`, or `Event`.
+    /// The effect's or answer's record, or the serialized `Event`.
     pub payload: serde_json::Value,
 }

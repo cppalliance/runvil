@@ -22,7 +22,6 @@ async fn complete_on_a_disabled_client_is_an_unavailable_error() {
         err.to_string(),
         "model access is turned off or not configured"
     );
-    assert!(!err.is_retryable());
 }
 
 #[tokio::test]
@@ -138,7 +137,6 @@ async fn a_request_past_the_timeout_is_a_timeout_failure() {
         CompletionErrorKind::Timeout,
         "the timeout must be recognizable: {err:?}"
     );
-    assert!(err.is_retryable());
 }
 
 /// Reads one request through its body, so answering and closing never
@@ -270,7 +268,6 @@ async fn a_stream_that_stalls_after_the_headers_is_a_timeout_failure() {
         CompletionErrorKind::Timeout,
         "the timeout must be recognizable: {err:?}"
     );
-    assert!(err.is_retryable());
 }
 
 #[tokio::test]
@@ -337,7 +334,6 @@ async fn a_refused_connection_is_a_transport_failure() {
         err.to_string(),
         "the connection to the model backend failed"
     );
-    assert!(err.is_retryable());
     assert!(std::error::Error::source(&err).is_some());
 }
 

@@ -52,17 +52,11 @@ pub(crate) mod detail {
         LUA_CHUNK_STARTED => LuaChunkStarted,
         LUA_CHUNK_SUCCEEDED => LuaChunkSucceeded,
         LUA_CHUNK_FAILED => LuaChunkFailed,
-        LUA_REPLY_BINDING_STARTED => LuaReplyBindingStarted,
-        LUA_REPLY_BINDING_SUCCEEDED => LuaReplyBindingSucceeded,
-        LUA_REPLY_BINDING_FAILED => LuaReplyBindingFailed,
         LUA_TEARDOWN_STARTED => LuaTeardownStarted,
         LUA_TEARDOWN_SUCCEEDED => LuaTeardownSucceeded,
         TOOL_SCOPE_VALIDATION_STARTED => ToolScopeValidationStarted,
         TOOL_SCOPE_VALIDATION_SUCCEEDED => ToolScopeValidationSucceeded,
         TOOL_SCOPE_VALIDATION_FAILED => ToolScopeValidationFailed,
-        MODEL_CATALOG_VALIDATION_STARTED => ModelCatalogValidationStarted,
-        MODEL_CATALOG_VALIDATION_SUCCEEDED => ModelCatalogValidationSucceeded,
-        MODEL_CATALOG_VALIDATION_FAILED => ModelCatalogValidationFailed,
         VFS_WRITE_SUCCEEDED => VfsWriteSucceeded,
         VFS_WRITE_FAILED => VfsWriteFailed,
         VFS_APPEND_SUCCEEDED => VfsAppendSucceeded,
@@ -147,12 +141,6 @@ pub(crate) enum Observation {
     LuaChunkSucceeded,
     /// A section VM failed to execute a Lua chunk.
     LuaChunkFailed,
-    /// A section VM began binding a model reply.
-    LuaReplyBindingStarted,
-    /// A section VM bound a model reply successfully.
-    LuaReplyBindingSucceeded,
-    /// A section VM failed to bind a model reply.
-    LuaReplyBindingFailed,
     /// A section VM began teardown.
     LuaTeardownStarted,
     /// A section VM completed teardown.
@@ -163,12 +151,6 @@ pub(crate) enum Observation {
     ToolScopeValidationSucceeded,
     /// A model-visible tool scope failed semantic validation.
     ToolScopeValidationFailed,
-    /// Live-catalog model binding validation began.
-    ModelCatalogValidationStarted,
-    /// Live-catalog model binding validation succeeded.
-    ModelCatalogValidationSucceeded,
-    /// Live-catalog model binding validation failed.
-    ModelCatalogValidationFailed,
     /// An effect-mediated store write succeeded.
     VfsWriteSucceeded,
     /// An effect-mediated store write failed.
@@ -274,17 +256,11 @@ impl Observation {
             Observation::LuaChunkStarted => "Lua chunk started",
             Observation::LuaChunkSucceeded => "Lua chunk succeeded",
             Observation::LuaChunkFailed => "Lua chunk failed",
-            Observation::LuaReplyBindingStarted => "Lua reply binding started",
-            Observation::LuaReplyBindingSucceeded => "Lua reply binding succeeded",
-            Observation::LuaReplyBindingFailed => "Lua reply binding failed",
             Observation::LuaTeardownStarted => "Lua teardown started",
             Observation::LuaTeardownSucceeded => "Lua teardown succeeded",
             Observation::ToolScopeValidationStarted => "Tool scope validation started",
             Observation::ToolScopeValidationSucceeded => "Tool scope validation succeeded",
             Observation::ToolScopeValidationFailed => "Tool scope validation failed",
-            Observation::ModelCatalogValidationStarted => "Model catalog validation started",
-            Observation::ModelCatalogValidationSucceeded => "Model catalog validation succeeded",
-            Observation::ModelCatalogValidationFailed => "Model catalog validation failed",
             Observation::VfsWriteSucceeded => "Vfs write succeeded",
             Observation::VfsWriteFailed => "Vfs write failed",
             Observation::VfsAppendSucceeded => "Vfs append succeeded",

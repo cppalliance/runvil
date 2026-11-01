@@ -49,17 +49,11 @@ lifecycle_pairs! {
     LuaChunkStarted,
     LuaChunkSucceeded,
     LuaChunkFailed,
-    LuaReplyBindingStarted,
-    LuaReplyBindingSucceeded,
-    LuaReplyBindingFailed,
     LuaTeardownStarted,
     LuaTeardownSucceeded,
     ToolScopeValidationStarted,
     ToolScopeValidationSucceeded,
     ToolScopeValidationFailed,
-    ModelCatalogValidationStarted,
-    ModelCatalogValidationSucceeded,
-    ModelCatalogValidationFailed,
     VfsWriteSucceeded,
     VfsWriteFailed,
     VfsAppendSucceeded,
@@ -92,8 +86,6 @@ macro_rules! task_lifecycle_variants {
             | Event::TaskFailed { .. }
             | Event::TaskCancelled { .. }
             | Event::TaskAbandoned { .. }
-            | Event::TaskResumed { .. }
-            | Event::TaskNote { .. }
     };
 }
 
@@ -268,20 +260,6 @@ fn forward_task(event: Event, observer: &dyn Observer) {
             &execution,
             &section,
             Observation::TaskAbandoned { task, reason },
-        ),
-        Event::TaskResumed {
-            execution, section, ..
-        } => observer.observe(
-            &execution,
-            &section,
-            Observation::Other("Task resumed".to_owned()),
-        ),
-        Event::TaskNote {
-            execution, section, ..
-        } => observer.observe(
-            &execution,
-            &section,
-            Observation::Other("Task note".to_owned()),
         ),
         // Routed here by `forward_one` for this group alone; `Event` is
         // `#[non_exhaustive]` in `runvil-types`.

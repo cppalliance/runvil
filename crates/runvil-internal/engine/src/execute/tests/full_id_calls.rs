@@ -68,7 +68,7 @@ fn a_script_calls_effect_record_and_result_name_the_tool_by_its_id() {
     };
     assert_eq!(alias, ECHO_ID, "the effect names the id as its alias");
     assert_eq!(
-        effect.record(),
+        effect.to_record(),
         EffectRecord::ToolCall {
             tool: echo_id(),
             alias: ECHO_ID.to_owned(),

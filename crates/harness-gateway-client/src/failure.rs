@@ -101,14 +101,13 @@ mod tests {
     }
 
     #[test]
-    fn a_decoded_parts_refusal_is_a_retryable_malformed_reply_with_its_specific() {
+    fn a_decoded_parts_refusal_is_a_malformed_reply_with_its_specific() {
         use runvil::model::ToolCall;
         let refusal = ToolCall::from_parts(" ", "fetch", serde_json::json!({}))
             .expect_err("a blank id is refused");
         assert_eq!(refusal.kind(), CompletionErrorKind::InvalidParts);
         let reply = decoded(refusal);
         assert_eq!(reply.kind(), CompletionErrorKind::MalformedResponse);
-        assert!(reply.is_retryable());
         assert_eq!(
             reply.to_string(),
             "the model backend sent a reply that could not be understood: tool call id was blank"

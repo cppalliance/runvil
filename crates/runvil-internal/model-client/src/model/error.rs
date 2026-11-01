@@ -19,9 +19,9 @@ const REASONING_IGNORED: &str = "reasoning content was present but ignored";
 ///
 /// The kinds form a closed set, so a caller can branch on the kind alone.
 /// The caller that performs a round maps every failure into one of these
-/// kinds. Each kind is either retryable or permanent (see
-/// [`CompletionError::is_retryable`]). The enum is `#[non_exhaustive]`, so
-/// a `match` on it needs a wildcard arm.
+/// kinds. Each kind is either retryable or permanent, as its own doc says.
+/// The enum is `#[non_exhaustive]`, so a `match` on it needs a wildcard
+/// arm.
 #[non_exhaustive]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum CompletionErrorKind {
@@ -106,18 +106,6 @@ impl CompletionErrorKind {
             CompletionErrorKind::Unavailable => "unavailable",
             CompletionErrorKind::InvalidParts => "invalid_parts",
         }
-    }
-
-    fn is_retryable(self) -> bool {
-        matches!(
-            self,
-            CompletionErrorKind::RateLimited
-                | CompletionErrorKind::Overloaded
-                | CompletionErrorKind::Timeout
-                | CompletionErrorKind::Transport
-                | CompletionErrorKind::ServerError
-                | CompletionErrorKind::MalformedResponse
-        )
     }
 }
 
@@ -257,15 +245,6 @@ impl CompletionError {
     #[must_use]
     pub fn kind(&self) -> CompletionErrorKind {
         self.kind
-    }
-
-    /// Returns `true` when retrying may succeed. The answer depends only on
-    /// the kind. `RateLimited`, `Overloaded`, `Timeout`, `Transport`,
-    /// `ServerError`, and `MalformedResponse` are retryable, and the rest
-    /// are permanent.
-    #[must_use]
-    pub fn is_retryable(&self) -> bool {
-        self.kind.is_retryable()
     }
 
     /// Returns the token counts that a context overflow reported, as

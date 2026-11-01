@@ -3,7 +3,7 @@
 use std::num::NonZeroU32;
 use std::sync::Arc;
 
-use runvil_types::emitter::{DebugMode, Emitter, EventSink};
+use runvil_types::emitter::{Emitter, EventSink};
 use runvil_types::event::{Event, lifecycle};
 
 use crate::contract::{self, PackListError};
@@ -60,7 +60,7 @@ impl Prompt {
         execution: &str,
     ) -> (std::result::Result<Prompt, ParseError>, Vec<Event>) {
         let sink = EventSink::default();
-        let emitter = Emitter::root(sink.clone(), execution, DebugMode::Off);
+        let emitter = Emitter::root(sink.clone(), execution, false);
         emitter.report("Prompt", lifecycle::PARSE_STARTED);
         let result = Self::parse_inner(input, &emitter);
         emitter.report(

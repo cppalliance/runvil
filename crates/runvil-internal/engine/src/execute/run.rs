@@ -4,10 +4,11 @@
 //! `cancel` modules.
 //!
 //! The effect vocabulary - [`Effect`] with its [`Round`] and
-//! [`PackToolSets`], [`EffectAnswer`], [`EffectId`], the serializable
-//! records of effects and answers, and the [`ToolCallOrigin`] and
-//! [`ToolCaller`] it re-exports from `runvil-types` - comes from the
-//! `effect` child module and is re-exported here.
+//! [`PackToolSets`], [`EffectAnswer`], [`EffectId`], and the
+//! [`ToolCallOrigin`] and [`ToolCaller`] it re-exports from
+//! `runvil-types` - comes from the `effect` child module and is
+//! re-exported here. The records of effects and answers stay in that
+//! module; the caller reads them as JSON.
 
 use std::fmt;
 use std::sync::Arc;
@@ -17,10 +18,9 @@ use runvil_types::ids::Provenance;
 
 mod effect;
 
-pub use effect::{
-    AnswerRecord, ChatAnswerRecord, Effect, EffectAnswer, EffectId, EffectRecord, FailureRecord,
-    PackToolSets, Round, ToolAnswerRecord, ToolCallOrigin, ToolCaller,
-};
+#[cfg(test)]
+pub(crate) use effect::{AnswerRecord, ChatAnswerRecord, EffectRecord};
+pub use effect::{Effect, EffectAnswer, EffectId, PackToolSets, Round, ToolCallOrigin, ToolCaller};
 
 use crate::parser::Prompt;
 

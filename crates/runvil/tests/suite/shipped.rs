@@ -4,7 +4,7 @@
 use std::fs;
 use std::path::Path;
 
-use runvil::effect::{EffectRecord, ToolCaller};
+use runvil::effect::{ToolCallOrigin, ToolCaller};
 use runvil::tools::ToolCatalog;
 use serde_json::{Value, json};
 
@@ -37,15 +37,14 @@ fn the_shipped_research_prompt_offers_its_web_tools_by_id_and_runs_end_to_end() 
 
     let (mut advertised, mut tool_calls) = (Vec::new(), Vec::new());
     for logged in &trace.effects {
-        match &logged.effect {
-            EffectRecord::Chat { tools, .. } => advertised.push(tools.clone()),
-            EffectRecord::ToolCall {
-                tool,
-                alias,
-                origin,
-                ..
-            } => tool_calls.push((tool.to_string(), alias.clone(), origin.caller)),
-            _ => {}
+        if let Some(chat) = logged.effect_of("Chat") {
+            advertised.push(serde_json::from_value::<Vec<String>>(
+                chat["tools"].clone(),
+            )?);
+        }
+        if let Some(call) = logged.effect_of("ToolCall") {
+            let origin: ToolCallOrigin = serde_json::from_value(call["origin"].clone())?;
+            tool_calls.push((call["tool"].clone(), call["alias"].clone(), origin.caller));
         }
     }
     let wire_names = vec!["web_search".to_owned(), "web_fetch".to_owned()];
@@ -56,11 +55,7 @@ fn the_shipped_research_prompt_offers_its_web_tools_by_id_and_runs_end_to_end() 
     );
     assert_eq!(
         tool_calls,
-        [(
-            "web/search".to_owned(),
-            "web_search".to_owned(),
-            ToolCaller::Model
-        )],
+        [(json!("web/search"), json!("web_search"), ToolCaller::Model)],
         "the model's call by wire name reaches the tool its id names"
     );
     Ok(())
@@ -71,9 +66,12 @@ fn the_shipped_research_prompt_names_no_tool_by_its_id_in_what_the_model_reads()
     let trace = research_ada_lovelace()?;
     let mut checked = 0;
     for logged in &trace.effects {
-        let EffectRecord::Chat { messages, .. } = &logged.effect else {
+        let Some(chat) = logged.effect_of("Chat") else {
             continue;
         };
+        let messages = chat["messages"]
+            .as_array()
+            .ok_or("a chat record holds its messages as a list")?;
         let user = messages
             .iter()
             .filter(|message| message.get("role").and_then(Value::as_str) == Some("user"));

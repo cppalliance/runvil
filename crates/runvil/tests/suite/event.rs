@@ -2,7 +2,7 @@
 
 use std::collections::HashSet;
 
-use runvil::event::{DebugMode, Event};
+use runvil::event::Event;
 use runvil::packs::{PackId, RosterEntry};
 use serde_json::Value;
 
@@ -105,7 +105,7 @@ fn content_events_pair_each_tool_result_with_its_caller_into_a_transcript() -> T
 fn debug_mode_alone_adds_one_request_and_one_response_per_model_round() -> TestResult {
     let (source, scenario) = shouting();
     let captured = scenario
-        .context(|ctx| ctx.with_report_debug(DebugMode::On))
+        .context(|ctx| ctx.with_report_debug(true))
         .run(&source)?;
 
     let (mut requests, mut responses) = (Vec::new(), Vec::new());

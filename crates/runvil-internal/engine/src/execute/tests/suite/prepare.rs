@@ -38,11 +38,11 @@ const DECLARES_NOTHING: &str = concat!(
 fn two_runs_writing_the_same_store_path_do_not_conflict() {
     let (ctx_a, ctx_b) = (test_context("run-a"), test_context("run-b"));
     let access_a = ctx_a
-        .vfs()
+        .vfs
         .acquire(Origin::new("run-a"))
         .expect("run a acquires");
     let access_b = ctx_b
-        .vfs()
+        .vfs
         .acquire(Origin::new("run-b"))
         .expect("run b acquires");
     let store_a =

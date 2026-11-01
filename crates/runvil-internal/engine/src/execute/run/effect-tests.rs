@@ -7,13 +7,17 @@
 //! rendered tools whole; a `ToolCall` answer projects to its text and
 //! trust; and every failure projects to its kind's tag and its display
 //! text. Each record round-trips through serde, as a run log and a replay
-//! depend on, and a record written before the render existed reads
-//! unchanged.
+//! depend on, the public JSON record of every kind is the typed record's
+//! JSON and reads back identical, and a record written before the render
+//! existed reads unchanged.
+
+use std::fmt;
 
 use runvil_model_client::client::{CompletionResult, RawExchange, ToolCall};
 use runvil_model_client::model::CompletionErrorKind;
 use runvil_types::packs::PackId;
 use runvil_types::tools::{OutputTrust, ToolErrorKind};
+use serde::de::DeserializeOwned;
 use serde_json::json;
 
 use super::*;
@@ -51,7 +55,7 @@ fn three_messages() -> Vec<Message> {
 #[test]
 fn a_chat_record_copies_after_and_keep_and_logs_only_the_messages_after_keep() {
     let effect = chat_effect(three_messages(), Some((RoundId::new(2), 2)));
-    let record = effect.record();
+    let record = effect.to_record();
     let EffectRecord::Chat {
         round,
         after,
@@ -93,7 +97,7 @@ fn a_chat_record_copies_after_and_keep_and_logs_only_the_messages_after_keep() {
 
 #[test]
 fn a_keep_equal_to_the_message_count_logs_no_messages() {
-    let record = chat_effect(three_messages(), Some((RoundId::new(2), 3))).record();
+    let record = chat_effect(three_messages(), Some((RoundId::new(2), 3))).to_record();
     let EffectRecord::Chat {
         after,
         keep,
@@ -134,7 +138,7 @@ fn a_render_record_keeps_the_slots_alias_the_entry_and_the_offered_ids() {
         binding: test_binding("writer", "A general model for tests", "test-model"),
         offered: tools_pack("Echo the value.", "echo"),
     };
-    let record = effect.record();
+    let record = effect.to_record();
     let canonical = serde_json::to_value(&record).expect("a render record converts");
     assert_eq!(
         canonical.to_string(),
@@ -147,7 +151,7 @@ fn a_render_record_keeps_the_slots_alias_the_entry_and_the_offered_ids() {
 
 #[test]
 fn a_render_answer_records_each_rendered_tool_whole() {
-    let record = EffectAnswer::Render(tools_pack("Shout the value.", "shout")).record();
+    let record = EffectAnswer::Render(tools_pack("Shout the value.", "shout")).to_record();
     let canonical = serde_json::to_value(&record).expect("a render answer record converts");
     assert_eq!(
         canonical.to_string(),
@@ -180,7 +184,7 @@ fn records_written_before_the_render_existed_read_unchanged() {
 
 #[test]
 fn a_first_send_records_no_after_and_logs_every_message() {
-    let record = chat_effect(three_messages(), None).record();
+    let record = chat_effect(three_messages(), None).to_record();
     let EffectRecord::Chat {
         after,
         keep,
@@ -213,7 +217,7 @@ fn a_chat_answer_records_the_reply_model_and_finish_reason_without_the_bodies() 
         CompletionResult::Text("the reply".to_owned()),
         "stop",
     ))));
-    let record = answer.record();
+    let record = answer.to_record();
     assert_eq!(
         record,
         AnswerRecord::Chat(Ok(ChatAnswerRecord::new("test-model")
@@ -235,7 +239,7 @@ fn a_chat_answer_with_tool_calls_records_their_names_in_call_order_and_no_reply(
         ToolCall::from_parts("call-2", "echo", json!({})).expect("a whole call"),
     ]);
     let answer = EffectAnswer::Chat(Ok(Box::new(finished_completion(calls, "tool_calls"))));
-    let record = answer.record();
+    let record = answer.to_record();
     assert_eq!(
         record,
         AnswerRecord::Chat(Ok(ChatAnswerRecord::new("test-model")
@@ -257,7 +261,7 @@ fn a_canned_chat_answer_records_no_finish_reason() {
             .expect("a text result is accepted");
     let answer = EffectAnswer::Chat(Ok(Box::new(completion)));
     assert_eq!(
-        answer.record(),
+        answer.to_record(),
         AnswerRecord::Chat(Ok(
             ChatAnswerRecord::new("canned-model").with_reply(Some("canned".to_owned()))
         ))
@@ -278,7 +282,7 @@ fn a_failed_chat_answer_records_the_kinds_tag_and_the_errors_display_text() {
         "the recorded text keeps the crate-authored specific: {expected}"
     );
     assert!(!expected.contains("hidden"), "the detail is never recorded");
-    let record = EffectAnswer::Chat(Err(error)).record();
+    let record = EffectAnswer::Chat(Err(error)).to_record();
     assert_eq!(
         record,
         AnswerRecord::Chat(Err(FailureRecord::new("malformed_response", expected)))
@@ -288,7 +292,7 @@ fn a_failed_chat_answer_records_the_kinds_tag_and_the_errors_display_text() {
 
 #[test]
 fn a_tool_call_answer_records_the_outputs_text_and_trust() {
-    let trusted = EffectAnswer::ToolCall(Ok(ToolOutput::trusted("done"))).record();
+    let trusted = EffectAnswer::ToolCall(Ok(ToolOutput::trusted("done"))).to_record();
     assert_eq!(
         trusted,
         AnswerRecord::ToolCall(Ok(ToolAnswerRecord::new("done", OutputTrust::Trusted)))
@@ -299,7 +303,7 @@ fn a_tool_call_answer_records_the_outputs_text_and_trust() {
     );
     assert_eq!(answer_round_trip(&trusted), trusted);
 
-    let untrusted = EffectAnswer::ToolCall(Ok(ToolOutput::untrusted("<html>"))).record();
+    let untrusted = EffectAnswer::ToolCall(Ok(ToolOutput::untrusted("<html>"))).to_record();
     assert_eq!(
         untrusted,
         AnswerRecord::ToolCall(Ok(ToolAnswerRecord::new("<html>", OutputTrust::Untrusted)))
@@ -311,7 +315,7 @@ fn a_tool_call_answer_records_the_outputs_text_and_trust() {
 fn a_failed_tool_call_answer_records_the_errors_display_text_and_hides_its_source() {
     let error = ToolError::new(ToolErrorKind::Backend, "backend failed")
         .with_source(std::io::Error::other("boom"));
-    let record = EffectAnswer::ToolCall(Err(error)).record();
+    let record = EffectAnswer::ToolCall(Err(error)).to_record();
     assert_eq!(
         record,
         AnswerRecord::ToolCall(Err(FailureRecord::new("backend", "backend failed"))),
@@ -345,7 +349,7 @@ fn a_failure_record_of_each_kind_round_trips_through_json() {
         ),
     ];
     for (answer, line) in cases {
-        let record = answer.record();
+        let record = answer.to_record();
         assert_eq!(
             serde_json::to_string(&record).expect("a failure record serializes"),
             line
@@ -359,14 +363,14 @@ fn the_store_answer_records_byte_identical_json_for_every_outcome() {
     // `AnswerRecord::Vfs` holds the `VfsOutcome` itself, and its JSON
     // is a fixed run-log format: the unit outcome as a bare string, the
     // payload outcomes in serde's externally tagged form.
-    let unit = EffectAnswer::Vfs(Ok(VfsOutcome::Unit)).record();
+    let unit = EffectAnswer::Vfs(Ok(VfsOutcome::Unit)).to_record();
     assert_eq!(
         serde_json::to_string(&unit).expect("a store answer records"),
         r#"{"Vfs":{"Ok":"Unit"}}"#
     );
     assert_eq!(answer_round_trip(&unit), unit);
 
-    let text = EffectAnswer::Vfs(Ok(VfsOutcome::Text("the read".to_owned()))).record();
+    let text = EffectAnswer::Vfs(Ok(VfsOutcome::Text("the read".to_owned()))).to_record();
     assert_eq!(
         serde_json::to_string(&text).expect("a store answer records"),
         r#"{"Vfs":{"Ok":{"Text":"the read"}}}"#
@@ -377,14 +381,14 @@ fn the_store_answer_records_byte_identical_json_for_every_outcome() {
         "a.txt".to_owned(),
         "b.txt".to_owned(),
     ])))
-    .record();
+    .to_record();
     assert_eq!(
         serde_json::to_string(&paths).expect("a store answer records"),
         r#"{"Vfs":{"Ok":{"Paths":["a.txt","b.txt"]}}}"#
     );
     assert_eq!(answer_round_trip(&paths), paths);
 
-    let flag = EffectAnswer::Vfs(Ok(VfsOutcome::Bool(true))).record();
+    let flag = EffectAnswer::Vfs(Ok(VfsOutcome::Bool(true))).to_record();
     assert_eq!(
         serde_json::to_string(&flag).expect("a store answer records"),
         r#"{"Vfs":{"Ok":{"Bool":true}}}"#
@@ -399,7 +403,7 @@ fn a_failed_store_answer_records_the_vfs_errors_tag_and_display_text() {
     };
     let expected = error.to_string();
     assert_eq!(expected, "not found: missing.txt");
-    let record = EffectAnswer::Vfs(Err(error)).record();
+    let record = EffectAnswer::Vfs(Err(error)).to_record();
     assert_eq!(
         record,
         AnswerRecord::Vfs(Err(FailureRecord::new("not_found", expected)))
@@ -409,4 +413,86 @@ fn a_failed_store_answer_records_the_vfs_errors_tag_and_display_text() {
         r#"{"Vfs":{"Err":{"kind":"not_found","message":"not found: missing.txt"}}}"#
     );
     assert_eq!(answer_round_trip(&record), record);
+}
+
+/// Checks that `record`, a public record, is the JSON of `typed`, and that
+/// it reads back identical through its text and through the typed form.
+#[track_caller]
+fn assert_exact_round_trip<T>(record: &Value, typed: &T)
+where
+    T: Serialize + DeserializeOwned + PartialEq + fmt::Debug,
+{
+    let text = serde_json::to_string(record).expect("a record serializes");
+    assert_eq!(
+        record,
+        &serde_json::to_value(typed).expect("a typed record converts"),
+        "the public record is the typed record's JSON: {text}"
+    );
+    let reread: Value = serde_json::from_str(&text).expect("a record's text is JSON");
+    assert_eq!(&reread, record, "the text reads back to the same value");
+    let back: T = serde_json::from_value(record.clone()).expect("a record reads back typed");
+    assert_eq!(&back, typed);
+    assert_eq!(
+        &serde_json::to_value(&back).expect("a typed record converts"),
+        record,
+        "the typed form converts back to the same value"
+    );
+}
+
+#[test]
+fn every_kinds_public_record_is_json_that_round_trips_exactly() {
+    let access = || {
+        Arc::new(
+            runvil_vfs::VfsRef::default()
+                .acquire(runvil_vfs::Origin::new("effect record fixture"))
+                .expect("the stock backend acquires"),
+        )
+    };
+    let effects = [
+        chat_effect(three_messages(), Some((RoundId::new(2), 1))),
+        Effect::Render {
+            entry: "0.1".to_owned(),
+            binding: test_binding("writer", "A general model for tests", "test-model"),
+            offered: tools_pack("Echo the value.", "echo"),
+        },
+        Effect::ToolCall {
+            tool: ToolId::parse("tools/echo").expect("a fixture tool id"),
+            alias: "echo".to_owned(),
+            args: json!({ "value": 0.1, "nested": { "b": 1, "a": [true, null] } }),
+            origin: ToolCallOrigin::new("run-1", "Only", ToolCaller::Model).with_entry("0.1"),
+            access: access(),
+            survives_stop: false,
+        },
+        Effect::Vfs {
+            access: access(),
+            op: VfsOp::Write {
+                path: "note.md".to_owned(),
+                contents: "hello".to_owned(),
+            },
+        },
+        Effect::Timer {
+            duration: Duration::from_millis(500),
+        },
+    ];
+    for effect in &effects {
+        assert_exact_round_trip(&effect.record(), &effect.to_record());
+    }
+    let answers = [
+        EffectAnswer::Chat(Ok(Box::new(finished_completion(
+            CompletionResult::Text("the reply".to_owned()),
+            "stop",
+        )))),
+        EffectAnswer::Chat(Err(CompletionError::new(
+            CompletionErrorKind::RateLimited,
+            "the model backend is limiting the request rate",
+        ))),
+        EffectAnswer::Render(tools_pack("Shout the value.", "shout")),
+        EffectAnswer::ToolCall(Ok(ToolOutput::untrusted("<html>"))),
+        EffectAnswer::Vfs(Ok(VfsOutcome::Paths(vec!["a.txt".to_owned()]))),
+        EffectAnswer::Timer,
+        EffectAnswer::Dropped,
+    ];
+    for answer in &answers {
+        assert_exact_round_trip(&answer.record(), &answer.to_record());
+    }
 }

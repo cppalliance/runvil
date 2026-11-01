@@ -23,7 +23,7 @@ use runvil_lua::{
     project_messages,
 };
 use runvil_model_client::model::ModelSet;
-use runvil_types::emitter::{DebugMode, Emitter, EventSink};
+use runvil_types::emitter::{Emitter, EventSink};
 use runvil_types::seed::RunSeed;
 use runvil_types::untrusted::GuardNonce;
 use serde_json::json;
@@ -33,7 +33,7 @@ const SECTION: &str = "Bench";
 /// An emitter over a sink nobody drains: the bench measures the VM, not
 /// the reports.
 fn emitter() -> Emitter {
-    Emitter::root(EventSink::default(), "bench", DebugMode::Off)
+    Emitter::root(EventSink::default(), "bench", false)
 }
 
 /// A section VM with Engine values injected, so the section's `messages`

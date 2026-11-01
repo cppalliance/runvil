@@ -16,7 +16,7 @@
 use std::collections::{BTreeMap, VecDeque};
 use std::sync::Arc;
 
-use runvil::effect::{AnswerRecord, Effect, EffectAnswer, EffectId, EffectRecord, IssuedEffect};
+use runvil::effect::{Effect, EffectAnswer, EffectId, IssuedEffect};
 use runvil::event::Event;
 use runvil::ids::Provenance;
 use runvil::model::{Completion, ModelInfo, ModelRole};
@@ -24,7 +24,7 @@ use runvil::timestamp::Timestamp;
 use runvil::tools::ToolCatalog;
 use runvil::vfs::perform_vfs_op;
 use runvil::{Prompt, Run, RunContext, RunOutcome, RunSeed, Step};
-use serde_json::json;
+use serde_json::{Value, json};
 
 use super::{Reply, TestResult, Tool, canned, tool_info};
 
@@ -188,7 +188,7 @@ pub(crate) struct Driver {
 struct Issued {
     id: EffectId,
     provenance: Provenance,
-    effect: EffectRecord,
+    effect: Value,
 }
 
 impl Driver {
@@ -361,6 +361,14 @@ impl Trace {
 
 pub(crate) struct Logged {
     pub(crate) provenance: Provenance,
-    pub(crate) effect: EffectRecord,
-    pub(crate) answer: AnswerRecord,
+    pub(crate) effect: Value,
+    pub(crate) answer: Value,
+}
+
+impl Logged {
+    /// The effect record's body when the effect is of `kind`, such as
+    /// `Chat` or `ToolCall`.
+    pub(crate) fn effect_of(&self, kind: &str) -> Option<&Value> {
+        self.effect.get(kind)
+    }
 }

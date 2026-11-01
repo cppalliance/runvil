@@ -4,8 +4,7 @@
 //! global serves). Two runs under the same inputs agree byte for byte, and
 //! `sys.now` is an unknown field.
 
-use runvil_types::replay::Flags;
-use runvil_types::seed::{RunSeed, RunUid};
+use runvil_types::seed::RunSeed;
 use runvil_types::timestamp::Timestamp;
 
 use super::context::{parse, test_context};
@@ -128,35 +127,11 @@ fn sys_when_is_timestamp_to_rfc3339_for_any_started_at() {
 }
 
 #[test]
-fn the_context_holds_the_flags_and_starts_them_empty() {
-    // `Flags` is a run input like the seed: empty from `new`, kept
-    // verbatim when the caller sets it, and readable beside the other
-    // inputs.
-    let fresh = test_context(EXECUTION);
-    assert_eq!(fresh.flags(), Flags::EMPTY);
-    assert!(fresh.flags().is_empty(), "no flag is set by default");
-
-    let recorded = Flags::from_bits(0b101);
-    let mut rng = Seeded::new(DRAWS);
-    let seed = rng.run_seed();
-    let ctx = RunContext::new(EXECUTION, seed, STARTED_AT).with_flags(recorded);
-    assert_eq!(ctx.flags(), recorded, "the caller's flags are kept");
-    rng.check_eq(&ctx.seed(), &seed, "the caller's seed is kept");
-    assert_eq!(ctx.started_at(), STARTED_AT);
-}
-
-#[test]
-fn a_run_contexts_debug_shows_the_run_id_and_not_the_seed() {
+fn a_run_contexts_debug_shows_no_seed() {
     let mut rng = Seeded::new(DRAWS);
     let seed = rng.run_seed();
     let ctx = RunContext::new(EXECUTION, seed, STARTED_AT);
     let debug = format!("{ctx:?}");
-    let uid = RunUid::from_seed(&seed);
-    rng.check_eq(&ctx.uid(), &uid, "the run id derives from the seed");
-    rng.check(
-        debug.contains(&format!("uid: {uid:?}")),
-        format_args!("the Debug names the run id {uid}: {debug}"),
-    );
     rng.check(
         !debug.contains(&seed.to_string()) && !debug.to_lowercase().contains("seed"),
         format_args!("the Debug shows no seed: {debug}"),

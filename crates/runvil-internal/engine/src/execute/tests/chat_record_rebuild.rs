@@ -59,7 +59,7 @@ fn echo_rounds(lua: &str, replies: Vec<EffectAnswer>) -> (Scenario, SentLog) {
                 other => panic!("only model rounds reach the model: {other:?}"),
             };
             rounds.borrow_mut().push(Sent {
-                record: effect.record(),
+                record: effect.to_record(),
                 live: messages
                     .iter()
                     .map(|message| serde_json::to_value(message).expect("a message serializes"))

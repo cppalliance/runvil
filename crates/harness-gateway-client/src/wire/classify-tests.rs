@@ -340,9 +340,15 @@ fn each_http_kind_carries_its_fixed_phrase_and_the_status_suffix() {
 }
 
 #[test]
-fn a_429_is_retryable_now() {
-    assert!(classify_http_failure(429, "slow down").is_retryable());
-    assert!(!classify_http_failure(429, "insufficient_quota").is_retryable());
+fn a_429_is_rate_limited_unless_its_body_names_a_spent_quota() {
+    assert_eq!(
+        classify_http_failure(429, "slow down").kind(),
+        CompletionErrorKind::RateLimited
+    );
+    assert_eq!(
+        classify_http_failure(429, "insufficient_quota").kind(),
+        CompletionErrorKind::QuotaExhausted
+    );
 }
 
 #[test]
@@ -406,5 +412,4 @@ fn an_in_stream_envelope_that_matches_no_rule_stays_a_transport_failure() {
         "the connection to the model backend failed"
     );
     assert_eq!(error.detail(), Some("upstream\\ndied"));
-    assert!(error.is_retryable());
 }

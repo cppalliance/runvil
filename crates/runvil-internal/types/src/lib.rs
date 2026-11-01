@@ -20,12 +20,10 @@
 //! holds an implementation. [`ids`] is the hierarchical, deterministic
 //! identity of a run's chains and tasks and the [`Provenance`](ids::Provenance)
 //! replay key stamped on every effect and event; [`timestamp`] is the UTC
-//! instant a run starts from, rendered over std alone; [`seed`] is the
+//! instant a run starts from, rendered over std alone; and [`seed`] is the
 //! caller's [`RunSeed`](seed::RunSeed) and the one-way derivations from
-//! it, the run id [`RunUid`](seed::RunUid) among them; and [`replay`] holds
-//! the behavior [`Flags`](replay::Flags) a run records. This crate depends
-//! on no other runvil crate, so every runvil crate may depend on
-//! it, and it declares no async runtime.
+//! it. This crate depends on no other runvil crate, so every runvil crate
+//! may depend on it, and it declares no async runtime.
 //!
 //! ## Invariants
 //!
@@ -43,7 +41,6 @@ pub mod metrics;
 pub mod models;
 pub mod names;
 pub mod packs;
-pub mod replay;
 pub mod seed;
 #[cfg(test)]
 mod test_support;

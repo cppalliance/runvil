@@ -1,5 +1,5 @@
-//! Tests for the failure vocabulary: retryability per kind, the fixed
-//! phrases, the specifics that extend them, and the detail channel.
+//! Tests for the failure vocabulary: the tags, the fixed phrases, the
+//! specifics that extend them, and the detail channel.
 
 use super::*;
 
@@ -18,26 +18,6 @@ const ALL_KINDS: [CompletionErrorKind; 13] = [
     CompletionErrorKind::Unavailable,
     CompletionErrorKind::InvalidParts,
 ];
-
-#[test]
-fn retryability_is_fixed_per_kind() {
-    let retryable = [
-        CompletionErrorKind::RateLimited,
-        CompletionErrorKind::Overloaded,
-        CompletionErrorKind::Timeout,
-        CompletionErrorKind::Transport,
-        CompletionErrorKind::ServerError,
-        CompletionErrorKind::MalformedResponse,
-    ];
-    for kind in ALL_KINDS {
-        let error = CompletionError::new(kind, "message");
-        assert_eq!(
-            error.is_retryable(),
-            retryable.contains(&kind),
-            "retryability of {kind:?}"
-        );
-    }
-}
 
 #[test]
 fn each_kind_tags_as_its_snake_case_name() {
@@ -152,7 +132,6 @@ fn context_overflow_holds_the_counts() {
     let error = CompletionError::context_overflow(Some(10), None, "too big");
     assert_eq!(error.kind(), CompletionErrorKind::ContextOverflow);
     assert_eq!(error.overflow(), (Some(10), None));
-    assert!(!error.is_retryable());
 }
 
 #[test]
@@ -181,7 +160,6 @@ fn a_timeout_and_a_transport_failure_are_built_from_a_kind_and_a_source() {
         "deadline",
     ));
     assert_eq!(timed_out.kind(), CompletionErrorKind::Timeout);
-    assert!(timed_out.is_retryable());
     assert_eq!(
         timed_out.to_string(),
         "the model backend did not answer in time"
@@ -199,7 +177,6 @@ fn a_timeout_and_a_transport_failure_are_built_from_a_kind_and_a_source() {
     )
     .with_source(std::io::Error::other("connection refused"));
     assert_eq!(refused.kind(), CompletionErrorKind::Transport);
-    assert!(refused.is_retryable());
 }
 
 #[test]
@@ -225,7 +202,6 @@ fn a_specific_extends_the_phrase_after_a_colon_and_never_adds_detail() {
     );
     assert_eq!(malformed.message(), malformed.to_string());
     assert_eq!(malformed.detail(), None);
-    assert!(malformed.is_retryable());
 
     let empty = CompletionError::specific(
         CompletionErrorKind::EmptyReply,
@@ -238,7 +214,6 @@ fn a_specific_extends_the_phrase_after_a_colon_and_never_adds_detail() {
          reasoning content was present but ignored"
     );
     assert_eq!(empty.finish_reason(), Some("stop"));
-    assert!(!empty.is_retryable());
 }
 
 #[test]
@@ -250,7 +225,6 @@ fn the_shared_empty_reply_owner_builds_the_phrase_and_the_reasoning_specific() {
     assert_eq!(plain.kind(), CompletionErrorKind::EmptyReply);
     assert_eq!(plain.to_string(), CompletionErrorKind::EmptyReply.phrase());
     assert_eq!(plain.finish_reason(), None);
-    assert!(!plain.is_retryable());
 
     let reasoned = CompletionError::empty_reply(true).with_finish_reason("stop");
     assert_eq!(

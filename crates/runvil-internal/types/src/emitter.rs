@@ -37,23 +37,6 @@ use crate::tools::{OutputTrust, ToolId};
 #[path = "emitter-tests.rs"]
 mod tests;
 
-/// Selects whether a run reports each model round's raw bodies as events.
-///
-/// The bodies are the round's raw request and response, reported as
-/// `Request` and `Response` events. Off by default. The `Chat` effect and
-/// its answer already carry the bodies, so a caller that logs effects has
-/// them. A caller that also wants them in the event stream selects `On`.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-#[non_exhaustive]
-pub enum DebugMode {
-    /// The model rounds skip the `Request` and `Response` events and
-    /// the body clones those events need.
-    #[default]
-    Off,
-    /// Every model round emits its raw request and response bodies.
-    On,
-}
-
 /// Names one phase of loading a library section into a section's environment.
 ///
 /// [`Emitter::library_load`] reports it.
@@ -163,15 +146,16 @@ pub struct Emitter {
     /// The caller-chosen run identifier stamped on every event.
     execution: Arc<str>,
     /// Whether the caller asked for raw request/response capture: the model
-    /// rounds emit `Request` and `Response` only when [`DebugMode::On`],
-    /// so a run that did not opt in never clones a body.
-    debug: DebugMode,
+    /// rounds emit `Request` and `Response` only when it is set, so a run
+    /// that did not opt in never clones a body.
+    debug: bool,
 }
 
 impl Emitter {
-    /// Builds the emitter for `task` over `sink`.
+    /// Builds the emitter for `task` over `sink`, capturing raw model-turn
+    /// bodies when `debug` is set.
     #[must_use]
-    pub fn new(sink: EventSink, task: TaskId, execution: Arc<str>, debug: DebugMode) -> Self {
+    pub fn new(sink: EventSink, task: TaskId, execution: Arc<str>, debug: bool) -> Self {
         Self {
             sink,
             task,
@@ -183,7 +167,7 @@ impl Emitter {
     /// The root task's emitter over `sink`: the main walk is task `0`,
     /// and so is a prompt's parse, which happens before any run exists.
     #[must_use]
-    pub fn root(sink: EventSink, execution: &str, debug: DebugMode) -> Self {
+    pub fn root(sink: EventSink, execution: &str, debug: bool) -> Self {
         Self::new(
             sink,
             TaskId::from(ChainId::root()),
@@ -220,7 +204,7 @@ impl Emitter {
     /// Whether the run captures raw model-turn bodies.
     #[must_use]
     pub fn captures_debug(&self) -> bool {
-        self.debug == DebugMode::On
+        self.debug
     }
 
     /// Stamps one issued effect: this task's next provenance, drawn from

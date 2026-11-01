@@ -64,9 +64,6 @@ fn lifecycle_of(event: &Event) -> Option<Lifecycle> {
         Event::LuaChunkStarted { .. } => Some(lifecycle::LUA_CHUNK_STARTED),
         Event::LuaChunkSucceeded { .. } => Some(lifecycle::LUA_CHUNK_SUCCEEDED),
         Event::LuaChunkFailed { .. } => Some(lifecycle::LUA_CHUNK_FAILED),
-        Event::LuaReplyBindingStarted { .. } => Some(lifecycle::LUA_REPLY_BINDING_STARTED),
-        Event::LuaReplyBindingSucceeded { .. } => Some(lifecycle::LUA_REPLY_BINDING_SUCCEEDED),
-        Event::LuaReplyBindingFailed { .. } => Some(lifecycle::LUA_REPLY_BINDING_FAILED),
         Event::LuaTeardownStarted { .. } => Some(lifecycle::LUA_TEARDOWN_STARTED),
         Event::LuaTeardownSucceeded { .. } => Some(lifecycle::LUA_TEARDOWN_SUCCEEDED),
         Event::ToolScopeValidationStarted { .. } => Some(lifecycle::TOOL_SCOPE_VALIDATION_STARTED),
@@ -74,15 +71,6 @@ fn lifecycle_of(event: &Event) -> Option<Lifecycle> {
             Some(lifecycle::TOOL_SCOPE_VALIDATION_SUCCEEDED)
         }
         Event::ToolScopeValidationFailed { .. } => Some(lifecycle::TOOL_SCOPE_VALIDATION_FAILED),
-        Event::ModelCatalogValidationStarted { .. } => {
-            Some(lifecycle::MODEL_CATALOG_VALIDATION_STARTED)
-        }
-        Event::ModelCatalogValidationSucceeded { .. } => {
-            Some(lifecycle::MODEL_CATALOG_VALIDATION_SUCCEEDED)
-        }
-        Event::ModelCatalogValidationFailed { .. } => {
-            Some(lifecycle::MODEL_CATALOG_VALIDATION_FAILED)
-        }
         Event::VfsWriteSucceeded { .. } => Some(lifecycle::VFS_WRITE_SUCCEEDED),
         Event::VfsWriteFailed { .. } => Some(lifecycle::VFS_WRITE_FAILED),
         Event::VfsAppendSucceeded { .. } => Some(lifecycle::VFS_APPEND_SUCCEEDED),
@@ -109,12 +97,10 @@ fn lifecycle_of(event: &Event) -> Option<Lifecycle> {
         | Event::TaskFailed { .. }
         | Event::TaskCancelled { .. }
         | Event::TaskAbandoned { .. }
-        | Event::TaskResumed { .. }
         | Event::Thinking { .. }
         | Event::AssistantReply { .. }
         | Event::AssistantToolCalls { .. }
         | Event::ToolResult { .. }
-        | Event::TaskNote { .. }
         | Event::Request { .. }
         | Event::Response { .. } => None,
     }
@@ -187,12 +173,6 @@ fn task_samples() -> Vec<Event> {
             task: task("0.0"),
             reason: AbandonReason::ToolLoopExhausted,
         },
-        Event::TaskResumed {
-            execution: "run-1".to_owned(),
-            section: "Worker".to_owned(),
-            provenance: provenance("0.3", 0),
-            task: task("0.3"),
-        },
     ]
 }
 
@@ -245,13 +225,6 @@ fn content_samples() -> Vec<Event> {
             vendor: Some("acme".to_owned()),
             content: "file contents".to_owned(),
             trusted: false,
-        },
-        Event::TaskNote {
-            execution: "run-1".to_owned(),
-            section: "Worker".to_owned(),
-            provenance: provenance("0.1", 2),
-            task: task("0.1"),
-            text: "halfway".to_owned(),
         },
     ]
 }
@@ -388,16 +361,15 @@ fn a_serialized_event_is_tagged_by_kind_with_its_coordinates_beside_the_payload(
         &event,
         r#"{"kind":"vfs_write_succeeded","execution":"run-1","section":"Gather","provenance":{"task":"0.2","seq":9}}"#,
     );
-    let note = Event::TaskNote {
+    let succeeded = Event::TaskSucceeded {
         execution: "run-1".to_owned(),
         section: "Worker".to_owned(),
         provenance: provenance("0.1", 10),
         task: task("0.1"),
-        text: "halfway".to_owned(),
     };
     assert_wire(
-        &note,
-        r#"{"kind":"task_note","execution":"run-1","section":"Worker","provenance":{"task":"0.1","seq":10},"task":"0.1","text":"halfway"}"#,
+        &succeeded,
+        r#"{"kind":"task_succeeded","execution":"run-1","section":"Worker","provenance":{"task":"0.1","seq":10},"task":"0.1"}"#,
     );
 }
 
@@ -443,7 +415,7 @@ fn every_event_exposes_its_coordinates() {
             provenance: provenance("0", 12),
             message: "hello".to_owned(),
         },
-        Event::TaskResumed {
+        Event::TaskSucceeded {
             execution: "run-1".to_owned(),
             section: "Worker".to_owned(),
             provenance: provenance("0.1", 0),

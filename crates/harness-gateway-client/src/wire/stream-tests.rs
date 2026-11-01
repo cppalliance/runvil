@@ -209,7 +209,6 @@ fn finish_fails_a_tool_call_batch_sharing_an_id_as_a_retryable_malformed_reply()
     .finish(Value::Null, None)
     .expect_err("two calls sharing an id must fail");
     assert_eq!(error.kind(), CompletionErrorKind::MalformedResponse);
-    assert!(error.is_retryable());
 }
 
 #[test]
@@ -385,7 +384,6 @@ fn error_envelope_naming_a_context_limit_is_a_context_overflow() {
         .expect_err("an error envelope must fail the stream");
     assert_eq!(error.kind(), CompletionErrorKind::ContextOverflow);
     assert_eq!(error.overflow(), (Some(5000), Some(4096)));
-    assert!(!error.is_retryable());
 }
 
 #[test]

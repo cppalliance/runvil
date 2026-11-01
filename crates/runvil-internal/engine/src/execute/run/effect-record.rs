@@ -58,8 +58,7 @@ impl<T> PackToolSets<T> {
 /// caller may serve the slot with a different model from the bound one.
 /// The answer's [`ChatAnswerRecord`] names the model that served the round.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[non_exhaustive]
-pub enum EffectRecord {
+pub(crate) enum EffectRecord {
     /// One model round.
     Chat {
         /// The round's run-wide id, which the round's content events also
@@ -127,8 +126,7 @@ pub enum EffectRecord {
 /// variant per answer kind, each holding its outcome with every failure
 /// recorded as a [`FailureRecord`].
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[non_exhaustive]
-pub enum AnswerRecord {
+pub(crate) enum AnswerRecord {
     /// The model round's outcome.
     Chat(std::result::Result<ChatAnswerRecord, FailureRecord>),
     /// Each Pack's rendered tools per set, in the order asked, whole,
@@ -156,12 +154,11 @@ pub enum AnswerRecord {
 /// the `VfsError` tag for a store operation (such as `not_found`).
 /// `message` is the failure's display text.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[non_exhaustive]
-pub struct FailureRecord {
+pub(crate) struct FailureRecord {
     /// The stable tag of the failure's kind.
-    pub kind: String,
+    pub(crate) kind: String,
     /// The failure's display text.
-    pub message: String,
+    pub(crate) message: String,
 }
 
 impl FailureRecord {
@@ -180,17 +177,16 @@ impl FailureRecord {
 /// answer. The round's request and response bodies travel separately, as
 /// debug events.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[non_exhaustive]
-pub struct ChatAnswerRecord {
+pub(crate) struct ChatAnswerRecord {
     /// The model that served the round, as the completion names it.
-    pub model: String,
+    pub(crate) model: String,
     /// The provider's finish reason, when it sent one.
-    pub finish_reason: Option<String>,
+    pub(crate) finish_reason: Option<String>,
     /// The reply text, when the round produced text.
-    pub reply: Option<String>,
+    pub(crate) reply: Option<String>,
     /// The names of the tools the model requested, in call order, when it
     /// requested any.
-    pub tool_calls: Vec<String>,
+    pub(crate) tool_calls: Vec<String>,
 }
 
 #[cfg(test)]
@@ -252,12 +248,11 @@ impl From<&Completion> for ChatAnswerRecord {
 
 /// A tool's own output as the log records it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[non_exhaustive]
-pub struct ToolAnswerRecord {
+pub(crate) struct ToolAnswerRecord {
     /// The output text, before the Engine's trust rules apply.
-    pub text: String,
+    pub(crate) text: String,
     /// The trust level the tool declared for its output.
-    pub trust: OutputTrust,
+    pub(crate) trust: OutputTrust,
 }
 
 impl ToolAnswerRecord {

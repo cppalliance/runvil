@@ -1,9 +1,6 @@
 #[non_exhaustive] pub enum runvil::ParseErrorKind
 #[non_exhaustive] pub enum runvil::RunErrorKind
-#[non_exhaustive] pub enum runvil::effect::AnswerRecord
-#[non_exhaustive] pub enum runvil::effect::EffectRecord
 #[non_exhaustive] pub enum runvil::effect::ToolCaller
-#[non_exhaustive] pub enum runvil::event::DebugMode
 #[non_exhaustive] pub enum runvil::event::Event
 #[non_exhaustive] pub enum runvil::event::ReplyOrigin
 #[non_exhaustive] pub enum runvil::ids::AbandonReason
@@ -36,12 +33,9 @@
 #[non_exhaustive] pub struct runvil::ParseError { /* private fields */ }
 #[non_exhaustive] pub struct runvil::Prompt { /* private fields */ }
 #[non_exhaustive] pub struct runvil::RunLimits { .. }
-#[non_exhaustive] pub struct runvil::effect::ChatAnswerRecord { .. }
-#[non_exhaustive] pub struct runvil::effect::FailureRecord { .. }
 #[non_exhaustive] pub struct runvil::effect::IssuedEffect { .. }
 #[non_exhaustive] pub struct runvil::effect::PackToolSets<T> { .. }
 #[non_exhaustive] pub struct runvil::effect::Round { .. }
-#[non_exhaustive] pub struct runvil::effect::ToolAnswerRecord { .. }
 #[non_exhaustive] pub struct runvil::effect::ToolCallOrigin { .. }
 #[non_exhaustive] pub struct runvil::ids::Provenance { .. }
 #[non_exhaustive] pub struct runvil::metrics::CallMetrics { .. }
@@ -94,19 +88,13 @@ auto runvil::RunSeed: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::Step: Freeze, !RefUnwindSafe, Send, Sync, Unpin, !UnwindSafe
 auto runvil::cancel::CancelHandle: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::cancel::Cancelled: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
-auto runvil::effect::AnswerRecord: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
-auto runvil::effect::ChatAnswerRecord: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::effect::Effect: Freeze, !RefUnwindSafe, Send, Sync, Unpin, !UnwindSafe
 auto runvil::effect::EffectAnswer: Freeze, !RefUnwindSafe, Send, Sync, Unpin, !UnwindSafe
 auto runvil::effect::EffectId: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
-auto runvil::effect::EffectRecord: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
-auto runvil::effect::FailureRecord: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::effect::IssuedEffect: Freeze, !RefUnwindSafe, Send, Sync, Unpin, !UnwindSafe
 auto runvil::effect::Round: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
-auto runvil::effect::ToolAnswerRecord: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::effect::ToolCallOrigin: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::effect::ToolCaller: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
-auto runvil::event::DebugMode: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::event::Event: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::event::ReplyOrigin: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::ids::AbandonReason: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
@@ -160,7 +148,6 @@ auto runvil::prompt::ArgsDeclIter: Freeze, RefUnwindSafe, Send, Sync, Unpin, Unw
 auto runvil::prompt::FileDecl: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::prompt::Frontmatter: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::prompt::RoleRequirements: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
-auto runvil::replay::Flags: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::timestamp::Timestamp: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::tools::OutputTrust: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::tools::ToolCatalog: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
@@ -211,19 +198,13 @@ derives runvil::RunSeed: Clone, Copy, Debug, Deserialize, Eq, PartialEq, Seriali
 derives runvil::Step: Debug
 derives runvil::cancel::CancelHandle: Clone, Debug, Default
 derives runvil::cancel::Cancelled: Debug
-derives runvil::effect::AnswerRecord: Clone, Debug, Deserialize, PartialEq, Serialize
-derives runvil::effect::ChatAnswerRecord: Clone, Debug, Deserialize, Eq, PartialEq, Serialize
 derives runvil::effect::Effect: Debug
 derives runvil::effect::EffectAnswer: Debug
 derives runvil::effect::EffectId: Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd
-derives runvil::effect::EffectRecord: Clone, Debug, Deserialize, PartialEq, Serialize
-derives runvil::effect::FailureRecord: Clone, Debug, Deserialize, Eq, PartialEq, Serialize
 derives runvil::effect::IssuedEffect: Debug
 derives runvil::effect::Round: Clone, Copy, Debug, Eq, PartialEq
-derives runvil::effect::ToolAnswerRecord: Clone, Debug, Deserialize, Eq, PartialEq, Serialize
 derives runvil::effect::ToolCallOrigin: Clone, Debug, Deserialize, Eq, PartialEq, Serialize
 derives runvil::effect::ToolCaller: Clone, Copy, Debug, Deserialize, Eq, Hash, PartialEq, Serialize
-derives runvil::event::DebugMode: Clone, Copy, Debug, Default, Eq, PartialEq
 derives runvil::event::Event: Clone, Debug, Deserialize, PartialEq, Serialize
 derives runvil::event::ReplyOrigin: Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize
 derives runvil::ids::AbandonReason: Clone, Copy, Debug, Deserialize, Eq, Hash, PartialEq, Serialize
@@ -277,7 +258,6 @@ derives runvil::prompt::ArgsDeclIter: Clone, Debug
 derives runvil::prompt::FileDecl: Clone, Debug, Deserialize, Eq, PartialEq
 derives runvil::prompt::Frontmatter: Clone, Debug, Deserialize, Eq, PartialEq
 derives runvil::prompt::RoleRequirements: Clone, Copy, Debug, Deserialize, Eq, PartialEq
-derives runvil::replay::Flags: Clone, Copy, Debug, Default, Deserialize, Eq, Hash, PartialEq, Serialize
 derives runvil::timestamp::Timestamp: Clone, Copy, Debug, Default, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize
 derives runvil::tools::OutputTrust: Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize
 derives runvil::tools::ToolCatalog: Clone, Debug, Default
@@ -316,7 +296,6 @@ derives runvil::vfs::VfsPathBuf: Clone, Debug, Eq, Hash, Ord, PartialEq, Partial
 derives runvil::vfs::VfsRef: Clone, Debug, Default
 derives runvil::vfs::VfsRefBuilder: Debug
 derives runvil::vfs::Writability: Clone, Copy, Debug, Eq, Hash, PartialEq
-impl core::convert::From<&runvil::model::Completion> for runvil::effect::ChatAnswerRecord
 impl core::convert::From<runvil::ids::ChainId> for runvil::ids::TaskId
 impl core::convert::From<runvil::vfs::VfsPath> for runvil::vfs::VfsPathBuf
 impl core::error::Error for runvil::ParseError
@@ -363,9 +342,6 @@ impl core::fmt::Display for runvil::vfs::VfsPathBuf
 impl core::future::future::Future for runvil::cancel::Cancelled
 impl core::future::future::Future for runvil::cancel::Cancelled { type Output = () }
 impl core::iter::traits::exact_size::ExactSizeIterator for runvil::prompt::ArgsDeclIter<'_>
-impl core::ops::bit::BitOr for runvil::replay::Flags
-impl core::ops::bit::BitOr for runvil::replay::Flags { type Output = runvil::replay::Flags }
-impl core::ops::bit::BitOrAssign for runvil::replay::Flags
 impl core::ops::drop::Drop for runvil::vfs::Access
 impl core::str::traits::FromStr for runvil::ids::ChainId
 impl core::str::traits::FromStr for runvil::ids::ChainId { type Err = runvil::ids::ParseIdError }
@@ -414,16 +390,11 @@ pub const fn runvil::effect::EffectId::get(self) -> u64
 pub const fn runvil::ids::RoundId::get(self) -> u64
 pub const fn runvil::ids::RoundId::new(id: u64) -> Self
 pub const fn runvil::model::ModelRole::as_str(self) -> &'static str
-pub const fn runvil::replay::Flags::bits(self) -> u32
-pub const fn runvil::replay::Flags::contains(self, other: runvil::replay::Flags) -> bool
-pub const fn runvil::replay::Flags::from_bits(bits: u32) -> Self
-pub const fn runvil::replay::Flags::is_empty(self) -> bool
 pub const fn runvil::timestamp::Timestamp::from_unix_millis(millis: i64) -> Self
 pub const fn runvil::timestamp::Timestamp::unix_millis(self) -> i64
 pub const runvil::model::ModelId::GATEWAY: &'static str
 pub const runvil::model::ModelRole::ALL: [runvil::model::ModelRole; 5]
 pub const runvil::model::Role::ALL: &'static [runvil::model::Role]
-pub const runvil::replay::Flags::EMPTY: runvil::replay::Flags
 pub const runvil::timestamp::Timestamp::UNIX_EPOCH: runvil::timestamp::Timestamp
 pub enum runvil::RunOutcome
 pub enum runvil::Step
@@ -442,20 +413,14 @@ pub fn runvil::Prompt::title(&self) -> &str
 pub fn runvil::Run::new(prompt: alloc::sync::Arc<runvil::Prompt>, args: &str, config: runvil::RunContext) -> runvil::Run
 pub fn runvil::Run::resume(&mut self, id: runvil::effect::EffectId, answer: runvil::effect::EffectAnswer)
 pub fn runvil::Run::step(&mut self) -> runvil::Step
-pub fn runvil::RunContext::flags(&self) -> runvil::replay::Flags
 pub fn runvil::RunContext::new(name: impl core::convert::Into<alloc::string::String>, seed: runvil::RunSeed, started_at: runvil::timestamp::Timestamp) -> runvil::RunContext
-pub fn runvil::RunContext::seed(&self) -> runvil::RunSeed
-pub fn runvil::RunContext::started_at(&self) -> runvil::timestamp::Timestamp
-pub fn runvil::RunContext::tools(&self) -> &runvil::tools::ToolCatalog
-pub fn runvil::RunContext::vfs(&self) -> &runvil::vfs::VfsRef
 pub fn runvil::RunContext::with_cancel(self, handle: runvil::cancel::CancelHandle) -> runvil::RunContext
-pub fn runvil::RunContext::with_flags(self, flags: runvil::replay::Flags) -> runvil::RunContext
 pub fn runvil::RunContext::with_limits(self, limits: runvil::RunLimits) -> runvil::RunContext
 pub fn runvil::RunContext::with_models(self, models: alloc::collections::btree::map::BTreeMap<runvil::model::ModelRole, runvil::model::ModelInfo>) -> runvil::RunContext
 pub fn runvil::RunContext::with_packs(self, roster: impl core::iter::traits::collect::IntoIterator<Item = (runvil::packs::PackId, runvil::packs::RosterEntry)>) -> runvil::RunContext
 pub fn runvil::RunContext::with_preludes(self, preludes: alloc::vec::Vec<runvil::packs::Prelude>) -> runvil::RunContext
 pub fn runvil::RunContext::with_provenance_start(self, start: u32) -> runvil::RunContext
-pub fn runvil::RunContext::with_report_debug(self, mode: runvil::event::DebugMode) -> runvil::RunContext
+pub fn runvil::RunContext::with_report_debug(self, report: bool) -> runvil::RunContext
 pub fn runvil::RunContext::with_tools(self, tools: runvil::tools::ToolCatalog) -> runvil::RunContext
 pub fn runvil::RunContext::with_ui(self, snapshot: serde_json::value::Value) -> runvil::RunContext
 pub fn runvil::RunContext::with_vfs(self, vfs: runvil::vfs::VfsRef) -> runvil::RunContext
@@ -466,8 +431,8 @@ pub fn runvil::cancel::CancelHandle::cancelled(&self) -> runvil::cancel::Cancell
 pub fn runvil::cancel::CancelHandle::child(&self) -> runvil::cancel::CancelHandle
 pub fn runvil::cancel::CancelHandle::is_cancelled(&self) -> bool
 pub fn runvil::cancel::CancelHandle::new() -> Self
-pub fn runvil::effect::Effect::record(&self) -> runvil::effect::EffectRecord
-pub fn runvil::effect::EffectAnswer::record(&self) -> runvil::effect::AnswerRecord
+pub fn runvil::effect::Effect::record(&self) -> serde_json::value::Value
+pub fn runvil::effect::EffectAnswer::record(&self) -> serde_json::value::Value
 pub fn runvil::effect::PackToolSets::new(pack: runvil::packs::PackId, static_set: alloc::vec::Vec<T>, dynamic_set: alloc::vec::Vec<T>) -> runvil::effect::PackToolSets<T>
 pub fn runvil::effect::Round::new(id: runvil::ids::RoundId, origin: runvil::event::ReplyOrigin) -> runvil::effect::Round
 pub fn runvil::effect::ToolCallOrigin::new(execution: impl core::convert::Into<alloc::string::String>, section: impl core::convert::Into<alloc::string::String>, caller: runvil::effect::ToolCaller) -> runvil::effect::ToolCallOrigin
@@ -523,7 +488,6 @@ pub fn runvil::model::CompletionError::context_overflow(prompt_tokens: core::opt
 pub fn runvil::model::CompletionError::detail(&self) -> core::option::Option<&str>
 pub fn runvil::model::CompletionError::empty_reply(reasoning_present: bool) -> runvil::model::CompletionError
 pub fn runvil::model::CompletionError::finish_reason(&self) -> core::option::Option<&str>
-pub fn runvil::model::CompletionError::is_retryable(&self) -> bool
 pub fn runvil::model::CompletionError::kind(&self) -> runvil::model::CompletionErrorKind
 pub fn runvil::model::CompletionError::message(&self) -> &str
 pub fn runvil::model::CompletionError::new(kind: runvil::model::CompletionErrorKind, message: impl core::convert::Into<alloc::string::String>) -> runvil::model::CompletionError
@@ -636,8 +600,6 @@ pub fn runvil::tools::ToolCatalog::new(tools: impl core::iter::traits::collect::
 pub fn runvil::tools::ToolCatalog::tools(&self) -> &[runvil::tools::ToolInfo]
 pub fn runvil::tools::ToolCatalogError::duplicate_id(&self) -> core::option::Option<&runvil::tools::ToolId>
 pub fn runvil::tools::ToolCatalogError::kind(&self) -> runvil::tools::ToolCatalogErrorKind
-pub fn runvil::tools::ToolError::is_cancelled(&self) -> bool
-pub fn runvil::tools::ToolError::is_retryable(&self) -> bool
 pub fn runvil::tools::ToolError::kind(&self) -> runvil::tools::ToolErrorKind
 pub fn runvil::tools::ToolError::message(text: impl core::convert::Into<alloc::string::String>) -> runvil::tools::ToolError
 pub fn runvil::tools::ToolError::new(kind: runvil::tools::ToolErrorKind, text: impl core::convert::Into<alloc::string::String>) -> runvil::tools::ToolError
@@ -739,7 +701,6 @@ pub mod runvil::metrics
 pub mod runvil::model
 pub mod runvil::packs
 pub mod runvil::prompt
-pub mod runvil::replay
 pub mod runvil::timestamp
 pub mod runvil::tools
 pub mod runvil::vfs
@@ -778,20 +739,6 @@ pub runvil::Step::Pending { .. }
 pub runvil::Step::Pending::effects: alloc::vec::Vec<runvil::effect::IssuedEffect>
 pub runvil::Step::Pending::events: alloc::vec::Vec<runvil::event::Event>
 pub runvil::Step::Pending::withdrawn: alloc::vec::Vec<runvil::effect::EffectId>
-pub runvil::effect::AnswerRecord::Chat(..)
-pub runvil::effect::AnswerRecord::Chat::0: core::result::Result<runvil::effect::ChatAnswerRecord, runvil::effect::FailureRecord>
-pub runvil::effect::AnswerRecord::Dropped
-pub runvil::effect::AnswerRecord::Render(..)
-pub runvil::effect::AnswerRecord::Render::0: alloc::vec::Vec<runvil::effect::PackToolSets<runvil::tools::ToolInfo>>
-pub runvil::effect::AnswerRecord::Timer
-pub runvil::effect::AnswerRecord::ToolCall(..)
-pub runvil::effect::AnswerRecord::ToolCall::0: core::result::Result<runvil::effect::ToolAnswerRecord, runvil::effect::FailureRecord>
-pub runvil::effect::AnswerRecord::Vfs(..)
-pub runvil::effect::AnswerRecord::Vfs::0: core::result::Result<runvil::vfs::VfsOutcome, runvil::effect::FailureRecord>
-pub runvil::effect::ChatAnswerRecord::finish_reason: core::option::Option<alloc::string::String>
-pub runvil::effect::ChatAnswerRecord::model: alloc::string::String
-pub runvil::effect::ChatAnswerRecord::reply: core::option::Option<alloc::string::String>
-pub runvil::effect::ChatAnswerRecord::tool_calls: alloc::vec::Vec<alloc::string::String>
 pub runvil::effect::Effect::Chat { .. }
 pub runvil::effect::Effect::Chat::after: core::option::Option<(runvil::ids::RoundId, u64)>
 pub runvil::effect::Effect::Chat::binding: runvil::model::ModelBinding
@@ -824,31 +771,6 @@ pub runvil::effect::EffectAnswer::ToolCall(..)
 pub runvil::effect::EffectAnswer::ToolCall::0: core::result::Result<runvil::tools::ToolOutput, runvil::tools::ToolError>
 pub runvil::effect::EffectAnswer::Vfs(..)
 pub runvil::effect::EffectAnswer::Vfs::0: core::result::Result<runvil::vfs::VfsOutcome, runvil::vfs::VfsError>
-pub runvil::effect::EffectRecord::Chat { .. }
-pub runvil::effect::EffectRecord::Chat::after: core::option::Option<runvil::ids::RoundId>
-pub runvil::effect::EffectRecord::Chat::alias: alloc::string::String
-pub runvil::effect::EffectRecord::Chat::keep: u64
-pub runvil::effect::EffectRecord::Chat::max_tokens: core::option::Option<u32>
-pub runvil::effect::EffectRecord::Chat::messages: alloc::vec::Vec<serde_json::value::Value>
-pub runvil::effect::EffectRecord::Chat::round: runvil::ids::RoundId
-pub runvil::effect::EffectRecord::Chat::temperature: core::option::Option<f64>
-pub runvil::effect::EffectRecord::Chat::thinking: core::option::Option<bool>
-pub runvil::effect::EffectRecord::Chat::tools: alloc::vec::Vec<alloc::string::String>
-pub runvil::effect::EffectRecord::Render { .. }
-pub runvil::effect::EffectRecord::Render::alias: alloc::string::String
-pub runvil::effect::EffectRecord::Render::entry: alloc::string::String
-pub runvil::effect::EffectRecord::Render::offered: alloc::vec::Vec<runvil::effect::PackToolSets<runvil::tools::ToolId>>
-pub runvil::effect::EffectRecord::Timer { .. }
-pub runvil::effect::EffectRecord::Timer::seconds: f64
-pub runvil::effect::EffectRecord::ToolCall { .. }
-pub runvil::effect::EffectRecord::ToolCall::alias: alloc::string::String
-pub runvil::effect::EffectRecord::ToolCall::args: serde_json::value::Value
-pub runvil::effect::EffectRecord::ToolCall::origin: runvil::effect::ToolCallOrigin
-pub runvil::effect::EffectRecord::ToolCall::tool: runvil::tools::ToolId
-pub runvil::effect::EffectRecord::Vfs { .. }
-pub runvil::effect::EffectRecord::Vfs::op: runvil::vfs::VfsOp
-pub runvil::effect::FailureRecord::kind: alloc::string::String
-pub runvil::effect::FailureRecord::message: alloc::string::String
 pub runvil::effect::IssuedEffect::effect: runvil::effect::Effect
 pub runvil::effect::IssuedEffect::id: runvil::effect::EffectId
 pub runvil::effect::IssuedEffect::provenance: runvil::ids::Provenance
@@ -857,8 +779,6 @@ pub runvil::effect::PackToolSets::pack: runvil::packs::PackId
 pub runvil::effect::PackToolSets::static_set: alloc::vec::Vec<T>
 pub runvil::effect::Round::id: runvil::ids::RoundId
 pub runvil::effect::Round::origin: runvil::event::ReplyOrigin
-pub runvil::effect::ToolAnswerRecord::text: alloc::string::String
-pub runvil::effect::ToolAnswerRecord::trust: runvil::tools::OutputTrust
 pub runvil::effect::ToolCallOrigin::caller: runvil::effect::ToolCaller
 pub runvil::effect::ToolCallOrigin::entry: core::option::Option<alloc::string::String>
 pub runvil::effect::ToolCallOrigin::execution: alloc::string::String
@@ -866,8 +786,6 @@ pub runvil::effect::ToolCallOrigin::model: core::option::Option<alloc::string::S
 pub runvil::effect::ToolCallOrigin::section: alloc::string::String
 pub runvil::effect::ToolCaller::Model
 pub runvil::effect::ToolCaller::Script
-pub runvil::event::DebugMode::Off
-pub runvil::event::DebugMode::On
 pub runvil::event::Event::AssistantReply { .. }
 pub runvil::event::Event::AssistantReply::execution: alloc::string::String
 pub runvil::event::Event::AssistantReply::finish_reason: core::option::Option<alloc::string::String>
@@ -931,18 +849,6 @@ pub runvil::event::Event::LuaLibraryLoadSucceeded::execution: alloc::string::Str
 pub runvil::event::Event::LuaLibraryLoadSucceeded::library: alloc::string::String
 pub runvil::event::Event::LuaLibraryLoadSucceeded::provenance: runvil::ids::Provenance
 pub runvil::event::Event::LuaLibraryLoadSucceeded::section: alloc::string::String
-pub runvil::event::Event::LuaReplyBindingFailed { .. }
-pub runvil::event::Event::LuaReplyBindingFailed::execution: alloc::string::String
-pub runvil::event::Event::LuaReplyBindingFailed::provenance: runvil::ids::Provenance
-pub runvil::event::Event::LuaReplyBindingFailed::section: alloc::string::String
-pub runvil::event::Event::LuaReplyBindingStarted { .. }
-pub runvil::event::Event::LuaReplyBindingStarted::execution: alloc::string::String
-pub runvil::event::Event::LuaReplyBindingStarted::provenance: runvil::ids::Provenance
-pub runvil::event::Event::LuaReplyBindingStarted::section: alloc::string::String
-pub runvil::event::Event::LuaReplyBindingSucceeded { .. }
-pub runvil::event::Event::LuaReplyBindingSucceeded::execution: alloc::string::String
-pub runvil::event::Event::LuaReplyBindingSucceeded::provenance: runvil::ids::Provenance
-pub runvil::event::Event::LuaReplyBindingSucceeded::section: alloc::string::String
 pub runvil::event::Event::LuaTeardownStarted { .. }
 pub runvil::event::Event::LuaTeardownStarted::execution: alloc::string::String
 pub runvil::event::Event::LuaTeardownStarted::provenance: runvil::ids::Provenance
@@ -951,18 +857,6 @@ pub runvil::event::Event::LuaTeardownSucceeded { .. }
 pub runvil::event::Event::LuaTeardownSucceeded::execution: alloc::string::String
 pub runvil::event::Event::LuaTeardownSucceeded::provenance: runvil::ids::Provenance
 pub runvil::event::Event::LuaTeardownSucceeded::section: alloc::string::String
-pub runvil::event::Event::ModelCatalogValidationFailed { .. }
-pub runvil::event::Event::ModelCatalogValidationFailed::execution: alloc::string::String
-pub runvil::event::Event::ModelCatalogValidationFailed::provenance: runvil::ids::Provenance
-pub runvil::event::Event::ModelCatalogValidationFailed::section: alloc::string::String
-pub runvil::event::Event::ModelCatalogValidationStarted { .. }
-pub runvil::event::Event::ModelCatalogValidationStarted::execution: alloc::string::String
-pub runvil::event::Event::ModelCatalogValidationStarted::provenance: runvil::ids::Provenance
-pub runvil::event::Event::ModelCatalogValidationStarted::section: alloc::string::String
-pub runvil::event::Event::ModelCatalogValidationSucceeded { .. }
-pub runvil::event::Event::ModelCatalogValidationSucceeded::execution: alloc::string::String
-pub runvil::event::Event::ModelCatalogValidationSucceeded::provenance: runvil::ids::Provenance
-pub runvil::event::Event::ModelCatalogValidationSucceeded::section: alloc::string::String
 pub runvil::event::Event::ModelMetadataDegraded { .. }
 pub runvil::event::Event::ModelMetadataDegraded::execution: alloc::string::String
 pub runvil::event::Event::ModelMetadataDegraded::message: alloc::string::String
@@ -1043,17 +937,6 @@ pub runvil::event::Event::TaskFailed::execution: alloc::string::String
 pub runvil::event::Event::TaskFailed::provenance: runvil::ids::Provenance
 pub runvil::event::Event::TaskFailed::section: alloc::string::String
 pub runvil::event::Event::TaskFailed::task: runvil::ids::TaskId
-pub runvil::event::Event::TaskNote { .. }
-pub runvil::event::Event::TaskNote::execution: alloc::string::String
-pub runvil::event::Event::TaskNote::provenance: runvil::ids::Provenance
-pub runvil::event::Event::TaskNote::section: alloc::string::String
-pub runvil::event::Event::TaskNote::task: runvil::ids::TaskId
-pub runvil::event::Event::TaskNote::text: alloc::string::String
-pub runvil::event::Event::TaskResumed { .. }
-pub runvil::event::Event::TaskResumed::execution: alloc::string::String
-pub runvil::event::Event::TaskResumed::provenance: runvil::ids::Provenance
-pub runvil::event::Event::TaskResumed::section: alloc::string::String
-pub runvil::event::Event::TaskResumed::task: runvil::ids::TaskId
 pub runvil::event::Event::TaskStarted { .. }
 pub runvil::event::Event::TaskStarted::execution: alloc::string::String
 pub runvil::event::Event::TaskStarted::index: core::option::Option<u64>
@@ -1264,7 +1147,6 @@ pub runvil::tools::OutputTrust::Untrusted
 pub runvil::tools::ToolCatalogError::DuplicateId::id: runvil::tools::ToolId
 pub runvil::tools::ToolCatalogErrorKind::DuplicateId
 pub runvil::tools::ToolErrorKind::Backend
-pub runvil::tools::ToolErrorKind::Cancelled
 pub runvil::tools::ToolErrorKind::InvalidArguments
 pub runvil::tools::ToolErrorKind::Other
 pub runvil::tools::ToolErrorKind::Transport
@@ -1437,7 +1319,6 @@ pub struct runvil::packs::GlobalName { /* private fields */ }
 pub struct runvil::packs::PackRef { /* private fields */ }
 pub struct runvil::packs::Prelude { /* private fields */ }
 pub struct runvil::prompt::ArgsDeclIter<'a> { /* private fields */ }
-pub struct runvil::replay::Flags(/* private fields */)
 pub struct runvil::timestamp::Timestamp(/* private fields */)
 pub struct runvil::vfs::Access { /* private fields */ }
 pub struct runvil::vfs::AcquireContext { /* private fields */ }

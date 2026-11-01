@@ -150,10 +150,6 @@ fn from_parts_refuses_a_blank_id_a_blank_name_and_non_object_arguments() {
             CompletionErrorKind::InvalidParts,
             "{label} must be refused"
         );
-        assert!(
-            !error.is_retryable(),
-            "{label}: rebuilding the same parts fails the same way"
-        );
     }
     let call = ToolCall::from_parts("call_1", "fetch", object()).expect("a whole call is accepted");
     assert_eq!((call.id(), call.name()), ("call_1", "fetch"));
@@ -169,7 +165,6 @@ fn from_result_refuses_an_empty_batch_and_duplicate_ids_and_accepts_text() {
     let twice = CompletionResult::ToolCalls(vec![call.clone(), call.clone()]);
     let duplicate = Completion::from_result(twice, "m").expect_err("a duplicate id is refused");
     assert_eq!(duplicate.kind(), CompletionErrorKind::InvalidParts);
-    assert!(!duplicate.is_retryable());
     assert!(
         duplicate.to_string().contains("\"call_1\""),
         "the message names the repeated id: {duplicate}"

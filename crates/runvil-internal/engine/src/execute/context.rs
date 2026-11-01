@@ -144,7 +144,6 @@ impl RunState {
             tools,
             packs,
             preludes,
-            ..
         } = config;
         let mut requirements = Requirements::default();
         let model_set = Arc::new(fill::fill_model_set(&prompt, models, &mut requirements));

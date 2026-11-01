@@ -10,7 +10,6 @@ mod packs;
 mod parsing;
 mod prepare;
 mod prompt;
-mod replay;
 mod shipped;
 mod support;
 mod timestamp;

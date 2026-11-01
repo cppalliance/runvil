@@ -6,7 +6,8 @@ use runvil_lua::VfsOp;
 
 use super::*;
 
-use crate::{EffectRecord, RunErrorKind};
+use crate::RunErrorKind;
+use crate::execute::EffectRecord;
 
 /// A store failure the author caught with `pcall` is an error table of
 /// kind `store`: its `reason`, `path`, and `anchor` fields and its

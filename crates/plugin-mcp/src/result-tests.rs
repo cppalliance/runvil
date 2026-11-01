@@ -117,7 +117,6 @@ fn a_timeout_is_a_transport_error_naming_the_deadline() {
     });
     assert_eq!(error.kind(), ToolErrorKind::Transport);
     assert!(error.to_string().contains("300 seconds"));
-    assert!(error.is_retryable());
 }
 
 #[test]

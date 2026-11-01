@@ -60,7 +60,7 @@ fn a_chat_effect_records_its_round_alias_messages_tools_and_invocation() {
             origin: ReplyOrigin::Chat,
         },
     };
-    let record = effect.record();
+    let record = effect.to_record();
     assert_eq!(
         record,
         EffectRecord::Chat {
@@ -131,7 +131,7 @@ fn a_tool_call_record_keeps_the_identity_alias_args_and_origin_but_no_access_or_
         access,
         survives_stop: true,
     };
-    let record = effect.record();
+    let record = effect.to_record();
     assert_eq!(
         record,
         EffectRecord::ToolCall {
@@ -180,7 +180,7 @@ fn a_store_effect_records_its_operation_and_drops_the_access_handle() {
             end: None,
         },
     };
-    let record = effect.record();
+    let record = effect.to_record();
     assert_eq!(
         record,
         EffectRecord::Vfs {
@@ -205,7 +205,7 @@ fn a_timer_effect_records_its_duration_in_seconds() {
     let effect = Effect::Timer {
         duration: std::time::Duration::from_millis(250),
     };
-    let record = effect.record();
+    let record = effect.to_record();
     assert_eq!(record, EffectRecord::Timer { seconds: 0.25 });
     assert_eq!(round_trip(&record), record);
 }

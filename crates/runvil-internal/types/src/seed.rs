@@ -3,19 +3,15 @@
 //! The caller draws a run's [`RunSeed`] from a CSPRNG for a live run and
 //! passes the recorded one back for a replay. Every value derived from the
 //! seed goes through `derive()` under its own `runvil.<purpose>.v1`
-//! tag: the guard nonce
-//! ([`GuardNonce::from_seed`](crate::untrusted::GuardNonce::from_seed)) and
-//! the run id ([`RunUid`]). Each derivation is one-way, so a derived value
-//! can be shown without revealing the seed or any other value derived from
-//! it.
+//! tag, as the guard nonce
+//! ([`GuardNonce::from_seed`](crate::untrusted::GuardNonce::from_seed))
+//! does. Each derivation is one-way, so a derived value can be shown
+//! without revealing the seed or any other value derived from it.
 
 use std::fmt;
 
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use sha2::{Digest as _, Sha256};
-
-/// The domain tag the run id is derived under.
-const RUN_UID_DOMAIN: &[u8] = b"runvil.run-uid.v1";
 
 /// What a run seed's text form must be, for a refusal to name.
 const REQUIRED: &str = "a run seed is 64 lowercase hex characters";
@@ -85,37 +81,6 @@ pub(crate) fn derive(domain: &[u8], seed: &RunSeed) -> [u8; 32] {
     let mut out = [0u8; 32];
     out.copy_from_slice(&digest);
     out
-}
-
-/// Identifies a run by 32 bytes derived from its seed.
-///
-/// The derivation is tagged `runvil.run-uid.v1`. The id is never the
-/// seed itself, so it can appear in logs, records, and views without
-/// revealing the seed or the nonce. A replay passes back the recorded seed,
-/// so it reproduces the id. `Display` renders 64 lowercase hex characters.
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
-pub struct RunUid([u8; 32]);
-
-impl RunUid {
-    /// The id of the run whose seed is `seed`.
-    #[must_use]
-    pub fn from_seed(seed: &RunSeed) -> RunUid {
-        RunUid(derive(RUN_UID_DOMAIN, seed))
-    }
-}
-
-impl fmt::Display for RunUid {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write_hex(f, &self.0)
-    }
-}
-
-impl fmt::Debug for RunUid {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str("RunUid(")?;
-        write_hex(f, &self.0)?;
-        f.write_str(")")
-    }
 }
 
 /// Writes `bytes` as lowercase hex.

@@ -30,7 +30,7 @@ struct Tap {
 
 impl Tap {
     fn record(&mut self, effect: &Effect) {
-        self.issued.push(effect.record());
+        self.issued.push(effect.to_record());
         if let Effect::Chat { round, .. } = effect {
             self.rounds.push(*round);
         }

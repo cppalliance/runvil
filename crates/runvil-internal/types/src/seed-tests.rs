@@ -1,6 +1,6 @@
 //! Tests for the run seed and the values derived from it: the derivation's
-//! known answer, the nonce and run id it yields, the seed's serde form, and
-//! its redacted `Debug`.
+//! known answer, the nonce it yields, the seed's serde form, and its
+//! redacted `Debug`.
 
 use std::fmt::Write as _;
 
@@ -18,32 +18,26 @@ fn hex(bytes: &[u8]) -> String {
 
 #[test]
 fn derive_matches_its_known_answer() {
-    // SHA-256 over `runvil.run-uid.v1` then the bytes 0x00..=0x1f,
+    // SHA-256 over `runvil.guard-nonce.v1` then the bytes 0x00..=0x1f,
     // computed once outside this crate.
     let seed = RunSeed::from_bytes(std::array::from_fn(|i| {
         u8::try_from(i).expect("an index below 32 fits a byte")
     }));
-    let expected = "9fdae9c2e5fc9ce35263235fc1f3c2fdb9ae59aa64b42725d3dbcb12d5fce826";
-    assert_eq!(hex(&derive(b"runvil.run-uid.v1", &seed)), expected);
+    let expected = "0d89f97db656f4554ed91f0dc4bc9a829d2555c04535cceffdda52e6d44b66cf";
+    assert_eq!(hex(&derive(b"runvil.guard-nonce.v1", &seed)), expected);
     assert_eq!(
-        RunUid::from_seed(&seed).to_string(),
-        expected,
-        "the run id is derive under its own tag"
+        GuardNonce::from_seed(&seed).to_string(),
+        expected[..32],
+        "the nonce is the first half of derive under its own tag"
     );
 }
 
 #[test]
-fn the_nonce_and_run_id_differ_from_each_other_and_the_seed_and_repeat() {
+fn the_nonce_differs_from_the_seed_and_repeats() {
     let mut rng = Seeded::new(SEED);
     let seed = rng.run_seed();
     let nonce = GuardNonce::from_seed(&seed).to_string();
-    let uid = RunUid::from_seed(&seed).to_string();
     let bytes = hex(seed.as_bytes());
-    rng.check(
-        !uid.starts_with(&nonce),
-        format_args!("the nonce {nonce} is the run id's prefix {uid}"),
-    );
-    rng.check(uid != bytes, "the run id is the seed's bytes");
     rng.check(
         !bytes.starts_with(&nonce),
         format_args!("the nonce {nonce} is the seed's prefix"),
@@ -52,11 +46,6 @@ fn the_nonce_and_run_id_differ_from_each_other_and_the_seed_and_repeat() {
         &GuardNonce::from_seed(&seed).to_string(),
         &nonce,
         "one seed, one nonce",
-    );
-    rng.check_eq(
-        &RunUid::from_seed(&seed),
-        &RunUid::from_seed(&seed),
-        "one seed, one run id",
     );
 }
 

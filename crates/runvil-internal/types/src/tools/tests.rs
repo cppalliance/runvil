@@ -55,7 +55,6 @@ fn each_tool_error_kind_tags_as_its_snake_case_name() {
         (ToolErrorKind::InvalidArguments, "invalid_arguments"),
         (ToolErrorKind::Backend, "backend"),
         (ToolErrorKind::Transport, "transport"),
-        (ToolErrorKind::Cancelled, "cancelled"),
         (ToolErrorKind::Other, "other"),
     ] {
         assert_eq!(kind.tag(), tag);
@@ -78,13 +77,9 @@ fn tool_error_classifies_and_hides_source() {
     let plain = ToolError::message("model-safe");
     assert_eq!(plain.kind(), ToolErrorKind::Other);
     assert_eq!(plain.to_string(), "model-safe");
-    assert!(!plain.is_cancelled() && !plain.is_retryable());
 
-    let cancelled = ToolError::message("stopped").with_kind(ToolErrorKind::Cancelled);
-    assert!(cancelled.is_cancelled());
-
-    let retry = ToolError::message("net").with_kind(ToolErrorKind::Transport);
-    assert!(retry.is_retryable());
+    let transport = ToolError::message("net").with_kind(ToolErrorKind::Transport);
+    assert_eq!(transport.kind(), ToolErrorKind::Transport);
 
     let sourced = ToolError::message("wrap").with_source(std::io::Error::other("cause"));
     assert!(std::error::Error::source(&sourced).is_some());

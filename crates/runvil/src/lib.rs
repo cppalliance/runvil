@@ -29,17 +29,12 @@ pub mod effect {
     //! The outside work a run asks for, the answers it takes back, and the
     //! records a run log stores for both.
 
-    pub use runvil_engine::AnswerRecord;
-    pub use runvil_engine::ChatAnswerRecord;
     pub use runvil_engine::Effect;
     pub use runvil_engine::EffectAnswer;
     pub use runvil_engine::EffectId;
-    pub use runvil_engine::EffectRecord;
-    pub use runvil_engine::FailureRecord;
     pub use runvil_engine::IssuedEffect;
     pub use runvil_engine::PackToolSets;
     pub use runvil_engine::Round;
-    pub use runvil_engine::ToolAnswerRecord;
     pub use runvil_engine::ToolCallOrigin;
     pub use runvil_engine::ToolCaller;
 }
@@ -47,7 +42,6 @@ pub mod effect {
 pub mod event {
     //! The events a run reports for the caller to log.
 
-    pub use runvil_types::emitter::DebugMode;
     pub use runvil_types::event::Event;
     pub use runvil_types::event::ReplyOrigin;
 }
@@ -198,10 +192,4 @@ pub mod metrics {
     pub use runvil_types::metrics::ToolCallEvent;
     pub use runvil_types::metrics::Usage;
     pub use runvil_types::metrics::VllmMetrics;
-}
-
-pub mod replay {
-    //! The behavior flags a run's record keeps and hands back bit for bit.
-
-    pub use runvil_types::replay::Flags;
 }

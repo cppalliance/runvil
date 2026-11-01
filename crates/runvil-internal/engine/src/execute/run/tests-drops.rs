@@ -66,7 +66,7 @@ fn bound_sections(sections: &str, cancel: &CancelHandle) -> Run {
 fn drop_next(run: &mut Run) -> (EffectRecord, AnswerRecord) {
     let (id, effect) = only_effect(run.step());
     let answer = EffectAnswer::Dropped;
-    let records = (effect.record(), answer.record());
+    let records = (effect.to_record(), answer.to_record());
     run.resume(id, answer);
     records
 }
@@ -152,7 +152,7 @@ fn a_dropped_loop_round_resumes_a_pcall_with_the_cancelled_error_and_the_run_con
         ),
         "the loop's first round is a chat round numbered 0: {effect:?}"
     );
-    let records = (effect.record(), EffectAnswer::Dropped.record());
+    let records = (effect.to_record(), EffectAnswer::Dropped.to_record());
     run.resume(id, EffectAnswer::Dropped);
     assert!(
         matches!(

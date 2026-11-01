@@ -4,7 +4,7 @@
 //! resume`. Every step's events are handed to the run's recorder before any
 //! of the step's effects is issued, so an effect's record never precedes the
 //! events its step reported. Each effect is appended as its
-//! [`EffectRecord`](runvil::effect::EffectRecord) and then handled by
+//! [`record`](runvil::effect::Effect::record) and then handled by
 //! kind. A chat, render, tool-call, or timer effect's performer future
 //! joins the effects in flight, which the loop polls inside the run's own
 //! future: the loop starts no task, so a run is one future that any
@@ -420,12 +420,11 @@ impl Driver {
 
     /// Appends one issued effect's record.
     async fn commit_effect(&mut self, issued: &IssuedEffect) -> Result<(), RecorderError> {
-        let payload = serde_json::to_value(issued.effect.record()).map_err(RecorderError::new)?;
         self.append(record(
             &issued.provenance,
             RecordKind::Effect,
             Some(issued.id.get()),
-            payload,
+            issued.effect.record(),
         ))
         .await
     }
@@ -437,12 +436,11 @@ impl Driver {
         provenance: &Provenance,
         answer: &EffectAnswer,
     ) -> Result<(), RecorderError> {
-        let payload = serde_json::to_value(answer.record()).map_err(RecorderError::new)?;
         self.append(record(
             provenance,
             RecordKind::Answer,
             Some(id.get()),
-            payload,
+            answer.record(),
         ))
         .await
     }

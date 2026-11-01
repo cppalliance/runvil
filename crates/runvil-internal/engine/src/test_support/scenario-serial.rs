@@ -64,7 +64,7 @@ pub(crate) fn round_trip(record: &EffectRecord) -> EffectRecord {
 /// prompt a `models.infer` round sends.
 #[track_caller]
 pub(crate) fn infer_prompt(effect: &Effect) -> String {
-    let EffectRecord::Chat { messages, .. } = effect.record() else {
+    let EffectRecord::Chat { messages, .. } = effect.to_record() else {
         panic!("a chat effect records its messages: {effect:?}");
     };
     messages[0]["content"]
@@ -167,7 +167,7 @@ pub(crate) fn drive_batched(mut run: Run, batching: Batching) -> Outcome {
                     effect,
                 } in issued
                 {
-                    effects.push((provenance, effect.record()));
+                    effects.push((provenance, effect.to_record()));
                     outstanding.push((id, effect));
                 }
                 assert!(

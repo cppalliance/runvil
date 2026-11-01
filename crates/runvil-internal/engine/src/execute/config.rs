@@ -7,10 +7,8 @@ use std::fmt;
 mod limits;
 
 use runvil_types::cancel::CancelHandle;
-use runvil_types::emitter::DebugMode;
 use runvil_types::packs::{PackId, Prelude};
-use runvil_types::replay::Flags;
-use runvil_types::seed::{RunSeed, RunUid};
+use runvil_types::seed::RunSeed;
 use runvil_types::timestamp::Timestamp;
 use runvil_types::tools::ToolCatalog;
 use runvil_vfs::VfsRef;
@@ -42,18 +40,16 @@ pub struct RunContext {
     /// The caller's run label, moved into `RunState::execution` at start and
     /// read nowhere else.
     pub(super) name: String,
-    /// The run's seed, as the caller supplied it: the source of the run id,
-    /// the untrusted-envelope nonce, and every other in-run random choice.
+    /// The run's seed, as the caller supplied it: the source of the
+    /// untrusted-envelope nonce and every other in-run random choice.
     pub(super) seed: RunSeed,
-    /// The behavior flags the run records; empty by default.
-    flags: Flags,
     /// When the run began, as the caller stamped it: rendered as `sys.when`
     /// in every section, the H1 pass included.
     pub(super) started_at: Timestamp,
     /// Where the root task's provenance sequence starts; set by `with_provenance_start`.
     pub(super) provenance_start: u32,
     /// Whether the run reports raw model-round bodies as events; set by `with_report_debug`.
-    pub(super) report_debug: DebugMode,
+    pub(super) report_debug: bool,
     /// The run's cancel flag, minted by `new` and replaced by `with_cancel`.
     pub(super) cancel: CancelHandle,
     /// The run's resource limits; set by `with_limits`.
@@ -80,12 +76,11 @@ impl RunContext {
     /// `started_at`.
     ///
     /// The new context has a fresh cancel flag, a `ui` snapshot of `None`,
-    /// debug reporting set to `DebugMode::Off`, default [`RunLimits`], empty
-    /// [`Flags`], and the default filesystem, which is a fresh memory store
-    /// at `/`.
+    /// debug reporting off, default [`RunLimits`], and the default
+    /// filesystem, which is a fresh memory store at `/`.
     ///
-    /// `seed` is the source of the run id and the untrusted-envelope nonce.
-    /// For a live run, the caller must draw its 32 bytes from a CSPRNG,
+    /// `seed` is the source of the untrusted-envelope nonce. For a live
+    /// run, the caller must draw its 32 bytes from a CSPRNG,
     /// because a predictable seed makes a guessable nonce. `started_at` is
     /// the instant every section reads as `sys.when`. The caller records
     /// both values, and a replay passes them back verbatim.
@@ -94,10 +89,9 @@ impl RunContext {
         RunContext {
             name: name.into(),
             seed,
-            flags: Flags::EMPTY,
             started_at,
             provenance_start: 0,
-            report_debug: DebugMode::Off,
+            report_debug: false,
             cancel: CancelHandle::new(),
             limits: RunLimits::default(),
             ui: None,
@@ -112,12 +106,12 @@ impl RunContext {
     /// Sets whether the run reports each model round's raw request and
     /// response bodies as `Request` and `Response` events.
     ///
-    /// The default, [`DebugMode::Off`], turns both events off. A caller that
-    /// wants the pair in the event stream, such as for a debug capture,
-    /// passes [`DebugMode::On`].
+    /// The default, `false`, turns both events off, so the rounds never
+    /// clone a body for them. A caller that wants the pair in the event
+    /// stream, such as for a debug capture, passes `true`.
     #[must_use]
-    pub fn with_report_debug(mut self, mode: DebugMode) -> RunContext {
-        self.report_debug = mode;
+    pub fn with_report_debug(mut self, report: bool) -> RunContext {
+        self.report_debug = report;
         self
     }
 
@@ -168,16 +162,6 @@ impl RunContext {
         self
     }
 
-    /// Sets the behavior flags the run records.
-    ///
-    /// A live run keeps the default, the empty set. A replay passes back the
-    /// set the original run recorded.
-    #[must_use]
-    pub fn with_flags(mut self, flags: Flags) -> RunContext {
-        self.flags = flags;
-        self
-    }
-
     /// Sets where the root task's provenance sequence starts.
     ///
     /// The default, 0, fits a run recorded on its own. When the caller
@@ -200,8 +184,8 @@ impl RunContext {
     ///
     /// Every tool call effect carries an access to this same filesystem, so
     /// the tools and the run share one set of files. The caller seeds files
-    /// before the run and extracts output after it through the context's
-    /// handle, returned by [`vfs`](RunContext::vfs).
+    /// before the run and extracts output after it through its own clone of
+    /// `vfs`.
     #[must_use]
     pub fn with_vfs(mut self, vfs: VfsRef) -> RunContext {
         self.vfs = vfs;
@@ -212,8 +196,7 @@ impl RunContext {
     /// every Pack the caller can serve this run, declared by the prompt or
     /// not. The catalog lists every tool the run can use: Lua calls one by id,
     /// and a section offers one to its model with `tools.offer`. The caller
-    /// performs every call. Read it back with
-    /// [`tools`](RunContext::tools).
+    /// performs every call.
     #[must_use]
     pub fn with_tools(mut self, tools: ToolCatalog) -> RunContext {
         self.tools = tools;
@@ -293,48 +276,6 @@ impl RunContext {
         self.models = models;
         self
     }
-
-    /// Returns the run's VFS handle, set with [`with_vfs`](RunContext::with_vfs).
-    #[must_use]
-    pub fn vfs(&self) -> &VfsRef {
-        &self.vfs
-    }
-
-    /// Returns the run's tool catalog, set with
-    /// [`with_tools`](RunContext::with_tools). It is empty by default.
-    #[must_use]
-    pub fn tools(&self) -> &ToolCatalog {
-        &self.tools
-    }
-
-    /// Returns the run's seed, as the caller supplied it.
-    #[must_use]
-    pub fn seed(&self) -> RunSeed {
-        self.seed
-    }
-
-    /// Returns the run's id, derived from its seed.
-    ///
-    /// The id is one-way, so it does not reveal the seed or the nonce. It
-    /// appears in a debug rendering only: events and reports carry the
-    /// run's `name`. A replay under the recorded seed has the same id.
-    #[must_use]
-    pub(crate) fn uid(&self) -> RunUid {
-        RunUid::from_seed(&self.seed)
-    }
-
-    /// Returns the behavior flags the run records. Set them with
-    /// [`with_flags`](RunContext::with_flags).
-    #[must_use]
-    pub fn flags(&self) -> Flags {
-        self.flags
-    }
-
-    /// Returns when the run began, as the caller stamped it.
-    #[must_use]
-    pub fn started_at(&self) -> Timestamp {
-        self.started_at
-    }
 }
 
 impl fmt::Debug for RunContext {
@@ -342,8 +283,6 @@ impl fmt::Debug for RunContext {
         let mut state = f.debug_struct("RunContext");
         state
             .field("name", &self.name)
-            .field("uid", &self.uid())
-            .field("flags", &self.flags)
             .field("started_at", &self.started_at)
             .field("provenance_start", &self.provenance_start)
             .field("report_debug", &self.report_debug)

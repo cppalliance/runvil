@@ -227,12 +227,6 @@ events! {
         LuaChunkSucceeded {},
         /// A section VM failed to execute a Lua chunk.
         LuaChunkFailed {},
-        /// A section VM began binding a model reply.
-        LuaReplyBindingStarted {},
-        /// A section VM bound a model reply successfully.
-        LuaReplyBindingSucceeded {},
-        /// A section VM failed to bind a model reply.
-        LuaReplyBindingFailed {},
         /// A section VM began teardown.
         LuaTeardownStarted {},
         /// A section VM completed teardown.
@@ -244,15 +238,6 @@ events! {
         ToolScopeValidationSucceeded {},
         /// A model-visible tool scope failed semantic validation.
         ToolScopeValidationFailed {},
-        /// Validation of model bindings against the live model catalog
-        /// began.
-        ModelCatalogValidationStarted {},
-        /// Validation of model bindings against the live model catalog
-        /// succeeded.
-        ModelCatalogValidationSucceeded {},
-        /// Validation of model bindings against the live model catalog
-        /// failed.
-        ModelCatalogValidationFailed {},
         // Lifecycle: operations on the run's store view (the `store.*` calls).
         /// A `store.write` call succeeded.
         VfsWriteSucceeded {},
@@ -341,12 +326,6 @@ events! {
             /// How the owner ended.
             reason: AbandonReason,
         },
-        /// Reports an existing task revived from its record. The Engine
-        /// never emits it.
-        TaskResumed {
-            /// The task's id.
-            task: TaskId,
-        },
         // Content.
         /// One completed block of model thinking.
         Thinking {
@@ -416,16 +395,6 @@ events! {
             /// Whether the dispatch treated the tool as trusted (its output
             /// not nonce-wrapped).
             trusted: bool,
-        },
-        /// Reports a task's own progress note, set through `tasks.note`.
-        /// The Engine never emits it: it stores the note on the task's
-        /// chain, and the task's owner reads it through `tasks.status`.
-        TaskNote {
-            /// The task that set the note.
-            task: TaskId,
-            /// The note: untrusted, authored by the task's model or its
-            /// Lua.
-            text: String,
         },
         // Debug.
         /// The JSON body sent to the chat-completions endpoint for one

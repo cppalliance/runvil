@@ -5,7 +5,7 @@
 //! events carry the round's id and the model the completion names.
 
 use runvil_model_client::client::RawExchange;
-use runvil_types::emitter::{DebugMode, EventSink};
+use runvil_types::emitter::EventSink;
 use runvil_types::ids::RoundId;
 use runvil_types::metrics::{CallMetrics, Usage};
 use serde_json::{Value, json};
@@ -50,12 +50,12 @@ fn usage_metrics(prompt_tokens: u32, completion_tokens: u32) -> CallMetrics {
 /// Reports `completion` as chat turn 3, round 5, and returns the events it
 /// pushed.
 fn report(completion: Completion) -> Vec<Event> {
-    report_with(completion, DebugMode::Off)
+    report_with(completion, false)
 }
 
-/// Reports `completion` as chat turn 3, round 5, under `debug` and returns
-/// the events it pushed.
-fn report_with(completion: Completion, debug: DebugMode) -> Vec<Event> {
+/// Reports `completion` as chat turn 3, round 5, capturing debug bodies
+/// when `debug` is set, and returns the events it pushed.
+fn report_with(completion: Completion, debug: bool) -> Vec<Event> {
     let sink = EventSink::default();
     let emitter = Emitter::root(sink.clone(), "run-1", debug);
     let _ = report_model_turn(
@@ -226,7 +226,7 @@ fn debug_capture_emits_the_request_and_response_from_the_raw_exchange() {
     let completion = canned()
         .with_raw(RawExchange::new(request.clone(), response.clone()))
         .with_finish_reason("stop");
-    let events = report_with(completion, DebugMode::On);
+    let events = report_with(completion, true);
     assert_eq!(requests(&events), vec![request]);
     assert_eq!(
         responses(&events),
@@ -252,7 +252,7 @@ fn debug_capture_emits_the_request_and_response_from_the_raw_exchange() {
 
 #[test]
 fn a_completion_with_no_raw_exchange_still_reports_its_pair_with_null_bodies() {
-    let events = report_with(canned(), DebugMode::On);
+    let events = report_with(canned(), true);
     assert_eq!(requests(&events), vec![Value::Null], "{events:?}");
     assert_eq!(
         responses(&events),
@@ -305,7 +305,7 @@ fn the_content_events_and_the_answer_record_name_the_model_the_completion_names(
 #[test]
 fn a_raw_exchange_is_not_captured_while_debug_is_off() {
     let completion = canned().with_raw(RawExchange::new(json!({}), json!({})));
-    let events = report_with(completion, DebugMode::Off);
+    let events = report_with(completion, false);
     assert!(requests(&events).is_empty(), "{events:?}");
     assert!(responses(&events).is_empty(), "{events:?}");
 }
