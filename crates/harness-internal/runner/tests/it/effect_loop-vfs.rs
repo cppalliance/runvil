@@ -1,9 +1,11 @@
 //! The effect loop answers a Vfs effect inline: a run of nothing but Vfs
 //! operations completes without a stall, the operation runs on the loop's
 //! own thread, a Vfs chain keeps stepping while another effect is parked,
-//! and a backend that panics drops its effect instead of unwinding the
-//! run.
+//! a backend that panics drops its effect instead of unwinding the run,
+//! and a Vfs effect withdrawn in the step that issued it is dropped
+//! without being performed.
 
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread::ThreadId;
 use std::time::Duration;
@@ -15,7 +17,9 @@ use runvil::vfs::VfsRef;
 use serde_json::json;
 
 use super::{answers, assert_one_answer_per_effect, begun_log, kinds};
-use crate::support::{GatedTool, HookedBackend, TextTool, WAITS, run_over, run_with_child, unused};
+use crate::support::{
+    GatedTool, HookedBackend, TextTool, WAITS, run_of_sections, run_over, run_with_child, unused,
+};
 
 #[tokio::test]
 async fn a_run_of_only_vfs_operations_completes_with_one_answer_per_effect() {
@@ -213,6 +217,67 @@ async fn a_backend_that_panics_drops_its_effect_instead_of_unwinding_the_run() {
     assert_eq!(answers.len(), 1, "the one write");
     assert_eq!(answers[0].payload, json!("Dropped"));
     assert_eq!(recorder.outcome(run_id), Some(RunOutcome::Cancelled));
+}
+
+/// Main spawns Slow, whose write stays out, and Fast, waits on Fast,
+/// cancels Slow, and returns: the step that decides the run issues Slow's
+/// write and withdraws it.
+const WITHDRAWS_A_WRITE: [(&str, &str); 3] = [
+    (
+        "Main",
+        "local slow = tasks.spawn('## Slow')\n\
+         local fast = tasks.spawn('## Fast')\n\
+         local _task, _ok, result = tasks.join_any({ fast })\n\
+         tasks.cancel(slow)\n\
+         return result",
+    ),
+    ("Slow", "store.write('slow.md', 'never')\nreturn 'slow'"),
+    ("Fast", "return 'fast'"),
+];
+
+#[tokio::test]
+async fn a_vfs_effect_withdrawn_in_the_step_that_issued_it_is_dropped_unperformed() {
+    let (recorder, run_id) = begun_log().await;
+    let written = Arc::new(AtomicBool::new(false));
+    let seen = Arc::clone(&written);
+    let vfs = VfsRef::builder()
+        .store(
+            "/",
+            HookedBackend::new(move || seen.store(true, Ordering::SeqCst)),
+        )
+        .build();
+
+    let outcome = drive_run(
+        run_of_sections(&WITHDRAWS_A_WRITE, vfs),
+        unused(),
+        recorder.clone(),
+        run_id,
+        CancelHandle::new(),
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        outcome,
+        RunOutcome::Completed {
+            final_text: "fast".to_owned()
+        }
+    );
+    assert!(
+        !written.load(Ordering::SeqCst),
+        "the withdrawn write never reached the backend"
+    );
+
+    let records = recorder.records(run_id);
+    assert_one_answer_per_effect(&records);
+    let effects: Vec<&Record> = records
+        .iter()
+        .filter(|record| record.kind == RecordKind::Effect)
+        .collect();
+    assert_eq!(effects.len(), 1, "Slow's write is the run's one effect");
+    assert_eq!(effects[0].payload, write_effect("slow.md", "never"));
+    let answers = answers(&records);
+    assert_eq!(answers.len(), 1);
+    assert_eq!(answers[0].payload, json!("Dropped"));
 }
 
 /// A label for one record: an event's kind, or the effect or answer kind

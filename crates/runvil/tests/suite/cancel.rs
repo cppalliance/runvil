@@ -60,8 +60,11 @@ fn one_parent_cancel_ends_every_run_holding_one_of_its_children() -> TestResult 
 
 #[test]
 fn a_cancelled_future_wakes_when_another_thread_cancels_the_run() -> TestResult {
-    let driver = Scenario::default().start(&note("'hello'"))?;
-    let handle = driver.run.cancel_handle();
+    let handle = CancelHandle::new();
+    let handed = handle.clone();
+    let driver = Scenario::default()
+        .context(move |ctx| ctx.with_cancel(handed.clone()))
+        .start(&note("'hello'"))?;
     let waiting = handle.cancelled();
 
     let remote = handle.clone();
@@ -72,5 +75,10 @@ fn a_cancelled_future_wakes_when_another_thread_cancels_the_run() -> TestResult 
         .join()
         .map_err(|_| "the cancelling thread panicked")?;
     assert!(handle.is_cancelled());
+    assert_eq!(
+        driver.finish()?.outcome,
+        RunOutcome::Cancelled,
+        "the run reads the flag the caller handed its context"
+    );
     Ok(())
 }

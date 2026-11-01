@@ -4,7 +4,8 @@
 //! records append in call order. An adhoc tool stops the batch and runs
 //! alone between its neighbors, and a task cancelled while parked on a
 //! batch orphans every call in it and lists each in the step's
-//! `withdrawn`, which a decided run leaves empty. Each test steps a `Run`
+//! `withdrawn`, where the step that decides the run lists every effect
+//! still outstanding. Each test steps a `Run`
 //! by hand, so it sees exactly what each step issued and withdrew, and
 //! answers each section's render with its tools unchanged.
 

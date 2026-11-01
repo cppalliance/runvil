@@ -1,8 +1,9 @@
 //! Tests for the effect table alone, one rule each: an issued effect takes
 //! exactly one answer, an orphan's answer is discarded, unknown ids and
-//! second answers are reported, only orphaned tool calls are withdrawn, in
-//! id order, and an effect orphaned in its own step still goes out with
-//! that step.
+//! second answers are reported, only orphaned tool calls are withdrawn
+//! until teardown withdraws every outstanding effect, in id order, a step
+//! lists only withdrawals still owed an answer, and an effect orphaned in
+//! its own step still goes out with that step.
 
 use std::time::Duration;
 
@@ -157,17 +158,39 @@ fn an_effect_orphaned_in_its_own_step_still_goes_out_with_that_step() {
 }
 
 #[test]
-fn teardown_orphans_every_awaited_effect_and_withdraws_none() {
+fn teardown_orphans_every_awaited_effect_and_withdraws_every_outstanding_one() {
     let mut table = EffectTable::default();
+    let earlier = issue_timer(&mut table, chain(2));
     let (call, _) = issue_tool_call(&mut table, chain(0));
     let timer = issue_timer(&mut table, chain(1));
+    let answered = issue_timer(&mut table, chain(1));
+    assert_eq!(table.orphan(earlier), None);
+    assert!(matches!(table.arrive(answered), Arrival::Awaited(_)));
+    table.orphan(call);
     table.orphan_all();
     let (_, withdrawn) = table.take_step();
-    assert!(withdrawn.is_empty(), "{withdrawn:?}");
+    assert_eq!(
+        withdrawn,
+        [earlier, call, timer],
+        "every effect still owed an answer, an earlier orphan included, once each, in id order"
+    );
     assert!(!table.has_awaited());
+    assert!(matches!(table.arrive(earlier), Arrival::Orphaned));
     assert!(matches!(table.arrive(call), Arrival::Orphaned));
     assert!(matches!(table.arrive(timer), Arrival::Orphaned));
     assert!(table.all_answered());
+}
+
+#[test]
+fn a_step_lists_no_withdrawal_already_answered() {
+    let mut table = EffectTable::default();
+    let (answered, _) = issue_tool_call(&mut table, chain(0));
+    let (owed, _) = issue_tool_call(&mut table, chain(0));
+    table.orphan(answered);
+    table.orphan(owed);
+    assert!(matches!(table.arrive(answered), Arrival::Orphaned));
+    let (_, withdrawn) = table.take_step();
+    assert_eq!(withdrawn, [owed], "the caller already answered {answered}");
 }
 
 #[test]

@@ -35,7 +35,10 @@ fn a_run_that_cannot_start_reports_its_failure_on_the_first_step() {
             message: "unsupported runvil version: 7 (this build supports major 0)".to_owned(),
         }
     );
-    assert!(run.decided(), "a run that never started is decided");
+    assert!(
+        run.decided_for_test(),
+        "a run that never started is decided"
+    );
     let Step::Done {
         outcome: RunOutcome::Failed { kind, .. },
         ..
@@ -50,7 +53,7 @@ fn a_run_that_cannot_start_reports_its_failure_on_the_first_step() {
 fn an_answer_before_the_first_step_fails_the_run_with_no_run_events() {
     let mut run = run_of("return 'never runs'", run_context());
     run.resume(EffectId(7), EffectAnswer::Timer);
-    assert!(run.decided(), "the stray answer decides the run");
+    assert!(run.decided_for_test(), "the stray answer decides the run");
     let Step::Done { outcome, events } = run.step() else {
         panic!("a run decided before it started is done at its first step");
     };

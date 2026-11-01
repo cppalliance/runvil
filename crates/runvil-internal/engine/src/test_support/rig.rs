@@ -143,7 +143,7 @@ impl Rig {
     ///
     /// # Panics
     /// When the run waits only on held effects, which nothing releases
-    /// until the run decides.
+    /// until the run withdraws them.
     #[track_caller]
     pub(crate) fn finish(mut self) -> RigTrace {
         self.settle();

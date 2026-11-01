@@ -102,10 +102,9 @@ pub fn perform_locally(
 ///
 /// The driver is the simplest correct caller of a run. After each `step`
 /// it answers the step's effects in issue order, each through `perform`,
-/// and steps again. Once the run has decided
-/// its outcome ([`Run::decided`]), the effects it still issues are
-/// answered [`EffectAnswer::Dropped`] without reaching `perform`, as a
-/// caller abandoning a cancelled run would answer them.
+/// and steps again. An effect the step also lists as withdrawn is answered
+/// [`EffectAnswer::Dropped`] without reaching `perform`, as the run asks
+/// of its caller.
 ///
 /// `perform` is handed the effect's id beside the effect so a scripted
 /// performer can correlate answers however it likes; it must return an
@@ -143,9 +142,10 @@ pub fn drive(
 /// to `answered`, `Dropped` ones included, and returns the run's outcome
 /// once it has one.
 ///
-/// An effect `perform` answers `None` joins `held`, unanswered. Once the
-/// run has decided its outcome, every effect it issues and every held one
-/// is answered `Dropped`.
+/// An effect `perform` answers `None` joins `held`, unanswered. Every
+/// effect the step withdraws, whether it issued the effect or an earlier
+/// step did and `held` keeps it, is answered `Dropped`, so the step that
+/// decides the run's outcome drops every held effect.
 pub(crate) fn drive_step(
     run: &mut Run,
     issued: &mut impl FnMut(&Effect),
@@ -160,7 +160,9 @@ pub(crate) fn drive_step(
             Some(outcome)
         }
         Step::Pending {
-            effects, events, ..
+            effects,
+            events,
+            withdrawn,
         } => {
             reported.extend(events);
             if effects.is_empty() && held.is_empty() {
@@ -173,10 +175,9 @@ pub(crate) fn drive_step(
                 );
                 return Some(error.to_outcome());
             }
-            let decided = run.decided();
             for IssuedEffect { id, effect, .. } in effects {
                 issued(&effect);
-                let answer = if decided {
+                let answer = if withdrawn.contains(&id) {
                     Some(EffectAnswer::Dropped)
                 } else {
                     perform(id, &effect)
@@ -189,11 +190,13 @@ pub(crate) fn drive_step(
                     None => held.push((id, effect)),
                 }
             }
-            if decided {
-                for (id, effect) in held.drain(..) {
-                    answered(&effect, &EffectAnswer::Dropped);
-                    run.resume(id, EffectAnswer::Dropped);
-                }
+            let (dropped, kept): (Vec<_>, Vec<_>) = std::mem::take(held)
+                .into_iter()
+                .partition(|(id, _)| withdrawn.contains(id));
+            *held = kept;
+            for (id, effect) in dropped {
+                answered(&effect, &EffectAnswer::Dropped);
+                run.resume(id, EffectAnswer::Dropped);
             }
             None
         }

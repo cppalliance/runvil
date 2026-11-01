@@ -123,10 +123,21 @@ impl RunContext {
 
     /// Sets the run's cancel flag, replacing the one that `new` created.
     ///
+    /// The caller keeps its own clone of `handle` and cancels the run by
+    /// setting it, from any thread. The flag `new` created is the run's
+    /// alone, so a run built without this call cannot be cancelled.
+    ///
     /// The flag is a synchronous [`CancelHandle`] that the Engine polls
-    /// between chain steps and from the Lua instruction hook. A caller that
-    /// cancels through an awaitable token must bridge the token to this
-    /// flag by setting the flag when the token fires.
+    /// between chain steps and from the Lua instruction hook, so running
+    /// Lua code sees it too. The next [`step`](super::Run::step) tears down
+    /// every chain and lists every effect still outstanding in its
+    /// `withdrawn`. The run then reports itself as cancelled once every
+    /// outstanding effect is answered. Cancellation is a request that later
+    /// steps complete: the caller answers each effect it abandons with
+    /// [`EffectAnswer::Dropped`](super::EffectAnswer::Dropped).
+    ///
+    /// A caller that cancels through an awaitable token must bridge the
+    /// token to this flag by setting the flag when the token fires.
     #[must_use]
     pub fn with_cancel(mut self, handle: CancelHandle) -> RunContext {
         self.cancel = handle;

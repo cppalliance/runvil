@@ -25,8 +25,8 @@
 //!   each answer before the run resumes with it. Every effect record has
 //!   exactly one answer record; a dropped effect's answer is `Dropped`.
 //! - The loop never reads an event to decide anything; control comes
-//!   from the run's own word (`Step`, `Run::decided`), the cancel flag,
-//!   and the Host's stop.
+//!   from the run's own word (`Step` and the effects it withdraws), the
+//!   cancel flag, and the Host's stop.
 //! - A [`HostContext`] builds every Pack its `PackRegistry` holds, and
 //!   only those. The registry holds the built-in `runvil/subagents` from
 //!   the start and refuses a duplicate FQN and the built-in's Pack id to

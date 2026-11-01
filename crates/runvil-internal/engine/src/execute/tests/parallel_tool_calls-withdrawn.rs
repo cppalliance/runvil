@@ -1,7 +1,10 @@
 //! The step's `withdrawn` list: a step that cancels a task parked on a
 //! batch lists the calls it orphaned, the calls the same step issued
-//! included, in effect-id order however many tasks it cancels, and a
-//! decided run's step lists none.
+//! included, in effect-id order however many tasks it cancels, and the
+//! step that decides the run lists every effect still outstanding, of
+//! every kind, the ones it issued included.
+
+use runvil_types::cancel::CancelHandle;
 
 use super::*;
 use crate::execute::tests::fixtures::echo_tool;
@@ -38,17 +41,22 @@ const CANCELLED_CHILD: &str = "---\nname: loop\ndescription: d\nrunvil: 0\n---\n
      models.loop()\n\
      return 'child done'\n```\n";
 
-/// A run of `source` over the loop models with `echo` offered, stepped by
-/// hand.
+/// A run of `source` over the loop models with `echo` offered, under the
+/// cancel flag `cancel`, stepped by hand.
 #[track_caller]
-fn echo_run(source: &str) -> Run {
-    loop_scenario(source).offer("echo", echo_tool()).into_run()
+fn echo_run(source: &str, cancel: &CancelHandle) -> Run {
+    let cancel = cancel.clone();
+    loop_scenario(source)
+        .offer("echo", echo_tool())
+        .context(move |ctx| ctx.with_cancel(cancel))
+        .into_run()
 }
 
-/// A run of [`CANCELLED_CHILD`] past its first steps and Child's render,
-/// with the ids of Main's `wait` round and Child's loop round.
-fn cancelled_child() -> (Run, EffectId, EffectId) {
-    let mut run = echo_run(CANCELLED_CHILD);
+/// A run of [`CANCELLED_CHILD`] under the cancel flag `cancel`, past its
+/// first steps and Child's render, with the ids of Main's `wait` round and
+/// Child's loop round.
+fn cancelled_child(cancel: &CancelHandle) -> (Run, EffectId, EffectId) {
+    let mut run = echo_run(CANCELLED_CHILD, cancel);
     let (rounds, withdrawn) = step_past_renders(&mut run);
     assert!(
         withdrawn.is_empty(),
@@ -86,7 +94,7 @@ fn tool_call_ids(effects: &[(EffectId, Effect)]) -> Vec<EffectId> {
 
 #[test]
 fn cancelling_a_task_withdraws_its_unanswered_tool_calls() {
-    let (mut run, infer, round) = cancelled_child();
+    let (mut run, infer, round) = cancelled_child(&CancelHandle::new());
     run.resume(round, two_echoes());
     let (issued, withdrawn) = withdrawals(run.step());
     let calls = tool_call_ids(&issued);
@@ -122,7 +130,7 @@ fn cancelling_a_task_withdraws_its_unanswered_tool_calls() {
 
 #[test]
 fn a_call_issued_and_withdrawn_in_one_step_is_listed_twice() {
-    let (mut run, infer, round) = cancelled_child();
+    let (mut run, infer, round) = cancelled_child(&CancelHandle::new());
     run.resume(round, two_echoes());
     run.resume(infer, chat_answer(&text("go")));
     let (issued, withdrawn) = withdrawals(run.step());
@@ -148,24 +156,25 @@ fn a_call_issued_and_withdrawn_in_one_step_is_listed_twice() {
 }
 
 #[test]
-fn a_decided_run_lists_no_withdrawn_calls() {
-    let (mut run, infer, round) = cancelled_child();
+fn the_step_that_decides_the_run_withdraws_every_outstanding_effect() {
+    let cancel = CancelHandle::new();
+    let (mut run, infer, round) = cancelled_child(&cancel);
     run.resume(round, two_echoes());
     let (issued, _) = withdrawals(run.step());
     let calls = tool_call_ids(&issued);
     assert_eq!(calls.len(), 2, "both calls are in flight: {issued:?}");
-    run.cancel();
+    cancel.cancel();
     let (issued, withdrawn) = withdrawals(run.step());
-    assert!(run.decided(), "the cancel decides the run");
     assert!(
         issued.is_empty(),
         "a torn-down run issues nothing: {issued:?}"
     );
-    assert!(
-        withdrawn.is_empty(),
-        "the run's end abandoned Child, yet a decided run lists none: {withdrawn:?}"
+    assert_eq!(
+        withdrawn,
+        [infer, calls[0], calls[1]],
+        "the cancel withdraws Main's round and both of Child's calls, in effect-id order"
     );
-    for id in calls.into_iter().chain([infer]) {
+    for id in withdrawn {
         run.resume(id, EffectAnswer::Dropped);
     }
     let result = match run.step() {
@@ -204,7 +213,7 @@ const CANCELLED_PAIR: &str = "---\nname: loop\ndescription: d\nrunvil: 0\n---\n\
 
 #[test]
 fn one_step_lists_every_tasks_withdrawn_calls_in_effect_id_order() {
-    let mut run = echo_run(CANCELLED_PAIR);
+    let mut run = echo_run(CANCELLED_PAIR, &CancelHandle::new());
     let (rounds, _) = step_past_renders(&mut run);
     let asking = |user: &str| {
         rounds
@@ -249,4 +258,57 @@ fn one_step_lists_every_tasks_withdrawn_calls_in_effect_id_order() {
         other @ Step::Pending { .. } => panic!("Main's second round ends the run: {other:?}"),
     };
     assert_eq!(text_of(result), "cancelled");
+}
+
+/// Main spawns Store, Call, and Fast, waits on Fast under a timeout, then
+/// cancels the other two and returns Fast's result, all in the run's first
+/// step.
+const DECIDED_IN_ONE_STEP: &str = "---\nname: loop\ndescription: d\nrunvil: 0\n---\n\n# Loop\n\n\
+     ## Main\n\n```lua\n\
+     local stored = tasks.spawn('## Store')\n\
+     local called = tasks.spawn('## Call')\n\
+     local fast = tasks.spawn('## Fast')\n\
+     local _t, _ok, result = tasks.join_any({ fast }, { timeout = 30 })\n\
+     tasks.cancel(stored)\n\
+     tasks.cancel(called)\n\
+     return result\n```\n\n\
+     ## Store\n\n```lua\n\
+     store.write('slow.md', 'never')\n\
+     return 'stored'\n```\n\n\
+     ## Call\n\n```lua\n\
+     return tools.call('tools/echo', { value = 'never' })\n```\n\n\
+     ## Fast\n\n```lua\n\
+     return 'fast'\n```\n";
+
+#[test]
+fn the_step_that_decides_the_run_withdraws_the_effects_it_issued_of_every_kind() {
+    let mut run = echo_run(DECIDED_IN_ONE_STEP, &CancelHandle::new());
+    let (issued, withdrawn) = withdrawals(run.step());
+    let kinds: Vec<&str> = issued
+        .iter()
+        .map(|(_, effect)| match effect {
+            Effect::Timer { .. } => "timer",
+            Effect::Vfs { .. } => "store",
+            Effect::ToolCall { .. } => "tool call",
+            other => panic!("only the timer, the write, and the call: {other:?}"),
+        })
+        .collect();
+    assert_eq!(
+        kinds,
+        ["timer", "store", "tool call"],
+        "Main's timeout timer, then Store's write and Call's call"
+    );
+    let ids: Vec<EffectId> = issued.iter().map(|(id, _)| *id).collect();
+    assert_eq!(
+        withdrawn, ids,
+        "the step that decides the run withdraws every effect it issued, in effect-id order"
+    );
+    for id in withdrawn {
+        run.resume(id, EffectAnswer::Dropped);
+    }
+    let result = match run.step() {
+        Step::Done { outcome, .. } => outcome,
+        other @ Step::Pending { .. } => panic!("every orphan is answered: {other:?}"),
+    };
+    assert_eq!(text_of(result), "fast");
 }

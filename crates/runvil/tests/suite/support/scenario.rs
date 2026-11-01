@@ -4,13 +4,14 @@
 //! The driver answers a store effect with `perform_vfs_op` and a timer as
 //! fired at once, a chat effect with the next scripted reply served under
 //! the bound model's name, and a tool call with the registered handler. An
-//! effect the scenario holds waits, and gets `Dropped` once the run is
-//! decided or withdraws it; no other effect is ever dropped. The driver
-//! fails the test instead of hanging when the chat script runs out, when
-//! scripted replies are left over at `Done`, or when an undecided run
-//! issues nothing new while only held effects remain. It also fails a run
-//! that reports `Done` while it still holds an effect, because `Done`
-//! waits for every issued effect's answer.
+//! effect the scenario holds waits. An effect the run withdraws gets
+//! `Dropped`, whether the scenario holds it or the withdrawing step issued
+//! it; no other effect is ever dropped. The driver fails the test instead
+//! of hanging when the chat script runs out, when scripted replies are
+//! left over at `Done`, or when a run issues and withdraws nothing while
+//! only held effects remain. It also fails a run that reports `Done` while
+//! it still holds an effect, because `Done` waits for every issued
+//! effect's answer.
 
 use std::collections::{BTreeMap, VecDeque};
 use std::sync::Arc;
@@ -67,8 +68,8 @@ impl Scenario {
         }
     }
 
-    /// Holds each effect `hold` picks, unanswered, until the run is decided
-    /// or withdraws it.
+    /// Holds each effect `hold` picks, unanswered, until the run withdraws
+    /// it.
     pub(crate) fn hold(mut self, hold: fn(&Effect) -> bool) -> Self {
         self.hold = Some(hold);
         self
@@ -192,7 +193,7 @@ struct Issued {
 
 impl Driver {
     /// Steps the run once, answers or holds each effect the step issued,
-    /// and drops the held effects it may. Returns how many it issued.
+    /// and drops each effect the step withdrew. Returns how many it issued.
     pub(crate) fn pump(&mut self) -> TestResult<usize> {
         if self.outcome.is_some() {
             return Err("the run is done, so there is nothing left to step".into());
@@ -237,22 +238,28 @@ impl Driver {
                 provenance,
                 effect: effect_record,
             };
-            if self.hold.is_some_and(|hold| hold(&effect)) {
+            if withdrawn.contains(&id) {
+                self.respond(held, EffectAnswer::Dropped);
+            } else if self.hold.is_some_and(|hold| hold(&effect)) {
                 self.held.push(held);
             } else {
                 let answer = self.answer(effect)?;
                 self.respond(held, answer);
             }
         }
-        let decided = self.run.decided();
         let (dropped, held): (Vec<_>, Vec<_>) = std::mem::take(&mut self.held)
             .into_iter()
-            .partition(|issued| decided || withdrawn.contains(&issued.id));
+            .partition(|issued| withdrawn.contains(&issued.id));
         self.held = held;
         for issued in dropped {
             self.respond(issued, EffectAnswer::Dropped);
         }
         Ok(issued)
+    }
+
+    /// How many effects the driver holds unanswered.
+    pub(crate) fn held(&self) -> usize {
+        self.held.len()
     }
 
     fn respond(&mut self, issued: Issued, answer: EffectAnswer) {
@@ -287,14 +294,15 @@ impl Driver {
         }
     }
 
-    /// Pumps once, and fails when another step could only wait forever.
+    /// Pumps once, and fails when another step could only wait forever. A
+    /// step that issues nothing can only withdraw held effects, so an
+    /// unchanged count means it withdrew nothing.
     fn advance(&mut self) -> TestResult {
         let held = self.held.len();
         let issued = self.pump()?;
-        let waiting = self.outcome.is_none() && !self.run.decided();
-        if waiting && issued == 0 && self.held.len() == held {
+        if self.outcome.is_none() && issued == 0 && self.held.len() == held {
             return Err(format!(
-                "the undecided run issued nothing new while only {held} held effects remain"
+                "the run issued and withdrew nothing while only {held} held effects remain"
             )
             .into());
         }

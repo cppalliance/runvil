@@ -8,6 +8,7 @@ use std::sync::Arc;
 
 use runvil_model_client::detail::tool_schema_new;
 use runvil_model_client::model::{ModelInvocation, Temperature};
+use runvil_types::cancel::CancelHandle;
 use runvil_types::event::{Event, ReplyOrigin};
 use runvil_types::ids::RoundId;
 use runvil_types::tools::ToolId;
@@ -244,9 +245,10 @@ fn a_run_is_send() {
 
 #[test]
 fn done_is_withheld_while_a_store_effect_is_outstanding_and_delivered_after_dropped() {
+    let cancel = CancelHandle::new();
     let mut run = run_of(
         "store.write('notes.md', 'kept')\nreturn 'unreachable'",
-        run_context(),
+        run_context().with_cancel(cancel.clone()),
     );
     let (id, effect) = only_effect(run.step());
     assert!(
@@ -256,7 +258,7 @@ fn done_is_withheld_while_a_store_effect_is_outstanding_and_delivered_after_drop
     // The run is cancelled while the store operation is out. The next step
     // tears the run down and reports its end, but the effect still owes
     // its answer, so `Done` waits.
-    run.cancel();
+    cancel.cancel();
     let step = run.step();
     let Step::Pending {
         effects, events, ..
@@ -300,12 +302,13 @@ fn a_dropped_answer_resumes_a_waiting_chain_with_the_cancelled_error() {
 
 #[test]
 fn an_orphaned_effects_real_answer_is_discarded_and_still_counts_as_the_answer() {
+    let cancel = CancelHandle::new();
     let mut run = run_of(
         "store.write('notes.md', 'kept')\nreturn 'unreachable'",
-        run_context(),
+        run_context().with_cancel(cancel.clone()),
     );
     let (id, _) = only_effect(run.step());
-    run.cancel();
+    cancel.cancel();
     assert!(matches!(run.step(), Step::Pending { .. }));
     // The caller performed the operation before it learned of the cancel:
     // its answer is the effect's one answer, discarded rather than applied.
@@ -409,45 +412,64 @@ fn a_child_cancel_handles_cancel_is_observed_by_the_instruction_hook() {
 
 #[test]
 fn a_context_without_a_caller_handle_shares_its_one_flag_with_the_run() {
-    let source = "---\nname: t\ndescription: d\nrunvil: 0\n---\n\n# Run\n\n## Only\n\n```lua\nreturn 'x'\n```\n";
-    let prompt = Prompt::parse(source, "run-test")
-        .0
-        .expect("the run test prompt parses");
     let ctx = run_context();
     let context_flag = ctx.cancel.clone();
-    let mut run = Run::new(Arc::new(prompt), "", ctx);
-    assert!(!context_flag.is_cancelled());
-    assert!(!run.cancel_handle().is_cancelled());
-    run.cancel();
-    assert!(
-        context_flag.is_cancelled(),
-        "the run's cancel sets the flag the context minted"
-    );
-    assert!(
-        run.cancel_handle().is_cancelled(),
-        "the run's own handle is the same flag"
+    let mut run = run_of("return 'x'", ctx);
+    context_flag.cancel();
+    let Step::Done { outcome, .. } = run.step() else {
+        panic!("the cancelled run has nothing outstanding");
+    };
+    assert_eq!(
+        outcome,
+        RunOutcome::Cancelled,
+        "the run polls the flag the context minted"
     );
 }
 
 #[test]
-fn a_run_is_decided_once_its_end_is_reported_while_done_is_withheld() {
+fn the_step_that_decides_the_run_withdraws_its_outstanding_effect_while_done_is_withheld() {
+    let cancel = CancelHandle::new();
     let mut run = run_of(
         "store.write('notes.md', 'kept')\nreturn 'unreachable'",
-        run_context(),
+        run_context().with_cancel(cancel.clone()),
     );
-    assert!(!run.decided(), "a fresh run is undecided");
-    let (id, _) = only_effect(run.step());
-    assert!(!run.decided(), "a run waiting on an answer is undecided");
-    run.cancel();
+    assert!(!run.decided_for_test(), "a fresh run is undecided");
+    let Step::Pending {
+        effects, withdrawn, ..
+    } = run.step()
+    else {
+        panic!("the run parks on its store effect");
+    };
+    let id = only_effect_id(&effects);
+    assert!(withdrawn.is_empty(), "a live run withdraws nothing");
     assert!(
-        matches!(run.step(), Step::Pending { .. }),
-        "Done waits on the store effect"
+        !run.decided_for_test(),
+        "a run waiting on an answer is undecided"
     );
-    assert!(
-        run.decided(),
-        "the run is decided before Done, so the caller can drop what it holds"
+    cancel.cancel();
+    let Step::Pending {
+        effects, withdrawn, ..
+    } = run.step()
+    else {
+        panic!("Done waits on the store effect");
+    };
+    assert!(effects.is_empty(), "a torn-down run issues nothing");
+    assert_eq!(
+        withdrawn,
+        [id],
+        "the deciding step withdraws the store effect, so the caller drops it"
     );
+    assert!(run.decided_for_test(), "the run is decided before Done");
     run.resume(id, EffectAnswer::Dropped);
     assert!(matches!(run.step(), Step::Done { .. }));
-    assert!(run.decided(), "a finished run stays decided");
+    assert!(run.decided_for_test(), "a finished run stays decided");
+}
+
+/// The id of the one effect in `effects`.
+#[track_caller]
+fn only_effect_id(effects: &[IssuedEffect]) -> EffectId {
+    let [issued] = effects else {
+        panic!("exactly one effect is issued: {effects:?}");
+    };
+    issued.id
 }

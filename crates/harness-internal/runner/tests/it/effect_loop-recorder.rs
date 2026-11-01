@@ -14,7 +14,8 @@ use runvil::vfs::VfsRef;
 
 use super::{answers, await_raised, cancel_after, meta};
 use crate::support::{
-    FailingRecorder, PendingTimer, TIMED_MAIN, TextTool, WAITS, run_over, run_with_child, unused,
+    FailingRecorder, PendingTimer, TIMED_MAIN, TextTool, WAITS, run_over, run_with_child,
+    run_with_child_and_cancel, unused,
 };
 
 /// A run of one store write and one read, over a fresh memory store: its
@@ -94,7 +95,7 @@ async fn a_recorder_that_refuses_an_answer_aborts_the_performers_still_out() {
     let cancel = CancelHandle::new();
     cancel_after(&cancel, Duration::from_millis(50));
     drive_run(
-        run_with_child(TIMED_MAIN, WAITS),
+        run_with_child_and_cancel(TIMED_MAIN, WAITS, &cancel),
         performers,
         dry.clone(),
         dry_run,

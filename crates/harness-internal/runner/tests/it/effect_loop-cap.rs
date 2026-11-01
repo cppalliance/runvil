@@ -70,8 +70,8 @@ fn looping(section: &str, user: &str, result: &str) -> String {
 }
 
 /// A run over [`PREAMBLE`] and `sections`, with the `default` role filled by
-/// one model and [`TOOL`] in its catalog.
-fn run_of(sections: &str) -> Run {
+/// one model and [`TOOL`] in its catalog, under the cancel flag `cancel`.
+fn run_of(sections: &str, cancel: &CancelHandle) -> Run {
     let source = format!("{PREAMBLE}{sections}");
     let (prompt, _parse_events) = Prompt::parse(&source, EXECUTION);
     let prompt = Arc::new(prompt.expect("the cap fixture parses"));
@@ -89,7 +89,8 @@ fn run_of(sections: &str) -> Run {
     let catalog = ToolCatalog::new([tool]).expect("the one-tool catalog is valid");
     let ctx = RunContext::new(EXECUTION, TEST_SEED, Timestamp::UNIX_EPOCH)
         .with_tools(catalog)
-        .with_models(BTreeMap::from([(ModelRole::Default, model)]));
+        .with_models(BTreeMap::from([(ModelRole::Default, model)]))
+        .with_cancel(cancel.clone());
     Run::new(prompt, "", ctx)
 }
 
@@ -235,11 +236,12 @@ impl Rig {
         }
     }
 
-    /// Drives `run` with `broker` and the rig's tool beside `steer`, and
-    /// returns the run's outcome. Fails when the two outlast [`PATIENCE`].
+    /// Drives a run over `sections` under the rig's cancel flag, with
+    /// `broker` and the rig's tool, beside `steer`, and returns the run's
+    /// outcome. Fails when the two outlast [`PATIENCE`].
     async fn drive(
         &self,
-        run: Run,
+        sections: &str,
         broker: ScriptedBroker,
         steer: impl Future<Output = ()>,
     ) -> RunOutcome {
@@ -247,7 +249,7 @@ impl Rig {
         performers.broker = Arc::new(broker);
         performers.tool = self.tool.clone();
         let drive = drive_run(
-            run,
+            run_of(sections, &self.cancel),
             performers,
             self.recorder.clone(),
             self.run_id,
@@ -307,7 +309,7 @@ async fn the_cap_holds_extra_calls_until_one_lands() {
     });
 
     let outcome = rig
-        .drive(run_of(&looping("Only", "go", "done")), broker, async {
+        .drive(&looping("Only", "go", "done"), broker, async {
             until("two calls start", || rig.tool.started().len() >= 2).await;
             settle().await;
             assert_eq!(
@@ -348,7 +350,7 @@ async fn waiting_calls_start_oldest_first() {
     );
 
     let outcome = rig
-        .drive(run_of(&sections), broker, async {
+        .drive(&sections, broker, async {
             until("B's call is issued", || rig.recorded("b1")).await;
             settle().await;
             assert_eq!(rig.tool.started(), ["a1"], "the cap holds the rest");
@@ -385,7 +387,7 @@ async fn a_call_withdrawn_in_the_step_that_issued_it_never_starts() {
     });
     let sections = format!("{MAIN_CANCELS}{}", looping("Child", "go", "child done"));
 
-    let outcome = rig.drive(run_of(&sections), broker, async {}).await;
+    let outcome = rig.drive(&sections, broker, async {}).await;
 
     assert_eq!(outcome, completed("cancelled"));
     assert!(
@@ -416,7 +418,7 @@ async fn cancelling_a_task_drops_its_waiting_and_running_calls() {
     });
     let sections = format!("{MAIN_CANCELS}{}", looping("Child", "go", "child done"));
 
-    let outcome = rig.drive(run_of(&sections), broker, async {}).await;
+    let outcome = rig.drive(&sections, broker, async {}).await;
 
     assert_eq!(outcome, completed("cancelled"));
     assert_eq!(rig.tool.started(), ["c1"], "the waiting call never started");
@@ -440,7 +442,7 @@ async fn a_cancel_drops_waiting_calls_without_starting_them() {
     });
 
     let outcome = rig
-        .drive(run_of(&looping("Only", "go", "done")), broker, async {
+        .drive(&looping("Only", "go", "done"), broker, async {
             until("one call starts", || !rig.tool.started().is_empty()).await;
             rig.cancel.cancel();
         })

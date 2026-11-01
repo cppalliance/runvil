@@ -19,7 +19,8 @@ use runvil::vfs::Access;
 use serde_json::{Value, json};
 
 use crate::support::{
-    PendingTool, RaiseOnDrop, TEST_SEED, TIMED_MAIN, WAITS, run, run_with_child, unused,
+    PendingTool, RaiseOnDrop, TEST_SEED, TIMED_MAIN, WAITS, run, run_with_child,
+    run_with_child_and_cancel, unused,
 };
 
 /// A Host's timer: sleeps on the test runtime's clock for the effect's
@@ -212,7 +213,7 @@ async fn a_pending_timer_is_torn_down_by_a_cancel() {
     // run must end at the cancel, not when the timer would have fired.
     let started = Instant::now();
     let outcome = drive_run(
-        run_with_child(TIMED_MAIN, WAITS),
+        run_with_child_and_cancel(TIMED_MAIN, WAITS, &cancel),
         performers,
         recorder.clone(),
         run_id,

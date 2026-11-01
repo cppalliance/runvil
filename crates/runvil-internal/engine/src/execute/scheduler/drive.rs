@@ -264,12 +264,12 @@ impl Scheduler {
     /// well has none left, its root chain having settled its own), tears
     /// every chain down (the suspended chains' frames
     /// drop unarmed - no `SECTION_FINISHED` - and every effect still out
-    /// with the caller becomes an orphan the caller still answers), reports
-    /// the run's end boundary after every task terminal, and holds
-    /// `result` until the orphans are answered. A second decision keeps
-    /// the first: the outcome that ended the run is the record. A run that
-    /// has not started ends like one that could not start: it holds
-    /// `result` and reports nothing.
+    /// with the caller becomes an orphan the caller still answers, listed
+    /// as withdrawn), reports the run's end boundary after every task
+    /// terminal, and holds `result` until the orphans are answered. A
+    /// second decision keeps the first: the outcome that ended the run is
+    /// the record. A run that has not started ends like one that could not
+    /// start: it holds `result` and reports nothing.
     fn end(&mut self, result: Result<String>) {
         match self.phase {
             Phase::Ending(_) | Phase::Done => return,
@@ -281,9 +281,6 @@ impl Scheduler {
         }
         self.settle_all_tasks(AbandonReason::RunTerminated);
         self.teardown();
-        // Settling withdrew the abandoned tasks' calls, but teardown orphans
-        // the rest unlisted, so a decided run lists none rather than some.
-        self.effects.clear_withdrawn();
         self.ctx.emitter().report(
             self.ctx.prompt().title(),
             if result.is_ok() {
@@ -296,9 +293,10 @@ impl Scheduler {
     }
 
     /// Drops every chain's live state in the teardown order (the suspended
-    /// coroutine, then the frame unarmed, then the access capability) and
-    /// orphans every awaited effect. The task entries keep their terminal
-    /// state for inspection; every entry is terminal by now, `end` having
+    /// coroutine, then the frame unarmed, then the access capability),
+    /// orphans every awaited effect, and withdraws every outstanding
+    /// effect. The task entries keep their terminal state for inspection;
+    /// every entry is terminal by now, `end` having
     /// settled the live ones, so nothing here reports. Each chain joins
     /// the tasks it owns before its access drops, closing the run's
     /// happens-before record.

@@ -21,6 +21,7 @@ use std::thread;
 
 use runvil_lua::ToolOutputKind;
 use runvil_model_client::model::ModelInvocation;
+use runvil_types::cancel::CancelHandle;
 use runvil_types::event::Event;
 use runvil_types::seed::RunSeed;
 use runvil_types::timestamp::Timestamp;
@@ -142,6 +143,8 @@ pub(crate) struct Scenario {
     signal: Option<Matcher>,
     /// The role map the run fills its model set from.
     roles: BTreeMap<ModelRole, ModelInfo>,
+    /// The cancel flag the run's context takes, which the scenario keeps.
+    cancel: CancelHandle,
 }
 
 impl Scenario {
@@ -163,6 +166,7 @@ impl Scenario {
             hold: None,
             signal: None,
             roles: BTreeMap::new(),
+            cancel: CancelHandle::new(),
         }
     }
 
@@ -209,7 +213,11 @@ impl Scenario {
     }
 
     /// Adds `edit` to the edits applied to the run's context, after the
-    /// scenario's own settings, its role map included.
+    /// scenario's own settings, its role map and cancel flag included. An
+    /// edit that replaces the cancel flag leaves [`cancel_when`] and
+    /// [`Driving::cancel`] setting a flag the run never reads.
+    ///
+    /// [`cancel_when`]: Scenario::cancel_when
     pub(crate) fn context(
         mut self,
         edit: impl FnOnce(RunContext) -> RunContext + 'static,
@@ -287,8 +295,9 @@ impl Scenario {
     }
 
     /// Leaves every effect `held` matches unanswered while the run keeps
-    /// stepping, so a cancel can land between steps. Once the run decides
-    /// its outcome, each held effect is answered `Dropped`.
+    /// stepping, so a cancel can land between steps. Each held effect the
+    /// run withdraws is answered `Dropped`, so the step that decides the
+    /// run's outcome drops them all.
     pub(crate) fn hold(mut self, held: impl Fn(&Effect) -> bool + 'static) -> Scenario {
         self.hold = Some(Box::new(held));
         self
@@ -335,7 +344,7 @@ impl Scenario {
         };
         let run = self.prefill.start(Arc::new(prompt), &self.args, ctx);
         let canceller = signalled.map(|signalled| {
-            let cancel = run.cancel_handle();
+            let cancel = self.cancel.clone();
             thread::spawn(move || {
                 if signalled.recv().is_ok() {
                     cancel.cancel();
@@ -351,6 +360,7 @@ impl Scenario {
             effects: Vec::new(),
             held: Vec::new(),
             store: self.store,
+            cancel: self.cancel,
             canceller,
         }
     }
@@ -388,7 +398,8 @@ impl Scenario {
         };
         let mut ctx = RunContext::new(self.name.clone(), self.seed, TEST_STARTED_AT)
             .with_vfs(self.store.vfs())
-            .with_models(std::mem::take(&mut self.roles));
+            .with_models(std::mem::take(&mut self.roles))
+            .with_cancel(self.cancel.clone());
         if !self.tools.is_empty() || !self.listed.is_empty() {
             let infos = self.tools.iter().map(FnTool::info);
             let catalog = ToolCatalog::new(infos.chain(self.listed.iter().cloned()))

@@ -268,15 +268,21 @@ fn a_cancelled_tasks_tool_call_is_joined_and_its_later_writes_are_refused() {
     let mut held: Option<(EffectId, Arc<Access>, EffectAnswer)> = None;
     let mut late = None;
     let result = loop {
-        let effects = match run.step() {
+        let (effects, withdrawn) = match run.step() {
             Step::Done { outcome, .. } => break outcome,
-            Step::Pending { effects, .. } => effects,
+            Step::Pending {
+                effects, withdrawn, ..
+            } => (effects, withdrawn),
         };
         if effects.is_empty() {
-            assert!(run.decided(), "only a decided run waits on nothing new");
             let (id, access, answer) = held
                 .take()
                 .expect("the decided run waits on the held call's answer");
+            assert_eq!(
+                withdrawn,
+                [id],
+                "only the step that decides the run waits on nothing new, and it withdraws the held call"
+            );
             late = Some(access.write("late.txt", b"after the cancel"));
             run.resume(id, answer);
             continue;

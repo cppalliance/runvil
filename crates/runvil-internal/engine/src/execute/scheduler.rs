@@ -225,6 +225,7 @@ impl Scheduler {
     /// Whether the run's outcome is decided: its end boundary is reported,
     /// or the run ended before it started, so at most the orphans' answers
     /// stand between the run and `Done`.
+    #[cfg(test)]
     pub(super) fn decided(&self) -> bool {
         matches!(self.phase, Phase::Ending(_) | Phase::Done)
     }

@@ -12,7 +12,6 @@
 use std::fmt;
 use std::sync::Arc;
 
-use runvil_types::cancel::CancelHandle;
 use runvil_types::event::Event;
 use runvil_types::ids::Provenance;
 
@@ -46,12 +45,16 @@ pub enum Step {
         effects: Vec<IssuedEffect>,
         /// The events the step reported, in order.
         events: Vec<Event>,
-        /// The tool-call effects this step orphaned, in effect-id order.
-        /// Their answers will be discarded, so the caller may drop each one
-        /// it still holds; it still owes each one answer. Empty once the
-        /// run is decided, when the caller may drop everything it holds.
-        /// It may name a call that `effects` lists, because one step can
-        /// issue a call and then orphan it.
+        /// The effects this step withdrew, in effect-id order. Their
+        /// answers will be discarded, so the caller may drop each one
+        /// unperformed, or abort it, and answer it
+        /// [`EffectAnswer::Dropped`]; it still owes each one answer. A step
+        /// withdraws a tool call whose chain stopped waiting on it. The
+        /// step that decides the run's outcome withdraws every effect still
+        /// outstanding, of every kind, so a caller that follows this list
+        /// drops everything it holds for the run. It may name an effect
+        /// that `effects` lists, because one step can issue an effect and
+        /// then withdraw it.
         withdrawn: Vec<EffectId>,
     },
     /// The run is over.
@@ -82,7 +85,9 @@ pub struct IssuedEffect {
 }
 
 /// One run of one prompt, which the caller drives through
-/// [`step`](Self::step) and [`resume`](Self::resume).
+/// [`step`](Self::step) and [`resume`](Self::resume), and cancels through
+/// the flag it supplies with
+/// [`RunContext::with_cancel`](super::RunContext::with_cancel).
 ///
 /// `Run` is `Send`: one caller drives it at a time, and the thread may
 /// change between calls. It holds its prompt through an `Arc`, so the
@@ -188,36 +193,12 @@ impl Run {
         self.scheduler.resume(id, answer);
     }
 
-    /// Asks the run to stop by setting its cancel flag.
-    ///
-    /// Running Lua code sees the flag through its instruction hook. The
-    /// next `step` tears down every chain. The run then reports itself as
-    /// cancelled once every outstanding effect is answered.
-    ///
-    /// Cancellation is a request that later steps complete. The caller
-    /// must answer each effect it abandons with [`EffectAnswer::Dropped`].
-    /// Like `step` and `resume`, `cancel` cannot fail.
-    pub fn cancel(&mut self) {
-        self.scheduler.cancel_handle().cancel();
-    }
-
-    /// Returns the run's cancel flag, so the caller can cancel the run from
-    /// another thread.
-    #[must_use]
-    pub fn cancel_handle(&self) -> CancelHandle {
-        self.scheduler.cancel_handle().clone()
-    }
-
-    /// Returns whether the run's outcome is decided.
-    ///
-    /// The outcome is decided once the run has reported its end event, or
-    /// once its first step found that the run cannot start. Any effect
-    /// still outstanding at that point is an orphan: only `Done` waits for
-    /// its answer. The caller can read this after a `Pending` step to learn
-    /// that it may drop what it holds for the run. This keeps control flow
-    /// independent of the events, which are only a report.
-    #[must_use]
-    pub fn decided(&self) -> bool {
+    /// Whether the run's outcome is decided: it has reported its end
+    /// event, or found at its first step that it cannot start. For the
+    /// suites that pin when a run is decided apart from what its steps
+    /// return.
+    #[cfg(test)]
+    pub(crate) fn decided_for_test(&self) -> bool {
         self.scheduler.decided()
     }
 

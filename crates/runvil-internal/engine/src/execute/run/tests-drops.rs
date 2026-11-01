@@ -9,6 +9,7 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
+use runvil_types::cancel::CancelHandle;
 use runvil_types::event::{Event, ReplyOrigin};
 use runvil_types::ids::RoundId;
 use runvil_types::models::{ModelRole, ThinkingMode};
@@ -26,18 +27,21 @@ use crate::test_support::scenario::{chat_answer, only_effect, test_model_with};
 use crate::test_support::scripted_chat::text;
 
 /// A run over one section whose Lua is `body`, on the `default` role
-/// filled by `test-model`, and `tools/echo` in the catalog.
+/// filled by `test-model`, and `tools/echo` in the catalog, under the
+/// cancel flag `cancel`.
 #[track_caller]
-fn bound_run(body: &str) -> Run {
-    bound_sections(&format!(
-        "## Only\n\n```lua\nmodels.use('default')\n{body}\n```\n"
-    ))
+fn bound_run(body: &str, cancel: &CancelHandle) -> Run {
+    bound_sections(
+        &format!("## Only\n\n```lua\nmodels.use('default')\n{body}\n```\n"),
+        cancel,
+    )
 }
 
 /// A run over `sections`, the prompt's H2 sections, on the `default` role
-/// filled by `test-model`, and `tools/echo` in the catalog.
+/// filled by `test-model`, and `tools/echo` in the catalog, under the
+/// cancel flag `cancel`.
 #[track_caller]
-fn bound_sections(sections: &str) -> Run {
+fn bound_sections(sections: &str, cancel: &CancelHandle) -> Run {
     let source = format!("---\nname: t\ndescription: d\nrunvil: 0\n---\n\n# Run\n\n{sections}");
     let prompt = Prompt::parse(&source, "run-test")
         .0
@@ -51,7 +55,8 @@ fn bound_sections(sections: &str) -> Run {
     let catalog = ToolCatalog::new([echo]).expect("one tool is a valid catalog");
     let ctx = run_context()
         .with_tools(catalog)
-        .with_models(BTreeMap::from([(ModelRole::Default, model)]));
+        .with_models(BTreeMap::from([(ModelRole::Default, model)]))
+        .with_cancel(cancel.clone());
     Run::new(Arc::new(prompt), "", ctx)
 }
 
@@ -68,12 +73,14 @@ fn drop_next(run: &mut Run) -> (EffectRecord, AnswerRecord) {
 
 #[test]
 fn a_dropped_chat_or_tool_call_resumes_a_pcall_with_the_cancelled_error_and_the_run_continues() {
+    let cancel = CancelHandle::new();
     let mut run = bound_run(
         "local chat_ok, chat_err = pcall(models.infer, 'dropped')\n\
          local tool_ok, tool_err = pcall(tools.call, 'tools/echo', { value = 'dropped' })\n\
          local kept = models.infer('kept')\n\
          return tostring(chat_ok) .. ':' .. chat_err.kind .. '|' \
          .. tostring(tool_ok) .. ':' .. tool_err.kind .. '|' .. kept",
+        &cancel,
     );
     let chat = drop_next(&mut run);
     assert!(
@@ -92,7 +99,7 @@ fn a_dropped_chat_or_tool_call_resumes_a_pcall_with_the_cancelled_error_and_the_
         "the record holds the call and its dropped answer: {tool:?}"
     );
     assert!(
-        !run.cancel_handle().is_cancelled(),
+        !cancel.is_cancelled(),
         "the drops left the run's cancel flag clear"
     );
     let (id, effect) = only_effect(run.step());
@@ -126,6 +133,7 @@ fn a_dropped_chat_or_tool_call_resumes_a_pcall_with_the_cancelled_error_and_the_
 
 #[test]
 fn a_dropped_loop_round_resumes_a_pcall_with_the_cancelled_error_and_the_run_continues() {
+    let cancel = CancelHandle::new();
     let mut run = bound_run(
         "messages:user('asked')\n\
          local loop_ok, loop_err = pcall(models.loop)\n\
@@ -133,6 +141,7 @@ fn a_dropped_loop_round_resumes_a_pcall_with_the_cancelled_error_and_the_run_con
          models.loop()\n\
          return tostring(loop_ok) .. ':' .. loop_err.kind .. '|' .. after_drop \
          .. '|' .. #messages .. ':' .. messages[#messages].content",
+        &cancel,
     );
     let (id, effect) = only_effect(run.step());
     assert!(
@@ -153,7 +162,7 @@ fn a_dropped_loop_round_resumes_a_pcall_with_the_cancelled_error_and_the_run_con
         "the record holds the loop round and its dropped answer: {records:?}"
     );
     assert!(
-        !run.cancel_handle().is_cancelled(),
+        !cancel.is_cancelled(),
         "the drop left the run's cancel flag clear"
     );
     let (id, effect) = only_effect(run.step());
@@ -199,7 +208,7 @@ fn an_uncaught_dropped_chat_or_tool_call_ends_the_run_cancelled() {
         "messages:user('dropped')\nreturn models.loop()",
         "return tools.call('tools/echo', { value = 'dropped' })",
     ] {
-        let mut run = bound_run(body);
+        let mut run = bound_run(body, &CancelHandle::new());
         let _ = drop_next(&mut run);
         let Step::Done { outcome, .. } = run.step() else {
             panic!("{body}: the uncaught drop ends the run with nothing outstanding");
@@ -212,13 +221,17 @@ fn an_uncaught_dropped_chat_or_tool_call_ends_the_run_cancelled() {
 }
 
 /// A run whose `## Main` runs `main` beside the `## Child` it spawns, whose
-/// one round stays out until the test answers it.
+/// one round stays out until the test answers it, under the cancel flag
+/// `cancel`.
 #[track_caller]
-fn timed_run(main: &str) -> Run {
-    bound_sections(&format!(
-        "## Main\n\n```lua\nmodels.use('default')\n{main}\n```\n\n\
-         ## Child\n\n```lua\nmodels.use('default')\nreturn models.infer('child')\n```\n"
-    ))
+fn timed_run(main: &str, cancel: &CancelHandle) -> Run {
+    bound_sections(
+        &format!(
+            "## Main\n\n```lua\nmodels.use('default')\n{main}\n```\n\n\
+             ## Child\n\n```lua\nmodels.use('default')\nreturn models.infer('child')\n```\n"
+        ),
+        cancel,
+    )
 }
 
 /// A main that catches its timed `wait` over the child, then joins the
@@ -258,11 +271,12 @@ fn parked_wait(run: &mut Run) -> (EffectId, EffectId) {
 #[test]
 fn a_dropped_timer_raises_the_cancelled_error_into_a_timed_waits_pcall_and_the_run_continues() {
     for wait in ["tasks.join_any", "tasks.join"] {
-        let mut run = timed_run(&caught_wait(wait));
+        let cancel = CancelHandle::new();
+        let mut run = timed_run(&caught_wait(wait), &cancel);
         let (timer, chat) = parked_wait(&mut run);
         run.resume(timer, EffectAnswer::Dropped);
         assert!(
-            !run.cancel_handle().is_cancelled(),
+            !cancel.is_cancelled(),
             "{wait}: the drop left the run's cancel flag clear"
         );
         let Step::Pending { effects, .. } = run.step() else {
@@ -289,20 +303,27 @@ fn a_dropped_timer_raises_the_cancelled_error_into_a_timed_waits_pcall_and_the_r
 #[test]
 fn an_uncaught_dropped_timer_ends_the_run_cancelled() {
     for wait in ["tasks.join_any", "tasks.join"] {
-        let mut run = timed_run(&format!(
-            "local t = tasks.spawn('## Child')\n\
-             {wait}({{ t }}, {{ timeout = 30 }})\n\
-             return 'waited'"
-        ));
+        let mut run = timed_run(
+            &format!(
+                "local t = tasks.spawn('## Child')\n\
+                 {wait}({{ t }}, {{ timeout = 30 }})\n\
+                 return 'waited'"
+            ),
+            &CancelHandle::new(),
+        );
         let (timer, chat) = parked_wait(&mut run);
         run.resume(timer, EffectAnswer::Dropped);
-        let Step::Pending { effects, .. } = run.step() else {
+        let Step::Pending {
+            effects, withdrawn, ..
+        } = run.step()
+        else {
             panic!("{wait}: the child's round is still out, so the run is not done");
         };
         assert!(effects.is_empty(), "{wait}: nothing new: {effects:?}");
-        assert!(
-            run.decided(),
-            "{wait}: the uncaught error decided the run; the child's round is an orphan"
+        assert_eq!(
+            withdrawn,
+            [chat],
+            "{wait}: the uncaught error decided the run and withdrew the child's round"
         );
         run.resume(chat, EffectAnswer::Dropped);
         let Step::Done { outcome, .. } = run.step() else {
@@ -317,9 +338,10 @@ fn an_uncaught_dropped_timer_ends_the_run_cancelled() {
 
 #[test]
 fn under_a_run_cancel_a_dropped_timer_ends_the_run_cancelled_without_resuming_the_wait() {
-    let mut run = timed_run(&caught_wait("tasks.join_any"));
+    let cancel = CancelHandle::new();
+    let mut run = timed_run(&caught_wait("tasks.join_any"), &cancel);
     let (timer, chat) = parked_wait(&mut run);
-    run.cancel();
+    cancel.cancel();
     run.resume(timer, EffectAnswer::Dropped);
     run.resume(chat, EffectAnswer::Dropped);
     let Step::Done { outcome, .. } = run.step() else {

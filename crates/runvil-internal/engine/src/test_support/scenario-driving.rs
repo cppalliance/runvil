@@ -9,6 +9,7 @@ use std::sync::Mutex;
 use std::sync::mpsc::Sender;
 use std::thread::JoinHandle;
 
+use runvil_types::cancel::CancelHandle;
 use runvil_types::event::Event;
 use runvil_types::tools::{ToolError, ToolId};
 use runvil_vfs::{Origin, VfsError, VfsRef};
@@ -102,9 +103,12 @@ pub(crate) struct Driving {
     /// How many of the events the parse reported.
     pub(super) parsed: usize,
     pub(super) effects: Vec<(EffectRecord, AnswerRecord)>,
-    /// The effects the scenario holds, unanswered until the run decides.
+    /// The effects the scenario holds, unanswered until a test releases
+    /// them or the run withdraws them.
     pub(super) held: Vec<(EffectId, Effect)>,
     pub(super) store: TestStore,
+    /// The cancel flag the scenario handed the run's context.
+    pub(super) cancel: CancelHandle,
     /// The thread that cancels the run on the scenario's signal.
     pub(super) canceller: Option<JoinHandle<()>>,
 }
@@ -142,6 +146,7 @@ impl Driving {
             effects.push((effect.record(), answer.record()));
         };
         let holding = self.held.len();
+        let kept: Vec<EffectId> = self.held.iter().map(|(id, _)| *id).collect();
         let stepped = drive_step(
             run,
             &mut issued,
@@ -154,9 +159,12 @@ impl Driving {
             self.outcome = Some(outcome);
             return false;
         }
-        // A deciding step answered every effect, held ones included, so
-        // only an undecided step leaves a wave to answer.
-        let mut wave = self.held.split_off(holding.min(self.held.len()));
+        // The step dropped what it withdrew, so what it left held beyond
+        // the earlier holds is the wave this step issued.
+        let (held, mut wave): (Vec<_>, Vec<_>) = std::mem::take(&mut self.held)
+            .into_iter()
+            .partition(|(id, _)| kept.contains(id));
+        self.held = held;
         order(&mut wave);
         for (id, effect) in wave {
             match self.answers.answer(&effect) {
@@ -218,7 +226,7 @@ impl Driving {
     /// run it steps would. A run that is done ignores it.
     pub(crate) fn cancel(&mut self) {
         if self.outcome.is_none() {
-            self.run.cancel();
+            self.cancel.cancel();
         }
     }
 
@@ -226,7 +234,7 @@ impl Driving {
     ///
     /// # Panics
     /// When the run waits only on held effects, which nothing releases
-    /// until the run decides.
+    /// until the run withdraws them.
     #[track_caller]
     pub(crate) fn finish(mut self) -> Trace {
         while self.step() {}
@@ -238,12 +246,12 @@ impl Driving {
     ///
     /// # Panics
     /// When the run is not done: it waits only on held effects, which
-    /// nothing releases until the run decides.
+    /// nothing releases until the run withdraws them.
     #[track_caller]
     pub(crate) fn end(mut self) -> (Trace, Run) {
         let Some(outcome) = self.outcome else {
             panic!(
-                "the run waits only on {} held effects, and no cancel has decided it",
+                "the run waits only on {} held effects, and no cancel has withdrawn them",
                 self.held.len()
             );
         };
@@ -326,8 +334,8 @@ impl Trace {
 
     /// Every effect the run issued, beside its answer, in the order the
     /// answers went, which is issue order for every effect the scenario
-    /// does not hold. An effect issued after the run decided its outcome,
-    /// and a held one, is paired with [`AnswerRecord::Dropped`].
+    /// does not hold. An effect the run withdrew before the scenario
+    /// answered it is paired with [`AnswerRecord::Dropped`].
     pub(crate) fn effects(&self) -> &[(EffectRecord, AnswerRecord)] {
         &self.effects
     }

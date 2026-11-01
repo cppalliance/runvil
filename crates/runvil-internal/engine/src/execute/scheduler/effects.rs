@@ -7,8 +7,10 @@
 //! to the scheduler, which fails the run loudly rather than passing it
 //! silently. An effect issued in a step goes out with that step even when
 //! the run's end orphaned it in the same step, because the caller still
-//! owes it an answer. The step also lists the tool calls orphaned since
-//! the last step, in id order.
+//! owes it an answer. The step also lists the effects withdrawn since the
+//! last step, in id order: a tool call orphaned while the run goes on, and
+//! every outstanding effect, of every kind, once the run's end tears it
+//! down.
 //!
 //! An awaited entry holds what its chain asked for, in the terms
 //! `apply_answer` needs to turn the caller's raw [`EffectAnswer`] into the
@@ -178,7 +180,7 @@ pub(super) struct EffectTable {
     /// The effects issued since the step began, in issue order, each with
     /// the provenance of the task that built it; the step returns them.
     issued: Vec<IssuedEffect>,
-    /// Tool-call effects orphaned since the last step, drained into
+    /// Effects withdrawn since the last step, drained into
     /// `Step::Pending`.
     withdrawn: Vec<EffectId>,
     /// The next effect id: a run-wide counter, so every effect the run
@@ -250,12 +252,15 @@ impl EffectTable {
         Some((chain, call.exec))
     }
 
-    /// Orphans every awaited effect at the run's teardown, silently: no
-    /// call is listed as withdrawn and no identity is returned, because
+    /// Orphans every awaited effect at the run's teardown and withdraws
+    /// every outstanding effect, the earlier orphans included, so the
+    /// caller may drop all it holds. No identity is returned, because
     /// those end when the run's scope closes.
     pub(super) fn orphan_all(&mut self) {
-        for entry in self.outstanding.values_mut() {
+        self.withdrawn.clear();
+        for (id, entry) in &mut self.outstanding {
             *entry = Outstanding::Orphaned;
+            self.withdrawn.push(*id);
         }
     }
 
@@ -296,21 +301,14 @@ impl EffectTable {
     }
 
     /// Takes the step's outgoing queue: the effects issued since the step
-    /// began, in issue order, and the tool calls withdrawn since the last
-    /// step, in id order.
+    /// began, in issue order, and the effects withdrawn since the last
+    /// step that still owe their answer, in id order.
     pub(super) fn take_step(&mut self) -> (Vec<IssuedEffect>, Vec<EffectId>) {
         let issued = std::mem::take(&mut self.issued);
         let mut withdrawn = std::mem::take(&mut self.withdrawn);
+        withdrawn.retain(|id| self.outstanding.contains_key(id));
         withdrawn.sort_unstable();
         (issued, withdrawn)
-    }
-
-    /// Drops the withdrawals listed since the last step. `drive::end` calls
-    /// this after its teardown: the teardown orphans whatever is still in
-    /// flight silently, and those orphans are not listed, so a decided run
-    /// lists none rather than some.
-    pub(super) fn clear_withdrawn(&mut self) {
-        self.withdrawn.clear();
     }
 
     /// Whether `id` is recorded as orphaned.

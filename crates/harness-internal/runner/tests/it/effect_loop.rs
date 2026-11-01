@@ -24,7 +24,7 @@ use serde_json::json;
 
 use crate::support::{
     ClosingTool, PanickingTool, PendingTimer, PendingTool, TEST_SEED, TIMED_MAIN, TextTool, WAITS,
-    run, run_over, run_with_child, unused,
+    run, run_over, run_with_child, run_with_child_and_cancel, unused,
 };
 
 #[path = "effect_loop-broker.rs"]
@@ -220,7 +220,7 @@ async fn a_cancel_writes_one_dropped_answer_per_outstanding_effect() {
     // Two effects are out when the cancel lands: the main section's
     // timeout timer and its child's tool call.
     let outcome = drive_run(
-        run_with_child(TIMED_MAIN, WAITS),
+        run_with_child_and_cancel(TIMED_MAIN, WAITS, &cancel),
         performers,
         recorder.clone(),
         run_id,

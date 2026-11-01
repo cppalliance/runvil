@@ -10,6 +10,7 @@ use std::error::Error;
 use std::num::NonZeroU32;
 use std::sync::Arc;
 
+use runvil::cancel::CancelHandle;
 use runvil::effect::{Effect, EffectAnswer, IssuedEffect};
 use runvil::event::Event;
 use runvil::model::{Completion, CompletionResult, ModelId, ModelInfo, ModelRole, ThinkingMode};
@@ -99,21 +100,24 @@ pub fn greet() -> Result<String, Box<dyn Error>> {
         .with_tools(catalog)
         .with_models(BTreeMap::from([(ModelRole::Default, model)]));
 
-    // 4. Create the run, and keep a cancel handle for anything that may
-    //    need to stop it.
-    let mut run = Run::new(Arc::new(prompt), "", ctx);
-    let cancel = run.cancel_handle();
+    // 4. Give the context a cancel flag, keep a clone for anything that may
+    //    need to stop the run, and create the run.
+    let cancel = CancelHandle::new();
+    let mut run = Run::new(Arc::new(prompt), "", ctx.with_cancel(cancel.clone()));
 
     // 5. Step until Done, logging each step's events and answering each
-    //    effect exactly once.
+    //    effect exactly once: an effect the step withdraws is dropped
+    //    instead of performed.
     let outcome = loop {
         match run.step() {
             Step::Pending {
-                effects, events, ..
+                effects,
+                events,
+                withdrawn,
             } => {
                 log.extend(events);
                 for IssuedEffect { id, effect, .. } in effects {
-                    if run.decided() {
+                    if withdrawn.contains(&id) {
                         run.resume(id, EffectAnswer::Dropped);
                     } else {
                         run.resume(id, answer(effect));

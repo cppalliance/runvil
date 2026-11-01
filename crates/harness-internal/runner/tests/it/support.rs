@@ -2,6 +2,7 @@
 //! over it, fake performers that answer by script, and a Pack registry
 //! holding a suite's Packs.
 
+use std::fmt::Write as _;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::task::Poll;
@@ -11,6 +12,7 @@ use harness_runner::performers::{BoxFuture, InferenceBroker, Performers, Timer, 
 use harness_runner::recorder::{
     MemoryRecorder, Record, RecorderError, RecorderFuture, RunId, RunMeta, RunOutcome, RunRecorder,
 };
+use runvil::cancel::CancelHandle;
 use runvil::effect::{Round, ToolCallOrigin};
 use runvil::model::{
     Completion, CompletionError, CompletionOptions, Message, ModelBinding, ModelCatalog, ToolSchema,
@@ -58,23 +60,27 @@ fn catalog() -> ToolCatalog {
     ToolCatalog::new([wait]).expect("the one-tool catalog is valid")
 }
 
-/// A prompt whose one section runs `lua` as its only block.
-fn prompt(lua: &str) -> Arc<Prompt> {
-    let source = format!(
-        "---\nname: runner-test\ndescription: a runner fixture\nrunvil: 0\n---\n\n\
-         # Fixture\n\n## Only\n\n```lua\n{lua}\n```\n"
+/// A prompt whose sections are `sections`, each a section's name and the
+/// Lua it runs as its only block, in order.
+fn prompt(sections: &[(&str, &str)]) -> Arc<Prompt> {
+    let mut source = String::from(
+        "---\nname: runner-test\ndescription: a runner fixture\nrunvil: 0\n---\n\n# Fixture\n",
     );
+    for (name, lua) in sections {
+        write!(source, "\n## {name}\n\n```lua\n{lua}\n```\n").expect("a String takes any write");
+    }
     let (prompt, _parse_events) = Prompt::parse(&source, EXECUTION);
     Arc::new(prompt.expect("the fixture prompt parses"))
 }
 
 /// A Pack-free run over `prompt` with a fixed seed and start,
 /// prepared against the fixture [`catalog`], over the run's filesystem
-/// `vfs`.
-fn prepared(prompt: Arc<Prompt>, vfs: VfsRef) -> Run {
+/// `vfs`, under the cancel flag `cancel`.
+fn prepared(prompt: Arc<Prompt>, vfs: VfsRef, cancel: &CancelHandle) -> Run {
     let ctx = RunContext::new(EXECUTION, TEST_SEED, Timestamp::UNIX_EPOCH)
         .with_vfs(vfs)
-        .with_tools(catalog());
+        .with_tools(catalog())
+        .with_cancel(cancel.clone());
     Run::new(prompt, "", ctx)
 }
 
@@ -88,19 +94,26 @@ pub(crate) fn run(lua: &str) -> Run {
 /// `vfs`: the test holds the handle, so it can read what the run wrote or
 /// mount a backend of its own.
 pub(crate) fn run_over(lua: &str, vfs: VfsRef) -> Run {
-    prepared(prompt(lua), vfs)
+    run_of_sections(&[("Only", lua)], vfs)
+}
+
+/// A Pack-free run over `sections`, each a section's name and the Lua it
+/// runs, whose `store` table operates on `vfs`.
+pub(crate) fn run_of_sections(sections: &[(&str, &str)], vfs: VfsRef) -> Run {
+    prepared(prompt(sections), vfs, &CancelHandle::new())
 }
 
 /// A Pack-free run over two sections: `## Main` runs `main`, and
 /// `## Child` runs `child` when the main spawns it as a task.
 pub(crate) fn run_with_child(main: &str, child: &str) -> Run {
-    let source = format!(
-        "---\nname: runner-test\ndescription: a runner fixture\nrunvil: 0\n---\n\n\
-         # Fixture\n\n## Main\n\n```lua\n{main}\n```\n\n## Child\n\n```lua\n{child}\n```\n"
-    );
-    let (prompt, _parse_events) = Prompt::parse(&source, EXECUTION);
-    let prompt = Arc::new(prompt.expect("the two-section fixture prompt parses"));
-    prepared(prompt, VfsRef::default())
+    run_with_child_and_cancel(main, child, &CancelHandle::new())
+}
+
+/// [`run_with_child`] under the cancel flag `cancel`, which the test also
+/// hands the loop.
+pub(crate) fn run_with_child_and_cancel(main: &str, child: &str, cancel: &CancelHandle) -> Run {
+    let sections = [("Main", main), ("Child", child)];
+    prepared(prompt(&sections), VfsRef::default(), cancel)
 }
 
 /// A main section that parks on a 30-second timer beside its child: the

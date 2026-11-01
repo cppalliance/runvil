@@ -17,23 +17,29 @@
 //! inline. Real-disk operations therefore block whatever polls the run, and
 //! Vfs operations from different chains run one at a time in issue order.
 //!
+//! An effect the step withdraws is answered `Dropped` without being
+//! performed, and a withdrawn effect an earlier step issued is aborted
+//! and answered `Dropped`, so the step that decides the run leaves the
+//! loop nothing to perform.
+//!
 //! The loop waits on three things at once: the run's cancel flag, the stop
 //! a Host raises through [`RunControl::stop_round`](crate::RunControl::stop_round),
-//! and the next effect to land. A cancel cancels the run, aborts every
-//! effect in flight, answers each `Dropped`, and steps the run to `Done`. A
-//! stop aborts every effect in flight except tool calls that survive stops
-//! and answers each `Dropped`, leaving the cancel flag clear, so the run
-//! decides what a dropped call means: a `pcall` catches it, and an uncaught
-//! one ends the run cancelled. The loop also looks for a stop before it
-//! starts a step's effects, and lowers each stop it sees once it has
-//! dropped what the stop reached, none included, so a stop never reaches
-//! an effect started after the loop saw it. A drop made there resumes the
-//! run as an inline answer does, so once the step's effects start the
-//! loop steps again instead of awaiting an answer. A Vfs effect is never in
-//! flight at a cancel or a stop: it is answered before the loop waits
-//! again. A drop is an answer, recorded like any other, so every effect
-//! record has exactly one answer record. Tool calls beyond the performer's
-//! cap wait, oldest first, and a cancel, a stop, or a withdrawal reaches them.
+//! and the next effect to land. A cancel aborts every effect in flight,
+//! answers each `Dropped`, and steps the run, which reads the same flag,
+//! to `Done`. A stop aborts every effect in flight except tool calls that
+//! survive stops and answers each `Dropped`, leaving the cancel flag
+//! clear, so the run decides what a dropped call means: a `pcall` catches
+//! it, and an uncaught one ends the run cancelled. The loop also looks for
+//! a stop before it starts a step's effects, and lowers each stop it sees
+//! once it has dropped what the stop reached, none included, so a stop
+//! never reaches an effect started after the loop saw it. A drop made
+//! there resumes the run as an inline answer does, so once the step's
+//! effects start the loop steps again instead of awaiting an answer. A Vfs
+//! effect is never in flight at a cancel or a stop: it is answered before
+//! the loop waits again. A drop is an answer, recorded like any other, so
+//! every effect record has exactly one answer record. Tool calls beyond the
+//! performer's cap wait, oldest first, and a cancel, a stop, or a
+//! withdrawal reaches them.
 //!
 //! A performer that panics is caught where its future is polled: its
 //! effect is answered `Dropped` and the panic is logged, so a lost
@@ -74,8 +80,10 @@ const STALLED: &str = "the effect loop has nothing to await for a pending run";
 
 /// Drives `run` to its end inside the returned future: performs its
 /// effects through `performers`, hands every event, effect, and answer to
-/// `recorder` under `run_id`, and cancels the run when `cancel` fires.
-/// Ends the run at the recorder with its one outcome and returns it.
+/// `recorder` under `run_id`, and drops every effect in flight when
+/// `cancel` fires. `cancel` must be the flag the run's context was built
+/// with, so the run sees the same cancel. Ends the run at the recorder with
+/// its one outcome and returns it.
 ///
 /// A run that is pending with nothing to await ends as failed with the
 /// kind `Internal`, once every future the loop still holds is torn down.
@@ -160,16 +168,11 @@ impl Driver {
                     events,
                     withdrawn,
                 } => {
-                    // The run's own word, not a scan of its events: the
-                    // events are a report, not a control channel. A cancel
-                    // that fired before this step is handed to the run here
-                    // so its next step observes it.
-                    if self.cancel.is_cancelled() {
-                        self.run.cancel();
-                    }
-                    let decided = self.run.decided() || self.cancel.is_cancelled();
+                    // The run reads this same flag, so its next step tears
+                    // every chain down.
+                    let cancelled = self.cancel.is_cancelled();
                     self.commit_events(events).await?;
-                    if decided {
+                    if cancelled {
                         // Every effect issued in this step is moot before
                         // it is performed, and every effect in flight is
                         // moot too. Record each effect and answer it
@@ -187,18 +190,26 @@ impl Driver {
                     }
                     for issued in effects {
                         self.commit_effect(&issued).await?;
+                        let (id, provenance) = (issued.id, &issued.provenance);
+                        // The run's own word, not a scan of its events: the
+                        // events are a report, not a control channel. A
+                        // withdrawn effect is moot before it is performed,
+                        // a Vfs effect included.
+                        if withdrawn.binary_search(&id).is_ok() {
+                            self.drop_effect(id, provenance).await?;
+                            answered = true;
+                            continue;
+                        }
                         // A Vfs effect comes back from `perform` and is
                         // answered here; every other kind goes in flight.
                         // The run is not stepped between inline answers:
                         // the whole batch is resumed, then stepped once.
-                        let (id, provenance) = (issued.id, &issued.provenance);
                         if let Some((access, op)) = self.perform(id, provenance, issued.effect) {
                             let answer = answer_vfs(id, provenance, access, op);
                             self.answer(id, provenance, answer).await?;
                             answered = true;
                         }
                     }
-                    // A step can issue a call and withdraw it, so withdrawal follows queuing.
                     if !withdrawn.is_empty() {
                         self.drop_in_flight(Reach::Withdrawn(&withdrawn)).await?;
                         answered = true;
@@ -239,10 +250,7 @@ impl Driver {
     /// raised.
     async fn await_answer(&mut self) -> Result<(), RecorderError> {
         match self.wake().await {
-            Woken::Cancel => {
-                self.run.cancel();
-                self.drop_in_flight(Reach::All).await
-            }
+            Woken::Cancel => self.drop_in_flight(Reach::All).await,
             Woken::Stop => self.act_on_stop().await.map(drop),
             Woken::Landed(id, provenance, answer) => {
                 self.answer(id, &provenance, answer).await?;
