@@ -15,7 +15,7 @@ use std::sync::Arc;
 use pulldown_cmark::{CodeBlockKind, CowStr, Event, Options, Parser, Tag};
 use runvil_types::emitter::Emitter;
 
-use crate::{Block, Error, ParseErrorKind, Result, sections};
+use crate::{Block, Error, ParseErrorKind, Result, position};
 use runvil_lua::LuaProgram;
 
 /// Uncompiled block produced while scanning section content.
@@ -48,18 +48,18 @@ pub(super) fn split_h1(
     for raw in raw_blocks {
         match raw {
             RawBlock::Prose(text) => blocks.push(Block::Prose {
-                text: sections::body_text(body, text)?,
+                text: position::body_text(body, text)?,
             }),
             RawBlock::Lua {
                 source,
                 line_offset,
             } => {
                 let location = format!("H1 `{title}` lua");
-                let line = sections::line_add(content_abs_line, line_offset)?;
+                let line = position::line_add(content_abs_line, line_offset)?;
                 blocks.push(Block::Lua(LuaProgram::compile(
                     &source,
                     &location,
-                    sections::nz_source_line(line)?,
+                    position::nz_source_line(line)?,
                     emitter,
                     title,
                 )?));
@@ -353,7 +353,7 @@ pub(super) fn split_section_blocks<'a>(
             blocks.push(RawBlock::Prose(pending.trim()));
         }
 
-        let line_offset = sections::line_add(sections::newlines_before(content, opening)?, 1)?;
+        let line_offset = position::line_add(position::newlines_before(content, opening)?, 1)?;
         blocks.push(RawBlock::Lua {
             source,
             line_offset,

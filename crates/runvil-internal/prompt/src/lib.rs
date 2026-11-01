@@ -31,6 +31,7 @@ mod fence;
 mod frontmatter;
 mod list;
 mod parse;
+mod position;
 mod prompt;
 mod sections;
 

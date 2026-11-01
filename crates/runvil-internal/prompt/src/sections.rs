@@ -1,6 +1,5 @@
 //! Walks a prompt body's markdown headings and builds its [`Section`] tree.
 
-use std::num::NonZeroU32;
 use std::ops::Range;
 use std::sync::Arc;
 
@@ -8,42 +7,9 @@ use pulldown_cmark::{Event, HeadingLevel, Options, Parser, Tag, TagEnd};
 use runvil_types::emitter::Emitter;
 
 use crate::fence::{self, RawBlock};
+use crate::position::{body_text, line_add, newlines_before, nz_source_line};
 use crate::{Block, BodyText, Error, ParseErrorKind, Result, Section, list};
 use runvil_lua::LuaProgram;
-
-/// Wraps a computed 1-based source line for [`LuaProgram::compile`].
-///
-/// Line numbers computed during parsing are always at least 1. A zero here means
-/// a broken source-position invariant; rather than silently coercing it to line
-/// one, this reports a structured internal parse error.
-///
-/// # Errors
-/// Returns [`Error::Internal`] when `line` is zero.
-pub(crate) fn nz_source_line(line: u32) -> Result<NonZeroU32> {
-    NonZeroU32::new(line).ok_or(Error::Internal(
-        "parser: computed 1-based source line was zero",
-    ))
-}
-
-/// Adds two 1-based line components with overflow checking.
-///
-/// # Errors
-/// Returns [`Error::Internal`] when the sum overflows `u32`, rather than
-/// saturating and hiding a broken position.
-pub(crate) fn line_add(a: u32, b: u32) -> Result<u32> {
-    a.checked_add(b)
-        .ok_or(Error::Internal("parser: source line arithmetic overflowed"))
-}
-
-/// Locates `part` inside the shared `text` it was sliced from.
-///
-/// # Errors
-/// Returns [`Error::Internal`] when `part` is not a slice of `text`.
-pub(crate) fn body_text(text: &Arc<str>, part: &str) -> Result<BodyText> {
-    BodyText::within(text, part).ok_or(Error::Internal(
-        "parser: section text is not a slice of the prompt body",
-    ))
-}
 
 /// A heading with its title and the prose/Lua that follows it (before the next
 /// heading of any level).
@@ -58,19 +24,6 @@ pub(crate) struct Heading<'a> {
     pub(crate) source_line: u32,
     /// Byte range of the heading within `body`, kept for span diagnostics.
     span: Range<usize>,
-}
-
-/// Counts the number of `\n` characters in `text[..byte_offset]`.
-///
-/// # Errors
-/// Returns [`Error::Internal`] when `byte_offset` is out of bounds or not a
-/// UTF-8 boundary, or when the newline count exceeds `u32`.
-pub(crate) fn newlines_before(text: &str, byte_offset: usize) -> Result<u32> {
-    let prefix = text.get(..byte_offset).ok_or(Error::Internal(
-        "parser: source byte offset invariant broken",
-    ))?;
-    u32::try_from(prefix.matches('\n').count())
-        .map_err(|_| Error::Internal("parser: newline count exceeded u32 range"))
 }
 
 /// Converts a `HeadingLevel` to its numeric level.

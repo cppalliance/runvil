@@ -8,6 +8,7 @@ use runvil_types::event::{Event, lifecycle};
 
 use crate::contract::{self, PackListError};
 use crate::fence::{self, FenceViolation};
+use crate::position;
 use crate::sections::{self, Heading};
 use crate::{Error, Frontmatter, ParseError, ParseErrorKind, Prompt, Result, frontmatter};
 
@@ -136,7 +137,7 @@ impl Prompt {
             let lines = h1_positions
                 .iter()
                 .map(|&index| {
-                    sections::line_add(frontmatter_lines, headings[index].source_line)
+                    position::line_add(frontmatter_lines, headings[index].source_line)
                         .map(|line| line.to_string())
                 })
                 .collect::<Result<Vec<_>>>()?;
@@ -157,7 +158,7 @@ impl Prompt {
             ));
         }
         let title = h1.title.clone();
-        let h1_content_abs_line = sections::line_add(frontmatter_lines, h1.content_start_line)?;
+        let h1_content_abs_line = position::line_add(frontmatter_lines, h1.content_start_line)?;
         if let Some((line, violation)) = fence::first_fence_violation(body) {
             let message = match violation {
                 FenceViolation::Label(label) => {
