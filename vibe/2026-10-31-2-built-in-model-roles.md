@@ -4,31 +4,31 @@ overview: "Every prompt gets exactly five roles (default, strong, small, fast, c
 todos:
   - id: types-model-role
     content: "runvil-types models.rs: ModelRole enum (Default, Strong, Small, Fast, Creative) with ALL, as_str() and serde Deserialize (kebab-case); unit tests"
-    status: pending
+    status: completed
   - id: parser-requirements
     content: "Parser: rename ModelRole struct to RoleRequirements { min_context, thinking: Option<bool> }; delete ModelKeyword, keywords:, description:, ModelRoles, ModelRolesIter, keyword_name; add Frontmatter::role_requirements(role); map visitor generic over key type (args keep alias grammar); update workshop ModelDto and the UI's run-api.ts and run-rows.ts; rewrite contract tests"
-    status: pending
+    status: completed
   - id: modelset-and-lua
     content: "model-client: ModelSet immutable (delete default alias API, ModelView, ModelSetError, lock helper, capabilities); Lua: Arc<ModelSet>; selection is Arc<Mutex<Option<ModelBinding>>> passed into injection and initialized to the default binding; models.use(label or handle, opts?); models.current; delete models.default and resolve_model_binding (SectionVm::current_model); handle loses capabilities; role errors"
-    status: pending
+    status: completed
   - id: engine-prepare
     content: "Engine: prepare(prompt, BTreeMap<ModelRole, ModelInfo>) checks declared requirements against the filling model, refuses a non-empty map without default (RequirementCheck::Unbound), and builds the ModelSet on RunContext; delete ModelBindings, bindings.rs, model_bindings(), bind_role_for_test, Scenario::bind_roles; RequirementCheck {ContextMinimum, Thinking, Unbound}; UnmetRequirement.role: ModelRole; RunState holds Arc<ModelSet>"
-    status: pending
+    status: completed
   - id: callers-and-fixtures
     content: "One pass per file: prepare callers (harness prepare_from_snapshot, scenarios, example, bench, tests) and every prompt and fixture with custom labels, keywords or models.default (README, prompts, workshop chat.md, roughly 30 fixture files); regenerate public-api.txt; first design doc update"
-    status: pending
+    status: completed
   - id: gate-commit-1
     content: "Commit 1 gate: cargo test and clippy for types, parser, model-client, lua, engine, harness, facade, workshop server; UI build; stale-name and wording sweeps; check that model-call events record the model id actually used"
-    status: pending
+    status: completed
   - id: chain-selection
     content: "Commit 2: Chain owns the selection Arc; ChainStart carries the starting value (default binding for root chains, parent's value for call and spawn, taken at dispatch); end_h1 hands H1's value to the root walk; section setup passes the chain's Arc into injection; tests; design doc update"
-    status: pending
+    status: completed
   - id: fanout-shim
     content: "Commit 3: 3-arg tasks.fanout(model, worker, collection) entirely in __impl_fanout.lua using privileged nil-safe selection get/set captured at install: switch, spawn every arm, restore before the first join and on the spawn-failure path; tests; design doc update"
-    status: pending
+    status: completed
   - id: final-gate
     content: "Gates for commits 2 and 3: tests, clippy, public-api check, stale-name and wording sweeps"
-    status: pending
+    status: completed
 isProject: false
 ---
 
@@ -660,7 +660,7 @@ Add the model-first form `tasks.fanout(model, worker, collection)`, implemented 
 
 <step-8>
 
-### Step 8: Design document for roles, the chain's current model and fanout
+### Step 8: Design document for roles, the chain's current model and fanout [completed]
 
 - Component: Model-first fanout
 - Tests:
