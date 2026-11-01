@@ -1,8 +1,9 @@
 //! The pick of each run's Packs: a bare entry means the runvil Pack of
 //! its id, a declared third-party Pack stands in for the runvil Pack of
 //! its id, an undeclared third-party Pack is in no run, what the pick
-//! cannot resolve is reported with its reason, and the ready wait covers
-//! only the run's Packs, keying each failure by FQN.
+//! cannot resolve is on the roster with its reason or, with none, left
+//! off it, and the ready wait covers only the run's Packs, keying each
+//! failure by FQN.
 
 use futures_util::FutureExt as _;
 use runvil::cancel::CancelHandle;
@@ -31,8 +32,8 @@ fn a_bare_entry_runs_with_the_runvil_pack_of_that_id() {
         catalog_ids(&host, HostServices::new(), &declares),
         ["web/runvil"]
     );
-    let (_run, requirements) = begin(&host, HostServices::new(), BTreeMap::new(), &declares);
-    assert!(requirements.is_satisfied(), "{requirements:?}");
+    let run = begin(&host, HostServices::new(), BTreeMap::new(), &declares);
+    assert_eq!(run.roster().get(&name("web")), Some(&usable_from("runvil")));
 }
 
 #[test]
@@ -64,65 +65,94 @@ fn a_run_that_declares_nothing_holds_every_runvil_pack_and_no_third_party_one() 
 }
 
 #[test]
-fn a_bare_entry_that_only_another_vendor_has_is_refused_naming_each_fqn() {
+fn a_bare_entry_that_only_another_vendor_has_is_unavailable_naming_each_fqn() {
     let one = vendors("ready");
-    let (_run, requirements) = begin(
-        &one,
-        HostServices::new(),
-        BTreeMap::new(),
-        &prompt("uses:\n  - poop\n"),
+    let declares = prompt("uses:\n  - poop\n");
+    let run = begin(&one, HostServices::new(), BTreeMap::new(), &declares);
+    assert_eq!(
+        run.roster().get(&name("poop")),
+        Some(&unavailable_for(
+            "poop means runvil/poop, which is not installed; write acme/poop to use that Pack"
+        ))
     );
     assert_eq!(
-        requirements.unavailable_packs,
-        [UnavailablePack::new(
-            name("poop"),
-            "poop means runvil/poop, which is not installed; write acme/poop to use that Pack"
-        )]
+        refusal(&run, &declares),
+        "the environment cannot satisfy this prompt:\n\
+         - poop is unavailable: poop means runvil/poop, which is not installed; \
+         write acme/poop to use that Pack",
+        "the run names the reason and does not call the Pack missing"
     );
-    assert!(requirements.missing_packs.is_empty());
 
     let both = host(&[
         (info("zed/poop"), Value::Null),
         (info("acme/poop"), Value::Null),
     ]);
-    let (_run, requirements) = begin(
-        &both,
-        HostServices::new(),
-        BTreeMap::new(),
-        &prompt("uses:\n  - poop\n"),
-    );
+    let run = begin(&both, HostServices::new(), BTreeMap::new(), &declares);
     assert_eq!(
-        requirements.unavailable_packs,
-        [UnavailablePack::new(
-            name("poop"),
+        run.roster().get(&name("poop")),
+        Some(&unavailable_for(
             "poop means runvil/poop, which is not installed; \
              write acme/poop or zed/poop to use that Pack"
-        )]
+        ))
     );
 }
 
 #[test]
 fn an_entry_no_vendor_has_is_missing_and_an_absent_vendor_name_is_unavailable() {
     let host = vendors("ready");
-    let (_run, requirements) = begin(
-        &host,
-        HostServices::new(),
-        BTreeMap::new(),
-        &prompt("uses:\n  - nope\n  - acme/gone\n"),
-    );
-    assert_eq!(requirements.missing_packs, [name("nope")]);
+    let declares = prompt("uses:\n  - nope\n  - acme/gone\n");
+    let run = begin(&host, HostServices::new(), BTreeMap::new(), &declares);
+    let roster = run.roster();
     assert_eq!(
-        requirements.unavailable_packs,
-        [UnavailablePack::new(
-            name("gone"),
-            "acme/gone is not installed"
-        )]
+        roster.get(&name("nope")),
+        None,
+        "no reason, so off the roster"
     );
-    let notice = requirements.notice();
-    assert!(notice.contains("- missing required Pack: nope"), "{notice}");
-    assert!(
-        notice.contains("- gone is unavailable: acme/gone is not installed"),
-        "{notice}"
+    assert_eq!(
+        roster.get(&name("gone")),
+        Some(&unavailable_for("acme/gone is not installed"))
+    );
+    assert_eq!(
+        refusal(&run, &declares),
+        "the environment cannot satisfy this prompt:\n\
+         - missing required Pack: nope\n\
+         - gone is unavailable: acme/gone is not installed"
+    );
+}
+
+#[test]
+fn the_roster_covers_every_declared_pack_the_run_cannot_serve() {
+    let needy = info("acme/needy").needs(NEEDS_SESSION);
+    let broken = PackInfo::new("acme/broken", backed);
+    let host = host(&[
+        (needy, Value::Null),
+        (broken, Value::Null),
+        (info("acme/fine"), Value::Null),
+    ]);
+    let declares = prompt("uses:\n  - acme/needy\n  - absent\n  - acme/fine\n  - acme/broken\n");
+    let run = begin(&host, HostServices::new(), BTreeMap::new(), &declares);
+    assert_eq!(
+        run.roster(),
+        BTreeMap::from([
+            (
+                name("broken"),
+                unavailable_for("backed needs tests/backend, and this host provides none"),
+            ),
+            (name("fine"), usable_from("acme")),
+            (
+                name("needy"),
+                unavailable_for("the run lacks the services it needs: tests/session"),
+            ),
+            (name("subagents"), usable_from("runvil")),
+        ]),
+        "the absent Pack, which no vendor has, stays off the roster"
+    );
+    assert_eq!(
+        refusal(&run, &declares),
+        "the environment cannot satisfy this prompt:\n\
+         - missing required Pack: absent\n\
+         - needy is unavailable: the run lacks the services it needs: tests/session\n\
+         - broken is unavailable: backed needs tests/backend, and this host provides none"
     );
 }
 
@@ -161,20 +191,18 @@ fn a_ready_failure_is_keyed_by_fqn_and_never_reaches_another_vendors_pack() {
         failures,
         BTreeMap::from([("acme/web", "web will not be ready".to_owned())])
     );
-    let (_run, requirements) =
-        host.begin_run(&packs, HostServices::new(), failures, &declares_acme);
+    let run = host.begin_run(&packs, HostServices::new(), failures);
     assert_eq!(
-        requirements.unavailable_packs,
-        [UnavailablePack::new(name("web"), "web will not be ready")]
+        run.roster().get(&name("web")),
+        Some(&unavailable_for("web will not be ready"))
     );
 
     let declares_runvil = prompt("uses:\n  - web\n");
     let packs = host.pick(&declares_runvil);
     let failures = host.wait_ready(&packs, &cancel).now_or_never().unwrap();
     assert!(failures.is_empty(), "{failures:?}");
-    let (run, requirements) =
-        host.begin_run(&packs, HostServices::new(), failures, &declares_runvil);
-    assert!(requirements.is_satisfied(), "{requirements:?}");
+    let run = host.begin_run(&packs, HostServices::new(), failures);
+    assert_eq!(run.roster().get(&name("web")), Some(&usable_from("runvil")));
     let ids: Vec<String> = run
         .catalog()
         .tools()

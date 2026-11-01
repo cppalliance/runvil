@@ -46,8 +46,8 @@ pub(crate) struct Rig {
 }
 
 impl Rig {
-    /// Parses the scenario's source, prepares its run, and starts it on
-    /// the rig.
+    /// Parses the scenario's source, builds its run, and starts it on the
+    /// rig.
     ///
     /// # Panics
     /// When the source fails to parse, naming the error.
@@ -129,22 +129,12 @@ impl Rig {
     }
 
     /// The run itself, for a test that hands it an answer by hand.
-    ///
-    /// # Panics
-    /// When the prepare refused the run.
-    #[track_caller]
     pub(crate) fn run_for_test(&mut self) -> &mut Run {
-        self.driving
-            .run_mut()
-            .expect("the prepare accepted the run")
+        self.driving.run_mut()
     }
 
     /// The scheduler behind the run, for a test that reaches below the run
     /// between steps.
-    ///
-    /// # Panics
-    /// When the prepare refused the run, which then has no scheduler.
-    #[track_caller]
     pub(crate) fn scheduler_for_test(&mut self) -> &mut Scheduler {
         self.run_for_test().scheduler_for_test()
     }
@@ -170,8 +160,8 @@ impl Rig {
 /// rounds it issued in issue order, and the finished run.
 pub(crate) struct RigTrace {
     trace: Trace,
-    /// The finished run, or `None` when the prepare refused it.
-    run: Option<Run>,
+    /// The finished run.
+    run: Run,
     tap: Tap,
 }
 
@@ -194,15 +184,7 @@ impl RigTrace {
 
     /// The state of `task`'s entry at the run's end, or `None` when no task
     /// with that id was started.
-    ///
-    /// # Panics
-    /// When the prepare refused the run, which then has no scheduler.
-    #[track_caller]
     pub(crate) fn task_state_for_test(&mut self, task: &TaskId) -> Option<TaskState> {
-        self.run
-            .as_mut()
-            .expect("the prepare accepted the run")
-            .scheduler_for_test()
-            .task_state_for_test(task)
+        self.run.scheduler_for_test().task_state_for_test(task)
     }
 }

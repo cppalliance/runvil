@@ -9,7 +9,7 @@ use runvil_parser::test_support::one_section;
 use runvil_types::event::Event;
 
 use super::fixtures::{echo_tool, scoped_tool};
-use super::models_loop::{LOOP_TO_TEXT, catalog_scenario, loop_model_name};
+use super::models_loop::{LOOP_TO_TEXT, loop_model_name, loop_scenario};
 use super::*;
 use crate::execute::run::{EffectRecord, ToolCallOrigin, ToolCaller};
 use crate::test_support::rig::{Rig, RigTrace};
@@ -62,7 +62,7 @@ fn looped(
     let mut replies: Vec<_> = requested.iter().map(|batch| calls(batch)).collect();
     replies.push(text("done"));
     let gateway = ScriptedChat::new(replies);
-    let mut scenario = catalog_scenario(one_section(section))
+    let mut scenario = loop_scenario(one_section(section))
         .tool(echo_tool())
         .tool(scoped_tool("lookup", "Look up a value.").0);
     for tool in extra {

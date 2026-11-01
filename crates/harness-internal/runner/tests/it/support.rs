@@ -2,7 +2,6 @@
 //! over it, fake performers that answer by script, and a Pack registry
 //! holding a suite's Packs.
 
-use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::task::Poll;
@@ -73,12 +72,9 @@ fn prompt(lua: &str) -> Arc<Prompt> {
 /// prepared against the fixture [`catalog`], over the run's filesystem
 /// `vfs`.
 fn prepared(prompt: Arc<Prompt>, vfs: VfsRef) -> Run {
-    let ctx = RunContext::new(EXECUTION, TEST_SEED, Timestamp::UNIX_EPOCH).with_vfs(vfs);
-    let (ctx, requirements) = ctx.with_tools(catalog()).prepare(&prompt, BTreeMap::new());
-    assert!(
-        requirements.is_satisfied(),
-        "the runner fixture prompt declares nothing the environment must supply: {requirements:?}"
-    );
+    let ctx = RunContext::new(EXECUTION, TEST_SEED, Timestamp::UNIX_EPOCH)
+        .with_vfs(vfs)
+        .with_tools(catalog());
     Run::new(prompt, "", ctx)
 }
 

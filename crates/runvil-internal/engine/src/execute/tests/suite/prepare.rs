@@ -1,17 +1,19 @@
-//! Prepare-pass tests that reach engine-only items: the per-run store
-//! mount's claims isolation, the caller's role map filling the model set, and
-//! the test driver's prepare-then-run path refusing an unsatisfiable prompt
-//! with the model-readable notice or running a satisfiable one. The rest of
-//! the prepare suite runs against the `runvil` facade.
+//! Start tests that reach engine-only items: the per-run store mount's
+//! claims isolation, the caller's role map filling the model set, and the
+//! run's first step refusing an unsatisfiable prompt with the
+//! model-readable notice or running a satisfiable one. The rest of the
+//! suite runs against the `runvil` facade.
 
 use std::collections::BTreeMap;
 use std::num::NonZeroU32;
 use std::sync::{Arc, Mutex};
 
 use crate::RunErrorKind;
+use crate::execute::context::RunState;
 use crate::execute::tests::context::test_context;
-use crate::execute::{Effect, EffectAnswer, RequirementCheck, UnmetRequirement};
+use crate::execute::{Effect, EffectAnswer, RunContext};
 use crate::model::ModelBinding;
+use crate::parser::Prompt;
 use crate::test_support::scenario::Scenario;
 use crate::test_support::scripted_chat::{ScriptedChat, text};
 use runvil_model_client::client::{Completion, CompletionResult};
@@ -34,9 +36,7 @@ const DECLARES_NOTHING: &str = concat!(
 
 #[test]
 fn two_runs_writing_the_same_store_path_do_not_conflict() {
-    let prompt = parse_ok(DECLARES_NOTHING);
-    let (ctx_a, _) = test_context("run-a").prepare(&prompt, BTreeMap::new());
-    let (ctx_b, _) = test_context("run-b").prepare(&prompt, BTreeMap::new());
+    let (ctx_a, ctx_b) = (test_context("run-a"), test_context("run-b"));
     let access_a = ctx_a
         .vfs()
         .acquire(Origin::new("run-a"))
@@ -98,15 +98,39 @@ fn declaring(front: &str, lua: &str) -> String {
         .build()
 }
 
+/// The state a run of `prompt` builds over `config`, as `Run::new` builds
+/// it.
+fn state_of(prompt: &Prompt, config: RunContext) -> RunState {
+    RunState::new(Arc::new(prompt.clone()), "", config)
+}
+
+/// The refusal notice of `scenario`'s run, after asserting that its first
+/// step failed it as `RequirementsUnmet` with no run events and no
+/// effects.
+#[track_caller]
+fn refusal(scenario: Scenario) -> String {
+    let trace = scenario.run();
+    let error = trace.error();
+    assert_eq!(error.kind(), RunErrorKind::RequirementsUnmet, "{error}");
+    assert!(
+        trace.run_events().is_empty(),
+        "a refused run reports no run events: {:?}",
+        trace.run_events()
+    );
+    assert!(trace.effects().is_empty(), "a refused run issues nothing");
+    error.to_string()
+}
+
 #[test]
 fn a_one_model_map_gives_all_five_roles_that_model() {
     let model = model_named("only", 32_000, ThinkingMode::Switchable);
-    let (ctx, requirements) = test_context("one-model").prepare(
+    let state = state_of(
         &parse_ok(DECLARES_NOTHING),
-        role_map([(ModelRole::Default, model.clone())]),
+        test_context("one-model").with_models(role_map([(ModelRole::Default, model.clone())])),
     );
-    assert!(requirements.is_satisfied(), "{requirements:?}");
-    let bindings = ctx.model_set.bindings();
+    assert_eq!(state.refusal(), None);
+    let set = state.model_set();
+    let bindings = set.bindings();
     assert_eq!(
         aliases(bindings),
         ["default", "strong", "small", "fast", "creative"],
@@ -121,15 +145,15 @@ fn a_one_model_map_gives_all_five_roles_that_model() {
 fn a_map_with_a_strong_entry_gives_strong_that_model_and_the_other_roles_the_default() {
     let default = model_named("default-model", 32_000, ThinkingMode::Switchable);
     let strong = model_named("strong-model", 200_000, ThinkingMode::Always);
-    let (ctx, requirements) = test_context("two-models").prepare(
+    let state = state_of(
         &parse_ok(DECLARES_NOTHING),
-        role_map([
+        test_context("two-models").with_models(role_map([
             (ModelRole::Default, default.clone()),
             (ModelRole::Strong, strong.clone()),
-        ]),
+        ])),
     );
-    assert!(requirements.is_satisfied(), "{requirements:?}");
-    for binding in ctx.model_set.bindings() {
+    assert_eq!(state.refusal(), None);
+    for binding in state.model_set().bindings() {
         let expected = if binding.alias() == "strong" {
             &strong
         } else {
@@ -146,77 +170,57 @@ fn a_map_with_a_strong_entry_gives_strong_that_model_and_the_other_roles_the_def
 }
 
 #[test]
-fn a_context_minimum_above_the_filling_models_is_one_unmet_entry_for_that_role() {
-    let prompt = parse_ok(&declaring(
-        "models: { strong: { min_context: 200000 } }",
-        "return 'x'",
-    ));
-    let (_, requirements) = test_context("minimum").prepare(
-        &prompt,
-        role_map([(
-            ModelRole::Default,
-            current_model(32_000, ThinkingMode::Switchable),
-        )]),
+fn a_context_minimum_above_the_filling_models_refuses_the_run_naming_that_role() {
+    let source = declaring("models: { strong: { min_context: 200000 } }", "return 'x'");
+    let notice = refusal(
+        Scenario::new(source).current_model(current_model(32_000, ThinkingMode::Switchable)),
     );
     assert_eq!(
-        requirements.unmet_models,
-        [UnmetRequirement {
-            role: ModelRole::Strong,
-            check: RequirementCheck::ContextMinimum,
-            required: "200000".to_owned(),
-            actual: "32000".to_owned(),
-        }]
+        notice,
+        "the environment cannot satisfy this prompt:\n\
+         - role 'strong': requires a context of at least 200000 tokens; \
+         the model filling it provides 32000"
     );
 }
 
 #[test]
-fn a_thinking_requirement_the_filling_model_fails_is_a_thinking_check() {
-    let prompt = parse_ok(&declaring(
+fn a_thinking_requirement_the_filling_model_fails_refuses_the_run_in_role_order() {
+    let source = declaring(
         "models: { strong: { thinking: true }, small: { thinking: false } }",
         "return 'x'",
-    ));
+    );
     let never = model_named("never", 32_000, ThinkingMode::Never);
     let always = model_named("always", 32_000, ThinkingMode::Always);
-    let (_, requirements) = test_context("thinking").prepare(
-        &prompt,
-        role_map([(ModelRole::Default, never), (ModelRole::Small, always)]),
+    let notice = refusal(
+        Scenario::new(source)
+            .current_model(never)
+            .role_model(ModelRole::Small, always),
     );
     assert_eq!(
-        requirements.unmet_models,
-        [
-            UnmetRequirement {
-                role: ModelRole::Strong,
-                check: RequirementCheck::Thinking,
-                required: "thinking: true".to_owned(),
-                actual: "Never".to_owned(),
-            },
-            UnmetRequirement {
-                role: ModelRole::Small,
-                check: RequirementCheck::Thinking,
-                required: "thinking: false".to_owned(),
-                actual: "Always".to_owned(),
-            },
-        ]
+        notice,
+        "the environment cannot satisfy this prompt:\n\
+         - role 'strong': requires 'thinking: true'; \
+         the thinking capability of the model filling it is Never\n\
+         - role 'small': requires 'thinking: false'; \
+         the thinking capability of the model filling it is Always"
     );
 }
 
 #[test]
 fn a_role_binding_carries_the_description_of_the_model_that_fills_it() {
     let prompt = parse_ok(&declaring("models: { strong: {} }", "return 'x'"));
-    let (ctx, requirements) = test_context("description").prepare(
+    let state = state_of(
         &prompt,
-        role_map([(
+        test_context("description").with_models(role_map([(
             ModelRole::Default,
             current_model(32_000, ThinkingMode::Never),
-        )]),
+        )])),
     );
-    assert!(requirements.is_satisfied(), "{requirements:?}");
-    let strong = ctx
-        .model_set
-        .binding("strong")
-        .expect("the strong role is bound");
+    assert_eq!(state.refusal(), None);
+    let set = state.model_set();
+    let strong = set.binding("strong").expect("the strong role is bound");
     assert_eq!(strong.description(), "A model for the prepare tests");
-    assert_eq!(ctx.model_set.bindings().len(), 5);
+    assert_eq!(set.bindings().len(), 5);
 }
 
 #[test]
@@ -248,42 +252,32 @@ fn thinking_true_on_strong_turns_thinking_on_for_strong_rounds_only() {
 }
 
 #[test]
-fn a_non_empty_map_without_a_default_entry_is_one_unbound_entry_and_refuses_the_run() {
-    let prompt = parse_ok(DECLARES_NOTHING);
+fn a_non_empty_map_without_a_default_entry_leaves_the_roles_empty_and_refuses_the_run() {
     let strong = model_named("strong-model", 200_000, ThinkingMode::Switchable);
-    let (ctx, requirements) =
-        test_context("unbound").prepare(&prompt, role_map([(ModelRole::Strong, strong)]));
-    assert_eq!(
-        requirements.unmet_models,
-        [UnmetRequirement {
-            role: ModelRole::Default,
-            check: RequirementCheck::Unbound,
-            required: "a model".to_owned(),
-            actual: "none".to_owned(),
-        }]
+    let state = state_of(
+        &parse_ok(DECLARES_NOTHING),
+        test_context("unbound").with_models(role_map([(ModelRole::Strong, strong.clone())])),
     );
     assert!(
-        ctx.model_set.bindings().is_empty(),
+        state.model_set().bindings().is_empty(),
         "the model set stays empty when the role map has no default"
     );
-    let refusal = requirements
-        .refusal()
-        .expect("a missing default refuses the run");
-    assert_eq!(refusal.kind(), RunErrorKind::RequirementsUnmet);
-    assert!(
-        refusal.to_string().contains(
-            "- role 'default': requires a model; the caller's role map has no 'default' entry"
-        ),
-        "{refusal}"
+    let notice = refusal(Scenario::new(DECLARES_NOTHING).role_model(ModelRole::Strong, strong));
+    assert_eq!(
+        notice,
+        "the environment cannot satisfy this prompt:\n\
+         - role 'default': requires a model; the caller's role map has no 'default' entry"
     );
 }
 
 #[test]
 fn an_empty_map_leaves_the_model_set_empty_and_a_model_call_raises_model_required() {
-    let (ctx, requirements) =
-        test_context("empty").prepare(&parse_ok(DECLARES_NOTHING), BTreeMap::new());
-    assert!(requirements.unmet_models.is_empty(), "{requirements:?}");
-    assert!(ctx.model_set.bindings().is_empty());
+    let state = state_of(
+        &parse_ok(DECLARES_NOTHING),
+        test_context("empty").with_models(BTreeMap::new()),
+    );
+    assert_eq!(state.refusal(), None);
+    assert!(state.model_set().bindings().is_empty());
 
     let asking = declaring("", "return models.infer('ping')");
     let trace = Scenario::new(asking).run();

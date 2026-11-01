@@ -1,5 +1,5 @@
-//! The greeter: one caller loop that parses a prompt, prepares it with a
-//! canned model and a shout tool, steps the run, answers every effect it
+//! The greeter: one caller loop that parses a prompt, builds its run with
+//! a canned model and a shout tool, steps the run, answers every effect it
 //! hands back, logs every event, and prints the result.
 //!
 //! The facade suite includes this file as a module and runs `greet`, so
@@ -56,8 +56,9 @@ pub fn answer(effect: Effect) -> EffectAnswer {
 ///
 /// # Errors
 ///
-/// Returns an error when the greeter fails to parse, prepare refuses it,
-/// or the run ends without text.
+/// Returns an error when the greeter fails to parse or the run ends
+/// without text, as it does when its first step finds that the context
+/// cannot satisfy the prompt.
 ///
 /// # Panics
 ///
@@ -80,8 +81,8 @@ pub fn greet() -> Result<String, Box<dyn Error>> {
     )
     .with_provenance_start(u32::try_from(parse_events.len())?);
 
-    // 3. Offer the shout tool, prepare with the canned model as the
-    //    `default` role, and refuse to run when prepare reports a gap.
+    // 3. Offer the shout tool and give the canned model the `default`
+    //    role. The run's first step checks them against the prompt.
     let shout = ToolInfo::new(
         ToolId::parse("example/text/shout")?,
         "Returns the text in capital letters.",
@@ -94,12 +95,9 @@ pub fn greet() -> Result<String, Box<dyn Error>> {
         NonZeroU32::new(8_192).ok_or("a context window is never zero")?,
         ThinkingMode::Never,
     );
-    let (ctx, requirements) = ctx
+    let ctx = ctx
         .with_tools(catalog)
-        .prepare(&prompt, BTreeMap::from([(ModelRole::Default, model)]));
-    if let Some(refusal) = requirements.refusal() {
-        return Err(refusal.into());
-    }
+        .with_models(BTreeMap::from([(ModelRole::Default, model)]));
 
     // 4. Create the run, and keep a cancel handle for anything that may
     //    need to stop it.

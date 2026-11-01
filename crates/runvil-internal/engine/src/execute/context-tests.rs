@@ -10,7 +10,6 @@ use serde_json::json;
 
 use super::*;
 use crate::execute::section_vm::VmSeed;
-use crate::execute::{UnavailablePack, UsablePack};
 use crate::lua::{Argv, RosterEntry};
 use crate::model::{ModelRole, ThinkingMode};
 use crate::test_support::fresh_access;
@@ -163,24 +162,28 @@ fn a_filled_role_binds_with_the_catalog_info_its_render_receives() {
     let prompt = test_prompt();
     let info =
         test_model_with("catalog-model", 65_536, ThinkingMode::Switchable).with_provider("acme");
-    let (ctx, _) = RunContext::new(
+    let ctx = RunContext::new(
         "run-context-test",
         TEST_SEED,
         runvil_types::timestamp::Timestamp::UNIX_EPOCH,
     )
-    .prepare(
-        &prompt,
-        BTreeMap::from([(ModelRole::Default, info.clone())]),
-    );
+    .with_models(BTreeMap::from([(ModelRole::Default, info.clone())]));
     let state = state_over(&prompt, ctx);
     let set = state.model_set();
     let binding = set.binding("default").expect("the filled role binds");
     assert_eq!(binding.render_info(), info);
+    assert_eq!(state.refusal(), None, "the prompt requires nothing");
 }
 
 #[test]
-fn a_pack_in_both_roster_lists_records_no_vendor() {
+fn an_unavailable_roster_pack_records_no_vendor_and_a_pack_listed_twice_keeps_its_last_entry() {
     let web = PackId::parse("web").expect("a static valid Pack id");
+    let usable = RosterEntry::Usable {
+        vendor: "acme".to_owned(),
+    };
+    let down = RosterEntry::Unavailable {
+        reason: "the server is down".to_owned(),
+    };
     let state = state_over(
         &test_prompt(),
         RunContext::new(
@@ -188,22 +191,17 @@ fn a_pack_in_both_roster_lists_records_no_vendor() {
             TEST_SEED,
             runvil_types::timestamp::Timestamp::UNIX_EPOCH,
         )
-        .with_packs(
-            vec![UsablePack::new(web.clone(), "acme")],
-            vec![UnavailablePack::new(web.clone(), "the server is down")],
-        ),
+        .with_packs([(web.clone(), usable), (web.clone(), down.clone())]),
     );
     let tool = ToolId::parse("web/fetch").expect("a static valid tool id");
     assert_eq!(
         state.tool_set().vendor_for(&tool),
         None,
-        "a name in both lists counts as unavailable, so it has no vendor"
+        "an unavailable Pack has no vendor"
     );
     assert_eq!(
         state.tool_set().roster_for_test().get(&web),
-        Some(&RosterEntry::Unavailable {
-            reason: "the server is down".to_owned(),
-        }),
-        "one roster entry per Pack, and the unavailable one won, carrying the given reason"
+        Some(&down),
+        "one roster entry per Pack, the last one given, carrying its reason"
     );
 }

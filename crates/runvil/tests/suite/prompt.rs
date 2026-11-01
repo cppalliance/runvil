@@ -1,9 +1,10 @@
 //! Reading what a prompt declares before it runs.
 
 use runvil::model::{ModelRole, ThinkingMode};
-use runvil::{ParseErrorKind, Prompt, RequirementCheck};
+use runvil::{ParseErrorKind, Prompt};
 
-use super::support::{Prepared, Scenario, TestResult, model, prompt};
+use super::prepare::refusal;
+use super::support::{Built, Scenario, TestResult, model, prompt};
 
 const CONTRACT: &str = "
     input: { path: names.md, description: The names to greet }
@@ -73,17 +74,14 @@ fn the_frontmatter_lists_every_declaration_with_arguments_sorted_by_name() -> Te
 }
 
 #[test]
-fn a_role_check_by_hand_finds_the_same_shortfall_prepare_reports() -> TestResult {
+fn a_role_check_by_hand_finds_the_same_shortfall_the_run_reports() -> TestResult {
     let source = prompt(
         "models: { fast: {}, small: { thinking: false, min_context: 100000 } }",
         &[("Greet", "return 'done'")],
     );
     let model = model("canned", 200_000, ThinkingMode::Always)?;
-    let Prepared {
-        prompt,
-        requirements,
-        ..
-    } = Scenario::default().model(model.clone()).prepare(&source)?;
+    let scenario = Scenario::default().model(model.clone());
+    let Built { prompt, .. } = scenario.build(&source)?;
 
     let mut misses = Vec::new();
     for role in ModelRole::ALL {
@@ -104,11 +102,12 @@ fn a_role_check_by_hand_finds_the_same_shortfall_prepare_reports() -> TestResult
     }
     assert_eq!(misses, [(ModelRole::Small, true, false)]);
 
-    let [unmet] = requirements.unmet_models.as_slice() else {
-        return Err("only the small role falls short".into());
-    };
-    assert_eq!(unmet.role, ModelRole::Small);
-    assert_eq!(unmet.check, RequirementCheck::Thinking);
-    assert_eq!(unmet.required, "thinking: false");
+    assert_eq!(
+        refusal(scenario, &source)?,
+        "the environment cannot satisfy this prompt:\n\
+         - role 'small': requires 'thinking: false'; \
+         the thinking capability of the model filling it is Always",
+        "only the small role falls short, on its thinking requirement"
+    );
     Ok(())
 }

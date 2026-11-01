@@ -1,7 +1,7 @@
 //! Tests for the Host's Packs and each run's snapshot: `new` builds every
 //! registered Pack, the built-in included, and stores a construct failure
-//! as unavailable; and the snapshot's requirements, roster, catalog,
-//! preludes, and calls. The pick of each run's Packs and the ready wait
+//! as unavailable; and the snapshot's roster, catalog, preludes, and
+//! calls. The pick of each run's Packs and the ready wait
 //! over them sit in the `pick` child module, and the snapshot's renders
 //! and its routing of a call the catalog lacks in the `render` child
 //! module.
@@ -10,8 +10,10 @@ use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
 
 use runvil::effect::{ToolCallOrigin, ToolCaller};
+use runvil::packs::RosterEntry;
+use runvil::timestamp::Timestamp;
 use runvil::vfs::{Origin, VfsRef};
-use runvil::{MissingService, Prompt, Requirements, UnavailablePack, UsablePack};
+use runvil::{Prompt, Run, RunContext, RunResult, RunSeed, Step};
 use runvil_plugin::{
     HostServices, Pack, PackFuture, PackId, PackInfo, PackRegistry, ServiceId, ServiceKey,
     ToolContext, ToolError, ToolId, ToolInfo, ToolOutput,
@@ -183,14 +185,14 @@ fn begin(
     services: HostServices,
     failures: BTreeMap<&'static str, String>,
     prompt: &Prompt,
-) -> (HostRunContext, Requirements) {
+) -> HostRunContext {
     let packs = host.pick(prompt);
-    host.begin_run(&packs, services, failures, prompt)
+    host.begin_run(&packs, services, failures)
 }
 
 /// The ids in a run's catalog, in catalog order.
 fn catalog_ids(host: &HostContext, services: HostServices, prompt: &Prompt) -> Vec<String> {
-    let (run, _requirements) = begin(host, services, BTreeMap::new(), prompt);
+    let run = begin(host, services, BTreeMap::new(), prompt);
     run.catalog()
         .tools()
         .iter()
@@ -200,9 +202,44 @@ fn catalog_ids(host: &HostContext, services: HostServices, prompt: &Prompt) -> V
 
 /// The run's usable Pack ids, in id order.
 fn usable(host: &HostContext, prompt: &Prompt) -> Vec<String> {
-    let (run, _requirements) = begin(host, HostServices::new(), BTreeMap::new(), prompt);
-    let (usable, _unavailable) = run.roster();
-    usable.iter().map(|entry| entry.pack.to_string()).collect()
+    let run = begin(host, HostServices::new(), BTreeMap::new(), prompt);
+    run.roster()
+        .into_iter()
+        .filter(|(_, entry)| matches!(entry, RosterEntry::Usable { .. }))
+        .map(|(name, _)| name.to_string())
+        .collect()
+}
+
+/// The roster entry of a Pack usable from `vendor`.
+fn usable_from(vendor: &str) -> RosterEntry {
+    RosterEntry::Usable {
+        vendor: vendor.to_owned(),
+    }
+}
+
+/// The roster entry of a Pack unavailable for `reason`.
+fn unavailable_for(reason: &str) -> RosterEntry {
+    RosterEntry::Unavailable {
+        reason: reason.to_owned(),
+    }
+}
+
+/// The refusal notice the first step of a run of `prompt` over `run`'s
+/// roster fails with.
+fn refusal(run: &HostRunContext, prompt: &Prompt) -> String {
+    let ctx = RunContext::new(
+        "host-test",
+        RunSeed::from_bytes([0; 32]),
+        Timestamp::UNIX_EPOCH,
+    )
+    .with_packs(run.roster());
+    match Run::new(Arc::new(prompt.clone()), "", ctx).step() {
+        Step::Done {
+            result: RunResult::Failure(error),
+            ..
+        } => error.to_string(),
+        other => panic!("the run's first step refuses it: {other:?}"),
+    }
 }
 
 #[test]
@@ -213,20 +250,19 @@ fn the_roster_hands_each_usable_pack_with_the_vendor_the_run_picked() {
         (info("runvil/web"), offering(&["web/fetch"])),
         (info("acme/poop"), Value::Null),
     ]);
-    let (run, _requirements) = begin(
+    let run = begin(
         &host,
         HostServices::new(),
         BTreeMap::new(),
         &prompt("uses:\n  - acme/kit\n"),
     );
-    let (usable, _unavailable) = run.roster();
     assert_eq!(
-        usable,
-        [
-            UsablePack::new(name("kit"), "acme"),
-            UsablePack::new(name("subagents"), "runvil"),
-            UsablePack::new(name("web"), "runvil"),
-        ],
+        run.roster(),
+        BTreeMap::from([
+            (name("kit"), usable_from("acme")),
+            (name("subagents"), usable_from("runvil")),
+            (name("web"), usable_from("runvil")),
+        ]),
         "the declared acme/kit reports acme, and every undeclared Pack reports runvil"
     );
 }
@@ -271,75 +307,45 @@ fn a_run_over_a_fresh_registry_holds_a_usable_subagents_pack_with_no_tools() {
 fn a_construct_failure_is_stored_and_reported_as_unavailable_with_its_reason() {
     let backed_info = PackInfo::new("acme/backed", backed);
     let bare = host(&[(backed_info, Value::Null)]);
-    let (_run, requirements) = begin(
-        &bare,
-        HostServices::new(),
-        BTreeMap::new(),
-        &prompt("uses:\n  - acme/backed\n"),
+    let declares = prompt("uses:\n  - acme/backed\n");
+    let run = begin(&bare, HostServices::new(), BTreeMap::new(), &declares);
+    assert_eq!(
+        run.roster().get(&name("backed")),
+        Some(&unavailable_for(
+            "backed needs tests/backend, and this host provides none"
+        ))
     );
     assert_eq!(
-        requirements.unavailable_packs,
-        [UnavailablePack::new(
-            name("backed"),
-            "backed needs tests/backend, and this host provides none"
-        )]
+        refusal(&run, &declares),
+        "the environment cannot satisfy this prompt:\n\
+         - backed is unavailable: backed needs tests/backend, and this host provides none",
+        "the run names the reason, and never calls the built Pack missing"
     );
-    assert!(requirements.missing_packs.is_empty());
 
     let mut wide = HostServices::new();
     wide.provide(&BACKEND, Arc::from("up")).unwrap();
     let provided = host_with(wide, &[(backed_info, Value::Null)]);
-    let (_run, requirements) = begin(
-        &provided,
-        HostServices::new(),
-        BTreeMap::new(),
-        &prompt("uses:\n  - acme/backed\n"),
-    );
-    assert!(
-        requirements.is_satisfied(),
-        "construct reads the Host-wide services: {requirements:?}"
-    );
-}
-
-#[test]
-fn begin_run_reports_every_declared_pack_it_cannot_serve() {
-    let needy = info("acme/needy").needs(NEEDS_SESSION);
-    let broken = PackInfo::new("acme/broken", backed);
-    let host = host(&[
-        (needy, Value::Null),
-        (broken, Value::Null),
-        (info("acme/fine"), Value::Null),
-    ]);
-
-    let (_run, requirements) = begin(
-        &host,
-        HostServices::new(),
-        BTreeMap::new(),
-        &prompt("uses:\n  - acme/needy\n  - absent\n  - acme/fine\n  - acme/broken\n"),
-    );
-    assert_eq!(requirements.missing_packs, [name("absent")]);
+    let run = begin(&provided, HostServices::new(), BTreeMap::new(), &declares);
     assert_eq!(
-        requirements.missing_services,
-        [MissingService::new(name("needy"), "tests/session")]
+        run.roster().get(&name("backed")),
+        Some(&usable_from("acme")),
+        "construct reads the Host-wide services"
     );
-    assert_eq!(
-        requirements.unavailable_packs.len(),
-        1,
-        "the declared Pack that failed to build is reported: {requirements:?}"
-    );
-    assert_eq!(requirements.unavailable_packs[0].pack, name("broken"));
 }
 
 #[test]
 fn a_declared_builtin_is_met_over_a_fresh_registry() {
     let host = host(&[]);
-    let (_run, requirements) = begin(
+    let run = begin(
         &host,
         HostServices::new(),
         BTreeMap::new(),
         &prompt("uses:\n  - subagents\n"),
     );
-    assert!(requirements.is_satisfied(), "{requirements:?}");
+    assert_eq!(
+        run.roster().get(&name("subagents")),
+        Some(&usable_from("runvil"))
+    );
 }
 
 #[test]
@@ -347,7 +353,7 @@ fn the_builtin_adds_no_catalog_tool_and_no_prelude() {
     let host = host(&[]);
     let declares = prompt("uses:\n  - subagents\n");
     assert!(catalog_ids(&host, HostServices::new(), &declares).is_empty());
-    let (run, _requirements) = begin(&host, HostServices::new(), BTreeMap::new(), &declares);
+    let run = begin(&host, HostServices::new(), BTreeMap::new(), &declares);
     assert!(run.preludes(&declares).is_empty());
 }
 
@@ -356,28 +362,24 @@ fn the_roster_lists_the_builtin_stub_as_usable_and_each_pack_that_cannot_serve_w
     let needy = info("acme/needy").needs(NEEDS_SESSION);
     let host = host(&[(info("acme/kit"), Value::Null), (needy, Value::Null)]);
     let failures = BTreeMap::from([("acme/kit", "the kit server is down".to_owned())]);
-    let (run, _requirements) = begin(
+    let run = begin(
         &host,
         HostServices::new(),
         failures,
         &prompt("uses:\n  - acme/kit\n  - acme/needy\n"),
     );
-    let (usable, unavailable) = run.roster();
     assert_eq!(
-        usable,
-        [UsablePack::new(name("subagents"), "runvil")],
-        "the undeclared stub with no tools is on the roster"
-    );
-    assert_eq!(
-        unavailable,
-        [
-            UnavailablePack::new(name("kit"), "the kit server is down"),
-            UnavailablePack::new(
+        run.roster(),
+        BTreeMap::from([
+            (name("kit"), unavailable_for("the kit server is down")),
+            (
                 name("needy"),
-                "the run lacks the services it needs: tests/session"
+                unavailable_for("the run lacks the services it needs: tests/session"),
             ),
-        ],
-        "a failed ready and an unmet need each carry their reason"
+            (name("subagents"), usable_from("runvil")),
+        ]),
+        "the undeclared stub with no tools is on the roster, and a failed ready and an \
+         unmet need each carry their reason"
     );
 }
 
@@ -417,7 +419,7 @@ fn an_undeclared_runvil_packs_tools_reach_the_catalog_but_its_prelude_does_not()
         catalog_ids(&host, HostServices::new(), &prompt),
         ["declared/a", "extra/b"]
     );
-    let (run, _requirements) = begin(&host, HostServices::new(), BTreeMap::new(), &prompt);
+    let run = begin(&host, HostServices::new(), BTreeMap::new(), &prompt);
     let preludes: Vec<String> = run
         .preludes(&prompt)
         .iter()
@@ -435,7 +437,7 @@ fn preludes_follow_the_prompts_declaration_order_and_carry_the_pack_id() {
         with_prelude("runvil/third"),
     ]);
     let prompt = prompt("uses:\n  - third\n  - acme/second\n  - first\n");
-    let (run, _requirements) = begin(&host, HostServices::new(), BTreeMap::new(), &prompt);
+    let run = begin(&host, HostServices::new(), BTreeMap::new(), &prompt);
     let order: Vec<String> = run
         .preludes(&prompt)
         .iter()
@@ -465,7 +467,7 @@ async fn a_call_goes_to_the_pack_its_tool_ids_first_segment_names() {
         (info("runvil/one"), offering(&["one/echo"])),
         (info("runvil/two"), offering(&["two/echo"])),
     ]);
-    let (run, _requirements) = begin(&host, HostServices::new(), BTreeMap::new(), &prompt(""));
+    let run = begin(&host, HostServices::new(), BTreeMap::new(), &prompt(""));
 
     let answer = |result: Result<ToolOutput, ToolError>| result.unwrap().text().to_owned();
     assert_eq!(answer(call(&run, "one/echo").await), "one:one/echo");
@@ -480,7 +482,7 @@ async fn a_call_goes_to_the_pack_its_tool_ids_first_segment_names() {
 async fn a_call_to_a_pack_the_run_cannot_use_fails_naming_the_tool() {
     let needy = info("runvil/needy").needs(NEEDS_SESSION);
     let host = host(&[(needy, offering(&["needy/use"]))]);
-    let (run, _requirements) = begin(&host, HostServices::new(), BTreeMap::new(), &prompt(""));
+    let run = begin(&host, HostServices::new(), BTreeMap::new(), &prompt(""));
     let error = call(&run, "needy/use")
         .await
         .expect_err("the run lacks the Pack's needs");

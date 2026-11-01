@@ -130,7 +130,7 @@ async fn a_render_asks_each_usable_pack_once_per_set_it_was_offered_into_and_ans
             (needy, offering(&["needy/a"])),
         ],
     );
-    let (run, _requirements) = begin(&host, HostServices::new(), BTreeMap::new(), &prompt(""));
+    let run = begin(&host, HostServices::new(), BTreeMap::new(), &prompt(""));
     let offered = vec![
         sets("two", &["two/a"], &[]),
         sets("one", &["one/a"], &["one/b"]),
@@ -173,7 +173,7 @@ async fn a_render_asks_each_usable_pack_once_per_set_it_was_offered_into_and_ans
 #[tokio::test]
 async fn a_call_goes_to_the_pack_its_id_names_when_the_catalog_lacks_the_tool() {
     let host = host(&[(info("runvil/one"), offering(&["one/echo"]))]);
-    let (run, _requirements) = begin(&host, HostServices::new(), BTreeMap::new(), &prompt(""));
+    let run = begin(&host, HostServices::new(), BTreeMap::new(), &prompt(""));
     let extra = ToolId::parse("one/extra").unwrap();
     assert!(
         run.catalog().get(&extra).is_none(),

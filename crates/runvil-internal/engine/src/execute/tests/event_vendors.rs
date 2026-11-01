@@ -8,8 +8,9 @@ use runvil_types::event::Event;
 use runvil_types::packs::PackId;
 
 use super::fixtures::echo_tool;
-use super::models_loop::catalog_scenario;
+use super::models_loop::loop_scenario;
 use super::*;
+use crate::lua::RosterEntry;
 
 /// A section that offers `tools/echo` and an adhoc `grab`, lets the model
 /// call both in one batch, then calls `tools/echo` from the script.
@@ -31,7 +32,7 @@ fn both_callers(roster: impl FnOnce(RunContext) -> RunContext + 'static) -> Trac
         ]),
         text("done"),
     ]);
-    let trace = catalog_scenario(one_section(BOTH_CALLERS))
+    let trace = loop_scenario(one_section(BOTH_CALLERS))
         .tool(echo_tool())
         .context(roster)
         .chat(&gateway)
@@ -85,8 +86,10 @@ fn result(id: &str, alias: &str, vendor: Option<&str>) -> (String, String, Optio
 #[test]
 fn a_catalog_call_records_the_vendor_the_caller_reported_and_an_adhoc_call_none() {
     let tools = PackId::parse("tools").expect("a static valid Pack id");
-    let trace =
-        both_callers(move |ctx| ctx.with_packs(vec![UsablePack::new(tools, "acme")], vec![]));
+    let usable = RosterEntry::Usable {
+        vendor: "acme".to_owned(),
+    };
+    let trace = both_callers(move |ctx| ctx.with_packs([(tools, usable)]));
     let events = trace.events();
     assert_eq!(
         batch_vendors(events),

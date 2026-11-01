@@ -1,34 +1,45 @@
-//! The prepare pass: real-file claims, the caller's tool catalog, and model
-//! roles. The store-mount isolation case and the prepare-run refusals
-//! drive the run fixture in `runvil-engine`'s test support, so they
-//! sit in that crate's own suite.
+//! A run's start: real-file claims, the caller's tool catalog, and model
+//! roles, whose requirements the run's first step checks. The store-mount
+//! isolation case and the start-check refusals that reach engine-only
+//! items sit in `runvil-engine`'s own suite.
 
 use runvil::event::Event;
 use runvil::model::{ModelRole, ThinkingMode};
 use runvil::tools::{ToolCatalog, ToolInfo};
 use runvil::vfs::{MemoryBackend, Origin, RealBackend, VfsError, VfsRef};
-use runvil::{RequirementCheck, Requirements, RunErrorKind, UnmetRequirement};
+use runvil::{RunErrorKind, RunResult};
 
 use super::support::{
-    Prepared, Scenario, TempRoot, TestResult, Trace, greeter, model, prompt, text, tool_info,
+    Built, Scenario, TempRoot, TestResult, Trace, greeter, model, prompt, text, tool_info,
 };
 
 fn declaring(front: &str) -> String {
     prompt(front, &[("Only", "return 'done'")])
 }
 
-fn report(front: &str, context: u32, thinking: ThinkingMode) -> TestResult<Requirements> {
-    let prepared = Scenario::default()
-        .model(model("current", context, thinking)?)
-        .prepare(&declaring(front))?;
-    Ok(prepared.requirements)
+/// The refusal notice of `scenario`'s run of `source`, after checking that
+/// its first step failed it as `RequirementsUnmet`, reporting nothing
+/// after the parse events and issuing no effect.
+pub(super) fn refusal(scenario: Scenario, source: &str) -> TestResult<String> {
+    let trace = scenario.run(source)?;
+    let RunResult::Failure(error) = &trace.result else {
+        return Err(format!("expected a refusal, got {:?}", trace.result).into());
+    };
+    assert_eq!(error.kind(), RunErrorKind::RequirementsUnmet, "{error}");
+    assert!(
+        matches!(trace.events.last(), Some(Event::ParseSucceeded { .. })),
+        "a refused run reports no run events: {:?}",
+        trace.events
+    );
+    assert!(trace.effects.is_empty(), "a refused run issues nothing");
+    Ok(error.to_string())
 }
 
-fn only_unmet(requirements: &Requirements) -> TestResult<&UnmetRequirement> {
-    match requirements.unmet_models.as_slice() {
-        [unmet] => Ok(unmet),
-        unmet => Err(format!("exactly one requirement is unmet: {unmet:?}").into()),
-    }
+/// The refusal notice of a run of `declaring(front)` under one model of
+/// the given context window and thinking capability.
+fn refusal_under(front: &str, context: u32, thinking: ThinkingMode) -> TestResult<String> {
+    let scenario = Scenario::default().model(model("current", context, thinking)?);
+    refusal(scenario, &declaring(front))
 }
 
 #[test]
@@ -41,7 +52,7 @@ fn two_runs_writing_the_same_real_file_through_the_shared_base_conflict() -> Tes
         .build();
     let scenario = Scenario::default().context(move |ctx| ctx.with_vfs(vfs.clone()));
     let source = greeter("return 'done'");
-    let (run_a, run_b) = (scenario.prepare(&source)?, scenario.prepare(&source)?);
+    let (run_a, run_b) = (scenario.build(&source)?, scenario.build(&source)?);
     let access_a = run_a.ctx.vfs().acquire(Origin::new("run-a"))?;
     access_a.write("/shared.txt", b"from a")?;
     let access_b = run_b.ctx.vfs().acquire(Origin::new("run-b"))?;
@@ -122,100 +133,82 @@ fn a_strong_entry_fills_strong_and_the_default_fills_every_other_role() -> TestR
 }
 
 #[test]
-fn a_role_map_with_models_but_no_default_is_refused_with_one_unbound_entry() -> TestResult {
+fn a_role_map_with_models_but_no_default_is_refused_naming_the_default_role() -> TestResult {
     let strong = model("strong-model", 200_000, ThinkingMode::Switchable)?;
-    let Prepared { requirements, .. } = Scenario::default()
-        .roles([(ModelRole::Strong, strong)])
-        .prepare(&declaring(""))?;
-    let unmet = only_unmet(&requirements)?;
-    assert_eq!(unmet.role, ModelRole::Default);
-    assert_eq!(unmet.check, RequirementCheck::Unbound);
-    assert_eq!(unmet.required, "a model");
-    assert_eq!(unmet.actual, "none");
-    let refusal = requirements
-        .refusal()
-        .ok_or("a missing default refuses the run")?;
-    assert_eq!(refusal.kind(), RunErrorKind::RequirementsUnmet);
-    assert!(
-        refusal.to_string().contains(
-            "- role 'default': requires a model; the caller's role map has no 'default' entry"
-        ),
-        "{refusal}"
+    let scenario = Scenario::default().roles([(ModelRole::Strong, strong)]);
+    assert_eq!(
+        refusal(scenario, &declaring(""))?,
+        "the environment cannot satisfy this prompt:\n\
+         - role 'default': requires a model; the caller's role map has no 'default' entry"
     );
     Ok(())
 }
 
 #[test]
-fn a_context_minimum_above_the_filling_models_is_reported() -> TestResult {
-    let requirements = report(STRONG, 32_000, ThinkingMode::Always)?;
-    assert!(!requirements.is_satisfied());
-    assert_eq!(requirements.missing_packs, []);
-    let unmet = only_unmet(&requirements)?;
-    assert_eq!(unmet.role, ModelRole::Strong);
-    assert_eq!(unmet.check, RequirementCheck::ContextMinimum);
-    assert_eq!(unmet.required, "200000");
-    assert_eq!(unmet.actual, "32000");
+fn a_context_minimum_above_the_filling_models_is_refused() -> TestResult {
+    // The model can think, so only the context check fails.
+    assert_eq!(
+        refusal_under(STRONG, 32_000, ThinkingMode::Always)?,
+        "the environment cannot satisfy this prompt:\n\
+         - role 'strong': requires a context of at least 200000 tokens; \
+         the model filling it provides 32000"
+    );
     Ok(())
 }
 
 #[test]
-fn a_thinking_requirement_the_filling_model_fails_is_reported() -> TestResult {
+fn a_thinking_requirement_the_filling_model_fails_is_refused() -> TestResult {
     // The context minimum is met, so only the thinking check fires.
-    let requirements = report(STRONG, 200_000, ThinkingMode::Never)?;
-    let unmet = only_unmet(&requirements)?;
-    assert_eq!(unmet.role, ModelRole::Strong);
-    assert_eq!(unmet.check, RequirementCheck::Thinking);
-    assert_eq!(unmet.required, "thinking: true");
-    assert_eq!(unmet.actual, "Never");
-
+    assert_eq!(
+        refusal_under(STRONG, 200_000, ThinkingMode::Never)?,
+        "the environment cannot satisfy this prompt:\n\
+         - role 'strong': requires 'thinking: true'; \
+         the thinking capability of the model filling it is Never"
+    );
     let small = "models: { small: { thinking: false } }";
-    let requirements = report(small, 32_000, ThinkingMode::Always)?;
-    let unmet = only_unmet(&requirements)?;
-    assert_eq!(unmet.role, ModelRole::Small);
-    assert_eq!(unmet.check, RequirementCheck::Thinking);
-    assert_eq!(unmet.required, "thinking: false");
-    assert_eq!(unmet.actual, "Always");
+    assert_eq!(
+        refusal_under(small, 32_000, ThinkingMode::Always)?,
+        "the environment cannot satisfy this prompt:\n\
+         - role 'small': requires 'thinking: false'; \
+         the thinking capability of the model filling it is Always"
+    );
     Ok(())
 }
 
-fn prepared_over(info: &ToolInfo) -> TestResult<Prepared> {
+/// The scenario whose catalog holds `info` alone, beside the context it
+/// builds for a prompt declaring `web`.
+fn over_catalog(info: &ToolInfo) -> TestResult<(Scenario, Built)> {
     let catalog = ToolCatalog::new([info.clone()])?;
-    Scenario::default()
-        .context(move |ctx| ctx.with_tools(catalog.clone()))
-        .prepare(&declaring("uses: [web]"))
+    let scenario = Scenario::default().context(move |ctx| ctx.with_tools(catalog.clone()));
+    let built = scenario.build(&declaring("uses: [web]"))?;
+    Ok((scenario, built))
 }
 
 #[test]
-fn a_prepared_context_keeps_the_caller_supplied_catalog() -> TestResult {
+fn a_context_keeps_the_caller_supplied_catalog() -> TestResult {
     let info = tool_info(
         "web/fetch",
         serde_json::json!({"type": "object", "properties": {"url": {"type": "string"}}}),
     )?
     .structured(true);
-    let Prepared {
-        ctx, requirements, ..
-    } = prepared_over(&info)?;
-    assert!(
-        requirements.is_satisfied(),
-        "a catalog reports nothing: {requirements:?}"
-    );
-    assert_eq!(ctx.tools().tools(), [info]);
+    let (scenario, built) = over_catalog(&info)?;
+    assert_eq!(built.ctx.tools().tools(), [info]);
+    assert_eq!(scenario.run(&declaring("uses: [web]"))?.text()?, "done");
     Ok(())
 }
 
 #[test]
-fn prepare_reports_nothing_for_a_declared_pack_the_catalog_lacks() -> TestResult {
+fn a_run_given_no_roster_checks_no_declared_pack_against_the_catalog() -> TestResult {
     let other = tool_info(
         "other/search",
         serde_json::json!({"type": "object", "properties": {}}),
     )?;
-    let Prepared {
-        ctx, requirements, ..
-    } = prepared_over(&other)?;
-    assert!(
-        requirements.is_satisfied(),
-        "the Engine's prepare checks model roles only: {requirements:?}"
+    let (scenario, built) = over_catalog(&other)?;
+    assert_eq!(built.ctx.tools().tools(), [other]);
+    assert_eq!(
+        scenario.run(&declaring("uses: [web]"))?.text()?,
+        "done",
+        "without a roster, the run checks model roles and reserved ids only"
     );
-    assert_eq!(ctx.tools().tools(), [other]);
     Ok(())
 }

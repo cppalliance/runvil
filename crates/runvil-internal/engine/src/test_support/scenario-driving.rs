@@ -93,9 +93,9 @@ impl Answers {
 
 /// A started scenario, stepped by hand or to its end.
 pub(crate) struct Driving {
-    /// The run, kept once it is done; `None` when the prepare refused it.
-    pub(super) run: Option<Run>,
-    /// The run's result, once it is done or when the prepare refused it.
+    /// The run, kept once it is done.
+    pub(super) run: Run,
+    /// The run's result, once it is done.
     pub(super) result: Option<RunResult>,
     pub(super) answers: Answers,
     /// The parse events, then every event the run reported, in order.
@@ -135,9 +135,7 @@ impl Driving {
         if self.result.is_some() {
             return false;
         }
-        let Some(run) = self.run.as_mut() else {
-            return false;
-        };
+        let run = &mut self.run;
         let effects = &mut self.effects;
         let mut moved = false;
         let mut answered = |effect: &Effect, answer: &EffectAnswer| {
@@ -187,10 +185,7 @@ impl Driving {
         let (id, effect) = self.held.remove(at);
         let answer = self.answers.perform(&effect);
         self.effects.push((effect.record(), answer.record()));
-        self.run
-            .as_mut()
-            .expect("a run holding an effect has started")
-            .resume(id, answer);
+        self.run.resume(id, answer);
     }
 
     /// The parse events, then every event the run reported so far, in
@@ -199,9 +194,9 @@ impl Driving {
         &self.events
     }
 
-    /// The run, done or not, or `None` when the prepare refused it.
-    pub(crate) fn run_mut(&mut self) -> Option<&mut Run> {
-        self.run.as_mut()
+    /// The run, done or not.
+    pub(crate) fn run_mut(&mut self) -> &mut Run {
+        &mut self.run
     }
 
     /// Joins the canceller once it is woken, so the next step sees its
@@ -223,10 +218,8 @@ impl Driving {
     /// Sets the run's cancel flag between steps, as a caller cancelling a
     /// run it steps would. A run that is done ignores it.
     pub(crate) fn cancel(&mut self) {
-        if self.result.is_none()
-            && let Some(run) = self.run.as_mut()
-        {
-            run.cancel();
+        if self.result.is_none() {
+            self.run.cancel();
         }
     }
 
@@ -242,14 +235,13 @@ impl Driving {
     }
 
     /// Ends a run already stepped as far as it goes and returns what it
-    /// produced, beside the run itself, or `None` when the prepare refused
-    /// it.
+    /// produced, beside the run itself.
     ///
     /// # Panics
     /// When the run is not done: it waits only on held effects, which
     /// nothing releases until the run decides.
     #[track_caller]
-    pub(crate) fn end(self) -> (Trace, Option<Run>) {
+    pub(crate) fn end(self) -> (Trace, Run) {
         let Some(result) = self.result else {
             panic!(
                 "the run waits only on {} held effects, and no cancel has decided it",
@@ -270,7 +262,7 @@ impl Driving {
             parsed: self.parsed,
             effects: self.effects,
             store: self.store,
-            turns: self.run.as_ref().map_or(0, Run::turns_for_test),
+            turns: self.run.turns_for_test(),
         };
         (trace, self.run)
     }

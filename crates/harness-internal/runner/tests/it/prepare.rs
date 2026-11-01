@@ -1,17 +1,17 @@
 //! Run preparation: a prompt whose requirements the environment cannot
-//! meet is refused with the Engine's own notice and its run ended as
-//! failed; a prompt that does not parse fails the same way under the
-//! `Parse` kind, and each failure leaves its parse events at the recorder;
-//! each preparation draws a fresh seed and start, both handed to the
-//! recorder when the run begins under the run's name; and the prepared tool
-//! performer sends a `ToolCall` effect to the Pack its id names. The
-//! run's optional input broker - one of its own services, lent to every
-//! tool call and behind the fixture ask Pack - sits in the `input`
-//! child module, the run's services meeting a Pack's needs sit in the
-//! `host_services` child module, a Pack's prelude reaching the prepared
-//! run sits in the `prelude` child module, the prompt's declared input
-//! and output files sit in the `files` child module, and the wait for
-//! each Pack to be ready sits in the `ready` child module.
+//! meet is prepared, and its run's first step ends it as failed with the
+//! Engine's own notice; a prompt that does not parse fails preparation
+//! under the `Parse` kind; each leaves only its parse events at the
+//! recorder; each preparation draws a fresh seed and start, both handed
+//! to the recorder when the run begins under the run's name; and the
+//! prepared tool performer sends a `ToolCall` effect to the Pack its id
+//! names. The run's optional input broker - one of its own services, lent
+//! to every tool call and behind the fixture ask Pack - sits in the
+//! `input` child module, the run's services meeting a Pack's needs sit in
+//! the `host_services` child module, a Pack's prelude reaching the
+//! prepared run sits in the `prelude` child module, the prompt's declared
+//! input and output files sit in the `files` child module, and the wait
+//! for each Pack to be ready sits in the `ready` child module.
 
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -20,7 +20,6 @@ use harness_runner::effect_loop::drive_run;
 use harness_runner::prepare::{PrepareError, Prepared, Services, prepare};
 use harness_runner::recorder::{MemoryRecorder, RecordKind, RunId, RunOutcome};
 use harness_runner::{HostContext, display_chain};
-use runvil::RunErrorKind;
 use runvil::cancel::CancelHandle;
 use runvil::event::Event;
 use runvil_plugin::{
@@ -64,16 +63,16 @@ fn recorder() -> Arc<MemoryRecorder> {
     Arc::new(MemoryRecorder::new())
 }
 
-/// The events the recorder holds for `run_id`, the run a failed
-/// preparation ended, after asserting they are a parse that reported, in
-/// order, and nothing else, because the loop never saw the run.
+/// The events the recorder holds for `run_id`, after asserting they are
+/// only events and open with the parse. A run that failed preparation, or
+/// that its first step refused, records nothing after its parse events.
 fn recorded_parse_events(recorder: &MemoryRecorder, run_id: RunId) -> Vec<Event> {
     let records = recorder.records(run_id);
     assert!(
         records
             .iter()
             .all(|record| record.kind == RecordKind::Event),
-        "a failed preparation records only events"
+        "a run that never started records only events"
     );
     let events: Vec<Event> = records
         .into_iter()
@@ -185,36 +184,29 @@ fn completed(outcome: RunOutcome) -> String {
 }
 
 #[tokio::test]
-async fn an_unmet_requirement_is_refused_with_the_engines_notice_and_its_run_ended_as_failed() {
+async fn an_unmet_requirement_ends_the_prepared_run_as_failed_with_the_engines_notice() {
     let recorder = recorder();
-    let error = prepare(NEEDS_WEB, "", services(&recorder, bare()))
-        .await
-        .expect_err("a missing required Pack refuses the run");
+    let (run_id, outcome) = prepare_and_drive(NEEDS_WEB, services(&recorder, bare())).await;
 
-    let PrepareError::Refused { run_id, error, .. } = error else {
-        panic!("the refusal is a requirements refusal: {error}");
-    };
-    assert_eq!(error.kind(), RunErrorKind::RequirementsUnmet);
     let notice = "the environment cannot satisfy this prompt:\n\
         - missing required Pack: web";
     assert_eq!(
-        error.to_string(),
-        notice,
-        "the refusal is the engine's notice, verbatim"
-    );
-
-    assert_eq!(
-        recorder.outcome(run_id),
-        Some(RunOutcome::Failed {
+        outcome,
+        RunOutcome::Failed {
             kind: "RequirementsUnmet".to_owned(),
             message: notice.to_owned(),
-        }),
+        },
+        "the failure is the engine's notice, verbatim"
+    );
+    assert_eq!(
+        recorder.outcome(run_id),
+        Some(outcome),
         "the recorder holds the refusal as the run's failure"
     );
     let events = recorded_parse_events(&recorder, run_id);
     assert!(
         matches!(events.last(), Some(Event::ParseSucceeded { .. })),
-        "the prompt parsed before the environment refused it: {events:?}"
+        "the parse events, then the end, with no run event between: {events:?}"
     );
 }
 
@@ -330,21 +322,38 @@ async fn a_prepared_run_drives_to_its_end_under_its_own_performers() {
     );
 }
 
-/// Prepares `source` over `host` and drives the run to its end.
-pub(crate) async fn drive_over(source: &str, host: HostContext) -> RunOutcome {
-    let recorder = recorder();
-    let prepared = prepare(source, "", services(&recorder, host))
-        .await
-        .unwrap();
-    drive_run(
+/// Prepares `source` with `services` and drives the run to its end,
+/// returning the run's id at the recorder beside its outcome.
+pub(crate) async fn prepare_and_drive(source: &str, services: Services) -> (RunId, RunOutcome) {
+    let recorder = Arc::clone(&services.recorder);
+    let prepared = prepare(source, "", services).await.unwrap();
+    let outcome = drive_run(
         prepared.run,
         prepared.performers,
-        recorder.clone(),
+        recorder,
         prepared.run_id,
         CancelHandle::new(),
     )
     .await
-    .unwrap()
+    .unwrap();
+    (prepared.run_id, outcome)
+}
+
+/// Prepares `source` over `host` and drives the run to its end.
+pub(crate) async fn drive_over(source: &str, host: HostContext) -> RunOutcome {
+    prepare_and_drive(source, services(&recorder(), host))
+        .await
+        .1
+}
+
+/// The notice of a run its first step refused, after asserting that the
+/// outcome is a `RequirementsUnmet` failure.
+#[track_caller]
+pub(crate) fn refusal(outcome: RunOutcome) -> String {
+    match outcome {
+        RunOutcome::Failed { kind, message } if kind == "RequirementsUnmet" => message,
+        other => panic!("the run's first step refuses it: {other:?}"),
+    }
 }
 
 #[tokio::test]
@@ -384,20 +393,14 @@ async fn an_undeclared_third_party_pack_is_not_in_the_run() {
 
 #[tokio::test]
 async fn a_bare_entry_another_vendor_answers_is_refused_naming_its_fqn() {
-    let recorder = recorder();
     let declares_bare = "---\nname: bare\ndescription: d\nrunvil: 0\n\
         uses:\n  - tools\n---\n\n# Title\n\n## Only\n\nDone.\n";
-    let error = prepare(declares_bare, "", services(&recorder, building(TOOLS)))
-        .await
-        .expect_err("a bare id means the runvil Pack, which the Host lacks");
-    let PrepareError::Refused { error, .. } = error else {
-        panic!("the refusal is a requirements refusal: {error}");
-    };
     assert_eq!(
-        error.to_string(),
+        refusal(drive_over(declares_bare, building(TOOLS)).await),
         "the environment cannot satisfy this prompt:\n\
          - tools is unavailable: tools means runvil/tools, which is not installed; \
-         write tests/tools to use that Pack"
+         write tests/tools to use that Pack",
+        "a bare id means the runvil Pack, which the Host lacks"
     );
 }
 

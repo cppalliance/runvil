@@ -3,7 +3,8 @@
 //!
 //! A prompt has five fixed roles, so the key is optional and only attaches
 //! requirements to them: a minimum context window and a thinking switch.
-//! Prepare checks each requirement against the model that fills the role.
+//! The run's first step checks each requirement against the model that
+//! fills the role.
 //! Parse only validates shape: a role name outside the five, a field outside
 //! the two, a repeated role, and a zero context minimum are errors.
 

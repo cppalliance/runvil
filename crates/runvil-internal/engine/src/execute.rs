@@ -9,15 +9,16 @@
 //! The run's outcome type ([`RunResult`]) is defined here; the rest lives in
 //! focused private children:
 //!
-//! - `config` - the public [`RunContext`], whose `prepare` fills the five
-//!   model roles, and [`RunLimits`]; installing Packs and taking each run's
-//!   catalog from them is the Harness's job.
+//! - `config` - the public [`RunContext`], which carries the caller's
+//!   role map for the five model roles, and [`RunLimits`]; installing
+//!   Packs and taking each run's catalog from them is the Harness's job.
 //! - `context` - the ambient `RunState` run state.
 //! - `error` - the public [`RunError`] and its stable [`RunErrorKind`].
-//! - `fill` - prepare's fill function, which builds the model set from the
-//!   caller's role map.
+//! - `fill` - the fill function, which builds the model set from the
+//!   caller's role map when the run is built.
 //! - `infer` - the nested-inference round's answer.
-//! - `requirements` - the preflight [`Requirements`] report.
+//! - `requirements` - what a run's context lacks for its prompt, which the
+//!   run's first step reports as its refusal notice.
 //! - `run` - the boundary with the caller: the `Run` state machine with its
 //!   `step`, `resume`, and `cancel`, the `Step` it returns, and the effect
 //!   vocabulary (the `Effect` a leaf arm issues, its serializable
@@ -54,9 +55,6 @@ mod walk_target;
 // Public API surface.
 pub use config::{RunContext, RunLimits};
 pub use error::{RunError, RunErrorKind, SourceLocation};
-pub use requirements::{
-    MissingService, RequirementCheck, Requirements, UnavailablePack, UnmetRequirement, UsablePack,
-};
 pub use run::{
     AnswerRecord, ChatAnswerRecord, Effect, EffectAnswer, EffectId, EffectRecord, FailureRecord,
     IssuedEffect, PackToolSets, Round, Run, Step, ToolAnswerRecord, ToolCallOrigin, ToolCaller,

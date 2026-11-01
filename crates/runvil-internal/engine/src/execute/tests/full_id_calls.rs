@@ -8,7 +8,7 @@ use runvil_parser::test_support::{one_section, prompt};
 use runvil_types::event::Event;
 
 use super::fixtures::{echo_tool, scoped_tool};
-use super::models_loop::catalog_scenario;
+use super::models_loop::loop_scenario;
 use super::*;
 use crate::execute::run::{Effect, EffectAnswer, EffectRecord, Step, ToolCallOrigin, ToolCaller};
 use crate::test_support::rig::Rig;
@@ -30,18 +30,18 @@ fn script_origin() -> ToolCallOrigin {
     ToolCallOrigin::new(EXECUTION, "Only", ToolCaller::Script).with_entry("0.1")
 }
 
-/// A run of the one section `lua` prepared against a catalog of the echo
-/// fixture and a second tool the prompts never offer.
+/// A run of the one section `lua` over a catalog of the echo fixture and a
+/// second tool the prompts never offer.
 #[track_caller]
 fn echo_and_concrete(lua: &str) -> Scenario {
     echo_and_concrete_sections(&[("Only", lua)])
 }
 
-/// A run of `sections`, each a heading and its Lua, prepared against the
-/// catalog [`echo_and_concrete`] uses.
+/// A run of `sections`, each a heading and its Lua, over the catalog
+/// [`echo_and_concrete`] uses.
 #[track_caller]
 fn echo_and_concrete_sections(sections: &[(&str, &str)]) -> Scenario {
-    catalog_scenario(prompt("", sections))
+    loop_scenario(prompt("", sections))
         .tool(echo_tool())
         .tool(scoped_tool("concrete", "Concrete description.").0)
 }
@@ -61,7 +61,7 @@ fn unofferable_tool() -> FnTool {
 #[test]
 fn a_script_calls_effect_record_and_result_name_the_tool_by_its_id() {
     let source = one_section("return tools.call('tools/echo', { value = 'hi' })");
-    let mut run = catalog_scenario(source).tool(echo_tool()).into_run();
+    let mut run = loop_scenario(source).tool(echo_tool()).into_run();
     let (id, effect) = only_effect(run.step());
     let Effect::ToolCall { alias, .. } = &effect else {
         panic!("the script's call is the one effect: {effect:?}");
@@ -100,7 +100,7 @@ fn a_script_reaches_by_id_a_catalog_tool_no_round_could_advertise() {
         "assert(tools.get('hidden/shape') ~= nil, 'the tool is in the run catalog')\n\
          return tools.call('hidden/shape', { value = 'hi' })",
     );
-    let rig = Rig::run(catalog_scenario(source).tool(unofferable_tool()));
+    let rig = Rig::run(loop_scenario(source).tool(unofferable_tool()));
     assert_eq!(rig.trace().text(), "unoffered: hi");
     assert_eq!(
         rig.issued(),
@@ -160,7 +160,7 @@ fn a_script_call_naming_a_string_without_a_slash_raises_before_any_resolution() 
          assert(not wire_ok and not bare_ok, 'neither name is a tool id')\n\
          return wire_err.kind .. ':' .. tostring(wire_err) .. '|' .. tostring(bare_err)",
     );
-    let rig = Rig::run(catalog_scenario(source).tool(echo_tool()));
+    let rig = Rig::run(loop_scenario(source).tool(echo_tool()));
     assert_eq!(
         rig.trace().text(),
         "lua:tools.call: \"tools_echo\" is not a tool id|tools.call: \"echo\" is not a tool id"
@@ -195,7 +195,7 @@ fn a_script_call_by_id_and_by_tool_object_issue_the_same_effect() {
         "return tools.call('tools/echo', { value = 'hi' }) .. '|' .. \
          tools.call(tools.get('tools/echo'), { value = 'hi' })",
     );
-    let rig = Rig::run(catalog_scenario(source).tool(echo_tool()));
+    let rig = Rig::run(loop_scenario(source).tool(echo_tool()));
     assert_eq!(rig.trace().text(), "echoed: hi|echoed: hi");
     let call = EffectRecord::ToolCall {
         tool: echo_id(),
@@ -237,7 +237,7 @@ fn a_model_issued_call_never_resolves_an_id() {
          assert(not ok, 'a model-issued id call is refused')\n\
          return err.kind .. ':' .. err.name",
     );
-    let rig = Rig::run(catalog_scenario(source).tool(echo_tool()).raw_shims());
+    let rig = Rig::run(loop_scenario(source).tool(echo_tool()).raw_shims());
     assert_eq!(rig.trace().text(), "unbound_tool:tools/echo");
     assert!(rig.issued().is_empty(), "nothing was issued");
 }

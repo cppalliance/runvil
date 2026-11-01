@@ -9,7 +9,7 @@ use runvil_parser::test_support::{one_section, prompt};
 
 use super::fixtures::echo_tool;
 use super::gateway::overflowing;
-use super::models_loop::{catalog_scenario, loop_scenario};
+use super::models_loop::loop_scenario;
 use super::*;
 use crate::model::CompletionErrorKind;
 
@@ -199,10 +199,7 @@ fn a_compactor_that_calls_a_tool_gets_its_result() {
          end)
          return got .. '|' .. messages[1].content .. '|' .. messages[2].content",
     );
-    let trace = catalog_scenario(source)
-        .tool(echo_tool())
-        .chat(&gateway)
-        .run();
+    let trace = loop_scenario(source).tool(echo_tool()).chat(&gateway).run();
     assert_eq!(trace.text(), "echoed: precheck|echoed: precheck|done");
 }
 

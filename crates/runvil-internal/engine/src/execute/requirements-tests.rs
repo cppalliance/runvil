@@ -1,20 +1,21 @@
-//! Tests for the preflight report's missing services, unavailable
-//! Packs, and the reserved Pack ids `adhoc` and `dynamic`.
+//! Tests for the run's start checks against its context: each declared
+//! Pack against the roster, the reserved Pack ids `adhoc` and `dynamic`,
+//! and the order of the refusal notice's lines. The model role checks sit
+//! in the execution suite's `prepare` module.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
+use std::sync::Arc;
 
-use runvil_types::models::ModelRole;
+use runvil_types::models::{ModelRole, ThinkingMode};
 use runvil_types::packs::PackId;
 use runvil_types::timestamp::Timestamp;
 use runvil_types::tools::{ToolCatalog, ToolId, ToolInfo};
 use serde_json::json;
 
-use super::{
-    MissingService, RequirementCheck, Requirements, UnavailablePack, UnmetRequirement, UsablePack,
-};
-use crate::execute::{RunContext, RunErrorKind};
+use crate::execute::{Run, RunContext, RunErrorKind, RunResult, Step};
+use crate::lua::RosterEntry;
 use crate::parser::Prompt;
-use crate::test_support::scenario::TEST_SEED;
+use crate::test_support::scenario::{TEST_SEED, test_model_with};
 
 /// The notice line of a run whose catalog or roster names the reserved
 /// Pack id `reserved`.
@@ -29,14 +30,16 @@ fn id(text: &str) -> PackId {
     PackId::parse(text).expect("a static valid id")
 }
 
-/// A prompt that declares no Pack and no model.
-fn declares_nothing() -> Prompt {
-    Prompt::parse(
-        "---\nname: t\ndescription: d\nrunvil: 0\n---\n\n# Run\n\n## Only\n\nDone.\n",
-        "requirements-test",
-    )
-    .0
-    .expect("the requirements test prompt parses")
+/// A prompt with `front` added to its frontmatter, whose one section
+/// returns `done`.
+fn prompt(front: &str) -> Prompt {
+    let source = format!(
+        "---\nname: t\ndescription: d\nrunvil: 0\n{front}---\n\n\
+         # Run\n\n## Only\n\n```lua\nreturn 'done'\n```\n"
+    );
+    Prompt::parse(&source, "requirements-test")
+        .0
+        .expect("the requirements test prompt parses")
 }
 
 fn context() -> RunContext {
@@ -54,6 +57,52 @@ fn catalog(ids: &[&str]) -> ToolCatalog {
     .expect("distinct ids make a valid catalog")
 }
 
+/// The roster entry of `pack`, usable from `acme`.
+fn usable(pack: &str) -> (PackId, RosterEntry) {
+    (
+        id(pack),
+        RosterEntry::Usable {
+            vendor: "acme".to_owned(),
+        },
+    )
+}
+
+/// The roster entry of `pack`, unavailable for `reason`.
+fn unavailable(pack: &str, reason: &str) -> (PackId, RosterEntry) {
+    (
+        id(pack),
+        RosterEntry::Unavailable {
+            reason: reason.to_owned(),
+        },
+    )
+}
+
+/// The refusal notice the first step of a run of `prompt` over `ctx`
+/// fails with, after asserting the step reported no run events, or
+/// `None` when the run passes its start checks and completes.
+#[track_caller]
+fn refusal(prompt: Prompt, ctx: RunContext) -> Option<String> {
+    let mut run = Run::new(Arc::new(prompt), "", ctx);
+    let Step::Done { result, events } = run.step() else {
+        panic!("the fixture run is done at its first step");
+    };
+    match result {
+        RunResult::Completed(text) => {
+            assert_eq!(text, "done");
+            None
+        }
+        RunResult::Failure(error) => {
+            assert_eq!(error.kind(), RunErrorKind::RequirementsUnmet, "{error}");
+            assert!(
+                events.is_empty(),
+                "a refused run reports no run events: {events:?}"
+            );
+            Some(error.to_string())
+        }
+        other => panic!("expected a completion or a refusal, got {other:?}"),
+    }
+}
+
 #[test]
 fn a_catalog_or_roster_naming_a_reserved_pack_id_refuses_the_run_naming_the_id_once() {
     for reserved in ["adhoc", "dynamic"] {
@@ -65,37 +114,21 @@ fn a_catalog_or_roster_naming_a_reserved_pack_id_refuses_the_run_naming_the_id_o
             ),
             (
                 "the usable roster",
-                context().with_packs(vec![UsablePack::new(id(reserved), "acme")], Vec::new()),
+                context().with_packs([usable(reserved)]),
             ),
             (
                 "the unavailable roster",
-                context().with_packs(
-                    Vec::new(),
-                    vec![UnavailablePack::new(id(reserved), "the server is down")],
-                ),
+                context().with_packs([unavailable(reserved, "the server is down")]),
             ),
         ];
         for (named_by, ctx) in contexts {
-            let (_, requirements) = ctx.prepare(&declares_nothing(), BTreeMap::new());
             assert_eq!(
-                requirements.reserved,
-                BTreeSet::from([id(reserved)]),
+                refusal(prompt(""), ctx),
+                Some(format!(
+                    "the environment cannot satisfy this prompt:\n{}",
+                    reserved_line(reserved)
+                )),
                 "{named_by} names {reserved}"
-            );
-            assert!(!requirements.is_satisfied(), "{named_by} names {reserved}");
-            let refusal = requirements
-                .refusal()
-                .expect("a reserved Pack id refuses the run");
-            assert_eq!(
-                refusal.kind(),
-                RunErrorKind::RequirementsUnmet,
-                "{named_by}"
-            );
-            let notice = refusal.to_string();
-            assert_eq!(
-                notice.matches(&reserved_line(reserved)).count(),
-                1,
-                "{named_by}: the notice names {reserved} once: {notice}"
             );
         }
     }
@@ -103,6 +136,7 @@ fn a_catalog_or_roster_naming_a_reserved_pack_id_refuses_the_run_naming_the_id_o
 
 #[test]
 fn a_context_naming_both_reserved_pack_ids_lists_them_sorted_each_once() {
+    // Two catalog tools and the roster all name `dynamic`.
     let ctx = context()
         .with_tools(catalog(&[
             "dynamic/search",
@@ -110,269 +144,96 @@ fn a_context_naming_both_reserved_pack_ids_lists_them_sorted_each_once() {
             "adhoc/grab",
             "dynamic/call",
         ]))
-        .with_packs(
-            vec![UsablePack::new(id("dynamic"), "acme")],
-            vec![UnavailablePack::new(id("adhoc"), "the server is down")],
-        );
-    let (_, requirements) = ctx.prepare(&declares_nothing(), BTreeMap::new());
+        .with_packs([
+            usable("dynamic"),
+            unavailable("adhoc", "the server is down"),
+        ]);
     assert_eq!(
-        requirements.reserved,
-        BTreeSet::from([id("adhoc"), id("dynamic")])
-    );
-    assert_eq!(
-        requirements.notice(),
-        format!(
+        refusal(prompt(""), ctx),
+        Some(format!(
             "the environment cannot satisfy this prompt:\n{}\n{}",
             reserved_line("adhoc"),
             reserved_line("dynamic")
-        )
+        ))
     );
 }
 
 #[test]
-fn a_context_naming_no_reserved_pack_id_leaves_the_reservations_empty() {
+fn a_context_naming_no_reserved_pack_id_passes_the_start_checks() {
     let ctx = context()
         .with_tools(catalog(&["web/fetch", "dynamics/search", "adhoc2/grab"]))
-        .with_packs(
-            vec![UsablePack::new(id("web"), "runvil")],
-            vec![UnavailablePack::new(id("mcp"), "the server is down")],
-        );
-    let (_, requirements) = ctx.prepare(&declares_nothing(), BTreeMap::new());
-    assert!(requirements.reserved.is_empty(), "{requirements:?}");
-    assert!(requirements.is_satisfied(), "{requirements:?}");
+        .with_packs([usable("web"), unavailable("mcp", "the server is down")]);
+    assert_eq!(refusal(prompt(""), ctx), None);
 }
 
 #[test]
-fn merge_keeps_the_union_of_both_reports_reserved_ids_sorted_each_once() {
-    let reserving = |ids: &[&str]| Requirements {
-        reserved: ids.iter().copied().map(id).collect(),
-        ..Requirements::default()
-    };
-    let mut kept = reserving(&["dynamic"]);
-    kept.merge(Requirements::default());
+fn a_declared_pack_the_roster_lists_as_unavailable_is_refused_with_its_reason_not_as_missing() {
+    let ctx = context().with_packs([unavailable("web", "the search provider is missing")]);
     assert_eq!(
-        kept.reserved,
-        BTreeSet::from([id("dynamic")]),
-        "merging a clear report keeps the ids"
-    );
-    let mut gained = Requirements::default();
-    gained.merge(reserving(&["dynamic"]));
-    assert_eq!(
-        gained.reserved,
-        BTreeSet::from([id("dynamic")]),
-        "merging a reserving report takes its ids"
-    );
-    let mut union = reserving(&["dynamic"]);
-    union.merge(reserving(&["dynamic", "adhoc"]));
-    assert_eq!(union.reserved, BTreeSet::from([id("adhoc"), id("dynamic")]));
-    assert_eq!(
-        union.notice(),
-        format!(
-            "the environment cannot satisfy this prompt:\n{}\n{}",
-            reserved_line("adhoc"),
-            reserved_line("dynamic")
+        refusal(prompt("uses: [web]\n"), ctx),
+        Some(
+            "the environment cannot satisfy this prompt:\n\
+             - web is unavailable: the search provider is missing"
+                .to_owned()
         )
     );
 }
 
-fn web_down() -> UnavailablePack {
-    UnavailablePack::new(id("web"), "the search provider is missing")
-}
-
 #[test]
-fn an_unavailable_pack_leaves_the_report_unsatisfied() {
-    let mut unavailable = Requirements::default();
-    unavailable.unavailable_packs.push(web_down());
-    assert!(!unavailable.is_satisfied());
-    assert!(unavailable.refusal().is_some());
-}
-
-#[test]
-fn the_notice_names_an_unavailable_packs_reason() {
-    let mut requirements = Requirements::default();
-    requirements.unavailable_packs.push(web_down());
-    assert_eq!(
-        requirements.notice(),
-        "the environment cannot satisfy this prompt:\n\
-         - web is unavailable: the search provider is missing"
-    );
-}
-
-#[test]
-fn merge_drops_a_missing_pack_named_as_unavailable() {
-    let mut requirements = Requirements::default();
-    requirements.missing_packs.push(id("web"));
-    requirements.missing_packs.push(id("other"));
-    let mut activation = Requirements::default();
-    activation.unavailable_packs.push(web_down());
-    requirements.merge(activation);
-    assert_eq!(requirements.missing_packs, [id("other")]);
-    assert_eq!(requirements.unavailable_packs, [web_down()]);
-}
-
-#[test]
-fn merge_folds_in_unavailable_packs_without_repeating_one() {
-    let mut requirements = Requirements::default();
-    requirements.unavailable_packs.push(web_down());
-    let mut other = Requirements::default();
-    other.unavailable_packs.push(web_down());
-    other
-        .unavailable_packs
-        .push(UnavailablePack::new(id("mcp"), "the server is down"));
-    requirements.merge(other);
-    assert_eq!(
-        requirements.unavailable_packs,
-        [
-            web_down(),
-            UnavailablePack::new(id("mcp"), "the server is down")
-        ]
-    );
-}
-
-fn missing_input(pack: &str) -> MissingService {
-    MissingService::new(id(pack), "an input broker")
-}
-
-#[test]
-fn a_missing_service_leaves_the_report_unsatisfied() {
-    let mut requirements = Requirements::default();
-    assert!(requirements.is_satisfied());
-    requirements
-        .missing_services
-        .push(missing_input("user-input"));
-    assert!(!requirements.is_satisfied());
-    assert!(requirements.refusal().is_some());
-}
-
-#[test]
-fn merge_folds_in_missing_services_without_repeating_one() {
-    let mut requirements = Requirements::default();
-    requirements
-        .missing_services
-        .push(missing_input("user-input"));
-    let mut activation = Requirements::default();
-    activation
-        .missing_services
-        .push(missing_input("user-input"));
-    activation.missing_services.push(missing_input("asker"));
-    requirements.merge(activation);
-    assert_eq!(
-        requirements.missing_services,
-        [missing_input("user-input"), missing_input("asker")]
-    );
-}
-
-#[test]
-fn merge_drops_an_incoming_missing_pack_already_named_as_lacking_a_service() {
-    let mut requirements = Requirements::default();
-    requirements
-        .missing_services
-        .push(missing_input("user-input"));
-    let mut other = Requirements::default();
-    other.missing_packs.push(id("user-input"));
-    other.missing_packs.push(id("other"));
-    requirements.merge(other);
-    assert_eq!(requirements.missing_packs, [id("other")]);
-    assert_eq!(requirements.missing_services, [missing_input("user-input")]);
-}
-
-#[test]
-fn merge_drops_a_missing_pack_the_incoming_report_names_as_lacking_a_service() {
-    let mut requirements = Requirements::default();
-    requirements.missing_packs.push(id("user-input"));
-    requirements.missing_packs.push(id("other"));
-    let mut activation = Requirements::default();
-    activation
-        .missing_services
-        .push(missing_input("user-input"));
-    requirements.merge(activation);
-    assert_eq!(requirements.missing_packs, [id("other")]);
-    assert_eq!(requirements.missing_services, [missing_input("user-input")]);
-}
-
-#[test]
-fn the_notice_names_the_pack_and_the_service_it_lacks() {
-    let mut requirements = Requirements::default();
-    requirements
-        .missing_services
-        .push(missing_input("user-input"));
-    assert_eq!(
-        requirements.notice(),
-        "the environment cannot satisfy this prompt:\n\
-         - user-input needs an input broker, and the environment provides none"
-    );
-}
-
-fn unmet(
-    role: ModelRole,
-    check: RequirementCheck,
-    required: &str,
-    actual: &str,
-) -> UnmetRequirement {
-    UnmetRequirement {
-        role,
-        check,
-        required: required.to_owned(),
-        actual: actual.to_owned(),
-    }
-}
-
-#[test]
-fn the_notice_gives_each_model_requirement_as_a_line_naming_the_role() {
-    let mut requirements = Requirements::default();
-    requirements.unmet_models.extend([
-        unmet(
-            ModelRole::Strong,
-            RequirementCheck::ContextMinimum,
-            "200000",
-            "32000",
-        ),
-        unmet(
-            ModelRole::Strong,
-            RequirementCheck::Thinking,
-            "thinking: true",
-            "Never",
-        ),
-        unmet(
-            ModelRole::Default,
-            RequirementCheck::Unbound,
-            "a model",
-            "none",
-        ),
+fn declared_packs_the_roster_lacks_are_missing_and_list_before_the_unavailable_ones() {
+    let ctx = context().with_packs([
+        unavailable("web", "the search provider is missing"),
+        unavailable("mcp", "the server is down"),
+        usable("kit"),
     ]);
+    assert_eq!(
+        refusal(prompt("uses: [web, other, kit, mcp, gone]\n"), ctx),
+        Some(
+            "the environment cannot satisfy this prompt:\n\
+             - missing required Pack: other\n\
+             - missing required Pack: gone\n\
+             - web is unavailable: the search provider is missing\n\
+             - mcp is unavailable: the server is down"
+                .to_owned()
+        ),
+        "each kind of gap lists in declaration order"
+    );
+}
+
+#[test]
+fn a_run_given_no_roster_checks_no_declared_pack_and_an_empty_roster_lacks_every_one() {
+    assert_eq!(
+        refusal(prompt("uses: [web]\n"), context()),
+        None,
+        "a run given no roster checks no declared Pack"
+    );
+    assert_eq!(
+        refusal(prompt("uses: [web]\n"), context().with_packs([])),
+        Some(
+            "the environment cannot satisfy this prompt:\n- missing required Pack: web".to_owned()
+        ),
+        "an empty roster is a roster"
+    );
+}
+
+#[test]
+fn the_notice_lists_missing_then_unavailable_packs_then_reserved_ids_then_model_lines() {
+    let ctx = context()
+        .with_tools(catalog(&["adhoc/grab"]))
+        .with_packs([unavailable("kit", "the kit server is down")])
+        .with_models(BTreeMap::from([(
+            ModelRole::Default,
+            test_model_with("small", 32_000, ThinkingMode::Switchable),
+        )]));
+    let reserved = reserved_line("adhoc");
     let expected = [
         "the environment cannot satisfy this prompt:",
-        "- role 'strong': requires a context of at least 200000 tokens; the model filling it provides 32000",
-        "- role 'strong': requires 'thinking: true'; the thinking capability of the model filling it is Never",
-        "- role 'default': requires a model; the caller's role map has no 'default' entry",
+        "- missing required Pack: web",
+        "- kit is unavailable: the kit server is down",
+        &reserved,
+        "- role 'strong': requires a context of at least 200000 tokens; \
+         the model filling it provides 32000",
     ];
-    assert_eq!(requirements.notice(), expected.join("\n"));
-}
-
-#[test]
-fn an_unbound_default_leaves_the_report_unsatisfied() {
-    let mut requirements = Requirements::default();
-    requirements.unmet_models.push(unmet(
-        ModelRole::Default,
-        RequirementCheck::Unbound,
-        "a model",
-        "none",
-    ));
-    assert!(!requirements.is_satisfied());
-    assert!(requirements.refusal().is_some());
-}
-
-#[test]
-fn the_notice_lists_missing_services_after_missing_packs() {
-    let mut requirements = Requirements::default();
-    requirements
-        .missing_services
-        .push(missing_input("user-input"));
-    requirements.missing_packs.push(id("web"));
-    assert_eq!(
-        requirements.notice(),
-        "the environment cannot satisfy this prompt:\n\
-         - missing required Pack: web\n\
-         - user-input needs an input broker, and the environment provides none"
-    );
+    let source = "uses: [kit, web]\nmodels: { strong: { min_context: 200000 } }\n";
+    assert_eq!(refusal(prompt(source), ctx), Some(expected.join("\n")));
 }

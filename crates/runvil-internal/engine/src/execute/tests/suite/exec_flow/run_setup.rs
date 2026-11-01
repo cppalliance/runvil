@@ -14,13 +14,13 @@ use runvil_vfs::{VfsError, VfsRef};
 
 /// A hand-built `VfsRef` that declares no store fails the run up front
 /// with [`RunErrorKind::Vfs`], saying what is missing: every run needs a
-/// declared store. (`RunContext::prepare` never replaces the handle, so
-/// the raw handle's declaration is what the run sees.)
+/// declared store. (Nothing replaces the handle, so the raw handle's
+/// declaration is what the run sees.)
 #[test]
 fn a_handle_without_a_declared_store_fails_the_run() {
     let source = one_section("store.write('overlay.txt', 'overlaid')");
     let vfs = VfsRef::new(runvil_vfs::MemoryBackend::new());
-    let trace = Scenario::new(source).vfs(vfs).unprepared().run();
+    let trace = Scenario::new(source).vfs(vfs).run();
     let error = trace.error();
     assert_eq!(
         error.kind(),

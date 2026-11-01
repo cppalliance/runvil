@@ -142,8 +142,8 @@ enum Phase {
     /// Chains run; the outcome is undecided.
     Running,
     /// The outcome is decided and the run's end boundary reported, unless
-    /// the run could not start and so reported nothing; `Done` waits on
-    /// the outstanding effects.
+    /// the run ended before it started and so reported nothing; `Done`
+    /// waits on the outstanding effects.
     Ending(Result<String>),
     /// `Done` was returned.
     Done,
@@ -218,8 +218,8 @@ impl Scheduler {
     }
 
     /// Whether the run's outcome is decided: its end boundary is reported,
-    /// or the first step found that the run cannot start, so at most the
-    /// orphans' answers stand between the run and `Done`.
+    /// or the run ended before it started, so at most the orphans' answers
+    /// stand between the run and `Done`.
     pub(super) fn decided(&self) -> bool {
         matches!(self.phase, Phase::Ending(_) | Phase::Done)
     }

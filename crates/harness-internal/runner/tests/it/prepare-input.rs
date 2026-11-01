@@ -88,19 +88,7 @@ fn with_input(input: Option<Arc<dyn AskBroker>>) -> HostServices {
 
 /// Prepares `source` under `services` and drives the run to its end.
 async fn drive_prompt(source: &str, services: Services) -> RunOutcome {
-    let recorder = Arc::clone(&services.recorder);
-    let prepared = prepare(source, "", services)
-        .await
-        .expect("the prompt prepares");
-    drive_run(
-        prepared.run,
-        prepared.performers,
-        recorder,
-        prepared.run_id,
-        CancelHandle::new(),
-    )
-    .await
-    .expect("the loop reaches an outcome")
+    prepare_and_drive(source, services).await.1
 }
 
 /// What the probe's one call saw, on a run with `input` as its broker.
@@ -156,20 +144,18 @@ fn user_input_services(
 #[tokio::test]
 async fn a_required_user_input_declaration_on_a_host_without_a_broker_is_refused() {
     let recorder = recorder();
-    let error = prepare(
-        &user_input_prompt(REQUIRED, ASKS_ONCE),
-        "",
-        user_input_services(&recorder, None),
-    )
-    .await
-    .expect_err("a required Pack without its service refuses the run");
-    let PrepareError::Refused { error, .. } = error else {
-        panic!("the refusal is a requirements refusal: {error}");
-    };
-    assert_eq!(error.kind(), RunErrorKind::RequirementsUnmet);
-    let notice = error.to_string();
+    let notice = refusal(
+        drive_prompt(
+            &user_input_prompt(REQUIRED, ASKS_ONCE),
+            user_input_services(&recorder, None),
+        )
+        .await,
+    );
     assert!(
-        notice.contains("- user-input needs tests/input-broker, and the environment provides none"),
+        notice.contains(
+            "- user-input is unavailable: the run lacks the services it needs: \
+             tests/input-broker"
+        ),
         "the notice names the Pack and the missing service: {notice}"
     );
     assert!(

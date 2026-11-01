@@ -6,7 +6,7 @@
 use runvil_parser::test_support::{PromptSource, one_section, prompt};
 
 use super::fixtures::{echo_tool, model_only_tool};
-use super::models_loop::{catalog_scenario, loop_model_name};
+use super::models_loop::{loop_model_name, loop_scenario};
 use super::*;
 use crate::execute::run::{EffectRecord, ToolCallOrigin, ToolCaller};
 use crate::test_support::rig::Rig;
@@ -51,7 +51,7 @@ fn the_run_catalog_keeps_its_order_and_a_pack_offer_expands_in_id_order() {
         )],
     );
     let mut rig = Rig::start(
-        catalog_scenario(source)
+        loop_scenario(source)
             .tool(echo_tool())
             .tool(offered_tool("gh/search"))
             .tool(offered_tool("alpha/zed"))
@@ -109,7 +109,7 @@ fn a_script_offers_the_extras_and_the_model_calls_an_offered_tool_by_its_wire_na
          models.loop()\n\
          return 'ok'",
     );
-    let rig = Rig::run(catalog_scenario(source).tool(echo_tool()).chat(&gateway));
+    let rig = Rig::run(loop_scenario(source).tool(echo_tool()).chat(&gateway));
     assert_eq!(rig.trace().text(), "ok");
     let records = rig.issued();
     let advertised: Vec<Vec<String>> = records
@@ -150,11 +150,7 @@ fn a_model_only_tool_is_advertised_and_called_by_the_model() {
          models.loop()\n\
          return 'ok'",
     );
-    let rig = Rig::run(
-        catalog_scenario(source)
-            .tool(model_only_tool())
-            .chat(&gateway),
-    );
+    let rig = Rig::run(loop_scenario(source).tool(model_only_tool()).chat(&gateway));
     assert_eq!(rig.trace().text(), "ok");
     let records = rig.issued();
     let calls: Vec<&EffectRecord> = records
@@ -185,7 +181,7 @@ fn a_section_tools_table_holds_only_its_api_and_its_round_advertises_only_the_of
          models.loop()\n\
          return table.concat(keys, ',')",
     );
-    let rig = Rig::run(catalog_scenario(source).tool(echo_tool()).chat(&gateway));
+    let rig = Rig::run(loop_scenario(source).tool(echo_tool()).chat(&gateway));
     assert_eq!(
         rig.trace().text(),
         TOOLS_TABLE_KEYS,
@@ -213,7 +209,7 @@ fn a_script_calls_an_offered_tool_by_its_object_and_by_its_id_without_offering_i
          return tools.call(tool, { value = 'a' }) .. '|' .. \
            tools.call('tools/echo', { value = 'b' }) .. '|' .. tool.id",
     );
-    let rig = Rig::run(catalog_scenario(source).tool(echo_tool()));
+    let rig = Rig::run(loop_scenario(source).tool(echo_tool()));
     assert_eq!(rig.trace().text(), "echoed: a|echoed: b|tools/echo");
     let call = |value: &str| EffectRecord::ToolCall {
         tool: ToolId::parse("tools/echo").expect("valid id"),
@@ -277,7 +273,7 @@ fn a_script_offers_a_declared_packs_tools_and_the_model_calls_one_by_its_wire_na
         )],
     );
     let rig = Rig::run(
-        catalog_scenario(source)
+        loop_scenario(source)
             .tool(echo_tool())
             .tool(offered_tool("gh/search"))
             .chat(&gateway),
@@ -307,7 +303,7 @@ fn a_script_offers_an_extra_packs_tools_after_checking_packs_get() {
          return 'ok'",
     );
     let rig = Rig::run(
-        catalog_scenario(source)
+        loop_scenario(source)
             .tool(echo_tool())
             .tool(offered_tool("gh/search"))
             .chat(&gateway),
@@ -334,7 +330,7 @@ fn the_pack_objects_and_the_adhoc_pack_are_installed_in_the_h1_vm() {
         )
         .build();
     let rig = Rig::run(
-        catalog_scenario(source)
+        loop_scenario(source)
             .tool(echo_tool())
             .tool(offered_tool("gh/search")),
     );

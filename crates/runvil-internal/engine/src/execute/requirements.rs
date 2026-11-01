@@ -1,9 +1,14 @@
-//! The preflight report: [`Requirements`].
+//! What a run's context lacks for its prompt: [`Requirements`], which the
+//! run's first step reports as its refusal notice.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use runvil_types::models::ModelRole;
 use runvil_types::packs::PackId;
+use runvil_types::tools::ToolCatalog;
+
+use crate::lua::RosterEntry;
+use crate::parser::Prompt;
 
 #[cfg(test)]
 #[path = "requirements-tests.rs"]
@@ -12,136 +17,79 @@ mod tests;
 /// The first line of every refusal notice.
 pub(super) const NOTICE_HEADER: &str = "the environment cannot satisfy this prompt:";
 
-/// A report of what the caller must still satisfy before a prompt can run.
-///
-/// [`RunContext::prepare`](super::RunContext::prepare) returns one
-/// together with the prepared context. The report lists only what needs a
-/// person's attention.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-#[non_exhaustive]
-pub struct Requirements {
+/// What the run's context lacks for its prompt, gathered when the run is
+/// built. The run's first step fails with its notice unless it is empty.
+#[derive(Debug, Default)]
+pub(super) struct Requirements {
     /// The model requirements that the models filling the roles fall short
     /// of, and the `default` role a non-empty role map leaves unfilled.
-    ///
-    /// Each entry names the role, the check that failed, and what was
-    /// required versus what the caller provided. Examples are a
-    /// `min_context` of 200000 against a model with a 32k context, and
-    /// `thinking` against a model whose thinking mode is `Never`. Only
-    /// `RunContext::prepare` adds these.
-    pub unmet_models: Vec<UnmetRequirement>,
-    /// The required Packs that the run lacks.
-    ///
-    /// The caller adds a Pack the prompt declares that is not installed.
-    /// The run fails until every one is satisfied.
-    pub missing_packs: Vec<PackId>,
-    /// The required Packs that are installed but need a service
-    /// the run lacks.
-    ///
-    /// There is one entry for each Pack and missing service. The caller
-    /// adds these and leaves each such Pack's tools out of the catalog.
-    /// The run fails until the application provides the service.
-    pub missing_services: Vec<MissingService>,
-    /// The required Packs that are installed but cannot serve, each
-    /// with the reason, such as a failure to build.
-    ///
-    /// The caller adds these. The run fails until the Pack can serve.
-    pub unavailable_packs: Vec<UnavailablePack>,
+    pub(super) unmet_models: Vec<UnmetRequirement>,
+    /// The declared Packs the roster lacks, in declaration order.
+    missing_packs: Vec<PackId>,
+    /// The declared Packs the roster lists as unable to serve, each with
+    /// its reason, in declaration order.
+    unavailable_packs: Vec<(PackId, String)>,
     /// The reserved Pack ids, such as `adhoc`, that the run's tool catalog
-    /// or Pack roster names.
-    ///
-    /// The Engine holds the tools under a reserved Pack id itself, so no
-    /// Pack may take one.
-    /// [`RunContext::prepare`](super::RunContext::prepare) fills it. The
-    /// run fails while it holds any id.
-    pub reserved: BTreeSet<PackId>,
+    /// or Pack roster names. The Engine holds the tools under a reserved
+    /// Pack id itself, so no Pack may take one.
+    reserved: BTreeSet<PackId>,
 }
 
 impl Requirements {
-    /// Returns whether the report lets the run proceed.
-    ///
-    /// That holds when every model requirement is met, every required
-    /// Pack is present, can serve, and has the services it needs, and
-    /// nothing in the run takes a reserved Pack id.
-    #[must_use]
-    pub fn is_satisfied(&self) -> bool {
-        self.unmet_models.is_empty()
-            && self.missing_packs.is_empty()
-            && self.missing_services.is_empty()
-            && self.unavailable_packs.is_empty()
-            && self.reserved.is_empty()
+    /// Checks each Pack `prompt` declares against `roster`, when the run
+    /// has one, and records each reserved Pack id that a tool of `catalog`
+    /// or a Pack of `roster`, usable or not, has.
+    pub(super) fn check_packs(
+        &mut self,
+        prompt: &Prompt,
+        catalog: &ToolCatalog,
+        roster: Option<&BTreeMap<PackId, RosterEntry>>,
+    ) {
+        if let Some(roster) = roster {
+            for entry in prompt.frontmatter().uses() {
+                let id = entry.id().clone();
+                match roster.get(&id) {
+                    None => self.missing_packs.push(id),
+                    Some(RosterEntry::Unavailable { reason }) => {
+                        self.unavailable_packs.push((id, reason.clone()));
+                    }
+                    Some(RosterEntry::Usable { .. }) => {}
+                }
+            }
+        }
+        self.reserved = catalog
+            .tools()
+            .iter()
+            .map(|tool| tool.id.pack())
+            .chain(roster.into_iter().flat_map(BTreeMap::keys).cloned())
+            .filter(PackId::is_reserved)
+            .collect();
     }
 
-    /// Adds the entries of `other` to this report.
-    ///
-    /// Use it to combine the caller's Pack report with the report
-    /// from `RunContext::prepare`, so that one refusal names every gap.
-    /// The merge skips an entry the report already holds, and keeps
-    /// `reserved` the union of both reports' ids.
-    ///
-    /// `unmet_models` is the exception: it is appended whole, so a role the
-    /// report already lists is listed again rather than skipped.
-    ///
-    /// The merge drops the `missing_packs` entry of a Pack that lacks a
-    /// service or is unavailable: the service or unavailable entry
-    /// already names the real cause.
-    pub fn merge(&mut self, other: Requirements) {
-        push_new(&mut self.missing_packs, other.missing_packs);
-        push_new(&mut self.missing_services, other.missing_services);
-        push_new(&mut self.unavailable_packs, other.unavailable_packs);
-        self.reserved.extend(other.reserved);
-        let (services, unavailable) = (&self.missing_services, &self.unavailable_packs);
-        self.missing_packs.retain(|id| {
-            !services.iter().any(|missing| missing.pack == *id)
-                && !unavailable.iter().any(|entry| entry.pack == *id)
-        });
-        self.unmet_models.extend(other.unmet_models);
-    }
-
-    /// Returns the error to fail the run with, or `None` when the report
-    /// is satisfied.
-    ///
-    /// The error is a [`RunError`](super::RunError) of kind
-    /// [`RequirementsUnmet`](super::RunErrorKind::RequirementsUnmet) that
-    /// reports the [`notice`](Requirements::notice). The caller checks it
-    /// after merging every report into one, and before building the run.
-    #[must_use]
-    pub fn refusal(&self) -> Option<super::RunError> {
-        (!self.is_satisfied()).then(|| {
-            super::RunError::from(crate::Error::RequirementsUnmet {
-                notice: self.notice(),
-                cause: None,
-            })
-        })
-    }
-
-    /// Returns the refusal notice, which explains what blocks the run.
+    /// Returns the refusal notice, which explains what blocks the run, or
+    /// `None` when nothing does.
     ///
     /// Each line names what is missing or falls short. The model lines
     /// carry required versus actual; the Pack lines name the Pack and, for
-    /// a service or an unavailable Pack, the reason. The notice is written
-    /// for a model to read: concise, factual, and self-contained.
-    #[must_use]
-    pub fn notice(&self) -> String {
+    /// an unavailable Pack, the reason. The notice is written for a model
+    /// to read: concise, factual, and self-contained.
+    pub(super) fn notice(&self) -> Option<String> {
         // Writing to a String is infallible, so each `write!` result is
         // discarded under the denied `unwrap_used`/`expect_used` lints.
         use std::fmt::Write as _;
+        if self.unmet_models.is_empty()
+            && self.missing_packs.is_empty()
+            && self.unavailable_packs.is_empty()
+            && self.reserved.is_empty()
+        {
+            return None;
+        }
         let mut notice = String::from(NOTICE_HEADER);
         for id in &self.missing_packs {
             let _ = write!(notice, "\n- missing required Pack: {id}");
         }
-        for missing in &self.missing_services {
-            let _ = write!(
-                notice,
-                "\n- {} needs {}, and the environment provides none",
-                missing.pack, missing.service
-            );
-        }
-        for entry in &self.unavailable_packs {
-            let _ = write!(
-                notice,
-                "\n- {} is unavailable: {}",
-                entry.pack, entry.reason
-            );
+        for (id, reason) in &self.unavailable_packs {
+            let _ = write!(notice, "\n- {id} is unavailable: {reason}");
         }
         for id in &self.reserved {
             let _ = write!(
@@ -173,138 +121,31 @@ impl Requirements {
                 ),
             };
         }
-        notice
-    }
-}
-
-/// Appends each entry of `incoming` that `entries` does not already hold.
-fn push_new<T: PartialEq>(entries: &mut Vec<T>, incoming: Vec<T>) {
-    for entry in incoming {
-        if !entries.contains(&entry) {
-            entries.push(entry);
-        }
-    }
-}
-
-/// An installed Pack that can serve the run, and its vendor.
-///
-/// The run's roster, set with
-/// [`RunContext::with_packs`](super::RunContext::with_packs), lists every
-/// one the run holds. The caller reports each Pack's vendor as it picked the
-/// Pack, and every tool-call and tool-result event for one of the Pack's
-/// tools records it.
-///
-/// The vendor promise holds only for a Pack the roster lists as usable. A
-/// Pack named in both roster lists counts as unavailable, so it has no
-/// vendor and its tools record none.
-#[derive(Debug, Clone, PartialEq, Eq)]
-#[non_exhaustive]
-pub struct UsablePack {
-    /// The installed Pack.
-    pub pack: PackId,
-    /// The vendor the caller picked the Pack from, such as `runvil` or
-    /// `acme`.
-    pub vendor: String,
-}
-
-impl UsablePack {
-    /// Creates an entry stating that `pack`, from `vendor`, can serve.
-    ///
-    /// Only the caller builds these, for its roster.
-    #[must_use]
-    pub fn new(pack: PackId, vendor: impl Into<String>) -> UsablePack {
-        UsablePack {
-            pack,
-            vendor: vendor.into(),
-        }
-    }
-}
-
-/// An installed Pack that cannot serve the run, and why.
-///
-/// The caller's Pack report lists each one the prompt declares, and the
-/// run's roster, set with
-/// [`RunContext::with_packs`](super::RunContext::with_packs), lists every
-/// one the run holds.
-#[derive(Debug, Clone, PartialEq, Eq)]
-#[non_exhaustive]
-pub struct UnavailablePack {
-    /// The installed Pack.
-    pub pack: PackId,
-    /// Why it cannot serve, written for the model that reads the refusal.
-    pub reason: String,
-}
-
-impl UnavailablePack {
-    /// Creates an entry stating that `pack` cannot serve, because of
-    /// `reason`.
-    ///
-    /// Only the caller builds these, for its Pack report and its roster.
-    #[must_use]
-    pub fn new(pack: PackId, reason: impl Into<String>) -> UnavailablePack {
-        UnavailablePack {
-            pack,
-            reason: reason.into(),
-        }
-    }
-}
-
-/// A service that a required Pack needs and the application lacks.
-///
-/// For example, a Pack that asks the operator a question needs a
-/// service that reaches the operator, and a batch application runs on its
-/// own, so it lacks that service.
-#[derive(Debug, Clone, PartialEq, Eq)]
-#[non_exhaustive]
-pub struct MissingService {
-    /// The installed, required Pack that needs the service.
-    pub pack: PackId,
-    /// The name of the missing service.
-    ///
-    /// The caller defines its own service names, so the report carries
-    /// the name verbatim.
-    pub service: String,
-}
-
-impl MissingService {
-    /// Creates an entry stating that `pack` needs the service named
-    /// `service`, which the application lacks.
-    ///
-    /// Only the caller's Pack report holds these.
-    #[must_use]
-    pub fn new(pack: PackId, service: impl Into<String>) -> MissingService {
-        MissingService {
-            pack,
-            service: service.into(),
-        }
+        Some(notice)
     }
 }
 
 /// A model requirement that the model filling a role falls short of, or a
-/// role the caller left without a model.
-///
-/// It names the role, the check that failed, and what the prompt required
-/// versus what the caller provided.
-#[derive(Debug, Clone, PartialEq, Eq)]
-#[non_exhaustive]
-pub struct UnmetRequirement {
+/// role the caller left without a model: the role, the check that failed,
+/// and what the prompt required versus what the caller provided.
+#[derive(Debug)]
+pub(super) struct UnmetRequirement {
     /// The role whose requirement failed.
-    pub role: ModelRole,
+    pub(super) role: ModelRole,
     /// Which requirement check failed.
-    pub check: RequirementCheck,
+    pub(super) check: RequirementCheck,
     /// What the prompt required, such as a context minimum of `200000`, a
     /// thinking switch of `thinking: true`, or `a model`.
-    pub required: String,
+    pub(super) required: String,
     /// What the filling model provides, such as a context of `32000` or a
     /// thinking mode of `Never`, or `none` when the caller gave the role no
     /// model.
-    pub actual: String,
+    pub(super) actual: String,
 }
 
 /// Which model requirement check failed.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[non_exhaustive]
-pub enum RequirementCheck {
+#[derive(Debug, Clone, Copy)]
+pub(super) enum RequirementCheck {
     /// The role's context minimum exceeds the context of the model that
     /// fills the role.
     ContextMinimum,

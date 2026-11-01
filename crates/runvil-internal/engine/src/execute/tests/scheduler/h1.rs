@@ -3,8 +3,8 @@
 
 use super::*;
 
-/// A run of `source` for a scheduler H1 test: prepared under the test
-/// model, which fills all five roles.
+/// A run of `source` for a scheduler H1 test: under the test model, which
+/// fills all five roles.
 fn h1_scenario(source: &str) -> Scenario {
     Scenario::new(source).bound()
 }

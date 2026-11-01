@@ -34,8 +34,8 @@ const EFFECT_FIRST: &str = "---\nname: t\ndescription: d\nrunvil: 0\n---\n\n\
     ## Only\n\n\
     ```lua\nreturn 'done'\n```\n";
 
-/// Runs `md` prepared against the echo tool as its catalog, the test model,
-/// and `preludes`.
+/// Runs `md` over the echo tool as its catalog, the test model, and
+/// `preludes`.
 #[track_caller]
 fn prelude_run(md: &str, preludes: Vec<Prelude>) -> Trace {
     Scenario::new(md)

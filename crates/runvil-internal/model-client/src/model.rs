@@ -2,10 +2,10 @@
 //!
 //! The caller supplies the
 //! [`ModelCatalog`](runvil_types::models::ModelCatalog); building it happens
-//! outside this crate. Prepare fills each of the five model roles from the
-//! caller's role map, checking the prompt's declared requirements against the
-//! model that fills the role, and the run builds its [`ModelSet`] from those
-//! bindings once, before any Lua runs. `models.use` selects one binding for
+//! outside this crate. Building a run fills each of the five model roles
+//! from the caller's role map into its [`ModelSet`], once, before any Lua
+//! runs, and the run's first step checks the prompt's declared requirements
+//! against the model that fills each role. `models.use` selects one binding for
 //! a section, and a section that never calls it runs on the `default` role.
 //! A model-facing section with no model fails with a model-binding failure
 //! surfaced through the run error the caller receives.

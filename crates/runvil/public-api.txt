@@ -1,5 +1,4 @@
 #[non_exhaustive] pub enum runvil::ParseErrorKind
-#[non_exhaustive] pub enum runvil::RequirementCheck
 #[non_exhaustive] pub enum runvil::RunErrorKind
 #[non_exhaustive] pub enum runvil::RunResult
 #[non_exhaustive] pub enum runvil::effect::AnswerRecord
@@ -35,15 +34,10 @@
 #[non_exhaustive] pub runvil::model::ModelCatalogError::DuplicateId { .. }
 #[non_exhaustive] pub runvil::model::TemperatureError::OutOfRange { .. }
 #[non_exhaustive] pub runvil::tools::ToolCatalogError::DuplicateId { .. }
-#[non_exhaustive] pub struct runvil::MissingService { .. }
 #[non_exhaustive] pub struct runvil::ParseError { /* private fields */ }
 #[non_exhaustive] pub struct runvil::Prompt { /* private fields */ }
-#[non_exhaustive] pub struct runvil::Requirements { .. }
 #[non_exhaustive] pub struct runvil::RunLimits { .. }
 #[non_exhaustive] pub struct runvil::SourceLocation { .. }
-#[non_exhaustive] pub struct runvil::UnavailablePack { .. }
-#[non_exhaustive] pub struct runvil::UnmetRequirement { .. }
-#[non_exhaustive] pub struct runvil::UsablePack { .. }
 #[non_exhaustive] pub struct runvil::effect::ChatAnswerRecord { .. }
 #[non_exhaustive] pub struct runvil::effect::FailureRecord { .. }
 #[non_exhaustive] pub struct runvil::effect::IssuedEffect { .. }
@@ -90,12 +84,9 @@
 #[non_exhaustive] pub struct runvil::vfs::Origin { .. }
 #[non_exhaustive] pub struct runvil::vfs::RealBackend { /* private fields */ }
 #[non_exhaustive] pub struct runvil::vfs::Stat { .. }
-auto runvil::MissingService: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::ParseError: Freeze, !RefUnwindSafe, Send, Sync, Unpin, !UnwindSafe
 auto runvil::ParseErrorKind: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::Prompt: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
-auto runvil::RequirementCheck: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
-auto runvil::Requirements: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::Run: Freeze, !RefUnwindSafe, Send, Sync, Unpin, !UnwindSafe
 auto runvil::RunContext: Freeze, !RefUnwindSafe, Send, Sync, Unpin, !UnwindSafe
 auto runvil::RunError: Freeze, !RefUnwindSafe, Send, Sync, Unpin, !UnwindSafe
@@ -105,9 +96,6 @@ auto runvil::RunResult: Freeze, !RefUnwindSafe, Send, Sync, Unpin, !UnwindSafe
 auto runvil::RunSeed: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::SourceLocation: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::Step: Freeze, !RefUnwindSafe, Send, Sync, Unpin, !UnwindSafe
-auto runvil::UnavailablePack: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
-auto runvil::UnmetRequirement: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
-auto runvil::UsablePack: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::cancel::CancelHandle: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::cancel::Cancelled: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::effect::AnswerRecord: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
@@ -168,6 +156,7 @@ auto runvil::packs::PackIdError: Freeze, RefUnwindSafe, Send, Sync, Unpin, Unwin
 auto runvil::packs::PackIdErrorKind: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::packs::PackRef: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::packs::Prelude: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
+auto runvil::packs::RosterEntry: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::prompt::ArgDecl: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::prompt::ArgType: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::prompt::ArgsDecl: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
@@ -214,12 +203,9 @@ auto runvil::vfs::VfsPathBuf: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSa
 auto runvil::vfs::VfsRef: Freeze, !RefUnwindSafe, Send, Sync, Unpin, !UnwindSafe
 auto runvil::vfs::VfsRefBuilder: Freeze, !RefUnwindSafe, Send, Sync, Unpin, !UnwindSafe
 auto runvil::vfs::Writability: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
-derives runvil::MissingService: Clone, Debug, Eq, PartialEq
 derives runvil::ParseError: Debug
 derives runvil::ParseErrorKind: Clone, Copy, Debug, Eq, Hash, PartialEq
 derives runvil::Prompt: Clone, Debug, Eq, PartialEq
-derives runvil::RequirementCheck: Clone, Copy, Debug, Eq, PartialEq
-derives runvil::Requirements: Clone, Debug, Default, Eq, PartialEq
 derives runvil::Run: Debug
 derives runvil::RunContext: Debug
 derives runvil::RunError: Debug
@@ -229,9 +215,6 @@ derives runvil::RunResult: Debug
 derives runvil::RunSeed: Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize
 derives runvil::SourceLocation: Clone, Debug, Eq, PartialEq
 derives runvil::Step: Debug
-derives runvil::UnavailablePack: Clone, Debug, Eq, PartialEq
-derives runvil::UnmetRequirement: Clone, Debug, Eq, PartialEq
-derives runvil::UsablePack: Clone, Debug, Eq, PartialEq
 derives runvil::cancel::CancelHandle: Clone, Debug, Default
 derives runvil::cancel::Cancelled: Debug
 derives runvil::effect::AnswerRecord: Clone, Debug, Deserialize, PartialEq, Serialize
@@ -292,6 +275,7 @@ derives runvil::packs::PackIdError: Clone, Debug, Eq, PartialEq
 derives runvil::packs::PackIdErrorKind: Clone, Copy, Debug, Eq, PartialEq
 derives runvil::packs::PackRef: Clone, Debug, Deserialize, Eq, PartialEq
 derives runvil::packs::Prelude: Clone, Debug, Eq, PartialEq
+derives runvil::packs::RosterEntry: Clone, Debug, Eq, PartialEq
 derives runvil::prompt::ArgDecl: Clone, Debug, Deserialize, Eq, PartialEq
 derives runvil::prompt::ArgType: Clone, Copy, Debug, Deserialize, Eq, PartialEq
 derives runvil::prompt::ArgsDecl: Clone, Debug, Default, Deserialize, Eq, PartialEq
@@ -451,7 +435,7 @@ pub const runvil::timestamp::Timestamp::UNIX_EPOCH: runvil::timestamp::Timestamp
 pub enum runvil::Step
 pub enum runvil::effect::Effect
 pub enum runvil::effect::EffectAnswer
-pub fn runvil::MissingService::new(pack: runvil::packs::PackId, service: impl core::convert::Into<alloc::string::String>) -> runvil::MissingService
+pub enum runvil::packs::RosterEntry
 pub fn runvil::ParseError::cause(&self) -> core::option::Option<&dyn core::error::Error + core::marker::Send + core::marker::Sync + 'static>
 pub fn runvil::ParseError::column(&self) -> core::option::Option<core::num::nonzero::NonZeroU32>
 pub fn runvil::ParseError::kind(&self) -> runvil::ParseErrorKind
@@ -461,10 +445,6 @@ pub fn runvil::ParseError::span(&self) -> core::option::Option<core::ops::range:
 pub fn runvil::Prompt::frontmatter(&self) -> &runvil::prompt::Frontmatter
 pub fn runvil::Prompt::parse(input: &str, execution: &str) -> (core::result::Result<runvil::Prompt, runvil::ParseError>, alloc::vec::Vec<runvil::event::Event>)
 pub fn runvil::Prompt::title(&self) -> &str
-pub fn runvil::Requirements::is_satisfied(&self) -> bool
-pub fn runvil::Requirements::merge(&mut self, other: runvil::Requirements)
-pub fn runvil::Requirements::notice(&self) -> alloc::string::String
-pub fn runvil::Requirements::refusal(&self) -> core::option::Option<runvil::RunError>
 pub fn runvil::Run::cancel(&mut self)
 pub fn runvil::Run::cancel_handle(&self) -> runvil::cancel::CancelHandle
 pub fn runvil::Run::decided(&self) -> bool
@@ -473,7 +453,6 @@ pub fn runvil::Run::resume(&mut self, id: runvil::effect::EffectId, answer: runv
 pub fn runvil::Run::step(&mut self) -> runvil::Step
 pub fn runvil::RunContext::flags(&self) -> runvil::replay::Flags
 pub fn runvil::RunContext::new(name: impl core::convert::Into<alloc::string::String>, seed: runvil::RunSeed, started_at: runvil::timestamp::Timestamp) -> runvil::RunContext
-pub fn runvil::RunContext::prepare(self, prompt: &runvil::Prompt, models: alloc::collections::btree::map::BTreeMap<runvil::model::ModelRole, runvil::model::ModelInfo>) -> (runvil::RunContext, runvil::Requirements)
 pub fn runvil::RunContext::seed(&self) -> runvil::RunSeed
 pub fn runvil::RunContext::started_at(&self) -> runvil::timestamp::Timestamp
 pub fn runvil::RunContext::tools(&self) -> &runvil::tools::ToolCatalog
@@ -481,7 +460,8 @@ pub fn runvil::RunContext::vfs(&self) -> &runvil::vfs::VfsRef
 pub fn runvil::RunContext::with_cancel(self, handle: runvil::cancel::CancelHandle) -> runvil::RunContext
 pub fn runvil::RunContext::with_flags(self, flags: runvil::replay::Flags) -> runvil::RunContext
 pub fn runvil::RunContext::with_limits(self, limits: runvil::RunLimits) -> runvil::RunContext
-pub fn runvil::RunContext::with_packs(self, usable: alloc::vec::Vec<runvil::UsablePack>, unavailable: alloc::vec::Vec<runvil::UnavailablePack>) -> runvil::RunContext
+pub fn runvil::RunContext::with_models(self, models: alloc::collections::btree::map::BTreeMap<runvil::model::ModelRole, runvil::model::ModelInfo>) -> runvil::RunContext
+pub fn runvil::RunContext::with_packs(self, roster: impl core::iter::traits::collect::IntoIterator<Item = (runvil::packs::PackId, runvil::packs::RosterEntry)>) -> runvil::RunContext
 pub fn runvil::RunContext::with_preludes(self, preludes: alloc::vec::Vec<runvil::packs::Prelude>) -> runvil::RunContext
 pub fn runvil::RunContext::with_provenance_start(self, start: u32) -> runvil::RunContext
 pub fn runvil::RunContext::with_report_debug(self, mode: runvil::event::DebugMode) -> runvil::RunContext
@@ -492,8 +472,6 @@ pub fn runvil::RunError::is_retryable(&self) -> bool
 pub fn runvil::RunError::kind(&self) -> runvil::RunErrorKind
 pub fn runvil::RunError::location(&self) -> core::option::Option<runvil::SourceLocation>
 pub fn runvil::RunError::originating_error(&self) -> core::option::Option<&dyn core::error::Error + core::marker::Send + core::marker::Sync + 'static>
-pub fn runvil::UnavailablePack::new(pack: runvil::packs::PackId, reason: impl core::convert::Into<alloc::string::String>) -> runvil::UnavailablePack
-pub fn runvil::UsablePack::new(pack: runvil::packs::PackId, vendor: impl core::convert::Into<alloc::string::String>) -> runvil::UsablePack
 pub fn runvil::cancel::CancelHandle::cancel(&self)
 pub fn runvil::cancel::CancelHandle::cancelled(&self) -> runvil::cancel::Cancelled
 pub fn runvil::cancel::CancelHandle::child(&self) -> runvil::cancel::CancelHandle
@@ -776,22 +754,12 @@ pub mod runvil::replay
 pub mod runvil::timestamp
 pub mod runvil::tools
 pub mod runvil::vfs
-pub runvil::MissingService::pack: runvil::packs::PackId
-pub runvil::MissingService::service: alloc::string::String
 pub runvil::ParseErrorKind::Fence
 pub runvil::ParseErrorKind::Frontmatter
 pub runvil::ParseErrorKind::Internal
 pub runvil::ParseErrorKind::List
 pub runvil::ParseErrorKind::Lua
 pub runvil::ParseErrorKind::Structure
-pub runvil::RequirementCheck::ContextMinimum
-pub runvil::RequirementCheck::Thinking
-pub runvil::RequirementCheck::Unbound
-pub runvil::Requirements::missing_packs: alloc::vec::Vec<runvil::packs::PackId>
-pub runvil::Requirements::missing_services: alloc::vec::Vec<runvil::MissingService>
-pub runvil::Requirements::reserved: alloc::collections::btree::set::BTreeSet<runvil::packs::PackId>
-pub runvil::Requirements::unavailable_packs: alloc::vec::Vec<runvil::UnavailablePack>
-pub runvil::Requirements::unmet_models: alloc::vec::Vec<runvil::UnmetRequirement>
 pub runvil::RunErrorKind::Binding
 pub runvil::RunErrorKind::Completion
 pub runvil::RunErrorKind::ContextExhausted
@@ -824,14 +792,6 @@ pub runvil::Step::Pending { .. }
 pub runvil::Step::Pending::effects: alloc::vec::Vec<runvil::effect::IssuedEffect>
 pub runvil::Step::Pending::events: alloc::vec::Vec<runvil::event::Event>
 pub runvil::Step::Pending::withdrawn: alloc::vec::Vec<runvil::effect::EffectId>
-pub runvil::UnavailablePack::pack: runvil::packs::PackId
-pub runvil::UnavailablePack::reason: alloc::string::String
-pub runvil::UnmetRequirement::actual: alloc::string::String
-pub runvil::UnmetRequirement::check: runvil::RequirementCheck
-pub runvil::UnmetRequirement::required: alloc::string::String
-pub runvil::UnmetRequirement::role: runvil::model::ModelRole
-pub runvil::UsablePack::pack: runvil::packs::PackId
-pub runvil::UsablePack::vendor: alloc::string::String
 pub runvil::effect::AnswerRecord::Chat(..)
 pub runvil::effect::AnswerRecord::Chat::0: core::result::Result<runvil::effect::ChatAnswerRecord, runvil::effect::FailureRecord>
 pub runvil::effect::AnswerRecord::Dropped
@@ -1305,6 +1265,10 @@ pub runvil::packs::PackIdErrorKind::Charset
 pub runvil::packs::PackIdErrorKind::Control
 pub runvil::packs::PackIdErrorKind::Empty
 pub runvil::packs::PackIdErrorKind::SegmentCount
+pub runvil::packs::RosterEntry::Unavailable { .. }
+pub runvil::packs::RosterEntry::Unavailable::reason: alloc::string::String
+pub runvil::packs::RosterEntry::Usable { .. }
+pub runvil::packs::RosterEntry::Usable::vendor: alloc::string::String
 pub runvil::prompt::ArgType::Boolean
 pub runvil::prompt::ArgType::Integer
 pub runvil::prompt::ArgType::Number

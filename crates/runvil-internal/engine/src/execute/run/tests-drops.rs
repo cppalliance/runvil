@@ -49,13 +49,9 @@ fn bound_sections(sections: &str) -> Run {
         json!({ "type": "object" }),
     );
     let catalog = ToolCatalog::new([echo]).expect("one tool is a valid catalog");
-    let (ctx, requirements) = run_context()
+    let ctx = run_context()
         .with_tools(catalog)
-        .prepare(&prompt, BTreeMap::from([(ModelRole::Default, model)]));
-    assert!(
-        requirements.refusal().is_none(),
-        "the model fills the prompt's role: {requirements:?}"
-    );
+        .with_models(BTreeMap::from([(ModelRole::Default, model)]));
     Run::new(Arc::new(prompt), "", ctx)
 }
 

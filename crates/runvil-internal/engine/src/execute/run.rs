@@ -105,16 +105,26 @@ impl Run {
     /// Builds a run of `prompt` with the arguments `args` and the context
     /// `config`.
     ///
-    /// A context that skipped
-    /// [`RunContext::prepare`](super::RunContext::prepare) runs with an
-    /// empty model set. Its tool set holds whatever catalog and roster the
-    /// context's builders set.
+    /// Building a run fills its five model roles from the context's role
+    /// map, as [`RunContext::with_models`](super::RunContext::with_models)
+    /// describes, and an empty map leaves the model set empty. Its tool set
+    /// holds whatever catalog and roster the context's builders set.
     ///
-    /// Building a run checks nothing. The first `step` checks that the
-    /// prompt declares a supported `runvil:` version, that the context's
-    /// filesystem declares a store, and that the store's backend passes its
-    /// probe. When a check fails, that step returns `Done` with the failure
-    /// and no events.
+    /// Building a run never fails. The first `step` checks, in order,
+    /// that the prompt declares a supported `runvil:` version, that the
+    /// context's filesystem declares a store whose backend passes its
+    /// probe, and that the context meets what the prompt requires: each
+    /// Pack the prompt declares is on the roster and can serve (a run given
+    /// no roster skips this check), each declared role's requirements hold
+    /// for the model that fills it, a non-empty role map has a `default`
+    /// entry, and no tool of the catalog and no Pack of the roster has a
+    /// Pack id the Engine reserves, such as `adhoc`. When a check fails,
+    /// that step returns `Done` with the failure and no events. The
+    /// requirements failure is a
+    /// [`RequirementsUnmet`](super::RunErrorKind::RequirementsUnmet) whose
+    /// message names every gap. When the run's cancel flag is set as a
+    /// check fails, the run ends [`Cancelled`](RunResult::Cancelled)
+    /// instead.
     #[must_use]
     pub fn new(prompt: Arc<Prompt>, args: &str, config: RunContext) -> Run {
         Self::from_state(RunState::new(prompt, args, config))

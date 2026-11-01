@@ -5,15 +5,15 @@
 //! [`Run::step`] returns [`Step::Pending`] with the effects the run waits on.
 //! The caller performs each effect and hands its answer to [`Run::resume`].
 //! The run ends at [`Step::Done`] with its [`RunResult`].
-//! Before the run starts, the caller puts the tools a run may offer on its
-//! [`RunContext`], and [`RunContext::prepare`] fills the five model roles
-//! from the caller's role map.
+//! Before the run starts, the caller puts on its [`RunContext`] the tools
+//! a run may offer, the Packs it holds, and the role map that fills the
+//! five model roles. The run's first step checks the context against what
+//! the prompt requires, and a context that falls short ends the run there
+//! with a [`RequirementsUnmet`](RunErrorKind::RequirementsUnmet) failure
+//! that names every gap.
 //!
 //! The crate's `greeter` example is that whole loop in one program.
 
-pub use runvil_engine::MissingService;
-pub use runvil_engine::RequirementCheck;
-pub use runvil_engine::Requirements;
 pub use runvil_engine::Run;
 pub use runvil_engine::RunContext;
 pub use runvil_engine::RunError;
@@ -22,9 +22,6 @@ pub use runvil_engine::RunLimits;
 pub use runvil_engine::RunResult;
 pub use runvil_engine::SourceLocation;
 pub use runvil_engine::Step;
-pub use runvil_engine::UnavailablePack;
-pub use runvil_engine::UnmetRequirement;
-pub use runvil_engine::UsablePack;
 pub use runvil_parser::ParseError;
 pub use runvil_parser::ParseErrorKind;
 pub use runvil_parser::Prompt;
@@ -117,10 +114,11 @@ pub mod tools {
 }
 
 pub mod packs {
-    //! Pack ids, the `uses:` entries that declare Packs, the Lua
-    //! preludes Packs add to a run, and the global names those preludes
-    //! may define.
+    //! Pack ids, the `uses:` entries that declare Packs, how each Pack
+    //! stands in a run's roster, the Lua preludes Packs add to a run, and
+    //! the global names those preludes may define.
 
+    pub use runvil_lua::RosterEntry;
     pub use runvil_types::names::GlobalName;
     pub use runvil_types::names::GlobalNameError;
     pub use runvil_types::packs::PackId;

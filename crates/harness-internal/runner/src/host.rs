@@ -16,9 +16,10 @@
 //! those Packs and waits for each of them to be ready, and a Pack whose
 //! `ready` fails is unavailable to that run the same way. Then it takes a
 //! snapshot of them with the run's own services: the catalog the Engine
-//! offers the run, the preludes of the Packs the prompt declares, the
-//! requirements the pick and the snapshot cannot meet, and the performer
-//! that sends each tool call to the Pack its id names.
+//! offers the run, the roster that says how each Pack stands, a declared
+//! Pack the pick could not resolve included, the preludes of the Packs
+//! the prompt declares, and the performer that sends each tool call to
+//! the Pack its id names.
 
 use std::collections::BTreeMap;
 use std::fmt;
@@ -26,8 +27,8 @@ use std::pin::pin;
 use std::sync::Arc;
 
 use futures_util::future::{Either, join_all, select};
+use runvil::Prompt;
 use runvil::cancel::CancelHandle;
-use runvil::{Prompt, Requirements};
 use runvil_plugin::{HostServices, Pack, PackId, PackInfo, PackRegistry};
 
 #[path = "host-run.rs"]
@@ -191,25 +192,23 @@ impl HostContext {
     }
 
     /// Takes one run's snapshot of its `packs` with `services`, the run's
-    /// own services, and reports the requirements it cannot meet for
-    /// `prompt`.
+    /// own services.
     ///
     /// `failures` holds the reason of each Pack whose `ready` failed
     /// before this run, by FQN, which the run treats as unavailable. The
     /// snapshot gives the run's catalog, which holds the tools of each of
     /// its usable Packs, its roster, which names each of its Packs with
-    /// the reason of each one that can't serve, and its declared preludes,
-    /// the declared, usable Packs', in declaration order. It also performs
-    /// the run's tool calls. The requirements cover every Pack the prompt
-    /// declares, the ones the pick could not resolve included.
+    /// the reason of each one that can't serve, a declared Pack the pick
+    /// could not resolve with a reason included, and its declared
+    /// preludes, the declared, usable Packs', in declaration order. It also
+    /// performs the run's tool calls.
     pub(crate) fn begin_run(
         &self,
         packs: &RunPacks,
         services: HostServices,
         failures: BTreeMap<&'static str, String>,
-        prompt: &Prompt,
-    ) -> (HostRunContext, Requirements) {
-        let run = HostRunContext::snapshot(
+    ) -> HostRunContext {
+        HostRunContext::snapshot(
             packs
                 .fqns
                 .iter()
@@ -217,9 +216,8 @@ impl HostContext {
                 .map(|built| (&built.id, built.info, &built.pack)),
             services,
             failures,
-        );
-        let requirements = run.requirements(prompt, &packs.unresolved);
-        (run, requirements)
+            &packs.unresolved,
+        )
     }
 }
 

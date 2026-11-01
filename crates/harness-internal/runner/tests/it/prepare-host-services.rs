@@ -1,6 +1,7 @@
 //! The run's services at preparation: a declared Pack that needs a
 //! service serves a call with the provider the run's map holds, and a run
-//! whose services lack it is refused naming the service.
+//! whose services lack it is refused at its first step naming the
+//! service.
 
 use super::*;
 
@@ -60,32 +61,22 @@ impl Pack for Greeter {
     }
 }
 
-/// Prepares [`GREETS`] with `run` as the run's services.
-async fn prepare_greeter(
-    run: HostServices,
-) -> (Arc<MemoryRecorder>, Result<Prepared, PrepareError>) {
+/// Prepares [`GREETS`] with `run` as the run's services and drives the
+/// run to its end, returning the recorder and the run's id beside its
+/// outcome.
+async fn drive_greeter(run: HostServices) -> (Arc<MemoryRecorder>, RunId, RunOutcome) {
     let recorder = recorder();
     let mut services = services(&recorder, building(GREETER));
     services.services = run;
-    let prepared = prepare(GREETS, "", services).await;
-    (recorder, prepared)
+    let (run_id, outcome) = prepare_and_drive(GREETS, services).await;
+    (recorder, run_id, outcome)
 }
 
 #[tokio::test]
 async fn a_pack_serves_a_call_with_the_service_the_runs_map_provides() {
     let mut run = HostServices::new();
     run.provide(&GREETING, Arc::from("hello")).unwrap();
-    let (recorder, prepared) = prepare_greeter(run).await;
-    let prepared = prepared.expect("the run's service meets the need");
-    let outcome = drive_run(
-        prepared.run,
-        prepared.performers,
-        recorder.clone(),
-        prepared.run_id,
-        CancelHandle::new(),
-    )
-    .await
-    .unwrap();
+    let (_recorder, _run_id, outcome) = drive_greeter(run).await;
     assert_eq!(
         completed(outcome),
         "hello",
@@ -95,15 +86,13 @@ async fn a_pack_serves_a_call_with_the_service_the_runs_map_provides() {
 
 #[tokio::test]
 async fn a_pack_whose_service_the_run_lacks_is_refused_naming_the_service() {
-    let (recorder, prepared) = prepare_greeter(HostServices::new()).await;
-    let Err(PrepareError::Refused { run_id, error }) = prepared else {
-        panic!("a required Pack without its service refuses the run");
-    };
+    let (recorder, run_id, outcome) = drive_greeter(HostServices::new()).await;
+    let notice = refusal(outcome);
     assert!(
-        error
-            .to_string()
-            .contains("- greeter needs tests/greeting, and the environment provides none"),
-        "the notice names the Pack and the missing service: {error}"
+        notice.contains(
+            "- greeter is unavailable: the run lacks the services it needs: tests/greeting"
+        ),
+        "the notice names the Pack and the missing service: {notice}"
     );
     let effects = recorder
         .records(run_id)

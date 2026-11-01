@@ -122,8 +122,8 @@ pub struct SectionVm<S = Injected> {
     /// run catalog. Shared with the run, not snapshotted; nothing writes
     /// it during a run.
     pub(crate) tool_set: Arc<ToolSet>,
-    /// The run's shared model set: the five filled roles, built once by
-    /// prepare and never written during a run.
+    /// The run's shared model set: the five filled roles, built once with
+    /// the run and never written during it.
     pub(crate) bound_models: Arc<ModelSet>,
     /// The section's offers, read by the executor's scope path.
     offers: Arc<Mutex<Offers>>,

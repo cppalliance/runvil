@@ -16,12 +16,12 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::sync::Arc;
 
+use runvil::Prompt;
 use runvil::effect::{PackToolSets, ToolCallOrigin};
 use runvil::model::ModelInfo;
-use runvil::packs::Prelude;
+use runvil::packs::{Prelude, RosterEntry};
 use runvil::tools::{ToolCatalog, ToolError, ToolErrorKind, ToolId, ToolInfo, ToolOutput};
 use runvil::vfs::Access;
-use runvil::{MissingService, Prompt, Requirements, UnavailablePack, UsablePack};
 use runvil_plugin::{HostServices, Pack, PackId, PackInfo, RenderContext, ServiceId, ToolContext};
 use serde_json::Value;
 
@@ -39,8 +39,8 @@ pub(crate) struct HostRunContext {
 enum PackState {
     /// It can serve; its validated tools are in the run's catalog.
     Usable { info: PackInfo, pack: Arc<dyn Pack> },
-    /// Its `construct` failed, or its `ready` did before this run, for
-    /// this reason.
+    /// The pick could not resolve it, or its `construct` failed, or its
+    /// `ready` did before this run, for this reason.
     Unavailable(String),
     /// The run lacks these services from the Pack's needs.
     NeedsUnmet(Vec<ServiceId>),
@@ -54,18 +54,22 @@ impl HostRunContext {
     /// reason it maps to. Any other built Pack is usable when `services`
     /// provide every id the Pack needs; only then is its tool list read
     /// and validated. The run's one catalog is built from every usable
-    /// Pack's validated tools, in Pack id order.
+    /// Pack's validated tools, in Pack id order. Each declared Pack id the
+    /// pick could not resolve that `unresolved` gives a reason for is
+    /// unavailable with that reason; one with no reason stays out, so the
+    /// run finds it missing.
     pub(super) fn snapshot<'a>(
         packs: impl Iterator<Item = (&'a PackId, PackInfo, &'a Result<Arc<dyn Pack>, String>)>,
         services: HostServices,
         mut failures: BTreeMap<&'static str, String>,
+        unresolved: &BTreeMap<PackId, Option<String>>,
     ) -> HostRunContext {
         let mut seen = BTreeSet::new();
         // The input arrives in pick order, declared Packs first, so the
         // catalog is built after `packs` is collected, from these lists
         // in Pack id order.
         let mut usable_tools: BTreeMap<&PackId, Vec<ToolInfo>> = BTreeMap::new();
-        let packs = packs
+        let mut packs: BTreeMap<PackId, PackState> = packs
             .map(|(name, info, built)| {
                 let state = match (built, failures.remove(info.fqn)) {
                     (Err(reason), _) => PackState::Unavailable(reason.clone()),
@@ -91,6 +95,10 @@ impl HostRunContext {
                 (name.clone(), state)
             })
             .collect();
+        packs.extend(unresolved.iter().filter_map(|(name, reason)| {
+            let reason = reason.clone()?;
+            Some((name.clone(), PackState::Unavailable(reason)))
+        }));
         let catalog =
             ToolCatalog::new(usable_tools.into_values().flatten()).unwrap_or_else(|error| {
                 // Every tool passed containment and uniqueness validation one
@@ -110,35 +118,40 @@ impl HostRunContext {
         self.catalog.clone()
     }
 
-    /// The run's roster: each of its usable Packs, with or without tools,
-    /// with the vendor of its FQN, and an entry with the reason for each
-    /// one that can't serve, both in id order.
-    pub(crate) fn roster(&self) -> (Vec<UsablePack>, Vec<UnavailablePack>) {
-        let mut usable = Vec::new();
-        let mut unavailable = Vec::new();
-        for (name, pack) in &self.packs {
-            match pack {
-                PackState::Usable { info, .. } => {
-                    let vendor = info
-                        .fqn
-                        .split_once('/')
-                        .map_or(info.fqn, |(vendor, _)| vendor);
-                    usable.push(UsablePack::new(name.clone(), vendor));
-                }
-                PackState::Unavailable(reason) => {
-                    unavailable.push(UnavailablePack::new(name.clone(), reason.clone()));
-                }
-                PackState::NeedsUnmet(unmet) => {
-                    let services: Vec<String> = unmet.iter().map(ToString::to_string).collect();
-                    let reason = format!(
-                        "the run lacks the services it needs: {}",
-                        services.join(", ")
-                    );
-                    unavailable.push(UnavailablePack::new(name.clone(), reason));
-                }
-            }
-        }
-        (usable, unavailable)
+    /// The run's roster, the one account of how each of its Packs stands:
+    /// each usable Pack, with or without tools, with the vendor of its
+    /// FQN, and each one that can't serve with the reason, a declared Pack
+    /// the pick could not resolve included, in id order.
+    pub(crate) fn roster(&self) -> BTreeMap<PackId, RosterEntry> {
+        self.packs
+            .iter()
+            .map(|(name, pack)| {
+                let entry = match pack {
+                    PackState::Usable { info, .. } => {
+                        let vendor = info
+                            .fqn
+                            .split_once('/')
+                            .map_or(info.fqn, |(vendor, _)| vendor);
+                        RosterEntry::Usable {
+                            vendor: vendor.to_owned(),
+                        }
+                    }
+                    PackState::Unavailable(reason) => RosterEntry::Unavailable {
+                        reason: reason.clone(),
+                    },
+                    PackState::NeedsUnmet(unmet) => {
+                        let services: Vec<String> = unmet.iter().map(ToString::to_string).collect();
+                        RosterEntry::Unavailable {
+                            reason: format!(
+                                "the run lacks the services it needs: {}",
+                                services.join(", ")
+                            ),
+                        }
+                    }
+                };
+                (name.clone(), entry)
+            })
+            .collect()
     }
 
     /// The preludes of the usable Packs `prompt` declares, in
@@ -155,54 +168,6 @@ impl HostRunContext {
                 _ => None,
             })
             .collect()
-    }
-
-    /// What the run cannot meet for `prompt`, for each Pack it declares:
-    /// one the pick could not resolve, as `unresolved` holds it, missing
-    /// or unavailable with its reason, one that failed to build or to be
-    /// ready, and one whose needs the run lacks.
-    pub(super) fn requirements(
-        &self,
-        prompt: &Prompt,
-        unresolved: &BTreeMap<PackId, Option<String>>,
-    ) -> Requirements {
-        let mut requirements = Requirements::default();
-        for name in prompt
-            .frontmatter()
-            .uses()
-            .iter()
-            .map(|entry| entry.id().clone())
-        {
-            if let Some(reason) = unresolved.get(&name) {
-                match reason {
-                    None => requirements.missing_packs.push(name),
-                    Some(reason) => requirements
-                        .unavailable_packs
-                        .push(UnavailablePack::new(name, reason.clone())),
-                }
-                continue;
-            }
-            match self.packs.get(&name) {
-                None => requirements.missing_packs.push(name),
-                Some(PackState::Unavailable(reason)) => requirements
-                    .unavailable_packs
-                    .push(UnavailablePack::new(name, reason.clone())),
-                Some(PackState::NeedsUnmet(unmet)) => {
-                    for service in unmet {
-                        tracing::warn!(
-                            pack = %name,
-                            %service,
-                            "the prompt needs a Pack whose service this run lacks"
-                        );
-                        requirements
-                            .missing_services
-                            .push(MissingService::new(name.clone(), service.to_string()));
-                    }
-                }
-                Some(PackState::Usable { .. }) => {}
-            }
-        }
-        requirements
     }
 
     /// The usable Pack whose id is `pack`.

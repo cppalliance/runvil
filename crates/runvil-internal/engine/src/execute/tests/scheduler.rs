@@ -20,9 +20,9 @@ use crate::execute::EffectRecord;
 use crate::test_support::rig::RigTrace;
 use crate::test_support::scenario::{infer_prompt, test_binding};
 
-/// The model set a prepared run holds: one `default` binding, which every
-/// section starts on. The scheduler's tests skip prepare, so they pre-fill
-/// the run's shared set directly.
+/// The model set a run with a one-model role map holds: one `default`
+/// binding, which every section starts on. The scheduler's tests give no
+/// role map, so they pre-fill the run's shared set directly.
 fn default_models() -> ModelSet {
     let mut set = ModelSet::default();
     set.push(test_binding(
@@ -33,10 +33,10 @@ fn default_models() -> ModelSet {
     set
 }
 
-/// A run of `source` over the [`default_models`], unprepared, so the run
-/// starts with that set and no catalog.
+/// A run of `source` over the [`default_models`], so the run starts with
+/// that set.
 pub(super) fn scheduler_scenario(source: impl Into<String>) -> Scenario {
-    Scenario::new(source).unprepared().models(default_models())
+    Scenario::new(source).models(default_models())
 }
 
 /// The model set the chain and fanout tests run over: the `default` binding
@@ -48,10 +48,10 @@ pub(super) fn three_models() -> ModelSet {
     set
 }
 
-/// A run of `md` over the [`three_models`], unprepared, so the run starts
-/// with that set and no catalog.
+/// A run of `md` over the [`three_models`], so the run starts with that
+/// set.
 pub(super) fn chain_scenario(md: &str) -> Scenario {
-    Scenario::new(md).unprepared().models(three_models())
+    Scenario::new(md).models(three_models())
 }
 
 /// A prompt with the given sections, each `(heading, lua)`, under one title.

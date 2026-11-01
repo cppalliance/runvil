@@ -163,7 +163,7 @@ events! {
         ParseSucceeded {},
         /// Prompt parsing or parse-time compilation returned an error.
         ParseFailed {},
-        /// A run passed its version gate and began.
+        /// A run passed its start checks and began.
         RunStarted {},
         /// A run returned a value.
         RunSucceeded {},

@@ -321,7 +321,6 @@ fn a_first_tool_call_sets_sys_model_to_the_model_models_use_selected() {
     ));
     models.push(test_binding("strong", "A second model", "other-model"));
     let trace = Scenario::new(md)
-        .unprepared()
         .models(models)
         .offer("echo", echo_tool())
         .run();

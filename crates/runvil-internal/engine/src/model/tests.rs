@@ -35,7 +35,7 @@ fn gateway_id(name: &str) -> ModelId {
     ModelId::gateway(name).expect("test model alias is valid")
 }
 
-/// A bound role as prepare's fill records it: label, description, resolved
+/// A bound role as the run's fill records it: label, description, resolved
 /// identity, and the thinking switch as the frozen invocation.
 fn bound_role(
     label: &str,

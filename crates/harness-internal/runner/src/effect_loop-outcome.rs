@@ -1,5 +1,5 @@
 //! The recorded outcome of a run: what the loop hands the recorder when a
-//! run ends, and what a refused preparation records in its place.
+//! run ends, a run its first step refused included.
 
 use runvil::{RunError, RunResult};
 
@@ -25,9 +25,8 @@ pub(super) fn outcome_of(result: RunResult) -> RunOutcome {
 
 /// The failed outcome for an Engine error: the failure's kind is the
 /// error kind's debug name and its message the error's text with its
-/// cause chain. The one derivation for a run that failed under the loop
-/// and a run preparation refused, so the two agree in the record.
-pub(crate) fn failed_outcome(error: &RunError) -> RunOutcome {
+/// cause chain.
+fn failed_outcome(error: &RunError) -> RunOutcome {
     RunOutcome::Failed {
         kind: format!("{:?}", error.kind()),
         message: display_chain(error),

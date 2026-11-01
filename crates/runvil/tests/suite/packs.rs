@@ -1,9 +1,9 @@
 //! Handing Packs to a run.
 
-use runvil::packs::PackId;
-use runvil::{UnavailablePack, UsablePack};
+use runvil::packs::{PackId, RosterEntry};
 
-use super::support::{Scenario, TestResult, greeter};
+use super::prepare::refusal;
+use super::support::{Scenario, TestResult, greeter, prompt};
 
 #[test]
 fn two_runs_whose_contexts_carry_different_rosters_each_see_their_own() -> TestResult {
@@ -11,15 +11,47 @@ fn two_runs_whose_contexts_carry_different_rosters_each_see_their_own() -> TestR
     let kit = PackId::parse("kit")?;
     let usable = {
         let kit = kit.clone();
-        Scenario::default()
-            .context(move |ctx| ctx.with_packs(vec![UsablePack::new(kit.clone(), "acme")], vec![]))
+        Scenario::default().context(move |ctx| {
+            ctx.with_packs([(
+                kit.clone(),
+                RosterEntry::Usable {
+                    vendor: "acme".to_owned(),
+                },
+            )])
+        })
     };
     let unavailable = Scenario::default().context(move |ctx| {
-        ctx.with_packs(vec![], vec![UnavailablePack::new(kit.clone(), "down")])
+        ctx.with_packs([(
+            kit.clone(),
+            RosterEntry::Unavailable {
+                reason: "down".to_owned(),
+            },
+        )])
     });
 
     for (scenario, expected) in [(usable, "true"), (unavailable, "false")] {
         assert_eq!(scenario.run(&source)?.text()?, expected);
     }
+    Ok(())
+}
+
+#[test]
+fn a_declared_pack_the_roster_lacks_or_cannot_use_refuses_the_run() -> TestResult {
+    let source = prompt("uses: [kit, web]", &[("Only", "return 'done'")]);
+    let kit = PackId::parse("kit")?;
+    let scenario = Scenario::default().context(move |ctx| {
+        ctx.with_packs([(
+            kit.clone(),
+            RosterEntry::Unavailable {
+                reason: "the kit server is down".to_owned(),
+            },
+        )])
+    });
+    assert_eq!(
+        refusal(scenario, &source)?,
+        "the environment cannot satisfy this prompt:\n\
+         - missing required Pack: web\n\
+         - kit is unavailable: the kit server is down"
+    );
     Ok(())
 }

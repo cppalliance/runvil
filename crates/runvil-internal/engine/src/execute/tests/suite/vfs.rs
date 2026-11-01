@@ -1,7 +1,7 @@
 //! The executor's `VfsRef` contract with its caller: an end-to-end run
-//! over the prepared handle, and the seed-run-extract round trip a caller
+//! over the caller's handle, and the seed-run-extract round trip a caller
 //! drives with no real files - seed the declared input through the run's
-//! handle, prepare and run, extract the declared output, and charge a
+//! handle, run, extract the declared output, and charge a
 //! missing output to the prompt's promise as an explicit contract error.
 //! Then the run-bounded scope: a run's `Done`, or its drop before `Done`,
 //! ends its scope however long the caller holds the store views it was
@@ -65,7 +65,7 @@ const MISSING_OUTPUT: &str = concat!(
 fn fresh_store_view(vfs: &VfsRef, origin: &str) -> Access {
     let access = vfs
         .acquire(Origin::new(origin))
-        .expect("the prepared backend acquires");
+        .expect("the caller's backend acquires");
     runvil_vfs::detail::store_view(&access).expect("the handle declares a store")
 }
 
@@ -103,9 +103,9 @@ fn seed_declared_input(vfs: &VfsRef, prompt: &Prompt, contents: &str) {
 }
 
 /// Seeds `source`'s declared input with `contents` and runs it over the
-/// seeded handle through the prepare, which keeps the handle as given:
-/// the test's seed-run-extract sequence is seed through the handle,
-/// prepare and run, extract through the handle. Returns the run's text
+/// seeded handle, which the run keeps as given: the test's
+/// seed-run-extract sequence is seed through the handle, run, extract
+/// through the handle. Returns the run's text
 /// and the handle.
 #[track_caller]
 fn seeded_run(source: &str, name: &str, contents: &str) -> (String, VfsRef) {
@@ -119,7 +119,7 @@ fn seeded_run(source: &str, name: &str, contents: &str) -> (String, VfsRef) {
 fn an_end_to_end_run_threads_one_vfs_ref_through_every_section() {
     // The store survives the context-clearing section transition: one
     // section's write is the next section's read, over the run's
-    // prepared handle.
+    // handle.
     let source = prompt(
         "",
         &[
@@ -140,7 +140,7 @@ fn an_end_to_end_run_threads_one_vfs_ref_through_every_section() {
 }
 
 #[test]
-fn a_caller_seeds_and_extracts_through_the_prepared_handle_with_no_real_files() {
+fn a_caller_seeds_and_extracts_through_the_runs_handle_with_no_real_files() {
     let (text, vfs) = seeded_run(ROUND_TRIP_PROMPT, "vfs-round-trip", "the paper body");
     assert_eq!(text, "done");
     let store = fresh_store_view(&vfs, "round-trip extraction");
@@ -179,12 +179,11 @@ fn fanout_interleaving_is_invariant_across_memory_and_real_backends() {
     // identical.
     const FANOUT_STORE_WRITES: &str =
         include_str!("../../../../tests/prompts/execution/fanout-store-writes.md");
-    // Both arms drive the raw caller-supplied handle contract (no prepare
-    // pass), so the caller's own backend serves the declared store in each.
+    // Both arms drive the raw caller-supplied handle contract, so the
+    // caller's own backend serves the declared store in each.
     let memory = Scenario::new(FANOUT_STORE_WRITES)
         .name("vfs-invariance-memory")
         .vfs(VfsRef::default())
-        .unprepared()
         .run();
 
     let temp = TempRoot::new("fanout_interleaving_is_invariant_across_memory_and_real_backends");
@@ -197,7 +196,6 @@ fn fanout_interleaving_is_invariant_across_memory_and_real_backends() {
     let real = Scenario::new(FANOUT_STORE_WRITES)
         .name("vfs-invariance-real")
         .vfs(real_vfs)
-        .unprepared()
         .run();
 
     assert_eq!(

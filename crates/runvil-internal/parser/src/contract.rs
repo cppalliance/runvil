@@ -5,8 +5,8 @@
 //! Pack id or vendor/name, no Pack id declared twice, the alias grammar
 //! on arg names, the five model role names, arg name and type sanity - and
 //! exposes the FULL declaration on the parsed [`Prompt`](crate::Prompt);
-//! satisfying the declaration against the caller's environment is prepare's
-//! job, never the parser's.
+//! checking the declaration against the caller's environment is the job of
+//! the run's first step, never the parser's.
 //!
 //! `args` and `models` are defined in submodules; this root owns the
 //! duplicate-Pack check and the map deserializer the two map keys share.

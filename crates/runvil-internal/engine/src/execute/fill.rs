@@ -1,4 +1,5 @@
-//! Prepare's fill function: the caller's role map becomes the run's model set.
+//! The run's fill function: the caller's role map becomes the run's model
+//! set when the run is built.
 
 use std::collections::BTreeMap;
 

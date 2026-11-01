@@ -74,7 +74,6 @@ fn a_raw_id_handle_fans_out_with_no_model_supplied() {
         ("### Arm", "return models.current().model_id"),
     ]);
     let trace = Scenario::new(md)
-        .unprepared()
         .models(ModelSet::default())
         .limits(ceiling(4))
         .context(|ctx| ctx.with_ui(serde_json::json!({})))

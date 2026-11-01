@@ -22,7 +22,7 @@ use runvil::model::{Completion, ModelInfo, ModelRole};
 use runvil::timestamp::Timestamp;
 use runvil::tools::ToolCatalog;
 use runvil::vfs::perform_vfs_op;
-use runvil::{Prompt, Requirements, Run, RunContext, RunResult, RunSeed, Step};
+use runvil::{Prompt, Run, RunContext, RunResult, RunSeed, Step};
 use serde_json::json;
 
 use super::{Reply, TestResult, Tool, canned, tool_info};
@@ -33,8 +33,8 @@ type Edit = Box<dyn Fn(RunContext) -> RunContext>;
 const TEST_SEED: RunSeed = RunSeed::from_bytes([7; 32]);
 
 /// One test's setup. Every scenario gives the `default` role [`canned`]
-/// unless it names a model or a role map, numbers run events on from the parse events, and fails to start
-/// when prepare reports a gap.
+/// unless it names a model or a role map, and numbers run events on from
+/// the parse events.
 #[derive(Default)]
 pub(crate) struct Scenario {
     args: String,
@@ -92,7 +92,7 @@ impl Scenario {
         self
     }
 
-    /// Sets the whole role map prepare fills the roles from, in place of the
+    /// Sets the whole role map the run fills the roles from, in place of the
     /// one-model map [`model`](Self::model) and [`canned`] make. The map may
     /// leave `default` out.
     pub(crate) fn roles(mut self, roles: impl IntoIterator<Item = (ModelRole, ModelInfo)>) -> Self {
@@ -113,10 +113,8 @@ impl Scenario {
         self
     }
 
-    /// Parses `source` as the run `greeter` and prepares its context,
-    /// whatever prepare reports. [`start`](Self::start) is what fails on
-    /// a gap.
-    pub(crate) fn prepare(&self, source: &str) -> TestResult<Prepared> {
+    /// Parses `source` as the run `greeter` and builds its context.
+    pub(crate) fn build(&self, source: &str) -> TestResult<Built> {
         let (parsed, events) = Prompt::parse(source, "greeter");
         let prompt = parsed?;
         let roles = match (&self.roles, &self.model) {
@@ -125,7 +123,8 @@ impl Scenario {
             (None, None) => BTreeMap::from([(ModelRole::Default, canned()?)]),
         };
         let mut ctx = RunContext::new("greeter", TEST_SEED, self.started_at)
-            .with_provenance_start(u32::try_from(events.len())?);
+            .with_provenance_start(u32::try_from(events.len())?)
+            .with_models(roles);
         if let Some(tool) = &self.tool {
             let info = tool_info(tool.id, json!({ "type": "object" }))?;
             ctx = ctx.with_tools(ToolCatalog::new([info])?);
@@ -133,27 +132,20 @@ impl Scenario {
         if let Some(edit) = &self.context {
             ctx = edit(ctx);
         }
-        let (ctx, requirements) = ctx.prepare(&prompt, roles);
-        Ok(Prepared {
+        Ok(Built {
             prompt,
             ctx,
-            requirements,
             events,
         })
     }
 
-    /// Prepares `source` and creates its run, not yet stepped. Fails when
-    /// prepare reports a gap.
+    /// Builds `source`'s context and creates its run, not yet stepped.
     pub(crate) fn start(self, source: &str) -> TestResult<Driver> {
-        let Prepared {
+        let Built {
             prompt,
             ctx,
-            requirements,
             events,
-        } = self.prepare(source)?;
-        if let Some(refusal) = requirements.refusal() {
-            return Err(refusal.into());
-        }
+        } = self.build(source)?;
         Ok(Driver {
             run: Run::new(Arc::new(prompt), &self.args, ctx),
             replies: self.replies.into(),
@@ -172,10 +164,9 @@ impl Scenario {
     }
 }
 
-pub(crate) struct Prepared {
+pub(crate) struct Built {
     pub(crate) prompt: Prompt,
     pub(crate) ctx: RunContext,
-    pub(crate) requirements: Requirements,
     /// The parse events.
     pub(crate) events: Vec<Event>,
 }

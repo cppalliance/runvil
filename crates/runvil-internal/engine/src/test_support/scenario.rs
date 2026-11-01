@@ -1,7 +1,7 @@
 //! The run-level test driver. A [`Scenario`] holds a run's setup as data:
 //! its source, args, run name, seed, context edits, store, tools, model,
 //! the sets it fills in before the run starts, the effects it holds, and
-//! the effect that cancels it. It parses the source, prepares the run, and
+//! the effect that cancels it. It parses the source, builds the run, and
 //! steps it on the calling thread, answering every effect it does not hold
 //! the moment it is issued, and returns a [`Trace`] of what the run
 //! produced. Nothing awaits or sleeps: a timer fires at once, a tool is a
@@ -30,7 +30,7 @@ use runvil_vfs::VfsRef;
 use super::FnTool;
 use super::scripted_chat::ScriptedChat;
 use crate::Error;
-use crate::execute::{Effect, EffectAnswer, Run, RunContext, RunError, RunLimits, RunResult};
+use crate::execute::{Effect, EffectAnswer, Run, RunContext, RunError, RunLimits};
 use crate::lua::ToolBinding;
 use crate::model::{
     CompletionErrorKind, ModelBinding, ModelId, ModelInfo, ModelRole, ModelSet, ThinkingMode,
@@ -106,7 +106,8 @@ pub(crate) fn assert_model_failure(error: &RunError, kind: CompletionErrorKind, 
     );
 }
 
-/// The edit a scenario applies to its run's context before the prepare.
+/// The edit a scenario applies to its run's context before the run is
+/// built.
 type ContextEdit = Box<dyn FnOnce(RunContext) -> RunContext>;
 
 /// A test over an effect: which effects a scenario holds, or which answer
@@ -139,16 +140,14 @@ pub(crate) struct Scenario {
     chat: Option<Chat>,
     hold: Option<Matcher>,
     signal: Option<Matcher>,
-    prepare: bool,
-    /// The role map the prepare fills the model set from.
+    /// The role map the run fills its model set from.
     roles: BTreeMap<ModelRole, ModelInfo>,
 }
 
 impl Scenario {
     /// A run of `source` named [`EXECUTION`], under [`TEST_SEED`] and
     /// [`TEST_STARTED_AT`], with empty args, a fresh memory store, no tools,
-    /// no model, nothing filled in, and no held effect, prepared so that
-    /// an unsatisfiable prompt is refused before it starts.
+    /// no model, nothing filled in, and no held effect.
     pub(crate) fn new(source: impl Into<String>) -> Scenario {
         Scenario {
             source: source.into(),
@@ -163,7 +162,6 @@ impl Scenario {
             chat: None,
             hold: None,
             signal: None,
-            prepare: true,
             roles: BTreeMap::new(),
         }
     }
@@ -186,7 +184,7 @@ impl Scenario {
         self
     }
 
-    /// Makes the [`TEST_MODEL`] the run's `default` model, so the prepare
+    /// Makes the [`TEST_MODEL`] the run's `default` model, so the run
     /// fills all five roles with it.
     pub(crate) fn bound(self) -> Scenario {
         self.current_model(test_model(TEST_MODEL))
@@ -198,8 +196,8 @@ impl Scenario {
         self.role_model(ModelRole::Default, model)
     }
 
-    /// Gives `role` its own model in the role map the prepare fills the
-    /// model set from.
+    /// Gives `role` its own model in the role map the run fills its model
+    /// set from.
     pub(crate) fn role_model(mut self, role: ModelRole, model: ModelInfo) -> Scenario {
         self.roles.insert(role, model);
         self
@@ -211,7 +209,7 @@ impl Scenario {
     }
 
     /// Adds `edit` to the edits applied to the run's context, after the
-    /// scenario's own settings and before the prepare.
+    /// scenario's own settings, its role map included.
     pub(crate) fn context(
         mut self,
         edit: impl FnOnce(RunContext) -> RunContext + 'static,
@@ -227,13 +225,6 @@ impl Scenario {
         self
     }
 
-    /// Starts the run over the context as given, with no prepare: no model
-    /// role is filled and no requirement is checked.
-    pub(crate) fn unprepared(mut self) -> Scenario {
-        self.prepare = false;
-        self
-    }
-
     /// Adds `tool` to the run's catalog and answers its calls with it.
     pub(crate) fn tool(mut self, tool: FnTool) -> Scenario {
         self.tools.push(tool);
@@ -241,7 +232,7 @@ impl Scenario {
     }
 
     /// Fills the run's model set with `set` before the run starts, as the
-    /// H1 pass would leave it, in place of the set the prepare fills.
+    /// H1 pass would leave it, in place of the set the role map fills.
     pub(crate) fn models(mut self, set: ModelSet) -> Scenario {
         self.prefill.models = Some(set);
         self
@@ -317,13 +308,13 @@ impl Scenario {
         self
     }
 
-    /// Parses the source, prepares the run, and starts it.
+    /// Parses the source, builds the run, and starts it.
     ///
     /// # Panics
     /// When the source fails to parse, naming the error.
     #[track_caller]
     pub(crate) fn start(mut self) -> Driving {
-        let (prompt, events, ctx, refused) = self.prepared();
+        let (prompt, events, ctx) = self.context_of();
         let (signal, signalled) = match self.signal {
             Some(signal) => {
                 let (sender, receiver) = mpsc::channel();
@@ -342,10 +333,8 @@ impl Scenario {
             signal,
             signalled: Cell::new(false),
         };
-        let run = refused
-            .is_none()
-            .then(|| self.prefill.start(Arc::new(prompt), &self.args, ctx));
-        let canceller = run.as_ref().zip(signalled).map(|(run, signalled)| {
+        let run = self.prefill.start(Arc::new(prompt), &self.args, ctx);
+        let canceller = signalled.map(|signalled| {
             let cancel = run.cancel_handle();
             thread::spawn(move || {
                 if signalled.recv().is_ok() {
@@ -355,7 +344,7 @@ impl Scenario {
         });
         Driving {
             run,
-            result: refused,
+            result: None,
             answers,
             parsed: events.len(),
             events,
@@ -375,35 +364,31 @@ impl Scenario {
         self.start().finish()
     }
 
-    /// Parses the source, prepares the run, and hands it back unstarted,
-    /// for a test that steps it and answers its effects by hand. The
+    /// Parses the source, builds the run, and hands it back unstarted, for
+    /// a test that steps it and answers its effects by hand. The
     /// scenario's tools still shape the catalog, but its answers, holds,
     /// and canceller play no part.
     ///
     /// # Panics
-    /// When the source fails to parse or the prepare refuses the run,
-    /// naming the error.
+    /// When the source fails to parse, naming the error.
     #[track_caller]
     pub(crate) fn into_run(mut self) -> Run {
-        let (prompt, _, ctx, refused) = self.prepared();
-        if let Some(refused) = refused {
-            panic!("expected the prepare to accept the run, got {refused:?}");
-        }
+        let (prompt, _, ctx) = self.context_of();
         self.prefill.start(Arc::new(prompt), &self.args, ctx)
     }
 
-    /// Parses the source and builds the run's context, prepared unless the
-    /// scenario skips the prepare, beside the parse events and the
-    /// prepare's refusal.
+    /// Parses the source and builds the run's context, beside the parse
+    /// events.
     #[track_caller]
-    fn prepared(&mut self) -> (Prompt, Vec<Event>, RunContext, Option<RunResult>) {
+    fn context_of(&mut self) -> (Prompt, Vec<Event>, RunContext) {
         let (parsed, events) = Prompt::parse(&self.source, &self.name);
         let prompt = match parsed {
             Ok(prompt) => prompt,
             Err(error) => panic!("expected the scenario source to parse, got {error}"),
         };
         let mut ctx = RunContext::new(self.name.clone(), self.seed, TEST_STARTED_AT)
-            .with_vfs(self.store.vfs());
+            .with_vfs(self.store.vfs())
+            .with_models(std::mem::take(&mut self.roles));
         if !self.tools.is_empty() || !self.listed.is_empty() {
             let infos = self.tools.iter().map(FnTool::info);
             let catalog = ToolCatalog::new(infos.chain(self.listed.iter().cloned()))
@@ -411,19 +396,12 @@ impl Scenario {
             ctx = ctx.with_tools(catalog);
         }
         let edit = std::mem::replace(&mut self.context, Box::new(|ctx| ctx));
-        let mut ctx = edit(ctx);
-        let mut refused = None;
-        if self.prepare {
-            let requirements;
-            (ctx, requirements) = ctx.prepare(&prompt, std::mem::take(&mut self.roles));
-            refused = requirements.refusal().map(RunResult::Failure);
-        }
-        (prompt, events, ctx, refused)
+        (prompt, events, edit(ctx))
     }
 }
 
 /// What a scenario fills into its run's state before the run starts, in
-/// place of what the prepare and the H1 pass would leave there.
+/// place of what the role map and the H1 pass would leave there.
 #[derive(Default)]
 struct Prefill {
     models: Option<ModelSet>,

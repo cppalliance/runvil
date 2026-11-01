@@ -78,16 +78,13 @@ fn parse_loop_prompt() -> Prompt {
         .expect("the bench prompt parses")
 }
 
-/// Prepares and runs `prompt` on a `context`-token window, on the serial
-/// driver: every effect is performed in process, and every round is
-/// answered by `chat`. A prompt the prepare refuses ends with the refusal.
+/// Runs `prompt` on a `context`-token window, on the serial driver: every
+/// effect is performed in process, and every round is answered by `chat`.
+/// A prompt the run's start checks refuse ends with the refusal.
 fn run_once(prompt: &Prompt, chat: &ScriptedChat, context: u32) -> RunResult {
-    let ctx = RunContext::new(EXECUTION, SEED, Timestamp::UNIX_EPOCH);
     let model = bench_catalog(context).models()[0].clone();
-    let (ctx, requirements) = ctx.prepare(prompt, BTreeMap::from([(ModelRole::Default, model)]));
-    if let Some(refusal) = requirements.refusal() {
-        return RunResult::Failure(refusal);
-    }
+    let ctx = RunContext::new(EXECUTION, SEED, Timestamp::UNIX_EPOCH)
+        .with_models(BTreeMap::from([(ModelRole::Default, model)]));
     let run = Run::new(Arc::new(prompt.clone()), "", ctx);
     let (result, _) = drive(run, |_, effect| {
         perform_locally(effect, &mut |round| {

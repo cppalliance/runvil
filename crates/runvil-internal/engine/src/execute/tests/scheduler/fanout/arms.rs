@@ -32,7 +32,7 @@ fn pre_cancelled_fanout_returns_interrupted() {
 fn model_required_when_arm_infer_has_no_binding() {
     // An arm whose explicit infer of its prose has no model binding fails
     // the fanout with Error::ModelRequired naming the worker section. The
-    // run starts unprepared with nothing filled in, so the model set stays
+    // run has no role map and nothing filled in, so the model set stays
     // empty - the scheduler scenario pre-fills a default binding.
     let md = "---\nname: t\ndescription: d\nrunvil: 0\n---\n\n\
         # Fanout\n\n\
@@ -43,7 +43,7 @@ fn model_required_when_arm_infer_has_no_binding() {
         ### Worker\n\n\
         Ask the model about {{ item }}.\n\n\
         ```lua\nreturn models.infer(prose)\n```\n";
-    let trace = Scenario::new(md).unprepared().run();
+    let trace = Scenario::new(md).run();
     let error = trace.error();
     assert!(
         matches!(error.inner(), Error::ModelRequired { .. }),

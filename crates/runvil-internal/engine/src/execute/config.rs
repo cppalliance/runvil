@@ -18,23 +18,19 @@ use runvil_vfs::VfsRef;
 pub use limits::RunLimits;
 
 use crate::lua::RosterEntry;
-use crate::model::{ModelInfo, ModelRole, ModelSet};
-use crate::parser::Prompt;
-
-use super::fill;
-use super::requirements::{Requirements, UnavailablePack, UsablePack};
+use crate::model::{ModelInfo, ModelRole};
 
 /// The inputs for one run of a prompt.
 ///
 /// The caller builds a context with `new` and the `with_*` builder
 /// methods, among them the run's tool catalog
 /// ([`with_tools`](RunContext::with_tools)), Pack roster
-/// ([`with_packs`](RunContext::with_packs)), and Pack preludes
-/// ([`with_preludes`](RunContext::with_preludes)). Then it calls
-/// [`prepare`](RunContext::prepare), which fills the five model roles from
-/// the caller's role map and reports what the caller must still satisfy. The
-/// Engine owns the context for the run. Each context belongs to exactly one
-/// run.
+/// ([`with_packs`](RunContext::with_packs)), Pack preludes
+/// ([`with_preludes`](RunContext::with_preludes)), and role map
+/// ([`with_models`](RunContext::with_models)). Building the run fills the
+/// five model roles from the role map, and the run's first step checks
+/// the context against what the prompt requires. The Engine owns the
+/// context for the run. Each context belongs to exactly one run.
 ///
 /// The context holds only the Engine's input. The observer, client, tool
 /// implementations, broker, and capture belong to the caller. The Engine
@@ -66,14 +62,15 @@ pub struct RunContext {
     pub(super) ui: Option<serde_json::Value>,
     /// The run's whole filesystem; set by `with_vfs`.
     pub(super) vfs: VfsRef,
-    /// The run's model set: one binding for each of the five roles, filled
-    /// by [`prepare`](RunContext::prepare).
-    pub(super) model_set: ModelSet,
+    /// The caller's role map, which fills the run's five roles; set by
+    /// `with_models`.
+    pub(super) models: BTreeMap<ModelRole, ModelInfo>,
     /// The run's tool catalog; set by `with_tools`.
     pub(super) tools: ToolCatalog,
     /// Each roster Pack by name, with its vendor when it can serve and the
-    /// reason when it can't; set by `with_packs`.
-    pub(super) packs: BTreeMap<PackId, RosterEntry>,
+    /// reason when it can't; set by `with_packs`, and `None` without a
+    /// roster.
+    pub(super) packs: Option<BTreeMap<PackId, RosterEntry>>,
     /// The run's Pack preludes, in declaration order; set by `with_preludes`.
     pub(super) preludes: Vec<Prelude>,
 }
@@ -105,9 +102,9 @@ impl RunContext {
             limits: RunLimits::default(),
             ui: None,
             vfs: VfsRef::default(),
-            model_set: ModelSet::default(),
+            models: BTreeMap::new(),
             tools: ToolCatalog::default(),
-            packs: BTreeMap::new(),
+            packs: None,
             preludes: Vec::new(),
         }
     }
@@ -192,7 +189,7 @@ impl RunContext {
     ///
     /// Every tool call effect carries an access to this same filesystem, so
     /// the tools and the run share one set of files. The caller seeds files
-    /// before the run and extracts output after it through the prepared
+    /// before the run and extracts output after it through the context's
     /// handle, returned by [`vfs`](RunContext::vfs).
     #[must_use]
     pub fn with_vfs(mut self, vfs: VfsRef) -> RunContext {
@@ -214,13 +211,17 @@ impl RunContext {
 
     /// Sets the run's roster: every installed Pack that can serve the run,
     /// declared by the prompt or not, with its vendor, and every one that
-    /// can't, with the reason.
+    /// can't, with the reason. A Pack listed twice keeps its last entry.
     ///
     /// Each usable Pack gets an object in the run's Lua, with or without
     /// tools. An unavailable one gets none, and offering it raises its
-    /// reason. A name in both lists counts as unavailable. Without a roster,
-    /// the run's Lua sees the declared Packs and the Packs with a tool
-    /// in the catalog.
+    /// reason. Without a roster, the run's Lua sees the declared Packs and
+    /// the Packs with a tool in the catalog.
+    ///
+    /// The run's first step checks each Pack the prompt declares against
+    /// the roster: one the roster lacks is missing, and one it lists as
+    /// unavailable fails the run with its reason. A run given no roster
+    /// checks no declared Pack.
     ///
     /// The caller reports each usable Pack's vendor, as it picked the
     /// Pack. Every tool-call and tool-result event for a catalog tool of
@@ -229,28 +230,9 @@ impl RunContext {
     #[must_use]
     pub fn with_packs(
         mut self,
-        usable: Vec<UsablePack>,
-        unavailable: Vec<UnavailablePack>,
+        roster: impl IntoIterator<Item = (PackId, RosterEntry)>,
     ) -> RunContext {
-        self.packs = usable
-            .into_iter()
-            .map(|entry| {
-                (
-                    entry.pack,
-                    RosterEntry::Usable {
-                        vendor: entry.vendor,
-                    },
-                )
-            })
-            .chain(unavailable.into_iter().map(|entry| {
-                (
-                    entry.pack,
-                    RosterEntry::Unavailable {
-                        reason: entry.reason,
-                    },
-                )
-            }))
-            .collect();
+        self.packs = Some(roster.into_iter().collect());
         self
     }
 
@@ -276,49 +258,29 @@ impl RunContext {
         self
     }
 
-    /// Fills the run's five model roles (`default`, `strong`, `small`,
-    /// `fast` and `creative`) from `models`, the caller's role map, and
-    /// reports what the caller must still satisfy, returning the context
-    /// beside the report.
-    ///
-    /// `prepare` leaves the filesystem as given. The caller checks before
-    /// `prepare` that each Pack the prompt declares can serve, and merges
-    /// that report into the one `prepare` returns.
+    /// Sets the caller's role map, which fills the run's five model roles
+    /// (`default`, `strong`, `small`, `fast` and `creative`) when the run
+    /// is built.
     ///
     /// A role's model is its own entry in `models`, else the `default`
     /// entry, so one entry for `default` fills all five roles. Every prompt
-    /// gets all five roles, whether or not it declares them. `prepare` then
-    /// checks each declared role's `min_context` and `thinking` requirements
-    /// against the info of the model that fills it. Each failed check is
-    /// listed in [`Requirements::unmet_models`] with the required and actual
-    /// values, and the role stays filled.
+    /// gets all five roles, whether or not it declares them. A role's
+    /// declared `thinking` requirement turns thinking on or off for its
+    /// rounds.
     ///
-    /// An empty `models` means the caller has no model: `prepare` skips the
-    /// fill and the checks, the roles stay empty, and a model round at run
-    /// time fails. A non-empty `models` with no `default` entry lists one
-    /// `Unbound` entry for the `default` role in
-    /// [`Requirements::unmet_models`] and leaves the roles empty.
+    /// The run's first step checks each declared role's `min_context` and
+    /// `thinking` requirements against the info of the model that fills
+    /// it, and fails the run naming each one that falls short, with the
+    /// required and actual values.
     ///
-    /// `prepare` also lists in [`Requirements::reserved`] each reserved
-    /// Pack id, such as `adhoc`, that a tool of the catalog or a Pack of
-    /// the roster, usable or not, has.
+    /// An empty `models`, the default, means the caller has no model: the
+    /// roles stay empty, nothing is checked, and a model round at run time
+    /// fails. A non-empty `models` with no `default` entry leaves the roles
+    /// empty and fails the run's first step.
     #[must_use]
-    pub fn prepare(
-        mut self,
-        prompt: &Prompt,
-        models: BTreeMap<ModelRole, ModelInfo>,
-    ) -> (RunContext, Requirements) {
-        let mut requirements = Requirements::default();
-        self.model_set = fill::fill_model_set(prompt, models, &mut requirements);
-        requirements.reserved = self
-            .tools
-            .tools()
-            .iter()
-            .map(|tool| tool.id.pack())
-            .chain(self.packs.keys().cloned())
-            .filter(PackId::is_reserved)
-            .collect();
-        (self, requirements)
+    pub fn with_models(mut self, models: BTreeMap<ModelRole, ModelInfo>) -> RunContext {
+        self.models = models;
+        self
     }
 
     /// Returns the run's VFS handle, set with [`with_vfs`](RunContext::with_vfs).
@@ -378,7 +340,7 @@ impl fmt::Debug for RunContext {
             .field("limits", &self.limits)
             .field("ui", &self.ui)
             .field("vfs", &self.vfs)
-            .field("model_set", &self.model_set)
+            .field("models", &self.models)
             .field("tools", &self.tools)
             .field("packs", &self.packs)
             .field(

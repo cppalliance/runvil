@@ -8,7 +8,7 @@
 use runvil_parser::test_support::one_section;
 use runvil_types::event::Event;
 
-use super::models_loop::catalog_scenario;
+use super::models_loop::loop_scenario;
 use super::*;
 use crate::test_support::scenario::TEST_SEED;
 
@@ -101,7 +101,7 @@ fn looped(section: &str, requested: &[&[(&str, &str, &str)]]) -> (Trace, Scripte
     let mut replies: Vec<_> = requested.iter().map(|batch| calls(batch)).collect();
     replies.push(text("done"));
     let gateway = ScriptedChat::new(replies);
-    let trace = catalog_scenario(one_section(&format!(
+    let trace = loop_scenario(one_section(&format!(
         "{section}\n\
          messages:user('list the tools')\n\
          models.loop()\n\
@@ -119,7 +119,7 @@ fn looped(section: &str, requested: &[&[(&str, &str, &str)]]) -> (Trace, Scripte
 
 #[test]
 fn a_scripts_listing_call_returns_the_text_unwrapped_and_reports_it_untrusted() {
-    let trace = catalog_scenario(one_section("return tools.call('tools/listing', {})"))
+    let trace = loop_scenario(one_section("return tools.call('tools/listing', {})"))
         .tool(listing_tool())
         .run();
     assert_eq!(
@@ -136,7 +136,7 @@ fn a_scripts_listing_call_returns_the_text_unwrapped_and_reports_it_untrusted() 
 
 #[test]
 fn a_script_call_to_a_tool_without_the_flag_stays_wrapped() {
-    let trace = catalog_scenario(one_section(
+    let trace = loop_scenario(one_section(
         "return tools.call('tools/untrusted_echo', { value = 'hi' })",
     ))
     .tool(untrusted_echo_tool())

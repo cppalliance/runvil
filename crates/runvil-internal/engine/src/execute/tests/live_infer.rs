@@ -1,15 +1,10 @@
 //! Tests for live `models.infer` against a scripted gateway, including H1 chunks and required libraries.
 
-use std::collections::BTreeMap;
-
-use runvil_parser::test_support::{PromptSource, parse_ok};
+use runvil_parser::test_support::PromptSource;
 use runvil_types::cancel::CancelHandle;
 
-use super::context::test_context;
 use super::fixtures::echo_tool;
 use super::*;
-use crate::model::ModelRole;
-use crate::test_support::scenario::{EXECUTION, TEST_MODEL, test_model};
 
 /// The prompt whose H1 infers once through the `default` handle into
 /// `var.answer`, which its `Result` section returns.
@@ -104,14 +99,6 @@ fn a_library_calls_engine_globals_at_load_time() {
             log('library loaded')",
         )
         .build();
-    let (_, requirements) = test_context(EXECUTION).prepare(
-        &parse_ok(&source),
-        BTreeMap::from([(ModelRole::Default, test_model(TEST_MODEL))]),
-    );
-    assert!(
-        requirements.is_satisfied(),
-        "the fixture declares nothing: {requirements:?}"
-    );
     let trace = Scenario::new(source).args("load-time args").bound().run();
 
     assert_eq!(trace.text(), "load-time args");

@@ -65,7 +65,6 @@ mod flight;
 mod outcome;
 
 use flight::{Flights, Reach};
-pub(crate) use outcome::failed_outcome;
 
 /// Why the loop stopped without an outcome.
 #[derive(Debug, thiserror::Error)]

@@ -52,7 +52,7 @@ fn an_offered_pack_reaches_only_the_rounds_of_the_section_entry_that_offered_it(
     );
     let gateway = ScriptedChat::new(vec![text("done"); 5]);
     let rig = Rig::run(
-        catalog_scenario(source)
+        loop_scenario(source)
             .tool(offered_tool("kit/a"))
             .tool(offered_tool("kit/b"))
             .tool(offered_tool("web/fetch"))
@@ -110,7 +110,7 @@ fn two_sections_that_offer_one_pack_each_route_a_model_call_by_their_own_sets() 
         ],
     );
     let rig = Rig::run(
-        catalog_scenario(source)
+        loop_scenario(source)
             .tool(offered_tool("kit/a"))
             .tool(offered_tool("kit/b"))
             .chat(&gateway),

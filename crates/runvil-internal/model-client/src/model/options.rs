@@ -349,7 +349,7 @@ impl CompletionOptions {
     }
 }
 
-/// The run's model set: the five role bindings that prepare builds once,
+/// The run's model set: the five role bindings the run builds once,
 /// shared unchanged by every section VM.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct ModelSet {

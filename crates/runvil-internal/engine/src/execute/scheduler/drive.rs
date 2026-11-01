@@ -29,11 +29,17 @@ impl Scheduler {
     /// result once it is over and every issued effect is answered. The
     /// first call checks that the run can start, then starts the H1 pass
     /// when the prompt has H1 blocks, else the root chain over the prompt's
-    /// sections. A run that cannot start ends with that failure and
-    /// reports no run events.
+    /// sections. A run that cannot start ends with that failure, or as
+    /// cancelled when its cancel flag is already set, and reports no run
+    /// events.
     pub(crate) fn step(&mut self) -> Step {
         if matches!(self.phase, Phase::Fresh) {
             if let Err(error) = self.check_start() {
+                let error = if self.ctx.cancel().is_cancelled() {
+                    Error::Interrupted
+                } else {
+                    error
+                };
                 self.phase = Phase::Ending(Err(error));
             } else {
                 self.phase = Phase::Running;
@@ -155,13 +161,15 @@ impl Scheduler {
     }
 
     /// Checks that the run can start: the version gate, then the declared
-    /// store.
+    /// store, then what the prompt requires of the context.
     ///
     /// # Errors
     /// Returns [`Error::UnsupportedVersion`] or a structural parse error for
-    /// a prompt that is not a supported runvil prompt, or [`Error::Store`]
+    /// a prompt that is not a supported runvil prompt, [`Error::Store`]
     /// when the handle declares no store or the store's backend fails the
-    /// probe.
+    /// probe, or [`Error::RequirementsUnmet`] with the refusal notice when
+    /// the context lacks a declared Pack or a model the prompt's roles
+    /// require, or names a Pack id the Engine reserves.
     fn check_start(&self) -> Result<()> {
         let frontmatter = self.ctx.prompt().frontmatter();
         match frontmatter.runvil() {
@@ -185,6 +193,12 @@ impl Scheduler {
             .acquire(Origin::new("store mount probe"))
             .map_err(Error::store)?;
         runvil_vfs::detail::probe_store(&probe).map_err(Error::store)?;
+        if let Some(notice) = self.ctx.refusal() {
+            return Err(Error::RequirementsUnmet {
+                notice: notice.to_owned(),
+                cause: None,
+            });
+        }
         Ok(())
     }
 
@@ -234,10 +248,17 @@ impl Scheduler {
     /// with the caller becomes an orphan the caller still answers), reports
     /// the run's end boundary after every task terminal, and holds
     /// `result` until the orphans are answered. A second decision keeps
-    /// the first: the outcome that ended the run is the record.
+    /// the first: the outcome that ended the run is the record. A run that
+    /// has not started ends like one that could not start: it holds
+    /// `result` and reports nothing.
     fn end(&mut self, result: Result<String>) {
-        if matches!(self.phase, Phase::Ending(_) | Phase::Done) {
-            return;
+        match self.phase {
+            Phase::Ending(_) | Phase::Done => return,
+            Phase::Fresh => {
+                self.phase = Phase::Ending(result);
+                return;
+            }
+            Phase::Running => {}
         }
         self.settle_all_tasks(AbandonReason::RunTerminated);
         self.teardown();

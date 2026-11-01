@@ -142,7 +142,7 @@ fn a_store_at_the_root_cannot_reach_a_mount_beneath_it() {
         .expect("the handle acquires")
         .write("/mount/secret.txt", b"secret")
         .expect("the mount seeds");
-    let trace = Scenario::new(source).vfs(vfs).unprepared().run();
+    let trace = Scenario::new(source).vfs(vfs).run();
     assert_eq!(
         trace.text(),
         "ok",

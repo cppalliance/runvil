@@ -1,7 +1,7 @@
 //! The Lua `models` Engine global: `use` / `get` / `current`.
 //!
-//! The five roles arrive pre-filled from prepare in the shared [`ModelSet`],
-//! and the table selects among them by role name. `models.use` takes a role
+//! The five roles arrive filled, when the run is built, in the shared
+//! [`ModelSet`], and the table selects among them by role name. `models.use` takes a role
 //! name or a model handle and stores the binding it selects, with its
 //! optional sampling options applied, as the section's current model.
 //! `models.get` inspects a role without selecting it, and `models.current`

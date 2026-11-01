@@ -5,9 +5,10 @@
 //! offering it raises its reason, an undeclared third-party Pack that
 //! never gets ready holds no run up, a built Pack with no tools still
 //! reaches the prompt's Lua, a cancel during the wait ends the run as
-//! cancelled in both the report and the record, a cancel that lands while
-//! a refusal is recorded leaves the report holding what the record holds,
-//! and a Pack that keeps the default `ready` serves as before.
+//! cancelled in both the report and the record, even when the run's first
+//! step would refuse it, a cancel that lands while a refusal is recorded
+//! leaves the report holding what the record holds, and a Pack that keeps
+//! the default `ready` serves as before.
 
 use super::*;
 
@@ -274,25 +275,16 @@ async fn a_declared_pack_whose_ready_fails_refuses_the_run_naming_its_reason() {
     let reason = "the fixture server refused the handshake";
     let (host, _moves, _startup) = slow_host(Phase::Failed(reason));
     let recorder = recorder();
-    let error = prepare(DECLARES_SLOW, "", services(&recorder, host))
-        .await
-        .expect_err("a declared Pack that will not be ready refuses the run");
-
-    let PrepareError::Refused { run_id, error } = error else {
-        panic!("the refusal is a requirements refusal: {error}");
-    };
-    assert!(
-        error
-            .to_string()
-            .contains(&format!("- slow is unavailable: {reason}")),
-        "the notice names the Pack and its ready failure: {error}"
-    );
-    assert!(
-        matches!(
-            recorder.outcome(run_id),
-            Some(RunOutcome::Failed { kind, .. }) if kind == "RequirementsUnmet"
-        ),
+    let (run_id, outcome) = prepare_and_drive(DECLARES_SLOW, services(&recorder, host)).await;
+    assert_eq!(
+        recorder.outcome(run_id).as_ref(),
+        Some(&outcome),
         "the recorder holds the refusal as the run's failure"
+    );
+    let notice = refusal(outcome);
+    assert!(
+        notice.contains(&format!("- slow is unavailable: {reason}")),
+        "the notice names the Pack and its ready failure: {notice}"
     );
 }
 
@@ -390,6 +382,46 @@ async fn a_cancel_while_a_declared_pack_is_still_starting_ends_the_run_cancelled
         recorder.outcome(run_id),
         Some(RunOutcome::Cancelled),
         "the recorder holds the cancel, not a refusal of the unready Pack"
+    );
+}
+
+#[tokio::test]
+async fn a_refusal_after_a_cancel_cut_the_wait_short_ends_the_run_cancelled_with_no_run_events() {
+    let (host, _moves, startup) = slow_host(Phase::Starting);
+    let recorder = recorder();
+    let harness = Harness::new(
+        recorder.clone(),
+        Arc::new(ScriptedBroker::replying()),
+        Arc::new(Unused),
+        Arc::new(host),
+        HostServices::new(),
+    );
+    let control = harness.control();
+    let declares_slow_and_web = "---\nname: slow-and-web\ndescription: d\nrunvil: 0\n\
+        uses:\n  - slow\n  - web\n---\n\n# Title\n\n## Only\n\nDone.\n";
+    let (report, ()) = tokio::time::timeout(PATIENCE, async {
+        tokio::join!(harness.run(request(declares_slow_and_web)), async {
+            startup.asked.notified().await;
+            control.cancel();
+        })
+    })
+    .await
+    .expect("the cancel ends the wait");
+
+    let report = report.expect("a cancelled run is reported");
+    assert_eq!(
+        report.outcome,
+        RunOutcome::Cancelled,
+        "the missing web Pack would refuse the run, but the cancel came first"
+    );
+    let run_id = report
+        .run_id
+        .expect("the run began at the recorder before the wait");
+    assert_eq!(recorder.outcome(run_id), Some(RunOutcome::Cancelled));
+    let events = recorded_parse_events(&recorder, run_id);
+    assert!(
+        matches!(events.last(), Some(Event::ParseSucceeded { .. })),
+        "the parse events, then the end, with no run event between: {events:?}"
     );
 }
 

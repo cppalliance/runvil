@@ -8,7 +8,7 @@
 use runvil_parser::test_support::{one_section, prompt};
 
 use super::fixtures::{echo_tool, scoped_tool};
-use super::models_loop::{catalog_scenario, loop_models, loop_scenario};
+use super::models_loop::{loop_models, loop_scenario};
 use super::*;
 use crate::model::{ModelBinding, ModelId, ModelInvocation, ToolSchema};
 use crate::test_support::scenario::test_binding;
@@ -141,10 +141,7 @@ fn after_the_render_every_offer_raises_even_an_identical_one_while_defining_stil
             ("offers", "tools.offer('tools/echo')"),
         ],
     );
-    let trace = catalog_scenario(source)
-        .tool(echo_tool())
-        .chat(&gateway)
-        .run();
+    let trace = loop_scenario(source).tool(echo_tool()).chat(&gateway).run();
     let lines: Vec<&str> = trace.text().lines().collect();
     let offer = format!("lua:tools.offer: {FIXED}");
     assert_eq!(

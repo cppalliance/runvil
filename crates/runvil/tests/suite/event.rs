@@ -2,9 +2,8 @@
 
 use std::collections::HashSet;
 
-use runvil::UsablePack;
 use runvil::event::{DebugMode, Event};
-use runvil::packs::PackId;
+use runvil::packs::{PackId, RosterEntry};
 use serde_json::Value;
 
 use super::support::{Scenario, TestResult, note, prompt, shout, text};
@@ -49,8 +48,11 @@ fn every_event_round_trips_as_a_json_line_and_no_two_share_a_provenance() -> Tes
 fn content_events_pair_each_tool_result_with_its_caller_into_a_transcript() -> TestResult {
     let (source, scenario) = shouting();
     let example = PackId::parse("example")?;
+    let usable = RosterEntry::Usable {
+        vendor: "acme".to_owned(),
+    };
     let trace = scenario
-        .context(move |ctx| ctx.with_packs(vec![UsablePack::new(example.clone(), "acme")], vec![]))
+        .context(move |ctx| ctx.with_packs([(example.clone(), usable.clone())]))
         .run(&source)?;
     assert_eq!(trace.text()?, "HI THERE");
 

@@ -45,7 +45,7 @@ fn two_catalog_tools_whose_default_names_clash_fail_only_the_section_that_offers
         ],
     );
     let rig = Rig::run(
-        catalog_scenario(source)
+        loop_scenario(source)
             .tool(offered_tool("dup/a.b"))
             .tool(offered_tool("dup/a/b"))
             .chat(&gateway),
@@ -83,7 +83,7 @@ fn a_catalog_tool_whose_default_name_is_invalid_fails_only_the_sections_that_off
         ],
     );
     let rig = Rig::run(
-        catalog_scenario(source)
+        loop_scenario(source)
             .tool(echo_tool())
             .tool(offered_tool("9lives/fetch"))
             .chat(&gateway),
@@ -111,7 +111,7 @@ fn a_catalog_tool_is_advertised_and_called_under_its_own_wire_name() {
          return messages[3].content",
     );
     let rig = Rig::run(
-        catalog_scenario(source)
+        loop_scenario(source)
             .tool(echo_tool().wire_name("echo"))
             .chat(&gateway),
     );
@@ -128,7 +128,7 @@ fn the_offer_hint_names_a_catalog_tool_by_its_own_wire_name_only() {
          local _, default = pcall(tools.offer, 'tools_echo')\n\
          return tostring(own) .. '|' .. tostring(default)",
     );
-    let rig = Rig::run(catalog_scenario(source).tool(echo_tool().wire_name("echo")));
+    let rig = Rig::run(loop_scenario(source).tool(echo_tool().wire_name("echo")));
     let (own, default) = rig
         .trace()
         .text()
@@ -149,7 +149,7 @@ fn the_scope_gate_says_a_name_exists_only_for_a_catalog_tools_own_wire_name() {
     let refused = |name: &str| {
         let gateway = ScriptedChat::new(vec![calls(&[("call_1", name, "{}")])]);
         let source = one_section("tools.offer('gh/search')\nmessages:user('go')\nmodels.loop()");
-        let trace = catalog_scenario(source)
+        let trace = loop_scenario(source)
             .tool(echo_tool().wire_name("echo"))
             .tool(offered_tool("gh/search"))
             .chat(&gateway)
@@ -188,7 +188,7 @@ fn the_scope_validation_events_bracket_the_merge_whether_it_holds_or_fails() {
             ("Clash", &failing_round("dup")),
         ],
     );
-    let trace = catalog_scenario(source)
+    let trace = loop_scenario(source)
         .tool(offered_tool("dup/a.b"))
         .tool(offered_tool("dup/a/b"))
         .chat(&gateway)
@@ -231,7 +231,7 @@ fn a_section_that_interleaves_two_packs_offers_sees_each_packs_tools_together() 
          models.loop()",
     );
     let rig = Rig::run(
-        catalog_scenario(source)
+        loop_scenario(source)
             .tool(offered_tool("kit/a"))
             .tool(offered_tool("kit/b"))
             .tool(offered_tool("web/fetch"))

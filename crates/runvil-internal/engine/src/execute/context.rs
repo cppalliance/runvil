@@ -23,6 +23,8 @@ use crate::model::{ModelBinding, ModelRole, ModelSet};
 use crate::parser::Prompt;
 
 use super::config::{RunContext, RunLimits};
+use super::fill;
+use super::requirements::Requirements;
 use super::section_context::SectionSys;
 use super::section_vm::{SectionVmSetup, VmSeed};
 
@@ -88,16 +90,19 @@ pub(crate) struct RunState {
     /// every section VM's instruction hook. The context's one handle, the
     /// same flag the caller watches and the run's `cancel` sets.
     cancel: CancelHandle,
-    /// The run's tool set: built from the prepared catalog at construction
+    /// The run's tool set: built from the context's catalog at construction
     /// and changed by nothing during the run, so every reader, every
     /// section VM (H1 included) among them, shares it with no lock and no
     /// copy.
     tool_set: Arc<ToolSet>,
-    /// The run's model set: the one [`RunContext::prepare`](super::RunContext::prepare)
-    /// filled, shared with every section VM (H1 included) and changed by
-    /// nothing during the run, so every reader shares it with no lock and no
-    /// copy.
+    /// The run's model set: filled from the context's role map at
+    /// construction, shared with every section VM (H1 included) and changed
+    /// by nothing during the run, so every reader shares it with no lock and
+    /// no copy.
     model_set: Arc<ModelSet>,
+    /// The refusal notice the run's first step fails with: what the prompt
+    /// requires that the context lacks, or `None` when it lacks nothing.
+    refusal: Option<Arc<str>>,
     /// The run's `started_at` rendered as RFC 3339, stamped into every
     /// section's `sys.when`, the H1 pass included.
     when: Arc<str>,
@@ -118,11 +123,11 @@ impl RunState {
     /// Builds the context for one run of `prompt` over `config`, which it
     /// consumes. The turn counter is minted here (starting at zero), as are
     /// the run's shared tool and model sets - the tool set built from the
-    /// catalog and the roster, the model set taken from the context (only
-    /// [`RunContext::prepare`](super::RunContext::prepare) fills it, and it
-    /// stays empty on a caller-built context that skipped it); the nonce
-    /// derives from `config`'s seed and `when` renders `config`'s
-    /// `started_at`, so two contexts over the same inputs agree on both.
+    /// catalog and the roster, the model set filled from the role map (it
+    /// stays empty for an empty map) - and the refusal notice of what the
+    /// prompt requires that `config` lacks; the nonce derives from
+    /// `config`'s seed and `when` renders `config`'s `started_at`, so two
+    /// contexts over the same inputs agree on both.
     #[must_use]
     pub(super) fn new(prompt: Arc<Prompt>, args: &str, config: RunContext) -> Self {
         let RunContext {
@@ -135,14 +140,21 @@ impl RunState {
             limits,
             ui,
             vfs,
-            model_set,
+            models,
             tools,
             packs,
             preludes,
             ..
         } = config;
-        let tool_set = Arc::new(bound::run_tool_set(&prompt, tools, packs));
-        let model_set = Arc::new(model_set);
+        let mut requirements = Requirements::default();
+        let model_set = Arc::new(fill::fill_model_set(&prompt, models, &mut requirements));
+        requirements.check_packs(&prompt, &tools, packs.as_ref());
+        let refusal = requirements.notice().map(Arc::from);
+        let tool_set = Arc::new(bound::run_tool_set(
+            &prompt,
+            tools,
+            packs.unwrap_or_default(),
+        ));
         let execution: Arc<str> = Arc::from(name);
         // The root task's event sequence starts at the context's
         // `provenance_start`: past any parse events the caller put in the
@@ -172,6 +184,7 @@ impl RunState {
             cancel,
             tool_set,
             model_set,
+            refusal,
             when: Arc::from(started_at.to_rfc3339()),
             ui: ui.map(Arc::new),
             preludes: preludes.into(),
@@ -279,6 +292,12 @@ impl RunState {
     /// constructs.
     pub(super) fn model_set(&self) -> Arc<ModelSet> {
         Arc::clone(&self.model_set)
+    }
+
+    /// The refusal notice the run's first step fails with, or `None` when
+    /// the context lacks nothing the prompt requires.
+    pub(super) fn refusal(&self) -> Option<&str> {
+        self.refusal.as_deref()
     }
 
     /// The resolved tool-loop cap per `models.loop` or model handle `loop`
@@ -411,6 +430,7 @@ impl fmt::Debug for RunState {
             .field("cancel", &self.cancel)
             .field("tool_set", &self.tool_set)
             .field("model_set", &self.model_set)
+            .field("refusal", &self.refusal)
             .field("when", &self.when)
             .field("ui", &self.ui)
             .field(

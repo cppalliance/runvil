@@ -48,12 +48,8 @@ fn infers_then_chats() -> Run {
         NonZeroU32::new(131_072).expect("131072 is non-zero"),
         ThinkingMode::Never,
     );
-    let ctx = RunContext::new(EXECUTION, TEST_SEED, Timestamp::UNIX_EPOCH);
-    let (ctx, requirements) = ctx.prepare(&prompt, BTreeMap::from([(ModelRole::Default, model)]));
-    assert!(
-        requirements.is_satisfied(),
-        "the model filling the default role satisfies the fixture: {requirements:?}"
-    );
+    let ctx = RunContext::new(EXECUTION, TEST_SEED, Timestamp::UNIX_EPOCH)
+        .with_models(BTreeMap::from([(ModelRole::Default, model)]));
     Run::new(prompt, "", ctx)
 }
 

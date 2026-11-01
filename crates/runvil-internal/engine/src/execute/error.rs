@@ -57,11 +57,14 @@ pub enum RunErrorKind {
     /// kind, an answer for an id the run never issued, or a second answer
     /// for one effect.
     Internal,
-    /// The environment falls short of what the prompt needs: a missing or
-    /// unavailable required Pack, a service the caller left out, a model
-    /// requirement a bound model fails to meet (a context minimum or a hard
-    /// keyword), a reserved Pack id that the run's tool catalog or Pack
-    /// roster names, or an H1 block that failed the prompt's hard gate.
+    /// The environment falls short of what the prompt needs. The run's
+    /// first step reports it, before any section runs, for a declared Pack
+    /// that the run's roster lacks or lists as unavailable, a model
+    /// requirement that the model filling a role fails to meet (a context
+    /// minimum or a thinking requirement), a non-empty role map with no
+    /// `default` entry, and a reserved Pack id that the run's tool catalog
+    /// or Pack roster names. An H1 block that failed the prompt's hard gate
+    /// reports it too.
     RequirementsUnmet,
 }
 

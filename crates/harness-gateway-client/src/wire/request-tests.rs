@@ -70,10 +70,9 @@ fn tool_round(offered: &[Offered]) -> Round {
     );
     let ctx = RunContext::new("round", RunSeed::from_bytes([7; 32]), Timestamp::UNIX_EPOCH);
     let catalog = ToolCatalog::new(tools).expect("the offered tools are distinct");
-    let (ctx, requirements) = ctx
+    let ctx = ctx
         .with_tools(catalog)
-        .prepare(&prompt, BTreeMap::from([(ModelRole::Default, model)]));
-    assert!(requirements.refusal().is_none(), "the round prepares");
+        .with_models(BTreeMap::from([(ModelRole::Default, model)]));
     let mut run = Run::new(Arc::new(prompt), "", ctx);
     let mut rounds = Vec::new();
     let result = loop {

@@ -3,7 +3,6 @@
 //! handles. Then the run's boundary with its caller: `Done` waits on
 //! outstanding effects, a drop is an answer, and the run is `Send`.
 
-use std::collections::BTreeMap;
 use std::num::NonZeroU32;
 use std::sync::Arc;
 
@@ -22,6 +21,8 @@ use crate::test_support::scenario::{TEST_SEED, only_effect, round_trip, test_bin
 
 #[path = "tests-drops.rs"]
 mod drops;
+#[path = "tests-start.rs"]
+mod start;
 
 /// A context for the run `run-test` under fixed caller inputs; nothing here
 /// reads the seed or `sys.when`.
@@ -405,21 +406,20 @@ fn a_child_cancel_handles_cancel_is_observed_by_the_instruction_hook() {
 }
 
 #[test]
-fn a_context_without_a_caller_handle_shares_its_one_flag_with_prepare_and_the_run() {
+fn a_context_without_a_caller_handle_shares_its_one_flag_with_the_run() {
     let source = "---\nname: t\ndescription: d\nrunvil: 0\n---\n\n# Run\n\n## Only\n\n```lua\nreturn 'x'\n```\n";
     let prompt = Prompt::parse(source, "run-test")
         .0
         .expect("the run test prompt parses");
-    // The flag `prepare` hands the Packs is the context's own.
-    let (ctx, _) = run_context().prepare(&prompt, BTreeMap::new());
-    let packs_flag = ctx.cancel.clone();
+    let ctx = run_context();
+    let context_flag = ctx.cancel.clone();
     let mut run = Run::new(Arc::new(prompt), "", ctx);
-    assert!(!packs_flag.is_cancelled());
+    assert!(!context_flag.is_cancelled());
     assert!(!run.cancel_handle().is_cancelled());
     run.cancel();
     assert!(
-        packs_flag.is_cancelled(),
-        "the run's cancel sets the flag the Packs hold"
+        context_flag.is_cancelled(),
+        "the run's cancel sets the flag the context minted"
     );
     assert!(
         run.cancel_handle().is_cancelled(),
@@ -448,43 +448,4 @@ fn a_run_is_decided_once_its_end_is_reported_while_done_is_withheld() {
     run.resume(id, EffectAnswer::Dropped);
     assert!(matches!(run.step(), Step::Done { .. }));
     assert!(run.decided(), "a finished run stays decided");
-}
-
-#[test]
-fn a_run_whose_only_section_returns_a_literal_is_done_at_its_first_step() {
-    let mut run = run_of("return 'hello'", run_context());
-    let Step::Done {
-        result: RunResult::Completed(text),
-        ..
-    } = run.step()
-    else {
-        panic!("the literal run is done at once");
-    };
-    assert_eq!(text, "hello");
-}
-
-#[test]
-fn a_run_that_cannot_start_reports_its_failure_on_the_first_step() {
-    let source = "---\nname: t\ndescription: d\nrunvil: 7\n---\n\n# Run\n\n## Only\n\ndone\n";
-    let prompt = Prompt::parse(source, "run-test")
-        .0
-        .expect("the prompt parses whatever version it declares");
-    let mut run = Run::new(Arc::new(prompt), "", run_context());
-    let Step::Done { result, events } = run.step() else {
-        panic!("a run that cannot start is done at once");
-    };
-    assert!(events.is_empty(), "nothing ran, nothing reported");
-    let RunResult::Failure(error) = result else {
-        panic!("an unsupported version fails, got {result:?}");
-    };
-    assert_eq!(error.kind(), crate::execute::RunErrorKind::Version);
-    assert!(run.decided(), "a run that never started is decided");
-    let Step::Done {
-        result: RunResult::Failure(again),
-        ..
-    } = run.step()
-    else {
-        panic!("a finished run stays done");
-    };
-    assert_eq!(again.kind(), crate::execute::RunErrorKind::Internal);
 }

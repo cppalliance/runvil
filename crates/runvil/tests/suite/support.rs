@@ -16,7 +16,7 @@ use serde_json::Value;
 
 mod scenario;
 
-pub(super) use scenario::{Prepared, Scenario, Trace};
+pub(super) use scenario::{Built, Scenario, Trace};
 
 pub(super) type TestResult<T = ()> = Result<T, Box<dyn Error>>;
 
@@ -107,8 +107,8 @@ pub(super) fn shout() -> Tool {
     }
 }
 
-/// The model every scenario gives the `default` role before prepare unless
-/// it names its own, and so the model every other role falls back to.
+/// The model every scenario gives the `default` role unless it names its
+/// own, and so the model every other role falls back to.
 pub(super) fn canned() -> TestResult<ModelInfo> {
     model("canned", 8_192, ThinkingMode::Never)
 }
