@@ -22,7 +22,7 @@
 //! - `requirements` - what a run's config lacks for its prompt, which the
 //!   run's first step reports as its refusal notice.
 //! - `run` - the boundary with the caller: the `Run` state machine with its
-//!   `step`, `resume`, and `cancel`, the `Step` it returns, and the effect
+//!   `step` and `resume`, the `Step` it returns, and the effect
 //!   vocabulary (the `Effect` a leaf arm issues, its JSON record, and the
 //!   `EffectAnswer` the caller returns).
 //! - `scheduler` - the chain scheduler driving the coroutine protocol:
