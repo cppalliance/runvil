@@ -88,14 +88,21 @@ pub(crate) fn trim_leading_blank_lines(content: &str) -> &str {
     &content[offset..]
 }
 
-/// Extracts source through the first exact, unindented triple-backtick closing
-/// line.
+/// Extracts source through the first closing line, the line the Markdown parser
+/// closes the fence on. The validator refuses any closing line that is not
+/// exactly three backticks before a split runs, so a split that meets one has
+/// broken an invariant, and it reports an internal error.
 fn extract_exact_fence<'a>(content: &'a str, label: &str) -> Result<(String, &'a str)> {
     let mut offset = 0;
     for line in content.split_inclusive('\n') {
         let text = line.strip_suffix('\n').unwrap_or(line);
         let text = text.strip_suffix('\r').unwrap_or(text);
-        if text == "```" {
+        if closes_three_backtick_fence(text) {
+            if text != "```" {
+                return Err(Error::Internal(
+                    "parser: fence split met a closing line the validator refuses",
+                ));
+            }
             let source = content[..offset].trim_end_matches(['\r', '\n']).to_string();
             return Ok((source, &content[offset + line.len()..]));
         }
@@ -236,7 +243,7 @@ fn closing_line(body: &str, extent: Range<usize>) -> Option<Range<usize>> {
 
 /// Whether `line` has the shape of a line that closes a fence opened by three
 /// backticks: at most three spaces of indent, three or more backticks, then
-/// only spaces or tabs.
+/// only spaces or tabs. The splitter and the validator both use this one rule.
 fn closes_three_backtick_fence(line: &str) -> bool {
     let unindented = line.trim_start_matches(' ');
     let marker = unindented.trim_start_matches('`');
