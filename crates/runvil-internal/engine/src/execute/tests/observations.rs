@@ -1,6 +1,6 @@
 //! Tests for the observation event sequence a run reports across its lifecycle.
 
-use runvil_parser::test_support::{one_section, prompt};
+use runvil_prompt::test_support::{one_section, prompt};
 use runvil_types::event::Event;
 
 use super::context::{Recorder, sequence};

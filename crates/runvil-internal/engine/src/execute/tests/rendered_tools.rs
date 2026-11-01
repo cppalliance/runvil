@@ -5,7 +5,7 @@
 //! whose merge fails, freezes nothing, one section's sets never reach
 //! another, and `models.infer` sends no tools either side of the freeze.
 
-use runvil_parser::test_support::{one_section, prompt};
+use runvil_prompt::test_support::{one_section, prompt};
 
 use super::fixtures::{echo_tool, scoped_tool};
 use super::models_loop::{loop_models, loop_scenario};

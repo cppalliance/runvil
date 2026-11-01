@@ -20,9 +20,9 @@ pub use runvil_engine::RunErrorKind;
 pub use runvil_engine::RunLimits;
 pub use runvil_engine::RunOutcome;
 pub use runvil_engine::Step;
-pub use runvil_parser::ParseError;
-pub use runvil_parser::ParseErrorKind;
-pub use runvil_parser::Prompt;
+pub use runvil_prompt::ParseError;
+pub use runvil_prompt::ParseErrorKind;
+pub use runvil_prompt::Prompt;
 pub use runvil_types::seed::RunSeed;
 
 pub mod effect {
@@ -116,13 +116,13 @@ pub mod prompt {
     //! What a prompt's frontmatter declares: its files, Packs,
     //! arguments, and model roles.
 
-    pub use runvil_parser::ArgDecl;
-    pub use runvil_parser::ArgType;
-    pub use runvil_parser::ArgsDecl;
-    pub use runvil_parser::ArgsDeclIter;
-    pub use runvil_parser::FileDecl;
-    pub use runvil_parser::Frontmatter;
-    pub use runvil_parser::RoleRequirements;
+    pub use runvil_prompt::ArgDecl;
+    pub use runvil_prompt::ArgType;
+    pub use runvil_prompt::ArgsDecl;
+    pub use runvil_prompt::ArgsDeclIter;
+    pub use runvil_prompt::FileDecl;
+    pub use runvil_prompt::Frontmatter;
+    pub use runvil_prompt::RoleRequirements;
 }
 
 pub mod vfs {

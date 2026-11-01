@@ -4735,7 +4735,7 @@ dependencies = [
  "runvil-engine",
  "runvil-lua",
  "runvil-model-client",
- "runvil-parser",
+ "runvil-prompt",
  "runvil-types",
  "runvil-vfs",
  "serde_json",
@@ -4751,7 +4751,7 @@ dependencies = [
  "regex",
  "runvil-lua",
  "runvil-model-client",
- "runvil-parser",
+ "runvil-prompt",
  "runvil-types",
  "runvil-vfs",
  "serde",
@@ -4786,7 +4786,18 @@ dependencies = [
 ]
 
 [[package]]
-name = "runvil-parser"
+name = "runvil-plugin"
+version = "0.3.0"
+dependencies = [
+ "build-ceiling",
+ "runvil-types",
+ "runvil-vfs",
+ "serde_json",
+ "thiserror 2.0.19",
+]
+
+[[package]]
+name = "runvil-prompt"
 version = "0.3.0"
 dependencies = [
  "build-ceiling",
@@ -4796,17 +4807,6 @@ dependencies = [
  "runvil-types",
  "serde",
  "serde_yaml_ng",
- "thiserror 2.0.19",
-]
-
-[[package]]
-name = "runvil-plugin"
-version = "0.3.0"
-dependencies = [
- "build-ceiling",
- "runvil-types",
- "runvil-vfs",
- "serde_json",
  "thiserror 2.0.19",
 ]
 

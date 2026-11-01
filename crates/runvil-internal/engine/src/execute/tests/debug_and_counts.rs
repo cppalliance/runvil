@@ -1,7 +1,7 @@
 //! Tests for debug capture delivery and the `tools.stats` counters. The
 //! infer-round reporting cases sit in `infer_rounds`.
 
-use runvil_parser::test_support::{PromptSource, one_section};
+use runvil_prompt::test_support::{PromptSource, one_section};
 
 use super::context::arm_fanout;
 use super::fixtures::{echo_tool, failing_tool, scoped_tool};

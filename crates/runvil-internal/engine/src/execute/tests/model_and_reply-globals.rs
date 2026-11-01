@@ -5,7 +5,7 @@
 //! member substitutes as compact JSON; and `reply` is not a global: it
 //! reads nil in Lua and fails as an unknown global in prose.
 
-use runvil_parser::test_support::one_section;
+use runvil_prompt::test_support::one_section;
 
 use super::*;
 use crate::execute::tests::fixtures::echo_tool;

@@ -5,7 +5,7 @@
 use runvil_lua::Error as LuaError;
 
 use super::*;
-use crate::parser::Prompt;
+use crate::prompt::Prompt;
 
 #[path = "tests-chain.rs"]
 mod chain;

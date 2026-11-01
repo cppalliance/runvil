@@ -6,7 +6,7 @@
 //! checks - over the run-level
 //! [`Scenario`](crate::test_support::scenario::Scenario). Its
 //! cases reach engine-only items (the test drivers and recorders, the store
-//! facade, the parser's Lua programs), so they run here rather than against
+//! facade, the loader's Lua programs), so they run here rather than against
 //! the `runvil` facade, whose own suite holds the rest.
 
 mod args_surface;

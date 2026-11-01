@@ -5,7 +5,7 @@
 //! `models.compact`, the same compaction outside a loop, in
 //! `models_compact`.
 
-use runvil_parser::test_support::{one_section, prompt};
+use runvil_prompt::test_support::{one_section, prompt};
 
 use super::fixtures::echo_tool;
 use super::gateway::overflowing;

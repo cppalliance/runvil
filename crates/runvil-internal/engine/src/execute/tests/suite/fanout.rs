@@ -1,7 +1,7 @@
 //! Concurrent fanout: per-arm start/terminal accounting, store writes across
 //! arms, the propagated arm-failure error contract, and encoding a result.
 
-use runvil_parser::test_support::prompt;
+use runvil_prompt::test_support::prompt;
 
 use crate::Error;
 use crate::RunErrorKind;

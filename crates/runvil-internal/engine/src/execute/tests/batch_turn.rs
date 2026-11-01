@@ -7,7 +7,7 @@
 //! A handler or a compactor cannot start its own loop while a loop runs in
 //! the section; once no loop runs, the next one starts normally.
 
-use runvil_parser::test_support::{one_section, prompt};
+use runvil_prompt::test_support::{one_section, prompt};
 use runvil_types::event::Event;
 
 use super::fixtures::echo_tool;

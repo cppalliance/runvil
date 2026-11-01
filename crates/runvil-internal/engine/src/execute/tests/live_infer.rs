@@ -1,6 +1,6 @@
 //! Tests for live `models.infer` against a scripted gateway, including H1 chunks and required libraries.
 
-use runvil_parser::test_support::PromptSource;
+use runvil_prompt::test_support::PromptSource;
 use runvil_types::cancel::CancelHandle;
 
 use super::fixtures::echo_tool;

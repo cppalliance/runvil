@@ -2,7 +2,7 @@
 //! runs over the section's `messages` list, and the argument errors are
 //! raised in order before any request leaves.
 
-use runvil_parser::test_support::one_section;
+use runvil_prompt::test_support::one_section;
 
 use super::*;
 

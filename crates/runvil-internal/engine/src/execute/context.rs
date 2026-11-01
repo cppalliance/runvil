@@ -23,7 +23,7 @@ use runvil_vfs::{Access, VfsRef};
 
 use crate::lua::{Argv, ToolSet};
 use crate::model::{ModelBinding, ModelRole, ModelSet};
-use crate::parser::Prompt;
+use crate::prompt::Prompt;
 
 use super::config::{RunConfig, RunLimits};
 use super::fill;
@@ -345,7 +345,7 @@ impl ChainState {
 
     /// The run's top-level section count, reported as `sys.section_count`.
     fn section_count(&self) -> usize {
-        crate::parser::detail::sections(&self.shared.prompt).len()
+        crate::prompt::detail::sections(&self.shared.prompt).len()
     }
 
     /// The H1-to-walk handoff: the `argv` H1 left behind at the freeze,

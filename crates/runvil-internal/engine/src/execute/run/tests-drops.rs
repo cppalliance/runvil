@@ -22,7 +22,7 @@ use crate::execute::run::{
     AnswerRecord, Effect, EffectAnswer, EffectId, EffectRecord, Round, Run, Step,
 };
 use crate::model::{Completion, CompletionResult};
-use crate::parser::Prompt;
+use crate::prompt::Prompt;
 use crate::test_support::scenario::{chat_answer, only_effect, test_model_with};
 use crate::test_support::scripted_chat::text;
 

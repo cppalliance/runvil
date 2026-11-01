@@ -1,4 +1,4 @@
-//! Prompt file parser.
+//! Loads a prompt file: its frontmatter, its Markdown structure, and its Lua.
 //!
 //! A prompt is one markdown file: YAML frontmatter, a required H1, optional H1
 //! blocks, then H2 sections.
@@ -14,7 +14,8 @@
 //! normally. Markdown left after the final `lua` fence is inert trailing
 //! commentary, never an error.
 //!
-//! The parser turns bytes into a [`Prompt`] tree without executing any of it.
+//! Every `lua` fence compiles at load time, so a loaded [`Prompt`] is ready to
+//! run: a syntax error surfaces here, never partway through a run.
 //!
 //! ## Invariants
 //!

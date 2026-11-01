@@ -8,7 +8,7 @@ use runvil_types::packs::PackId;
 use runvil_types::tools::ToolCatalog;
 
 use crate::lua::RosterEntry;
-use crate::parser::Prompt;
+use crate::prompt::Prompt;
 
 #[cfg(test)]
 #[path = "requirements-tests.rs"]

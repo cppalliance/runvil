@@ -2,7 +2,7 @@
 //! against a canned model: the `prompts/research-person.md` section and
 //! the shipped chat agent's turn loop.
 
-use runvil_parser::test_support::{PromptSource, one_section};
+use runvil_prompt::test_support::{PromptSource, one_section};
 
 use super::*;
 use crate::model::{ModelBinding, ModelId, ModelInvocation};

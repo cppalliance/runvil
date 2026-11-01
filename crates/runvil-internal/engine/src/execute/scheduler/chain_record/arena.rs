@@ -54,7 +54,7 @@ impl Chain {
         use crate::execute::context::ChainState;
         use crate::execute::section_context::TaskSeed;
         use crate::heading_address::{SectionIndex, SectionPos};
-        use crate::parser::Prompt;
+        use crate::prompt::Prompt;
         use crate::test_support::scenario::{TEST_SEED, TEST_STARTED_AT};
 
         let source = concat!(

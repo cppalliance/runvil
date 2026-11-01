@@ -2,7 +2,7 @@
 
 use std::collections::BTreeMap;
 
-use runvil_parser::test_support::one_section;
+use runvil_prompt::test_support::one_section;
 use runvil_types::tools::ToolCatalog;
 
 use super::fixtures::scoped_tool;

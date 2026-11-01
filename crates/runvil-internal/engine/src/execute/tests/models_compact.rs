@@ -5,7 +5,7 @@
 //! loop or a compactor runs. Compaction after an overflow sits in
 //! `compaction`.
 
-use runvil_parser::test_support::one_section;
+use runvil_prompt::test_support::one_section;
 
 use super::models_loop::loop_scenario;
 use super::*;

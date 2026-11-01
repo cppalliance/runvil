@@ -27,7 +27,7 @@ use criterion::{Criterion, criterion_group, criterion_main};
 use runvil_engine::test_support::scripted_chat::{ScriptedChat, ScriptedReply};
 use runvil_engine::test_support::{drive, perform_locally};
 use runvil_engine::{Effect, EffectAnswer, Run, RunConfig, RunOutcome};
-use runvil_parser::Prompt;
+use runvil_prompt::Prompt;
 use runvil_types::models::{ModelCatalog, ModelId, ModelInfo, ModelRole, ThinkingMode};
 use runvil_types::seed::RunSeed;
 use runvil_types::timestamp::Timestamp;

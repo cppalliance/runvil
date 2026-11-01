@@ -3,7 +3,7 @@
 //! [`Error`] is a `pub(crate)` internal error type, never part of the public API.
 //! A run it ends reports its kind and message in
 //! [`RunOutcome::Failed`](crate::RunOutcome::Failed), and
-//! [`ParseError`](crate::parser::ParseError),
+//! [`ParseError`](crate::prompt::ParseError),
 //! [`CompletionError`](crate::model::CompletionError), and
 //! [`runvil_types::tools::ToolError`] each reach that outcome through this
 //! type, which classifies them and keeps their causes.
@@ -18,7 +18,7 @@
 //! of their own: `Parse`, `Completion`, and `Substitution` hand their whole
 //! `Display` and `source` to the error they hold. That is the exception to
 //! the field rule above, and it is why `Error::originating_error` answers
-//! `None` for `Completion` and `Substitution` and the parser's own cause for
+//! `None` for `Completion` and `Substitution` and the loader's own cause for
 //! `Parse`.
 
 use runvil_types::ids::TaskId;
@@ -115,12 +115,12 @@ pub(crate) enum Error {
     /// The prompt failed to parse: invalid frontmatter YAML or a
     /// structurally-classified failure.
     ///
-    /// Holds the parser's [`ParseError`](crate::parser::ParseError) whole, so
+    /// Holds the loader's [`ParseError`](crate::prompt::ParseError) whole, so
     /// its stable kind, its location fields, and the YAML decode failure a
     /// frontmatter failure keeps as its cause survive until the run's
     /// failure message is built from them.
     #[error(transparent)]
-    Parse(crate::parser::ParseError),
+    Parse(crate::prompt::ParseError),
 
     /// A model round or a catalog fetch failed, as the broker that performed
     /// it reported.

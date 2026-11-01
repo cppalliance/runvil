@@ -14,7 +14,7 @@ use serde_json::json;
 
 use crate::execute::{Run, RunConfig, RunErrorKind, RunOutcome, Step};
 use crate::lua::RosterEntry;
-use crate::parser::Prompt;
+use crate::prompt::Prompt;
 use crate::test_support::scenario::{TEST_SEED, test_model_with};
 
 /// The notice line of a run whose catalog or roster names the reserved

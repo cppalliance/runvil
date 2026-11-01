@@ -15,7 +15,7 @@ use runvil_vfs::Origin;
 
 use crate::execute::RunOutcome;
 use crate::execute::run::{EffectAnswer, EffectId, Step};
-use crate::parser::ParseErrorKind;
+use crate::prompt::ParseErrorKind;
 use crate::{Error, Result};
 
 use super::chain::ChainStep;
@@ -167,8 +167,8 @@ impl Scheduler {
     /// with the generic completion.
     fn start(&mut self) -> Result<()> {
         let prompt = self.prompt();
-        if crate::parser::detail::h1_blocks(&prompt).is_empty() {
-            if crate::parser::detail::sections(&prompt).is_empty() {
+        if crate::prompt::detail::h1_blocks(&prompt).is_empty() {
+            if crate::prompt::detail::sections(&prompt).is_empty() {
                 self.end(Ok(GENERIC_COMPLETION.to_owned()));
                 return Ok(());
             }

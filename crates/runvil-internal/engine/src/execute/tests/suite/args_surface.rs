@@ -5,7 +5,7 @@
 //! so an H1 repair reaches every downstream section while an H2 assignment
 //! is an error; and `{{ argv }}` joins the prose substitution namespaces.
 
-use runvil_parser::test_support::{PromptSource, prompt};
+use runvil_prompt::test_support::{PromptSource, prompt};
 
 use crate::test_support::scenario::Scenario;
 

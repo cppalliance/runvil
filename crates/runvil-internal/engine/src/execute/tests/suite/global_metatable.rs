@@ -4,7 +4,7 @@
 //! `argv`, `prose`, and `messages` stay guarded whatever author code does
 //! to `_G`'s metatable.
 
-use runvil_parser::test_support::PromptSource;
+use runvil_prompt::test_support::PromptSource;
 
 use crate::test_support::scenario::Scenario;
 

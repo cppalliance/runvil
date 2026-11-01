@@ -10,7 +10,7 @@ use runvil_types::event::lifecycle;
 use crate::execute::requirements::NOTICE_HEADER;
 use crate::heading_address::{SectionIndex, SectionPos};
 use crate::lua::{Answer, CoroStep, LuaBlockResult, Request, YieldParse};
-use crate::parser::{Block, BodyText};
+use crate::prompt::{Block, BodyText};
 use crate::{Error, Result};
 
 use super::chain::ChainStep;

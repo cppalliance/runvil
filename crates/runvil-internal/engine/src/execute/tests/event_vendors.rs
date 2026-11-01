@@ -3,7 +3,7 @@
 //! a script call to a catalog tool, and none for an adhoc call or a run
 //! given no roster.
 
-use runvil_parser::test_support::one_section;
+use runvil_prompt::test_support::one_section;
 use runvil_types::event::Event;
 use runvil_types::packs::PackId;
 

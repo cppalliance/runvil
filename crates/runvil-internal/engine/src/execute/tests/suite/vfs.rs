@@ -12,11 +12,11 @@ use std::sync::Arc;
 use crate::execute::RunOutcome;
 use crate::execute::run::{Effect, IssuedEffect, Run, Step};
 use crate::execute::tests::context::{parse, test_config};
-use crate::parser::Prompt;
+use crate::prompt::Prompt;
 use crate::test_support::perform_locally;
 use crate::test_support::scenario::{EXECUTION, Scenario};
 use crate::test_support::temp_root::TempRoot;
-use runvil_parser::test_support::{parse_ok, prompt};
+use runvil_prompt::test_support::{parse_ok, prompt};
 use runvil_vfs::{Access, Origin, RealBackend, VfsError, VfsRef};
 
 const ROUND_TRIP_PROMPT: &str = concat!(

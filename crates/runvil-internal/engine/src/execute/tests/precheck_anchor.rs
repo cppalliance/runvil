@@ -7,7 +7,7 @@
 //! compactor that receives it in `models_loop_compactors`. What a refused
 //! send leaves in the run log is in `resend`.
 
-use runvil_parser::test_support::{one_section, prompt};
+use runvil_prompt::test_support::{one_section, prompt};
 use runvil_types::metrics::{CallMetrics, Usage};
 
 use super::models_loop::{loop_models, loop_scenario};

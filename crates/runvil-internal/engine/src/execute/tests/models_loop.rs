@@ -12,7 +12,7 @@
 //! loop's exit rules in `exit_rules`; its cap, scope gate, and
 //! result-record trust in `tool_loop`.
 
-use runvil_parser::test_support::one_section;
+use runvil_prompt::test_support::one_section;
 
 use super::context::Recorder;
 use super::fixtures::echo_tool;

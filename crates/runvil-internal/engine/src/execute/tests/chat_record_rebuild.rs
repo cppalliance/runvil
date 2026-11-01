@@ -8,7 +8,7 @@ use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::rc::Rc;
 
-use runvil_parser::test_support::one_section;
+use runvil_prompt::test_support::one_section;
 use runvil_types::ids::RoundId;
 
 use super::fixtures::echo_tool;

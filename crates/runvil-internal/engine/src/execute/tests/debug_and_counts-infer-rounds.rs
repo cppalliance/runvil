@@ -2,7 +2,7 @@
 //! `model_turn_completed`, then `thinking` when the backend supplied
 //! reasoning, then one `assistant_reply` with `origin = Infer`.
 
-use runvil_parser::test_support::PromptSource;
+use runvil_prompt::test_support::PromptSource;
 
 use super::*;
 use crate::test_support::recording::{ReplyReport, ThinkingReport};

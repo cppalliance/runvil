@@ -69,7 +69,7 @@ fn derived_values_come_from_the_prompt_and_limits() {
     let ctx = test_state(&prompt);
     assert_eq!(
         ctx.section_count(),
-        runvil_parser::detail::sections(&prompt).len()
+        runvil_prompt::detail::sections(&prompt).len()
     );
     assert_eq!(ctx.max_tool_iterations(), 24);
 }

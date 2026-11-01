@@ -3,7 +3,7 @@
 //! reaches by wire name in its section's frozen sets, and a script call
 //! reaches by id.
 
-use runvil_parser::test_support::{PromptSource, one_section, prompt};
+use runvil_prompt::test_support::{PromptSource, one_section, prompt};
 
 use super::fixtures::{echo_tool, model_only_tool};
 use super::models_loop::{loop_model_name, loop_scenario};

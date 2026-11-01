@@ -10,7 +10,7 @@ use runvil_types::tools::{ToolError, ToolErrorKind};
 use runvil_vfs::VfsError;
 
 use super::*;
-use crate::parser::Prompt;
+use crate::prompt::Prompt;
 
 /// The display text of each segment of `error`'s source chain, the error
 /// itself first.

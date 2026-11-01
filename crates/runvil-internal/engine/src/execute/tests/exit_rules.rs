@@ -4,7 +4,7 @@
 //! model's clean empty exit after tool work, and the empty rounds that
 //! raise `empty_model_reply`).
 
-use runvil_parser::test_support::{PromptSource, one_section, prompt};
+use runvil_prompt::test_support::{PromptSource, one_section, prompt};
 
 use super::context::Recorder;
 use super::fixtures::echo_tool;

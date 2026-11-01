@@ -6,7 +6,7 @@
 //! compactor call sit here; the exit rules, the batch rule, tool results,
 //! and the event trace sit in `rounds`.
 
-use runvil_parser::test_support::{one_section, prompt};
+use runvil_prompt::test_support::{one_section, prompt};
 
 use super::fixtures::structured_tool;
 use super::gateway::overflowing;

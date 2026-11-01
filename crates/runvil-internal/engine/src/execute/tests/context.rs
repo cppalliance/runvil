@@ -1,7 +1,7 @@
 //! Shared config builders, prompt sources, parsers, stores, task ids, and
 //! recorders for the execution suites.
 
-use runvil_parser::test_support::PromptSource;
+use runvil_prompt::test_support::PromptSource;
 use runvil_types::ids::TaskId;
 
 use super::*;

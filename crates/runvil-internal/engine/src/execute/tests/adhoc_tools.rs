@@ -8,7 +8,7 @@
 //! only when offered. The refusal of an offer once the section's tool list
 //! is rendered sits in `rendered_tools`.
 
-use runvil_parser::test_support::{one_section, prompt};
+use runvil_prompt::test_support::{one_section, prompt};
 
 use super::context::Recorder;
 use super::fixtures::scoped_tool;

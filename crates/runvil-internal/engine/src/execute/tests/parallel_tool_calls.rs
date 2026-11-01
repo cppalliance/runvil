@@ -9,7 +9,7 @@
 //! by hand, so it sees exactly what each step issued and withdrew, and
 //! answers each section's render with its tools unchanged.
 
-use runvil_parser::test_support::one_section;
+use runvil_prompt::test_support::one_section;
 use runvil_types::event::{Event, ReplyOrigin};
 
 use super::fixtures::echo_tool;

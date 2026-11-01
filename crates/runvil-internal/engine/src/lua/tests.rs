@@ -194,7 +194,7 @@ fn resume_with(vm: &SectionVm, thread: &Thread, answer: Answer<Error>) -> MultiV
         .expect("the coroutine accepts the answer")
 }
 
-/// Compiles one author block the way the parser's prologue chunks are
+/// Compiles one author block the way the loader's prologue chunks are
 /// compiled.
 #[track_caller]
 fn compile_block(source: &str) -> LuaProgram {

@@ -4,7 +4,7 @@
 //! synchronous `call`, driven
 //! through a run against a scripted gateway at `runvil: 0`.
 
-use runvil_parser::test_support::PromptSource;
+use runvil_prompt::test_support::PromptSource;
 
 use super::fixtures::echo_tool;
 use super::*;

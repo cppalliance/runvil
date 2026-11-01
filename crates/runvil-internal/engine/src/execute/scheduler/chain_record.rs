@@ -17,7 +17,7 @@ use crate::execute::section_context::{SectionContext, TaskSeed};
 use crate::execute::walk_target::JumpTarget;
 use crate::heading_address::SectionPos;
 use crate::lua::{Answer, Blocked};
-use crate::parser::{Block, BodyText, Prompt, Section};
+use crate::prompt::{Block, BodyText, Prompt, Section};
 use crate::{Error, Result};
 
 mod anchor;
@@ -474,7 +474,7 @@ impl Chain {
     /// result outlives a mutable borrow of the chain.
     pub(super) fn blocks<'p>(&self, prompt: &'p Prompt) -> &'p [Block] {
         if self.kind.is_h1() {
-            crate::parser::detail::h1_blocks(prompt)
+            crate::prompt::detail::h1_blocks(prompt)
         } else {
             self.walk
                 .current()

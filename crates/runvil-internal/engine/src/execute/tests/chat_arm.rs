@@ -6,7 +6,7 @@
 //! shim's exit rules and compactor then act on. The round's tool scope is
 //! covered in `chat_scope`.
 
-use runvil_parser::test_support::one_section;
+use runvil_prompt::test_support::one_section;
 use runvil_types::event::{Event, ReplyOrigin};
 use runvil_types::metrics::{CallMetrics, Usage};
 

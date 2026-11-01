@@ -4,7 +4,7 @@
 //! A call binds no global and advertises nothing; a wire name is the
 //! model's alone, and a model-issued call never resolves an id.
 
-use runvil_parser::test_support::{one_section, prompt};
+use runvil_prompt::test_support::{one_section, prompt};
 use runvil_types::event::Event;
 
 use super::fixtures::{echo_tool, scoped_tool};

@@ -10,7 +10,7 @@ publish = false
 [dependencies]
 runvil-lua.workspace = true
 runvil-model-client.workspace = true
-runvil-parser.workspace = true
+runvil-prompt.workspace = true
 runvil-types.workspace = true
 runvil-vfs.workspace = true
 regex.workspace = true
@@ -31,7 +31,7 @@ test-support = []
 [dev-dependencies]
 criterion.workspace = true
 runvil-lua = { workspace = true, features = ["test-support"] }
-runvil-parser = { workspace = true, features = ["test-support"] }
+runvil-prompt = { workspace = true, features = ["test-support"] }
 
 # The bench drives runs on the serial test driver and answers their rounds
 # from the scripted model, so it needs the feature that provides both.

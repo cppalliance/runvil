@@ -1,6 +1,6 @@
 //! Tests for section walk control flow: `call`, `jump`, `fanout`, the `prompt` reads, and `var`.
 
-use runvil_parser::test_support::{PromptSource, synthetic_section};
+use runvil_prompt::test_support::{PromptSource, synthetic_section};
 
 use super::context::arm_fanout;
 use super::*;

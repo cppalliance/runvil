@@ -12,7 +12,7 @@
 //! sets, so those cases run one loop round first.
 //! The adhoc tool cases sit in `adhoc_handlers`.
 
-use runvil_parser::test_support::one_section;
+use runvil_prompt::test_support::one_section;
 
 use super::fixtures::{echo_tool, failing_tool};
 use super::models_loop::loop_scenario;

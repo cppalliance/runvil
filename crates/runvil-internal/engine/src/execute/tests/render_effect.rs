@@ -6,7 +6,7 @@
 //! sending the same tools, and a dropped or broken answer ending the round
 //! with nothing fixed.
 
-use runvil_parser::test_support::{one_section, prompt};
+use runvil_prompt::test_support::{one_section, prompt};
 use runvil_types::packs::PackId;
 use runvil_types::tools::ToolInfo;
 

@@ -40,7 +40,7 @@ impl Scheduler {
         let origin = prompt_origin(
             self.ctx.prompt(),
             self.ctx.prompt().title(),
-            crate::parser::detail::h1_blocks(self.ctx.prompt()),
+            crate::prompt::detail::h1_blocks(self.ctx.prompt()),
         );
         let access = self.ctx.vfs().acquire(origin).map_err(Error::store)?;
         self.scope = Some(runvil_vfs::detail::scope_handle(&access));
@@ -99,7 +99,7 @@ impl Scheduler {
         let concurrency = chain.concurrency;
         // The walk starts on the model the pass ended on.
         let model = chain.current_model()?;
-        if crate::parser::detail::sections(self.ctx.prompt()).is_empty() {
+        if crate::prompt::detail::sections(self.ctx.prompt()).is_empty() {
             // No walk follows, so the pass's end is the run's end: a task
             // the pass spawned and left live ends here under the same
             // rules as a finishing chain.

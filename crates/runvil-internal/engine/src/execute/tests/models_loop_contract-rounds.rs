@@ -3,7 +3,7 @@
 //! call, an adhoc tool's return and its cancellation, and the full trace a
 //! run reports for the loop.
 
-use runvil_parser::test_support::{PromptSource, one_section};
+use runvil_prompt::test_support::{PromptSource, one_section};
 
 use super::*;
 use crate::execute::run::{Effect, EffectAnswer, Step};

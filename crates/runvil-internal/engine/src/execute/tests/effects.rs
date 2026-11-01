@@ -6,7 +6,7 @@
 //! origin and a nested infer round the `Infer` origin. The run's answer
 //! rules (a drop, an orphan, a wrong kind) are pinned beside `Run` itself.
 
-use runvil_parser::test_support::one_section;
+use runvil_prompt::test_support::one_section;
 use runvil_types::event::ReplyOrigin;
 use runvil_types::ids::RoundId;
 use runvil_types::packs::PackId;

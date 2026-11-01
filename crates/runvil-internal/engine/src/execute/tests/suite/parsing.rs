@@ -8,9 +8,9 @@ use std::num::NonZeroU32;
 use std::path::{Path, PathBuf};
 
 use runvil_lua::LuaProgram;
-use runvil_parser::detail;
+use runvil_prompt::detail;
 
-use crate::parser::Prompt;
+use crate::prompt::Prompt;
 
 struct ValidFixture {
     name: &'static str,

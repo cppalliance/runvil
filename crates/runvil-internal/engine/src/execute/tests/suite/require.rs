@@ -6,7 +6,7 @@
 //! fixture tool. Each submodule holds one topic and reaches the support
 //! below through `super`.
 
-use runvil_parser::test_support::{PromptSource, prompt};
+use runvil_prompt::test_support::{PromptSource, prompt};
 
 use crate::test_support::scenario::{Record, Scenario};
 

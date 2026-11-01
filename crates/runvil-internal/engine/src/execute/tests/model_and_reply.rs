@@ -2,7 +2,7 @@
 //! The `sys.model`, `item`, and `reply` reads sit in `globals`, and the
 //! `models.get` and handle `infer` cases in `handles`.
 
-use runvil_parser::test_support::{PromptSource, parse_ok};
+use runvil_prompt::test_support::{PromptSource, parse_ok};
 
 use crate::model::ModelRole;
 use crate::test_support::scenario::{Trace, test_model};
@@ -133,7 +133,7 @@ fn epilog_runs_after_prose_and_can_return() {
          return 'epilog result'",
     );
     let prompt = parse_ok(&source);
-    let entry = runvil_parser::detail::entry(&prompt).expect("fixture has sections");
+    let entry = runvil_prompt::detail::entry(&prompt).expect("fixture has sections");
     assert!(entry.prologue().is_none());
     assert!(entry.epilog().is_some());
 

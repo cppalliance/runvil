@@ -4,7 +4,7 @@
 use std::collections::BTreeMap;
 
 use crate::model::{ModelBinding, ModelInfo, ModelInvocation, ModelRole, ModelSet, ThinkingMode};
-use crate::parser::{Prompt, RoleRequirements};
+use crate::prompt::{Prompt, RoleRequirements};
 
 use super::requirements::{RequirementCheck, Requirements, UnmetRequirement};
 

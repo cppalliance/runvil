@@ -19,7 +19,7 @@ use crate::execute::walk_target::{self, RequireOrigin};
 use crate::heading_address::{SectionPos, Visible};
 use crate::lua::{Library, LibraryKey, SectionVm, Uninjected};
 use crate::model::ModelBinding;
-use crate::parser::Prompt;
+use crate::prompt::Prompt;
 use crate::{Error, Result};
 
 use super::{SectionContext, SectionSys, TaskSeed};

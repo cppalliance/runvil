@@ -16,7 +16,7 @@ use runvil_types::event::ReplyOrigin;
 
 use crate::execute::run::{Effect, EffectId, Round};
 use crate::lua::Answer;
-use crate::parser::Prompt;
+use crate::prompt::Prompt;
 use crate::{Error, Result};
 
 use super::{Chain, ChainIndex, Continuation, EffectTable, Scheduler};

@@ -5,7 +5,7 @@
 //! with the run's nonce. A listing kept from outside the adhoc call, a
 //! failed listing call, and a trusted listing mark nothing.
 
-use runvil_parser::test_support::one_section;
+use runvil_prompt::test_support::one_section;
 use runvil_types::event::Event;
 
 use super::models_loop::loop_scenario;

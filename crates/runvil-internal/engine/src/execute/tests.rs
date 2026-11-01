@@ -17,8 +17,8 @@ use super::*;
 use crate::Error;
 use crate::lua::{SectionVm, current_static_set};
 use crate::model::{ModelInfo, ModelSet};
-use crate::parser::ParseErrorKind;
-use crate::parser::Prompt;
+use crate::prompt::ParseErrorKind;
+use crate::prompt::Prompt;
 use crate::test_support::recording::{Observation, Observer, detail, null_emitter};
 use crate::test_support::scenario::{Scenario, Trace};
 use crate::test_support::scripted_chat::{
@@ -50,7 +50,7 @@ fn calls_slow_tool(effect: &Effect) -> bool {
 
 #[test]
 fn run_with_a_pre_cancelled_handle_fails_as_cancelled() {
-    use runvil_parser::test_support::prompt;
+    use runvil_prompt::test_support::prompt;
     use runvil_types::cancel::CancelHandle;
 
     // The explicit-cancel wiring of the public entry point: a handle passed
@@ -111,7 +111,7 @@ fn tool_turn_nonces(bodies: &[ScriptedCall]) -> Vec<String> {
 
 #[test]
 fn untrusted_nonce_differs_across_runs_under_different_seeds() {
-    use runvil_parser::test_support::PromptSource;
+    use runvil_prompt::test_support::PromptSource;
 
     // The nonce is the run seed's: two runs of the same prompt under
     // different caller-drawn seeds wrap the same untrusted tool result under

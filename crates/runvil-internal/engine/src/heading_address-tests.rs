@@ -26,10 +26,10 @@ fn resolve_visible_bare_name_errors() {
 }
 
 fn sibling(name: &str, level: u8) -> Section {
-    runvil_parser::test_support::synthetic_section(
+    runvil_prompt::test_support::synthetic_section(
         name,
         level,
-        vec![runvil_parser::test_support::prose_block(String::new())],
+        vec![runvil_prompt::test_support::prose_block(String::new())],
     )
 }
 
@@ -110,8 +110,8 @@ fn self_pos() -> SectionPos {
         .child(SectionIndex::new(1))
 }
 
-fn tree() -> crate::parser::Prompt {
-    crate::parser::Prompt::parse(TREE, "reach-test")
+fn tree() -> crate::prompt::Prompt {
+    crate::prompt::Prompt::parse(TREE, "reach-test")
         .0
         .expect("the tree parses")
 }
@@ -124,7 +124,7 @@ fn from_self<'a>(root: &'a [Section], pos: &'a SectionPos) -> Reachable<'a> {
 #[test]
 fn a_nested_section_reaches_its_children_siblings_and_each_ancestors_siblings() {
     let prompt = tree();
-    let root = runvil_parser::detail::sections(&prompt);
+    let root = runvil_prompt::detail::sections(&prompt);
     let pos = self_pos();
     let expected: [(&str, &[usize], usize); 5] = [
         ("##### Child", &[1, 1, 1], 0),
@@ -148,7 +148,7 @@ fn a_nested_section_reaches_its_children_siblings_and_each_ancestors_siblings() 
 #[test]
 fn a_nested_section_reaches_no_grandchild_niece_cousin_itself_or_ancestor() {
     let prompt = tree();
-    let root = runvil_parser::detail::sections(&prompt);
+    let root = runvil_prompt::detail::sections(&prompt);
     let pos = self_pos();
     for heading in [
         "###### Grandchild",
@@ -166,7 +166,7 @@ fn a_nested_section_reaches_no_grandchild_niece_cousin_itself_or_ancestor() {
 #[test]
 fn the_h1_reaches_every_top_level_section_and_no_nested_one() {
     let prompt = tree();
-    let root = runvil_parser::detail::sections(&prompt);
+    let root = runvil_prompt::detail::sections(&prompt);
     for heading in ["## Top", "## Grand", "## Last"] {
         let reached = resolve_reachable(heading, Reachable::top(root))
             .unwrap_or_else(|error| panic!("{heading} must resolve: {error}"));
@@ -185,7 +185,7 @@ fn the_h1_reaches_every_top_level_section_and_no_nested_one() {
 #[test]
 fn a_reachable_name_at_another_level_does_not_resolve() {
     let prompt = tree();
-    let root = runvil_parser::detail::sections(&prompt);
+    let root = runvil_prompt::detail::sections(&prompt);
     let pos = self_pos();
     for heading in ["### Sibling", "## Uncle", "#### Child", "### Top"] {
         let found = find_reachable(heading, from_self(root, &pos)).expect("a miss is not an error");
@@ -199,7 +199,7 @@ fn a_reachable_name_at_another_level_does_not_resolve() {
 #[test]
 fn a_reach_miss_lists_only_the_reachable_sections() {
     let prompt = tree();
-    let root = runvil_parser::detail::sections(&prompt);
+    let root = runvil_prompt::detail::sections(&prompt);
     let pos = self_pos();
     let error = resolve_reachable("## Missing", from_self(root, &pos))
         .expect_err("an unknown heading must error");
@@ -213,7 +213,7 @@ fn a_reach_miss_lists_only_the_reachable_sections() {
 #[test]
 fn the_visible_set_stays_narrower_than_the_reach() {
     let prompt = tree();
-    let root = runvil_parser::detail::sections(&prompt);
+    let root = runvil_prompt::detail::sections(&prompt);
     let slice = root[1].children()[1].children();
     let visible = find_visible("### Uncle", Visible::of(slice, SectionIndex::new(1)))
         .expect("a miss is not an error");

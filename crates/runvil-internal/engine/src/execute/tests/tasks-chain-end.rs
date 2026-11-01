@@ -5,7 +5,7 @@
 //! or exhausted its tool loop); a task spawned in H1 belongs to the walk
 //! after the hand-off; an aborted chain's owned tasks abort with it.
 
-use runvil_parser::test_support::prompt;
+use runvil_prompt::test_support::prompt;
 use runvil_types::ids::AbandonReason;
 
 use super::*;

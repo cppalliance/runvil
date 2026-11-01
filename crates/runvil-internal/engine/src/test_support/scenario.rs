@@ -36,7 +36,7 @@ use crate::lua::ToolBinding;
 use crate::model::{
     CompletionErrorKind, ModelBinding, ModelId, ModelInfo, ModelRole, ModelSet, ThinkingMode,
 };
-use crate::parser::Prompt;
+use crate::prompt::Prompt;
 
 #[path = "scenario-driving.rs"]
 mod driving;

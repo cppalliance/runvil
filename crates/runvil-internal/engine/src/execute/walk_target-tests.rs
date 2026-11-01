@@ -2,7 +2,7 @@
 //! the key naming its position, and the reach a keyed lookup resolves from.
 
 use runvil_lua::LuaProgram;
-use runvil_parser::test_support::{prose_block, synthetic_section};
+use runvil_prompt::test_support::{prose_block, synthetic_section};
 
 use super::*;
 

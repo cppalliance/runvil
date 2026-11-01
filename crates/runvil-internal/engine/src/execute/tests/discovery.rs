@@ -5,7 +5,7 @@
 //! batch, and every discovery call counts. The refusals sit in the
 //! `refusals` child.
 
-use runvil_parser::test_support::one_section;
+use runvil_prompt::test_support::one_section;
 use runvil_types::event::Event;
 
 use super::fixtures::{echo_tool, scoped_tool};

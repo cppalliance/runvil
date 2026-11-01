@@ -11,7 +11,7 @@ use runvil_types::packs::PackId;
 use runvil_types::tools::ToolCatalog;
 
 use crate::lua::{RosterEntry, ToolSet};
-use crate::parser::Prompt;
+use crate::prompt::Prompt;
 
 /// Builds the run's shared tool set: the frontmatter's declared Packs,
 /// and the run catalog and roster, all moved out of the config. Nothing

@@ -21,7 +21,7 @@
 //! A chain and a section's `prompt` reads find their slice by path and
 //! read it in place.
 
-use crate::parser::{Prompt, Section, detail};
+use crate::prompt::{Prompt, Section, detail};
 use crate::{Error, Result};
 
 /// Where a sibling slice sits in the prompt tree: the index of each

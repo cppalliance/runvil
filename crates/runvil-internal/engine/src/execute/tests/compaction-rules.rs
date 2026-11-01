@@ -2,7 +2,7 @@
 //! structural rules, the shrink rule, and the retried round's precheck.
 //! Each broken rule raises its error and puts the records back.
 
-use runvil_parser::test_support::one_section;
+use runvil_prompt::test_support::one_section;
 
 use super::*;
 

@@ -8,7 +8,7 @@
 //! retry and restore in `compaction`; and `models.compact` in
 //! `models_compact`.
 
-use runvil_parser::test_support::one_section;
+use runvil_prompt::test_support::one_section;
 
 use super::gateway::overflowing;
 use super::models_loop::loop_scenario;

@@ -95,7 +95,7 @@ use runvil_vfs::Origin;
 use runvil_vfs::detail::ScopeHandle;
 
 use crate::lua::Answer;
-use crate::parser::{Block, Prompt};
+use crate::prompt::{Block, Prompt};
 use crate::{Error, Result};
 
 use super::context::ChainState;

@@ -6,7 +6,7 @@
 //! and take only `(compactor?)`. A record's `meta` stays in the list and
 //! reaches tools, but never the model.
 
-use runvil_parser::test_support::PromptSource;
+use runvil_prompt::test_support::PromptSource;
 
 use super::models_loop::loop_scenario;
 use super::*;

@@ -16,7 +16,7 @@
 
 use crate::heading_address::{self, Reachable, SectionIndex, SectionPos, SlicePath, Visible};
 use crate::lua::{Library, LibraryBlock, LibraryKey, SectionText};
-use crate::parser::{Block, Prompt, Section, detail};
+use crate::prompt::{Block, Prompt, Section, detail};
 use crate::{Error, Result};
 
 /// The position of `target` in `slice`, matched on the parser-unique

@@ -4,7 +4,7 @@
 //! it, which the section's message list recorded when the round was sent.
 //! A script call names no model.
 
-use runvil_parser::test_support::{one_section, prompt};
+use runvil_prompt::test_support::{one_section, prompt};
 
 use super::fixtures::echo_tool;
 use super::models_loop::{loop_model_name, loop_scenario};

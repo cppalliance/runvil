@@ -13,7 +13,7 @@ publish = false
 runvil-engine.workspace = true
 runvil-lua.workspace = true
 runvil-model-client.workspace = true
-runvil-parser.workspace = true
+runvil-prompt.workspace = true
 runvil-types.workspace = true
 runvil-vfs.workspace = true
 

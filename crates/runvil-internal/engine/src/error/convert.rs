@@ -6,7 +6,7 @@
 use std::borrow::Cow;
 
 use runvil_lua::Error as LuaError;
-use runvil_parser::Error as ParserError;
+use runvil_prompt::Error as ParserError;
 use runvil_types::ids::TaskId;
 use runvil_vfs::VfsError;
 
@@ -14,8 +14,8 @@ use super::{BoxedSource, Error};
 
 impl Error {
     /// Builds a parse failure with a stable classification and no source span.
-    pub(crate) fn parse(kind: crate::parser::ParseErrorKind, message: impl Into<String>) -> Error {
-        Error::Parse(crate::parser::detail::parse_error(kind, message))
+    pub(crate) fn parse(kind: crate::prompt::ParseErrorKind, message: impl Into<String>) -> Error {
+        Error::Parse(crate::prompt::detail::parse_error(kind, message))
     }
 
     /// Stamps the prompt's frontmatter name onto a parse failure raised by
@@ -25,7 +25,7 @@ impl Error {
     pub(crate) fn with_prompt_name(self, name: &str) -> Error {
         match self {
             Error::Parse(error) => {
-                Error::Parse(crate::parser::detail::with_prompt_name(error, name))
+                Error::Parse(crate::prompt::detail::with_prompt_name(error, name))
             }
             other => other,
         }
@@ -134,12 +134,12 @@ impl From<crate::model::CompletionError> for Error {
 /// internal failure maps onto its own variant. The parser crate's error
 /// type is not `#[non_exhaustive]` (the two crates version together), so
 /// this match is total.
-impl From<crate::parser::ParseError> for Error {
-    fn from(error: crate::parser::ParseError) -> Self {
-        match crate::parser::detail::parse_error_into_inner(error) {
+impl From<crate::prompt::ParseError> for Error {
+    fn from(error: crate::prompt::ParseError) -> Self {
+        match crate::prompt::detail::parse_error_into_inner(error) {
             inner
             @ (ParserError::ParseFrontmatter { .. } | ParserError::ParseStructured { .. }) => {
-                Error::Parse(crate::parser::detail::parse_error_from_inner(inner))
+                Error::Parse(crate::prompt::detail::parse_error_from_inner(inner))
             }
             ParserError::Lua(lua) => Error::from(lua),
             ParserError::Internal(message) => Error::internal(message),

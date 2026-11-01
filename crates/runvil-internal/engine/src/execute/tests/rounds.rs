@@ -3,7 +3,7 @@
 //! every content event a round's answer reports - its thinking, its reply,
 //! its tool-call batch - holds the id its `Chat` effect held.
 
-use runvil_parser::test_support::one_section;
+use runvil_prompt::test_support::one_section;
 use runvil_types::event::{Event, ReplyOrigin};
 use runvil_types::ids::RoundId;
 

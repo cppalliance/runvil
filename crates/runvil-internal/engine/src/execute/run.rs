@@ -22,7 +22,7 @@ mod effect;
 pub(crate) use effect::{AnswerRecord, ChatAnswerRecord, EffectRecord};
 pub use effect::{Effect, EffectAnswer, EffectId, PackToolSets, Round, ToolCallOrigin, ToolCaller};
 
-use crate::parser::Prompt;
+use crate::prompt::Prompt;
 
 use super::RunOutcome;
 use super::config::RunConfig;

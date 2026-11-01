@@ -5,7 +5,7 @@
 //! at section end, and no `reply` global or automatic result handoff
 //! crosses a section boundary.
 
-use runvil_parser::test_support::{PromptSource, one_section, prompt};
+use runvil_prompt::test_support::{PromptSource, one_section, prompt};
 
 use crate::test_support::scenario::Scenario;
 

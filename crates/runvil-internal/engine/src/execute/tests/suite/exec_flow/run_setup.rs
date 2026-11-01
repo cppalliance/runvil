@@ -54,7 +54,7 @@ impl runvil_vfs::Vfs for RefusingStore {
 #[test]
 fn a_store_backend_that_refuses_its_session_fails_the_run_at_the_first_step() {
     let source = one_section("return 'never runs'");
-    let (prompt, _) = crate::parser::Prompt::parse(&source, EXECUTION);
+    let (prompt, _) = crate::prompt::Prompt::parse(&source, EXECUTION);
     let vfs = VfsRef::builder().store("/", RefusingStore).build();
     let mut run = crate::execute::run::Run::new(
         Arc::new(prompt.expect("the fixture parses")),

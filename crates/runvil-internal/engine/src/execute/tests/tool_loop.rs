@@ -8,7 +8,7 @@
 //! calls in `models_loop`; its compactor paths in `models_loop_compactors`
 //! and `compaction`.
 
-use runvil_parser::test_support::{one_section, prompt};
+use runvil_prompt::test_support::{one_section, prompt};
 use runvil_types::event::Event;
 
 use super::context::Recorder;

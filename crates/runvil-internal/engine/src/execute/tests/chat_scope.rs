@@ -2,7 +2,7 @@
 //! sends the section's Static Set, its offered catalog tools and adhoc
 //! tools as the first round froze them.
 
-use runvil_parser::test_support::one_section;
+use runvil_prompt::test_support::one_section;
 
 use super::fixtures::echo_tool;
 use super::models_loop::loop_scenario;

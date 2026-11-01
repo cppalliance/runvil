@@ -29,8 +29,8 @@ fn a_container_crate_depending_on_a_container_sibling_passes() {
     let root = tempfile::TempDir::new().expect("tempdir");
     write_crate(
         root.path(),
-        "runvil-internal/parser",
-        "runvil-parser",
+        "runvil-internal/prompt",
+        "runvil-prompt",
         "[dependencies]\nrunvil-lua = { path = \"../lua\" }\n",
     );
     write_crate(root.path(), "runvil-internal/lua", "runvil-lua", "");

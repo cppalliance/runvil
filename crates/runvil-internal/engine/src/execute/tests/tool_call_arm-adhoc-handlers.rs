@@ -7,7 +7,7 @@
 //! survives. A model-issued call resolves in the section's frozen sets,
 //! so those cases run one loop round first.
 
-use runvil_parser::test_support::prompt;
+use runvil_prompt::test_support::prompt;
 
 use super::*;
 use crate::execute::tests::fixtures::{echo_tool, failing_tool, untrusted_echo_tool};

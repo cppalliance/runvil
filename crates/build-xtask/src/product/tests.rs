@@ -230,10 +230,10 @@ fn dev_build_and_target_dependencies_are_checked() {
         root.path(),
         "workshop-server",
         "workshop-server",
-        "[dev-dependencies]\nrunvil-parser = { path = \"../runvil-parser\" }\n\
+        "[dev-dependencies]\nrunvil-prompt = { path = \"../runvil-prompt\" }\n\
          [target.'cfg(windows)'.dependencies]\nharness-runner = { path = \"../harness-runner\" }\n",
     );
-    write_crate(root.path(), "runvil-parser", "runvil-parser", "");
+    write_crate(root.path(), "runvil-prompt", "runvil-prompt", "");
     write_crate(root.path(), "harness-runner", "harness-runner", "");
     let violations = product_boundary_violations(root.path());
     assert_eq!(
