@@ -1,6 +1,6 @@
 //! Source positions: 1-based line arithmetic, and the location of a stretch of
 //! the shared prompt body. The fence splitter, the section walker, and the
-//! parser all use these, so none of them has to name another for them.
+//! parser all use these, so the splitter does not depend on the walker.
 
 use std::num::NonZeroU32;
 use std::sync::Arc;
