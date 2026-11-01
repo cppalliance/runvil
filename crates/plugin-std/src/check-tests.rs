@@ -4,7 +4,7 @@
 use runvil_plugin::ToolErrorKind;
 use serde_json::json;
 
-use super::check;
+use super::{check, plural, refuse_blank, refuse_unknown};
 
 /// The schema the `StrReplace` tool ships, which has a required string, an
 /// optional string, and an optional boolean.
@@ -137,4 +137,155 @@ fn a_parameter_the_schema_does_not_declare_passes_so_the_tool_can_see_it() {
         check("StrReplace", &replace(), &args).is_ok(),
         "extra arguments reach the tool, which refuses them itself"
     );
+}
+
+/// The schema the `Read` tool ships, whose properties are `path`,
+/// `offset`, and `limit`.
+fn read() -> serde_json::Value {
+    json!({
+        "type": "object",
+        "properties": {
+            "path": { "type": "string" },
+            "offset": { "type": "integer" },
+            "limit": { "type": "integer" }
+        },
+        "required": ["path"]
+    })
+}
+
+#[test]
+fn an_undeclared_key_is_refused_naming_it_and_listing_the_parameters_sorted() {
+    let args = json!({ "path": "/a.md", "lines": 3 });
+    let Err(error) = refuse_unknown("Read", &read(), &args) else {
+        panic!("{args} is refused");
+    };
+    assert_eq!(
+        error.to_string(),
+        "std_Read: `lines` is not a parameter of this tool. \
+         The parameters are `limit`, `offset` and `path`."
+    );
+    assert_eq!(error.kind(), ToolErrorKind::InvalidArguments);
+}
+
+#[test]
+fn the_parameter_list_is_sorted_bytewise_whatever_order_the_schema_holds() {
+    let schema = json!({
+        "type": "object",
+        "properties": { "zeta": {}, "alpha": {}, "Mid": {} }
+    });
+    let Err(error) = refuse_unknown("Grep", &schema, &json!({ "x": 1 })) else {
+        panic!("x is refused");
+    };
+    assert_eq!(
+        error.to_string(),
+        "std_Grep: `x` is not a parameter of this tool. \
+         The parameters are `Mid`, `alpha` and `zeta`."
+    );
+}
+
+#[test]
+fn two_parameters_are_joined_with_and_and_one_parameter_has_no_and() {
+    let two = json!({ "type": "object", "properties": { "b": {}, "a": {} } });
+    let Err(error) = refuse_unknown("Read", &two, &json!({ "c": 1 })) else {
+        panic!("c is refused");
+    };
+    assert!(
+        error
+            .to_string()
+            .ends_with("The parameters are `a` and `b`."),
+        "{error}"
+    );
+    let one = json!({ "type": "object", "properties": { "a": {} } });
+    let Err(error) = refuse_unknown("Read", &one, &json!({ "c": 1 })) else {
+        panic!("c is refused");
+    };
+    assert!(
+        error.to_string().ends_with("The parameters are `a`."),
+        "{error}"
+    );
+}
+
+#[test]
+fn declared_keys_a_null_argument_list_and_a_null_value_pass_the_unknown_key_check() {
+    assert!(refuse_unknown("Read", &read(), &json!({ "path": "/a.md", "limit": 2 })).is_ok());
+    assert!(refuse_unknown("Read", &read(), &json!(null)).is_ok());
+    assert!(refuse_unknown("Read", &read(), &json!({ "path": "/a.md", "limit": null })).is_ok());
+}
+
+#[test]
+fn a_null_value_under_an_undeclared_key_is_still_refused() {
+    let args = json!({ "path": "/a.md", "lines": null });
+    assert!(refuse_unknown("Read", &read(), &args).is_err(), "{args}");
+}
+
+#[test]
+fn the_smallest_undeclared_key_is_the_one_named() {
+    let args = json!({ "path": "/a.md", "zz": 1, "aa": 2, "mm": 3 });
+    let Err(error) = refuse_unknown("Read", &read(), &args) else {
+        panic!("{args} is refused");
+    };
+    assert!(
+        error.to_string().contains("`aa` is not a parameter"),
+        "{error}"
+    );
+}
+
+#[test]
+fn a_schema_without_properties_refuses_no_key() {
+    let schema = json!({ "type": "object" });
+    assert!(refuse_unknown("Read", &schema, &json!({ "x": 1 })).is_ok());
+}
+
+#[test]
+fn a_schema_with_an_empty_property_list_says_the_tool_takes_none() {
+    let schema = json!({ "type": "object", "properties": {} });
+    let Err(error) = refuse_unknown("Read", &schema, &json!({ "x": 1 })) else {
+        panic!("x is refused");
+    };
+    assert_eq!(
+        error.to_string(),
+        "std_Read: `x` is not a parameter of this tool. This tool takes no parameters."
+    );
+}
+
+#[test]
+fn a_blank_value_fails_naming_the_parameter_and_echoing_the_value() {
+    let Err(error) = refuse_blank("Read", "path", "   ") else {
+        panic!("whitespace is refused");
+    };
+    assert_eq!(
+        error.to_string(),
+        "std_Read: `path` is empty or only whitespace, and the call passed \"   \""
+    );
+    assert_eq!(error.kind(), ToolErrorKind::InvalidArguments);
+}
+
+#[test]
+fn an_empty_or_whitespace_only_value_is_blank_and_any_text_is_not() {
+    for blank in ["", " ", "\t\n"] {
+        assert!(refuse_blank("Read", "path", blank).is_err(), "{blank:?}");
+    }
+    for text in ["a", " a ", "/notes.md"] {
+        assert!(refuse_blank("Read", "path", text).is_ok(), "{text:?}");
+    }
+}
+
+#[test]
+fn plural_adds_s_for_every_count_but_one() {
+    assert_eq!(plural(1, "line"), "1 line");
+    assert_eq!(plural(10, "line"), "10 lines");
+    assert_eq!(plural(0, "line"), "0 lines");
+    assert_eq!(
+        plural(2, "invalid UTF-8 sequence"),
+        "2 invalid UTF-8 sequences"
+    );
+}
+
+#[test]
+fn plural_turns_a_consonant_then_y_into_ies_and_keeps_a_vowel_then_y() {
+    assert_eq!(plural(1, "directory"), "1 directory");
+    assert_eq!(plural(2, "directory"), "2 directories");
+    assert_eq!(plural(0, "entry"), "0 entries");
+    assert_eq!(plural(3, "key"), "3 keys");
+    assert_eq!(plural(5, "day"), "5 days");
 }

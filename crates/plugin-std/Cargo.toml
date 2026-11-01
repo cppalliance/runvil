@@ -13,6 +13,8 @@ runvil-plugin.workspace = true
 # Each tool's definition is embedded JSON, read into a spec at construct.
 serde.workspace = true
 serde_json.workspace = true
+# Grep compiles its pattern with Rust regex syntax.
+regex.workspace = true
 
 [dev-dependencies]
 # `testing::TestCall`, which lends the tools a context without a Harness.

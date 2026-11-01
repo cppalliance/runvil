@@ -1,4 +1,5 @@
-//! Argument checking against a tool's own JSON Schema.
+//! Argument checking against a tool's own JSON Schema, and the helpers
+//! the file tools share to refuse what the schema alone cannot.
 
 use runvil_plugin::{ToolError, ToolErrorKind};
 use serde_json::Value;
@@ -21,19 +22,22 @@ pub(crate) fn check(tool: &str, schema: &Value, args: &Value) -> Result<(), Tool
         args
     };
     let Some(object) = args.as_object() else {
-        return Err(refusal(tool, "the arguments must be a JSON object"));
+        return Err(invalid_arguments(
+            tool,
+            "the arguments must be a JSON object",
+        ));
     };
     if let Some(required) = schema.get("required").and_then(Value::as_array) {
         for name in required.iter().filter_map(Value::as_str) {
             match object.get(name) {
                 None => {
-                    return Err(refusal(
+                    return Err(invalid_arguments(
                         tool,
                         format!("`{name}` is required, and the call left it out"),
                     ));
                 }
                 Some(Value::Null) => {
-                    return Err(refusal(
+                    return Err(invalid_arguments(
                         tool,
                         format!("`{name}` is required, and the call passed null"),
                     ));
@@ -60,7 +64,7 @@ fn check_value(tool: &str, name: &str, property: &Value, value: &Value) -> Resul
         && !allowed.contains(value)
     {
         let allowed: Vec<String> = allowed.iter().map(ToString::to_string).collect();
-        return Err(refusal(
+        return Err(invalid_arguments(
             tool,
             format!(
                 "`{name}` must be one of {}, and the call passed {value}",
@@ -80,7 +84,7 @@ fn check_value(tool: &str, name: &str, property: &Value, value: &Value) -> Resul
         "object" => value.is_object(),
         "null" => value.is_null(),
         other => {
-            return Err(refusal(
+            return Err(invalid_arguments(
                 tool,
                 format!("`{name}` has a schema type {other} this build does not know"),
             ));
@@ -89,7 +93,7 @@ fn check_value(tool: &str, name: &str, property: &Value, value: &Value) -> Resul
     if matches {
         return check_items(tool, name, property, value);
     }
-    Err(refusal(
+    Err(invalid_arguments(
         tool,
         format!("`{name}` must be a JSON {expected}, and the call passed {value}"),
     ))
@@ -110,9 +114,86 @@ fn check_items(tool: &str, name: &str, property: &Value, value: &Value) -> Resul
     Ok(())
 }
 
+/// Refuses a key in `args` that the `schema`'s `properties` do not
+/// declare.
+///
+/// [`check`] lets an undeclared key through so the tool can decide what to
+/// do with it, and the file tools refuse it here, after `check` and before
+/// any other work. The message names the smallest undeclared key, and
+/// lists the declared parameters sorted bytewise, so the text does not
+/// depend on the order the JSON holds them in. A schema with no
+/// `properties`, and arguments that are not an object, refuse nothing.
+///
+/// # Errors
+/// Returns an invalid-arguments [`ToolError`] naming the key.
+pub(crate) fn refuse_unknown(tool: &str, schema: &Value, args: &Value) -> Result<(), ToolError> {
+    let (Some(properties), Some(object)) = (
+        schema.get("properties").and_then(Value::as_object),
+        args.as_object(),
+    ) else {
+        return Ok(());
+    };
+    let Some(unknown) = object
+        .keys()
+        .filter(|key| !properties.contains_key(*key))
+        .min()
+    else {
+        return Ok(());
+    };
+    let mut names: Vec<&str> = properties.keys().map(String::as_str).collect();
+    names.sort_unstable();
+    let quoted: Vec<String> = names.iter().map(|name| format!("`{name}`")).collect();
+    let tail = match quoted.split_last() {
+        None => "This tool takes no parameters.".to_owned(),
+        Some((last, [])) => format!("The parameters are {last}."),
+        Some((last, first)) => format!("The parameters are {} and {last}.", first.join(", ")),
+    };
+    Err(invalid_arguments(
+        tool,
+        format!("`{unknown}` is not a parameter of this tool. {tail}"),
+    ))
+}
+
+/// Refuses `value` when it is empty or only whitespace, naming the
+/// parameter `name` and echoing the value.
+///
+/// This runs before any I/O, so a blank path never reaches the
+/// filesystem.
+///
+/// # Errors
+/// Returns an invalid-arguments [`ToolError`] naming the parameter.
+pub(crate) fn refuse_blank(tool: &str, name: &str, value: &str) -> Result<(), ToolError> {
+    if value.trim().is_empty() {
+        return Err(invalid_arguments(
+            tool,
+            format!("`{name}` is empty or only whitespace, and the call passed \"{value}\""),
+        ));
+    }
+    Ok(())
+}
+
+/// `{n} {noun}` for a count, with `s` added to the noun for any `n` but 1.
+///
+/// A noun that ends in a consonant and then `y` takes `ies` instead, so
+/// `directory` gives `directories`. Examples: `1 line`, `10 lines`,
+/// `0 lines`.
+pub(crate) fn plural(n: usize, noun: &str) -> String {
+    if n == 1 {
+        return format!("{n} {noun}");
+    }
+    if let Some(stem) = noun.strip_suffix('y')
+        && let Some(before) = stem.chars().next_back()
+        && before.is_alphabetic()
+        && !matches!(before.to_ascii_lowercase(), 'a' | 'e' | 'i' | 'o' | 'u')
+    {
+        return format!("{n} {stem}ies");
+    }
+    format!("{n} {noun}s")
+}
+
 /// An invalid-arguments error whose message opens with the tool's id
 /// segment.
-fn refusal(tool: &str, reason: impl std::fmt::Display) -> ToolError {
+pub(crate) fn invalid_arguments(tool: &str, reason: impl std::fmt::Display) -> ToolError {
     ToolError::new(
         ToolErrorKind::InvalidArguments,
         format!("std_{tool}: {reason}"),

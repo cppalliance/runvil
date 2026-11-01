@@ -88,6 +88,47 @@ fn every_required_parameter_is_one_the_schema_declares_and_describes() {
 }
 
 #[test]
+fn the_read_description_holds_the_limits_the_code_uses_and_no_unfilled_placeholder() {
+    let definitions = all().expect("every embedded definition parses");
+    let read = definitions
+        .iter()
+        .find(|definition| definition.segment == "read")
+        .expect("the read definition exists");
+    let text = &read.description;
+    assert!(text.contains("100000"), "the byte cap is named: {text}");
+    assert!(
+        text.contains("16777216"),
+        "the file ceiling is named: {text}"
+    );
+    assert!(!text.contains("cat -n"), "the cat -n line is gone: {text}");
+    assert!(
+        !text.contains("2000 characters"),
+        "the 2000-character line is gone: {text}"
+    );
+    for placeholder in ["{byte_cap}", "{file_ceiling}"] {
+        assert!(
+            !text.contains(placeholder),
+            "{placeholder} is filled in: {text}"
+        );
+    }
+}
+
+#[test]
+fn the_read_schema_takes_integers_for_offset_and_limit() {
+    let definitions = all().expect("every embedded definition parses");
+    let read = definitions
+        .iter()
+        .find(|definition| definition.segment == "read")
+        .expect("the read definition exists");
+    for name in ["offset", "limit"] {
+        assert_eq!(
+            read.parameters["properties"][name]["type"], "integer",
+            "{name} is an integer"
+        );
+    }
+}
+
+#[test]
 fn no_definition_names_behavior_this_build_does_not_have() {
     for definition in all().expect("every embedded definition parses") {
         let text = format!("{} {}", definition.description, definition.parameters);

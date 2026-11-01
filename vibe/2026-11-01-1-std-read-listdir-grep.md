@@ -321,7 +321,7 @@ Commit: one commit holding the method, its tests, and `crates/runvil/public-api.
 
 <step-2>
 
-### Step 2: Shared plugin-std code and real Read
+### Step 2: Shared plugin-std code and real Read [completed]
 
 - Component: `read-tool`
 - Tests:

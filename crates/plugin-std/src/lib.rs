@@ -34,16 +34,22 @@
 //!
 //! # This build
 //!
-//! Every tool is a stub: a call with arguments that match the schema
-//! answers [`NOT_IMPLEMENTED`], and a call whose arguments do not match
-//! fails with an invalid-arguments
-//! [`ToolError`](runvil_plugin::ToolError) naming the parameter. The
-//! stubs exist so that the crate, the definitions, the ids, the wire
-//! names, and the Lua path can be proven before any file logic exists.
+//! Read is real. It returns a window of a text file's lines, each with a
+//! six-wide line number, and it refuses a directory, a file over 16 MiB,
+//! and binary data. A read that stops early ends with a line that names
+//! the offset to continue from. File text comes back as untrusted output.
+//!
+//! Write, StrReplace, Delete, Glob, and Grep are still stubs: a call with
+//! arguments that match the schema answers [`NOT_IMPLEMENTED`]. For every
+//! tool, a call whose arguments do not match fails with an
+//! invalid-arguments [`ToolError`](runvil_plugin::ToolError) naming the
+//! parameter. The stubs exist so that the crate, the definitions, the
+//! ids, the wire names, and the Lua path can be proven before any file
+//! logic exists.
 //!
 //! # Where the file access goes
 //!
-//! When the tools are real, every filesystem operation goes through the
+//! Every filesystem operation a tool performs goes through the
 //! call's [`Access`](runvil_plugin::Access), never the disk directly. That
 //! puts every read and write under the run's `ModePolicy`, so a run in
 //! `Mode::Ask` refuses every mutation without the Pack deciding anything,
@@ -72,6 +78,9 @@
 
 mod check;
 mod pack;
+mod read;
+mod refusal;
 mod spec;
+mod text;
 
 pub use crate::pack::{NOT_IMPLEMENTED, install};

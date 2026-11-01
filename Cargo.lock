@@ -4062,6 +4062,7 @@ dependencies = [
 name = "plugin-std"
 version = "0.3.0"
 dependencies = [
+ "regex",
  "runvil-plugin",
  "serde",
  "serde_json",

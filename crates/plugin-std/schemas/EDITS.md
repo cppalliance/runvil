@@ -19,6 +19,25 @@ Pack does not have.
 - Removed: `Image Support`, `PDF Support`, and the paragraph explaining how
   images and PDFs are returned. This build reads text only, so a model told
   otherwise would send a PDF and get an error.
+- Removed `Results are returned using cat -n format, with line numbers
+  starting at 1`. The description now states the format Read really uses: a
+  six-wide right-aligned number, a pipe, and the line's text, where the
+  number and the pipe are not part of the line.
+- Removed `Any lines longer than 2000 characters will be truncated`. Read
+  cuts a line only when that line alone passes the byte cap, and the
+  description says so.
+- Added lines that state what Read does: it opens any path the call names
+  inside what the run has mounted, and reads through a link unless the link
+  leaves the run's filesystem; a result holds at most `{byte_cap}` bytes of
+  numbered lines, and a read that stops early names the offset to continue
+  from; only text is read, so a file over `{file_ceiling}` bytes and a binary
+  file are refused. The two placeholders are filled when the definition is
+  built, from the constants the code enforces, so the text and the limits
+  cannot drift apart.
+- The `offset` and `limit` types are `integer`, where Cursor's were
+  `number`, because a line count is whole.
+- The `offset` text now says that 1 is the first line, that 0 reads as 1, and
+  that a negative value counts back from the end with -1 as the last line.
 
 ## write.json
 

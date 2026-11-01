@@ -70,8 +70,24 @@ fn id(segment: &str) -> ToolId {
 
 /// Calls the tool `segment` with `args`.
 fn call(segment: &str, args: Value) -> Result<ToolOutput, ToolError> {
+    call_seeded(segment, &[], args)
+}
+
+/// Calls the tool `segment` with `args` after writing each of `files`, a
+/// path beside its bytes, through the call's own access.
+fn call_seeded(
+    segment: &str,
+    files: &[(&str, &[u8])],
+    args: Value,
+) -> Result<ToolOutput, ToolError> {
     let pack = built();
     let call = TestCall::new(id(segment));
+    for (path, bytes) in files {
+        call.context()
+            .access()
+            .write(path, bytes)
+            .expect("a seeded file is written");
+    }
     block_on(pack.call(call.context(), args))
 }
 
@@ -181,7 +197,6 @@ fn construct_accepts_null_or_an_empty_object_and_refuses_any_other_configuration
 #[test]
 fn every_tool_answers_the_not_implemented_text_naming_itself() {
     for (segment, wire_name) in [
-        ("read", "Read"),
         ("write", "Write"),
         ("replace", "StrReplace"),
         ("rm", "Delete"),
@@ -189,7 +204,7 @@ fn every_tool_answers_the_not_implemented_text_naming_itself() {
         ("grep", "Grep"),
     ] {
         let args = match segment {
-            "read" | "rm" => json!({ "path": "/notes.md" }),
+            "rm" => json!({ "path": "/notes.md" }),
             "write" => json!({ "path": "/notes.md", "contents": "hi" }),
             "replace" => json!({
                 "path": "/notes.md",
@@ -257,4 +272,34 @@ fn a_call_of_a_tool_the_pack_lacks_fails_naming_it() {
     let error =
         block_on(pack.call(unknown.context(), json!({}))).expect_err("std has no copy tool");
     assert_eq!(error.to_string(), "std has no tool named copy");
+}
+
+#[test]
+fn read_answers_the_numbered_lines_of_a_seeded_file_as_untrusted_output() {
+    let output = call_seeded(
+        "read",
+        &[("/notes.md", b"hello\nworld\n")],
+        json!({ "path": "/notes.md" }),
+    )
+    .expect("a seeded file reads");
+    assert_eq!(output.text(), "     1|hello\n     2|world\n");
+    assert_eq!(output.trust(), OutputTrust::Untrusted);
+}
+
+#[test]
+fn read_answers_file_is_empty_for_a_zero_byte_file() {
+    let output = call_seeded(
+        "read",
+        &[("/empty.md", b"")],
+        json!({ "path": "/empty.md" }),
+    )
+    .expect("an empty file reads");
+    assert_eq!(output.text(), "File is empty.");
+    assert_eq!(output.trust(), OutputTrust::Untrusted);
+}
+
+#[test]
+fn read_of_a_missing_path_fails_with_the_not_found_text() {
+    let error = call("read", json!({ "path": "/nope.md" })).expect_err("the file is missing");
+    assert_eq!(error.to_string(), "File not found: /nope.md");
 }

@@ -62,12 +62,26 @@ static DEFINITIONS: LazyLock<Result<Vec<Definition>, ToolError>> = LazyLock::new
             Ok(Definition {
                 segment,
                 wire_name: file.wire_name,
-                description: file.description,
+                description: fill(segment, &file.description),
                 parameters: file.parameters,
             })
         })
         .collect()
 });
+
+/// `description` with the tool's `{...}` placeholders filled from the
+/// constants its code uses, so the text the model reads and the limit the
+/// code enforces cannot drift apart.
+///
+/// A tool without placeholders keeps its text as it is.
+fn fill(segment: &str, description: &str) -> String {
+    match segment {
+        "read" => description
+            .replace("{byte_cap}", &crate::read::BYTE_CAP.to_string())
+            .replace("{file_ceiling}", &crate::text::MAX_FILE_BYTES.to_string()),
+        _ => description.to_owned(),
+    }
+}
 
 /// Every definition, in [`SOURCES`] order.
 ///
