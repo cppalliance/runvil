@@ -86,6 +86,7 @@ impl Section {
     }
 
     /// Classic leading Lua fence when the first block is Lua.
+    #[cfg(any(test, feature = "test-support"))]
     #[must_use]
     pub fn prologue(&self) -> Option<&LuaProgram> {
         match self.blocks.first() {
@@ -95,6 +96,7 @@ impl Section {
     }
 
     /// Text of the last prose block, or `""` when the section has none.
+    #[cfg(any(test, feature = "test-support"))]
     #[must_use]
     pub fn prose(&self) -> &str {
         self.blocks
@@ -109,6 +111,7 @@ impl Section {
 
     /// Classic trailing Lua fence when the last block is Lua and not the sole
     /// leading prologue (a section that is only one Lua block has no epilog).
+    #[cfg(any(test, feature = "test-support"))]
     #[must_use]
     pub fn epilog(&self) -> Option<&LuaProgram> {
         match self.blocks.as_slice() {

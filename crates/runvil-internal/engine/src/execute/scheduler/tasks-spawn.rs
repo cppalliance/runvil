@@ -107,7 +107,9 @@ impl Scheduler {
         let worker = resolved.pos.section(&prompt).ok_or(Error::internal(
             "a resolved worker is absent from its slice",
         ))?;
-        if worker.prologue().is_none() && worker.epilog().is_none() && !worker.items().is_empty() {
+        // A section is list-only exactly when it parsed into list items, which
+        // the parser refuses for any section holding a Lua block.
+        if !worker.items().is_empty() {
             return Err(Error::lua_message(format!(
                 "section `{}` is a list section, not a worker template",
                 worker.name()
