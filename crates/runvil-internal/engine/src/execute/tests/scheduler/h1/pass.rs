@@ -16,7 +16,7 @@ fn h1_infer_runs_once() {
         # Live H1\n\n\
         ```lua\n\
         local writer = models.get('default')\n\
-        var.answer = writer:infer('answer once')\n\
+        var.answer = models.infer(writer, 'answer once')\n\
         ```\n\n\
         ## Result\n\n\
         ```lua\nreturn var.answer\n```\n";

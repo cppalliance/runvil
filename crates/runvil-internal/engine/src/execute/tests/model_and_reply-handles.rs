@@ -91,7 +91,8 @@ fn models_infer_uses_the_section_model_without_touching_reply() {
 #[test]
 fn handle_infer_uses_that_model_regardless_of_the_section_model() {
     let gateway = ScriptedChat::new(vec![text("pong")]);
-    let source = PromptSource::new().section("Only", "return models.get('strong'):infer('ping')");
+    let source =
+        PromptSource::new().section("Only", "return models.infer(models.get('strong'), 'ping')");
     let trace = two_models(&source).chat(&gateway).run();
     assert_eq!(trace.text(), "pong");
     let body = gateway

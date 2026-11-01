@@ -1,10 +1,10 @@
-//! Inspectable Lua userdata returned by `models.use` and `models.get`.
+//! Inspectable Lua userdata returned by `models.use`, `models.get`, and
+//! `models.current`.
 //!
-//! The userdata exposes a frozen [`ModelBinding`]'s fields to Lua, and it
-//! carries `infer` and `loop`, run as `h:infer(prompt)` and
-//! `h:loop(compactor?)` on the handle's binding. Those two are
-//! the shim's Lua functions, read through field getters, because each may
-//! suspend and a Rust method cannot.
+//! The userdata is a pure value: it exposes a frozen [`ModelBinding`]'s
+//! fields to Lua and nothing else. It has no methods, so there is exactly
+//! one way to run a model: the `models` namespace functions, which take the
+//! handle as their leading argument.
 
 use mlua::{UserData, UserDataFields, Value};
 
@@ -99,8 +99,6 @@ impl UserData for LuaModelHandle {
         fields.add_field_method_get("thinking", |_, this| Ok(this.thinking()));
         fields.add_field_method_get("temperature", |_, this| Ok(this.temperature()));
         fields.add_field_method_get("max_tokens", |_, this| Ok(this.max_tokens()));
-        fields.add_field_function_get("infer", |lua, _| crate::coro::handle_method(lua, "infer"));
-        fields.add_field_function_get("loop", |lua, _| crate::coro::handle_method(lua, "loop"));
     }
 }
 

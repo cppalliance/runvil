@@ -108,8 +108,6 @@ The author-facing surface is five fixed roles, optional requirements in front ma
     local s = models.get("small")
     models.infer(prose)                  -- on the current model
     models.infer(s, prose)               -- explicit handle, frozen binding
-    s:infer("prompt")                    -- handle methods
-    s:loop()
 
     -- SAVE AND RESTORE around a block of work
     local prev = models.current()
@@ -304,7 +302,7 @@ Tests cover the parse rules, `prepare` resolution, the Lua surface, chain inheri
 - Deferred: per-role model selection in production Hosts. The harness passes only `default` because its host snapshot carries one `selected_model` (`crates/harness-internal/runner/src/environment.rs`). Revisit when that snapshot carries per-role selections.
 - Deferred: a scoped model-switch form. Revisit if chain-level persistence leaks cost in practice.
 - Deferred: `FromStr` for `ModelRole`. Revisit when a Host reads role names from configuration.
-- Out of scope: the handle's duplicate `name` and `label` fields, and the `h:infer` and `h:loop` forms that duplicate `models.infer(h, ...)` and `models.loop(h, ...)` (`crates/runvil-internal/lua/src/models-userdata.rs`).
+- Out of scope: the handle's duplicate `name` and `label` fields (`crates/runvil-internal/lua/src/models-userdata.rs`).
 - Out of scope: a model argument on `tasks.spawn`.
 - Out of scope: editing dated logs under `vibe/` and the generated `.vibelight/` directory.
 

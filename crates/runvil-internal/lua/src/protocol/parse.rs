@@ -236,12 +236,12 @@ fn parse_infer(table: &mlua::Table) -> std::result::Result<Request, FieldFailure
     Ok(Request::Infer { prompt, binding })
 }
 
-/// Reads the optional model handle of `call` (`models.infer` or
-/// `models.loop`) off the request's `handle` field, which a handle's
-/// `infer` or `loop` sets from its receiver: absent or nil is `None`, a
+/// Reads the optional model handle of `models.infer` or `models.loop` off
+/// the request's `handle` field, which the shim sets from the call's
+/// leading handle: absent or nil is `None`, a
 /// model handle's userdata is its frozen [`ModelBinding`] cloned out of
 /// its borrow while the VM handle is live, and any other value is the
-/// call's error naming the call, since the receiver is author-supplied.
+/// call's error naming the call, since the handle is author-supplied.
 fn call_handle(
     table: &mlua::Table,
     call: &str,

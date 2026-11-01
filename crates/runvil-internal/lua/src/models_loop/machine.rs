@@ -56,8 +56,8 @@ pub(super) struct Machine<V> {
     list: MessageList,
     /// The same list as the value every `chat` request names.
     messages: V,
-    /// The receiver of a handle's `loop`, set on every `chat` request;
-    /// `None` for `models.loop`.
+    /// The leading model handle's value, set on every `chat` request;
+    /// `None` when the call named no handle.
     handle: Option<V>,
     /// The compactor argument, or `compactors.fail` as read when the
     /// call began, which is not type-checked, as in the shim.

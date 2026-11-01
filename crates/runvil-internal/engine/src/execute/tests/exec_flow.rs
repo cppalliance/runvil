@@ -145,9 +145,9 @@ fn default_arm(worker: &str) -> String {
 }
 
 /// The worker Lua that asks the model through the `default` handle.
-const HANDLE_INFER: &str = "return models.get('default'):infer('ping about ' .. item)";
+const HANDLE_INFER: &str = "return models.infer(models.get('default'), 'ping about ' .. item)";
 
-/// `handle:infer(...)` works inside an arm, so a worker's Lua can call the model
+/// `models.infer(models.get('default'), ...)` works inside an arm, so a worker's Lua can call the model
 /// directly.
 #[test]
 fn fanout_arm_model_infer_works_inside_an_arm() {
@@ -176,7 +176,7 @@ fn fanout_arm_model_infer_works_inside_an_arm() {
     );
 }
 
-/// `handle:infer(...)` inside an arm handed no client surfaces the lazy-creation
+/// `models.infer` with a leading handle inside an arm handed no client surfaces the lazy-creation
 /// error.
 #[test]
 fn fanout_arm_model_infer_without_a_client_surfaces_the_disabled_gateway() {
@@ -194,9 +194,11 @@ fn fanout_arm_model_infer_without_a_client_surfaces_the_disabled_gateway() {
 /// An unknown model alias errors loudly inside an arm, same as on the walk.
 #[test]
 fn fanout_arm_model_infer_with_an_unknown_alias_errors_loudly() {
-    let trace = Scenario::new(default_arm("return models.get('ghost'):infer('ping')"))
-        .bound()
-        .run();
+    let trace = Scenario::new(default_arm(
+        "return models.infer(models.get('ghost'), 'ping')",
+    ))
+    .bound()
+    .run();
     let rendered = trace.error().to_string();
     assert!(
         rendered.contains(

@@ -282,9 +282,9 @@ fn a_handles_loop_runs_on_its_frozen_binding() {
     let source = one_section(
         "local other = models.get('strong')
          messages:user('one')
-         other:loop()
+         models.loop(other)
          messages:user('two')
-         other:loop()
+         models.loop(other)
          assert(#messages == 4, 'each call appends its terminal record')
          return messages[2].content .. '|' .. messages[4].content",
     );

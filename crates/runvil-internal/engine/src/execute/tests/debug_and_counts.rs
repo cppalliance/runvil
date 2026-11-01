@@ -81,7 +81,7 @@ fn nested_model_infer_capture_reaches_the_debug_sink() {
     let source = PromptSource::new()
         .section(
             "Only",
-            "local text = models.get('default'):infer('say hello')
+            "local text = models.infer(models.get('default'), 'say hello')
          return text",
         )
         .build();
@@ -333,13 +333,13 @@ fn tool_calls_typo_alias_is_a_hard_error_with_seeded_set() {
 
 #[test]
 fn handle_infer_returns_text_without_touching_reply_or_sys() {
-    // The one infer shape: `handle:infer(...)` returns the round's text and never
+    // The one infer shape: `models.infer(handle, prompt)` returns the round's text and never
     // sets `reply` or `sys.reply_finish_reason`.
     let gateway = ScriptedChat::new(vec![text("pong")]);
     let source = PromptSource::new()
         .section(
             "Only",
-            "local text = models.get('default'):infer('say hello')
+            "local text = models.infer(models.get('default'), 'say hello')
          assert(type(text) == 'string', 'infer must return text')
          assert(text == 'pong')
          assert(reply == nil, 'infer must not set reply')

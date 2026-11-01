@@ -41,12 +41,12 @@ pub enum SpawnVia {
 #[derive(Debug)]
 pub enum Request {
     /// `models.infer(prompt)` (`binding: None`: resolve the section's
-    /// current model) or `h:infer(prompt)` (`binding: Some`: the handle's
-    /// frozen binding).
+    /// current model) or `models.infer(model, prompt)` (`binding: Some`:
+    /// the handle's frozen binding).
     Infer {
         /// The author-supplied prompt text.
         prompt: String,
-        /// The receiver handle's frozen binding, else `None`.
+        /// The leading handle's frozen binding, else `None`.
         binding: Option<ModelBinding>,
     },
     /// `call(target, input?)`: run a contained chain over the target's
@@ -182,9 +182,9 @@ pub enum Request {
         /// dispatch, not the parse, refuses an empty list. Its records
         /// were validated as the list added them.
         list: MessageList,
-        /// The receiver of a handle's `loop`, as its frozen binding; `None`
-        /// when the round names no handle, and the driver resolves the
-        /// section's current model.
+        /// The leading handle of a `models.loop` call, as its frozen
+        /// binding; `None` when the round names no handle, and the driver
+        /// resolves the section's current model.
         binding: Option<ModelBinding>,
     },
     /// `store.*(...)`: one run-scoped store operation as a leaf yield.

@@ -86,7 +86,7 @@ fn every_later_round_sends_the_same_tool_bytes_across_a_model_change() {
          messages:user('one')
          models.loop()
          messages:user('two')
-         models.get('strong'):loop()
+         models.loop(models.get('strong'))
          return messages[#messages].content",
     );
     let trace = loop_scenario(source)
@@ -238,7 +238,7 @@ fn a_first_round_refused_for_a_missing_model_renders_nothing() {
          local ok, err = pcall(models.loop)
          assert(not ok, 'a section with no model is refused')
          tools.offer('tools/echo')
-         models.get('strong'):loop()
+         models.loop(models.get('strong'))
          return tostring(err)",
     );
     let mut unset = ModelSet::default();

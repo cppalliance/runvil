@@ -98,7 +98,7 @@ fn begin_with_flag(lua: &Lua, max_rounds: usize) -> (Function, Arc<AtomicBool>) 
 }
 
 #[test]
-fn both_entries_check_their_arguments_in_order_with_the_shims_texts() {
+fn the_entry_checks_its_arguments_in_order_with_the_shims_texts() {
     let lua = Lua::new();
     install_section_list(&lua);
     let (begin, _) = begin_with_flag(&lua, 2);
@@ -111,39 +111,43 @@ fn both_entries_check_their_arguments_in_order_with_the_shims_texts() {
                return type(step) .. '|' .. tag .. '|' .. tostring(value.op or value)
              end
              return {
-               probe(false, h), probe(false, h, nil), probe(false, nil, nil),
-               probe(false, 5, nil), probe(false, 5), probe(false, null), probe(false),
-               probe(false, nil), probe(true), probe(true, 5), probe(true, h, nil, nil),
-               probe(true, h, 1.5, nil), probe(true, h, 1.5), probe(true, h),
-               probe(true, h, nil),
+               probe(h, nil, nil), probe(h, nil), probe(h, 1.5),
+               probe(h, 1.5, nil), probe(false, h), probe(5, h),
+               probe(false, nil, nil), probe(5, nil), probe(5), probe(null),
+               probe(), probe(nil), probe(h), probe(h, 5),
              }",
         )
         .call((begin, handle(&lua), Value::NULL))
         .unwrap();
-    let handle_first = "nil|raise|models.loop takes (compactor?); call handle:loop(compactor?) \
-                        to run on a model handle";
-    let loop_arity = "nil|raise|models.loop takes (compactor?)";
-    let no_receiver = "nil|raise|call loop on a model handle with a colon: handle:loop(compactor?)";
-    let method_arity = "nil|raise|handle:loop takes (compactor?)";
+    let arity = "nil|raise|models.loop takes (compactor?) or (model, compactor?)";
+    let integer = "nil|raise|compactor must be a function, got integer";
+    let number = "nil|raise|compactor must be a function, got number";
     let started = "function|yield|chat";
     assert_eq!(
         outcomes,
         [
-            handle_first,
-            handle_first,
-            loop_arity,
-            loop_arity,
-            "nil|raise|compactor must be a function, got integer",
+            // Three arguments, whichever shape the first one starts.
+            arity,
+            // A handle then one argument is the handle shape.
+            started,
+            // A handle then a non-function compactor.
+            number,
+            arity,
+            // A non-handle first argument takes the section-model shape, so
+            // it may carry only one argument.
+            arity,
+            arity,
+            arity,
+            arity,
+            // That one argument is the compactor, checked after the arity.
+            integer,
             "nil|raise|compactor must be a function, got userdata",
+            // No arguments, a nil argument, a handle alone, and a handle
+            // with nil all take a documented shape.
             started,
             started,
-            no_receiver,
-            no_receiver,
-            method_arity,
-            method_arity,
-            "nil|raise|compactor must be a function, got number",
             started,
-            started,
+            integer,
         ]
     );
 }
@@ -162,7 +166,7 @@ fn every_started_loop_yields_the_sections_one_list() {
                step(false, 'ended')
                return request.messages
              end
-             return messages_sent(false), messages_sent(true, h)",
+             return messages_sent(), messages_sent(h)",
         )
         .call((begin, handle(&lua)))
         .unwrap();
@@ -199,16 +203,16 @@ fn a_running_loop_refuses_another_until_its_step_ends_or_fails() {
                return type(refused) .. '|' .. tag .. '|' .. tostring(err)
              end
              note('idle')
-             local step = begin(false)
+             local step = begin()
              note('started')
-             note('loop ' .. refusal(false))
-             note('method ' .. refusal(true, h))
+             note('loop ' .. refusal())
+             note('handle ' .. refusal(h))
              note(step(false, 'ended'))
-             local _, exhausted = capped(false)
+             local _, exhausted = capped()
              note('capped ' .. exhausted)
-             local failing = begin(false)
+             local failing = begin()
              note('restarted')
-             note(tostring(pcall(failing, true, 'not a round')))
+             note(tostring(pcall(failing, 'not a round')))
              return table.concat(seen, ',')",
         )
         .call((begin, capped, is_running, handle(&lua)))
@@ -217,7 +221,7 @@ fn a_running_loop_refuses_another_until_its_step_ends_or_fails() {
     assert_eq!(
         seen,
         format!(
-            "idle=false,started=true,loop {refused},method {refused},raise=false,\
+            "idle=false,started=true,loop {refused},handle {refused},raise=false,\
              capped raise=false,restarted=true,false=false"
         )
     );
@@ -236,7 +240,7 @@ fn a_step_failing_on_a_full_heap_after_an_overflow_leaves_no_flag_set() {
     let (begin, running) = begin_with_flag(&lua, 2);
     let mut judged = false;
     for headroom in (0..64 * 1024).step_by(8) {
-        let (step, _, _): (Function, Value, Value) = begin.call(false).unwrap();
+        let (step, _, _): (Function, Value, Value) = begin.call(()).unwrap();
         let overflowed = ChatResult {
             outcome: ChatOutcome::Overflow(OverflowReason::Precheck),
             ..round()

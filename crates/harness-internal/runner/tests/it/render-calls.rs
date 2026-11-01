@@ -125,7 +125,7 @@ const ON_TWO_MODELS: [(&str, &str); 3] = [
     (
         "OnN",
         "tools.offer('render/echo')\nmessages:user('hold on n')\n\
-         local n = models.get('n')\nlocal ok, err = pcall(n.loop, n)\n\
+         local n = models.get('n')\nlocal ok, err = pcall(models.loop, n)\n\
          return tostring(ok) .. ':' .. (ok and messages[#messages].content or err.kind)",
     ),
 ];

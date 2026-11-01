@@ -67,10 +67,6 @@ const FANOUT_CHUNK_NAME: &str = "@crates/runvil-internal/lua/src/__impl_fanout.l
 /// a captured cap, bounds how many arms run at once.
 const FANOUT_SOURCE: &str = include_str!("__impl_fanout.lua");
 
-/// The registry key for the shim's model-handle methods, `infer` and
-/// `loop`, stashed by the prelude install for [`handle_method`].
-const HANDLE_METHODS_REGISTRY: &str = "runvil.impl_coro.handle_methods";
-
 /// The registry key for the shim's model-issued `tool_call` form, which
 /// test builds stash for `install_model_tool_call_shim` to install as
 /// `tools.call_as_model`, so a fixture section can drive the driver's
@@ -129,8 +125,7 @@ static FANOUT_PROGRAM: LazyLock<std::result::Result<LuaProgram, SharedSource>> =
 /// over the same captures plus the collection enumerator and the item
 /// renderer, and installed on the `tasks` table as `tasks.fanout`. The
 /// `models.loop` and `models.compact` shims are installed on the `models`
-/// table, and the chunk's `handle_methods` table, a model handle's `infer`
-/// and `loop`, is stashed in the registry for [`handle_method`].
+/// table.
 /// `selection`, the chain's current model, is what the `fanout` chunk's
 /// `get_selection` and `set_selection` captures read and write.
 /// `max_tool_iterations`, the run's resolved round cap, the `compactors`
@@ -151,12 +146,16 @@ static FANOUT_PROGRAM: LazyLock<std::result::Result<LuaProgram, SharedSource>> =
 /// two captures, `enter_adhoc_handler` and `leave_adhoc_handler`, count up
 /// and down on `adhoc_handler_depth`, the counter the VM's `jump` reads, so
 /// `jump` refuses while an adhoc tool's handler runs, whatever reference
+/// the two captures, `enter_adhoc_handler` and `leave_adhoc_handler`, count up
+/// and down on `adhoc_handler_depth`, the counter the VM's `jump` reads, so
+/// `jump` refuses while an adhoc tool's handler runs, whatever reference
 /// the handler calls it through. Then `cancel_requested` reads the
 /// cancel flag of `cancel_hook`, so the chunk's protected calls
 /// raise a failure caught under cancellation again instead of returning
 /// it, and the hook's abort always reaches the block guard. Next,
 /// `is_model_handle` reports whether a value is a model handle, so the
-/// `infer` entries check their receiver before any yield, and the last
+/// `infer` and `loop` entries read a leading handle before any yield, and
+/// the last
 /// two, `loop_begin` and `compact_begin`, start each loop and compaction
 /// call for the trampoline.
 ///
@@ -352,13 +351,9 @@ fn selection_captures(
     Ok((get, set))
 }
 
-/// Stashes the shim chunk's `handle_methods` and `store` under their
-/// registry keys, for the installs and the handle getters that read them
-/// after the prelude.
+/// Stashes the shim chunk's `store` under its registry key, for the store
+/// install that reads it after the prelude.
 fn stash_shims(lua: &Lua, shims: &Table) -> Result<()> {
-    let handle_methods: Table = shims.raw_get("handle_methods").map_err(Error::lua)?;
-    lua.set_named_registry_value(HANDLE_METHODS_REGISTRY, handle_methods)
-        .map_err(Error::lua)?;
     #[cfg(any(test, feature = "test-support"))]
     {
         let model_tool_call: Function = shims.raw_get("model_tool_call").map_err(Error::lua)?;
@@ -404,16 +399,6 @@ fn adhoc_handler_captures(lua: &Lua, depth: &Arc<AtomicU32>) -> Result<(Function
 /// Returns [`Error::LuaRuntime`] if the shim prelude never ran on this VM.
 pub(crate) fn block_guard(lua: &Lua) -> Result<Function> {
     lua.named_registry_value(GUARD_REGISTRY).map_err(Error::lua)
-}
-
-/// The shim's `name` method for a model handle, `infer` or `loop`, from
-/// the table `install_shim_prelude` stashed; nil on a VM where the
-/// prelude never ran.
-pub(crate) fn handle_method(lua: &Lua, name: &str) -> mlua::Result<Value> {
-    match lua.named_registry_value::<Value>(HANDLE_METHODS_REGISTRY)? {
-        Value::Table(methods) => methods.raw_get(name),
-        _ => Ok(Value::Nil),
-    }
 }
 
 /// Installs the store yield shims onto a VM's `store` table, replacing the

@@ -18,9 +18,10 @@
 -- run's cancel flag is set: a failure caught under cancellation is the
 -- instruction hook's abort, which must unwind to the block guard, so every
 -- protected call below raises it again instead of returning it,
--- `is_model_handle(value)` reports whether a value is a model handle,
--- `loop_begin(entry, ...)` starts one `models.loop` call in Rust over the
--- run's round cap, the section's `compactors` table, and the section's
+-- `is_model_handle(value)` reports whether a value is a model handle, so
+-- the `infer` and `loop` entries can read a leading model handle before
+-- any yield, `loop_begin(...)` starts one `models.loop` call in Rust over
+-- the run's round cap, the section's `compactors` table, and the section's
 -- `messages` list, returning the
 -- call's step function and its first action, and `compact_begin(...)`
 -- starts one `models.compact` call over the same list the same way. The
@@ -118,32 +119,22 @@ local function run_infer(handle, prompt)
   return result
 end
 
--- models.infer(prompt) and a model handle's `infer`, as `h:infer(prompt)`.
--- Handles carry `infer` and `loop` as fields that read these entries, Lua
--- functions because each may suspend and a Rust method cannot. Each entry
--- checks its receiver and then its arity, counting trailing nils, before
--- any yield.
+-- models.infer(prompt) runs on the section's current model, and
+-- models.infer(model, prompt) runs on the model handle's frozen binding.
+-- The leading handle is checked first, then the arity for that shape is
+-- counted with trailing nils, before any yield.
 local function infer(...)
   if is_model_handle((...)) then
-    raise("lua", {
-      message = "models.infer takes (prompt); call handle:infer(prompt) to run on a model handle",
-    })
+    if select('#', ...) > 2 then
+      raise("lua", { message = "models.infer takes (prompt) or (model, prompt)" })
+    end
+    local handle, prompt = ...
+    return run_infer(handle, prompt)
   end
   if select('#', ...) > 1 then
-    raise("lua", { message = "models.infer takes (prompt)" })
+    raise("lua", { message = "models.infer takes (prompt) or (model, prompt)" })
   end
   return run_infer(nil, (...))
-end
-
-local function handle_infer(...)
-  if not is_model_handle((...)) then
-    raise("lua", { message = "call infer on a model handle with a colon: handle:infer(prompt)" })
-  end
-  if select('#', ...) > 2 then
-    raise("lua", { message = "handle:infer takes (prompt)" })
-  end
-  local handle, prompt = ...
-  return run_infer(handle, prompt)
 end
 
 local function call_section(target, input)
@@ -250,17 +241,11 @@ local function drive(step, action, a, b)
 end
 
 -- models.loop(compactor?) runs the section's `messages` list on the
--- section's current model, and a model handle's `loop`, as
--- `h:loop(compactor?)`, runs every round on the handle's frozen binding.
--- The Engine installs the
--- first as models.loop. Each entry names itself to `loop_begin`, so the
--- argument checks know the form without inspecting the arguments.
+-- section's current model, and models.loop(model, compactor?) runs every
+-- round on the model handle's frozen binding. The compactor is optional in
+-- both shapes. The Engine installs this as models.loop.
 local function models_loop(...)
-  return drive(loop_begin(false, ...))
-end
-
-local function handle_loop(...)
-  return drive(loop_begin(true, ...))
+  return drive(loop_begin(...))
 end
 
 -- models.compact(compactor, reason) runs `compactor(reason)` once over the
@@ -356,8 +341,6 @@ return {
   helpers = { raise = raise, fail = fail, engine_type = engine_type },
   loop = models_loop,
   compact = models_compact,
-  -- The fields a model handle reads, through the registry stash.
-  handle_methods = { infer = handle_infer, loop = handle_loop },
   model_tool_call = tools_call_as_model,
   guard = guard,
   pcall = protected_call,

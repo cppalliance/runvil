@@ -151,7 +151,7 @@ impl RunContext {
     /// to application state takes effect on the next run. A snapshot also
     /// makes `models.get` resolve a label outside the five roles as a raw
     /// gateway model id. So a prompt can run
-    /// `models.get(ui().selected_model):loop()` and run on the model the
+    /// `models.loop(models.get(ui().selected_model))` and run on the model the
     /// user picked. The default is `None`, which leaves the `ui` global
     /// absent and limits `models.get` to the five roles.
     #[must_use]

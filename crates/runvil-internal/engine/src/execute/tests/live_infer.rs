@@ -17,7 +17,7 @@ fn h1_handle_infer() -> String {
     PromptSource::new()
         .h1("
             local writer = models.get('default')
-            var.answer = writer:infer('answer once')")
+            var.answer = models.infer(writer, 'answer once')")
         .section("Result", "return var.answer")
         .build()
 }
@@ -172,7 +172,7 @@ fn nested_lua_infer_emits_a_model_turn_observation() {
     let source = PromptSource::new()
         .h1("
             local writer = models.get('default')
-            var.answer = writer:infer('ping')")
+            var.answer = models.infer(writer, 'ping')")
         .section("Result", "return var.answer");
     let trace = Scenario::new(source.build()).bound().chat(&gateway).run();
 
@@ -203,7 +203,7 @@ fn cancelled_nested_infer_does_not_report_model_turn_failed() {
     let gateway = ScriptedChat::new(vec![text("too late")]);
     let source = PromptSource::new().h1("
         local writer = models.get('default')
-        return writer:infer('must cancel')");
+        return models.infer(writer, 'must cancel')");
     let cancel = CancelHandle::new();
     let canceller = cancel.clone();
     let mut driving = Scenario::new(source.build())
@@ -242,7 +242,7 @@ fn handle_infer_tool_call_violation_uses_entry_point_neutral_wording() {
     let gateway = ScriptedChat::new(vec![calls(&[("call_1", "ghost", "{}")])]);
     let source = PromptSource::new().h1("
         local writer = models.get('default')
-        return writer:infer('answer without tools')");
+        return models.infer(writer, 'answer without tools')");
     let trace = Scenario::new(source.build()).bound().chat(&gateway).run();
     let rendered = trace.error().to_string();
     assert!(

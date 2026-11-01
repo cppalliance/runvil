@@ -129,8 +129,8 @@ fn a_non_function_compactor_is_the_calls_error_in_the_engines_type_names() {
     // The argument error is pcall-able at the call site and names the
     // value's type as the protocol parse does: an integer is "integer",
     // a float "number", anything else its Lua type name. No round runs.
-    // Each value is passed to `models.loop` and to a handle's `loop`;
-    // both entries reach the compactor check.
+    // Each value is passed to `models.loop` with and without a leading
+    // handle; both shapes reach the compactor check.
     let gateway = ScriptedChat::new(vec![text("unreachable")]);
     let source = one_section(
         "messages:user('hello')
@@ -144,7 +144,7 @@ fn a_non_function_compactor_is_the_calls_error_in_the_engines_type_names() {
          local out = {}
          for _, bad in ipairs({ 42, 4.5, 'summarize', {} }) do
            out[#out + 1] = refusal(models.loop, bad)
-           out[#out + 1] = refusal(writer.loop, writer, bad)
+           out[#out + 1] = refusal(models.loop, writer, bad)
          end
          assert(#messages == 1, 'a refused call appends nothing')
          return table.concat(out, '|')",

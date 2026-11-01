@@ -141,7 +141,7 @@ fn a_section_that_switches_models_between_rounds_reports_each_rounds_model() {
 #[test]
 fn an_adhoc_handlers_infer_on_another_model_leaves_the_batchs_later_call_on_its_rounds_model() {
     let (rig, gateway) = run_echo(
-        &grab_then_loop("return models.get('strong'):infer('aside')"),
+        &grab_then_loop("return models.infer(models.get('strong'), 'aside')"),
         vec![grab_then_echo(), text("aside reply"), text("final answer")],
     );
     assert_eq!(rig.trace().text(), "final answer");

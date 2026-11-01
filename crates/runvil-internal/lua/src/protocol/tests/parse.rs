@@ -228,7 +228,8 @@ fn an_infer_with_a_missing_or_non_string_prompt_is_the_calls_error() {
 
 #[test]
 fn an_infer_with_a_wrong_handle_type_is_the_calls_error() {
-    // The handle is the author-supplied receiver of `h:infer`, so a
+    // The handle is the author-supplied leading argument of
+    // `models.infer`, so a
     // wrong shape is the call's error (pcall-able at the call site), not
     // a malformed-yield block failure.
     let lua = Lua::new();

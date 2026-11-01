@@ -28,7 +28,7 @@ fn chat_request(lua: &Lua, records: &str) -> mlua::Table {
 }
 
 /// A `chat` request over the list [`chat_request`] builds, with `handle`
-/// beside it, as a handle's `loop` yields it.
+/// beside it, as a `models.loop` call with a leading handle yields it.
 fn chat_request_with_handle(lua: &Lua, records: &str, handle: impl IntoLua) -> mlua::Table {
     lua_table_with(
         lua,
@@ -190,7 +190,8 @@ fn messages_that_are_not_a_list_are_a_malformed_yield() {
 
 #[test]
 fn chat_with_the_loops_handle_holds_its_frozen_binding() {
-    // A handle's `loop` yields its receiver beside the messages; the
+    // A `models.loop` call with a leading handle yields that handle beside
+    // the messages; the
     // binding is cloned out of the userdata at the parse, so the round runs
     // on the handle's model rather than the section default.
     let lua = Lua::new();

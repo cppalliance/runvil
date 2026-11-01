@@ -77,7 +77,7 @@ fn a_light_userdata_compactor_is_named_userdata_as_lua_names_it() {
          local null = tools.call('tools/structured', {}).none
          local other = models.get('strong')
          messages:user('hello')
-         local ok, err = pcall(other.loop, other, null)
+         local ok, err = pcall(models.loop, other, null)
          assert(not ok, 'a light userdata compactor is refused')
          return type(null) .. '|' .. err.kind .. '|' .. tostring(err) .. '|' .. #messages",
     );
@@ -117,7 +117,10 @@ fn the_arity_error_still_raises_when_the_author_has_rebound_error() {
         "the raise ends the call before the cancel: {:?}",
         trace.result()
     );
-    assert_eq!(trace.text(), "models.loop takes (compactor?)");
+    assert_eq!(
+        trace.text(),
+        "models.loop takes (compactor?) or (model, compactor?)"
+    );
     assert!(trace.effects().is_empty(), "no round runs");
 }
 
@@ -171,7 +174,7 @@ fn each_loop_entry_returns_exactly_one_value() {
          local n = select('#', models.loop())
          messages:user('second')
          local other = models.get('strong')
-         local m = select('#', other:loop())
+         local m = select('#', models.loop(other))
          return n .. '|' .. m .. '|' .. #messages",
     );
     let trace = loop_scenario(source).chat(&gateway).run();

@@ -49,8 +49,8 @@
 //!
 //! `messages` is the section's one conversation: a list the VM creates
 //! empty at each section entry and serves as a global that no assignment
-//! replaces. `models.loop` and a model handle's `loop` run over it, and a
-//! compactor rewrites it in place.
+//! can rebind. `models.loop` runs over it, and a compactor rewrites it in
+//! place.
 //!
 //! Most of this crate's public items exist for `runvil-engine`'s
 //! executor, which drives the VM and the coroutine protocol; the facade

@@ -40,7 +40,7 @@ const PATIENT: &str = concat!(
     "---\nname: patient\ndescription: Waits on the model\nrunvil: 0\n",
     "---\n\n# Patient\n\n## Only\n\n```lua\n",
     "local writer = models.get('default')\n",
-    "local ok, err = pcall(writer.infer, writer, 'Take your time.')\n",
+    "local ok, err = pcall(models.infer, writer, 'Take your time.')\n",
     "return ok and 'answered' or err.kind\n",
     "```\n",
 );
@@ -50,7 +50,7 @@ const CHATS: &str = concat!(
     "---\nname: chats\ndescription: Says hello to the model\nrunvil: 0\n",
     "---\n\n# Chats\n\n## Only\n\n```lua\n",
     "messages:user('Hello, desk.')\n",
-    "models.get('default'):loop()\n",
+    "models.loop(models.get('default'))\n",
     "return messages[#messages].content\n",
     "```\n",
 );

@@ -55,13 +55,21 @@ fn the_models_namespace_offers_use_and_get_and_leaves_infer_to_the_shims() {
 }
 
 #[test]
-fn a_handle_reads_nil_methods_where_the_shim_prelude_never_ran() {
+fn a_handle_exposes_fields_and_no_methods() {
+    // A handle is an inspectable value: the fields read, and a name it does
+    // not have raises, so `infer` and `loop` are absent however the VM is
+    // built.
     let vm = models_vm();
-    let (infer_is_nil, loop_is_nil): (bool, bool) =
-        vm.eval("local h = models.get('default'); return h.infer == nil, h.loop == nil");
+    let (name, infer_failed, loop_failed): (String, bool, bool) = vm.eval(
+        "local h = models.get('default')
+         local _, infer_err = pcall(function() return h.infer end)
+         local _, loop_err = pcall(function() return h.loop end)
+         return h.name, infer_err ~= nil, loop_err ~= nil",
+    );
+    assert_eq!(name, "default");
     assert!(
-        infer_is_nil && loop_is_nil,
-        "with no shim prelude a handle's infer and loop must read nil"
+        infer_failed && loop_failed,
+        "a handle has no infer and no loop"
     );
 }
 

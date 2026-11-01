@@ -1,10 +1,12 @@
 //! The rules of `models.loop` and `models.compact`, run in Rust behind the
 //! loop shim.
 //!
-//! `models.loop` and a model handle's `loop` are one-line entries over a
+//! `models.loop` is a one-line entry over a
 //! Lua trampoline in `__impl_coro.lua` over `loop_begin`, which this
 //! module builds, and the step closure each call returns, which owns that
-//! call's machine. `models.compact` is a third entry over the same
+//! call's machine. `models.loop` takes an optional leading model handle,
+//! which runs every round on that handle's frozen binding, and an optional
+//! compactor. `models.compact` is a second entry over the same
 //! trampoline and `compact_begin`, whose step settles one compactor call
 //! the way an overflowed round's is settled. A Rust function called from
 //! Lua cannot yield, and cannot call a Lua function that may yield, so
@@ -34,20 +36,10 @@ mod machine;
 
 use machine::{Input, Machine, Phase, Then, raised, settle};
 
-/// `models.loop`'s refusal of a model handle in the compactor's place.
-const HANDLE_FIRST: &str = "models.loop takes (compactor?); \
-                            call handle:loop(compactor?) to run on a model handle";
+/// `models.loop`'s refusal past its two argument shapes.
+const LOOP_ARITY: &str = "models.loop takes (compactor?) or (model, compactor?)";
 
-/// `models.loop`'s refusal past one argument.
-const LOOP_ARITY: &str = "models.loop takes (compactor?)";
-
-/// A handle's `loop` called without a model handle as its receiver.
-const NO_RECEIVER: &str = "call loop on a model handle with a colon: handle:loop(compactor?)";
-
-/// A handle's `loop` past its receiver and one argument.
-const METHOD_ARITY: &str = "handle:loop takes (compactor?)";
-
-/// Either entry called while a loop or a compactor runs in the same
+/// `models.loop` called while a loop or a compactor runs in the same
 /// section.
 const LOOP_RUNNING: &str = "a loop or a compactor is already running in this section; \
                             ask a side question with models.infer(prompt)";
@@ -62,10 +54,10 @@ const COMPACT_RUNNING: &str =
 
 /// Builds `loop_begin`, the shim chunk's argument before `compact_begin`.
 ///
-/// `loop_begin(entry, ...)` takes `false` for `models.loop` or `true` for
-/// a handle's `loop`, then that entry's arguments, and returns the
-/// call's step closure followed by the first action's tag and values;
-/// or `nil`, `"raise"`, and the argument error. Every call runs over the
+/// `loop_begin(...)` takes the call's arguments: an optional leading model
+/// handle, then an optional compactor. It returns the call's step closure
+/// followed by the first action's tag and values; or `nil`, `"raise"`, and
+/// the argument error. Every call runs over the
 /// section's list, read from the `_G` guard's `messages` slot. The step
 /// closure, made with `create_function_mut`, owns the call's
 /// [`machine::Machine`]; it takes the last yield's resume values, or the
@@ -100,9 +92,8 @@ pub(crate) fn loop_begin(
     .map_err(Error::lua)
 }
 
-/// `loop_begin`'s body: the entry flag; for a handle's `loop`, the
-/// receiver then the arity, and for `models.loop`, the handle-first
-/// refusal then the arity; the compactor's type; the refusal while
+/// `loop_begin`'s body: the leading handle, then the arity; the
+/// compactor's type; the refusal while
 /// `running` or the list's `compacting` flag is set; then the machine over
 /// the section's list, its step closure, and the first action. `running`
 /// is set only once nothing here can fail and the first action leaves the
@@ -118,31 +109,23 @@ fn begin(
     running: &Arc<AtomicBool>,
     hook: &CancelHook,
 ) -> mlua::Result<MultiValue> {
-    let mut args = args.into_iter();
-    let Some(Value::Boolean(method)) = args.next() else {
-        return Err(malformed("loop_begin needs its entry flag first"));
+    let args: Vec<Value> = args.into_iter().collect();
+    // A leading model handle selects the handle's frozen binding; anything
+    // else is the compactor of the section-model shape.
+    let handle = match args.split_first() {
+        Some((first, _)) if crate::models::is_handle(first) => Some(first.clone()),
+        _ => None,
     };
-    let args: Vec<Value> = args.collect();
-    let receiver = args.first().is_some_and(crate::models::is_handle);
-    let (handle, mut args) = if method {
-        if !receiver {
-            return refuse(lua, NO_RECEIVER);
-        }
-        if args.len() > 2 {
-            return refuse(lua, METHOD_ARITY);
-        }
-        let mut args = args.into_iter();
-        (args.next(), args)
+    let rest = if handle.is_some() {
+        &args[1..]
     } else {
-        if receiver {
-            return refuse(lua, HANDLE_FIRST);
-        }
-        if args.len() > 1 {
-            return refuse(lua, LOOP_ARITY);
-        }
-        (None, args.into_iter())
+        &args[..]
     };
-    let compactor = match args.next().unwrap_or(Value::Nil) {
+    if rest.len() > 1 {
+        return refuse(lua, LOOP_ARITY);
+    }
+    let compactor = rest.first().cloned().unwrap_or(Value::Nil);
+    let compactor = match compactor {
         Value::Nil => compactors.get::<Value>("fail")?,
         function @ Value::Function(_) => function,
         other => {

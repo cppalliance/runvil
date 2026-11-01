@@ -158,7 +158,7 @@ impl Offers {
 }
 
 /// The two sets a section entry froze at its first loop round
-/// (`models.loop` or a handle's `loop`): the one record of what its model
+/// (`models.loop`): the one record of what its model
 /// was shown. Each holds its tools' bindings under their wire names, in
 /// merge order, and no wire name appears twice across them.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]

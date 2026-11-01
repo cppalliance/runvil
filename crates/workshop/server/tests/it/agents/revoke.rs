@@ -25,11 +25,11 @@ uses:
 
 ```lua
 messages:user('launch@' .. tostring(ui().workspace_root))
-models.get('test-model'):loop()
+models.loop(models.get('test-model'))
 while true do
     local text = input.ask()
     messages:user(text .. '@' .. tostring(ui().workspace_root))
-    models.get('test-model'):loop()
+    models.loop(models.get('test-model'))
 end
 ```
 ";

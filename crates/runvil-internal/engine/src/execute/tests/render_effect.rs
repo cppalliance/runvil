@@ -218,7 +218,7 @@ fn a_handle_round_renders_and_then_chats_on_the_handles_binding() {
     let source = one_section(
         "tools.offer('tools/echo')
          messages:user('go')
-         models.get('strong'):loop()
+         models.loop(models.get('strong'))
          return messages[#messages].content",
     );
     let rig = Rig::run(
@@ -253,7 +253,7 @@ fn a_raw_gateway_model_id_renders_with_a_model_info_built_from_its_binding() {
     let source = one_section(
         "tools.offer('tools/echo')
          messages:user('go')
-         models.get('raw-model'):loop()
+         models.loop(models.get('raw-model'))
          return messages[#messages].content",
     );
     let mut driving = loop_scenario(source)

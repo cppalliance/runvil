@@ -331,7 +331,7 @@ fn tools_call_rejects_a_first_argument_that_is_neither_a_string_nor_a_tool() {
 }
 
 #[test]
-fn a_handles_infer_runs_on_its_frozen_binding() {
+fn a_leading_handle_infer_runs_on_its_frozen_binding() {
     let vm = scheduler_vm(&test_models(), None);
     let request = yielded_request(
         &vm,
@@ -340,7 +340,7 @@ fn a_handles_infer_runs_on_its_frozen_binding() {
             local u = models.use("fast")
             assert(h.name == "fast" and h.model_id == "test-model")
             assert(u.name == "fast")
-            return h:infer("yo")
+            return models.infer(h, "yo")
             "#,
     );
     match request {
@@ -359,7 +359,7 @@ fn a_handles_infer_runs_on_its_frozen_binding() {
 #[test]
 fn a_handle_from_models_get_infers_without_a_proxy() {
     let vm = scheduler_vm(&test_models(), None);
-    match yielded_request(&vm, r#"return models.get("fast"):infer("yo")"#) {
+    match yielded_request(&vm, r#"return models.infer(models.get("fast"), "yo")"#) {
         Request::Infer {
             prompt,
             binding: Some(binding),
@@ -372,25 +372,32 @@ fn a_handle_from_models_get_infers_without_a_proxy() {
 }
 
 #[test]
-fn model_handles_carry_infer_and_loop_methods() {
-    // A model handle stays a frozen, inspectable userdata whose `infer`
-    // and `loop` fields read the shim's methods; a field the handle does
-    // not have still fails to read.
+fn model_handles_expose_their_fields_and_no_methods() {
+    // A model handle is a frozen, inspectable userdata: every documented
+    // field reads, and a callable name it does not have raises.
     let vm = scheduler_vm(&test_models(), None);
-    let (is_userdata, methods, read_failed): (bool, String, bool) = vm
+    let (is_userdata, fields, read_failed): (bool, String, bool) = vm
         .lua()
         .load(
             r#"
             local h = models.get("fast")
             local ok = pcall(function() return h.nothing end)
+            local inferred = pcall(function() return h.infer end)
+            local looped = pcall(function() return h.loop end)
             return type(h) == "userdata",
-              type(h.infer) .. "|" .. type(h.loop),
-              not ok
+              type(h.name) .. "|" .. type(h.label) .. "|" .. type(h.model_id)
+                .. "|" .. type(h.description) .. "|" .. type(h.context)
+                .. "|" .. type(h.provider) .. "|" .. tostring(h.thinking)
+                .. "|" .. tostring(h.temperature) .. "|" .. tostring(h.max_tokens),
+              not ok and not inferred and not looped
             "#,
         )
         .eval()
         .expect("the handle probe evaluates");
     assert!(is_userdata, "handles install as bare userdata");
-    assert_eq!(methods, "function|function");
-    assert!(read_failed, "a handle has no `nothing` field to read");
+    assert_eq!(fields, "string|string|string|string|number|nil|nil|nil|nil");
+    assert!(
+        read_failed,
+        "a handle has no `nothing`, `infer`, or `loop` field to read"
+    );
 }

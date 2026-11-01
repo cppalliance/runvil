@@ -310,7 +310,7 @@ fn meta_reaches_a_tool_through_a_view_but_never_the_model() {
 }
 
 #[test]
-fn both_loop_entries_take_only_a_compactor_and_check_it_before_a_running_loop() {
+fn the_loop_entry_takes_its_two_shapes_and_checks_the_compactor_before_a_running_loop() {
     let source = PromptSource::new().section(
         "Only",
         "local other = models.get('strong')
@@ -319,18 +319,17 @@ fn both_loop_entries_take_only_a_compactor_and_check_it_before_a_running_loop() 
            local ok, err = pcall(call)
            refusals[#refusals + 1] = tostring(ok) .. ':' .. err.kind .. ':' .. tostring(err)
          end
-         tools.offer(tools.adhoc({ name = 'probe', description = 'Probe the loop entries', parameters = { value = 'string' } }, function()
-           refuse(function() return models.loop(other) end)
+         tools.offer(tools.adhoc({ name = 'probe', description = 'Probe the loop entry', parameters = { value = 'string' } }, function()
            refuse(function() return models.loop(nil, nil) end)
+           refuse(function() return models.loop(other, nil, nil) end)
            refuse(function() return models.loop(42) end)
            refuse(function() return models.loop() end)
-           refuse(function() return other.loop() end)
-           refuse(function() return other:loop(nil, nil) end)
-           refuse(function() return other:loop(42) end)
-           refuse(function() return other:loop(compactors.fail) end)
+           refuse(function() return models.loop(other) end)
+           refuse(function() return models.loop(other, 42) end)
+           refuse(function() return models.loop(compactors.fail) end)
            return 'probed'
          end))
-         messages:user('probe the entries')
+         messages:user('probe the entry')
          models.loop()
          return table.concat(refusals, '\\n') .. '\\n' .. #messages",
     );
@@ -338,22 +337,22 @@ fn both_loop_entries_take_only_a_compactor_and_check_it_before_a_running_loop() 
         &source,
         vec![calls(&[("c1", "probe", "{\"value\":\"x\"}")]), text("done")],
     );
+    let arity = "models.loop takes (compactor?) or (model, compactor?)";
     let compactor = "compactor must be a function, got integer";
     let expected = [
-        "models.loop takes (compactor?); call handle:loop(compactor?) to run on a model handle",
-        "models.loop takes (compactor?)",
+        arity,
+        arity,
         compactor,
         LOOP_RUNNING,
-        "call loop on a model handle with a colon: handle:loop(compactor?)",
-        "handle:loop takes (compactor?)",
+        LOOP_RUNNING,
         compactor,
         LOOP_RUNNING,
     ]
     .map(|message| format!("false:lua:{message}"));
     let lines: Vec<&str> = out.lines().collect();
-    assert_eq!(lines[..8], expected);
+    assert_eq!(lines[..7], expected);
     assert_eq!(
-        lines[8], "4",
+        lines[7], "4",
         "the user message, the call, its result, and the reply"
     );
     assert_eq!(gateway.call_count(), 2, "no refused entry sends a round");

@@ -1,4 +1,4 @@
-//! The chat request parser: the handle a handle's `loop` names and the
+//! The chat request parser: the handle a `models.loop` call names and the
 //! section's list.
 
 use mlua::Value;
@@ -8,8 +8,8 @@ use crate::protocol::Request;
 
 use super::{FieldFailure, call_handle};
 
-/// Parses a `chat` request: the optional `handle`, which a handle's
-/// `loop` sets from its receiver, and the `messages` list, which the loop
+/// Parses a `chat` request: the optional `handle`, which a `models.loop`
+/// call with a leading model handle sets, and the `messages` list, which the loop
 /// sets to the section's list.
 ///
 /// The list validated each record as it added it, so the parse checks only

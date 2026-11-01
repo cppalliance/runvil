@@ -1,8 +1,8 @@
 //! The nested-inference round a section's `models.infer` yields resolve to.
 //!
 //! One `infer` shape only: a single direct, tool-free model round on a
-//! fresh conversation. `h:infer(prompt)` runs it with the handle's
-//! frozen binding; `models.infer(prompt)` resolves the section's
+//! fresh conversation. `models.infer(model, prompt)` runs it with the
+//! handle's frozen binding; `models.infer(prompt)` resolves the section's
 //! current model and runs the same path. Neither form sends tools, reads or
 //! changes the section's `messages`, sets `reply`, or touches `sys`, and
 //! both work inside a loop's tool handlers and compactors, where a loop

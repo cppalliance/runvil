@@ -50,7 +50,7 @@ while true do
         return
     end
     messages:user(text)
-    models.get('test-model'):loop()
+    models.loop(models.get('test-model'))
 end
 ```
 ";
