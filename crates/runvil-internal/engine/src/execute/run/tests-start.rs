@@ -31,7 +31,7 @@ fn a_run_that_cannot_start_reports_its_failure_on_the_first_step() {
     assert_eq!(
         outcome,
         RunOutcome::Failed {
-            kind: crate::execute::RunErrorKind::Version,
+            kind: crate::execute::RunErrorKind::Parse,
             message: "unsupported runvil version: 7 (this build supports major 0)".to_owned(),
         }
     );

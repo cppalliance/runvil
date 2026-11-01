@@ -304,9 +304,9 @@ fn is_determinism(result: &RunOutcome) -> bool {
     matches!(
         result,
         RunOutcome::Failed {
-            kind: RunErrorKind::Determinism,
-            ..
-        }
+            kind: RunErrorKind::Vfs,
+            message,
+        } if message.starts_with("store determinism violation: ")
     )
 }
 

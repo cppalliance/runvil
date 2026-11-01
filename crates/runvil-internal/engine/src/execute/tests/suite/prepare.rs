@@ -282,7 +282,7 @@ fn an_empty_map_leaves_the_model_set_empty_and_a_model_call_raises_model_require
     let asking = declaring("", "return models.infer('ping')");
     let trace = Scenario::new(asking).run();
     let error = trace.error();
-    assert_eq!(error.kind(), RunErrorKind::Binding, "{error}");
+    assert_eq!(error.kind(), RunErrorKind::RequirementsUnmet, "{error}");
     assert!(
         error.to_string().contains("model binding required"),
         "{error}"

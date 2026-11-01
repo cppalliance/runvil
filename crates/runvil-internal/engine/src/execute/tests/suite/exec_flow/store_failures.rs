@@ -6,6 +6,7 @@ use runvil_lua::VfsOp;
 
 use super::*;
 
+use crate::Error;
 use crate::RunErrorKind;
 use crate::execute::EffectRecord;
 
@@ -182,11 +183,11 @@ fn a_library_write_across_two_arms_ends_the_run_with_determinism() {
     let source = arms_requiring_a_seeder("store.write('seeded.txt', 'seed')");
     let trace = Scenario::new(source).run();
     let error = trace.error();
-    assert_eq!(
-        error.kind(),
-        RunErrorKind::Determinism,
+    assert!(
+        matches!(error, Error::Determinism(_)),
         "the load-time conflict is a determinism violation: {error:?}"
     );
+    assert_eq!(error.kind(), RunErrorKind::Vfs, "{error:?}");
 }
 
 /// A conflict a library caught with its own `pcall` while loading still
@@ -198,11 +199,11 @@ fn a_library_conflict_caught_with_pcall_still_ends_the_run_with_determinism() {
     );
     let trace = Scenario::new(source).run();
     let error = trace.error();
-    assert_eq!(
-        error.kind(),
-        RunErrorKind::Determinism,
+    assert!(
+        matches!(error, Error::Determinism(_)),
         "a caught load-time conflict is still fatal: {error:?}"
     );
+    assert_eq!(error.kind(), RunErrorKind::Vfs, "{error:?}");
 }
 
 /// The library the captured-store cases require: `store.write` captured
@@ -240,11 +241,11 @@ fn a_captured_store_function_conflict_caught_with_pcall_still_ends_the_run_with_
     );
     let trace = Scenario::new(source).run();
     let error = trace.error();
-    assert_eq!(
-        error.kind(),
-        RunErrorKind::Determinism,
+    assert!(
+        matches!(error, Error::Determinism(_)),
         "a conflict through a captured store function is fatal: {error:?}"
     );
+    assert_eq!(error.kind(), RunErrorKind::Vfs, "{error:?}");
 }
 
 /// A store function a library captured at load time reaches the caller

@@ -331,7 +331,7 @@ fn model_required_when_infer_has_no_binding() {
     let error = trace.error();
     assert_eq!(
         error.kind(),
-        RunErrorKind::Binding,
+        RunErrorKind::RequirementsUnmet,
         "expected ModelRequired, got {error}"
     );
     assert!(

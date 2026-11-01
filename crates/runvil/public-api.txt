@@ -667,14 +667,12 @@ pub runvil::ParseErrorKind::Structure
 pub runvil::RunErrorKind::Binding
 pub runvil::RunErrorKind::Completion
 pub runvil::RunErrorKind::ContextExhausted
-pub runvil::RunErrorKind::Determinism
 pub runvil::RunErrorKind::Internal
 pub runvil::RunErrorKind::Lua
 pub runvil::RunErrorKind::Parse
 pub runvil::RunErrorKind::Quota
 pub runvil::RunErrorKind::RequirementsUnmet
 pub runvil::RunErrorKind::Tool
-pub runvil::RunErrorKind::Version
 pub runvil::RunErrorKind::Vfs
 pub runvil::RunLimits::lua_log_events: core::num::nonzero::NonZeroU32
 pub runvil::RunLimits::lua_memory_bytes: core::num::nonzero::NonZeroUsize

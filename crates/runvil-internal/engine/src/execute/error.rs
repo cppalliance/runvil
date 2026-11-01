@@ -16,12 +16,13 @@ use super::RunOutcome;
 pub enum RunErrorKind {
     /// Parsing the prompt failed: invalid frontmatter YAML, a failure the
     /// parser classified as structural, or a Lua block that did not compile.
+    /// The run's first step reports it too, before any section runs, for a
+    /// prompt that declares no `runvil:` version or a major version this
+    /// build does not support.
     Parse,
-    /// The prompt declared a `runvil:` major version outside the set
-    /// this build supports.
-    Version,
-    /// Binding a tool or model capability failed, or the capability was
-    /// absent.
+    /// Building the tools a section offers its model failed: a tool's
+    /// model-facing schema did not build, or the section's frozen sets, or
+    /// the render answer they are merged from, broke a rule of the merge.
     Binding,
     /// A model completion failed at the transport, backend, or decode layer.
     Completion,
@@ -30,12 +31,12 @@ pub enum RunErrorKind {
     Tool,
     /// A run-scoped store operation failed, or the run lacks a store to
     /// operate on.
-    Vfs,
-    /// Two live executions in the run claimed the same store path.
     ///
-    /// The run stops at once to keep the interleaving of their store access
-    /// deterministic. Lua code cannot catch this failure.
-    Determinism,
+    /// It also covers two live executions in the run that claim the same
+    /// store path. The run then stops at once to keep the interleaving of
+    /// their store access deterministic, and Lua code cannot catch the
+    /// failure.
+    Vfs,
     /// A section's Lua phase failed to run or return a usable value, or the
     /// author's program broke where the Engine cannot fix it: a Pack prelude
     /// that did not load, a chain that ended with tasks still live, a
@@ -63,7 +64,8 @@ pub enum RunErrorKind {
     /// minimum or a thinking requirement), a non-empty role map with no
     /// `default` entry, and a reserved Pack id that the run's tool catalog
     /// or Pack roster names. An H1 block that failed the prompt's hard gate
-    /// reports it too.
+    /// reports it too, and so does a `models.infer` or `models.loop` round
+    /// that finds no current model because the caller supplied none.
     RequirementsUnmet,
 }
 
@@ -77,12 +79,10 @@ impl RunErrorKind {
     pub fn as_str(self) -> &'static str {
         match self {
             RunErrorKind::Parse => "Parse",
-            RunErrorKind::Version => "Version",
             RunErrorKind::Binding => "Binding",
             RunErrorKind::Completion => "Completion",
             RunErrorKind::Tool => "Tool",
             RunErrorKind::Vfs => "Vfs",
-            RunErrorKind::Determinism => "Determinism",
             RunErrorKind::Lua => "Lua",
             RunErrorKind::Quota => "Quota",
             RunErrorKind::ContextExhausted => "ContextExhausted",
@@ -93,17 +93,18 @@ impl RunErrorKind {
 
     /// Parses a tag from [`RunErrorKind::as_str`] back into its kind.
     ///
-    /// Returns `None` for any other string.
+    /// Two tags that older builds wrote also parse, so a stored run keeps
+    /// its meaning: `Version` reads as [`RunErrorKind::Parse`] and
+    /// `Determinism` as [`RunErrorKind::Vfs`]. Returns `None` for any
+    /// other string.
     #[must_use]
     pub fn from_tag(tag: &str) -> Option<RunErrorKind> {
         match tag {
-            "Parse" => Some(RunErrorKind::Parse),
-            "Version" => Some(RunErrorKind::Version),
+            "Parse" | "Version" => Some(RunErrorKind::Parse),
             "Binding" => Some(RunErrorKind::Binding),
             "Completion" => Some(RunErrorKind::Completion),
             "Tool" => Some(RunErrorKind::Tool),
-            "Vfs" => Some(RunErrorKind::Vfs),
-            "Determinism" => Some(RunErrorKind::Determinism),
+            "Vfs" | "Determinism" => Some(RunErrorKind::Vfs),
             "Lua" => Some(RunErrorKind::Lua),
             "Quota" => Some(RunErrorKind::Quota),
             "ContextExhausted" => Some(RunErrorKind::ContextExhausted),
@@ -118,7 +119,7 @@ impl Error {
     /// Returns the stable classification of this failure.
     pub(crate) fn kind(&self) -> RunErrorKind {
         match self {
-            Error::Parse(_) => RunErrorKind::Parse,
+            Error::Parse(_) | Error::UnsupportedVersion(_) => RunErrorKind::Parse,
             Error::LuaQuota { .. } | Error::CallDepthExceeded { .. } => RunErrorKind::Quota,
             Error::ContextExhausted { .. } => RunErrorKind::ContextExhausted,
             // A leaked task, a task reached for by a chain that does not
@@ -133,8 +134,9 @@ impl Error {
             | Error::TaskConsumed { .. }
             | Error::TaskCancelled { .. }
             | Error::Substitution(_) => RunErrorKind::Lua,
-            Error::UnsupportedVersion(_) => RunErrorKind::Version,
-            Error::RequirementsUnmet { .. } => RunErrorKind::RequirementsUnmet,
+            Error::RequirementsUnmet { .. } | Error::ModelRequired { .. } => {
+                RunErrorKind::RequirementsUnmet
+            }
             Error::Completion(_) => RunErrorKind::Completion,
             Error::ToolLoopExhausted
             | Error::OutOfScopeToolCall { .. }
@@ -144,11 +146,8 @@ impl Error {
             // A cancelled run ends as `RunOutcome::Cancelled`, so an
             // interruption that reaches a failure is an Engine fault.
             Error::Internal { .. } | Error::Interrupted => RunErrorKind::Internal,
-            Error::Store { .. } => RunErrorKind::Vfs,
-            Error::Determinism(_) => RunErrorKind::Determinism,
-            Error::BindSchema { .. } | Error::ToolSets { .. } | Error::ModelRequired { .. } => {
-                RunErrorKind::Binding
-            }
+            Error::Store { .. } | Error::Determinism(_) => RunErrorKind::Vfs,
+            Error::BindSchema { .. } | Error::ToolSets { .. } => RunErrorKind::Binding,
         }
     }
 

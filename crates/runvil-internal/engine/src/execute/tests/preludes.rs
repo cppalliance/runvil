@@ -204,9 +204,9 @@ fn a_prelude_write_across_two_arms_ends_the_run_with_determinism_caught_or_not()
                 panic!("the second arm's install-time write ends the run: `{source}`: {other:?}")
             }
         };
-        assert_eq!(
-            kind,
-            RunErrorKind::Determinism,
+        assert_eq!(kind, RunErrorKind::Vfs, "`{source}`: {message}");
+        assert!(
+            message.starts_with("store determinism violation: "),
             "the conflict wins over the prelude's own outcome: `{source}`: {message}"
         );
     }

@@ -3,6 +3,7 @@
 
 use runvil_parser::test_support::prompt;
 
+use crate::Error;
 use crate::RunErrorKind;
 use crate::test_support::scenario::{Record, Scenario};
 
@@ -120,10 +121,14 @@ fn a_cross_arm_append_terminates_the_run_with_a_determinism_violation() {
         .name(FANOUT_CROSS_ARM_EXECUTION)
         .run();
     let error = trace.error();
+    assert!(
+        matches!(error, Error::Determinism(_)),
+        "a conflicting access is a determinism violation: {error:?}"
+    );
     assert_eq!(
         error.kind(),
-        RunErrorKind::Determinism,
-        "a conflicting access classifies as a determinism violation: {error:?}"
+        RunErrorKind::Vfs,
+        "a determinism violation classifies as a store failure: {error:?}"
     );
     let text = error.to_string();
     assert!(

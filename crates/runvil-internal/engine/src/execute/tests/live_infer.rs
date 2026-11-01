@@ -60,7 +60,7 @@ fn unread_h1_prose_stays_inert_and_explicit_infer_requires_a_model() {
     let error = trace.error();
     assert_eq!(
         error.kind(),
-        RunErrorKind::Binding,
+        RunErrorKind::RequirementsUnmet,
         "expected ModelRequired, got {error}"
     );
     assert!(
