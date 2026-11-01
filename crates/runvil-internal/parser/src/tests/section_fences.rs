@@ -2,6 +2,7 @@
 //! compilation reports.
 
 use super::*;
+use runvil_lua::LuaProgram;
 
 #[test]
 fn lua_fence_separated_from_prose() {

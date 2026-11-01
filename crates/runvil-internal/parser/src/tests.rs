@@ -2,6 +2,7 @@
 
 use std::num::NonZeroU32;
 
+use runvil_lua::LuaProgram;
 use runvil_types::event::Event;
 
 use super::*;

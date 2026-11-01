@@ -22,8 +22,6 @@
 //!   `cargo test -p build-xtask` enforces the product and container
 //!   boundaries.
 
-pub use runvil_lua::LuaProgram;
-
 mod body_text;
 mod contract;
 pub mod detail;

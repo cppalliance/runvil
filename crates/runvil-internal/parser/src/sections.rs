@@ -8,7 +8,8 @@ use pulldown_cmark::{Event, HeadingLevel, Options, Parser, Tag, TagEnd};
 use runvil_types::emitter::Emitter;
 
 use crate::fence::{self, RawBlock};
-use crate::{Block, BodyText, Error, LuaProgram, ParseErrorKind, Result, Section, list};
+use crate::{Block, BodyText, Error, ParseErrorKind, Result, Section, list};
+use runvil_lua::LuaProgram;
 
 /// Wraps a computed 1-based source line for [`LuaProgram::compile`].
 ///

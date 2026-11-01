@@ -15,7 +15,8 @@ use std::sync::Arc;
 use pulldown_cmark::{CodeBlockKind, CowStr, Event, Options, Parser, Tag};
 use runvil_types::emitter::Emitter;
 
-use crate::{Block, Error, LuaProgram, ParseErrorKind, Result, sections};
+use crate::{Block, Error, ParseErrorKind, Result, sections};
+use runvil_lua::LuaProgram;
 
 /// Uncompiled block produced while scanning section content.
 pub(super) enum RawBlock<'a> {

@@ -2,6 +2,7 @@
 //! file-absolute line.
 
 use super::*;
+use runvil_lua::LuaProgram;
 
 fn assert_runtime_error_line(program: &LuaProgram, absolute_line: u32) {
     let lua = mlua::Lua::new();

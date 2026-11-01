@@ -6,7 +6,8 @@
 //! Construction happens in the parsing modules; this module holds the value
 //! types and the invariant-preserving operations on them.
 
-use crate::{BodyText, Frontmatter, LuaProgram};
+use crate::{BodyText, Frontmatter};
+use runvil_lua::LuaProgram;
 
 /// One executable block inside a section: a compiled Lua fence or prose.
 #[derive(Debug, Clone, PartialEq, Eq)]
