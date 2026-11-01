@@ -45,13 +45,6 @@ fn is_valid_alias(alias: &str) -> bool {
             .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-'))
 }
 
-/// How one contract map's keys are described in its errors.
-#[derive(Clone, Copy)]
-struct ContractKeys {
-    /// The key kind (`model role`), for error messages.
-    what: &'static str,
-}
-
 /// A key of a contract map: how it is checked and how an error names it.
 trait ContractKey: Ord {
     /// Refuses a key the map's grammar does not allow.
@@ -89,10 +82,11 @@ impl ContractKey for ModelRole {
 }
 
 /// Deserializes a contract map (`models`, `args`): keys of type `K` checked
-/// by [`ContractKey`], values deserialized as `T`, duplicates rejected.
+/// by [`ContractKey`], values deserialized as `T`, duplicates rejected. `what`
+/// names the keys in every error.
 fn deserialize_contract_map<'de, D, K, T>(
     deserializer: D,
-    keys: ContractKeys,
+    what: &'static str,
 ) -> Result<BTreeMap<K, T>, D::Error>
 where
     D: Deserializer<'de>,
@@ -100,7 +94,7 @@ where
     T: Deserialize<'de>,
 {
     deserializer.deserialize_map(MapVisitor {
-        keys,
+        what,
         _marker: PhantomData,
     })
 }
@@ -108,8 +102,8 @@ where
 /// The visitor behind [`deserialize_contract_map`]: a streaming map walk so
 /// rejections keep their source position.
 struct MapVisitor<K, T> {
-    /// The checks the map's keys get.
-    keys: ContractKeys,
+    /// The key kind (`model role` or `arg name`), for error messages.
+    what: &'static str,
     /// The key and value types, without ownership or variance claims.
     _marker: PhantomData<fn() -> (K, T)>,
 }
@@ -122,18 +116,14 @@ where
     type Value = BTreeMap<K, T>;
 
     fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            formatter,
-            "a map of {} keys to declarations",
-            self.keys.what
-        )
+        write!(formatter, "a map of {} keys to declarations", self.what)
     }
 
     fn visit_map<A>(self, mut map: A) -> Result<Self::Value, A::Error>
     where
         A: MapAccess<'de>,
     {
-        let ContractKeys { what } = self.keys;
+        let what = self.what;
         let mut entries: BTreeMap<K, T> = BTreeMap::new();
         while let Some(key) = map.next_key::<K>()? {
             key.check(what).map_err(de::Error::custom)?;

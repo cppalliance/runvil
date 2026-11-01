@@ -9,7 +9,7 @@ use std::collections::{BTreeMap, btree_map};
 
 use serde::Deserialize;
 
-use crate::contract::{self, ContractKeys};
+use crate::contract;
 
 /// The type of a declared prompt arg.
 ///
@@ -268,8 +268,7 @@ impl<'de> Deserialize<'de> for ArgsDecl {
     {
         // Arg names are `argv` fields, never globals, so a reserved name
         // such as the default declaration's `prose` is a valid arg name.
-        let fields =
-            contract::deserialize_contract_map(deserializer, ContractKeys { what: "arg name" })?;
+        let fields = contract::deserialize_contract_map(deserializer, "arg name")?;
         Ok(ArgsDecl {
             fields,
             implicit: false,

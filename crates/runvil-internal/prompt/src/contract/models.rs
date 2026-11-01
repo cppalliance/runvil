@@ -14,7 +14,7 @@ use std::num::NonZeroU32;
 use runvil_types::models::ModelRole;
 use serde::Deserialize;
 
-use crate::contract::{self, ContractKeys};
+use crate::contract;
 
 /// The requirements a prompt puts on one model role.
 ///
@@ -69,8 +69,7 @@ impl<'de> Deserialize<'de> for RoleMap {
     where
         D: serde::Deserializer<'de>,
     {
-        let roles =
-            contract::deserialize_contract_map(deserializer, ContractKeys { what: "model role" })?;
+        let roles = contract::deserialize_contract_map(deserializer, "model role")?;
         Ok(RoleMap { roles })
     }
 }
