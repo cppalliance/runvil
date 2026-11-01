@@ -80,10 +80,10 @@ fn a_script_calls_effect_record_and_result_name_the_tool_by_its_id() {
         id,
         EffectAnswer::ToolCall(Ok(ToolOutput::trusted("echoed: hi"))),
     );
-    let Step::Done { result, events } = run.step() else {
+    let Step::Done { outcome, events } = run.step() else {
         panic!("the answered call ends the run");
     };
-    assert_eq!(text_of(result), "echoed: hi");
+    assert_eq!(text_of(outcome), "echoed: hi");
     let aliases: Vec<&str> = events
         .iter()
         .filter_map(|event| match event {
@@ -209,7 +209,7 @@ fn a_script_call_by_id_and_by_tool_object_issue_the_same_effect() {
 #[test]
 fn a_name_that_is_no_catalog_id_is_unbound_and_lists_the_catalog_ids() {
     let rig = Rig::run(echo_and_concrete("return tools.call('tools/missing', {})"));
-    let error = rig.trace().error().inner();
+    let error = rig.trace().error();
     match error {
         Error::UnboundToolCall { name, ids } => {
             assert_eq!(name, "tools/missing");

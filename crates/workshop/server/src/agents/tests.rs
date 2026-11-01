@@ -15,7 +15,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use harness::pack::{HostContext, HostServices};
-use harness::record::{MemoryRecorder, RunOutcome};
+use harness::record::{MemoryRecorder, RunErrorKind, RunOutcome};
 use harness::vfs::VfsRef;
 use harness::{BoxFuture, Harness, HostSnapshot, InferenceBroker, RunRequest};
 use harness_gateway_client::{CompletionError, CompletionErrorKind};
@@ -162,7 +162,7 @@ async fn a_host_without_the_search_provider_refuses_a_prompt_requiring_web() {
     let Some(RunOutcome::Failed { kind, message }) = outcome else {
         panic!("the run is refused as it prepares: {outcome:?}");
     };
-    assert_eq!(kind, "RequirementsUnmet");
+    assert_eq!(kind, RunErrorKind::RequirementsUnmet);
     assert!(
         message.contains(
             "- web is unavailable: web needs runvil/search-provider, and this host provides none"
@@ -219,7 +219,7 @@ async fn the_servers_value_is_the_mcp_packs_configuration() {
     let Some(RunOutcome::Failed { kind, message }) = outcome else {
         panic!("the run is refused as it prepares: {outcome:?}");
     };
-    assert_eq!(kind, "RequirementsUnmet");
+    assert_eq!(kind, RunErrorKind::RequirementsUnmet);
     assert!(
         message.contains("- mcp is unavailable: the MCP configuration must be a JSON object"),
         "the refusal names the mcp Pack and its configuration rule: {message}"

@@ -9,7 +9,7 @@ use runvil_types::models::ThinkingMode;
 
 use super::{current_model, refusal, under_model};
 use crate::RunErrorKind;
-use crate::execute::RunResult;
+use crate::execute::RunOutcome;
 use crate::test_support::scenario::Scenario;
 use crate::test_support::scripted_chat::{ScriptedChat, text};
 
@@ -174,9 +174,9 @@ fn a_refusal_after_the_runs_cancel_fired_ends_the_run_cancelled_with_no_run_even
         let trace =
             cancelled_before_it_starts(under_model(source, "cancelled", model.clone())).run();
         assert!(
-            matches!(trace.result(), RunResult::Cancelled),
+            matches!(trace.outcome(), RunOutcome::Cancelled),
             "{refused_for} after a cancel ends the run cancelled, got {:?}",
-            trace.result()
+            trace.outcome()
         );
         assert!(
             trace.run_events().is_empty(),
@@ -191,9 +191,9 @@ fn a_run_that_passes_its_start_checks_after_a_cancel_starts_and_ends_cancelled()
     let model = current_model(200_000, ThinkingMode::Always);
     let trace = cancelled_before_it_starts(under_model(DECLARES_STRONG, "started", model)).run();
     assert!(
-        matches!(trace.result(), RunResult::Cancelled),
+        matches!(trace.outcome(), RunOutcome::Cancelled),
         "got {:?}",
-        trace.result()
+        trace.outcome()
     );
     assert!(
         matches!(trace.run_events().first(), Some(Event::RunStarted { .. })),

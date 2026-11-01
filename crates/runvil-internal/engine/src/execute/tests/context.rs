@@ -50,8 +50,7 @@ const fn _public_execution_types_are_send_sync_static() {
     const fn assert_send_sync<T: Send + Sync>() {}
     assert_send_sync_static::<RunContext>();
     assert_send_sync_static::<RunLimits>();
-    assert_send_sync_static::<RunResult>();
-    assert_send_sync_static::<RunError>();
+    assert_send_sync_static::<RunOutcome>();
     assert_send_sync_static::<RunErrorKind>();
 }
 

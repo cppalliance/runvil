@@ -221,7 +221,7 @@ fn an_out_of_scope_tool_name_fails_the_round_with_out_of_scope_tool() {
         .offer("echo", echo_tool())
         .chat(&gateway)
         .run();
-    match trace.error().inner() {
+    match trace.error() {
         Error::OutOfScopeToolCall {
             name,
             global_exists,

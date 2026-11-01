@@ -54,13 +54,15 @@ pub mod plugin {
 
 pub mod record {
     //! The recorder that receives every effect, answer, and event of a run,
-    //! an in-memory recorder, and the seed each run's meta records.
+    //! an in-memory recorder, the seed each run's meta records, and the
+    //! Engine's outcome each run ends with, with the kind of a failed one.
 
     pub use harness_runner::recorder::MemoryRecorder;
     pub use harness_runner::recorder::Record;
     pub use harness_runner::recorder::RecordKind;
     pub use harness_runner::recorder::RecorderError;
     pub use harness_runner::recorder::RecorderFuture;
+    pub use harness_runner::recorder::RunErrorKind;
     pub use harness_runner::recorder::RunId;
     pub use harness_runner::recorder::RunMeta;
     pub use harness_runner::recorder::RunOutcome;

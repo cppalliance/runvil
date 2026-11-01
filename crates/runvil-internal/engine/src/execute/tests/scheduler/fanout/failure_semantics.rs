@@ -91,7 +91,7 @@ fn fanout_depth_cap_reads_the_chain_field() {
     let error = trace.error();
     assert!(
         matches!(
-            error.inner(),
+            error,
             Error::CallDepthExceeded {
                 cap: 8,
                 via: DepthVia::Fanout
@@ -218,7 +218,7 @@ fn two_arms_writing_one_path_terminate_the_run_with_a_determinism_violation() {
         ```\n";
     let trace = scheduler_scenario(md).run();
 
-    match trace.error().inner() {
+    match trace.error() {
         Error::Determinism(detail) => {
             assert!(detail.contains("shared.txt"), "error was: {detail}");
             assert!(
@@ -275,7 +275,7 @@ fn two_live_arms_appending_one_path_terminate_with_a_determinism_violation() {
         ```\n";
     let trace = scheduler_scenario(md).run();
 
-    match trace.error().inner() {
+    match trace.error() {
         Error::Determinism(detail) => {
             assert!(detail.contains("evidence.md"), "error was: {detail}");
             assert_eq!(

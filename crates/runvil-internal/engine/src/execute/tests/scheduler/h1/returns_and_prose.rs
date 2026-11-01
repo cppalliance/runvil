@@ -122,7 +122,7 @@ fn unread_h1_prose_stays_inert_and_explicit_infer_requires_a_model() {
     let trace = Scenario::new(reading).run();
     let error = trace.error();
     assert!(
-        matches!(error.inner(), Error::ModelRequired { .. }),
+        matches!(error, Error::ModelRequired { .. }),
         "expected ModelRequired, got {error}"
     );
 }

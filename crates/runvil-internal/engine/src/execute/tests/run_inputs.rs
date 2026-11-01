@@ -26,12 +26,12 @@ const DRAWS: u64 = 0x5EED;
 
 /// Runs `md` with no effects under `seed` and [`STARTED_AT`], returning
 /// the run's text.
-fn run_seeded(md: &str, seed: RunSeed) -> RunResult {
+fn run_seeded(md: &str, seed: RunSeed) -> RunOutcome {
     let ctx = RunContext::new(EXECUTION, seed, STARTED_AT);
-    let (result, _) = drive(Run::new(Arc::new(parse(md)), "", ctx), |_, effect| {
+    let (outcome, _) = drive(Run::new(Arc::new(parse(md)), "", ctx), |_, effect| {
         panic!("no effect is issued: {effect:?}")
     });
-    result
+    outcome
 }
 
 /// The nonce between `<untrusted_input_` and `>` in a wrapped envelope.
@@ -171,13 +171,13 @@ fn sys_now_is_absent_from_the_globals() {
         ```lua\n\
         return sys.now\n\
         ```\n";
-    let error = match run_seeded(md, TEST_SEED) {
-        RunResult::Failure(error) => error,
+    let message = match run_seeded(md, TEST_SEED) {
+        RunOutcome::Failed { message, .. } => message,
         other => panic!("reading sys.now fails the section: {other:?}"),
     };
     assert!(
-        error.to_string().contains("unknown sys field 'now'"),
-        "sys.now is an unknown field, not a stale clock: {error}"
+        message.contains("unknown sys field 'now'"),
+        "sys.now is an unknown field, not a stale clock: {message}"
     );
 }
 

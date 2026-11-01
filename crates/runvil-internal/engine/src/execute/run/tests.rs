@@ -271,12 +271,13 @@ fn done_is_withheld_while_a_store_effect_is_outstanding_and_delivered_after_drop
     );
     run.resume(id, EffectAnswer::Dropped);
     let step = run.step();
-    let Step::Done { result, .. } = step else {
+    let Step::Done { outcome, .. } = step else {
         panic!("Done follows the last answer, got {step:?}");
     };
-    assert!(
-        matches!(result, RunResult::Cancelled),
-        "the cancelled run reports as cancelled: {result:?}"
+    assert_eq!(
+        outcome,
+        RunOutcome::Cancelled,
+        "the cancelled run reports as cancelled"
     );
 }
 
@@ -287,12 +288,13 @@ fn a_dropped_answer_resumes_a_waiting_chain_with_the_cancelled_error() {
     assert!(matches!(effect, Effect::Vfs { .. }));
     run.resume(id, EffectAnswer::Dropped);
     let step = run.step();
-    let Step::Done { result, .. } = step else {
+    let Step::Done { outcome, .. } = step else {
         panic!("the dropped store operation ends the run, got {step:?}");
     };
-    assert!(
-        matches!(result, RunResult::Cancelled),
-        "the chain resumed with the cancelled error and the run reports it: {result:?}"
+    assert_eq!(
+        outcome,
+        RunOutcome::Cancelled,
+        "the chain resumed with the cancelled error and the run reports it"
     );
 }
 
@@ -312,7 +314,7 @@ fn an_orphaned_effects_real_answer_is_discarded_and_still_counts_as_the_answer()
         matches!(
             run.step(),
             Step::Done {
-                result: RunResult::Cancelled,
+                outcome: RunOutcome::Cancelled,
                 ..
             }
         ),
@@ -332,16 +334,16 @@ fn an_answer_for_an_unissued_effect_is_an_internal_error() {
     };
     assert!(ended(&events));
     run.resume(id, EffectAnswer::Dropped);
-    let Step::Done { result, .. } = run.step() else {
+    let Step::Done { outcome, .. } = run.step() else {
         panic!("Done follows the orphan's answer");
     };
-    let RunResult::Failure(error) = result else {
-        panic!("an unknown id fails the run, got {result:?}");
+    let RunOutcome::Failed { kind, message } = outcome else {
+        panic!("an unknown id fails the run, got {outcome:?}");
     };
-    assert_eq!(error.kind(), crate::execute::RunErrorKind::Internal);
+    assert_eq!(kind, crate::execute::RunErrorKind::Internal);
     assert!(
-        error.to_string().contains("did not issue"),
-        "the failure names the unknown id: {error}"
+        message.contains("did not issue"),
+        "the failure names the unknown id: {message}"
     );
 }
 
@@ -350,15 +352,15 @@ fn an_answer_of_the_wrong_kind_for_a_pending_effect_fails_loudly() {
     let mut run = run_of("return store.exists('x')", run_context());
     let (id, _) = only_effect(run.step());
     run.resume(id, EffectAnswer::Timer);
-    let Step::Done { result, .. } = run.step() else {
+    let Step::Done { outcome, .. } = run.step() else {
         panic!("the mismatch ends the run with nothing outstanding");
     };
-    let RunResult::Failure(error) = result else {
-        panic!("a wrong-kind answer fails the run, got {result:?}");
+    let RunOutcome::Failed { message, .. } = outcome else {
+        panic!("a wrong-kind answer fails the run, got {outcome:?}");
     };
     assert!(
-        error.to_string().contains("effect's own kind"),
-        "the mismatch is a loud invariant failure: {error}"
+        message.contains("effect's own kind"),
+        "the mismatch is a loud invariant failure: {message}"
     );
 }
 
@@ -398,10 +400,10 @@ fn a_child_cancel_handles_cancel_is_observed_by_the_instruction_hook() {
     });
     let step = run.step();
     canceller.join().expect("the canceller thread finishes");
-    let Step::Done { result, events } = step else {
+    let Step::Done { outcome, events } = step else {
         panic!("the hook aborts the loop and nothing is outstanding, got {step:?}");
     };
-    assert!(matches!(result, RunResult::Cancelled), "got {result:?}");
+    assert_eq!(outcome, RunOutcome::Cancelled);
     assert!(ended(&events), "the end boundary is on the final step");
 }
 

@@ -22,7 +22,7 @@ use runvil::model::{Completion, ModelInfo, ModelRole};
 use runvil::timestamp::Timestamp;
 use runvil::tools::ToolCatalog;
 use runvil::vfs::perform_vfs_op;
-use runvil::{Prompt, Run, RunContext, RunResult, RunSeed, Step};
+use runvil::{Prompt, Run, RunContext, RunOutcome, RunSeed, Step};
 use serde_json::json;
 
 use super::{Reply, TestResult, Tool, canned, tool_info};
@@ -155,7 +155,7 @@ impl Scenario {
             held: Vec::new(),
             events,
             effects: Vec::new(),
-            result: None,
+            outcome: None,
         })
     }
 
@@ -181,7 +181,7 @@ pub(crate) struct Driver {
     held: Vec<Issued>,
     events: Vec<Event>,
     effects: Vec<Logged>,
-    result: Option<RunResult>,
+    outcome: Option<RunOutcome>,
 }
 
 struct Issued {
@@ -194,7 +194,7 @@ impl Driver {
     /// Steps the run once, answers or holds each effect the step issued,
     /// and drops the held effects it may. Returns how many it issued.
     pub(crate) fn pump(&mut self) -> TestResult<usize> {
-        if self.result.is_some() {
+        if self.outcome.is_some() {
             return Err("the run is done, so there is nothing left to step".into());
         }
         let (mut effects, withdrawn) = match self.run.step() {
@@ -206,7 +206,7 @@ impl Driver {
                 self.events.extend(events);
                 (effects, withdrawn)
             }
-            Step::Done { result, events } => {
+            Step::Done { outcome, events } => {
                 self.events.extend(events);
                 let held = self.held.len();
                 if held > 0 {
@@ -216,7 +216,7 @@ impl Driver {
                 if left > 0 {
                     return Err(format!("the run ended with {left} scripted replies left").into());
                 }
-                self.result = Some(result);
+                self.outcome = Some(outcome);
                 return Ok(0);
             }
         };
@@ -267,7 +267,7 @@ impl Driver {
     pub(crate) fn pump_until_held(&mut self) -> TestResult {
         while self.held.is_empty() {
             self.advance()?;
-            if self.result.is_some() {
+            if self.outcome.is_some() {
                 return Err("the run finished without issuing an effect to hold".into());
             }
         }
@@ -276,9 +276,9 @@ impl Driver {
 
     pub(crate) fn finish(mut self) -> TestResult<Trace> {
         loop {
-            if let Some(result) = self.result.take() {
+            if let Some(outcome) = self.outcome.take() {
                 return Ok(Trace {
-                    result,
+                    outcome,
                     events: self.events,
                     effects: self.effects,
                 });
@@ -291,7 +291,7 @@ impl Driver {
     fn advance(&mut self) -> TestResult {
         let held = self.held.len();
         let issued = self.pump()?;
-        let waiting = self.result.is_none() && !self.run.decided();
+        let waiting = self.outcome.is_none() && !self.run.decided();
         if waiting && issued == 0 && self.held.len() == held {
             return Err(format!(
                 "the undecided run issued nothing new while only {held} held effects remain"
@@ -334,7 +334,7 @@ impl Driver {
 }
 
 pub(crate) struct Trace {
-    pub(crate) result: RunResult,
+    pub(crate) outcome: RunOutcome,
     /// The parse events, then the run's events, in report order.
     pub(crate) events: Vec<Event>,
     /// Every effect the run issued, in the order the driver answered them.
@@ -342,11 +342,11 @@ pub(crate) struct Trace {
 }
 
 impl Trace {
-    /// The text of a `RunResult::Completed`. Fails on any other result.
+    /// The text of a `RunOutcome::Completed`. Fails on any other outcome.
     pub(crate) fn text(&self) -> TestResult<&str> {
-        match &self.result {
-            RunResult::Completed(text) => Ok(text),
-            result => Err(format!("expected RunResult::Completed, got {result:?}").into()),
+        match &self.outcome {
+            RunOutcome::Completed { final_text } => Ok(final_text),
+            outcome => Err(format!("expected RunOutcome::Completed, got {outcome:?}").into()),
         }
     }
 }

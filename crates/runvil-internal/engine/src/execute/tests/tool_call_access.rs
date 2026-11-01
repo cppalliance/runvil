@@ -269,7 +269,7 @@ fn a_cancelled_tasks_tool_call_is_joined_and_its_later_writes_are_refused() {
     let mut late = None;
     let result = loop {
         let effects = match run.step() {
-            Step::Done { result, .. } => break result,
+            Step::Done { outcome, .. } => break outcome,
             Step::Pending { effects, .. } => effects,
         };
         if effects.is_empty() {

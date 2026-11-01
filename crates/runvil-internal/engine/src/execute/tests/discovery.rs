@@ -462,7 +462,7 @@ fn a_scripts_call_of_a_discovery_tools_id_fails_as_an_unknown_id() {
         Vec::new(),
         &[],
     );
-    match rig.trace().error().inner() {
+    match rig.trace().error() {
         Error::UnboundToolCall { name, .. } => assert_eq!(name, "dynamic/call"),
         other => panic!("expected the unbound-tool error, got {other:?}"),
     }

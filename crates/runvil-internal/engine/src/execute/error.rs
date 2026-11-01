@@ -1,13 +1,12 @@
-//! The public run-error surface: [`RunError`], its stable [`RunErrorKind`],
-//! and the [`SourceLocation`] that says where a failure happened.
-
-use std::fmt;
-use std::num::NonZeroU32;
-use std::ops::Range;
+//! The stable [`RunErrorKind`] of a failed run, and the kind and message
+//! the Engine's own error ends a run with.
 
 use crate::Error;
 
-/// The stable category of a [`RunError`], for matching in code.
+use super::RunOutcome;
+
+/// The stable category of a failed run's
+/// [`RunOutcome::Failed`](super::RunOutcome::Failed), for matching in code.
 ///
 /// Each variant names the condition that failed the run. The enum is
 /// `#[non_exhaustive]`, so a `match` on it needs a wildcard arm. That lets
@@ -68,60 +67,57 @@ pub enum RunErrorKind {
     RequirementsUnmet,
 }
 
-/// Where a run failed: a position in the prompt source or in the Rust
-/// source.
-///
-/// The error's [`RunErrorKind`] says which of the two it is, and the
-/// extension of `path` says so too. Use the kind to branch in code, the
-/// error message to show a reader, and the location to navigate to the
-/// fault. Only the Engine builds one.
-#[derive(Debug, Clone, PartialEq, Eq)]
-#[non_exhaustive]
-pub struct SourceLocation {
-    /// The prompt name or Rust source file where the failure occurred.
+impl RunErrorKind {
+    /// Returns the stable tag for this kind: the variant's name, such as
+    /// `Parse` or `RequirementsUnmet`.
     ///
-    /// For a prompt failure this is the prompt's frontmatter name when
-    /// parsing got that far. Otherwise it is the placeholder `<prompt>`,
-    /// which the caller should replace with its own label for the source. A
-    /// frontmatter YAML failure always gets the placeholder, because it
-    /// happens before the name is read. For an internal fault this is the
-    /// Rust source file, as given by `file!()`.
-    pub path: String,
-    /// The 1-based line, when known.
-    pub line: Option<u32>,
-    /// The 1-based column, when known.
-    pub column: Option<u32>,
-    /// The byte span of the offending region, when known.
-    ///
-    /// Only parse failures can have a span, and a frontmatter YAML failure
-    /// always has `None`. The offsets index the document body, which
-    /// excludes the frontmatter and any leading BOM and has CRLF line endings
-    /// normalized to LF. Use [`line`](SourceLocation::line) and
-    /// [`column`](SourceLocation::column) to locate the failure in the
-    /// original file.
-    pub span: Option<Range<usize>>,
-}
-
-/// The error a failed prompt run reports.
-///
-/// A run that fails ends with [`Step::Done`](super::Step::Done), whose
-/// result is [`RunResult::Failure`](super::RunResult::Failure) holding this
-/// error. Use [`kind`](RunError::kind) to classify the failure in code. The
-/// message is self-contained: when the failure keeps an originating error,
-/// the message already holds that error's text, and
-/// [`originating_error`](RunError::originating_error) returns the error
-/// itself. A failure whose message does not hold its underlying error, such
-/// as a model round's, keeps it behind [`std::error::Error::source`] instead.
-#[derive(Debug)]
-pub struct RunError {
-    inner: Error,
-}
-
-impl RunError {
-    /// Returns the stable classification of this failure.
+    /// [`RunErrorKind::from_tag`] parses the same word back, so the two
+    /// round-trip.
     #[must_use]
-    pub fn kind(&self) -> RunErrorKind {
-        match &self.inner {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            RunErrorKind::Parse => "Parse",
+            RunErrorKind::Version => "Version",
+            RunErrorKind::Binding => "Binding",
+            RunErrorKind::Completion => "Completion",
+            RunErrorKind::Tool => "Tool",
+            RunErrorKind::Vfs => "Vfs",
+            RunErrorKind::Determinism => "Determinism",
+            RunErrorKind::Lua => "Lua",
+            RunErrorKind::Quota => "Quota",
+            RunErrorKind::ContextExhausted => "ContextExhausted",
+            RunErrorKind::Internal => "Internal",
+            RunErrorKind::RequirementsUnmet => "RequirementsUnmet",
+        }
+    }
+
+    /// Parses a tag from [`RunErrorKind::as_str`] back into its kind.
+    ///
+    /// Returns `None` for any other string.
+    #[must_use]
+    pub fn from_tag(tag: &str) -> Option<RunErrorKind> {
+        match tag {
+            "Parse" => Some(RunErrorKind::Parse),
+            "Version" => Some(RunErrorKind::Version),
+            "Binding" => Some(RunErrorKind::Binding),
+            "Completion" => Some(RunErrorKind::Completion),
+            "Tool" => Some(RunErrorKind::Tool),
+            "Vfs" => Some(RunErrorKind::Vfs),
+            "Determinism" => Some(RunErrorKind::Determinism),
+            "Lua" => Some(RunErrorKind::Lua),
+            "Quota" => Some(RunErrorKind::Quota),
+            "ContextExhausted" => Some(RunErrorKind::ContextExhausted),
+            "Internal" => Some(RunErrorKind::Internal),
+            "RequirementsUnmet" => Some(RunErrorKind::RequirementsUnmet),
+            _ => None,
+        }
+    }
+}
+
+impl Error {
+    /// Returns the stable classification of this failure.
+    pub(crate) fn kind(&self) -> RunErrorKind {
+        match self {
             Error::Parse(_) => RunErrorKind::Parse,
             Error::LuaQuota { .. } | Error::CallDepthExceeded { .. } => RunErrorKind::Quota,
             Error::ContextExhausted { .. } => RunErrorKind::ContextExhausted,
@@ -145,7 +141,7 @@ impl RunError {
             | Error::UnboundToolCall { .. }
             | Error::ModelOnlyToolCall { .. }
             | Error::Tool { .. } => RunErrorKind::Tool,
-            // A cancelled run ends as `RunResult::Cancelled`, so an
+            // A cancelled run ends as `RunOutcome::Cancelled`, so an
             // interruption that reaches a failure is an Engine fault.
             Error::Internal { .. } | Error::Interrupted => RunErrorKind::Internal,
             Error::Store { .. } => RunErrorKind::Vfs,
@@ -156,89 +152,53 @@ impl RunError {
         }
     }
 
-    /// The Engine's own error behind the boundary one, for a test that
-    /// matches on its variant.
-    #[cfg(test)]
-    pub(crate) fn inner(&self) -> &Error {
-        &self.inner
-    }
-
-    /// Returns the error this failure originated from, when it keeps one: a
-    /// Lua runtime failure keeps the `mlua` error, a Lua compile failure the
-    /// compiler diagnostic, a schema binding failure the validation error, a
-    /// tool failure the tool's own error, a store failure the store's
-    /// structured error, an unmet requirement the failure it stands in for,
-    /// an internal fault the failure that broke the invariant, and a parse
-    /// failure the parser's cause. A model round's failure and a failed
-    /// `{{ }}` substitution answer `None`: whatever cause each holds belongs
-    /// to the error it wraps.
+    /// Returns the self-contained text a failed run reports: the error's
+    /// own text, then each cause down its `source` chain whose text the
+    /// message does not hold yet, after `: `, then where the failure
+    /// happened.
     ///
-    /// The message already holds the cause's text, so
-    /// [`std::error::Error::source`] does not return it again, and a printer
-    /// that walks the source chain shows the text once.
-    #[must_use]
-    pub fn originating_error(&self) -> Option<&(dyn std::error::Error + Send + Sync + 'static)> {
-        self.inner.originating_error()
-    }
-
-    /// Returns `true` when retrying the run may succeed (transient transport or
-    /// backend failures).
-    #[must_use]
-    pub fn is_retryable(&self) -> bool {
-        match &self.inner {
-            Error::Completion(error) => error.is_retryable(),
-            Error::Parse(_)
-            | Error::Interrupted
-            | Error::Lua { .. }
-            | Error::LuaCompile { .. }
-            | Error::BindSchema { .. }
-            | Error::ToolSets { .. }
-            | Error::Substitution(_)
-            | Error::ToolLoopExhausted
-            | Error::TasksLive { .. }
-            | Error::TaskNotOwned { .. }
-            | Error::TaskConsumed { .. }
-            | Error::TaskCancelled { .. }
-            | Error::OutOfScopeToolCall { .. }
-            | Error::UnboundToolCall { .. }
-            | Error::ModelOnlyToolCall { .. }
-            | Error::ModelRequired { .. }
-            | Error::UnsupportedVersion(_)
-            | Error::RequirementsUnmet { .. }
-            | Error::Tool { .. }
-            | Error::Internal { .. }
-            | Error::LuaQuota { .. }
-            | Error::CallDepthExceeded { .. }
-            | Error::ContextExhausted { .. }
-            | Error::Store { .. }
-            | Error::Determinism(_) => false,
+    /// A cause-bearing variant renders its cause in its own text and keeps
+    /// no `source`, so the chain adds only what a transparent variant's
+    /// error keeps there. A parse failure ends with its prompt name, line,
+    /// and column, each when known, as `(prompt {name}, line {line},
+    /// column {column})`, and an internal fault with the Rust source file
+    /// and line of the broken invariant, as `(at {file}:{line})`.
+    pub(crate) fn message(&self) -> String {
+        let mut rendered = self.to_string();
+        let mut cause = std::error::Error::source(self);
+        while let Some(current) = cause {
+            let text = current.to_string();
+            if !text.is_empty() && !rendered.contains(&text) {
+                rendered.push_str(": ");
+                rendered.push_str(&text);
+            }
+            cause = current.source();
         }
+        if let Some(location) = self.location() {
+            rendered.push_str(" (");
+            rendered.push_str(&location);
+            rendered.push(')');
+        }
+        rendered
     }
 
-    /// Returns where the failure occurred, or `None` when it has no location.
-    ///
-    /// A failure of kind `Parse` returns its position in the prompt source.
-    /// The path is the prompt's frontmatter name when parsing got that far,
-    /// and the placeholder `<prompt>` otherwise. The line and column come
-    /// from the YAML error for a frontmatter failure, or from the span for
-    /// any other parse failure. A failure of kind `Internal` returns the Rust
-    /// source file and line of the broken invariant. Failures of every other
-    /// kind return `None`.
-    #[must_use]
-    pub fn location(&self) -> Option<SourceLocation> {
-        match &self.inner {
-            Error::Parse(error) => Some(SourceLocation {
-                path: error.name().unwrap_or("<prompt>").to_owned(),
-                line: error.line().map(NonZeroU32::get),
-                column: error.column().map(NonZeroU32::get),
-                span: error.span(),
-            }),
-            Error::Internal { file, line, .. } => Some(SourceLocation {
-                path: (*file).to_owned(),
-                line: Some(*line),
-                column: None,
-                span: None,
-            }),
+    /// Where the failure happened, for the end of its message, or `None`
+    /// when the failure has no location or the parser found none of its
+    /// parts.
+    fn location(&self) -> Option<String> {
+        match self {
+            Error::Parse(error) => {
+                let parts: Vec<String> = [
+                    error.name().map(|name| format!("prompt {name}")),
+                    error.line().map(|line| format!("line {line}")),
+                    error.column().map(|column| format!("column {column}")),
+                ]
+                .into_iter()
+                .flatten()
+                .collect();
+                (!parts.is_empty()).then(|| parts.join(", "))
+            }
+            Error::Internal { file, line, .. } => Some(format!("at {file}:{line}")),
             Error::Completion(_)
             | Error::Interrupted
             | Error::Lua { .. }
@@ -265,22 +225,16 @@ impl RunError {
             | Error::Determinism(_) => None,
         }
     }
-}
 
-impl fmt::Display for RunError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.inner)
+    /// Returns the failed outcome this error ends a run with.
+    pub(crate) fn to_outcome(&self) -> RunOutcome {
+        RunOutcome::Failed {
+            kind: self.kind(),
+            message: self.message(),
+        }
     }
 }
 
-impl std::error::Error for RunError {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        std::error::Error::source(&self.inner)
-    }
-}
-
-impl From<Error> for RunError {
-    fn from(inner: Error) -> Self {
-        RunError { inner }
-    }
-}
+#[cfg(test)]
+#[path = "error-tests.rs"]
+mod tests;

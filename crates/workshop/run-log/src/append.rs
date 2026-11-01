@@ -139,7 +139,9 @@ impl RunLog {
         let kind = outcome.as_str();
         let (final_text, error_kind, error_message) = match outcome {
             RunOutcome::Completed { final_text } => (Some(final_text), None, None),
-            RunOutcome::Failed { kind, message } => (None, Some(kind), Some(message)),
+            RunOutcome::Failed { kind, message } => {
+                (None, Some(kind.as_str().to_owned()), Some(message))
+            }
             RunOutcome::Cancelled => (None, None, None),
         };
         let changed = self

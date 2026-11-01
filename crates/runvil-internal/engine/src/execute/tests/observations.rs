@@ -160,9 +160,9 @@ fn a_run_refused_by_the_version_gate_reports_nothing() {
     let source = one_section("return \"ran\"").replacen("runvil: 0", "runvil: 2", 1);
     let trace = Scenario::new(source).run();
     assert!(
-        matches!(trace.result(), RunResult::Failure(_)),
+        matches!(trace.outcome(), RunOutcome::Failed { .. }),
         "the version gate fails the run, got {:?}",
-        trace.result()
+        trace.outcome()
     );
     let records = trace.run_records();
     assert!(
@@ -177,7 +177,7 @@ fn a_failing_run_still_reports_run_finished() {
     // observation must report the run failure.
     let trace = Scenario::new(failing_prompt()).run();
     assert!(
-        matches!(trace.error().inner(), Error::Lua { .. }),
+        matches!(trace.error(), Error::Lua { .. }),
         "the prologue fails as a Lua error, got {:?}",
         trace.error()
     );
@@ -206,9 +206,9 @@ fn an_erroring_section_reports_started_but_not_finished() {
     // errors mid-walk must emit SECTION_STARTED and never SECTION_FINISHED.
     let trace = Scenario::new(failing_prompt()).run();
     assert!(
-        matches!(trace.result(), RunResult::Failure(_)),
+        matches!(trace.outcome(), RunOutcome::Failed { .. }),
         "the erroring section fails the run, got {:?}",
-        trace.result()
+        trace.outcome()
     );
 
     let observed = sequence(&trace);
@@ -231,9 +231,9 @@ fn an_erroring_section_tears_down_exactly_once_without_finishing() {
     // keeps SECTION_FINISHED from firing for the erroring section.
     let trace = Scenario::new(second_section_errors()).run();
     assert!(
-        matches!(trace.result(), RunResult::Failure(_)),
+        matches!(trace.outcome(), RunOutcome::Failed { .. }),
         "the erroring section fails the run, got {:?}",
-        trace.result()
+        trace.outcome()
     );
 
     let observed = sequence(&trace);

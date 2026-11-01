@@ -89,7 +89,7 @@ fn unsupported_major_one_is_refused() {
     // declared version rather than silently degrading to major 0.
     let trace = Scenario::new(ran_under("runvil: 1\n")).run();
     assert!(
-        matches!(trace.error().inner(), Error::UnsupportedVersion(1)),
+        matches!(trace.error(), Error::UnsupportedVersion(1)),
         "the gate refuses major 1 by name, got {:?}",
         trace.error()
     );
@@ -100,7 +100,7 @@ fn unsupported_major_is_refused() {
     // Any major other than 0 is refused, never silently degraded to major 0.
     let trace = Scenario::new(ran_under("runvil: 2\n")).run();
     assert!(
-        matches!(trace.error().inner(), Error::UnsupportedVersion(2)),
+        matches!(trace.error(), Error::UnsupportedVersion(2)),
         "the gate refuses major 2 by name, got {:?}",
         trace.error()
     );
@@ -111,7 +111,7 @@ fn missing_version_is_not_a_runvil_prompt() {
     // No `runvil:` key: not our prompt, so `run` declines with a Parse
     // error rather than executing it.
     let trace = Scenario::new(ran_under("")).run();
-    match trace.error().inner() {
+    match trace.error() {
         Error::Parse(error) => {
             assert_eq!(error.kind(), ParseErrorKind::Structure);
             assert_eq!(
@@ -126,6 +126,14 @@ fn missing_version_is_not_a_runvil_prompt() {
         }
         other => panic!("expected Parse, got {other:?}"),
     }
+    assert_eq!(
+        trace.outcome(),
+        &RunOutcome::Failed {
+            kind: RunErrorKind::Parse,
+            message: "not a runvil prompt: no runvil version (prompt t)".to_owned(),
+        },
+        "the outcome's message names the prompt the failure's location named"
+    );
 }
 
 // --- Cross-section store persistence ---
@@ -262,7 +270,7 @@ fn empty_stop_turn_without_tool_calls_fails() {
     for offered in [None, Some(echo_tool())] {
         let trace = exit_scenario(vec![text_finish("", "stop")], offered).run();
         let events = exit_events(&trace);
-        match trace.error().inner() {
+        match trace.error() {
             Error::Completion(error) => {
                 assert_eq!(error.kind(), CompletionErrorKind::EmptyReply);
                 assert_eq!(error.finish_reason(), Some("stop"));
@@ -286,7 +294,7 @@ fn empty_truncated_final_text_fails_without_truncation_detail() {
     // truncated.
     let trace = exit_scenario(vec![text_finish("", "length")], None).run();
     let events = exit_events(&trace);
-    match trace.error().inner() {
+    match trace.error() {
         Error::Completion(error) => {
             assert_eq!(error.kind(), CompletionErrorKind::EmptyReply);
             assert_eq!(error.finish_reason(), Some("length"));
@@ -306,7 +314,7 @@ fn empty_turn_without_finish_reason_after_tool_call_fails() {
     )
     .run();
     let events = exit_events(&trace);
-    match trace.error().inner() {
+    match trace.error() {
         Error::Completion(error) => {
             assert_eq!(error.kind(), CompletionErrorKind::EmptyReply);
             assert_eq!(error.finish_reason(), None);

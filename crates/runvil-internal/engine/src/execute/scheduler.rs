@@ -179,6 +179,9 @@ pub(crate) struct Scheduler {
     /// root-start sites (`h1::start_h1` and `walk::start_root_walk`) are its
     /// only writers, each at the acquisition that opens the run's identity.
     scope: Option<ScopeHandle>,
+    /// The error behind the failed outcome the last `Done` carried.
+    #[cfg(test)]
+    failure: Option<Error>,
 }
 
 impl Drop for Scheduler {
@@ -200,6 +203,8 @@ impl Scheduler {
             admission: Admission::default(),
             phase: Phase::Fresh,
             scope: None,
+            #[cfg(test)]
+            failure: None,
         }
     }
 

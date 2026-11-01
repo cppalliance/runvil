@@ -1,7 +1,7 @@
 //! Describing models and answering their rounds.
 
 use runvil::model::{CompletionErrorKind, ModelCatalog, ModelCatalogError, ModelId, ThinkingMode};
-use runvil::{RunErrorKind, RunResult};
+use runvil::{RunErrorKind, RunOutcome};
 
 use super::support::{Reply, Scenario, TestResult, fail, model, prompt};
 
@@ -13,9 +13,9 @@ fn asking() -> String {
     prompt("", &[("Greet", lua)])
 }
 
-fn run_asking(reply: Reply) -> TestResult<RunResult> {
+fn run_asking(reply: Reply) -> TestResult<RunOutcome> {
     let scenario = Scenario::replies([reply]).model(model("fast", 32_000, ThinkingMode::Never)?);
-    Ok(scenario.run(&asking())?.result)
+    Ok(scenario.run(&asking())?.outcome)
 }
 
 #[test]
@@ -42,9 +42,9 @@ fn a_catalog_finds_a_model_by_id_and_refuses_a_repeated_id_as_a_whole() -> TestR
 
 #[test]
 fn a_failed_model_round_fails_the_run_as_a_completion_failure() -> TestResult {
-    let RunResult::Failure(error) = run_asking(fail(CompletionErrorKind::Overloaded))? else {
+    let RunOutcome::Failed { kind, .. } = run_asking(fail(CompletionErrorKind::Overloaded))? else {
         return Err("a failed round fails the run".into());
     };
-    assert_eq!(error.kind(), RunErrorKind::Completion);
+    assert_eq!(kind, RunErrorKind::Completion);
     Ok(())
 }

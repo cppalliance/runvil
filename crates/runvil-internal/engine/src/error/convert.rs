@@ -20,7 +20,7 @@ impl Error {
 
     /// Stamps the prompt's frontmatter name onto a parse failure raised by
     /// `run` itself: the prompt is already parsed at that point, so the
-    /// name is known and the location can name it. Any other variant passes
+    /// name is known and the failure's message can name it. Any other variant passes
     /// through unchanged.
     pub(crate) fn with_prompt_name(self, name: &str) -> Error {
         match self {
@@ -32,8 +32,8 @@ impl Error {
     }
 
     /// Builds an internal-invariant failure, capturing the Rust source
-    /// position of the call site so [`crate::RunError::location`] can point
-    /// at the broken invariant. The message is owned when it names a value.
+    /// position of the call site so the run's failure message can point at
+    /// the broken invariant. The message is owned when it names a value.
     #[track_caller]
     pub(crate) fn internal(message: impl Into<Cow<'static, str>>) -> Error {
         let location = std::panic::Location::caller();

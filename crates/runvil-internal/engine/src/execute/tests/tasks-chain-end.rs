@@ -48,7 +48,7 @@ fn a_chain_ending_with_live_author_tasks_fails_as_tasks_live_naming_the_ids() {
         CHILD_PARKED_ON_STORE_WRITE,
     );
     let mut rig = Rig::run(scheduler_scenario(md));
-    let error = rig.trace().error().inner();
+    let error = rig.trace().error();
 
     match error {
         Error::TasksLive { tasks } => {
@@ -92,7 +92,7 @@ fn a_chain_failing_with_a_live_task_keeps_its_own_error_and_abandons_the_task() 
         CHILD_PARKED_ON_STORE_WRITE,
     );
     let mut rig = Rig::run(scheduler_scenario(md));
-    let error = rig.trace().error().inner();
+    let error = rig.trace().error();
 
     assert!(
         !matches!(error, Error::TasksLive { .. }),
@@ -160,7 +160,7 @@ fn a_returning_owner_abandons_its_running_task_as_owner_returned() {
         CHILD_PARKED_ON_HELD_ROUND,
     );
     let rig = run_abandoning_a_running_task(scheduler_scenario(md), AbandonReason::OwnerReturned);
-    match rig.trace().error().inner() {
+    match rig.trace().error() {
         Error::TasksLive { tasks } => assert_eq!(tasks, &[task("0.0")]),
         other => panic!("expected tasks_live, got {other:?}"),
     }
@@ -175,7 +175,7 @@ fn a_failing_owner_abandons_its_running_task_as_owner_failed() {
         CHILD_PARKED_ON_HELD_ROUND,
     );
     let rig = run_abandoning_a_running_task(scheduler_scenario(md), AbandonReason::OwnerFailed);
-    let error = rig.trace().error().inner();
+    let error = rig.trace().error();
     assert!(
         error.to_string().contains("spawner boom"),
         "the owner keeps its own error over the leak: {error}"
@@ -201,7 +201,7 @@ fn an_exhausted_tool_loop_abandons_its_running_task_as_tool_loop_exhausted() {
         .offer("echo", echo_tool())
         .chat(&gateway);
     let rig = run_abandoning_a_running_task(scenario, AbandonReason::ToolLoopExhausted);
-    let error = rig.trace().error().inner();
+    let error = rig.trace().error();
     assert!(
         matches!(error, Error::ToolLoopExhausted),
         "the owner's own error stands: {error:?}"
@@ -238,7 +238,7 @@ fn moving_spawner_prompt(movement: &str) -> String {
 fn assert_task_outlives_movement(md: String) {
     let mut rig = Rig::run(scheduler_scenario(md));
 
-    match rig.trace().error().inner() {
+    match rig.trace().error() {
         Error::TasksLive { tasks } => assert_eq!(
             tasks,
             &[task("0.0")],
@@ -341,7 +341,7 @@ fn a_task_spawned_in_h1_belongs_to_the_main_walk() {
         ```\n";
     let mut rig = Rig::run(scheduler_scenario(md));
 
-    match rig.trace().error().inner() {
+    match rig.trace().error() {
         Error::TasksLive { tasks } => assert_eq!(
             tasks,
             &[task("0.0")],

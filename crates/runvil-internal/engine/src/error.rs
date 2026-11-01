@@ -1,21 +1,23 @@
 //! The crate's internal error type.
 //!
 //! [`Error`] is a `pub(crate)` internal error type, never part of the public API.
-//! The public boundary is [`crate::RunError`], and [`ParseError`](crate::parser::ParseError),
+//! A run it ends reports its kind and message in
+//! [`RunOutcome::Failed`](crate::RunOutcome::Failed), and
+//! [`ParseError`](crate::parser::ParseError),
 //! [`CompletionError`](crate::model::CompletionError), and
-//! [`runvil_types::tools::ToolError`] each reach it through `RunError`'s
-//! classification, which classifies this internal type and keeps its cause.
+//! [`runvil_types::tools::ToolError`] each reach that outcome through this
+//! type, which classifies them and keeps their causes.
 //! The `From` bridges that let internal `?` reach this type live in `convert`.
 //!
 //! A variant that keeps an originating error renders that error's text in
-//! its own `Display` and holds the error as a plain `cause` field behind
-//! [`Error::originating_error`], never as a `#[source]`, so a printer that
-//! walks the source chain shows the cause's text once.
+//! its own `Display` and holds the error as a plain `cause` field, never as
+//! a `#[source]`, so a printer that walks the source chain shows the
+//! cause's text once.
 //!
 //! Three variants are `#[error(transparent)]` and so keep no `cause` field
 //! of their own: `Parse`, `Completion`, and `Substitution` hand their whole
 //! `Display` and `source` to the error they hold. That is the exception to
-//! the field rule above, and it is why [`Error::originating_error`] answers
+//! the field rule above, and it is why `Error::originating_error` answers
 //! `None` for `Completion` and `Substitution` and the parser's own cause for
 //! `Parse`.
 
@@ -107,7 +109,7 @@ impl std::fmt::Display for DepthVia {
 /// failures.
 ///
 /// The model variant holds the broker's closed error whole, so no HTTP
-/// client's error type leaks through the wrappers' `source()`.
+/// client's error type leaks through its `source()`.
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum Error {
     /// The prompt failed to parse: invalid frontmatter YAML or a
@@ -115,7 +117,8 @@ pub(crate) enum Error {
     ///
     /// Holds the parser's [`ParseError`](crate::parser::ParseError) whole, so
     /// its stable kind, its location fields, and the YAML decode failure a
-    /// frontmatter failure keeps as its cause survive the public wrappers.
+    /// frontmatter failure keeps as its cause survive until the run's
+    /// failure message is built from them.
     #[error(transparent)]
     Parse(crate::parser::ParseError),
 
@@ -124,7 +127,8 @@ pub(crate) enum Error {
     ///
     /// Holds the broker's [`CompletionError`](crate::model::CompletionError)
     /// whole, so the closed kind, the fixed message, the opt-in detail, and
-    /// the cause chain survive the public wrappers. The Engine branches on
+    /// the cause chain survive until the run's failure message is built
+    /// from them. The Engine branches on
     /// its kind only: a context overflow takes the provider overflow path
     /// and an empty reply takes the empty-answer path.
     #[error(transparent)]
@@ -144,9 +148,9 @@ pub(crate) enum Error {
     /// It also holds the message of a raised error table whose kind needs
     /// structure the table does not hold (see `Error::from_raised`).
     /// `cause` holds the originating `mlua` error when there is one. The
-    /// message is the specific failure as a noun phrase; the public wrapper
-    /// classifies this as a Lua failure, so no redundant `lua error:` type
-    /// label is prepended.
+    /// message is the specific failure as a noun phrase; the run's failed
+    /// outcome classifies this as a Lua failure, so no redundant
+    /// `lua error:` type label is prepended.
     #[error("{message}")]
     Lua {
         /// The diagnostic, location-tagged when it maps to a prompt line.
@@ -158,8 +162,7 @@ pub(crate) enum Error {
     /// Lua source was not syntactically valid at its prompt location.
     ///
     /// Keeps the originating `mlua` compile error as the cause beside the
-    /// location metadata, so the typed compiler diagnostic survives through
-    /// [`RunError::originating_error`](crate::RunError::originating_error)
+    /// location metadata, so the typed compiler diagnostic survives
     /// instead of being flattened into `message` alone.
     #[error("lua compilation error at {location} (line {source_line}): {message}")]
     LuaCompile {
@@ -374,7 +377,7 @@ pub(crate) enum Error {
     ///
     /// The Rust source position of the construction site is captured (via
     /// [`Error::internal`] or [`Error::internal_with_cause`], both
-    /// `#[track_caller]`) so [`crate::RunError::location`] can point at the
+    /// `#[track_caller]`) so the run's failure message can point at the
     /// broken invariant. A Lua-crate internal failure brings its own
     /// captured site.
     #[error("internal invariant violated: {message}{}", cause_suffix(.cause.as_ref()))]
@@ -421,7 +424,7 @@ pub(crate) enum Error {
 
     /// A run-scoped store operation failed at the virtual filesystem layer,
     /// keeping the concrete [`runvil_vfs::VfsError`] as the cause so a
-    /// backend failure survives the public wrappers instead of being
+    /// backend failure survives as a typed error instead of being
     /// flattened to a string. The message is the model-facing rendering for
     /// the operation (or the probe text, which says when the run declares no
     /// store), kept beside the error because the error alone does not name
@@ -454,6 +457,7 @@ pub(crate) enum Error {
 impl Error {
     /// Returns the originating error a cause-bearing variant keeps, whose
     /// text its `Display` already holds; `None` for every other variant.
+    #[cfg(test)]
     pub(crate) fn originating_error(
         &self,
     ) -> Option<&(dyn std::error::Error + Send + Sync + 'static)> {

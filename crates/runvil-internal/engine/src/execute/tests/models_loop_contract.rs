@@ -113,9 +113,9 @@ fn the_arity_error_still_raises_when_the_author_has_rebound_error() {
     driving.cancel();
     let trace = driving.finish();
     assert!(
-        !matches!(trace.result(), RunResult::Cancelled),
+        !matches!(trace.outcome(), RunOutcome::Cancelled),
         "the raise ends the call before the cancel: {:?}",
-        trace.result()
+        trace.outcome()
     );
     assert_eq!(
         trace.text(),
@@ -147,7 +147,7 @@ fn an_uncaught_loop_arity_error_fails_the_run_naming_the_authors_prompt_line() {
          return 'unreachable'",
     );
     let trace = loop_scenario(source).chat(&gateway).run();
-    match trace.error().inner() {
+    match trace.error() {
         Error::Lua {
             message,
             cause: Some(_),

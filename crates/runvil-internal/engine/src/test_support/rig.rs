@@ -166,7 +166,7 @@ pub(crate) struct RigTrace {
 }
 
 impl RigTrace {
-    /// The run's result, events, answered effects, and store.
+    /// The run's outcome, events, answered effects, and store.
     pub(crate) fn trace(&self) -> &Trace {
         &self.trace
     }

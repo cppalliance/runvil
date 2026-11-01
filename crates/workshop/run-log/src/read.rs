@@ -5,7 +5,8 @@ use harness::record::RunSeed;
 use crate::append::{RunLog, unsigned};
 use crate::error::LogError;
 use crate::record::{
-    Record, RecordFilter, RecordKind, RunId, RunMeta, RunOutcome, RunRow, Seq, StoredRecord,
+    Record, RecordFilter, RecordKind, RunErrorKind, RunId, RunMeta, RunOutcome, RunRow, Seq,
+    StoredRecord,
 };
 use crate::schema;
 
@@ -126,6 +127,10 @@ fn to_seed(text: String) -> Result<RunSeed, LogError> {
 }
 
 /// Rebuilds a [`RunOutcome`] from its four columns.
+///
+/// A failed run's kind reads back through [`RunErrorKind::from_tag`]. A
+/// stored tag the Engine does not name, such as the `Input` that older
+/// rows hold, reads as [`RunErrorKind::Internal`] with its stored message.
 fn parse_outcome(
     kind: &str,
     final_text: Option<String>,
@@ -134,7 +139,10 @@ fn parse_outcome(
 ) -> Result<RunOutcome, LogError> {
     match (kind, final_text, error_kind, error_message) {
         ("completed", Some(final_text), None, None) => Ok(RunOutcome::Completed { final_text }),
-        ("failed", None, Some(kind), Some(message)) => Ok(RunOutcome::Failed { kind, message }),
+        ("failed", None, Some(kind), Some(message)) => Ok(RunOutcome::Failed {
+            kind: RunErrorKind::from_tag(&kind).unwrap_or(RunErrorKind::Internal),
+            message,
+        }),
         ("cancelled", None, None, None) => Ok(RunOutcome::Cancelled),
         (kind, final_text, error_kind, error_message) => Err(LogError::Corrupt(format!(
             "expected outcome columns to match {kind:?}, found final_text={final_text:?} \

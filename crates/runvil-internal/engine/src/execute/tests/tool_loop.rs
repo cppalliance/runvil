@@ -46,7 +46,7 @@ fn tool_loop_gives_up_after_exactly_the_configured_cap() {
         .offer("echo", echo_tool())
         .chat(&gateway)
         .run();
-    let error = trace.error().inner();
+    let error = trace.error();
     assert!(matches!(error, Error::ToolLoopExhausted), "got {error:?}");
     assert_eq!(
         gateway.call_count(),
@@ -94,7 +94,7 @@ fn tool_loop_uses_the_default_cap_when_unspecified() {
         .offer("echo", echo_tool())
         .chat(&gateway)
         .run();
-    let error = trace.error().inner();
+    let error = trace.error();
     assert!(matches!(error, Error::ToolLoopExhausted), "got {error:?}");
     assert_eq!(gateway.call_count(), default_cap);
 }
@@ -219,7 +219,7 @@ fn repeated_calls_to_a_failing_tool_exit_at_the_iteration_cap() {
         .offer("echo", failing_tool())
         .chat(&gateway)
         .run();
-    let error = trace.error().inner();
+    let error = trace.error();
     assert!(matches!(error, Error::ToolLoopExhausted), "got {error:?}");
     assert_eq!(
         gateway.call_count(),
@@ -421,9 +421,9 @@ fn cancel_during_in_flight_tool_call_returns_promptly() {
     driving.cancel();
     let trace = driving.finish();
     assert!(
-        matches!(trace.result(), RunResult::Cancelled),
+        matches!(trace.outcome(), RunOutcome::Cancelled),
         "expected the cancelled run, got {:?}",
-        trace.result()
+        trace.outcome()
     );
     assert!(
         trace

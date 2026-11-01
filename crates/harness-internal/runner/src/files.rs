@@ -10,7 +10,7 @@
 
 use runvil::vfs::{Origin, VfsError, VfsOp, VfsOutcome, VfsRef, perform_vfs_op};
 
-use crate::recorder::RunOutcome;
+use crate::recorder::{RunErrorKind, RunOutcome};
 
 /// Why a run's report omits its output text.
 ///
@@ -71,6 +71,20 @@ pub enum InputFileError {
         #[source]
         source: VfsError,
     },
+}
+
+impl InputFileError {
+    /// The Engine's kind for the run this failure ends: input text the
+    /// prompt does not declare and a declared input nobody supplied are
+    /// unmet requirements, and a store refusal is a store failure.
+    pub(crate) fn kind(&self) -> RunErrorKind {
+        match self {
+            InputFileError::Undeclared | InputFileError::Missing { .. } => {
+                RunErrorKind::RequirementsUnmet
+            }
+            InputFileError::Vfs { .. } => RunErrorKind::Vfs,
+        }
+    }
 }
 
 /// Puts the prompt's declared input in place in `vfs`'s store: writes

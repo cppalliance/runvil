@@ -1,10 +1,10 @@
 //! The crate's internal error type.
 //!
 //! [`Error`] mirrors `runvil-engine`'s own internal error type: it
-//! is never part of the documented API. The executor's public boundary
-//! (`runvil_engine::RunError`) wraps and classifies `runvil-engine`'s
-//! internal error type, which maps this one back variant-for-variant through
-//! `From<runvil_lua::Error>`. The internal type is public only so
+//! is never part of the documented API. A failed run's public outcome
+//! (`runvil_engine::RunOutcome`) carries the kind and message of
+//! `runvil-engine`'s internal error type, which maps this one back
+//! variant-for-variant through `From<runvil_lua::Error>`. The internal type is public only so
 //! `runvil-engine` can perform that mapping verbatim; the facade does
 //! not re-export it, and it is not marked `#[non_exhaustive]`, so the
 //! mapping stays total.

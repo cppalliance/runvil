@@ -1,9 +1,10 @@
 //! The prompt's declared store files: the launch's input text is staged
 //! at the frontmatter's `input:` path before the run, through the store
 //! view wherever the handle mounts the store; a Host-seeded store
-//! satisfies the declaration; text with no declared file, a declared file
-//! with neither text nor a seeded copy, and a store that refuses the write
-//! each refuse the run and end it under the `Input` kind; and the
+//! satisfies the declaration; text with no declared file and a declared
+//! file with neither text nor a seeded copy each refuse the run and end it
+//! under the `RequirementsUnmet` kind, and a store that refuses the write
+//! ends it under the `Vfs` kind; and the
 //! declared `output:` path comes back on the prepared run for the caller
 //! to read once the run completes.
 
@@ -13,7 +14,7 @@ use harness_runner::display_chain;
 use harness_runner::effect_loop::drive_run;
 use harness_runner::files::{InputFileError, read_output};
 use harness_runner::prepare::{PrepareError, Prepared, prepare};
-use harness_runner::recorder::{MemoryRecorder, RunOutcome};
+use harness_runner::recorder::{MemoryRecorder, RunErrorKind, RunOutcome};
 use runvil::cancel::CancelHandle;
 use runvil::event::Event;
 use runvil::vfs::{MemoryBackend, Mode, ModePolicy, Origin, VfsError, VfsRef};
@@ -42,20 +43,20 @@ async fn prepare_over(
     (recorder, prepared)
 }
 
-/// Checks that `error` is an input refusal whose run ended under the
-/// `Input` kind with the cause chain as its message, and that the
-/// recorder holds only the run's parse events. Returns the cause.
-fn refused(recorder: &MemoryRecorder, error: PrepareError) -> InputFileError {
+/// Checks that `error` is an input refusal whose run ended under `kind`
+/// with the cause chain as its message, and that the recorder holds only
+/// the run's parse events. Returns the cause.
+fn refused(recorder: &MemoryRecorder, error: PrepareError, kind: RunErrorKind) -> InputFileError {
     let PrepareError::Input { run_id, source, .. } = error else {
         panic!("the failure is an input refusal: {error}");
     };
     assert_eq!(
         recorder.outcome(run_id),
         Some(RunOutcome::Failed {
-            kind: "Input".to_owned(),
+            kind,
             message: display_chain(&source),
         }),
-        "the recorder holds the refusal under the Input kind"
+        "the recorder holds the refusal under the {kind:?} kind"
     );
     let events = recorded_parse_events(recorder, run_id);
     assert!(
@@ -114,14 +115,22 @@ async fn a_host_seeded_store_satisfies_the_declared_input() {
 #[tokio::test]
 async fn input_text_for_a_prompt_that_declares_no_input_is_refused() {
     let (recorder, prepared) = prepare_over(PLAIN, &VfsRef::default(), Some("# Paper")).await;
-    let source = refused(&recorder, prepared.expect_err("undeclared input refuses"));
+    let source = refused(
+        &recorder,
+        prepared.expect_err("undeclared input refuses"),
+        RunErrorKind::RequirementsUnmet,
+    );
     assert!(matches!(source, InputFileError::Undeclared), "{source:?}");
 }
 
 #[tokio::test]
 async fn a_declared_input_neither_supplied_nor_in_the_store_is_refused() {
     let (recorder, prepared) = prepare_over(FILES, &VfsRef::default(), None).await;
-    let source = refused(&recorder, prepared.expect_err("a missing input refuses"));
+    let source = refused(
+        &recorder,
+        prepared.expect_err("a missing input refuses"),
+        RunErrorKind::RequirementsUnmet,
+    );
     let InputFileError::Missing { path } = source else {
         panic!("the refusal names the missing file: {source:?}");
     };
@@ -135,7 +144,11 @@ async fn a_store_that_refuses_the_staging_write_refuses_the_run() {
         .policy(ModePolicy::new(Mode::Ask))
         .build();
     let (recorder, prepared) = prepare_over(FILES, &vfs, Some("# Paper")).await;
-    let source = refused(&recorder, prepared.expect_err("a refused write refuses"));
+    let source = refused(
+        &recorder,
+        prepared.expect_err("a refused write refuses"),
+        RunErrorKind::Vfs,
+    );
     let InputFileError::Vfs { path, source } = source else {
         panic!("the refusal is the store's: {source:?}");
     };

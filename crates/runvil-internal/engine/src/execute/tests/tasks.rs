@@ -281,11 +281,10 @@ fn spawn_shares_calls_depth_cap() {
     // Either way the whole spawn cascade and the one refusal ran before
     // any answer arrived, which is what this test measures.
     let rig = Rig::run(scheduler_scenario(md));
-    let outcome = rig.trace().result();
+    let outcome = rig.trace().outcome();
     assert!(
-        matches!(outcome, RunResult::Completed(_))
-            || matches!(outcome, RunResult::Failure(error)
-                if matches!(error.inner(), Error::TasksLive { .. })),
+        matches!(outcome, RunOutcome::Completed { .. })
+            || matches!(rig.trace().error(), Error::TasksLive { .. }),
         "unexpected outcome: {outcome:?}"
     );
 

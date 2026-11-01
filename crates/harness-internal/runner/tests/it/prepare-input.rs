@@ -197,7 +197,7 @@ async fn an_uncaught_failed_ask_ends_the_run_as_a_tool_failure() {
     let RunOutcome::Failed { kind, message } = outcome else {
         panic!("an uncaught failed ask fails the run: {outcome:?}");
     };
-    assert_eq!(kind, "Tool");
+    assert_eq!(kind, RunErrorKind::Tool);
     assert!(
         message.contains("the operator's window closed"),
         "the broker's message reaches the run's failure: {message}"

@@ -13,8 +13,7 @@ use runvil_types::event::lifecycle;
 use runvil_types::ids::AbandonReason;
 use runvil_vfs::Origin;
 
-use crate::execute::RunResult;
-use crate::execute::error::RunError;
+use crate::execute::RunOutcome;
 use crate::execute::run::{EffectAnswer, EffectId, Step};
 use crate::parser::ParseErrorKind;
 use crate::{Error, Result};
@@ -87,16 +86,12 @@ impl Scheduler {
                 // orphan's store effect still runs in the live scope.
                 self.end_scope();
                 Step::Done {
-                    result: match result {
-                        Ok(text) => RunResult::Completed(text),
-                        Err(Error::Interrupted) => RunResult::Cancelled,
-                        Err(error) => RunResult::Failure(RunError::from(error)),
-                    },
+                    outcome: self.outcome(result),
                     events,
                 }
             }
             Phase::Done => Step::Done {
-                result: RunResult::Failure(RunError::from(Error::internal(
+                outcome: self.outcome(Err(Error::internal(
                     "a finished run cannot be stepped again",
                 ))),
                 events,
@@ -108,6 +103,30 @@ impl Scheduler {
                     events,
                     withdrawn,
                 }
+            }
+        }
+    }
+
+    /// The outcome the run ends with for `result`: an interruption that
+    /// reached the end is a cancellation, and any other error a failure.
+    #[cfg_attr(
+        not(test),
+        expect(
+            clippy::unused_self,
+            reason = "only a test build keeps the failure's error on the scheduler"
+        )
+    )]
+    fn outcome(&mut self, result: Result<String>) -> RunOutcome {
+        match result {
+            Ok(final_text) => RunOutcome::Completed { final_text },
+            Err(Error::Interrupted) => RunOutcome::Cancelled,
+            Err(error) => {
+                let outcome = error.to_outcome();
+                #[cfg(test)]
+                {
+                    self.failure = Some(error);
+                }
+                outcome
             }
         }
     }

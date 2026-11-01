@@ -59,9 +59,9 @@ fn cancellation_while_suspended_on_infer_interrupts_the_run() {
         .run();
 
     assert!(
-        matches!(trace.result(), RunResult::Cancelled),
+        matches!(trace.outcome(), RunOutcome::Cancelled),
         "cancelling a suspended infer must interrupt the run, got {:?}",
-        trace.result()
+        trace.outcome()
     );
     assert!(
         matches!(
@@ -90,7 +90,7 @@ fn call_depth_cap_reads_the_chain_field() {
     let error = trace.error();
     assert!(
         matches!(
-            error.inner(),
+            error,
             Error::CallDepthExceeded {
                 cap: 8,
                 via: DepthVia::Call

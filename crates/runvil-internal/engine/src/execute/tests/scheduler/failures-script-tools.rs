@@ -54,7 +54,7 @@ fn a_script_tools_call_with_an_unbound_name_lists_the_offered_ids() {
         ## Only\n\n\
         ```lua\ntools.offer('tools/echo')\nreturn tools.call('tools/missing', {})\n```\n";
     let trace = scheduler_scenario(md).offer("echo", echo_tool()).run();
-    match trace.error().inner() {
+    match trace.error() {
         Error::UnboundToolCall { name, ids } => {
             assert_eq!(name, "tools/missing");
             assert_eq!(ids, &["tools/echo".to_owned()]);
@@ -97,7 +97,7 @@ fn a_script_tools_call_of_a_model_only_tool_is_refused_naming_it() {
         .offer("echo", echo_tool())
         .offer("replace", model_only_tool())
         .run();
-    match trace.error().inner() {
+    match trace.error() {
         Error::ModelOnlyToolCall { name, id } => {
             assert_eq!(name, "tools/replace");
             assert_eq!(id, "tools/replace");
@@ -140,7 +140,7 @@ fn a_script_tools_call_of_a_model_only_tool_by_its_object_is_refused_the_same_wa
     let trace = scheduler_scenario(md)
         .offer("replace", model_only_tool())
         .run();
-    match trace.error().inner() {
+    match trace.error() {
         Error::ModelOnlyToolCall { id, .. } => assert_eq!(id, "tools/replace"),
         other => panic!("expected the typed model-only error, got {other:?}"),
     }
@@ -185,9 +185,9 @@ fn cancellation_interrupts_a_slow_script_tools_call() {
         .run();
 
     assert!(
-        matches!(trace.result(), RunResult::Cancelled),
+        matches!(trace.outcome(), RunOutcome::Cancelled),
         "cancelling a suspended tools.call must interrupt the run, got {:?}",
-        trace.result()
+        trace.outcome()
     );
     assert_eq!(
         started.load(Ordering::SeqCst),
@@ -247,7 +247,7 @@ fn invalid_json_from_a_structured_tool_is_a_tool_error() {
     let trace = scheduler_scenario(md)
         .offer("form", structured_tool("not json", true))
         .run();
-    match trace.error().inner() {
+    match trace.error() {
         Error::Tool { message, .. } => {
             assert!(
                 message.contains("returned invalid JSON"),
@@ -271,7 +271,7 @@ fn an_untrusted_structured_output_is_wrapped_before_classification() {
     let trace = scheduler_scenario(md)
         .offer("form", structured_tool("{\"text\":\"typed\"}", false))
         .run();
-    match trace.error().inner() {
+    match trace.error() {
         Error::Tool { message, .. } => {
             assert!(
                 message.contains("returned invalid JSON"),

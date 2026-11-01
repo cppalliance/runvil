@@ -55,6 +55,7 @@ mod schema;
 pub use append::RunLog;
 pub use error::LogError;
 pub use record::{
-    Record, RecordFilter, RecordKind, RunId, RunMeta, RunOutcome, RunRow, Seq, StoredRecord,
+    Record, RecordFilter, RecordKind, RunErrorKind, RunId, RunMeta, RunOutcome, RunRow, Seq,
+    StoredRecord,
 };
 pub use recorder::{AgentRecorder, TursoRecorder};

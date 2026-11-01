@@ -35,5 +35,4 @@ fn an_infer_round_answered_with_tool_calls_fails_as_a_retryable_malformed_reply(
         failure.is_retryable(),
         "a reply that broke protocol may come back well formed"
     );
-    assert!(crate::RunError::from(error).is_retryable());
 }

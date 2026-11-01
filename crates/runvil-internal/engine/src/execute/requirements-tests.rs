@@ -12,7 +12,7 @@ use runvil_types::timestamp::Timestamp;
 use runvil_types::tools::{ToolCatalog, ToolId, ToolInfo};
 use serde_json::json;
 
-use crate::execute::{Run, RunContext, RunErrorKind, RunResult, Step};
+use crate::execute::{Run, RunContext, RunErrorKind, RunOutcome, Step};
 use crate::lua::RosterEntry;
 use crate::parser::Prompt;
 use crate::test_support::scenario::{TEST_SEED, test_model_with};
@@ -83,23 +83,23 @@ fn unavailable(pack: &str, reason: &str) -> (PackId, RosterEntry) {
 #[track_caller]
 fn refusal(prompt: Prompt, ctx: RunContext) -> Option<String> {
     let mut run = Run::new(Arc::new(prompt), "", ctx);
-    let Step::Done { result, events } = run.step() else {
+    let Step::Done { outcome, events } = run.step() else {
         panic!("the fixture run is done at its first step");
     };
-    match result {
-        RunResult::Completed(text) => {
-            assert_eq!(text, "done");
+    match outcome {
+        RunOutcome::Completed { final_text } => {
+            assert_eq!(final_text, "done");
             None
         }
-        RunResult::Failure(error) => {
-            assert_eq!(error.kind(), RunErrorKind::RequirementsUnmet, "{error}");
+        RunOutcome::Failed { kind, message } => {
+            assert_eq!(kind, RunErrorKind::RequirementsUnmet, "{message}");
             assert!(
                 events.is_empty(),
                 "a refused run reports no run events: {events:?}"
             );
-            Some(error.to_string())
+            Some(message)
         }
-        other => panic!("expected a completion or a refusal, got {other:?}"),
+        RunOutcome::Cancelled => panic!("expected a completion or a refusal, got a cancellation"),
     }
 }
 

@@ -40,7 +40,7 @@ fn model_calling_an_offered_but_unscoped_tool_is_a_hard_error() {
         "{\"value\":\"x\"}",
     )])]);
     let trace = scoped_loop("").chat(&gateway).run();
-    let error = trace.error().inner();
+    let error = trace.error();
     match error {
         Error::OutOfScopeToolCall {
             name,
@@ -78,7 +78,7 @@ fn model_calling_an_advertised_tool_by_canonical_id_gets_no_not_offered_suffix()
         "{\"value\":\"x\"}",
     )])]);
     let trace = scoped_loop("").chat(&gateway).run();
-    let error = trace.error().inner();
+    let error = trace.error();
     match error {
         Error::OutOfScopeToolCall {
             name,
@@ -114,7 +114,7 @@ fn model_calling_a_defined_but_unoffered_adhoc_tool_gets_no_not_offered_suffix()
     )
     .chat(&gateway)
     .run();
-    let error = trace.error().inner();
+    let error = trace.error();
     match error {
         Error::OutOfScopeToolCall {
             name,
@@ -194,7 +194,7 @@ fn with_dynamic_offers_a_name_outside_both_sets_fails_listing_only_the_static_se
     // discovery tools because this section has them.
     let gateway = ScriptedChat::new(vec![calls(&[("call_1", "rogue", "{}")])]);
     let trace = scoped_loop(DYNAMIC_OFFERS).chat(&gateway).run();
-    match trace.error().inner() {
+    match trace.error() {
         Error::OutOfScopeToolCall {
             name,
             global_exists,
@@ -211,7 +211,7 @@ fn with_dynamic_offers_a_name_outside_both_sets_fails_listing_only_the_static_se
         }
         other => panic!("expected OutOfScopeToolCall, got {other:?}"),
     }
-    let message = trace.error().inner().to_string();
+    let message = trace.error().to_string();
     assert!(
         message.ends_with(
             "; a Dynamic Set tool is reached through GetDynamicTools and CallDynamicTool"
@@ -227,7 +227,7 @@ fn a_section_without_a_dynamic_set_is_told_nothing_about_the_discovery_tools() {
     // so naming one would point a model at a tool its round cannot call.
     let gateway = ScriptedChat::new(vec![calls(&[("call_1", "rogue", "{}")])]);
     let trace = scoped_loop("").chat(&gateway).run();
-    let message = trace.error().inner().to_string();
+    let message = trace.error().to_string();
     assert!(
         message.ends_with("aliases this section offers: [\"scoped\"]"),
         "the message ends at the Static Set: {message}"
@@ -254,7 +254,7 @@ fn a_static_tool_wearing_a_discovery_wire_name_does_not_claim_a_dynamic_set() {
         .offer("CallDynamicTool", scoped_tool("call", "Call.").0)
         .chat(&gateway)
         .run();
-    let error = trace.error().inner();
+    let error = trace.error();
     match error {
         Error::OutOfScopeToolCall {
             has_dynamic_set,
@@ -290,7 +290,7 @@ fn model_calling_pure_unknown_tool_is_a_hard_error() {
         .offer("echo", echo_tool())
         .chat(&gateway)
         .run();
-    let error = trace.error().inner();
+    let error = trace.error();
     match error {
         Error::OutOfScopeToolCall {
             name,

@@ -114,7 +114,7 @@ fn cancelling_a_task_withdraws_its_unanswered_tool_calls() {
     }
     run.resume(linger, chat_answer(&text("done")));
     let result = match run.step() {
-        Step::Done { result, .. } => result,
+        Step::Done { outcome, .. } => outcome,
         other @ Step::Pending { .. } => panic!("Main's second round ends the run: {other:?}"),
     };
     assert_eq!(text_of(result), "cancelled");
@@ -141,7 +141,7 @@ fn a_call_issued_and_withdrawn_in_one_step_is_listed_twice() {
         run.resume(*id, answer);
     }
     let result = match run.step() {
-        Step::Done { result, .. } => result,
+        Step::Done { outcome, .. } => outcome,
         other @ Step::Pending { .. } => panic!("Main's second round ends the run: {other:?}"),
     };
     assert_eq!(text_of(result), "cancelled");
@@ -169,13 +169,13 @@ fn a_decided_run_lists_no_withdrawn_calls() {
         run.resume(id, EffectAnswer::Dropped);
     }
     let result = match run.step() {
-        Step::Done { result, .. } => result,
+        Step::Done { outcome, .. } => outcome,
         other @ Step::Pending { .. } => {
             panic!("every orphan is answered, so the run is done: {other:?}")
         }
     };
     assert!(
-        matches!(result, RunResult::Cancelled),
+        matches!(result, RunOutcome::Cancelled),
         "the run ends cancelled: {result:?}"
     );
 }
@@ -245,7 +245,7 @@ fn one_step_lists_every_tasks_withdrawn_calls_in_effect_id_order() {
     };
     run.resume(linger, chat_answer(&text("done")));
     let result = match run.step() {
-        Step::Done { result, .. } => result,
+        Step::Done { outcome, .. } => outcome,
         other @ Step::Pending { .. } => panic!("Main's second round ends the run: {other:?}"),
     };
     assert_eq!(text_of(result), "cancelled");

@@ -98,7 +98,7 @@ fn a_failed_h1_assertion_ends_the_run_as_requirements_unmet() {
     let trace = h1_scenario(md).run();
 
     let error = trace.error();
-    let notice = match error.inner() {
+    let notice = match error {
         Error::RequirementsUnmet { notice, .. } => notice,
         other => panic!("the failed assertion classifies as RequirementsUnmet: {other:?}"),
     };
@@ -135,7 +135,7 @@ fn an_uncaught_h1_assertion_reports_the_chunk_failed() {
 
     let error = trace.error();
     assert!(
-        matches!(error.inner(), Error::RequirementsUnmet { .. }),
+        matches!(error, Error::RequirementsUnmet { .. }),
         "the failed gate classifies as RequirementsUnmet: {error}"
     );
     let observed = sequence(&trace);
@@ -161,7 +161,7 @@ fn an_h1_scalar_return_still_reads_var_back() {
 
     let error = trace.error();
     assert!(
-        matches!(error.inner(), Error::Lua { cause: None, .. }),
+        matches!(error, Error::Lua { cause: None, .. }),
         "the read-back failure is machinery around the prompt's chunk, \
          not the failed gate, so it keeps the Lua kind: {error}"
     );
@@ -190,7 +190,7 @@ fn a_failing_library_required_from_h1_ends_the_run_as_requirements_unmet() {
 
     let error = trace.error();
     assert!(
-        matches!(error.inner(), Error::RequirementsUnmet { .. }),
+        matches!(error, Error::RequirementsUnmet { .. }),
         "the library's raise is the failed H1 gate: {error}"
     );
     let cause = error

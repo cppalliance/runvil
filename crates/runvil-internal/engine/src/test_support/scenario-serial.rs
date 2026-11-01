@@ -10,7 +10,7 @@ use runvil_types::ids::{Provenance, TaskId};
 use super::super::perform_locally;
 use super::super::scripted_chat::{ScriptedReply, text};
 use crate::execute::{
-    Effect, EffectAnswer, EffectId, EffectRecord, IssuedEffect, Run, RunResult, Step,
+    Effect, EffectAnswer, EffectId, EffectRecord, IssuedEffect, Run, RunOutcome, Step,
 };
 
 /// The answer a `Chat` effect gets from the scripted model's `reply`,
@@ -75,9 +75,9 @@ pub(crate) fn infer_prompt(effect: &Effect) -> String {
 
 /// The text of a run that succeeded; panics on any other outcome.
 #[track_caller]
-pub(crate) fn text_of(result: RunResult) -> String {
-    match result {
-        RunResult::Completed(text) => text,
+pub(crate) fn text_of(outcome: RunOutcome) -> String {
+    match outcome {
+        RunOutcome::Completed { final_text } => final_text,
         other => panic!("the run succeeds: {other:?}"),
     }
 }
@@ -101,7 +101,7 @@ pub(crate) enum Batching {
 /// Everything one driven run produced, in the forms the properties
 /// compare.
 pub(crate) struct Outcome {
-    pub(crate) result: RunResult,
+    pub(crate) result: RunOutcome,
     pub(crate) events: Vec<Event>,
     pub(crate) effects: Vec<(Provenance, EffectRecord)>,
 }
@@ -130,7 +130,7 @@ impl Outcome {
     #[track_caller]
     pub(crate) fn text(&self) -> &str {
         match &self.result {
-            RunResult::Completed(text) => text,
+            RunOutcome::Completed { final_text } => final_text,
             other => panic!("the run succeeds: {other:?}"),
         }
     }
@@ -145,12 +145,12 @@ pub(crate) fn drive_batched(mut run: Run, batching: Batching) -> Outcome {
     loop {
         match run.step() {
             Step::Done {
-                result,
+                outcome,
                 events: more,
             } => {
                 events.extend(more);
                 return Outcome {
-                    result,
+                    result: outcome,
                     events,
                     effects,
                 };

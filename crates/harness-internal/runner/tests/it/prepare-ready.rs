@@ -450,7 +450,13 @@ async fn a_cancel_that_lands_while_a_refusal_is_recorded_leaves_the_report_holdi
         .run_id
         .expect("the run began at the recorder before the refusal");
     assert!(
-        matches!(&report.outcome, RunOutcome::Failed { kind, .. } if kind == "RequirementsUnmet"),
+        matches!(
+            report.outcome,
+            RunOutcome::Failed {
+                kind: RunErrorKind::RequirementsUnmet,
+                ..
+            }
+        ),
         "the refusal was decided before the cancel landed: {:?}",
         report.outcome
     );

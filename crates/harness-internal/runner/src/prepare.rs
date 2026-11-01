@@ -47,7 +47,9 @@ use crate::display_chain::display_chain;
 use crate::files::{InputFileError, stage_input};
 use crate::host::HostContext;
 use crate::performers::{InferenceBroker, Performers, Timer};
-use crate::recorder::{Record, RecordKind, RecorderError, RunId, RunMeta, RunOutcome, RunRecorder};
+use crate::recorder::{
+    Record, RecordKind, RecorderError, RunErrorKind, RunId, RunMeta, RunOutcome, RunRecorder,
+};
 
 /// What the caller owns and preparation borrows: the Host's built
 /// Packs and the run's own services, the real directories, the run's
@@ -122,8 +124,8 @@ pub struct Prepared {
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
 pub enum PrepareError {
-    /// The prompt does not parse. The run is ended as failed; the parse
-    /// failure is the source.
+    /// The prompt does not parse. The run is ended as failed with kind
+    /// `Parse`; the parse failure is the source.
     #[error("the prompt does not parse")]
     Parse {
         /// The run, ended with this failure.
@@ -135,7 +137,8 @@ pub enum PrepareError {
     /// The prompt's declared input file could not be put in place: the
     /// launch supplied text the prompt declares no file for, the prompt
     /// declares a file that is neither supplied nor in the store, or the
-    /// store refused. The run is ended as failed with kind `Input`.
+    /// store refused. The run is ended as failed with kind
+    /// `RequirementsUnmet`, or `Vfs` when the store refused.
     #[error("the prompt's declared input file cannot be put in place")]
     Input {
         /// The run, ended with this refusal.
@@ -163,8 +166,10 @@ impl PrepareError {
     /// nothing, the run the recorder issued and its refusal.
     pub(crate) fn ended(self) -> Result<(RunId, RunOutcome), (Option<RunId>, RecorderError)> {
         match self {
-            PrepareError::Parse { run_id, source } => Ok((run_id, failed("Parse", &source))),
-            PrepareError::Input { run_id, source } => Ok((run_id, failed("Input", &source))),
+            PrepareError::Parse { run_id, source } => {
+                Ok((run_id, failed(RunErrorKind::Parse, &source)))
+            }
+            PrepareError::Input { run_id, source } => Ok((run_id, failed(source.kind(), &source))),
             PrepareError::Recorder { run, source } => Err((run, source)),
         }
     }
@@ -240,7 +245,7 @@ pub async fn prepare(
         Ok(prompt) => prompt,
         Err(source) => {
             recorder
-                .end_run(run_id, failed("Parse", &source))
+                .end_run(run_id, failed(RunErrorKind::Parse, &source))
                 .await
                 .map_err(recorded)?;
             return Err(PrepareError::Parse { run_id, source });
@@ -252,7 +257,7 @@ pub async fn prepare(
     let declared = prompt.frontmatter().input().map(FileDecl::path);
     if let Err(source) = stage_input(&vfs, declared, input_text) {
         recorder
-            .end_run(run_id, failed("Input", &source))
+            .end_run(run_id, failed(source.kind(), &source))
             .await
             .map_err(recorded)?;
         return Err(PrepareError::Input { run_id, source });
@@ -310,11 +315,11 @@ pub async fn prepare(
     })
 }
 
-/// The failed outcome of a run that ended in preparation: `kind` names the
-/// stage and the message is the cause chain.
-fn failed(kind: &str, source: &dyn std::error::Error) -> RunOutcome {
+/// The failed outcome of a run that ended in preparation: `kind` is the
+/// Engine's kind for the failure and the message is the cause chain.
+fn failed(kind: RunErrorKind, source: &dyn std::error::Error) -> RunOutcome {
     RunOutcome::Failed {
-        kind: kind.to_owned(),
+        kind,
         message: display_chain(source),
     }
 }

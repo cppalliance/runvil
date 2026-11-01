@@ -1,6 +1,6 @@
 //! Tests for the internal error: its source chains through the public
-//! wrappers, its bridges from other crates' errors, and the locations and
-//! classifications it reports through `RunError`.
+//! wrappers, its bridges from other crates' errors, and the kinds and
+//! messages, locations included, it ends a run with.
 
 use runvil_lua::Error as LuaError;
 
@@ -35,20 +35,15 @@ fn context_exhaustion_maps_from_lua_and_classifies() {
             "a variant with no originating error has no cause"
         );
         assert_eq!(error.to_string(), message);
-        let run_error = crate::RunError::from(error);
-        assert_eq!(run_error.kind(), crate::RunErrorKind::ContextExhausted);
-        assert!(
-            !run_error.is_retryable(),
-            "retrying an over-window request cannot succeed"
-        );
+        assert_eq!(error.kind(), crate::RunErrorKind::ContextExhausted);
+        assert_eq!(error.message(), message);
     }
 }
 
 #[test]
 fn a_schema_build_failure_renders_its_refusal_and_keeps_it_as_the_cause() {
-    // The binding failure renders the schema refusal in its message and
-    // keeps the typed refusal as its cause, which the public `RunError`
-    // wrapper reaches.
+    // The binding failure renders the schema refusal in its message once
+    // and keeps the typed refusal as its cause.
     let schema_error =
         runvil_model_client::detail::tool_schema_new("echo", "", serde_json::json!([]))
             .expect_err("an array is not an object schema");
@@ -61,8 +56,8 @@ fn a_schema_build_failure_renders_its_refusal_and_keeps_it_as_the_cause() {
         "model-facing schema build failure for tool alias \"echo\": tool \"echo\" parameters \
          schema must be a JSON object"
     );
-    let run_error = crate::RunError::from(bind);
-    let cause = run_error
+    assert_eq!(bind.message(), bind.to_string());
+    let cause = bind
         .originating_error()
         .and_then(|cause| cause.downcast_ref::<runvil_model_client::client::ToolSchemaError>());
     assert!(cause.is_some(), "the schema refusal is the cause");
@@ -71,8 +66,7 @@ fn a_schema_build_failure_renders_its_refusal_and_keeps_it_as_the_cause() {
 #[test]
 fn lua_compile_keeps_the_originating_compiler_error_as_its_cause() {
     // A compile failure keeps the concrete `mlua` error as its cause
-    // instead of flattening it into `message` alone, and the public
-    // `RunError` wrapper reaches it.
+    // instead of flattening it into `message` alone.
     let compile = Error::LuaCompile {
         location: "section `S` prologue".to_owned(),
         source_line: 7,
@@ -88,7 +82,6 @@ fn lua_compile_keeps_the_originating_compiler_error_as_its_cause() {
         .and_then(|cause| cause.downcast_ref::<mlua::Error>())
         .expect("the compiler error is the cause");
     assert!(matches!(cause, mlua::Error::SyntaxError { .. }));
-    assert!(crate::RunError::from(compile).originating_error().is_some());
 }
 
 #[test]
@@ -150,11 +143,10 @@ fn completion_errors_preserve_their_causes_across_the_error_type_bridge() {
 }
 
 #[test]
-fn frontmatter_locations_surface_through_the_run_error() {
+fn a_frontmatter_failure_message_ends_with_its_line_and_column() {
     // The parser's surfaced YAML position crosses the error-type
-    // bridge and lands on `RunError::location` for navigation. A
-    // frontmatter failure predates the prompt's name, so the path is
-    // the placeholder a caller replaces with its own label for the source.
+    // bridge and ends the run's failure message. A frontmatter failure
+    // predates the prompt's name, so the message names no prompt.
     let source = concat!(
         "---\n",
         "name: x\n",
@@ -167,67 +159,57 @@ fn frontmatter_locations_surface_through_the_run_error() {
     let parse = Prompt::parse(source, "test")
         .0
         .expect_err("a Pack id with spaces must be rejected");
-    let run_error = crate::RunError::from(Error::from(parse));
-    assert_eq!(run_error.kind(), crate::RunErrorKind::Parse);
-    let location = run_error
-        .location()
-        .expect("a parse failure reports a location");
-    assert_eq!(location.line, Some(5));
-    assert_eq!(location.column, Some(5));
-    assert_eq!(location.span, None);
+    let error = Error::from(parse);
+    assert_eq!(error.kind(), crate::RunErrorKind::Parse);
+    assert_eq!(error.message(), format!("{error} (line 5, column 5)"));
 }
 
 #[test]
-fn structured_locations_include_the_prompt_name_through_the_run_error() {
-    // A post-frontmatter parse failure reports the prompt's
-    // frontmatter name as the location's path, plus the offending
-    // span's line and column.
+fn a_structured_failure_message_ends_with_the_prompt_name_and_position() {
+    // A post-frontmatter parse failure ends its message with the
+    // prompt's frontmatter name and the offending span's line and
+    // column.
     let source = "---\nname: dup\ndescription: d\n---\n\n# T\n\n## S\n\np\n\n## S\n\nq\n";
     let parse = Prompt::parse(source, "test")
         .0
         .expect_err("duplicate sibling sections must be rejected");
-    let run_error = crate::RunError::from(Error::from(parse));
-    let location = run_error
-        .location()
-        .expect("a structured parse failure reports a location");
-    assert_eq!(location.path, "dup");
-    assert_eq!(location.line, Some(12));
-    assert_eq!(location.column, Some(1));
-    assert!(location.span.is_some());
+    let error = Error::from(parse);
+    assert_eq!(
+        error.message(),
+        format!("{error} (prompt dup, line 12, column 1)")
+    );
 }
 
 #[test]
-fn internal_faults_report_the_rust_file_and_line() {
+fn an_internal_fault_message_ends_with_the_rust_file_and_line() {
     // An internal invariant failure locates itself in the Rust
     // source, captured at the construction site.
     let expected_line = line!() + 1;
-    let run_error = crate::RunError::from(Error::internal("a test invariant"));
-    let location = run_error
-        .location()
-        .expect("an internal fault reports a location");
-    assert_eq!(location.path, file!(), "the path is the Rust source file");
-    assert_eq!(location.line, Some(expected_line));
-    assert_eq!(location.column, None);
+    let error = Error::internal("a test invariant");
+    assert_eq!(
+        error.message(),
+        format!(
+            "internal invariant violated: a test invariant (at {}:{expected_line})",
+            file!()
+        )
+    );
 }
 
 #[test]
-fn errors_without_a_location_return_none() {
+fn a_failure_without_a_location_ends_its_message_with_its_own_text() {
     // Cancellation and the other non-positional kinds have no source
-    // position to navigate to.
-    let run_error = crate::RunError::from(Error::Interrupted);
-    assert!(run_error.location().is_none());
+    // position to point at.
+    let error = Error::Interrupted;
+    assert_eq!(error.message(), error.to_string());
 }
 
 #[test]
 fn interrupted_and_substitution_failures_classify_under_kinds_a_finished_run_reports() {
-    // A finished run reports cancellation as `RunResult::Cancelled`, so an
-    // interruption that reaches a `RunError` is the Engine's fault, and a
-    // failed `{{ }}` substitution is the author's program failing, as any
+    // A finished run reports cancellation as `RunOutcome::Cancelled`, so an
+    // interruption that reaches a failed outcome is the Engine's fault, and
+    // a failed `{{ }}` substitution is the author's program failing, as any
     // Lua fault is.
-    assert_eq!(
-        crate::RunError::from(Error::Interrupted).kind(),
-        crate::RunErrorKind::Internal
-    );
+    assert_eq!(Error::Interrupted.kind(), crate::RunErrorKind::Internal);
     let (var, sys) = (serde_json::json!({}), serde_json::json!({}));
     let unset = |_: &str| -> Result<Option<serde_json::Value>> { Ok(None) };
     let sources = crate::subst::Sources {
@@ -241,26 +223,20 @@ fn interrupted_and_substitution_failures_classify_under_kinds_a_finished_run_rep
     let error = crate::subst::substitute("{{ var.missing }}", &sources)
         .expect_err("a missing key fails the substitution");
     assert!(matches!(error, Error::Substitution(_)), "{error:?}");
-    assert_eq!(
-        crate::RunError::from(error).kind(),
-        crate::RunErrorKind::Lua
-    );
+    assert_eq!(error.kind(), crate::RunErrorKind::Lua);
 }
 
 #[test]
 fn requirements_unmet_classifies_and_reports_the_notice_as_its_message() {
-    // The refusal notice is the whole Display, and the kind classifies
-    // it for code. Retrying cannot help: the
-    // environment, not the transport, is what falls short.
+    // The refusal notice is the whole message, and the kind classifies
+    // it for code.
     let error = Error::RequirementsUnmet {
         notice: "the environment cannot satisfy this prompt:\n- role 'strong': requires a context of at least 200000 tokens; the model filling it provides 32000".to_owned(),
         cause: None,
     };
-    let run_error = crate::RunError::from(error);
-    assert_eq!(run_error.kind(), crate::RunErrorKind::RequirementsUnmet);
-    assert!(!run_error.is_retryable());
-    assert!(run_error.location().is_none());
-    assert!(run_error.to_string().contains("strong"));
+    assert_eq!(error.kind(), crate::RunErrorKind::RequirementsUnmet);
+    assert_eq!(error.message(), error.to_string());
+    assert!(error.message().contains("strong"));
 }
 
 #[test]
@@ -277,11 +253,9 @@ fn the_call_depth_cap_is_a_quota_that_lua_still_reads_as_lua() {
             runvil_lua::ErrorValue::kind(&error),
             runvil_lua::ErrorKind::Lua
         );
-        let run_error = crate::RunError::from(error);
-        assert_eq!(run_error.kind(), crate::RunErrorKind::Quota);
-        assert!(!run_error.is_retryable());
-        assert!(run_error.location().is_none());
-        assert!(run_error.originating_error().is_none());
+        assert_eq!(error.kind(), crate::RunErrorKind::Quota);
+        assert_eq!(error.message(), text);
+        assert!(error.originating_error().is_none());
     }
 }
 
@@ -304,17 +278,15 @@ fn an_owned_lua_internal_message_reaches_the_engine_error_whole() {
         error.to_string(),
         format!("internal invariant violated: {message}")
     );
-    let run_error = crate::RunError::from(error);
-    assert_eq!(run_error.kind(), crate::RunErrorKind::Internal);
-    let location = run_error
-        .location()
-        .expect("an internal fault reports a location");
+    assert_eq!(error.kind(), crate::RunErrorKind::Internal);
     assert_eq!(
-        location.path,
-        file!(),
-        "the path is the construction site's file"
+        error.message(),
+        format!(
+            "internal invariant violated: {message} (at {}:{expected_line})",
+            file!()
+        ),
+        "the message ends with the construction site's file and line"
     );
-    assert_eq!(location.line, Some(expected_line));
 }
 
 /// One failure of each store variant, with fields a table can carry.

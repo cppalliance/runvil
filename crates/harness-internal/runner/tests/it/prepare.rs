@@ -18,7 +18,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use harness_runner::effect_loop::drive_run;
 use harness_runner::prepare::{PrepareError, Prepared, Services, prepare};
-use harness_runner::recorder::{MemoryRecorder, RecordKind, RunId, RunOutcome};
+use harness_runner::recorder::{MemoryRecorder, RecordKind, RunErrorKind, RunId, RunOutcome};
 use harness_runner::{HostContext, display_chain};
 use runvil::cancel::CancelHandle;
 use runvil::event::Event;
@@ -193,7 +193,7 @@ async fn an_unmet_requirement_ends_the_prepared_run_as_failed_with_the_engines_n
     assert_eq!(
         outcome,
         RunOutcome::Failed {
-            kind: "RequirementsUnmet".to_owned(),
+            kind: RunErrorKind::RequirementsUnmet,
             message: notice.to_owned(),
         },
         "the failure is the engine's notice, verbatim"
@@ -224,7 +224,7 @@ async fn a_prompt_that_does_not_parse_fails_preparation_and_its_run_ends_as_a_pa
     assert_eq!(
         recorder.outcome(run_id),
         Some(RunOutcome::Failed {
-            kind: "Parse".to_owned(),
+            kind: RunErrorKind::Parse,
             message: display_chain(&source),
         }),
         "the recorder holds the parse failure and its cause chain under the Parse kind"
@@ -351,7 +351,10 @@ pub(crate) async fn drive_over(source: &str, host: HostContext) -> RunOutcome {
 #[track_caller]
 pub(crate) fn refusal(outcome: RunOutcome) -> String {
     match outcome {
-        RunOutcome::Failed { kind, message } if kind == "RequirementsUnmet" => message,
+        RunOutcome::Failed {
+            kind: RunErrorKind::RequirementsUnmet,
+            message,
+        } => message,
         other => panic!("the run's first step refuses it: {other:?}"),
     }
 }

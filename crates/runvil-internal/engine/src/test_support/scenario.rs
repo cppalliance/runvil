@@ -30,7 +30,7 @@ use runvil_vfs::VfsRef;
 use super::FnTool;
 use super::scripted_chat::ScriptedChat;
 use crate::Error;
-use crate::execute::{Effect, EffectAnswer, Run, RunContext, RunError, RunLimits};
+use crate::execute::{Effect, EffectAnswer, Run, RunContext, RunLimits};
 use crate::lua::ToolBinding;
 use crate::model::{
     CompletionErrorKind, ModelBinding, ModelId, ModelInfo, ModelRole, ModelSet, ThinkingMode,
@@ -96,8 +96,8 @@ pub(crate) fn test_binding(alias: &str, description: &str, model: &str) -> Model
 
 /// Asserts `error` is a model failure of `kind` whose message is `message`.
 #[track_caller]
-pub(crate) fn assert_model_failure(error: &RunError, kind: CompletionErrorKind, message: &str) {
-    let Error::Completion(failure) = error.inner() else {
+pub(crate) fn assert_model_failure(error: &Error, kind: CompletionErrorKind, message: &str) {
+    let Error::Completion(failure) = error else {
         panic!("expected a model failure, got {error:?}");
     };
     assert_eq!(
@@ -344,7 +344,7 @@ impl Scenario {
         });
         Driving {
             run,
-            result: None,
+            outcome: None,
             answers,
             parsed: events.len(),
             events,

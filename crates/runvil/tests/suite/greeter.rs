@@ -2,7 +2,7 @@
 //! `examples/greeter.rs`.
 
 use runvil::effect::{Effect, EffectAnswer};
-use runvil::{Prompt, RunResult};
+use runvil::{Prompt, RunOutcome};
 
 use super::support::{Scenario, TestResult, note, prompt, shout, text};
 
@@ -73,7 +73,7 @@ fn a_cancel_from_another_thread_ends_the_run_cancelled_once_held_effects_drop() 
         .map_err(|_| "the cancelling thread panicked")?;
 
     assert!(driver.pump()? == 0 && driver.run.decided());
-    assert!(matches!(driver.finish()?.result, RunResult::Cancelled));
+    assert_eq!(driver.finish()?.outcome, RunOutcome::Cancelled);
     Ok(())
 }
 

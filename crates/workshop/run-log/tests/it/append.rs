@@ -3,7 +3,7 @@
 use harness::record::RunSeed;
 use serde_json::json;
 use workshop_run_log::{
-    LogError, Record, RecordFilter, RecordKind, RunId, RunLog, RunMeta, RunOutcome,
+    LogError, Record, RecordFilter, RecordKind, RunErrorKind, RunId, RunLog, RunMeta, RunOutcome,
 };
 
 /// Every record of a run, in loop order.
@@ -219,7 +219,7 @@ async fn a_failed_outcome_keeps_its_kind_and_message() {
     let mut log = RunLog::in_memory().await.unwrap();
     let run = log.begin_run(meta(), AGENT).await.unwrap();
     let outcome = RunOutcome::Failed {
-        kind: "tool".to_owned(),
+        kind: RunErrorKind::Tool,
         message: "expected a reply, got nothing".to_owned(),
     };
     log.end_run(run, outcome.clone()).await.unwrap();
@@ -231,6 +231,66 @@ async fn a_failed_outcome_keeps_its_kind_and_message() {
         log.run(run).await.unwrap().outcome,
         Some(RunOutcome::Cancelled)
     );
+}
+
+#[tokio::test]
+async fn a_stored_kind_the_engine_does_not_name_reads_as_internal_with_its_message() {
+    // Each run ends as a `RequirementsUnmet` failure, and its stored kind
+    // is then set as an older build may have written it.
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("runs.db");
+    let message = "the input file could not be put in place";
+    for (stored, read) in [
+        ("Vfs", RunErrorKind::Vfs),
+        ("Input", RunErrorKind::Internal),
+    ] {
+        let run = {
+            let mut log = RunLog::open(&path).await.unwrap();
+            let run = log.begin_run(meta(), AGENT).await.unwrap();
+            let failed = RunOutcome::Failed {
+                kind: RunErrorKind::RequirementsUnmet,
+                message: message.to_owned(),
+            };
+            log.end_run(run, failed).await.unwrap();
+            run
+        };
+        let raw = turso::Builder::new_local(path.to_str().unwrap())
+            .build()
+            .await
+            .unwrap()
+            .connect()
+            .unwrap();
+        let mut rows = raw
+            .query(
+                "SELECT error_kind FROM runs WHERE run_id = ?1",
+                (run.get(),),
+            )
+            .await
+            .unwrap();
+        let written: String = rows.next().await.unwrap().unwrap().get(0).unwrap();
+        assert_eq!(
+            written, "RequirementsUnmet",
+            "the column holds the kind's tag"
+        );
+        drop(rows);
+        raw.execute(
+            "UPDATE runs SET error_kind = ?2 WHERE run_id = ?1",
+            (run.get(), stored),
+        )
+        .await
+        .unwrap();
+        drop(raw);
+
+        let log = RunLog::open(&path).await.unwrap();
+        assert_eq!(
+            log.run(run).await.unwrap().outcome,
+            Some(RunOutcome::Failed {
+                kind: read,
+                message: message.to_owned(),
+            }),
+            "the stored tag {stored:?} reads as {read:?} and keeps its message"
+        );
+    }
 }
 
 #[tokio::test]

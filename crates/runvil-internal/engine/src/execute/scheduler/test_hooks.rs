@@ -105,6 +105,11 @@ impl Scheduler {
         self.ctx.turns().load(Ordering::Relaxed)
     }
 
+    /// Takes the error behind the failed outcome the last `Done` carried.
+    pub(crate) fn take_failure_for_test(&mut self) -> Option<Error> {
+        self.failure.take()
+    }
+
     /// Starts a chain over the top-level slice at `index`, as a jump out
     /// of the H1 pass starts the walk, and returns the section name the
     /// chain reports before its first entry.

@@ -22,9 +22,9 @@ fn pre_cancelled_fanout_returns_interrupted() {
     driving.cancel();
     let trace = driving.finish();
     assert!(
-        matches!(trace.result(), RunResult::Cancelled),
+        matches!(trace.outcome(), RunOutcome::Cancelled),
         "a pre-cancelled fanout must interrupt the run, got {:?}",
-        trace.result()
+        trace.outcome()
     );
 }
 
@@ -46,7 +46,7 @@ fn model_required_when_arm_infer_has_no_binding() {
     let trace = Scenario::new(md).run();
     let error = trace.error();
     assert!(
-        matches!(error.inner(), Error::ModelRequired { .. }),
+        matches!(error, Error::ModelRequired { .. }),
         "expected ModelRequired, got {error}"
     );
     assert!(

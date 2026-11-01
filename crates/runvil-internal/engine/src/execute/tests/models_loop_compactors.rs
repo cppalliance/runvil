@@ -24,7 +24,7 @@ fn an_omitted_compactor_defaults_to_fail_with_typed_precheck_exhaustion() {
          return 'unreachable'",
     );
     let trace = loop_scenario(source).chat(&gateway).run();
-    let error = trace.error().inner();
+    let error = trace.error();
     assert!(
         matches!(error, Error::ContextExhausted { reason, .. } if reason == "precheck"),
         "the omitted compactor defaults to compactors.fail with the precheck reason, got {error:?}"
@@ -67,7 +67,7 @@ fn an_explicit_compactors_fail_invocation_reports_the_provider_reason() {
          return 'unreachable'",
     );
     let trace = loop_scenario(source).chat(&gateway).run();
-    let error = trace.error().inner();
+    let error = trace.error();
     assert!(
         matches!(error, Error::ContextExhausted { reason, .. } if reason == "provider"),
         "the explicit compactors.fail invocation reports the provider reason, got {error:?}"
@@ -91,9 +91,8 @@ fn an_uncaught_compactors_fail_with_a_callers_reason_ends_the_run_as_context_exh
         "the run's message holds the caller's reason, got: {error}"
     );
     assert!(
-        matches!(error.inner(), Error::ContextExhausted { reason, .. } if reason == "manual"),
-        "the reason survives as given, got {:?}",
-        error.inner()
+        matches!(error, Error::ContextExhausted { reason, .. } if reason == "manual"),
+        "the reason survives as given, got {error:?}"
     );
     assert_eq!(
         gateway.call_count(),
@@ -117,9 +116,8 @@ fn an_uncaught_direct_compactors_fail_ends_the_run_as_context_exhausted() {
         "the run's message holds the caller's reason, got: {error}"
     );
     assert!(
-        matches!(error.inner(), Error::ContextExhausted { reason, .. } if reason == "manual"),
-        "the reason survives as given, got {:?}",
-        error.inner()
+        matches!(error, Error::ContextExhausted { reason, .. } if reason == "manual"),
+        "the reason survives as given, got {error:?}"
     );
     assert_eq!(gateway.call_count(), 0, "no request leaves");
 }
@@ -213,9 +211,9 @@ fn cancel_during_a_looping_compactor_returns_promptly() {
         .cancel_when(|effect| matches!(effect, Effect::Chat { .. }))
         .run();
     assert!(
-        matches!(trace.result(), RunResult::Cancelled),
+        matches!(trace.outcome(), RunOutcome::Cancelled),
         "expected the cancelled run, got {:?}",
-        trace.result()
+        trace.outcome()
     );
     assert_eq!(
         gateway.call_count(),
@@ -237,7 +235,7 @@ fn a_compactors_own_string_raise_reaches_the_caller_with_the_reason_tag() {
          return 'unreachable'",
     );
     let trace = loop_scenario(source).chat_with(overflowing(&rounds)).run();
-    match trace.error().inner() {
+    match trace.error() {
         Error::Lua {
             message,
             cause: Some(_),

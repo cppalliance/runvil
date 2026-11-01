@@ -13,6 +13,11 @@
 //! serializes its own state. A recorder that fails stops its run: the
 //! Harness never skips a record. A Host that prefers to keep running logs
 //! the failure inside its recorder and returns `Ok`.
+//!
+//! A run's end is the Engine's [`RunOutcome`], as the run's last step
+//! returned it. A run that ends before the Engine runs it, because its
+//! prompt does not parse or its input cannot be put in place, ends with a
+//! failed outcome of the Engine's kind for that failure.
 
 use std::error::Error;
 use std::fmt;
@@ -20,6 +25,7 @@ use std::future::Future;
 use std::pin::Pin;
 
 use runvil::RunSeed;
+pub use runvil::{RunErrorKind, RunOutcome};
 
 #[path = "recorder-memory.rs"]
 mod memory;
@@ -187,36 +193,4 @@ pub struct Record {
     pub effect_id: Option<u64>,
     /// The serialized `EffectRecord`, `EffectAnswer`, or `Event`.
     pub payload: serde_json::Value,
-}
-
-/// How a run ended. Mirrors the Engine's `RunResult`.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum RunOutcome {
-    /// The run completed with its final text.
-    Completed {
-        /// The run's final text.
-        final_text: String,
-    },
-    /// The run failed.
-    Failed {
-        /// The failure's classification.
-        kind: String,
-        /// The failure's message.
-        message: String,
-    },
-    /// The Host cancelled the run.
-    Cancelled,
-}
-
-impl RunOutcome {
-    /// The text that stores this outcome: `completed`, `failed`, or
-    /// `cancelled`.
-    #[must_use]
-    pub const fn as_str(&self) -> &'static str {
-        match self {
-            Self::Completed { .. } => "completed",
-            Self::Failed { .. } => "failed",
-            Self::Cancelled => "cancelled",
-        }
-    }
 }

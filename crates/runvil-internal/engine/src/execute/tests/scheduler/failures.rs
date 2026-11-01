@@ -28,7 +28,7 @@ fn two_arms_appending_one_path_boom_without_any_other_suspension() {
         ```\n";
     let trace = scheduler_scenario(md).run();
 
-    match trace.error().inner() {
+    match trace.error() {
         Error::Determinism(detail) => {
             assert!(detail.contains("log.txt"), "error was: {detail}");
         }
@@ -108,7 +108,7 @@ fn fatal_arm_aborts_queued_siblings() {
         ```\n";
     let trace = scheduler_scenario(md).limits(ceiling(1)).run();
 
-    let error = trace.error().inner();
+    let error = trace.error();
     assert!(
         !matches!(error, Error::Interrupted),
         "expected a fatal arm error, got {error}"
@@ -158,7 +158,7 @@ fn fatal_arm_aborts_an_in_flight_sibling() {
         return a\n\
         ```\n";
     let rig = Rig::run(scheduler_scenario(md).chat(&gateway).hold(asks("slow:1")));
-    let error = rig.trace().error().inner();
+    let error = rig.trace().error();
 
     assert!(
         !matches!(error, Error::Interrupted),
@@ -265,9 +265,9 @@ fn cancellation_while_suspended_in_a_fanout_arm_interrupts_the_run() {
     let rig = rig.finish();
 
     assert!(
-        matches!(rig.trace().result(), RunResult::Cancelled),
+        matches!(rig.trace().outcome(), RunOutcome::Cancelled),
         "cancelling suspended arms must interrupt the run, got {:?}",
-        rig.trace().result()
+        rig.trace().outcome()
     );
     assert_eq!(
         issued_prompts(&rig),
@@ -391,7 +391,7 @@ fn an_answer_for_an_unknown_request_id_fails_loudly() {
     let rig = rig.finish();
 
     assert!(
-        matches!(rig.trace().error().inner(), Error::Internal { message, .. } if message.contains("did not issue")),
+        matches!(rig.trace().error(), Error::Internal { message, .. } if message.contains("did not issue")),
         "the unknown answer is a loud invariant failure: {:?}",
         rig.trace().error()
     );
@@ -418,7 +418,7 @@ fn aborting_an_effect_that_is_not_outstanding_records_no_orphan() {
     let rig = rig.finish();
 
     assert!(
-        matches!(rig.trace().error().inner(), Error::Internal { message, .. } if message.contains("did not issue")),
+        matches!(rig.trace().error(), Error::Internal { message, .. } if message.contains("did not issue")),
         "the answer for the never-issued id still fails loudly: {:?}",
         rig.trace().error()
     );

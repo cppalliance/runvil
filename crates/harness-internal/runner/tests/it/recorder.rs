@@ -8,7 +8,8 @@ use std::sync::Arc;
 
 use harness_runner::display_chain;
 use harness_runner::recorder::{
-    MemoryRecorder, Record, RecordKind, RecorderError, RunId, RunMeta, RunOutcome, RunRecorder,
+    MemoryRecorder, Record, RecordKind, RecorderError, RunErrorKind, RunId, RunMeta, RunOutcome,
+    RunRecorder,
 };
 use serde_json::json;
 
@@ -242,7 +243,7 @@ async fn a_second_end_run_fails_and_keeps_the_first_outcome() {
         .end_run(
             run,
             RunOutcome::Failed {
-                kind: "Late".to_owned(),
+                kind: RunErrorKind::Internal,
                 message: "a second end".to_owned(),
             },
         )
@@ -367,7 +368,7 @@ fn run_outcome_text_names_each_variant() {
         final_text: String::new(),
     };
     let failed = RunOutcome::Failed {
-        kind: "Parse".to_owned(),
+        kind: RunErrorKind::Parse,
         message: "bad".to_owned(),
     };
 

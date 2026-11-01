@@ -6,14 +6,15 @@
 //!
 //! # Module layout
 //!
-//! The run's outcome type ([`RunResult`]) is defined here; the rest lives in
+//! The run's outcome type ([`RunOutcome`]) is defined here; the rest lives in
 //! focused private children:
 //!
 //! - `config` - the public [`RunContext`], which carries the caller's
 //!   role map for the five model roles, and [`RunLimits`]; installing
 //!   Packs and taking each run's catalog from them is the Harness's job.
 //! - `context` - the ambient `RunState` run state.
-//! - `error` - the public [`RunError`] and its stable [`RunErrorKind`].
+//! - `error` - the stable [`RunErrorKind`] of a failed outcome, and the
+//!   kind and message the Engine's own error ends a run with.
 //! - `fill` - the fill function, which builds the model set from the
 //!   caller's role map when the run is built.
 //! - `infer` - the nested-inference round's answer.
@@ -54,7 +55,7 @@ mod walk_target;
 
 // Public API surface.
 pub use config::{RunContext, RunLimits};
-pub use error::{RunError, RunErrorKind, SourceLocation};
+pub use error::RunErrorKind;
 pub use run::{
     AnswerRecord, ChatAnswerRecord, Effect, EffectAnswer, EffectId, EffectRecord, FailureRecord,
     IssuedEffect, PackToolSets, Round, Run, Step, ToolAnswerRecord, ToolCallOrigin, ToolCaller,
@@ -93,31 +94,45 @@ pub fn perform_vfs_op(
 /// Every outcome is a value of this enum. That includes a prompt that
 /// declines its task: a decline is not an error and not a cancellation, so
 /// the run still completes, with the prompt's reason for declining as the
-/// [`Completed`](RunResult::Completed) text. The variant tells code what
+/// [`Completed`](RunOutcome::Completed) text. The variant tells code what
 /// happened, and the payload explains it to people and models.
 ///
-/// This enum is the one outcome type that is `#[non_exhaustive]`, so a
-/// `match` on it needs a wildcard arm, while [`Step`], [`Effect`], and
-/// [`EffectAnswer`] are deliberately closed. Those three are the caller's
-/// protocol: its loop names every kind, so a new kind there must break its
-/// build rather than reach code that cannot handle it. A run's outcome is
-/// the exception because the caller consumes it as a result, and a wildcard
-/// arm that treats an unfamiliar outcome as a failure is a sound default
-/// where an unfamiliar effect kind is not.
-///
-/// A failure's [`RunError`] has a [`kind`](RunError::kind) that classifies
-/// the failure by condition; [`RunErrorKind`] documents each kind.
-#[derive(Debug)]
-#[non_exhaustive]
-pub enum RunResult {
-    /// The run completed with its final text.
-    Completed(String),
+/// Closed on purpose, like [`Step`]: a new outcome breaks every caller's
+/// build rather than reach code that cannot handle it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum RunOutcome {
+    /// The run completed.
+    Completed {
+        /// The run's final text.
+        final_text: String,
+    },
+    /// The run failed.
+    Failed {
+        /// The failure's stable classification; [`RunErrorKind`] documents
+        /// each kind.
+        kind: RunErrorKind,
+        /// The failure's self-contained message, with the text of each
+        /// cause it keeps and, for a parse or internal failure, where it
+        /// happened.
+        message: String,
+    },
     /// The caller cancelled the run or dropped an effect the run was waiting
     /// on and the cancelled error went uncaught, or a block raised a caught
     /// `cancelled` error value again after another suspending call.
     Cancelled,
-    /// The run failed. The error's kind classifies the failure.
-    Failure(RunError),
+}
+
+impl RunOutcome {
+    /// The text that names this outcome: `completed`, `failed`, or
+    /// `cancelled`.
+    #[must_use]
+    pub const fn as_str(&self) -> &'static str {
+        match self {
+            Self::Completed { .. } => "completed",
+            Self::Failed { .. } => "failed",
+            Self::Cancelled => "cancelled",
+        }
+    }
 }
 
 #[cfg(test)]

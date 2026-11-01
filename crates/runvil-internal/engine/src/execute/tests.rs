@@ -64,9 +64,9 @@ fn run_with_a_pre_cancelled_handle_fails_as_cancelled() {
         .context(move |ctx| ctx.with_cancel(handle))
         .run();
     assert!(
-        matches!(trace.result(), RunResult::Cancelled),
+        matches!(trace.outcome(), RunOutcome::Cancelled),
         "a pre-cancelled handle must end the run cancelled, got {:?}",
-        trace.result()
+        trace.outcome()
     );
 }
 

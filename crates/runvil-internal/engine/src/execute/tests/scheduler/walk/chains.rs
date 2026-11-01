@@ -252,7 +252,7 @@ fn a_jump_descent_does_not_consume_call_depth() {
     let error = rig.trace().error();
     assert!(
         matches!(
-            error.inner(),
+            error,
             Error::CallDepthExceeded {
                 cap: 8,
                 via: DepthVia::Call

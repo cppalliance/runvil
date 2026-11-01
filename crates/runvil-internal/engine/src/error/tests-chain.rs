@@ -1,8 +1,9 @@
 //! The error-chain convention: a cause-bearing failure's message holds the
 //! cause's text, its source chain shows that text once, and its cause stays
 //! reachable through `originating_error()`; a variant that still keeps a `source()`
-//! shows each segment of its chain once; an internal failure built with a
-//! cause appends it once; and the store probe names a missing store.
+//! shows each segment of its chain once, and so does the message a run
+//! ends with; an internal failure built with a cause appends it once; and
+//! the store probe names a missing store.
 
 use runvil_lua::VfsOp;
 use runvil_types::tools::{ToolError, ToolErrorKind};
@@ -114,18 +115,17 @@ fn no_segment_of_an_error_chain_repeats() {
             "required no source, since Display already holds the cause, actual a source on \
              {error:?}"
         );
-        let run_error = crate::RunError::from(error);
-        assert!(
-            run_error.originating_error().is_some(),
-            "the public wrapper reaches the cause: {run_error}"
-        );
-        assert_eq!(assert_no_segment_repeats(&run_error), 1);
+        assert_eq!(assert_no_segment_repeats(&error), 1);
     }
     for error in source_bearing() {
-        let run_error = crate::RunError::from(error);
         assert!(
-            assert_no_segment_repeats(&run_error) > 1,
-            "required a chain of at least two segments to walk, actual one for {run_error:?}"
+            assert_no_segment_repeats(&error) > 1,
+            "required a chain of at least two segments to walk, actual one for {error:?}"
+        );
+        assert_eq!(
+            error.message(),
+            chain(&error).join(": "),
+            "the run's message holds each segment of the chain once"
         );
     }
 }
@@ -145,15 +145,14 @@ fn an_internal_failure_built_with_a_cause_shows_its_text_once_and_keeps_it() {
             .as_deref(),
         Some("the cause")
     );
-    let location = crate::RunError::from(error)
-        .location()
-        .expect("an internal fault reports a location");
     assert_eq!(
-        location.path,
-        file!(),
-        "the path is the construction site's"
+        error.message(),
+        format!(
+            "internal invariant violated: a test invariant: the cause (at {}:{expected_line})",
+            file!()
+        ),
+        "the message ends with the construction site's file and line"
     );
-    assert_eq!(location.line, Some(expected_line));
 
     let bare = Error::internal("a test invariant");
     assert!(bare.originating_error().is_none());

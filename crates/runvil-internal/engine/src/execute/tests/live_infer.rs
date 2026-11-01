@@ -203,9 +203,9 @@ fn cancelled_nested_infer_does_not_report_model_turn_failed() {
     cancel.cancel();
     let trace = driving.finish();
     assert!(
-        matches!(trace.result(), RunResult::Cancelled),
+        matches!(trace.outcome(), RunOutcome::Cancelled),
         "cancelling an in-flight infer must interrupt the run: {:?}",
-        trace.result()
+        trace.outcome()
     );
     assert!(
         matches!(

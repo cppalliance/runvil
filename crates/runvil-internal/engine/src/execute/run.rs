@@ -25,7 +25,7 @@ pub use effect::{
 
 use crate::parser::Prompt;
 
-use super::RunResult;
+use super::RunOutcome;
 use super::config::RunContext;
 use super::context::RunState;
 use super::scheduler::Scheduler;
@@ -56,13 +56,13 @@ pub enum Step {
     },
     /// The run is over.
     ///
-    /// Carries the run's result and its last events. A step returns `Done`
+    /// Carries the run's outcome and its last events. A step returns `Done`
     /// only after every issued effect has been answered. The event that
     /// marks the run's end comes with `Done`, or with an earlier `Pending`
     /// step when effects were still outstanding as the run ended.
     Done {
         /// The run's outcome.
-        result: RunResult,
+        outcome: RunOutcome,
         /// The events reported since the previous step.
         events: Vec<Event>,
     },
@@ -123,7 +123,7 @@ impl Run {
     /// requirements failure is a
     /// [`RequirementsUnmet`](super::RunErrorKind::RequirementsUnmet) whose
     /// message names every gap. When the run's cancel flag is set as a
-    /// check fails, the run ends [`Cancelled`](RunResult::Cancelled)
+    /// check fails, the run ends [`Cancelled`](RunOutcome::Cancelled)
     /// instead.
     #[must_use]
     pub fn new(prompt: Arc<Prompt>, args: &str, config: RunContext) -> Run {
@@ -163,7 +163,7 @@ impl Run {
     /// [`new`](Self::new) describes.
     ///
     /// `step` cannot fail: a run's failures are values in
-    /// [`RunResult::Failure`]. So the caller drives the loop and owns the
+    /// [`RunOutcome::Failed`]. So the caller drives the loop and owns the
     /// retry policy without catching a panic.
     pub fn step(&mut self) -> Step {
         self.scheduler.step()
@@ -183,7 +183,7 @@ impl Run {
     /// answer for an effect whose chain stopped waiting is discarded.
     ///
     /// `resume` cannot fail: a bad answer ends the run with a
-    /// [`RunResult::Failure`] instead of returning an error or panicking.
+    /// [`RunOutcome::Failed`] instead of returning an error or panicking.
     pub fn resume(&mut self, id: EffectId, answer: EffectAnswer) {
         self.scheduler.resume(id, answer);
     }
@@ -232,6 +232,13 @@ impl Run {
     #[cfg(test)]
     pub(crate) fn turns_for_test(&self) -> u32 {
         self.scheduler.turns_for_test()
+    }
+
+    /// Takes the Engine error behind the failed outcome the last `Done`
+    /// carried, for the suites that match on its variant.
+    #[cfg(test)]
+    pub(crate) fn take_failure_for_test(&mut self) -> Option<crate::Error> {
+        self.scheduler.take_failure_for_test()
     }
 }
 

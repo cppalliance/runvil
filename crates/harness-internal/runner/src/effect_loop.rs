@@ -61,8 +61,6 @@ use crate::recorder::{Record, RecordKind, RecorderError, RunId, RunOutcome, RunR
 
 #[path = "effect_loop-flight.rs"]
 mod flight;
-#[path = "effect_loop-outcome.rs"]
-mod outcome;
 
 use flight::{Flights, Reach};
 
@@ -156,11 +154,10 @@ impl Driver {
     async fn drive(&mut self) -> Result<RunOutcome, DriveError> {
         loop {
             match self.run.step() {
-                Step::Done { result, events } => {
+                Step::Done { outcome, events } => {
                     self.commit_events(events).await?;
                     // `Done` is returned only once every effect is
                     // answered, so nothing is in flight.
-                    let outcome = outcome::outcome_of(result);
                     self.recorder.end_run(self.run_id, outcome.clone()).await?;
                     return Ok(outcome);
                 }

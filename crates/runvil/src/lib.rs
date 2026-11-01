@@ -4,7 +4,7 @@
 //! A [`Prompt`] is a parsed prompt file. A [`Run`] executes one prompt.
 //! [`Run::step`] returns [`Step::Pending`] with the effects the run waits on.
 //! The caller performs each effect and hands its answer to [`Run::resume`].
-//! The run ends at [`Step::Done`] with its [`RunResult`].
+//! The run ends at [`Step::Done`] with its [`RunOutcome`].
 //! Before the run starts, the caller puts on its [`RunContext`] the tools
 //! a run may offer, the Packs it holds, and the role map that fills the
 //! five model roles. The run's first step checks the context against what
@@ -16,11 +16,9 @@
 
 pub use runvil_engine::Run;
 pub use runvil_engine::RunContext;
-pub use runvil_engine::RunError;
 pub use runvil_engine::RunErrorKind;
 pub use runvil_engine::RunLimits;
-pub use runvil_engine::RunResult;
-pub use runvil_engine::SourceLocation;
+pub use runvil_engine::RunOutcome;
 pub use runvil_engine::Step;
 pub use runvil_parser::ParseError;
 pub use runvil_parser::ParseErrorKind;

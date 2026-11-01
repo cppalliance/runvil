@@ -91,7 +91,7 @@ async fn preludes_run_in_the_prompts_declaration_order_not_the_registry_order() 
     let RunOutcome::Failed { kind, message } = outcome else {
         panic!("the two preludes collide: {outcome:?}");
     };
-    assert_eq!(kind, "Lua");
+    assert_eq!(kind, RunErrorKind::Lua);
     assert!(
         message.contains(
             "Pack `first`: its prelude defines the global `shared`, \

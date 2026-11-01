@@ -61,9 +61,9 @@ fn records(trace: &Trace) -> Vec<EffectRecord> {
 fn assert_fails_before_any_effect(md: &str, preludes: Vec<Prelude>, fragments: &[&str]) {
     let control = prelude_run(md, Vec::new());
     assert!(
-        matches!(control.result(), RunResult::Completed(_)),
+        matches!(control.outcome(), RunOutcome::Completed { .. }),
         "without preludes the prompt succeeds: {:?}",
-        control.result()
+        control.outcome()
     );
     assert!(
         !control.effects().is_empty(),
@@ -198,16 +198,16 @@ fn a_prelude_write_across_two_arms_ends_the_run_with_determinism_caught_or_not()
         "pcall(function() store.write('seeded.txt', 'seed') end)",
     ] {
         let trace = prelude_run(md, vec![prelude("seeder", source)]);
-        let error = match trace.result() {
-            RunResult::Failure(error) => error,
+        let (kind, message) = match trace.outcome() {
+            RunOutcome::Failed { kind, message } => (*kind, message),
             other => {
                 panic!("the second arm's install-time write ends the run: `{source}`: {other:?}")
             }
         };
         assert_eq!(
-            error.kind(),
+            kind,
             RunErrorKind::Determinism,
-            "the conflict wins over the prelude's own outcome: `{source}`: {error:?}"
+            "the conflict wins over the prelude's own outcome: `{source}`: {message}"
         );
     }
 }

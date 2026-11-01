@@ -7,7 +7,7 @@ use std::sync::Arc;
 use std::task::{Context, Poll, Wake, Waker};
 use std::thread::{self, Thread};
 
-use runvil::RunResult;
+use runvil::RunOutcome;
 use runvil::cancel::CancelHandle;
 use runvil::effect::Effect;
 
@@ -50,16 +50,11 @@ fn one_parent_cancel_ends_every_run_holding_one_of_its_children() -> TestResult 
 
     parent.cancel();
 
-    let mut results = Vec::new();
+    let mut outcomes = Vec::new();
     for driver in drivers {
-        results.push(driver.finish()?.result);
+        outcomes.push(driver.finish()?.outcome);
     }
-    assert!(
-        results.len() == 2
-            && results
-                .iter()
-                .all(|result| matches!(result, RunResult::Cancelled))
-    );
+    assert_eq!(outcomes, [RunOutcome::Cancelled, RunOutcome::Cancelled]);
     Ok(())
 }
 

@@ -7,7 +7,7 @@ use runvil::event::Event;
 use runvil::model::{ModelRole, ThinkingMode};
 use runvil::tools::{ToolCatalog, ToolInfo};
 use runvil::vfs::{MemoryBackend, Origin, RealBackend, VfsError, VfsRef};
-use runvil::{RunErrorKind, RunResult};
+use runvil::{RunErrorKind, RunOutcome};
 
 use super::support::{
     Built, Scenario, TempRoot, TestResult, Trace, greeter, model, prompt, text, tool_info,
@@ -22,17 +22,17 @@ fn declaring(front: &str) -> String {
 /// after the parse events and issuing no effect.
 pub(super) fn refusal(scenario: Scenario, source: &str) -> TestResult<String> {
     let trace = scenario.run(source)?;
-    let RunResult::Failure(error) = &trace.result else {
-        return Err(format!("expected a refusal, got {:?}", trace.result).into());
+    let RunOutcome::Failed { kind, message } = &trace.outcome else {
+        return Err(format!("expected a refusal, got {:?}", trace.outcome).into());
     };
-    assert_eq!(error.kind(), RunErrorKind::RequirementsUnmet, "{error}");
+    assert_eq!(*kind, RunErrorKind::RequirementsUnmet, "{message}");
     assert!(
         matches!(trace.events.last(), Some(Event::ParseSucceeded { .. })),
         "a refused run reports no run events: {:?}",
         trace.events
     );
     assert!(trace.effects.is_empty(), "a refused run issues nothing");
-    Ok(error.to_string())
+    Ok(message.clone())
 }
 
 /// The refusal notice of a run of `declaring(front)` under one model of

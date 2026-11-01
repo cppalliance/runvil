@@ -8,13 +8,13 @@ use super::*;
 fn a_run_whose_only_section_returns_a_literal_is_done_at_its_first_step() {
     let mut run = run_of("return 'hello'", run_context());
     let Step::Done {
-        result: RunResult::Completed(text),
+        outcome: RunOutcome::Completed { final_text },
         ..
     } = run.step()
     else {
         panic!("the literal run is done at once");
     };
-    assert_eq!(text, "hello");
+    assert_eq!(final_text, "hello");
 }
 
 #[test]
@@ -24,23 +24,26 @@ fn a_run_that_cannot_start_reports_its_failure_on_the_first_step() {
         .0
         .expect("the prompt parses whatever version it declares");
     let mut run = Run::new(Arc::new(prompt), "", run_context());
-    let Step::Done { result, events } = run.step() else {
+    let Step::Done { outcome, events } = run.step() else {
         panic!("a run that cannot start is done at once");
     };
     assert!(events.is_empty(), "nothing ran, nothing reported");
-    let RunResult::Failure(error) = result else {
-        panic!("an unsupported version fails, got {result:?}");
-    };
-    assert_eq!(error.kind(), crate::execute::RunErrorKind::Version);
+    assert_eq!(
+        outcome,
+        RunOutcome::Failed {
+            kind: crate::execute::RunErrorKind::Version,
+            message: "unsupported runvil version: 7 (this build supports major 0)".to_owned(),
+        }
+    );
     assert!(run.decided(), "a run that never started is decided");
     let Step::Done {
-        result: RunResult::Failure(again),
+        outcome: RunOutcome::Failed { kind, .. },
         ..
     } = run.step()
     else {
         panic!("a finished run stays done");
     };
-    assert_eq!(again.kind(), crate::execute::RunErrorKind::Internal);
+    assert_eq!(kind, crate::execute::RunErrorKind::Internal);
 }
 
 #[test]
@@ -48,21 +51,19 @@ fn an_answer_before_the_first_step_fails_the_run_with_no_run_events() {
     let mut run = run_of("return 'never runs'", run_context());
     run.resume(EffectId(7), EffectAnswer::Timer);
     assert!(run.decided(), "the stray answer decides the run");
-    let Step::Done { result, events } = run.step() else {
+    let Step::Done { outcome, events } = run.step() else {
         panic!("a run decided before it started is done at its first step");
     };
     assert!(
         events.is_empty(),
         "a run that never started reports no run events: {events:?}"
     );
-    let RunResult::Failure(error) = result else {
-        panic!("a stray answer fails the run, got {result:?}");
+    let RunOutcome::Failed { kind, message } = outcome else {
+        panic!("a stray answer fails the run, got {outcome:?}");
     };
-    assert_eq!(error.kind(), crate::execute::RunErrorKind::Internal);
+    assert_eq!(kind, crate::execute::RunErrorKind::Internal);
     assert!(
-        error
-            .to_string()
-            .contains("an answer arrived for an effect the run did not issue"),
-        "{error}"
+        message.contains("an answer arrived for an effect the run did not issue"),
+        "{message}"
     );
 }

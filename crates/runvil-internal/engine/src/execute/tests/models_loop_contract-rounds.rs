@@ -222,7 +222,7 @@ fn a_dropped_model_issued_call_raises_cancelled_at_the_loop_call_site() {
     );
     run.resume(call, EffectAnswer::Dropped);
     let result = match run.step() {
-        Step::Done { result, .. } => result,
+        Step::Done { outcome, .. } => outcome,
         other @ Step::Pending { .. } => panic!("the caught drop ends the section: {other:?}"),
     };
     assert_eq!(text_of(result), "false:cancelled|1|user");
@@ -274,9 +274,9 @@ fn an_adhoc_tool_cancelled_mid_handler_reports_no_failed_tool_call() {
     driving.cancel();
     let trace = driving.finish();
     assert!(
-        matches!(trace.result(), RunResult::Cancelled),
+        matches!(trace.outcome(), RunOutcome::Cancelled),
         "expected the cancelled run, got {:?}",
-        trace.result()
+        trace.outcome()
     );
     assert_eq!(
         trace_loop_events(&trace),

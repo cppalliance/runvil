@@ -154,7 +154,7 @@ fn the_scope_gate_says_a_name_exists_only_for_a_catalog_tools_own_wire_name() {
             .tool(offered_tool("gh/search"))
             .chat(&gateway)
             .run();
-        match trace.error().inner() {
+        match trace.error() {
             Error::OutOfScopeToolCall {
                 global_exists,
                 has_dynamic_set,

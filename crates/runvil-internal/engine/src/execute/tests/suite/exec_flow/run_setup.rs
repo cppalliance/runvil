@@ -6,7 +6,7 @@ use std::sync::Arc;
 use super::*;
 
 use crate::RunErrorKind;
-use crate::RunResult;
+use crate::RunOutcome;
 use crate::execute::tests::context::test_context;
 use crate::execute::tests::fixtures::echo_tool;
 use crate::test_support::scenario::EXECUTION;
@@ -63,9 +63,9 @@ fn a_store_backend_that_refuses_its_session_fails_the_run_at_the_first_step() {
     );
     match run.step() {
         crate::execute::run::Step::Done {
-            result: RunResult::Failure(error),
+            outcome: RunOutcome::Failed { kind, message },
             ..
-        } => assert_eq!(error.kind(), RunErrorKind::Vfs, "{error}"),
+        } => assert_eq!(kind, RunErrorKind::Vfs, "{message}"),
         other => panic!("expected the first step to fail the run, got {other:?}"),
     }
 }

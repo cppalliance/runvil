@@ -1,6 +1,5 @@
 #[non_exhaustive] pub enum runvil::ParseErrorKind
 #[non_exhaustive] pub enum runvil::RunErrorKind
-#[non_exhaustive] pub enum runvil::RunResult
 #[non_exhaustive] pub enum runvil::effect::AnswerRecord
 #[non_exhaustive] pub enum runvil::effect::EffectRecord
 #[non_exhaustive] pub enum runvil::effect::ToolCaller
@@ -37,7 +36,6 @@
 #[non_exhaustive] pub struct runvil::ParseError { /* private fields */ }
 #[non_exhaustive] pub struct runvil::Prompt { /* private fields */ }
 #[non_exhaustive] pub struct runvil::RunLimits { .. }
-#[non_exhaustive] pub struct runvil::SourceLocation { .. }
 #[non_exhaustive] pub struct runvil::effect::ChatAnswerRecord { .. }
 #[non_exhaustive] pub struct runvil::effect::FailureRecord { .. }
 #[non_exhaustive] pub struct runvil::effect::IssuedEffect { .. }
@@ -89,12 +87,10 @@ auto runvil::ParseErrorKind: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSaf
 auto runvil::Prompt: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::Run: Freeze, !RefUnwindSafe, Send, Sync, Unpin, !UnwindSafe
 auto runvil::RunContext: Freeze, !RefUnwindSafe, Send, Sync, Unpin, !UnwindSafe
-auto runvil::RunError: Freeze, !RefUnwindSafe, Send, Sync, Unpin, !UnwindSafe
 auto runvil::RunErrorKind: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::RunLimits: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
-auto runvil::RunResult: Freeze, !RefUnwindSafe, Send, Sync, Unpin, !UnwindSafe
+auto runvil::RunOutcome: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::RunSeed: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
-auto runvil::SourceLocation: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::Step: Freeze, !RefUnwindSafe, Send, Sync, Unpin, !UnwindSafe
 auto runvil::cancel::CancelHandle: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::cancel::Cancelled: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
@@ -208,12 +204,10 @@ derives runvil::ParseErrorKind: Clone, Copy, Debug, Eq, Hash, PartialEq
 derives runvil::Prompt: Clone, Debug, Eq, PartialEq
 derives runvil::Run: Debug
 derives runvil::RunContext: Debug
-derives runvil::RunError: Debug
 derives runvil::RunErrorKind: Clone, Copy, Debug, Eq, Hash, PartialEq
 derives runvil::RunLimits: Clone, Copy, Debug, Default, Eq, Hash, PartialEq
-derives runvil::RunResult: Debug
+derives runvil::RunOutcome: Clone, Debug, Eq, PartialEq
 derives runvil::RunSeed: Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize
-derives runvil::SourceLocation: Clone, Debug, Eq, PartialEq
 derives runvil::Step: Debug
 derives runvil::cancel::CancelHandle: Clone, Debug, Default
 derives runvil::cancel::Cancelled: Debug
@@ -326,7 +320,6 @@ impl core::convert::From<&runvil::model::Completion> for runvil::effect::ChatAns
 impl core::convert::From<runvil::ids::ChainId> for runvil::ids::TaskId
 impl core::convert::From<runvil::vfs::VfsPath> for runvil::vfs::VfsPathBuf
 impl core::error::Error for runvil::ParseError
-impl core::error::Error for runvil::RunError
 impl core::error::Error for runvil::ids::ParseIdError
 impl core::error::Error for runvil::model::CompletionError
 impl core::error::Error for runvil::model::ModelCatalogError
@@ -341,7 +334,6 @@ impl core::error::Error for runvil::tools::ToolIdError
 impl core::error::Error for runvil::vfs::ParsePathReasonError
 impl core::error::Error for runvil::vfs::VfsError
 impl core::fmt::Display for runvil::ParseError
-impl core::fmt::Display for runvil::RunError
 impl core::fmt::Display for runvil::RunSeed
 impl core::fmt::Display for runvil::effect::EffectId
 impl core::fmt::Display for runvil::ids::ChainId
@@ -415,6 +407,7 @@ impl<T> core::panic::unwind_safe::RefUnwindSafe for runvil::effect::PackToolSets
 impl<T> core::panic::unwind_safe::UnwindSafe for runvil::effect::PackToolSets<T> where alloc::vec::Vec<T>: core::panic::unwind_safe::UnwindSafe + core::panic::unwind_safe::UnwindSafe
 impl<T> runvil::effect::PackToolSets<T>
 impl<T> serde_core::ser::Serialize for runvil::effect::PackToolSets<T> where T: serde_core::ser::Serialize
+pub const fn runvil::RunOutcome::as_str(&self) -> &'static str
 pub const fn runvil::RunSeed::as_bytes(&self) -> &[u8; 32]
 pub const fn runvil::RunSeed::from_bytes(bytes: [u8; 32]) -> runvil::RunSeed
 pub const fn runvil::effect::EffectId::get(self) -> u64
@@ -432,6 +425,7 @@ pub const runvil::model::ModelRole::ALL: [runvil::model::ModelRole; 5]
 pub const runvil::model::Role::ALL: &'static [runvil::model::Role]
 pub const runvil::replay::Flags::EMPTY: runvil::replay::Flags
 pub const runvil::timestamp::Timestamp::UNIX_EPOCH: runvil::timestamp::Timestamp
+pub enum runvil::RunOutcome
 pub enum runvil::Step
 pub enum runvil::effect::Effect
 pub enum runvil::effect::EffectAnswer
@@ -468,10 +462,8 @@ pub fn runvil::RunContext::with_report_debug(self, mode: runvil::event::DebugMod
 pub fn runvil::RunContext::with_tools(self, tools: runvil::tools::ToolCatalog) -> runvil::RunContext
 pub fn runvil::RunContext::with_ui(self, snapshot: serde_json::value::Value) -> runvil::RunContext
 pub fn runvil::RunContext::with_vfs(self, vfs: runvil::vfs::VfsRef) -> runvil::RunContext
-pub fn runvil::RunError::is_retryable(&self) -> bool
-pub fn runvil::RunError::kind(&self) -> runvil::RunErrorKind
-pub fn runvil::RunError::location(&self) -> core::option::Option<runvil::SourceLocation>
-pub fn runvil::RunError::originating_error(&self) -> core::option::Option<&dyn core::error::Error + core::marker::Send + core::marker::Sync + 'static>
+pub fn runvil::RunErrorKind::as_str(self) -> &'static str
+pub fn runvil::RunErrorKind::from_tag(tag: &str) -> core::option::Option<runvil::RunErrorKind>
 pub fn runvil::cancel::CancelHandle::cancel(&self)
 pub fn runvil::cancel::CancelHandle::cancelled(&self) -> runvil::cancel::Cancelled
 pub fn runvil::cancel::CancelHandle::child(&self) -> runvil::cancel::CancelHandle
@@ -776,18 +768,15 @@ pub runvil::RunLimits::lua_log_events: core::num::nonzero::NonZeroU32
 pub runvil::RunLimits::lua_memory_bytes: core::num::nonzero::NonZeroUsize
 pub runvil::RunLimits::max_concurrency: core::num::nonzero::NonZeroUsize
 pub runvil::RunLimits::max_tool_iterations: core::num::nonzero::NonZeroU32
-pub runvil::RunResult::Cancelled
-pub runvil::RunResult::Completed(..)
-pub runvil::RunResult::Completed::0: alloc::string::String
-pub runvil::RunResult::Failure(..)
-pub runvil::RunResult::Failure::0: runvil::RunError
-pub runvil::SourceLocation::column: core::option::Option<u32>
-pub runvil::SourceLocation::line: core::option::Option<u32>
-pub runvil::SourceLocation::path: alloc::string::String
-pub runvil::SourceLocation::span: core::option::Option<core::ops::range::Range<usize>>
+pub runvil::RunOutcome::Cancelled
+pub runvil::RunOutcome::Completed { .. }
+pub runvil::RunOutcome::Completed::final_text: alloc::string::String
+pub runvil::RunOutcome::Failed { .. }
+pub runvil::RunOutcome::Failed::kind: runvil::RunErrorKind
+pub runvil::RunOutcome::Failed::message: alloc::string::String
 pub runvil::Step::Done { .. }
 pub runvil::Step::Done::events: alloc::vec::Vec<runvil::event::Event>
-pub runvil::Step::Done::result: runvil::RunResult
+pub runvil::Step::Done::outcome: runvil::RunOutcome
 pub runvil::Step::Pending { .. }
 pub runvil::Step::Pending::effects: alloc::vec::Vec<runvil::effect::IssuedEffect>
 pub runvil::Step::Pending::events: alloc::vec::Vec<runvil::event::Event>
@@ -1435,7 +1424,6 @@ pub runvil::vfs::Writability::ReadOnly
 pub runvil::vfs::Writability::ReadWrite
 pub struct runvil::Run { /* private fields */ }
 pub struct runvil::RunContext { /* private fields */ }
-pub struct runvil::RunError { /* private fields */ }
 pub struct runvil::RunSeed(/* private fields */)
 pub struct runvil::cancel::CancelHandle { /* private fields */ }
 pub struct runvil::cancel::Cancelled { /* private fields */ }
