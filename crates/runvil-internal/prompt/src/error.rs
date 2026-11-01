@@ -225,24 +225,17 @@ pub enum ParseErrorKind {
 #[derive(Debug)]
 #[non_exhaustive]
 pub struct ParseError {
-    kind: ParseErrorKind,
-    span: Option<Range<usize>>,
-    name: Option<String>,
-    line: Option<NonZeroU32>,
-    column: Option<NonZeroU32>,
     inner: Box<Error>,
 }
 
 /// The classified parts of an internal error: the stable kind plus the
 /// location fields the internal error holds.
 ///
-/// The location fields are the source span, the prompt's frontmatter name
-/// when the failure postdates the frontmatter, and the 1-based line/column -
+/// The location fields are the source span and the 1-based line/column -
 /// surfaced from the retained YAML failure, or computed from the span.
 struct Classification {
     kind: ParseErrorKind,
     span: Option<Range<usize>>,
-    name: Option<String>,
     line: Option<NonZeroU32>,
     column: Option<NonZeroU32>,
 }
@@ -252,7 +245,6 @@ fn classify_parse_error(inner: &Error) -> Classification {
     let unlocated = |kind| Classification {
         kind,
         span: None,
-        name: None,
         line: None,
         column: None,
     };
@@ -260,14 +252,12 @@ fn classify_parse_error(inner: &Error) -> Classification {
         Error::ParseStructured {
             kind,
             span,
-            name,
             line,
             column,
             ..
         } => Classification {
             kind: *kind,
             span: span.clone(),
-            name: name.clone(),
             line: *line,
             column: *column,
         },
@@ -290,7 +280,7 @@ impl ParseError {
     /// Returns the stable classification of this failure.
     #[must_use]
     pub fn kind(&self) -> ParseErrorKind {
-        self.kind
+        classify_parse_error(&self.inner).kind
     }
 
     /// Returns the byte span of the offending region, when one is available.
@@ -303,7 +293,7 @@ impl ParseError {
     /// [`column`](ParseError::column).
     #[must_use]
     pub fn span(&self) -> Option<Range<usize>> {
-        self.span.clone()
+        classify_parse_error(&self.inner).span
     }
 
     /// Returns the prompt's frontmatter name, when the failure came after the
@@ -315,7 +305,10 @@ impl ParseError {
     /// also returns `None`.
     #[must_use]
     pub fn name(&self) -> Option<&str> {
-        self.name.as_deref()
+        match &*self.inner {
+            Error::ParseStructured { name, .. } => name.as_deref(),
+            _ => None,
+        }
     }
 
     /// Returns the 1-based file line of the failure, when known.
@@ -325,13 +318,13 @@ impl ParseError {
     /// span starts.
     #[must_use]
     pub fn line(&self) -> Option<NonZeroU32> {
-        self.line
+        classify_parse_error(&self.inner).line
     }
 
     /// Returns the 1-based column of the failure, when known.
     #[must_use]
     pub fn column(&self) -> Option<NonZeroU32> {
-        self.column
+        classify_parse_error(&self.inner).column
     }
 
     /// Returns the originating error this failure keeps, when it has one.
@@ -352,15 +345,9 @@ impl ParseError {
         *self.inner
     }
 
-    /// Classifies the internal error into its public wrapper.
+    /// Wraps the internal error in its public form.
     pub(crate) fn from_inner(inner: Error) -> ParseError {
-        let classified = classify_parse_error(&inner);
         ParseError {
-            kind: classified.kind,
-            span: classified.span,
-            name: classified.name,
-            line: classified.line,
-            column: classified.column,
             inner: Box::new(inner),
         }
     }
