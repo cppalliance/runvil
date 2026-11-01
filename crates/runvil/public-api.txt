@@ -582,6 +582,7 @@ pub fn runvil::vfs::Access::glob(&self, pattern: &str) -> core::result::Result<a
 pub fn runvil::vfs::Access::list(&self, path: &str) -> core::result::Result<alloc::vec::Vec<runvil::vfs::Entry>, runvil::vfs::VfsError>
 pub fn runvil::vfs::Access::mkdir(&self, path: &str, recursive: bool) -> core::result::Result<(), runvil::vfs::VfsError>
 pub fn runvil::vfs::Access::read(&self, path: &str) -> core::result::Result<alloc::vec::Vec<u8>, runvil::vfs::VfsError>
+pub fn runvil::vfs::Access::read_range(&self, path: &str, offset: u64, len: u64) -> core::result::Result<alloc::vec::Vec<u8>, runvil::vfs::VfsError>
 pub fn runvil::vfs::Access::read_string(&self, path: &str) -> core::result::Result<alloc::string::String, runvil::vfs::VfsError>
 pub fn runvil::vfs::Access::remove(&self, path: &str, recursive: bool) -> core::result::Result<bool, runvil::vfs::VfsError>
 pub fn runvil::vfs::Access::rename(&self, from: &str, to: &str) -> core::result::Result<(), runvil::vfs::VfsError>

@@ -36,6 +36,26 @@ impl Access {
         })
     }
 
+    /// Reads up to `len` bytes of the file at `path`, starting at byte
+    /// `offset`.
+    ///
+    /// It returns fewer than `len` bytes when the file ends first, and
+    /// nothing when `offset` is at or past the end. `RealBackend` seeks
+    /// and reads only the requested bytes. A backend without an override
+    /// reads the whole file and slices it, so the read is not bounded
+    /// there.
+    ///
+    /// # Errors
+    /// Returns an error when the policy denies the read, when another
+    /// access holds a conflicting claim on `path` that is not ordered
+    /// before this operation, or when the backend fails.
+    pub fn read_range(&self, path: &str, offset: u64, len: u64) -> Result<Vec<u8>, VfsError> {
+        let path = self.gate(Op::Read, path)?;
+        self.admit(Claims::claim_read, &path)?;
+        self.fire(Op::Read, &path);
+        self.inner().read_range(&path, offset, len)
+    }
+
     /// Creates or overwrites the file at `path` with `contents`.
     ///
     /// # Errors

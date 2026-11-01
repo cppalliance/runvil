@@ -17,6 +17,7 @@ use crate::traits::{AcquireContext, Op, Policy, Verdict};
 mod claims;
 mod happens_before;
 mod operations;
+mod read_range;
 mod refusals;
 mod regions;
 /// The rooted-path, idempotent-remove, and split-glob semantics of
