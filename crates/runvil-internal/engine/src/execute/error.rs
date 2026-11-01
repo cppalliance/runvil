@@ -5,8 +5,8 @@ use crate::Error;
 
 use super::RunOutcome;
 
-/// The stable category of a failed run's
-/// [`RunOutcome::Failed`](super::RunOutcome::Failed), for matching in code.
+/// The stable category of a failed run's [`RunOutcome::Failed`], for matching
+/// in code.
 ///
 /// Each variant names the condition that failed the run. The enum is
 /// `#[non_exhaustive]`, so a `match` on it needs a wildcard arm. That lets
