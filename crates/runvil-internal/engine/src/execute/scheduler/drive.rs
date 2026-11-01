@@ -1,8 +1,8 @@
 //! The run-level step: `resume -> match request -> dispatch -> resume with
 //! answer`, run until no chain can proceed without an answer from the
-//! caller. The step starts the run's first chain on its first call, drains
-//! the ready queue, and returns the effects the drain issued with the
-//! events it reported.
+//! caller. The step checks that the run can start and starts its first
+//! chain on its first call, drains the ready queue, and returns the
+//! effects the drain issued with the events it reported.
 //! An empty ready queue with no parked effect and no queued chain that can
 //! be admitted is a stall, which fails loudly rather than hangs.
 //! The run's `Done` is withheld until
@@ -11,10 +11,12 @@
 
 use runvil_types::event::lifecycle;
 use runvil_types::ids::AbandonReason;
+use runvil_vfs::Origin;
 
 use crate::execute::RunResult;
 use crate::execute::error::RunError;
 use crate::execute::run::{EffectAnswer, EffectId, Step};
+use crate::parser::ParseErrorKind;
 use crate::{Error, Result};
 
 use super::chain::ChainStep;
@@ -25,13 +27,25 @@ impl Scheduler {
     /// Drains the ready queue and returns the step's outcome: the effects
     /// issued and the events reported while chains ran, or the run's
     /// result once it is over and every issued effect is answered. The
-    /// first call starts the H1 pass when the prompt has H1 blocks, else
-    /// the root chain over the prompt's sections.
+    /// first call checks that the run can start, then starts the H1 pass
+    /// when the prompt has H1 blocks, else the root chain over the prompt's
+    /// sections. A run that cannot start ends with that failure and
+    /// reports no run events.
     pub(crate) fn step(&mut self) -> Step {
         if matches!(self.phase, Phase::Fresh) {
-            self.phase = Phase::Running;
-            if let Err(error) = self.start() {
-                self.end(Err(error));
+            if let Err(error) = self.check_start() {
+                self.phase = Phase::Ending(Err(error));
+            } else {
+                self.phase = Phase::Running;
+                // The run's boundaries are events like every other report:
+                // pushed into the buffer under the root task, so the caller
+                // sees them in order with the sections between them.
+                self.ctx
+                    .emitter()
+                    .report(self.ctx.prompt().title(), lifecycle::RUN_STARTED);
+                if let Err(error) = self.start() {
+                    self.end(Err(error));
+                }
             }
         }
         if matches!(self.phase, Phase::Running) {
@@ -137,6 +151,40 @@ impl Scheduler {
         } else {
             self.start_h1()?;
         }
+        Ok(())
+    }
+
+    /// Checks that the run can start: the version gate, then the declared
+    /// store.
+    ///
+    /// # Errors
+    /// Returns [`Error::UnsupportedVersion`] or a structural parse error for
+    /// a prompt that is not a supported runvil prompt, or [`Error::Store`]
+    /// when the handle declares no store or the store's backend fails the
+    /// probe.
+    fn check_start(&self) -> Result<()> {
+        let frontmatter = self.ctx.prompt().frontmatter();
+        match frontmatter.runvil() {
+            Some(0) => {}
+            Some(other) => return Err(Error::UnsupportedVersion(other)),
+            None => {
+                return Err(Error::parse(
+                    ParseErrorKind::Structure,
+                    "not a runvil prompt: no runvil version",
+                )
+                .with_prompt_name(frontmatter.name()));
+            }
+        }
+        // Every run and every store call needs a declared store: the probe
+        // stats the store root through a throwaway capability, so a handle
+        // with no declaration fails here rather than on the first store call,
+        // and a declared-but-failing backend's error fails the run.
+        let probe = self
+            .ctx
+            .vfs()
+            .acquire(Origin::new("store mount probe"))
+            .map_err(Error::store)?;
+        runvil_vfs::detail::probe_store(&probe).map_err(Error::store)?;
         Ok(())
     }
 

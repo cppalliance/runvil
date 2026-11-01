@@ -90,7 +90,7 @@ mod walk;
 use std::collections::VecDeque;
 use std::sync::Arc;
 
-use runvil_types::event::lifecycle;
+use runvil_types::cancel::CancelHandle;
 use runvil_vfs::Origin;
 use runvil_vfs::detail::ScopeHandle;
 
@@ -136,12 +136,14 @@ fn prompt_origin(prompt: &Prompt, label: &str, blocks: &[Block]) -> Origin {
 
 /// The run's phase, as the step loop reads it.
 enum Phase {
-    /// No chain has started: the next step starts the H1 pass or the walk.
+    /// No chain has started: the next step checks that the run can start,
+    /// then starts the H1 pass or the walk.
     Fresh,
     /// Chains run; the outcome is undecided.
     Running,
-    /// The outcome is decided and the run's end boundary reported; `Done`
-    /// waits on the outstanding effects.
+    /// The outcome is decided and the run's end boundary reported, unless
+    /// the run could not start and so reported nothing; `Done` waits on
+    /// the outstanding effects.
     Ending(Result<String>),
     /// `Done` was returned.
     Done,
@@ -186,14 +188,9 @@ impl Drop for Scheduler {
 }
 
 impl Scheduler {
-    /// Builds the scheduler for one run over `ctx`'s prompt and reports
-    /// the run's start, so the first step's events open with it.
+    /// Builds the scheduler for one run over `ctx`'s prompt. Nothing runs
+    /// or reports until the first step.
     pub(super) fn new(ctx: RunState) -> Self {
-        // The run's boundaries are events like every other report: pushed
-        // into the buffer under the root task, so the caller sees them in
-        // order with the sections between them.
-        ctx.emitter()
-            .report(ctx.prompt().title(), lifecycle::RUN_STARTED);
         Self {
             ctx,
             chains: ChainArena::new(),
@@ -221,9 +218,25 @@ impl Scheduler {
     }
 
     /// Whether the run's outcome is decided: its end boundary is reported,
-    /// so at most the orphans' answers stand between the run and `Done`.
+    /// or the first step found that the run cannot start, so at most the
+    /// orphans' answers stand between the run and `Done`.
     pub(super) fn decided(&self) -> bool {
         matches!(self.phase, Phase::Ending(_) | Phase::Done)
+    }
+
+    /// The run's cancel flag.
+    pub(super) fn cancel_handle(&self) -> &CancelHandle {
+        self.ctx.cancel()
+    }
+
+    /// The name of the run's phase, for the run's `Debug` output.
+    pub(super) fn phase_name(&self) -> &'static str {
+        match self.phase {
+            Phase::Fresh => "fresh",
+            Phase::Running => "running",
+            Phase::Ending(_) => "ending",
+            Phase::Done => "done",
+        }
     }
 
     /// Answers `id` at once with `answer` and queues it to resume: the

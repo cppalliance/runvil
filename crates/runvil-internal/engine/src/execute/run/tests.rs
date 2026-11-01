@@ -464,7 +464,7 @@ fn a_run_whose_only_section_returns_a_literal_is_done_at_its_first_step() {
 }
 
 #[test]
-fn a_stillborn_run_reports_its_failure_on_the_first_step() {
+fn a_run_that_cannot_start_reports_its_failure_on_the_first_step() {
     let source = "---\nname: t\ndescription: d\nrunvil: 7\n---\n\n# Run\n\n## Only\n\ndone\n";
     let prompt = Prompt::parse(source, "run-test")
         .0
@@ -484,7 +484,7 @@ fn a_stillborn_run_reports_its_failure_on_the_first_step() {
         ..
     } = run.step()
     else {
-        panic!("a spent run stays done");
+        panic!("a finished run stays done");
     };
     assert_eq!(again.kind(), crate::execute::RunErrorKind::Internal);
 }

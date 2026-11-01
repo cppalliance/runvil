@@ -23,13 +23,11 @@ pub use effect::{
     PackToolSets, Round, ToolAnswerRecord, ToolCallOrigin, ToolCaller,
 };
 
-use crate::parser::{ParseErrorKind, Prompt};
-use crate::{Error, Result};
+use crate::parser::Prompt;
 
 use super::RunResult;
 use super::config::RunContext;
 use super::context::RunState;
-use super::error::RunError;
 use super::scheduler::Scheduler;
 
 /// The outcome of one call to [`Run::step`]: the run either continues or
@@ -90,38 +88,16 @@ pub struct IssuedEffect {
 /// change between calls. It holds its prompt through an `Arc`, so the
 /// caller can parse a prompt once and run it many times.
 pub struct Run {
-    /// Whether the run is live, failed to start, or has reported that
-    /// failure.
-    start: Start,
-    /// The run's cancel flag, shared with every chain's VM hook.
-    cancel: CancelHandle,
-}
-
-/// Where a run stands: live with its scheduler, failed to start with the
-/// failure its first step reports, or spent once that step has reported
-/// it.
-enum Start {
-    /// The run started; its scheduler steps it.
-    Live(Box<Scheduler>),
-    /// The run failed to start; the first step reports this failure.
-    Stillborn(Error),
-    /// The run failed to start and its first step reported why.
-    Spent,
+    /// The scheduler that steps every chain of the run.
+    scheduler: Box<Scheduler>,
 }
 
 impl fmt::Debug for Run {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let start = match &self.start {
-            Start::Live(_) => "live",
-            Start::Stillborn(_) => "stillborn",
-            Start::Spent => "spent",
-        };
-        let mut state = f.debug_struct("Run");
-        state.field("start", &start);
-        if let Start::Stillborn(error) = &self.start {
-            state.field("failure", error);
-        }
-        state.field("cancel", &self.cancel).finish()
+        f.debug_struct("Run")
+            .field("phase", &self.scheduler.phase_name())
+            .field("cancel", self.scheduler.cancel_handle())
+            .finish()
     }
 }
 
@@ -134,23 +110,14 @@ impl Run {
     /// empty model set. Its tool set holds whatever catalog and roster the
     /// context's builders set.
     ///
-    /// A run that fails to start is still built, and its first `step`
-    /// returns `Done` with the failure. A run fails to start when the
-    /// prompt has no supported `runvil:` version, when the context's
-    /// filesystem declares no store, or when the store's backend fails its
-    /// probe.
+    /// Building a run checks nothing. The first `step` checks that the
+    /// prompt declares a supported `runvil:` version, that the context's
+    /// filesystem declares a store, and that the store's backend passes its
+    /// probe. When a check fails, that step returns `Done` with the failure
+    /// and no events.
     #[must_use]
     pub fn new(prompt: Arc<Prompt>, args: &str, config: RunContext) -> Run {
-        // The context's one flag, held here so a stillborn run still has
-        // the handle `cancel` and `cancel_handle` name.
-        let cancel = config.cancel.clone();
-        match prepare_state(prompt, args, config) {
-            Ok(state) => Self::from_state(state),
-            Err(error) => Run {
-                start: Start::Stillborn(error),
-                cancel,
-            },
-        }
+        Self::from_state(RunState::new(prompt, args, config))
     }
 
     /// [`Run::new`], with `edit` applied to the assembled state before the
@@ -163,23 +130,14 @@ impl Run {
         config: RunContext,
         edit: impl FnOnce(RunState) -> RunState,
     ) -> Run {
-        let cancel = config.cancel.clone();
-        match prepare_state(prompt, args, config) {
-            Ok(state) => Self::from_state(edit(state)),
-            Err(error) => Run {
-                start: Start::Stillborn(error),
-                cancel,
-            },
-        }
+        Self::from_state(edit(RunState::new(prompt, args, config)))
     }
 
-    /// Builds the live run over a state that passed `prepare_state`.
+    /// Builds the run over its assembled state.
     #[must_use]
     fn from_state(state: RunState) -> Run {
-        let cancel = state.cancel().clone();
         Run {
-            start: Start::Live(Box::new(Scheduler::new(state))),
-            cancel,
+            scheduler: Box::new(Scheduler::new(state)),
         }
     }
 
@@ -191,23 +149,14 @@ impl Run {
     /// answered. Calling `step` after `Done` is a caller error: it returns
     /// `Done` again with an internal failure.
     ///
+    /// The first call checks that the run can start, as
+    /// [`new`](Self::new) describes.
+    ///
     /// `step` cannot fail: a run's failures are values in
     /// [`RunResult::Failure`]. So the caller drives the loop and owns the
     /// retry policy without catching a panic.
     pub fn step(&mut self) -> Step {
-        if let Start::Live(scheduler) = &mut self.start {
-            return scheduler.step();
-        }
-        let failure = match std::mem::replace(&mut self.start, Start::Spent) {
-            Start::Stillborn(error) => error,
-            Start::Live(_) | Start::Spent => {
-                Error::internal("a run that failed to start cannot be stepped again")
-            }
-        };
-        Step::Done {
-            result: RunResult::Failure(RunError::from(failure)),
-            events: Vec::new(),
-        }
+        self.scheduler.step()
     }
 
     /// Delivers the answer to one effect the run issued.
@@ -226,9 +175,7 @@ impl Run {
     /// `resume` cannot fail: a bad answer ends the run with a
     /// [`RunResult::Failure`] instead of returning an error or panicking.
     pub fn resume(&mut self, id: EffectId, answer: EffectAnswer) {
-        if let Start::Live(scheduler) = &mut self.start {
-            scheduler.resume(id, answer);
-        }
+        self.scheduler.resume(id, answer);
     }
 
     /// Asks the run to stop by setting its cancel flag.
@@ -241,85 +188,41 @@ impl Run {
     /// must answer each effect it abandons with [`EffectAnswer::Dropped`].
     /// Like `step` and `resume`, `cancel` cannot fail.
     pub fn cancel(&mut self) {
-        self.cancel.cancel();
+        self.scheduler.cancel_handle().cancel();
     }
 
     /// Returns the run's cancel flag, so the caller can cancel the run from
     /// another thread.
     #[must_use]
     pub fn cancel_handle(&self) -> CancelHandle {
-        self.cancel.clone()
+        self.scheduler.cancel_handle().clone()
     }
 
     /// Returns whether the run's outcome is decided.
     ///
     /// The outcome is decided once the run has reported its end event, or
-    /// when the run failed to start. Any effect still outstanding at that
-    /// point is an orphan: only `Done` waits for its answer. The caller can
-    /// read this after a `Pending` step to learn that it may drop what it
-    /// holds for the run. This keeps control flow independent of the
-    /// events, which are only a report.
+    /// once its first step found that the run cannot start. Any effect
+    /// still outstanding at that point is an orphan: only `Done` waits for
+    /// its answer. The caller can read this after a `Pending` step to learn
+    /// that it may drop what it holds for the run. This keeps control flow
+    /// independent of the events, which are only a report.
     #[must_use]
     pub fn decided(&self) -> bool {
-        match &self.start {
-            Start::Live(scheduler) => scheduler.decided(),
-            Start::Stillborn(_) | Start::Spent => true,
-        }
+        self.scheduler.decided()
     }
 
     /// The scheduler behind the run, for the suites that inspect its
     /// arena.
     #[cfg(test)]
     pub(crate) fn scheduler_for_test(&mut self) -> &mut Scheduler {
-        match &mut self.start {
-            Start::Live(scheduler) => scheduler,
-            Start::Stillborn(_) | Start::Spent => {
-                panic!("a run built from a state holds its scheduler")
-            }
-        }
+        &mut self.scheduler
     }
 
-    /// The run's model-turn counter, for the suites that count turns: zero
-    /// for a run that failed to start.
+    /// The run's model-turn counter, for the suites that count turns.
     #[cfg(test)]
     pub(crate) fn turns_for_test(&self) -> u32 {
-        match &self.start {
-            Start::Live(scheduler) => scheduler.turns_for_test(),
-            Start::Stillborn(_) | Start::Spent => 0,
-        }
+        self.scheduler.turns_for_test()
     }
-}
-
-/// Assembles the run state from the caller's context, checking the version
-/// gate and then the declared store.
-///
-/// # Errors
-/// Returns [`Error::UnsupportedVersion`] or a structural parse error for a
-/// prompt that is not a supported runvil prompt, or [`Error::Store`]
-/// when the handle declares no store or the store's backend fails the
-/// probe.
-fn prepare_state(prompt: Arc<Prompt>, args: &str, config: RunContext) -> Result<RunState> {
-    match prompt.frontmatter().runvil() {
-        Some(0) => {}
-        Some(other) => return Err(Error::UnsupportedVersion(other)),
-        None => {
-            return Err(Error::parse(
-                ParseErrorKind::Structure,
-                "not a runvil prompt: no runvil version",
-            )
-            .with_prompt_name(prompt.frontmatter().name()));
-        }
-    }
-    // Every run and every store call needs a declared store: the probe
-    // stats the store root through a throwaway capability, so a handle
-    // with no declaration fails here rather than on the first store call,
-    // and a declared-but-failing backend's error fails the run.
-    let probe = config
-        .vfs
-        .acquire(runvil_vfs::Origin::new("store mount probe"))
-        .map_err(Error::store)?;
-    runvil_vfs::detail::probe_store(&probe).map_err(Error::store)?;
-    Ok(RunState::new(prompt, args, config))
 }
 
 #[cfg(test)]
