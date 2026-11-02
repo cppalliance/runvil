@@ -12,7 +12,13 @@ xtask = "run -p build-xtask --"
 # Outlines the workspace with the vibelight checkout next to this repo. Cargo
 # builds it in release mode on first use and rebuilds it when its source
 # changes. Run it from the repo root: the path is relative to the cwd.
-vibelight = "run --release --manifest-path ../vibelight/Cargo.toml --"
+#
+# The name is `outline`, not `vibelight`, on purpose. Cargo resolves an alias
+# before an installed subcommand, warns that the alias shadows it, and plans to
+# make that a hard error, so an alias named `vibelight` would break every
+# `cargo install vibelight` user. With this name the checkout stays the default
+# here, and `cargo vibelight` runs whichever version is installed.
+outline = "run --release --bin vibelight --manifest-path ../vibelight/Cargo.toml --"
 
 # Clippy appends a docs-link line to every diagnostic; the lint name already
 # identifies it.
