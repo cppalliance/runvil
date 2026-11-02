@@ -343,7 +343,7 @@ jobs:
         uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
 
       - name: Build the Engine crates at the floor
-        run: cargo build --locked -p runvil -p runvil-engine -p runvil-lua -p runvil-parser -p runvil-types -p runvil-vfs -p runvil-model-client
+        run: cargo build --locked -p runvil -p runvil-engine -p runvil-lua -p runvil-prompt -p runvil-types -p runvil-vfs -p runvil-model-client
 
   # Single required status check for branch protection: it fails when any
   # job fails or is cancelled, so a cancelled job cannot read as green.
