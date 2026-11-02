@@ -24,19 +24,22 @@ type BoxedSource = Box<dyn std::error::Error + Send + Sync>;
 /// internal type variant-for-variant; the facade does not re-export it.
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
-    /// The prompt frontmatter was not valid YAML.
+    /// The prompt frontmatter did not decode: it was not valid YAML, or a key
+    /// or value broke the frontmatter schema, such as an unknown key or an arg
+    /// default of the wrong type.
     ///
     /// Keeps the decode failure as the cause beside the location it reports.
     #[error("invalid frontmatter: {message}")]
     ParseFrontmatter {
         /// The human-readable diagnostic (no raw source dump).
         message: String,
-        /// The originating YAML parse failure, whose text `message` holds.
+        /// The originating YAML decode failure, whose text `message` holds.
         cause: BoxedSource,
         /// The 1-based file line of the YAML failure, surfaced from the
         /// cause's location when it has one.
         line: Option<NonZeroU32>,
-        /// The 1-based file column of the YAML failure, when known.
+        /// The 1-based file column of the YAML failure, counted in characters
+        /// as the YAML parser counts them, when known.
         column: Option<NonZeroU32>,
     },
 
@@ -54,8 +57,8 @@ pub enum Error {
         span: Option<Range<usize>>,
         /// The human-readable diagnostic.
         message: String,
-        /// The prompt's frontmatter name, stamped when the failure postdates
-        /// the frontmatter (a frontmatter failure predates the name).
+        /// The prompt's frontmatter name, stamped on a failure found in the
+        /// body or raised by the Engine.
         name: Option<String>,
         /// The 1-based file line of the span's start, computed against the
         /// source when a span is known.
@@ -64,9 +67,9 @@ pub enum Error {
         column: Option<NonZeroU32>,
     },
 
-    /// A Lua region failed to compile at parse time, preserved as the
-    /// `runvil-lua` internal error type so the compiler diagnostic
-    /// chain survives unchanged.
+    /// A Lua region failed to compile at parse time, or the compiler VM could
+    /// not start, preserved as the `runvil-lua` internal error type so the
+    /// compiler diagnostic chain survives unchanged.
     #[error(transparent)]
     Lua(#[from] runvil_lua::Error),
 
@@ -129,8 +132,8 @@ impl Error {
     ///
     /// The position is the span's 1-based file line and byte column, when
     /// the failure has a span. Every other variant passes through unchanged:
-    /// a frontmatter failure predates the name, a Lua compile failure already
-    /// reports its own position, and an internal failure has none.
+    /// a frontmatter failure predates the name, a Lua failure reports its own
+    /// position, if it has one, and an internal failure has none.
     pub(crate) fn with_prompt_context(
         self,
         name: &str,
@@ -165,9 +168,9 @@ impl Error {
 /// Returns the 1-based file line and byte column of `byte_offset` within
 /// `body`, offset past the frontmatter lines.
 ///
-/// Both are `None` when the offset is out of bounds or the arithmetic
-/// overflows - an invariant break that must not replace the original parse
-/// failure.
+/// Both are `None` when the offset is out of bounds, and either is `None`
+/// alone when its own arithmetic overflows - an invariant break that must not
+/// replace the original parse failure.
 fn body_line_column(
     body: &str,
     byte_offset: usize,
@@ -208,7 +211,7 @@ pub enum ParseErrorKind {
     /// fence looked like a `lua` opening line (Lookalike). Lines inside the
     /// body of another fenced code block are never inspected.
     Fence,
-    /// A list-only section contained prose lines or empty items.
+    /// A list section had an empty item.
     List,
     /// A Lua region failed to compile because of a syntax error.
     Lua,
@@ -223,7 +226,6 @@ pub enum ParseErrorKind {
 /// failure happened. It keeps the originating error, when there is one,
 /// which [`cause`](ParseError::cause) returns.
 #[derive(Debug)]
-#[non_exhaustive]
 pub struct ParseError {
     inner: Box<Error>,
 }
@@ -296,13 +298,12 @@ impl ParseError {
         classify_parse_error(&self.inner).span
     }
 
-    /// Returns the prompt's frontmatter name, when the failure came after the
-    /// frontmatter was read.
+    /// Returns the prompt's frontmatter name for a `Structure`, `Fence`, or
+    /// `List` failure found past the frontmatter.
     ///
-    /// A frontmatter failure happens before the parser learns the name, which
-    /// comes from the frontmatter itself. It returns `None`, and the caller
-    /// can use its own label for the source. A Lua compile failure
-    /// also returns `None`.
+    /// Every other failure returns `None`, including every `Frontmatter`
+    /// failure, a refused `uses:` list among them, and every `Lua` and
+    /// `Internal` failure. The caller can use its own label for the source.
     #[must_use]
     pub fn name(&self) -> Option<&str> {
         match &*self.inner {
@@ -322,6 +323,10 @@ impl ParseError {
     }
 
     /// Returns the 1-based column of the failure, when known.
+    ///
+    /// For a frontmatter YAML failure, this is the column the YAML parser
+    /// reported, which counts characters. For a failure with a byte span, it
+    /// is the byte column where the span starts.
     #[must_use]
     pub fn column(&self) -> Option<NonZeroU32> {
         classify_parse_error(&self.inner).column

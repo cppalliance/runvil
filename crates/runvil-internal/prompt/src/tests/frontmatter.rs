@@ -6,7 +6,7 @@ use super::*;
 #[test]
 fn name_and_description_are_sufficient_frontmatter_for_parsing() {
     let prompt = parse_ok("---\nname: x\ndescription: d\n---\n\n# T\n\n## S\n\np\n");
-    assert_eq!(prompt.frontmatter.name, "x");
+    assert_eq!(prompt.frontmatter.name(), "x");
 }
 
 #[test]
@@ -36,12 +36,12 @@ fn unknown_frontmatter_field_is_rejected() {
 fn max_tool_iterations_parses_positive_and_is_absent_when_unset() {
     let p = parse_ok(&prompt("max_tool_iterations: 20", &[]));
     assert_eq!(
-        p.frontmatter.max_tool_iterations,
+        p.frontmatter.max_tool_iterations(),
         Some(std::num::NonZeroU32::new(20).unwrap())
     );
 
     let p = parse_ok(&prompt("", &[]));
-    assert_eq!(p.frontmatter.max_tool_iterations, None);
+    assert_eq!(p.frontmatter.max_tool_iterations(), None);
 }
 
 #[test]
@@ -57,13 +57,31 @@ fn max_tool_iterations_rejects_zero_negative_and_overflow() {
 }
 
 #[test]
+fn max_tool_iterations_reports_the_guides_messages() {
+    for raw in ["0", "-1"] {
+        assert_parse_error(
+            &prompt(&format!("max_tool_iterations: {raw}"), &[]),
+            ParseErrorKind::Frontmatter,
+            &format!("max_tool_iterations must be a positive integer (>= 1), got {raw}"),
+        );
+    }
+    for raw in ["1001", "100000000000"] {
+        assert_parse_error(
+            &prompt(&format!("max_tool_iterations: {raw}"), &[]),
+            ParseErrorKind::Frontmatter,
+            &format!("max_tool_iterations must be <= 1000, got {raw}"),
+        );
+    }
+}
+
+#[test]
 fn max_tool_iterations_accepts_the_upper_boundary() {
     let p = parse_ok(&prompt(
         &format!("max_tool_iterations: {MAX_TOOL_ITERATIONS}"),
         &[],
     ));
     assert_eq!(
-        p.frontmatter.max_tool_iterations,
+        p.frontmatter.max_tool_iterations(),
         Some(std::num::NonZeroU32::new(MAX_TOOL_ITERATIONS).unwrap())
     );
 }
@@ -71,10 +89,10 @@ fn max_tool_iterations_accepts_the_upper_boundary() {
 #[test]
 fn frontmatter_exposes_runvil_field() {
     let with = "---\nname: x\ndescription: d\nrunvil: 0\n---\n\n# T\n\n## S\n\np\n";
-    assert_eq!(parse_ok(with).frontmatter.runvil, Some(0));
+    assert_eq!(parse_ok(with).frontmatter.runvil(), Some(0));
 
     let without = "---\nname: x\ndescription: d\n---\n\n# T\n\n## S\n\np\n";
-    assert_eq!(parse_ok(without).frontmatter.runvil, None);
+    assert_eq!(parse_ok(without).frontmatter.runvil(), None);
 }
 
 #[test]

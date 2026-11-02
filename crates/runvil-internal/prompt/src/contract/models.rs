@@ -24,7 +24,6 @@ use crate::contract;
 /// requires a model that can run without thinking and turns it off.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
 #[serde(deny_unknown_fields)]
-#[non_exhaustive]
 pub struct RoleRequirements {
     /// The minimum context window in tokens.
     #[serde(default)]

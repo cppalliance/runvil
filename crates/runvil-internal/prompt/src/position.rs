@@ -9,9 +9,8 @@ use crate::{BodyText, Error, Result};
 
 /// Wraps a computed 1-based source line for the Lua compiler.
 ///
-/// Line numbers computed during parsing are always at least 1. A zero here means
-/// a broken source-position invariant; rather than silently coercing it to line
-/// one, this reports a structured internal parse error.
+/// Line numbers computed during parsing are always at least 1, so a zero means
+/// a broken source-position invariant.
 ///
 /// # Errors
 /// Returns [`Error::Internal`] when `line` is zero.
@@ -21,7 +20,8 @@ pub(crate) fn nz_source_line(line: u32) -> Result<NonZeroU32> {
     ))
 }
 
-/// Adds two 1-based line components with overflow checking.
+/// Adds two line components, at most one of them 1-based, with overflow
+/// checking.
 ///
 /// # Errors
 /// Returns [`Error::Internal`] when the sum overflows `u32`, rather than
@@ -31,12 +31,12 @@ pub(crate) fn line_add(a: u32, b: u32) -> Result<u32> {
         .ok_or(Error::Internal("parser: source line arithmetic overflowed"))
 }
 
-/// Locates `part` inside the shared `text` it was sliced from.
+/// Locates `part` inside `shared`, the text it was sliced from.
 ///
 /// # Errors
-/// Returns [`Error::Internal`] when `part` is not a slice of `text`.
-pub(crate) fn body_text(text: &Arc<str>, part: &str) -> Result<BodyText> {
-    BodyText::within(text, part).ok_or(Error::Internal(
+/// Returns [`Error::Internal`] when `part` is not a slice of `shared`.
+pub(crate) fn body_text(shared: &Arc<str>, part: &str) -> Result<BodyText> {
+    BodyText::within(shared, part).ok_or(Error::Internal(
         "parser: section text is not a slice of the prompt body",
     ))
 }
@@ -53,3 +53,6 @@ pub(crate) fn newlines_before(text: &str, byte_offset: usize) -> Result<u32> {
     u32::try_from(prefix.matches('\n').count())
         .map_err(|_| Error::Internal("parser: newline count exceeded u32 range"))
 }
+
+#[cfg(test)]
+mod tests;

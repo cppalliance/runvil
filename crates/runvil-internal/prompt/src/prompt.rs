@@ -4,7 +4,7 @@
 //! below them is the Engine's, reached through [`crate::detail`].
 //!
 //! Construction happens in the parsing modules; this module holds the value
-//! types and the invariant-preserving operations on them.
+//! types and their accessors.
 
 use crate::{BodyText, Frontmatter};
 use runvil_lua::LuaProgram;
@@ -22,14 +22,13 @@ pub enum Block {
     /// template.
     #[non_exhaustive]
     Prose {
-        /// Captured Markdown, trimmed of surrounding blank lines.
+        /// Captured Markdown, trimmed of leading and trailing whitespace.
         text: BodyText,
     },
 }
 
 /// One section of a prompt: a heading, ordered blocks, and children.
 #[derive(Debug, Clone, PartialEq, Eq)]
-#[non_exhaustive]
 pub struct Section {
     /// The heading text (the section's address).
     pub(crate) name: String,
@@ -39,9 +38,8 @@ pub struct Section {
     pub(crate) blocks: Vec<Block>,
     /// Child sections nested under this one (deeper heading levels).
     pub(crate) children: Vec<Section>,
-    /// Pre-parsed bullet items for list-only sections (no lua blocks).
-    ///
-    /// Empty for non-list sections.
+    /// The list items of a list section, which has at least one; empty for
+    /// every other section.
     pub(crate) items: Vec<BodyText>,
     /// The section's own raw Markdown, without its heading line or children.
     pub(crate) markdown: BodyText,
@@ -72,7 +70,7 @@ impl Section {
         &self.children
     }
 
-    /// Returns the pre-parsed bullet items for a list-only section.
+    /// Returns the list items of a list section; empty for every other section.
     #[must_use]
     pub fn items(&self) -> &[BodyText] {
         &self.items
@@ -85,7 +83,7 @@ impl Section {
         self.markdown.as_str()
     }
 
-    /// Classic leading Lua fence when the first block is Lua.
+    /// The prologue: the first block, when it is Lua.
     #[cfg(any(test, feature = "test-support"))]
     #[must_use]
     pub fn prologue(&self) -> Option<&LuaProgram> {
@@ -109,8 +107,7 @@ impl Section {
             .unwrap_or("")
     }
 
-    /// Classic trailing Lua fence when the last block is Lua and not the sole
-    /// leading prologue (a section that is only one Lua block has no epilog).
+    /// The epilog: the last block, when it is Lua and not the only block.
     #[cfg(any(test, feature = "test-support"))]
     #[must_use]
     pub fn epilog(&self) -> Option<&LuaProgram> {
@@ -121,22 +118,15 @@ impl Section {
         }
     }
 
-    /// True when this section is a validated bullet list.
-    ///
-    /// A section is list-only exactly when it parsed into non-empty
-    /// [`items`](Self::items) - i.e. it had no Lua blocks and every nonblank
-    /// prose line was a valid list item. Ordinary prose (even prose that
-    /// happens to contain a single bullet line) is not list-only.
-    #[cfg(test)]
+    /// Returns whether this is a list section, which has at least one item.
     #[must_use]
-    pub(crate) fn is_list_only(&self) -> bool {
+    pub fn is_list(&self) -> bool {
         !self.items.is_empty()
     }
 }
 
 /// A fully parsed prompt file.
 #[derive(Debug, Clone, PartialEq, Eq)]
-#[non_exhaustive]
 pub struct Prompt {
     /// The parsed YAML frontmatter.
     pub(crate) frontmatter: Frontmatter,

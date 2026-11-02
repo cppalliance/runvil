@@ -1,24 +1,18 @@
 //! Detects list-only sections and extracts their bullet items.
-//!
-//! A no-Lua section whose every nonblank line is a bullet marker is a list; one
-//! marker classifier (`classify_list_line`) feeds both detection
-//! ([`is_all_list_markers`]) and extraction ([`parse_bullet_items`]) so the two
-//! can never disagree about what counts as a marker.
 
 use crate::{Error, ParseErrorKind, Result};
 
-/// Parses bullet items from prose in a list-only section.
-///
-/// A list-only section has no Lua blocks. Its prose must contain only unordered
-/// (`- ` or `* `) or ordered (`N. ` or `N) `) bullet lines, with blank lines
-/// ignored. Returns an error if the section contains non-list content or if the
-/// items list is empty.
+/// Returns the items of a list section's prose, or `None` when the prose is
+/// not a list. Prose is a list when every nonblank line is a bullet marker
+/// and at least one is, so one incidental bullet in ordinary prose leaves it
+/// prose.
 ///
 /// # Errors
-/// Returns a list-classified parse error when a line is a non-list line, an
-/// empty marker, or when no items were found.
-pub(super) fn parse_bullet_items<'a>(prose: &'a str, section: &str) -> Result<Vec<&'a str>> {
+/// Returns a list-classified parse error when the prose is a list and a
+/// marker has no content.
+pub(crate) fn bullet_items<'a>(prose: &'a str, section: &str) -> Result<Option<Vec<&'a str>>> {
     let mut items = Vec::new();
+    let mut has_empty_marker = false;
     for line in prose.lines() {
         let trimmed = line.trim();
         if trimmed.is_empty() {
@@ -26,60 +20,20 @@ pub(super) fn parse_bullet_items<'a>(prose: &'a str, section: &str) -> Result<Ve
         }
         match classify_list_line(trimmed) {
             ListLine::Item(content) => items.push(content),
-            ListLine::EmptyMarker => {
-                return Err(Error::parse(
-                    ParseErrorKind::List,
-                    format!("empty bullet item in list section `{section}`"),
-                ));
-            }
-            ListLine::NotAMarker => {
-                return Err(Error::parse(
-                    ParseErrorKind::List,
-                    format!(
-                        "section `{section}` is a list section but contains non-list content: {trimmed}"
-                    ),
-                ));
-            }
+            ListLine::EmptyMarker => has_empty_marker = true,
+            ListLine::NotAMarker => return Ok(None),
         }
     }
-    if items.is_empty() {
+    if has_empty_marker {
         return Err(Error::parse(
             ParseErrorKind::List,
-            format!("section `{section}` is a list section but has no items"),
+            format!("empty bullet item in list section `{section}`"),
         ));
     }
-    Ok(items)
-}
-
-/// Returns true when `prose` is entirely list markers.
-///
-/// Every nonblank line must be a list marker (well-formed or empty), and at
-/// least one such line must exist. This is the list-only invariant: a single
-/// incidental bullet line in otherwise ordinary prose leaves a non-marker
-/// line present, so the section is classified as prose rather than forced
-/// through strict list parsing. A section whose lines are all markers but
-/// include an empty one is still a list, so [`parse_bullet_items`] reports
-/// the empty item.
-pub(super) fn is_all_list_markers(prose: &str) -> bool {
-    let mut saw_marker = false;
-    for line in prose.lines() {
-        let trimmed = line.trim();
-        if trimmed.is_empty() {
-            continue;
-        }
-        match classify_list_line(trimmed) {
-            ListLine::NotAMarker => return false,
-            ListLine::Item(_) | ListLine::EmptyMarker => saw_marker = true,
-        }
-    }
-    saw_marker
+    Ok((!items.is_empty()).then_some(items))
 }
 
 /// The classification of a single nonblank prose line as a list marker.
-///
-/// One classifier feeds both list *detection* (is this section a list?) and
-/// *extraction* (parse its items), so the two can never disagree about what
-/// counts as a marker.
 enum ListLine<'a> {
     /// A well-formed marker with nonblank content (the returned item text).
     Item(&'a str),
@@ -165,8 +119,11 @@ mod tests {
 
     #[test]
     fn all_markers_predicate() {
-        assert!(is_all_list_markers("- a\n1. b"));
-        assert!(!is_all_list_markers("- a\nplain line"));
-        assert!(!is_all_list_markers("   \n  "));
+        assert_eq!(
+            bullet_items("- a\n1. b", "test").unwrap(),
+            Some(vec!["a", "b"])
+        );
+        assert_eq!(bullet_items("- a\nplain line", "test").unwrap(), None);
+        assert_eq!(bullet_items("   \n  ", "test").unwrap(), None);
     }
 }

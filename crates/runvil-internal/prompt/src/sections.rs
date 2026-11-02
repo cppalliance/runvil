@@ -3,10 +3,10 @@
 use std::ops::Range;
 use std::sync::Arc;
 
-use pulldown_cmark::{Event, HeadingLevel, Options, Parser, Tag, TagEnd};
+use pulldown_cmark::{Event, Options, Parser, Tag, TagEnd};
 use runvil_types::emitter::Emitter;
 
-use crate::fence::{self, RawBlock};
+use crate::fence::{self, LuaRole, RawBlock};
 use crate::position::{body_text, line_add, newlines_before, nz_source_line};
 use crate::{Block, BodyText, Error, ParseErrorKind, Result, Section, list};
 use runvil_lua::LuaProgram;
@@ -16,26 +16,15 @@ use runvil_lua::LuaProgram;
 #[derive(Debug, Clone)]
 pub(crate) struct Heading<'a> {
     pub(crate) level: u8,
+    /// The heading's text, trimmed.
     pub(crate) title: String,
     pub(crate) content: &'a str,
     /// 1-based line number within `body` where `content` begins.
-    pub(crate) content_start_line: u32,
+    pub(crate) content_body_line: u32,
     /// 1-based line number within `body` of the heading line itself.
-    pub(crate) source_line: u32,
+    pub(crate) body_line: u32,
     /// Byte range of the heading within `body`, kept for span diagnostics.
     span: Range<usize>,
-}
-
-/// Converts a `HeadingLevel` to its numeric level.
-fn level_num(level: HeadingLevel) -> u8 {
-    match level {
-        HeadingLevel::H1 => 1,
-        HeadingLevel::H2 => 2,
-        HeadingLevel::H3 => 3,
-        HeadingLevel::H4 => 4,
-        HeadingLevel::H5 => 5,
-        HeadingLevel::H6 => 6,
-    }
 }
 
 /// Walks the markdown body and collects every heading with the content that
@@ -61,7 +50,7 @@ pub(crate) fn collect_headings(body: &str) -> Result<Vec<Heading<'_>>> {
                 container_depth = container_depth.saturating_sub(1);
             }
             Event::Start(Tag::Heading { level, .. }) if container_depth == 0 => {
-                current = Some((level_num(level), range.clone(), String::new()));
+                current = Some((level as u8, range.clone(), String::new()));
             }
             Event::End(TagEnd::Heading(_)) => {
                 if let Some((level, range, title)) = current.take() {
@@ -90,64 +79,18 @@ pub(crate) fn collect_headings(body: &str) -> Result<Vec<Heading<'_>>> {
         let end = raws.peek().map_or(body.len(), |next| next.range.start);
         // +1 because newlines_before gives 0-based offset, and we want
         // the 1-based line number of the first content line.
-        let content_start_line = line_add(newlines_before(body, start)?, 1)?;
-        let source_line = line_add(newlines_before(body, raw.range.start)?, 1)?;
+        let content_body_line = line_add(newlines_before(body, start)?, 1)?;
+        let body_line = line_add(newlines_before(body, raw.range.start)?, 1)?;
         headings.push(Heading {
             level: raw.level,
             title: raw.title,
             content: &body[start..end],
-            content_start_line,
-            source_line,
+            content_body_line,
+            body_line,
             span: raw.range,
         });
     }
     Ok(headings)
-}
-
-/// Builds one heading's executable blocks while preserving source positions.
-///
-/// Prose reads in place from `body`, the shared text `heading` was sliced from.
-/// `label` names the section in each Lua block's location.
-fn build_heading_blocks(
-    body: &Arc<str>,
-    heading: &Heading<'_>,
-    name: &str,
-    label: &str,
-    frontmatter_lines: u32,
-    emitter: &Emitter,
-) -> Result<Vec<Block>> {
-    let content_abs_line = line_add(frontmatter_lines, heading.content_start_line)?;
-    let raw_blocks = fence::split_section_blocks(heading.content, name)?;
-    let has_prose = raw_blocks
-        .iter()
-        .any(|block| matches!(block, RawBlock::Prose(_)));
-    let total = raw_blocks.len();
-    let mut blocks = Vec::with_capacity(total);
-    let mut ordinal = 0;
-    for (index, raw) in raw_blocks.into_iter().enumerate() {
-        match raw {
-            RawBlock::Prose(text) => blocks.push(Block::Prose {
-                text: body_text(body, text)?,
-            }),
-            RawBlock::Lua {
-                source,
-                line_offset,
-            } => {
-                ordinal += 1;
-                let abs_line = line_add(content_abs_line, line_offset)?;
-                let location = fence::lua_block_location(label, index, total, has_prose, ordinal);
-                let program = LuaProgram::compile(
-                    &source,
-                    &location,
-                    nz_source_line(abs_line)?,
-                    emitter,
-                    name,
-                )?;
-                blocks.push(Block::Lua(program));
-            }
-        }
-    }
-    Ok(blocks)
 }
 
 /// Rejects an orphan deep heading, one that skips a level.
@@ -164,7 +107,7 @@ fn check_child_level(heading: &Heading<'_>, parent_level: u8) -> Result<()> {
             heading.span.clone(),
             format!(
                 "section `{}` is an orphan H{level} heading with no parent H{}",
-                heading.title.trim(),
+                heading.title,
                 parent_level + 1
             ),
         ));
@@ -176,62 +119,16 @@ fn check_child_level(heading: &Heading<'_>, parent_level: u8) -> Result<()> {
 ///
 /// A section's name is its runtime address (jumps, lookups, fanout), so an
 /// empty/whitespace heading is unaddressable and must be rejected at parse.
-fn section_name(heading: &Heading<'_>, level: u8) -> Result<String> {
+fn section_name(heading: &Heading<'_>) -> Result<String> {
     let name = heading.title.clone();
-    if name.trim().is_empty() {
+    if name.is_empty() {
         return Err(Error::parse_at(
             ParseErrorKind::Structure,
             heading.span.clone(),
-            format!("an H{level} section heading must not be empty"),
+            format!("an H{} section heading must not be empty", heading.level),
         ));
     }
     Ok(name)
-}
-
-/// Returns the section's list items, or none when it is not a list.
-///
-/// A section is a list only when it has no Lua and every nonblank prose line
-/// is a list marker; one incidental bullet in mixed prose leaves a non-marker
-/// line, so the section stays prose.
-fn list_items(body: &Arc<str>, blocks: &[Block], name: &str) -> Result<Vec<BodyText>> {
-    let has_no_lua = blocks
-        .iter()
-        .all(|block| matches!(block, Block::Prose { .. }));
-    let prose_for_items = blocks.iter().find_map(|block| match block {
-        Block::Prose { text, .. } => Some(text.as_str()),
-        Block::Lua(_) => None,
-    });
-    if has_no_lua
-        && let Some(prose) = prose_for_items
-        && list::is_all_list_markers(prose)
-    {
-        list::parse_bullet_items(prose, name)?
-            .into_iter()
-            .map(|item| body_text(body, item))
-            .collect()
-    } else {
-        Ok(Vec::new())
-    }
-}
-
-/// Names a section in its Lua block locations.
-///
-/// The name is the title alone, or the title and its heading line when
-/// another section in `headings` shares the title, so a reader can tell the
-/// two sections' errors apart. The locations are display names; each block's
-/// line-based chunk name, not its location, decides which program maps an
-/// error.
-fn block_label(headings: &[Heading<'_>], name: &str, heading_abs_line: u32) -> String {
-    if headings
-        .iter()
-        .filter(|other| other.title == name)
-        .nth(1)
-        .is_some()
-    {
-        format!("section `{name}` (line {heading_abs_line})")
-    } else {
-        format!("section `{name}`")
-    }
 }
 
 /// Rejects a section whose name an earlier sibling already took.
@@ -257,62 +154,204 @@ fn check_unique_sibling(
     Ok(())
 }
 
-/// Builds a section tree from a flat, document-ordered list of headings.
+/// Compiles a prompt body's H1 and section blocks, and builds its section
+/// tree.
 ///
-/// Recursion consumes headings whose level is deeper than `parent_level`; a
-/// heading at or above `parent_level` belongs to an ancestor and stops the
-/// current level. A heading that skips a level (an orphan deep heading, such as
-/// an H4 directly under an H2, or an H3 top-level section with no parent H2) is
-/// rejected: every heading must be exactly one level deeper than its parent.
-///
-/// # Errors
-/// Returns [`Error::ParseStructured`] for an orphan heading, an empty heading,
-/// duplicate sibling names, or malformed section content. Propagates
-/// [`Error::Lua`] from Lua compilation and [`Error::Internal`] from invalid
-/// or overflowing source-line calculations, from a fence split that disagrees
-/// with the Markdown parser, or from section text that is not a slice of
-/// `body`.
-pub(crate) fn build_sections(
-    body: &Arc<str>,
-    headings: &[Heading<'_>],
-    pos: &mut usize,
-    parent_level: u8,
+/// [`SectionWalker::build_sections`] consumes `headings` from `pos` onward, so
+/// one walker builds one tree.
+pub(crate) struct SectionWalker<'a> {
+    /// The prompt body that every heading and block is sliced from.
+    shared: &'a Arc<str>,
+    /// The section headings, every heading after the H1 at level 2 or deeper,
+    /// in document order.
+    headings: &'a [Heading<'a>],
+    /// The file lines before the body, added to a body line to give its file
+    /// line.
     frontmatter_lines: u32,
-    emitter: &Emitter,
-) -> Result<Vec<Section>> {
-    let mut result = Vec::new();
-    // Parallel to `result`: each sibling's name and its 1-based heading line, so
-    // a duplicate can name both the first and the offending location.
-    let mut sibling_lines: Vec<(String, u32)> = Vec::new();
-    while *pos < headings.len() {
-        let h = &headings[*pos];
-        let level = h.level;
-        if level <= parent_level {
-            break;
-        }
-        check_child_level(h, parent_level)?;
-        let name = section_name(h, level)?;
-        let heading_abs_line = line_add(frontmatter_lines, h.source_line)?;
-        let label = block_label(headings, &name, heading_abs_line);
-        let blocks = build_heading_blocks(body, h, &name, &label, frontmatter_lines, emitter)?;
-        *pos += 1;
-        let children = build_sections(body, headings, pos, level, frontmatter_lines, emitter)?;
-        let items = list_items(body, &blocks, &name)?;
-        check_unique_sibling(&sibling_lines, &name, h, heading_abs_line)?;
-        sibling_lines.push((name.clone(), heading_abs_line));
-
-        result.push(Section {
-            name,
-            level,
-            blocks,
-            children,
-            items,
-            markdown: body_text(body, fence::trim_leading_blank_lines(h.content).trim_end())?,
-        });
-    }
-    Ok(result)
+    /// Receives each Lua block's compile events.
+    emitter: &'a Emitter,
+    /// Index in `headings` of the next heading to build.
+    pos: usize,
 }
 
-#[cfg(test)]
-#[path = "sections-tests.rs"]
-mod position_tests;
+impl<'a> SectionWalker<'a> {
+    /// Returns a walker positioned at the first of `headings`.
+    pub(crate) fn new(
+        shared: &'a Arc<str>,
+        headings: &'a [Heading<'a>],
+        frontmatter_lines: u32,
+        emitter: &'a Emitter,
+    ) -> Self {
+        Self {
+            shared,
+            headings,
+            frontmatter_lines,
+            emitter,
+            pos: 0,
+        }
+    }
+
+    /// Builds a section tree from the walker's flat, document-ordered headings.
+    ///
+    /// Recursion consumes headings whose level is deeper than `parent_level`; a
+    /// heading at or above `parent_level` belongs to an ancestor and stops the
+    /// current level. A heading that skips a level (an orphan deep heading, such
+    /// as an H4 directly under an H2, or an H3 top-level section with no parent
+    /// H2) is rejected: every heading must be exactly one level deeper than its
+    /// parent.
+    ///
+    /// Each section's checks run in a fixed order that decides which error a
+    /// malformed prompt reports: its level, its name, its blocks, its children,
+    /// its list items, and last its name against earlier siblings.
+    ///
+    /// # Errors
+    /// Returns [`Error::ParseStructured`] for an orphan heading, an empty
+    /// heading, duplicate sibling names, or malformed section content.
+    /// Propagates [`Error::Lua`] from Lua compilation and [`Error::Internal`]
+    /// from invalid or overflowing source-line calculations, from a fence split
+    /// that disagrees with the Markdown parser, or from section text that is
+    /// not a slice of `shared`.
+    pub(crate) fn build_sections(&mut self, parent_level: u8) -> Result<Vec<Section>> {
+        let headings = self.headings;
+        let mut result = Vec::new();
+        // Parallel to `result`: each sibling's name and its 1-based heading line, so
+        // a duplicate can name both the first and the offending location.
+        let mut sibling_lines: Vec<(String, u32)> = Vec::new();
+        while self.pos < headings.len() {
+            let h = &headings[self.pos];
+            let level = h.level;
+            if level <= parent_level {
+                break;
+            }
+            check_child_level(h, parent_level)?;
+            let name = section_name(h)?;
+            let heading_abs_line = line_add(self.frontmatter_lines, h.body_line)?;
+            let location = self.section_location(&name, heading_abs_line);
+            let blocks = self.build_heading_blocks(h, &name, &location)?;
+            self.pos += 1;
+            let children = self.build_sections(level)?;
+            let items = self.list_items(&blocks, &name)?;
+            check_unique_sibling(&sibling_lines, &name, h, heading_abs_line)?;
+            sibling_lines.push((name.clone(), heading_abs_line));
+
+            result.push(Section {
+                name,
+                level,
+                blocks,
+                children,
+                items,
+                markdown: body_text(
+                    self.shared,
+                    fence::trim_leading_blank_lines(h.content).trim_end(),
+                )?,
+            });
+        }
+        Ok(result)
+    }
+
+    /// Builds one heading's executable blocks while preserving source positions.
+    ///
+    /// `location` names the section in each Lua block's location.
+    fn build_heading_blocks(
+        &self,
+        heading: &Heading<'_>,
+        name: &str,
+        location: &str,
+    ) -> Result<Vec<Block>> {
+        let content_abs_line = line_add(self.frontmatter_lines, heading.content_body_line)?;
+        let raw_blocks = fence::split_section_blocks(heading.content, name)?;
+        self.compile_blocks(raw_blocks, content_abs_line, name, |role| {
+            fence::lua_block_location(location, role)
+        })
+    }
+
+    /// Compiles split content into blocks, in source order.
+    ///
+    /// Every prose block must be a slice of `shared`, which it reads from in
+    /// place. `content_abs_line` is the 1-based file line where the content
+    /// begins, and `location` gives each Lua block's compile location from its
+    /// role.
+    ///
+    /// # Errors
+    /// Propagates [`Error::Lua`] from Lua compilation, and returns
+    /// [`Error::Internal`] for an overflowing or zero source line or for prose
+    /// that is not a slice of `shared`.
+    pub(crate) fn compile_blocks(
+        &self,
+        raw_blocks: Vec<RawBlock<'_>>,
+        content_abs_line: u32,
+        name: &str,
+        location: impl Fn(&LuaRole) -> String,
+    ) -> Result<Vec<Block>> {
+        let mut blocks = Vec::with_capacity(raw_blocks.len());
+        for raw in raw_blocks {
+            match raw {
+                RawBlock::Prose(text) => blocks.push(Block::Prose {
+                    text: body_text(self.shared, text)?,
+                }),
+                RawBlock::Lua {
+                    source,
+                    line_offset,
+                    role,
+                } => {
+                    let abs_line = line_add(content_abs_line, line_offset)?;
+                    let program = LuaProgram::compile(
+                        &source,
+                        &location(&role),
+                        nz_source_line(abs_line)?,
+                        self.emitter,
+                        name,
+                    )?;
+                    blocks.push(Block::Lua(program));
+                }
+            }
+        }
+        Ok(blocks)
+    }
+
+    /// Returns the section's list items, or none when it is not a list.
+    ///
+    /// A section is a list when it has no Lua and [`list::bullet_items`] returns
+    /// items.
+    fn list_items(&self, blocks: &[Block], name: &str) -> Result<Vec<BodyText>> {
+        let has_no_lua = blocks
+            .iter()
+            .all(|block| matches!(block, Block::Prose { .. }));
+        let prose_for_items = blocks.iter().find_map(|block| match block {
+            Block::Prose { text, .. } => Some(text.as_str()),
+            Block::Lua(_) => None,
+        });
+        if has_no_lua
+            && let Some(prose) = prose_for_items
+            && let Some(items) = list::bullet_items(prose, name)?
+        {
+            items
+                .into_iter()
+                .map(|item| body_text(self.shared, item))
+                .collect()
+        } else {
+            Ok(Vec::new())
+        }
+    }
+
+    /// Names a section in its Lua block locations.
+    ///
+    /// The name is the title alone, or the title and its heading line when
+    /// another section in `headings` shares the title, so a reader can tell the
+    /// two sections' errors apart. The locations are display names; each block's
+    /// line-based chunk name, not its location, decides which program maps an
+    /// error.
+    fn section_location(&self, name: &str, heading_abs_line: u32) -> String {
+        if self
+            .headings
+            .iter()
+            .filter(|other| other.title == name)
+            .nth(1)
+            .is_some()
+        {
+            format!("section `{name}` (line {heading_abs_line})")
+        } else {
+            format!("section `{name}`")
+        }
+    }
+}

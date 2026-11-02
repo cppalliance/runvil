@@ -1,12 +1,13 @@
-//! The one prompt-local alias grammar, shared by the `tools` and `models`
-//! Engine globals.
+//! The [`Alias`] type: an adhoc tool's name, checked against the
+//! prompt-local alias grammar of [`runvil_types::names::is_alias`].
+
+use runvil_types::names::is_alias;
 
 use crate::error::{Error, Result};
 
 /// A prompt-local alias that passed the supported wire grammar.
 ///
-/// An adhoc tool's name and a model label share the one rule. An alias
-/// never contains `/`, so it never reads as a tool id.
+/// An alias never contains `/`, so it never reads as a tool id.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Alias(String);
 
@@ -18,13 +19,7 @@ impl Alias {
     /// with a non-letter, or contains a character other than a letter,
     /// digit, `_`, or `-` after its first byte.
     pub(crate) fn parse(alias: String) -> Result<Alias> {
-        let bytes = alias.as_bytes();
-        let valid = (1..=64).contains(&bytes.len())
-            && bytes[0].is_ascii_alphabetic()
-            && bytes[1..]
-                .iter()
-                .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-'));
-        if valid {
+        if is_alias(&alias) {
             Ok(Alias(alias))
         } else {
             Err(Error::Lua(format!(
@@ -45,37 +40,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn the_alias_grammar_accepts_letters_digits_underscores_and_dashes() {
-        for alias in [
-            "a",
-            "A",
-            "search",
-            "web_fetch",
-            "web-fetch2",
-            &"z".repeat(64),
-        ] {
-            let parsed = Alias::parse(alias.to_owned()).expect("the alias validates");
-            assert_eq!(String::from(parsed), alias, "{alias:?} keeps its text");
-        }
-    }
-
-    #[test]
     fn the_alias_grammar_rejects_every_other_shape() {
-        for alias in [
-            "",
-            "1search",
-            "_search",
-            "-search",
-            "web fetch",
-            "web.fetch",
-            "web/fetch",
-            &"a".repeat(65),
-        ] {
-            assert!(
-                Alias::parse(alias.to_owned()).is_err(),
-                "{alias:?} must not validate"
-            );
-        }
         let error = Alias::parse("1search".to_owned()).expect_err("the message names the grammar");
         assert!(
             error

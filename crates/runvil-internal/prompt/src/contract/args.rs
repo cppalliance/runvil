@@ -1,9 +1,8 @@
 //! Parses the `args` frontmatter key into typed arg declarations.
 //!
-//! The declaration advertises, documents, and derives the tool schema; it
-//! does not enforce - enforcement belongs to the prompt's H1. There are no
-//! freeform prompts: a prompt with no `args:` key gets the default
-//! declaration of one optional string field named `prose`.
+//! The declaration advertises and documents the prompt's args; it does not
+//! enforce - enforcement belongs to the prompt's H1. There are no freeform
+//! prompts: a prompt with no `args:` key gets the default [`ArgsDecl`].
 
 use std::collections::{BTreeMap, btree_map};
 
@@ -47,7 +46,6 @@ impl std::fmt::Display for ArgType {
 /// The declaration of one prompt arg: its type, whether it is optional, its
 /// default, and its description.
 #[derive(Debug, Clone, PartialEq, Eq)]
-#[non_exhaustive]
 pub struct ArgDecl {
     kind: ArgType,
     optional: bool,
@@ -84,7 +82,8 @@ impl ArgDecl {
     }
 }
 
-/// The map form of an arg declaration (`type` is a Rust keyword).
+/// The unchecked map form of an arg declaration: [`ArgDecl`]'s `Deserialize`
+/// reads it, then refuses a `default` whose YAML type does not match `type`.
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct ArgDeclWire {
@@ -155,18 +154,12 @@ impl<'de> Deserialize<'de> for ArgDecl {
 ///
 /// Every prompt has an args declaration. A prompt whose frontmatter omits
 /// the `args` key gets the default declaration: one optional string arg
-/// named `prose`. The input text of such a prompt arrives wrapped as
+/// named `prose`. The argument string of such a prompt arrives wrapped as
 /// `argv = { prose = "<text>" }`.
 #[derive(Debug, Clone, PartialEq, Eq)]
-#[non_exhaustive]
 pub struct ArgsDecl {
     fields: BTreeMap<String, ArgDecl>,
-    /// True only when the declaration is the implicit default (the `args:`
-    /// key was absent).
-    ///
-    /// Interface prose then wraps into `argv.prose`. An explicit `args:`
-    /// key - even one identical to the default shape - is a structured
-    /// declaration and never wraps.
+    /// Whether the `args:` key was absent; see [`ArgsDecl::is_default`].
     implicit: bool,
 }
 
@@ -174,9 +167,8 @@ impl ArgsDecl {
     /// Returns whether this is the default declaration, which a prompt gets
     /// when its frontmatter omits the `args` key.
     ///
-    /// The input text of such a prompt arrives wrapped as `argv.prose`. This
-    /// returns `false` for every explicit `args` key, even one that declares
-    /// the same single `prose` arg.
+    /// This returns `false` for every explicit `args` key, even one that
+    /// declares the same single `prose` arg.
     #[must_use]
     pub fn is_default(&self) -> bool {
         self.implicit
@@ -242,7 +234,6 @@ impl<'a> Iterator for ArgsDeclIter<'a> {
 impl ExactSizeIterator for ArgsDeclIter<'_> {}
 
 impl Default for ArgsDecl {
-    /// The default declaration: one optional string field named `prose`.
     fn default() -> Self {
         let mut fields = BTreeMap::new();
         fields.insert(

@@ -6,6 +6,7 @@
 //! one that splits a completion into the result the tool loop consumes and
 //! the metadata the round reports.
 
+use runvil_types::names::is_alias;
 use serde_json::Value;
 
 use crate::client::{
@@ -68,13 +69,7 @@ pub fn tool_schema_new(
     parameters: Value,
 ) -> Result<ToolSchema, ToolSchemaError> {
     let name = name.into();
-    let bytes = name.as_bytes();
-    let valid = (1..=64).contains(&bytes.len())
-        && bytes[0].is_ascii_alphabetic()
-        && bytes[1..]
-            .iter()
-            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-'));
-    if !valid {
+    if !is_alias(&name) {
         return Err(ToolSchemaError::InvalidName {
             name,
             reason: "expected [A-Za-z][A-Za-z0-9_-]{0,63}",

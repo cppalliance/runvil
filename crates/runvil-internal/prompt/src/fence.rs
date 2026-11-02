@@ -1,78 +1,40 @@
 //! Checks the strict `lua` fence rule and splits content into Lua and prose blocks.
 //!
 //! H1 and section content is an alternating sequence of `lua` fences and
-//! prose. A `lua` fence opens with a line that is exactly three backticks
-//! then `lua` and closes with a line that is exactly three backticks. This
-//! module finds the first fence in the body that breaks the Label, Opener, or
-//! Closer rule, or the first Lookalike line, so the parse can reject it, and
-//! splits content into [`RawBlock`]s that the facade compiles into
-//! [`Block`]s. Lines inside the body of another fenced code block are never
-//! inspected, which is how a document shows a Lua fence as an example.
+//! prose. [`Prompt::parse`](crate::Prompt::parse) states the strict fence
+//! rule. This module finds the first fence or line in the body that breaks
+//! its Label, Opener, Closer, or Lookalike case, so the parse can reject it,
+//! and splits content into [`RawBlock`]s, which this crate compiles into
+//! [`Block`](crate::Block)s.
 
 use std::ops::Range;
-use std::sync::Arc;
 
 use pulldown_cmark::{CodeBlockKind, CowStr, Event, Options, Parser, Tag};
-use runvil_types::emitter::Emitter;
 
-use crate::{Block, Error, ParseErrorKind, Result, position};
-use runvil_lua::LuaProgram;
+use crate::{Error, ParseErrorKind, Result, position};
 
 /// Uncompiled block produced while scanning section content.
-pub(super) enum RawBlock<'a> {
+pub(crate) enum RawBlock<'a> {
     Lua {
         source: String,
         /// Lines before the first line of Lua source within section content.
         line_offset: u32,
+        /// The block's place in its section, which names it in its compile
+        /// location.
+        role: LuaRole,
     },
     Prose(&'a str),
 }
 
-/// Compiles H1 content as alternating live Lua and prose blocks.
-///
-/// `content` is the H1's stretch of `body`, and `content_abs_line` is the
-/// 1-based line number in the full input where `content` begins.
-///
-/// # Errors
-/// Returns a fence-classified parse error for an unclosed fence, and a Lua
-/// compilation error for invalid Lua.
-pub(super) fn split_h1(
-    body: &Arc<str>,
-    content: &str,
-    title: &str,
-    content_abs_line: u32,
-    emitter: &Emitter,
-) -> Result<Vec<Block>> {
-    let raw_blocks = split_section_blocks(content, title)?;
-    let mut blocks = Vec::with_capacity(raw_blocks.len());
-    for raw in raw_blocks {
-        match raw {
-            RawBlock::Prose(text) => blocks.push(Block::Prose {
-                text: position::body_text(body, text)?,
-            }),
-            RawBlock::Lua {
-                source,
-                line_offset,
-            } => {
-                let location = format!("H1 `{title}` lua");
-                let line = position::line_add(content_abs_line, line_offset)?;
-                blocks.push(Block::Lua(LuaProgram::compile(
-                    &source,
-                    &location,
-                    position::nz_source_line(line)?,
-                    emitter,
-                    title,
-                )?));
-            }
-        }
-    }
-    if matches!(
-        blocks.as_slice(),
-        [Block::Prose { text }] if text.as_str().is_empty()
-    ) {
-        blocks.clear();
-    }
-    Ok(blocks)
+/// A Lua block's place among its section's blocks.
+pub(crate) enum LuaRole {
+    /// The first block.
+    Prologue,
+    /// Neither first nor last, with its 1-based place among the section's
+    /// Lua blocks.
+    Middle(usize),
+    /// The last block, when it is not also the first.
+    Epilog,
 }
 
 /// Removes complete leading lines that contain only whitespace.
@@ -92,7 +54,7 @@ pub(crate) fn trim_leading_blank_lines(content: &str) -> &str {
 /// closes the fence on. The validator refuses any closing line that is not
 /// exactly three backticks before a split runs, so a split that meets one has
 /// broken an invariant, and it reports an internal error.
-fn extract_exact_fence<'a>(content: &'a str, label: &str) -> Result<(String, &'a str)> {
+fn extract_exact_fence<'a>(content: &'a str, location: &str) -> Result<(String, &'a str)> {
     let mut offset = 0;
     for line in content.split_inclusive('\n') {
         let text = line.strip_suffix('\n').unwrap_or(line);
@@ -110,7 +72,7 @@ fn extract_exact_fence<'a>(content: &'a str, label: &str) -> Result<(String, &'a
     }
     Err(Error::parse(
         ParseErrorKind::Fence,
-        format!("{label} fence is not closed"),
+        format!("{location} fence is not closed"),
     ))
 }
 
@@ -153,7 +115,7 @@ fn exact_lua_openings(content: &str) -> Vec<usize> {
 }
 
 /// The rule a fence or line breaks, as found by [`first_fence_violation`].
-pub(super) enum FenceViolation {
+pub(crate) enum FenceViolation {
     /// Label: the fence's label starts with `lua` in any letter case without
     /// being exactly `lua`.
     Label(String),
@@ -177,7 +139,7 @@ pub(super) enum FenceViolation {
 /// fence, such as in an indented code block or a raw HTML block, and breaks
 /// the Opener rule. Lines inside a fence's extent are never checked against
 /// the Lookalike rule, so a fence nested in another fence's body never fails.
-pub(super) fn first_fence_violation(body: &str) -> Option<(Range<usize>, FenceViolation)> {
+pub(crate) fn first_fence_violation(body: &str) -> Option<(Range<usize>, FenceViolation)> {
     let mut extents = Vec::new();
     let mut fence = None;
     for (extent, label) in fence_openings(body) {
@@ -304,7 +266,7 @@ fn pending_prose<'a>(content: &'a str, segment: Range<usize>, rules: &[Range<usi
 ///
 /// Every exact `lua` fence the Markdown parser reports becomes a Lua block.
 /// Text between fences becomes prose (including an empty segment between
-/// consecutive fences, so classic prologue/epilog with empty prose stays
+/// consecutive fences, so a prologue and an epilog around empty prose stay
 /// `[Lua, Prose, Lua]`). Leading blank lines before a leading fence are
 /// discarded. Each prose segment is the pending Markdown buffer for the
 /// fence that follows it: a thematic break resets the buffer, so only the
@@ -318,7 +280,7 @@ fn pending_prose<'a>(content: &'a str, segment: Range<usize>, rules: &[Range<usi
 /// Returns a fence-classified parse error when an exact `lua` fence is not
 /// closed, and [`Error::Internal`] when an opening the Markdown parser
 /// reports falls inside the previous fence's extracted source.
-pub(super) fn split_section_blocks<'a>(
+pub(crate) fn split_section_blocks<'a>(
     content: &'a str,
     section: &str,
 ) -> Result<Vec<RawBlock<'a>>> {
@@ -344,15 +306,13 @@ pub(super) fn split_section_blocks<'a>(
                 "parser: section fence split disagrees with the Markdown parser",
             ));
         };
-        // Preserve classic location wording for unclosed leading/trailing fences.
-        let label = if index == 0 && opening == leading_start {
+        // An unclosed fence runs to the end of its content, so it is always the last block.
+        let location = if index == 0 && opening == leading_start {
             format!("section `{section}` prologue `lua`")
-        } else if index + 1 == openings.len() {
-            format!("section `{section}` epilog `lua`")
         } else {
-            format!("section `{section}` `lua`")
+            format!("section `{section}` epilog `lua`")
         };
-        let (source, rest) = extract_exact_fence(after_open, &label)?;
+        let (source, rest) = extract_exact_fence(after_open, &location)?;
         let fence_end = content.len() - rest.len();
 
         if !(pos == 0 && opening == leading_start) {
@@ -364,6 +324,7 @@ pub(super) fn split_section_blocks<'a>(
         blocks.push(RawBlock::Lua {
             source,
             line_offset,
+            role: LuaRole::Middle(index + 1),
         });
         pos = fence_end;
     }
@@ -373,30 +334,29 @@ pub(super) fn split_section_blocks<'a>(
         blocks.push(RawBlock::Prose(trailing));
     }
 
+    if let Some(RawBlock::Lua { role, .. }) = blocks.first_mut() {
+        *role = LuaRole::Prologue;
+    }
+    if blocks.len() > 1
+        && let Some(RawBlock::Lua { role, .. }) = blocks.last_mut()
+    {
+        *role = LuaRole::Epilog;
+    }
+
     Ok(blocks)
 }
 
-/// Compile label for one Lua block of the section named by `label`,
-/// preserving classic prologue/epilog names.
+/// The compile location of one Lua block, from its section's location and
+/// its role.
 ///
-/// Every other block is named by `ordinal`, its 1-based place among the
-/// section's Lua blocks. The label is the display name mapped runtime
-/// errors give the block; mapping itself matches the block's line-based
-/// chunk name, so the label need not be unique or short.
-pub(super) fn lua_block_location(
-    label: &str,
-    index: usize,
-    total: usize,
-    has_prose: bool,
-    ordinal: usize,
-) -> String {
-    let is_first = index == 0;
-    let is_last = index + 1 == total;
-    if is_first {
-        return format!("{label} prologue");
+/// A middle block is named by its 1-based place among the section's Lua
+/// blocks. The location is the display name mapped runtime errors give the
+/// block; mapping itself matches the block's line-based chunk name, so the
+/// location need not be unique or short.
+pub(crate) fn lua_block_location(section_location: &str, role: &LuaRole) -> String {
+    match role {
+        LuaRole::Prologue => format!("{section_location} prologue"),
+        LuaRole::Epilog => format!("{section_location} epilog"),
+        LuaRole::Middle(n) => format!("{section_location} lua {n}"),
     }
-    if is_last && has_prose {
-        return format!("{label} epilog");
-    }
-    format!("{label} lua {ordinal}")
 }

@@ -1,7 +1,7 @@
 //! List section tests: list detection and the bullet parser.
 
 use super::*;
-use crate::list::parse_bullet_items;
+use crate::list::bullet_items;
 
 #[test]
 fn mixed_prose_with_one_bullet_is_not_a_list() {
@@ -10,7 +10,7 @@ fn mixed_prose_with_one_bullet_is_not_a_list() {
     let body = "Here is context.\n- one incidental bullet\nMore prose follows.";
     let prompt = parse_ok(&PromptSource::new().prose("S", body).build());
     let section = &prompt.sections[0];
-    assert!(!section.is_list_only(), "mixed prose is not a list");
+    assert!(!section.is_list(), "mixed prose is not a list");
     assert!(section.items().is_empty());
     assert!(section.prose().contains("incidental bullet"));
 }
@@ -20,7 +20,7 @@ fn pure_list_section_parses_items() {
     let body = "- alpha\n- beta\n3. gamma";
     let prompt = parse_ok(&PromptSource::new().prose("S", body).build());
     let section = &prompt.sections[0];
-    assert!(section.is_list_only());
+    assert!(section.is_list());
     assert_eq!(section.items(), ["alpha", "beta", "gamma"]);
 }
 
@@ -34,6 +34,14 @@ fn all_marker_list_with_empty_item_is_rejected() {
 }
 
 #[test]
+fn an_empty_marker_before_a_prose_line_stays_prose() {
+    let prompt = parse_ok(&PromptSource::new().prose("S", "- alpha\n-\nmore").build());
+    let section = &prompt.sections[0];
+    assert!(section.items().is_empty());
+    assert_eq!(section.prose(), "- alpha\n-\nmore");
+}
+
+#[test]
 fn list_error_kind_does_not_depend_on_the_section_name() {
     for section in ["frontmatter", "fence"] {
         let error = parse_err(&PromptSource::new().prose(section, "- alpha\n1.").build());
@@ -43,42 +51,25 @@ fn list_error_kind_does_not_depend_on_the_section_name() {
 
 #[test]
 fn bullet_parser_strips_unordered_markers() {
-    let items = parse_bullet_items("- alpha\n* beta\n- gamma", "test").unwrap();
-    assert_eq!(items, vec!["alpha", "beta", "gamma"]);
+    let items = bullet_items("- alpha\n* beta\n- gamma", "test").unwrap();
+    assert_eq!(items, Some(vec!["alpha", "beta", "gamma"]));
 }
 
 #[test]
 fn bullet_parser_strips_ordered_markers() {
-    let items = parse_bullet_items("1. first\n2. second\n3) third", "test").unwrap();
-    assert_eq!(items, vec!["first", "second", "third"]);
+    let items = bullet_items("1. first\n2. second\n3) third", "test").unwrap();
+    assert_eq!(items, Some(vec!["first", "second", "third"]));
 }
 
 #[test]
 fn bullet_parser_ignores_blank_lines() {
-    let items = parse_bullet_items("- alpha\n\n- beta\n  \n- gamma", "test").unwrap();
-    assert_eq!(items, vec!["alpha", "beta", "gamma"]);
-}
-
-#[test]
-fn bullet_parser_rejects_non_list_content() {
-    let err = parse_bullet_items("- alpha\nnot a bullet\n- gamma", "test")
-        .expect_err("non-list content must error");
-    assert!(
-        err.to_string().contains("non-list content"),
-        "error was: {err}"
-    );
-}
-
-#[test]
-fn bullet_parser_rejects_empty_list() {
-    let err = parse_bullet_items("", "test").expect_err("empty list must error");
-    assert!(err.to_string().contains("no items"), "error was: {err}");
+    let items = bullet_items("- alpha\n\n- beta\n  \n- gamma", "test").unwrap();
+    assert_eq!(items, Some(vec!["alpha", "beta", "gamma"]));
 }
 
 #[test]
 fn bullet_parser_rejects_empty_item() {
-    let err =
-        parse_bullet_items("- alpha\n- \n- gamma", "test").expect_err("empty item must error");
+    let err = bullet_items("- alpha\n- \n- gamma", "test").expect_err("empty item must error");
     assert!(
         err.to_string().contains("empty bullet item"),
         "error was: {err}"

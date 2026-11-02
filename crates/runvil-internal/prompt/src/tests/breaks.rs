@@ -61,7 +61,7 @@ fn list_items_below_a_leading_break_parse() {
     let body = "---\n\n- alpha\n- beta";
     let prompt = parse_ok(&PromptSource::new().prose("Items", body).build());
     let section = &prompt.sections[0];
-    assert!(section.is_list_only());
+    assert!(section.is_list());
     assert_eq!(section.items(), ["alpha", "beta"]);
 }
 

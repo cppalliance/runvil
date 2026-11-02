@@ -193,8 +193,8 @@ fn parses_multi_section_with_all_features() {
         .build();
 
     let p = parse_ok(&src);
-    assert_eq!(p.frontmatter.name, "demo");
-    assert_eq!(p.frontmatter.description, "d");
+    assert_eq!(p.frontmatter.name(), "demo");
+    assert_eq!(p.frontmatter.description(), "d");
     assert_eq!(p.title, "Demo Title");
     assert_eq!(
         p.h1_blocks,

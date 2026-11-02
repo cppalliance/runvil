@@ -1,6 +1,7 @@
-//! Tests for `GlobalName` parsing and its rejection messages.
+//! Tests for `GlobalName` parsing and its rejection messages, and for the
+//! alias grammar.
 
-use super::GlobalName;
+use super::{GlobalName, is_alias};
 
 const EMPTY: &str = "invalid global name: segments must not be empty";
 const CONTROL: &str = "invalid global name: segments must not contain a control character";
@@ -113,4 +114,32 @@ fn from_str_parses_like_parse() {
         GlobalName::parse("Web").expect_err("uppercase is rejected")
     );
     assert_eq!(error.to_string(), CHARSET);
+}
+
+#[test]
+fn is_alias_follows_the_alias_grammar() {
+    for name in [
+        "a",
+        "A",
+        "search",
+        "web_fetch",
+        "web-fetch2",
+        "a_b-1",
+        &"z".repeat(64),
+    ] {
+        assert!(is_alias(name), "{name:?} must be an alias");
+    }
+    for name in [
+        "",
+        "1search",
+        "_search",
+        "-search",
+        "web fetch",
+        "web.fetch",
+        "web/fetch",
+        "\u{e9}",
+        &"a".repeat(65),
+    ] {
+        assert!(!is_alias(name), "{name:?} must not be an alias");
+    }
 }

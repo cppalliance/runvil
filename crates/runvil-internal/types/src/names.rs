@@ -8,6 +8,9 @@
 //! alphanumeric plus `-`, `_`, `.`, and comparison is case-sensitive. A
 //! name carries no version, so a `@` is a parse error.
 //!
+//! [`is_alias`] holds a second grammar, for prompt-local aliases, which are
+//! never global names.
+//!
 //! [`IdError`] is the error every id type and every catalog of ids returns,
 //! whether the id is built on a name or not.
 
@@ -132,6 +135,20 @@ fn validate_segment(segment: &str) -> Result<(), &'static str> {
         }
     }
     Ok(())
+}
+
+/// Returns whether `name` follows the prompt-local alias grammar
+/// `[A-Za-z][A-Za-z0-9_-]{0,63}`: 1 to 64 bytes, an ASCII letter first, then
+/// ASCII letters, digits, `_`, or `-`. An alias, such as an arg name or an
+/// adhoc tool name, is never a global name.
+#[must_use]
+pub fn is_alias(name: &str) -> bool {
+    let bytes = name.as_bytes();
+    (1..=64).contains(&bytes.len())
+        && bytes[0].is_ascii_alphabetic()
+        && bytes[1..]
+            .iter()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-'))
 }
 
 /// The error returned when an id, or a catalog of ids, is invalid.

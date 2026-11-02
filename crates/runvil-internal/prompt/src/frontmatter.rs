@@ -11,11 +11,9 @@ use crate::{ArgsDecl, Error, ParseErrorKind, Result, RoleRequirements};
 /// A declared input or output file in a prompt's frontmatter.
 ///
 /// The `path` is the file's name in the store, which the prompt reads or
-/// writes. The `description` documents the file's purpose and also feeds MCP
-/// schema generation.
+/// writes. The `description` documents the file's purpose for the caller.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Deserialize)]
 #[serde(deny_unknown_fields)]
-#[non_exhaustive]
 pub struct FileDecl {
     /// The store-internal path (e.g. `"paper.md"`).
     path: String,
@@ -43,18 +41,17 @@ impl FileDecl {
 /// a misspelled or extra one, is a prompt authoring error and fails the parse.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Deserialize)]
 #[serde(deny_unknown_fields)]
-#[non_exhaustive]
 pub struct Frontmatter {
-    /// The prompt's identifier, supplied explicitly by a caller.
-    pub(crate) name: String,
-    /// One-line description shown in prompt listings and name retrieval.
-    pub(crate) description: String,
+    /// The prompt's identifier, from the `name:` key.
+    name: String,
+    /// The prompt's one-line summary, from the `description:` key.
+    description: String,
     /// The runvil Engine major this file targets, when declared.
     ///
     /// Its presence marks the file as a runvil prompt; `None` means the
     /// file is not one.
     #[serde(default)]
-    pub(crate) runvil: Option<u32>,
+    runvil: Option<u32>,
     /// Maximum model round trips a section's tool-call loop may take.
     ///
     /// An absent value leaves the runtime's own cap in force. A declared
@@ -62,7 +59,7 @@ pub struct Frontmatter {
     /// negatives, and values above [`MAX_TOOL_ITERATIONS`], so no invalid
     /// cap can reach execution.
     #[serde(default, deserialize_with = "max_tool_iterations")]
-    pub(crate) max_tool_iterations: Option<NonZeroU32>,
+    max_tool_iterations: Option<NonZeroU32>,
     /// A file the prompt expects to find in the store when it starts.
     #[serde(default)]
     input: Option<FileDecl>,
@@ -75,7 +72,7 @@ pub struct Frontmatter {
     #[serde(default)]
     uses: Vec<PackRef>,
     /// The typed args declaration; an absent `args:` key yields the default
-    /// declaration (one optional string field named `prose`).
+    /// [`ArgsDecl`].
     #[serde(default)]
     args: ArgsDecl,
     /// The requirements declared per model role.
@@ -104,15 +101,16 @@ where
             "max_tool_iterations must be a positive integer (>= 1), got {raw}"
         )));
     }
-    if raw > i64::from(MAX_TOOL_ITERATIONS) {
-        return Err(serde::de::Error::custom(format!(
-            "max_tool_iterations must be <= {MAX_TOOL_ITERATIONS}, got {raw}"
-        )));
-    }
-    // 1 <= raw <= MAX_TOOL_ITERATIONS, so both conversions are infallible.
-    let value = u32::try_from(raw)
-        .map_err(|_| serde::de::Error::custom("max_tool_iterations is out of range"))?;
-    Ok(NonZeroU32::new(value))
+    u32::try_from(raw)
+        .ok()
+        .and_then(NonZeroU32::new)
+        .filter(|v| v.get() <= MAX_TOOL_ITERATIONS)
+        .map(Some)
+        .ok_or_else(|| {
+            serde::de::Error::custom(format!(
+                "max_tool_iterations must be <= {MAX_TOOL_ITERATIONS}, got {raw}"
+            ))
+        })
 }
 
 impl Frontmatter {
@@ -122,7 +120,7 @@ impl Frontmatter {
         &self.name
     }
 
-    /// Returns the one-line description shown in listings.
+    /// Returns the prompt's one-line summary.
     #[must_use]
     pub fn description(&self) -> &str {
         &self.description
@@ -172,8 +170,7 @@ impl Frontmatter {
 
     /// Returns the typed args declaration.
     ///
-    /// A prompt that omits the `args:` key yields the default declaration
-    /// (one optional string field named `prose`).
+    /// A prompt that omits the `args:` key yields the default [`ArgsDecl`].
     #[must_use]
     pub fn args(&self) -> &ArgsDecl {
         &self.args
@@ -187,14 +184,25 @@ impl Frontmatter {
     }
 }
 
-/// Splits a file into its YAML frontmatter, its markdown body, and the
-/// number of lines consumed by the frontmatter block (both `---` delimiters
-/// and everything between them).
+/// A prompt file split at its frontmatter by [`split_frontmatter`].
+#[derive(Debug)]
+pub(crate) struct SplitSource {
+    /// The YAML text between the two `---` delimiters.
+    pub(crate) yaml: String,
+    /// The markdown body after the closing `---` line.
+    pub(crate) body: String,
+    /// The number of lines consumed by the frontmatter block (both `---`
+    /// delimiters and everything between them).
+    pub(crate) frontmatter_lines: u32,
+}
+
+/// Splits a file into its YAML frontmatter and its markdown body.
 ///
 /// The file must open with a `---` line and close the frontmatter with another
 /// `---` line starting at column 0; an indented `---` is YAML block scalar
-/// text. `str::lines` handles both `\n` and `\r\n`.
-pub(crate) fn split_frontmatter(input: &str) -> Result<(String, String, u32)> {
+/// text. `str::lines` handles both `\n` and `\r\n`. Whitespace before or after
+/// the dashes of the opening line is ignored.
+pub(crate) fn split_frontmatter(input: &str) -> Result<SplitSource> {
     let input = input.strip_prefix('\u{feff}').unwrap_or(input); // drop BOM
     let mut lines = input.lines();
     match lines.next() {
@@ -225,5 +233,9 @@ pub(crate) fn split_frontmatter(input: &str) -> Result<(String, String, u32)> {
         ));
     }
     let body = lines.collect::<Vec<_>>().join("\n");
-    Ok((yaml, body, line_count))
+    Ok(SplitSource {
+        yaml,
+        body,
+        frontmatter_lines: line_count,
+    })
 }

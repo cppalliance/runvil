@@ -1,7 +1,7 @@
 //! Tests for the source-position helpers.
 
+use super::newlines_before;
 use crate::Error;
-use crate::position::newlines_before;
 
 #[test]
 fn newlines_before_reports_broken_byte_offset_invariants() {

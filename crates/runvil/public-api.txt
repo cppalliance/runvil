@@ -23,8 +23,6 @@
 #[non_exhaustive] pub enum runvil::vfs::VfsOutcome
 #[non_exhaustive] pub enum runvil::vfs::Writability
 #[non_exhaustive] pub runvil::model::TemperatureError::OutOfRange { .. }
-#[non_exhaustive] pub struct runvil::ParseError { /* private fields */ }
-#[non_exhaustive] pub struct runvil::Prompt { /* private fields */ }
 #[non_exhaustive] pub struct runvil::RunLimits { .. }
 #[non_exhaustive] pub struct runvil::effect::IssuedEffect { .. }
 #[non_exhaustive] pub struct runvil::effect::PackToolSets<T> { .. }
@@ -50,11 +48,6 @@
 #[non_exhaustive] pub struct runvil::model::ToolCall { /* private fields */ }
 #[non_exhaustive] pub struct runvil::model::ToolSchema { /* private fields */ }
 #[non_exhaustive] pub struct runvil::packs::PackId(/* private fields */)
-#[non_exhaustive] pub struct runvil::prompt::ArgDecl { /* private fields */ }
-#[non_exhaustive] pub struct runvil::prompt::ArgsDecl { /* private fields */ }
-#[non_exhaustive] pub struct runvil::prompt::FileDecl { /* private fields */ }
-#[non_exhaustive] pub struct runvil::prompt::Frontmatter { /* private fields */ }
-#[non_exhaustive] pub struct runvil::prompt::RoleRequirements { /* private fields */ }
 #[non_exhaustive] pub struct runvil::tools::ToolCatalog { /* private fields */ }
 #[non_exhaustive] pub struct runvil::tools::ToolError { /* private fields */ }
 #[non_exhaustive] pub struct runvil::tools::ToolId(/* private fields */)
@@ -1242,6 +1235,8 @@ pub runvil::vfs::VfsOutcome::Text::0: alloc::string::String
 pub runvil::vfs::VfsOutcome::Unit
 pub runvil::vfs::Writability::ReadOnly
 pub runvil::vfs::Writability::ReadWrite
+pub struct runvil::ParseError { /* private fields */ }
+pub struct runvil::Prompt { /* private fields */ }
 pub struct runvil::Run { /* private fields */ }
 pub struct runvil::RunConfig { /* private fields */ }
 pub struct runvil::RunSeed(/* private fields */)
@@ -1259,7 +1254,12 @@ pub struct runvil::model::Temperature(/* private fields */)
 pub struct runvil::packs::GlobalName { /* private fields */ }
 pub struct runvil::packs::PackRef { /* private fields */ }
 pub struct runvil::packs::Prelude { /* private fields */ }
+pub struct runvil::prompt::ArgDecl { /* private fields */ }
+pub struct runvil::prompt::ArgsDecl { /* private fields */ }
 pub struct runvil::prompt::ArgsDeclIter<'a> { /* private fields */ }
+pub struct runvil::prompt::FileDecl { /* private fields */ }
+pub struct runvil::prompt::Frontmatter { /* private fields */ }
+pub struct runvil::prompt::RoleRequirements { /* private fields */ }
 pub struct runvil::timestamp::Timestamp(/* private fields */)
 pub struct runvil::vfs::Access { /* private fields */ }
 pub struct runvil::vfs::AcquireContext { /* private fields */ }

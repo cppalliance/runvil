@@ -2,14 +2,16 @@
 //!
 //! The YAML is the whole contract: Packs install, models declare, args
 //! type. Parsing validates the static shape - each `uses:` entry a bare
-//! Pack id or vendor/name, no Pack id declared twice, the alias grammar
-//! on arg names, the five model role names, arg name and type sanity - and
-//! exposes the FULL declaration on the parsed [`Prompt`](crate::Prompt);
-//! checking the declaration against the caller's environment is the job of
-//! the run's first step, never the parser's.
+//! Pack id or vendor/name, no Pack id declared twice, no reserved Pack id,
+//! the alias grammar on arg names, the five model role names, and each arg
+//! default against its declared type - and exposes the FULL declaration on
+//! the parsed [`Prompt`](crate::Prompt); checking the declaration against
+//! the caller's environment is the job of the run's first step, never the
+//! parser's.
 //!
-//! `args` and `models` are defined in submodules; this root owns the
-//! duplicate-Pack check and the map deserializer the two map keys share.
+//! `args` and `models` are defined in submodules; this root owns the `uses:`
+//! checks, the arg-name check, and the map deserializer the two map keys
+//! share.
 
 use std::collections::btree_map::Entry;
 use std::collections::{BTreeMap, BTreeSet};
@@ -17,6 +19,7 @@ use std::fmt;
 use std::marker::PhantomData;
 
 use runvil_types::models::ModelRole;
+use runvil_types::names::is_alias;
 use runvil_types::packs::{PackId, PackRef};
 use serde::de::{self, MapAccess, Visitor};
 use serde::{Deserialize, Deserializer};
@@ -31,20 +34,6 @@ pub use args::{ArgDecl, ArgType, ArgsDecl, ArgsDeclIter};
 pub(crate) use models::RoleMap;
 pub use models::RoleRequirements;
 
-/// The prompt-local alias grammar: `[A-Za-z][A-Za-z0-9_-]{0,63}`.
-///
-/// Args field names are prompt-local and never global names. (The same rule
-/// sits in `runvil-lua`'s `alias` module, the run-time counterpart to this
-/// parse-time check.)
-fn is_valid_alias(alias: &str) -> bool {
-    let bytes = alias.as_bytes();
-    (1..=64).contains(&bytes.len())
-        && bytes[0].is_ascii_alphabetic()
-        && bytes[1..]
-            .iter()
-            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-'))
-}
-
 /// A key of a contract map: how it is checked and how an error names it.
 trait ContractKey: Ord {
     /// Refuses a key the map's grammar does not allow.
@@ -56,7 +45,7 @@ trait ContractKey: Ord {
 
 impl ContractKey for String {
     fn check(&self, what: &str) -> Result<(), String> {
-        if is_valid_alias(self) {
+        if is_alias(self) {
             Ok(())
         } else {
             Err(format!(

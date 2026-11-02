@@ -1,11 +1,12 @@
 //! Test support for the parser's own tests and, through the `test-support`
 //! feature, for companion crates' tests.
 //!
-//! `Section` and `Block::Prose` are `#[non_exhaustive]`, so a companion
-//! crate's tests cannot construct them literally; these constructors are the
-//! cross-crate seam for synthetic section trees. The source builder writes a
-//! prompt from its parts, and the parse assertions show the source and the
-//! actual outcome when a parse goes the other way.
+//! `Section`'s fields are crate-private and `Block::Prose` is
+//! `#[non_exhaustive]`, so a companion crate's tests cannot construct them
+//! literally; these constructors are the cross-crate seam for synthetic
+//! section trees. The source builder writes a prompt from its parts, and the
+//! parse assertions show the source and the actual outcome when a parse goes
+//! the other way.
 
 use crate::{Block, BodyText, ParseError, ParseErrorKind, Prompt, Section};
 

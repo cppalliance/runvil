@@ -4,7 +4,8 @@
 //! blocks, then H2 sections.
 //! H1 and section content are alternating sequences of exact `lua` fences and
 //! prose ([`Block`]). Sections nest recursively (H3 under H2, H4 under H3, and
-//! so on through H6). Classic prologue/prose/epilog is exactly `[Lua, Prose, Lua]`.
+//! so on through H6). A section with a prologue, prose, and an epilog is
+//! exactly `[Lua, Prose, Lua]`.
 //!
 //! Prose capture follows the pending-Markdown model: Markdown accumulates
 //! after each heading or ordinary `lua` fence, and each prose block is the
@@ -14,8 +15,9 @@
 //! normally. Markdown left after the final `lua` fence is inert trailing
 //! commentary, never an error.
 //!
-//! Every `lua` fence compiles at load time, so a loaded [`Prompt`] is ready to
-//! run: a syntax error surfaces here, never partway through a run.
+//! Every `lua` fence in the H1 body and the sections compiles at load time, so
+//! a loaded [`Prompt`] is ready to run: a syntax error surfaces here, never
+//! partway through a run.
 //!
 //! ## Invariants
 //!
