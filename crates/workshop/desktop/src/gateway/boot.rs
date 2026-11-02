@@ -88,6 +88,9 @@ pub(crate) fn ensure_gateway(config: &Config) -> anyhow::Result<GatewayAttachmen
         GatewayPlan::ConfigOnly => Ok(GatewayAttachment::Config),
         GatewayPlan::Fail => Err(no_gateway_error()),
         GatewayPlan::Launch(exe) => {
+            if sibling_is_placeholder(&exe) {
+                return Err(placeholder_gateway_error(&exe));
+            }
             launch_and_attach_cancellable(&run_dir, &exe, &CancellationToken::new())
                 .and_then(validated_recovery_attachment)
                 .context("launch the sidecar gateway")
@@ -143,6 +146,41 @@ pub(super) fn plan_gateway(
 pub(super) fn sibling_gateway(exe_dir: &Path) -> Option<PathBuf> {
     let candidate = exe_dir.join(GATEWAY_EXE_NAME);
     candidate.is_file().then_some(candidate)
+}
+
+/// The text `tools/fetch-gateway-sidecar.mjs --stub` writes, and the only
+/// content a file may hold and still be called a Gateway. Checked before a
+/// launch because Windows answers a text file with "This version of %1 is
+/// not compatible with the version of Windows you're running" and no clue
+/// which file was at fault.
+const STUB_PREFIX: &str = "This is a placeholder staged by";
+
+/// Whether the sibling Gateway is a compile-only stub rather than an
+/// executable. A real Gateway starts with `MZ` on Windows and something
+/// other than this text everywhere else, so a byte-prefix compare is the
+/// whole test.
+pub(super) fn sibling_is_placeholder(exe: &Path) -> bool {
+    use std::io::Read as _;
+    let Ok(mut file) = std::fs::File::open(exe) else {
+        return false;
+    };
+    let mut prefix = vec![0_u8; STUB_PREFIX.len()];
+    let Ok(read) = file.read(&mut prefix) else {
+        return false;
+    };
+    prefix.truncate(read);
+    prefix == STUB_PREFIX.as_bytes()
+}
+
+/// The failure for a stub sidecar, naming the file and the one command that
+/// replaces it with a runnable Gateway.
+pub(super) fn placeholder_gateway_error(exe: &Path) -> anyhow::Error {
+    anyhow::anyhow!(
+        "the gateway beside this program is a compile-only stub, not an executable: {}; \
+         run `node tools/fetch-gateway-sidecar.mjs` from the repository root to stage the \
+         pinned Gateway release, then rebuild",
+        exe.display()
+    )
 }
 
 /// Builds the loud boot failure naming both supported remedies.

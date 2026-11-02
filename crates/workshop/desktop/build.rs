@@ -57,6 +57,10 @@ fn install_gateway_sidecar() -> Result<(), Box<dyn Error>> {
         .join(format!("runvil-gateway-{target}{exe_suffix}"));
 
     println!("cargo:rerun-if-env-changed={GATEWAY_SIDECAR_VARIABLE}");
+    // The marker is written only by `tools/fetch-gateway-sidecar.mjs`, never
+    // here, so watching it cannot loop. Watching it means re-staging a
+    // release over a stub re-runs this script and the warning below clears.
+    println!("cargo:rerun-if-changed={}", pin_marker(&sidecar).display());
     if let Some(named) = env::var_os(GATEWAY_SIDECAR_VARIABLE) {
         let named = PathBuf::from(named);
         if named.as_os_str().is_empty() {
@@ -86,6 +90,19 @@ fn install_gateway_sidecar() -> Result<(), Box<dyn Error>> {
     // `target/<profile>/runvil-gateway` from an earlier day must not
     // silently replace a downloaded release.
     if sidecar_is_pinned(&sidecar) {
+        if sidecar_is_stub(&sidecar) {
+            // CI stages a stub for compile-only jobs, so a build that copies
+            // one is expected there. A person building locally gets the same
+            // warning, which is the last chance to notice before an app that
+            // cannot start exists on disk.
+            println!(
+                "cargo:warning={} is a compile-only stub Gateway and cannot run; \
+                 run `node tools/fetch-gateway-sidecar.mjs --target {}` and rebuild for a \
+                 Gateway that starts",
+                sidecar.display(),
+                target
+            );
+        }
         return Ok(());
     }
     if !built.is_file() || sidecar_is_current(&built, &sidecar) {
@@ -119,9 +136,26 @@ fn profile_dir_from_out_dir(out_dir: &Path) -> Option<PathBuf> {
 /// Whether `tools/fetch-gateway-sidecar.mjs` staged the sidecar and said
 /// so: the file is then the authority, whatever a workspace build wrote.
 fn sidecar_is_pinned(sidecar: &Path) -> bool {
+    pin_marker(sidecar).is_file()
+}
+
+/// The marker beside the sidecar: `<sidecar>.pinned`.
+fn pin_marker(sidecar: &Path) -> PathBuf {
     let mut marker = sidecar.as_os_str().to_owned();
     marker.push(".pinned");
-    Path::new(&marker).is_file()
+    PathBuf::from(marker)
+}
+
+/// Whether the marker says the staged sidecar is the compile-only stub
+/// rather than the pinned release. The marker is the fetch script's JSON,
+/// so a substring check keeps this script free of a JSON dependency. A
+/// malformed marker reads as unknown, and unknown is not a stub: the app's
+/// own boot check still refuses to run one.
+fn sidecar_is_stub(sidecar: &Path) -> bool {
+    let Ok(text) = fs::read_to_string(pin_marker(sidecar)) else {
+        return false;
+    };
+    text.contains("\"kind\": \"stub\"") || text.contains("\"kind\":\"stub\"")
 }
 
 /// The sidecar is current when it exists with the same length and a

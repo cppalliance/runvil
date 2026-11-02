@@ -13,7 +13,8 @@ use super::{
 #[cfg(windows)]
 use crate::gateway::boot::spawn_detached_windows_with;
 use crate::gateway::boot::{
-    GATEWAY_EXE_NAME, GatewayPlan, no_gateway_error, plan_gateway, sibling_gateway, spawn_detached,
+    GATEWAY_EXE_NAME, GatewayPlan, no_gateway_error, placeholder_gateway_error, plan_gateway,
+    sibling_gateway, sibling_is_placeholder, spawn_detached,
 };
 use crate::gateway::identity::GatewayAttachment;
 use crate::gateway::supervisor::RECOVERY_POLL_INTERVAL;
@@ -262,6 +263,68 @@ fn the_no_gateway_error_names_both_remedies() {
     assert!(
         message.contains("workshop.toml"),
         "the error names the explicit-config remedy: {message}"
+    );
+}
+
+/// The stub `tools/fetch-gateway-sidecar.mjs --stub` writes, which CI stages
+/// so compile-only jobs need no Gateway release.
+const STUB_TEXT: &str = "This is a placeholder staged by tools/fetch-gateway-sidecar.mjs --stub.\n\
+     It stands in for the Gateway sidecar so compile-only jobs need no release.\n";
+
+fn sibling_with(content: &[u8]) -> (tempfile::TempDir, PathBuf) {
+    let dir = tempfile::TempDir::new().expect("tempdir");
+    let exe = dir.path().join(GATEWAY_EXE_NAME);
+    std::fs::write(&exe, content).expect("write the sibling");
+    (dir, exe)
+}
+
+#[test]
+fn a_stub_sibling_is_recognized_before_a_launch_attempt() {
+    let (_dir, exe) = sibling_with(STUB_TEXT.as_bytes());
+    assert!(
+        sibling_is_placeholder(&exe),
+        "the compile-only stub must be caught before spawning it"
+    );
+}
+
+#[test]
+fn a_real_executable_sibling_is_not_a_placeholder() {
+    let (_dir, exe) = sibling_with(b"MZ\x90\x00\x03\x00\x00\x00");
+    assert!(
+        !sibling_is_placeholder(&exe),
+        "an executable is left to the spawn to judge"
+    );
+}
+
+#[test]
+fn an_empty_sibling_is_not_treated_as_a_placeholder() {
+    let (_dir, exe) = sibling_with(b"");
+    assert!(
+        !sibling_is_placeholder(&exe),
+        "an unreadable prefix must not read as a stub"
+    );
+}
+
+#[test]
+fn a_missing_sibling_is_not_treated_as_a_placeholder() {
+    let dir = tempfile::TempDir::new().expect("tempdir");
+    assert!(
+        !sibling_is_placeholder(&dir.path().join(GATEWAY_EXE_NAME)),
+        "a file that is not there cannot be a stub"
+    );
+}
+
+#[test]
+fn the_placeholder_error_names_the_file_and_the_fetch_command() {
+    let exe = PathBuf::from("/install/runvil-gateway");
+    let message = placeholder_gateway_error(&exe).to_string();
+    assert!(
+        message.contains("runvil-gateway"),
+        "the error names the file that is not runnable: {message}"
+    );
+    assert!(
+        message.contains("node tools/fetch-gateway-sidecar.mjs"),
+        "the error names the one command that stages a real Gateway: {message}"
     );
 }
 
