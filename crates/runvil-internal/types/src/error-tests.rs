@@ -1,11 +1,12 @@
-//! Tests for `ErrorCode` numbering, `Location` ranges, and the cause chain
-//! `with_cause` appends.
+//! Tests for `ErrorCode` numbering, `Location` ranges, the cause chain
+//! `with_cause` appends, and how `place` locates an error and
+//! `coordinates` formats its location.
 
 use std::collections::BTreeSet;
 use std::fmt;
 use std::num::NonZeroU32;
 
-use super::{Error, ErrorCode, Location};
+use super::{Error, ErrorCode, Location, coordinates, place};
 
 /// A cause with an optional cause of its own.
 #[derive(Debug)]
@@ -315,5 +316,64 @@ fn a_line_location_covers_the_whole_line() {
     assert_eq!(
         (last.end_line, last.end_column),
         (NonZeroU32::MAX, nonzero(1))
+    );
+}
+
+/// A runtime failure with no location.
+fn runtime() -> Error {
+    Error::new(ErrorCode::LuaRuntime, "boom", "Fix the code.")
+}
+
+/// The range in `file` from line 2, column 5, up to line 4, column 7.
+fn span(file: &str) -> Location {
+    Location::new(file, nonzero(2), nonzero(5), nonzero(4), nonzero(7))
+        .expect("the range ends after it starts")
+}
+
+#[test]
+fn place_keeps_an_existing_location() {
+    let mut error = runtime();
+    error.at = Some(span("a.md"));
+    assert_eq!(place(error.clone(), "b.md", Some(nonzero(9))), error);
+}
+
+#[test]
+fn place_fills_an_empty_file_and_keeps_the_lines_and_columns() {
+    let mut error = runtime();
+    error.at = Some(span(""));
+    let placed = place(error, "a.md", Some(nonzero(9)));
+    assert_eq!(placed.at, Some(span("a.md")));
+}
+
+#[test]
+fn place_sets_a_line_location_when_there_is_none() {
+    let placed = place(runtime(), "a.md", Some(nonzero(7)));
+    assert_eq!(placed.at, Some(Location::line("a.md", nonzero(7))));
+}
+
+#[test]
+fn place_with_no_line_and_no_location_changes_nothing() {
+    assert_eq!(place(runtime(), "a.md", None), runtime());
+}
+
+#[test]
+fn place_leaves_an_internal_error_unchanged() {
+    let code = ErrorCode::Internal;
+    let unlocated = Error::new(code, "internal invariant violated: x", code.prose());
+    let mut in_rust = unlocated.clone();
+    in_rust.at = Some(Location::line("src/a.rs", nonzero(12)));
+    let mut unfiled = unlocated.clone();
+    unfiled.at = Some(span(""));
+    for error in [unlocated, in_rust, unfiled] {
+        assert_eq!(place(error.clone(), "a.md", Some(nonzero(7))), error);
+    }
+}
+
+#[test]
+fn coordinates_formats_the_file_and_start_line() {
+    assert_eq!(coordinates(&span("a.md")), "a.md:2");
+    assert_eq!(
+        coordinates(&Location::line("src/a.rs", nonzero(12))),
+        "src/a.rs:12"
     );
 }

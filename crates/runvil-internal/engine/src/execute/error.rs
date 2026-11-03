@@ -1,7 +1,7 @@
 //! The stable [`RunErrorKind`] of a failed run, and the kind and message
 //! an Engine failure ends a run with.
 
-use runvil_types::error::{ErrorCode, FactKey};
+use runvil_types::error::{ErrorCode, FactKey, coordinates};
 
 use crate::Error;
 
@@ -240,7 +240,7 @@ fn location(error: &Error) -> Option<String> {
         _ if error.code == ErrorCode::Internal => error
             .at
             .as_ref()
-            .map(|at| format!("at {}:{}", at.file, at.start_line)),
+            .map(|at| format!("at {}", coordinates(at))),
         _ => None,
     }
 }

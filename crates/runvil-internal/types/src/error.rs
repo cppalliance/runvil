@@ -129,6 +129,35 @@ impl Location {
     }
 }
 
+/// Places `error` in the prompt `file`. This is the only code that writes a
+/// prompt location.
+///
+/// An [`ErrorCode::Internal`] error comes back unchanged, so it keeps its
+/// Rust location. Any other error that has a location keeps it, so the
+/// first placement wins; only an empty file in it becomes `file`, since the
+/// parser locates a failure before it knows the file. Otherwise a known
+/// `line` becomes [`Location::line`] in `file`, and with no `line` the
+/// error comes back unchanged.
+#[must_use]
+pub fn place(mut error: Error, file: &str, line: Option<NonZeroU32>) -> Error {
+    if error.code == ErrorCode::Internal {
+        return error;
+    }
+    match &mut error.at {
+        Some(at) if at.file.is_empty() => file.clone_into(&mut at.file),
+        Some(_) => {}
+        None => error.at = line.map(|line| Location::line(file, line)),
+    }
+    error
+}
+
+/// Formats `at` as `{file}:{line}`: its file and start line, with no
+/// column. This is the only code that formats a location as `file:line`.
+#[must_use]
+pub fn coordinates(at: &Location) -> String {
+    format!("{}:{}", at.file, at.start_line)
+}
+
 /// The name of a fact. Each mirrors a field name in today's Lua error tables,
 /// apart from `Limit`, `Section`, `Chain`, and `Run`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]

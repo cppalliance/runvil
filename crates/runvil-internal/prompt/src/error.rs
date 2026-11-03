@@ -10,7 +10,7 @@
 use std::num::NonZeroU32;
 use std::ops::Range;
 
-use runvil_types::error::{Error, ErrorCode, FactKey, Location};
+use runvil_types::error::{Error, ErrorCode, FactKey, Location, coordinates};
 use runvil_types::packs::PackId;
 
 /// The parser's result type over the universal [`Error`].
@@ -125,12 +125,7 @@ pub(crate) fn with_prompt_context(mut error: Error, name: Option<&str>, file: &s
     }
     error.prose = match (code, &error.at) {
         (ErrorCode::Internal, _) => code.prose().to_owned(),
-        (_, Some(at)) => format!(
-            "{file}:{}: {}. {}",
-            at.start_line,
-            error.message,
-            code.prose()
-        ),
+        (_, Some(at)) => format!("{}: {}. {}", coordinates(at), error.message, code.prose()),
         (_, None) => format!("{file}: {}. {}", error.message, code.prose()),
     };
     error
