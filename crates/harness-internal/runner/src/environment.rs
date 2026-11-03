@@ -9,7 +9,7 @@
 
 use std::path::PathBuf;
 
-use runvil::error::Error;
+use runvil::error::{Error, ErrorCode, FactKey};
 use runvil::model::{ModelId, ModelInfo};
 
 use crate::performers::InferenceBroker;
@@ -43,31 +43,14 @@ impl HostSnapshot {
     }
 }
 
-/// The reason a run failed to resolve its model at launch.
-///
-/// Each variant ends the recorded run as failed, with the error's cause
-/// chain as the message.
-#[derive(Debug, thiserror::Error)]
-#[non_exhaustive]
-pub enum CurrentModelError {
-    /// The inference broker failed to fetch its model list. The broker's
-    /// error is the source.
-    #[error("the model catalog could not be fetched")]
-    CatalogFetchFailed(#[source] Error),
-    /// The selected id is absent from the fetched catalog.
-    #[error("the selected model `{0}` is absent from the fetched catalog")]
-    SelectionAbsent(String),
-}
-
-impl CurrentModelError {
-    /// The Engine's kind for the run this failure ends: a model list the
-    /// broker cannot fetch is a completion failure, and a selection the
-    /// list lacks is an unmet requirement.
-    pub(crate) fn kind(&self) -> RunErrorKind {
-        match self {
-            CurrentModelError::CatalogFetchFailed(_) => RunErrorKind::Completion,
-            CurrentModelError::SelectionAbsent(_) => RunErrorKind::RequirementsUnmet,
-        }
+/// The Engine's kind for the run a failure of [`current_model`] ends: a
+/// model list the broker cannot fetch is a completion failure, and a
+/// selection the list lacks is an unmet requirement.
+pub(crate) fn model_kind(error: &Error) -> RunErrorKind {
+    if error.code == ErrorCode::RequirementsUnmet {
+        RunErrorKind::RequirementsUnmet
+    } else {
+        RunErrorKind::Completion
     }
 }
 
@@ -78,21 +61,23 @@ impl CurrentModelError {
 /// The model is `None` only when there is no selection and the broker
 /// lists no model, or the selected id is not representable; the prompt's
 /// declared roles then stay unbound. A failed listing or a selection
-/// absent from the list is a reported [`CurrentModelError`], never a
-/// fabricated fallback model info.
+/// absent from the list is a reported failure, never a fabricated
+/// fallback model info. The recorded run ends as failed, with the
+/// failure's message.
 ///
 /// # Errors
-/// Returns [`CurrentModelError::CatalogFetchFailed`] when the broker's
-/// model list cannot be fetched and [`CurrentModelError::SelectionAbsent`]
-/// when the selected id is not in it.
+/// Returns the broker's own failure, its message after `the model catalog
+/// could not be fetched: `, when the model list cannot be fetched, and
+/// `RequirementsUnmet` with the selected id as the `Name` fact and the
+/// `Reason` fact `model_absent` when the selected id is not in it.
 pub async fn current_model(
     host: &HostSnapshot,
     broker: &dyn InferenceBroker,
-) -> Result<Option<ModelInfo>, CurrentModelError> {
-    let catalog = broker
-        .models()
-        .await
-        .map_err(CurrentModelError::CatalogFetchFailed)?;
+) -> Result<Option<ModelInfo>, Error> {
+    let catalog = broker.models().await.map_err(|mut error| {
+        error.message = format!("the model catalog could not be fetched: {}", error.message);
+        error
+    })?;
     let Some(selected) = host.selected_model.clone() else {
         return Ok(catalog.models().first().cloned());
     };
@@ -103,11 +88,17 @@ pub async fn current_model(
             return Ok(None);
         }
     };
-    catalog
-        .get(&id)
-        .cloned()
-        .map(Some)
-        .ok_or(CurrentModelError::SelectionAbsent(selected))
+    catalog.get(&id).cloned().map(Some).ok_or_else(|| {
+        let code = ErrorCode::RequirementsUnmet;
+        let mut error = Error::new(
+            code,
+            format!("the selected model `{selected}` is absent from the fetched catalog"),
+            code.prose(),
+        );
+        error.facts.insert(FactKey::Name, selected.into());
+        error.facts.insert(FactKey::Reason, "model_absent".into());
+        error
+    })
 }
 
 #[cfg(test)]

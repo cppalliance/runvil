@@ -12,11 +12,11 @@ use std::sync::atomic::Ordering;
 use std::task::Poll;
 
 use harness_runner::display_chain;
-use harness_runner::environment::{CurrentModelError, HostSnapshot};
+use harness_runner::environment::HostSnapshot;
 use harness_runner::recorder::{MemoryRecorder, RunErrorKind};
 use harness_runner::{Harness, HarnessError, HostContext, RunReport, RunRequest};
 use runvil::error::{Error, ErrorCode};
-use runvil::model::{Completion, completion_error, phrase};
+use runvil::model::{Completion, phrase};
 use runvil_plugin::{HostServices, PackRegistry};
 
 use super::{PendingTimer, RunOutcome, answers_to, plain_harness, request, run_beside, until};
@@ -80,14 +80,13 @@ async fn a_model_list_the_broker_cannot_fetch_ends_the_recorded_run_as_a_complet
         .run(request(PLAIN))
         .await
         .expect("a failed listing is the run's outcome");
-    let lookup = CurrentModelError::CatalogFetchFailed(completion_error(code, phrase(code)));
     assert_eq!(
         report.outcome,
         RunOutcome::Failed {
             kind: RunErrorKind::Completion,
-            message: display_chain(&lookup),
+            message: format!("the model catalog could not be fetched: {}", phrase(code)),
         },
-        "the message is the lookup's cause chain, the broker's message included"
+        "the message is the lookup's, the broker's message included"
     );
     assert_ended_before_the_parse(&recorder, &report);
 }

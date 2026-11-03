@@ -22,7 +22,7 @@ use runvil_plugin::HostServices;
 
 use crate::display_chain::display_chain;
 use crate::effect_loop::drive;
-use crate::environment::{HostSnapshot, current_model};
+use crate::environment::{HostSnapshot, current_model, model_kind};
 use crate::files::{not_completed, report_output};
 use crate::host::HostContext;
 use crate::performers::{InferenceBroker, Timer};
@@ -297,7 +297,7 @@ async fn resolve_model(
     match select(cancel.cancelled(), resolving).await {
         Either::Left(((), _)) => Err(RunOutcome::Cancelled),
         Either::Right((resolved, _)) => resolved.map_err(|error| RunOutcome::Failed {
-            kind: error.kind(),
+            kind: model_kind(&error),
             message: display_chain(&error),
         }),
     }
