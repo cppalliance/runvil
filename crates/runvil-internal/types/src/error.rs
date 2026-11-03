@@ -1,0 +1,291 @@
+//! The universal error: one [`Error`] record that can describe any Engine
+//! failure, by a stable [`ErrorCode`], text for people and for the model,
+//! an optional [`Location`], and values named by [`FactKey`].
+
+use std::collections::BTreeMap;
+use std::fmt;
+use std::num::NonZeroU32;
+
+#[cfg(test)]
+#[path = "error-tests.rs"]
+mod tests;
+
+/// One failure: what it is, the text for people and for the model, where it
+/// happened, and the values it names.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Error {
+    /// Which failure this is.
+    pub code: ErrorCode,
+    /// The full diagnostic for logs and people, causes included.
+    pub message: String,
+    /// The text the model reads: what failed, and what to do instead or that
+    /// it can never work.
+    pub prose: String,
+    /// Where it happened, when known.
+    pub at: Option<Location>,
+    /// The values the failure names, such as a path or a task id.
+    pub facts: BTreeMap<FactKey, serde_json::Value>,
+}
+
+impl Error {
+    /// Builds an error with no location and no facts.
+    #[must_use]
+    pub fn new(code: ErrorCode, message: impl Into<String>, prose: impl Into<String>) -> Error {
+        Error {
+            code,
+            message: message.into(),
+            prose: prose.into(),
+            at: None,
+            facts: BTreeMap::new(),
+        }
+    }
+}
+
+impl fmt::Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.message)
+    }
+}
+
+impl std::error::Error for Error {}
+
+/// A range in a file, from the start position up to but not including the
+/// end. Lines and columns are 1-based, and columns count characters.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Location {
+    /// The file. Its extension tells its kind, such as `.md` for a prompt or
+    /// `.rs` for Rust.
+    pub file: String,
+    /// The line the range starts on.
+    pub start_line: NonZeroU32,
+    /// The column the range starts at.
+    pub start_column: NonZeroU32,
+    /// The line of the end position.
+    pub end_line: NonZeroU32,
+    /// The column of the end position, which the range excludes.
+    pub end_column: NonZeroU32,
+}
+
+impl Location {
+    /// Builds a range, or `None` when the end comes before the start.
+    #[must_use]
+    pub fn new(
+        file: impl Into<String>,
+        start_line: NonZeroU32,
+        start_column: NonZeroU32,
+        end_line: NonZeroU32,
+        end_column: NonZeroU32,
+    ) -> Option<Location> {
+        ((end_line, end_column) >= (start_line, start_column)).then(|| Location {
+            file: file.into(),
+            start_line,
+            start_column,
+            end_line,
+            end_column,
+        })
+    }
+
+    /// Builds the range covering all of `line`, from column 1 up to column 1
+    /// of the next line. On line `u32::MAX` the range is empty.
+    #[must_use]
+    pub fn line(file: impl Into<String>, line: NonZeroU32) -> Location {
+        Location {
+            file: file.into(),
+            start_line: line,
+            start_column: NonZeroU32::MIN,
+            end_line: line.saturating_add(1),
+            end_column: NonZeroU32::MIN,
+        }
+    }
+}
+
+/// The name of a fact. Each mirrors a field name in today's Lua error tables,
+/// apart from `Limit`, `Section`, and `Chain`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum FactKey {
+    /// A store path or glob pattern, as a string.
+    Path,
+    /// The name the failure is about, such as a tool alias, a Pack id, or
+    /// rejected input, as a string.
+    Name,
+    /// A task id, as a dotted string.
+    Task,
+    /// Task ids, as an array of dotted strings.
+    Tasks,
+    /// An edit's anchor text, as a string.
+    Anchor,
+    /// A count, such as anchor matches or prompt tokens, as an integer.
+    Count,
+    /// The limit that was hit, such as a context window or a depth cap, as an
+    /// integer.
+    Limit,
+    /// The tag of the rule that was broken, as a string.
+    Rule,
+    /// The byte length of the valid UTF-8 prefix, as an integer.
+    ValidUpTo,
+    /// The tag of a sub-reason within the code, as a string.
+    Reason,
+    /// The model backend's finish reason, as a string.
+    FinishReason,
+    /// The section or prompt region the failure is in, as a string.
+    Section,
+    /// The chain the failure happened in, as a dotted string.
+    Chain,
+}
+
+/// A stable failure code. Numbers group by family in hundreds: 1xx parse,
+/// 2xx Lua, 3xx tasks, 4xx model, 5xx tools, 6xx store, 7xx run. A number is
+/// never reused. Variants named after a `VfsError` or `CompletionErrorKind`
+/// variant keep its name, so their tags will match.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[repr(u16)]
+pub enum ErrorCode {
+    /// The frontmatter is missing, unclosed, not valid YAML, or breaks its
+    /// schema.
+    FrontmatterInvalid = 101,
+    /// The document structure is invalid, such as a missing H1 or a
+    /// duplicate sibling section.
+    StructureInvalid = 102,
+    /// A `lua` fence is unclosed or breaks the strict fence rule.
+    FenceInvalid = 103,
+    /// A list section has an empty item.
+    ListEmptyItem = 104,
+    /// The prompt declares a `runvil:` major this build does not support.
+    UnsupportedVersion = 105,
+    /// A value failed to parse or validate, such as an id, a tag, or a
+    /// temperature.
+    InvalidValue = 106,
+
+    /// Lua failed at runtime, or a call from Lua was refused.
+    LuaRuntime = 201,
+    /// A Lua region did not compile.
+    LuaCompile = 202,
+    /// A Lua quota ran out, such as the `log()` event or byte budget.
+    LuaQuota = 203,
+    /// A `call`, `tasks.spawn`, or `tasks.fanout` arm passed the call-depth
+    /// cap.
+    CallDepthExceeded = 204,
+    /// A `{{ }}` prose substitution failed.
+    Substitution = 205,
+
+    /// A chain ended with tasks still live.
+    TasksLive = 301,
+    /// A task operation named a task the caller does not own.
+    TaskNotOwned = 302,
+    /// A wait named a task whose result was already delivered.
+    TaskConsumed = 303,
+    /// A wait delivered a task its owner cancelled.
+    TaskCancelled = 304,
+
+    /// The request exceeds the model's context window.
+    ContextOverflow = 401,
+    /// The model backend is limiting the request rate.
+    RateLimited = 402,
+    /// The billing or usage quota is spent.
+    QuotaExhausted = 403,
+    /// The model backend is temporarily at capacity.
+    Overloaded = 404,
+    /// The provider declined the content on policy grounds.
+    Refused = 405,
+    /// The wait for a reply or the next chunk timed out.
+    Timeout = 406,
+    /// The connection to the model backend failed or the stream broke.
+    Transport = 407,
+    /// The model backend reported a fault of its own.
+    ServerError = 408,
+    /// The model backend refused the request for any other reason.
+    Rejected = 409,
+    /// The reply was malformed or over the size limit.
+    MalformedResponse = 410,
+    /// The model's reply had no text and no tool calls.
+    EmptyReply = 411,
+    /// Model access is turned off or not configured.
+    Unavailable = 412,
+    /// A tool call or completion was built from invalid parts.
+    InvalidParts = 413,
+    /// The context window overflowed and the compactor did not compact.
+    ContextExhausted = 414,
+    /// A model round found no current model.
+    ModelRequired = 415,
+
+    /// The tool rejected the arguments it was given.
+    ToolInvalidArguments = 501,
+    /// The tool's backend refused or failed the request.
+    ToolBackend = 502,
+    /// The tool call failed at the transport layer.
+    ToolTransport = 503,
+    /// The tool failed for any other reason.
+    ToolOther = 504,
+    /// The model called a tool outside the section's offered sets.
+    OutOfScopeTool = 505,
+    /// A script `tools.call` named no tool in the run.
+    UnboundTool = 506,
+    /// A script `tools.call` named a tool only a model may call.
+    ModelOnlyTool = 507,
+    /// The tool-call loop reached its cap without a final reply.
+    ToolLoopExhausted = 508,
+    /// A tool's model-facing schema did not build.
+    ToolSchemaInvalid = 509,
+    /// A section's tool sets broke a rule of the merge that builds them.
+    ToolSetsInvalid = 510,
+
+    /// The path does not exist.
+    NotFound = 601,
+    /// The path already exists where creation required absence.
+    AlreadyExists = 602,
+    /// A directory operation named a non-directory.
+    NotADirectory = 603,
+    /// A file operation named a directory.
+    IsADirectory = 604,
+    /// A non-recursive removal named a directory that has entries.
+    DirectoryNotEmpty = 605,
+    /// Bytes that are not UTF-8 appeared where text was required.
+    NotUtf8 = 606,
+    /// The path or glob pattern is malformed or escapes the namespace root.
+    InvalidPath = 607,
+    /// A line range was rejected.
+    InvalidRange = 608,
+    /// An edit's anchor text was empty, absent, or found more than once.
+    Anchor = 609,
+    /// The policy denied the operation.
+    PermissionDenied = 610,
+    /// The policy asked for an approval this layer never grants.
+    ApprovalRequired = 611,
+    /// The run or tool call that owned the access has ended.
+    ScopeEnded = 612,
+    /// The mount or backend that serves the path is read-only.
+    ReadOnly = 613,
+    /// The path resolves outside its backend's root.
+    OutsideRoot = 614,
+    /// The operation would remove or replace the mounted root.
+    RootProtected = 615,
+    /// The run declares no store.
+    NoStore = 616,
+    /// A two-path operation named paths that different mounts serve.
+    CrossMount = 617,
+    /// An operating-system I/O call failed.
+    Io = 618,
+    /// The backend does not implement the operation.
+    Unsupported = 619,
+    /// The operation conflicts with another access's claim on the path.
+    Conflict = 620,
+    /// The backend failed for any other reason.
+    Backend = 621,
+    /// Two live executions claimed the same store path.
+    Determinism = 622,
+
+    /// The environment falls short of what the prompt needs.
+    RequirementsUnmet = 701,
+    /// The run was cancelled, or the call it waited on was dropped.
+    Interrupted = 702,
+    /// An internal invariant broke; nothing the prompt can fix.
+    Internal = 703,
+}
+
+impl ErrorCode {
+    /// Returns the code's number.
+    #[must_use]
+    pub const fn number(self) -> u16 {
+        self as u16
+    }
+}

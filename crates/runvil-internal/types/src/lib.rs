@@ -22,8 +22,9 @@
 //! replay key stamped on every effect and event; [`timestamp`] is the UTC
 //! instant a run starts from, rendered over std alone; and [`seed`] is the
 //! caller's [`RunSeed`](seed::RunSeed) and the one-way derivations from
-//! it. This crate depends on no other runvil crate, so every runvil crate
-//! may depend on it, and it declares no async runtime.
+//! it. [`error`] is the universal [`Error`](error::Error) record that can
+//! describe any Engine failure. This crate depends on no other runvil crate,
+//! so every runvil crate may depend on it, and it declares no async runtime.
 //!
 //! ## Invariants
 //!
@@ -35,6 +36,7 @@
 
 pub mod cancel;
 pub mod emitter;
+pub mod error;
 pub mod event;
 pub mod ids;
 pub mod metrics;
