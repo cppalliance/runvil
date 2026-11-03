@@ -45,16 +45,25 @@ impl Error {
     }
 
     /// Appends `cause`, and each cause under it, to the message after `: `,
-    /// skipping any text the message already holds. The prose stays as it
-    /// was.
+    /// skipping any text the message already holds. A cause whose text
+    /// starts with the message's end and then `: ` adds only what follows.
+    /// The prose stays as it was.
     #[must_use]
     pub fn with_cause(mut self, cause: &(dyn std::error::Error + 'static)) -> Error {
         let mut next = Some(cause);
         while let Some(current) = next {
             let text = current.to_string();
             if !text.is_empty() && !self.message.contains(&text) {
-                self.message.push_str(": ");
-                self.message.push_str(&text);
+                let repeated = text
+                    .rmatch_indices(": ")
+                    .map(|(at, _)| at)
+                    .find(|&at| at > 0 && self.message.ends_with(&text[..at]));
+                if let Some(at) = repeated {
+                    self.message.push_str(&text[at..]);
+                } else {
+                    self.message.push_str(": ");
+                    self.message.push_str(&text);
+                }
             }
             next = current.source();
         }

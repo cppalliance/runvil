@@ -41,6 +41,23 @@ fn with_cause_skips_text_the_message_already_holds() {
     assert_eq!(error.message, "read failed: disk gone");
 }
 
+#[test]
+fn with_cause_adds_only_what_follows_text_the_message_ends_with() {
+    let inner = Error::new(ErrorCode::ToolTransport, "request failed", "request failed")
+        .with_cause(&Layer("refused", None));
+    let error = Error::new(
+        ErrorCode::ToolTransport,
+        "search: request failed",
+        "Try again.",
+    )
+    .with_cause(&inner);
+    assert_eq!(error.message, "search: request failed: refused");
+
+    let unrelated = Error::new(ErrorCode::Io, "read failed", "Try again.")
+        .with_cause(&Layer("disk gone: sector 9", None));
+    assert_eq!(unrelated.message, "read failed: disk gone: sector 9");
+}
+
 /// Every code, in declaration order.
 const ALL: [ErrorCode; 68] = [
     ErrorCode::FrontmatterInvalid,
