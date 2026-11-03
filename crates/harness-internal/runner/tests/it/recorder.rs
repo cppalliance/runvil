@@ -8,12 +8,21 @@ use std::sync::Arc;
 
 use harness_runner::display_chain;
 use harness_runner::recorder::{
-    MemoryRecorder, Record, RecordKind, RecorderError, RunErrorKind, RunId, RunMeta, RunOutcome,
-    RunRecorder,
+    MemoryRecorder, Record, RecordKind, RunErrorKind, RunId, RunMeta, RunOutcome, RunRecorder,
+    recorder_error,
 };
+use runvil::error::{ErrorCode, FactKey};
 use serde_json::json;
 
 use crate::support::TEST_SEED;
+
+/// Asserts `error` is the memory recorder's refusal of run `run` for
+/// `reason`.
+fn assert_refused(error: &runvil::error::Error, run: i64, reason: &str) {
+    assert_eq!(error.code, ErrorCode::RecorderFailed);
+    assert_eq!(error.facts.get(&FactKey::Reason), Some(&json!(reason)));
+    assert_eq!(error.facts.get(&FactKey::Run), Some(&json!(run)));
+}
 
 fn meta(name: &str) -> RunMeta {
     RunMeta {
@@ -183,6 +192,7 @@ async fn an_append_to_an_unknown_run_fails() {
         .await
         .expect_err("run 99 was never begun");
 
+    assert_refused(&error, 99, "unknown_run");
     let text = display_chain(&error);
     assert!(
         text.contains("unknown run 99"),
@@ -199,6 +209,7 @@ async fn ending_an_unknown_run_fails() {
         .await
         .expect_err("run 5 was never begun");
 
+    assert_refused(&error, 5, "unknown_run");
     let text = display_chain(&error);
     assert!(
         text.contains("unknown run 5"),
@@ -221,6 +232,7 @@ async fn an_append_after_end_run_fails_and_changes_nothing() {
         .await
         .expect_err("an ended run accepts no more records");
 
+    assert_refused(&error, 1, "run_ended");
     let text = display_chain(&error);
     assert!(
         text.contains("run 1 has ended"),
@@ -250,6 +262,7 @@ async fn a_second_end_run_fails_and_keeps_the_first_outcome() {
         .await
         .expect_err("a run ends exactly once");
 
+    assert_refused(&error, 1, "run_ended");
     let text = display_chain(&error);
     assert!(
         text.contains("run 1 has ended"),
@@ -310,25 +323,21 @@ impl fmt::Display for DiskFull {
 impl Error for DiskFull {}
 
 #[test]
-fn a_recorder_error_reports_its_cause_as_source() {
-    let error = RecorderError::new(DiskFull);
+fn a_recorder_error_keeps_its_cause_in_the_message_only() {
+    let error = recorder_error(DiskFull);
 
-    let source = error.source().expect("the wrapped error is the source");
-    assert_eq!(source.to_string(), "the disk is full");
-    assert!(
-        source.downcast_ref::<DiskFull>().is_some(),
-        "the source is the very error the recorder returned"
-    );
+    assert_eq!(error.code, ErrorCode::RecorderFailed);
     assert_eq!(
         display_chain(&error),
         "the run recorder failed: the disk is full",
         "the rendered chain shows the recorder's cause"
     );
+    assert_eq!(error.prose, ErrorCode::RecorderFailed.prose());
 }
 
 #[test]
 fn a_recorder_error_takes_a_plain_message() {
-    let error = RecorderError::new("the store is read-only");
+    let error = recorder_error("the store is read-only");
 
     assert_eq!(
         display_chain(&error),

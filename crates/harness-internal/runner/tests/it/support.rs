@@ -10,7 +10,7 @@ use std::time::Duration;
 
 use harness_runner::performers::{BoxFuture, InferenceBroker, Performers, Timer, ToolPerformer};
 use harness_runner::recorder::{
-    MemoryRecorder, Record, RecorderError, RecorderFuture, RunId, RunMeta, RunOutcome, RunRecorder,
+    MemoryRecorder, Record, RecorderFuture, RunId, RunMeta, RunOutcome, RunRecorder, recorder_error,
 };
 use runvil::cancel::CancelHandle;
 use runvil::effect::{Round, ToolCallOrigin};
@@ -301,10 +301,10 @@ impl FailingRecorder {
         &self.inner
     }
 
-    fn count(&self) -> Result<(), RecorderError> {
+    fn count(&self) -> Result<(), runvil::error::Error> {
         let call = self.calls.fetch_add(1, Ordering::SeqCst) + 1;
         if call == self.fail_on {
-            return Err(RecorderError::new(format!(
+            return Err(recorder_error(format!(
                 "the fixture recorder refuses call {call}"
             )));
         }

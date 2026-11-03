@@ -64,13 +64,13 @@ pub mod record {
     pub use harness_runner::recorder::MemoryRecorder;
     pub use harness_runner::recorder::Record;
     pub use harness_runner::recorder::RecordKind;
-    pub use harness_runner::recorder::RecorderError;
     pub use harness_runner::recorder::RecorderFuture;
     pub use harness_runner::recorder::RunErrorKind;
     pub use harness_runner::recorder::RunId;
     pub use harness_runner::recorder::RunMeta;
     pub use harness_runner::recorder::RunOutcome;
     pub use harness_runner::recorder::RunRecorder;
+    pub use harness_runner::recorder::recorder_error;
     pub use runvil::RunSeed;
 }
 

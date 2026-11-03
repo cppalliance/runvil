@@ -59,6 +59,7 @@ use std::task::Poll;
 
 use runvil::cancel::CancelHandle;
 use runvil::effect::{Effect, EffectAnswer, EffectId, IssuedEffect};
+use runvil::error::Error;
 use runvil::event::Event;
 use runvil::ids::Provenance;
 use runvil::vfs::{Access, VfsOp, perform_vfs_op};
@@ -67,7 +68,7 @@ use runvil::{Run, Step};
 use crate::harness::StopSignal;
 use crate::performers::{BoxFuture, Performers};
 use crate::recorder::{
-    Record, RecordKind, RecorderError, RunErrorKind, RunId, RunOutcome, RunRecorder,
+    Record, RecordKind, RunErrorKind, RunId, RunOutcome, RunRecorder, recorder_error,
 };
 
 #[path = "effect_loop-flight.rs"]
@@ -102,7 +103,7 @@ pub async fn drive_run(
     recorder: Arc<dyn RunRecorder>,
     run_id: RunId,
     cancel: CancelHandle,
-) -> Result<RunOutcome, RecorderError> {
+) -> Result<RunOutcome, Error> {
     drive(run, performers, recorder, run_id, cancel, Arc::default()).await
 }
 
@@ -115,7 +116,7 @@ pub(crate) async fn drive(
     run_id: RunId,
     cancel: CancelHandle,
     stop: Arc<StopSignal>,
-) -> Result<RunOutcome, RecorderError> {
+) -> Result<RunOutcome, Error> {
     let cap = performers.tool.max_in_flight();
     let mut driver = Driver {
         run,
@@ -154,7 +155,7 @@ enum Woken {
 }
 
 impl Driver {
-    async fn drive(&mut self) -> Result<RunOutcome, RecorderError> {
+    async fn drive(&mut self) -> Result<RunOutcome, Error> {
         loop {
             match self.run.step() {
                 Step::Done { outcome, events } => {
@@ -240,7 +241,7 @@ impl Driver {
     }
 
     /// Ends the run at the recorder with `outcome` and returns it.
-    async fn end(&mut self, outcome: RunOutcome) -> Result<RunOutcome, RecorderError> {
+    async fn end(&mut self, outcome: RunOutcome) -> Result<RunOutcome, Error> {
         self.recorder.end_run(self.run_id, outcome.clone()).await?;
         Ok(outcome)
     }
@@ -248,7 +249,7 @@ impl Driver {
     /// Waits for the next answer, then answers every effect already
     /// landed behind it, or acts on a cancel or a stop as soon as one is
     /// raised.
-    async fn await_answer(&mut self) -> Result<(), RecorderError> {
+    async fn await_answer(&mut self) -> Result<(), Error> {
         match self.wake().await {
             Woken::Cancel => self.drop_in_flight(Reach::All).await,
             Woken::Stop => self.act_on_stop().await.map(drop),
@@ -263,7 +264,7 @@ impl Driver {
     /// calls that survive stops, which may be nothing, then lowers the
     /// stop. Returns whether it answered any effect, since each answer
     /// resumes a chain the run must step.
-    async fn act_on_stop(&mut self) -> Result<bool, RecorderError> {
+    async fn act_on_stop(&mut self) -> Result<bool, Error> {
         let owed = self.flights.len();
         self.drop_in_flight(Reach::AllButSurvivors).await?;
         self.stop.lower();
@@ -294,7 +295,7 @@ impl Driver {
     }
 
     /// Answers every effect that has already landed, without waiting.
-    async fn answer_landed(&mut self) -> Result<(), RecorderError> {
+    async fn answer_landed(&mut self) -> Result<(), Error> {
         while let Some((id, provenance, answer)) = self.flights.landed_now() {
             self.answer(id, &provenance, answer).await?;
         }
@@ -305,7 +306,7 @@ impl Driver {
     /// flight that `reach` takes. The aborted futures are then torn down,
     /// so whatever a dropped performer held is gone before the run steps
     /// on; an effect `reach` spared that landed meanwhile is answered too.
-    async fn drop_in_flight(&mut self, reach: Reach<'_>) -> Result<(), RecorderError> {
+    async fn drop_in_flight(&mut self, reach: Reach<'_>) -> Result<(), Error> {
         for (id, provenance) in self.flights.abort(reach) {
             self.drop_effect(id, &provenance).await?;
         }
@@ -314,11 +315,7 @@ impl Driver {
 
     /// Records the `Dropped` answer for one effect and resumes the run
     /// with it.
-    async fn drop_effect(
-        &mut self,
-        id: EffectId,
-        provenance: &Provenance,
-    ) -> Result<(), RecorderError> {
+    async fn drop_effect(&mut self, id: EffectId, provenance: &Provenance) -> Result<(), Error> {
         self.answer(id, provenance, EffectAnswer::Dropped).await
     }
 
@@ -328,7 +325,7 @@ impl Driver {
         id: EffectId,
         provenance: &Provenance,
         answer: EffectAnswer,
-    ) -> Result<(), RecorderError> {
+    ) -> Result<(), Error> {
         self.commit_answer(id, provenance, &answer).await?;
         self.run.resume(id, answer);
         Ok(())
@@ -405,13 +402,13 @@ impl Driver {
     }
 
     /// Appends one step's events to the recorder.
-    async fn commit_events(&mut self, events: Vec<Event>) -> Result<(), RecorderError> {
+    async fn commit_events(&mut self, events: Vec<Event>) -> Result<(), Error> {
         for event in events {
             let record = record(
                 event.provenance(),
                 RecordKind::Event,
                 None,
-                serde_json::to_value(&event).map_err(RecorderError::new)?,
+                serde_json::to_value(&event).map_err(recorder_error)?,
             );
             self.append(record).await?;
         }
@@ -419,7 +416,7 @@ impl Driver {
     }
 
     /// Appends one issued effect's record.
-    async fn commit_effect(&mut self, issued: &IssuedEffect) -> Result<(), RecorderError> {
+    async fn commit_effect(&mut self, issued: &IssuedEffect) -> Result<(), Error> {
         self.append(record(
             &issued.provenance,
             RecordKind::Effect,
@@ -435,7 +432,7 @@ impl Driver {
         id: EffectId,
         provenance: &Provenance,
         answer: &EffectAnswer,
-    ) -> Result<(), RecorderError> {
+    ) -> Result<(), Error> {
         self.append(record(
             provenance,
             RecordKind::Answer,
@@ -445,7 +442,7 @@ impl Driver {
         .await
     }
 
-    async fn append(&mut self, record: Record) -> Result<(), RecorderError> {
+    async fn append(&mut self, record: Record) -> Result<(), Error> {
         self.recorder.append(self.run_id, record).await
     }
 }

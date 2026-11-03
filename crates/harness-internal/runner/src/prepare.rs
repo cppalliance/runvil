@@ -35,6 +35,7 @@ use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use runvil::cancel::CancelHandle;
+use runvil::error::Error;
 use runvil::event::Event;
 use runvil::model::{ModelInfo, ModelRole};
 use runvil::prompt::FileDecl;
@@ -49,7 +50,7 @@ use crate::files::{InputFileError, stage_input};
 use crate::host::HostContext;
 use crate::performers::{InferenceBroker, Performers, Timer};
 use crate::recorder::{
-    Record, RecordKind, RecorderError, RunErrorKind, RunId, RunMeta, RunOutcome, RunRecorder,
+    Record, RecordKind, RunErrorKind, RunId, RunMeta, RunOutcome, RunRecorder, recorder_error,
 };
 
 /// What the caller owns and preparation borrows: the Host's built
@@ -168,18 +169,18 @@ pub enum PrepareError {
         run: RunId,
         /// The recorder's refusal.
         #[source]
-        source: RecorderError,
+        source: Box<Error>,
     },
 }
 
 impl PrepareError {
     /// The failed outcome this failure ended the run with, or, for a
     /// recorder refusal, which ends nothing, the refusal.
-    pub(crate) fn ended(self) -> Result<RunOutcome, RecorderError> {
+    pub(crate) fn ended(self) -> Result<RunOutcome, Error> {
         match self {
             PrepareError::Parse { source, .. } => Ok(failed(RunErrorKind::Parse, &source)),
             PrepareError::Input { source, .. } => Ok(failed(source.kind(), &source)),
-            PrepareError::Recorder { source, .. } => Err(source),
+            PrepareError::Recorder { source, .. } => Err(*source),
         }
     }
 }
@@ -190,11 +191,7 @@ impl PrepareError {
 ///
 /// # Errors
 /// Returns the recorder's refusal to begin the run.
-pub async fn begin(
-    recorder: &dyn RunRecorder,
-    name: &str,
-    source: &str,
-) -> Result<Begun, RecorderError> {
+pub async fn begin(recorder: &dyn RunRecorder, name: &str, source: &str) -> Result<Begun, Error> {
     let seed = RunSeed::from_bytes(rand::random());
     let started_at = now_timestamp();
     let run_id = recorder
@@ -259,7 +256,7 @@ pub async fn prepare(
     } = begun;
     let recorded = |source| PrepareError::Recorder {
         run: run_id,
-        source,
+        source: Box::new(source),
     };
 
     // Parse-time events are the run's first records, whether or not the
@@ -353,14 +350,14 @@ fn failed(kind: RunErrorKind, source: &dyn std::error::Error) -> RunOutcome {
 }
 
 /// One event's record under its own provenance.
-fn event_record(event: &Event) -> Result<Record, RecorderError> {
+fn event_record(event: &Event) -> Result<Record, Error> {
     let provenance = event.provenance();
     Ok(Record {
         task_id: provenance.task.to_string(),
         task_seq: provenance.seq,
         kind: RecordKind::Event,
         effect_id: None,
-        payload: serde_json::to_value(event).map_err(RecorderError::new)?,
+        payload: serde_json::to_value(event).map_err(recorder_error)?,
     })
 }
 

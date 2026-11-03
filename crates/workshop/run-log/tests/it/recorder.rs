@@ -8,14 +8,12 @@
     reason = "test helpers fail by panicking with the failure shown"
 )]
 
-use std::error::Error as _;
 use std::fs;
 use std::path::Path;
 use std::sync::Arc;
 
-use harness::record::{
-    Record, RecordKind, RecorderError, RunId, RunMeta, RunOutcome, RunRecorder, RunSeed,
-};
+use harness::record::{Record, RecordKind, RunId, RunMeta, RunOutcome, RunRecorder, RunSeed};
+use runvil::error::{Error, ErrorCode};
 use serde_json::json;
 use workshop_run_log::{LogError, RecordFilter, RunLog, TursoRecorder};
 
@@ -56,15 +54,13 @@ async fn read_back(path: &Path) -> RunLog {
     RunLog::open(path).await.unwrap()
 }
 
-/// The log failure behind a recorder error.
-fn log_failure(error: &RecorderError) -> &LogError {
-    let Some(cause) = error.source() else {
-        panic!("a recorder error carries its cause as source()");
+/// The text of the log failure behind a recorder error.
+fn log_failure(error: &Error) -> &str {
+    assert_eq!(error.code, ErrorCode::RecorderFailed);
+    let Some(cause) = error.message.strip_prefix("the run recorder failed: ") else {
+        panic!("a recorder error carries its cause in its message: {error:?}");
     };
-    let Some(failure) = cause.downcast_ref::<LogError>() else {
-        panic!("the cause is the run log's own error: {cause}");
-    };
-    failure
+    cause
 }
 
 #[tokio::test]
@@ -167,7 +163,7 @@ async fn a_failed_open_is_retried_by_the_next_call() {
 
     let error = recorder.begin_run(meta("session-1")).await.unwrap_err();
     assert!(
-        matches!(log_failure(&error), LogError::Io { .. }),
+        log_failure(&error).starts_with("run log file: "),
         "the directory cannot be created: {error:?}"
     );
 
@@ -238,7 +234,7 @@ async fn a_write_the_log_refuses_reaches_the_caller_as_a_recorder_error() {
         .await
         .unwrap_err();
     assert!(
-        matches!(log_failure(&error), LogError::UnknownRun(run) if *run == unknown),
+        log_failure(&error) == LogError::UnknownRun(unknown).to_string(),
         "{error:?}"
     );
 
@@ -249,7 +245,7 @@ async fn a_write_the_log_refuses_reaches_the_caller_as_a_recorder_error() {
         .await
         .unwrap_err();
     assert!(
-        matches!(log_failure(&error), LogError::RunEnded(ended) if *ended == run),
+        log_failure(&error) == LogError::RunEnded(run).to_string(),
         "{error:?}"
     );
 }

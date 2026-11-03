@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use harness::record::{
-    Record, RecorderError, RecorderFuture, RunId, RunMeta, RunOutcome, RunRecorder,
+    Record, RecorderFuture, RunId, RunMeta, RunOutcome, RunRecorder, recorder_error,
 };
 use tokio::sync::Mutex;
 
@@ -24,8 +24,8 @@ const RUNS_FILE: &str = "runs.db";
 ///
 /// The Harness writes through the handle [`for_agent`](Self::for_agent)
 /// returns, which names the launched agent in the row of each run it
-/// begins. A failed write comes back as a [`RecorderError`] whose cause is
-/// the log's [`LogError`]. The Harness stops the run that hit it.
+/// begins. A failed write comes back as a [`recorder_error`] whose message
+/// holds the log's [`LogError`]. The Harness stops the run that hit it.
 #[derive(Debug)]
 pub struct TursoRecorder {
     /// The directory the database file sits in.
@@ -99,10 +99,10 @@ impl RunRecorder for AgentRecorder {
                 .recorder
                 .open(&mut slot)
                 .await
-                .map_err(RecorderError::new)?;
+                .map_err(recorder_error)?;
             log.begin_run(meta, &self.agent)
                 .await
-                .map_err(RecorderError::new)
+                .map_err(recorder_error)
         })
     }
 
@@ -113,11 +113,11 @@ impl RunRecorder for AgentRecorder {
                 .recorder
                 .open(&mut slot)
                 .await
-                .map_err(RecorderError::new)?;
+                .map_err(recorder_error)?;
             log.append(run, record)
                 .await
                 .map(drop)
-                .map_err(RecorderError::new)
+                .map_err(recorder_error)
         })
     }
 
@@ -128,8 +128,8 @@ impl RunRecorder for AgentRecorder {
                 .recorder
                 .open(&mut slot)
                 .await
-                .map_err(RecorderError::new)?;
-            log.end_run(run, outcome).await.map_err(RecorderError::new)
+                .map_err(recorder_error)?;
+            log.end_run(run, outcome).await.map_err(recorder_error)
         })
     }
 }

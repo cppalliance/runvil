@@ -27,7 +27,7 @@ use crate::files::{OutputError, report_output};
 use crate::host::HostContext;
 use crate::performers::{InferenceBroker, Timer};
 use crate::prepare::{Services, begin, prepare};
-use crate::recorder::{RecorderError, RunId, RunOutcome, RunRecorder};
+use crate::recorder::{RunId, RunOutcome, RunRecorder};
 
 #[path = "harness-control.rs"]
 mod control;
@@ -113,7 +113,7 @@ pub enum HarnessError {
         run: Option<RunId>,
         /// The error the recorder returned.
         #[source]
-        source: RecorderError,
+        source: Box<runvil::error::Error>,
     },
 }
 
@@ -205,13 +205,17 @@ impl Harness {
             host,
         } = request;
 
-        let begun = begin(&*recorder, &name, &source)
-            .await
-            .map_err(|source| HarnessError::Recorder { run: None, source })?;
+        let begun =
+            begin(&*recorder, &name, &source)
+                .await
+                .map_err(|source| HarnessError::Recorder {
+                    run: None,
+                    source: Box::new(source),
+                })?;
         let run_id = begun.run_id;
         let recorded = |source| HarnessError::Recorder {
             run: Some(run_id),
-            source,
+            source: Box::new(source),
         };
 
         let model = match resolve_model(&host, &*broker, control.cancel_handle()).await {

@@ -22,12 +22,12 @@
 //! input cannot be put in place. A run the effect loop loses track of
 //! ends as failed with the kind `Internal`.
 
-use std::error::Error;
 use std::fmt;
 use std::future::Future;
 use std::pin::Pin;
 
 use runvil::RunSeed;
+use runvil::error::{Error, ErrorCode};
 pub use runvil::{RunErrorKind, RunOutcome};
 
 #[path = "recorder-memory.rs"]
@@ -38,30 +38,19 @@ pub use memory::MemoryRecorder;
 /// The future that each [`RunRecorder`] method returns.
 ///
 /// It is boxed, can be sent between threads, and borrows the recorder.
-pub type RecorderFuture<'a, T> =
-    Pin<Box<dyn Future<Output = Result<T, RecorderError>> + Send + 'a>>;
+pub type RecorderFuture<'a, T> = Pin<Box<dyn Future<Output = Result<T, Error>> + Send + 'a>>;
 
-/// The error a recorder returns when it fails to store a write.
+/// Builds the `RecorderFailed` error a recorder returns when it fails to
+/// store a write, from the error or the message that made it fail.
 ///
-/// It wraps the recorder's own error as its source. The Harness stops the
-/// run that received it. Its message says only that the run recorder
-/// failed, so read the source chain for the reason.
-#[derive(Debug, thiserror::Error)]
-#[error("the run recorder failed")]
-pub struct RecorderError {
-    /// The recorder's own error.
-    #[source]
-    source: Box<dyn Error + Send + Sync>,
-}
-
-impl RecorderError {
-    /// Wraps the error, or the message, that made the recorder fail.
-    #[must_use]
-    pub fn new(source: impl Into<Box<dyn Error + Send + Sync>>) -> Self {
-        Self {
-            source: source.into(),
-        }
-    }
+/// The Harness stops the run that received it. Its message is `the run
+/// recorder failed: ` followed by the cause chain, and its prose is the
+/// code's default.
+#[must_use]
+pub fn recorder_error(cause: impl Into<Box<dyn std::error::Error + Send + Sync>>) -> Error {
+    let cause = cause.into();
+    let code = ErrorCode::RecorderFailed;
+    Error::new(code, "the run recorder failed", code.prose()).with_cause(&*cause)
 }
 
 /// The storage that the Harness writes each run's history to.
@@ -76,14 +65,14 @@ pub trait RunRecorder: Send + Sync {
     ///
     /// # Errors
     ///
-    /// Returns the recorder's own failure, wrapped in a [`RecorderError`].
+    /// Returns the recorder's own failure, built with [`recorder_error`].
     fn begin_run(&self, meta: RunMeta) -> RecorderFuture<'_, RunId>;
 
     /// Adds one record to an open run.
     ///
     /// # Errors
     ///
-    /// Returns the recorder's own failure, wrapped in a [`RecorderError`].
+    /// Returns the recorder's own failure, built with [`recorder_error`].
     fn append(&self, run: RunId, record: Record) -> RecorderFuture<'_, ()>;
 
     /// Closes a run with its outcome. The Harness calls it once for each
@@ -91,7 +80,7 @@ pub trait RunRecorder: Send + Sync {
     ///
     /// # Errors
     ///
-    /// Returns the recorder's own failure, wrapped in a [`RecorderError`].
+    /// Returns the recorder's own failure, built with [`recorder_error`].
     fn end_run(&self, run: RunId, outcome: RunOutcome) -> RecorderFuture<'_, ()>;
 }
 

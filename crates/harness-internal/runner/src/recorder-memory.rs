@@ -2,7 +2,10 @@
 
 use std::sync::{Mutex, MutexGuard, PoisonError};
 
-use super::{Record, RecorderError, RecorderFuture, RunId, RunMeta, RunOutcome, RunRecorder};
+use runvil::error::{Error, FactKey};
+use serde_json::Value;
+
+use super::{Record, RecorderFuture, RunId, RunMeta, RunOutcome, RunRecorder, recorder_error};
 
 /// A recorder that keeps every run in memory, for tests and doc examples.
 ///
@@ -10,7 +13,8 @@ use super::{Record, RecorderError, RecorderFuture, RunId, RunMeta, RunOutcome, R
 /// in the order runs begin. A write to an id outside the runs this recorder
 /// began, a write to a run that has ended, and a second
 /// [`end_run`](RunRecorder::end_run) each fail, so a test notices a Harness
-/// that breaks the call order.
+/// that breaks the call order. Each such failure has the `Reason` fact
+/// `unknown_run` or `run_ended` and the run id as the `Run` fact.
 #[derive(Debug, Default)]
 pub struct MemoryRecorder {
     runs: Mutex<Vec<MemoryRun>>,
@@ -21,14 +25,6 @@ struct MemoryRun {
     meta: RunMeta,
     records: Vec<Record>,
     outcome: Option<RunOutcome>,
-}
-
-#[derive(Debug, thiserror::Error)]
-enum MemoryError {
-    #[error("memory recorder: unknown run {0}")]
-    UnknownRun(RunId),
-    #[error("memory recorder: run {0} has ended")]
-    RunEnded(RunId),
 }
 
 impl MemoryRecorder {
@@ -85,21 +81,38 @@ fn slot(run: RunId) -> usize {
 }
 
 /// The run `run`, if it exists and still takes writes.
-fn open_run(runs: &mut [MemoryRun], run: RunId) -> Result<&mut MemoryRun, MemoryError> {
-    let found = runs
-        .get_mut(slot(run))
-        .ok_or(MemoryError::UnknownRun(run))?;
+fn open_run(runs: &mut [MemoryRun], run: RunId) -> Result<&mut MemoryRun, Error> {
+    let found = runs.get_mut(slot(run)).ok_or_else(|| {
+        refused(
+            run,
+            "unknown_run",
+            format!("memory recorder: unknown run {run}"),
+        )
+    })?;
     if found.outcome.is_some() {
-        return Err(MemoryError::RunEnded(run));
+        return Err(refused(
+            run,
+            "run_ended",
+            format!("memory recorder: run {run} has ended"),
+        ));
     }
     Ok(found)
+}
+
+/// A write to `run` the recorder refuses for `reason`, with `text` as its
+/// cause.
+fn refused(run: RunId, reason: &str, text: String) -> Error {
+    let mut error = recorder_error(text);
+    error.facts.insert(FactKey::Reason, Value::from(reason));
+    error.facts.insert(FactKey::Run, Value::from(run.get()));
+    error
 }
 
 impl RunRecorder for MemoryRecorder {
     fn begin_run(&self, meta: RunMeta) -> RecorderFuture<'_, RunId> {
         Box::pin(async move {
             let mut runs = self.lock();
-            let id = i64::try_from(runs.len() + 1).map_err(RecorderError::new)?;
+            let id = i64::try_from(runs.len() + 1).map_err(recorder_error)?;
             runs.push(MemoryRun {
                 meta,
                 records: Vec::new(),
@@ -112,18 +125,14 @@ impl RunRecorder for MemoryRecorder {
     fn append(&self, run: RunId, record: Record) -> RecorderFuture<'_, ()> {
         Box::pin(async move {
             let mut runs = self.lock();
-            open_run(&mut runs, run)
-                .map(|open| open.records.push(record))
-                .map_err(RecorderError::new)
+            open_run(&mut runs, run).map(|open| open.records.push(record))
         })
     }
 
     fn end_run(&self, run: RunId, outcome: RunOutcome) -> RecorderFuture<'_, ()> {
         Box::pin(async move {
             let mut runs = self.lock();
-            open_run(&mut runs, run)
-                .map(|open| open.outcome = Some(outcome))
-                .map_err(RecorderError::new)
+            open_run(&mut runs, run).map(|open| open.outcome = Some(outcome))
         })
     }
 }
