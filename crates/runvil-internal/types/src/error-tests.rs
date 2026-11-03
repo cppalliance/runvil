@@ -1,9 +1,45 @@
-//! Tests for `ErrorCode` numbering and `Location` ranges.
+//! Tests for `ErrorCode` numbering, `Location` ranges, and the cause chain
+//! `with_cause` appends.
 
 use std::collections::BTreeSet;
+use std::fmt;
 use std::num::NonZeroU32;
 
-use super::{ErrorCode, Location};
+use super::{Error, ErrorCode, Location};
+
+/// A cause with an optional cause of its own.
+#[derive(Debug)]
+struct Layer(&'static str, Option<Box<Layer>>);
+
+impl fmt::Display for Layer {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.0)
+    }
+}
+
+impl std::error::Error for Layer {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        self.1
+            .as_deref()
+            .map(|layer| layer as &(dyn std::error::Error + 'static))
+    }
+}
+
+#[test]
+fn with_cause_appends_the_chain_to_the_message_and_keeps_the_prose() {
+    let cause = Layer("disk gone", Some(Box::new(Layer("sector 9", None))));
+    let error = Error::new(ErrorCode::Io, "read failed", "Try again.").with_cause(&cause);
+    assert_eq!(error.message, "read failed: disk gone: sector 9");
+    assert_eq!(error.prose, "Try again.");
+}
+
+#[test]
+fn with_cause_skips_text_the_message_already_holds() {
+    let cause = Layer("disk gone", Some(Box::new(Layer("", None))));
+    let error =
+        Error::new(ErrorCode::Io, "read failed: disk gone", "Try again.").with_cause(&cause);
+    assert_eq!(error.message, "read failed: disk gone");
+}
 
 /// Every code, in declaration order.
 const ALL: [ErrorCode; 68] = [

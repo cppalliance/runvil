@@ -41,6 +41,23 @@ impl Error {
             facts: BTreeMap::new(),
         }
     }
+
+    /// Appends `cause`, and each cause under it, to the message after `: `,
+    /// skipping any text the message already holds. The prose stays as it
+    /// was.
+    #[must_use]
+    pub fn with_cause(mut self, cause: &(dyn std::error::Error + 'static)) -> Error {
+        let mut next = Some(cause);
+        while let Some(current) = next {
+            let text = current.to_string();
+            if !text.is_empty() && !self.message.contains(&text) {
+                self.message.push_str(": ");
+                self.message.push_str(&text);
+            }
+            next = current.source();
+        }
+        self
+    }
 }
 
 impl fmt::Display for Error {
