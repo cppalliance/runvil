@@ -167,7 +167,7 @@ pub enum FactKey {
 
 /// A stable failure code. Numbers group by family in hundreds: 1xx parse,
 /// 2xx Lua, 3xx tasks, 4xx model, 5xx tools, 6xx store, 7xx run, 8xx
-/// harness. A number is never reused. Store and model codes keep the names
+/// caller. A number is never reused. Store and model codes keep the names
 /// of the store and model failure kinds a run log already records.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[repr(u16)]
