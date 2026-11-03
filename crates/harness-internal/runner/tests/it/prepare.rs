@@ -17,11 +17,14 @@ use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use harness_runner::effect_loop::drive_run;
-use harness_runner::prepare::{PrepareError, Prepared, Services, begin, prepare};
-use harness_runner::recorder::{MemoryRecorder, RecordKind, RunErrorKind, RunId, RunOutcome};
+use harness_runner::prepare::{Prepared, Services, begin, prepare};
+use harness_runner::recorder::{
+    MemoryRecorder, Record, RecordKind, RecorderFuture, RunErrorKind, RunId, RunMeta, RunOutcome,
+    RunRecorder,
+};
 use harness_runner::{HostContext, display_chain};
 use runvil::cancel::CancelHandle;
-use runvil::error::{Error, ErrorCode};
+use runvil::error::{Error, ErrorCode, FactKey};
 use runvil::event::Event;
 use runvil::tools::tool_error;
 use runvil_plugin::{
@@ -117,14 +120,22 @@ pub(crate) fn services(recorder: &Arc<MemoryRecorder>, host: HostContext) -> Ser
 
 /// Begins a run of `source` under the name `services` holds at the
 /// recorder it holds, then prepares the run with no arguments.
-pub(crate) async fn begin_and_prepare(
-    source: &str,
-    services: Services,
-) -> Result<Prepared, PrepareError> {
+pub(crate) async fn begin_and_prepare(source: &str, services: Services) -> Result<Prepared, Error> {
     let begun = begin(&*services.recorder, &services.name, source)
         .await
         .expect("the memory recorder begins the run");
     prepare(source, "", begun, services).await
+}
+
+/// The run a preparation failure names in its `Run` fact.
+pub(crate) fn run_of(error: &Error) -> RunId {
+    RunId::from_raw(
+        error
+            .facts
+            .get(&FactKey::Run)
+            .and_then(Value::as_i64)
+            .expect("a preparation failure names its run"),
+    )
 }
 
 /// The fixture Pack `tools`: one tool, `tools/echo`, echoing its
@@ -231,23 +242,56 @@ async fn a_prompt_that_does_not_parse_fails_preparation_and_its_run_ends_as_a_pa
         .await
         .expect_err("a prompt without a closed frontmatter does not parse");
 
-    let PrepareError::Parse { run_id, source, .. } = error else {
-        panic!("the failure is a parse failure: {error}");
-    };
-
+    assert_eq!(
+        error.code,
+        ErrorCode::FrontmatterInvalid,
+        "the failure is the parse failure"
+    );
+    let run_id = run_of(&error);
     assert_eq!(
         recorder.outcome(run_id),
         Some(RunOutcome::Failed {
             kind: RunErrorKind::Parse,
-            message: display_chain(&source),
+            message: display_chain(&error),
         }),
-        "the recorder holds the parse failure and its cause chain under the Parse kind"
+        "the recorder holds the parse failure under the Parse kind"
     );
     let events = recorded_parse_events(&recorder, run_id);
     assert!(
         matches!(events.last(), Some(Event::ParseFailed { .. })),
         "the events end with the failed parse: {events:?}"
     );
+}
+
+/// A recorder that begins runs in memory and refuses every append with a
+/// store error of its own.
+struct RefusingAppends(MemoryRecorder);
+
+impl RunRecorder for RefusingAppends {
+    fn begin_run(&self, meta: RunMeta) -> RecorderFuture<'_, RunId> {
+        self.0.begin_run(meta)
+    }
+
+    fn append(&self, _run: RunId, _record: Record) -> RecorderFuture<'_, ()> {
+        let code = ErrorCode::Io;
+        Box::pin(async move { Err(Error::new(code, "the disk is full", code.prose())) })
+    }
+
+    fn end_run(&self, run: RunId, outcome: RunOutcome) -> RecorderFuture<'_, ()> {
+        self.0.end_run(run, outcome)
+    }
+}
+
+#[tokio::test]
+async fn a_refused_parse_event_fails_preparation_as_a_recorder_failure_naming_the_run() {
+    let mut services = services(&recorder(), bare());
+    services.recorder = Arc::new(RefusingAppends(MemoryRecorder::new()));
+    let error = begin_and_prepare(PLAIN, services)
+        .await
+        .expect_err("the first parse event is refused");
+    assert_eq!(error.code, ErrorCode::RecorderFailed);
+    assert_eq!(error.message, "the run recorder failed: the disk is full");
+    assert_eq!(run_of(&error), RunId::from_raw(1));
 }
 
 #[tokio::test]

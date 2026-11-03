@@ -13,7 +13,7 @@ use std::sync::Arc;
 use harness_runner::display_chain;
 use harness_runner::effect_loop::drive_run;
 use harness_runner::files::read_output;
-use harness_runner::prepare::{PrepareError, Prepared};
+use harness_runner::prepare::Prepared;
 use harness_runner::recorder::{MemoryRecorder, RunErrorKind, RunOutcome};
 use runvil::cancel::CancelHandle;
 use runvil::error::{Error, ErrorCode, FactKey};
@@ -21,7 +21,9 @@ use runvil::event::Event;
 use runvil::vfs::{MemoryBackend, Mode, ModePolicy, Origin, VfsRef};
 use serde_json::json;
 
-use super::{PLAIN, bare, begin_and_prepare, completed, recorded_parse_events, recorder, services};
+use super::{
+    PLAIN, bare, begin_and_prepare, completed, recorded_parse_events, recorder, run_of, services,
+};
 
 /// A prompt declaring `paper.md` as its input and `report.md` as its
 /// output, whose one section writes the output from the input.
@@ -36,7 +38,7 @@ async fn prepare_over(
     source: &str,
     vfs: &VfsRef,
     input_text: Option<&str>,
-) -> (Arc<MemoryRecorder>, Result<Prepared, PrepareError>) {
+) -> (Arc<MemoryRecorder>, Result<Prepared, Error>) {
     let recorder = recorder();
     let mut services = services(&recorder, bare());
     services.vfs = vfs.clone();
@@ -47,16 +49,14 @@ async fn prepare_over(
 
 /// Checks that `error` is an input refusal whose run ended under `kind`
 /// with the cause chain as its message, and that the recorder holds only
-/// the run's parse events. Returns the cause.
-fn refused(recorder: &MemoryRecorder, error: PrepareError, kind: RunErrorKind) -> Error {
-    let PrepareError::Input { run_id, source, .. } = error else {
-        panic!("the failure is an input refusal: {error}");
-    };
+/// the run's parse events. Returns the refusal.
+fn refused(recorder: &MemoryRecorder, error: Error, kind: RunErrorKind) -> Error {
+    let run_id = run_of(&error);
     assert_eq!(
         recorder.outcome(run_id),
         Some(RunOutcome::Failed {
             kind,
-            message: display_chain(&source),
+            message: display_chain(&error),
         }),
         "the recorder holds the refusal under the {kind:?} kind"
     );
@@ -65,7 +65,7 @@ fn refused(recorder: &MemoryRecorder, error: PrepareError, kind: RunErrorKind) -
         matches!(events.last(), Some(Event::ParseSucceeded { .. })),
         "the prompt parsed before its input was refused: {events:?}"
     );
-    *source
+    error
 }
 
 #[tokio::test]

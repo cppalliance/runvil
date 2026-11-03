@@ -26,7 +26,7 @@ use crate::environment::{HostSnapshot, current_model, model_kind};
 use crate::files::{not_completed, report_output};
 use crate::host::HostContext;
 use crate::performers::{InferenceBroker, Timer};
-use crate::prepare::{Services, begin, prepare};
+use crate::prepare::{Services, begin, ended, prepare};
 use crate::recorder::{RunId, RunOutcome, RunRecorder};
 
 #[path = "harness-control.rs"]
@@ -258,7 +258,7 @@ impl Harness {
         let prepared = match prepare(&source, &args, begun, services).await {
             Ok(prepared) => prepared,
             Err(error) => {
-                return match error.ended() {
+                return match ended(error) {
                     Ok(outcome) => Ok(RunReport {
                         run_id,
                         outcome,

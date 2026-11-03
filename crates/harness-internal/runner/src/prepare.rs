@@ -35,7 +35,7 @@ use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use runvil::cancel::CancelHandle;
-use runvil::error::Error;
+use runvil::error::{Error, ErrorCode, FactKey};
 use runvil::event::Event;
 use runvil::model::{ModelInfo, ModelRole};
 use runvil::prompt::FileDecl;
@@ -136,55 +136,41 @@ pub struct Prepared {
     pub output_path: Option<String>,
 }
 
-/// Why a run could not be prepared.
-#[derive(Debug, thiserror::Error)]
-#[non_exhaustive]
-pub enum PrepareError {
-    /// The prompt does not parse. The run is ended as failed with kind
-    /// `Parse`; the parse failure is the source.
-    #[error("the prompt does not parse")]
-    Parse {
-        /// The run, ended with this failure.
-        run_id: RunId,
-        /// The parse failure.
-        #[source]
-        source: Box<Error>,
-    },
-    /// The prompt's declared input file could not be put in place: the
-    /// launch supplied text the prompt declares no file for, the prompt
-    /// declares a file that is neither supplied nor in the store, or the
-    /// store refused. The run is ended as failed with kind
-    /// `RequirementsUnmet`, or `Vfs` when the store refused.
-    #[error("the prompt's declared input file cannot be put in place")]
-    Input {
-        /// The run, ended with this refusal.
-        run_id: RunId,
-        /// Why the input could not be put in place.
-        #[source]
-        source: Box<Error>,
-    },
-    /// The recorder refused a write; the run cannot be recorded, so it is
-    /// not prepared.
-    #[error("the run could not be recorded")]
-    Recorder {
-        /// The run the recorder refused a write for.
-        run: RunId,
-        /// The recorder's refusal.
-        #[source]
-        source: Box<Error>,
-    },
+/// The failed outcome a [`prepare`] failure ended its run with, or, for a
+/// `RecorderFailed` refusal, which ends nothing, the refusal.
+pub(crate) fn ended(error: Error) -> Result<RunOutcome, Error> {
+    if error.code == ErrorCode::RecorderFailed {
+        return Err(error);
+    }
+    Ok(failed(ended_kind(&error), &error))
 }
 
-impl PrepareError {
-    /// The failed outcome this failure ended the run with, or, for a
-    /// recorder refusal, which ends nothing, the refusal.
-    pub(crate) fn ended(self) -> Result<RunOutcome, Error> {
-        match self {
-            PrepareError::Parse { source, .. } => Ok(failed(RunErrorKind::Parse, &source)),
-            PrepareError::Input { source, .. } => Ok(failed(input_kind(&source), &source)),
-            PrepareError::Recorder { source, .. } => Err(*source),
-        }
+/// The kind a [`prepare`] failure ends its run under: the input's kind for
+/// an unmet or refused input, and `Parse` for a prompt that does not parse.
+fn ended_kind(error: &Error) -> RunErrorKind {
+    if error.code == ErrorCode::RequirementsUnmet || error.code.number() / 100 == 6 {
+        input_kind(error)
+    } else {
+        RunErrorKind::Parse
     }
+}
+
+/// `error` with run `run`'s id as its `Run` fact.
+fn of_run(run: RunId, mut error: Error) -> Error {
+    error.facts.insert(FactKey::Run, run.get().into());
+    error
+}
+
+/// A recorder's refusal of a write for run `run`: `RecorderFailed` with
+/// the run's `Run` fact, the refusal built with [`recorder_error`] when
+/// the recorder returned another code.
+fn refused(run: RunId, error: Error) -> Error {
+    let error = if error.code == ErrorCode::RecorderFailed {
+        error
+    } else {
+        recorder_error(error)
+    };
+    of_run(run, error)
 }
 
 /// Begins one run named `name` of the prompt `source` at `recorder`: draws
@@ -226,18 +212,19 @@ pub async fn begin(recorder: &dyn RunRecorder, name: &str, source: &str) -> Resu
 /// notice, or as cancelled when the run's cancel fired first.
 ///
 /// # Errors
-/// Returns [`PrepareError::Parse`] when the source does not parse and
-/// [`PrepareError::Input`] when its declared input file cannot be put in
-/// place (in both cases the run is ended as failed, and
-/// `Harness::run_to_end` reports it while the events recorded so far stay
-/// at the recorder), and [`PrepareError::Recorder`] when the recorder
-/// refuses a write.
+/// Returns the parse failure when the source does not parse and the input
+/// failure from `stage_input` when its declared input file cannot be put
+/// in place. In both cases the run is ended as failed, the failure keeps
+/// its own code and gains the run's `Run` fact, and `Harness::run_to_end`
+/// reports it while the events recorded so far stay at the recorder.
+/// Returns `RecorderFailed` with the `Run` fact when the recorder refuses
+/// a write.
 pub async fn prepare(
     source: &str,
     args: &str,
     begun: Begun,
     services: Services,
-) -> Result<Prepared, PrepareError> {
+) -> Result<Prepared, Error> {
     let Services {
         host,
         services,
@@ -257,10 +244,7 @@ pub async fn prepare(
         seed,
         started_at,
     } = begun;
-    let recorded = |source| PrepareError::Recorder {
-        run: run_id,
-        source: Box::new(source),
-    };
+    let recorded = |source| refused(run_id, source);
 
     // Parse-time events are the run's first records, whether or not the
     // parse succeeds.
@@ -273,13 +257,10 @@ pub async fn prepare(
         Ok(prompt) => prompt,
         Err(source) => {
             recorder
-                .end_run(run_id, failed(RunErrorKind::Parse, &source))
+                .end_run(run_id, failed(ended_kind(&source), &source))
                 .await
                 .map_err(recorded)?;
-            return Err(PrepareError::Parse {
-                run_id,
-                source: Box::new(source),
-            });
+            return Err(of_run(run_id, source));
         }
     };
 
@@ -288,13 +269,10 @@ pub async fn prepare(
     let declared = prompt.frontmatter().input().map(FileDecl::path);
     if let Err(source) = stage_input(&vfs, declared, input_text) {
         recorder
-            .end_run(run_id, failed(input_kind(&source), &source))
+            .end_run(run_id, failed(ended_kind(&source), &source))
             .await
             .map_err(recorded)?;
-        return Err(PrepareError::Input {
-            run_id,
-            source: Box::new(source),
-        });
+        return Err(of_run(run_id, source));
     }
     let output_path = prompt
         .frontmatter()
