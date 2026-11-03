@@ -6,6 +6,8 @@ use std::collections::BTreeMap;
 use std::fmt;
 use std::num::NonZeroU32;
 
+#[path = "error-prose.rs"]
+mod prose;
 #[cfg(test)]
 #[path = "error-tests.rs"]
 mod tests;
@@ -100,10 +102,10 @@ impl Location {
 }
 
 /// The name of a fact. Each mirrors a field name in today's Lua error tables,
-/// apart from `Limit`, `Section`, and `Chain`.
+/// apart from `Limit`, `Section`, `Chain`, and `Run`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum FactKey {
-    /// A store path or glob pattern, as a string.
+    /// A file or store path, or a glob pattern, as a string.
     Path,
     /// The name the failure is about, such as a tool alias, a Pack id, or
     /// rejected input, as a string.
@@ -131,11 +133,13 @@ pub enum FactKey {
     Section,
     /// The chain the failure happened in, as a dotted string.
     Chain,
+    /// The run id a recorder issued, as an integer.
+    Run,
 }
 
 /// A stable failure code. Numbers group by family in hundreds: 1xx parse,
-/// 2xx Lua, 3xx tasks, 4xx model, 5xx tools, 6xx store, 7xx run. A number is
-/// never reused. Variants named after a `VfsError` or `CompletionErrorKind`
+/// 2xx Lua, 3xx tasks, 4xx model, 5xx tools, 6xx store, 7xx run, 8xx
+/// harness. A number is never reused. Variants named after a `VfsError` or `CompletionErrorKind`
 /// variant keep its name, so their tags will match.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[repr(u16)]
@@ -152,8 +156,8 @@ pub enum ErrorCode {
     ListEmptyItem = 104,
     /// The prompt declares a `runvil:` major this build does not support.
     UnsupportedVersion = 105,
-    /// A value failed to parse or validate, such as an id, a tag, or a
-    /// temperature.
+    /// A value is missing, or failed to parse or validate, such as an id, a
+    /// tag, a temperature, or a setting.
     InvalidValue = 106,
 
     /// Lua failed at runtime, or a call from Lua was refused.
@@ -280,6 +284,14 @@ pub enum ErrorCode {
     Interrupted = 702,
     /// An internal invariant broke; nothing the prompt can fix.
     Internal = 703,
+
+    /// The run recorder failed to store a write.
+    RecorderFailed = 801,
+    /// A Plugin entry point did not open or load.
+    PluginLoadFailed = 802,
+    /// The run report has no output text: the run did not complete, or the
+    /// prompt declares no `output:` file.
+    NoOutput = 803,
 }
 
 impl ErrorCode {

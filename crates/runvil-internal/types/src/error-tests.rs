@@ -6,7 +6,7 @@ use std::num::NonZeroU32;
 use super::{ErrorCode, Location};
 
 /// Every code, in declaration order.
-const ALL: [ErrorCode; 65] = [
+const ALL: [ErrorCode; 68] = [
     ErrorCode::FrontmatterInvalid,
     ErrorCode::StructureInvalid,
     ErrorCode::FenceInvalid,
@@ -72,6 +72,9 @@ const ALL: [ErrorCode; 65] = [
     ErrorCode::RequirementsUnmet,
     ErrorCode::Interrupted,
     ErrorCode::Internal,
+    ErrorCode::RecorderFailed,
+    ErrorCode::PluginLoadFailed,
+    ErrorCode::NoOutput,
 ];
 
 /// The family hundred of each code. The match is exhaustive, so a new code
@@ -141,6 +144,7 @@ fn family(code: ErrorCode) -> u16 {
         | ErrorCode::Backend
         | ErrorCode::Determinism => 6,
         ErrorCode::RequirementsUnmet | ErrorCode::Interrupted | ErrorCode::Internal => 7,
+        ErrorCode::RecorderFailed | ErrorCode::PluginLoadFailed | ErrorCode::NoOutput => 8,
     }
 }
 
@@ -158,6 +162,15 @@ fn every_code_is_listed_once() {
 fn every_code_number_falls_in_its_family_hundred() {
     for code in ALL {
         assert_eq!(code.number() / 100, family(code), "{code:?}");
+    }
+}
+
+#[test]
+fn every_code_has_default_prose_in_whole_sentences() {
+    for code in ALL {
+        let prose = code.prose();
+        assert!(!prose.is_empty(), "{code:?}");
+        assert!(prose.ends_with('.'), "{code:?}: {prose}");
     }
 }
 
