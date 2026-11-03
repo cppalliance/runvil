@@ -4,23 +4,40 @@
 use runvil::model::Message;
 
 use runvil::error::{ErrorCode, FactKey};
+use serde_json::Value;
 
 use super::*;
+use crate::config::invalid_env;
+
+/// Asserts `error` is a setup error for `reason`, naming `variable` when one
+/// is given, whose prose is its message.
+#[track_caller]
+fn assert_setup_error(error: &Error, reason: &str, variable: Option<&str>) {
+    assert_eq!(error.code, ErrorCode::InvalidValue, "{error:?}");
+    assert_eq!(
+        error.facts.get(&FactKey::Reason),
+        Some(&Value::from(reason)),
+        "{error:?}"
+    );
+    assert_eq!(
+        error.facts.get(&FactKey::Name),
+        variable.map(Value::from).as_ref(),
+        "{error:?}"
+    );
+    assert_eq!(error.prose, error.message, "{error:?}");
+}
 
 #[test]
 fn from_env_surfaces_non_unicode_value_instead_of_dropping_it() {
     let err = from_env_with(|name| {
         if name == "RUNVIL_GATEWAY_URL" {
-            Err(GatewayConfigError::InvalidEnv(name.to_owned()))
+            Err(invalid_env(name))
         } else {
             Ok(Some("tok".to_owned()))
         }
     })
     .expect_err("a non-Unicode variable must be surfaced, not treated as missing");
-    assert!(
-        matches!(err, GatewayConfigError::InvalidEnv(ref name) if name == "RUNVIL_GATEWAY_URL"),
-        "expected an explicit InvalidEnv error, got {err:?}"
-    );
+    assert_setup_error(&err, "invalid_env", Some("RUNVIL_GATEWAY_URL"));
     assert_eq!(
         err.to_string(),
         "environment variable is set but not valid Unicode: RUNVIL_GATEWAY_URL"
@@ -35,10 +52,7 @@ fn from_env_missing_gateway_url() {
         err.to_string(),
         "missing environment variable: RUNVIL_GATEWAY_URL"
     );
-    assert!(matches!(
-        err,
-        GatewayConfigError::MissingEnv(name) if name == "RUNVIL_GATEWAY_URL"
-    ));
+    assert_setup_error(&err, "missing_env", Some("RUNVIL_GATEWAY_URL"));
 }
 
 #[test]
@@ -58,10 +72,7 @@ fn from_env_missing_gateway_key() {
     ] {
         let err = from_env_with(lookup_from(&key_pairs))
             .expect_err("missing key against a non-loopback gateway must fail");
-        assert!(
-            matches!(err, GatewayConfigError::MissingEnv(ref name) if name == "RUNVIL_GATEWAY_API_KEY"),
-            "expected MissingEnv for {key_pairs:?}, got {err:?}"
-        );
+        assert_setup_error(&err, "missing_env", Some("RUNVIL_GATEWAY_API_KEY"));
     }
 }
 
@@ -249,24 +260,20 @@ fn gateway_endpoint_rejects_non_http_schemes_and_missing_host() {
 }
 
 #[test]
-fn gateway_endpoint_keeps_the_url_parse_cause() {
-    // AUDIT-DISCARDED-SOURCE: the url::ParseError survives as the source.
+fn gateway_endpoint_keeps_the_url_parse_cause_in_its_message() {
     let url_error = GatewayEndpoint::new("not a url").expect_err("malformed URL is rejected");
-    assert_eq!(url_error.to_string(), "gateway URL is not a valid URL");
-    assert!(
-        std::error::Error::source(&url_error)
-            .is_some_and(|source| source.downcast_ref::<url::ParseError>().is_some()),
-        "the url::ParseError cause must survive"
+    assert_eq!(
+        url_error.message,
+        format!(
+            "gateway URL is not a valid URL: {}",
+            url::ParseError::RelativeUrlWithoutBase
+        )
     );
+    assert_setup_error(&url_error, "invalid_config", None);
 }
 
 #[test]
-fn constructor_errors_preserve_sources_without_leaking_secrets() {
-    let parse = GatewayEndpoint::new("not a url hunter2").expect_err("malformed URL is rejected");
-    assert!(
-        std::error::Error::source(&parse).is_some(),
-        "the endpoint parse failure must be preserved as the source"
-    );
+fn constructor_errors_do_not_leak_secrets() {
     for url in [
         "not a url hunter2",
         "ftp://alice:hunter2@host/v1",

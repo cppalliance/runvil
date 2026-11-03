@@ -76,7 +76,6 @@ mod wire;
 
 pub use broker::GatewayBroker;
 pub use catalog::fetch_model_catalog;
-pub use config::GatewayConfigError;
 pub use config::GatewayEndpoint;
 pub use config::SecretString;
 pub use runvil::model::CompletionError;

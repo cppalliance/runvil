@@ -117,7 +117,7 @@ fn keyed_client(base: &str) -> GatewayChat {
 
 fn lookup_from<'a>(
     pairs: &'a [(&'a str, &'a str)],
-) -> impl Fn(&str) -> Result<Option<String>, GatewayConfigError> + 'a {
+) -> impl Fn(&str) -> Result<Option<String>, Error> + 'a {
     let pairs: Vec<(String, String)> = pairs
         .iter()
         .map(|(name, value)| ((*name).to_owned(), (*value).to_owned()))

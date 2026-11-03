@@ -1,47 +1,43 @@
 //! Client configuration: the redacted bearer secret, the validated gateway
-//! endpoint, and the error a bad setup reports.
+//! endpoint, and the setup errors a bad setup reports.
+//!
+//! A setup error happens before the client sends its first request. It is
+//! an [`InvalidValue`](ErrorCode::InvalidValue) whose message names the
+//! environment variable or the rule that failed, never a key, and whose
+//! `Reason` fact is `missing_env`, `invalid_env`, or `invalid_config`.
 
 use std::fmt;
 
 use runvil::error::{Error, ErrorCode, FactKey};
+use serde_json::Value;
 
-/// The error returned when setting up the gateway client fails because an
-/// environment variable, the bearer key, or the endpoint URL is missing or
-/// unusable.
-///
-/// This is a setup error. It happens before the client sends its first
-/// request, so it stays within client setup, separate from the Engine and
-/// its [`CompletionErrorKind`](crate::CompletionErrorKind) values. The
-/// message names the environment variable or the rule that failed, and never
-/// contains a key.
-#[derive(Debug, thiserror::Error)]
-#[non_exhaustive]
-pub enum GatewayConfigError {
-    /// A required environment variable was missing.
-    #[error("missing environment variable: {0}")]
-    MissingEnv(String),
+/// The setup error for a required environment variable that is not set.
+pub(crate) fn missing_env(name: &str) -> Error {
+    let mut error = setup_error(
+        "missing_env",
+        format!("missing environment variable: {name}"),
+    );
+    error.facts.insert(FactKey::Name, Value::from(name));
+    error
+}
 
-    /// An environment variable was set, but its value was invalid Unicode.
-    #[error("environment variable is set but not valid Unicode: {0}")]
-    InvalidEnv(String),
+/// The setup error for an environment variable whose value is not valid
+/// Unicode.
+pub(crate) fn invalid_env(name: &str) -> Error {
+    let mut error = setup_error(
+        "invalid_env",
+        format!("environment variable is set but not valid Unicode: {name}"),
+    );
+    error.facts.insert(FactKey::Name, Value::from(name));
+    error
+}
 
-    /// A configuration value failed validation.
-    #[error("{0}")]
-    InvalidConfig(String),
-
-    /// A configuration input was invalid, and the error keeps the concrete
-    /// cause as its `source`.
-    ///
-    /// The cause is, for example, a URL parse failure.
-    #[error("{message}")]
-    Config {
-        /// A human-readable description of the problem. The text of the
-        /// source error appears only in `source`.
-        message: String,
-        /// The underlying error that caused this one.
-        #[source]
-        source: Box<dyn std::error::Error + Send + Sync>,
-    },
+/// A setup error with `reason`. Its prose is its message, which names the
+/// variable or the rule to fix.
+fn setup_error(reason: &'static str, message: String) -> Error {
+    let mut error = Error::new(ErrorCode::InvalidValue, message.clone(), message);
+    error.facts.insert(FactKey::Reason, Value::from(reason));
+    error
 }
 
 /// A bearer credential whose contents never appear in `Debug` or `Display`
@@ -72,7 +68,7 @@ impl SecretString {
             );
             error
                 .facts
-                .insert(FactKey::Reason, serde_json::Value::from("empty_secret"));
+                .insert(FactKey::Reason, Value::from("empty_secret"));
             return Err(error);
         }
         Ok(SecretString(secret))
@@ -118,21 +114,18 @@ impl GatewayEndpoint {
     /// The URL is checked with a strict URL parser.
     ///
     /// # Errors
-    /// Returns a [`GatewayConfigError`] when `url` fails to parse as an
-    /// absolute URL, uses a scheme other than `http` or `https`, omits the
+    /// Returns an `invalid_config` setup error when `url` fails to parse as
+    /// an absolute URL, uses a scheme other than `http` or `https`, omits the
     /// host, embeds credentials (a `user:pass@` component), or has a query or
     /// fragment.
     /// A query or fragment is rejected because an API root is a bare path.
     /// No error includes `url`, because a URL can contain a credential.
-    pub fn new(url: &str) -> std::result::Result<GatewayEndpoint, GatewayConfigError> {
-        let reject = GatewayConfigError::InvalidConfig;
+    pub fn new(url: &str) -> std::result::Result<GatewayEndpoint, Error> {
+        let reject = |message: String| setup_error("invalid_config", message);
         let trimmed = url.trim();
-        // Preserve the concrete `url::ParseError` as a private source rather than
-        // flattening it into the message (AUDIT-DISCARDED-SOURCE).
-        let parsed = url::Url::parse(trimmed).map_err(|error| GatewayConfigError::Config {
-            message: "gateway URL is not a valid URL".to_owned(),
-            source: Box::new(error),
-        })?;
+        // The parse failure's own text names the rule, never the input.
+        let parsed = url::Url::parse(trimmed)
+            .map_err(|error| reject(format!("gateway URL is not a valid URL: {error}")))?;
         if !matches!(parsed.scheme(), "http" | "https") {
             return Err(reject(
                 "gateway URL must use the http or https scheme".to_owned(),
@@ -187,9 +180,9 @@ impl GatewayEndpoint {
 }
 
 impl TryFrom<&str> for GatewayEndpoint {
-    type Error = GatewayConfigError;
+    type Error = Error;
 
-    fn try_from(url: &str) -> std::result::Result<GatewayEndpoint, GatewayConfigError> {
+    fn try_from(url: &str) -> std::result::Result<GatewayEndpoint, Error> {
         GatewayEndpoint::new(url)
     }
 }

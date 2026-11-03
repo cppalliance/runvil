@@ -11,9 +11,10 @@ use std::fmt;
 use std::num::NonZeroU64;
 use std::time::{Duration, Instant};
 
+use runvil::error::Error;
 use runvil::model::{Completion, CompletionError, CompletionOptions, Message, ToolSchema};
 
-use crate::config::{GatewayConfigError, GatewayEndpoint, SecretString};
+use crate::config::{GatewayEndpoint, SecretString, invalid_env, missing_env};
 use crate::failure::{elapsed, transport_failure, unavailable};
 use crate::wire::classify::classify_http_failure;
 use crate::wire::delta::StreamDelta;
@@ -184,19 +185,18 @@ impl GatewayChat {
     /// `Unavailable`-kind error when the gateway answers 401.
     ///
     /// # Errors
-    /// Returns a [`GatewayConfigError`] when `RUNVIL_GATEWAY_URL` is
-    /// missing or invalid, when either variable is set to a value that is not
-    /// valid Unicode, or when the URL's host is not loopback (a LAN or
-    /// remote gateway) and `RUNVIL_GATEWAY_API_KEY` is missing or empty.
-    pub fn from_env() -> Result<GatewayChat, GatewayConfigError> {
+    /// Returns an [`InvalidValue`](runvil::error::ErrorCode::InvalidValue)
+    /// setup error when `RUNVIL_GATEWAY_URL` is missing or invalid, when
+    /// either variable is set to a value that is not valid Unicode, or when
+    /// the URL's host is not loopback (a LAN or remote gateway) and
+    /// `RUNVIL_GATEWAY_API_KEY` is missing or empty.
+    pub fn from_env() -> Result<GatewayChat, Error> {
         from_env_with(|name| match std::env::var(name) {
             Ok(value) => Ok(Some(value)),
             Err(std::env::VarError::NotPresent) => Ok(None),
             // A set-but-non-Unicode value is a real misconfiguration, surfaced
             // explicitly instead of being silently treated as "not set".
-            Err(std::env::VarError::NotUnicode(_)) => {
-                Err(GatewayConfigError::InvalidEnv(name.to_owned()))
-            }
+            Err(std::env::VarError::NotUnicode(_)) => Err(invalid_env(name)),
         })
     }
 
@@ -319,10 +319,10 @@ impl GatewayChat {
 /// counts as unset ([`SecretString::new`] refuses only an empty secret, and
 /// `Result::ok` folds that refusal into `None`).
 fn from_env_with(
-    lookup: impl Fn(&str) -> Result<Option<String>, GatewayConfigError>,
-) -> Result<GatewayChat, GatewayConfigError> {
-    let base_url = lookup("RUNVIL_GATEWAY_URL")?
-        .ok_or_else(|| GatewayConfigError::MissingEnv("RUNVIL_GATEWAY_URL".into()))?;
+    lookup: impl Fn(&str) -> Result<Option<String>, Error>,
+) -> Result<GatewayChat, Error> {
+    let base_url =
+        lookup("RUNVIL_GATEWAY_URL")?.ok_or_else(|| missing_env("RUNVIL_GATEWAY_URL"))?;
     let endpoint = GatewayEndpoint::new(&base_url)?;
     let key = lookup("RUNVIL_GATEWAY_API_KEY")?
         .map(SecretString::new)
@@ -330,9 +330,7 @@ fn from_env_with(
     match key {
         Some(key) => Ok(GatewayChat::new(endpoint, key)),
         None if endpoint.is_loopback() => Ok(GatewayChat::keyless(endpoint)),
-        None => Err(GatewayConfigError::MissingEnv(
-            "RUNVIL_GATEWAY_API_KEY".into(),
-        )),
+        None => Err(missing_env("RUNVIL_GATEWAY_API_KEY")),
     }
 }
 
