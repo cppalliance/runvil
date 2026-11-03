@@ -75,7 +75,6 @@ pub mod model {
     pub use runvil_model_client::client::Completion;
     pub use runvil_model_client::client::CompletionResult;
     pub use runvil_model_client::client::Message;
-    pub use runvil_model_client::client::ParseRoleError;
     pub use runvil_model_client::client::RawExchange;
     pub use runvil_model_client::client::Role;
     pub use runvil_model_client::client::ToolArguments;

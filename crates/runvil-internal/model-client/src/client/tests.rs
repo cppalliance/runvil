@@ -75,11 +75,15 @@ fn a_role_parses_from_its_name_and_a_refusal_lists_the_accepted_roles() {
     let error = "wizard"
         .parse::<Role>()
         .expect_err("an unknown role is refused");
-    assert_eq!(error.input(), "wizard");
+    let text = "invalid role `wizard`: required one of `system`, `user`, `assistant`, `tool`";
+    assert_eq!(error.code, runvil_types::error::ErrorCode::InvalidValue);
     assert_eq!(
-        error.to_string(),
-        "invalid role `wizard`: required one of `system`, `user`, `assistant`, `tool`"
+        error.facts.get(&runvil_types::error::FactKey::Name),
+        Some(&Value::from("wizard"))
     );
+    assert_eq!(error.message, text);
+    assert_eq!(error.prose, text);
+    assert_eq!(error.at, None);
 }
 
 #[test]

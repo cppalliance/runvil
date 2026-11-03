@@ -1,7 +1,10 @@
-//! The chat-completions message role and its parse error.
+//! The chat-completions message role.
 
 use std::fmt;
 use std::str::FromStr;
+
+use runvil_types::error::{Error, ErrorCode, FactKey};
+use serde_json::Value;
 
 /// Names who speaks one message in a chat-completions conversation.
 ///
@@ -45,46 +48,22 @@ impl fmt::Display for Role {
 }
 
 impl FromStr for Role {
-    type Err = ParseRoleError;
+    type Err = Error;
 
-    /// Parses a role from its exact wire name, never case-folded.
-    fn from_str(name: &str) -> Result<Role, ParseRoleError> {
-        Role::ALL
-            .iter()
-            .copied()
-            .find(|role| role.as_str() == name)
-            .ok_or_else(|| ParseRoleError {
-                input: name.to_owned(),
-            })
-    }
-}
-
-/// The error returned when text is not a [`Role`]'s wire name.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ParseRoleError {
-    /// The rejected text.
-    input: String,
-}
-
-impl ParseRoleError {
-    /// Returns the rejected text.
-    #[must_use]
-    pub fn input(&self) -> &str {
-        &self.input
-    }
-}
-
-impl fmt::Display for ParseRoleError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "invalid role `{}`: required one of ", self.input)?;
-        for (position, role) in Role::ALL.iter().enumerate() {
-            if position > 0 {
-                f.write_str(", ")?;
-            }
-            write!(f, "`{role}`")?;
+    /// Parses a role from its exact wire name, never case-folded. Other text
+    /// is an [`InvalidValue`](ErrorCode::InvalidValue) error that names it
+    /// and lists every role.
+    fn from_str(name: &str) -> Result<Role, Error> {
+        if let Some(role) = Role::ALL.iter().copied().find(|role| role.as_str() == name) {
+            return Ok(role);
         }
-        Ok(())
+        let roles: Vec<String> = Role::ALL.iter().map(|role| format!("`{role}`")).collect();
+        let text = format!(
+            "invalid role `{name}`: required one of {}",
+            roles.join(", ")
+        );
+        let mut error = Error::new(ErrorCode::InvalidValue, text.clone(), text);
+        error.facts.insert(FactKey::Name, Value::from(name));
+        Err(error)
     }
 }
-
-impl std::error::Error for ParseRoleError {}

@@ -107,7 +107,6 @@ auto runvil::model::ModelId: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSaf
 auto runvil::model::ModelInfo: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::model::ModelInvocation: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::model::ModelRole: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
-auto runvil::model::ParseRoleError: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::model::RawExchange: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::model::Role: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::model::Temperature: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
@@ -211,7 +210,6 @@ derives runvil::model::ModelId: Clone, Debug, Eq, Hash, Ord, PartialEq, PartialO
 derives runvil::model::ModelInfo: Clone, Debug, Eq, PartialEq
 derives runvil::model::ModelInvocation: Clone, Debug, Default, Eq, PartialEq
 derives runvil::model::ModelRole: Clone, Copy, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd
-derives runvil::model::ParseRoleError: Clone, Debug, Eq, PartialEq
 derives runvil::model::RawExchange: Clone, Debug, Eq, PartialEq
 derives runvil::model::Role: Clone, Copy, Debug, Deserialize, Eq, Hash, PartialEq, Serialize
 derives runvil::model::Temperature: Clone, Copy, Debug, Eq, PartialEq
@@ -271,7 +269,6 @@ impl core::convert::From<runvil::vfs::VfsPath> for runvil::vfs::VfsPathBuf
 impl core::error::Error for runvil::ParseError
 impl core::error::Error for runvil::error::Error
 impl core::error::Error for runvil::model::CompletionError
-impl core::error::Error for runvil::model::ParseRoleError
 impl core::error::Error for runvil::model::TemperatureError
 impl core::error::Error for runvil::tools::ToolError
 impl core::error::Error for runvil::vfs::ParsePathReasonError
@@ -283,7 +280,6 @@ impl core::fmt::Display for runvil::error::Error
 impl core::fmt::Display for runvil::ids::ChainId
 impl core::fmt::Display for runvil::ids::TaskId
 impl core::fmt::Display for runvil::model::CompletionError
-impl core::fmt::Display for runvil::model::ParseRoleError
 impl core::fmt::Display for runvil::model::Role
 impl core::fmt::Display for runvil::model::TemperatureError
 impl core::fmt::Display for runvil::packs::GlobalName
@@ -306,7 +302,7 @@ impl core::str::traits::FromStr for runvil::ids::ChainId { type Err = runvil::er
 impl core::str::traits::FromStr for runvil::ids::TaskId
 impl core::str::traits::FromStr for runvil::ids::TaskId { type Err = runvil::error::Error }
 impl core::str::traits::FromStr for runvil::model::Role
-impl core::str::traits::FromStr for runvil::model::Role { type Err = runvil::model::ParseRoleError }
+impl core::str::traits::FromStr for runvil::model::Role { type Err = runvil::error::Error }
 impl core::str::traits::FromStr for runvil::packs::GlobalName
 impl core::str::traits::FromStr for runvil::packs::GlobalName { type Err = runvil::error::Error }
 impl core::str::traits::FromStr for runvil::packs::PackId
@@ -508,7 +504,6 @@ pub fn runvil::model::ModelInvocation::new() -> runvil::model::ModelInvocation
 pub fn runvil::model::ModelInvocation::with_max_tokens(self, max_tokens: core::option::Option<core::num::nonzero::NonZeroU32>) -> runvil::model::ModelInvocation
 pub fn runvil::model::ModelInvocation::with_temperature(self, temperature: core::option::Option<runvil::model::Temperature>) -> runvil::model::ModelInvocation
 pub fn runvil::model::ModelInvocation::with_thinking(self, thinking: core::option::Option<bool>) -> runvil::model::ModelInvocation
-pub fn runvil::model::ParseRoleError::input(&self) -> &str
 pub fn runvil::model::RawExchange::new(request: serde_json::value::Value, response: serde_json::value::Value) -> runvil::model::RawExchange
 pub fn runvil::model::RawExchange::request(&self) -> &serde_json::value::Value
 pub fn runvil::model::RawExchange::response(&self) -> &serde_json::value::Value
@@ -1357,7 +1352,6 @@ pub struct runvil::ids::RoundId(/* private fields */)
 pub struct runvil::ids::TaskId(/* private fields */)
 pub struct runvil::model::ArgumentNames<'a> { /* private fields */ }
 pub struct runvil::model::ModelBinding { /* private fields */ }
-pub struct runvil::model::ParseRoleError { /* private fields */ }
 pub struct runvil::model::Temperature(/* private fields */)
 pub struct runvil::packs::GlobalName { /* private fields */ }
 pub struct runvil::packs::PackRef { /* private fields */ }
