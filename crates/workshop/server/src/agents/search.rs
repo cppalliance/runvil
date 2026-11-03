@@ -3,10 +3,9 @@
 //!
 //! The provider holds the server's [`Registry`] and reads the gateway
 //! handles through it on every search, as the inference broker does, so a
-//! replaced gateway serves the next search. It keeps the [`GatewaySearch`]
-//! of the last generation it searched under and hands each search to it.
-
-use std::sync::{Mutex, PoisonError};
+//! replaced gateway serves the next search. It builds a [`GatewaySearch`]
+//! per search; the Gateway client's shared connection pool makes that a
+//! few clones and keeps connections alive across searches.
 
 use harness_gateway_client::GatewaySearch;
 use plugin_web::{SearchError, SearchErrorKind, SearchProvider, SearchQuery, SearchResults};
@@ -23,23 +22,17 @@ const NO_GATEWAY: &str = "request failed";
 pub(super) struct GatewaySearchProvider {
     /// The subsystem registry the gateway handles are read through.
     registry: Registry,
-    /// The client built for the last generation searched under.
-    cached: Mutex<Option<(u64, GatewaySearch)>>,
 }
 
 impl GatewaySearchProvider {
     /// Builds the provider over the server's subsystem registry.
     pub(super) fn new(registry: Registry) -> Self {
-        Self {
-            registry,
-            cached: Mutex::new(None),
-        }
+        Self { registry }
     }
 
-    /// The client for the current gateway generation, built on the first
-    /// search under it. A missing gateway registration, a gateway the
-    /// heartbeat reports down, or an endpoint or key that cannot be built
-    /// fails as transport with [`NO_GATEWAY`].
+    /// A client for the current gateway generation. A missing gateway
+    /// registration, a gateway the heartbeat reports down, or an endpoint
+    /// or key that cannot be built fails as transport with [`NO_GATEWAY`].
     fn client(&self) -> Result<GatewaySearch, SearchError> {
         let no_gateway = || SearchError::new(SearchErrorKind::Transport, NO_GATEWAY);
         let handles = self
@@ -50,16 +43,7 @@ impl GatewaySearchProvider {
             return Err(no_gateway());
         }
         let gateway = UsableGateway::read(&handles).ok_or_else(no_gateway)?;
-        // A poisoned lock holds a pair written whole by one store.
-        let mut cached = self.cached.lock().unwrap_or_else(PoisonError::into_inner);
-        if let Some((generation, client)) = cached.as_ref()
-            && *generation == gateway.generation
-        {
-            return Ok(client.clone());
-        }
-        let client = GatewaySearch::new(gateway.endpoint, gateway.key);
-        *cached = Some((gateway.generation, client.clone()));
-        Ok(client)
+        Ok(GatewaySearch::new(gateway.endpoint, gateway.key))
     }
 }
 

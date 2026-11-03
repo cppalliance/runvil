@@ -7,6 +7,7 @@ use runvil::model::{ModelCatalog, ModelId, ModelInfo, ThinkingMode};
 use serde::Deserialize;
 
 use crate::failure::{malformed, transport_failure, with_detail};
+use crate::transport::shared_client;
 use crate::wire::classify::classify_http_failure;
 use crate::wire::stream::escape_controls;
 
@@ -115,17 +116,6 @@ async fn read_error_body_bounded(
     Ok(escaped)
 }
 
-/// Returns the process-wide catalog HTTP client, building it once on first use.
-///
-/// A single reusable client (MODEL-018) lets catalog fetches share one
-/// connection pool and transport configuration rather than each constructing a
-/// throwaway client with its own pool. The returned handle is a cheap clone of
-/// the shared client (its state is reference-counted internally).
-fn catalog_client() -> reqwest::Client {
-    static CATALOG_CLIENT: std::sync::OnceLock<reqwest::Client> = std::sync::OnceLock::new();
-    CATALOG_CLIENT.get_or_init(reqwest::Client::new).clone()
-}
-
 /// Sends a bearer-authed GET through the shared client (MODEL-018) and
 /// returns the success response, classifying every failure the same way for
 /// each gateway endpoint: `Transport` (or `Timeout`) when the send fails, the
@@ -135,7 +125,7 @@ fn catalog_client() -> reqwest::Client {
 /// the [`reqwest::Error`] to the message under the same timeout marking as a
 /// send failure.
 async fn get_authed(url: String, token: &str) -> std::result::Result<reqwest::Response, Error> {
-    let response = catalog_client()
+    let response = shared_client()
         .get(url)
         .bearer_auth(token)
         .send()

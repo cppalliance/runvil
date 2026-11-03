@@ -14,6 +14,7 @@ use runvil::error::{Error, ErrorCode};
 use runvil::tools::tool_error;
 
 use crate::config::{GatewayEndpoint, SecretString};
+use crate::transport::shared_client;
 
 /// The largest error body kept for diagnostics, in bytes.
 const MAX_ERROR_BODY: usize = 2000;
@@ -142,7 +143,7 @@ impl GatewaySearch {
         timeout: Duration,
     ) -> GatewaySearch {
         GatewaySearch {
-            http: reqwest::Client::new(),
+            http: shared_client(),
             base_url: endpoint.url,
             key,
             timeout,

@@ -42,6 +42,18 @@ pub struct GatewayChat {
     max_response_bytes: u64,
 }
 
+/// Returns the process-wide HTTP client, building it once on first use.
+///
+/// Every request this crate sends goes through it (MODEL-018), so every
+/// [`GatewayChat`], `GatewaySearch`, and catalog fetch shares one connection
+/// pool however often the caller rebuilds them. The pool is keyed by scheme,
+/// host, and port, so a gateway at a new address gets its own connections.
+/// The handle is a reference-counted clone.
+pub(crate) fn shared_client() -> reqwest::Client {
+    static CLIENT: std::sync::OnceLock<reqwest::Client> = std::sync::OnceLock::new();
+    CLIENT.get_or_init(reqwest::Client::new).clone()
+}
+
 /// Default longest wait for the next receive.
 const DEFAULT_RECEIVE_TIMEOUT: Duration = Duration::from_secs(120);
 /// Default response-body ceiling.
@@ -93,7 +105,7 @@ impl GatewayChat {
     #[must_use]
     pub fn new(endpoint: GatewayEndpoint, key: SecretString) -> GatewayChat {
         GatewayChat {
-            transport: GatewayTransport::Http(reqwest::Client::new()),
+            transport: GatewayTransport::Http(shared_client()),
             base_url: endpoint.url,
             key: Some(key),
             receive_timeout: DEFAULT_RECEIVE_TIMEOUT,
@@ -116,7 +128,7 @@ impl GatewayChat {
     #[must_use]
     pub fn keyless(endpoint: GatewayEndpoint) -> GatewayChat {
         GatewayChat {
-            transport: GatewayTransport::Http(reqwest::Client::new()),
+            transport: GatewayTransport::Http(shared_client()),
             base_url: endpoint.url,
             key: None,
             receive_timeout: DEFAULT_RECEIVE_TIMEOUT,
