@@ -77,7 +77,7 @@
 
 mod ask;
 
-use runvil_plugin::{InstallError, PackInfo, PackRegistry, ServiceId, ServiceKey, ToolError};
+use runvil_plugin::{Error, PackInfo, PackRegistry, ServiceId, ServiceKey, ToolError};
 use serde_json::Value;
 
 /// The Pack's `PackInfo`.
@@ -94,14 +94,14 @@ const USER_INPUT: PackInfo = PackInfo::new("runvil/user-input", ask::construct)
 /// `user-input` key.
 ///
 /// # Errors
-/// Returns the registry's [`InstallError`], such as
-/// [`InstallError::DuplicatePack`] when `packs` holds
-/// `runvil/user-input` already.
+/// Returns the registry's refusal, such as an
+/// [`InvalidValue`](runvil_plugin::ErrorCode::InvalidValue) error with the
+/// reason `duplicate_pack` when `packs` holds `runvil/user-input` already.
 #[expect(
     clippy::needless_pass_by_value,
     reason = "the Plugin signature fixes the argument types"
 )]
-pub fn install(packs: &mut PackRegistry, config: Value) -> Result<(), InstallError> {
+pub fn install(packs: &mut PackRegistry, config: Value) -> Result<(), Error> {
     packs.insert(USER_INPUT, config["user-input"].clone())
 }
 

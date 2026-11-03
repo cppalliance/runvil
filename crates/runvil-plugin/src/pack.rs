@@ -147,7 +147,7 @@ pub trait Pack: Send + Sync {
 ///     .prelude(PRELUDE)
 ///     .needs(NEEDS);
 ///
-/// pub fn install(packs: &mut PackRegistry, config: Value) -> Result<(), InstallError> {
+/// pub fn install(packs: &mut PackRegistry, config: Value) -> Result<(), Error> {
 ///     packs.insert(GREETER, config["greeter"].clone())
 /// }
 /// ```

@@ -5,8 +5,8 @@
 use std::sync::Arc;
 
 use runvil_plugin::{
-    HostServices, InstallError, Pack, PackFuture, PackId, PackInfo, PackRegistry, ToolContext,
-    ToolError, ToolId, ToolInfo, ToolOutput,
+    Error, HostServices, Pack, PackFuture, PackId, PackInfo, PackRegistry, ToolContext, ToolError,
+    ToolId, ToolInfo, ToolOutput,
 };
 use serde_json::{Value, json};
 
@@ -38,14 +38,14 @@ const STD: PackInfo =
 /// which is `null` when `config` has no `std` key.
 ///
 /// # Errors
-/// Returns the registry's [`InstallError`], such as
-/// [`InstallError::DuplicatePack`] when `packs` holds `runvil/std`
-/// already.
+/// Returns the registry's refusal, such as an
+/// [`InvalidValue`](runvil_plugin::ErrorCode::InvalidValue) error with the
+/// reason `duplicate_pack` when `packs` holds `runvil/std` already.
 #[expect(
     clippy::needless_pass_by_value,
     reason = "the Plugin signature fixes the argument types"
 )]
-pub fn install(packs: &mut PackRegistry, config: Value) -> Result<(), InstallError> {
+pub fn install(packs: &mut PackRegistry, config: Value) -> Result<(), Error> {
     packs.insert(STD, config["std"].clone())
 }
 

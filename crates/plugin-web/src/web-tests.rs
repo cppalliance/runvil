@@ -8,8 +8,8 @@ use std::sync::Arc;
 
 use runvil_plugin::testing::TestCall;
 use runvil_plugin::{
-    HostServices, InstallError, Pack, PackId, PackRegistry, ServiceKey, TOKIO_RUNTIME, ToolError,
-    ToolErrorKind, ToolId,
+    ErrorCode, FactKey, HostServices, Pack, PackId, PackRegistry, ServiceKey, TOKIO_RUNTIME,
+    ToolError, ToolErrorKind, ToolId,
 };
 use serde_json::{Value, json};
 use tokio::runtime::Handle;
@@ -94,9 +94,15 @@ fn install_adds_the_web_pack_with_the_config_under_its_pack_id() {
 fn install_returns_the_registrys_refusal() {
     let mut packs = PackRegistry::new();
     install(&mut packs, Value::Null).expect("the first install inserts web");
+    let error = install(&mut packs, Value::Null).expect_err("a second install is refused");
+    assert_eq!(error.code, ErrorCode::InvalidValue);
     assert_eq!(
-        install(&mut packs, Value::Null),
-        Err(InstallError::DuplicatePack { fqn: "runvil/web" })
+        error.facts.get(&FactKey::Reason),
+        Some(&Value::from("duplicate_pack"))
+    );
+    assert_eq!(
+        error.facts.get(&FactKey::Name),
+        Some(&Value::from("runvil/web"))
     );
 }
 

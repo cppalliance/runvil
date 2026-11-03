@@ -8,10 +8,31 @@
 //! Pack id and builds a Pack that offers no tools and carries no prelude
 //! and no needs.
 
+use runvil_types::error::{Error, ErrorCode, FactKey};
 use serde_json::{Value, json};
 
-use super::{BUILTIN, InstallError, PackOrigin, PackRegistry, builtin, pack_id};
+use super::{BUILTIN, PackOrigin, PackRegistry, builtin, pack_id};
 use crate::{HostServices, PackId, PackInfo, ServiceId, ServiceKey};
+
+/// Asserts `result` refuses the insert of `fqn` for `reason`, with its
+/// message as its prose, and returns the message.
+#[track_caller]
+fn refused(result: Result<(), Error>, reason: &str, fqn: &str) -> String {
+    let error = result.expect_err("the insert must be refused");
+    assert_eq!(error.code, ErrorCode::InvalidValue, "{error:?}");
+    assert_eq!(
+        error.facts.get(&FactKey::Reason),
+        Some(&Value::from(reason)),
+        "{error:?}"
+    );
+    assert_eq!(
+        error.facts.get(&FactKey::Name),
+        Some(&Value::from(fqn)),
+        "{error:?}"
+    );
+    assert_eq!(error.prose, error.message, "{error:?}");
+    error.message
+}
 
 /// The built-in's FQN.
 const SUBAGENTS: &str = "runvil/subagents";
@@ -69,10 +90,10 @@ fn add_refuses_an_fqn_that_is_not_a_vendor_name_pair() {
         "Acme/web",
         "acme/Web",
     ] {
-        assert_eq!(
+        refused(
             PackRegistry::new().insert(fixture(bad), Value::Null),
-            Err(InstallError::InvalidFqn { fqn: bad }),
-            "{bad}"
+            "invalid_fqn",
+            bad,
         );
     }
 }
@@ -82,10 +103,10 @@ fn add_refuses_an_fqn_the_registry_holds_already_the_builtins_included() {
     let mut packs = PackRegistry::new();
     packs.insert(fixture("tests/tools"), Value::Null).unwrap();
     for taken in ["tests/tools", SUBAGENTS] {
-        assert_eq!(
+        refused(
             packs.insert(fixture(taken), Value::Null),
-            Err(InstallError::DuplicatePack { fqn: taken }),
-            "{taken}"
+            "duplicate_pack",
+            taken,
         );
     }
     assert!(
@@ -99,13 +120,10 @@ fn add_refuses_an_fqn_the_registry_holds_already_the_builtins_included() {
 #[test]
 fn add_refuses_a_third_party_pack_taking_the_builtins_pack_id() {
     let mut packs = PackRegistry::new();
-    let refused = packs.insert(fixture("acme/subagents"), Value::Null);
-    assert_eq!(
-        refused,
-        Err(InstallError::ReservedName {
-            fqn: "acme/subagents",
-            name: name("subagents"),
-        })
+    refused(
+        packs.insert(fixture("acme/subagents"), Value::Null),
+        "reserved_name",
+        "acme/subagents",
     );
     assert!(
         !packs.list().any(|(info, _)| info.fqn == "acme/subagents"),
@@ -122,14 +140,14 @@ fn add_refuses_a_pack_taking_a_reserved_pack_id_from_any_vendor() {
         ("runvil/dynamic", "dynamic"),
     ] {
         let mut packs = PackRegistry::new();
-        let refused = packs.insert(fixture(fqn), Value::Null);
-        assert_eq!(
-            refused,
-            Err(InstallError::ReservedPackId {
-                fqn,
-                id: name(reserved),
-            }),
-            "{fqn}"
+        let message = refused(
+            packs.insert(fixture(fqn), Value::Null),
+            "reserved_pack_id",
+            fqn,
+        );
+        assert!(
+            message.contains(&format!("the Pack id {reserved},")),
+            "{message}"
         );
         assert!(
             !packs.list().any(|(info, _)| info.fqn == fqn),
@@ -204,23 +222,16 @@ fn the_registrys_debug_output_shows_each_fqn_origin_and_pack_id_and_no_config() 
 
 #[test]
 fn the_registry_refusals_name_the_pack() {
-    let refusals = [
-        InstallError::InvalidFqn { fqn: "web" },
-        InstallError::DuplicatePack { fqn: "acme/web" },
-        InstallError::ReservedName {
-            fqn: "acme/subagents",
-            name: name("subagents"),
-        },
-        InstallError::ReservedPackId {
-            fqn: "acme/adhoc",
-            id: name("adhoc"),
-        },
-        InstallError::ReservedPackId {
-            fqn: "acme/dynamic",
-            id: name("dynamic"),
-        },
+    let mut packs = PackRegistry::new();
+    packs.insert(fixture("acme/web"), Value::Null).unwrap();
+    let mut insert = |fqn| packs.insert(fixture(fqn), Value::Null);
+    let messages = [
+        refused(insert("web"), "invalid_fqn", "web"),
+        refused(insert("acme/web"), "duplicate_pack", "acme/web"),
+        refused(insert("acme/subagents"), "reserved_name", "acme/subagents"),
+        refused(insert("acme/adhoc"), "reserved_pack_id", "acme/adhoc"),
+        refused(insert("acme/dynamic"), "reserved_pack_id", "acme/dynamic"),
     ];
-    let messages: Vec<String> = refusals.iter().map(ToString::to_string).collect();
     assert_eq!(
         messages,
         [

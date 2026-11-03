@@ -8,7 +8,7 @@
 //! `install` function of a Plugin crate (a `plugin-*` crate):
 //!
 //! ```text
-//! pub fn install(packs: &mut PackRegistry, config: Value) -> Result<(), InstallError>
+//! pub fn install(packs: &mut PackRegistry, config: Value) -> Result<(), Error>
 //! ```
 //!
 //! It calls [`PackRegistry::insert`] once for each Pack it offers, with the
@@ -97,7 +97,7 @@ pub mod testing;
 
 pub use context::{RenderContext, ToolContext};
 pub use pack::{Pack, PackFuture, PackInfo};
-pub use registry::{InstallError, PackOrigin, PackRegistry};
+pub use registry::{PackOrigin, PackRegistry};
 pub use service::{HostServices, ServiceId, ServiceKey, TOKIO_RUNTIME};
 
 pub use runvil_types::error::{Error, ErrorCode, FactKey, Location};

@@ -38,7 +38,6 @@ pub mod pack {
 
     pub use harness_runner::HostContext;
     pub use runvil_plugin::HostServices;
-    pub use runvil_plugin::InstallError;
     pub use runvil_plugin::PackId;
     pub use runvil_plugin::PackOrigin;
     pub use runvil_plugin::PackRegistry;

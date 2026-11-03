@@ -1,12 +1,12 @@
 //! The Packs a Host builds: [`PackRegistry`], holding the built-ins
-//! from the start and each Pack a Plugin inserts with its config, the
-//! [`PackOrigin`] that says which a Pack is, and the [`InstallError`] an
-//! insert refuses with.
+//! from the start and each Pack a Plugin inserts with its config, and the
+//! [`PackOrigin`] that says which a Pack is.
 
 use std::collections::BTreeMap;
 use std::fmt;
 use std::sync::Arc;
 
+use runvil_types::error::{Error, ErrorCode, FactKey};
 use runvil_types::packs::PackId;
 use runvil_types::tools::{ToolError, ToolInfo, ToolOutput};
 use serde_json::Value;
@@ -87,26 +87,52 @@ impl PackRegistry {
     /// Pack id, such as `runvil/web` and `acme/web`.
     ///
     /// # Errors
-    /// Returns [`InstallError::InvalidFqn`] when the FQN is not a
-    /// `vendor/name` pair of valid one-segment names,
-    /// [`InstallError::DuplicatePack`] when the registry holds the FQN
-    /// already, as it holds each built-in's from the start,
-    /// [`InstallError::ReservedPackId`] when the Pack id is
-    /// [reserved](PackId::is_reserved), such as `adhoc`, and
-    /// [`InstallError::ReservedName`] when the Pack id is a built-in's.
-    pub fn insert(&mut self, info: PackInfo, config: Value) -> Result<(), InstallError> {
-        let id = pack_id(info.fqn).ok_or(InstallError::InvalidFqn { fqn: info.fqn })?;
-        if self.entries.contains_key(info.fqn) {
-            return Err(InstallError::DuplicatePack { fqn: info.fqn });
+    /// Returns an [`InvalidValue`](ErrorCode::InvalidValue) error that names
+    /// the FQN, so the Host's author sees the refusal at startup, with the
+    /// reason:
+    ///
+    /// - `invalid_fqn` when the FQN is not a `vendor/name` pair of valid
+    ///   one-segment names;
+    /// - `duplicate_pack` when the registry holds the FQN already, as it
+    ///   holds each built-in's from the start;
+    /// - `reserved_pack_id` when the Pack id is
+    ///   [reserved](PackId::is_reserved), such as `adhoc`;
+    /// - `reserved_name` when the Pack id is a built-in's.
+    ///
+    /// A Pack whose `construct` fails is not refused here; the Host builds
+    /// it as unavailable instead.
+    pub fn insert(&mut self, info: PackInfo, config: Value) -> Result<(), Error> {
+        let fqn = info.fqn;
+        let id = pack_id(fqn).ok_or_else(|| {
+            refusal(
+                "invalid_fqn",
+                format!("Pack fully qualified name `{fqn}` is not a vendor/name pair"),
+                fqn,
+            )
+        })?;
+        if self.entries.contains_key(fqn) {
+            return Err(refusal(
+                "duplicate_pack",
+                format!("Pack `{fqn}` is already in the registry"),
+                fqn,
+            ));
         }
         if id.is_reserved() {
-            return Err(InstallError::ReservedPackId { fqn: info.fqn, id });
+            return Err(refusal(
+                "reserved_pack_id",
+                format!("Pack `{fqn}` cannot take the Pack id {id}, which the Engine reserves"),
+                fqn,
+            ));
         }
         if self.reserves(&id) {
-            return Err(InstallError::ReservedName {
-                fqn: info.fqn,
-                name: id,
-            });
+            return Err(refusal(
+                "reserved_name",
+                format!(
+                    "Pack `{fqn}` cannot take the Pack id {id}, which the built-in runvil/{id} \
+                     reserves"
+                ),
+                fqn,
+            ));
         }
         self.entries.insert(
             info.fqn,
@@ -160,49 +186,14 @@ impl fmt::Debug for PackRegistry {
     }
 }
 
-/// A Pack [`PackRegistry::insert`] refuses outright, so the Host's author
-/// sees it at startup.
-///
-/// A Pack whose `construct` fails is not one of these; the Host builds it
-/// as unavailable instead.
-#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
-#[non_exhaustive]
-pub enum InstallError {
-    /// The inserted Pack's FQN is not `vendor/name`, or a segment of it is
-    /// not a valid one-segment name.
-    #[error("Pack fully qualified name `{fqn}` is not a vendor/name pair")]
-    InvalidFqn {
-        /// The FQN as its `PackInfo` spells it.
-        fqn: &'static str,
-    },
-    /// The registry holds the inserted Pack's FQN already, as a built-in or
-    /// as a Pack inserted before.
-    #[error("Pack `{fqn}` is already in the registry")]
-    DuplicatePack {
-        /// The FQN as its `PackInfo` spells it.
-        fqn: &'static str,
-    },
-    /// The inserted Pack's id is a built-in's, which only that built-in may
-    /// have.
-    #[error(
-        "Pack `{fqn}` cannot take the Pack id {name}, which the built-in runvil/{name} reserves"
-    )]
-    ReservedName {
-        /// The FQN as its `PackInfo` spells it.
-        fqn: &'static str,
-        /// The Pack id it would have taken.
-        name: PackId,
-    },
-    /// The inserted Pack's id is one the Engine
-    /// [reserves](PackId::is_reserved), such as `adhoc`, which holds a
-    /// section's own tools, whatever the vendor.
-    #[error("Pack `{fqn}` cannot take the Pack id {id}, which the Engine reserves")]
-    ReservedPackId {
-        /// The FQN as its `PackInfo` spells it.
-        fqn: &'static str,
-        /// The reserved Pack id it would have taken.
-        id: PackId,
-    },
+/// The refusal of an insert: an `InvalidValue` that names the FQN, with the
+/// broken rule as its reason. Its prose is its message, which names the Pack
+/// and the rule.
+fn refusal(reason: &'static str, message: String, fqn: &str) -> Error {
+    let mut error = Error::new(ErrorCode::InvalidValue, message.clone(), message);
+    error.facts.insert(FactKey::Name, Value::from(fqn));
+    error.facts.insert(FactKey::Reason, Value::from(reason));
+    error
 }
 
 /// The built-ins every registry holds from the start.
