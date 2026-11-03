@@ -9,10 +9,21 @@ use std::sync::{Arc, Mutex};
 
 use axum::http::StatusCode;
 use plugin_web::{
-    Freshness, SafeSearch, SearchErrorKind, SearchProvider, SearchQuery, SearchResult,
+    Freshness, SafeSearch, SearchError, SearchErrorKind, SearchProvider, SearchQuery, SearchResult,
 };
+use runvil::error::{Error, ErrorCode};
 
-use crate::search::GatewaySearchError;
+/// Asserts `error`'s source is the Gateway's failure under `code`, whose
+/// prose is `error`'s text and whose message holds that text and more.
+fn assert_gateway_cause(error: &SearchError, code: ErrorCode) {
+    let source = std::error::Error::source(error).expect("the failure keeps a cause");
+    let cause = source
+        .downcast_ref::<Error>()
+        .unwrap_or_else(|| panic!("the Gateway's error is the cause: {source}"));
+    assert_eq!(cause.code, code);
+    assert_eq!(cause.prose, error.to_string());
+    assert!(cause.message.starts_with(&cause.prose));
+}
 
 /// The Authorization header and body of each search a mock received.
 type Seen = Arc<Mutex<Vec<(Option<String>, Value)>>>;
@@ -120,11 +131,7 @@ async fn a_gateway_error_status_maps_as_backend_with_the_gateway_error_as_source
         .expect_err("a 502 fails the search");
     assert_eq!(error.kind(), SearchErrorKind::Backend);
     assert_eq!(error.to_string(), "backend returned 502: upstream down");
-    let source = std::error::Error::source(&error).expect("the failure keeps a cause");
-    assert!(
-        source.is::<GatewaySearchError>(),
-        "the Gateway's error is the cause: {source}"
-    );
+    assert_gateway_cause(&error, ErrorCode::ToolBackend);
 }
 
 #[tokio::test]
@@ -140,9 +147,5 @@ async fn a_refused_connection_maps_as_transport_with_the_gateway_error_as_source
         .expect_err("a refused connection fails the search");
     assert_eq!(error.kind(), SearchErrorKind::Transport);
     assert_eq!(error.to_string(), "request failed");
-    let source = std::error::Error::source(&error).expect("the failure keeps a cause");
-    assert!(
-        source.is::<GatewaySearchError>(),
-        "the Gateway's error is the cause: {source}"
-    );
+    assert_gateway_cause(&error, ErrorCode::ToolTransport);
 }

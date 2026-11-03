@@ -31,7 +31,6 @@ serde.workspace = true
 # The request body, every streamed payload, and the reassembled response
 # are JSON.
 serde_json.workspace = true
-thiserror.workspace = true
 # `time` for the per-receive timeout. Non-test code spawns no task.
 tokio = { workspace = true, features = ["time"] }
 url.workspace = true

@@ -58,7 +58,7 @@
 //!   error text.
 //! - A backend error body is bounded and control-escaped before it is
 //!   kept. A chat round keeps it only in the error's message, never in its
-//!   prose, and a search keeps it in the `GatewaySearchError` message.
+//!   prose, and a search keeps it in its error's message and prose.
 //! - A client sends requests without a key only when the caller builds it
 //!   with `GatewayChat::keyless`, which does not check the endpoint's
 //!   address, or when `GatewayChat::from_env` finds no key for a loopback
@@ -78,8 +78,6 @@ pub use catalog::fetch_model_catalog;
 pub use config::GatewayEndpoint;
 pub use config::SecretString;
 pub use search::GatewaySearch;
-pub use search::GatewaySearchError;
-pub use search::GatewaySearchErrorKind;
 pub use transport::GatewayChat;
 pub use wire::classify::classify_http_failure;
 pub use wire::classify::classify_stream_error;

@@ -1,18 +1,33 @@
 //! Gateway response handling: a refused connection or a stalled gateway is
-//! a transport error with its source, a success body with the wrong shape
-//! or invalid UTF-8 is a backend error with its source, an oversized
+//! a transport failure with its cause, a success body with the wrong shape
+//! or invalid UTF-8 is a backend failure with its cause, an oversized
 //! success body is rejected rather than truncated, a success body that
-//! fails mid-read is a transport error with its source, and an error body
-//! is bounded, sanitized, and keeps a mid-read failure as the error source.
+//! fails mid-read is a transport failure with its cause, and an error body
+//! is bounded, sanitized, and keeps a mid-read failure as the cause. A
+//! cause is in the message after the prose, never in the prose.
 
 use super::*;
 
 use std::time::Duration;
 
-use crate::search::{GatewaySearchErrorKind, MAX_ERROR_BODY, MAX_RESPONSE_BODY};
+use runvil::error::{Error, ErrorCode};
+
+use crate::search::{MAX_ERROR_BODY, MAX_RESPONSE_BODY};
+
+/// Asserts `err` failed as `code` with `prose`, and that its message holds
+/// the prose followed by a cause the prose leaves out.
+fn assert_caused(err: &Error, code: ErrorCode, prose: &str) {
+    assert_eq!(err.code, code);
+    assert_eq!(err.prose, prose);
+    let cause = err.message.strip_prefix(&format!("{prose}: "));
+    assert!(
+        cause.is_some_and(|cause| !cause.is_empty()),
+        "the cause follows the prose in the message only: {err:?}"
+    );
+}
 
 #[tokio::test]
-async fn transport_failure_is_transport_kind() {
+async fn a_refused_connection_is_a_transport_failure_with_its_cause() {
     // Bind then drop the listener so the port is closed and the connection
     // is refused deterministically.
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -23,9 +38,7 @@ async fn transport_failure_is_transport_kind() {
         .search(&query("hi"))
         .await
         .expect_err("a refused connection must surface as an error");
-    assert_eq!(err.kind(), GatewaySearchErrorKind::Transport);
-    assert_eq!(err.to_string(), "request failed");
-    assert!(std::error::Error::source(&err).is_some());
+    assert_caused(&err, ErrorCode::ToolTransport, "request failed");
 }
 
 #[tokio::test]
@@ -44,17 +57,15 @@ async fn stalling_gateway_times_out_as_transport() {
         .search(&query("hi"))
         .await
         .expect_err("a stalled gateway must surface as an error");
-    assert_eq!(err.kind(), GatewaySearchErrorKind::Transport);
+    assert_caused(&err, ErrorCode::ToolTransport, "request failed");
     assert!(
-        std::error::Error::source(&err)
-            .and_then(|source| source.downcast_ref::<reqwest::Error>())
-            .is_some_and(reqwest::Error::is_timeout),
-        "the timeout must be preserved as the error's transport source"
+        err.message.contains("timed out"),
+        "the timeout must be kept in the message: {err:?}"
     );
 }
 
 #[tokio::test]
-async fn malformed_success_json_is_backend_error_with_source() {
+async fn malformed_success_json_is_a_backend_failure_with_its_cause() {
     async fn web_search() -> Json<Value> {
         // Missing the required `results` array: valid JSON, wrong shape.
         Json(serde_json::json!({ "unexpected": true }))
@@ -65,16 +76,11 @@ async fn malformed_success_json_is_backend_error_with_source() {
         .search(&query("hi"))
         .await
         .expect_err("a wrong-shaped success body must be rejected");
-    assert_eq!(err.kind(), GatewaySearchErrorKind::Backend);
-    assert_eq!(err.to_string(), "malformed search response");
-    assert!(
-        std::error::Error::source(&err).is_some(),
-        "a malformed response must preserve its parse source"
-    );
+    assert_caused(&err, ErrorCode::ToolBackend, "malformed search response");
 }
 
 #[tokio::test]
-async fn non_utf8_success_body_is_backend_error_with_source() {
+async fn non_utf8_success_body_is_a_backend_failure_with_its_cause() {
     async fn web_search() -> Vec<u8> {
         vec![b'{', 0xff, 0xfe, b'}']
     }
@@ -84,13 +90,10 @@ async fn non_utf8_success_body_is_backend_error_with_source() {
         .search(&query("hi"))
         .await
         .expect_err("a success body that is not UTF-8 must be rejected");
-    assert_eq!(err.kind(), GatewaySearchErrorKind::Backend);
-    assert_eq!(err.to_string(), "response body was not valid UTF-8");
-    assert!(
-        std::error::Error::source(&err)
-            .and_then(|source| source.downcast_ref::<std::string::FromUtf8Error>())
-            .is_some(),
-        "the UTF-8 decode failure must be preserved as the error's source"
+    assert_caused(
+        &err,
+        ErrorCode::ToolBackend,
+        "response body was not valid UTF-8",
     );
 }
 
@@ -105,12 +108,13 @@ async fn oversized_success_body_is_rejected() {
         .search(&query("hi"))
         .await
         .expect_err("an oversized success body must be rejected, not truncated");
-    assert_eq!(err.kind(), GatewaySearchErrorKind::Backend);
+    assert_eq!(err.code, ErrorCode::ToolBackend);
     assert_eq!(
-        err.to_string(),
+        err.prose,
         format!("response body exceeded {MAX_RESPONSE_BODY} bytes"),
         "the error must name the cap overflow"
     );
+    assert_eq!(err.message, err.prose);
 }
 
 #[tokio::test]
@@ -127,8 +131,9 @@ async fn oversized_error_body_is_bounded_and_sanitized() {
         .search(&query("hi"))
         .await
         .expect_err("a 500 response must surface as an error");
-    assert_eq!(err.kind(), GatewaySearchErrorKind::Backend);
-    let message = err.to_string();
+    assert_eq!(err.code, ErrorCode::ToolBackend);
+    assert_eq!(err.message, err.prose);
+    let message = err.prose;
     assert!(
         message.starts_with("backend returned 500: line-one\\nline-two\\ttab"),
         "error must name the status and escape the body: {message}"
@@ -165,40 +170,29 @@ async fn spawn_truncated_reply(status: &'static str) -> (SocketAddr, tokio::task
 }
 
 #[tokio::test]
-async fn success_body_read_failure_is_transport_error_with_source() {
+async fn success_body_read_failure_is_a_transport_failure_with_its_cause() {
     let (addr, handle) = spawn_truncated_reply("200 OK").await;
 
     let err = search_at(&format!("http://{addr}"))
         .search(&query("hi"))
         .await
         .expect_err("a truncated 200 body must surface as an error");
-    assert_eq!(err.kind(), GatewaySearchErrorKind::Transport);
-    assert_eq!(err.to_string(), "reading response failed");
-    assert!(
-        std::error::Error::source(&err)
-            .and_then(|source| source.downcast_ref::<reqwest::Error>())
-            .is_some(),
-        "the body-read failure must be preserved as the error's source, got: {err}"
-    );
+    assert_caused(&err, ErrorCode::ToolTransport, "reading response failed");
     handle.abort();
 }
 
 #[tokio::test]
-async fn error_body_read_failure_is_preserved_as_source() {
+async fn error_body_read_failure_is_kept_as_the_cause() {
     let (addr, handle) = spawn_truncated_reply("500 Internal Server Error").await;
 
     let err = search_at(&format!("http://{addr}"))
         .search(&query("hi"))
         .await
         .expect_err("a truncated 500 body must surface as an error");
-    assert_eq!(err.kind(), GatewaySearchErrorKind::Backend);
-    assert_eq!(
-        err.to_string(),
-        "backend returned 500, and its error body could not be read"
-    );
-    assert!(
-        std::error::Error::source(&err).is_some(),
-        "the body-read failure must be preserved as the error's source, got: {err}"
+    assert_caused(
+        &err,
+        ErrorCode::ToolBackend,
+        "backend returned 500, and its error body could not be read",
     );
     handle.abort();
 }

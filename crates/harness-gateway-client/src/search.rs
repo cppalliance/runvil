@@ -10,6 +10,8 @@ use std::time::Duration;
 use plugin_web::{
     SearchError, SearchErrorKind, SearchProvider, SearchQuery, SearchResult, SearchResults,
 };
+use runvil::error::{Error, ErrorCode};
+use runvil::tools::tool_error;
 
 use crate::config::{GatewayEndpoint, SecretString};
 
@@ -99,61 +101,6 @@ struct GatewaySearchResult {
     extra_snippets: Vec<String>,
 }
 
-/// Which side of a Gateway web search failed.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-#[non_exhaustive]
-pub enum GatewaySearchErrorKind {
-    /// Sending the request or reading a successful reply failed, timeouts
-    /// included.
-    Transport,
-    /// The Gateway answered with a failure status or an unusable body.
-    Backend,
-}
-
-/// An error from a failed Gateway web search, with its kind, a message, and
-/// the underlying cause when there is one.
-///
-/// The message starts with what failed, such as `request failed` or
-/// `backend returned 502: ...`. When the message includes the Gateway's
-/// error body, that body is truncated to a size limit and its control
-/// characters are escaped. The message never contains the bearer key.
-#[derive(Debug, thiserror::Error)]
-#[error("{message}")]
-pub struct GatewaySearchError {
-    kind: GatewaySearchErrorKind,
-    message: String,
-    #[source]
-    source: Option<Box<dyn std::error::Error + Send + Sync>>,
-}
-
-impl GatewaySearchError {
-    fn new(kind: GatewaySearchErrorKind, message: impl Into<String>) -> GatewaySearchError {
-        GatewaySearchError {
-            kind,
-            message: message.into(),
-            source: None,
-        }
-    }
-
-    fn with_source(
-        kind: GatewaySearchErrorKind,
-        message: impl Into<String>,
-        source: impl std::error::Error + Send + Sync + 'static,
-    ) -> GatewaySearchError {
-        GatewaySearchError {
-            kind,
-            message: message.into(),
-            source: Some(Box::new(source)),
-        }
-    }
-
-    /// Returns which side of the search failed.
-    #[must_use]
-    pub fn kind(&self) -> GatewaySearchErrorKind {
-        self.kind
-    }
-}
-
 /// The [`SearchProvider`] a Host supplies to search the web through the
 /// Gateway.
 ///
@@ -203,11 +150,10 @@ impl GatewaySearch {
     }
 
     /// Runs one web search and returns the Gateway's parsed reply, failing
-    /// as the [`SearchProvider`] impl documents.
-    async fn search(
-        &self,
-        request: &GatewaySearchRequest,
-    ) -> Result<GatewaySearchResponse, GatewaySearchError> {
+    /// as the [`SearchProvider`] impl documents: `ToolTransport` where it
+    /// says `Transport` and `ToolBackend` where it says `Backend`, with the
+    /// text it names as the prose and any cause after it in the message.
+    async fn search(&self, request: &GatewaySearchRequest) -> Result<GatewaySearchResponse, Error> {
         let response = self
             .http
             .post(format!("{}/tools/web_search", self.base_url))
@@ -217,11 +163,7 @@ impl GatewaySearch {
             .send()
             .await
             .map_err(|source| {
-                GatewaySearchError::with_source(
-                    GatewaySearchErrorKind::Transport,
-                    "request failed",
-                    source,
-                )
+                tool_error(ErrorCode::ToolTransport, "request failed").with_cause(&source)
             })?;
 
         let status = response.status();
@@ -229,7 +171,7 @@ impl GatewaySearch {
             let code = status.as_u16();
             // The error body is external gateway content: bound the read and
             // sanitize control characters. If the body itself cannot be read,
-            // keep the read failure as the returned error's `source()`.
+            // keep the read failure in the returned error's message.
             match read_bounded(response, MAX_ERROR_BODY).await {
                 Ok(body) => {
                     let body = if body.is_empty() {
@@ -237,17 +179,17 @@ impl GatewaySearch {
                     } else {
                         sanitize_diagnostic(&body)
                     };
-                    return Err(GatewaySearchError::new(
-                        GatewaySearchErrorKind::Backend,
+                    return Err(tool_error(
+                        ErrorCode::ToolBackend,
                         format!("backend returned {code}: {body}"),
                     ));
                 }
                 Err(source) => {
-                    return Err(GatewaySearchError::with_source(
-                        GatewaySearchErrorKind::Backend,
+                    return Err(tool_error(
+                        ErrorCode::ToolBackend,
                         format!("backend returned {code}, and its error body could not be read"),
-                        source,
-                    ));
+                    )
+                    .with_cause(&source));
                 }
             }
         }
@@ -256,11 +198,7 @@ impl GatewaySearch {
         // overflow), then parse the promised JSON shape.
         let body = read_capped(response, MAX_RESPONSE_BODY).await?;
         serde_json::from_str(&body).map_err(|source| {
-            GatewaySearchError::with_source(
-                GatewaySearchErrorKind::Backend,
-                "malformed search response",
-                source,
-            )
+            tool_error(ErrorCode::ToolBackend, "malformed search response").with_cause(&source)
         })
     }
 }
@@ -271,8 +209,10 @@ impl SearchProvider for GatewaySearch {
     /// results with every field copied as the Gateway sent it.
     ///
     /// # Errors
-    /// Returns a [`SearchError`] with the message of the
-    /// [`GatewaySearchError`] it keeps as its source. Its kind is:
+    /// Returns a [`SearchError`] whose text is the prose of the [`Error`]
+    /// it keeps as its source. The Gateway's error body in that text is
+    /// truncated to a size limit and its control characters are escaped,
+    /// and the text never holds the bearer key. Its kind is:
     /// - `Transport` when sending the request fails (`request failed`) or
     ///   reading a successful reply fails (`reading response failed`),
     ///   including when the deadline passes;
@@ -324,14 +264,15 @@ fn search_results(response: GatewaySearchResponse) -> SearchResults {
     }
 }
 
-/// The provider's error for a failed Gateway search: its kind and text,
-/// with the Gateway's error as the cause.
-fn search_error(error: GatewaySearchError) -> SearchError {
-    let kind = match error.kind {
-        GatewaySearchErrorKind::Backend => SearchErrorKind::Backend,
-        GatewaySearchErrorKind::Transport => SearchErrorKind::Transport,
+/// The provider's error for a failed Gateway search: its kind from the
+/// code, its text from the prose, and the Gateway's error as the cause.
+fn search_error(error: Error) -> SearchError {
+    let kind = if error.code == ErrorCode::ToolTransport {
+        SearchErrorKind::Transport
+    } else {
+        SearchErrorKind::Backend
     };
-    SearchError::with_source(kind, error.to_string(), error)
+    SearchError::with_source(kind, error.prose.clone(), error)
 }
 
 /// Escapes control characters in an external diagnostic body so a hostile
@@ -357,18 +298,11 @@ fn sanitize_diagnostic(body: &str) -> String {
 /// Reads at most `limit` bytes of a diagnostic body, stopping early once the cap
 /// is reached. Used for the error path, where a truncated, lossy rendering is an
 /// acceptable diagnostic.
-async fn read_bounded(
-    mut response: reqwest::Response,
-    limit: usize,
-) -> Result<String, GatewaySearchError> {
+async fn read_bounded(mut response: reqwest::Response, limit: usize) -> Result<String, Error> {
     let mut buffer: Vec<u8> = Vec::new();
     while buffer.len() < limit {
         let chunk = response.chunk().await.map_err(|source| {
-            GatewaySearchError::with_source(
-                GatewaySearchErrorKind::Transport,
-                "reading response failed",
-                source,
-            )
+            tool_error(ErrorCode::ToolTransport, "reading response failed").with_cause(&source)
         })?;
         let Some(chunk) = chunk else { break };
         let take = (limit - buffer.len()).min(chunk.len());
@@ -383,32 +317,21 @@ async fn read_bounded(
 /// Reads a success body, rejecting it once it would exceed `limit` bytes rather
 /// than truncating (a truncated JSON document is not a valid result set), and
 /// requiring valid UTF-8.
-async fn read_capped(
-    mut response: reqwest::Response,
-    limit: usize,
-) -> Result<String, GatewaySearchError> {
+async fn read_capped(mut response: reqwest::Response, limit: usize) -> Result<String, Error> {
     let mut buffer: Vec<u8> = Vec::new();
     while let Some(chunk) = response.chunk().await.map_err(|source| {
-        GatewaySearchError::with_source(
-            GatewaySearchErrorKind::Transport,
-            "reading response failed",
-            source,
-        )
+        tool_error(ErrorCode::ToolTransport, "reading response failed").with_cause(&source)
     })? {
         if buffer.len() + chunk.len() > limit {
-            return Err(GatewaySearchError::new(
-                GatewaySearchErrorKind::Backend,
+            return Err(tool_error(
+                ErrorCode::ToolBackend,
                 format!("response body exceeded {limit} bytes"),
             ));
         }
         buffer.extend_from_slice(&chunk);
     }
     String::from_utf8(buffer).map_err(|source| {
-        GatewaySearchError::with_source(
-            GatewaySearchErrorKind::Backend,
-            "response body was not valid UTF-8",
-            source,
-        )
+        tool_error(ErrorCode::ToolBackend, "response body was not valid UTF-8").with_cause(&source)
     })
 }
 
