@@ -17,7 +17,7 @@ mod wire;
 pub use role::Role;
 pub use wire::{
     ArgumentNames, Completion, CompletionResult, Message, RawExchange, ToolArguments, ToolCall,
-    ToolSchema, ToolSchemaError,
+    ToolSchema,
 };
 
 #[cfg(test)]

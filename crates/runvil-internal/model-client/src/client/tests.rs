@@ -270,23 +270,36 @@ fn tool_schema_new_validates_wire_name_and_object_schema() {
         "bad name",
         &format!("a{}", "z".repeat(64)),
     ] {
-        assert!(
-            matches!(
-                tool_schema_new(name, "d", json_object()),
-                Err(ToolSchemaError::InvalidName { .. })
-            ),
-            "{name:?} must be refused"
-        );
+        assert_schema_refused(name, json_object(), "invalid_name");
     }
     // A non-object JSON Schema is rejected.
-    assert!(matches!(
-        tool_schema_new("ok", "d", json!([1, 2, 3])),
-        Err(ToolSchemaError::NonObjectSchema { .. })
-    ));
-    assert!(matches!(
-        tool_schema_new("ok", "d", json!("scalar")),
-        Err(ToolSchemaError::NonObjectSchema { .. })
-    ));
+    assert_schema_refused("ok", json!([1, 2, 3]), "non_object_schema");
+    assert_schema_refused("ok", json!("scalar"), "non_object_schema");
+}
+
+/// Asserts the schema for `name` and `parameters` is refused as an invalid
+/// tool schema naming the tool, for `reason`.
+#[track_caller]
+fn assert_schema_refused(name: &str, parameters: Value, reason: &str) {
+    use runvil_types::error::{ErrorCode, FactKey};
+    let error = tool_schema_new(name, "d", parameters).expect_err("the schema must be refused");
+    assert_eq!(error.code, ErrorCode::ToolSchemaInvalid, "{name:?}");
+    assert_eq!(
+        error.facts.get(&FactKey::Name),
+        Some(&Value::from(name)),
+        "{name:?}"
+    );
+    assert_eq!(
+        error.facts.get(&FactKey::Reason),
+        Some(&Value::from(reason)),
+        "{name:?}"
+    );
+    assert_eq!(
+        error.prose,
+        ErrorCode::ToolSchemaInvalid.prose(),
+        "{name:?}"
+    );
+    assert!(error.message.contains(&format!("{name:?}")), "{error:?}");
 }
 
 fn json_object() -> Value {

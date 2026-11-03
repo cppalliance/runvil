@@ -6,12 +6,11 @@
 //! one that splits a completion into the result the tool loop consumes and
 //! the metadata the round reports.
 
+use runvil_types::error::{Error, ErrorCode, FactKey};
 use runvil_types::names::is_alias;
 use serde_json::Value;
 
-use crate::client::{
-    Completion, CompletionResult, Message, Role, ToolCall, ToolSchema, ToolSchemaError,
-};
+use crate::client::{Completion, CompletionResult, Message, Role, ToolCall, ToolSchema};
 
 /// Constructs a message from parts a caller has already validated.
 ///
@@ -58,31 +57,49 @@ pub fn message_raw_tool_calls(message: &Message) -> Option<&[Value]> {
 /// facade-visible constructor.
 ///
 /// # Errors
-/// Returns [`ToolSchemaError::InvalidName`] when `name` does not match
-/// `[A-Za-z][A-Za-z0-9_-]{0,63}`, and
-/// [`ToolSchemaError::NonObjectSchema`] when `parameters` is not a JSON
-/// object, so a tool can never be advertised to the model with an unusable
-/// name or a non-object JSON Schema.
+/// Returns a [`ToolSchemaInvalid`](ErrorCode::ToolSchemaInvalid) error
+/// with the reason `invalid_name` when `name` does not match
+/// `[A-Za-z][A-Za-z0-9_-]{0,63}`, and `non_object_schema` when
+/// `parameters` is not a JSON object, so a tool can never be advertised to
+/// the model with an unusable name or a non-object JSON Schema.
 pub fn tool_schema_new(
     name: impl Into<String>,
     description: impl Into<String>,
     parameters: Value,
-) -> Result<ToolSchema, ToolSchemaError> {
+) -> Result<ToolSchema, Error> {
     let name = name.into();
     if !is_alias(&name) {
-        return Err(ToolSchemaError::InvalidName {
-            name,
-            reason: "expected [A-Za-z][A-Za-z0-9_-]{0,63}",
-        });
+        return Err(schema_error(
+            "invalid_name",
+            format!("invalid tool wire name {name:?}: expected [A-Za-z][A-Za-z0-9_-]{{0,63}}"),
+            &name,
+        ));
     }
     if !parameters.is_object() {
-        return Err(ToolSchemaError::NonObjectSchema { name });
+        return Err(schema_error(
+            "non_object_schema",
+            format!("tool {name:?} parameters schema must be a JSON object"),
+            &name,
+        ));
     }
     Ok(ToolSchema {
         name,
         description: description.into(),
         parameters,
     })
+}
+
+/// The error for a refused tool schema: a `ToolSchemaInvalid` that names the
+/// tool, with the broken rule as its reason.
+fn schema_error(reason: &'static str, message: String, name: &str) -> Error {
+    let mut error = Error::new(
+        ErrorCode::ToolSchemaInvalid,
+        message,
+        ErrorCode::ToolSchemaInvalid.prose(),
+    );
+    error.facts.insert(FactKey::Name, Value::from(name));
+    error.facts.insert(FactKey::Reason, Value::from(reason));
+    error
 }
 
 /// Returns a tool call's parsed arguments as the raw wire JSON the

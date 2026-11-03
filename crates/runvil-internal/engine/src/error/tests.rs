@@ -59,8 +59,12 @@ fn a_schema_build_failure_renders_its_refusal_and_keeps_it_as_the_cause() {
     assert_eq!(bind.message(), bind.to_string());
     let cause = bind
         .originating_error()
-        .and_then(|cause| cause.downcast_ref::<runvil_model_client::client::ToolSchemaError>());
-    assert!(cause.is_some(), "the schema refusal is the cause");
+        .and_then(|cause| cause.downcast_ref::<runvil_types::error::Error>())
+        .expect("the schema refusal is the cause");
+    assert_eq!(
+        cause.code,
+        runvil_types::error::ErrorCode::ToolSchemaInvalid
+    );
 }
 
 #[test]

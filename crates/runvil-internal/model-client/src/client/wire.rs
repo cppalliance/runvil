@@ -136,33 +136,6 @@ impl ToolSchema {
     }
 }
 
-/// The reason a [`ToolSchema`] could not be built from its wire parts.
-///
-/// `ToolSchema` is built only inside the Engine (from the executor's `Tool`
-/// contract, through [`crate::detail::tool_schema_new`]), so the raw-`Value`
-/// validation and its error stay off the facade. The type is public so
-/// `runvil-engine` can box it as an error source.
-#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
-#[non_exhaustive]
-pub enum ToolSchemaError {
-    /// The wire name did not match `[A-Za-z][A-Za-z0-9_-]{0,63}`.
-    #[error("invalid tool wire name {name:?}: {reason}")]
-    #[non_exhaustive]
-    InvalidName {
-        /// The rejected wire name.
-        name: String,
-        /// Why it was rejected.
-        reason: &'static str,
-    },
-    /// The parameters JSON Schema was not a JSON object.
-    #[error("tool {name:?} parameters schema must be a JSON object")]
-    #[non_exhaustive]
-    NonObjectSchema {
-        /// The tool whose schema was rejected.
-        name: String,
-    },
-}
-
 /// A tool call the model asked for: a call id, a tool name, and arguments.
 ///
 /// `OpenAI` sends a call's `function.arguments` as a JSON-encoded string.

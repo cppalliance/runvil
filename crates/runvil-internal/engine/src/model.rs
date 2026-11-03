@@ -15,7 +15,7 @@
 //!
 //! - This crate's test support and its test suites, which also need names
 //!   the production surface does not re-export, such as
-//!   `CompletionOptions`, `RawExchange`, `Role`, and `ToolSchemaError`.
+//!   `CompletionOptions`, `RawExchange`, and `Role`.
 //! - The crate's bench, `benches/models_loop.rs`, a separate crate that
 //!   cannot see a `pub(crate)` surface.
 //!
