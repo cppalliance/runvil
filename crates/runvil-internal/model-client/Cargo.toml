@@ -13,7 +13,6 @@ publish = false
 runvil-types.workspace = true
 serde.workspace = true
 serde_json.workspace = true
-thiserror.workspace = true
 
 [build-dependencies]
 build-ceiling.workspace = true
