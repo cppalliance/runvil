@@ -29,6 +29,8 @@ use std::str::FromStr;
 
 use mlua::{Function, Lua, Table, Value};
 
+use runvil_types::error::{ErrorCode, FactKey};
+
 use crate::error::{Error, accepted_tags};
 
 pub(crate) use classify::{install_normalize_failure, normalized};
@@ -166,33 +168,24 @@ impl std::fmt::Display for ErrorKind {
 }
 
 impl FromStr for ErrorKind {
-    type Err = ParseErrorKindError;
+    type Err = runvil_types::error::Error;
 
-    /// Parses a kind from its exact tag, as `ErrorKind::from_tag` does.
-    fn from_str(tag: &str) -> Result<ErrorKind, ParseErrorKindError> {
-        ErrorKind::from_tag(tag).ok_or_else(|| ParseErrorKindError {
-            input: tag.to_owned(),
+    /// Parses a kind from its exact tag, as `ErrorKind::from_tag` does. Other
+    /// text is an [`InvalidValue`](ErrorCode::InvalidValue) error that names
+    /// it and lists every tag.
+    fn from_str(tag: &str) -> Result<ErrorKind, Self::Err> {
+        ErrorKind::from_tag(tag).ok_or_else(|| {
+            let text = format!(
+                "invalid error kind `{tag}`: required one of {}",
+                accepted_tags(ErrorKind::ALL.iter().map(|kind| kind.tag()))
+            );
+            let mut error =
+                runvil_types::error::Error::new(ErrorCode::InvalidValue, text.clone(), text);
+            error
+                .facts
+                .insert(FactKey::Name, serde_json::Value::from(tag));
+            error
         })
-    }
-}
-
-/// The error returned when text is not an [`ErrorKind`] tag.
-#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
-#[error(
-    "invalid error kind `{input}`: required one of {}",
-    accepted_tags(ErrorKind::ALL.iter().map(|kind| kind.tag()))
-)]
-pub struct ParseErrorKindError {
-    /// The rejected text.
-    input: String,
-}
-
-impl ParseErrorKindError {
-    /// Returns the rejected text.
-    #[cfg(test)]
-    #[must_use]
-    pub(crate) fn input(&self) -> &str {
-        &self.input
     }
 }
 

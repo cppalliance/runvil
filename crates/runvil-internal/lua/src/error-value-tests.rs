@@ -6,7 +6,7 @@ use runvil_types::error::{ErrorCode, FactKey};
 use runvil_vfs::{PathReason, VfsError};
 use serde_json::Value;
 
-use super::{ErrorKind, ParseErrorKindError, store_error, store_error_value_fields};
+use super::{ErrorKind, store_error, store_error_value_fields};
 
 #[test]
 fn every_error_kind_tag_parses_back_to_its_kind() {
@@ -17,10 +17,12 @@ fn every_error_kind_tag_parses_back_to_its_kind() {
 
 #[test]
 fn an_unknown_error_kind_names_the_text_and_every_accepted_tag() {
-    let error: ParseErrorKindError = "stoer"
+    let error = "stoer"
         .parse::<ErrorKind>()
         .expect_err("a misspelled tag is not a kind");
-    assert_eq!(error.input(), "stoer");
+    assert_eq!(error.code, ErrorCode::InvalidValue);
+    assert_eq!(error.facts.get(&FactKey::Name), Some(&Value::from("stoer")));
+    assert_eq!(error.prose, error.message);
     let message = error.to_string();
     assert!(message.contains("`stoer`"), "the rejected text: {message}");
     for kind in ErrorKind::ALL {
