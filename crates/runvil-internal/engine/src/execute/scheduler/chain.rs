@@ -7,6 +7,7 @@
 use std::num::NonZeroUsize;
 use std::sync::{Arc, Mutex};
 
+use runvil_types::error::ErrorCode;
 use runvil_types::ids::{AbandonReason, ChainId, TaskId};
 use runvil_vfs::Access;
 
@@ -16,7 +17,7 @@ use crate::execute::section_context::TaskSeed;
 use crate::heading_address::SectionPos;
 use crate::lua::Answer;
 use crate::model::ModelBinding;
-use crate::{Error, Result};
+use crate::{Result, error};
 
 use super::chain_record::{CallDepth, ChainKind, Walk};
 use super::{Chain, ChainIndex, ChatAnchor, Counters, GENERIC_COMPLETION, Scheduler};
@@ -38,12 +39,12 @@ impl Chain {
     /// supplied no model.
     ///
     /// # Errors
-    /// Returns [`Error::Internal`] when the selection's lock is poisoned.
+    /// Returns an `Internal` failure when the selection's lock is poisoned.
     pub(super) fn current_model(&self) -> Result<Option<ModelBinding>> {
         self.selection
             .lock()
             .map(|selection| selection.clone())
-            .map_err(|_| Error::internal("model selection lock was poisoned"))
+            .map_err(|_| error::internal("model selection lock was poisoned"))
     }
 }
 
@@ -92,7 +93,7 @@ impl Scheduler {
     /// root walk and the H1 pass.
     ///
     /// # Errors
-    /// Returns [`Error::Internal`] when the run's chain count exceeds `u32`.
+    /// Returns an `Internal` failure when the run's chain count exceeds `u32`.
     pub(super) fn start_chain(&mut self, start: ChainStart) -> Result<ChainIndex> {
         let task = match &start.kind {
             ChainKind::Root | ChainKind::H1 => TaskId::from(ChainId::root()),
@@ -130,7 +131,7 @@ impl Scheduler {
     /// it again.
     ///
     /// # Errors
-    /// Returns [`Error::Internal`] when the run's chain count exceeds
+    /// Returns an `Internal` failure when the run's chain count exceeds
     /// `u32`, leaving the ready queue unchanged.
     #[expect(
         clippy::too_many_arguments,
@@ -243,7 +244,9 @@ impl Scheduler {
         // the typed error, so the outcome ends the run here, exactly as
         // the answer boundary does.
         let outcome = match outcome {
-            Err(error @ Error::Determinism(_)) => return ChainStep::RunEnded(Err(error)),
+            Err(error) if error.code == ErrorCode::Determinism => {
+                return ChainStep::RunEnded(Err(error));
+            }
             outcome => outcome,
         };
         // A scheduler bug that strands the outcome - a missing task entry,

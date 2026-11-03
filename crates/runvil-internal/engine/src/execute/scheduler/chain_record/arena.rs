@@ -3,7 +3,7 @@
 
 use std::ops::{Index, IndexMut};
 
-use crate::{Error, Result};
+use crate::{Result, error};
 
 use super::Chain;
 
@@ -117,18 +117,18 @@ impl ChainArena {
     /// Adds `chain` and returns the index that names it.
     ///
     /// # Errors
-    /// Returns [`Error::Internal`] when the arena already holds its bound,
-    /// leaving the arena unchanged.
+    /// Returns an `Internal` failure when the arena already holds its
+    /// bound, leaving the arena unchanged.
     pub(in crate::execute::scheduler) fn push(&mut self, chain: Chain) -> Result<ChainIndex> {
         #[cfg(test)]
         let max_chains = self.max_chains;
         #[cfg(not(test))]
         let max_chains = MAX_CHAINS;
         if self.chains.len() >= max_chains {
-            return Err(Error::internal("a run's chain count cannot exceed u32"));
+            return Err(error::internal("a run's chain count cannot exceed u32"));
         }
-        let id = ChainIndex(u32::try_from(self.chains.len()).map_err(|error| {
-            Error::internal_with_cause("a run's chain count cannot exceed u32", error)
+        let id = ChainIndex(u32::try_from(self.chains.len()).map_err(|cause| {
+            error::internal_with_cause("a run's chain count cannot exceed u32", &cause)
         })?);
         self.chains.push(chain);
         Ok(id)

@@ -61,10 +61,7 @@ fn accept_infer_completion(
 /// round's protocol, with `specific` naming how.
 fn malformed_reply(specific: &str) -> Error {
     let code = ErrorCode::MalformedResponse;
-    Error::Completion(completion_error(
-        code,
-        format!("{}: {specific}", phrase(code)),
-    ))
+    completion_error(code, format!("{}: {specific}", phrase(code)))
 }
 
 /// Applies one infer round's answer, the completion the caller obtained
@@ -77,11 +74,11 @@ fn malformed_reply(specific: &str) -> Error {
 /// cancellation, so no `MODEL_TURN_FAILED` fires for it.
 ///
 /// # Errors
-/// Returns the completion's failure, or an [`Error::Completion`] with code
+/// Returns the completion's failure, or a model failure with code
 /// `MalformedResponse` when the round produced tool calls (none were
 /// advertised) or an unrecognized outcome.
 pub(super) fn accept_infer(
-    result: std::result::Result<Box<Completion>, runvil_types::error::Error>,
+    result: std::result::Result<Box<Completion>, Error>,
     round: RoundId,
     reporting: &ReportingHandles,
     section: &str,
@@ -92,7 +89,7 @@ pub(super) fn accept_infer(
             reporting
                 .emitter
                 .report(section, lifecycle::MODEL_TURN_FAILED);
-            return Err(Error::from(error));
+            return Err(error);
         }
     };
     accept_infer_completion(*completion, round, reporting, section)

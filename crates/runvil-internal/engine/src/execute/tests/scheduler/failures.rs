@@ -28,12 +28,13 @@ fn two_arms_appending_one_path_boom_without_any_other_suspension() {
         ```\n";
     let trace = scheduler_scenario(md).run();
 
-    match trace.error() {
-        Error::Determinism(detail) => {
-            assert!(detail.contains("log.txt"), "error was: {detail}");
-        }
-        other => panic!("expected the fatal determinism violation, got {other:?}"),
-    }
+    let error = trace.error();
+    assert_eq!(
+        error.code,
+        ErrorCode::Determinism,
+        "expected the fatal determinism violation, got {error:?}"
+    );
+    assert!(error.message.contains("log.txt"), "error was: {error}");
     // The losing arm's append never reached the backend: exactly one arm's
     // append landed.
     let log = trace.read("log.txt").expect("one arm appended");
@@ -110,7 +111,7 @@ fn fatal_arm_aborts_queued_siblings() {
 
     let error = trace.error();
     assert!(
-        !matches!(error, Error::Interrupted),
+        error.code != ErrorCode::Interrupted,
         "expected a fatal arm error, got {error}"
     );
     let log = trace.read("log.txt").expect("the fatal arm wrote its item");
@@ -161,7 +162,7 @@ fn fatal_arm_aborts_an_in_flight_sibling() {
     let error = rig.trace().error();
 
     assert!(
-        !matches!(error, Error::Interrupted),
+        error.code != ErrorCode::Interrupted,
         "expected a fatal arm error, got {error}"
     );
     assert!(
@@ -374,7 +375,7 @@ fn a_spawn_failure_mid_fanout_cancels_the_queued_arms() {
 fn an_answer_for_an_unknown_request_id_fails_loudly() {
     // An answer arriving for an id the run never issued (and that is not an
     // orphan) means the caller lost track of its effects: the run must fail
-    // with Error::Internal rather than silently discard the answer. Only an
+    // with an `Internal` failure rather than silently discard the answer. Only an
     // orphaned id (a fatal sibling's late I/O answer, covered by
     // `a_caught_fanout_failure_lets_the_caller_continue`) may be
     // discarded.
@@ -391,7 +392,8 @@ fn an_answer_for_an_unknown_request_id_fails_loudly() {
     let rig = rig.finish();
 
     assert!(
-        matches!(rig.trace().error(), Error::Internal { message, .. } if message.contains("did not issue")),
+        rig.trace().error().code == ErrorCode::Internal
+            && rig.trace().error().message.contains("did not issue"),
         "the unknown answer is a loud invariant failure: {:?}",
         rig.trace().error()
     );
@@ -418,7 +420,8 @@ fn aborting_an_effect_that_is_not_outstanding_records_no_orphan() {
     let rig = rig.finish();
 
     assert!(
-        matches!(rig.trace().error(), Error::Internal { message, .. } if message.contains("did not issue")),
+        rig.trace().error().code == ErrorCode::Internal
+            && rig.trace().error().message.contains("did not issue"),
         "the answer for the never-issued id still fails loudly: {:?}",
         rig.trace().error()
     );
@@ -428,7 +431,7 @@ fn aborting_an_effect_that_is_not_outstanding_records_no_orphan() {
 fn an_answer_for_a_chain_with_no_suspended_block_fails_loudly() {
     // Every answer goes to a block that yielded for it, so an answer that
     // finds none is a scheduler bug: the inline answer and a wait's wake
-    // both raise Error::Internal rather than drop the answer and strand
+    // both raise an `Internal` failure rather than drop the answer and strand
     // the chain off every queue.
     let md = "---\nname: t\ndescription: d\nrunvil: 0\n---\n\n\
         # Title\n\n\
@@ -442,7 +445,7 @@ fn an_answer_for_a_chain_with_no_suspended_block_fails_loudly() {
 
     for delivery in deliveries {
         assert!(
-            matches!(&delivery, Err(Error::Internal { message, .. }) if message.contains("suspended block")),
+            matches!(&delivery, Err(error) if error.code == ErrorCode::Internal && error.message.contains("suspended block")),
             "an answer with no suspended block is a loud invariant failure: {delivery:?}"
         );
     }
@@ -464,7 +467,7 @@ fn a_second_delivery_before_resume_is_an_internal_error() {
 
     assert!(first.is_ok(), "the first delivery lands: {first:?}");
     assert!(
-        matches!(&second, Err(Error::Internal { .. })),
+        matches!(&second, Err(error) if error.code == ErrorCode::Internal),
         "a second delivery before resume is a loud invariant failure: {second:?}"
     );
     assert!(holds_first, "the block still holds the first answer");

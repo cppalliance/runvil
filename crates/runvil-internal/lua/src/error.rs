@@ -1,11 +1,9 @@
 //! The crate's internal error type.
 //!
-//! [`Error`] mirrors `runvil-engine`'s own internal error type: it
-//! is never part of the documented API. A failed run's public outcome
-//! (`runvil_engine::RunOutcome`) carries the kind and message of
-//! `runvil-engine`'s internal error type, which maps this one back
-//! variant-for-variant through `From<runvil_lua::Error>`. The internal type is public only so
-//! `runvil-engine` can perform that mapping verbatim; the facade does
+//! [`Error`] is never part of the documented API. Where it leaves the
+//! crate it becomes the universal [`runvil_types::error::Error`] through
+//! [`into_universal`], which maps it variant for variant; the type is
+//! public only so `runvil-engine` can call that mapping, the facade does
 //! not re-export it, and it is not marked `#[non_exhaustive]`, so the
 //! mapping stays total.
 //!
@@ -15,6 +13,14 @@
 //! source chain shows the cause's text once.
 
 use std::borrow::Cow;
+
+#[path = "error-universal.rs"]
+mod universal;
+
+pub use universal::{
+    context_exhausted, internal_at, interrupted, into_universal, lua_quota, lua_runtime,
+    task_cancelled, task_consumed, task_not_owned, tool_loop_exhausted,
+};
 
 /// A type-erased owned error cause used by the internal error type.
 type BoxedSource = Box<dyn std::error::Error + Send + Sync>;

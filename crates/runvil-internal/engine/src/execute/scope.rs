@@ -21,7 +21,7 @@ use crate::lua::{
     ToolSet, current_catalog_packs, current_dynamic_set, current_static_set, wire_name_of,
 };
 use crate::model::{ToolSchema, detail};
-use crate::{Error, Result};
+use crate::{Result, error};
 
 /// The most Dynamic Set wire names the search tool's description lists.
 const LISTED_NAMES: usize = 100;
@@ -67,9 +67,12 @@ impl SectionOffers {
     /// Returns the expansion's error.
     pub(super) fn read(tool_set: &ToolSet, vm: &SectionVm) -> Result<Self> {
         let (runtime, adhoc) = (vm.offers(), vm.adhoc_tools());
-        let static_tools = current_static_set(tool_set, runtime, adhoc)?;
-        let dynamic_tools = current_dynamic_set(tool_set, runtime, adhoc, &static_tools)?;
-        let packs = current_catalog_packs(tool_set, runtime, adhoc)?;
+        let static_tools =
+            current_static_set(tool_set, runtime, adhoc).map_err(error::into_universal)?;
+        let dynamic_tools = current_dynamic_set(tool_set, runtime, adhoc, &static_tools)
+            .map_err(error::into_universal)?;
+        let packs =
+            current_catalog_packs(tool_set, runtime, adhoc).map_err(error::into_universal)?;
         Ok(Self {
             static_tools,
             dynamic_tools,
@@ -187,9 +190,9 @@ struct Laid {
 ///   schema.
 ///
 /// # Errors
-/// Returns [`Error::ToolSets`] naming the rule and the Packs or tools
-/// that broke it, or [`Error::BindSchema`] for a tool no round could
-/// advertise.
+/// Returns a `ToolSetsInvalid` failure naming the rule and the Packs or
+/// tools that broke it, or a `ToolSchemaInvalid` failure for a tool no
+/// round could advertise.
 pub(super) fn merge_tool_sets(
     offers: &SectionOffers,
     rendered: Vec<PackToolSets<ToolInfo>>,
@@ -225,9 +228,9 @@ pub(super) fn merge_tool_sets(
 /// with each tool a set repeats kept at its first copy.
 ///
 /// # Errors
-/// Returns [`Error::ToolSets`] for an answer whose Packs differ from the
-/// ones asked, in order, or naming the first rendered tool a Pack's
-/// answer may not hold.
+/// Returns a `ToolSetsInvalid` failure for an answer whose Packs differ
+/// from the ones asked, in order, or naming the first rendered tool a
+/// Pack's answer may not hold.
 fn check_render(
     asked: &[PackToolSets<ToolInfo>],
     answered: Vec<PackToolSets<ToolInfo>>,
@@ -237,12 +240,10 @@ fn check_render(
         all.iter().map(|sets| sets.pack.clone()).collect()
     };
     if packs(asked) != packs(&answered) {
-        return Err(Error::ToolSets {
-            evidence: SetEvidence::RenderedPacks {
-                asked: packs(asked),
-                answered: packs(&answered),
-            },
-        });
+        return Err(error::tool_sets(&SetEvidence::RenderedPacks {
+            asked: packs(asked),
+            answered: packs(&answered),
+        }));
     }
     answered
         .into_iter()
@@ -263,9 +264,9 @@ fn check_render(
 /// dropped.
 ///
 /// # Errors
-/// Returns [`Error::ToolSets`] naming the first tool that sits in a set
-/// the Pack was not offered into, under another Pack's id, or is a run
-/// catalog tool the section did not offer in `set`.
+/// Returns a `ToolSetsInvalid` failure naming the first tool that sits in
+/// a set the Pack was not offered into, under another Pack's id, or is a
+/// run catalog tool the section did not offer in `set`.
 fn check_set(
     pack: &PackId,
     set: OfferMode,
@@ -273,8 +274,8 @@ fn check_set(
     tools: Vec<ToolInfo>,
     catalog: &ToolCatalog,
 ) -> Result<Vec<ToolInfo>> {
-    let refuse = |rule: SetRule, tool: &ToolInfo| Error::ToolSets {
-        evidence: SetEvidence::Tools {
+    let refuse = |rule: SetRule, tool: &ToolInfo| {
+        error::tool_sets(&SetEvidence::Tools {
             rule,
             tools: NonEmpty::new(
                 SetTool {
@@ -283,7 +284,7 @@ fn check_set(
                 },
                 Vec::new(),
             ),
-        },
+        })
     };
     let mut kept: Vec<ToolInfo> = Vec::with_capacity(tools.len());
     for tool in tools {
@@ -352,7 +353,7 @@ fn bind(mut tool: ToolInfo, catalog: &ToolCatalog) -> ToolBinding {
 /// [`LISTED_NAMES`] of them and then how many more there are.
 ///
 /// # Errors
-/// Returns [`Error::Internal`] should a discovery tool's id not parse.
+/// Returns an `Internal` failure should a discovery tool's id not parse.
 fn discovery_tools(dynamic_set: &[Laid]) -> Result<Vec<Laid>> {
     let mut names: Vec<&str> = dynamic_set
         .iter()
@@ -389,7 +390,7 @@ fn discovery_tools(dynamic_set: &[Laid]) -> Result<Vec<Laid>> {
                 ),
             };
             let id = ToolId::parse(tool.id())
-                .map_err(|_| Error::internal("a discovery tool's id is a tool id"))?;
+                .map_err(|_| error::internal("a discovery tool's id is a tool id"))?;
             let info = ToolInfo::new(id, description, parameters);
             Ok(Laid {
                 binding: ToolBinding::from_info(tool.wire_name(), &info),
@@ -464,12 +465,10 @@ fn refuse_clash(static_set: &[Laid], dynamic_set: &[Laid]) -> Result<()> {
             set,
         };
         if let Some(first) = taken.get(wire_name) {
-            return Err(Error::ToolSets {
-                evidence: SetEvidence::Tools {
-                    rule: SetRule::UniqueWireName(wire_name.to_owned()),
-                    tools: NonEmpty::new(first.clone(), vec![site]),
-                },
-            });
+            return Err(error::tool_sets(&SetEvidence::Tools {
+                rule: SetRule::UniqueWireName(wire_name.to_owned()),
+                tools: NonEmpty::new(first.clone(), vec![site]),
+            }));
         }
         taken.insert(wire_name, site);
     }
@@ -482,17 +481,14 @@ fn refuse_clash(static_set: &[Laid], dynamic_set: &[Laid]) -> Result<()> {
 /// refused rather than sent to the model.
 ///
 /// # Errors
-/// Returns [`Error::BindSchema`] holding the refusal.
+/// Returns a `ToolSchemaInvalid` failure that names the refusal.
 pub(super) fn tool_schema(binding: &ToolBinding) -> Result<ToolSchema> {
     detail::tool_schema_new(
         binding.alias().to_owned(),
         binding.description().to_owned(),
         binding.schema().clone(),
     )
-    .map_err(|error| Error::BindSchema {
-        alias: binding.alias().to_owned(),
-        cause: Box::new(error),
-    })
+    .map_err(|refusal| error::bind_schema(binding.alias(), &refusal))
 }
 
 #[cfg(test)]

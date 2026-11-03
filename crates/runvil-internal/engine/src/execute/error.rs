@@ -1,7 +1,7 @@
 //! The stable [`RunErrorKind`] of a failed run, and the kind and message
-//! the Engine's own error ends a run with.
+//! an Engine failure ends a run with.
 
-use runvil_types::error::FactKey;
+use runvil_types::error::{ErrorCode, FactKey};
 
 use crate::Error;
 
@@ -117,132 +117,140 @@ impl RunErrorKind {
     }
 }
 
-impl Error {
-    /// Returns the stable classification of this failure.
-    pub(crate) fn kind(&self) -> RunErrorKind {
-        match self {
-            Error::Parse(_) | Error::UnsupportedVersion(_) => RunErrorKind::Parse,
-            Error::LuaQuota { .. } | Error::CallDepthExceeded { .. } => RunErrorKind::Quota,
-            Error::ContextExhausted { .. } => RunErrorKind::ContextExhausted,
-            // A leaked task, a task reached for by a chain that does not
-            // own it, a result waited on twice, a wait's delivery of a
-            // cancelled task surfacing uncaught, and a failed `{{ }}`
-            // substitution are the author's program failing, as any Lua
-            // fault is.
-            Error::LuaCompile { .. }
-            | Error::Lua { .. }
-            | Error::TasksLive { .. }
-            | Error::TaskNotOwned { .. }
-            | Error::TaskConsumed { .. }
-            | Error::TaskCancelled { .. }
-            | Error::Substitution(_) => RunErrorKind::Lua,
-            Error::RequirementsUnmet { .. } | Error::ModelRequired { .. } => {
-                RunErrorKind::RequirementsUnmet
-            }
-            Error::Completion(_) => RunErrorKind::Completion,
-            Error::ToolLoopExhausted
-            | Error::OutOfScopeToolCall { .. }
-            | Error::UnboundToolCall { .. }
-            | Error::ModelOnlyToolCall { .. }
-            | Error::Tool { .. } => RunErrorKind::Tool,
-            // A cancelled run ends as `RunOutcome::Cancelled`, so an
-            // interruption that reaches a failure is an Engine fault.
-            Error::Internal { .. } | Error::Interrupted => RunErrorKind::Internal,
-            Error::Store { .. } | Error::Determinism(_) => RunErrorKind::Vfs,
-            Error::BindSchema { .. } | Error::ToolSets { .. } => RunErrorKind::Binding,
+/// Returns the stable classification of a failure with `code`.
+///
+/// A leaked task, a task reached for by a chain that does not own it, a
+/// result waited on twice, a wait's delivery of a cancelled task surfacing
+/// uncaught, and a failed `{{ }}` substitution are the author's program
+/// failing, as any Lua fault is. A cancelled run ends as
+/// `RunOutcome::Cancelled`, so an interruption that reaches a failure is an
+/// Engine fault, as is a failure only the Harness raises.
+pub(crate) fn run_error_kind(code: ErrorCode) -> RunErrorKind {
+    match code {
+        ErrorCode::FrontmatterInvalid
+        | ErrorCode::StructureInvalid
+        | ErrorCode::FenceInvalid
+        | ErrorCode::ListEmptyItem
+        | ErrorCode::UnsupportedVersion
+        | ErrorCode::InvalidValue => RunErrorKind::Parse,
+        ErrorCode::LuaQuota | ErrorCode::CallDepthExceeded => RunErrorKind::Quota,
+        ErrorCode::ContextExhausted => RunErrorKind::ContextExhausted,
+        ErrorCode::LuaRuntime
+        | ErrorCode::LuaCompile
+        | ErrorCode::TasksLive
+        | ErrorCode::TaskNotOwned
+        | ErrorCode::TaskConsumed
+        | ErrorCode::TaskCancelled
+        | ErrorCode::Substitution => RunErrorKind::Lua,
+        ErrorCode::RequirementsUnmet | ErrorCode::ModelRequired => RunErrorKind::RequirementsUnmet,
+        ErrorCode::ContextOverflow
+        | ErrorCode::RateLimited
+        | ErrorCode::QuotaExhausted
+        | ErrorCode::Overloaded
+        | ErrorCode::Refused
+        | ErrorCode::Timeout
+        | ErrorCode::Transport
+        | ErrorCode::ServerError
+        | ErrorCode::Rejected
+        | ErrorCode::MalformedResponse
+        | ErrorCode::EmptyReply
+        | ErrorCode::Unavailable
+        | ErrorCode::InvalidParts => RunErrorKind::Completion,
+        ErrorCode::ToolLoopExhausted
+        | ErrorCode::OutOfScopeTool
+        | ErrorCode::UnboundTool
+        | ErrorCode::ModelOnlyTool
+        | ErrorCode::ToolInvalidArguments
+        | ErrorCode::ToolBackend
+        | ErrorCode::ToolTransport
+        | ErrorCode::ToolOther => RunErrorKind::Tool,
+        ErrorCode::Internal | ErrorCode::Interrupted => RunErrorKind::Internal,
+        ErrorCode::NotFound
+        | ErrorCode::AlreadyExists
+        | ErrorCode::NotADirectory
+        | ErrorCode::IsADirectory
+        | ErrorCode::DirectoryNotEmpty
+        | ErrorCode::NotUtf8
+        | ErrorCode::InvalidPath
+        | ErrorCode::InvalidRange
+        | ErrorCode::Anchor
+        | ErrorCode::PermissionDenied
+        | ErrorCode::ApprovalRequired
+        | ErrorCode::ScopeEnded
+        | ErrorCode::ReadOnly
+        | ErrorCode::OutsideRoot
+        | ErrorCode::RootProtected
+        | ErrorCode::NoStore
+        | ErrorCode::CrossMount
+        | ErrorCode::Io
+        | ErrorCode::Unsupported
+        | ErrorCode::Conflict
+        | ErrorCode::Backend
+        | ErrorCode::Determinism => RunErrorKind::Vfs,
+        ErrorCode::ToolSchemaInvalid | ErrorCode::ToolSetsInvalid => RunErrorKind::Binding,
+        ErrorCode::RecorderFailed | ErrorCode::PluginLoadFailed | ErrorCode::NoOutput => {
+            RunErrorKind::Internal
         }
     }
+}
 
-    /// Returns the self-contained text a failed run reports: the error's
-    /// own text, then each cause down its `source` chain whose text the
-    /// message does not hold yet, after `: `, then where the failure
-    /// happened.
-    ///
-    /// A cause-bearing variant renders its cause in its own text and keeps
-    /// no `source`, so the chain adds only what a transparent variant's
-    /// error keeps there. A parse failure ends with its prompt name, line,
-    /// and column, each when known, as `(prompt {name}, line {line},
-    /// column {column})`, and an internal fault with the Rust source file
-    /// and line of the broken invariant, as `(at {file}:{line})`.
-    pub(crate) fn message(&self) -> String {
-        let mut rendered = self.to_string();
-        let mut cause = std::error::Error::source(self);
-        while let Some(current) = cause {
-            let text = current.to_string();
-            if !text.is_empty() && !rendered.contains(&text) {
-                rendered.push_str(": ");
-                rendered.push_str(&text);
-            }
-            cause = current.source();
-        }
-        if let Some(location) = self.location() {
-            rendered.push_str(" (");
-            rendered.push_str(&location);
-            rendered.push(')');
-        }
-        rendered
+/// Returns the self-contained text a failed run reports: the error's
+/// message, with its causes, then where the failure happened.
+///
+/// A parse failure ends with its prompt name, line, and column, each when
+/// known, as `(prompt {name}, line {line}, column {column})`, and an
+/// internal fault with the Rust source file and line of the broken
+/// invariant, as `(at {file}:{line})`.
+pub(crate) fn failure_message(error: &Error) -> String {
+    let mut rendered = error.message.clone();
+    if let Some(location) = location(error) {
+        rendered.push_str(" (");
+        rendered.push_str(&location);
+        rendered.push(')');
     }
+    rendered
+}
 
-    /// Where the failure happened, for the end of its message, or `None`
-    /// when the failure has no location or the parser found none of its
-    /// parts.
-    fn location(&self) -> Option<String> {
-        match self {
-            Error::Parse(error) => {
-                let parts: Vec<String> = [
-                    error
-                        .facts
-                        .get(&FactKey::Name)
-                        .and_then(serde_json::Value::as_str)
-                        .map(|name| format!("prompt {name}")),
-                    error
-                        .at
-                        .as_ref()
-                        .map(|at| format!("line {}", at.start_line)),
-                    error
-                        .at
-                        .as_ref()
-                        .map(|at| format!("column {}", at.start_column)),
-                ]
-                .into_iter()
-                .flatten()
-                .collect();
-                (!parts.is_empty()).then(|| parts.join(", "))
-            }
-            Error::Internal { file, line, .. } => Some(format!("at {file}:{line}")),
-            Error::Completion(_)
-            | Error::Interrupted
-            | Error::Lua { .. }
-            | Error::LuaCompile { .. }
-            | Error::BindSchema { .. }
-            | Error::ToolSets { .. }
-            | Error::Substitution(_)
-            | Error::ToolLoopExhausted
-            | Error::TasksLive { .. }
-            | Error::TaskNotOwned { .. }
-            | Error::TaskConsumed { .. }
-            | Error::TaskCancelled { .. }
-            | Error::OutOfScopeToolCall { .. }
-            | Error::UnboundToolCall { .. }
-            | Error::ModelOnlyToolCall { .. }
-            | Error::ModelRequired { .. }
-            | Error::UnsupportedVersion(_)
-            | Error::RequirementsUnmet { .. }
-            | Error::Tool { .. }
-            | Error::LuaQuota { .. }
-            | Error::CallDepthExceeded { .. }
-            | Error::ContextExhausted { .. }
-            | Error::Store { .. }
-            | Error::Determinism(_) => None,
+/// Where the failure happened, for the end of its message, or `None`
+/// when the failure has no location or the parser found none of its
+/// parts.
+fn location(error: &Error) -> Option<String> {
+    match run_error_kind(error.code) {
+        RunErrorKind::Parse => {
+            let parts: Vec<String> = [
+                error
+                    .facts
+                    .get(&FactKey::Name)
+                    .and_then(serde_json::Value::as_str)
+                    .map(|name| format!("prompt {name}")),
+                error
+                    .at
+                    .as_ref()
+                    .map(|at| format!("line {}", at.start_line)),
+                error
+                    .at
+                    .as_ref()
+                    .map(|at| format!("column {}", at.start_column)),
+            ]
+            .into_iter()
+            .flatten()
+            .collect();
+            (!parts.is_empty()).then(|| parts.join(", "))
         }
+        _ if error.code == ErrorCode::Internal => error
+            .at
+            .as_ref()
+            .map(|at| format!("at {}:{}", at.file, at.start_line)),
+        _ => None,
     }
+}
 
-    /// Returns the failed outcome this error ends a run with.
-    pub(crate) fn to_outcome(&self) -> RunOutcome {
-        RunOutcome::Failed {
-            kind: self.kind(),
-            message: self.message(),
-        }
+/// Returns the failed outcome `error` ends a run with: the kind its code
+/// classifies, and its message.
+pub(crate) fn outcome(error: &Error) -> RunOutcome {
+    RunOutcome::Failed {
+        kind: run_error_kind(error.code),
+        message: failure_message(error),
     }
 }
 

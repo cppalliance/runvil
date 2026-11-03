@@ -114,18 +114,13 @@ pub(crate) struct Sources<'a> {
 /// untouched.
 ///
 /// # Errors
-/// Returns [`Error::Substitution`](crate::Error::Substitution) holding a
-/// `Substitution` error whose `Reason` fact is one of the reasons `failure`
-/// lists, which is the complete list of what a placeholder can fail with.
-/// Its message names the reason and the byte offset of the offending
-/// placeholder after a detail with its bounded, control-escaped path
-/// preview, and a `serialize` message then holds the lookup failure.
+/// Returns a `Substitution` failure whose `Reason` fact is one of the
+/// reasons `failure` lists, which is the complete list of what a
+/// placeholder can fail with. Its message names the reason and the byte
+/// offset of the offending placeholder after a detail with its bounded,
+/// control-escaped path preview, and a `serialize` message then holds the
+/// lookup failure.
 pub(crate) fn substitute(prose: &str, sources: &Sources<'_>) -> Result<String> {
-    // `?` would bridge the failure to `Error::Completion` instead.
-    substitute_inner(prose, sources).map_err(|error| crate::Error::Substitution(Box::new(error)))
-}
-
-fn substitute_inner(prose: &str, sources: &Sources<'_>) -> SubstResult<String> {
     let mut out = String::with_capacity(prose.len());
     let bytes = prose.as_bytes();
     let mut i = 0;

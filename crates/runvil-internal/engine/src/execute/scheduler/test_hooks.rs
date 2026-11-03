@@ -115,10 +115,9 @@ impl Scheduler {
     /// chain reports before its first entry.
     ///
     /// # Errors
-    /// Returns [`Error::Store`](crate::Error::Store) when the backend
-    /// refuses the chain's access, or
-    /// [`Error::Internal`](crate::Error::Internal) when the run's chain
-    /// count exceeds its bound.
+    /// Returns a store failure when the backend refuses the chain's
+    /// access, or an `Internal` failure when the run's chain count exceeds
+    /// its bound.
     pub(crate) fn name_before_first_entry_for_test(&mut self, index: usize) -> Result<String> {
         let id = self.start_probe_chain(index)?;
         Ok(self.chains[id].section_name().to_owned())
@@ -166,7 +165,7 @@ impl Scheduler {
             .ctx
             .vfs()
             .acquire(Origin::at("probe", self.ctx.prompt().title(), 1))
-            .map_err(Error::store)?;
+            .map_err(|cause| crate::error::store(&cause))?;
         self.start_chain(ChainStart {
             lineage: ChainId::root(),
             counters: Counters::default(),

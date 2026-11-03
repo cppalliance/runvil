@@ -54,13 +54,10 @@ fn a_script_tools_call_with_an_unbound_name_lists_the_offered_ids() {
         ## Only\n\n\
         ```lua\ntools.offer('tools/echo')\nreturn tools.call('tools/missing', {})\n```\n";
     let trace = scheduler_scenario(md).offer("echo", echo_tool()).run();
-    match trace.error() {
-        Error::UnboundToolCall { name, ids } => {
-            assert_eq!(name, "tools/missing");
-            assert_eq!(ids, &["tools/echo".to_owned()]);
-        }
-        other => panic!("expected the typed unbound-tool error, got {other:?}"),
-    }
+    assert_eq!(
+        trace.error(),
+        &crate::error::unbound_tool("tools/missing", &["tools/echo".to_owned()])
+    );
 }
 
 #[test]
@@ -97,13 +94,10 @@ fn a_script_tools_call_of_a_model_only_tool_is_refused_naming_it() {
         .offer("echo", echo_tool())
         .offer("replace", model_only_tool())
         .run();
-    match trace.error() {
-        Error::ModelOnlyToolCall { name, id } => {
-            assert_eq!(name, "tools/replace");
-            assert_eq!(id, "tools/replace");
-        }
-        other => panic!("expected the typed model-only error, got {other:?}"),
-    }
+    assert_eq!(
+        trace.error(),
+        &crate::error::model_only_tool("tools/replace", "tools/replace")
+    );
 }
 
 #[test]
@@ -140,10 +134,12 @@ fn a_script_tools_call_of_a_model_only_tool_by_its_object_is_refused_the_same_wa
     let trace = scheduler_scenario(md)
         .offer("replace", model_only_tool())
         .run();
-    match trace.error() {
-        Error::ModelOnlyToolCall { id, .. } => assert_eq!(id, "tools/replace"),
-        other => panic!("expected the typed model-only error, got {other:?}"),
-    }
+    let error = trace.error();
+    assert_eq!(error.code, ErrorCode::ModelOnlyTool, "got {error:?}");
+    assert!(
+        error.message.contains("(tools/replace) is model-only"),
+        "the refusal names the catalog id: {error}"
+    );
 }
 
 #[test]
@@ -247,15 +243,12 @@ fn invalid_json_from_a_structured_tool_is_a_tool_error() {
     let trace = scheduler_scenario(md)
         .offer("form", structured_tool("not json", true))
         .run();
-    match trace.error() {
-        Error::Tool { message, .. } => {
-            assert!(
-                message.contains("returned invalid JSON"),
-                "the tool error names the invalid JSON, got: {message}"
-            );
-        }
-        other => panic!("expected the typed tool error, got {other:?}"),
-    }
+    let error = trace.error();
+    assert_eq!(error.code, ErrorCode::ToolOther, "got {error:?}");
+    assert!(
+        error.message.contains("returned invalid JSON"),
+        "the tool error names the invalid JSON, got: {error}"
+    );
 }
 
 #[test]
@@ -271,15 +264,12 @@ fn an_untrusted_structured_output_is_wrapped_before_classification() {
     let trace = scheduler_scenario(md)
         .offer("form", structured_tool("{\"text\":\"typed\"}", false))
         .run();
-    match trace.error() {
-        Error::Tool { message, .. } => {
-            assert!(
-                message.contains("returned invalid JSON"),
-                "the wrap must precede the parse, got: {message}"
-            );
-        }
-        other => panic!("expected the typed tool error, got {other:?}"),
-    }
+    let error = trace.error();
+    assert_eq!(error.code, ErrorCode::ToolOther, "got {error:?}");
+    assert!(
+        error.message.contains("returned invalid JSON"),
+        "the wrap must precede the parse, got: {error}"
+    );
 }
 
 #[test]

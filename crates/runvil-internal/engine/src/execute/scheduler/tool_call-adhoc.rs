@@ -20,7 +20,7 @@ use runvil_types::tools::OutputTrust;
 
 use crate::execute::section_context::AdhocCall;
 use crate::lua::{AdhocToolOutcome, Answer, ScriptReport, ToolBinding, ToolCallOutcome};
-use crate::{Error, Result};
+use crate::{Result, error};
 
 use super::super::dispatch::Dispatched;
 use super::super::{CallSite, ChainOps};
@@ -43,7 +43,7 @@ impl ChainOps<'_> {
         // The attempt counts at dispatch, before the handler runs, so a
         // handler that then fails still counts.
         let counted = binding.id().to_string();
-        counts.increment(&counted)?;
+        counts.increment(&counted).map_err(error::into_universal)?;
         self.chain.frame_mut()?.push_adhoc_call(AdhocCall {
             tool: binding.id().clone(),
             alias: binding.alias().to_owned(),
@@ -72,7 +72,7 @@ impl ChainOps<'_> {
     /// the shim raises the handler's own value in its place.
     ///
     /// # Errors
-    /// Returns [`Error::Internal`] when the chain has no frame or no open
+    /// Returns an `Internal` failure when the chain has no frame or no open
     /// adhoc call, or no suspended block to take the answer.
     pub(in crate::execute::scheduler) fn dispatch_adhoc_tool_done(
         &mut self,
@@ -81,7 +81,7 @@ impl ChainOps<'_> {
         let chain = &mut *self.chain;
         let emitter = Arc::clone(chain.ctx.emitter());
         let section = chain.section_name().to_owned();
-        let call = chain.frame_mut()?.pop_adhoc_call().ok_or(Error::internal(
+        let call = chain.frame_mut()?.pop_adhoc_call().ok_or(error::internal(
             "an adhoc tool's completion closes the call that opened it",
         ))?;
         let answer = match outcome {
@@ -104,9 +104,9 @@ impl ChainOps<'_> {
                 );
                 Ok(ToolCallOutcome::Plain(text))
             }
-            AdhocToolOutcome::BadReturn(error) => {
+            AdhocToolOutcome::BadReturn(failure) => {
                 emitter.report(&section, lifecycle::TOOL_CALL_FAILED);
-                Err(Error::from(error))
+                Err(error::into_universal(failure))
             }
             AdhocToolOutcome::Raised => {
                 emitter.report(&section, lifecycle::TOOL_CALL_FAILED);

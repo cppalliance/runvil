@@ -20,7 +20,7 @@ use crate::heading_address::{SectionPos, Visible};
 use crate::lua::{Library, LibraryKey, SectionVm, Uninjected};
 use crate::model::ModelBinding;
 use crate::prompt::Prompt;
-use crate::{Error, Result};
+use crate::{Result, error};
 
 use super::{SectionContext, SectionSys, TaskSeed};
 
@@ -40,7 +40,7 @@ fn library_resolver(
 /// run's cancel flag and Lua limits applied.
 ///
 /// # Errors
-/// Returns the [`Error`] of the VM construction or the limits install.
+/// Returns the failure of the VM construction or the limits install.
 fn limited_vm(ctx: &ChainState, name: &str) -> Result<SectionVm<Uninjected>> {
     let vm = SectionVm::new_for_section(
         ctx.nonce(),
@@ -48,7 +48,8 @@ fn limited_vm(ctx: &ChainState, name: &str) -> Result<SectionVm<Uninjected>> {
         &ctx.model_set(),
         ctx.emitter(),
         name,
-    )?;
+    )
+    .map_err(error::into_universal)?;
     // The run's cancel flag reaches every block coroutine's hook.
     vm.set_cancel(ctx.cancel().clone());
     // A limits failure propagates bare: no teardown runs here, so no
@@ -56,7 +57,8 @@ fn limited_vm(ctx: &ChainState, name: &str) -> Result<SectionVm<Uninjected>> {
     vm.apply_lua_limits(
         ctx.limits().lua_memory_bytes.get(),
         ctx.limits().lua_log_events.get(),
-    )?;
+    )
+    .map_err(error::into_universal)?;
     Ok(vm)
 }
 
@@ -80,8 +82,8 @@ impl SectionContext {
     /// every other entry.
     ///
     /// # Errors
-    /// Returns [`Error::Internal`] when `pos` is past its slice, and
-    /// otherwise the [`Error`] of whichever step failed (see [`section_vm`]
+    /// Returns an `Internal` failure when `pos` is past its slice, and
+    /// otherwise the failure of whichever step failed (see [`section_vm`]
     /// for which failures tear the VM down).
     #[expect(
         clippy::too_many_arguments,
@@ -97,7 +99,7 @@ impl SectionContext {
         var: &serde_json::Value,
         seed: TaskSeed,
     ) -> Result<Self> {
-        let section = pos.section(ctx.prompt()).ok_or(Error::internal(
+        let section = pos.section(ctx.prompt()).ok_or(error::internal(
             "an entered section is absent from its slice",
         ))?;
         let mut sys = ctx.section_sys(section_id, task_id, section.name());
@@ -160,7 +162,7 @@ impl SectionContext {
     /// top-level section, behind `require`.
     ///
     /// # Errors
-    /// Returns the [`Error`] of whichever step failed (see [`section_vm`]
+    /// Returns the failure of whichever step failed (see [`section_vm`]
     /// for which failures tear the VM down).
     pub(crate) fn new_h1(
         ctx: &ChainState,

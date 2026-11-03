@@ -26,7 +26,7 @@ use runvil_types::ids::TaskId;
 use runvil_types::tools::ToolId;
 
 use crate::lua::{ProseState, ScriptReport, SectionVm, ToolCallCounts};
-use crate::{Error, Result, subst};
+use crate::{Result, error, subst};
 
 use super::context::{ChainState, ReportingHandles};
 
@@ -152,12 +152,12 @@ impl SectionContext {
     /// goes through the live VM.
     ///
     /// # Errors
-    /// Returns [`Error::Lua`] when the section reassigned the `var` global,
-    /// which the walk relies on to fail the run, or when `var` cannot
-    /// convert back to JSON (the write guard keeps that second case from
-    /// happening in practice).
+    /// Returns a `LuaRuntime` failure when the section reassigned the `var`
+    /// global, which the walk relies on to fail the run, or when `var`
+    /// cannot convert back to JSON (the write guard keeps that second case
+    /// from happening in practice).
     pub(super) fn read_var(&self) -> Result<serde_json::Value> {
-        Ok(self.vm().var()?)
+        self.vm().var().map_err(error::into_universal)
     }
 
     /// Reads the H1 pass's `argv` back as JSON while the frame is live: the
@@ -165,9 +165,9 @@ impl SectionContext {
     /// repair. `None` reads as nil.
     ///
     /// # Errors
-    /// Returns [`Error::Lua`] when H1 left `argv` as non-JSON data.
+    /// Returns a `LuaRuntime` failure when H1 left `argv` as non-JSON data.
     pub(super) fn read_argv(&self) -> Result<Option<serde_json::Value>> {
-        self.vm().argv_json().map_err(Error::from)
+        self.vm().argv_json().map_err(error::into_universal)
     }
 
     /// Arms the completion flag: the block walk completed (a jump or
@@ -199,13 +199,13 @@ impl SectionContext {
     /// renders.
     ///
     /// # Errors
-    /// Returns [`Error::Lua`] if the guard cannot be installed.
+    /// Returns a `LuaRuntime` failure if the guard cannot be installed.
     pub(super) fn install_lazy_prose(&self, ctx: &ChainState, template: &str) -> Result<()> {
         let template = template.to_owned();
         let render = prose_renderer(ctx, self.item.clone());
         self.vm()
-            .install_lazy_prose(move |state: ProseState<'_>| render(&template, state))?;
-        Ok(())
+            .install_lazy_prose(move |state: ProseState<'_>| render(&template, state))
+            .map_err(error::into_universal)
     }
 
     /// The frame's effective reporting handles for the `chat` rounds the
@@ -228,7 +228,7 @@ impl SectionContext {
     /// thread.
     ///
     /// # Errors
-    /// Returns the [`Error`] of the first-call install or the
+    /// Returns the failure of the first-call install or the
     /// id seeding.
     pub(super) fn tool_call_counts(&mut self, ids: &[ToolId]) -> Result<ToolCallCounts> {
         let Self {
@@ -240,7 +240,9 @@ impl SectionContext {
             None => counts.insert(install_first_call_state(vm, sys, ids)?),
         };
         for id in ids {
-            counts.ensure(&id.to_string())?;
+            counts
+                .ensure(&id.to_string())
+                .map_err(error::into_universal)?;
         }
         Ok(counts.clone())
     }
@@ -287,7 +289,7 @@ fn prose_renderer(
     let raw_args = Arc::clone(ctx.args());
     let argv = ctx.argv().cloned();
     move |template: &str, state: ProseState<'_>| -> mlua::Result<String> {
-        let globals = |name: &str| (state.globals)(name).map_err(Error::from);
+        let globals = |name: &str| (state.globals)(name).map_err(error::into_universal);
         let sources = subst::Sources {
             args: &raw_args,
             argv: argv.as_deref(),
@@ -311,19 +313,22 @@ fn prose_renderer(
 /// call. `sys` changes only once the VM's re-seal succeeds.
 ///
 /// # Errors
-/// Returns the [`Error`] of the counts install, the model resolution, or
+/// Returns the failure of the counts install, the model resolution, or
 /// the `sys` re-seal.
 fn install_first_call_state(
     vm: &SectionVm,
     sys: &mut SectionSys,
     ids: &[ToolId],
 ) -> Result<ToolCallCounts> {
-    let counts = vm.install_tool_call_counts(ids)?;
-    let resolved_model = vm.current_model()?;
+    let counts = vm
+        .install_tool_call_counts(ids)
+        .map_err(error::into_universal)?;
+    let resolved_model = vm.current_model().map_err(error::into_universal)?;
     if let Some(binding) = resolved_model.as_ref() {
         let mut enriched = sys.clone();
         enriched.model = Some(binding.id().name().to_owned());
-        vm.re_seal_sys(&enriched.to_json())?;
+        vm.re_seal_sys(&enriched.to_json())
+            .map_err(error::into_universal)?;
         *sys = enriched;
     }
     Ok(counts)

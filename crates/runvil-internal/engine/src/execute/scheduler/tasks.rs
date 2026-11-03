@@ -27,7 +27,7 @@ use runvil_types::ids::TaskId;
 use runvil_vfs::ExecId;
 
 use crate::execute::run::EffectId;
-use crate::{Error, Result};
+use crate::{Result, error};
 
 use super::ChainIndex;
 
@@ -177,13 +177,13 @@ impl TaskArena {
         self.entries.insert(task, entry);
     }
 
-    /// The entry of a task `caller` owns, or [`Error::TaskNotOwned`] - for
+    /// The entry of a task `caller` owns, or a `TaskNotOwned` failure - for
     /// an unknown id too, so a caller learns nothing about tasks it never
     /// started.
     pub(super) fn owned(&self, caller: ChainIndex, task: &TaskId) -> Result<&TaskEntry> {
         match self.entries.get(task) {
             Some(entry) if entry.owner == caller => Ok(entry),
-            _ => Err(Error::TaskNotOwned { task: task.clone() }),
+            _ => Err(error::task_not_owned(task)),
         }
     }
 
@@ -198,7 +198,7 @@ impl TaskArena {
     ) -> Result<&TaskEntry> {
         match self.entries.get(task) {
             Some(entry) if entry.owner == caller || caller_task == task => Ok(entry),
-            _ => Err(Error::TaskNotOwned { task: task.clone() }),
+            _ => Err(error::task_not_owned(task)),
         }
     }
 
@@ -239,7 +239,7 @@ impl TaskArena {
         for task in tasks {
             match self.owned(caller, task)?.state {
                 EntryState::Delivered { .. } => {
-                    return Err(Error::TaskConsumed { task: task.clone() });
+                    return Err(error::task_consumed(task));
                 }
                 EntryState::Running => {}
                 EntryState::Done(_) | EntryState::Cancelled | EntryState::Abandoned => {
@@ -275,7 +275,7 @@ impl TaskArena {
     /// wait on it, so its delivery is a scheduler bug.
     pub(super) fn take_delivery(&mut self, task: &TaskId) -> Result<String> {
         let Some(entry) = self.entries.get_mut(task) else {
-            return Err(Error::internal("a delivered task has an entry"));
+            return Err(error::internal("a delivered task has an entry"));
         };
         match &mut entry.state {
             EntryState::Done(outcome) => {
@@ -285,11 +285,11 @@ impl TaskArena {
                 };
                 outcome
             }
-            EntryState::Cancelled => Err(Error::TaskCancelled { task: task.clone() }),
-            EntryState::Abandoned => Err(Error::internal(
+            EntryState::Cancelled => Err(error::task_cancelled(task)),
+            EntryState::Abandoned => Err(error::internal(
                 "an abandoned task's owner ended, so no wait can deliver it",
             )),
-            EntryState::Running | EntryState::Delivered { .. } => Err(Error::internal(
+            EntryState::Running | EntryState::Delivered { .. } => Err(error::internal(
                 "only a terminal, undelivered entry is delivered",
             )),
         }

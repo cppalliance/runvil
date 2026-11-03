@@ -96,10 +96,10 @@ fn unsupported_major_one_is_refused() {
     // Major 1 is unsupported: the gate refuses it and names the
     // declared version rather than silently degrading to major 0.
     let trace = Scenario::new(ran_under("runvil: 1\n")).run();
-    assert!(
-        matches!(trace.error(), Error::UnsupportedVersion(1)),
-        "the gate refuses major 1 by name, got {:?}",
-        trace.error()
+    assert_eq!(
+        trace.error(),
+        &crate::error::unsupported_version(1),
+        "the gate refuses major 1 by name"
     );
 }
 
@@ -107,10 +107,10 @@ fn unsupported_major_one_is_refused() {
 fn unsupported_major_is_refused() {
     // Any major other than 0 is refused, never silently degraded to major 0.
     let trace = Scenario::new(ran_under("runvil: 2\n")).run();
-    assert!(
-        matches!(trace.error(), Error::UnsupportedVersion(2)),
-        "the gate refuses major 2 by name, got {:?}",
-        trace.error()
+    assert_eq!(
+        trace.error(),
+        &crate::error::unsupported_version(2),
+        "the gate refuses major 2 by name"
     );
 }
 
@@ -119,24 +119,20 @@ fn missing_version_is_not_a_runvil_prompt() {
     // No `runvil:` key: not our prompt, so `run` declines with a Parse
     // error rather than executing it.
     let trace = Scenario::new(ran_under("")).run();
-    match trace.error() {
-        Error::Parse(error) => {
-            assert_eq!(error.code, ErrorCode::StructureInvalid);
-            assert_eq!(
-                error
-                    .facts
-                    .get(&FactKey::Name)
-                    .and_then(serde_json::Value::as_str),
-                Some("t"),
-                "the error reports the parsed prompt's frontmatter name"
-            );
-            assert!(
-                error.to_string().contains("not a runvil prompt"),
-                "the Parse message must name the missing version, got: {error}"
-            );
-        }
-        other => panic!("expected Parse, got {other:?}"),
-    }
+    let error = trace.error();
+    assert_eq!(error.code, ErrorCode::StructureInvalid, "got {error:?}");
+    assert_eq!(
+        error
+            .facts
+            .get(&FactKey::Name)
+            .and_then(serde_json::Value::as_str),
+        Some("t"),
+        "the error reports the parsed prompt's frontmatter name"
+    );
+    assert!(
+        error.to_string().contains("not a runvil prompt"),
+        "the Parse message must name the missing version, got: {error}"
+    );
     assert_eq!(
         trace.outcome(),
         &RunOutcome::Failed {
@@ -281,17 +277,13 @@ fn empty_stop_turn_without_tool_calls_fails() {
     for offered in [None, Some(echo_tool())] {
         let trace = exit_scenario(vec![text_finish("", "stop")], offered).run();
         let events = exit_events(&trace);
-        match trace.error() {
-            Error::Completion(error) => {
-                assert_eq!(error.code, ErrorCode::EmptyReply);
-                assert_eq!(finish_reason(error), Some("stop"));
-                assert_eq!(
-                    error.prose, "the model replied with no text and no tool calls",
-                    "the fixed phrase for the code is the prose"
-                );
-            }
-            other => panic!("expected an EmptyReply failure, got {other:?}"),
-        }
+        let error = trace.error();
+        assert_eq!(error.code, ErrorCode::EmptyReply, "got {error:?}");
+        assert_eq!(finish_reason(error), Some("stop"));
+        assert_eq!(
+            error.prose, "the model replied with no text and no tool calls",
+            "the fixed phrase for the code is the prose"
+        );
         assert_eq!(trace.turns(), 1, "the empty round is a completed turn");
         assert_eq!(events, vec![detail::MODEL_TURN_COMPLETED.to_string()]);
     }
@@ -304,13 +296,9 @@ fn empty_truncated_final_text_fails_without_truncation_detail() {
     // truncated.
     let trace = exit_scenario(vec![text_finish("", "length")], None).run();
     let events = exit_events(&trace);
-    match trace.error() {
-        Error::Completion(error) => {
-            assert_eq!(error.code, ErrorCode::EmptyReply);
-            assert_eq!(finish_reason(error), Some("length"));
-        }
-        other => panic!("expected an EmptyReply failure, got {other:?}"),
-    }
+    let error = trace.error();
+    assert_eq!(error.code, ErrorCode::EmptyReply, "got {error:?}");
+    assert_eq!(finish_reason(error), Some("length"));
     assert_eq!(events, vec![detail::MODEL_TURN_COMPLETED.to_string()]);
 }
 
@@ -324,13 +312,9 @@ fn empty_turn_without_finish_reason_after_tool_call_fails() {
     )
     .run();
     let events = exit_events(&trace);
-    match trace.error() {
-        Error::Completion(error) => {
-            assert_eq!(error.code, ErrorCode::EmptyReply);
-            assert_eq!(finish_reason(error), None);
-        }
-        other => panic!("expected an EmptyReply failure, got {other:?}"),
-    }
+    let error = trace.error();
+    assert_eq!(error.code, ErrorCode::EmptyReply, "got {error:?}");
+    assert_eq!(finish_reason(error), None);
     assert_eq!(
         trace.turns(),
         2,

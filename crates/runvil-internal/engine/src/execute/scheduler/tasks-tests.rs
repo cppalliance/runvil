@@ -4,12 +4,13 @@
 //! running inside the task, and `live_author_tasks` lists an owner's live
 //! tasks in spawn order without internal timers.
 
+use runvil_types::error::ErrorCode;
 use runvil_types::ids::{ChainId, TaskId};
 use runvil_vfs::{Origin, VfsRef};
 
 use super::super::ChainIndex;
 use super::{Stop, TaskArena, TaskBacking, TaskState};
-use crate::Error;
+use crate::error;
 use crate::execute::run::EffectId;
 
 fn chain(raw: u32) -> ChainIndex {
@@ -98,7 +99,7 @@ fn a_completed_task_is_done_and_its_outcome_is_taken_once() {
     );
     assert!(matches!(
         arena.take_delivery(&task),
-        Err(Error::Internal { .. })
+        Err(error) if error.code == ErrorCode::Internal
     ));
     assert_eq!(
         arena.state_of(&task),
@@ -145,7 +146,7 @@ fn an_ended_or_delivered_task_keeps_its_entry() {
     assert!(arena.stop(&abandoned, Stop::Abandoned).is_some());
     assert!(
         arena
-            .complete(&delivered, Err(Error::Interrupted))
+            .complete(&delivered, Err(error::interrupted()))
             .is_some()
     );
     assert!(arena.take_delivery(&delivered).is_err());
@@ -166,12 +167,12 @@ fn owned_admits_only_the_tasks_owner() {
     assert_eq!(entry.target, "worker 0");
     assert!(matches!(
         arena.owned(chain(2), &task),
-        Err(Error::TaskNotOwned { task: refused }) if refused == task
+        Err(refused) if refused == error::task_not_owned(&task)
     ));
     let unknown = TaskId::from(ChainId::root().child(9));
     assert!(matches!(
         arena.owned(chain(1), &unknown),
-        Err(Error::TaskNotOwned { task: refused }) if refused == unknown
+        Err(refused) if refused == error::task_not_owned(&unknown)
     ));
 }
 
@@ -187,12 +188,12 @@ fn visible_also_admits_a_caller_running_inside_the_task() {
     );
     assert!(matches!(
         arena.visible(chain(7), &outside, &task),
-        Err(Error::TaskNotOwned { task: refused }) if refused == task
+        Err(refused) if refused == error::task_not_owned(&task)
     ));
     let unknown = TaskId::from(ChainId::root().child(9));
     assert!(matches!(
         arena.visible(chain(7), &unknown, &unknown),
-        Err(Error::TaskNotOwned { .. })
+        Err(refused) if refused.code == ErrorCode::TaskNotOwned
     ));
 }
 

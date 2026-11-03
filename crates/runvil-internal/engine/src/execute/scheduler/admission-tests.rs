@@ -8,13 +8,13 @@
 
 use std::num::NonZeroUsize;
 
+use runvil_types::error::ErrorCode;
 use runvil_types::ids::ChainId;
 use runvil_vfs::{Origin, VfsRef};
 
 use super::super::chain_record::{Chain, ChainArena, ChainIndex, ChainKind};
 use super::super::tasks::{TaskArena, TaskBacking};
 use super::{Admission, Admit, ChainTree, SpawnRecord};
-use crate::Error;
 
 /// The arenas a [`ChainTree`] reads, built up one chain at a time.
 struct Tree {
@@ -256,7 +256,7 @@ fn a_resumption_whose_slots_belong_to_no_admitted_task_is_an_internal_error() {
     assert!(admission.wake(queued, &tree.view()));
     assert!(matches!(
         admission.plan(&tree.view()),
-        Err(Error::Internal { .. })
+        Err(error) if error.code == ErrorCode::Internal
     ));
     assert!(admission.resuming.contains(&queued));
 }
@@ -277,7 +277,7 @@ fn a_pass_that_fails_on_an_internal_error_leaves_admission_as_it_found_it() {
     );
     assert!(matches!(
         admission.plan(&tree.view()),
-        Err(Error::Internal { .. })
+        Err(error) if error.code == ErrorCode::Internal
     ));
     assert!(admission.is_queued(task));
     assert!(!admission.holding.contains(&task));
@@ -303,7 +303,7 @@ fn a_pass_that_fails_after_admitting_a_resumption_leaves_its_slots_given_back() 
     );
     assert!(matches!(
         admission.plan(&tree.view()),
-        Err(Error::Internal { .. })
+        Err(error) if error.code == ErrorCode::Internal
     ));
     assert_eq!(admission.gave_back.get(&call), Some(&task));
     assert!(admission.resuming.contains(&call));

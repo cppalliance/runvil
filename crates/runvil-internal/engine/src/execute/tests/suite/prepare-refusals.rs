@@ -8,9 +8,9 @@ use runvil_types::event::Event;
 use runvil_types::models::ThinkingMode;
 
 use super::{current_model, refusal, under_model};
-use crate::Error;
 use crate::RunErrorKind;
 use crate::execute::RunOutcome;
+use crate::execute::run_error_kind;
 use crate::test_support::scenario::Scenario;
 use crate::test_support::scripted_chat::{ScriptedChat, text};
 
@@ -150,11 +150,12 @@ fn an_unsupported_version_is_reported_before_an_unmet_requirement() {
     let model = current_model(32_000, ThinkingMode::Switchable);
     let trace = under_model(&source, "version-first", model).run();
     let error = trace.error();
-    assert!(
-        matches!(error, Error::UnsupportedVersion(7)),
-        "the version gate refuses the run first: {error}"
+    assert_eq!(
+        error,
+        &crate::error::unsupported_version(7),
+        "the version gate refuses the run first"
     );
-    assert_eq!(error.kind(), RunErrorKind::Parse, "{error}");
+    assert_eq!(run_error_kind(error.code), RunErrorKind::Parse, "{error}");
     assert!(
         trace.run_events().is_empty(),
         "nothing ran, nothing reported"

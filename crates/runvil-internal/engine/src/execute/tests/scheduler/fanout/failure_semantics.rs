@@ -89,17 +89,12 @@ fn fanout_depth_cap_reads_the_chain_field() {
     let trace = scheduler_scenario(md).run();
 
     let error = trace.error();
-    assert!(
-        matches!(
-            error,
-            Error::CallDepthExceeded {
-                cap: 8,
-                via: DepthVia::Fanout
-            }
-        ),
-        "expected the typed depth-cap error named after fanout, got {error:?}"
+    assert_eq!(
+        error,
+        &crate::error::call_depth_exceeded(8, DepthVia::Fanout),
+        "expected the typed depth-cap error named after fanout"
     );
-    assert_eq!(error.kind(), RunErrorKind::Quota, "{error}");
+    assert_eq!(run_error_kind(error.code), RunErrorKind::Quota, "{error}");
     assert_eq!(
         error.to_string(),
         "tasks.fanout recursion exceeded cap of 8",
@@ -218,21 +213,23 @@ fn two_arms_writing_one_path_terminate_the_run_with_a_determinism_violation() {
         ```\n";
     let trace = scheduler_scenario(md).run();
 
-    match trace.error() {
-        Error::Determinism(detail) => {
-            assert!(detail.contains("shared.txt"), "error was: {detail}");
-            assert!(
-                detail.contains("conflicts with"),
-                "the conflict is named: {detail}"
-            );
-            assert_eq!(
-                detail.matches("ExecId(").count(),
-                2,
-                "both arms' identities are named: {detail}"
-            );
-        }
-        other => panic!("expected the fatal determinism violation, got {other:?}"),
-    }
+    let error = trace.error();
+    assert_eq!(
+        error.code,
+        ErrorCode::Determinism,
+        "expected the fatal determinism violation, got {error:?}"
+    );
+    let detail = &error.message;
+    assert!(detail.contains("shared.txt"), "error was: {detail}");
+    assert!(
+        detail.contains("conflicts with"),
+        "the conflict is named: {detail}"
+    );
+    assert_eq!(
+        detail.matches("ExecId(").count(),
+        2,
+        "both arms' identities are named: {detail}"
+    );
     let recorder = recorded(&trace);
     assert_eq!(
         terminal_count(&trace, task_started),
@@ -275,15 +272,17 @@ fn two_live_arms_appending_one_path_terminate_with_a_determinism_violation() {
         ```\n";
     let trace = scheduler_scenario(md).run();
 
-    match trace.error() {
-        Error::Determinism(detail) => {
-            assert!(detail.contains("evidence.md"), "error was: {detail}");
-            assert_eq!(
-                detail.matches("ExecId(").count(),
-                2,
-                "both arms' identities are named: {detail}"
-            );
-        }
-        other => panic!("expected the fatal determinism violation, got {other:?}"),
-    }
+    let error = trace.error();
+    assert_eq!(
+        error.code,
+        ErrorCode::Determinism,
+        "expected the fatal determinism violation, got {error:?}"
+    );
+    let detail = &error.message;
+    assert!(detail.contains("evidence.md"), "error was: {detail}");
+    assert_eq!(
+        detail.matches("ExecId(").count(),
+        2,
+        "both arms' identities are named: {detail}"
+    );
 }

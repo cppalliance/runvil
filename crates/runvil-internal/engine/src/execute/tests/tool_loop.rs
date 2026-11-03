@@ -47,7 +47,7 @@ fn tool_loop_gives_up_after_exactly_the_configured_cap() {
         .chat(&gateway)
         .run();
     let error = trace.error();
-    assert!(matches!(error, Error::ToolLoopExhausted), "got {error:?}");
+    assert_eq!(error, &crate::error::tool_loop_exhausted());
     assert_eq!(
         gateway.call_count(),
         cap,
@@ -95,7 +95,7 @@ fn tool_loop_uses_the_default_cap_when_unspecified() {
         .chat(&gateway)
         .run();
     let error = trace.error();
-    assert!(matches!(error, Error::ToolLoopExhausted), "got {error:?}");
+    assert_eq!(error, &crate::error::tool_loop_exhausted());
     assert_eq!(gateway.call_count(), default_cap);
 }
 
@@ -224,7 +224,7 @@ fn repeated_calls_to_a_failing_tool_exit_at_the_iteration_cap() {
         .chat(&gateway)
         .run();
     let error = trace.error();
-    assert!(matches!(error, Error::ToolLoopExhausted), "got {error:?}");
+    assert_eq!(error, &crate::error::tool_loop_exhausted());
     assert_eq!(
         gateway.call_count(),
         cap,

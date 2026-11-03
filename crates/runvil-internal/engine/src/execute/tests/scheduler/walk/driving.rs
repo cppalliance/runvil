@@ -88,17 +88,12 @@ fn call_depth_cap_reads_the_chain_field() {
     let trace = scheduler_scenario(md).run();
 
     let error = trace.error();
-    assert!(
-        matches!(
-            error,
-            Error::CallDepthExceeded {
-                cap: 8,
-                via: DepthVia::Call
-            }
-        ),
-        "expected the typed call-depth error, got {error:?}"
+    assert_eq!(
+        error,
+        &crate::error::call_depth_exceeded(8, DepthVia::Call),
+        "expected the typed call-depth error"
     );
-    assert_eq!(error.kind(), RunErrorKind::Quota, "{error}");
+    assert_eq!(run_error_kind(error.code), RunErrorKind::Quota, "{error}");
     assert_eq!(error.to_string(), "call recursion exceeded cap of 8");
 }
 

@@ -14,10 +14,10 @@ use std::sync::Arc;
 
 use runvil_types::event::ReplyOrigin;
 
+use crate::Result;
 use crate::execute::run::{Effect, EffectId, Round};
 use crate::lua::Answer;
 use crate::prompt::Prompt;
-use crate::{Error, Result};
 
 use super::{Chain, ChainIndex, Continuation, EffectTable, Scheduler};
 
@@ -75,9 +75,9 @@ impl ChainOps<'_> {
     /// [`Scheduler::with_chain`] to perform.
     ///
     /// # Errors
-    /// Returns [`Error::Internal`] when the chain has no suspended block
+    /// Returns an `Internal` failure when the chain has no suspended block
     /// to take the answer, or one that already holds an answer.
-    pub(super) fn answer(&mut self, answer: Result<Answer<Error>>) -> Result<()> {
+    pub(super) fn answer(&mut self, answer: Result<Answer>) -> Result<()> {
         self.chain.deliver(answer)?;
         self.answered = true;
         Ok(())

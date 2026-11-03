@@ -251,13 +251,7 @@ fn a_jump_descent_does_not_consume_call_depth() {
 
     let error = rig.trace().error();
     assert!(
-        matches!(
-            error,
-            Error::CallDepthExceeded {
-                cap: 8,
-                via: DepthVia::Call
-            }
-        ),
+        error == &crate::error::call_depth_exceeded(8, DepthVia::Call),
         "the depth cap must fail the run, got {error:?}"
     );
     assert_eq!(

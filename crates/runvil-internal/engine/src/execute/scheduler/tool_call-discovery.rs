@@ -31,7 +31,7 @@ use serde_json::{Map, Value};
 
 use crate::execute::scope::PATTERN_LIMIT;
 use crate::lua::{Answer, DiscoveryTool, OfferMode, RenderedTools, ToolBinding, ToolCallOutcome};
-use crate::{Error, Result};
+use crate::{Result, error};
 
 use super::super::dispatch::Dispatched;
 use super::super::{CallSite, ChainOps};
@@ -72,7 +72,7 @@ impl ChainOps<'_> {
     /// call's id and `binding`, as a failed model call reports.
     ///
     /// # Errors
-    /// Returns [`Error::Internal`] when the chain's section holds no frozen
+    /// Returns an `Internal` failure when the chain's section holds no frozen
     /// sets, which a model call can only reach after the freeze, and the
     /// error of the counts install or of the target's preparer.
     pub(super) fn prepare_discovery_call(
@@ -87,7 +87,7 @@ impl ChainOps<'_> {
             .frame()?
             .vm()
             .rendered_tools()
-            .ok_or(Error::internal(
+            .ok_or(error::internal(
                 "a model call's section holds its frozen sets",
             ))?;
         let discovered = match tool {
@@ -114,7 +114,7 @@ impl ChainOps<'_> {
         };
         let counted = tool.unwrap_or(DiscoveryTool::Call).id();
         let counts = self.section_call_counts()?;
-        counts.increment(counted)?;
+        counts.increment(counted).map_err(error::into_universal)?;
         let turn = self.call_turn(&site);
         let chain = &*self.chain;
         let text = match trust {
@@ -153,7 +153,8 @@ impl ChainOps<'_> {
             .frame()?
             .vm()
             .adhoc_tools()
-            .binding(&target.id().to_string())?;
+            .binding(&target.id().to_string())
+            .map_err(error::into_universal)?;
         if let Some(adhoc) = adhoc {
             return self.prepare_adhoc_call(&adhoc, args, &site);
         }
@@ -167,7 +168,7 @@ impl ChainOps<'_> {
 /// Dynamic Set.
 ///
 /// # Errors
-/// Returns [`Error::Internal`] should a listing not serialize.
+/// Returns an `Internal` failure should a listing not serialize.
 fn search(frozen: &RenderedTools, args: &Value) -> Result<Discovered> {
     let tool = DiscoveryTool::Search.wire_name();
     let refused = |refusal| Ok(Discovered::Refused(refusal));
@@ -309,11 +310,11 @@ fn cut(description: &str) -> Cow<'_, str> {
 /// A listing's text: `listed` as compact JSON.
 ///
 /// # Errors
-/// Returns [`Error::Internal`] should `listed` not serialize.
+/// Returns an `Internal` failure should `listed` not serialize.
 fn listing(listed: &impl Serialize) -> Result<Discovered> {
     serde_json::to_string(listed)
         .map(Discovered::Listing)
-        .map_err(|_| Error::internal("a discovery listing serializes"))
+        .map_err(|_| error::internal("a discovery listing serializes"))
 }
 
 /// The JSON type of `value`, for a refusal.

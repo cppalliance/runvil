@@ -365,6 +365,7 @@ pub fn runvil::effect::ToolCallOrigin::with_entry(self, entry: impl core::conver
 pub fn runvil::effect::ToolCallOrigin::with_model(self, model: impl core::convert::Into<alloc::string::String>) -> runvil::effect::ToolCallOrigin
 pub fn runvil::error::Error::new(code: runvil::error::ErrorCode, message: impl core::convert::Into<alloc::string::String>, prose: impl core::convert::Into<alloc::string::String>) -> runvil::error::Error
 pub fn runvil::error::Error::with_cause(self, cause: &dyn core::error::Error + 'static) -> runvil::error::Error
+pub fn runvil::error::ErrorCode::from_tag(tag: &str) -> core::option::Option<runvil::error::ErrorCode>
 pub fn runvil::error::Location::line(file: impl core::convert::Into<alloc::string::String>, line: core::num::nonzero::NonZeroU32) -> runvil::error::Location
 pub fn runvil::error::Location::new(file: impl core::convert::Into<alloc::string::String>, start_line: core::num::nonzero::NonZeroU32, start_column: core::num::nonzero::NonZeroU32, end_line: core::num::nonzero::NonZeroU32, end_column: core::num::nonzero::NonZeroU32) -> core::option::Option<runvil::error::Location>
 pub fn runvil::event::Event::execution(&self) -> &str

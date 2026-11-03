@@ -15,7 +15,7 @@
 //! - `context` - the ambient run state: the run-wide `SharedState` and
 //!   each chain's `ChainState`.
 //! - `error` - the stable [`RunErrorKind`] of a failed outcome, and the
-//!   kind and message the Engine's own error ends a run with.
+//!   kind and message an Engine failure ends a run with.
 //! - `fill` - the fill function, which builds the model set from the
 //!   caller's role map when the run is built.
 //! - `infer` - the nested-inference round's answer.
@@ -57,6 +57,9 @@ mod walk_target;
 // Public API surface.
 pub use config::{RunConfig, RunLimits};
 pub use error::RunErrorKind;
+pub(crate) use error::outcome;
+#[cfg(test)]
+pub(crate) use error::run_error_kind;
 #[cfg(test)]
 pub(crate) use run::{AnswerRecord, ChatAnswerRecord, EffectRecord};
 pub use run::{
@@ -121,7 +124,9 @@ pub enum RunOutcome {
     },
     /// The caller cancelled the run or dropped an effect the run was waiting
     /// on and the cancelled error went uncaught, or a block raised a caught
-    /// `cancelled` error value again after another suspending call.
+    /// `cancelled` error value with no `task` again after another
+    /// suspending call. A raised value that names its `task` is that task's
+    /// cancellation, which fails the run as `Lua`.
     Cancelled,
 }
 

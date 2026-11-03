@@ -284,7 +284,7 @@ fn spawn_shares_calls_depth_cap() {
     let outcome = rig.trace().outcome();
     assert!(
         matches!(outcome, RunOutcome::Completed { .. })
-            || matches!(rig.trace().error(), Error::TasksLive { .. }),
+            || rig.trace().error().code == ErrorCode::TasksLive,
         "unexpected outcome: {outcome:?}"
     );
 

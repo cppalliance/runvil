@@ -1,9 +1,11 @@
 //! The classifier a Rust callback's failure runs through on its way to
 //! author code, and the `normalize_failure` capture built on it.
 
+use std::collections::BTreeMap;
+
 use mlua::{Function, Lua, Value};
 
-use super::{ErrorField, ErrorKind, ErrorValue, error_table};
+use super::{ErrorKind, Raised, raised_table};
 use crate::error::Error;
 
 /// A Rust callback's failure classified for the error table: the kind, the
@@ -19,38 +21,26 @@ use crate::error::Error;
 /// a bad argument, a value conversion, an external error of another type,
 /// an exhausted memory quota) is `lua`; anything else is mlua's own
 /// machinery failing, which the author cannot act on, so it is `internal`.
-struct Classified {
-    kind: ErrorKind,
-    message: String,
-    fields: Vec<(String, ErrorField)>,
-}
-
-impl Classified {
-    fn from_mlua(error: &mlua::Error) -> Classified {
-        if let Some(typed) = error.downcast_ref::<Error>() {
-            return Classified {
-                kind: typed.kind(),
-                message: typed.to_string(),
-                fields: typed.fields(),
-            };
-        }
-        let root = root_cause(error);
-        let kind = match root {
-            mlua::Error::RuntimeError(_)
-            | mlua::Error::SyntaxError { .. }
-            | mlua::Error::MemoryError(_)
-            | mlua::Error::BadArgument { .. }
-            | mlua::Error::FromLuaConversionError { .. }
-            | mlua::Error::SerializeError(_)
-            | mlua::Error::DeserializeError(_)
-            | mlua::Error::ExternalError(_) => ErrorKind::Lua,
-            _ => ErrorKind::Internal,
-        };
-        Classified {
-            kind,
-            message: root.to_string(),
-            fields: Vec::new(),
-        }
+fn classified(error: &mlua::Error) -> Raised {
+    if let Some(typed) = error.downcast_ref::<Error>() {
+        return typed.to_raised();
+    }
+    let root = root_cause(error);
+    let kind = match root {
+        mlua::Error::RuntimeError(_)
+        | mlua::Error::SyntaxError { .. }
+        | mlua::Error::MemoryError(_)
+        | mlua::Error::BadArgument { .. }
+        | mlua::Error::FromLuaConversionError { .. }
+        | mlua::Error::SerializeError(_)
+        | mlua::Error::DeserializeError(_)
+        | mlua::Error::ExternalError(_) => ErrorKind::Lua,
+        _ => ErrorKind::Internal,
+    };
+    Raised {
+        kind,
+        message: root.to_string(),
+        fields: BTreeMap::new(),
     }
 }
 
@@ -62,22 +52,6 @@ fn root_cause(error: &mlua::Error) -> &mlua::Error {
             root_cause(cause)
         }
         other => other,
-    }
-}
-
-impl std::fmt::Display for Classified {
-    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        formatter.write_str(&self.message)
-    }
-}
-
-impl ErrorValue for Classified {
-    fn kind(&self) -> ErrorKind {
-        self.kind
-    }
-
-    fn fields(&self) -> Vec<(String, ErrorField)> {
-        self.fields.clone()
     }
 }
 
@@ -98,10 +72,7 @@ pub(crate) fn install_normalize_failure(lua: &Lua) -> mlua::Result<Function> {
 /// unchanged, for the capture and the loop's compactor rule alike.
 pub(crate) fn normalized(lua: &Lua, value: Value) -> mlua::Result<Value> {
     match value {
-        Value::Error(error) => Ok(Value::Table(error_table(
-            lua,
-            &Classified::from_mlua(&error),
-        )?)),
+        Value::Error(error) => Ok(Value::Table(raised_table(lua, &classified(&error))?)),
         other => Ok(other),
     }
 }

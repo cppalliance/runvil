@@ -25,7 +25,7 @@ use runvil_vfs::Access;
 
 use crate::lua::{Library, LibraryKey, ProseState, SectionText, SectionVm, Uninjected};
 use crate::model::ModelBinding;
-use crate::{Error, Result};
+use crate::{Error, Result, error};
 
 /// What a section VM is seeded with beyond the shared Engine values.
 ///
@@ -146,7 +146,9 @@ where
             setup.argv,
             setup.selection,
         )
-        .map_err(|failure| Error::from(failure.teardown(setup.emitter, setup.section_name)))?;
+        .map_err(|failure| {
+            error::into_universal(failure.teardown(setup.emitter, setup.section_name))
+        })?;
     match install_after_injection(&mut vm, setup, read, resolve, render) {
         Ok(()) => Ok(vm),
         Err(error) => {
@@ -172,15 +174,19 @@ where
         + 'static,
     P: Fn(&str, ProseState<'_>) -> mlua::Result<String> + Send + Sync + 'static,
 {
-    vm.install_engine_globals(setup.emitter, setup.section_name)?;
+    vm.install_engine_globals(setup.emitter, setup.section_name)
+        .map_err(error::into_universal)?;
     if let Some(snapshot) = setup.ui {
-        crate::lua::install_ui(vm.lua(), Arc::clone(snapshot))?;
+        crate::lua::install_ui(vm.lua(), Arc::clone(snapshot)).map_err(error::into_universal)?;
     }
     if let Some(item) = setup.seed.item {
-        vm.set_global_json("item", item)?;
+        vm.set_global_json("item", item)
+            .map_err(error::into_universal)?;
     }
-    vm.install_scheduler_control_globals(read)?;
-    vm.install_coro_shims(setup.max_tool_iterations)?;
+    vm.install_scheduler_control_globals(read)
+        .map_err(error::into_universal)?;
+    vm.install_coro_shims(setup.max_tool_iterations)
+        .map_err(error::into_universal)?;
     // The preludes read `tools` and `store` from `_G` as they install, so
     // they follow the yield shims.
     let installed = crate::lua::install_preludes(vm.lua(), setup.preludes);
@@ -189,15 +195,17 @@ where
     // returns - caught by `pcall` or not - so the conflict wins over the
     // install's own outcome.
     if let Some(detail) = vm.take_store_conflict() {
-        return Err(Error::Determinism(detail));
+        return Err(error::determinism(&detail));
     }
-    installed?;
+    installed.map_err(error::into_universal)?;
     // `require` follows the preludes, so a prelude that calls it while it
     // installs finds none.
-    vm.install_require(resolve, render, setup.emitter, setup.section_name)?;
+    vm.install_require(resolve, render, setup.emitter, setup.section_name)
+        .map_err(error::into_universal)?;
     #[cfg(test)]
     if setup.raw_shims {
-        runvil_lua::test_support::install_model_tool_call_shim(vm.lua())?;
+        runvil_lua::test_support::install_model_tool_call_shim(vm.lua())
+            .map_err(error::into_universal)?;
     }
     // The store yield shims install after the preludes: a prelude runs as a
     // main chunk, not a coroutine, so its store calls while it installs
@@ -206,5 +214,5 @@ where
     // a prelude's top-level `store.write` yield from outside a coroutine.
     // The install also switches any store function a prelude captured, so
     // none of them runs directly after this point.
-    crate::lua::install_store_shims(vm.lua()).map_err(Error::from)
+    crate::lua::install_store_shims(vm.lua()).map_err(error::into_universal)
 }

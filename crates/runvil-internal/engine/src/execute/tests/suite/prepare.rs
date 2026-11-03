@@ -10,6 +10,7 @@ use std::sync::{Arc, Mutex};
 
 use crate::RunErrorKind;
 use crate::execute::context::ChainState;
+use crate::execute::run_error_kind;
 use crate::execute::tests::context::test_config;
 use crate::execute::{Effect, EffectAnswer, RunConfig};
 use crate::model::ModelBinding;
@@ -111,7 +112,11 @@ fn state_of(prompt: &Prompt, config: RunConfig) -> ChainState {
 fn refusal(scenario: Scenario) -> String {
     let trace = scenario.run();
     let error = trace.error();
-    assert_eq!(error.kind(), RunErrorKind::RequirementsUnmet, "{error}");
+    assert_eq!(
+        run_error_kind(error.code),
+        RunErrorKind::RequirementsUnmet,
+        "{error}"
+    );
     assert!(
         trace.run_events().is_empty(),
         "a refused run reports no run events: {:?}",
@@ -282,7 +287,11 @@ fn an_empty_map_leaves_the_model_set_empty_and_a_model_call_raises_model_require
     let asking = declaring("", "return models.infer('ping')");
     let trace = Scenario::new(asking).run();
     let error = trace.error();
-    assert_eq!(error.kind(), RunErrorKind::RequirementsUnmet, "{error}");
+    assert_eq!(
+        run_error_kind(error.code),
+        RunErrorKind::RequirementsUnmet,
+        "{error}"
+    );
     assert!(
         error.to_string().contains("model binding required"),
         "{error}"

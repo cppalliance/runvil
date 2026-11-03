@@ -15,7 +15,6 @@ use serde_json::{Value, json};
 use self::fixtures::untrusted_echo_tool;
 use super::turn::advance_turn;
 use super::*;
-use crate::Error;
 use crate::lua::{SectionVm, current_static_set};
 use crate::model::{ModelInfo, ModelSet};
 use crate::prompt::Prompt;

@@ -462,9 +462,14 @@ fn a_scripts_call_of_a_discovery_tools_id_fails_as_an_unknown_id() {
         Vec::new(),
         &[],
     );
-    match rig.trace().error() {
-        Error::UnboundToolCall { name, .. } => assert_eq!(name, "dynamic/call"),
-        other => panic!("expected the unbound-tool error, got {other:?}"),
-    }
+    let error = rig.trace().error();
+    assert_eq!(
+        (
+            error.code,
+            error.facts.get(&runvil_types::error::FactKey::Name)
+        ),
+        (ErrorCode::UnboundTool, Some(&Value::from("dynamic/call"))),
+        "expected the unbound-tool error, got {error:?}"
+    );
     assert!(issued_calls(&rig).is_empty(), "nothing was issued");
 }

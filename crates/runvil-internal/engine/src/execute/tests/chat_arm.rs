@@ -221,19 +221,11 @@ fn an_out_of_scope_tool_name_fails_the_round_with_out_of_scope_tool() {
         .offer("echo", echo_tool())
         .chat(&gateway)
         .run();
-    match trace.error() {
-        Error::OutOfScopeToolCall {
-            name,
-            global_exists,
-            static_aliases,
-            ..
-        } => {
-            assert_eq!(name, "rogue");
-            assert!(!global_exists, "rogue is bound nowhere");
-            assert_eq!(static_aliases, &["echo".to_owned()]);
-        }
-        other => panic!("expected OutOfScopeToolCall, got {other:?}"),
-    }
+    // Rogue is bound nowhere, and the section offers only echo.
+    assert_eq!(
+        trace.error(),
+        &crate::error::out_of_scope_tool("rogue", false, &["echo".to_owned()], false)
+    );
 }
 
 #[test]

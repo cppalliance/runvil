@@ -5,13 +5,14 @@
 //! closing observation boundary.
 
 use runvil_types::emitter::Emitter;
+use runvil_types::error::ErrorCode;
 use runvil_types::event::lifecycle;
 
 use crate::execute::requirements::NOTICE_HEADER;
 use crate::heading_address::{SectionIndex, SectionPos};
 use crate::lua::{Answer, CoroStep, LuaBlockResult, Request, YieldParse};
 use crate::prompt::{Block, BodyText};
-use crate::{Error, Result};
+use crate::{Result, error};
 
 use super::chain::ChainStep;
 use super::chain_record::{Entered, Running};
@@ -25,7 +26,7 @@ enum Settled {
     /// The block suspended on a request for its arm to dispatch.
     Dispatch(Request),
     /// The block suspended on a call answered on the spot.
-    Answer(Result<Answer<Error>>),
+    Answer(Result<Answer>),
     /// The block jumped to the heading.
     Jump(String),
     /// The block returned a scalar.
@@ -56,26 +57,26 @@ fn settle_block(
             // error remaps: the machinery around it (section setup,
             // the final `var` read-back, jump-target resolution)
             // keeps its own kind - a prompt bug under
-            // `Error::Lua`, not an unsatisfiable environment. Fatal
+            // `LuaRuntime`, not an unsatisfiable environment. Fatal
             // run conditions (cancellation, the claims violation)
             // keep their own classification either way.
-            return Err(match error {
-                error @ Error::Lua { .. } if is_h1 => Error::RequirementsUnmet {
-                    notice: format!("{NOTICE_HEADER}\n- the H1 gate failed"),
-                    cause: Some(Box::new(error)),
-                },
-                other => other,
-            });
+            if is_h1 && error.code == ErrorCode::LuaRuntime {
+                let notice = format!("{NOTICE_HEADER}\n- the H1 gate failed");
+                return Err(error::requirements_unmet(&notice, Some(&error)));
+            }
+            return Err(error);
         }
     };
     match step {
         CoroStep::Yielded(coroutine, values) => {
             let settled = match entered.frame.vm().request_from_yield(&values) {
                 YieldParse::Request(request) => Settled::Dispatch(request),
-                YieldParse::Refused(error) => Settled::Answer(Err(Error::from(error))),
-                YieldParse::Malformed(error) => {
+                YieldParse::Refused(refusal) => {
+                    Settled::Answer(Err(error::into_universal(refusal)))
+                }
+                YieldParse::Malformed(malformed) => {
                     emitter.report(name, lifecycle::LUA_CHUNK_FAILED);
-                    return Err(Error::from(error));
+                    return Err(error::into_universal(malformed));
                 }
             };
             entered.running = Some(Running {
@@ -137,14 +138,14 @@ impl Scheduler {
                 answer: Some(answer),
             } = running
             else {
-                return Err(Error::internal(
+                return Err(error::internal(
                     "a ready chain's suspended coroutine waits on its answer",
                 ));
             };
             // The answer ends whatever the chain was parked on.
             chain.parked = None;
             let Some(Block::Lua(program)) = entered.block_in(blocks) else {
-                return Err(Error::internal("a suspended coroutine's block is Lua"));
+                return Err(error::internal("a suspended coroutine's block is Lua"));
             };
             entered
                 .frame
@@ -166,7 +167,7 @@ impl Scheduler {
                         .frame
                         .vm()
                         .start_block_coro(program)
-                        .map_err(Error::from)
+                        .map_err(error::into_universal)
                 }
                 Some(Block::Prose { text, .. }) => {
                     // The parser emits one prose block per inter-fence gap,
@@ -182,7 +183,7 @@ impl Scheduler {
                 // `Block` is `#[non_exhaustive]` across the crate seam; an
                 // unlisted variant has no advance rule.
                 Some(_) => {
-                    return Err(Error::internal("an unrecognized block kind cannot advance"));
+                    return Err(error::internal("an unrecognized block kind cannot advance"));
                 }
                 // The section's blocks are exhausted: fall through.
                 None if is_h1 => {

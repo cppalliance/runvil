@@ -5,10 +5,12 @@
 //! tool, are in the `render` child.
 
 use runvil_lua::ToolOutputKind;
+use runvil_types::error::{ErrorCode, FactKey};
 use runvil_types::tools::ToolId;
 use serde_json::json;
 
 use super::*;
+use crate::Error;
 
 #[path = "scope-tests-render.rs"]
 mod render;
@@ -285,33 +287,32 @@ fn the_search_tools_description_lists_at_most_one_hundred_names_then_counts_the_
 #[test]
 fn rule_five_fails_a_wire_name_used_twice_within_one_set_or_across_the_sets() {
     let tools = catalog([info("dup/a.b"), info("dup/a/b"), info("web/search")]);
-    let clash = |error: Error| match error {
-        Error::ToolSets {
-            evidence:
-                SetEvidence::Tools {
-                    rule: SetRule::UniqueWireName(wire_name),
-                    tools,
-                },
-        } => (
-            wire_name,
-            tools
-                .iter()
-                .map(|tool| (tool.id.to_string(), tool.set))
-                .collect::<Vec<_>>(),
-        ),
-        other => panic!("expected a wire-name clash, got {other:?}"),
+    // The failure a clash of `wire_name` between the two tools fails with.
+    let clash = |wire_name: &str, tools: [(&str, OfferMode); 2]| {
+        let [first, second] = tools.map(|(id, set)| SetTool {
+            id: ToolId::parse(id).expect("a fixture tool id"),
+            set,
+        });
+        error::tool_sets(&SetEvidence::Tools {
+            rule: SetRule::UniqueWireName(wire_name.to_owned()),
+            tools: NonEmpty::new(first, vec![second]),
+        })
     };
     let within = merged(&[listed("dup/a/b"), listed("dup/a.b")], &[], &tools)
         .expect_err("two tools of one set clash");
     assert_eq!(
-        clash(within),
-        (
-            "dup_a_b".to_owned(),
-            vec![
-                ("dup/a/b".to_owned(), OfferMode::Static),
-                ("dup/a.b".to_owned(), OfferMode::Static),
+        within,
+        clash(
+            "dup_a_b",
+            [
+                ("dup/a/b", OfferMode::Static),
+                ("dup/a.b", OfferMode::Static)
             ]
         )
+    );
+    assert_eq!(
+        within.facts.get(&FactKey::Rule),
+        Some(&Value::from("unique_wire_name"))
     );
     let across = merged(&[adhoc("web_search")], &[listed("web/search")], &tools)
         .expect_err("a static adhoc tool and a dynamic Pack tool of its name clash");
@@ -323,12 +324,12 @@ fn rule_five_fails_a_wire_name_used_twice_within_one_set_or_across_the_sets() {
         "the message names each tool's set"
     );
     assert_eq!(
-        clash(across),
-        (
-            "web_search".to_owned(),
-            vec![
-                ("adhoc/web_search".to_owned(), OfferMode::Static),
-                ("web/search".to_owned(), OfferMode::Dynamic),
+        across,
+        clash(
+            "web_search",
+            [
+                ("adhoc/web_search", OfferMode::Static),
+                ("web/search", OfferMode::Dynamic),
             ]
         )
     );
@@ -339,12 +340,12 @@ fn rule_five_fails_a_wire_name_used_twice_within_one_set_or_across_the_sets() {
     let discovery = merged(&offers, &[listed("web/search")], &tools)
         .expect_err("a Pack tool takes the search tool's wire name");
     assert_eq!(
-        clash(discovery),
-        (
-            "GetDynamicTools".to_owned(),
-            vec![
-                ("web/discover".to_owned(), OfferMode::Static),
-                ("dynamic/search".to_owned(), OfferMode::Static),
+        discovery,
+        clash(
+            "GetDynamicTools",
+            [
+                ("web/discover", OfferMode::Static),
+                ("dynamic/search", OfferMode::Static),
             ]
         )
     );
@@ -365,8 +366,9 @@ fn rule_six_fails_a_bad_wire_name_or_a_non_object_schema_alike_in_either_set() {
         {
             let error = merged(&static_tools, &dynamic_tools, &tools)
                 .expect_err("no round could advertise the tool");
-            assert!(
-                matches!(&error, Error::BindSchema { alias: refused, .. } if refused == alias),
+            assert_eq!(
+                (error.code, error.facts.get(&FactKey::Name)),
+                (ErrorCode::ToolSchemaInvalid, Some(&Value::from(alias))),
                 "{alias}: {error:?}"
             );
         }

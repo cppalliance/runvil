@@ -11,7 +11,6 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use mlua::{HookTriggers, MultiValue, Value, VmState};
 use serde_json::json;
 
-use runvil_lua::Error;
 use runvil_types::metrics::ToolCallEvent;
 
 use crate::lua::{Answer, ChatOutcome, ChatResult, Request};
@@ -38,7 +37,7 @@ const ROUND_INSTRUCTION_FLOOR: u64 = 2;
 const MEASURED_ROUNDS: i64 = 3;
 
 /// A completed round that requested one `tools_echo` call.
-fn tool_call_round() -> Answer<Error> {
+fn tool_call_round() -> Answer {
     Answer::Chat(Box::new(ChatResult {
         outcome: ChatOutcome::ToolCalls(vec![ToolCallEvent::new(
             "call_1",
@@ -51,7 +50,7 @@ fn tool_call_round() -> Answer<Error> {
 }
 
 /// A completed round that produced the terminal reply.
-fn reply_round(text: &str) -> Answer<Error> {
+fn reply_round(text: &str) -> Answer {
     Answer::Chat(Box::new(ChatResult {
         outcome: ChatOutcome::Reply(text.to_owned()),
         finish_reason: Some("stop".to_owned()),

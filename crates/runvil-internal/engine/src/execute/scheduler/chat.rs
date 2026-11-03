@@ -40,7 +40,7 @@ use crate::lua::{
     output_reserve, precheck, project_messages, wire_name_of,
 };
 use crate::model::{Completion, CompletionResult, ModelBinding, ToolCall, detail};
-use crate::{Error, Result};
+use crate::{Error, Result, error};
 
 use super::dispatch::Dispatched;
 use super::{ChainOps, Continuation};
@@ -98,7 +98,7 @@ impl ChainOps<'_> {
     ) -> Result<Dispatched> {
         let messages = list.to_records();
         if messages.is_empty() {
-            return Err(Error::lua_message("messages must not be empty"));
+            return Err(error::lua_runtime("messages must not be empty"));
         }
         let chain = &*self.chain;
         let section = chain.section_name().to_owned();
@@ -107,10 +107,8 @@ impl ChainOps<'_> {
         let binding = if let Some(binding) = binding {
             binding
         } else {
-            let current = vm.current_model()?;
-            current.ok_or_else(|| Error::ModelRequired {
-                section: section.clone(),
-            })?
+            let current = vm.current_model().map_err(error::into_universal)?;
+            current.ok_or_else(|| error::model_required(&section))?
         };
         let handles = frame.reporting_handles().clone();
         let emitter = handles.emitter;
@@ -149,9 +147,9 @@ impl ChainOps<'_> {
         // error resumes into Lua, the loop's precedent.
         let conversation = match project_messages(&messages) {
             Ok(conversation) => conversation,
-            Err(error) => {
+            Err(failure) => {
                 emitter.report(&section, lifecycle::MODEL_TURN_FAILED);
-                return Err(Error::from(error));
+                return Err(error::into_universal(failure));
             }
         };
         let context = binding.context();
@@ -209,7 +207,7 @@ impl ChainOps<'_> {
     /// round named. Returns that list.
     ///
     /// # Errors
-    /// Returns the merge's error, or [`Error::Internal`] when the parked
+    /// Returns the merge's error, or an `Internal` failure when the parked
     /// chain has lost its frame.
     fn merge_render(&self, rendered: Vec<PackToolSets<ToolInfo>>) -> Result<MessageList> {
         let chain = &*self.chain;
@@ -245,13 +243,13 @@ impl ChainOps<'_> {
     /// outcome; any other round only releases the messages it sent.
     ///
     /// # Errors
-    /// Returns [`Error::Internal`] when the parked chain has lost its frame
-    /// or its section's frozen sets.
+    /// Returns an `Internal` failure when the parked chain has lost its
+    /// frame or its section's frozen sets.
     pub(super) fn accept_chat(
         &mut self,
         round: RoundId,
         result: Result<Box<Completion>>,
-    ) -> Result<Result<Answer<Error>>> {
+    ) -> Result<Result<Answer>> {
         let chain = &*self.chain;
         let round = ArrivedRound {
             id: round,
@@ -277,9 +275,9 @@ impl ChainOps<'_> {
                 // absence is a scheduler fault, never an author-visible
                 // out-of-scope refusal.
                 let vm = chain.frame()?.vm();
-                let frozen = vm.rendered_tools().ok_or(Error::internal(
-                    "a parked chat round's section holds its frozen sets",
-                ))?;
+                let frozen = vm.rendered_tools().ok_or_else(|| {
+                    error::internal("a parked chat round's section holds its frozen sets")
+                })?;
                 let scope = Scope {
                     frozen: &frozen,
                     tool_set: chain.ctx.tool_set(),
@@ -289,7 +287,7 @@ impl ChainOps<'_> {
             // `CompletionResult` is `#[non_exhaustive]` across the crate
             // boundary: an outcome this build does not recognize can be
             // neither resumed nor promoted to an answer.
-            _ => Err(Error::internal("unrecognized completion outcome")),
+            _ => Err(error::internal("unrecognized completion outcome")),
         };
         let usage = served
             .metrics
@@ -340,7 +338,7 @@ impl ArrivedRound {
     /// other failure is a failed turn and the call's error.
     fn failed(&self, error: Error) -> std::result::Result<Box<ChatResult>, Error> {
         match error {
-            Error::Completion(error) if error.code == ErrorCode::ContextOverflow => {
+            error if error.code == ErrorCode::ContextOverflow => {
                 self.reporting
                     .emitter
                     .report(&self.section, lifecycle::MODEL_TURN_FAILED);
@@ -349,7 +347,7 @@ impl ArrivedRound {
                     self.reporting.turns.load(Ordering::Relaxed),
                 )))
             }
-            Error::Completion(error) if error.code == ErrorCode::EmptyReply => {
+            error if error.code == ErrorCode::EmptyReply => {
                 let turn = advance_turn(&self.reporting.turns);
                 self.reporting
                     .emitter
@@ -439,17 +437,18 @@ impl ArrivedRound {
             self.reporting
                 .emitter
                 .report(&self.section, lifecycle::TOOL_CALL_FAILED);
-            return Err(Error::OutOfScopeToolCall {
-                name: rogue.name().to_owned(),
-                global_exists: scope.global_exists(rogue.name()),
-                has_dynamic_set: !scope.frozen.dynamic_set.is_empty(),
-                static_aliases: scope
-                    .frozen
-                    .static_set
-                    .iter()
-                    .map(|binding| binding.alias().to_owned())
-                    .collect(),
-            });
+            let static_aliases: Vec<String> = scope
+                .frozen
+                .static_set
+                .iter()
+                .map(|binding| binding.alias().to_owned())
+                .collect();
+            return Err(error::out_of_scope_tool(
+                rogue.name(),
+                scope.global_exists(rogue.name()),
+                &static_aliases,
+                !scope.frozen.dynamic_set.is_empty(),
+            ));
         }
         Ok(ChatResult {
             outcome: ChatOutcome::ToolCalls(events),

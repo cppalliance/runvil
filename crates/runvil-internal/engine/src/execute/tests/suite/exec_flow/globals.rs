@@ -4,6 +4,7 @@
 
 use super::*;
 use crate::RunErrorKind;
+use crate::execute::run_error_kind;
 
 /// The `tasks` global is the task namespace (`tasks.spawn` and the
 /// waits), not a control-flow table: indexing it by a heading string reads
@@ -149,7 +150,7 @@ fn var_write_of_a_function_fails_the_run() {
     let trace = Scenario::new(one_section("var.f = function() end")).run();
     let error = trace.error();
     assert_eq!(
-        error.kind(),
+        run_error_kind(error.code),
         RunErrorKind::Lua,
         "the guard raises in Lua: {error}"
     );
@@ -202,7 +203,7 @@ fn missing_bare_global_in_prose_errors() {
     let trace = Scenario::new(source.build()).run();
     let error = trace.error();
     assert_eq!(
-        error.kind(),
+        run_error_kind(error.code),
         RunErrorKind::Lua,
         "the Lua read of `prose` raises the substitution failure: {error}"
     );
@@ -234,7 +235,7 @@ fn bare_global_holding_json_null_in_prose_is_the_null_value_failure() {
     let trace = Scenario::new(source.build()).run();
     let error = trace.error();
     assert_eq!(
-        error.kind(),
+        run_error_kind(error.code),
         RunErrorKind::Lua,
         "the Lua read of `prose` raises the substitution failure: {error}"
     );

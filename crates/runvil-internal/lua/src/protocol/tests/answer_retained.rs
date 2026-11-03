@@ -7,15 +7,13 @@ use crate::tests::recording::null_emitter;
 use crate::{CoroStep, LuaProgram};
 
 /// The typed error every case answers the block's `models.infer` with.
-fn quota() -> Error {
-    Error::LuaQuota {
-        resource: crate::QuotaResource::LogEvent,
-    }
+fn quota() -> runvil_types::error::Error {
+    crate::lua_quota(crate::QuotaResource::LogEvent)
 }
 
 /// Runs `source` on a shim VM to its `models.infer` yield, answers the
 /// yield with [`quota`], and returns how the block ended.
-fn answered(source: &str) -> std::result::Result<CoroStep, Error> {
+fn answered(source: &str) -> std::result::Result<CoroStep, runvil_types::error::Error> {
     let vm = TestVm::new().shims().build();
     let program = LuaProgram::compile(
         source,
@@ -30,7 +28,7 @@ fn answered(source: &str) -> std::result::Result<CoroStep, Error> {
     else {
         panic!("the infer shim must suspend the block");
     };
-    let ended = vm.resume_block_coro_answer::<Error>(&program, &thread, Err(quota()));
+    let ended = vm.resume_block_coro_answer(&program, &thread, Err(quota()));
     drop(thread);
     vm.teardown();
     ended
@@ -43,9 +41,7 @@ fn a_block_raising_the_answered_error_table_surfaces_the_typed_error() {
         "local ok, err = pcall(models.infer, 'hi')\nerror(err, 0)",
     ] {
         match answered(source) {
-            Err(Error::LuaQuota {
-                resource: crate::QuotaResource::LogEvent,
-            }) => {}
+            Err(error) if error == quota() => {}
             other => panic!("block {source:?} must surface the typed quota error, got {other:?}"),
         }
     }
@@ -56,9 +52,10 @@ fn a_block_raising_the_answered_errors_text_as_its_own_keeps_its_own_error() {
     // The raise carries the same text as the answered error, but it is the
     // block's own string, not the answer's table.
     match answered("local ok, err = pcall(models.infer, 'hi')\nerror(tostring(err), 0)") {
-        Err(Error::LuaRuntime { message, .. }) => assert!(
-            message.contains("lua log event quota exceeded"),
-            "the block's own raise keeps its message: {message}"
+        Err(error) if error.code == runvil_types::error::ErrorCode::LuaRuntime => assert!(
+            error.message.contains("lua log event quota exceeded"),
+            "the block's own raise keeps its message: {}",
+            error.message
         ),
         other => panic!("the block's own raise must stay its own error, got {other:?}"),
     }

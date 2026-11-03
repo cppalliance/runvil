@@ -5,28 +5,19 @@
 
 use super::*;
 
-/// A failed merge's rule and the tools it names, as a vector so a case can
-/// write the expected list inline.
-#[track_caller]
-fn broken(error: Error) -> (SetRule, Vec<SetTool>) {
-    match error {
-        Error::ToolSets {
-            evidence: SetEvidence::Tools { rule, tools },
-        } => (rule, tools.into_vec()),
-        other => panic!("expected a broken merge rule naming tools, got {other:?}"),
-    }
+/// The failure of a merge that broke `rule` through `tool`, the one
+/// rendered tool a render rule refuses.
+fn broken(rule: SetRule, tool: SetTool) -> Error {
+    error::tool_sets(&SetEvidence::Tools {
+        rule,
+        tools: NonEmpty::new(tool, Vec::new()),
+    })
 }
 
-/// The Packs a failed render rule was asked about, and the Packs it was
-/// answered with.
-#[track_caller]
-fn render_evidence(error: Error) -> (Vec<PackId>, Vec<PackId>) {
-    match error {
-        Error::ToolSets {
-            evidence: SetEvidence::RenderedPacks { asked, answered },
-        } => (asked, answered),
-        other => panic!("expected a broken render rule naming Packs, got {other:?}"),
-    }
+/// The failure of a render answered with the Packs `answered` where the
+/// section offered the Packs `asked`.
+fn render_evidence(asked: Vec<PackId>, answered: Vec<PackId>) -> Error {
+    error::tool_sets(&SetEvidence::RenderedPacks { asked, answered })
 }
 
 /// The tool `id` in `set`, as a failed merge names it.
@@ -74,8 +65,8 @@ fn rule_one_refuses_an_answer_whose_packs_are_not_the_ones_asked_in_offer_order(
         let answered_packs = answered.iter().map(|sets| sets.pack.clone()).collect();
         let error = merge_tool_sets(&offers, answered, &tools).expect_err(case);
         assert_eq!(
-            render_evidence(error),
-            (vec![pack("gh"), pack("web")], answered_packs),
+            error,
+            render_evidence(vec![pack("gh"), pack("web")], answered_packs),
             "{case}"
         );
     }
@@ -138,7 +129,7 @@ fn rule_one_refuses_a_rendered_tool_outside_what_its_pack_was_asked() {
         let mut answered = asked.clone();
         set_mut(&mut answered[index], set).push(info(id));
         let error = merge_tool_sets(&offers, answered, &tools).expect_err(case);
-        assert_eq!(broken(error), (rule, vec![site(id, set)]), "{case}");
+        assert_eq!(error, broken(rule, site(id, set)), "{case}");
     }
 }
 

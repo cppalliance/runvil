@@ -3,12 +3,13 @@
 //! from library code.
 
 use runvil_lua::VfsOp;
+use runvil_types::error::ErrorCode;
 
 use super::*;
 
-use crate::Error;
 use crate::RunErrorKind;
 use crate::execute::EffectRecord;
+use crate::execute::run_error_kind;
 
 /// A store failure the author caught with `pcall` is an error table of
 /// kind `store`: its `reason`, `path`, and `anchor` fields and its
@@ -59,7 +60,7 @@ fn an_uncaught_store_failure_ends_the_run_as_a_store_error() {
     let trace = Scenario::new(one_section("return store.read('missing.txt')")).run();
     let error = trace.error();
     assert_eq!(
-        error.kind(),
+        run_error_kind(error.code),
         RunErrorKind::Vfs,
         "the run fails as a store error: {error:?}"
     );
@@ -82,7 +83,7 @@ fn an_uncaught_store_failure_in_h1_ends_the_run_as_a_store_error() {
     let trace = Scenario::new(source.build()).run();
     let error = trace.error();
     assert_eq!(
-        error.kind(),
+        run_error_kind(error.code),
         RunErrorKind::Vfs,
         "the H1 failure is a store error: {error:?}"
     );
@@ -110,7 +111,7 @@ fn a_caught_store_error_raised_again_after_a_suspending_call_keeps_store() {
     let trace = Scenario::new(source).run();
     let error = trace.error();
     assert_eq!(
-        error.kind(),
+        run_error_kind(error.code),
         RunErrorKind::Vfs,
         "the re-raised error keeps its store classification: {error:?}"
     );
@@ -184,10 +185,10 @@ fn a_library_write_across_two_arms_ends_the_run_with_determinism() {
     let trace = Scenario::new(source).run();
     let error = trace.error();
     assert!(
-        matches!(error, Error::Determinism(_)),
+        error.code == ErrorCode::Determinism,
         "the load-time conflict is a determinism violation: {error:?}"
     );
-    assert_eq!(error.kind(), RunErrorKind::Vfs, "{error:?}");
+    assert_eq!(run_error_kind(error.code), RunErrorKind::Vfs, "{error:?}");
 }
 
 /// A conflict a library caught with its own `pcall` while loading still
@@ -200,10 +201,10 @@ fn a_library_conflict_caught_with_pcall_still_ends_the_run_with_determinism() {
     let trace = Scenario::new(source).run();
     let error = trace.error();
     assert!(
-        matches!(error, Error::Determinism(_)),
+        error.code == ErrorCode::Determinism,
         "a caught load-time conflict is still fatal: {error:?}"
     );
-    assert_eq!(error.kind(), RunErrorKind::Vfs, "{error:?}");
+    assert_eq!(run_error_kind(error.code), RunErrorKind::Vfs, "{error:?}");
 }
 
 /// The library the captured-store cases require: `store.write` captured
@@ -242,10 +243,10 @@ fn a_captured_store_function_conflict_caught_with_pcall_still_ends_the_run_with_
     let trace = Scenario::new(source).run();
     let error = trace.error();
     assert!(
-        matches!(error, Error::Determinism(_)),
+        error.code == ErrorCode::Determinism,
         "a conflict through a captured store function is fatal: {error:?}"
     );
-    assert_eq!(error.kind(), RunErrorKind::Vfs, "{error:?}");
+    assert_eq!(run_error_kind(error.code), RunErrorKind::Vfs, "{error:?}");
 }
 
 /// A store function a library captured at load time reaches the caller

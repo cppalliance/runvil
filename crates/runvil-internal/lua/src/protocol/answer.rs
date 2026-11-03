@@ -142,11 +142,11 @@ impl mlua::UserData for ChatResult {}
 /// once (the `fanout` shim's fatal-arm path) hands the driver the member's
 /// own typed error rather than its rendering.
 #[derive(Debug)]
-pub struct TaskDelivery<E> {
+pub struct TaskDelivery {
     /// The member that ended.
     pub task: TaskId,
     /// The member's final text or failure.
-    pub outcome: std::result::Result<String, E>,
+    pub outcome: std::result::Result<String, runvil_types::error::Error>,
 }
 
 /// A task's lifecycle phase, as `tasks.status` reports it in `state`.
@@ -252,13 +252,12 @@ pub struct TaskStatus {
 /// `Result` owns the typed error until the envelope is rendered, so a
 /// `call` or `join_any` failure round-trips with its structure intact.
 ///
-/// The error type is the driver's, and only a [`TaskDelivery`] holds one:
-/// a `join_any` member's failure is part of a successful wait. The
-/// executor's scheduler drives `Answer` over its own error type so a
-/// member's dispatch failure (a gateway completion error, a binding
-/// failure) round-trips typed.
+/// The error is the universal [`Error`](runvil_types::error::Error), and
+/// only a [`TaskDelivery`] holds one: a `join_any` member's failure is part
+/// of a successful wait, so a member's dispatch failure (a gateway
+/// completion error, a binding failure) round-trips typed.
 #[derive(Debug)]
-pub enum Answer<E> {
+pub enum Answer {
     /// The completion text for an `infer` request.
     Infer(String),
     /// The contained chain's final text for a `call` request.
@@ -270,7 +269,7 @@ pub enum Answer<E> {
     /// path text; the wait shim keeps it to wait on and cancel.
     Timer(TaskId),
     /// The member delivered for a `join_any` request.
-    JoinAny(TaskDelivery<E>),
+    JoinAny(TaskDelivery),
     /// Whether the task has ended, for a `ready` request.
     Ready(bool),
     /// The task's status table for a `status` request. Boxed so the

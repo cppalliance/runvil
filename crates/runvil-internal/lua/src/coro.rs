@@ -40,7 +40,7 @@ use crate::program::LuaProgram;
 use crate::var::var_snapshot_table;
 
 use failure::stash_failure_capture;
-pub(crate) use failure::take_failure;
+pub(crate) use failure::{StashedFailure, take_failure};
 
 /// The shim chunk's name: `@`-prefixed so PUC renders it verbatim as a file
 /// path, making unexpected shim errors clickable `file:line:` references.

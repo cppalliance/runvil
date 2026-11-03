@@ -300,7 +300,7 @@ fn concurrency_converts_a_whole_number_float_and_refuses_an_out_of_range_one() {
 fn a_timer_answer_resumes_the_task_id_as_its_path_text() {
     let lua = Lua::new();
     let task: TaskId = "0.3".parse().expect("`0.3` is a valid task id");
-    let answer: Answer<Error> = Answer::Timer(task);
+    let answer = Answer::Timer(task);
     let (envelope, retained) =
         answer_envelope(&lua, Ok(answer)).expect("a timer answer renders its envelope");
     assert!(retained.is_none());

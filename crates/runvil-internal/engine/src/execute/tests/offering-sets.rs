@@ -154,18 +154,18 @@ fn the_scope_gate_says_a_name_exists_only_for_a_catalog_tools_own_wire_name() {
             .tool(offered_tool("gh/search"))
             .chat(&gateway)
             .run();
-        match trace.error() {
-            Error::OutOfScopeToolCall {
-                global_exists,
-                has_dynamic_set,
-                static_aliases,
-                ..
-            } => {
-                assert!(!has_dynamic_set, "the section holds no Dynamic Set tool");
-                assert_eq!(static_aliases, &["gh_search".to_owned()]);
-                *global_exists
-            }
-            other => panic!("expected OutOfScopeToolCall, got {other:?}"),
+        // The section holds no Dynamic Set tool and offers only gh_search,
+        // so the refusal differs only in whether the name exists.
+        let offered = ["gh_search".to_owned()];
+        let error = trace.error();
+        if error == &crate::error::out_of_scope_tool(name, true, &offered, false) {
+            true
+        } else {
+            assert_eq!(
+                error,
+                &crate::error::out_of_scope_tool(name, false, &offered, false)
+            );
+            false
         }
     };
     assert!(refused("echo"), "the unoffered tool's own wire name exists");

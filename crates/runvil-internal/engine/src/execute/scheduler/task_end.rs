@@ -13,11 +13,12 @@
 
 use std::sync::Arc;
 
+use runvil_types::error::ErrorCode;
 use runvil_types::event::Event;
 use runvil_types::ids::{AbandonReason, Provenance, TaskId};
 use runvil_vfs::Access;
 
-use crate::{Error, Result};
+use crate::{Result, error};
 
 use super::tasks::{Stop, TaskBacking};
 use super::{ChainIndex, Scheduler};
@@ -30,7 +31,7 @@ impl Scheduler {
     /// holds the outcome until a wait takes it.
     ///
     /// # Errors
-    /// Returns [`Error::Internal`] when the chain has no live entry - every
+    /// Returns an `Internal` failure when the chain has no live entry - every
     /// task chain registers its entry before it is enqueued, and a stopped
     /// task's chain is aborted before it can end - or when the woken owner
     /// has no suspended block.
@@ -41,7 +42,7 @@ impl Scheduler {
         let emitter = Arc::clone(chain.ctx.emitter());
         let succeeded = outcome.is_ok();
         let Some(entry) = self.tasks.complete(&task, outcome) else {
-            return Err(Error::internal("a task chain's end implies its entry"));
+            return Err(error::internal("a task chain's end implies its entry"));
         };
         let owner = entry.owner;
         emitter.emit(&entry.target, |execution, section, provenance| {
@@ -69,7 +70,7 @@ impl Scheduler {
     /// live task the chain owns is abandoned (the reason names how the
     /// owner ended: the section ended, the tool loop was exhausted, or the
     /// owner failed some other way), and an `Ok` outcome that leaked
-    /// tasks becomes [`Error::TasksLive`] naming them in
+    /// tasks becomes a `TasksLive` failure naming them in
     /// spawn order. A failing chain keeps its own error - the leak is the
     /// lesser fault - but its tasks end all the same.
     pub(super) fn settle_owned_tasks(
@@ -79,12 +80,14 @@ impl Scheduler {
     ) -> Result<String> {
         let reason = match &outcome {
             Ok(_) => AbandonReason::OwnerReturned,
-            Err(Error::ToolLoopExhausted) => AbandonReason::ToolLoopExhausted,
+            Err(error) if error.code == ErrorCode::ToolLoopExhausted => {
+                AbandonReason::ToolLoopExhausted
+            }
             Err(_) => AbandonReason::OwnerFailed,
         };
         let leaked = self.abandon_owned_tasks(owner, reason);
         match outcome {
-            Ok(_) if !leaked.is_empty() => Err(Error::TasksLive { tasks: leaked }),
+            Ok(_) if !leaked.is_empty() => Err(error::tasks_live(&leaked)),
             outcome => outcome,
         }
     }

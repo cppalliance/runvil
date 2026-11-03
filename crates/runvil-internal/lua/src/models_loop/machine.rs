@@ -24,7 +24,7 @@ use runvil_types::metrics::ToolCallEvent;
 
 use crate::compactors::{OverflowReason, estimate_tokens};
 use crate::error::Error;
-use crate::error_value::{ErrorField, ErrorKind, ErrorValue, Raised};
+use crate::error_value::{ErrorField, ErrorKind, Raised};
 use crate::messages::{MessageList, Snapshot};
 use crate::projection::project_messages;
 use crate::protocol::{
@@ -424,7 +424,7 @@ fn check(
     overflow: Option<OverflowReason>,
 ) -> std::result::Result<(), Raised> {
     let projected = project_messages(&list.to_records())
-        .map_err(|refused| raised(refused.kind(), &refused.to_string()))?;
+        .map_err(|refused| raised(refused.to_raised().kind, &refused.to_string()))?;
     let Some(reason) = overflow else {
         return Ok(());
     };
@@ -442,14 +442,10 @@ fn check(
 /// A new `context_exhausted` error for `reason`, as `compactors.fail`
 /// raises it.
 fn exhausted(reason: OverflowReason) -> Raised {
-    let error = Error::ContextExhausted {
+    Error::ContextExhausted {
         reason: reason.tag().to_owned(),
-    };
-    Raised {
-        kind: error.kind(),
-        message: error.to_string(),
-        fields: error.fields().into_iter().collect(),
     }
+    .to_raised()
 }
 
 /// A record of `role` holding the plain text `content` and no `meta`.

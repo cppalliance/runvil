@@ -7,6 +7,7 @@ use super::*;
 
 use crate::RunErrorKind;
 use crate::RunOutcome;
+use crate::execute::run_error_kind;
 use crate::execute::tests::context::test_config;
 use crate::execute::tests::fixtures::echo_tool;
 use crate::test_support::scenario::EXECUTION;
@@ -23,7 +24,7 @@ fn a_handle_without_a_declared_store_fails_the_run() {
     let trace = Scenario::new(source).vfs(vfs).run();
     let error = trace.error();
     assert_eq!(
-        error.kind(),
+        run_error_kind(error.code),
         RunErrorKind::Vfs,
         "the run fails as a store error: {error}"
     );
@@ -110,7 +111,7 @@ fn offering_a_tool_its_present_pack_does_not_offer_fails_the_section() {
     );
     let trace = Scenario::new(source).tool(echo_tool()).run();
     let error = trace.error();
-    assert_eq!(error.kind(), RunErrorKind::Lua, "{error}");
+    assert_eq!(run_error_kind(error.code), RunErrorKind::Lua, "{error}");
     assert!(
         error
             .to_string()

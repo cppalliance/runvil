@@ -4,15 +4,13 @@
 //! rendered through `test_support::answer_envelope`. The loop's other contract
 //! cases run end to end in `execute/tests/models_loop_contract.rs`.
 
-use runvil_lua::Error;
-
 use crate::lua::{Answer, ChatOutcome, ChatResult, Request};
 
 use super::{parse_request, resume_with, scheduler_vm, start, test_models};
 
 /// A completed round with no reply, no tool calls, and no empty detail,
 /// ending for `finish_reason`.
-fn empty_round(finish_reason: Option<&str>) -> Answer<Error> {
+fn empty_round(finish_reason: Option<&str>) -> Answer {
     Answer::Chat(Box::new(ChatResult {
         outcome: ChatOutcome::Empty(None),
         finish_reason: finish_reason.map(str::to_owned),

@@ -43,7 +43,7 @@ fn err_of(prose: &str) -> Error {
         item: Some(&json!("i")),
         ..test_sources(&var, &sys)
     };
-    substitute_inner(prose, &sources).expect_err("expected substitution failure")
+    substitute(prose, &sources).expect_err("expected substitution failure")
 }
 
 /// The `Reason` fact of a substitution failure.
@@ -121,7 +121,7 @@ fn nil_argv_is_an_error() {
     let var = json!({});
     let sys = json!({});
     for prose in ["{{ argv }}", "{{ argv.x }}"] {
-        let e = substitute_inner(prose, &test_sources(&var, &sys)).unwrap_err();
+        let e = substitute(prose, &test_sources(&var, &sys)).unwrap_err();
         assert_eq!(reason(&e), Some("nil_argv"), "path {prose:?}");
         assert!(e.to_string().contains("argv"), "names argv: {e}");
         assert!(
@@ -141,7 +141,7 @@ fn dotted_index_into_a_scalar_argv_is_an_error() {
         argv: Some(&argv),
         ..test_sources(&var, &sys)
     };
-    let e = substitute_inner("{{ argv.x }}", &sources).unwrap_err();
+    let e = substitute("{{ argv.x }}", &sources).unwrap_err();
     assert_eq!(reason(&e), Some("missing_key"));
 }
 
@@ -272,18 +272,16 @@ fn a_failure_is_a_substitution_error_with_its_reason_fact() {
 }
 
 #[test]
-fn a_failure_reaches_the_engine_error_as_a_substitution_never_a_completion() {
+fn a_failure_classifies_as_the_authors_program_failing_and_lua_reads_it_as_lua() {
     let error = run("{{ var.nope }}").expect_err("a missing key fails the substitution");
-    let crate::Error::Substitution(failure) = &error else {
-        panic!("a substitution failure must not bridge to a completion failure: {error:?}");
-    };
-    assert_eq!(reason(failure), Some("missing_key"));
-    assert_eq!(error.to_string(), failure.message);
-    assert_eq!(error.kind(), crate::RunErrorKind::Lua);
+    assert_eq!(error.code, ErrorCode::Substitution);
+    assert_eq!(reason(&error), Some("missing_key"));
     assert_eq!(
-        runvil_lua::ErrorValue::kind(&error),
-        runvil_lua::ErrorKind::Lua
+        crate::execute::run_error_kind(error.code),
+        crate::RunErrorKind::Lua
     );
+    assert_eq!(runvil_lua::error_kind(&error), runvil_lua::ErrorKind::Lua);
+    assert_eq!(runvil_lua::error_fields(&error), Vec::new());
 }
 
 // --- bare globals (section-local Lua globals in prose) -------------------
@@ -340,13 +338,13 @@ fn non_json_bare_global_is_an_error() {
     let sys = json!({});
     let globals = |name: &str| {
         assert_eq!(name, "f");
-        Err(crate::Error::lua_message("global `f` is a function"))
+        Err(crate::error::lua_runtime("global `f` is a function"))
     };
     let sources = Sources {
         globals: &globals,
         ..test_sources(&var, &sys)
     };
-    let e = substitute_inner("{{ f }}", &sources).unwrap_err();
+    let e = substitute("{{ f }}", &sources).unwrap_err();
     assert_eq!(reason(&e), Some("serialize"));
     assert_eq!(
         e.message,
@@ -381,10 +379,10 @@ fn reply_is_no_longer_a_namespace() {
 fn null_value_and_nil_item_reasons() {
     let var = json!({ "n": Value::Null });
     let sys = json!({});
-    let e = substitute_inner("{{ var.n }}", &test_sources(&var, &sys)).unwrap_err();
+    let e = substitute("{{ var.n }}", &test_sources(&var, &sys)).unwrap_err();
     assert_eq!(reason(&e), Some("null_value"));
 
-    let e = substitute_inner("{{ item }}", &test_sources(&var, &sys)).unwrap_err();
+    let e = substitute("{{ item }}", &test_sources(&var, &sys)).unwrap_err();
     assert_eq!(reason(&e), Some("nil_item"));
 }
 

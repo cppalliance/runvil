@@ -26,7 +26,7 @@ fn an_omitted_compactor_defaults_to_fail_with_typed_precheck_exhaustion() {
     let trace = loop_scenario(source).chat(&gateway).run();
     let error = trace.error();
     assert!(
-        matches!(error, Error::ContextExhausted { reason, .. } if reason == "precheck"),
+        error == &crate::error::context_exhausted("precheck"),
         "the omitted compactor defaults to compactors.fail with the precheck reason, got {error:?}"
     );
     assert_eq!(
@@ -69,7 +69,7 @@ fn an_explicit_compactors_fail_invocation_reports_the_provider_reason() {
     let trace = loop_scenario(source).chat(&gateway).run();
     let error = trace.error();
     assert!(
-        matches!(error, Error::ContextExhausted { reason, .. } if reason == "provider"),
+        error == &crate::error::context_exhausted("provider"),
         "the explicit compactors.fail invocation reports the provider reason, got {error:?}"
     );
     assert_eq!(gateway.call_count(), 1, "the request left and was rejected");
@@ -85,13 +85,17 @@ fn an_uncaught_compactors_fail_with_a_callers_reason_ends_the_run_as_context_exh
     );
     let trace = loop_scenario(source).chat(&gateway).run();
     let error = trace.error();
-    assert_eq!(error.kind(), RunErrorKind::ContextExhausted, "{error}");
+    assert_eq!(
+        run_error_kind(error.code),
+        RunErrorKind::ContextExhausted,
+        "{error}"
+    );
     assert!(
         error.to_string().contains("manual"),
         "the run's message holds the caller's reason, got: {error}"
     );
     assert!(
-        matches!(error, Error::ContextExhausted { reason, .. } if reason == "manual"),
+        error == &crate::error::context_exhausted("manual"),
         "the reason survives as given, got {error:?}"
     );
     assert_eq!(
@@ -110,13 +114,17 @@ fn an_uncaught_direct_compactors_fail_ends_the_run_as_context_exhausted() {
     );
     let trace = loop_scenario(source).chat(&gateway).run();
     let error = trace.error();
-    assert_eq!(error.kind(), RunErrorKind::ContextExhausted, "{error}");
+    assert_eq!(
+        run_error_kind(error.code),
+        RunErrorKind::ContextExhausted,
+        "{error}"
+    );
     assert!(
         error.to_string().contains("manual"),
         "the run's message holds the caller's reason, got: {error}"
     );
     assert!(
-        matches!(error, Error::ContextExhausted { reason, .. } if reason == "manual"),
+        error == &crate::error::context_exhausted("manual"),
         "the reason survives as given, got {error:?}"
     );
     assert_eq!(gateway.call_count(), 0, "no request leaves");
@@ -235,16 +243,17 @@ fn a_compactors_own_string_raise_reaches_the_caller_with_the_reason_tag() {
          return 'unreachable'",
     );
     let trace = loop_scenario(source).chat_with(overflowing(&rounds)).run();
-    match trace.error() {
-        Error::Lua {
-            message,
-            cause: Some(_),
-        } => assert!(
-            message.contains("custom failure: provider"),
-            "the compactor's own error survives with the reason tag, got: {message}"
-        ),
-        other => panic!("expected the compactor's own runtime error, got {other:?}"),
-    }
+    let error = trace.error();
+    assert_eq!(
+        error.code,
+        ErrorCode::LuaRuntime,
+        "expected the compactor's own runtime error, got {error:?}"
+    );
+    assert!(
+        error.message.contains("custom failure: provider"),
+        "the compactor's own error survives with the reason tag, got: {}",
+        error.message
+    );
     assert_eq!(
         rounds.load(Ordering::SeqCst),
         1,

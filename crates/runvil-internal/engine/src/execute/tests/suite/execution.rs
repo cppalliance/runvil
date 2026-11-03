@@ -5,6 +5,7 @@
 use std::collections::BTreeSet;
 
 use crate::RunErrorKind;
+use crate::execute::run_error_kind;
 use crate::test_support::recording::detail;
 use crate::test_support::scenario::{Record, Scenario};
 
@@ -190,7 +191,7 @@ fn execution_error_fixtures_report_their_typed_contract() {
         let trace = Scenario::new(fixture.source).name(fixture.execution).run();
         let error = trace.error();
         assert_eq!(
-            error.kind(),
+            run_error_kind(error.code),
             fixture.kind,
             "fixture {} returned the wrong error kind: {error:?}",
             fixture.name

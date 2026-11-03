@@ -23,7 +23,7 @@ use std::sync::Arc;
 use runvil_types::event::Event;
 
 use crate::lua::Answer;
-use crate::{Error, Result};
+use crate::{Result, error};
 
 use super::chain_record::{ChainArena, ChainKind, Parked};
 use super::tasks::TaskArena;
@@ -155,7 +155,7 @@ impl Admission {
     /// next admission in the same pass.
     ///
     /// # Errors
-    /// Returns [`Error::Internal`] when a resumed chain's slots belong to
+    /// Returns an `Internal` failure when a resumed chain's slots belong to
     /// no admitted task, or a queued spawn is not a task chain. A failed
     /// pass leaves admission as it found it: both queues, the holders, and
     /// the given-back slots.
@@ -175,7 +175,7 @@ impl Admission {
                 continue;
             }
             if !matches!(tree.kind(holder), ChainKind::Task) || self.is_queued(holder) {
-                return Err(Error::internal(
+                return Err(error::internal(
                     "a resumed chain's slots belong to an admitted task",
                 ));
             }
@@ -191,7 +191,7 @@ impl Admission {
                 continue;
             }
             if !matches!(tree.kind(id), ChainKind::Task) {
-                return Err(Error::internal("a queued chain backs a task"));
+                return Err(error::internal("a queued chain backs a task"));
             }
             holding.insert(id);
             count_slot(&mut used, tree, id);
@@ -328,7 +328,7 @@ impl Scheduler {
     /// admission [`Admission::plan`] made, in its order.
     ///
     /// # Errors
-    /// Returns [`Error::Internal`] when the plan does, or when a started
+    /// Returns an `Internal` failure when the plan does, or when a started
     /// task has no entry.
     pub(super) fn admit(&mut self) -> Result<()> {
         let tree = ChainTree {
@@ -354,7 +354,7 @@ impl Scheduler {
     /// spawner moved on still reports where it was spawned).
     ///
     /// # Errors
-    /// Returns [`Error::Internal`] when its task has no entry: a spawn
+    /// Returns an `Internal` failure when its task has no entry: a spawn
     /// registers the entry before it queues the chain.
     fn admit_chain(&mut self, id: ChainIndex, record: SpawnRecord) -> Result<()> {
         let chain = &mut self.chains[id];
@@ -365,7 +365,7 @@ impl Scheduler {
         let var = chain.var.clone();
         let (Some(owner), Some(target)) = (self.tasks.owner_of(&task), self.tasks.target_of(&task))
         else {
-            return Err(Error::internal("a task chain has an entry"));
+            return Err(error::internal("a task chain has an entry"));
         };
         let target = target.to_owned();
         let emitter = Arc::clone(self.chains[owner].ctx.emitter());
@@ -394,13 +394,9 @@ impl Scheduler {
     /// its slots, else pushed onto the ready queue at once.
     ///
     /// # Errors
-    /// Returns [`Error::Internal`] when the chain has no suspended block
+    /// Returns an `Internal` failure when the chain has no suspended block
     /// to take the answer, or one that already holds an answer.
-    pub(super) fn wake_from_wait(
-        &mut self,
-        id: ChainIndex,
-        answer: Result<Answer<Error>>,
-    ) -> Result<()> {
+    pub(super) fn wake_from_wait(&mut self, id: ChainIndex, answer: Result<Answer>) -> Result<()> {
         self.chains[id].deliver(answer)?;
         let tree = ChainTree {
             chains: &self.chains,

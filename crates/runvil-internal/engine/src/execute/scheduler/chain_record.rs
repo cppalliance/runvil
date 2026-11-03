@@ -18,7 +18,7 @@ use crate::execute::walk_target::JumpTarget;
 use crate::heading_address::SectionPos;
 use crate::lua::{Answer, Blocked};
 use crate::prompt::{Block, BodyText, Prompt, Section};
-use crate::{Error, Result};
+use crate::{Result, error};
 
 mod anchor;
 mod arena;
@@ -74,15 +74,12 @@ impl CallDepth {
     /// The depth a chain started one level deeper runs at.
     ///
     /// # Errors
-    /// Returns [`Error::CallDepthExceeded`], named after `via`, when that
+    /// Returns a `CallDepthExceeded` failure, named after `via`, when that
     /// depth passes the cap.
     pub(super) fn deeper(self, via: DepthVia) -> Result<CallDepth> {
         let depth = self.0 + 1;
         if depth > MAX_CALL_DEPTH {
-            return Err(Error::CallDepthExceeded {
-                cap: MAX_CALL_DEPTH,
-                via,
-            });
+            return Err(error::call_depth_exceeded(MAX_CALL_DEPTH, via));
         }
         Ok(CallDepth(depth))
     }
@@ -143,7 +140,7 @@ pub(super) struct Running {
     /// The block's coroutine handle; a block that returns disposes of it.
     pub(super) coroutine: Thread,
     /// The answer delivered for the suspended coroutine, taken at resume.
-    pub(super) answer: Option<Result<Answer<Error>>>,
+    pub(super) answer: Option<Result<Answer>>,
 }
 
 /// The section a chain has entered: built at each section entry, the H1
@@ -357,7 +354,7 @@ impl Chain {
     /// chain end.
     ///
     /// # Errors
-    /// Returns [`Error::Internal`] when the chain's capability is gone,
+    /// Returns an `Internal` failure when the chain's capability is gone,
     /// which only the chain-end paths do - a live chain always holds it.
     /// The two teardown probes skip rather than fail on a gone capability:
     /// `join_task` returns without a join, and `end_tool_call` ends the
@@ -365,19 +362,19 @@ impl Chain {
     pub(super) fn access(&self) -> Result<&Arc<Access>> {
         self.access
             .as_ref()
-            .ok_or(Error::internal("a live chain holds its access capability"))
+            .ok_or(error::internal("a live chain holds its access capability"))
     }
 
     /// Hands out the chain's next child id, under [`Counters::next_child`].
     ///
     /// # Errors
-    /// Returns [`Error::Internal`] when one chain has started `u32::MAX`
+    /// Returns an `Internal` failure when one chain has started `u32::MAX`
     /// children, which no reachable run does.
     pub(super) fn next_child_id(&mut self) -> Result<ChainId> {
         let index = self.counters.next_child;
         self.counters.next_child = index
             .checked_add(1)
-            .ok_or(Error::internal("a chain's child count cannot exceed u32"))?;
+            .ok_or(error::internal("a chain's child count cannot exceed u32"))?;
         Ok(self.lineage.child(index))
     }
 
@@ -385,13 +382,13 @@ impl Chain {
     /// [`Counters::next_entry`].
     ///
     /// # Errors
-    /// Returns [`Error::Internal`] when one chain has entered `u32::MAX`
+    /// Returns an `Internal` failure when one chain has entered `u32::MAX`
     /// sections, which no reachable run does.
     pub(super) fn next_entry_id(&mut self) -> Result<String> {
         let index = self.counters.next_entry;
         self.counters.next_entry = index
             .checked_add(1)
-            .ok_or(Error::internal("a chain's entry count cannot exceed u32"))?;
+            .ok_or(error::internal("a chain's entry count cannot exceed u32"))?;
         Ok(self.lineage.entry(index))
     }
 
@@ -418,22 +415,22 @@ impl Chain {
     /// the block resumes.
     ///
     /// # Errors
-    /// Returns [`Error::Internal`] when the chain has no suspended block, or
+    /// Returns an `Internal` failure when the chain has no suspended block, or
     /// when its block already holds an answer: every answer goes to a block
     /// that yielded for it, once, and the first answer stays.
     #[track_caller]
-    pub(super) fn deliver(&mut self, answer: Result<Answer<Error>>) -> Result<()> {
+    pub(super) fn deliver(&mut self, answer: Result<Answer>) -> Result<()> {
         let Some(running) = self
             .entered
             .as_mut()
             .and_then(|entered| entered.running.as_mut())
         else {
-            return Err(Error::internal(
+            return Err(error::internal(
                 "a delivered answer implies a suspended block",
             ));
         };
         if running.answer.is_some() {
-            return Err(Error::internal(
+            return Err(error::internal(
                 "a suspended block holds at most one delivered answer",
             ));
         }
@@ -445,7 +442,7 @@ impl Chain {
     /// reaches the chain by its arena index.
     ///
     /// # Errors
-    /// Returns [`Error::Internal`] when the chain is between sections,
+    /// Returns an `Internal` failure when the chain is between sections,
     /// which no caller that reached the chain through a suspended or
     /// running block can see.
     #[track_caller]
@@ -453,7 +450,7 @@ impl Chain {
         self.entered
             .as_ref()
             .map(|entered| &entered.frame)
-            .ok_or(Error::internal("a live chain holds its frame"))
+            .ok_or(error::internal("a live chain holds its frame"))
     }
 
     /// The frame of the section the chain is running, mutably.
@@ -465,7 +462,7 @@ impl Chain {
         self.entered
             .as_mut()
             .map(|entered| &mut entered.frame)
-            .ok_or(Error::internal("a live chain holds its frame"))
+            .ok_or(error::internal("a live chain holds its frame"))
     }
 
     /// The chain's current block sequence: the H1 pass's blocks, or the

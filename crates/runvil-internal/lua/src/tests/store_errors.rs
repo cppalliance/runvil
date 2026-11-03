@@ -359,22 +359,30 @@ fn a_raised_store_error_renders_an_integer_count_and_the_message() {
         },
         anchor,
     );
-    assert_eq!(error.kind(), crate::ErrorKind::Store);
-    let fields = error.fields();
-    assert!(fields.contains(&("count".to_owned(), crate::ErrorField::Integer(3),)));
-    let lua = mlua::Lua::new();
-    let table = crate::error_value::error_table(&lua, &error).expect("the table builds");
-    let raised = crate::error_value::raised_from(&lua, &Value::Table(table))
-        .expect("the table reads back")
-        .expect("the table is a structured error table");
-    assert_eq!(raised.kind, crate::ErrorKind::Store);
+    let own = error.to_raised();
+    assert_eq!(own.kind, crate::ErrorKind::Store);
     assert_eq!(
-        raised.fields.get("count"),
-        Some(&crate::ErrorField::Integer(3)),
-        "the count field stays an integer through the boundary"
+        own.fields.get("count"),
+        Some(&crate::ErrorField::Integer(3))
     );
     assert!(
         error.to_string().contains("include more surrounding text"),
         "the message carries the recovery hint: {error}"
     );
+    // The same failure answered to Lua as a universal error renders the
+    // same table.
+    let lua = mlua::Lua::new();
+    for table in [
+        crate::error_value::raised_table(&lua, &own),
+        crate::error_value::error_table(&lua, &crate::into_universal(error)),
+    ] {
+        let table = table.expect("the table builds");
+        let raised = crate::error_value::raised_from(&lua, &Value::Table(table))
+            .expect("the table reads back")
+            .expect("the table is a structured error table");
+        assert_eq!(
+            raised, own,
+            "the count field stays an integer through the boundary"
+        );
+    }
 }

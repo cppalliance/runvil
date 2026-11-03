@@ -17,6 +17,7 @@
 //! call's identity: what the tool did is joined back into the chain, and
 //! the call's access refuses every later operation.
 
+use runvil_types::error::ErrorCode;
 use runvil_types::event::lifecycle::{self, Lifecycle};
 use runvil_types::ids::{RoundId, TaskId};
 use runvil_types::tools::ToolOutput;
@@ -28,7 +29,7 @@ use crate::lua::{
     prepare_model_dispatch,
 };
 use crate::model::Completion;
-use crate::{Error, Result};
+use crate::{Error, Result, error};
 
 use super::tasks::Stop;
 use super::{
@@ -74,16 +75,16 @@ fn vfs_observations(op: &VfsOp) -> Option<(Lifecycle, Lifecycle)> {
 /// claims-model conflict becomes the fatal determinism violation: the
 /// driver intercepts it at the answer boundary and ends the run on the
 /// spot rather than resuming it into Lua, so no author `pcall` can catch
-/// it. Every other failure returns as the call's answer as an
-/// [`Error::Store`] holding the model-facing message rendered for the
-/// operation and the structured cause, which ends the run as a
+/// it. Every other failure returns as the call's answer as a store
+/// failure with the model-facing message rendered for the operation and
+/// the store's code and facts, which ends the run as a
 /// `RunErrorKind::Vfs` error if it aborts the chunk uncaught.
-fn classify_vfs_failure(op: &VfsOp, error: VfsError) -> Error {
-    match error {
-        VfsError::Conflict { detail, .. } => Error::Determinism(detail),
+fn classify_vfs_failure(op: &VfsOp, cause: &VfsError) -> Error {
+    match cause {
+        VfsError::Conflict { detail, .. } => error::determinism(detail),
         // `VfsError` is `#[non_exhaustive]` across the crate seam; every
         // other failure is the call's answer.
-        error => Error::store_op(op, error),
+        cause => error::store_op(op, cause),
     }
 }
 
@@ -103,10 +104,10 @@ impl Scheduler {
     /// tries after is admitted.
     ///
     /// # Errors
-    /// Returns [`Error::Internal`] when the answer's kind does not match
+    /// Returns an `Internal` failure when the answer's kind does not match
     /// the effect's, when a batched call's answer finds no open slot to
     /// fill, or when the chain it resumes has no suspended block.
-    /// Returns [`Error::Determinism`] when a store answer reports a
+    /// Returns a `Determinism` failure when a store answer reports a
     /// claims-model conflict: the run ends on the spot rather than
     /// resuming the conflict into Lua, where an author `pcall` could catch
     /// it.
@@ -128,14 +129,13 @@ impl Scheduler {
         };
         let answer = match (resume, answer) {
             (Continuation::Timer(task), EffectAnswer::Dropped) => return self.drop_timer(&task),
-            (_, EffectAnswer::Dropped) => Err(Error::Interrupted),
+            (_, EffectAnswer::Dropped) => Err(error::interrupted()),
             (Continuation::Infer(round), EffectAnswer::Chat(result)) => self
                 .with_chain(chain, |ops| ops.accept_infer(round, result))
                 .map(Answer::Infer),
-            (Continuation::Chat(round), EffectAnswer::Chat(result)) => self
-                .with_chain(chain, |ops| {
-                    ops.accept_chat(round, result.map_err(Error::from))
-                })?,
+            (Continuation::Chat(round), EffectAnswer::Chat(result)) => {
+                self.with_chain(chain, |ops| ops.accept_chat(round, result))?
+            }
             (Continuation::Render(binding), EffectAnswer::Render(rendered)) => {
                 return self.with_chain(chain, |ops| ops.accept_render(binding, rendered));
             }
@@ -147,7 +147,7 @@ impl Scheduler {
                     // A claims-model conflict is fatal: the suspended
                     // chains drop unarmed in the run's teardown, exactly
                     // as on the cancellation path.
-                    Err(error @ Error::Determinism(_)) => return Err(error),
+                    Err(error) if error.code == ErrorCode::Determinism => return Err(error),
                     result => result.map(Answer::Store),
                 }
             }
@@ -187,7 +187,7 @@ impl Scheduler {
                 | EffectAnswer::ToolCall(_)
                 | EffectAnswer::Vfs(_),
             ) => {
-                return Err(Error::internal(
+                return Err(error::internal(
                     "an effect's answer must be of the effect's own kind",
                 ));
             }
@@ -233,7 +233,7 @@ impl Scheduler {
         if self.ctx.cancel().is_cancelled() || !self.chains[owner].end_wait_for(task) {
             return Ok(());
         }
-        self.wake_from_wait(owner, Err(Error::Interrupted))
+        self.wake_from_wait(owner, Err(error::interrupted()))
     }
 }
 
@@ -288,7 +288,7 @@ impl ChainOps<'_> {
                     &report,
                 )
                 .map(|outcome| ToolCallOutcome::Plain(outcome.into_content()))
-                .map_err(Error::from)
+                .map_err(error::into_universal)
             }
             CallSite::Script => match prepare_dispatch(
                 &call.binding,
@@ -308,9 +308,9 @@ impl ChainOps<'_> {
                         call.binding.alias(),
                         outcome.into_content(),
                     )
-                    .map_err(Error::from)
+                    .map_err(error::into_universal)
                 }
-                Err(error) => Err(Error::from(error)),
+                Err(failure) => Err(error::into_universal(failure)),
             },
         }
     }
@@ -332,6 +332,6 @@ impl ChainOps<'_> {
                 if result.is_ok() { succeeded } else { failed },
             );
         }
-        result.map_err(|error| classify_vfs_failure(op, error))
+        result.map_err(|cause| classify_vfs_failure(op, &cause))
     }
 }

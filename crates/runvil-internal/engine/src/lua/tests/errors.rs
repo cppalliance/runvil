@@ -1,10 +1,11 @@
 //! The failure contract at the coroutine boundary: every failure that
 //! reaches Lua is a `{ kind, message, ... }` table whose `tostring` is the
 //! message, a Rust-raised error answered through the envelope arrives in
-//! the same shape, an author's own raise passes through untouched, a
-//! typed error substituted at the boundary keeps its kind, a kept table
-//! maps back onto the executor's typed variants, and tracebacks through
-//! the shim render the impl frames verbatim.
+//! the same shape, an Engine failure answered there renders the table its
+//! code names, an author's own raise passes through untouched, a typed
+//! error substituted at the boundary keeps its kind, a kept table maps
+//! back onto the failure it stands in for, and tracebacks through the shim
+//! render the impl frames verbatim.
 
 use std::num::NonZeroU32;
 
@@ -18,6 +19,9 @@ use crate::model::ModelSet;
 use crate::test_support::recording::null_emitter;
 
 use super::{compile_block, scheduler_vm, start, test_models};
+
+#[path = "errors-tables.rs"]
+mod tables;
 
 #[test]
 fn models_infer_takes_a_prompt_or_a_model_and_a_prompt() {
@@ -113,12 +117,10 @@ fn a_failure_envelope_raises_a_table_holding_the_kind_and_fields() {
         else {
             panic!("the shim yield must suspend the block");
         };
-        let error = Error::ContextExhausted {
-            reason: reason.to_owned(),
-        };
+        let error = crate::error::context_exhausted(reason);
         let display = error.to_string();
         match vm
-            .resume_block_coro_answer::<Error>(&program, &thread, Err(error))
+            .resume_block_coro_answer(&program, &thread, Err(error))
             .expect("the pcall'd block resumes")
         {
             CoroStep::Done(LuaBlockResult::Returned(Some(text))) => {
@@ -251,13 +253,9 @@ fn a_typed_error_substituted_at_the_coroutine_boundary_keeps_its_kind() {
         else {
             panic!("the shim yield must suspend the block");
         };
-        let answer = Err(Error::LuaQuota {
-            resource: runvil_lua::QuotaResource::LogEvent,
-        });
-        match vm.resume_block_coro_answer::<Error>(&program, &thread, answer) {
-            Err(Error::LuaQuota {
-                resource: runvil_lua::QuotaResource::LogEvent,
-            }) => {}
+        let quota = crate::error::lua_quota(runvil_lua::QuotaResource::LogEvent);
+        match vm.resume_block_coro_answer(&program, &thread, Err(quota.clone())) {
+            Err(error) if error == quota => {}
             other => panic!("block {source:?} must surface the typed quota error, got {other:?}"),
         }
     }
@@ -277,13 +275,9 @@ fn a_structured_raise_surfacing_as_the_coroutine_failure_keeps_its_table() {
     else {
         panic!("the shim yield must suspend the block");
     };
-    let (envelope, _retained) = answer_envelope::<Error>(
-        vm.lua(),
-        Err(Error::ContextExhausted {
-            reason: "precheck".to_owned(),
-        }),
-    )
-    .expect("the envelope renders");
+    let (envelope, _retained) =
+        answer_envelope(vm.lua(), Err(crate::error::context_exhausted("precheck")))
+            .expect("the envelope renders");
     match vm.resume_block_coro(&program, &thread, envelope) {
         Err(Error::Raised(raised)) => {
             assert_eq!(raised.kind, ErrorKind::ContextExhausted);
@@ -301,110 +295,6 @@ fn a_structured_raise_surfacing_as_the_coroutine_failure_keeps_its_table() {
             );
         }
         other => panic!("expected the kept table as a Raised failure, got {other:?}"),
-    }
-}
-
-#[test]
-fn a_raised_table_maps_onto_the_executor_error_type_by_kind() {
-    // The executor's `From<runvil_lua::Error>` turns a kept table back
-    // into the variant its kind names, so a Lua-side raise classifies the
-    // same way as the Rust-raised error it replaces.
-    // A `context_exhausted` table keeps any reason string, and only a
-    // table with no reason falls back to a Lua failure.
-    for reason in ["provider", "manual"] {
-        let exhausted = runvil_lua::Raised {
-            kind: ErrorKind::ContextExhausted,
-            message: format!("context exhausted: {reason}"),
-            fields: [(
-                "reason".to_owned(),
-                runvil_lua::ErrorField::String(reason.to_owned()),
-            )]
-            .into_iter()
-            .collect(),
-        };
-        match crate::Error::from(Error::Raised(exhausted)) {
-            crate::Error::ContextExhausted { reason: kept, .. } => assert_eq!(kept, reason),
-            other => panic!("expected context exhaustion holding {reason:?}, got {other:?}"),
-        }
-    }
-    let reasonless = runvil_lua::Raised {
-        kind: ErrorKind::ContextExhausted,
-        message: "context exhausted".to_owned(),
-        fields: std::collections::BTreeMap::new(),
-    };
-    match crate::Error::from(Error::Raised(reasonless)) {
-        crate::Error::Lua { message, .. } => assert_eq!(message, "context exhausted"),
-        other => panic!("a reasonless table must keep its message as a Lua failure, got {other:?}"),
-    }
-    let loop_exhausted = runvil_lua::Raised {
-        kind: ErrorKind::ToolLoopExhausted,
-        message: "tool-call loop did not converge".to_owned(),
-        fields: std::collections::BTreeMap::new(),
-    };
-    assert!(matches!(
-        crate::Error::from(Error::Raised(loop_exhausted)),
-        crate::Error::ToolLoopExhausted
-    ));
-    let cancelled = runvil_lua::Raised {
-        kind: ErrorKind::Cancelled,
-        message: "interrupted: the run was cancelled or this call was stopped".to_owned(),
-        fields: std::collections::BTreeMap::new(),
-    };
-    assert!(matches!(
-        crate::Error::from(Error::Raised(cancelled)),
-        crate::Error::Interrupted
-    ));
-    // The empty-reply arm keeps the message the author saw as the message
-    // and copies the `finish_reason` field across.
-    let empty = runvil_lua::Raised {
-        kind: ErrorKind::EmptyModelReply,
-        message: "the model returned an empty turn".to_owned(),
-        fields: [(
-            "finish_reason".to_owned(),
-            runvil_lua::ErrorField::String("length".to_owned()),
-        )]
-        .into_iter()
-        .collect(),
-    };
-    match crate::Error::from(Error::Raised(empty)) {
-        crate::Error::Completion(error) => {
-            assert_eq!(error.code, runvil_types::error::ErrorCode::EmptyReply);
-            assert_eq!(error.prose, "the model returned an empty turn");
-            assert_eq!(
-                error
-                    .facts
-                    .get(&runvil_types::error::FactKey::FinishReason)
-                    .and_then(serde_json::Value::as_str),
-                Some("length")
-            );
-        }
-        other => panic!("expected the empty-reply failure, got {other:?}"),
-    }
-    // A model failure or a missing model holds none of the structure its
-    // variant needs, so the table keeps its message as a Lua failure with
-    // no cause rather than rebuilding a completion failure.
-    for (kind, message) in [
-        (
-            ErrorKind::ModelFailure,
-            "the model backend reported a fault of its own (status 500)",
-        ),
-        (
-            ErrorKind::ModelRequired,
-            "model binding required for section Only",
-        ),
-    ] {
-        let raised = runvil_lua::Raised {
-            kind,
-            message: message.to_owned(),
-            fields: std::collections::BTreeMap::new(),
-        };
-        match crate::Error::from(Error::Raised(raised)) {
-            crate::Error::Lua {
-                message: kept,
-                cause: None,
-            } => assert_eq!(kept, message),
-            other => panic!("a {kind:?} table must stay a cause-less Lua failure, got {other:?}"),
-        }
     }
 }
 

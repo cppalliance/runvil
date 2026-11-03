@@ -245,8 +245,7 @@ fn a_step_failing_on_a_full_heap_after_an_overflow_leaves_no_flag_set() {
             outcome: ChatOutcome::Overflow(OverflowReason::Precheck),
             ..round()
         };
-        let (envelope, _) =
-            answer_envelope(&lua, Ok(Answer::<Error>::Chat(Box::new(overflowed)))).unwrap();
+        let (envelope, _) = answer_envelope(&lua, Ok(Answer::Chat(Box::new(overflowed)))).unwrap();
         lua.gc_collect().unwrap();
         lua.set_memory_limit(lua.used_memory() + headroom).unwrap();
         let stepped = step.call::<MultiValue>(envelope);
@@ -274,7 +273,7 @@ fn a_step_failing_on_a_full_heap_after_an_overflow_leaves_no_flag_set() {
 #[test]
 fn envelope_failure_keeps_an_error_table_and_wraps_anything_else() {
     let lua = Lua::new();
-    let table = error_table(&lua, &Error::Interrupted).unwrap();
+    let table = error_table(&lua, &crate::interrupted()).unwrap();
     let kept = envelope_failure(&lua, Value::Table(table.clone())).unwrap();
     assert_eq!(kept.to_pointer(), table.to_pointer());
     let boom = Value::String(lua.create_string("boom").unwrap());
@@ -299,7 +298,7 @@ fn a_chat_answer_resumes_as_a_chat_result_userdata_the_step_takes_whole() {
         ..round()
     };
     let (envelope, retained) =
-        answer_envelope(&lua, Ok(Answer::<Error>::Chat(Box::new(served.clone())))).unwrap();
+        answer_envelope(&lua, Ok(Answer::Chat(Box::new(served.clone())))).unwrap();
     assert!(retained.is_none());
     let values = envelope.into_vec();
     let Some(Value::UserData(resumed)) = values.get(1).cloned() else {

@@ -16,7 +16,7 @@ use runvil_vfs::Origin;
 
 use crate::execute::RunOutcome;
 use crate::execute::run::{EffectAnswer, EffectId, Step};
-use crate::{Error, Result};
+use crate::{Result, error};
 
 use super::chain::ChainStep;
 use super::effects::Arrival;
@@ -35,7 +35,7 @@ impl Scheduler {
         if matches!(self.phase, Phase::Fresh) {
             if let Err(error) = self.check_start() {
                 let error = if self.ctx.cancel().is_cancelled() {
-                    Error::Interrupted
+                    error::interrupted()
                 } else {
                     error
                 };
@@ -72,7 +72,7 @@ impl Scheduler {
             && self.ready.is_empty()
             && !self.effects.has_awaited()
         {
-            self.end(Err(Error::internal(
+            self.end(Err(error::internal(
                 "the scheduler stalled with no ready chain, no in-flight request, \
                  and no queued chain that can be admitted",
             )));
@@ -91,7 +91,7 @@ impl Scheduler {
                 }
             }
             Phase::Done => Step::Done {
-                outcome: self.outcome(Err(Error::internal(
+                outcome: self.outcome(Err(error::internal(
                     "a finished run cannot be stepped again",
                 ))),
                 events,
@@ -119,9 +119,9 @@ impl Scheduler {
     fn outcome(&mut self, result: Result<String>) -> RunOutcome {
         match result {
             Ok(final_text) => RunOutcome::Completed { final_text },
-            Err(Error::Interrupted) => RunOutcome::Cancelled,
+            Err(error) if error.code == ErrorCode::Interrupted => RunOutcome::Cancelled,
             Err(error) => {
-                let outcome = error.to_outcome();
+                let outcome = crate::execute::outcome(&error);
                 #[cfg(test)]
                 {
                     self.failure = Some(error);
@@ -145,7 +145,7 @@ impl Scheduler {
             Arrival::Awaited(parked) => parked,
             Arrival::Orphaned => return,
             Arrival::Unknown => {
-                self.end(Err(Error::internal(
+                self.end(Err(error::internal(
                     "an answer arrived for an effect the run did not issue or already answered",
                 )));
                 return;
@@ -183,24 +183,27 @@ impl Scheduler {
     /// store, then what the prompt requires of the config.
     ///
     /// # Errors
-    /// Returns [`Error::UnsupportedVersion`] or a structural parse error for
-    /// a prompt that is not a supported runvil prompt, [`Error::Store`]
-    /// when the handle declares no store or the store's backend fails the
-    /// probe, or [`Error::RequirementsUnmet`] with the refusal notice when
-    /// the config lacks a declared Pack or a model the prompt's roles
-    /// require, or names a Pack id the Engine reserves.
+    /// Returns an `UnsupportedVersion` or a structural parse failure for a
+    /// prompt that is not a supported runvil prompt, a store failure when
+    /// the handle declares no store or the store's backend fails the probe,
+    /// or `RequirementsUnmet` with the refusal notice when the config lacks
+    /// a declared Pack or a model the prompt's roles require, or names a
+    /// Pack id the Engine reserves.
     fn check_start(&self) -> Result<()> {
         let prompt = self.ctx.prompt();
         let frontmatter = prompt.frontmatter();
         match frontmatter.runvil() {
             Some(0) => {}
-            Some(other) => return Err(Error::UnsupportedVersion(other)),
+            Some(other) => return Err(error::unsupported_version(other)),
             None => {
-                return Err(Error::parse(
-                    ErrorCode::StructureInvalid,
-                    "not a runvil prompt: no runvil version",
-                )
-                .with_prompt_context(frontmatter.name(), prompt.file()));
+                return Err(crate::prompt::detail::with_prompt_context(
+                    crate::prompt::detail::parse_error(
+                        ErrorCode::StructureInvalid,
+                        "not a runvil prompt: no runvil version",
+                    ),
+                    frontmatter.name(),
+                    prompt.file(),
+                ));
             }
         }
         // Every run and every store call needs a declared store: the probe
@@ -211,13 +214,10 @@ impl Scheduler {
             .ctx
             .vfs()
             .acquire(Origin::new("store mount probe"))
-            .map_err(Error::store)?;
-        runvil_vfs::detail::probe_store(&probe).map_err(Error::store)?;
+            .map_err(|cause| error::store(&cause))?;
+        runvil_vfs::detail::probe_store(&probe).map_err(|cause| error::store(&cause))?;
         if let Some(notice) = self.ctx.refusal() {
-            return Err(Error::RequirementsUnmet {
-                notice: notice.to_owned(),
-                cause: None,
-            });
+            return Err(error::requirements_unmet(notice, None));
         }
         Ok(())
     }
@@ -233,7 +233,7 @@ impl Scheduler {
     fn drain(&mut self) {
         loop {
             if self.ctx.cancel().is_cancelled() {
-                self.end(Err(Error::Interrupted));
+                self.end(Err(error::interrupted()));
                 return;
             }
             let Some(id) = self.ready.pop_front() else {

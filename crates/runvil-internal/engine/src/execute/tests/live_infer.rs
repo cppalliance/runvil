@@ -59,7 +59,7 @@ fn unread_h1_prose_stays_inert_and_explicit_infer_requires_a_model() {
     let trace = Scenario::new(reading.build()).run();
     let error = trace.error();
     assert_eq!(
-        error.kind(),
+        run_error_kind(error.code),
         RunErrorKind::RequirementsUnmet,
         "expected ModelRequired, got {error}"
     );

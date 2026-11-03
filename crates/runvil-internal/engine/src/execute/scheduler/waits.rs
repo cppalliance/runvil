@@ -34,8 +34,8 @@ use std::sync::atomic::Ordering;
 use runvil_types::event::Event;
 use runvil_types::ids::TaskId;
 
+use crate::Result;
 use crate::lua::{Answer, NonEmpty, TaskDelivery, TaskPhase, TaskStatus};
-use crate::{Error, Result};
 
 use super::admission::ChainTree;
 use super::chain_record::Parked;
@@ -90,7 +90,7 @@ impl Scheduler {
     /// The delivery is the join: everything the task did happens before the
     /// owner's next step, so its store writes - a cancelled task's partial
     /// writes included - are visible from the very next operation.
-    fn deliver(&mut self, task: &TaskId) -> TaskDelivery<Error> {
+    fn deliver(&mut self, task: &TaskId) -> TaskDelivery {
         if let Some(owner) = self.tasks.owner_of(task) {
             self.join_task(owner, task);
         }

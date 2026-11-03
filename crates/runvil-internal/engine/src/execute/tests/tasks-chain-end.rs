@@ -50,16 +50,11 @@ fn a_chain_ending_with_live_author_tasks_fails_as_tasks_live_naming_the_ids() {
     let mut rig = Rig::run(scheduler_scenario(md));
     let error = rig.trace().error();
 
-    match error {
-        Error::TasksLive { tasks } => {
-            assert_eq!(
-                tasks,
-                &[task("0.0"), task("0.1")],
-                "leaked ids in spawn order"
-            );
-        }
-        other => panic!("expected tasks_live, got {other:?}"),
-    }
+    assert_eq!(
+        error,
+        &crate::error::tasks_live(&[task("0.0"), task("0.1")]),
+        "leaked ids in spawn order"
+    );
     let text = error.to_string();
     assert!(
         text.contains("0.0, 0.1"),
@@ -95,7 +90,7 @@ fn a_chain_failing_with_a_live_task_keeps_its_own_error_and_abandons_the_task() 
     let error = rig.trace().error();
 
     assert!(
-        !matches!(error, Error::TasksLive { .. }),
+        error.code != ErrorCode::TasksLive,
         "a failing owner keeps its own error over the leak: {error:?}"
     );
     assert!(
@@ -160,10 +155,10 @@ fn a_returning_owner_abandons_its_running_task_as_owner_returned() {
         CHILD_PARKED_ON_HELD_ROUND,
     );
     let rig = run_abandoning_a_running_task(scheduler_scenario(md), AbandonReason::OwnerReturned);
-    match rig.trace().error() {
-        Error::TasksLive { tasks } => assert_eq!(tasks, &[task("0.0")]),
-        other => panic!("expected tasks_live, got {other:?}"),
-    }
+    assert_eq!(
+        rig.trace().error(),
+        &crate::error::tasks_live(&[task("0.0")])
+    );
 }
 
 #[test]
@@ -203,7 +198,7 @@ fn an_exhausted_tool_loop_abandons_its_running_task_as_tool_loop_exhausted() {
     let rig = run_abandoning_a_running_task(scenario, AbandonReason::ToolLoopExhausted);
     let error = rig.trace().error();
     assert!(
-        matches!(error, Error::ToolLoopExhausted),
+        error == &crate::error::tool_loop_exhausted(),
         "the owner's own error stands: {error:?}"
     );
 }
@@ -238,14 +233,11 @@ fn moving_spawner_prompt(movement: &str) -> String {
 fn assert_task_outlives_movement(md: String) {
     let mut rig = Rig::run(scheduler_scenario(md));
 
-    match rig.trace().error() {
-        Error::TasksLive { tasks } => assert_eq!(
-            tasks,
-            &[task("0.0")],
-            "the walk still owns the task when the sibling returns"
-        ),
-        other => panic!("expected tasks_live, got {other:?}"),
-    }
+    assert_eq!(
+        rig.trace().error(),
+        &crate::error::tasks_live(&[task("0.0")]),
+        "the walk still owns the task when the sibling returns"
+    );
     assert_eq!(
         rig.task_state_for_test(&task("0.0")),
         Some(TaskState::Abandoned),
@@ -341,14 +333,11 @@ fn a_task_spawned_in_h1_belongs_to_the_main_walk() {
         ```\n";
     let mut rig = Rig::run(scheduler_scenario(md));
 
-    match rig.trace().error() {
-        Error::TasksLive { tasks } => assert_eq!(
-            tasks,
-            &[task("0.0")],
-            "the walk owns H1's task and leaks it"
-        ),
-        other => panic!("expected tasks_live, got {other:?}"),
-    }
+    assert_eq!(
+        rig.trace().error(),
+        &crate::error::tasks_live(&[task("0.0")]),
+        "the walk owns H1's task and leaks it"
+    );
     assert_eq!(
         rig.task_state_for_test(&task("0.0")),
         Some(TaskState::Abandoned)

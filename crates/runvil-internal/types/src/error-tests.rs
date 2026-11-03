@@ -232,6 +232,16 @@ fn every_code_has_its_own_snake_case_tag() {
 }
 
 #[test]
+fn every_tag_parses_back_to_its_code_and_no_other_text_parses() {
+    for code in ALL {
+        assert_eq!(ErrorCode::from_tag(code.tag()), Some(code), "{code:?}");
+    }
+    for tag in ["", "Not_Found", "not_found ", "tool", "store"] {
+        assert_eq!(ErrorCode::from_tag(tag), None, "{tag:?}");
+    }
+}
+
+#[test]
 fn store_and_model_codes_keep_the_tags_stored_records_hold() {
     // The store and model tags a run log already holds.
     for (code, tag) in [

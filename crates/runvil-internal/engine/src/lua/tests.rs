@@ -24,8 +24,8 @@ use std::num::NonZeroU32;
 use std::sync::{Arc, Mutex};
 
 use mlua::{MultiValue, Thread};
+use runvil_lua::LuaProgram;
 use runvil_lua::test_support::answer_envelope;
-use runvil_lua::{Error, LuaProgram};
 use runvil_types::tools::{ToolId, ToolInfo};
 use runvil_types::untrusted::GuardNonce;
 use serde_json::json;
@@ -138,7 +138,7 @@ fn set_up_vm(binds: &VmBinds<'_>) -> SectionVm {
     };
     let read = |_: String| -> std::result::Result<Option<SectionText>, crate::Error> { Ok(None) };
     let resolve = |heading: String, _| -> std::result::Result<Library, crate::Error> {
-        Err(crate::Error::lua_message(format!(
+        Err(crate::error::lua_runtime(format!(
             "no library `{heading}` in reach"
         )))
     };
@@ -186,7 +186,7 @@ fn parse_request(vm: &SectionVm, yielded: MultiValue) -> Request {
 /// Renders the successful `answer` as the shim's envelope and resumes the
 /// thread with it.
 #[track_caller]
-fn resume_with(vm: &SectionVm, thread: &Thread, answer: Answer<Error>) -> MultiValue {
+fn resume_with(vm: &SectionVm, thread: &Thread, answer: Answer) -> MultiValue {
     let (envelope, _retained) =
         answer_envelope(vm.lua(), Ok(answer)).expect("the envelope renders");
     thread

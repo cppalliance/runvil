@@ -147,22 +147,21 @@ fn an_uncaught_loop_arity_error_fails_the_run_naming_the_authors_prompt_line() {
          return 'unreachable'",
     );
     let trace = loop_scenario(source).chat(&gateway).run();
-    match trace.error() {
-        Error::Lua {
-            message,
-            cause: Some(_),
-        } => {
-            assert!(
-                message.contains("models.loop takes (compactor?)"),
-                "the runtime error keeps the shim's message: {message}"
-            );
-            assert!(
-                message.contains("section `Only` prologue:13: in"),
-                "the runtime error names the author's prompt line: {message}"
-            );
-        }
-        other => panic!("expected the mapped runtime error, got {other:?}"),
-    }
+    let error = trace.error();
+    assert_eq!(
+        error.code,
+        ErrorCode::LuaRuntime,
+        "expected the mapped runtime error, got {error:?}"
+    );
+    let message = &error.message;
+    assert!(
+        message.contains("models.loop takes (compactor?)"),
+        "the runtime error keeps the shim's message: {message}"
+    );
+    assert!(
+        message.contains("section `Only` prologue:13: in"),
+        "the runtime error names the author's prompt line: {message}"
+    );
     assert_eq!(gateway.call_count(), 0, "no round runs");
 }
 

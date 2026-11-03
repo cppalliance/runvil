@@ -8,9 +8,8 @@ use super::*;
 #[test]
 fn an_ok_infer_answer_round_trips_through_lua() {
     let lua = Lua::new();
-    let (envelope, retained) =
-        answer_envelope(&lua, Ok(Answer::<Error>::Infer("completion".to_owned())))
-            .expect("the envelope renders");
+    let (envelope, retained) = answer_envelope(&lua, Ok(Answer::Infer("completion".to_owned())))
+        .expect("the envelope renders");
     assert!(retained.is_none());
     let (ok, result) = echo_through_lua(&lua, envelope);
     assert!(ok);
@@ -23,9 +22,8 @@ fn an_ok_infer_answer_round_trips_through_lua() {
 #[test]
 fn an_ok_call_answer_round_trips_through_lua() {
     let lua = Lua::new();
-    let (envelope, retained) =
-        answer_envelope(&lua, Ok(Answer::<Error>::Call("chain text".to_owned())))
-            .expect("the envelope renders");
+    let (envelope, retained) = answer_envelope(&lua, Ok(Answer::Call("chain text".to_owned())))
+        .expect("the envelope renders");
     assert!(retained.is_none());
     let (ok, result) = echo_through_lua(&lua, envelope);
     assert!(ok);
@@ -40,7 +38,7 @@ fn an_ok_spawn_answer_resumes_the_task_id_as_its_path_text() {
     let lua = Lua::new();
     let task: TaskId = "0.2".parse().expect("a task id parses");
     let (envelope, retained) =
-        answer_envelope(&lua, Ok(Answer::<Error>::Spawn(task))).expect("the envelope renders");
+        answer_envelope(&lua, Ok(Answer::Spawn(task))).expect("the envelope renders");
     assert!(retained.is_none());
     let (ok, result) = echo_through_lua(&lua, envelope);
     assert!(ok);
@@ -53,19 +51,10 @@ fn an_ok_spawn_answer_resumes_the_task_id_as_its_path_text() {
 #[test]
 fn a_failed_answer_round_trips_and_retains_the_typed_error() {
     let lua = Lua::new();
-    let (envelope, retained) = answer_envelope::<Error>(
-        &lua,
-        Err(Error::LuaQuota {
-            resource: crate::QuotaResource::LogEvent,
-        }),
-    )
-    .expect("the envelope renders");
-    match retained {
-        Some(Error::LuaQuota {
-            resource: crate::QuotaResource::LogEvent,
-        }) => {}
-        other => panic!("expected the retained LuaQuota error, got {other:?}"),
-    }
+    let quota = crate::lua_quota(crate::QuotaResource::LogEvent);
+    let (envelope, retained) =
+        answer_envelope(&lua, Err(quota.clone())).expect("the envelope renders");
+    assert_eq!(retained, Some(quota), "the typed error is retained");
     let (ok, result) = echo_through_lua(&lua, envelope);
     assert!(!ok);
     let (kind, message) = failure_parts(&lua, result);
@@ -81,22 +70,20 @@ fn a_join_any_delivery_of_a_failed_member_retains_the_members_typed_error() {
     // substitute the member's own error for the raised table.
     let lua = Lua::new();
     let task: TaskId = "0.1".parse().expect("a task id parses");
+    let quota = crate::lua_quota(crate::QuotaResource::LogEvent);
     let (envelope, retained) = answer_envelope(
         &lua,
-        Ok(Answer::<Error>::JoinAny(TaskDelivery {
+        Ok(Answer::JoinAny(TaskDelivery {
             task,
-            outcome: Err(Error::LuaQuota {
-                resource: crate::QuotaResource::LogEvent,
-            }),
+            outcome: Err(quota.clone()),
         })),
     )
     .expect("the envelope renders");
-    match retained {
-        Some(Error::LuaQuota {
-            resource: crate::QuotaResource::LogEvent,
-        }) => {}
-        other => panic!("expected the member's retained LuaQuota error, got {other:?}"),
-    }
+    assert_eq!(
+        retained,
+        Some(quota),
+        "the member's typed error is retained"
+    );
     let (ok, id, member_ok, kind, message): (bool, String, bool, String, String) = lua
         .load(
             "local ok, id, member_ok, err = ...; \
@@ -117,7 +104,7 @@ fn a_join_any_delivery_of_a_finished_member_retains_nothing() {
     let task: TaskId = "0.1".parse().expect("a task id parses");
     let (envelope, retained) = answer_envelope(
         &lua,
-        Ok(Answer::<Error>::JoinAny(TaskDelivery {
+        Ok(Answer::JoinAny(TaskDelivery {
             task,
             outcome: Ok("done".to_owned()),
         })),
@@ -155,9 +142,8 @@ fn a_status_answer_derives_ok_from_the_phase() {
             depth: 0,
             note: None,
         };
-        let (envelope, retained) =
-            answer_envelope(&lua, Ok(Answer::<Error>::Status(Box::new(status))))
-                .expect("the envelope renders");
+        let (envelope, retained) = answer_envelope(&lua, Ok(Answer::Status(Box::new(status))))
+            .expect("the envelope renders");
         assert!(retained.is_none());
         let (ok, phase, status_ok): (bool, String, String) = lua
             .load("local ok, status = ...; return ok, status.state, tostring(status.ok)")
@@ -174,7 +160,7 @@ fn an_ok_plain_tool_call_answer_round_trips_as_a_string() {
     let lua = Lua::new();
     let (envelope, retained) = answer_envelope(
         &lua,
-        Ok(Answer::<Error>::ToolCallResult(ToolCallOutcome::Plain(
+        Ok(Answer::ToolCallResult(ToolCallOutcome::Plain(
             "echoed: hi".to_owned(),
         ))),
     )
@@ -192,8 +178,8 @@ fn an_ok_plain_tool_call_answer_round_trips_as_a_string() {
 fn an_ok_structured_tool_call_answer_round_trips_as_a_table() {
     let lua = Lua::new();
     let outcome = ToolCallOutcome::Structured(json!({ "text": "typed", "images": [] }));
-    let (envelope, retained) = answer_envelope(&lua, Ok(Answer::<Error>::ToolCallResult(outcome)))
-        .expect("the envelope renders");
+    let (envelope, retained) =
+        answer_envelope(&lua, Ok(Answer::ToolCallResult(outcome))).expect("the envelope renders");
     assert!(retained.is_none());
     let (ok, text, images_len): (bool, String, i64) = lua
         .load("local ok, result = ...; return ok, result.text, #result.images")
@@ -231,7 +217,7 @@ fn an_adhoc_tool_call_answer_resumes_with_its_handler_and_args() {
     let lua = lua_with_adhoc_grab();
     let (envelope, retained) = answer_envelope(
         &lua,
-        Ok(Answer::<Error>::ToolCallResult(ToolCallOutcome::Adhoc {
+        Ok(Answer::ToolCallResult(ToolCallOutcome::Adhoc {
             alias: "grab".to_owned(),
             args: json!({ "value": "hi" }),
         })),
@@ -259,7 +245,7 @@ fn an_adhoc_tool_call_answer_for_an_unregistered_alias_is_an_error() {
     let lua = lua_with_adhoc_grab();
     let error = answer_envelope(
         &lua,
-        Ok(Answer::<Error>::ToolCallResult(ToolCallOutcome::Adhoc {
+        Ok(Answer::ToolCallResult(ToolCallOutcome::Adhoc {
             alias: "missing".to_owned(),
             args: json!({}),
         })),
@@ -277,11 +263,12 @@ fn an_adhoc_tool_call_answer_for_an_unregistered_alias_is_an_error() {
 fn a_cancelled_answer_round_trips_as_the_cancelled_kind_and_retains_the_typed_error() {
     let lua = Lua::new();
     let (envelope, retained) =
-        answer_envelope::<Error>(&lua, Err(Error::Interrupted)).expect("the envelope renders");
-    match retained {
-        Some(Error::Interrupted) => {}
-        other => panic!("expected the retained Interrupted error, got {other:?}"),
-    }
+        answer_envelope(&lua, Err(crate::interrupted())).expect("the envelope renders");
+    assert_eq!(
+        retained,
+        Some(crate::interrupted()),
+        "the typed error is retained"
+    );
     let (ok, result) = echo_through_lua(&lua, envelope);
     assert!(!ok);
     let (kind, message) = failure_parts(&lua, result);

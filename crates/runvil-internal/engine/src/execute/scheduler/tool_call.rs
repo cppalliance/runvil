@@ -51,7 +51,7 @@ use crate::lua::{
     Answer, DiscoveryTool, ModelCall, OfferMode, ScriptReport, ToolBinding, ToolCallCounts,
     ToolCallOutcome, ToolCallRecord, ToolSet, current_dynamic_set, current_static_set,
 };
-use crate::{Error, Result};
+use crate::{Error, Result, error};
 
 use super::chain_record::Parked;
 use super::dispatch::Dispatched;
@@ -69,10 +69,8 @@ fn unbound_tool_call(tool_set: &ToolSet, name: &str) -> Error {
         .map(|info| &info.id)
         .collect();
     ids.sort();
-    Error::UnboundToolCall {
-        name: name.to_owned(),
-        ids: ids.into_iter().map(ToString::to_string).collect(),
-    }
+    let ids: Vec<String> = ids.into_iter().map(ToString::to_string).collect();
+    error::unbound_tool(name, &ids)
 }
 
 /// Where one tool call is answered, with the binding it resolved to, so a
@@ -156,8 +154,8 @@ impl ChainOps<'_> {
     /// to the adhoc tool the id names, when it is one.
     ///
     /// # Errors
-    /// Returns [`Error::UnboundToolCall`] for a name that resolves to no
-    /// tool, and [`Error::ModelOnlyToolCall`] for a script's call of a
+    /// Returns an `UnboundTool` failure for a name that resolves to no
+    /// tool, and a `ModelOnlyTool` failure for a script's call of a
     /// catalog tool marked model-only.
     fn tool_route(&self, name: &str, site: &CallSite) -> Result<ToolRoute> {
         let chain = &*self.chain;
@@ -170,11 +168,17 @@ impl ChainOps<'_> {
             if set == OfferMode::Dynamic || DiscoveryTool::of(binding.id()).is_some() {
                 return Ok(ToolRoute::Discovery(binding));
             }
-            let adhoc = vm.adhoc_tools().binding(&binding.id().to_string())?;
+            let adhoc = vm
+                .adhoc_tools()
+                .binding(&binding.id().to_string())
+                .map_err(error::into_universal)?;
             return Ok(adhoc.map_or(ToolRoute::Catalog(binding), ToolRoute::Adhoc));
         }
         if name.contains('/')
-            && let Some(binding) = vm.adhoc_tools().binding(name)?
+            && let Some(binding) = vm
+                .adhoc_tools()
+                .binding(name)
+                .map_err(error::into_universal)?
         {
             return Ok(ToolRoute::Adhoc(binding));
         }
@@ -188,10 +192,7 @@ impl ChainOps<'_> {
         // so a model-only tool refuses the call while the catalog keeps
         // naming it.
         if info.model_only_call {
-            return Err(crate::Error::ModelOnlyToolCall {
-                name: name.to_owned(),
-                id: info.id.to_string(),
-            });
+            return Err(error::model_only_tool(name, &info.id.to_string()));
         }
         Ok(ToolRoute::Catalog(ToolBinding::from_info(
             &info.id.to_string(),
@@ -221,7 +222,11 @@ impl ChainOps<'_> {
             for tool in frozen {
                 let seeded = DiscoveryTool::of(&tool).is_some()
                     || tool_set.catalog().get(&tool).is_some()
-                    || vm.adhoc_tools().binding(&tool.to_string())?.is_some();
+                    || vm
+                        .adhoc_tools()
+                        .binding(&tool.to_string())
+                        .map_err(error::into_universal)?
+                        .is_some();
                 if seeded {
                     ids.push(tool);
                 }
@@ -229,8 +234,10 @@ impl ChainOps<'_> {
             ids
         } else {
             let (runtime, adhoc) = (vm.offers(), vm.adhoc_tools());
-            let static_tools = current_static_set(tool_set, runtime, adhoc)?;
-            let dynamic_tools = current_dynamic_set(tool_set, runtime, adhoc, &static_tools)?;
+            let static_tools =
+                current_static_set(tool_set, runtime, adhoc).map_err(error::into_universal)?;
+            let dynamic_tools = current_dynamic_set(tool_set, runtime, adhoc, &static_tools)
+                .map_err(error::into_universal)?;
             static_tools
                 .iter()
                 .chain(&dynamic_tools)
@@ -247,14 +254,10 @@ impl ChainOps<'_> {
     /// answered.
     ///
     /// # Errors
-    /// Returns [`Error::Internal`] when the chain holds no such slot,
+    /// Returns an `Internal` failure when the chain holds no such slot,
     /// which only an answer the scheduler should have orphaned produces,
     /// or when the full batch finds no suspended block to answer.
-    pub(super) fn fill_batch_slot(
-        &mut self,
-        slot: usize,
-        answer: Result<Answer<Error>>,
-    ) -> Result<()> {
+    pub(super) fn fill_batch_slot(&mut self, slot: usize, answer: Result<Answer>) -> Result<()> {
         let landed = match answer {
             Ok(Answer::ToolCallResult(ToolCallOutcome::Plain(text))) => Ok(text),
             Err(error) => Err(error),
@@ -276,7 +279,7 @@ impl ChainOps<'_> {
                 | Answer::Chat(_)
                 | Answer::ToolCallsResult(_)
                 | Answer::Store(_),
-            ) => Err(Error::internal(
+            ) => Err(error::internal(
                 "a batched call lands as plain text or a failure",
             )),
         };
@@ -284,7 +287,7 @@ impl ChainOps<'_> {
             Some(Parked::Batch(batch)) => batch.get_mut(slot).filter(|open| open.is_none()),
             _ => None,
         }
-        .ok_or(Error::internal(
+        .ok_or(error::internal(
             "a batched call's answer fills an open slot of its chain's batch",
         ))?;
         *open = Some(landed);
@@ -355,7 +358,7 @@ impl ChainOps<'_> {
         // The attempt counts at dispatch - before the tool runs, so a
         // cancelled dispatch still counts.
         let counted = binding.id().to_string();
-        counts.increment(&counted)?;
+        counts.increment(&counted).map_err(error::into_universal)?;
         let prompt = self.prompt();
         let chain = &*self.chain;
         let frame = chain.frame()?;
@@ -379,7 +382,7 @@ impl ChainOps<'_> {
             chain.access()?,
             prompt_origin(&prompt, &binding.id().to_string(), chain.blocks(&prompt)),
         )
-        .map_err(Error::store)?;
+        .map_err(|cause| error::store(&cause))?;
         let exec = detail::access_id(&access);
         let effect = Effect::ToolCall {
             tool: binding.id().clone(),

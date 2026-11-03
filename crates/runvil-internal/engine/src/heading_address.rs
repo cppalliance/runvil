@@ -22,7 +22,7 @@
 //! read it in place.
 
 use crate::prompt::{Prompt, Section, detail};
-use crate::{Error, Result};
+use crate::{Error, Result, error};
 
 /// Where a sibling slice sits in the prompt tree: the index of each
 /// ancestor section from the top level down to the slice's parent. The
@@ -282,13 +282,13 @@ pub(crate) fn section_heading(section: &Section) -> String {
 /// rejected, so a malformed heading can never be silently reinterpreted.
 ///
 /// # Errors
-/// Returns [`Error::Lua`] when the marker run is absent, is not followed by
+/// Returns a `LuaRuntime` failure when the marker run is absent, is not followed by
 /// whitespace, or the name is empty.
 fn parse_heading_address(heading: &str) -> Result<(usize, String)> {
     let stripped = heading.trim();
     let level = stripped.chars().take_while(|&c| c == '#').count();
     if level == 0 {
-        return Err(Error::lua_message(format!(
+        return Err(error::lua_runtime(format!(
             "section heading must include ### markers, got bare name: {stripped}"
         )));
     }
@@ -298,12 +298,12 @@ fn parse_heading_address(heading: &str) -> Result<(usize, String)> {
     // no name to parse whether or not whitespace followed the markers.
     let name = rest.trim();
     if name.is_empty() {
-        return Err(Error::lua_message(format!(
+        return Err(error::lua_runtime(format!(
             "section heading has no name: {stripped}"
         )));
     }
     if !rest.starts_with(|c: char| c.is_whitespace()) {
-        return Err(Error::lua_message(format!(
+        return Err(error::lua_runtime(format!(
             "section heading must have whitespace after the {} markers: {stripped}",
             "#".repeat(level)
         )));
@@ -317,7 +317,7 @@ fn parse_heading_address(heading: &str) -> Result<(usize, String)> {
 /// the same `None`, because only the visible set is ever searched.
 ///
 /// # Errors
-/// Returns [`Error::Lua`] when the heading is malformed (see
+/// Returns a `LuaRuntime` failure when the heading is malformed (see
 /// [`parse_heading_address`]) or when more than one visible section matches
 /// the exact address, so an ambiguous heading never resolves to an arbitrary
 /// first hit.
@@ -329,7 +329,7 @@ pub(crate) fn find_visible<'a>(heading: &str, visible: Visible<'a>) -> Result<Op
 /// at `heading`'s exact address, with its position, or `None`.
 ///
 /// # Errors
-/// Returns [`Error::Lua`] when the heading is malformed (see
+/// Returns a `LuaRuntime` failure when the heading is malformed (see
 /// [`parse_heading_address`]) or when more than one reachable section
 /// matches the exact address.
 pub(crate) fn find_reachable<'a>(
@@ -359,7 +359,7 @@ fn find_one<'a, T>(
     });
     let found = matches.next();
     if found.is_some() && matches.next().is_some() {
-        return Err(Error::lua_message(format!(
+        return Err(error::lua_runtime(format!(
             "section heading `{}` is ambiguous; more than one {set} section matches {} {name}",
             heading.trim(),
             "#".repeat(level)
@@ -373,7 +373,7 @@ fn find_one<'a, T>(
 /// structure.
 fn not_found<'a>(heading: &str, available: impl Iterator<Item = &'a Section>) -> Error {
     let available: Vec<String> = available.map(section_heading).collect();
-    Error::lua_message(format!(
+    error::lua_runtime(format!(
         "section heading `{}` not found; available sections: {}",
         heading.trim(),
         available.join(", ")
@@ -384,7 +384,7 @@ fn not_found<'a>(heading: &str, available: impl Iterator<Item = &'a Section>) ->
 /// the surfaces that must reach a section, such as `call` and `jump`.
 ///
 /// # Errors
-/// Returns [`Error::Lua`] for every [`find_visible`] error, and, through
+/// Returns a `LuaRuntime` failure for every [`find_visible`] error, and, through
 /// [`not_found`], when no visible section matches the exact address.
 pub(crate) fn resolve_visible<'a>(heading: &str, visible: Visible<'a>) -> Result<&'a Section> {
     find_visible(heading, visible)?.ok_or_else(|| not_found(heading, visible.iter()))
@@ -394,7 +394,7 @@ pub(crate) fn resolve_visible<'a>(heading: &str, visible: Visible<'a>) -> Result
 /// for `require`.
 ///
 /// # Errors
-/// Returns [`Error::Lua`] for every [`find_reachable`] error, and, through
+/// Returns a `LuaRuntime` failure for every [`find_reachable`] error, and, through
 /// [`not_found`], when no reachable section matches the exact address.
 pub(crate) fn resolve_reachable<'a>(heading: &str, reach: Reachable<'a>) -> Result<Reached<'a>> {
     find_reachable(heading, reach)?

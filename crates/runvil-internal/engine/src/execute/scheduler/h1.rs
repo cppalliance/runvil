@@ -2,7 +2,7 @@
 //! driver loop's first chain, under the walk's rules with these deltas:
 //! the frame takes the root chain's entry 0 and fires no section
 //! observations, a scalar return short-circuits the run, a Lua failure is
-//! the prompt's failed hard gate, mapped to [`Error::RequirementsUnmet`],
+//! the prompt's failed hard gate, mapped to a `RequirementsUnmet` failure,
 //! and the pass's end hands off to the root walk. The frame's own deltas,
 //! writable `argv` among them, are listed on `SectionContext::new_h1`.
 //!
@@ -19,7 +19,7 @@
 use std::sync::Arc;
 
 use crate::heading_address::{SectionIndex, SectionPos};
-use crate::{Error, Result};
+use crate::{Result, error};
 
 use super::chain::ChainStep;
 use super::chain_record::{ChainKind, Entered};
@@ -32,8 +32,8 @@ impl Scheduler {
     /// chain itself, so this returns no index and no caller pushes it.
     ///
     /// # Errors
-    /// Returns [`Error::Internal`] when the run's chain count exceeds `u32`,
-    /// or [`Error::Store`] when the backend refuses acquisition.
+    /// Returns an `Internal` failure when the run's chain count exceeds `u32`,
+    /// or a store failure when the backend refuses acquisition.
     pub(super) fn start_h1(&mut self) -> Result<()> {
         // The H1 pass runs under the prompt's title, from its first
         // compiled H1 chunk.
@@ -42,7 +42,11 @@ impl Scheduler {
             self.ctx.prompt().title(),
             crate::prompt::detail::h1_blocks(self.ctx.prompt()),
         );
-        let access = self.ctx.vfs().acquire(origin).map_err(Error::store)?;
+        let access = self
+            .ctx
+            .vfs()
+            .acquire(origin)
+            .map_err(|cause| error::store(&cause))?;
         self.scope = Some(runvil_vfs::detail::scope_handle(&access));
         // The pass's one frame takes the root lineage's entry 0, and the
         // walk that follows continues its counters (see `Chain::lineage`).
@@ -69,16 +73,16 @@ impl Scheduler {
     /// result is the shared generic completion.
     ///
     /// # Errors
-    /// Returns [`Error::Lua`] when the final `var` read-back fails or H1
+    /// Returns a `LuaRuntime` failure when the final `var` read-back fails or H1
     /// left `argv` as non-JSON data,
-    /// or [`Error::Internal`] when the chain holds no frame, when the walk
+    /// or an `Internal` failure when the chain holds no frame, when the walk
     /// it hands off to cannot start because the run's chain count exceeds
     /// `u32`, or when the pass's capability is gone - the walk reuses it, so
     /// it acquires nothing and has nothing to fall back on.
     pub(super) fn end_h1(&mut self, id: ChainIndex, start: SectionPos) -> Result<ChainStep> {
         let chain = &mut self.chains[id];
         let Some(Entered { frame, .. }) = chain.entered.take() else {
-            return Err(Error::internal("the H1 pass ends with a live frame"));
+            return Err(error::internal("the H1 pass ends with a live frame"));
         };
         let var = frame.read_var()?;
         // The freeze: whatever `argv` H1 leaves behind - the derived parse
@@ -134,7 +138,7 @@ impl Scheduler {
     /// then the pass ends and the root walk starts at the target.
     ///
     /// # Errors
-    /// Returns [`Error::Lua`] when the heading is malformed, matches no
+    /// Returns a `LuaRuntime` failure when the heading is malformed, matches no
     /// top-level section, or matches more than one; the pass's own ending
     /// can fail as [`end_h1`](Self::end_h1) documents.
     pub(super) fn end_h1_at_jump(&mut self, id: ChainIndex, heading: &str) -> Result<ChainStep> {

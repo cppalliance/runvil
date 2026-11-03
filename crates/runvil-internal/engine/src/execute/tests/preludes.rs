@@ -71,7 +71,7 @@ fn assert_fails_before_any_effect(md: &str, preludes: Vec<Prelude>, fragments: &
     );
     let trace = prelude_run(md, preludes);
     let error = trace.error();
-    assert_eq!(error.kind(), RunErrorKind::Lua, "{error:?}");
+    assert_eq!(run_error_kind(error.code), RunErrorKind::Lua, "{error:?}");
     let message = error.to_string();
     for fragment in fragments {
         assert!(

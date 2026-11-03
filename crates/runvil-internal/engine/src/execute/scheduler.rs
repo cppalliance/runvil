@@ -23,8 +23,8 @@
 //! Every `dispatch_*` arm with a fallible half resumes that half's error
 //! into the calling chain as the call's answer (`tool_calls` into the
 //! failing call's batch slot), so an author `pcall` catches it. An
-//! `Error::Internal` from a scheduler method marks a state the scheduler's
-//! own invariants rule out: a scheduler or shim bug.
+//! `Internal` failure from a scheduler method marks a state the
+//! scheduler's own invariants rule out: a scheduler or shim bug.
 //!
 //! [`ChainState`] stays the ambient shared read-mostly context, cloned into
 //! chains and callbacks; the scheduler owns the root chain's copy and is
@@ -94,9 +94,9 @@ use runvil_types::cancel::CancelHandle;
 use runvil_vfs::Origin;
 use runvil_vfs::detail::ScopeHandle;
 
+use crate::Result;
 use crate::lua::Answer;
 use crate::prompt::{Block, Prompt};
-use crate::{Error, Result};
 
 use super::context::ChainState;
 use super::run::EffectAnswer;
@@ -182,7 +182,7 @@ pub(crate) struct Scheduler {
     scope: Option<ScopeHandle>,
     /// The error behind the failed outcome the last `Done` carried.
     #[cfg(test)]
-    failure: Option<Error>,
+    failure: Option<crate::Error>,
 }
 
 impl Drop for Scheduler {
@@ -251,9 +251,9 @@ impl Scheduler {
     /// end answering another chain.
     ///
     /// # Errors
-    /// Returns [`Error::Internal`] when the chain has no suspended block
+    /// Returns an `Internal` failure when the chain has no suspended block
     /// to take the answer, or one that already holds an answer.
-    fn answer_inline(&mut self, id: ChainIndex, answer: Result<Answer<Error>>) -> Result<()> {
+    fn answer_inline(&mut self, id: ChainIndex, answer: Result<Answer>) -> Result<()> {
         self.chains[id].deliver(answer)?;
         self.ready.push_back(id);
         Ok(())

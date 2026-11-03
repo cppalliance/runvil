@@ -1,12 +1,14 @@
 //! The rules of the merge that builds a section entry's frozen sets, the
-//! evidence a broken rule carries, and the message
-//! [`Error::ToolSets`](super::Error::ToolSets) renders when the sets break
-//! one.
+//! evidence a broken rule carries, and the `ToolSetsInvalid` failure the
+//! sets fail with when they break one.
 
+use runvil_types::error::{ErrorCode, FactKey};
 use runvil_types::packs::PackId;
 use runvil_types::tools::ToolId;
 
 use crate::lua::{NonEmpty, OfferMode};
+
+use super::{Error, failure, with_fact};
 
 /// A merge rule a section entry's frozen sets broke, among the rules that
 /// name the tools that broke them.
@@ -57,6 +59,36 @@ pub(crate) struct SetTool {
     pub(crate) set: OfferMode,
 }
 
+impl SetRule {
+    /// The rule's tag, the failure's `Rule` fact.
+    fn tag(&self) -> &'static str {
+        match self {
+            SetRule::UnofferedSet(_) => "unoffered_set",
+            SetRule::ForeignTool(_) => "foreign_tool",
+            SetRule::UnofferedCatalogTool => "unoffered_catalog_tool",
+            SetRule::UniqueWireName(_) => "unique_wire_name",
+        }
+    }
+}
+
+/// A section entry's frozen sets, or the render answer they are merged
+/// from, that broke a rule of the merge that builds them, which fails the
+/// entry's first loop round. The message names each tool that broke it,
+/// with its Pack and its set, or the Packs a render answered, and the
+/// rule; the `Rule` fact is the rule's tag, or `rendered_packs` for an
+/// answer whose Packs differ from the ones asked.
+pub(crate) fn tool_sets(evidence: &SetEvidence) -> Error {
+    let rule = match evidence {
+        SetEvidence::RenderedPacks { .. } => "rendered_packs",
+        SetEvidence::Tools { rule, .. } => rule.tag(),
+    };
+    with_fact(
+        failure(ErrorCode::ToolSetsInvalid, sets_message(evidence)),
+        FactKey::Rule,
+        rule,
+    )
+}
+
 /// `packs` as a bracketed list, such as `[web, gh]`.
 fn pack_list(packs: &[PackId]) -> String {
     let names: Vec<String> = packs.iter().map(ToString::to_string).collect();
@@ -66,7 +98,7 @@ fn pack_list(packs: &[PackId]) -> String {
 /// The message for `evidence`, written for a model: each tool with its
 /// Pack and its set, or the Packs a render answered, and what the rule
 /// requires.
-pub(super) fn sets_message(evidence: &SetEvidence) -> String {
+fn sets_message(evidence: &SetEvidence) -> String {
     let (rule, tools) = match evidence {
         SetEvidence::RenderedPacks { asked, answered } => {
             return format!(

@@ -8,9 +8,10 @@
 //!
 //! Three groups still name `runvil_lua` itself:
 //!
-//! - The error bridge, `error::convert` and `error::value`, which maps the
-//!   Lua crate's error type variant for variant and implements its
-//!   [`ErrorValue`](runvil_lua::ErrorValue) trait on this crate's error.
+//! - The error module, which re-exports the Lua crate's boundary,
+//!   [`into_universal`](runvil_lua::into_universal), with the failure
+//!   constructors it shares with the Engine, and whose store constructors
+//!   build a store failure through [`store_error`](runvil_lua::store_error).
 //! - Test-only code: the `#[cfg(test)]` shim install in `execute::section_vm`,
 //!   which reaches `runvil_lua::test_support`, and this crate's test support,
 //!   which takes `ToolOutputKind` from the crate root.
@@ -19,13 +20,13 @@
 pub(crate) use runvil_lua::{
     AdhocToolOutcome, Answer, Argv, Blocked, ChatOutcome, ChatResult, CoroStep, DiscoveryTool,
     Library, LibraryBlock, LibraryKey, LuaBlockResult, MessageList, ModelCall, ModelReport,
-    NonEmpty, OfferMode, OfferedTool, OverflowReason, ProseState, QuotaResource, RenderedTools,
-    Request, RosterEntry, ScriptReport, SectionText, SectionVm, SpawnVia, TaskDelivery, TaskPhase,
+    NonEmpty, OfferMode, OfferedTool, OverflowReason, ProseState, RenderedTools, Request,
+    RosterEntry, ScriptReport, SectionText, SectionVm, SpawnVia, TaskDelivery, TaskPhase,
     TaskStatus, ToolBinding, ToolCallCounts, ToolCallOutcome, ToolCallRecord, ToolSet, Uninjected,
     UsageAnchor, VfsOp, VfsOutcome, YieldParse, current_catalog_packs, current_dynamic_set,
-    current_static_set, exhaustion_detail, install_preludes, install_store_shims, install_ui,
-    output_reserve, precheck, prepare_dispatch, prepare_model_dispatch, project_messages,
-    render_item, wire_name_of,
+    current_static_set, install_preludes, install_store_shims, install_ui, output_reserve,
+    precheck, prepare_dispatch, prepare_model_dispatch, project_messages, render_item,
+    wire_name_of,
 };
 
 // The store operation behind `execute::perform_vfs_op`, the entry point

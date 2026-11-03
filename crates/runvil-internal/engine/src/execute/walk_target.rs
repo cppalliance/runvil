@@ -17,7 +17,7 @@
 use crate::heading_address::{self, Reachable, SectionIndex, SectionPos, SlicePath, Visible};
 use crate::lua::{Library, LibraryBlock, LibraryKey, SectionText};
 use crate::prompt::{Block, Prompt, Section, detail};
-use crate::{Error, Result};
+use crate::{Result, error};
 
 /// The position of `target` in `slice`, matched on the parser-unique
 /// `(level, name)` pair; `None` when the slice does not contain it.
@@ -40,7 +40,7 @@ pub(super) fn h1_visible_sections(prompt: &Prompt) -> &[Section] {
 /// heading.
 ///
 /// # Errors
-/// Returns [`Error::Lua`] when the heading is malformed or matches more
+/// Returns a `LuaRuntime` failure when the heading is malformed or matches more
 /// than one visible section (see [`heading_address::find_visible`]).
 pub(super) fn read_visible(heading: &str, visible: Visible<'_>) -> Result<Option<SectionText>> {
     Ok(
@@ -79,7 +79,7 @@ pub(super) struct JumpTarget {
 /// first.
 ///
 /// # Errors
-/// Returns [`Error::Lua`] when the heading is malformed, matches no visible
+/// Returns a `LuaRuntime` failure when the heading is malformed, matches no visible
 /// section, or matches more than one.
 pub(super) fn resolve_jump_target(
     heading: &str,
@@ -87,7 +87,7 @@ pub(super) fn resolve_jump_target(
     jumper: &SectionPos,
 ) -> Result<JumpTarget> {
     let siblings = jumper.siblings(prompt);
-    let jumper_section = jumper.section(prompt).ok_or(Error::internal(
+    let jumper_section = jumper.section(prompt).ok_or(error::internal(
         "a jumping section is absent from its sibling slice",
     ))?;
     let target = heading_address::resolve_visible(heading, Visible::of(siblings, jumper.index))?;
@@ -100,7 +100,7 @@ pub(super) fn resolve_jump_target(
     // `target` was resolved out of the visible set read from exactly these
     // two slices, so a miss here is an internal invariant violation, not a
     // user-facing Lua error.
-    let index = section_position(siblings, target).ok_or(Error::internal(
+    let index = section_position(siblings, target).ok_or(error::internal(
         "resolved jump target is absent from the jumper's sibling slice",
     ))?;
     Ok(JumpTarget {
@@ -125,7 +125,7 @@ impl RequireOrigin {
     /// The position `key` names: its library section's own.
     ///
     /// # Errors
-    /// Returns [`Error::Internal`] when `key` is not one [`library_key`]
+    /// Returns an `Internal` failure when `key` is not one [`library_key`]
     /// built.
     fn from_key(key: &LibraryKey) -> Result<Self> {
         let mut indices = key
@@ -134,11 +134,11 @@ impl RequireOrigin {
             .map(str::parse)
             .collect::<std::result::Result<Vec<usize>, _>>()
             .map_err(|cause| {
-                Error::internal_with_cause("a library key names no section position", cause)
+                error::internal_with_cause("a library key names no section position", &cause)
             })?;
         let index = indices
             .pop()
-            .ok_or(Error::internal("a library key names no section position"))?;
+            .ok_or(error::internal("a library key names no section position"))?;
         let slice = indices
             .into_iter()
             .fold(SlicePath::root(), |path, ancestor| {
@@ -179,9 +179,9 @@ fn library_key(pos: &SectionPos) -> LibraryKey {
 /// `origin`.
 ///
 /// # Errors
-/// Returns [`Error::Lua`] when the heading is malformed or names no
+/// Returns a `LuaRuntime` failure when the heading is malformed or names no
 /// section in the reach, the miss listing the reach and nothing else, and
-/// [`Error::Internal`] for a key [`library_key`] did not build or a block
+/// an `Internal` failure for a key [`library_key`] did not build or a block
 /// kind the Engine cannot run.
 pub(super) fn resolve_library(
     prompt: &Prompt,
@@ -201,7 +201,7 @@ pub(super) fn resolve_library(
 /// block pairs with nothing.
 ///
 /// # Errors
-/// Returns [`Error::Internal`] for a block kind the Engine cannot run.
+/// Returns an `Internal` failure for a block kind the Engine cannot run.
 fn build_library(section: &Section, key: LibraryKey) -> Result<Library> {
     let mut blocks = Vec::new();
     let mut pending = "";
@@ -214,7 +214,7 @@ fn build_library(section: &Section, key: LibraryKey) -> Result<Library> {
             }),
             // `Block` is `#[non_exhaustive]` across the crate seam; an
             // unlisted variant has no library form.
-            _ => return Err(Error::internal("an unrecognized block kind cannot load")),
+            _ => return Err(error::internal("an unrecognized block kind cannot load")),
         }
     }
     Ok(Library {

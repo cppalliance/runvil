@@ -8,7 +8,7 @@ use crate::lua::{SectionVm, ToolSet};
 use crate::test_support::fresh_access;
 use crate::test_support::recording::null_emitter;
 use crate::test_support::scenario::TEST_SEED;
-use crate::{Error, Result};
+use crate::{Result, error};
 use runvil_model_client::model::ModelInvocation;
 use runvil_types::emitter::Emitter;
 use runvil_types::untrusted::GuardNonce;
@@ -79,14 +79,15 @@ fn section_vm_with_models(
         models,
         emitter,
         section,
-    )?
+    )
+    .map_err(error::into_universal)?
     .inject_values("", &json!({}), &fresh_access())
-    .map_err(|failure| Error::from(failure.teardown(emitter, section)))
+    .map_err(|failure| error::into_universal(failure.teardown(emitter, section)))
 }
 
 /// Reads the section's current model the way the Engine's read path does.
 fn resolve_section_model(vm: &SectionVm) -> Result<Option<ModelBinding>> {
-    vm.current_model().map_err(Error::from)
+    vm.current_model().map_err(error::into_universal)
 }
 
 #[path = "tests-always.rs"]

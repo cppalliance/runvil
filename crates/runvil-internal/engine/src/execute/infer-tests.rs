@@ -27,11 +27,8 @@ fn an_infer_round_answered_with_tool_calls_fails_as_a_retryable_malformed_reply(
         "Infer",
     )
     .expect_err("no tools were advertised, so tool calls are refused");
-    let Error::Completion(failure) = &error else {
-        panic!("required a completion failure, actual {error:?}");
-    };
     assert_eq!(
-        failure.code,
+        error.code,
         ErrorCode::MalformedResponse,
         "a reply that broke protocol is malformed, so it may come back well formed"
     );

@@ -2,8 +2,9 @@
 //! resume envelope.
 
 use mlua::{Lua, LuaSerdeExt, MultiValue, Table, Value};
+use runvil_types::error::Error;
 
-use crate::error_value::{ErrorValue, error_table};
+use crate::error_value::error_table;
 use crate::tools::adhoc_handler;
 
 use super::answer::{Answer, TaskDelivery, TaskPhase, TaskStatus, ToolCallOutcome, VfsOutcome};
@@ -12,9 +13,9 @@ use super::answer::{Answer, TaskDelivery, TaskPhase, TaskStatus, ToolCallOutcome
 /// error table, beside that table: the block's raise of this very table,
 /// and no other value, is the retained error's.
 #[derive(Debug)]
-pub(crate) struct Retained<E> {
+pub(crate) struct Retained {
     /// The typed error the answer owned.
-    pub(crate) error: E,
+    pub(crate) error: Error,
     /// The error table the envelope holds.
     pub(crate) table: Table,
 }
@@ -76,10 +77,10 @@ fn store_value(lua: &Lua, outcome: VfsOutcome) -> mlua::Result<Value> {
 /// the typed error to retain: a shim that re-raises the member's failure at
 /// once (`tasks.fanout` on a fatal arm) surfaces the member's own typed
 /// error.
-fn delivery_values<E: ErrorValue>(
+fn delivery_values(
     lua: &Lua,
-    delivery: TaskDelivery<E>,
-) -> mlua::Result<(Vec<Value>, Option<Retained<E>>)> {
+    delivery: TaskDelivery,
+) -> mlua::Result<(Vec<Value>, Option<Retained>)> {
     let id = Value::String(lua.create_string(delivery.task.to_string())?);
     let (ok, result, retained) = match delivery.outcome {
         Ok(text) => (true, Value::String(lua.create_string(&text)?), None),
@@ -100,8 +101,9 @@ fn delivery_values<E: ErrorValue>(
 ///
 /// On success the envelope is `(true, value...)`. On failure it is
 /// `(false, table)`, where `table` is the error's structured value
-/// (`kind`, `message` as the error's display string, and the kind's
-/// fields, with `tostring` returning the message) - the shim raises it
+/// (`kind`, `message`, and the kind's fields, as
+/// [`error_table`] renders them, with `tostring` returning the message) -
+/// the shim raises it
 /// with `error(result, 0)`, so a printing author sees exactly the Engine's
 /// message and a branching one reads `kind` - and the typed error is
 /// retained beside that table, which identifies its raise. A successful
@@ -111,10 +113,10 @@ fn delivery_values<E: ErrorValue>(
 /// # Errors
 /// Returns an `mlua` error if a Lua string, userdata, or table cannot be
 /// created on `lua`.
-pub(crate) fn render_envelope<E: ErrorValue>(
+pub(crate) fn render_envelope(
     lua: &Lua,
-    answer: std::result::Result<Answer<E>, E>,
-) -> mlua::Result<(MultiValue, Option<Retained<E>>)> {
+    answer: std::result::Result<Answer, Error>,
+) -> mlua::Result<(MultiValue, Option<Retained>)> {
     let answer = match answer {
         Ok(answer) => answer,
         Err(error) => {

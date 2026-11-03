@@ -23,7 +23,7 @@ use crate::execute::run::Effect;
 use crate::execute::section_context::TaskSeed;
 use crate::lua::{Answer, Request, VfsOp};
 use crate::model::{Message, ModelBinding};
-use crate::{Error, Result};
+use crate::{Result, error};
 
 use super::chain::ChainStart;
 use super::chain_record::{ChainKind, Parked};
@@ -36,7 +36,7 @@ use super::{ChainIndex, ChainOps, Continuation, Counters, Scheduler};
 #[derive(Debug)]
 pub(super) enum Dispatched {
     Issued,
-    Answered(Answer<Error>),
+    Answered(Answer),
 }
 
 /// What a chain parks on when it yields `request`; `None` for the arms
@@ -69,8 +69,8 @@ impl Scheduler {
     /// # Errors
     /// Returns the store arm's error when the chain's access capability is
     /// gone, the `adhoc_tool_done` arm's error when no adhoc tool call is
-    /// open, or [`Error::Internal`] when an arm's answer finds no suspended
-    /// block to take it.
+    /// open, or an `Internal` failure when an arm's answer finds no
+    /// suspended block to take it.
     pub(super) fn dispatch(&mut self, id: ChainIndex, request: Request) -> Result<()> {
         self.chains[id].parked = parked_on(&request);
         match request {
@@ -213,10 +213,9 @@ impl ChainOps<'_> {
             chain
                 .frame()?
                 .vm()
-                .current_model()?
-                .ok_or_else(|| Error::ModelRequired {
-                    section: chain.section_name().to_owned(),
-                })?
+                .current_model()
+                .map_err(error::into_universal)?
+                .ok_or_else(|| error::model_required(chain.section_name()))?
         };
         // A nested infer round consumes only the accumulated completion;
         // its `Infer` origin tells the caller its live deltas have no
@@ -240,13 +239,15 @@ impl ChainOps<'_> {
     /// is pushed when the answer is applied, before the chain resumes.
     ///
     /// # Errors
-    /// Returns [`Error::Internal`] when the live chain's access capability
-    /// is gone, which only the chain-end paths take, or [`Error::Store`]
-    /// when the handle the chain's access came from declares no store,
+    /// Returns an `Internal` failure when the live chain's access
+    /// capability is gone, which only the chain-end paths take, or a store
+    /// failure when the handle the chain's access came from declares no store,
     /// which the run's start probe already ruled out.
     fn dispatch_vfs(&mut self, op: VfsOp) -> Result<()> {
         let access = Arc::clone(self.chain.access()?);
-        let view = Arc::new(runvil_vfs::detail::store_view(&access).map_err(Error::store)?);
+        let view = Arc::new(
+            runvil_vfs::detail::store_view(&access).map_err(|cause| error::store(&cause))?,
+        );
         let effect = Effect::Vfs {
             access: view,
             op: op.clone(),

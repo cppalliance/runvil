@@ -8,7 +8,7 @@ use super::*;
 #[test]
 fn pre_cancelled_fanout_returns_interrupted() {
     // A fanout entered under an already-cancelled handle fails the run with
-    // Error::Interrupted instead of running the arms.
+    // an interruption instead of running the arms.
     let md = "---\nname: t\ndescription: d\nrunvil: 0\n---\n\n\
         # Fanout\n\n\
         ## Parent\n\n\
@@ -31,7 +31,7 @@ fn pre_cancelled_fanout_returns_interrupted() {
 #[test]
 fn model_required_when_arm_infer_has_no_binding() {
     // An arm whose explicit infer of its prose has no model binding fails
-    // the fanout with Error::ModelRequired naming the worker section. The
+    // the fanout with `ModelRequired` naming the worker section. The
     // run has no role map and nothing filled in, so the model set stays
     // empty - the scheduler scenario pre-fills a default binding.
     let md = "---\nname: t\ndescription: d\nrunvil: 0\n---\n\n\
@@ -46,7 +46,7 @@ fn model_required_when_arm_infer_has_no_binding() {
     let trace = Scenario::new(md).run();
     let error = trace.error();
     assert!(
-        matches!(error, Error::ModelRequired { .. }),
+        error.code == ErrorCode::ModelRequired,
         "expected ModelRequired, got {error}"
     );
     assert!(

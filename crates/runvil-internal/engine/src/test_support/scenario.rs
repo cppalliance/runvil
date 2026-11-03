@@ -97,10 +97,11 @@ pub(crate) fn test_binding(alias: &str, description: &str, model: &str) -> Model
 /// Asserts `error` is a model failure of `code` whose prose is `prose`.
 #[track_caller]
 pub(crate) fn assert_model_failure(error: &Error, code: ErrorCode, prose: &str) {
-    let Error::Completion(failure) = error else {
-        panic!("expected a model failure, got {error:?}");
-    };
-    assert_eq!((failure.code, failure.prose.as_str()), (code, prose));
+    assert_eq!(
+        (error.code, error.prose.as_str()),
+        (code, prose),
+        "{error:?}"
+    );
 }
 
 /// The edit a scenario applies to its run's config before the run is

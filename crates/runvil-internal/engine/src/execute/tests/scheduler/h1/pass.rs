@@ -98,14 +98,16 @@ fn a_failed_h1_assertion_ends_the_run_as_requirements_unmet() {
     let trace = h1_scenario(md).run();
 
     let error = trace.error();
-    let notice = match error {
-        Error::RequirementsUnmet { notice, .. } => notice,
-        other => panic!("the failed assertion classifies as RequirementsUnmet: {other:?}"),
-    };
+    assert_eq!(
+        error.code,
+        ErrorCode::RequirementsUnmet,
+        "the failed assertion classifies as RequirementsUnmet: {error:?}"
+    );
+    let notice = &error.prose;
     let cause = error
-        .originating_error()
-        .expect("the remap keeps the chunk's own failure as the cause")
-        .to_string();
+        .message
+        .strip_prefix(&format!("{notice}: "))
+        .expect("the remap names the chunk's own failure after the notice");
     assert!(
         cause.contains("the gate cannot hold") && !notice.contains("the gate cannot hold"),
         "the assertion's message is the cause, not the notice: {notice:?} / {cause:?}"
@@ -134,8 +136,9 @@ fn an_uncaught_h1_assertion_reports_the_chunk_failed() {
     let trace = h1_scenario(md).run();
 
     let error = trace.error();
-    assert!(
-        matches!(error, Error::RequirementsUnmet { .. }),
+    assert_eq!(
+        error.code,
+        ErrorCode::RequirementsUnmet,
         "the failed gate classifies as RequirementsUnmet: {error}"
     );
     let observed = sequence(&trace);
@@ -160,8 +163,9 @@ fn an_h1_scalar_return_still_reads_var_back() {
     let trace = h1_scenario(md).run();
 
     let error = trace.error();
-    assert!(
-        matches!(error, Error::Lua { cause: None, .. }),
+    assert_eq!(
+        error.code,
+        ErrorCode::LuaRuntime,
         "the read-back failure is machinery around the prompt's chunk, \
          not the failed gate, so it keeps the Lua kind: {error}"
     );
@@ -189,13 +193,14 @@ fn a_failing_library_required_from_h1_ends_the_run_as_requirements_unmet() {
     let trace = h1_scenario(md).run();
 
     let error = trace.error();
-    assert!(
-        matches!(error, Error::RequirementsUnmet { .. }),
+    assert_eq!(
+        error.code,
+        ErrorCode::RequirementsUnmet,
         "the library's raise is the failed H1 gate: {error}"
     );
     let cause = error
-        .originating_error()
-        .map(ToString::to_string)
+        .message
+        .strip_prefix(&format!("{}: ", error.prose))
         .unwrap_or_default();
     assert!(
         cause.contains("library boom"),

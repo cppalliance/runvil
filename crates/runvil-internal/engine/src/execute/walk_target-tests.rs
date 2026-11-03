@@ -151,17 +151,20 @@ fn a_keyed_lookup_resolves_from_the_librarys_reach() {
 }
 
 #[test]
-fn a_key_that_names_no_position_is_an_internal_error_that_keeps_its_cause() {
+fn a_key_that_names_no_position_is_an_internal_error_that_names_its_cause() {
+    let invariant = "internal invariant violated: a library key names no section position: ";
     for identity in ["", "x", "1.", "1..2"] {
         let error = RequireOrigin::from_key(&LibraryKey::new(identity.to_owned()))
             .expect_err("a foreign key must not parse");
-        assert!(
-            matches!(error, Error::Internal { .. }),
+        assert_eq!(
+            error.code,
+            runvil_types::error::ErrorCode::Internal,
             "{identity:?} gave {error}"
         );
         assert!(
-            error.originating_error().is_some(),
-            "required the index parse failure as the cause, actual none for {identity:?}"
+            error.message.len() > invariant.len() && error.message.starts_with(invariant),
+            "required the index parse failure after the invariant, actual {:?} for {identity:?}",
+            error.message
         );
     }
 }

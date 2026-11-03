@@ -18,7 +18,7 @@ use crate::execute::walk_target::{
 };
 use crate::heading_address::{self, SectionIndex, SectionPos, Visible};
 use crate::prompt::Block;
-use crate::{Error, Result};
+use crate::{Result, error};
 
 use super::chain::ChainStep;
 use super::chain_record::{ChainKind, Entered};
@@ -32,8 +32,8 @@ impl Scheduler {
     /// [`Chain::counters`](super::Chain) for the normative statement.
     ///
     /// # Errors
-    /// Returns [`Error::Internal`] when the run's chain count exceeds `u32`,
-    /// or [`Error::Store`] when the backend refuses acquisition.
+    /// Returns an `Internal` failure when the run's chain count exceeds `u32`,
+    /// or a store failure when the backend refuses acquisition.
     pub(super) fn start_root_walk(&mut self) -> Result<()> {
         // The pass the prompt does not have would have taken root entry 0
         // and started no child, so the walk continues from the counters
@@ -50,7 +50,11 @@ impl Scheduler {
         let blocks: &[Block] =
             crate::prompt::detail::entry(prompt).map_or(&[], |section| section.blocks());
         let origin = prompt_origin(prompt, prompt.title(), blocks);
-        let access = self.ctx.vfs().acquire(origin).map_err(Error::store)?;
+        let access = self
+            .ctx
+            .vfs()
+            .acquire(origin)
+            .map_err(|cause| error::store(&cause))?;
         self.scope = Some(runvil_vfs::detail::scope_handle(&access));
         self.start_root_chain(
             ChainKind::Root,
@@ -69,7 +73,7 @@ impl Scheduler {
     /// chain when its slice is exhausted.
     ///
     /// # Errors
-    /// Returns the [`Error`] of frame construction, as documented on
+    /// Returns the failure of frame construction, as documented on
     /// [`SectionContext::new`].
     pub(super) fn advance_entry(&mut self, id: ChainIndex) -> Result<ChainStep> {
         if self.with_chain(id, ChainOps::enter_section)?
@@ -96,7 +100,7 @@ impl ChainOps<'_> {
     /// slice is exhausted and the chain ends.
     ///
     /// # Errors
-    /// Returns the [`Error`] of frame construction, as documented on
+    /// Returns the failure of frame construction, as documented on
     /// [`SectionContext::new`].
     fn enter_section(&mut self) -> Result<bool> {
         let prompt = self.prompt();
@@ -158,13 +162,13 @@ impl ChainOps<'_> {
     /// section; then the walk advances to the next section.
     ///
     /// # Errors
-    /// Returns [`Error::Lua`] when the final `var` read-back fails (the
-    /// frame drops unarmed), or [`Error::Internal`] when the chain holds no
+    /// Returns a `LuaRuntime` failure when the final `var` read-back fails (the
+    /// frame drops unarmed), or an `Internal` failure when the chain holds no
     /// frame.
     pub(super) fn end_section(&mut self) -> Result<()> {
         let chain = &mut *self.chain;
         let Some(Entered { mut frame, .. }) = chain.entered.take() else {
-            return Err(Error::internal("a section end implies a live frame"));
+            return Err(error::internal("a section end implies a live frame"));
         };
         chain.var = frame.read_var()?;
         frame.mark_completed();
@@ -183,7 +187,7 @@ impl ChainOps<'_> {
     /// the target.
     ///
     /// # Errors
-    /// Returns [`Error::Lua`] when the `var` read-back fails (the
+    /// Returns a `LuaRuntime` failure when the `var` read-back fails (the
     /// frame drops unarmed) or when the heading matches no visible section
     /// or more than one - the jumper's frame has already closed as
     /// completed.
@@ -191,7 +195,7 @@ impl ChainOps<'_> {
         {
             let chain = &mut *self.chain;
             let Some(Entered { mut frame, .. }) = chain.entered.take() else {
-                return Err(Error::internal("a jump implies a live frame"));
+                return Err(error::internal("a jump implies a live frame"));
             };
             chain.var = frame.read_var()?;
             frame.mark_completed();
@@ -209,7 +213,7 @@ impl ChainOps<'_> {
     /// slice, so its targets never descend.
     ///
     /// # Errors
-    /// Returns [`Error::Lua`] when the heading is malformed, matches no
+    /// Returns a `LuaRuntime` failure when the heading is malformed, matches no
     /// visible section, or matches more than one (see
     /// [`heading_address::resolve_visible`]).
     pub(super) fn resolve_chain_target(&self, heading: &str) -> Result<JumpTarget> {
@@ -218,7 +222,7 @@ impl ChainOps<'_> {
         if chain.kind.is_h1() {
             let sections = h1_visible_sections(&prompt);
             let target = heading_address::resolve_visible(heading, Visible::all(sections))?;
-            let index = section_position(sections, target).ok_or(Error::internal(
+            let index = section_position(sections, target).ok_or(error::internal(
                 "a resolved H1 target is absent from the top-level slice",
             ))?;
             return Ok(JumpTarget {

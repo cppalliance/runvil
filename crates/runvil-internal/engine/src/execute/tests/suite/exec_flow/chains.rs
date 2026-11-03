@@ -4,6 +4,7 @@
 
 use super::*;
 use crate::RunErrorKind;
+use crate::execute::run_error_kind;
 
 /// A jump transfers control and the jumper's remaining blocks never run.
 #[test]
@@ -355,7 +356,7 @@ fn call_recursion_is_capped() {
     let trace = Scenario::new(source).run();
     let error = trace.error();
     assert_eq!(
-        error.kind(),
+        run_error_kind(error.code),
         RunErrorKind::Quota,
         "the cap is a quota: {error}"
     );

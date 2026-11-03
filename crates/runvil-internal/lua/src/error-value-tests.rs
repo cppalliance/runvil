@@ -39,7 +39,7 @@ fn an_unknown_error_kind_names_the_text_and_every_accepted_tag() {
     clippy::too_many_lines,
     reason = "one table holds every variant beside its code"
 )]
-fn every_store_failure() -> Vec<(VfsError, ErrorCode)> {
+pub(super) fn every_store_failure() -> Vec<(VfsError, ErrorCode)> {
     let path = || "a.md".to_owned();
     let text = || "why".to_owned();
     vec![

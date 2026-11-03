@@ -125,9 +125,13 @@ pub use crate::dispatch::{
 pub use crate::engine_globals::{
     install_ui, run_store_op, store_error_message, store_probe_message,
 };
-pub use crate::error::{Error, QuotaResource};
+pub use crate::error::{
+    Error, QuotaResource, context_exhausted, internal_at, interrupted, into_universal, lua_quota,
+    lua_runtime, task_cancelled, task_consumed, task_not_owned, tool_loop_exhausted,
+};
 pub use crate::error_value::{
-    ErrorField, ErrorKind, ErrorValue, Raised, store_error, store_error_value_fields,
+    ErrorField, ErrorKind, Raised, error_fields, error_kind, error_table_message, store_error,
+    store_error_value_fields,
 };
 pub use crate::globals::{RESERVED_NAMES, Reserved, reserved_name};
 pub use crate::messages::MessageList;

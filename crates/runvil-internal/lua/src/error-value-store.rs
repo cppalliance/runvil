@@ -7,6 +7,16 @@ use serde_json::Value;
 
 use super::ErrorField;
 
+/// Each store field's name in a Lua error table beside the fact that holds
+/// it in a universal error, in the order a table lists them.
+const STORE_FACTS: [(&str, FactKey); 5] = [
+    ("path", FactKey::Path),
+    ("valid_up_to", FactKey::ValidUpTo),
+    ("rule", FactKey::Rule),
+    ("anchor", FactKey::Anchor),
+    ("count", FactKey::Count),
+];
+
 /// Returns the variant's own fields, without `reason`, in the shape
 /// `store_error_value_fields` documents.
 fn store_error_fields(error: &runvil_vfs::VfsError) -> Vec<(String, ErrorField)> {
@@ -88,13 +98,8 @@ pub fn store_error(error: &runvil_vfs::VfsError) -> Error {
     let code = store_error_code(error);
     let mut converted = Error::new(code, error.to_string(), code.prose());
     for (name, field) in store_error_fields(error) {
-        let key = match name.as_str() {
-            "path" => FactKey::Path,
-            "valid_up_to" => FactKey::ValidUpTo,
-            "rule" => FactKey::Rule,
-            "anchor" => FactKey::Anchor,
-            "count" => FactKey::Count,
-            _ => continue,
+        let Some(&(_, key)) = STORE_FACTS.iter().find(|(known, _)| *known == name) else {
+            continue;
         };
         let value = match field {
             ErrorField::String(text) => Value::from(text),
@@ -103,6 +108,30 @@ pub fn store_error(error: &runvil_vfs::VfsError) -> Error {
         converted.facts.insert(key, value);
     }
     converted
+}
+
+/// Returns the fields a store failure's universal error renders into its
+/// Lua error table, the inverse of [`store_error`]: the code's tag as
+/// `reason`, then each store fact under the field name
+/// [`store_error_value_fields`] gives it, a string fact as a string and a
+/// count or an offset as an integer.
+pub(super) fn store_fact_fields(error: &Error) -> Vec<(String, ErrorField)> {
+    let mut fields = vec![(
+        "reason".to_owned(),
+        ErrorField::String(error.code.tag().to_owned()),
+    )];
+    for (name, key) in STORE_FACTS {
+        let field = match error.facts.get(&key) {
+            Some(Value::String(text)) => ErrorField::String(text.clone()),
+            Some(value) => match value.as_i64() {
+                Some(number) => ErrorField::Integer(number),
+                None => continue,
+            },
+            None => continue,
+        };
+        fields.push((name.to_owned(), field));
+    }
+    fields
 }
 
 /// The code named after the variant.

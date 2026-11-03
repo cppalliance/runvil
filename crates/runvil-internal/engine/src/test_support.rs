@@ -30,7 +30,6 @@ use runvil_types::error::ErrorCode;
 use runvil_types::event::Event;
 use runvil_types::tools::tool_error;
 
-use crate::Error;
 use crate::execute::{Effect, EffectAnswer, EffectId, IssuedEffect, Run, RunOutcome, Step};
 use crate::lua::run_store_op;
 
@@ -172,10 +171,10 @@ pub(crate) fn drive_step(
                 // is held, so a pending step that issued nothing while
                 // holding nothing has nothing to wait on: an invariant
                 // failure reported rather than a hang.
-                let error = Error::internal(
+                let error = crate::error::internal(
                     "the serial driver was handed a pending run with no effect to answer",
                 );
-                return Some(error.to_outcome());
+                return Some(crate::execute::outcome(&error));
             }
             for IssuedEffect { id, effect, .. } in effects {
                 issued(&effect);

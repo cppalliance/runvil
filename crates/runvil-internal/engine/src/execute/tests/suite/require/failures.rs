@@ -7,6 +7,7 @@
 use runvil_types::packs::Prelude;
 
 use crate::RunErrorKind;
+use crate::execute::run_error_kind;
 use crate::execute::tests::preludes::prelude;
 use crate::test_support::scenario::Trace;
 
@@ -24,7 +25,7 @@ fn run_with_preludes(source: &str, preludes: Vec<Prelude>) -> Trace {
 #[track_caller]
 fn lua_failure(trace: &Trace) -> String {
     let error = trace.error();
-    assert_eq!(error.kind(), RunErrorKind::Lua, "{error}");
+    assert_eq!(run_error_kind(error.code), RunErrorKind::Lua, "{error}");
     error.to_string()
 }
 

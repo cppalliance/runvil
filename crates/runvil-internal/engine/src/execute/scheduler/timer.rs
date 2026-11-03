@@ -27,7 +27,7 @@ use runvil_types::ids::TaskId;
 
 use crate::execute::run::Effect;
 use crate::lua::Answer;
-use crate::{Error, Result};
+use crate::{Result, error};
 
 use super::tasks::TaskBacking;
 use super::{ChainIndex, Continuation, Scheduler};
@@ -68,13 +68,13 @@ impl Scheduler {
     /// waits when the timer fires.
     ///
     /// # Errors
-    /// Returns [`Error::Internal`] when `task`'s entry isn't live - a
+    /// Returns an `Internal` failure when `task`'s entry isn't live - a
     /// cancelled or abandoned timer's effect is aborted and its late firing
     /// discarded before it reaches here - or when the woken owner has no
     /// suspended block.
     pub(super) fn fire_timer(&mut self, task: &TaskId) -> Result<()> {
         let Some(entry) = self.tasks.complete(task, Ok(String::new())) else {
-            return Err(Error::internal("a fired timer has a live entry"));
+            return Err(error::internal("a fired timer has a live entry"));
         };
         let owner = entry.owner;
         self.wake_waiter(owner, task)

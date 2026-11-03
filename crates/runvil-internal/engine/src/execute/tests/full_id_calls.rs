@@ -210,17 +210,14 @@ fn a_script_call_by_id_and_by_tool_object_issue_the_same_effect() {
 fn a_name_that_is_no_catalog_id_is_unbound_and_lists_the_catalog_ids() {
     let rig = Rig::run(echo_and_concrete("return tools.call('tools/missing', {})"));
     let error = rig.trace().error();
-    match error {
-        Error::UnboundToolCall { name, ids } => {
-            assert_eq!(name, "tools/missing");
-            assert_eq!(
-                ids,
-                &["tools/concrete".to_owned(), ECHO_ID.to_owned()],
-                "every catalog tool's id is listed, in id order"
-            );
-        }
-        other => panic!("expected the typed unbound-tool error, got {other:?}"),
-    }
+    assert_eq!(
+        error,
+        &crate::error::unbound_tool(
+            "tools/missing",
+            &["tools/concrete".to_owned(), ECHO_ID.to_owned()]
+        ),
+        "every catalog tool's id is listed, in id order"
+    );
     assert_eq!(
         error.to_string(),
         "tool \"tools/missing\" is not a tool in this run; \

@@ -27,7 +27,7 @@ use mlua::{AnyUserData, Function, Lua, LuaSerdeExt, MultiValue, Table, Value};
 use runvil_types::metrics::ToolCallEvent;
 
 use crate::error::{Error, Result};
-use crate::error_value::{ErrorKind, error_table, normalized};
+use crate::error_value::{ErrorKind, normalized, raised_table};
 use crate::hardening::CancelHook;
 use crate::messages::MessageList;
 use crate::protocol::ChatResult;
@@ -309,7 +309,7 @@ fn answer<T>(
 /// each request table built as the shim builds it, a call's arguments
 /// converted with `to_value`, the overflow reason as its `tag()`, a
 /// normalized failure through `error_value::normalized`, and a new error
-/// as `error_table` over `Error::Raised`.
+/// as `raised_table` over the new [`Raised`](crate::Raised).
 fn act(lua: &Lua, then: Then<Value>) -> mlua::Result<MultiValue> {
     let (tag, values) = match then {
         Then::Chat { messages, handle } => {
@@ -356,7 +356,7 @@ fn act(lua: &Lua, then: Then<Value>) -> mlua::Result<MultiValue> {
         Then::Raise(value) => ("raise", vec![value]),
         Then::RaiseNormalized(failure) => ("raise", vec![normalized(lua, failure)?]),
         Then::RaiseNew(raised) => {
-            let table = error_table(lua, &Error::Raised(raised))?;
+            let table = raised_table(lua, &raised)?;
             ("raise", vec![Value::Table(table)])
         }
     };
@@ -397,7 +397,7 @@ fn envelope_failure(lua: &Lua, value: Value) -> mlua::Result<Value> {
     }
     let tostring: Function = lua.globals().get("tostring")?;
     let message: String = tostring.call(value)?;
-    let table = error_table(lua, &Error::Raised(raised(ErrorKind::Lua, &message)))?;
+    let table = raised_table(lua, &raised(ErrorKind::Lua, &message))?;
     Ok(Value::Table(table))
 }
 

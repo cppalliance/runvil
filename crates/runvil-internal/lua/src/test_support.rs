@@ -17,7 +17,6 @@ use crate::argv::Argv;
 use crate::bindings::{RosterEntry, ToolBinding, ToolSet};
 use crate::coro::MODEL_TOOL_CALL_REGISTRY;
 use crate::error::{Error, Result};
-use crate::error_value::ErrorValue;
 use crate::program::LuaProgram;
 use crate::protocol::{Answer, render_envelope};
 use crate::scope::Offers;
@@ -132,10 +131,10 @@ impl ToolSet {
 /// # Errors
 /// Returns an `mlua` error if a Lua string, userdata, or table cannot be
 /// created on `lua`.
-pub fn answer_envelope<E: ErrorValue>(
+pub fn answer_envelope(
     lua: &Lua,
-    answer: std::result::Result<Answer<E>, E>,
-) -> mlua::Result<(MultiValue, Option<E>)> {
+    answer: std::result::Result<Answer, runvil_types::error::Error>,
+) -> mlua::Result<(MultiValue, Option<runvil_types::error::Error>)> {
     let (envelope, retained) = render_envelope(lua, answer)?;
     Ok((envelope, retained.map(|retained| retained.error)))
 }

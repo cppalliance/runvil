@@ -16,7 +16,7 @@ use runvil_vfs::detail;
 use crate::error::DepthVia;
 use crate::execute::section_context::TaskSeed;
 use crate::lua::{Answer, SpawnVia};
-use crate::{Error, Result};
+use crate::{Result, error};
 
 use super::super::admission::SpawnRecord;
 use super::super::chain::ChainStart;
@@ -104,11 +104,11 @@ impl Scheduler {
         // target's slice by path, resolved against the shared tree.
         let prompt = self.prompt();
         let resolved = self.with_chain(id, |ops| ops.resolve_chain_target(target))?;
-        let worker = resolved.pos.section(&prompt).ok_or(Error::internal(
+        let worker = resolved.pos.section(&prompt).ok_or(error::internal(
             "a resolved worker is absent from its slice",
         ))?;
         if worker.is_list() {
-            return Err(Error::lua_message(format!(
+            return Err(error::lua_runtime(format!(
                 "section `{}` is a list section, not a worker template",
                 worker.name()
             )));
@@ -122,7 +122,7 @@ impl Scheduler {
             &spawner_access,
             prompt_origin(&prompt, worker.name(), worker.blocks()),
         )
-        .map_err(Error::store)?;
+        .map_err(|cause| error::store(&cause))?;
         // The task's happens-before identity, recorded before the access
         // moves into the chain: every delivery joins it, and the chain
         // end joins it last.

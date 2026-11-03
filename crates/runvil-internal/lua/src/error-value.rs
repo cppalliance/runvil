@@ -10,8 +10,9 @@
 //! caller that branches reads `kind` and the kind's own fields (`reason`
 //! for `context_exhausted`, `finish_reason` for `empty_model_reply`).
 //!
-//! [`ErrorKind`] names the closed vocabulary of kinds, [`ErrorValue`] is
-//! what a Rust error implements to render itself into the shape,
+//! [`ErrorKind`] names the closed vocabulary of kinds; [`error_kind`],
+//! [`error_table_message`], and [`error_fields`] render a universal error
+//! into the shape, and [`Error::to_raised`] this crate's own;
 //! [`install_normalize_failure`] is the capture the shim's `pcall` and
 //! `xpcall` replacements run a caught value through (so a Rust callback's
 //! failure, which mlua raises as an opaque userdata, takes the same shape),
@@ -23,6 +24,8 @@
 mod classify;
 #[path = "error-value-store.rs"]
 mod store;
+#[path = "error-value-universal.rs"]
+mod universal;
 
 use std::collections::BTreeMap;
 use std::str::FromStr;
@@ -35,6 +38,7 @@ use crate::error::{Error, accepted_tags};
 
 pub(crate) use classify::{install_normalize_failure, normalized};
 pub use store::{store_error, store_error_value_fields};
+pub use universal::{error_fields, error_kind, error_table_message};
 
 /// The registry key of the shared error metatable, created on first use per
 /// VM so every error table on that VM - Lua-built or Rust-built - shares
@@ -221,64 +225,34 @@ impl ErrorField {
     }
 }
 
-/// A Rust error's rendering into the Lua error table: its kind, its
-/// message, and the kind's own fields.
-///
-/// The envelope renderer requires this of the driver's error type, so a
-/// failure answered to Lua always has a kind; an internal type that gains a
-/// variant classifies it here.
-pub trait ErrorValue: std::fmt::Display {
-    /// The kind the table's `kind` field names.
-    fn kind(&self) -> ErrorKind;
-
-    /// The text the table's `message` field holds, which an author may hand
-    /// a model. `Display` supplies it unless a variant keeps a model-safe
-    /// text apart from its diagnostic.
-    fn table_message(&self) -> String {
-        self.to_string()
-    }
-
-    /// The kind's own fields, as `(name, value)` pairs set beside
-    /// `kind` and `message`. Empty for kinds without fields.
-    fn fields(&self) -> Vec<(String, ErrorField)> {
-        Vec::new()
-    }
-}
-
-impl ErrorValue for Error {
-    fn kind(&self) -> ErrorKind {
-        match self {
+impl Error {
+    /// This crate's own error as the error table it renders into, for a
+    /// failure that reaches Lua without leaving the crate: the kind an
+    /// author branches on, the display text as the message, and the kind's
+    /// own fields. A raised table renders as it was read back.
+    pub(crate) fn to_raised(&self) -> Raised {
+        let (kind, fields) = match self {
             Error::Lua(_)
             | Error::LuaRuntime { .. }
             | Error::LuaCompile { .. }
-            | Error::LuaQuota { .. } => ErrorKind::Lua,
-            Error::ContextExhausted { .. } => ErrorKind::ContextExhausted,
-            Error::Interrupted => ErrorKind::Cancelled,
-            Error::Tool { .. } => ErrorKind::Tool,
-            Error::Store { .. } => ErrorKind::Store,
-            Error::Internal { .. } => ErrorKind::Internal,
-            Error::Raised(raised) => raised.kind,
-        }
-    }
-
-    fn fields(&self) -> Vec<(String, ErrorField)> {
-        match self {
-            Error::ContextExhausted { reason } => {
-                vec![("reason".to_owned(), ErrorField::String(reason.clone()))]
-            }
-            Error::Store { cause, .. } => store_error_value_fields(cause),
-            Error::Raised(raised) => raised
-                .fields
-                .iter()
-                .map(|(name, value)| (name.clone(), value.clone()))
-                .collect(),
-            Error::Lua(_)
-            | Error::LuaRuntime { .. }
-            | Error::LuaCompile { .. }
-            | Error::LuaQuota { .. }
-            | Error::Interrupted
-            | Error::Tool { .. }
-            | Error::Internal { .. } => Vec::new(),
+            | Error::LuaQuota { .. } => (ErrorKind::Lua, BTreeMap::new()),
+            Error::ContextExhausted { reason } => (
+                ErrorKind::ContextExhausted,
+                BTreeMap::from([("reason".to_owned(), ErrorField::String(reason.clone()))]),
+            ),
+            Error::Interrupted => (ErrorKind::Cancelled, BTreeMap::new()),
+            Error::Tool { .. } => (ErrorKind::Tool, BTreeMap::new()),
+            Error::Store { cause, .. } => (
+                ErrorKind::Store,
+                store_error_value_fields(cause).into_iter().collect(),
+            ),
+            Error::Internal { .. } => (ErrorKind::Internal, BTreeMap::new()),
+            Error::Raised(raised) => return raised.clone(),
+        };
+        Raised {
+            kind,
+            message: self.to_string(),
+            fields,
         }
     }
 }
@@ -289,8 +263,8 @@ impl ErrorValue for Error {
 /// This is the shape a block coroutine's failure takes when the raised
 /// value was an error table (built by the shim's `raise` or by
 /// `error_table`) and no retained typed error was substituted for it -
-/// the case for a Lua-side raise. The executor maps it back onto its own
-/// internal type by kind.
+/// the case for a Lua-side raise. [`into_universal`](crate::into_universal)
+/// maps it onto the failure its kind names.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Raised {
     /// The kind the table named.
@@ -352,23 +326,49 @@ fn finish_table(lua: &Lua, kind: ErrorKind, fields: Table) -> mlua::Result<Table
     Ok(fields)
 }
 
-/// Renders a Rust error as the Lua error table: `kind`, `message` (its
-/// [`table_message`](ErrorValue::table_message)), and the kind's fields,
-/// under the shared metatable.
-///
-/// # Errors
-/// Returns an `mlua` error if the table cannot be created on `lua`.
-pub(crate) fn error_table(lua: &Lua, error: &impl ErrorValue) -> mlua::Result<Table> {
+/// Builds the error table of `kind` holding `message` and `fields`, under
+/// the shared metatable.
+fn table_of(
+    lua: &Lua,
+    kind: ErrorKind,
+    message: &str,
+    fields: impl IntoIterator<Item = (String, ErrorField)>,
+) -> mlua::Result<Table> {
     let table = lua.create_table()?;
-    table.raw_set("message", error.table_message())?;
-    for (name, value) in error.fields() {
+    table.raw_set("message", message)?;
+    for (name, value) in fields {
         let value = match value {
             ErrorField::String(value) => Value::String(lua.create_string(value)?),
             ErrorField::Integer(value) => Value::Integer(value),
         };
         table.raw_set(name, value)?;
     }
-    finish_table(lua, error.kind(), table)
+    finish_table(lua, kind, table)
+}
+
+/// Renders a universal error as the Lua error table: the `kind`
+/// [`error_kind`] names, the `message` [`error_table_message`] gives, and
+/// the [`error_fields`] beside them, under the shared metatable.
+///
+/// # Errors
+/// Returns an `mlua` error if the table cannot be created on `lua`.
+pub(crate) fn error_table(lua: &Lua, error: &runvil_types::error::Error) -> mlua::Result<Table> {
+    table_of(
+        lua,
+        error_kind(error),
+        &error_table_message(error),
+        error_fields(error),
+    )
+}
+
+/// Renders `raised` as the Lua error table: its kind, its message, and its
+/// fields, under the shared metatable. This crate's own error renders
+/// through it, by [`Error::to_raised`].
+///
+/// # Errors
+/// Returns an `mlua` error if the table cannot be created on `lua`.
+pub(crate) fn raised_table(lua: &Lua, raised: &Raised) -> mlua::Result<Table> {
+    table_of(lua, raised.kind, &raised.message, raised.fields.clone())
 }
 
 /// Builds the `error_value(kind, fields)` chunk capture for the shim: the
