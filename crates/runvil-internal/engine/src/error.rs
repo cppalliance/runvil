@@ -27,13 +27,13 @@ use runvil_types::error::{ErrorCode, FactKey};
 use runvil_types::ids::TaskId;
 use serde_json::Value;
 
-mod sets;
 #[cfg(test)]
 mod tests;
 mod tools;
 
-pub(crate) use sets::{SetEvidence, SetRule, SetTool, tool_sets};
-pub(crate) use tools::{bind_schema, model_only_tool, out_of_scope_tool, unbound_tool};
+pub(crate) use tools::{
+    bind_schema, model_only_tool, out_of_scope_tool, tool_in_set, tool_sets, unbound_tool,
+};
 
 /// Crate-internal result alias over [`Error`].
 pub(crate) type Result<T> = std::result::Result<T, Error>;

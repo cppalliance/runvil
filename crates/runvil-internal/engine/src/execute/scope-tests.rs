@@ -10,7 +10,6 @@ use runvil_types::tools::ToolId;
 use serde_json::json;
 
 use super::*;
-use crate::Error;
 
 #[path = "scope-tests-render.rs"]
 mod render;
@@ -287,51 +286,30 @@ fn the_search_tools_description_lists_at_most_one_hundred_names_then_counts_the_
 #[test]
 fn rule_five_fails_a_wire_name_used_twice_within_one_set_or_across_the_sets() {
     let tools = catalog([info("dup/a.b"), info("dup/a/b"), info("web/search")]);
-    // The failure a clash of `wire_name` between the two tools fails with.
-    let clash = |wire_name: &str, tools: [(&str, OfferMode); 2]| {
-        let [first, second] = tools.map(|(id, set)| SetTool {
-            id: ToolId::parse(id).expect("a fixture tool id"),
-            set,
-        });
-        error::tool_sets(&SetEvidence::Tools {
-            rule: SetRule::UniqueWireName(wire_name.to_owned()),
-            tools: NonEmpty::new(first, vec![second]),
-        })
-    };
     let within = merged(&[listed("dup/a/b"), listed("dup/a.b")], &[], &tools)
         .expect_err("two tools of one set clash");
     assert_eq!(
-        within,
-        clash(
-            "dup_a_b",
-            [
-                ("dup/a/b", OfferMode::Static),
-                ("dup/a.b", OfferMode::Static)
-            ]
+        (within.code, within.to_string()),
+        (
+            ErrorCode::ToolSetsInvalid,
+            "the tools dup/a/b of the dup Pack in the Static Set and dup/a.b of the dup Pack in \
+             the Static Set share the wire name \"dup_a_b\", and a wire name names one tool \
+             across a section's Static Set and Dynamic Set; offer only one of them"
+                .to_owned()
         )
-    );
-    assert_eq!(
-        within.facts.get(&FactKey::Rule),
-        Some(&Value::from("unique_wire_name"))
     );
     let across = merged(&[adhoc("web_search")], &[listed("web/search")], &tools)
         .expect_err("a static adhoc tool and a dynamic Pack tool of its name clash");
     assert_eq!(
-        across.to_string(),
-        "the tools adhoc/web_search of the adhoc Pack in the Static Set and web/search of the \
-         web Pack in the Dynamic Set share the wire name \"web_search\", and a wire name names \
-         one tool across a section's Static Set and Dynamic Set; offer only one of them",
+        (across.code, across.to_string()),
+        (
+            ErrorCode::ToolSetsInvalid,
+            "the tools adhoc/web_search of the adhoc Pack in the Static Set and web/search of \
+             the web Pack in the Dynamic Set share the wire name \"web_search\", and a wire name \
+             names one tool across a section's Static Set and Dynamic Set; offer only one of them"
+                .to_owned()
+        ),
         "the message names each tool's set"
-    );
-    assert_eq!(
-        across,
-        clash(
-            "web_search",
-            [
-                ("adhoc/web_search", OfferMode::Static),
-                ("web/search", OfferMode::Dynamic),
-            ]
-        )
     );
     let taker = info("web/discover").wire_name("GetDynamicTools");
     let tools = catalog([taker.clone(), info("web/search")]);
@@ -340,13 +318,14 @@ fn rule_five_fails_a_wire_name_used_twice_within_one_set_or_across_the_sets() {
     let discovery = merged(&offers, &[listed("web/search")], &tools)
         .expect_err("a Pack tool takes the search tool's wire name");
     assert_eq!(
-        discovery,
-        clash(
-            "GetDynamicTools",
-            [
-                ("web/discover", OfferMode::Static),
-                ("dynamic/search", OfferMode::Static),
-            ]
+        (discovery.code, discovery.to_string()),
+        (
+            ErrorCode::ToolSetsInvalid,
+            "the tools web/discover of the web Pack in the Static Set and dynamic/search of the \
+             dynamic Pack in the Static Set share the wire name \"GetDynamicTools\", and a wire \
+             name names one tool across a section's Static Set and Dynamic Set; offer only one \
+             of them"
+                .to_owned()
         )
     );
 }

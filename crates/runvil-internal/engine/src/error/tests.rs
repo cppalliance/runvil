@@ -364,41 +364,27 @@ fn an_unconverged_tool_loop_is_a_tool_kind() {
 }
 
 #[test]
-fn broken_tool_sets_name_the_rule_they_broke() {
-    let packs = tool_sets(&SetEvidence::RenderedPacks {
-        asked: vec!["web".parse().expect("a Pack id")],
-        answered: Vec::new(),
-    });
-    assert_eq!(packs.code, ErrorCode::ToolSetsInvalid);
+fn broken_tool_sets_end_a_run_as_a_binding_failure_with_an_internal_table() {
+    let error = tool_sets("the sets broke a rule".to_owned());
+    assert_eq!(error.code, ErrorCode::ToolSetsInvalid);
+    assert_eq!(error.message, "the sets broke a rule");
+    assert_eq!(error.prose, ErrorCode::ToolSetsInvalid.prose());
+    assert!(error.facts.is_empty(), "{:?}", error.facts);
     assert_eq!(
-        packs.message,
-        "the render answered the Packs [] where the section offered the Packs [web]; a render \
-         answers each offered Pack once, in offer order"
+        failed(&error),
+        (RunErrorKind::Binding, error.message.clone())
     );
     assert_eq!(
-        packs.facts.get(&FactKey::Rule),
-        Some(&Value::from("rendered_packs"))
-    );
-    assert_eq!(
-        failed(&packs),
-        (RunErrorKind::Binding, packs.message.clone())
-    );
-    let clash = tool_sets(&SetEvidence::Tools {
-        rule: SetRule::UniqueWireName("fetch".to_owned()),
-        tools: crate::lua::NonEmpty::new(
-            SetTool {
-                id: "web/fetch".parse().expect("a tool id"),
-                set: crate::lua::OfferMode::Static,
-            },
-            Vec::new(),
-        ),
-    });
-    assert_eq!(
-        clash.facts.get(&FactKey::Rule),
-        Some(&Value::from("unique_wire_name"))
-    );
-    assert_eq!(
-        (error_kind(&clash), error_fields(&clash)),
+        (error_kind(&error), error_fields(&error)),
         (ErrorKind::Internal, Vec::new())
+    );
+}
+
+#[test]
+fn a_tool_in_a_set_names_its_id_its_pack_and_its_set() {
+    let id = "web/fetch".parse().expect("a tool id");
+    assert_eq!(
+        tool_in_set(&id, crate::lua::OfferMode::Dynamic),
+        "web/fetch of the web Pack in the Dynamic Set"
     );
 }

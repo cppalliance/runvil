@@ -5,30 +5,6 @@
 
 use super::*;
 
-/// The failure of a merge that broke `rule` through `tool`, the one
-/// rendered tool a render rule refuses.
-fn broken(rule: SetRule, tool: SetTool) -> Error {
-    error::tool_sets(&SetEvidence::Tools {
-        rule,
-        tools: NonEmpty::new(tool, Vec::new()),
-    })
-}
-
-/// The failure of a render answered with the Packs `answered` where the
-/// section offered the Packs `asked`.
-fn render_evidence(asked: Vec<PackId>, answered: Vec<PackId>) -> Error {
-    error::tool_sets(&SetEvidence::RenderedPacks { asked, answered })
-}
-
-/// The tool `id` in `set`, as a failed merge names it.
-#[track_caller]
-fn site(id: &str, set: OfferMode) -> SetTool {
-    SetTool {
-        id: ToolId::parse(id).expect("a fixture tool id"),
-        set,
-    }
-}
-
 /// The Pack id `id`.
 #[track_caller]
 fn pack(id: &str) -> PackId {
@@ -62,11 +38,19 @@ fn rule_one_refuses_an_answer_whose_packs_are_not_the_ones_asked_in_offer_order(
             vec![gh.clone(), sets("kit", Vec::new(), Vec::new())],
         ),
     ] {
-        let answered_packs = answered.iter().map(|sets| sets.pack.clone()).collect();
+        let answered_packs: Vec<String> =
+            answered.iter().map(|sets| sets.pack.to_string()).collect();
         let error = merge_tool_sets(&offers, answered, &tools).expect_err(case);
         assert_eq!(
-            error,
-            render_evidence(vec![pack("gh"), pack("web")], answered_packs),
+            (error.code, error.to_string()),
+            (
+                ErrorCode::ToolSetsInvalid,
+                format!(
+                    "the render answered the Packs [{}] where the section offered the Packs \
+                     [gh, web]; a render answers each offered Pack once, in offer order",
+                    answered_packs.join(", ")
+                )
+            ),
             "{case}"
         );
     }
@@ -87,49 +71,63 @@ fn rule_one_refuses_a_rendered_tool_outside_what_its_pack_was_asked() {
             gh,
             OfferMode::Static,
             "gh/new",
-            SetRule::UnofferedSet(pack("gh")),
+            "the gh Pack's render returned gh/new of the gh Pack in the Static Set, a set the \
+             section did not offer the gh Pack into; a render returns tools only for the sets \
+             the section offered its Pack into",
         ),
         (
             "a model-only tool under another Pack's id",
             web,
             OfferMode::Static,
             "gh/new",
-            SetRule::ForeignTool(pack("web")),
+            "the web Pack's render returned gh/new of the gh Pack in the Static Set; a Pack \
+             renders only tools whose id starts with its own Pack id",
         ),
         (
             "another Pack's catalog tool",
             web,
             OfferMode::Dynamic,
             "gh/one",
-            SetRule::ForeignTool(pack("web")),
+            "the web Pack's render returned gh/one of the gh Pack in the Dynamic Set; a Pack \
+             renders only tools whose id starts with its own Pack id",
         ),
         (
             "a catalog tool the section never offered",
             web,
             OfferMode::Static,
             "web/other",
-            SetRule::UnofferedCatalogTool,
+            "the render returned web/other of the web Pack in the Static Set, a run catalog \
+             tool the section did not offer in that set; a render returns a catalog tool only \
+             into a set the section offered it in",
         ),
         (
             "a catalog tool the section offered only into the Dynamic Set",
             web,
             OfferMode::Static,
             "web/search",
-            SetRule::UnofferedCatalogTool,
+            "the render returned web/search of the web Pack in the Static Set, a run catalog \
+             tool the section did not offer in that set; a render returns a catalog tool only \
+             into a set the section offered it in",
         ),
         (
             "a catalog tool the section offered only into the Static Set",
             web,
             OfferMode::Dynamic,
             "web/fetch",
-            SetRule::UnofferedCatalogTool,
+            "the render returned web/fetch of the web Pack in the Dynamic Set, a run catalog \
+             tool the section did not offer in that set; a render returns a catalog tool only \
+             into a set the section offered it in",
         ),
     ];
-    for (case, index, set, id, rule) in cases {
+    for (case, index, set, id, message) in cases {
         let mut answered = asked.clone();
         set_mut(&mut answered[index], set).push(info(id));
         let error = merge_tool_sets(&offers, answered, &tools).expect_err(case);
-        assert_eq!(error, broken(rule, site(id, set)), "{case}");
+        assert_eq!(
+            (error.code, error.to_string()),
+            (ErrorCode::ToolSetsInvalid, message.to_owned()),
+            "{case}"
+        );
     }
 }
 
@@ -210,11 +208,6 @@ fn the_stored_pack_order_is_the_whole_of_what_a_render_is_asked() {
 
 #[test]
 fn a_render_rules_message_names_both_asked_and_answered_packs_and_never_renders_subjectless() {
-    // The rule that names Packs carries `asked` and `answered` as its own
-    // shape, so its message can never render with no subject: the counts
-    // and both lists are the evidence, not tools it was handed. A
-    // `RenderedPacks` rule that could arrive with no tool list is the
-    // shape this variant replaces.
     let tools = catalog([info("web/fetch"), info("gh/one")]);
     let offers = SectionOffers {
         static_tools: vec![listed("web/fetch")],

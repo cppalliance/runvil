@@ -1,9 +1,11 @@
 //! The failures of a tool's binding and of a refused tool call: a schema
-//! that did not build, and a name the model or a script may not call.
+//! that did not build, frozen sets that broke a rule of the merge that
+//! builds them, and a name the model or a script may not call.
 
 use runvil_types::error::{ErrorCode, FactKey};
+use runvil_types::tools::ToolId;
 
-use crate::lua::DiscoveryTool;
+use crate::lua::{DiscoveryTool, OfferMode};
 
 use super::{Error, failure, with_fact};
 
@@ -30,6 +32,20 @@ pub(crate) fn bind_schema(alias: &str, cause: &Error) -> Error {
         error.facts.insert(FactKey::Reason, reason.clone());
     }
     error.with_cause(cause)
+}
+
+/// A section entry's frozen sets, or the render answer they are merged
+/// from, that broke a rule of the merge that builds them, which fails the
+/// entry's first loop round. `message` names what broke the rule and what
+/// the rule requires.
+pub(crate) fn tool_sets(message: String) -> Error {
+    failure(ErrorCode::ToolSetsInvalid, message)
+}
+
+/// The tool `id` in `set`, as a broken merge rule's message names it, such
+/// as `web/fetch of the web Pack in the Static Set`.
+pub(crate) fn tool_in_set(id: &ToolId, set: OfferMode) -> String {
+    format!("{id} of the {} Pack in the {set}", id.pack())
 }
 
 /// The model called `name`, outside both of the section entry's frozen

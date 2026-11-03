@@ -14,11 +14,10 @@ use runvil_types::packs::PackId;
 use runvil_types::tools::{ToolCatalog, ToolId, ToolInfo};
 use serde_json::{Value, json};
 
-use crate::error::{SetEvidence, SetRule, SetTool};
 use crate::execute::PackToolSets;
 use crate::lua::{
-    DiscoveryTool, NonEmpty, OfferMode, OfferedTool, RenderedTools, SectionVm, ToolBinding,
-    ToolSet, current_catalog_packs, current_dynamic_set, current_static_set, wire_name_of,
+    DiscoveryTool, OfferMode, OfferedTool, RenderedTools, SectionVm, ToolBinding, ToolSet,
+    current_catalog_packs, current_dynamic_set, current_static_set, wire_name_of,
 };
 use crate::model::{ToolSchema, detail};
 use crate::{Result, error};
@@ -233,14 +232,16 @@ fn check_render(
     answered: Vec<PackToolSets<ToolInfo>>,
     catalog: &ToolCatalog,
 ) -> Result<Vec<PackToolSets<ToolInfo>>> {
-    let packs = |all: &[PackToolSets<ToolInfo>]| -> Vec<PackId> {
-        all.iter().map(|sets| sets.pack.clone()).collect()
+    let names = |all: &[PackToolSets<ToolInfo>]| -> Vec<String> {
+        all.iter().map(|sets| sets.pack.to_string()).collect()
     };
-    if packs(asked) != packs(&answered) {
-        return Err(error::tool_sets(&SetEvidence::RenderedPacks {
-            asked: packs(asked),
-            answered: packs(&answered),
-        }));
+    if names(asked) != names(&answered) {
+        return Err(error::tool_sets(format!(
+            "the render answered the Packs [{}] where the section offered the Packs [{}]; a \
+             render answers each offered Pack once, in offer order",
+            names(&answered).join(", "),
+            names(asked).join(", ")
+        )));
     }
     answered
         .into_iter()
@@ -271,29 +272,30 @@ fn check_set(
     tools: Vec<ToolInfo>,
     catalog: &ToolCatalog,
 ) -> Result<Vec<ToolInfo>> {
-    let refuse = |rule: SetRule, tool: &ToolInfo| {
-        error::tool_sets(&SetEvidence::Tools {
-            rule,
-            tools: NonEmpty::new(
-                SetTool {
-                    id: tool.id.clone(),
-                    set,
-                },
-                Vec::new(),
-            ),
-        })
-    };
     let mut kept: Vec<ToolInfo> = Vec::with_capacity(tools.len());
     for tool in tools {
         if offered.is_empty() {
-            return Err(refuse(SetRule::UnofferedSet(pack.clone()), &tool));
+            return Err(error::tool_sets(format!(
+                "the {pack} Pack's render returned {}, a set the section did not offer the \
+                 {pack} Pack into; a render returns tools only for the sets the section offered \
+                 its Pack into",
+                error::tool_in_set(&tool.id, set)
+            )));
         }
         if !pack.contains(&tool.id) {
-            return Err(refuse(SetRule::ForeignTool(pack.clone()), &tool));
+            return Err(error::tool_sets(format!(
+                "the {pack} Pack's render returned {}; a Pack renders only tools whose id \
+                 starts with its own Pack id",
+                error::tool_in_set(&tool.id, set)
+            )));
         }
         let unoffered = !offered.iter().any(|held| held.id == tool.id);
         if unoffered && catalog.get(&tool.id).is_some() {
-            return Err(refuse(SetRule::UnofferedCatalogTool, &tool));
+            return Err(error::tool_sets(format!(
+                "the render returned {}, a run catalog tool the section did not offer in that \
+                 set; a render returns a catalog tool only into a set the section offered it in",
+                error::tool_in_set(&tool.id, set)
+            )));
         }
         if !kept.iter().any(|held| held.id == tool.id) {
             kept.push(tool);
@@ -454,20 +456,19 @@ fn refuse_clash(static_set: &[Laid], dynamic_set: &[Laid]) -> Result<()> {
         .iter()
         .map(|tool| (tool, OfferMode::Static))
         .chain(dynamic_set.iter().map(|tool| (tool, OfferMode::Dynamic)));
-    let mut taken: BTreeMap<&str, SetTool> = BTreeMap::new();
+    let mut taken: BTreeMap<&str, (&ToolId, OfferMode)> = BTreeMap::new();
     for (tool, set) in sited {
         let wire_name = tool.binding.alias();
-        let site = SetTool {
-            id: tool.binding.id().clone(),
-            set,
-        };
-        if let Some(first) = taken.get(wire_name) {
-            return Err(error::tool_sets(&SetEvidence::Tools {
-                rule: SetRule::UniqueWireName(wire_name.to_owned()),
-                tools: NonEmpty::new(first.clone(), vec![site]),
-            }));
+        let id = tool.binding.id();
+        if let Some(&(first_id, first_set)) = taken.get(wire_name) {
+            return Err(error::tool_sets(format!(
+                "the tools {} and {} share the wire name {wire_name:?}, and a wire name names \
+                 one tool across a section's Static Set and Dynamic Set; offer only one of them",
+                error::tool_in_set(first_id, first_set),
+                error::tool_in_set(id, set)
+            )));
         }
-        taken.insert(wire_name, site);
+        taken.insert(wire_name, (id, set));
     }
     Ok(())
 }
