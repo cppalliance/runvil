@@ -102,7 +102,6 @@ pub use service::{HostServices, ServiceError, ServiceId, ServiceKey, TOKIO_RUNTI
 
 pub use runvil_types::error::{Error, ErrorCode, FactKey, Location};
 pub use runvil_types::models::{ModelId, ModelInfo, ThinkingMode};
-pub use runvil_types::names::IdError;
 pub use runvil_types::packs::PackId;
 pub use runvil_types::tools::{
     OutputTrust, ToolCallOrigin, ToolCaller, ToolError, ToolErrorKind, ToolId, ToolInfo, ToolOutput,

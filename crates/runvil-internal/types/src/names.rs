@@ -11,11 +11,16 @@
 //! [`is_alias`] holds a second grammar, for prompt-local aliases, which are
 //! never global names.
 //!
-//! [`IdError`] is the error every id type and every catalog of ids returns,
-//! whether the id is built on a name or not.
+//! Every id type and every catalog of ids rejects an id with an
+//! [`InvalidValue`](ErrorCode::InvalidValue) error, whether the id is built
+//! on a name or not.
 
 use std::fmt;
 use std::str::FromStr;
+
+use serde_json::Value;
+
+use crate::error::{Error, ErrorCode, FactKey};
 
 #[cfg(test)]
 #[path = "names-tests.rs"]
@@ -46,14 +51,14 @@ impl GlobalName {
     ///
     /// # Errors
     ///
-    /// Returns [`IdError`] when:
+    /// Returns an [`InvalidValue`](ErrorCode::InvalidValue) error when:
     ///
     /// - a segment is empty, including the whole string being empty;
     /// - a segment contains a control byte;
     /// - a segment contains any other character outside the set.
-    pub fn parse(s: &str) -> Result<GlobalName, IdError> {
+    pub fn parse(s: &str) -> Result<GlobalName, Error> {
         GlobalName::validate(s)
-            .map_err(|reason| IdError::new(format!("invalid global name: {reason}")))
+            .map_err(|reason| invalid_id(format!("invalid global name: {reason}"), s))
     }
 
     /// Parses `s` as [`GlobalName::parse`] does, but returns only the
@@ -96,9 +101,9 @@ impl GlobalName {
 }
 
 impl FromStr for GlobalName {
-    type Err = IdError;
+    type Err = Error;
 
-    fn from_str(s: &str) -> Result<GlobalName, IdError> {
+    fn from_str(s: &str) -> Result<GlobalName, Error> {
         GlobalName::parse(s)
     }
 }
@@ -151,38 +156,16 @@ pub fn is_alias(name: &str) -> bool {
             .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-'))
 }
 
-/// The error returned when an id, or a catalog of ids, is invalid.
-///
-/// Parsing a [`GlobalName`], a [`PackId`], a [`ToolId`], a [`ChainId`] or a
-/// [`TaskId`], or building a [`ModelId`], returns it for a malformed id.
-/// Building a [`ToolCatalog`] or a [`ModelCatalog`] returns it when two
-/// entries share an id. Its message names what was rejected and why, such
-/// as `invalid Pack id: segments must not be empty`.
-///
-/// [`PackId`]: crate::packs::PackId
-/// [`ToolId`]: crate::tools::ToolId
-/// [`ChainId`]: crate::ids::ChainId
-/// [`TaskId`]: crate::ids::TaskId
-/// [`ModelId`]: crate::models::ModelId
-/// [`ToolCatalog`]: crate::tools::ToolCatalog
-/// [`ModelCatalog`]: crate::models::ModelCatalog
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct IdError {
-    /// The rendered message.
-    message: String,
+/// The error for an invalid id, or for a catalog that repeats one: an
+/// [`InvalidValue`](ErrorCode::InvalidValue) whose message says what was
+/// rejected and why, such as `invalid Pack id: segments must not be empty`,
+/// with the rejected text as its `Name` fact.
+pub(crate) fn invalid_id(message: String, rejected: &str) -> Error {
+    let mut error = Error::new(
+        ErrorCode::InvalidValue,
+        message,
+        ErrorCode::InvalidValue.prose(),
+    );
+    error.facts.insert(FactKey::Name, Value::from(rejected));
+    error
 }
-
-impl IdError {
-    /// Builds an error that renders as `message`.
-    pub(crate) fn new(message: String) -> IdError {
-        IdError { message }
-    }
-}
-
-impl fmt::Display for IdError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(&self.message)
-    }
-}
-
-impl std::error::Error for IdError {}

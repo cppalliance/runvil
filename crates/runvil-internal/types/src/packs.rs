@@ -16,7 +16,8 @@
 
 use std::str::FromStr;
 
-use crate::names::{GlobalName, IdError};
+use crate::error::Error;
+use crate::names::{GlobalName, invalid_id};
 use crate::tools::ToolId;
 
 #[cfg(test)]
@@ -45,12 +46,14 @@ impl PackId {
     /// Parses a Pack identity, requiring exactly one segment.
     ///
     /// # Errors
-    /// Returns [`IdError`] when the id has more than one segment, is empty
-    /// or has an empty segment, a segment contains a control byte, or a
-    /// segment contains any other character than a lowercase ASCII letter,
-    /// a digit, `-`, `_`, or `.`.
-    pub fn parse(name: &str) -> Result<PackId, IdError> {
-        PackId::validate(name).map_err(|reason| IdError::new(format!("invalid Pack id: {reason}")))
+    /// Returns an [`InvalidValue`](crate::error::ErrorCode::InvalidValue)
+    /// error when the id has more than one segment, is empty or has an empty
+    /// segment, a segment contains a control byte, or a segment contains any
+    /// other character than a lowercase ASCII letter, a digit, `-`, `_`, or
+    /// `.`.
+    pub fn parse(name: &str) -> Result<PackId, Error> {
+        PackId::validate(name)
+            .map_err(|reason| invalid_id(format!("invalid Pack id: {reason}"), name))
     }
 
     /// Parses `name` as [`PackId::parse`] does, but returns only the reason
@@ -92,9 +95,9 @@ impl PackId {
 }
 
 impl FromStr for PackId {
-    type Err = IdError;
+    type Err = Error;
 
-    fn from_str(name: &str) -> Result<PackId, IdError> {
+    fn from_str(name: &str) -> Result<PackId, Error> {
         PackId::parse(name)
     }
 }

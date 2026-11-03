@@ -29,7 +29,8 @@ use std::str::FromStr;
 
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
-use crate::names::IdError;
+use crate::error::Error;
+use crate::names::invalid_id;
 
 #[cfg(test)]
 #[path = "ids-tests.rs"]
@@ -84,15 +85,19 @@ impl fmt::Display for ChainId {
 }
 
 impl FromStr for ChainId {
-    type Err = IdError;
+    type Err = Error;
 
     /// Parses a path: one or more components joined by dots, such as
     /// `0.2.0`, each plain decimal digits that fit in a `u32`.
     fn from_str(input: &str) -> Result<Self, Self::Err> {
         let reject = || {
-            IdError::new(format!(
-                "invalid chain id `{input}`: required a dot-separated path of decimal components"
-            ))
+            invalid_id(
+                format!(
+                    "invalid chain id `{input}`: required a dot-separated path of decimal \
+                     components"
+                ),
+                input,
+            )
         };
         if input.is_empty() {
             return Err(reject());
@@ -108,7 +113,7 @@ impl FromStr for ChainId {
                 }
                 component.parse::<u32>().map_err(|_| reject())
             })
-            .collect::<Result<Vec<u32>, IdError>>()
+            .collect::<Result<Vec<u32>, Error>>()
             .map(Self)
     }
 }
@@ -148,7 +153,7 @@ impl fmt::Display for TaskId {
 }
 
 impl FromStr for TaskId {
-    type Err = IdError;
+    type Err = Error;
 
     fn from_str(input: &str) -> Result<Self, Self::Err> {
         input.parse().map(Self)

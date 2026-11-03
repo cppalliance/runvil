@@ -57,16 +57,14 @@ pub mod error {
 }
 
 pub mod ids {
-    //! Task, chain, and round ids, the provenance that orders a run's
-    //! records, and the error an invalid id, or a catalog that repeats one,
-    //! reports.
+    //! Task, chain, and round ids, and the provenance that orders a run's
+    //! records.
 
     pub use runvil_types::ids::AbandonReason;
     pub use runvil_types::ids::ChainId;
     pub use runvil_types::ids::Provenance;
     pub use runvil_types::ids::RoundId;
     pub use runvil_types::ids::TaskId;
-    pub use runvil_types::names::IdError;
 }
 
 pub mod model {

@@ -5,7 +5,8 @@ use std::sync::Arc;
 
 use super::ids::ToolId;
 use super::info::ToolInfo;
-use crate::names::IdError;
+use crate::error::Error;
+use crate::names::invalid_id;
 
 /// A catalog of the tools a run may offer, given as `ToolInfo` values.
 ///
@@ -45,16 +46,17 @@ impl ToolCatalog {
     /// This is the only place the catalog checks identities.
     ///
     /// # Errors
-    /// Returns [`IdError`] if two `ToolInfo` values share a [`ToolId`].
-    pub fn new(tools: impl IntoIterator<Item = ToolInfo>) -> Result<Self, IdError> {
+    /// Returns an [`InvalidValue`](crate::error::ErrorCode::InvalidValue)
+    /// error if two `ToolInfo` values share a [`ToolId`].
+    pub fn new(tools: impl IntoIterator<Item = ToolInfo>) -> Result<Self, Error> {
         let tools: Vec<ToolInfo> = tools.into_iter().collect();
         let mut seen = std::collections::BTreeSet::new();
         for tool in &tools {
             if !seen.insert(&tool.id) {
-                return Err(IdError::new(format!(
-                    "duplicate tool identity `{}` in the tool catalog",
-                    tool.id
-                )));
+                return Err(invalid_id(
+                    format!("duplicate tool identity `{}` in the tool catalog", tool.id),
+                    &tool.id.to_string(),
+                ));
             }
         }
         Ok(Self {

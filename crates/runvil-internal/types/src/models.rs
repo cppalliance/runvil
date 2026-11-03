@@ -9,7 +9,8 @@ use std::num::NonZeroU32;
 
 use serde::Deserialize;
 
-use crate::names::IdError;
+use crate::error::Error;
+use crate::names::invalid_id;
 
 /// The stable identity of one catalogued model.
 ///
@@ -35,12 +36,13 @@ impl ModelId {
     /// Builds an identity from its server namespace and model name.
     ///
     /// # Errors
-    /// Returns [`IdError`] if `server` or `name` is empty or contains a
-    /// control character, so every `ModelId` is usable.
+    /// Returns an [`InvalidValue`](crate::error::ErrorCode::InvalidValue)
+    /// error if `server` or `name` is empty or contains a control character,
+    /// so every `ModelId` is usable.
     pub fn new(
         server: impl Into<String>,
         name: impl Into<String>,
-    ) -> std::result::Result<ModelId, IdError> {
+    ) -> std::result::Result<ModelId, Error> {
         let server = server.into();
         let name = name.into();
         Self::validate("server", &server)?;
@@ -53,9 +55,9 @@ impl ModelId {
     /// `name` is the name the gateway lists the model under.
     ///
     /// # Errors
-    /// Returns [`IdError`] if `name` is empty or contains a control
-    /// character.
-    pub fn gateway(name: impl Into<String>) -> std::result::Result<ModelId, IdError> {
+    /// Returns an [`InvalidValue`](crate::error::ErrorCode::InvalidValue)
+    /// error if `name` is empty or contains a control character.
+    pub fn gateway(name: impl Into<String>) -> std::result::Result<ModelId, Error> {
         Self::new(Self::GATEWAY, name)
     }
 
@@ -64,7 +66,7 @@ impl ModelId {
     /// Rejection is by Unicode scalar, not raw byte: every control
     /// character is refused, including C1 controls such as U+0085 (NEL) whose
     /// UTF-8 encoding a byte-range scan would miss.
-    fn validate(field: &'static str, value: &str) -> std::result::Result<(), IdError> {
+    fn validate(field: &'static str, value: &str) -> std::result::Result<(), Error> {
         let reason = if value.is_empty() {
             "must not be empty"
         } else if value.chars().any(char::is_control) {
@@ -72,7 +74,10 @@ impl ModelId {
         } else {
             return Ok(());
         };
-        Err(IdError::new(format!("invalid model id: {field} {reason}")))
+        Err(invalid_id(
+            format!("invalid model id: {field} {reason}"),
+            value,
+        ))
     }
 
     /// Returns the server namespace.
@@ -238,20 +243,20 @@ impl ModelCatalog {
     /// given in.
     ///
     /// # Errors
-    /// Returns [`IdError`] when two `ModelInfo` values share one stable
-    /// [`ModelId`], so each identity in the catalog names exactly one model
-    /// info.
+    /// Returns an [`InvalidValue`](crate::error::ErrorCode::InvalidValue)
+    /// error when two `ModelInfo` values share one stable [`ModelId`], so
+    /// each identity in the catalog names exactly one model info.
     pub fn new(
         models: impl IntoIterator<Item = ModelInfo>,
-    ) -> std::result::Result<ModelCatalog, IdError> {
+    ) -> std::result::Result<ModelCatalog, Error> {
         let models: Vec<ModelInfo> = models.into_iter().collect();
         for (index, model) in models.iter().enumerate() {
             if models[..index].iter().any(|prior| prior.id() == model.id()) {
-                return Err(IdError::new(format!(
-                    "duplicate model identity in catalog: {}/{}",
-                    model.id().server(),
-                    model.id().name()
-                )));
+                let identity = format!("{}/{}", model.id().server(), model.id().name());
+                return Err(invalid_id(
+                    format!("duplicate model identity in catalog: {identity}"),
+                    &identity,
+                ));
             }
         }
         Ok(Self { models })
@@ -302,7 +307,7 @@ mod tests {
 
     #[test]
     fn model_id_rejects_empty_and_control_characters() {
-        let message = |result: std::result::Result<ModelId, IdError>| {
+        let message = |result: std::result::Result<ModelId, Error>| {
             result
                 .expect_err("the model id must be rejected")
                 .to_string()

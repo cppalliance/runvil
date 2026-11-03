@@ -85,7 +85,6 @@ auto runvil::event::Event: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::event::ReplyOrigin: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::ids::AbandonReason: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::ids::ChainId: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
-auto runvil::ids::IdError: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::ids::Provenance: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::ids::RoundId: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::ids::TaskId: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
@@ -190,7 +189,6 @@ derives runvil::event::Event: Clone, Debug, Deserialize, PartialEq, Serialize
 derives runvil::event::ReplyOrigin: Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize
 derives runvil::ids::AbandonReason: Clone, Copy, Debug, Deserialize, Eq, Hash, PartialEq, Serialize
 derives runvil::ids::ChainId: Clone, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize
-derives runvil::ids::IdError: Clone, Debug, Eq, PartialEq
 derives runvil::ids::Provenance: Clone, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize
 derives runvil::ids::RoundId: Clone, Copy, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize
 derives runvil::ids::TaskId: Clone, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize
@@ -272,7 +270,6 @@ impl core::convert::From<runvil::ids::ChainId> for runvil::ids::TaskId
 impl core::convert::From<runvil::vfs::VfsPath> for runvil::vfs::VfsPathBuf
 impl core::error::Error for runvil::ParseError
 impl core::error::Error for runvil::error::Error
-impl core::error::Error for runvil::ids::IdError
 impl core::error::Error for runvil::model::CompletionError
 impl core::error::Error for runvil::model::ParseRoleError
 impl core::error::Error for runvil::model::TemperatureError
@@ -284,7 +281,6 @@ impl core::fmt::Display for runvil::RunSeed
 impl core::fmt::Display for runvil::effect::EffectId
 impl core::fmt::Display for runvil::error::Error
 impl core::fmt::Display for runvil::ids::ChainId
-impl core::fmt::Display for runvil::ids::IdError
 impl core::fmt::Display for runvil::ids::TaskId
 impl core::fmt::Display for runvil::model::CompletionError
 impl core::fmt::Display for runvil::model::ParseRoleError
@@ -306,17 +302,17 @@ impl core::future::future::Future for runvil::cancel::Cancelled { type Output = 
 impl core::iter::traits::exact_size::ExactSizeIterator for runvil::prompt::ArgsDeclIter<'_>
 impl core::ops::drop::Drop for runvil::vfs::Access
 impl core::str::traits::FromStr for runvil::ids::ChainId
-impl core::str::traits::FromStr for runvil::ids::ChainId { type Err = runvil::ids::IdError }
+impl core::str::traits::FromStr for runvil::ids::ChainId { type Err = runvil::error::Error }
 impl core::str::traits::FromStr for runvil::ids::TaskId
-impl core::str::traits::FromStr for runvil::ids::TaskId { type Err = runvil::ids::IdError }
+impl core::str::traits::FromStr for runvil::ids::TaskId { type Err = runvil::error::Error }
 impl core::str::traits::FromStr for runvil::model::Role
 impl core::str::traits::FromStr for runvil::model::Role { type Err = runvil::model::ParseRoleError }
 impl core::str::traits::FromStr for runvil::packs::GlobalName
-impl core::str::traits::FromStr for runvil::packs::GlobalName { type Err = runvil::ids::IdError }
+impl core::str::traits::FromStr for runvil::packs::GlobalName { type Err = runvil::error::Error }
 impl core::str::traits::FromStr for runvil::packs::PackId
-impl core::str::traits::FromStr for runvil::packs::PackId { type Err = runvil::ids::IdError }
+impl core::str::traits::FromStr for runvil::packs::PackId { type Err = runvil::error::Error }
 impl core::str::traits::FromStr for runvil::tools::ToolId
-impl core::str::traits::FromStr for runvil::tools::ToolId { type Err = runvil::ids::IdError }
+impl core::str::traits::FromStr for runvil::tools::ToolId { type Err = runvil::error::Error }
 impl core::str::traits::FromStr for runvil::vfs::PathReason
 impl core::str::traits::FromStr for runvil::vfs::PathReason { type Err = runvil::vfs::ParsePathReasonError }
 impl runvil::vfs::Policy for runvil::vfs::AllowAll
@@ -497,10 +493,10 @@ pub fn runvil::model::ModelCatalog::contains(&self, id: &runvil::model::ModelId)
 pub fn runvil::model::ModelCatalog::empty() -> Self
 pub fn runvil::model::ModelCatalog::get(&self, id: &runvil::model::ModelId) -> core::option::Option<&runvil::model::ModelInfo>
 pub fn runvil::model::ModelCatalog::models(&self) -> &[runvil::model::ModelInfo]
-pub fn runvil::model::ModelCatalog::new(models: impl core::iter::traits::collect::IntoIterator<Item = runvil::model::ModelInfo>) -> core::result::Result<runvil::model::ModelCatalog, runvil::ids::IdError>
-pub fn runvil::model::ModelId::gateway(name: impl core::convert::Into<alloc::string::String>) -> core::result::Result<runvil::model::ModelId, runvil::ids::IdError>
+pub fn runvil::model::ModelCatalog::new(models: impl core::iter::traits::collect::IntoIterator<Item = runvil::model::ModelInfo>) -> core::result::Result<runvil::model::ModelCatalog, runvil::error::Error>
+pub fn runvil::model::ModelId::gateway(name: impl core::convert::Into<alloc::string::String>) -> core::result::Result<runvil::model::ModelId, runvil::error::Error>
 pub fn runvil::model::ModelId::name(&self) -> &str
-pub fn runvil::model::ModelId::new(server: impl core::convert::Into<alloc::string::String>, name: impl core::convert::Into<alloc::string::String>) -> core::result::Result<runvil::model::ModelId, runvil::ids::IdError>
+pub fn runvil::model::ModelId::new(server: impl core::convert::Into<alloc::string::String>, name: impl core::convert::Into<alloc::string::String>) -> core::result::Result<runvil::model::ModelId, runvil::error::Error>
 pub fn runvil::model::ModelInfo::context(&self) -> core::num::nonzero::NonZeroU32
 pub fn runvil::model::ModelInfo::description(&self) -> &str
 pub fn runvil::model::ModelInfo::id(&self) -> &runvil::model::ModelId
@@ -530,10 +526,10 @@ pub fn runvil::model::ToolCall::name(&self) -> &str
 pub fn runvil::model::ToolSchema::description(&self) -> &str
 pub fn runvil::model::ToolSchema::name(&self) -> &str
 pub fn runvil::model::ToolSchema::parameters(&self) -> &serde_json::value::Value
-pub fn runvil::packs::GlobalName::parse(s: &str) -> core::result::Result<runvil::packs::GlobalName, runvil::ids::IdError>
+pub fn runvil::packs::GlobalName::parse(s: &str) -> core::result::Result<runvil::packs::GlobalName, runvil::error::Error>
 pub fn runvil::packs::PackId::contains(&self, tool: &runvil::tools::ToolId) -> bool
 pub fn runvil::packs::PackId::is_reserved(&self) -> bool
-pub fn runvil::packs::PackId::parse(name: &str) -> core::result::Result<runvil::packs::PackId, runvil::ids::IdError>
+pub fn runvil::packs::PackId::parse(name: &str) -> core::result::Result<runvil::packs::PackId, runvil::error::Error>
 pub fn runvil::packs::PackRef::id(&self) -> &runvil::packs::PackId
 pub fn runvil::packs::PackRef::vendor(&self) -> &str
 pub fn runvil::packs::Prelude::new(pack: runvil::packs::PackId, source: impl core::convert::Into<alloc::string::String>) -> runvil::packs::Prelude
@@ -563,7 +559,7 @@ pub fn runvil::prompt::RoleRequirements::min_context(&self) -> core::option::Opt
 pub fn runvil::prompt::RoleRequirements::thinking(&self) -> core::option::Option<bool>
 pub fn runvil::timestamp::Timestamp::to_rfc3339(self) -> alloc::string::String
 pub fn runvil::tools::ToolCatalog::get(&self, id: &runvil::tools::ToolId) -> core::option::Option<&runvil::tools::ToolInfo>
-pub fn runvil::tools::ToolCatalog::new(tools: impl core::iter::traits::collect::IntoIterator<Item = runvil::tools::ToolInfo>) -> core::result::Result<Self, runvil::ids::IdError>
+pub fn runvil::tools::ToolCatalog::new(tools: impl core::iter::traits::collect::IntoIterator<Item = runvil::tools::ToolInfo>) -> core::result::Result<Self, runvil::error::Error>
 pub fn runvil::tools::ToolCatalog::tools(&self) -> &[runvil::tools::ToolInfo]
 pub fn runvil::tools::ToolError::kind(&self) -> runvil::tools::ToolErrorKind
 pub fn runvil::tools::ToolError::message(text: impl core::convert::Into<alloc::string::String>) -> runvil::tools::ToolError
@@ -573,7 +569,7 @@ pub fn runvil::tools::ToolError::with_source(self, source: impl core::convert::I
 pub fn runvil::tools::ToolErrorKind::tag(self) -> &'static str
 pub fn runvil::tools::ToolId::name(&self) -> &str
 pub fn runvil::tools::ToolId::pack(&self) -> runvil::packs::PackId
-pub fn runvil::tools::ToolId::parse(id: &str) -> core::result::Result<runvil::tools::ToolId, runvil::ids::IdError>
+pub fn runvil::tools::ToolId::parse(id: &str) -> core::result::Result<runvil::tools::ToolId, runvil::error::Error>
 pub fn runvil::tools::ToolInfo::describes_tools(self, describes: bool) -> runvil::tools::ToolInfo
 pub fn runvil::tools::ToolInfo::model_only_call(self, model_only: bool) -> runvil::tools::ToolInfo
 pub fn runvil::tools::ToolInfo::new(id: runvil::tools::ToolId, description: impl core::convert::Into<alloc::string::String>, parameters_schema: serde_json::value::Value) -> runvil::tools::ToolInfo
@@ -1357,7 +1353,6 @@ pub struct runvil::effect::EffectId(/* private fields */)
 pub struct runvil::error::Error { .. }
 pub struct runvil::error::Location { .. }
 pub struct runvil::ids::ChainId(/* private fields */)
-pub struct runvil::ids::IdError { /* private fields */ }
 pub struct runvil::ids::RoundId(/* private fields */)
 pub struct runvil::ids::TaskId(/* private fields */)
 pub struct runvil::model::ArgumentNames<'a> { /* private fields */ }

@@ -6,8 +6,9 @@
 //! order changes, would make a replayed run differ from the run that ran.
 
 use harness::record::RunSeed;
+use runvil::error::Error;
 use runvil::event::{Event, ReplyOrigin};
-use runvil::ids::{IdError, Provenance, RoundId, TaskId};
+use runvil::ids::{Provenance, RoundId, TaskId};
 use runvil::metrics::{CallMetrics, ClientTiming, LlamaTimings, Usage, VllmMetrics};
 use serde_json::{Map, Value, json};
 use workshop_run_log::{Record, RecordFilter, RecordKind, RunLog, RunMeta};
@@ -34,7 +35,7 @@ fn meta() -> RunMeta {
 }
 
 /// The replay key every fidelity event carries.
-fn provenance() -> Result<Provenance, IdError> {
+fn provenance() -> Result<Provenance, Error> {
     Ok(Provenance::new("0".parse::<TaskId>()?, 0))
 }
 
