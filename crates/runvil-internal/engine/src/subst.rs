@@ -31,99 +31,58 @@
 //! replacement that itself contains `{{ ... }}` is emitted verbatim and never
 //! triggers a second round of substitution.
 
+use runvil_types::error::{Error, ErrorCode, FactKey};
 use serde_json::Value;
 
 use crate::Result;
 
-/// A stable classification of a [`SubstitutionError`].
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum SubstErrorKind {
-    /// A `{{` was opened but never closed with `}}`.
-    Unclosed,
-    /// A bare namespace with no `.key` suffix where one is required.
-    BadPath,
-    /// A path segment was empty or whitespace-padded (`var.`, `var..x`).
-    EmptySegment,
-    /// The leading namespace is not one of the known roots and names no bare
-    /// global.
-    UnknownNamespace,
-    /// A key path after `args` or `item`, which render whole only.
-    NotATable,
-    /// A key path found no value: under `var`, `sys`, `argv`, or a bare
-    /// global.
-    MissingKey,
-    /// The resolved value was JSON null, for a `var`, `sys`, `argv`, or bare
-    /// global source. A null `item` is not this: `{{ item }}` renders it as
-    /// the text `null`.
-    NullValue,
-    /// `{{ item }}` was used with no item seeded into this section.
-    NilItem,
-    /// An `argv` placeholder, bare or dotted, was used while `argv` was nil.
-    NilArgv,
-    /// The bare-global lookup failed: the global cannot become JSON data, the
-    /// name is `prose` itself, or the lookup raised.
-    Serialize,
-}
-
-/// A typed substitution failure.
+/// Builds the failure of the placeholder that opens at byte `offset` of the
+/// prose. `detail` says what failed, with a bounded, control-escaped preview
+/// of the placeholder path; the message follows it with the documented
+/// kind name, the reason in CamelCase, and the offset, as
+/// `{detail} [MissingKey at byte 4]`, and the prose with the code's default
+/// text. `reason` is the `Reason` fact, one of:
 ///
-/// Holds a stable [`kind`](SubstitutionError::kind), the byte
-/// [`offset`](SubstitutionError::offset) of the offending placeholder within
-/// the prose, a `message` that embeds a bounded, control-escaped preview of the
-/// placeholder path, and - for the serialization case - the preserved
-/// underlying error as its [`source`](std::error::Error::source).
-#[derive(Debug)]
-pub(crate) struct SubstitutionError {
-    kind: SubstErrorKind,
-    offset: usize,
-    message: String,
-    source: Option<Box<dyn std::error::Error + Send + Sync>>,
+/// - `unclosed`: a `{{` was opened but never closed with `}}`.
+/// - `bad_path`: a bare namespace with no `.key` suffix where one is
+///   required.
+/// - `empty_segment`: a path segment was empty or whitespace-padded
+///   (`var.`, `var..x`).
+/// - `unknown_namespace`: the leading namespace is not one of the known
+///   roots and names no bare global.
+/// - `not_a_table`: a key path after `args` or `item`, which render whole
+///   only.
+/// - `missing_key`: a key path found no value: under `var`, `sys`, `argv`,
+///   or a bare global.
+/// - `null_value`: the resolved value was JSON null, for a `var`, `sys`,
+///   `argv`, or bare global source. A null `item` is not this: `{{ item }}`
+///   renders it as the text `null`.
+/// - `nil_item`: `{{ item }}` was used with no item seeded into this
+///   section.
+/// - `nil_argv`: an `argv` placeholder, bare or dotted, was used while
+///   `argv` was nil.
+/// - `serialize`: the bare-global lookup failed: the global cannot become
+///   JSON data, the name is `prose` itself, or the lookup raised.
+fn failure(reason: &str, offset: usize, detail: String) -> Error {
+    let code = ErrorCode::Substitution;
+    let kind: String = reason
+        .split('_')
+        .flat_map(|word| {
+            let mut letters = word.chars();
+            letters
+                .next()
+                .map(|first| first.to_ascii_uppercase())
+                .into_iter()
+                .chain(letters)
+        })
+        .collect();
+    let message = format!("{detail} [{kind} at byte {offset}]");
+    let mut error = Error::new(code, message, detail + ". " + code.prose());
+    error.facts.insert(FactKey::Reason, Value::from(reason));
+    error
 }
 
-impl SubstitutionError {
-    fn new(kind: SubstErrorKind, offset: usize, message: String) -> Self {
-        SubstitutionError {
-            kind,
-            offset,
-            message,
-            source: None,
-        }
-    }
-
-    fn with_source(
-        kind: SubstErrorKind,
-        offset: usize,
-        message: String,
-        source: Box<dyn std::error::Error + Send + Sync>,
-    ) -> Self {
-        SubstitutionError {
-            kind,
-            offset,
-            message,
-            source: Some(source),
-        }
-    }
-}
-
-impl std::fmt::Display for SubstitutionError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "{} [{:?} at byte {}]",
-            self.message, self.kind, self.offset
-        )
-    }
-}
-
-impl std::error::Error for SubstitutionError {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        self.source
-            .as_deref()
-            .map(|s| s as &(dyn std::error::Error + 'static))
-    }
-}
-
-type SubstResult<T> = std::result::Result<T, SubstitutionError>;
+type SubstResult<T> = std::result::Result<T, Error>;
 
 /// The value sources `{{ }}` placeholders resolve against.
 ///
@@ -145,7 +104,7 @@ pub(crate) struct Sources<'a> {
     pub(crate) sys: &'a Value,
     /// The bare-global lookup for `{{ name }}` resolution: `Ok(None)` when
     /// unset, `Ok(Some(_))` with its JSON form when set, and `Err` when the
-    /// lookup fails, which a placeholder reports as `Serialize`.
+    /// lookup fails, which a placeholder reports as `serialize`.
     pub(crate) globals: &'a dyn Fn(&str) -> Result<Option<Value>>,
 }
 
@@ -156,12 +115,14 @@ pub(crate) struct Sources<'a> {
 ///
 /// # Errors
 /// Returns [`Error::Substitution`](crate::Error::Substitution) holding a
-/// [`SubstitutionError`] whose kind is a [`SubstErrorKind`] variant, which is
-/// the complete list of what a placeholder can fail with. The error carries
-/// the byte offset of the offending placeholder and a message with its
-/// bounded, control-escaped path preview.
+/// `Substitution` error whose `Reason` fact is one of the reasons `failure`
+/// lists, which is the complete list of what a placeholder can fail with.
+/// Its message names the reason and the byte offset of the offending
+/// placeholder after a detail with its bounded, control-escaped path
+/// preview, and a `serialize` message then holds the lookup failure.
 pub(crate) fn substitute(prose: &str, sources: &Sources<'_>) -> Result<String> {
-    Ok(substitute_inner(prose, sources)?)
+    // `?` would bridge the failure to `Error::Completion` instead.
+    substitute_inner(prose, sources).map_err(|error| crate::Error::Substitution(Box::new(error)))
 }
 
 fn substitute_inner(prose: &str, sources: &Sources<'_>) -> SubstResult<String> {
@@ -182,13 +143,9 @@ fn substitute_inner(prose: &str, sources: &Sources<'_>) -> SubstResult<String> {
         if bytes[i] == b'{' && i + 1 < prose.len() && bytes[i + 1] == b'{' {
             let start = i;
             let after = &prose[i + 2..];
-            let end = after.find("}}").ok_or_else(|| {
-                SubstitutionError::new(
-                    SubstErrorKind::Unclosed,
-                    start,
-                    "unclosed '{{' in prose".to_string(),
-                )
-            })?;
+            let end = after
+                .find("}}")
+                .ok_or_else(|| failure("unclosed", start, "unclosed '{{' in prose".to_string()))?;
             let path = after[..end].trim();
             out.push_str(&resolve(path, start, sources)?);
             i += 2 + end + 2;
@@ -206,8 +163,8 @@ fn substitute_inner(prose: &str, sources: &Sources<'_>) -> SubstResult<String> {
 /// The nil-`argv` failure shared by the bare and dotted `{{ argv }}` paths.
 fn nil_argv<'a>(argv: Option<&'a Value>, path: &str, offset: usize) -> SubstResult<&'a Value> {
     argv.ok_or_else(|| {
-        SubstitutionError::new(
-            SubstErrorKind::NilArgv,
+        failure(
+            "nil_argv",
             offset,
             format!(
                 "{{{{ {} }}}} is nil (argv holds no value)",
@@ -227,20 +184,20 @@ fn bare_global_root(
 ) -> SubstResult<Value> {
     globals(name)
         .map_err(|error| {
-            SubstitutionError::with_source(
-                SubstErrorKind::Serialize,
+            failure(
+                "serialize",
                 offset,
                 format!(
                     "global '{}' in {{{{ {} }}}} is not JSON data",
                     path_preview(name),
                     path_preview(path)
                 ),
-                Box::new(error),
             )
+            .with_cause(&error)
         })?
         .ok_or_else(|| {
-            SubstitutionError::new(
-                SubstErrorKind::UnknownNamespace,
+            failure(
+                "unknown_namespace",
                 offset,
                 format!(
                     "unknown namespace or global '{}' in {{{{ {} }}}}",
@@ -258,8 +215,8 @@ fn resolve(path: &str, offset: usize, sources: &Sources<'_>) -> SubstResult<Stri
     }
     if path == "item" {
         return sources.item.map(crate::lua::render_item).ok_or_else(|| {
-            SubstitutionError::new(
-                SubstErrorKind::NilItem,
+            failure(
+                "nil_item",
                 offset,
                 "{{ item }} is nil (no item is seeded into this section)".to_string(),
             )
@@ -275,8 +232,8 @@ fn resolve(path: &str, offset: usize, sources: &Sources<'_>) -> SubstResult<Stri
     // when a matching JSON key happens to exist.
     for segment in path.split('.') {
         if segment.is_empty() || segment.trim() != segment {
-            return Err(SubstitutionError::new(
-                SubstErrorKind::EmptySegment,
+            return Err(failure(
+                "empty_segment",
                 offset,
                 format!(
                     "empty or padded path segment in {{{{ {} }}}}",
@@ -297,15 +254,15 @@ fn resolve(path: &str, offset: usize, sources: &Sources<'_>) -> SubstResult<Stri
         "sys" => sources.sys,
         "argv" => nil_argv(sources.argv, path, offset)?,
         "args" => {
-            return Err(SubstitutionError::new(
-                SubstErrorKind::NotATable,
+            return Err(failure(
+                "not_a_table",
                 offset,
                 "args is a string, not a table".to_string(),
             ));
         }
         "item" => {
-            return Err(SubstitutionError::new(
-                SubstErrorKind::NotATable,
+            return Err(failure(
+                "not_a_table",
                 offset,
                 "item takes no key path; {{ item }} renders the whole item".to_string(),
             ));
@@ -321,8 +278,8 @@ fn resolve(path: &str, offset: usize, sources: &Sources<'_>) -> SubstResult<Stri
         Some(keys) => {
             for key in keys.split('.') {
                 current = current.get(key).ok_or_else(|| {
-                    SubstitutionError::new(
-                        SubstErrorKind::MissingKey,
+                    failure(
+                        "missing_key",
                         offset,
                         format!("missing {{{{ {} }}}}", path_preview(path)),
                     )
@@ -332,8 +289,8 @@ fn resolve(path: &str, offset: usize, sources: &Sources<'_>) -> SubstResult<Stri
         // A bare `var`/`sys` with no key stays an error; a bare global with
         // no keys renders its whole JSON value.
         None if matches!(namespace, "var" | "sys") => {
-            return Err(SubstitutionError::new(
-                SubstErrorKind::BadPath,
+            return Err(failure(
+                "bad_path",
                 offset,
                 format!("bad path: {{{{ {} }}}}", path_preview(path)),
             ));
@@ -373,8 +330,8 @@ fn path_preview(path: &str) -> String {
 /// [`render_item`](crate::lua::render_item); a null is an error.
 fn render(value: &Value, path: &str, offset: usize) -> SubstResult<String> {
     if value.is_null() {
-        return Err(SubstitutionError::new(
-            SubstErrorKind::NullValue,
+        return Err(failure(
+            "null_value",
             offset,
             format!("missing {{{{ {} }}}}", path_preview(path)),
         ));

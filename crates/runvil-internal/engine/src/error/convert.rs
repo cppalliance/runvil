@@ -117,12 +117,6 @@ impl Error {
     }
 }
 
-impl From<crate::subst::SubstitutionError> for Error {
-    fn from(error: crate::subst::SubstitutionError) -> Error {
-        Error::Substitution(Box::new(error))
-    }
-}
-
 impl From<runvil_types::error::Error> for Error {
     fn from(error: runvil_types::error::Error) -> Error {
         Error::Completion(error)

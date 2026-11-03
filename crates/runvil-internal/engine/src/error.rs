@@ -3,9 +3,9 @@
 //! [`Error`] is a `pub(crate)` internal error type, never part of the public API.
 //! A run it ends reports its kind and message in
 //! [`RunOutcome::Failed`](crate::RunOutcome::Failed), and the
-//! [`runvil_types::error::Error`] a parse, a model round, or a tool fails
-//! with reaches that outcome through this type, which classifies it and
-//! keeps its cause.
+//! [`runvil_types::error::Error`] a parse, a model round, a tool, or a
+//! `{{ }}` substitution fails with reaches that outcome through this type,
+//! which classifies it and keeps its cause.
 //! The `From` bridges that let internal `?` reach this type live in `convert`.
 //!
 //! A variant that keeps an originating error renders that error's text in
@@ -204,13 +204,14 @@ pub(crate) enum Error {
 
     /// A `{{ }}` prose substitution failed (unknown/missing path, unclosed).
     ///
-    /// Holds a typed [`crate::subst::SubstitutionError`] with a stable kind,
-    /// the byte offset of the offending placeholder, a bounded preview, and any
-    /// preserved serialization source, rather than a flattened string. The
-    /// substitution error is the whole message and its cause chain, so the
-    /// variant is transparent over it.
+    /// Holds the substitution's [`runvil_types::error::Error`] whole: code
+    /// `Substitution`, a `Reason` fact that names what the placeholder
+    /// failed with, and a message that names the reason, the byte offset of
+    /// the offending placeholder, and a bounded preview of its path, with a
+    /// failed bare-global lookup's cause chain. That message is the whole
+    /// text, so the variant is transparent over it.
     #[error(transparent)]
-    Substitution(Box<crate::subst::SubstitutionError>),
+    Substitution(Box<runvil_types::error::Error>),
 
     /// The tool-call loop ran its iteration cap without a final text reply.
     #[error("tool-call loop did not converge")]

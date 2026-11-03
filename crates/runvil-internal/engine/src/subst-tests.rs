@@ -1,6 +1,8 @@
 //! Regression coverage for `{{ }}` prose substitution: the resolution
 //! of the `args`, `argv`, `item`, `var`, `sys`, and bare-global sources, the
-//! escape grammar, path segment validation, and the typed error kinds.
+//! escape grammar, path segment validation, and the failure reasons.
+
+use std::collections::BTreeMap;
 
 use super::*;
 use serde_json::json;
@@ -34,7 +36,7 @@ fn run(prose: &str) -> Result<String> {
     substitute(prose, &test_sources(&var, &sys))
 }
 
-fn err_of(prose: &str) -> SubstitutionError {
+fn err_of(prose: &str) -> Error {
     let var = json!({ "kind": "library", "row": { "a": 1 }, "arr": [1, 2] });
     let sys = json!({ "id": 1 });
     let sources = Sources {
@@ -42,6 +44,11 @@ fn err_of(prose: &str) -> SubstitutionError {
         ..test_sources(&var, &sys)
     };
     substitute_inner(prose, &sources).expect_err("expected substitution failure")
+}
+
+/// The `Reason` fact of a substitution failure.
+fn reason(error: &Error) -> Option<&str> {
+    error.facts.get(&FactKey::Reason)?.as_str()
 }
 
 #[test]
@@ -115,7 +122,7 @@ fn nil_argv_is_an_error() {
     let sys = json!({});
     for prose in ["{{ argv }}", "{{ argv.x }}"] {
         let e = substitute_inner(prose, &test_sources(&var, &sys)).unwrap_err();
-        assert_eq!(e.kind, SubstErrorKind::NilArgv, "path {prose:?}");
+        assert_eq!(reason(&e), Some("nil_argv"), "path {prose:?}");
         assert!(e.to_string().contains("argv"), "names argv: {e}");
         assert!(
             e.to_string().contains("is nil (argv holds no value)"),
@@ -135,7 +142,7 @@ fn dotted_index_into_a_scalar_argv_is_an_error() {
         ..test_sources(&var, &sys)
     };
     let e = substitute_inner("{{ argv.x }}", &sources).unwrap_err();
-    assert_eq!(e.kind, SubstErrorKind::MissingKey);
+    assert_eq!(reason(&e), Some("missing_key"));
 }
 
 #[test]
@@ -173,7 +180,7 @@ fn no_placeholders_passthrough() {
 
 #[test]
 fn unclosed_is_error() {
-    assert_eq!(err_of("open {{ args").kind, SubstErrorKind::Unclosed);
+    assert_eq!(reason(&err_of("open {{ args")), Some("unclosed"));
 }
 
 // --- Escape grammar ------------------------------------------------------
@@ -222,10 +229,9 @@ fn empty_or_padded_segments_are_rejected() {
         let prose = format!("{{{{ {bad} }}}}");
         let e = err_of(&prose);
         assert_eq!(
-            e.kind,
-            SubstErrorKind::EmptySegment,
-            "path {bad:?} must be an empty-segment error, got {:?}",
-            e.kind
+            reason(&e),
+            Some("empty_segment"),
+            "path {bad:?} must be an empty-segment error, got {e:?}"
         );
     }
 }
@@ -235,14 +241,49 @@ fn valid_nested_segment_still_resolves() {
     assert_eq!(run("{{ var.row.a }}").unwrap(), "1");
 }
 
-// --- Typed error kind/offset/source --------------------------------------
+// --- Failure reason/offset/cause -----------------------------------------
 
 #[test]
-fn error_has_kind_and_offset() {
+fn error_has_reason_and_offset() {
     let e = err_of("prefix {{ ghost.x }}");
-    assert_eq!(e.kind, SubstErrorKind::UnknownNamespace);
-    assert_eq!(e.offset, 7, "offset must point at the '{{{{'");
-    assert!(e.to_string().contains("ghost.x"));
+    assert_eq!(reason(&e), Some("unknown_namespace"));
+    assert!(
+        e.message.ends_with("[UnknownNamespace at byte 7]"),
+        "offset must point at the '{{{{': {e}"
+    );
+    assert!(e.message.contains("ghost.x"));
+}
+
+#[test]
+fn a_failure_is_a_substitution_error_with_its_reason_fact() {
+    let e = err_of("see {{ var.nope }}");
+    let detail = "missing {{ var.nope }}";
+    assert_eq!(e.code, ErrorCode::Substitution);
+    assert_eq!(e.message, format!("{detail} [MissingKey at byte 4]"));
+    assert_eq!(
+        e.prose,
+        format!("{detail}. {}", ErrorCode::Substitution.prose())
+    );
+    assert_eq!(
+        e.facts,
+        BTreeMap::from([(FactKey::Reason, Value::from("missing_key"))])
+    );
+    assert_eq!(e.at, None);
+}
+
+#[test]
+fn a_failure_reaches_the_engine_error_as_a_substitution_never_a_completion() {
+    let error = run("{{ var.nope }}").expect_err("a missing key fails the substitution");
+    let crate::Error::Substitution(failure) = &error else {
+        panic!("a substitution failure must not bridge to a completion failure: {error:?}");
+    };
+    assert_eq!(reason(failure), Some("missing_key"));
+    assert_eq!(error.to_string(), failure.message);
+    assert_eq!(error.kind(), crate::RunErrorKind::Lua);
+    assert_eq!(
+        runvil_lua::ErrorValue::kind(&error),
+        runvil_lua::ErrorKind::Lua
+    );
 }
 
 // --- bare globals (section-local Lua globals in prose) -------------------
@@ -289,7 +330,7 @@ fn bare_global_table_renders_as_json() {
 #[test]
 fn missing_bare_global_is_unknown_namespace() {
     let e = err_of("{{ ghost }}");
-    assert_eq!(e.kind, SubstErrorKind::UnknownNamespace);
+    assert_eq!(reason(&e), Some("unknown_namespace"));
     assert!(e.to_string().contains("global 'ghost'"));
 }
 
@@ -306,21 +347,25 @@ fn non_json_bare_global_is_an_error() {
         ..test_sources(&var, &sys)
     };
     let e = substitute_inner("{{ f }}", &sources).unwrap_err();
-    assert_eq!(e.kind, SubstErrorKind::Serialize);
-    assert!(e.to_string().contains("not JSON data"));
+    assert_eq!(reason(&e), Some("serialize"));
+    assert_eq!(
+        e.message,
+        "global 'f' in {{ f }} is not JSON data [Serialize at byte 0]: global `f` is a function",
+        "the lookup failure must be preserved in the message"
+    );
     assert!(
-        std::error::Error::source(&e).is_some(),
-        "the lookup failure must be preserved as the source"
+        !e.prose.contains("is a function"),
+        "the lookup failure must stay out of the prose: {e:?}"
     );
 }
 
 #[test]
 fn bare_namespaces_still_require_a_key() {
-    // `{{ var }}` and `{{ sys }}` stay BadPath; only bare globals render
+    // `{{ var }}` and `{{ sys }}` stay `bad_path`; only bare globals render
     // whole values.
     for prose in ["{{ var }}", "{{ sys }}"] {
         let e = err_of(prose);
-        assert_eq!(e.kind, SubstErrorKind::BadPath, "path {prose:?}");
+        assert_eq!(reason(&e), Some("bad_path"), "path {prose:?}");
     }
 }
 
@@ -329,24 +374,24 @@ fn reply_is_no_longer_a_namespace() {
     // `{{ reply }}` resolves as a bare global like any other name, and is
     // unset here.
     let e = err_of("{{ reply }}");
-    assert_eq!(e.kind, SubstErrorKind::UnknownNamespace);
+    assert_eq!(reason(&e), Some("unknown_namespace"));
 }
 
 #[test]
-fn null_value_and_item_kinds() {
+fn null_value_and_nil_item_reasons() {
     let var = json!({ "n": Value::Null });
     let sys = json!({});
     let e = substitute_inner("{{ var.n }}", &test_sources(&var, &sys)).unwrap_err();
-    assert_eq!(e.kind, SubstErrorKind::NullValue);
+    assert_eq!(reason(&e), Some("null_value"));
 
     let e = substitute_inner("{{ item }}", &test_sources(&var, &sys)).unwrap_err();
-    assert_eq!(e.kind, SubstErrorKind::NilItem);
+    assert_eq!(reason(&e), Some("nil_item"));
 }
 
 #[test]
-fn not_a_table_kind() {
+fn not_a_table_reason() {
     let e = err_of("{{ args.x }}");
-    assert_eq!(e.kind, SubstErrorKind::NotATable);
+    assert_eq!(reason(&e), Some("not_a_table"));
     assert!(e.to_string().contains("not a table"));
 }
 

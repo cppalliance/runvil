@@ -240,7 +240,7 @@ fn bare_global_holding_json_null_in_prose_is_the_null_value_failure() {
     );
     let rendered = error.to_string();
     assert!(
-        rendered.contains("missing {{ nothing }}") && rendered.contains("NullValue"),
+        rendered.contains("missing {{ nothing }}") && rendered.contains("[NullValue at byte "),
         "the error is the null-value failure naming the global: {rendered}"
     );
 }
