@@ -177,6 +177,7 @@ fn request(source: &str) -> RunRequest {
     RunRequest {
         name: "session-1".to_owned(),
         source: source.to_owned(),
+        file: "prompt".to_owned(),
         args: String::new(),
         input_text: None,
         vfs: VfsRef::default(),

@@ -73,7 +73,7 @@ fn looping(section: &str, user: &str, result: &str) -> String {
 /// one model and [`TOOL`] in its catalog, under the cancel flag `cancel`.
 fn run_of(sections: &str, cancel: &CancelHandle) -> Run {
     let source = format!("{PREAMBLE}{sections}");
-    let (prompt, _parse_events) = Prompt::parse(&source, EXECUTION);
+    let (prompt, _parse_events) = Prompt::parse(&source, "prompt", EXECUTION);
     let prompt = Arc::new(prompt.expect("the cap fixture parses"));
     let model = ModelInfo::new(
         ModelId::gateway(MODEL).expect("the model id is valid"),

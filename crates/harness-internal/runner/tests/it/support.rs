@@ -83,7 +83,7 @@ fn prompt(sections: &[(&str, &str)]) -> Arc<Prompt> {
     for (name, lua) in sections {
         write!(source, "\n## {name}\n\n```lua\n{lua}\n```\n").expect("a String takes any write");
     }
-    let (prompt, _parse_events) = Prompt::parse(&source, EXECUTION);
+    let (prompt, _parse_events) = Prompt::parse(&source, "prompt", EXECUTION);
     Arc::new(prompt.expect("the fixture prompt parses"))
 }
 

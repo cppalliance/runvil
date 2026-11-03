@@ -155,7 +155,7 @@ fn a_frontmatter_failure_message_ends_with_its_line_and_column() {
         "---\n",
         "\n# T\n\n## S\n\np\n",
     );
-    let parse = Prompt::parse(source, "test")
+    let parse = Prompt::parse(source, "prompt", "test")
         .0
         .expect_err("a Pack id with spaces must be rejected");
     let error = Error::from(parse);
@@ -169,7 +169,7 @@ fn a_structured_failure_message_ends_with_the_prompt_name_and_position() {
     // prompt's frontmatter name and the offending span's line and
     // column.
     let source = "---\nname: dup\ndescription: d\n---\n\n# T\n\n## S\n\np\n\n## S\n\nq\n";
-    let parse = Prompt::parse(source, "test")
+    let parse = Prompt::parse(source, "prompt", "test")
         .0
         .expect_err("duplicate sibling sections must be rejected");
     let error = Error::from(parse);

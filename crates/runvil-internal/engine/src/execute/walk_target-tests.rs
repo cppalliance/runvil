@@ -29,7 +29,7 @@ const LIBRARY_TREE: &str = concat!(
 );
 
 fn library_tree() -> Prompt {
-    Prompt::parse(LIBRARY_TREE, "library-test")
+    Prompt::parse(LIBRARY_TREE, "prompt", "library-test")
         .0
         .expect("the tree parses")
 }

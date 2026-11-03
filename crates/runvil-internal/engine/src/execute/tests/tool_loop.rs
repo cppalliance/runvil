@@ -106,7 +106,7 @@ fn run_resolves_cap_from_frontmatter_else_default() {
     let default_cap = RunLimits::default().max_tool_iterations.get() as usize;
     let declared =
         "---\nname: t\ndescription: d\nmax_tool_iterations: 5\n---\n\n# T\n\n## S\n\np\n";
-    let p = Prompt::parse(declared, EXECUTION).0.unwrap();
+    let p = Prompt::parse(declared, "prompt", EXECUTION).0.unwrap();
     assert_eq!(
         p.frontmatter()
             .max_tool_iterations()
@@ -115,7 +115,7 @@ fn run_resolves_cap_from_frontmatter_else_default() {
     );
 
     let absent = "---\nname: t\ndescription: d\n---\n\n# T\n\n## S\n\np\n";
-    let p = Prompt::parse(absent, EXECUTION).0.unwrap();
+    let p = Prompt::parse(absent, "prompt", EXECUTION).0.unwrap();
     assert_eq!(
         p.frontmatter()
             .max_tool_iterations()

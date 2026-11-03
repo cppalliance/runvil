@@ -16,7 +16,10 @@ impl Prompt {
     /// Parses the full source text of a prompt file into a [`Prompt`] and
     /// returns the events reported during parsing alongside the result.
     ///
-    /// The caller supplies `execution`, an identifier that every event
+    /// The caller supplies `file`, the name of the file the source came
+    /// from, such as `agents/research.md`, or `prompt` when it came from no
+    /// file. [`Prompt::file`] returns it, so a failure can name the file.
+    /// The caller also supplies `execution`, an identifier that every event
     /// carries. Every event is reported under task `0` because parsing happens
     /// before any run starts.
     ///
@@ -59,12 +62,13 @@ impl Prompt {
     ///   of its own invariants breaks, or the Lua compiler cannot start.
     pub fn parse(
         input: &str,
+        file: &str,
         execution: &str,
     ) -> (std::result::Result<Prompt, ParseError>, Vec<Event>) {
         let sink = EventSink::default();
         let emitter = Emitter::root(sink.clone(), execution, false);
         emitter.report("Prompt", lifecycle::PARSE_STARTED);
-        let result = Self::parse_inner(input, &emitter);
+        let result = Self::parse_inner(input, file, &emitter);
         emitter.report(
             "Prompt",
             if result.is_ok() {
@@ -76,7 +80,7 @@ impl Prompt {
         (result.map_err(ParseError::from_inner), sink.take())
     }
 
-    fn parse_inner(input: &str, emitter: &Emitter) -> Result<Prompt> {
+    fn parse_inner(input: &str, file: &str, emitter: &Emitter) -> Result<Prompt> {
         let split = frontmatter::split_frontmatter(input)?;
         let frontmatter_lines = split.frontmatter_lines;
         let shared: Arc<str> = Arc::from(split.body);
@@ -111,7 +115,7 @@ impl Prompt {
         // Everything past the frontmatter postdates the prompt's name, so a
         // failure from here on is stamped with it (and its span's position).
         let name = frontmatter.name().to_owned();
-        Self::parse_body(frontmatter, &shared, frontmatter_lines, emitter)
+        Self::parse_body(frontmatter, &shared, frontmatter_lines, file, emitter)
             .map_err(|error| error.with_prompt_context(&name, &shared, frontmatter_lines))
     }
 
@@ -119,6 +123,7 @@ impl Prompt {
         frontmatter: Frontmatter,
         shared: &Arc<str>,
         frontmatter_lines: u32,
+        file: &str,
         emitter: &Emitter,
     ) -> Result<Prompt> {
         let body: &str = shared;
@@ -198,6 +203,7 @@ impl Prompt {
         let sections = walker.build_sections(1)?;
 
         Ok(Prompt {
+            file: file.to_owned(),
             frontmatter,
             title,
             h1_blocks,

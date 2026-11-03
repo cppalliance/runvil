@@ -9,6 +9,10 @@ use std::path::Path;
 /// fresh install has a working chat with no agents folder at all.
 pub const BUILTIN_CHAT_SOURCE: &str = include_str!("../agents/chat.md");
 
+/// The file the built-in chat agent's source comes from, as its run names
+/// it: the file in this crate that [`BUILTIN_CHAT_SOURCE`] embeds.
+const BUILTIN_CHAT_FILE: &str = "agents/chat.md";
+
 /// The built-in default agent's name: discovery always offers it, and a
 /// folder file named `chat.md` shadows the embedded source.
 const BUILTIN_CHAT_NAME: &str = "chat";
@@ -59,16 +63,17 @@ pub fn discover_agents(dir: &Path) -> Vec<String> {
     names
 }
 
-/// Reads the source of the agent `name`, accepting only a name the agent
-/// menu lists: [`discover_agents`] over `dir` is the trust boundary, so a
-/// client-sent name reaches the filesystem only as the bare stem of a
-/// real `.md` file in `dir`, or as the built-in `chat`.
+/// Reads the agent `name` as the pair of the file its source came from and
+/// the source, accepting only a name the agent menu lists:
+/// [`discover_agents`] over `dir` is the trust boundary, so a client-sent
+/// name reaches the filesystem only as the bare stem of a real `.md` file
+/// in `dir`, or as the built-in `chat`.
 ///
 /// # Errors
 /// Returns [`LaunchError::UnknownAgent`] for a name discovery does not
 /// list, paths included, and [`LaunchError::Unreadable`] when a listed
 /// agent's source cannot be read.
-pub fn load_agent(dir: &Path, name: &str) -> Result<String, LaunchError> {
+pub fn load_agent(dir: &Path, name: &str) -> Result<(String, String), LaunchError> {
     if !discover_agents(dir).iter().any(|known| known == name) {
         return Err(LaunchError::UnknownAgent {
             name: name.to_owned(),
@@ -77,17 +82,18 @@ pub fn load_agent(dir: &Path, name: &str) -> Result<String, LaunchError> {
     agent_source(dir, name).map_err(|source| LaunchError::Unreadable { source })
 }
 
-/// Reads the agent's program source: the folder file when it exists - a
-/// folder `chat.md` shadows the built-in - else the embedded built-in for
-/// the `chat` name alone. A missing file for any other name is a real
-/// filesystem race, surfaced as the error it is; so is an existing
-/// `chat.md` that cannot be read, because silently serving the built-in
-/// would mask the operator's own file.
-fn agent_source(dir: &Path, name: &str) -> io::Result<String> {
-    match std::fs::read_to_string(dir.join(format!("{name}.md"))) {
-        Ok(source) => Ok(source),
+/// Reads the agent's file and program source: the folder file's path and
+/// text when it exists - a folder `chat.md` shadows the built-in - else
+/// the embedded built-in for the `chat` name alone. A missing file for any
+/// other name is a real filesystem race, surfaced as the error it is; so is
+/// an existing `chat.md` that cannot be read, because silently serving the
+/// built-in would mask the operator's own file.
+fn agent_source(dir: &Path, name: &str) -> io::Result<(String, String)> {
+    let path = dir.join(format!("{name}.md"));
+    match std::fs::read_to_string(&path) {
+        Ok(source) => Ok((path.display().to_string(), source)),
         Err(error) if name == BUILTIN_CHAT_NAME && error.kind() == io::ErrorKind::NotFound => {
-            Ok(BUILTIN_CHAT_SOURCE.to_owned())
+            Ok((BUILTIN_CHAT_FILE.to_owned(), BUILTIN_CHAT_SOURCE.to_owned()))
         }
         Err(error) => Err(error),
     }

@@ -56,7 +56,7 @@ use crate::recorder::{
 /// What the caller owns and preparation borrows: the Host's built
 /// Packs and the run's own services, the real directories, the run's
 /// cancel flag, the recorder, the inference broker and the timer that
-/// reach beyond the runner, and the run's name.
+/// reach beyond the runner, and the run's name and prompt file.
 pub struct Services {
     /// The Host's built Packs, from which the run picks its own and takes
     /// their snapshot.
@@ -83,6 +83,8 @@ pub struct Services {
     /// The run's name, the one it began under: every event's
     /// `execution`.
     pub name: String,
+    /// The file the prompt's source came from, which the parse records.
+    pub file: String,
     /// The Host's default model, when one is selected: the run fills all
     /// five roles with it, and its first step checks each declared role's
     /// requirements against it.
@@ -246,6 +248,7 @@ pub async fn prepare(
         broker,
         timer,
         name,
+        file,
         model,
         ui,
     } = services;
@@ -261,7 +264,7 @@ pub async fn prepare(
 
     // Parse-time events are the run's first records, whether or not the
     // parse succeeds.
-    let (prompt, parse_events) = Prompt::parse(source, &name);
+    let (prompt, parse_events) = Prompt::parse(source, &file, &name);
     for event in &parse_events {
         let record = event_record(event).map_err(recorded)?;
         recorder.append(run_id, record).await.map_err(recorded)?;

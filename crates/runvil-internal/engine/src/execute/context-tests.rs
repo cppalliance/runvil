@@ -20,7 +20,7 @@ fn test_prompt() -> Prompt {
         "---\nname: t\ndescription: d\nrunvil: 0\n---\n\n",
         "# Title\n\n## Only\n\ndone\n",
     );
-    Prompt::parse(source, "run-context-test")
+    Prompt::parse(source, "prompt", "run-context-test")
         .0
         .expect("the test prompt parses")
 }

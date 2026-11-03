@@ -230,3 +230,12 @@ fn parses_single_minimal_section() {
     assert_eq!(p.sections[0].name, "Greet");
     assert_eq!(p.sections[0].prose(), "Say hi");
 }
+
+#[test]
+fn parse_records_the_file_the_source_came_from() {
+    let src = PromptSource::new().prose("Greet", "Say hi").build();
+    let prompt = Prompt::parse(&src, "agents/research.md", "test")
+        .0
+        .expect("the minimal prompt parses");
+    assert_eq!(prompt.file(), "agents/research.md");
+}

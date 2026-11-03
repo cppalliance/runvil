@@ -116,7 +116,7 @@ impl Scenario {
 
     /// Parses `source` as the run `greeter` and builds its config.
     pub(crate) fn build(&self, source: &str) -> TestResult<Built> {
-        let (parsed, events) = Prompt::parse(source, "greeter");
+        let (parsed, events) = Prompt::parse(source, "prompt", "greeter");
         let prompt = parsed?;
         let roles = match (&self.roles, &self.model) {
             (Some(roles), _) => roles.clone(),

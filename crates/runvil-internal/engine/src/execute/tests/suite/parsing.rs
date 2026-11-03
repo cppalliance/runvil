@@ -39,7 +39,7 @@ const VALID_FIXTURES: &[ValidFixture] = &[
 #[test]
 fn valid_prompt_files_parse_through_the_public_api() {
     for fixture in VALID_FIXTURES {
-        let prompt = Prompt::parse(fixture.source, fixture.name)
+        let prompt = Prompt::parse(fixture.source, fixture.name, fixture.name)
             .0
             .unwrap_or_else(|error| panic!("fixture {} failed to parse: {error}", fixture.name));
         // Call the verifier directly so its own assertion and source line remain
@@ -168,7 +168,7 @@ fn every_prompt_under_parses(directory: &Path) {
 
     for path in files {
         let source = fs::read_to_string(&path).expect("read prompt fixture");
-        Prompt::parse(&source, POSITIVE_PARSE)
+        Prompt::parse(&source, &path.display().to_string(), POSITIVE_PARSE)
             .0
             .unwrap_or_else(|error| panic!("{} must parse: {error}", path.display()));
     }

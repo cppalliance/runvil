@@ -61,7 +61,7 @@ impl Chain {
             "---\nname: t\ndescription: d\nrunvil: 0\n---\n\n",
             "# Title\n\n## Only\n\ndone\n",
         );
-        let prompt = Prompt::parse(source, "chain-test")
+        let prompt = Prompt::parse(source, "prompt", "chain-test")
             .0
             .expect("the test prompt parses");
         let ctx = ChainState::root(

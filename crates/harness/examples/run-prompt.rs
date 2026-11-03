@@ -76,6 +76,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let request = RunRequest {
         name: "desk-greet-1".to_owned(),
         source: GREET.to_owned(),
+        file: "prompt".to_owned(),
         args: String::new(),
         input_text: Some("desk".to_owned()),
         vfs: VfsRef::default(),

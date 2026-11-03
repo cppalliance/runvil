@@ -298,7 +298,7 @@ impl AgentSessions {
         // the same unreadable state as an unreadable file.
         let agents_path = self.inner.agents_path.clone();
         let agent = name.to_owned();
-        let source = tokio::task::spawn_blocking(move || load_agent(&agents_path, &agent))
+        let (file, source) = tokio::task::spawn_blocking(move || load_agent(&agents_path, &agent))
             .await
             .unwrap_or_else(|join| {
                 Err(LaunchError::Unreadable {
@@ -311,15 +311,15 @@ impl AgentSessions {
             self.inner.registry.push(),
             self.inner.backoff.clone(),
         );
-        tokio::spawn(self.clone().drive(conversation.clone(), source));
+        tokio::spawn(self.clone().drive(conversation.clone(), file, source));
         Ok(conversation)
     }
 
-    /// Runs `conversation`'s one run over `source`. The request's Host
+    /// Runs `conversation`'s one run over `source`, read from `file`. The request's Host
     /// snapshot is read once the menu's catalog holds a chat-capable
     /// model, so a pick made while the catalog was empty is the one the
     /// run binds; a close during that wait ends the run before it begins.
-    async fn drive(self, conversation: Conversation, source: String) {
+    async fn drive(self, conversation: Conversation, file: String, source: String) {
         tokio::select! {
             () = conversation.closing() => {}
             () = self.inner.broker.chat_model_ready() => {}
@@ -327,6 +327,7 @@ impl AgentSessions {
         let request = RunRequest {
             name: conversation.id().to_string(),
             source,
+            file,
             args: String::new(),
             input_text: None,
             vfs: language_guide::run_vfs(),

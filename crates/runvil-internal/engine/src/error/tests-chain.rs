@@ -28,9 +28,13 @@ fn chain(error: &(dyn std::error::Error + 'static)) -> Vec<String> {
 /// One failure of each variant that keeps its cause in a plain field.
 #[track_caller]
 fn cause_bearing() -> Vec<Error> {
-    let frontmatter = Prompt::parse("---\nname: [unclosed\n---\n\n# T\n\n## S\n\np\n", "test")
-        .0
-        .expect_err("an unclosed YAML list is refused");
+    let frontmatter = Prompt::parse(
+        "---\nname: [unclosed\n---\n\n# T\n\n## S\n\np\n",
+        "prompt",
+        "test",
+    )
+    .0
+    .expect_err("an unclosed YAML list is refused");
     let syntax = mlua::Error::SyntaxError {
         message: "unexpected symbol near <eof>".to_owned(),
         incomplete_input: true,

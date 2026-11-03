@@ -61,7 +61,7 @@ pub(super) fn parse(md: &str) -> Prompt {
     } else {
         md.replacen("---\n\n", "---\n\n# Test prompt\n\n", 1)
     };
-    Prompt::parse(&source, EXECUTION).0.unwrap()
+    Prompt::parse(&source, "prompt", EXECUTION).0.unwrap()
 }
 
 /// An [`Observer`] that keeps every observation it is handed, in order, so a test

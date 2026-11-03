@@ -95,6 +95,7 @@ pub(super) async fn run_prompt_over(
     let request = RunRequest {
         name: conversation.id().to_string(),
         source,
+        file: "prompt".to_owned(),
         args: String::new(),
         input_text: None,
         vfs,

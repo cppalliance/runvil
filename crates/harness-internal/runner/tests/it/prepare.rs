@@ -109,6 +109,7 @@ pub(crate) fn services(recorder: &Arc<MemoryRecorder>, host: HostContext) -> Ser
         broker: Arc::new(Unused),
         timer: Arc::new(Unused),
         name: "session-1".to_owned(),
+        file: "prompt".to_owned(),
         model: None,
         ui: None,
     }

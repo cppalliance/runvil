@@ -68,7 +68,7 @@ pub fn answer(effect: Effect) -> EffectAnswer {
 pub fn greet() -> Result<String, Box<dyn Error>> {
     // 1. Parse the greeter, and start the log with its parse events before
     //    checking the result.
-    let (parsed, parse_events) = Prompt::parse(GREETER, "greeter");
+    let (parsed, parse_events) = Prompt::parse(GREETER, "prompt", "greeter");
     let mut log: Vec<Event> = parse_events.clone();
     let prompt = parsed?;
 

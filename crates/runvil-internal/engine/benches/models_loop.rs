@@ -73,7 +73,7 @@ const LOOP_PROMPT: &str = "---\nname: bench_loop\ndescription: d\nrunvil: 0\n---
 
 /// Parses the loop prompt once for the whole benchmark.
 fn parse_loop_prompt() -> Prompt {
-    Prompt::parse(LOOP_PROMPT, EXECUTION)
+    Prompt::parse(LOOP_PROMPT, "prompt", EXECUTION)
         .0
         .expect("the bench prompt parses")
 }

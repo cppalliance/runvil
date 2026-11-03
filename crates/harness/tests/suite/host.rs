@@ -60,6 +60,7 @@ fn request(name: &str, source: &str) -> RunRequest {
     RunRequest {
         name: name.to_owned(),
         source: source.to_owned(),
+        file: "prompt".to_owned(),
         args: String::new(),
         input_text: None,
         vfs: VfsRef::default(),

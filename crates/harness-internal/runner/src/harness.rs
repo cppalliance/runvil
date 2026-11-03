@@ -69,6 +69,10 @@ pub struct RunRequest {
     /// The prompt's Markdown source. The Harness reads the prompt only
     /// from this text.
     pub source: String,
+    /// The file the source came from, as the Host names it, such as
+    /// `agents/research.md`, or `prompt` when it came from no file. The
+    /// run's failures name it, so a reader can open the file.
+    pub file: String,
     /// The run's argument text.
     pub args: String,
     /// Text written to the prompt's declared `input:` file before the run
@@ -202,6 +206,7 @@ impl Harness {
         let RunRequest {
             name,
             source,
+            file,
             args,
             input_text,
             vfs,
@@ -246,6 +251,7 @@ impl Harness {
             broker,
             timer,
             name,
+            file,
             model,
             ui: Some(host.ui()),
         };

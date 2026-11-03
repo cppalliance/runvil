@@ -215,7 +215,7 @@ fn prompt_of(body: &str) -> Arc<Prompt> {
     let source = format!(
         "---\nname: t\ndescription: d\nrunvil: 0\n---\n\n# Run\n\n## Only\n\n```lua\n{body}\n```\n"
     );
-    let prompt = Prompt::parse(&source, "run-test")
+    let prompt = Prompt::parse(&source, "prompt", "run-test")
         .0
         .expect("the run test prompt parses");
     Arc::new(prompt)

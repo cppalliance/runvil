@@ -387,7 +387,7 @@ impl Scenario {
     /// events.
     #[track_caller]
     fn config_of(&mut self) -> (Prompt, Vec<Event>, RunConfig) {
-        let (parsed, events) = Prompt::parse(&self.source, &self.name);
+        let (parsed, events) = Prompt::parse(&self.source, "prompt", &self.name);
         let prompt = match parsed {
             Ok(prompt) => prompt,
             Err(error) => panic!("expected the scenario source to parse, got {error}"),

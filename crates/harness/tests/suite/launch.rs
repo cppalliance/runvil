@@ -36,6 +36,7 @@ fn request(source: &str, vfs: VfsRef) -> RunRequest {
     RunRequest {
         name: "shouts-1".to_owned(),
         source: source.to_owned(),
+        file: "prompt".to_owned(),
         args: String::new(),
         input_text: Some("hello".to_owned()),
         vfs,

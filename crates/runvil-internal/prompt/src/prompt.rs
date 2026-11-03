@@ -128,6 +128,9 @@ impl Section {
 /// A fully parsed prompt file.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Prompt {
+    /// The file the source came from, as the caller of
+    /// [`Prompt::parse`](crate::Prompt::parse) named it.
+    pub(crate) file: String,
     /// The parsed YAML frontmatter.
     pub(crate) frontmatter: Frontmatter,
     /// The required H1 title.
@@ -139,6 +142,13 @@ pub struct Prompt {
 }
 
 impl Prompt {
+    /// Returns the file the source came from, such as
+    /// `agents/research.md`, or `prompt` when it came from no file.
+    #[must_use]
+    pub fn file(&self) -> &str {
+        &self.file
+    }
+
     /// Returns the parsed frontmatter.
     #[must_use]
     pub fn frontmatter(&self) -> &Frontmatter {

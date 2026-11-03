@@ -169,7 +169,7 @@ fn prompt(frontmatter: &str) -> Prompt {
         "---\nname: host-test\ndescription: d\nrunvil: 0\n{frontmatter}---\n\n\
          # Title\n\n## Only\n\nDone.\n"
     );
-    let (prompt, _events) = Prompt::parse(&source, "host-test");
+    let (prompt, _events) = Prompt::parse(&source, "prompt", "host-test");
     prompt.unwrap()
 }
 

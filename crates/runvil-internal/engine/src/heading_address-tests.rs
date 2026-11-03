@@ -111,7 +111,7 @@ fn self_pos() -> SectionPos {
 }
 
 fn tree() -> crate::prompt::Prompt {
-    crate::prompt::Prompt::parse(TREE, "reach-test")
+    crate::prompt::Prompt::parse(TREE, "prompt", "reach-test")
         .0
         .expect("the tree parses")
 }

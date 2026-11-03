@@ -344,8 +344,9 @@ pub fn runvil::ParseError::kind(&self) -> runvil::ParseErrorKind
 pub fn runvil::ParseError::line(&self) -> core::option::Option<core::num::nonzero::NonZeroU32>
 pub fn runvil::ParseError::name(&self) -> core::option::Option<&str>
 pub fn runvil::ParseError::span(&self) -> core::option::Option<core::ops::range::Range<usize>>
+pub fn runvil::Prompt::file(&self) -> &str
 pub fn runvil::Prompt::frontmatter(&self) -> &runvil::prompt::Frontmatter
-pub fn runvil::Prompt::parse(input: &str, execution: &str) -> (core::result::Result<runvil::Prompt, runvil::ParseError>, alloc::vec::Vec<runvil::event::Event>)
+pub fn runvil::Prompt::parse(input: &str, file: &str, execution: &str) -> (core::result::Result<runvil::Prompt, runvil::ParseError>, alloc::vec::Vec<runvil::event::Event>)
 pub fn runvil::Prompt::title(&self) -> &str
 pub fn runvil::Run::new(prompt: alloc::sync::Arc<runvil::Prompt>, args: &str, config: runvil::RunConfig) -> runvil::Run
 pub fn runvil::Run::resume(&mut self, id: runvil::effect::EffectId, answer: runvil::effect::EffectAnswer)

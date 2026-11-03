@@ -37,7 +37,7 @@ fn prompt(front: &str) -> Prompt {
         "---\nname: t\ndescription: d\nrunvil: 0\n{front}---\n\n\
          # Run\n\n## Only\n\n```lua\nreturn 'done'\n```\n"
     );
-    Prompt::parse(&source, "requirements-test")
+    Prompt::parse(&source, "prompt", "requirements-test")
         .0
         .expect("the requirements test prompt parses")
 }

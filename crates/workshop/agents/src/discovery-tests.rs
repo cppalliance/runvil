@@ -33,8 +33,8 @@ fn the_built_in_chat_is_always_listed_and_a_dir_file_shadows_its_source() {
     );
     assert_eq!(
         agent_source(dir.path(), "chat").expect("the built-in serves"),
-        BUILTIN_CHAT_SOURCE,
-        "with no directory file, the embedded source is what launches"
+        (BUILTIN_CHAT_FILE.to_owned(), BUILTIN_CHAT_SOURCE.to_owned()),
+        "with no directory file, the embedded source is what launches, named by its own file"
     );
 
     std::fs::write(dir.path().join("chat.md"), "# shadowed").expect("seed the shadow");
@@ -45,8 +45,11 @@ fn the_built_in_chat_is_always_listed_and_a_dir_file_shadows_its_source() {
     );
     assert_eq!(
         agent_source(dir.path(), "chat").expect("the shadow reads"),
-        "# shadowed",
-        "a directory chat.md shadows the embedded source"
+        (
+            dir.path().join("chat.md").display().to_string(),
+            "# shadowed".to_owned()
+        ),
+        "a directory chat.md shadows the embedded source and names its own path"
     );
 
     assert_eq!(
@@ -78,7 +81,10 @@ fn a_launch_loads_only_a_name_the_agent_menu_lists() {
     std::fs::write(dir.path().join("hidden.txt"), "# hidden").expect("seed a non-agent");
     assert_eq!(
         load_agent(dir.path(), "echo").expect("a listed agent loads"),
-        "# echo"
+        (
+            dir.path().join("echo.md").display().to_string(),
+            "# echo".to_owned()
+        )
     );
     for refused in ["ghost", "hidden", "../echo", "echo.md"] {
         let error = load_agent(dir.path(), refused)

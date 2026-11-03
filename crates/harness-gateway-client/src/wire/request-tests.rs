@@ -53,7 +53,7 @@ fn tool_round(offered: &[Offered]) -> Round {
          models.loop()\nreturn messages[#messages].content\n```\n"
     );
     let first_wire_name = format!("example_test_{}", offered[0].0);
-    let (parsed, _parse_events) = Prompt::parse(&source, "round");
+    let (parsed, _parse_events) = Prompt::parse(&source, "prompt", "round");
     let prompt = parsed.expect("the round prompt parses");
     let tools: Vec<ToolInfo> = offered
         .iter()

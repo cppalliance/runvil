@@ -75,6 +75,7 @@ pub(crate) fn harness_for(
     let request = RunRequest {
         name: conversation.id().to_string(),
         source,
+        file: "prompt".to_owned(),
         args: String::new(),
         input_text: None,
         vfs: VfsRef::default(),

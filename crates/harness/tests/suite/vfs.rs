@@ -140,6 +140,7 @@ async fn a_hosts_edit_of_a_file_the_run_read_conflicts_while_the_run_waits_on_it
     let request = RunRequest {
         name: "desk-review-1".to_owned(),
         source: REVIEW.to_owned(),
+        file: "prompt".to_owned(),
         args: String::new(),
         input_text: None,
         vfs: vfs.clone(),
