@@ -18,8 +18,8 @@
 use std::num::NonZeroU32;
 use std::sync::{Arc, Mutex, PoisonError};
 
-use harness::{BoxFuture, InferenceBroker};
-use harness_gateway_client::{GatewayBroker, StreamDelta};
+use harness::{BoxFuture, InferenceBroker, StreamDelta};
+use harness_gateway_client::GatewayBroker;
 use runvil::effect::Round;
 use runvil::error::{Error, ErrorCode};
 use runvil::event::ReplyOrigin;
@@ -42,8 +42,11 @@ pub(super) struct WorkshopBroker {
     registry: Registry,
     /// The broker built for the last generation served under, shared with
     /// the model lists still waiting.
-    cached: Arc<Mutex<Option<(u64, GatewayBroker)>>>,
+    cached: Arc<Mutex<Option<GenerationBroker>>>,
 }
+
+/// A gateway generation beside the broker built for it.
+type GenerationBroker = (u64, Arc<dyn InferenceBroker>);
 
 impl WorkshopBroker {
     /// Builds the broker over the server's subsystem registry.
@@ -57,7 +60,7 @@ impl WorkshopBroker {
     /// The Gateway broker for the current generation, built on the first
     /// call under it. No usable gateway fails as `Unavailable` with the
     /// code's fixed phrase, so no URL or key reaches the message.
-    fn current(&self) -> Result<GatewayBroker, Error> {
+    fn current(&self) -> Result<Arc<dyn InferenceBroker>, Error> {
         let unavailable = ErrorCode::Unavailable;
         let gateway = usable_gateway(&self.registry)
             .ok_or_else(|| completion_error(unavailable, phrase(unavailable)))?;
@@ -66,10 +69,11 @@ impl WorkshopBroker {
         if let Some((generation, broker)) = cached.as_ref()
             && *generation == gateway.generation
         {
-            return Ok(broker.clone());
+            return Ok(Arc::clone(broker));
         }
-        let broker = GatewayBroker::new(gateway.endpoint, gateway.key);
-        *cached = Some((gateway.generation, broker.clone()));
+        let broker: Arc<dyn InferenceBroker> =
+            Arc::new(GatewayBroker::new(gateway.endpoint, gateway.key));
+        *cached = Some((gateway.generation, Arc::clone(&broker)));
         Ok(broker)
     }
 
@@ -115,26 +119,6 @@ impl WorkshopBroker {
         }
         options.with_model(pick)
     }
-
-    /// Runs one round through the current generation's Gateway broker,
-    /// sent to the dropdown's current pick, handing `on_piece` each live
-    /// piece of the reply as it arrives.
-    fn chat_streaming(
-        &self,
-        binding: ModelBinding,
-        messages: Vec<Message>,
-        tools: Vec<ToolSchema>,
-        options: CompletionOptions,
-        on_piece: Arc<dyn Fn(StreamDelta) + Send + Sync>,
-    ) -> BoxFuture<Result<Box<Completion>, Error>> {
-        match self.current() {
-            Ok(broker) => {
-                let options = self.routed(&binding, options);
-                broker.chat_streaming(binding, messages, tools, options, on_piece)
-            }
-            Err(error) => Box::pin(async move { Err(error) }),
-        }
-    }
 }
 
 impl InferenceBroker for WorkshopBroker {
@@ -158,6 +142,27 @@ impl InferenceBroker for WorkshopBroker {
             Ok(broker) => {
                 let options = self.routed(&binding, options);
                 broker.chat(binding, messages, tools, options, round)
+            }
+            Err(error) => Box::pin(async move { Err(error) }),
+        }
+    }
+
+    /// Runs the round on the current generation's Gateway broker, sent to
+    /// the dropdown's current pick, handing `on_piece` each live piece of
+    /// the reply as it arrives.
+    fn chat_streaming(
+        &self,
+        binding: ModelBinding,
+        messages: Vec<Message>,
+        tools: Vec<ToolSchema>,
+        options: CompletionOptions,
+        round: Round,
+        on_piece: Arc<dyn Fn(StreamDelta) + Send + Sync>,
+    ) -> BoxFuture<Result<Box<Completion>, Error>> {
+        match self.current() {
+            Ok(broker) => {
+                let options = self.routed(&binding, options);
+                broker.chat_streaming(binding, messages, tools, options, round, on_piece)
             }
             Err(error) => Box::pin(async move { Err(error) }),
         }
@@ -229,7 +234,7 @@ impl InferenceBroker for RunBroker {
             conversation.publish_delta(round.id, kind, content);
         });
         self.inner
-            .chat_streaming(binding, messages, tools, options, on_piece)
+            .chat_streaming(binding, messages, tools, options, round, on_piece)
     }
 }
 

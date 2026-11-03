@@ -5,7 +5,7 @@ use runvil::error::{ErrorCode, FactKey};
 use runvil::model::{CompletionResult, Message};
 
 use super::*;
-use crate::StreamDelta;
+use harness::StreamDelta;
 
 #[tokio::test]
 async fn complete_sends_completion_options_and_stream_flags_on_the_wire() {

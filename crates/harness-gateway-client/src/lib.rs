@@ -6,8 +6,9 @@
 //! [`GatewayChat`] under the client's own request limits, and it lists the
 //! Gateway's models through [`fetch_model_catalog`]. A Host that shows a
 //! reply as it forms runs the round through
-//! [`GatewayBroker::chat_streaming`], which hands each [`StreamDelta`] to
-//! the Host's callback as it arrives.
+//! [`InferenceBroker::chat_streaming`](harness::InferenceBroker::chat_streaming),
+//! which hands each [`StreamDelta`](harness::StreamDelta) to the Host's
+//! callback as it arrives.
 //!
 //! [`GatewayChat`] is the HTTP client that sends a `Chat` effect's round
 //! to one Gateway URL. It presents the Gateway's shared bearer key when
@@ -81,7 +82,6 @@ pub use search::GatewaySearch;
 pub use transport::GatewayChat;
 pub use wire::classify::classify_http_failure;
 pub use wire::classify::classify_stream_error;
-pub use wire::delta::StreamDelta;
 pub use wire::read::ChunkSource;
 pub use wire::read::read_body_capped;
 pub use wire::read::read_completion_stream;

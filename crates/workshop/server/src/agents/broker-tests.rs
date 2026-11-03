@@ -16,8 +16,7 @@ use axum::Router;
 use axum::http::{HeaderMap, StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
-use harness::InferenceBroker;
-use harness_gateway_client::StreamDelta;
+use harness::{InferenceBroker, StreamDelta};
 use runvil::effect::Round;
 use runvil::error::{Error, ErrorCode};
 use runvil::event::ReplyOrigin;
@@ -140,6 +139,7 @@ async fn streamed_round(broker: &WorkshopBroker) -> (Result<String, Error>, Vec<
             vec![Message::user("hi")],
             Vec::new(),
             CompletionOptions::new("m"),
+            Round::new(RoundId::new(0), ReplyOrigin::Chat),
             Arc::new(move |piece| {
                 sink.lock()
                     .unwrap_or_else(PoisonError::into_inner)

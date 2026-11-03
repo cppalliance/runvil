@@ -16,9 +16,9 @@ use runvil::metrics::ClientTiming;
 use runvil::model::Completion;
 use serde_json::Value;
 
-use super::delta::StreamDelta;
 use super::stream::{Applied, SseScanner, StreamAccumulator};
 use crate::failure::malformed;
+use harness::StreamDelta;
 
 /// A response body that a transport supplies one chunk at a time.
 ///
