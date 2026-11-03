@@ -77,6 +77,10 @@ auto runvil::effect::IssuedEffect: Freeze, !RefUnwindSafe, Send, Sync, Unpin, !U
 auto runvil::effect::Round: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::effect::ToolCallOrigin: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::effect::ToolCaller: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
+auto runvil::error::Error: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
+auto runvil::error::ErrorCode: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
+auto runvil::error::FactKey: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
+auto runvil::error::Location: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::event::Event: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::event::ReplyOrigin: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::ids::AbandonReason: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
@@ -178,6 +182,10 @@ derives runvil::effect::IssuedEffect: Debug
 derives runvil::effect::Round: Clone, Copy, Debug, Eq, PartialEq
 derives runvil::effect::ToolCallOrigin: Clone, Debug, Deserialize, Eq, PartialEq, Serialize
 derives runvil::effect::ToolCaller: Clone, Copy, Debug, Deserialize, Eq, Hash, PartialEq, Serialize
+derives runvil::error::Error: Clone, Debug, Eq, PartialEq
+derives runvil::error::ErrorCode: Clone, Copy, Debug, Eq, Hash, PartialEq
+derives runvil::error::FactKey: Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd
+derives runvil::error::Location: Clone, Debug, Eq, PartialEq
 derives runvil::event::Event: Clone, Debug, Deserialize, PartialEq, Serialize
 derives runvil::event::ReplyOrigin: Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize
 derives runvil::ids::AbandonReason: Clone, Copy, Debug, Deserialize, Eq, Hash, PartialEq, Serialize
@@ -263,6 +271,7 @@ derives runvil::vfs::Writability: Clone, Copy, Debug, Eq, Hash, PartialEq
 impl core::convert::From<runvil::ids::ChainId> for runvil::ids::TaskId
 impl core::convert::From<runvil::vfs::VfsPath> for runvil::vfs::VfsPathBuf
 impl core::error::Error for runvil::ParseError
+impl core::error::Error for runvil::error::Error
 impl core::error::Error for runvil::ids::IdError
 impl core::error::Error for runvil::model::CompletionError
 impl core::error::Error for runvil::model::ParseRoleError
@@ -273,6 +282,7 @@ impl core::error::Error for runvil::vfs::VfsError
 impl core::fmt::Display for runvil::ParseError
 impl core::fmt::Display for runvil::RunSeed
 impl core::fmt::Display for runvil::effect::EffectId
+impl core::fmt::Display for runvil::error::Error
 impl core::fmt::Display for runvil::ids::ChainId
 impl core::fmt::Display for runvil::ids::IdError
 impl core::fmt::Display for runvil::ids::TaskId
@@ -339,6 +349,8 @@ pub const fn runvil::RunOutcome::as_str(&self) -> &'static str
 pub const fn runvil::RunSeed::as_bytes(&self) -> &[u8; 32]
 pub const fn runvil::RunSeed::from_bytes(bytes: [u8; 32]) -> runvil::RunSeed
 pub const fn runvil::effect::EffectId::get(self) -> u64
+pub const fn runvil::error::ErrorCode::number(self) -> u16
+pub const fn runvil::error::ErrorCode::prose(self) -> &'static str
 pub const fn runvil::ids::RoundId::get(self) -> u64
 pub const fn runvil::ids::RoundId::new(id: u64) -> Self
 pub const fn runvil::model::ModelRole::as_str(self) -> &'static str
@@ -352,6 +364,8 @@ pub enum runvil::RunOutcome
 pub enum runvil::Step
 pub enum runvil::effect::Effect
 pub enum runvil::effect::EffectAnswer
+pub enum runvil::error::ErrorCode
+pub enum runvil::error::FactKey
 pub enum runvil::packs::RosterEntry
 pub fn runvil::ParseError::cause(&self) -> core::option::Option<&dyn core::error::Error + core::marker::Send + core::marker::Sync + 'static>
 pub fn runvil::ParseError::column(&self) -> core::option::Option<core::num::nonzero::NonZeroU32>
@@ -390,6 +404,9 @@ pub fn runvil::effect::Round::new(id: runvil::ids::RoundId, origin: runvil::even
 pub fn runvil::effect::ToolCallOrigin::new(execution: impl core::convert::Into<alloc::string::String>, section: impl core::convert::Into<alloc::string::String>, caller: runvil::effect::ToolCaller) -> runvil::effect::ToolCallOrigin
 pub fn runvil::effect::ToolCallOrigin::with_entry(self, entry: impl core::convert::Into<alloc::string::String>) -> runvil::effect::ToolCallOrigin
 pub fn runvil::effect::ToolCallOrigin::with_model(self, model: impl core::convert::Into<alloc::string::String>) -> runvil::effect::ToolCallOrigin
+pub fn runvil::error::Error::new(code: runvil::error::ErrorCode, message: impl core::convert::Into<alloc::string::String>, prose: impl core::convert::Into<alloc::string::String>) -> runvil::error::Error
+pub fn runvil::error::Location::line(file: impl core::convert::Into<alloc::string::String>, line: core::num::nonzero::NonZeroU32) -> runvil::error::Location
+pub fn runvil::error::Location::new(file: impl core::convert::Into<alloc::string::String>, start_line: core::num::nonzero::NonZeroU32, start_column: core::num::nonzero::NonZeroU32, end_line: core::num::nonzero::NonZeroU32, end_column: core::num::nonzero::NonZeroU32) -> core::option::Option<runvil::error::Location>
 pub fn runvil::event::Event::execution(&self) -> &str
 pub fn runvil::event::Event::provenance(&self) -> &runvil::ids::Provenance
 pub fn runvil::event::Event::section(&self) -> &str
@@ -643,6 +660,7 @@ pub fn runvil::vfs::VfsRefBuilder::store(self, root: &str, backend: impl runvil:
 pub fn runvil::vfs::perform_vfs_op(access: &runvil::vfs::Access, op: runvil::vfs::VfsOp) -> core::result::Result<runvil::vfs::VfsOutcome, runvil::vfs::VfsError>
 pub mod runvil::cancel
 pub mod runvil::effect
+pub mod runvil::error
 pub mod runvil::event
 pub mod runvil::ids
 pub mod runvil::metrics
@@ -732,6 +750,98 @@ pub runvil::effect::ToolCallOrigin::model: core::option::Option<alloc::string::S
 pub runvil::effect::ToolCallOrigin::section: alloc::string::String
 pub runvil::effect::ToolCaller::Model
 pub runvil::effect::ToolCaller::Script
+pub runvil::error::Error::at: core::option::Option<runvil::error::Location>
+pub runvil::error::Error::code: runvil::error::ErrorCode
+pub runvil::error::Error::facts: alloc::collections::btree::map::BTreeMap<runvil::error::FactKey, serde_json::value::Value>
+pub runvil::error::Error::message: alloc::string::String
+pub runvil::error::Error::prose: alloc::string::String
+pub runvil::error::ErrorCode::AlreadyExists = 602
+pub runvil::error::ErrorCode::Anchor = 609
+pub runvil::error::ErrorCode::ApprovalRequired = 611
+pub runvil::error::ErrorCode::Backend = 621
+pub runvil::error::ErrorCode::CallDepthExceeded = 204
+pub runvil::error::ErrorCode::Conflict = 620
+pub runvil::error::ErrorCode::ContextExhausted = 414
+pub runvil::error::ErrorCode::ContextOverflow = 401
+pub runvil::error::ErrorCode::CrossMount = 617
+pub runvil::error::ErrorCode::Determinism = 622
+pub runvil::error::ErrorCode::DirectoryNotEmpty = 605
+pub runvil::error::ErrorCode::EmptyReply = 411
+pub runvil::error::ErrorCode::FenceInvalid = 103
+pub runvil::error::ErrorCode::FrontmatterInvalid = 101
+pub runvil::error::ErrorCode::Internal = 703
+pub runvil::error::ErrorCode::Interrupted = 702
+pub runvil::error::ErrorCode::InvalidParts = 413
+pub runvil::error::ErrorCode::InvalidPath = 607
+pub runvil::error::ErrorCode::InvalidRange = 608
+pub runvil::error::ErrorCode::InvalidValue = 106
+pub runvil::error::ErrorCode::Io = 618
+pub runvil::error::ErrorCode::IsADirectory = 604
+pub runvil::error::ErrorCode::ListEmptyItem = 104
+pub runvil::error::ErrorCode::LuaCompile = 202
+pub runvil::error::ErrorCode::LuaQuota = 203
+pub runvil::error::ErrorCode::LuaRuntime = 201
+pub runvil::error::ErrorCode::MalformedResponse = 410
+pub runvil::error::ErrorCode::ModelOnlyTool = 507
+pub runvil::error::ErrorCode::ModelRequired = 415
+pub runvil::error::ErrorCode::NoOutput = 803
+pub runvil::error::ErrorCode::NoStore = 616
+pub runvil::error::ErrorCode::NotADirectory = 603
+pub runvil::error::ErrorCode::NotFound = 601
+pub runvil::error::ErrorCode::NotUtf8 = 606
+pub runvil::error::ErrorCode::OutOfScopeTool = 505
+pub runvil::error::ErrorCode::OutsideRoot = 614
+pub runvil::error::ErrorCode::Overloaded = 404
+pub runvil::error::ErrorCode::PermissionDenied = 610
+pub runvil::error::ErrorCode::PluginLoadFailed = 802
+pub runvil::error::ErrorCode::QuotaExhausted = 403
+pub runvil::error::ErrorCode::RateLimited = 402
+pub runvil::error::ErrorCode::ReadOnly = 613
+pub runvil::error::ErrorCode::RecorderFailed = 801
+pub runvil::error::ErrorCode::Refused = 405
+pub runvil::error::ErrorCode::Rejected = 409
+pub runvil::error::ErrorCode::RequirementsUnmet = 701
+pub runvil::error::ErrorCode::RootProtected = 615
+pub runvil::error::ErrorCode::ScopeEnded = 612
+pub runvil::error::ErrorCode::ServerError = 408
+pub runvil::error::ErrorCode::StructureInvalid = 102
+pub runvil::error::ErrorCode::Substitution = 205
+pub runvil::error::ErrorCode::TaskCancelled = 304
+pub runvil::error::ErrorCode::TaskConsumed = 303
+pub runvil::error::ErrorCode::TaskNotOwned = 302
+pub runvil::error::ErrorCode::TasksLive = 301
+pub runvil::error::ErrorCode::Timeout = 406
+pub runvil::error::ErrorCode::ToolBackend = 502
+pub runvil::error::ErrorCode::ToolInvalidArguments = 501
+pub runvil::error::ErrorCode::ToolLoopExhausted = 508
+pub runvil::error::ErrorCode::ToolOther = 504
+pub runvil::error::ErrorCode::ToolSchemaInvalid = 509
+pub runvil::error::ErrorCode::ToolSetsInvalid = 510
+pub runvil::error::ErrorCode::ToolTransport = 503
+pub runvil::error::ErrorCode::Transport = 407
+pub runvil::error::ErrorCode::Unavailable = 412
+pub runvil::error::ErrorCode::UnboundTool = 506
+pub runvil::error::ErrorCode::Unsupported = 619
+pub runvil::error::ErrorCode::UnsupportedVersion = 105
+pub runvil::error::FactKey::Anchor
+pub runvil::error::FactKey::Chain
+pub runvil::error::FactKey::Count
+pub runvil::error::FactKey::FinishReason
+pub runvil::error::FactKey::Limit
+pub runvil::error::FactKey::Name
+pub runvil::error::FactKey::Path
+pub runvil::error::FactKey::Reason
+pub runvil::error::FactKey::Rule
+pub runvil::error::FactKey::Run
+pub runvil::error::FactKey::Section
+pub runvil::error::FactKey::Task
+pub runvil::error::FactKey::Tasks
+pub runvil::error::FactKey::ValidUpTo
+pub runvil::error::Location::end_column: core::num::nonzero::NonZeroU32
+pub runvil::error::Location::end_line: core::num::nonzero::NonZeroU32
+pub runvil::error::Location::file: alloc::string::String
+pub runvil::error::Location::start_column: core::num::nonzero::NonZeroU32
+pub runvil::error::Location::start_line: core::num::nonzero::NonZeroU32
 pub runvil::event::Event::AssistantReply { .. }
 pub runvil::event::Event::AssistantReply::execution: alloc::string::String
 pub runvil::event::Event::AssistantReply::finish_reason: core::option::Option<alloc::string::String>
@@ -1243,6 +1353,8 @@ pub struct runvil::RunSeed(/* private fields */)
 pub struct runvil::cancel::CancelHandle { /* private fields */ }
 pub struct runvil::cancel::Cancelled { /* private fields */ }
 pub struct runvil::effect::EffectId(/* private fields */)
+pub struct runvil::error::Error { .. }
+pub struct runvil::error::Location { .. }
 pub struct runvil::ids::ChainId(/* private fields */)
 pub struct runvil::ids::IdError { /* private fields */ }
 pub struct runvil::ids::RoundId(/* private fields */)

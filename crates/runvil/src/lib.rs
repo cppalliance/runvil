@@ -46,6 +46,16 @@ pub mod event {
     pub use runvil_types::event::ReplyOrigin;
 }
 
+pub mod error {
+    //! The universal error: its code, its text for people and for the model,
+    //! where it happened, and the values it names.
+
+    pub use runvil_types::error::Error;
+    pub use runvil_types::error::ErrorCode;
+    pub use runvil_types::error::FactKey;
+    pub use runvil_types::error::Location;
+}
+
 pub mod ids {
     //! Task, chain, and round ids, the provenance that orders a run's
     //! records, and the error an invalid id, or a catalog that repeats one,

@@ -100,6 +100,7 @@ pub use pack::{Pack, PackFuture, PackInfo};
 pub use registry::{InstallError, PackOrigin, PackRegistry};
 pub use service::{HostServices, ServiceError, ServiceId, ServiceKey, TOKIO_RUNTIME};
 
+pub use runvil_types::error::{Error, ErrorCode, FactKey, Location};
 pub use runvil_types::models::{ModelId, ModelInfo, ThinkingMode};
 pub use runvil_types::names::IdError;
 pub use runvil_types::packs::PackId;
