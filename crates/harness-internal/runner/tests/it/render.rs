@@ -11,10 +11,12 @@ use std::sync::{Arc, Mutex};
 
 use harness_runner::recorder::{MemoryRecorder, Record, RecordKind, RunOutcome};
 use harness_runner::{Harness, HostContext};
+use runvil::error::{Error, ErrorCode};
 use runvil::model::{Completion, CompletionResult, ToolCall};
+use runvil::tools::tool_error;
 use runvil_plugin::{
     HostServices, ModelInfo, Pack, PackFuture, PackId, PackInfo, PackRegistry, RenderContext,
-    ServiceKey, ToolContext, ToolError, ToolId, ToolInfo, ToolOutput,
+    ServiceKey, ToolContext, ToolId, ToolInfo, ToolOutput,
 };
 use serde_json::{Value, json};
 use tokio::sync::Semaphore;
@@ -138,10 +140,13 @@ fn construct(
     _name: &PackId,
     config: Value,
     services: &HostServices,
-) -> Result<Arc<dyn Pack>, ToolError> {
-    let seen = services
-        .get(&SEEN)
-        .ok_or_else(|| ToolError::message("the render Pack needs tests/render-seen"))?;
+) -> Result<Arc<dyn Pack>, Error> {
+    let seen = services.get(&SEEN).ok_or_else(|| {
+        tool_error(
+            ErrorCode::ToolOther,
+            "the render Pack needs tests/render-seen",
+        )
+    })?;
     let surviving = config["surviving"]
         .as_array()
         .into_iter()
@@ -197,7 +202,7 @@ impl Pack for RenderPack {
         &'a self,
         cx: ToolContext<'a>,
         args: Value,
-    ) -> PackFuture<'a, Result<ToolOutput, ToolError>> {
+    ) -> PackFuture<'a, Result<ToolOutput, Error>> {
         let origin = cx.origin();
         self.seen.calls.lock().unwrap().push(Called {
             tool: cx.tool().to_string(),

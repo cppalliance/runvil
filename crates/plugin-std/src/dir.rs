@@ -15,7 +15,7 @@ mod walk;
 #[cfg(test)]
 mod tests;
 
-use runvil_plugin::{Access, FileType, ToolError, ToolOutput, VfsError};
+use runvil_plugin::{Access, Error, ErrorCode, FileType, ToolOutput, VfsError, tool_error};
 use serde_json::Value;
 
 use crate::refusal::{missing_root, not_a_directory, refusal};
@@ -28,14 +28,14 @@ use self::args::Request;
 /// schema check.
 ///
 /// # Errors
-/// Returns an invalid-arguments [`ToolError`] naming the parameter for a
+/// Returns an invalid-arguments [`Error`] naming the parameter for a
 /// bad argument, and a message error for any other failure, worded for a
 /// model to read.
 pub(crate) fn call(
     access: &Access,
     definition: &Definition,
     args: &Value,
-) -> Result<ToolOutput, ToolError> {
+) -> Result<ToolOutput, Error> {
     let request = args::parse(definition, args)?;
     list_directory(access, &definition.wire_name, &request, BODY_CAP)
 }
@@ -47,17 +47,18 @@ fn list_directory(
     tool: &str,
     request: &Request<'_>,
     cap: usize,
-) -> Result<ToolOutput, ToolError> {
+) -> Result<ToolOutput, Error> {
     let target = request.target;
-    let failed = |error: VfsError| ToolError::message(refusal(tool, target, &error));
+    let message = |text: String| tool_error(ErrorCode::ToolOther, text);
+    let failed = |error: VfsError| message(refusal(tool, target, &error));
     let stat = match access.stat(target) {
         Ok(stat) => stat,
-        Err(VfsError::NotFound { .. }) => return Err(ToolError::message(missing_root(target))),
+        Err(VfsError::NotFound { .. }) => return Err(message(missing_root(target))),
         Err(error) => return Err(failed(error)),
     };
-    check_directory(target, stat.file_type).map_err(ToolError::message)?;
+    check_directory(target, stat.file_type).map_err(message)?;
     let tree = walk::walk(target, &request.ignore, cap, |path| access.list(path))
-        .map_err(|failure| ToolError::message(refusal(tool, &failure.path, &failure.error)))?;
+        .map_err(|failure| message(refusal(tool, &failure.path, &failure.error)))?;
     Ok(ToolOutput::untrusted(render::render(&tree)))
 }
 

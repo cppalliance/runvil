@@ -5,7 +5,7 @@
 use std::fmt;
 use std::sync::Arc;
 
-use runvil_plugin::{ToolError, ToolErrorKind, ToolOutput};
+use runvil_plugin::{Error, ErrorCode, ToolOutput, tool_error};
 
 use crate::provider::{SearchErrorKind, SearchProvider};
 
@@ -120,32 +120,32 @@ impl WebSearch {
     /// the results as untrusted compact JSON.
     ///
     /// # Errors
-    /// Returns a [`ToolError`] for invalid arguments, a provider failure,
+    /// Returns an [`Error`] for invalid arguments, a provider failure,
     /// or a malformed response.
-    pub(crate) async fn call(&self, args: serde_json::Value) -> Result<ToolOutput, ToolError> {
+    pub(crate) async fn call(&self, args: serde_json::Value) -> Result<ToolOutput, Error> {
         // Validate and normalize arguments before the provider spends a
         // round; only the validated query reaches it.
         let query = SearchRequest::from_args(args)?.into_query();
 
         let results = self.provider.search(query).await.map_err(|error| {
-            let kind = match error.kind() {
-                SearchErrorKind::Transport => ToolErrorKind::Transport,
-                SearchErrorKind::Backend => ToolErrorKind::Backend,
+            let code = match error.kind() {
+                SearchErrorKind::Transport => ErrorCode::ToolTransport,
+                SearchErrorKind::Backend => ErrorCode::ToolBackend,
             };
-            ToolError::new(kind, format!("web_search: {error}")).with_source(error)
+            tool_error(code, format!("web_search: {error}")).with_cause(&error)
         })?;
         if let Some(index) = results.results.iter().position(|r| r.url.trim().is_empty()) {
-            return Err(ToolError::message(format!(
-                "web_search: malformed search response: result {index} has an empty url"
-            ))
-            .with_kind(ToolErrorKind::Backend));
+            return Err(tool_error(
+                ErrorCode::ToolBackend,
+                format!("web_search: malformed search response: result {index} has an empty url"),
+            ));
         }
         let body = serde_json::to_string(&results).map_err(|source| {
-            ToolError::new(
-                ToolErrorKind::Other,
+            tool_error(
+                ErrorCode::ToolOther,
                 "web_search: the results could not be rendered",
             )
-            .with_source(source)
+            .with_cause(&source)
         })?;
 
         // The results embed third-party titles, URLs, and descriptions, so

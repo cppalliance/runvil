@@ -14,7 +14,7 @@
 
 use runvil_types::emitter::Emitter;
 use runvil_types::event::lifecycle;
-use runvil_types::tools::{OutputTrust, ToolError, ToolOutput};
+use runvil_types::tools::{OutputTrust, ToolOutput};
 use runvil_types::untrusted::GuardNonce;
 
 use crate::bindings::ToolBinding;
@@ -108,7 +108,7 @@ impl ToolDispatch {
 pub fn prepare_dispatch(
     binding: &ToolBinding,
     vendor: Option<&str>,
-    call_result: std::result::Result<ToolOutput, ToolError>,
+    call_result: std::result::Result<ToolOutput, runvil_types::error::Error>,
     nonce: &GuardNonce,
     emitter: &Emitter,
     section: &str,
@@ -135,7 +135,7 @@ pub fn prepare_dispatch(
 pub(crate) fn dispatch_body(
     binding: &ToolBinding,
     vendor: Option<&str>,
-    call_result: std::result::Result<ToolOutput, ToolError>,
+    call_result: std::result::Result<ToolOutput, runvil_types::error::Error>,
     nonce: &GuardNonce,
     emitter: &Emitter,
     section: &str,
@@ -206,7 +206,7 @@ pub(crate) fn dispatch_body(
 pub fn prepare_model_dispatch(
     binding: &ToolBinding,
     vendor: Option<&str>,
-    call_result: std::result::Result<ToolOutput, ToolError>,
+    call_result: std::result::Result<ToolOutput, runvil_types::error::Error>,
     nonce: &GuardNonce,
     emitter: &Emitter,
     section: &str,

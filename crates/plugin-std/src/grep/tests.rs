@@ -19,7 +19,7 @@ use std::pin::pin;
 use std::task::{Context, Poll, Waker};
 
 use runvil_plugin::testing::TestCall;
-use runvil_plugin::{OutputTrust, ToolError, ToolId, ToolOutput};
+use runvil_plugin::{Error, OutputTrust, ToolId, ToolOutput};
 use serde_json::Value;
 
 use super::args;
@@ -81,14 +81,14 @@ fn definition() -> &'static Definition {
 
 /// Calls Grep with `args` as the Pack does: the schema check first, then
 /// the tool.
-fn grep(call: &TestCall, args: &Value) -> Result<ToolOutput, ToolError> {
+fn grep(call: &TestCall, args: &Value) -> Result<ToolOutput, Error> {
     let definition = definition();
     crate::check::check(&definition.wire_name, &definition.parameters, args)?;
     block_on(super::call(call.context().access(), definition, args))
 }
 
 /// Calls Grep over `source` with `args`, under `limits`.
-fn grep_over(source: &impl Source, args: &Value, limits: &Limits) -> Result<ToolOutput, ToolError> {
+fn grep_over(source: &impl Source, args: &Value, limits: &Limits) -> Result<ToolOutput, Error> {
     let definition = definition();
     crate::check::check(&definition.wire_name, &definition.parameters, args)?;
     let request = args::parse(definition, args)?;
@@ -96,19 +96,19 @@ fn grep_over(source: &impl Source, args: &Value, limits: &Limits) -> Result<Tool
 }
 
 /// Calls Grep over the call's filesystem under `limits`.
-fn grep_limited(call: &TestCall, args: &Value, limits: &Limits) -> Result<ToolOutput, ToolError> {
+fn grep_limited(call: &TestCall, args: &Value, limits: &Limits) -> Result<ToolOutput, Error> {
     grep_over(call.context().access(), args, limits)
 }
 
 /// The text of a successful search, which must be untrusted output.
-fn text_of(result: Result<ToolOutput, ToolError>) -> String {
+fn text_of(result: Result<ToolOutput, Error>) -> String {
     let output = result.expect("the search succeeds");
     assert_eq!(output.trust(), OutputTrust::Untrusted, "{}", output.text());
     output.text().to_owned()
 }
 
 /// The message of a failed search.
-fn failure_of(result: Result<ToolOutput, ToolError>) -> String {
+fn failure_of(result: Result<ToolOutput, Error>) -> String {
     match result {
         Ok(output) => panic!("the search fails, but it answered {:?}", output.text()),
         Err(error) => error.to_string(),

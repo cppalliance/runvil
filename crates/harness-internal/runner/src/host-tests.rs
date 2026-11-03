@@ -10,13 +10,15 @@ use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
 
 use runvil::effect::{ToolCallOrigin, ToolCaller};
+use runvil::error::{Error, ErrorCode};
 use runvil::packs::RosterEntry;
 use runvil::timestamp::Timestamp;
+use runvil::tools::tool_error;
 use runvil::vfs::{Origin, VfsRef};
 use runvil::{Prompt, Run, RunConfig, RunOutcome, RunSeed, Step};
 use runvil_plugin::{
     HostServices, Pack, PackFuture, PackId, PackInfo, PackRegistry, ServiceId, ServiceKey,
-    ToolContext, ToolError, ToolId, ToolInfo, ToolOutput,
+    ToolContext, ToolId, ToolInfo, ToolOutput,
 };
 use serde_json::{Value, json};
 
@@ -55,11 +57,11 @@ impl Pack for Listed {
         self.tools.clone()
     }
 
-    fn ready(&self) -> PackFuture<'_, Result<(), ToolError>> {
+    fn ready(&self) -> PackFuture<'_, Result<(), Error>> {
         match self.ready.as_deref() {
             Some("fails") => {
                 let reason = format!("{} will not be ready", self.name);
-                Box::pin(async move { Err(ToolError::message(reason)) })
+                Box::pin(async move { Err(tool_error(ErrorCode::ToolOther, reason)) })
             }
             Some("pends") => Box::pin(std::future::pending()),
             _ => Box::pin(async { Ok(()) }),
@@ -70,7 +72,7 @@ impl Pack for Listed {
         &'a self,
         cx: ToolContext<'a>,
         _args: Value,
-    ) -> PackFuture<'a, Result<ToolOutput, ToolError>> {
+    ) -> PackFuture<'a, Result<ToolOutput, Error>> {
         Box::pin(async move { Ok(ToolOutput::trusted(format!("{}:{}", self.name, cx.tool()))) })
     }
 }
@@ -83,11 +85,7 @@ impl Pack for Listed {
     clippy::unnecessary_wraps,
     reason = "the PackInfo construct signature fixes the argument and return types"
 )]
-fn listed(
-    name: &PackId,
-    config: Value,
-    services: &HostServices,
-) -> Result<Arc<dyn Pack>, ToolError> {
+fn listed(name: &PackId, config: Value, services: &HostServices) -> Result<Arc<dyn Pack>, Error> {
     if let Some(built) = services.get(&BUILT) {
         built.lock().unwrap().push(name.to_string());
     }
@@ -115,13 +113,10 @@ fn listed_tool(id: &str) -> ToolInfo {
 
 /// Builds a [`Listed`] with one `<name>/use` tool, failing when the Host
 /// provides no [`BACKEND`].
-fn backed(
-    name: &PackId,
-    _config: Value,
-    services: &HostServices,
-) -> Result<Arc<dyn Pack>, ToolError> {
+fn backed(name: &PackId, _config: Value, services: &HostServices) -> Result<Arc<dyn Pack>, Error> {
     if services.get(&BACKEND).is_none() {
-        return Err(ToolError::message(
+        return Err(tool_error(
+            ErrorCode::ToolOther,
             "backed needs tests/backend, and this host provides none",
         ));
     }
@@ -447,7 +442,7 @@ fn preludes_follow_the_prompts_declaration_order_and_carry_the_pack_id() {
 }
 
 /// Calls `tool` through `run` from a script and returns its result.
-async fn call(run: &dyn ToolPerformer, tool: &str) -> Result<ToolOutput, ToolError> {
+async fn call(run: &dyn ToolPerformer, tool: &str) -> Result<ToolOutput, Error> {
     let access = VfsRef::default().acquire(Origin::new("host test")).unwrap();
     let origin = ToolCallOrigin::new("host-test", "Only", ToolCaller::Script);
     let tool = ToolId::parse(tool).unwrap();
@@ -469,7 +464,7 @@ async fn a_call_goes_to_the_pack_its_tool_ids_first_segment_names() {
     ]);
     let run = begin(&host, HostServices::new(), BTreeMap::new(), &prompt(""));
 
-    let answer = |result: Result<ToolOutput, ToolError>| result.unwrap().text().to_owned();
+    let answer = |result: Result<ToolOutput, Error>| result.unwrap().text().to_owned();
     assert_eq!(answer(call(&run, "one/echo").await), "one:one/echo");
     assert_eq!(answer(call(&run, "two/echo").await), "two:two/echo");
     let error = call(&run, "three/echo")

@@ -5,8 +5,8 @@
 use std::sync::Arc;
 
 use runvil_plugin::{
-    Error, HostServices, Pack, PackFuture, PackId, PackInfo, PackRegistry, ToolContext, ToolError,
-    ToolId, ToolInfo, ToolOutput,
+    Error, ErrorCode, HostServices, Pack, PackFuture, PackId, PackInfo, PackRegistry, ToolContext,
+    ToolId, ToolInfo, ToolOutput, tool_error,
 };
 use serde_json::{Value, json};
 
@@ -65,19 +65,22 @@ fn construct(
     name: &PackId,
     config: Value,
     _services: &HostServices,
-) -> Result<Arc<dyn Pack>, ToolError> {
+) -> Result<Arc<dyn Pack>, Error> {
     if !(config.is_null() || config == json!({})) {
-        return Err(ToolError::message("std takes no configuration"));
+        return Err(tool_error(
+            ErrorCode::ToolOther,
+            "std takes no configuration",
+        ));
     }
     let tools = spec::all()?
         .iter()
         .map(|definition| {
             let id = ToolId::parse(&format!("{name}/{}", definition.segment)).map_err(|e| {
-                ToolError::message(format!(
-                    "std could not name its {} tool",
-                    definition.segment
-                ))
-                .with_source(e)
+                tool_error(
+                    ErrorCode::ToolOther,
+                    format!("std could not name its {} tool", definition.segment),
+                )
+                .with_cause(&e)
             })?;
             let info = ToolInfo::new(
                 id,
@@ -87,7 +90,7 @@ fn construct(
             .wire_name(definition.wire_name.clone());
             Ok(info)
         })
-        .collect::<Result<Vec<_>, ToolError>>()?;
+        .collect::<Result<Vec<_>, Error>>()?;
     Ok(Arc::new(Std { tools }))
 }
 
@@ -113,11 +116,14 @@ impl Pack for Std {
         &'a self,
         cx: ToolContext<'a>,
         args: Value,
-    ) -> PackFuture<'a, Result<ToolOutput, ToolError>> {
+    ) -> PackFuture<'a, Result<ToolOutput, Error>> {
         Box::pin(async move {
             let name = cx.tool().name();
             let Some(definition) = definition(name) else {
-                return Err(ToolError::message(format!("std has no tool named {name}")));
+                return Err(tool_error(
+                    ErrorCode::ToolOther,
+                    format!("std has no tool named {name}"),
+                ));
             };
             crate::check::check(&definition.wire_name, &definition.parameters, &args)?;
             match definition.segment {

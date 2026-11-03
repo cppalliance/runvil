@@ -33,7 +33,7 @@ fn construct_greeter(
     name: &PackId,
     _config: Value,
     _services: &HostServices,
-) -> Result<Arc<dyn Pack>, ToolError> {
+) -> Result<Arc<dyn Pack>, Error> {
     let greet = ToolInfo::new(
         ToolId::parse(&format!("{name}/greet")).unwrap(),
         "Answer with the run's greeting.",
@@ -51,11 +51,11 @@ impl Pack for Greeter {
         &'a self,
         cx: ToolContext<'a>,
         _args: Value,
-    ) -> PackFuture<'a, Result<ToolOutput, ToolError>> {
+    ) -> PackFuture<'a, Result<ToolOutput, Error>> {
         Box::pin(async move {
             let greeting = cx
                 .service(&GREETING)
-                .ok_or_else(|| ToolError::message("no greeting in this run"))?;
+                .ok_or_else(|| tool_error(ErrorCode::ToolOther, "no greeting in this run"))?;
             Ok(ToolOutput::trusted(greeting.to_string()))
         })
     }

@@ -5,7 +5,7 @@
 //! [`RunOutcome::Failed`](crate::RunOutcome::Failed), and
 //! [`ParseError`](crate::prompt::ParseError),
 //! [`CompletionError`](crate::model::CompletionError), and
-//! [`runvil_types::tools::ToolError`] each reach that outcome through this
+//! a tool's [`runvil_types::error::Error`] each reach that outcome through this
 //! type, which classifies them and keeps their causes.
 //! The `From` bridges that let internal `?` reach this type live in `convert`.
 //!
@@ -359,9 +359,9 @@ pub(crate) enum Error {
 
     /// A dispatched tool returned a model-safe failure.
     ///
-    /// The tool's own [`runvil_types::tools::ToolError`] is kept as the
-    /// cause, so the typed failure (and any transport/parse error the tool
-    /// wrapped) survives instead of being flattened to a string.
+    /// The tool's own [`runvil_types::error::Error`] is kept as the cause,
+    /// so its code and facts survive instead of being flattened to a
+    /// string.
     #[error("tool call failure: {message}")]
     Tool {
         /// The tool's model-safe failure message.

@@ -10,11 +10,11 @@
 
 use std::sync::Arc;
 
-use runvil_types::tools::{ToolError, ToolId, ToolInfo, ToolOutput};
+use runvil_types::error::Error;
+use runvil_types::tools::{ToolId, ToolInfo, ToolOutput};
 
 /// The closure an [`FnTool`] answers its calls with.
-type FnToolHandler =
-    dyn Fn(serde_json::Value) -> Result<ToolOutput, ToolError> + Send + Sync + 'static;
+type FnToolHandler = dyn Fn(serde_json::Value) -> Result<ToolOutput, Error> + Send + Sync + 'static;
 
 /// A fixture tool whose call is a closure, answered at once by the serial
 /// test drivers.
@@ -37,7 +37,7 @@ impl FnTool {
     pub(crate) fn new(
         id: &str,
         schema: serde_json::Value,
-        handler: impl Fn(serde_json::Value) -> Result<ToolOutput, ToolError> + Send + Sync + 'static,
+        handler: impl Fn(serde_json::Value) -> Result<ToolOutput, Error> + Send + Sync + 'static,
     ) -> FnTool {
         let id = ToolId::parse(id).unwrap_or_else(|error| panic!("tool id {id:?}: {error}"));
         FnTool {
@@ -106,7 +106,7 @@ impl FnTool {
     }
 
     /// Answers one call with `args` at once.
-    pub(crate) fn call_now(&self, args: serde_json::Value) -> Result<ToolOutput, ToolError> {
+    pub(crate) fn call_now(&self, args: serde_json::Value) -> Result<ToolOutput, Error> {
         (self.handler)(args)
     }
 }

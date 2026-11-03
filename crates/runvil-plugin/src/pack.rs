@@ -5,8 +5,9 @@ use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
 
+use runvil_types::error::Error;
 use runvil_types::packs::PackId;
-use runvil_types::tools::{ToolError, ToolInfo, ToolOutput};
+use runvil_types::tools::{ToolInfo, ToolOutput};
 
 use crate::{HostServices, RenderContext, ServiceId, ToolContext};
 
@@ -57,10 +58,10 @@ pub trait Pack: Send + Sync {
     ///   has changed.
     ///
     /// # Errors
-    /// Returns a [`ToolError`], whose message is safe to show the model,
-    /// when the Pack can't offer its tools now, such as when the backend
-    /// it connects to refuses it or is down.
-    fn ready(&self) -> PackFuture<'_, Result<(), ToolError>> {
+    /// Returns an [`Error`], whose prose is safe to show the model, when the
+    /// Pack can't offer its tools now, such as when the backend it connects
+    /// to refuses it or is down.
+    fn ready(&self) -> PackFuture<'_, Result<(), Error>> {
         Box::pin(async { Ok(()) })
     }
 
@@ -94,14 +95,15 @@ pub trait Pack: Send + Sync {
     ///   stall the run until a stop or a cancel.
     ///
     /// # Errors
-    /// Returns a [`ToolError`], whose message is safe to show the model,
-    /// when the call rejects the arguments, its backend refuses, its
+    /// Returns an [`Error`] with a tool code, built with
+    /// [`tool_error`](crate::tool_error) so its prose is safe to show the
+    /// model, when the call rejects the arguments, its backend refuses, its
     /// transport fails, or the run is cancelled.
     fn call<'a>(
         &'a self,
         cx: ToolContext<'a>,
         args: serde_json::Value,
-    ) -> PackFuture<'a, Result<ToolOutput, ToolError>>;
+    ) -> PackFuture<'a, Result<ToolOutput, Error>>;
 
     /// Returns the tools the model sees, given the tools a section offered
     /// from this Pack in one set.
@@ -179,7 +181,7 @@ pub struct PackInfo {
         name: &PackId,
         config: serde_json::Value,
         services: &HostServices,
-    ) -> Result<Arc<dyn Pack>, ToolError>,
+    ) -> Result<Arc<dyn Pack>, Error>,
     /// One line saying what the Pack offers, for a Host listing the
     /// Packs its registry holds; empty unless the Plugin crate sets it.
     pub description: &'static str,
@@ -199,7 +201,7 @@ impl PackInfo {
             name: &PackId,
             config: serde_json::Value,
             services: &HostServices,
-        ) -> Result<Arc<dyn Pack>, ToolError>,
+        ) -> Result<Arc<dyn Pack>, Error>,
     ) -> PackInfo {
         PackInfo {
             fqn,

@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use std::fmt;
 
 use reqwest::header::{HeaderName, HeaderValue};
-use runvil_plugin::ToolError;
+use runvil_plugin::{Error, ErrorCode, tool_error};
 use serde_json::{Map, Value};
 
 /// The reason every local entry is refused with, until local servers
@@ -41,8 +41,8 @@ pub(crate) struct Vars<'a> {
     pub(crate) home: Option<String>,
 }
 
-fn refuse(text: impl Into<String>) -> ToolError {
-    ToolError::message(text)
+fn refuse(text: impl Into<String>) -> Error {
+    tool_error(ErrorCode::ToolOther, text)
 }
 
 /// Parses `config` into a remote entry.
@@ -52,7 +52,7 @@ fn refuse(text: impl Into<String>) -> ToolError {
 /// both shapes or neither, a wrong value type, the legacy `sse` type, an
 /// unset `${env:NAME}`, and a header rmcp owns or that is not a valid
 /// header. No message holds an entry value.
-pub(crate) fn parse(config: &Value, vars: &Vars<'_>) -> Result<RemoteEntry, ToolError> {
+pub(crate) fn parse(config: &Value, vars: &Vars<'_>) -> Result<RemoteEntry, Error> {
     let entry = config.as_object().ok_or_else(|| {
         refuse("an MCP entry must be a JSON object with `url`, or with `command`")
     })?;
@@ -73,7 +73,7 @@ pub(crate) fn parse(config: &Value, vars: &Vars<'_>) -> Result<RemoteEntry, Tool
 
 /// Checks the value types of a local entry's fields, so a malformed one is
 /// named as malformed. No variable is resolved.
-fn check_local_shape(entry: &Map<String, Value>) -> Result<(), ToolError> {
+fn check_local_shape(entry: &Map<String, Value>) -> Result<(), Error> {
     string_field(entry, "command")?;
     if let Some(args) = entry.get("args") {
         let all_strings = args
@@ -90,7 +90,7 @@ fn check_local_shape(entry: &Map<String, Value>) -> Result<(), ToolError> {
     Ok(())
 }
 
-fn parse_remote(entry: &Map<String, Value>, vars: &Vars<'_>) -> Result<RemoteEntry, ToolError> {
+fn parse_remote(entry: &Map<String, Value>, vars: &Vars<'_>) -> Result<RemoteEntry, Error> {
     if entry.get("type").and_then(Value::as_str) == Some("sse") {
         return Err(refuse(
             "type `sse` is the legacy MCP transport, and only Streamable HTTP is supported",
@@ -118,7 +118,7 @@ fn parse_remote(entry: &Map<String, Value>, vars: &Vars<'_>) -> Result<RemoteEnt
 /// One header: a valid name that rmcp does not own, and a valid value
 /// with its variables resolved. The value is marked sensitive, so no
 /// `Debug` output shows it.
-fn header(key: &str, raw: &str, vars: &Vars<'_>) -> Result<(HeaderName, HeaderValue), ToolError> {
+fn header(key: &str, raw: &str, vars: &Vars<'_>) -> Result<(HeaderName, HeaderValue), Error> {
     let name = HeaderName::from_bytes(key.as_bytes())
         .map_err(|_| refuse(format!("header `{key}` is not a valid header name")))?;
     if RESERVED_HEADERS.contains(&name.as_str()) {
@@ -136,15 +136,12 @@ fn header(key: &str, raw: &str, vars: &Vars<'_>) -> Result<(HeaderName, HeaderVa
     Ok((name, value))
 }
 
-fn wrong_type(field: &str, wanted: &str) -> ToolError {
+fn wrong_type(field: &str, wanted: &str) -> Error {
     refuse(format!("`{field}` must be {wanted}"))
 }
 
 /// The string at `field`, or `None` when it is absent.
-fn string_field<'a>(
-    entry: &'a Map<String, Value>,
-    field: &str,
-) -> Result<Option<&'a str>, ToolError> {
+fn string_field<'a>(entry: &'a Map<String, Value>, field: &str) -> Result<Option<&'a str>, Error> {
     match entry.get(field) {
         None => Ok(None),
         Some(Value::String(text)) => Ok(Some(text)),
@@ -153,7 +150,7 @@ fn string_field<'a>(
 }
 
 /// The key and string value of each member of the object at `value`.
-fn string_map<'a>(value: &'a Value, field: &str) -> Result<Vec<(&'a str, &'a str)>, ToolError> {
+fn string_map<'a>(value: &'a Value, field: &str) -> Result<Vec<(&'a str, &'a str)>, Error> {
     let members = value
         .as_object()
         .ok_or_else(|| wrong_type(field, "an object of strings"))?;

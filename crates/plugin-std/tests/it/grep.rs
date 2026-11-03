@@ -7,7 +7,7 @@ use std::pin::pin;
 use std::task::{Context, Poll, Waker};
 
 use runvil_plugin::testing::TestCall;
-use runvil_plugin::{OutputTrust, ToolError, ToolOutput};
+use runvil_plugin::{Error, OutputTrust, ToolOutput};
 use serde_json::{Value, json};
 
 use crate::tools::{built, id};
@@ -39,7 +39,7 @@ fn a_search_over_a_thousand_files_yields_to_the_executor_before_it_completes() {
     let mut future = pin!(pack.call(call.context(), args()));
     let mut cx = Context::from_waker(Waker::noop());
     let mut pending = 0;
-    let result: Result<ToolOutput, ToolError> = loop {
+    let result: Result<ToolOutput, Error> = loop {
         match future.as_mut().poll(&mut cx) {
             Poll::Ready(result) => break result,
             Poll::Pending => pending += 1,

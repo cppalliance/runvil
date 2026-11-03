@@ -9,7 +9,7 @@
 
 use std::sync::LazyLock;
 
-use runvil_plugin::{ToolError, ToolErrorKind};
+use runvil_plugin::{Error, ErrorCode, tool_error};
 use serde::Deserialize;
 use serde_json::Value;
 
@@ -50,16 +50,16 @@ const SOURCES: [(&str, &str); 7] = [
 ];
 
 /// The parsed definitions, one per [`SOURCES`] entry in order.
-static DEFINITIONS: LazyLock<Result<Vec<Definition>, ToolError>> = LazyLock::new(|| {
+static DEFINITIONS: LazyLock<Result<Vec<Definition>, Error>> = LazyLock::new(|| {
     SOURCES
         .iter()
         .map(|(segment, source)| {
             let file: File = serde_json::from_str(source).map_err(|e| {
-                ToolError::new(
-                    ToolErrorKind::Backend,
+                tool_error(
+                    ErrorCode::ToolBackend,
                     format!("std could not read the definition of its {segment} tool"),
                 )
-                .with_source(e)
+                .with_cause(&e)
             })?;
             Ok(Definition {
                 segment,
@@ -92,12 +92,13 @@ fn fill(segment: &str, description: &str) -> String {
 /// Every definition, in [`SOURCES`] order.
 ///
 /// # Errors
-/// Returns a backend [`ToolError`] naming the tool whose file does not
-/// parse. The files are embedded, so this can only happen after an edit.
-pub(crate) fn all() -> Result<&'static [Definition], ToolError> {
+/// Returns a [`ToolBackend`](ErrorCode::ToolBackend) error naming the tool
+/// whose file does not parse. The files are embedded, so this can only
+/// happen after an edit.
+pub(crate) fn all() -> Result<&'static [Definition], Error> {
     match &*DEFINITIONS {
         Ok(definitions) => Ok(definitions),
-        Err(error) => Err(ToolError::new(error.kind(), error.to_string())),
+        Err(error) => Err(error.clone()),
     }
 }
 

@@ -20,21 +20,21 @@ struct Scripted(&'static str);
 
 #[async_trait::async_trait]
 impl AskBroker for Scripted {
-    async fn wait(&self) -> Result<String, ToolError> {
+    async fn wait(&self) -> Result<String, Error> {
         Ok(self.0.to_owned())
     }
 }
 
 /// A broker whose every wait fails, with a hidden cause behind the
-/// message.
+/// prose.
 struct Failing;
 
 #[async_trait::async_trait]
 impl AskBroker for Failing {
-    async fn wait(&self) -> Result<String, ToolError> {
+    async fn wait(&self) -> Result<String, Error> {
         Err(
-            ToolError::new(ToolErrorKind::Backend, "the operator's window closed")
-                .with_source(std::io::Error::other("socket reset")),
+            tool_error(ErrorCode::ToolBackend, "the operator's window closed")
+                .with_cause(&std::io::Error::other("socket reset")),
         )
     }
 }
@@ -56,7 +56,7 @@ fn construct_probe(
     name: &PackId,
     _config: Value,
     _services: &HostServices,
-) -> Result<Arc<dyn Pack>, ToolError> {
+) -> Result<Arc<dyn Pack>, Error> {
     let saw = ToolInfo::new(
         ToolId::parse(&format!("{name}/saw")).unwrap(),
         "Answer whether the call was lent a broker.",
@@ -74,7 +74,7 @@ impl Pack for Probe {
         &'a self,
         cx: ToolContext<'a>,
         _args: Value,
-    ) -> PackFuture<'a, Result<ToolOutput, ToolError>> {
+    ) -> PackFuture<'a, Result<ToolOutput, Error>> {
         let saw = cx.service(&BROKER).is_some();
         Box::pin(async move { Ok(ToolOutput::trusted(saw.to_string())) })
     }

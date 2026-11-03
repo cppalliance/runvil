@@ -1,14 +1,16 @@
 //! The fixture ask Pack the Harness suites build in place of a real
 //! user-input Pack, which Harness crates may not name: an ask tool that
 //! survives stops, a prelude defining `input.ask()`, a need for the run's
-//! broker, and a broker that fails with a `ToolError`. A prompt declares
+//! broker, and a broker that fails with a tool error. A prompt declares
 //! it as `tests/user-input`.
 
 use std::sync::Arc;
 
+use runvil::error::{Error, ErrorCode};
+use runvil::tools::tool_error;
 use runvil_plugin::{
-    HostServices, Pack, PackFuture, PackId, PackInfo, ServiceId, ServiceKey, ToolContext,
-    ToolError, ToolId, ToolInfo, ToolOutput,
+    HostServices, Pack, PackFuture, PackId, PackInfo, ServiceId, ServiceKey, ToolContext, ToolId,
+    ToolInfo, ToolOutput,
 };
 use serde_json::{Value, json};
 
@@ -35,7 +37,7 @@ end
 /// Delivers the operator's answer to the fixture's ask tool.
 #[async_trait::async_trait]
 pub(crate) trait AskBroker: Send + Sync {
-    async fn wait(&self) -> Result<String, ToolError>;
+    async fn wait(&self) -> Result<String, Error>;
 }
 
 /// Run services holding `broker` under [`BROKER`].
@@ -57,7 +59,7 @@ fn construct(
     name: &PackId,
     _config: Value,
     _services: &HostServices,
-) -> Result<Arc<dyn Pack>, ToolError> {
+) -> Result<Arc<dyn Pack>, Error> {
     let ask = ToolInfo::new(
         ToolId::parse(&format!("{name}/ask")).unwrap(),
         "Wait for the operator's next message.",
@@ -76,11 +78,11 @@ impl Pack for Asker {
         &'a self,
         cx: ToolContext<'a>,
         _args: Value,
-    ) -> PackFuture<'a, Result<ToolOutput, ToolError>> {
+    ) -> PackFuture<'a, Result<ToolOutput, Error>> {
         Box::pin(async move {
-            let broker = cx
-                .service(&BROKER)
-                .ok_or_else(|| ToolError::message("no operator is connected to this run"))?;
+            let broker = cx.service(&BROKER).ok_or_else(|| {
+                tool_error(ErrorCode::ToolOther, "no operator is connected to this run")
+            })?;
             broker.wait().await.map(ToolOutput::trusted)
         })
     }

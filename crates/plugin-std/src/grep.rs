@@ -22,7 +22,7 @@ mod window;
 #[cfg(test)]
 mod tests;
 
-use runvil_plugin::{Access, ToolError, ToolOutput};
+use runvil_plugin::{Access, Error, ErrorCode, ToolOutput, tool_error};
 use serde_json::Value;
 
 use crate::spec::Definition;
@@ -35,14 +35,14 @@ use self::source::Source;
 /// check.
 ///
 /// # Errors
-/// Returns an invalid-arguments [`ToolError`] naming the parameter for a
+/// Returns an invalid-arguments [`Error`] naming the parameter for a
 /// bad argument, and a message error for a root that cannot be searched,
 /// worded for a model to read.
 pub(crate) async fn call(
     access: &Access,
     definition: &Definition,
     args: &Value,
-) -> Result<ToolOutput, ToolError> {
+) -> Result<ToolOutput, Error> {
     let request = args::parse(definition, args)?;
     search(access, &definition.wire_name, &request, &Limits::default()).await
 }
@@ -54,9 +54,9 @@ async fn search<S: Source>(
     tool: &str,
     request: &Request<'_>,
     limits: &Limits,
-) -> Result<ToolOutput, ToolError> {
+) -> Result<ToolOutput, Error> {
     let found = find::find(source, tool, request, limits)
         .await
-        .map_err(ToolError::message)?;
+        .map_err(|text| tool_error(ErrorCode::ToolOther, text))?;
     Ok(render::render(&found, request, limits))
 }

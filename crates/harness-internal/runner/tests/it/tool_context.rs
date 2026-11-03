@@ -8,9 +8,10 @@ use std::sync::Arc;
 use harness_runner::effect_loop::drive_run;
 use harness_runner::recorder::{MemoryRecorder, RunOutcome};
 use runvil::cancel::CancelHandle;
+use runvil::error::{Error, ErrorCode};
+use runvil::tools::tool_error;
 use runvil_plugin::{
-    HostServices, Pack, PackFuture, PackId, PackInfo, ToolContext, ToolError, ToolId, ToolInfo,
-    ToolOutput,
+    HostServices, Pack, PackFuture, PackId, PackInfo, ToolContext, ToolId, ToolInfo, ToolOutput,
 };
 use serde_json::{Value, json};
 
@@ -43,7 +44,7 @@ fn construct(
     name: &PackId,
     _config: Value,
     _services: &HostServices,
-) -> Result<Arc<dyn Pack>, ToolError> {
+) -> Result<Arc<dyn Pack>, Error> {
     let record = ToolInfo::new(
         ToolId::parse(&format!("{name}/record")).unwrap(),
         "Write a file through the call's access and name the caller.",
@@ -63,11 +64,11 @@ impl Pack for Record {
         &'a self,
         cx: ToolContext<'a>,
         _args: Value,
-    ) -> PackFuture<'a, Result<ToolOutput, ToolError>> {
+    ) -> PackFuture<'a, Result<ToolOutput, Error>> {
         Box::pin(async move {
             cx.access()
                 .write("/from-tool.md", WRITTEN.as_bytes())
-                .map_err(|error| ToolError::message(format!("record: {error}")))?;
+                .map_err(|error| tool_error(ErrorCode::ToolOther, format!("record: {error}")))?;
             Ok(ToolOutput::trusted(format!("{:?}", cx.origin().caller)))
         })
     }

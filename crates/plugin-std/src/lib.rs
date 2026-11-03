@@ -62,7 +62,7 @@
 //! Write, StrReplace, Delete, and Glob are still stubs: a call with
 //! arguments that match the schema answers [`NOT_IMPLEMENTED`]. For every
 //! tool, a call whose arguments do not match fails with an
-//! invalid-arguments [`ToolError`](runvil_plugin::ToolError) naming the
+//! invalid-arguments [`Error`](runvil_plugin::Error) naming the
 //! parameter. The stubs exist so that the crate, the definitions, the
 //! ids, the wire names, and the Lua path can be proven before any file
 //! logic exists.
@@ -74,7 +74,7 @@
 //! puts every read and write under the run's `ModePolicy`, so a run in
 //! `Mode::Ask` refuses every mutation without the Pack deciding anything,
 //! and a run in `Mode::Plan` allows mutations to markdown paths alone. The
-//! tools only report the resulting `VfsError` as a `ToolError` the model
+//! tools only report the resulting `VfsError` as a tool error the model
 //! can read.
 //!
 //! Shell is deliberately absent. An in-process shell over the same
@@ -91,7 +91,7 @@
 //!   unchanged, except for the edits `schemas/EDITS.md` lists. A test per
 //!   tool holds the wire name in place.
 //! - A call whose arguments the schema refuses is an
-//!   [`InvalidArguments`](runvil_plugin::ToolErrorKind::InvalidArguments)
+//!   [`ToolInvalidArguments`](runvil_plugin::ErrorCode::ToolInvalidArguments)
 //!   failure that names the parameter. No other outcome reports the
 //!   arguments, so a model can tell a bad call from a missing
 //!   implementation.

@@ -20,7 +20,6 @@ use runvil::model::{
     Completion, CompletionError, CompletionOptions, CompletionResult, Message, ModelBinding,
     ModelCatalog, ModelId, ModelInfo, ThinkingMode, ToolSchema,
 };
-use runvil_plugin::ToolError;
 
 use crate::asker::{AskBroker, asker_host, broker_services};
 use crate::support::{Clock, Offline};
@@ -85,7 +84,7 @@ struct Operator(&'static str);
 
 #[async_trait]
 impl AskBroker for Operator {
-    async fn wait(&self) -> Result<String, ToolError> {
+    async fn wait(&self) -> Result<String, runvil::error::Error> {
         Ok(self.0.to_owned())
     }
 }

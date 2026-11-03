@@ -42,7 +42,7 @@
 //!
 //! # Failed and cancelled waits
 //!
-//! A broker failure is a [`ToolError`], and it becomes the ask call's
+//! A broker failure is an [`Error`], and it becomes the ask call's
 //! error unchanged. It raises at the script's `input.ask()` call as a Lua
 //! error of kind `"tool"` whose message is the broker's message, so
 //! `pcall` catches it; uncaught, it ends the run as a tool failure. The
@@ -77,7 +77,7 @@
 
 mod ask;
 
-use runvil_plugin::{Error, PackInfo, PackRegistry, ServiceId, ServiceKey, ToolError};
+use runvil_plugin::{Error, PackInfo, PackRegistry, ServiceId, ServiceKey};
 use serde_json::Value;
 
 /// The Pack's `PackInfo`.
@@ -149,9 +149,9 @@ pub trait InputBroker: Send + Sync {
     /// Waits for the operator's next message and returns it byte-exact.
     ///
     /// # Errors
-    /// Returns a [`ToolError`], whose message is safe to show the model,
+    /// Returns an [`Error`], whose prose is safe to show the model,
     /// when the broker fails to produce the operator's message, for
     /// example because the Host withdrew the wait. It is the ask call's
     /// error unchanged.
-    async fn wait(&self) -> Result<String, ToolError>;
+    async fn wait(&self) -> Result<String, Error>;
 }

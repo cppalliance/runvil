@@ -166,8 +166,8 @@ pub enum SearchErrorKind {
 /// The error a [`SearchProvider`] returns when a search fails.
 ///
 /// It holds a kind, a message, and an optional cause. The search tool
-/// keeps the whole error as the source of the tool error it returns, so
-/// the cause stays in the error chain.
+/// keeps the whole error as the cause of the tool error it returns, so
+/// the cause's text stays in that error's message.
 #[derive(Debug, thiserror::Error)]
 #[error("{message}")]
 pub struct SearchError {

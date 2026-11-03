@@ -60,12 +60,17 @@ pub(super) fn untrusted_echo_tool() -> FnTool {
 ///
 /// The fixtures declare their arguments `required` in their JSON schema, so a
 /// missing or non-string value is a malformed call, not something to paper over
-/// with an empty string. Returning a concrete [`ToolError`] makes a malformed
+/// with an empty string. Returning a concrete tool error makes a malformed
 /// fixture call fail loudly instead of silently succeeding on `""`.
-fn require_string_arg<'a>(args: &'a Value, key: &str) -> std::result::Result<&'a str, ToolError> {
+fn require_string_arg<'a>(
+    args: &'a Value,
+    key: &str,
+) -> std::result::Result<&'a str, runvil_types::error::Error> {
     args.get(key).and_then(Value::as_str).ok_or_else(|| {
-        ToolError::message(format!("fixture tool requires a string `{key}` argument"))
-            .with_kind(ToolErrorKind::InvalidArguments)
+        tool_error(
+            ErrorCode::ToolInvalidArguments,
+            format!("fixture tool requires a string `{key}` argument"),
+        )
     })
 }
 
@@ -94,13 +99,10 @@ pub(super) fn structured_tool(body: &'static str, trusted: bool) -> FnTool {
 #[track_caller]
 pub(super) fn failing_tool() -> FnTool {
     FnTool::new("tools/failing", no_arguments(), |_| {
-        // Attach an inner cause so the executor's error can be checked for source
-        // preservation (item 4): the tool error must not be flattened to a string.
+        // The cause lands in the error's message only; the model reads the
+        // prose, which stays the tool's own text.
         let cause = std::io::Error::other("upstream socket reset");
-        Err(
-            ToolError::new(ToolErrorKind::Backend, "the tool's own backend failed")
-                .with_source(cause),
-        )
+        Err(tool_error(ErrorCode::ToolBackend, "the tool's own backend failed").with_cause(&cause))
     })
     .description("Always fail.")
 }

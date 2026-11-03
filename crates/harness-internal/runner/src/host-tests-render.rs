@@ -37,10 +37,10 @@ fn rendering(
     name: &PackId,
     config: Value,
     services: &HostServices,
-) -> Result<Arc<dyn Pack>, ToolError> {
+) -> Result<Arc<dyn Pack>, Error> {
     let renders = services
         .get(&RENDERS)
-        .ok_or_else(|| ToolError::message("rendering needs tests/renders"))?;
+        .ok_or_else(|| tool_error(ErrorCode::ToolOther, "rendering needs tests/renders"))?;
     Ok(Arc::new(Rendering {
         name: name.clone(),
         listed: listed(name, config, services)?,
@@ -57,7 +57,7 @@ impl Pack for Rendering {
         &'a self,
         cx: ToolContext<'a>,
         args: Value,
-    ) -> PackFuture<'a, Result<ToolOutput, ToolError>> {
+    ) -> PackFuture<'a, Result<ToolOutput, Error>> {
         self.listed.call(cx, args)
     }
 

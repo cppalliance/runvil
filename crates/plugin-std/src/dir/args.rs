@@ -1,7 +1,7 @@
 //! ListDir's arguments: what the call asks for, and what is refused before
 //! any path is looked at.
 
-use runvil_plugin::ToolError;
+use runvil_plugin::Error;
 use serde_json::Value;
 
 use crate::check::{invalid_pattern, refuse_blank, refuse_unknown};
@@ -24,12 +24,9 @@ pub(super) struct Request<'a> {
 /// hears about the same one.
 ///
 /// # Errors
-/// Returns an invalid-arguments [`ToolError`] naming the parameter. A
+/// Returns an invalid-arguments [`Error`] naming the parameter. A
 /// refused pattern is echoed with the rule it broke.
-pub(super) fn parse<'a>(
-    definition: &Definition,
-    args: &'a Value,
-) -> Result<Request<'a>, ToolError> {
+pub(super) fn parse<'a>(definition: &Definition, args: &'a Value) -> Result<Request<'a>, Error> {
     let tool = definition.wire_name.as_str();
     refuse_unknown(tool, &definition.parameters, args)?;
     let target = args
@@ -47,6 +44,6 @@ pub(super) fn parse<'a>(
             Matcher::new(pattern)
                 .map_err(|error| invalid_pattern(tool, "ignore_globs", pattern, error))
         })
-        .collect::<Result<Vec<_>, ToolError>>()?;
+        .collect::<Result<Vec<_>, Error>>()?;
     Ok(Request { target, ignore })
 }

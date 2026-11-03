@@ -18,9 +18,10 @@ use std::sync::Arc;
 
 use runvil::Prompt;
 use runvil::effect::{PackToolSets, ToolCallOrigin};
+use runvil::error::{Error, ErrorCode};
 use runvil::model::ModelInfo;
 use runvil::packs::{Prelude, RosterEntry};
-use runvil::tools::{ToolCatalog, ToolError, ToolErrorKind, ToolId, ToolInfo, ToolOutput};
+use runvil::tools::{ToolCatalog, ToolId, ToolInfo, ToolOutput, tool_error};
 use runvil::vfs::Access;
 use runvil_plugin::{HostServices, Pack, PackId, PackInfo, RenderContext, ServiceId, ToolContext};
 use serde_json::Value;
@@ -187,7 +188,7 @@ impl ToolPerformer for HostRunContext {
         access: Arc<Access>,
         origin: ToolCallOrigin,
         args: Value,
-    ) -> BoxFuture<Result<ToolOutput, ToolError>> {
+    ) -> BoxFuture<Result<ToolOutput, Error>> {
         let pack = self.usable(&tool.pack()).cloned();
         let services = self.services.clone();
         Box::pin(async move {
@@ -197,10 +198,10 @@ impl ToolPerformer for HostRunContext {
                     alias = %alias,
                     "a ToolCall names a tool of no usable Pack of the run"
                 );
-                return Err(ToolError::message(format!(
-                    "tool `{alias}` ({tool}) belongs to no usable Pack of this run"
-                ))
-                .with_kind(ToolErrorKind::Other));
+                return Err(tool_error(
+                    ErrorCode::ToolOther,
+                    format!("tool `{alias}` ({tool}) belongs to no usable Pack of this run"),
+                ));
             };
             let cx = ToolContext::new(&tool, &access, &origin, &services);
             pack.call(cx, args).await

@@ -8,8 +8,8 @@ use std::sync::Arc;
 
 use runvil_plugin::testing::TestCall;
 use runvil_plugin::{
-    ErrorCode, FactKey, HostServices, Pack, PackId, PackRegistry, ServiceKey, TOKIO_RUNTIME,
-    ToolError, ToolErrorKind, ToolId,
+    Error, ErrorCode, FactKey, HostServices, Pack, PackId, PackRegistry, ServiceKey, TOKIO_RUNTIME,
+    ToolId,
 };
 use serde_json::{Value, json};
 use tokio::runtime::Handle;
@@ -57,7 +57,7 @@ fn name(text: &str) -> PackId {
 }
 
 /// The Pack built under the Pack id `id` with `config` and both services.
-fn construct(id: &str, config: Value) -> Result<Arc<dyn Pack>, ToolError> {
+fn construct(id: &str, config: Value) -> Result<Arc<dyn Pack>, Error> {
     (WEB.construct)(&name(id), config, &services_with(true, true))
 }
 
@@ -200,7 +200,7 @@ async fn a_call_reaches_the_tool_its_last_segment_names() {
         .call(fetch.context(), json!({ "url": "https://1.2.3.4/" }))
         .await
         .expect_err("the fetch policy refuses an IP literal host");
-    assert_eq!(error.kind(), ToolErrorKind::InvalidArguments);
+    assert_eq!(error.code, ErrorCode::ToolInvalidArguments);
     assert!(
         error.to_string().contains("ip literal host not allowed"),
         "the fetch tool's policy refused the call, got: {error}"

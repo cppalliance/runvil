@@ -1,7 +1,7 @@
 //! `ignore_globs`: where a pattern matches, what a match leaves out, and
 //! what a refused pattern says.
 
-use runvil_plugin::{Entry, FileType, Stat, ToolErrorKind, VfsError};
+use runvil_plugin::{Entry, ErrorCode, FileType, Stat, VfsError};
 use serde_json::json;
 
 use super::{failure_of, list, seeded, text_of};
@@ -137,7 +137,7 @@ fn a_refused_pattern_is_an_invalid_arguments_error_with_the_reason() {
     ] {
         let args = json!({ "target_directory": "/p", "ignore_globs": [pattern] });
         let error = list(&call, &args).expect_err("the pattern is refused");
-        assert_eq!(error.kind(), ToolErrorKind::InvalidArguments, "{pattern:?}");
+        assert_eq!(error.code, ErrorCode::ToolInvalidArguments, "{pattern:?}");
         assert_eq!(
             error.to_string(),
             format!(

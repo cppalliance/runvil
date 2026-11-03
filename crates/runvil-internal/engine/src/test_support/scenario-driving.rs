@@ -10,8 +10,9 @@ use std::sync::mpsc::Sender;
 use std::thread::JoinHandle;
 
 use runvil_types::cancel::CancelHandle;
+use runvil_types::error::ErrorCode;
 use runvil_types::event::Event;
-use runvil_types::tools::{ToolError, ToolId};
+use runvil_types::tools::{ToolId, tool_error};
 use runvil_vfs::{Origin, VfsError, VfsRef};
 
 use super::super::FnTool;
@@ -81,7 +82,8 @@ impl Answers {
             Effect::Render { offered, .. } => EffectAnswer::Render(offered.clone()),
             Effect::ToolCall { tool, args, .. } => match self.tools.get(tool) {
                 Some(tool) => EffectAnswer::ToolCall(tool.call_now(args.clone())),
-                None => EffectAnswer::ToolCall(Err(ToolError::message(
+                None => EffectAnswer::ToolCall(Err(tool_error(
+                    ErrorCode::ToolOther,
                     "the tool the call names has no implementation in the test driver's tool table",
                 ))),
             },

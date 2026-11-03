@@ -99,11 +99,10 @@ pub mod tools {
 
     pub use runvil_types::tools::OutputTrust;
     pub use runvil_types::tools::ToolCatalog;
-    pub use runvil_types::tools::ToolError;
-    pub use runvil_types::tools::ToolErrorKind;
     pub use runvil_types::tools::ToolId;
     pub use runvil_types::tools::ToolInfo;
     pub use runvil_types::tools::ToolOutput;
+    pub use runvil_types::tools::tool_error;
 }
 
 pub mod packs {

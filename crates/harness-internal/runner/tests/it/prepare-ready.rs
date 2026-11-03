@@ -89,14 +89,15 @@ fn construct_starting(
     name: &PackId,
     config: Value,
     services: &HostServices,
-) -> Result<Arc<dyn Pack>, ToolError> {
+) -> Result<Arc<dyn Pack>, Error> {
     let startup = services
         .get(&STARTUPS)
         .and_then(|startups| startups.get(&name.to_string()).cloned())
         .ok_or_else(|| {
-            ToolError::message(format!(
-                "{name} needs its startup in tests/startups, and this host provides none"
-            ))
+            tool_error(
+                ErrorCode::ToolOther,
+                format!("{name} needs its startup in tests/startups, and this host provides none"),
+            )
         })?;
     Ok(Arc::new(Starting {
         echo: construct_echo(name, config, services)?,
@@ -112,16 +113,21 @@ impl Pack for Starting {
         }
     }
 
-    fn ready(&self) -> PackFuture<'_, Result<(), ToolError>> {
+    fn ready(&self) -> PackFuture<'_, Result<(), Error>> {
         let mut phase = self.startup.phase.clone();
         Box::pin(async move {
             self.startup.asked.notify_one();
             let settled = *phase
                 .wait_for(|phase| !matches!(phase, Phase::Starting))
                 .await
-                .map_err(|_closed| ToolError::message("the test dropped the fixture's startup"))?;
+                .map_err(|_closed| {
+                    tool_error(
+                        ErrorCode::ToolOther,
+                        "the test dropped the fixture's startup",
+                    )
+                })?;
             match settled {
-                Phase::Failed(reason) => Err(ToolError::message(reason)),
+                Phase::Failed(reason) => Err(tool_error(ErrorCode::ToolOther, reason)),
                 Phase::Starting | Phase::Ready => Ok(()),
             }
         })
@@ -131,7 +137,7 @@ impl Pack for Starting {
         &'a self,
         cx: ToolContext<'a>,
         args: Value,
-    ) -> PackFuture<'a, Result<ToolOutput, ToolError>> {
+    ) -> PackFuture<'a, Result<ToolOutput, Error>> {
         self.echo.call(cx, args)
     }
 }

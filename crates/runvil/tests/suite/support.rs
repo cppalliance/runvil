@@ -7,11 +7,12 @@ use std::num::NonZeroU32;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 
+use runvil::error::ErrorCode;
 use runvil::model::{
     CompletionError, CompletionErrorKind, CompletionResult, ModelId, ModelInfo, ThinkingMode,
     ToolCall,
 };
-use runvil::tools::{ToolError, ToolId, ToolInfo, ToolOutput};
+use runvil::tools::{ToolId, ToolInfo, ToolOutput, tool_error};
 use serde_json::Value;
 
 mod scenario;
@@ -20,7 +21,7 @@ pub(super) use scenario::{Built, Scenario, Trace};
 
 pub(super) type TestResult<T = ()> = Result<T, Box<dyn Error>>;
 
-type Handler = Box<dyn Fn(&Value) -> Result<ToolOutput, ToolError>>;
+type Handler = Box<dyn Fn(&Value) -> Result<ToolOutput, runvil::error::Error>>;
 
 /// A tool a scenario registers under its full id, not its wire name.
 pub(super) struct Tool {
@@ -100,9 +101,10 @@ pub(super) fn shout() -> Tool {
         id: "example/text/shout",
         handler: Box::new(|args| match args.get("text").and_then(Value::as_str) {
             Some(text) => Ok(ToolOutput::trusted(text.to_uppercase())),
-            None => Err(ToolError::message(format!(
-                "shout needs a string `text` argument; got {args}"
-            ))),
+            None => Err(tool_error(
+                ErrorCode::ToolOther,
+                format!("shout needs a string `text` argument; got {args}"),
+            )),
         }),
     }
 }

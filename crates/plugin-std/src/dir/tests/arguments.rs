@@ -1,6 +1,6 @@
 //! What ListDir refuses about its arguments, and in which order.
 
-use runvil_plugin::ToolErrorKind;
+use runvil_plugin::ErrorCode;
 use serde_json::json;
 
 use super::{failure_of, list, new_call};
@@ -13,7 +13,7 @@ fn a_missing_target_names_the_parameter() {
         error.to_string(),
         "std_ListDir: `target_directory` is required, and the call left it out"
     );
-    assert_eq!(error.kind(), ToolErrorKind::InvalidArguments);
+    assert_eq!(error.code, ErrorCode::ToolInvalidArguments);
 }
 
 #[test]
@@ -54,7 +54,7 @@ fn an_undeclared_key_is_refused_and_the_parameters_are_named() {
         "std_ListDir: `path` is not a parameter of this tool. \
          The parameters are `ignore_globs` and `target_directory`."
     );
-    assert_eq!(error.kind(), ToolErrorKind::InvalidArguments);
+    assert_eq!(error.code, ErrorCode::ToolInvalidArguments);
 }
 
 #[test]

@@ -1,17 +1,17 @@
 //! The argument rules: what Read refuses before it touches a file, and in
 //! what order.
 
-use runvil_plugin::ToolErrorKind;
+use runvil_plugin::ErrorCode;
 use serde_json::{Value, json};
 
 use super::{new_call, numbered_file, read, seeded, text_of};
 
-/// The error kind and message of a refused call over an empty filesystem.
-fn refused(args: &Value) -> (ToolErrorKind, String) {
+/// The error code and message of a refused call over an empty filesystem.
+fn refused(args: &Value) -> (ErrorCode, String) {
     let call = new_call();
     match read(&call, args) {
         Ok(output) => panic!("{args} is refused, but it answered {:?}", output.text()),
-        Err(error) => (error.kind(), error.to_string()),
+        Err(error) => (error.code, error.to_string()),
     }
 }
 
@@ -19,7 +19,7 @@ fn refused(args: &Value) -> (ToolErrorKind, String) {
 fn a_limit_below_one_is_refused_with_the_value_as_given() {
     for (limit, passed) in [(json!(0), "0"), (json!(-3), "-3")] {
         let (kind, message) = refused(&json!({ "path": "/a.md", "limit": limit }));
-        assert_eq!(kind, ToolErrorKind::InvalidArguments);
+        assert_eq!(kind, ErrorCode::ToolInvalidArguments);
         assert_eq!(
             message,
             format!("std_Read: `limit` must be at least 1, and the call passed {passed}")
@@ -30,7 +30,7 @@ fn a_limit_below_one_is_refused_with_the_value_as_given() {
 #[test]
 fn a_string_offset_is_refused_and_not_coerced() {
     let (kind, message) = refused(&json!({ "path": "/a.md", "offset": "3" }));
-    assert_eq!(kind, ToolErrorKind::InvalidArguments);
+    assert_eq!(kind, ErrorCode::ToolInvalidArguments);
     assert_eq!(
         message,
         "std_Read: `offset` must be a JSON integer, and the call passed \"3\""
@@ -57,7 +57,7 @@ fn an_integer_that_does_not_fit_in_64_bits_is_refused() {
         let mut args = json!({ "path": "/a.md" });
         args[name] = json!(u64::MAX);
         let (kind, message) = refused(&args);
-        assert_eq!(kind, ToolErrorKind::InvalidArguments);
+        assert_eq!(kind, ErrorCode::ToolInvalidArguments);
         assert_eq!(
             message,
             format!(
@@ -108,7 +108,7 @@ fn a_whole_number_float_past_the_64_bit_range_is_refused() {
         let mut args = json!({ "path": "/a.md" });
         args[name] = passed.clone();
         let (kind, message) = refused(&args);
-        assert_eq!(kind, ToolErrorKind::InvalidArguments);
+        assert_eq!(kind, ErrorCode::ToolInvalidArguments);
         assert_eq!(
             message,
             format!(
@@ -122,7 +122,7 @@ fn a_whole_number_float_past_the_64_bit_range_is_refused() {
 #[test]
 fn a_float_limit_below_one_is_refused_with_the_value_as_given() {
     let (kind, message) = refused(&json!({ "path": "/a.md", "limit": 0.0 }));
-    assert_eq!(kind, ToolErrorKind::InvalidArguments);
+    assert_eq!(kind, ErrorCode::ToolInvalidArguments);
     assert_eq!(
         message,
         "std_Read: `limit` must be at least 1, and the call passed 0.0"
@@ -132,7 +132,7 @@ fn a_float_limit_below_one_is_refused_with_the_value_as_given() {
 #[test]
 fn an_undeclared_key_is_refused_naming_it_and_the_parameters() {
     let (kind, message) = refused(&json!({ "path": "/a.md", "lines": 2 }));
-    assert_eq!(kind, ToolErrorKind::InvalidArguments);
+    assert_eq!(kind, ErrorCode::ToolInvalidArguments);
     assert_eq!(
         message,
         "std_Read: `lines` is not a parameter of this tool. \
@@ -144,7 +144,7 @@ fn an_undeclared_key_is_refused_naming_it_and_the_parameters() {
 fn a_blank_path_is_refused_before_any_io() {
     for (blank, shown) in [("", ""), ("   ", "   ")] {
         let (kind, message) = refused(&json!({ "path": blank }));
-        assert_eq!(kind, ToolErrorKind::InvalidArguments);
+        assert_eq!(kind, ErrorCode::ToolInvalidArguments);
         assert_eq!(
             message,
             format!(
@@ -157,7 +157,7 @@ fn a_blank_path_is_refused_before_any_io() {
 #[test]
 fn a_missing_path_is_refused_by_the_shared_check() {
     let (kind, message) = refused(&json!({}));
-    assert_eq!(kind, ToolErrorKind::InvalidArguments);
+    assert_eq!(kind, ErrorCode::ToolInvalidArguments);
     assert_eq!(
         message,
         "std_Read: `path` is required, and the call left it out"
@@ -182,14 +182,14 @@ fn the_blank_path_is_refused_before_the_limit() {
 #[test]
 fn the_limit_is_refused_before_the_file_is_looked_up() {
     let (kind, message) = refused(&json!({ "path": "/missing.md", "limit": 0 }));
-    assert_eq!(kind, ToolErrorKind::InvalidArguments);
+    assert_eq!(kind, ErrorCode::ToolInvalidArguments);
     assert!(message.contains("`limit` must be at least 1"), "{message}");
 }
 
 #[test]
 fn a_missing_file_is_a_plain_message_and_not_an_invalid_arguments_error() {
     let (kind, message) = refused(&json!({ "path": "/missing.md" }));
-    assert_ne!(kind, ToolErrorKind::InvalidArguments);
+    assert_ne!(kind, ErrorCode::ToolInvalidArguments);
     assert_eq!(message, "File not found: /missing.md");
 }
 
@@ -208,7 +208,7 @@ fn a_null_offset_and_a_null_limit_read_as_absent() {
 #[test]
 fn a_null_argument_list_is_refused_for_its_missing_path() {
     let (kind, message) = refused(&Value::Null);
-    assert_eq!(kind, ToolErrorKind::InvalidArguments);
+    assert_eq!(kind, ErrorCode::ToolInvalidArguments);
     assert_eq!(
         message,
         "std_Read: `path` is required, and the call left it out"

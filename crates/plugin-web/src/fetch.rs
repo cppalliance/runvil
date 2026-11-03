@@ -16,7 +16,7 @@ use tokio::runtime::Handle;
 use tokio::task::JoinHandle;
 use url::Url;
 
-use runvil_plugin::{ToolError, ToolErrorKind, ToolOutput};
+use runvil_plugin::{Error, ErrorCode, ToolOutput, tool_error};
 
 use crate::config::{ConfigError, FetchConfig};
 use crate::error::{Disposition, FetchError, SafeUrl};
@@ -29,8 +29,8 @@ use crate::response::{
 use crate::url_policy::check_url;
 
 /// The result [`WebFetch::call`] returns: untrusted page text on success,
-/// a narrow [`ToolError`] on a hard failure.
-type CallResult = Result<ToolOutput, ToolError>;
+/// a narrow tool [`Error`] on a hard failure.
+type CallResult = Result<ToolOutput, Error>;
 
 /// The hardened HTTP client the fetch tool sends every request through,
 /// with the validated [`FetchConfig`] policy it enforces.
@@ -259,7 +259,7 @@ impl Drop for AbortOnDrop {
 fn soft_or_hard(err: &FetchError) -> CallResult {
     match err.classify() {
         Disposition::SoftOutput => Ok(ToolOutput::untrusted(err.model_facing())),
-        Disposition::Hard(kind) => Err(ToolError::message(err.model_facing()).with_kind(kind)),
+        Disposition::Hard(code) => Err(tool_error(code, err.model_facing())),
     }
 }
 
@@ -283,9 +283,7 @@ fn map_send_error_to_outcome(err: &reqwest::Error, url: &str) -> CallResult {
         if let Some(fetch_err) = current.downcast_ref::<FetchError>() {
             return match fetch_err.classify() {
                 Disposition::SoftOutput => Ok(ToolOutput::untrusted(fetch_err.model_facing())),
-                Disposition::Hard(kind) => {
-                    Err(ToolError::message(fetch_err.model_facing()).with_kind(kind))
-                }
+                Disposition::Hard(code) => Err(tool_error(code, fetch_err.model_facing())),
             };
         }
         source = current.source();
@@ -344,7 +342,7 @@ impl WebFetch {
     /// fetch.
     ///
     /// # Errors
-    /// Returns a [`ToolError`] for invalid arguments, a URL the policy
+    /// Returns an [`Error`] for invalid arguments, a URL the policy
     /// refuses outright, or a fetch task that did not finish. A page the
     /// fetch could not render is a soft, untrusted output instead.
     pub(crate) async fn call(&self, args: serde_json::Value) -> CallResult {
@@ -352,8 +350,10 @@ impl WebFetch {
             .get("url")
             .and_then(serde_json::Value::as_str)
             .ok_or_else(|| {
-                ToolError::message("web_fetch: missing url argument")
-                    .with_kind(ToolErrorKind::InvalidArguments)
+                tool_error(
+                    ErrorCode::ToolInvalidArguments,
+                    "web_fetch: missing url argument",
+                )
             })?;
 
         // A per-call `max_chars` is clamped to the configured ceiling; absent,
@@ -373,11 +373,11 @@ impl WebFetch {
         );
         match (&mut task.0).await {
             Ok(result) => result,
-            Err(join) => Err(ToolError::new(
-                ToolErrorKind::Other,
+            Err(join) => Err(tool_error(
+                ErrorCode::ToolOther,
                 "web_fetch: the fetch task did not finish",
             )
-            .with_source(join)),
+            .with_cause(&join)),
         }
     }
 }
@@ -385,9 +385,9 @@ impl WebFetch {
 /// Parses the optional `max_chars` argument, clamped to `ceiling`.
 ///
 /// # Errors
-/// Returns an invalid-arguments [`ToolError`] if `max_chars` is present but is
+/// Returns an invalid-arguments [`Error`] if `max_chars` is present but is
 /// not a positive integer.
-fn parse_max_chars(args: &serde_json::Value, ceiling: usize) -> Result<usize, ToolError> {
+fn parse_max_chars(args: &serde_json::Value, ceiling: usize) -> Result<usize, Error> {
     let Some(value) = args.get("max_chars") else {
         return Ok(ceiling);
     };
@@ -395,8 +395,10 @@ fn parse_max_chars(args: &serde_json::Value, ceiling: usize) -> Result<usize, To
         return Ok(ceiling);
     }
     let n = value.as_u64().filter(|n| *n >= 1).ok_or_else(|| {
-        ToolError::message("web_fetch: max_chars must be a positive integer")
-            .with_kind(ToolErrorKind::InvalidArguments)
+        tool_error(
+            ErrorCode::ToolInvalidArguments,
+            "web_fetch: max_chars must be a positive integer",
+        )
     })?;
     let requested = usize::try_from(n).unwrap_or(usize::MAX);
     Ok(requested.min(ceiling))
@@ -405,15 +407,17 @@ fn parse_max_chars(args: &serde_json::Value, ceiling: usize) -> Result<usize, To
 /// Parses the optional `raw` argument, defaulting to `false`.
 ///
 /// # Errors
-/// Returns an invalid-arguments [`ToolError`] if `raw` is present and is neither
+/// Returns an invalid-arguments [`Error`] if `raw` is present and is neither
 /// null nor a boolean.
-fn parse_raw(args: &serde_json::Value) -> Result<bool, ToolError> {
+fn parse_raw(args: &serde_json::Value) -> Result<bool, Error> {
     match args.get("raw") {
         None => Ok(false),
         Some(value) if value.is_null() => Ok(false),
         Some(value) => value.as_bool().ok_or_else(|| {
-            ToolError::message("web_fetch: raw must be a boolean")
-                .with_kind(ToolErrorKind::InvalidArguments)
+            tool_error(
+                ErrorCode::ToolInvalidArguments,
+                "web_fetch: raw must be a boolean",
+            )
         }),
     }
 }

@@ -6,7 +6,8 @@ use std::sync::{Arc, Mutex};
 
 use runvil_lua::LuaProgram;
 use runvil_model_client::client::Role;
-use runvil_types::tools::{ToolError, ToolErrorKind, ToolId, ToolOutput};
+use runvil_types::error::ErrorCode;
+use runvil_types::tools::{ToolId, ToolOutput, tool_error};
 use runvil_types::untrusted::GuardNonce;
 use runvil_vfs::{Access, VfsError};
 use serde_json::{Value, json};

@@ -1,7 +1,7 @@
 //! How Grep compiles and applies the pattern: the dialect, the flags, and
 //! what a bad pattern says.
 
-use runvil_plugin::ToolErrorKind;
+use runvil_plugin::ErrorCode;
 use serde_json::json;
 
 use super::{failure_of, grep, new_call, seeded, text_of};
@@ -32,7 +32,7 @@ fn a_pattern_the_dialect_cannot_compile_is_an_error_naming_the_pattern_the_reaso
             error.to_string(),
             format!("std_Grep: Invalid regular expression \"{pattern}\": {reason}. {ADVICE}")
         );
-        assert_eq!(error.kind(), ToolErrorKind::InvalidArguments, "{pattern}");
+        assert_eq!(error.code, ErrorCode::ToolInvalidArguments, "{pattern}");
     }
 }
 

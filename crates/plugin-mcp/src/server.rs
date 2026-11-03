@@ -8,7 +8,7 @@ use rmcp::model::{
     RequestId, Tool,
 };
 use rmcp::service::{Peer, PeerRequestOptions, RoleClient};
-use runvil_plugin::{ToolError, ToolErrorKind};
+use runvil_plugin::{Error, ErrorCode, tool_error};
 use serde_json::Value;
 use tokio::runtime::Handle;
 use tokio::sync::watch;
@@ -96,7 +96,7 @@ impl Drop for Server {
 }
 
 /// A spawned call, aborted when the call awaiting it is dropped.
-struct AbortOnDrop(JoinHandle<Result<String, ToolError>>);
+struct AbortOnDrop(JoinHandle<Result<String, Error>>);
 
 impl Drop for AbortOnDrop {
     fn drop(&mut self) {
@@ -132,7 +132,7 @@ async fn send(
     name: String,
     arguments: JsonObject,
     runtime: Handle,
-) -> Result<String, ToolError> {
+) -> Result<String, Error> {
     let request = ClientRequest::CallToolRequest(CallToolRequest::new(
         CallToolRequestParams::new(name).with_arguments(arguments),
     ));
@@ -157,15 +157,14 @@ pub(crate) async fn call(
     peer: Peer<RoleClient>,
     name: String,
     arguments: JsonObject,
-) -> Result<String, ToolError> {
+) -> Result<String, Error> {
     let mut task = AbortOnDrop(runtime.spawn(send(peer, name, arguments, runtime.clone())));
     match (&mut task.0).await {
         Ok(outcome) => outcome,
-        Err(join) => Err(ToolError::new(
-            ToolErrorKind::Transport,
-            "the MCP call task did not finish",
-        )
-        .with_source(join)),
+        Err(join) => Err(
+            tool_error(ErrorCode::ToolTransport, "the MCP call task did not finish")
+                .with_cause(&join),
+        ),
     }
 }
 

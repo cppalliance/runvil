@@ -222,11 +222,12 @@ impl Error {
         }
     }
 
-    /// Wraps a tool failure as [`Error::Tool`], keeping the tool's own
-    /// error as the cause rather than discarding it.
-    pub(crate) fn tool(source: runvil_types::tools::ToolError) -> Error {
+    /// Wraps a tool failure as [`Error::Tool`]: the message is the tool's
+    /// prose, the text that is safe for the model, and the tool's own error
+    /// is kept as the cause rather than discarded.
+    pub(crate) fn tool(source: runvil_types::error::Error) -> Error {
         Error::Tool {
-            message: source.to_string(),
+            message: source.prose.clone(),
             cause: Box::new(source),
         }
     }

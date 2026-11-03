@@ -21,10 +21,11 @@ use harness_runner::prepare::{PrepareError, Prepared, Services, begin, prepare};
 use harness_runner::recorder::{MemoryRecorder, RecordKind, RunErrorKind, RunId, RunOutcome};
 use harness_runner::{HostContext, display_chain};
 use runvil::cancel::CancelHandle;
+use runvil::error::{Error, ErrorCode};
 use runvil::event::Event;
+use runvil::tools::tool_error;
 use runvil_plugin::{
-    HostServices, Pack, PackFuture, PackId, PackInfo, ToolContext, ToolError, ToolErrorKind,
-    ToolId, ToolInfo, ToolOutput,
+    HostServices, Pack, PackFuture, PackId, PackInfo, ToolContext, ToolId, ToolInfo, ToolOutput,
 };
 use serde_json::{Value, json};
 
@@ -151,7 +152,7 @@ fn construct_echo(
     name: &PackId,
     _config: Value,
     _services: &HostServices,
-) -> Result<Arc<dyn Pack>, ToolError> {
+) -> Result<Arc<dyn Pack>, Error> {
     let echo = ToolInfo::new(
         ToolId::parse(&format!("{name}/echo")).unwrap(),
         "Echo the value argument.",
@@ -169,12 +170,12 @@ impl Pack for Echo {
         &'a self,
         _cx: ToolContext<'a>,
         args: Value,
-    ) -> PackFuture<'a, Result<ToolOutput, ToolError>> {
+    ) -> PackFuture<'a, Result<ToolOutput, Error>> {
         Box::pin(async move {
             let value = args
                 .get("value")
                 .and_then(Value::as_str)
-                .ok_or_else(|| ToolError::message("echo: missing `value`"))?;
+                .ok_or_else(|| tool_error(ErrorCode::ToolOther, "echo: missing `value`"))?;
             Ok(ToolOutput::trusted(value.to_owned()))
         })
     }

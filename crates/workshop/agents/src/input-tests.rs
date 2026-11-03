@@ -225,8 +225,8 @@ async fn a_registry_cancel_fails_the_broker_call_and_emits_cancelled() {
         .expect_err("a cancelled wait fails the broker call");
     assert_eq!(error.to_string(), "the user-input wait was cancelled");
     assert_eq!(
-        error.kind(),
-        runvil::tools::ToolErrorKind::Backend,
+        error.code,
+        runvil::error::ErrorCode::ToolBackend,
         "the ask call fails as a backend failure"
     );
     let frame = socket.recv().await.expect("the cancellation frame arrives");

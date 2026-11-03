@@ -7,8 +7,8 @@ use std::time::Duration;
 
 use runvil_plugin::testing::TestCall;
 use runvil_plugin::{
-    HostServices, OutputTrust, Pack, PackId, PackInfo, PackRegistry, ServiceKey, TOKIO_RUNTIME,
-    ToolCaller, ToolError, ToolId, ToolOutput,
+    Error, HostServices, OutputTrust, Pack, PackId, PackInfo, PackRegistry, ServiceKey,
+    TOKIO_RUNTIME, ToolCaller, ToolId, ToolOutput,
 };
 use serde_json::{Map, Value, json};
 use tokio::net::TcpListener;
@@ -44,10 +44,7 @@ pub(crate) fn inserted(config: Value) -> Vec<(PackInfo, PackId, Value)> {
 
 /// Builds the Pack `install` inserts, under the Pack id and with the config
 /// the registry holds it with, from the server map `servers`.
-pub(crate) fn construct(
-    servers: Value,
-    services: &HostServices,
-) -> Result<Arc<dyn Pack>, ToolError> {
+pub(crate) fn construct(servers: Value, services: &HostServices) -> Result<Arc<dyn Pack>, Error> {
     let config = Map::from_iter([("mcp".to_owned(), servers)]);
     let mut inserted = inserted(Value::Object(config));
     let (info, id, config) = inserted.pop().expect("install inserts one Pack");
@@ -70,11 +67,7 @@ fn tool_call(tool: &str) -> TestCall {
 
 /// Calls the Pack's tool `mcp/<tool>` with `args` from a model round and
 /// returns its text, checking that the output is untrusted.
-pub(crate) async fn invoke(
-    pack: &Arc<dyn Pack>,
-    tool: &str,
-    args: Value,
-) -> Result<String, ToolError> {
+pub(crate) async fn invoke(pack: &Arc<dyn Pack>, tool: &str, args: Value) -> Result<String, Error> {
     let test = tool_call(tool).with_caller(ToolCaller::Model);
     let output = pack.call(test.context(), args).await?;
     assert_eq!(
@@ -91,7 +84,7 @@ pub(crate) async fn invoke_as_script(
     pack: &Arc<dyn Pack>,
     tool: &str,
     args: Value,
-) -> Result<ToolOutput, ToolError> {
+) -> Result<ToolOutput, Error> {
     pack.call(tool_call(tool).context(), args).await
 }
 
@@ -110,7 +103,7 @@ pub(crate) async fn call(
     namespace: &str,
     tool: &str,
     arguments: Value,
-) -> Result<String, ToolError> {
+) -> Result<String, Error> {
     invoke(
         pack,
         "call_dynamic_tool",

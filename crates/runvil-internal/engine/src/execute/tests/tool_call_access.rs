@@ -29,15 +29,21 @@ const FILES: &str = "test/tools/files";
 #[track_caller]
 fn files_tool() -> FnTool {
     FnTool::new(FILES, json!({ "type": "object" }), |_| {
-        Err(ToolError::message("the suite's driver performs this tool"))
+        Err(tool_error(
+            ErrorCode::ToolOther,
+            "the suite's driver performs this tool",
+        ))
     })
     .description("reads or writes one of the run's files")
 }
 
 /// Performs one files call through `access`: `read` names a file whose
 /// text is the output, and `write` names a file that receives `text`.
-fn use_access(access: &Access, args: &Value) -> std::result::Result<ToolOutput, ToolError> {
-    let failed = |error: VfsError| ToolError::message(error.to_string());
+fn use_access(
+    access: &Access,
+    args: &Value,
+) -> std::result::Result<ToolOutput, runvil_types::error::Error> {
+    let failed = |error: VfsError| tool_error(ErrorCode::ToolOther, error.to_string());
     if let Some(path) = args["read"].as_str() {
         return access
             .read_string(path)

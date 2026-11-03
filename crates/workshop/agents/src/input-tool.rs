@@ -6,7 +6,8 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use plugin_user_input::InputBroker;
-use runvil::tools::{ToolError, ToolErrorKind};
+use runvil::error::{Error, ErrorCode};
+use runvil::tools::tool_error;
 use tokio::sync::broadcast;
 
 use super::{WaitFrame, WaitRegistry};
@@ -84,9 +85,10 @@ impl InputBroker for SessionInputBroker {
     /// cancelled out of the registry - the drop guard removes the wait and
     /// pushes [`WaitFrame::Cancelled`], so no path leaks a wait or a stale
     /// prompt. A wait cancelled out of the registry resolves here as the
-    /// broker's failure policy: a [`ToolError`] of kind `Backend` the run
-    /// raises at the Lua call site.
-    async fn wait(&self) -> Result<String, ToolError> {
+    /// broker's failure policy: an [`Error`] with the code
+    /// [`ToolBackend`](ErrorCode::ToolBackend) the run raises at the Lua
+    /// call site.
+    async fn wait(&self) -> Result<String, Error> {
         let (token, receiver) = self.registry.create();
         let mut guard = WaitGuard {
             registry: Arc::clone(&self.registry),
@@ -109,8 +111,10 @@ impl InputBroker for SessionInputBroker {
             // of the registry. The still-armed guard pushes the cancelled
             // frame on scope exit, so this path clears the client's prompt
             // too.
-            Err(_) => Err(ToolError::message("the user-input wait was cancelled")
-                .with_kind(ToolErrorKind::Backend)),
+            Err(_) => Err(tool_error(
+                ErrorCode::ToolBackend,
+                "the user-input wait was cancelled",
+            )),
         }
     }
 }

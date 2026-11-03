@@ -7,8 +7,8 @@ use std::collections::BTreeMap;
 use rmcp::model::JsonObject;
 use rmcp::service::{Peer, RoleClient};
 use runvil_plugin::{
-    Pack, PackFuture, PackId, ToolCaller, ToolContext, ToolError, ToolErrorKind, ToolId, ToolInfo,
-    ToolOutput,
+    Error, ErrorCode, Pack, PackFuture, PackId, ToolCaller, ToolContext, ToolId, ToolInfo,
+    ToolOutput, tool_error,
 };
 use serde_json::{Map, Value, json};
 use tokio::runtime::Handle;
@@ -81,13 +81,13 @@ fn marked(caller: ToolCaller, text: String) -> ToolOutput {
     }
 }
 
-fn invalid(text: impl Into<String>) -> ToolError {
-    ToolError::message(text).with_kind(ToolErrorKind::InvalidArguments)
+fn invalid(text: impl Into<String>) -> Error {
+    tool_error(ErrorCode::ToolInvalidArguments, text)
 }
 
 /// The members of a tool's arguments, which must be a JSON object or
 /// `null`.
-fn members(args: Value, refusal: &str) -> Result<Map<String, Value>, ToolError> {
+fn members(args: Value, refusal: &str) -> Result<Map<String, Value>, Error> {
     match args {
         Value::Null => Ok(Map::new()),
         Value::Object(members) => Ok(members),
@@ -96,7 +96,7 @@ fn members(args: Value, refusal: &str) -> Result<Map<String, Value>, ToolError> 
 }
 
 /// The string at `key`, or `None` when it is absent or `null`.
-fn string<'a>(members: &'a Map<String, Value>, key: &str) -> Result<Option<&'a str>, ToolError> {
+fn string<'a>(members: &'a Map<String, Value>, key: &str) -> Result<Option<&'a str>, Error> {
     match members.get(key) {
         None | Some(Value::Null) => Ok(None),
         Some(Value::String(text)) => Ok(Some(text)),
@@ -138,11 +138,10 @@ impl Mcp {
         name: &PackId,
         namespaces: BTreeMap<String, Namespace>,
         runtime: Handle,
-    ) -> Result<Mcp, ToolError> {
+    ) -> Result<Mcp, Error> {
         let id = |tool: &str| {
             ToolId::parse(&format!("{name}/{tool}")).map_err(|e| {
-                ToolError::new(ToolErrorKind::Backend, "MCP could not name its tools")
-                    .with_source(e)
+                tool_error(ErrorCode::ToolBackend, "MCP could not name its tools").with_cause(&e)
             })
         };
         let get = ToolInfo::new(
@@ -194,7 +193,7 @@ impl Mcp {
     }
 
     /// The server under `name`, or an error that says how to list them.
-    fn namespace(&self, name: &str) -> Result<&Namespace, ToolError> {
+    fn namespace(&self, name: &str) -> Result<&Namespace, Error> {
         self.namespaces.get(name).ok_or_else(|| {
             invalid(format!(
                 "no configured MCP server has the namespace `{name}`; call {} with no arguments \
@@ -204,7 +203,7 @@ impl Mcp {
         })
     }
 
-    fn unknown_tool(&self, namespace: &str, tool: &str) -> ToolError {
+    fn unknown_tool(&self, namespace: &str, tool: &str) -> Error {
         invalid(format!(
             "the MCP server `{namespace}` has no tool `{tool}`; call {} with namespace \
              `{namespace}` to list its tools",
@@ -213,7 +212,7 @@ impl Mcp {
     }
 
     /// Answers `get_dynamic_tools` as JSON text.
-    fn list(&self, args: Value) -> Result<String, ToolError> {
+    fn list(&self, args: Value) -> Result<String, Error> {
         let members = members(
             args,
             "get_dynamic_tools takes a JSON object with the optional strings `namespace` and `toolName`",
@@ -259,7 +258,7 @@ impl Mcp {
 
     /// The peer and tool name a `call_dynamic_tool` goes to, or why it
     /// cannot go out.
-    fn target(&self, namespace: &str, tool: &str) -> Result<(Peer<RoleClient>, String), ToolError> {
+    fn target(&self, namespace: &str, tool: &str) -> Result<(Peer<RoleClient>, String), Error> {
         self.namespace(namespace)?.with_status(|status| match status {
             Status::Ready(ready) => ready
                 .tools
@@ -267,19 +266,23 @@ impl Mcp {
                 .find(|listed| listed.name == tool)
                 .map(|listed| (ready.peer.clone(), listed.name.clone()))
                 .ok_or_else(|| self.unknown_tool(namespace, tool)),
-            Status::Loading => Err(ToolError::message(format!(
-                "the MCP server `{namespace}` is still loading; call {} later to see when it is ready",
-                self.get.id
-            ))),
-            Status::Error(reason) => Err(ToolError::message(format!(
-                "the MCP server `{namespace}` is unavailable: {reason}"
-            ))),
+            Status::Loading => Err(tool_error(
+                ErrorCode::ToolOther,
+                format!(
+                    "the MCP server `{namespace}` is still loading; call {} later to see when it is ready",
+                    self.get.id
+                ),
+            )),
+            Status::Error(reason) => Err(tool_error(
+                ErrorCode::ToolOther,
+                format!("the MCP server `{namespace}` is unavailable: {reason}"),
+            )),
         })
     }
 
     /// Performs `call_dynamic_tool` and returns the result's text. Every
     /// argument is checked before anything is sent.
-    async fn call_tool(&self, args: Value) -> Result<String, ToolError> {
+    async fn call_tool(&self, args: Value) -> Result<String, Error> {
         let mut members = members(
             args,
             "call_dynamic_tool takes a JSON object with the strings `namespace` and `toolName` \
@@ -312,7 +315,7 @@ impl Pack for Mcp {
         &'a self,
         cx: ToolContext<'a>,
         args: Value,
-    ) -> PackFuture<'a, Result<ToolOutput, ToolError>> {
+    ) -> PackFuture<'a, Result<ToolOutput, Error>> {
         Box::pin(async move {
             let tool = cx.tool();
             let caller = cx.origin().caller;
@@ -321,7 +324,10 @@ impl Pack for Mcp {
             } else if *tool == self.call.id {
                 self.call_tool(args).await.map(|text| marked(caller, text))
             } else {
-                Err(ToolError::message(format!("MCP has no tool {tool}")))
+                Err(tool_error(
+                    ErrorCode::ToolOther,
+                    format!("MCP has no tool {tool}"),
+                ))
             }
         })
     }

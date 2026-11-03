@@ -1,7 +1,8 @@
 //! Tests for the internal error: the cause-bearing variants' chains and the
 //! quota variant's message.
 
-use runvil_types::tools::{ToolError, ToolErrorKind};
+use runvil_types::error::ErrorCode;
+use runvil_types::tools::tool_error;
 use runvil_vfs::VfsError;
 
 use super::{Error, QuotaResource};
@@ -34,10 +35,7 @@ fn no_segment_of_a_cause_bearing_error_chain_repeats() {
             message: syntax.to_string(),
             cause: Box::new(syntax),
         },
-        Error::tool(ToolError::new(
-            ToolErrorKind::Backend,
-            "the backend refused",
-        )),
+        Error::tool(tool_error(ErrorCode::ToolBackend, "the backend refused")),
         Error::store(
             &VfsOp::Read {
                 path: "a.txt".to_owned(),

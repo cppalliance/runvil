@@ -3,7 +3,7 @@
 
 use std::time::Duration;
 
-use runvil_plugin::{OutputTrust, ToolErrorKind};
+use runvil_plugin::{ErrorCode, OutputTrust};
 use serde_json::{Value, json};
 
 use crate::fixture::Fixture;
@@ -177,27 +177,27 @@ async fn a_tool_name_without_a_namespace_an_unknown_namespace_and_an_unknown_too
     };
 
     let error = refused(json!({ "toolName": "Echo" })).await;
-    assert_eq!(error.kind(), ToolErrorKind::InvalidArguments);
+    assert_eq!(error.code, ErrorCode::ToolInvalidArguments);
     assert_eq!(
         error.to_string(),
         "`toolName` names a tool of one server, so it needs `namespace` too"
     );
     let error = refused(json!({ "namespace": "github" })).await;
-    assert_eq!(error.kind(), ToolErrorKind::InvalidArguments);
+    assert_eq!(error.code, ErrorCode::ToolInvalidArguments);
     assert_eq!(
         error.to_string(),
         "no configured MCP server has the namespace `github`; call mcp/get_dynamic_tools with \
          no arguments to list the namespaces"
     );
     let error = refused(json!({ "namespace": "GitHub", "toolName": "echo" })).await;
-    assert_eq!(error.kind(), ToolErrorKind::InvalidArguments);
+    assert_eq!(error.code, ErrorCode::ToolInvalidArguments);
     assert_eq!(
         error.to_string(),
         "the MCP server `GitHub` has no tool `echo`; call mcp/get_dynamic_tools with namespace \
          `GitHub` to list its tools"
     );
     let error = refused(json!({ "namespace": 1 })).await;
-    assert_eq!(error.kind(), ToolErrorKind::InvalidArguments);
+    assert_eq!(error.code, ErrorCode::ToolInvalidArguments);
     let error = refused(json!(["GitHub"])).await;
-    assert_eq!(error.kind(), ToolErrorKind::InvalidArguments);
+    assert_eq!(error.code, ErrorCode::ToolInvalidArguments);
 }

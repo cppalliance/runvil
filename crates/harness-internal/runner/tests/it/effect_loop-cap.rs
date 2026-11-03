@@ -15,12 +15,13 @@ use harness_runner::performers::{BoxFuture, ToolPerformer};
 use harness_runner::recorder::{MemoryRecorder, RecordKind, RunId, RunOutcome};
 use runvil::cancel::CancelHandle;
 use runvil::effect::ToolCallOrigin;
+use runvil::error::Error;
 use runvil::model::{
     Completion, CompletionError, CompletionResult, ModelId, ModelInfo, ModelRole, ThinkingMode,
     ToolCall,
 };
 use runvil::timestamp::Timestamp;
-use runvil::tools::{ToolCatalog, ToolError, ToolId, ToolInfo, ToolOutput};
+use runvil::tools::{ToolCatalog, ToolId, ToolInfo, ToolOutput};
 use runvil::vfs::Access;
 use runvil::{Prompt, Run, RunConfig};
 use serde_json::{Value, json};
@@ -138,7 +139,7 @@ impl ToolPerformer for ParkingTool {
         _access: Arc<Access>,
         _origin: ToolCallOrigin,
         args: Value,
-    ) -> BoxFuture<Result<ToolOutput, ToolError>> {
+    ) -> BoxFuture<Result<ToolOutput, Error>> {
         let name = args["name"].as_str().unwrap_or_default().to_owned();
         let gate = Arc::clone(&self.gate);
         let started = Arc::clone(&self.started);

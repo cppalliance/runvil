@@ -26,8 +26,9 @@
 //! suites hold without rewriting their assertions. `FnTool` is the
 //! fixture tool, a closure answered at once.
 
+use runvil_types::error::ErrorCode;
 use runvil_types::event::Event;
-use runvil_types::tools::ToolError;
+use runvil_types::tools::tool_error;
 
 use crate::Error;
 use crate::execute::{Effect, EffectAnswer, EffectId, IssuedEffect, Run, RunOutcome, Step};
@@ -88,9 +89,10 @@ pub fn perform_locally(
     match effect {
         Effect::Chat { .. } => chat(effect),
         Effect::Render { offered, .. } => EffectAnswer::Render(offered.clone()),
-        Effect::ToolCall { alias, .. } => EffectAnswer::ToolCall(Err(ToolError::message(format!(
-            "no tool is bound as {alias} in this test"
-        )))),
+        Effect::ToolCall { alias, .. } => EffectAnswer::ToolCall(Err(tool_error(
+            ErrorCode::ToolOther,
+            format!("no tool is bound as {alias} in this test"),
+        ))),
         Effect::Vfs { access, op } => EffectAnswer::Vfs(run_store_op(access, op.clone())),
         Effect::Timer { .. } => EffectAnswer::Timer,
     }

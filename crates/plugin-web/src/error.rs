@@ -3,26 +3,26 @@
 //! [`FetchError`] is the single internal error type for every `web_fetch`
 //! failure mode: the URL and address policies, redirects, DNS, the size caps,
 //! the timeouts, the body read, and the content-type and decoding refusals. It
-//! is never public; `call` maps it to a narrow `ToolError`
+//! is never public; `call` maps it to a narrow tool error
 //! through [`FetchError::classify`]. It provides a model-facing rendering
 //! that withholds internal detail, and preserves dependency and I/O causes
 //! behind `#[source]` fields so a log can inspect the chain.
 
 use std::net::IpAddr;
 
-use runvil_plugin::ToolErrorKind;
+use runvil_plugin::ErrorCode;
 
 /// How `call` should treat a [`FetchError`].
 ///
 /// A [`Disposition::SoftOutput`] error is returned to the model as untrusted
 /// tool text so it can try a different URL; a [`Disposition::Hard`] error aborts
-/// the call with the given [`ToolErrorKind`].
+/// the call with the given [`ErrorCode`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Disposition {
     /// Returns the model-facing text as untrusted tool output.
     SoftOutput,
-    /// Aborts the call with this error kind.
-    Hard(ToolErrorKind),
+    /// Aborts the call with this error code.
+    Hard(ErrorCode),
 }
 
 /// A URL stored for diagnostics with its secrets redacted.
@@ -227,7 +227,7 @@ impl FetchError {
     /// Decides how `call` should treat this error.
     ///
     /// The match is exhaustive with no wildcard, so a new variant forces an
-    /// explicit disposition and kind decision at compile time. Target, network,
+    /// explicit disposition and code decision at compile time. Target, network,
     /// content, redirect, and blocked-scheme outcomes are soft (returned as tool
     /// text the model can act on); admission and SSRF refusals, decided before a
     /// useful retry shape exists, are hard invalid-arguments errors.
@@ -250,7 +250,7 @@ impl FetchError {
             | FetchError::IpLiteral(_)
             | FetchError::BlockedAddress { .. }
             | FetchError::NoAllowedAddress { .. } => {
-                Disposition::Hard(ToolErrorKind::InvalidArguments)
+                Disposition::Hard(ErrorCode::ToolInvalidArguments)
             }
         }
     }
@@ -261,7 +261,7 @@ mod tests {
     use std::error::Error as _;
     use std::net::IpAddr;
 
-    use runvil_plugin::ToolErrorKind;
+    use runvil_plugin::ErrorCode;
 
     use super::{Disposition, FetchError, SafeUrl};
 
@@ -365,7 +365,7 @@ mod tests {
         for err in &hard {
             assert_eq!(
                 err.classify(),
-                Disposition::Hard(ToolErrorKind::InvalidArguments),
+                Disposition::Hard(ErrorCode::ToolInvalidArguments),
                 "{err} must be hard invalid-arguments"
             );
         }

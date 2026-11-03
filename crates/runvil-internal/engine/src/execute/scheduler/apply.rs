@@ -19,7 +19,7 @@
 
 use runvil_types::event::lifecycle::{self, Lifecycle};
 use runvil_types::ids::{RoundId, TaskId};
-use runvil_types::tools::{ToolError, ToolOutput};
+use runvil_types::tools::ToolOutput;
 use runvil_vfs::{ExecId, VfsError, detail};
 
 use crate::execute::infer::accept_infer;
@@ -260,7 +260,7 @@ impl ChainOps<'_> {
     fn accept_tool_call(
         &mut self,
         call: &ToolCallContinuation,
-        result: std::result::Result<ToolOutput, ToolError>,
+        result: std::result::Result<ToolOutput, runvil_types::error::Error>,
     ) -> Result<ToolCallOutcome> {
         let chain = &mut *self.chain;
         // The shared dispatch body reports through this chain's emitter, so

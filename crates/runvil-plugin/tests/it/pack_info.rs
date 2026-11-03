@@ -12,9 +12,9 @@ use std::task::{Context, Poll, Waker};
 
 use runvil_plugin::testing::TestCall;
 use runvil_plugin::{
-    HostServices, ModelId, ModelInfo, OutputTrust, Pack, PackFuture, PackId, PackInfo,
-    RenderContext, ServiceId, ServiceKey, ThinkingMode, ToolContext, ToolError, ToolErrorKind,
-    ToolId, ToolInfo, ToolOutput,
+    Error, ErrorCode, HostServices, ModelId, ModelInfo, OutputTrust, Pack, PackFuture, PackId,
+    PackInfo, RenderContext, ServiceId, ServiceKey, ThinkingMode, ToolContext, ToolId, ToolInfo,
+    ToolOutput, tool_error,
 };
 use serde_json::{Value, json};
 
@@ -44,15 +44,21 @@ fn construct(
     name: &PackId,
     config: Value,
     services: &HostServices,
-) -> Result<Arc<dyn Pack>, ToolError> {
+) -> Result<Arc<dyn Pack>, Error> {
     if !config.is_null() {
-        return Err(ToolError::message("greeter takes no configuration"));
+        return Err(tool_error(
+            ErrorCode::ToolOther,
+            "greeter takes no configuration",
+        ));
     }
     let greeting = services.get(&GREETING).ok_or_else(|| {
-        ToolError::message("greeter needs acme/greeting, and this Host provides none")
+        tool_error(
+            ErrorCode::ToolOther,
+            "greeter needs acme/greeting, and this Host provides none",
+        )
     })?;
     let id = ToolId::parse(&format!("{name}/greet")).map_err(|e| {
-        ToolError::new(ToolErrorKind::Backend, "greeter could not name its tool").with_source(e)
+        tool_error(ErrorCode::ToolBackend, "greeter could not name its tool").with_cause(&e)
     })?;
     let tools = vec![ToolInfo::new(
         id,
@@ -71,22 +77,23 @@ impl Pack for Greeter {
         &'a self,
         cx: ToolContext<'a>,
         args: Value,
-    ) -> PackFuture<'a, Result<ToolOutput, ToolError>> {
+    ) -> PackFuture<'a, Result<ToolOutput, Error>> {
         Box::pin(async move {
             match cx.tool().name() {
                 "greet" => {
-                    let visitor = cx
-                        .service(&VISITOR)
-                        .ok_or_else(|| ToolError::message("no visitor is in this run"))?;
+                    let visitor = cx.service(&VISITOR).ok_or_else(|| {
+                        tool_error(ErrorCode::ToolOther, "no visitor is in this run")
+                    })?;
                     let mark = args.get("mark").and_then(Value::as_str).unwrap_or(".");
                     Ok(ToolOutput::untrusted(format!(
                         "{}, {visitor}{mark}",
                         self.greeting
                     )))
                 }
-                other => Err(ToolError::message(format!(
-                    "greeter has no tool named {other}"
-                ))),
+                other => Err(tool_error(
+                    ErrorCode::ToolOther,
+                    format!("greeter has no tool named {other}"),
+                )),
             }
         })
     }

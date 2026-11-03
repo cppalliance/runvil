@@ -1,7 +1,7 @@
 //! Read's arguments: what the call asks for, and what is refused before
 //! any file is touched.
 
-use runvil_plugin::ToolError;
+use runvil_plugin::Error;
 use serde_json::Value;
 
 use crate::check::{invalid_arguments, refuse_blank, refuse_unknown};
@@ -26,11 +26,8 @@ pub(super) struct Request<'a> {
 /// about the same one.
 ///
 /// # Errors
-/// Returns an invalid-arguments [`ToolError`] naming the parameter.
-pub(super) fn parse<'a>(
-    definition: &Definition,
-    args: &'a Value,
-) -> Result<Request<'a>, ToolError> {
+/// Returns an invalid-arguments [`Error`] naming the parameter.
+pub(super) fn parse<'a>(definition: &Definition, args: &'a Value) -> Result<Request<'a>, Error> {
     let tool = definition.wire_name.as_str();
     refuse_unknown(tool, &definition.parameters, args)?;
     let path = args.get("path").and_then(Value::as_str).unwrap_or_default();
@@ -59,11 +56,7 @@ pub(super) fn parse<'a>(
 /// The shared check has already refused anything that is not a whole
 /// number, so a value that still has no `i64` is a whole number past the
 /// 64-bit range, which is refused here.
-fn integer<'a>(
-    tool: &str,
-    name: &str,
-    args: &'a Value,
-) -> Result<Option<(i64, &'a Value)>, ToolError> {
+fn integer<'a>(tool: &str, name: &str, args: &'a Value) -> Result<Option<(i64, &'a Value)>, Error> {
     let Some(value) = args.get(name).filter(|value| !value.is_null()) else {
         return Ok(None);
     };

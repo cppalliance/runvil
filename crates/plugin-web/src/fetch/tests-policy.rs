@@ -6,7 +6,7 @@
 
 use super::*;
 
-use runvil_plugin::ToolErrorKind;
+use runvil_plugin::ErrorCode;
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn slow_server_past_total_timeout_yields_timeout() {
@@ -197,7 +197,7 @@ async fn call_rejects_bad_urls_before_network() {
             .await
             .expect_err(&format!("expected {raw} to be refused before any network"));
         assert!(
-            err.kind() == ToolErrorKind::InvalidArguments,
+            err.code == ErrorCode::ToolInvalidArguments,
             "expected a policy rejection for {raw}, got: {err:?}"
         );
         assert!(
@@ -260,7 +260,7 @@ async fn blocked_url_still_hard_fails() {
         .expect_err("a bare IP literal URL must still be a hard error");
 
     assert!(
-        err.kind() == ToolErrorKind::InvalidArguments && err.to_string().contains("ip literal"),
+        err.code == ErrorCode::ToolInvalidArguments && err.to_string().contains("ip literal"),
         "got: {err:?}"
     );
 }

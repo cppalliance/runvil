@@ -10,8 +10,8 @@
 use std::sync::Arc;
 
 use runvil_plugin::{
-    Error, HostServices, Pack, PackFuture, PackId, PackInfo, PackRegistry, ServiceKey, ToolContext,
-    ToolError, ToolErrorKind, ToolId, ToolInfo, ToolOutput,
+    Error, ErrorCode, HostServices, Pack, PackFuture, PackId, PackInfo, PackRegistry, ServiceKey,
+    ToolContext, ToolId, ToolInfo, ToolOutput, tool_error,
 };
 use serde_json::{Value, json};
 use tokio::runtime::Handle;
@@ -76,15 +76,24 @@ fn construct(
     name: &PackId,
     config: Value,
     services: &HostServices,
-) -> Result<Arc<dyn Pack>, ToolError> {
+) -> Result<Arc<dyn Pack>, Error> {
     if !(config.is_null() || config == json!({})) {
-        return Err(ToolError::message("web takes no configuration"));
+        return Err(tool_error(
+            ErrorCode::ToolOther,
+            "web takes no configuration",
+        ));
     }
     let provider = services.get(&SEARCH_PROVIDER).ok_or_else(|| {
-        ToolError::message("web needs runvil/search-provider, and this host provides none")
+        tool_error(
+            ErrorCode::ToolOther,
+            "web needs runvil/search-provider, and this host provides none",
+        )
     })?;
     let runtime = services.get(&TOKIO_RUNTIME).ok_or_else(|| {
-        ToolError::message("web needs runvil/tokio-runtime, and this host provides none")
+        tool_error(
+            ErrorCode::ToolOther,
+            "web needs runvil/tokio-runtime, and this host provides none",
+        )
     })?;
     let web = Web::new(
         name,
@@ -96,11 +105,10 @@ fn construct(
 
 impl Web {
     /// The Pack over `fetch` and `search`, its tools named under `name`.
-    fn new(name: &PackId, fetch: WebFetch, search: WebSearch) -> Result<Web, ToolError> {
+    fn new(name: &PackId, fetch: WebFetch, search: WebSearch) -> Result<Web, Error> {
         let id = |tool: &str| {
             ToolId::parse(&format!("{name}/{tool}")).map_err(|e| {
-                ToolError::new(ToolErrorKind::Backend, "web could not name its tools")
-                    .with_source(e)
+                tool_error(ErrorCode::ToolBackend, "web could not name its tools").with_cause(&e)
             })
         };
         let tools = vec![
@@ -141,12 +149,15 @@ impl Pack for Web {
         &'a self,
         cx: ToolContext<'a>,
         args: Value,
-    ) -> PackFuture<'a, Result<ToolOutput, ToolError>> {
+    ) -> PackFuture<'a, Result<ToolOutput, Error>> {
         Box::pin(async move {
             match cx.tool().name() {
                 "fetch" => self.fetch.call(args).await,
                 "search" => self.search.call(args).await,
-                other => Err(ToolError::message(format!("web has no tool named {other}"))),
+                other => Err(tool_error(
+                    ErrorCode::ToolOther,
+                    format!("web has no tool named {other}"),
+                )),
             }
         })
     }

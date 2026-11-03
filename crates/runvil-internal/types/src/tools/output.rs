@@ -1,4 +1,7 @@
-//! Tool output with mandatory trust, and the narrow model-safe tool error.
+//! Tool output with mandatory trust, and the constructor of a tool call's
+//! failure.
+
+use crate::error::{Error, ErrorCode};
 
 /// Whether a tool's output is trusted or must be treated as untrusted data.
 ///
@@ -59,103 +62,13 @@ impl ToolOutput {
     }
 }
 
-/// A stable classification of a [`ToolError`] that code can match on.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[non_exhaustive]
-pub enum ToolErrorKind {
-    /// The model supplied arguments that the tool rejected.
-    InvalidArguments,
-    /// The tool's backend refused or failed the request.
-    Backend,
-    /// The request failed at the transport layer, such as a network error or a
-    /// timeout.
-    Transport,
-    /// Any other tool failure.
-    Other,
-}
-
-impl ToolErrorKind {
-    /// Returns the kind's stable tag: its name in snake_case, such as
-    /// `invalid_arguments`. A run log records a failed call under it.
-    #[must_use]
-    pub fn tag(self) -> &'static str {
-        match self {
-            ToolErrorKind::InvalidArguments => "invalid_arguments",
-            ToolErrorKind::Backend => "backend",
-            ToolErrorKind::Transport => "transport",
-            ToolErrorKind::Other => "other",
-        }
-    }
-}
-
-/// An error from a tool call, with a message that is safe to show the model.
-///
-/// The `Display` message is meant for the caller and is safe to hand back to
-/// the model. Any underlying cause stays out of that message and is available
-/// only through [`std::error::Error::source`]. Match on [`ToolError::kind`] to
-/// tell failures apart.
-#[derive(Debug)]
-#[non_exhaustive]
-pub struct ToolError {
-    kind: ToolErrorKind,
-    message: String,
-    source: Option<Box<dyn std::error::Error + Send + Sync>>,
-}
-
-impl ToolError {
-    /// Builds an error of `kind` with `text` as its model-safe message.
-    #[must_use]
-    pub fn new(kind: ToolErrorKind, text: impl Into<String>) -> ToolError {
-        ToolError {
-            kind,
-            message: text.into(),
-            source: None,
-        }
-    }
-
-    /// Builds an error from a message alone, with the kind `Other`.
-    #[must_use]
-    pub fn message(text: impl Into<String>) -> ToolError {
-        ToolError::new(ToolErrorKind::Other, text)
-    }
-
-    /// Keeps `source` as the underlying cause, returning the updated error.
-    ///
-    /// The cause is not part of the message. It is available only through
-    /// `Error::source`. The kind stays as it was built.
-    #[must_use]
-    pub fn with_source(
-        mut self,
-        source: impl Into<Box<dyn std::error::Error + Send + Sync>>,
-    ) -> ToolError {
-        self.source = Some(source.into());
-        self
-    }
-
-    /// Sets the classification, returning the updated error.
-    #[must_use]
-    pub fn with_kind(mut self, kind: ToolErrorKind) -> ToolError {
-        self.kind = kind;
-        self
-    }
-
-    /// Returns the stable classification of this error.
-    #[must_use]
-    pub fn kind(&self) -> ToolErrorKind {
-        self.kind
-    }
-}
-
-impl std::fmt::Display for ToolError {
-    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        formatter.write_str(&self.message)
-    }
-}
-
-impl std::error::Error for ToolError {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        self.source
-            .as_ref()
-            .map(|boxed| boxed.as_ref() as &(dyn std::error::Error + 'static))
-    }
+/// Builds a tool call's failure: `code` is one of the tool codes, such as
+/// [`ToolInvalidArguments`](ErrorCode::ToolInvalidArguments), and `text` is
+/// both the message and the prose the model reads, so it must be safe to
+/// show the model. A cause goes in the message only, through
+/// [`Error::with_cause`].
+#[must_use]
+pub fn tool_error(code: ErrorCode, text: impl Into<String>) -> Error {
+    let text = text.into();
+    Error::new(code, text.clone(), text)
 }

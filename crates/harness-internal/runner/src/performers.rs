@@ -33,11 +33,12 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use runvil::effect::{PackToolSets, Round, ToolCallOrigin};
+use runvil::error::Error;
 use runvil::model::{
     Completion, CompletionError, CompletionOptions, Message, ModelBinding, ModelCatalog, ModelInfo,
     ToolSchema,
 };
-use runvil::tools::{ToolError, ToolId, ToolInfo, ToolOutput};
+use runvil::tools::{ToolId, ToolInfo, ToolOutput};
 use runvil::vfs::Access;
 use serde_json::Value;
 
@@ -99,7 +100,7 @@ pub trait ToolPerformer: Send + Sync {
         access: Arc<Access>,
         origin: ToolCallOrigin,
         args: Value,
-    ) -> BoxFuture<Result<ToolOutput, ToolError>>;
+    ) -> BoxFuture<Result<ToolOutput, Error>>;
 
     /// Renders the tools the section entry `entry` offered from each Pack
     /// in `offered`, for `model`, the model of the entry's first round, and

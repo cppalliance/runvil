@@ -1,4 +1,5 @@
-//! Tests for `ToolId`, `ToolInfo`, `ToolCatalog`, and tool output trust.
+//! Tests for `ToolId`, `ToolInfo`, `ToolCatalog`, tool output trust, and
+//! `tool_error`.
 
 use serde_json::json;
 
@@ -49,19 +50,6 @@ fn output_trust_serializes_as_its_snake_case_name() {
 }
 
 #[test]
-fn each_tool_error_kind_tags_as_its_snake_case_name() {
-    use super::ToolErrorKind;
-    for (kind, tag) in [
-        (ToolErrorKind::InvalidArguments, "invalid_arguments"),
-        (ToolErrorKind::Backend, "backend"),
-        (ToolErrorKind::Transport, "transport"),
-        (ToolErrorKind::Other, "other"),
-    ] {
-        assert_eq!(kind.tag(), tag);
-    }
-}
-
-#[test]
 fn tool_catalog_is_send_and_sync() {
     // The public catalog must stay `Send + Sync` so downstream callers can
     // share it across tasks; a representation change that dropped either
@@ -70,40 +58,23 @@ fn tool_catalog_is_send_and_sync() {
 }
 
 #[test]
-fn tool_error_classifies_and_hides_source() {
-    use super::{ToolError, ToolErrorKind};
-    assert_send_sync::<ToolError>();
+fn a_tool_error_shows_its_text_as_message_and_prose_and_keeps_a_cause_out_of_the_prose() {
+    use super::tool_error;
+    use crate::error::ErrorCode;
+    let error = tool_error(ErrorCode::ToolBackend, "backend failed");
+    assert_eq!(error.code, ErrorCode::ToolBackend);
+    assert_eq!(error.message, "backend failed");
+    assert_eq!(error.prose, "backend failed");
 
-    let plain = ToolError::message("model-safe");
-    assert_eq!(plain.kind(), ToolErrorKind::Other);
-    assert_eq!(plain.to_string(), "model-safe");
-
-    let transport = ToolError::message("net").with_kind(ToolErrorKind::Transport);
-    assert_eq!(transport.kind(), ToolErrorKind::Transport);
-
-    let sourced = ToolError::message("wrap").with_source(std::io::Error::other("cause"));
-    assert!(std::error::Error::source(&sourced).is_some());
-    assert!(
-        !sourced.to_string().contains("cause"),
-        "Display must not expose the tool error source: {sourced}"
-    );
-}
-
-#[test]
-fn a_tool_error_takes_its_kind_at_construction_and_a_source_as_a_builder() {
-    use super::{ToolError, ToolErrorKind};
-    let err = ToolError::new(ToolErrorKind::Backend, "backend failed")
-        .with_source(std::io::Error::other("boom"));
-    assert_eq!(err.kind(), ToolErrorKind::Backend);
-    assert_eq!(err.to_string(), "backend failed");
-    assert!(std::error::Error::source(&err).is_some());
-
-    let kept = ToolError::new(ToolErrorKind::Transport, "net down")
-        .with_source(std::io::Error::other("reset"));
+    let caused = error.with_cause(&std::io::Error::other("boom"));
     assert_eq!(
-        kept.kind(),
-        ToolErrorKind::Transport,
-        "attaching a source keeps the kind the error was built with"
+        caused.prose, "backend failed",
+        "a cause never reaches the prose the model reads"
+    );
+    assert!(
+        caused.message.contains("boom"),
+        "the message holds the cause: {}",
+        caused.message
     );
 }
 

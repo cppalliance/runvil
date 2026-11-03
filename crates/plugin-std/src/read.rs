@@ -13,7 +13,7 @@ mod window;
 #[cfg(test)]
 mod tests;
 
-use runvil_plugin::{Access, FileType, ToolError, ToolOutput, VfsError};
+use runvil_plugin::{Access, Error, ErrorCode, FileType, ToolOutput, VfsError, tool_error};
 use serde_json::Value;
 
 use crate::check::plural;
@@ -31,14 +31,14 @@ pub(crate) const BYTE_CAP: usize = 100_000;
 /// check.
 ///
 /// # Errors
-/// Returns an invalid-arguments [`ToolError`] naming the parameter for a
+/// Returns an invalid-arguments [`Error`] naming the parameter for a
 /// bad argument, and a message error for any other failure, worded for a
 /// model to read.
 pub(crate) fn call(
     access: &Access,
     definition: &Definition,
     args: &Value,
-) -> Result<ToolOutput, ToolError> {
+) -> Result<ToolOutput, Error> {
     let request = args::parse(definition, args)?;
     read_file(access, &definition.wire_name, &request, BYTE_CAP)
 }
@@ -51,21 +51,22 @@ fn read_file(
     tool: &str,
     request: &Request<'_>,
     cap: usize,
-) -> Result<ToolOutput, ToolError> {
+) -> Result<ToolOutput, Error> {
     let path = request.path;
-    let failed = |error: VfsError| ToolError::message(refusal(tool, path, &error));
+    let message = |text: String| tool_error(ErrorCode::ToolOther, text);
+    let failed = |error: VfsError| message(refusal(tool, path, &error));
     let stat = access.stat(path).map_err(failed)?;
-    check_type(path, stat.file_type).map_err(ToolError::message)?;
+    check_type(path, stat.file_type).map_err(message)?;
     let bytes = access
         .read_range(path, 0, MAX_FILE_BYTES + 1)
         .map_err(failed)?;
     if u64::try_from(bytes.len()).unwrap_or(u64::MAX) > MAX_FILE_BYTES {
-        return Err(ToolError::message(format!(
+        return Err(message(format!(
             "File is too large to read: {path} is over the limit of {MAX_FILE_BYTES} bytes."
         )));
     }
     if sniff_binary(&bytes) {
-        return Err(ToolError::message(format!(
+        return Err(message(format!(
             "File content is binary data, not text: {path}"
         )));
     }
@@ -75,7 +76,7 @@ fn read_file(
         return Ok(ToolOutput::untrusted("File is empty."));
     }
     let Some(window) = window::window(lines.len(), request.offset, request.limit) else {
-        return Err(ToolError::message(format!(
+        return Err(message(format!(
             "Offset {} is beyond the end of {path}, which has {}.",
             request.offset.unwrap_or_default(),
             plural(lines.len(), "line")

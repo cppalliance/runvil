@@ -9,7 +9,7 @@ mod ignore;
 mod tree;
 
 use runvil_plugin::testing::TestCall;
-use runvil_plugin::{OutputTrust, ToolError, ToolId, ToolOutput};
+use runvil_plugin::{Error, OutputTrust, ToolId, ToolOutput};
 use serde_json::Value;
 
 use super::args::Request;
@@ -45,7 +45,7 @@ fn definition() -> &'static Definition {
 
 /// Calls ListDir with `args` as the Pack does: the schema check first,
 /// then the tool.
-fn list(call: &TestCall, args: &Value) -> Result<ToolOutput, ToolError> {
+fn list(call: &TestCall, args: &Value) -> Result<ToolOutput, Error> {
     let definition = definition();
     crate::check::check(&definition.wire_name, &definition.parameters, args)?;
     super::call(call.context().access(), definition, args)
@@ -57,7 +57,7 @@ fn list_capped(
     target: &str,
     ignore: &[&str],
     cap: usize,
-) -> Result<ToolOutput, ToolError> {
+) -> Result<ToolOutput, Error> {
     let request = Request {
         target,
         ignore: ignore
@@ -69,14 +69,14 @@ fn list_capped(
 }
 
 /// The text of a successful listing, which must be untrusted output.
-fn text_of(result: Result<ToolOutput, ToolError>) -> String {
+fn text_of(result: Result<ToolOutput, Error>) -> String {
     let output = result.expect("the listing succeeds");
     assert_eq!(output.trust(), OutputTrust::Untrusted, "{}", output.text());
     output.text().to_owned()
 }
 
 /// The message of a failed listing.
-fn failure_of(result: Result<ToolOutput, ToolError>) -> String {
+fn failure_of(result: Result<ToolOutput, Error>) -> String {
     match result {
         Ok(output) => panic!("the listing fails, but it answered {:?}", output.text()),
         Err(error) => error.to_string(),

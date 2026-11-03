@@ -1,6 +1,6 @@
 //! What Grep refuses about its arguments, and in which order.
 
-use runvil_plugin::ToolErrorKind;
+use runvil_plugin::ErrorCode;
 use serde_json::{Value, json};
 
 use super::{definition, failure_of, grep, new_call, seeded};
@@ -28,7 +28,7 @@ fn a_missing_pattern_names_the_parameter() {
         error.to_string(),
         "std_Grep: `pattern` is required, and the call left it out"
     );
-    assert_eq!(error.kind(), ToolErrorKind::InvalidArguments);
+    assert_eq!(error.code, ErrorCode::ToolInvalidArguments);
 }
 
 #[test]
@@ -41,7 +41,7 @@ fn an_undeclared_key_is_refused_naming_it_and_listing_the_sorted_parameters() {
             "std_Grep: `context` is not a parameter of this tool. The parameters are {PARAMETERS}."
         )
     );
-    assert_eq!(error.kind(), ToolErrorKind::InvalidArguments);
+    assert_eq!(error.code, ErrorCode::ToolInvalidArguments);
 }
 
 #[test]

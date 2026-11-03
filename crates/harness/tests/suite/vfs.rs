@@ -9,8 +9,8 @@ use async_trait::async_trait;
 use harness::record::MemoryRecorder;
 use harness::vfs::{Origin, VfsError, VfsRef};
 use harness::{Harness, HostSnapshot, RunRequest};
+use runvil::error::Error;
 use runvil::vfs::{MemoryBackend, Op, Policy, Verdict, VfsPath};
-use runvil_plugin::ToolError;
 
 use crate::asker::{AskBroker, asker_host, broker_services};
 use crate::support::{Clock, Offline};
@@ -89,7 +89,7 @@ struct Edit {
 
 #[async_trait]
 impl AskBroker for Edit {
-    async fn wait(&self) -> Result<String, ToolError> {
+    async fn wait(&self) -> Result<String, Error> {
         let edit = self
             .vfs
             .acquire_store(Origin::new("desk edit"))

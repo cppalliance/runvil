@@ -2,7 +2,8 @@
 //! `prepare_dispatch` and `prepare_model_dispatch` over fixture tools as
 //! data and canned outputs, reported to a recorder.
 
-use runvil_types::tools::{OutputTrust, ToolError, ToolErrorKind, ToolInfo, ToolOutput};
+use runvil_types::error::ErrorCode;
+use runvil_types::tools::{OutputTrust, ToolInfo, ToolOutput, tool_error};
 
 use super::*;
 use crate::test_vm::{TEST_SECTION, echo_tool, test_nonce, tool_at};
@@ -72,7 +73,7 @@ fn prepare_dispatch_turns_a_canned_tool_error_into_the_typed_error() {
     let error = dispatch_body(
         &failing,
         None,
-        Err(ToolError::message("canned failure").with_kind(ToolErrorKind::Backend)),
+        Err(tool_error(ErrorCode::ToolBackend, "canned failure")),
         &test_nonce(),
         recorder.emitter(),
         TEST_SECTION,
@@ -105,7 +106,10 @@ fn a_model_issued_tool_failure_becomes_untrusted_failure_text_under_its_call_id(
     let outcome = prepare_model_dispatch(
         &failing,
         None,
-        Err(ToolError::message("the tool's own backend failed").with_kind(ToolErrorKind::Backend)),
+        Err(tool_error(
+            ErrorCode::ToolBackend,
+            "the tool's own backend failed",
+        )),
         &nonce,
         recorder.emitter(),
         TEST_SECTION,
@@ -217,7 +221,7 @@ fn the_listing_rule_needs_the_flag_and_untrusted_output() {
     let failed = prepare_dispatch(
         &binding("tool", &listing_tool()),
         None,
-        Err(ToolError::message("the servers are down")),
+        Err(tool_error(ErrorCode::ToolOther, "the servers are down")),
         &nonce,
         Recorder::default().emitter(),
         TEST_SECTION,

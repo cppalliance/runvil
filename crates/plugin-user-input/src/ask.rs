@@ -4,8 +4,8 @@
 use std::sync::Arc;
 
 use runvil_plugin::{
-    HostServices, Pack, PackFuture, PackId, ToolContext, ToolError, ToolErrorKind, ToolId,
-    ToolInfo, ToolOutput,
+    Error, ErrorCode, HostServices, Pack, PackFuture, PackId, ToolContext, ToolId, ToolInfo,
+    ToolOutput, tool_error,
 };
 use serde_json::{Value, json};
 
@@ -26,16 +26,19 @@ pub(crate) fn construct(
     name: &PackId,
     config: Value,
     _services: &HostServices,
-) -> Result<Arc<dyn Pack>, ToolError> {
+) -> Result<Arc<dyn Pack>, Error> {
     if !(config.is_null() || config == json!({})) {
-        return Err(ToolError::message("user-input takes no configuration"));
+        return Err(tool_error(
+            ErrorCode::ToolOther,
+            "user-input takes no configuration",
+        ));
     }
     let id = ToolId::parse(&format!("{name}/{ASK}")).map_err(|e| {
-        ToolError::new(
-            ToolErrorKind::Backend,
+        tool_error(
+            ErrorCode::ToolBackend,
             "user-input could not name its ask tool",
         )
-        .with_source(e)
+        .with_cause(&e)
     })?;
     let ask = ToolInfo::new(
         id,
@@ -55,13 +58,13 @@ impl Pack for UserInput {
         &'a self,
         cx: ToolContext<'a>,
         _args: Value,
-    ) -> PackFuture<'a, Result<ToolOutput, ToolError>> {
+    ) -> PackFuture<'a, Result<ToolOutput, Error>> {
         Box::pin(async move {
             // The Pack's needs keep a run without a broker from seeing
             // the ask tool, so this branch is defensive.
-            let broker = cx
-                .service(&INPUT_BROKER)
-                .ok_or_else(|| ToolError::message("no operator is connected to this run"))?;
+            let broker = cx.service(&INPUT_BROKER).ok_or_else(|| {
+                tool_error(ErrorCode::ToolOther, "no operator is connected to this run")
+            })?;
             broker.wait().await.map(ToolOutput::trusted)
         })
     }

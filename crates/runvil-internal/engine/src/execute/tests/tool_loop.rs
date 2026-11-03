@@ -153,8 +153,8 @@ fn tool_loop_dispatches_then_returns_text() {
 
 #[test]
 fn a_failing_tool_becomes_an_untrusted_error_result_and_the_loop_continues() {
-    // A bound tool's own failure is the call's result record - the ToolError
-    // message, nonce-wrapped as untrusted - with TOOL_CALL_FAILED firing
+    // A bound tool's own failure is the call's result record - the tool
+    // error's prose, nonce-wrapped as untrusted - with TOOL_CALL_FAILED firing
     // alongside it, and the loop continues to the terminal reply.
     let gateway = ScriptedChat::new(vec![
         calls(&[("call_x", "echo", "{\"value\":\"x\"}")]),

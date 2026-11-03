@@ -2,7 +2,7 @@
 //! any path is looked at.
 
 use regex::{Regex, RegexBuilder};
-use runvil_plugin::ToolError;
+use runvil_plugin::Error;
 use serde_json::Value;
 
 use super::types;
@@ -62,11 +62,8 @@ const ACCEPTED_UNDECLARED: &str = "-n";
 /// compiled before any filesystem call.
 ///
 /// # Errors
-/// Returns an invalid-arguments [`ToolError`] naming the parameter.
-pub(super) fn parse<'a>(
-    definition: &Definition,
-    args: &'a Value,
-) -> Result<Request<'a>, ToolError> {
+/// Returns an invalid-arguments [`Error`] naming the parameter.
+pub(super) fn parse<'a>(definition: &Definition, args: &'a Value) -> Result<Request<'a>, Error> {
     let tool = definition.wire_name.as_str();
     let mut declared = args.clone();
     if let Some(object) = declared.as_object_mut() {
@@ -119,7 +116,7 @@ pub(super) fn parse<'a>(
 
 /// Refuses `-n` unless it is `true` or left out, because Grep always shows
 /// line numbers.
-fn refuse_line_numbers_off(tool: &str, args: &Value) -> Result<(), ToolError> {
+fn refuse_line_numbers_off(tool: &str, args: &Value) -> Result<(), Error> {
     match args.get(ACCEPTED_UNDECLARED) {
         None | Some(Value::Null | Value::Bool(true)) => Ok(()),
         Some(_) => Err(invalid_arguments(
@@ -134,7 +131,7 @@ fn refuse_line_numbers_off(tool: &str, args: &Value) -> Result<(), ToolError> {
 ///
 /// `unit` names what a context line count counts, and is empty for
 /// `head_limit` and `offset`, whose refusal is shorter.
-fn number(tool: &str, args: &Value, name: &str, unit: &str) -> Result<Option<f64>, ToolError> {
+fn number(tool: &str, args: &Value, name: &str, unit: &str) -> Result<Option<f64>, Error> {
     let Some(value) = args.get(name).filter(|value| !value.is_null()) else {
         return Ok(None);
     };
@@ -169,7 +166,7 @@ fn count(value: f64, up: bool) -> usize {
 
 /// The extensions of the `type` the call names, or `None` when it names
 /// none. An empty string names none.
-fn kind(tool: &str, args: &Value) -> Result<Option<&'static [&'static str]>, ToolError> {
+fn kind(tool: &str, args: &Value) -> Result<Option<&'static [&'static str]>, Error> {
     let Some(name) = text(args, "type") else {
         return Ok(None);
     };
@@ -185,7 +182,7 @@ fn kind(tool: &str, args: &Value) -> Result<Option<&'static [&'static str]>, Too
 }
 
 /// The `glob` the call names, compiled, or `None` when it names none.
-fn glob<'a>(tool: &str, args: &'a Value) -> Result<Option<(&'a str, Matcher)>, ToolError> {
+fn glob<'a>(tool: &str, args: &'a Value) -> Result<Option<(&'a str, Matcher)>, Error> {
     let Some(pattern) = text(args, "glob") else {
         return Ok(None);
     };
@@ -196,7 +193,7 @@ fn glob<'a>(tool: &str, args: &'a Value) -> Result<Option<(&'a str, Matcher)>, T
 
 /// The `path` the call names, or `None` when it names none, refused when
 /// it is only whitespace.
-fn path<'a>(tool: &str, args: &'a Value) -> Result<Option<&'a str>, ToolError> {
+fn path<'a>(tool: &str, args: &'a Value) -> Result<Option<&'a str>, Error> {
     let Some(path) = text(args, "path") else {
         return Ok(None);
     };
@@ -231,7 +228,7 @@ fn flag(args: &Value, name: &str) -> bool {
 /// Matching is case-sensitive unless `-i` is set, and `^` and `$` match at
 /// each line. With `multiline`, `.` also matches a line break and a line
 /// break is `\r\n` or `\n`. `literal` matches the pattern as plain text.
-fn compile(tool: &str, pattern: &str, args: &Value, multiline: bool) -> Result<Regex, ToolError> {
+fn compile(tool: &str, pattern: &str, args: &Value, multiline: bool) -> Result<Regex, Error> {
     let source = if flag(args, "literal") {
         regex::escape(pattern)
     } else {

@@ -5,7 +5,7 @@
 use std::time::Duration;
 
 use runvil_plugin::testing::TestCall;
-use runvil_plugin::{OutputTrust, ToolErrorKind, ToolId};
+use runvil_plugin::{ErrorCode, OutputTrust, ToolId};
 use serde_json::json;
 
 use crate::fixture::Fixture;
@@ -53,7 +53,7 @@ async fn a_script_calls_is_error_result_is_the_same_backend_error_as_a_models() 
     )
     .await
     .expect_err("isError fails");
-    assert_eq!(error.kind(), ToolErrorKind::Backend);
+    assert_eq!(error.code, ErrorCode::ToolBackend);
     assert_eq!(error.to_string(), "it failed");
 }
 
@@ -83,7 +83,7 @@ async fn an_is_error_result_becomes_a_backend_error() {
     let error = call(&pack, "GitHub", "fail", json!({}))
         .await
         .expect_err("isError fails");
-    assert_eq!(error.kind(), ToolErrorKind::Backend);
+    assert_eq!(error.code, ErrorCode::ToolBackend);
     assert_eq!(error.to_string(), "it failed");
 }
 
@@ -96,7 +96,7 @@ async fn arguments_that_are_not_an_object_are_refused_before_anything_is_sent() 
     let error = call(&pack, "GitHub", "Echo", json!([1]))
         .await
         .expect_err("refused");
-    assert_eq!(error.kind(), ToolErrorKind::InvalidArguments);
+    assert_eq!(error.code, ErrorCode::ToolInvalidArguments);
     assert_eq!(
         error.to_string(),
         "MCP tool arguments must be a JSON object"
@@ -110,7 +110,7 @@ async fn arguments_that_are_not_an_object_are_refused_before_anything_is_sent() 
         let error = invoke(&pack, "call_dynamic_tool", args)
             .await
             .expect_err("refused");
-        assert_eq!(error.kind(), ToolErrorKind::InvalidArguments, "{error}");
+        assert_eq!(error.code, ErrorCode::ToolInvalidArguments, "{error}");
     }
     assert!(!fixture.methods().contains(&"tools/call".to_owned()));
 }
@@ -124,12 +124,12 @@ async fn an_unknown_namespace_or_tool_is_refused_without_a_call() {
     let error = call(&pack, "github", "Echo", json!({}))
         .await
         .expect_err("namespaces match exactly");
-    assert_eq!(error.kind(), ToolErrorKind::InvalidArguments);
+    assert_eq!(error.code, ErrorCode::ToolInvalidArguments);
     assert!(error.to_string().contains("namespace `github`"), "{error}");
     let error = call(&pack, "GitHub", "echo", json!({}))
         .await
         .expect_err("tool names match exactly");
-    assert_eq!(error.kind(), ToolErrorKind::InvalidArguments);
+    assert_eq!(error.code, ErrorCode::ToolInvalidArguments);
     assert!(error.to_string().contains("no tool `echo`"), "{error}");
     assert!(!fixture.methods().contains(&"tools/call".to_owned()));
 }

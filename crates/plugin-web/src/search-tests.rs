@@ -9,7 +9,7 @@ use crate::provider::{
     Freshness, SafeSearch, SearchError, SearchErrorKind, SearchProvider, SearchQuery, SearchResult,
     SearchResults,
 };
-use runvil_plugin::{OutputTrust, ToolError, ToolErrorKind};
+use runvil_plugin::{Error, ErrorCode, OutputTrust};
 
 /// A provider that records every query and answers each with `reply`.
 struct Fake {
@@ -60,7 +60,7 @@ fn tool() -> (WebSearch, Arc<Fake>) {
 
 /// Calls the tool with `args`, expecting a refusal, and checks the
 /// provider was never asked.
-async fn refused(args: serde_json::Value) -> ToolError {
+async fn refused(args: serde_json::Value) -> Error {
     let (tool, fake) = tool();
     let err = tool
         .call(args)
@@ -240,7 +240,7 @@ async fn success_body_with_empty_url_is_rejected() {
         .call(serde_json::json!({ "query": "hi" }))
         .await
         .expect_err("an empty result url must be rejected");
-    assert_eq!(err.kind(), ToolErrorKind::Backend);
+    assert_eq!(err.code, ErrorCode::ToolBackend);
     assert_eq!(
         err.to_string(),
         "web_search: malformed search response: result 1 has an empty url"
@@ -263,22 +263,17 @@ fn backend_failure() -> Result<SearchResults, SearchError> {
 }
 
 #[tokio::test]
-async fn provider_errors_map_their_kind_and_message_and_stay_the_source() {
+async fn provider_errors_map_their_kind_and_message_and_keep_the_cause_out_of_the_prose() {
     let (tool, _fake) = tool_answering(transport_failure);
     let err = tool
         .call(serde_json::json!({ "query": "hi" }))
         .await
         .expect_err("a transport failure fails the call");
-    assert_eq!(err.kind(), ToolErrorKind::Transport);
-    assert_eq!(err.to_string(), "web_search: request failed");
-    let source = std::error::Error::source(&err)
-        .and_then(|source| source.downcast_ref::<SearchError>())
-        .expect("the provider error is the tool error's source");
-    assert_eq!(source.kind(), SearchErrorKind::Transport);
+    assert_eq!(err.code, ErrorCode::ToolTransport);
+    assert_eq!(err.prose, "web_search: request failed");
     assert_eq!(
-        std::error::Error::source(source).map(ToString::to_string),
-        Some("connection refused".to_owned()),
-        "the provider's own cause survives the trait boundary"
+        err.message, "web_search: request failed: connection refused",
+        "the provider's own cause survives the trait boundary, in the message"
     );
 
     let (tool, _fake) = tool_answering(backend_failure);
@@ -286,29 +281,26 @@ async fn provider_errors_map_their_kind_and_message_and_stay_the_source() {
         .call(serde_json::json!({ "query": "hi" }))
         .await
         .expect_err("a backend failure fails the call");
-    assert_eq!(err.kind(), ToolErrorKind::Backend);
-    assert_eq!(
-        err.to_string(),
-        "web_search: backend returned 502: upstream down"
-    );
+    assert_eq!(err.code, ErrorCode::ToolBackend);
+    assert_eq!(err.prose, "web_search: backend returned 502: upstream down");
 }
 
 #[tokio::test]
 async fn rejects_missing_query() {
     let err = refused(serde_json::json!({ "count": 3 })).await;
-    assert_eq!(err.kind(), ToolErrorKind::InvalidArguments);
+    assert_eq!(err.code, ErrorCode::ToolInvalidArguments);
 }
 
 #[tokio::test]
 async fn rejects_empty_and_oversized_query() {
     assert_eq!(
-        refused(serde_json::json!({ "query": "   " })).await.kind(),
-        ToolErrorKind::InvalidArguments
+        refused(serde_json::json!({ "query": "   " })).await.code,
+        ErrorCode::ToolInvalidArguments
     );
     let long = "x".repeat(MAX_QUERY_LEN + 1);
     assert_eq!(
-        refused(serde_json::json!({ "query": long })).await.kind(),
-        ToolErrorKind::InvalidArguments
+        refused(serde_json::json!({ "query": long })).await.code,
+        ErrorCode::ToolInvalidArguments
     );
 }
 
@@ -316,43 +308,46 @@ async fn rejects_empty_and_oversized_query() {
 async fn rejects_unknown_fields_and_bad_optional_types() {
     // Unknown field.
     let err = refused(serde_json::json!({ "query": "hi", "nonsense": 1 })).await;
-    assert_eq!(err.kind(), ToolErrorKind::InvalidArguments);
+    assert_eq!(err.code, ErrorCode::ToolInvalidArguments);
+    assert_eq!(err.prose, "web_search: invalid arguments");
     assert!(
-        std::error::Error::source(&err).is_some(),
-        "a deserialization failure must preserve its serde source"
+        err.message.starts_with("web_search: invalid arguments: ")
+            && err.message.contains("nonsense"),
+        "a deserialization failure must keep serde's text in the message: {}",
+        err.message
     );
     // Wrong type for count.
     assert_eq!(
         refused(serde_json::json!({ "query": "hi", "count": "five" }))
             .await
-            .kind(),
-        ToolErrorKind::InvalidArguments
+            .code,
+        ErrorCode::ToolInvalidArguments
     );
     // Out-of-range count.
     assert_eq!(
         refused(serde_json::json!({ "query": "hi", "count": MAX_COUNT + 1 }))
             .await
-            .kind(),
-        ToolErrorKind::InvalidArguments
+            .code,
+        ErrorCode::ToolInvalidArguments
     );
     assert_eq!(
         refused(serde_json::json!({ "query": "hi", "count": 0 }))
             .await
-            .kind(),
-        ToolErrorKind::InvalidArguments
+            .code,
+        ErrorCode::ToolInvalidArguments
     );
     // Unknown enum values.
     assert_eq!(
         refused(serde_json::json!({ "query": "hi", "freshness": "yesterday" }))
             .await
-            .kind(),
-        ToolErrorKind::InvalidArguments
+            .code,
+        ErrorCode::ToolInvalidArguments
     );
     assert_eq!(
         refused(serde_json::json!({ "query": "hi", "safesearch": "maybe" }))
             .await
-            .kind(),
-        ToolErrorKind::InvalidArguments
+            .code,
+        ErrorCode::ToolInvalidArguments
     );
 }
 
@@ -361,14 +356,14 @@ async fn rejects_invalid_domain_lists() {
     assert_eq!(
         refused(serde_json::json!({ "query": "hi", "include_domains": ["ok.com", "bad/host"] }))
             .await
-            .kind(),
-        ToolErrorKind::InvalidArguments
+            .code,
+        ErrorCode::ToolInvalidArguments
     );
     let many: Vec<String> = (0..30).map(|i| format!("h{i}.com")).collect();
     assert_eq!(
         refused(serde_json::json!({ "query": "hi", "exclude_domains": many }))
             .await
-            .kind(),
-        ToolErrorKind::InvalidArguments
+            .code,
+        ErrorCode::ToolInvalidArguments
     );
 }

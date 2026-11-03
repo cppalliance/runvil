@@ -6,22 +6,26 @@
 //! model and finish reason, never the bodies; a `Render` answer keeps its
 //! rendered tools whole; a `ToolCall` answer projects to its text and
 //! trust; and every failure projects to its kind's tag and its display
-//! text. Each record round-trips through serde, as a run log and a replay
+//! text, a tool call's to its code's tag and its prose. Each record round-trips through serde, as a run log and a replay
 //! depend on, the public JSON record of every kind is the typed record's
 //! JSON and reads back identical, and a record written before the render
-//! existed reads unchanged.
+//! existed reads unchanged. The store answer's records are in the `store`
+//! child.
 
 use std::fmt;
 
 use runvil_model_client::client::{CompletionResult, RawExchange, ToolCall};
 use runvil_model_client::model::CompletionErrorKind;
 use runvil_types::packs::PackId;
-use runvil_types::tools::{OutputTrust, ToolErrorKind};
+use runvil_types::tools::{OutputTrust, tool_error};
 use serde::de::DeserializeOwned;
 use serde_json::json;
 
 use super::*;
 use crate::test_support::scenario::test_binding;
+
+#[path = "effect-tests-store.rs"]
+mod store;
 
 /// Serializes the answer record and reads it back.
 #[track_caller]
@@ -312,16 +316,38 @@ fn a_tool_call_answer_records_the_outputs_text_and_trust() {
 }
 
 #[test]
-fn a_failed_tool_call_answer_records_the_errors_display_text_and_hides_its_source() {
-    let error = ToolError::new(ToolErrorKind::Backend, "backend failed")
-        .with_source(std::io::Error::other("boom"));
+fn a_failed_tool_call_answer_records_the_errors_prose_and_hides_its_cause() {
+    let error = tool_error(ErrorCode::ToolBackend, "backend failed")
+        .with_cause(&std::io::Error::other("boom"));
+    assert!(
+        error.message.contains("boom"),
+        "the message holds the cause"
+    );
     let record = EffectAnswer::ToolCall(Err(error)).to_record();
     assert_eq!(
         record,
         AnswerRecord::ToolCall(Err(FailureRecord::new("backend", "backend failed"))),
-        "the display text is the model-safe message; the source stays behind it"
+        "the prose is the model-safe text; the cause stays in the message"
     );
     assert_eq!(answer_round_trip(&record), record);
+}
+
+#[test]
+fn a_failed_tool_call_answer_records_each_tool_codes_tag_and_any_other_code_as_other() {
+    for (code, tag) in [
+        (ErrorCode::ToolInvalidArguments, "invalid_arguments"),
+        (ErrorCode::ToolBackend, "backend"),
+        (ErrorCode::ToolTransport, "transport"),
+        (ErrorCode::ToolOther, "other"),
+        (ErrorCode::Internal, "other"),
+    ] {
+        let record = EffectAnswer::ToolCall(Err(tool_error(code, "failed"))).to_record();
+        assert_eq!(
+            record,
+            AnswerRecord::ToolCall(Err(FailureRecord::new(tag, "failed"))),
+            "{code:?}"
+        );
+    }
 }
 
 #[test]
@@ -335,8 +361,8 @@ fn a_failure_record_of_each_kind_round_trips_through_json() {
             r#"{"Chat":{"Err":{"kind":"rate_limited","message":"the model backend is limiting the request rate"}}}"#,
         ),
         (
-            EffectAnswer::ToolCall(Err(ToolError::new(
-                ToolErrorKind::InvalidArguments,
+            EffectAnswer::ToolCall(Err(tool_error(
+                ErrorCode::ToolInvalidArguments,
                 "path is required",
             ))),
             r#"{"ToolCall":{"Err":{"kind":"invalid_arguments","message":"path is required"}}}"#,
@@ -356,63 +382,6 @@ fn a_failure_record_of_each_kind_round_trips_through_json() {
         );
         assert_eq!(answer_round_trip(&record), record);
     }
-}
-
-#[test]
-fn the_store_answer_records_byte_identical_json_for_every_outcome() {
-    // `AnswerRecord::Vfs` holds the `VfsOutcome` itself, and its JSON
-    // is a fixed run-log format: the unit outcome as a bare string, the
-    // payload outcomes in serde's externally tagged form.
-    let unit = EffectAnswer::Vfs(Ok(VfsOutcome::Unit)).to_record();
-    assert_eq!(
-        serde_json::to_string(&unit).expect("a store answer records"),
-        r#"{"Vfs":{"Ok":"Unit"}}"#
-    );
-    assert_eq!(answer_round_trip(&unit), unit);
-
-    let text = EffectAnswer::Vfs(Ok(VfsOutcome::Text("the read".to_owned()))).to_record();
-    assert_eq!(
-        serde_json::to_string(&text).expect("a store answer records"),
-        r#"{"Vfs":{"Ok":{"Text":"the read"}}}"#
-    );
-    assert_eq!(answer_round_trip(&text), text);
-
-    let paths = EffectAnswer::Vfs(Ok(VfsOutcome::Paths(vec![
-        "a.txt".to_owned(),
-        "b.txt".to_owned(),
-    ])))
-    .to_record();
-    assert_eq!(
-        serde_json::to_string(&paths).expect("a store answer records"),
-        r#"{"Vfs":{"Ok":{"Paths":["a.txt","b.txt"]}}}"#
-    );
-    assert_eq!(answer_round_trip(&paths), paths);
-
-    let flag = EffectAnswer::Vfs(Ok(VfsOutcome::Bool(true))).to_record();
-    assert_eq!(
-        serde_json::to_string(&flag).expect("a store answer records"),
-        r#"{"Vfs":{"Ok":{"Bool":true}}}"#
-    );
-    assert_eq!(answer_round_trip(&flag), flag);
-}
-
-#[test]
-fn a_failed_store_answer_records_the_vfs_errors_tag_and_display_text() {
-    let error = VfsError::NotFound {
-        path: "missing.txt".to_owned(),
-    };
-    let expected = error.to_string();
-    assert_eq!(expected, "not found: missing.txt");
-    let record = EffectAnswer::Vfs(Err(error)).to_record();
-    assert_eq!(
-        record,
-        AnswerRecord::Vfs(Err(FailureRecord::new("not_found", expected)))
-    );
-    assert_eq!(
-        serde_json::to_string(&record).expect("a store answer records"),
-        r#"{"Vfs":{"Err":{"kind":"not_found","message":"not found: missing.txt"}}}"#
-    );
-    assert_eq!(answer_round_trip(&record), record);
 }
 
 /// Checks that `record`, a public record, is the JSON of `typed`, and that

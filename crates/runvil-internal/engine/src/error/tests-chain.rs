@@ -6,7 +6,8 @@
 //! the store probe names a missing store.
 
 use runvil_lua::VfsOp;
-use runvil_types::tools::{ToolError, ToolErrorKind};
+use runvil_types::error::ErrorCode;
+use runvil_types::tools::tool_error;
 use runvil_vfs::VfsError;
 
 use super::*;
@@ -34,7 +35,7 @@ fn cause_bearing() -> Vec<Error> {
         message: "unexpected symbol near <eof>".to_owned(),
         incomplete_input: true,
     };
-    let tool = ToolError::new(ToolErrorKind::Backend, "the backend refused");
+    let tool = tool_error(ErrorCode::ToolBackend, "the backend refused");
     let schema = runvil_model_client::detail::tool_schema_new("echo", "", serde_json::json!([]))
         .expect_err("an array is not an object schema");
     vec![
@@ -52,7 +53,7 @@ fn cause_bearing() -> Vec<Error> {
             cause: Box::new(syntax),
         },
         Error::Tool {
-            message: tool.to_string(),
+            message: tool.prose.clone(),
             cause: Box::new(tool),
         },
         Error::store_op(

@@ -29,10 +29,11 @@ mod record;
 use std::sync::Arc;
 use std::time::Duration;
 
+use runvil_types::error::ErrorCode;
 use runvil_types::event::ReplyOrigin;
 use runvil_types::ids::RoundId;
 pub use runvil_types::tools::{ToolCallOrigin, ToolCaller};
-use runvil_types::tools::{ToolError, ToolId, ToolInfo, ToolOutput};
+use runvil_types::tools::{ToolId, ToolInfo, ToolOutput};
 use runvil_vfs::{Access, VfsError};
 use serde::Serialize;
 use serde_json::Value;
@@ -332,7 +333,7 @@ pub enum EffectAnswer {
     Render(Vec<PackToolSets<ToolInfo>>),
     /// The tool's own output or its own failure, before the Engine applies
     /// its trust rule.
-    ToolCall(std::result::Result<ToolOutput, ToolError>),
+    ToolCall(std::result::Result<ToolOutput, runvil_types::error::Error>),
     /// The outcome of the operation on the run's store view, or the
     /// store's own structured failure.
     Vfs(std::result::Result<VfsOutcome, VfsError>),
@@ -376,7 +377,10 @@ impl EffectAnswer {
             EffectAnswer::Render(rendered) => AnswerRecord::Render(rendered.clone()),
             EffectAnswer::ToolCall(result) => AnswerRecord::ToolCall(match result {
                 Ok(output) => Ok(ToolAnswerRecord::new(output.text(), output.trust())),
-                Err(error) => Err(FailureRecord::new(error.kind().tag(), error.to_string())),
+                Err(error) => Err(FailureRecord::new(
+                    tool_failure_tag(error.code),
+                    error.prose.clone(),
+                )),
             }),
             EffectAnswer::Vfs(result) => AnswerRecord::Vfs(match result {
                 Ok(outcome) => Ok(outcome.clone()),
@@ -385,6 +389,18 @@ impl EffectAnswer {
             EffectAnswer::Timer => AnswerRecord::Timer,
             EffectAnswer::Dropped => AnswerRecord::Dropped,
         }
+    }
+}
+
+/// The tag a failed tool call's record keeps. Stored run logs hold these
+/// tags, so each tool code keeps the tag its kind had, and any other code is
+/// `other`.
+fn tool_failure_tag(code: ErrorCode) -> &'static str {
+    match code {
+        ErrorCode::ToolInvalidArguments => "invalid_arguments",
+        ErrorCode::ToolBackend => "backend",
+        ErrorCode::ToolTransport => "transport",
+        _ => "other",
     }
 }
 

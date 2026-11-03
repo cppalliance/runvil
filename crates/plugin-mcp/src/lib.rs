@@ -107,7 +107,8 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use runvil_plugin::{
-    Error, HostServices, Pack, PackId, PackInfo, PackRegistry, ServiceKey, TOKIO_RUNTIME, ToolError,
+    Error, ErrorCode, HostServices, Pack, PackId, PackInfo, PackRegistry, ServiceKey,
+    TOKIO_RUNTIME, tool_error,
 };
 use serde_json::{Map, Value};
 use tokio::runtime::Handle;
@@ -150,19 +151,23 @@ fn construct(
     name: &PackId,
     config: Value,
     services: &HostServices,
-) -> Result<Arc<dyn Pack>, ToolError> {
+) -> Result<Arc<dyn Pack>, Error> {
     let entries = match config {
         Value::Null => Map::new(),
         Value::Object(entries) => entries,
         _ => {
-            return Err(ToolError::message(
+            return Err(tool_error(
+                ErrorCode::ToolOther,
                 "the MCP configuration must be a JSON object of servers by name, as the \
                  `mcpServers` object of an mcp.json file is",
             ));
         }
     };
     let runtime = services.get(&RUNTIME).ok_or_else(|| {
-        ToolError::message("MCP needs runvil/tokio-runtime, and this host provides none")
+        tool_error(
+            ErrorCode::ToolOther,
+            "MCP needs runvil/tokio-runtime, and this host provides none",
+        )
     })?;
     let env = |key: &str| std::env::var(key).ok();
     let home = std::env::home_dir().map(|dir| dir.to_string_lossy().into_owned());

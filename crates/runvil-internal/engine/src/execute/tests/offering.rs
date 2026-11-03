@@ -21,7 +21,7 @@ fn tool_at(id: &str, schema: Value) -> FnTool {
     let tool = FnTool::new(id, schema, move |args| {
         let value = args["value"]
             .as_str()
-            .ok_or_else(|| ToolError::message("the value argument is required"))?;
+            .ok_or_else(|| tool_error(ErrorCode::ToolOther, "the value argument is required"))?;
         Ok(ToolOutput::trusted(format!("{label}: {value}")))
     });
     tool.description(id)

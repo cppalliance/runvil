@@ -4,7 +4,7 @@ use std::time::Duration;
 
 use rmcp::ServiceError;
 use rmcp::model::{CallToolResult, ServerResult};
-use runvil_plugin::ToolErrorKind;
+use runvil_plugin::ErrorCode;
 use serde_json::{Value, json};
 
 use super::{output, render, service_error};
@@ -91,14 +91,14 @@ fn an_is_error_result_is_a_backend_error_with_the_servers_text() {
         { "type": "text", "text": "no such paper" }
     ] })))
     .expect_err("an isError result fails");
-    assert_eq!(error.kind(), ToolErrorKind::Backend);
+    assert_eq!(error.code, ErrorCode::ToolBackend);
     assert_eq!(error.to_string(), "no such paper");
 }
 
 #[test]
 fn an_is_error_result_without_text_still_says_it_failed() {
     let error = render(&result(json!({ "isError": true, "content": [] }))).expect_err("fails");
-    assert_eq!(error.kind(), ToolErrorKind::Backend);
+    assert_eq!(error.code, ErrorCode::ToolBackend);
     assert!(error.to_string().contains("error"));
 }
 
@@ -115,15 +115,15 @@ fn a_timeout_is_a_transport_error_naming_the_deadline() {
     let error = service_error(&ServiceError::Timeout {
         timeout: Duration::from_secs(300),
     });
-    assert_eq!(error.kind(), ToolErrorKind::Transport);
+    assert_eq!(error.code, ErrorCode::ToolTransport);
     assert!(error.to_string().contains("300 seconds"));
 }
 
 #[test]
 fn a_lost_connection_is_a_transport_error() {
     assert_eq!(
-        service_error(&ServiceError::TransportClosed).kind(),
-        ToolErrorKind::Transport
+        service_error(&ServiceError::TransportClosed).code,
+        ErrorCode::ToolTransport
     );
 }
 
@@ -140,7 +140,7 @@ fn a_dropped_transport_error_does_not_repeat_the_url_in_its_text() {
             "error sending request for url (http://host/mcp?key=ghp_secret)".into(),
         ),
     ));
-    assert_eq!(error.kind(), ToolErrorKind::Transport);
+    assert_eq!(error.code, ErrorCode::ToolTransport);
     assert!(!error.to_string().contains("ghp_secret"), "{error}");
     assert!(!error.to_string().contains("http://"), "{error}");
 }
@@ -150,14 +150,14 @@ fn a_json_rpc_error_from_the_server_is_a_backend_error_with_its_message() {
     let error = service_error(&ServiceError::McpError(rmcp::ErrorData::invalid_params(
         "bad id", None,
     )));
-    assert_eq!(error.kind(), ToolErrorKind::Backend);
+    assert_eq!(error.code, ErrorCode::ToolBackend);
     assert!(error.to_string().contains("bad id"));
 }
 
 #[test]
 fn a_failed_request_maps_through_output_and_a_good_one_renders() {
     let failed = output(Err(ServiceError::TransportClosed)).expect_err("fails");
-    assert_eq!(failed.kind(), ToolErrorKind::Transport);
+    assert_eq!(failed.code, ErrorCode::ToolTransport);
     let good = output(Ok(ServerResult::CallToolResult(result(
         json!({ "content": [{ "type": "text", "text": "fine" }] }),
     ))))
@@ -168,5 +168,5 @@ fn a_failed_request_maps_through_output_and_a_good_one_renders() {
 #[test]
 fn an_answer_that_is_not_a_tool_result_is_a_backend_error() {
     let other = output(Ok(ServerResult::empty(()))).expect_err("not a tool result");
-    assert_eq!(other.kind(), ToolErrorKind::Backend);
+    assert_eq!(other.code, ErrorCode::ToolBackend);
 }

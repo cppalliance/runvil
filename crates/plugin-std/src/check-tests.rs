@@ -1,7 +1,7 @@
 //! Argument checking: a matching call passes, and each kind of mismatch
 //! fails naming the parameter.
 
-use runvil_plugin::ToolErrorKind;
+use runvil_plugin::ErrorCode;
 use serde_json::json;
 
 use super::{check, invalid_pattern, plural, refuse_blank, refuse_unknown};
@@ -22,12 +22,12 @@ fn replace() -> serde_json::Value {
     })
 }
 
-/// The refusal of `args` against `schema`, as the message and kind.
-fn refused(schema: &serde_json::Value, args: &serde_json::Value) -> (String, ToolErrorKind) {
+/// The refusal of `args` against `schema`, as the message and code.
+fn refused(schema: &serde_json::Value, args: &serde_json::Value) -> (String, ErrorCode) {
     let Err(error) = check("StrReplace", schema, args) else {
         panic!("{args} is refused");
     };
-    (error.to_string(), error.kind())
+    (error.to_string(), error.code)
 }
 
 #[test]
@@ -57,7 +57,7 @@ fn a_missing_required_parameter_fails_naming_it() {
         message,
         "std_StrReplace: `new_string` is required, and the call left it out"
     );
-    assert_eq!(kind, ToolErrorKind::InvalidArguments);
+    assert_eq!(kind, ErrorCode::ToolInvalidArguments);
 }
 
 #[test]
@@ -68,7 +68,7 @@ fn a_required_parameter_passed_as_null_fails_naming_it() {
         message,
         "std_StrReplace: `path` is required, and the call passed null"
     );
-    assert_eq!(kind, ToolErrorKind::InvalidArguments);
+    assert_eq!(kind, ErrorCode::ToolInvalidArguments);
 }
 
 #[test]
@@ -79,7 +79,7 @@ fn a_parameter_of_the_wrong_type_fails_naming_it_and_the_value() {
         message,
         "std_StrReplace: `new_string` must be a JSON string, and the call passed 2"
     );
-    assert_eq!(kind, ToolErrorKind::InvalidArguments);
+    assert_eq!(kind, ErrorCode::ToolInvalidArguments);
 }
 
 #[test]
@@ -90,7 +90,7 @@ fn arguments_that_are_not_an_object_fail() {
         message,
         "std_StrReplace: the arguments must be a JSON object"
     );
-    assert_eq!(kind, ToolErrorKind::InvalidArguments);
+    assert_eq!(kind, ErrorCode::ToolInvalidArguments);
 }
 
 #[test]
@@ -106,7 +106,7 @@ fn a_value_outside_an_enum_fails_naming_the_allowed_values() {
         message,
         "std_StrReplace: `output_mode` must be one of \"content\", \"count\", and the call passed \"files\""
     );
-    assert_eq!(kind, ToolErrorKind::InvalidArguments);
+    assert_eq!(kind, ErrorCode::ToolInvalidArguments);
 }
 
 #[test]
@@ -165,7 +165,7 @@ fn an_undeclared_key_is_refused_naming_it_and_listing_the_parameters_sorted() {
         "std_Read: `lines` is not a parameter of this tool. \
          The parameters are `limit`, `offset` and `path`."
     );
-    assert_eq!(error.kind(), ToolErrorKind::InvalidArguments);
+    assert_eq!(error.code, ErrorCode::ToolInvalidArguments);
 }
 
 #[test]
@@ -258,7 +258,7 @@ fn a_blank_value_fails_naming_the_parameter_and_echoing_the_value() {
         error.to_string(),
         "std_Read: `path` is empty or only whitespace, and the call passed \"   \""
     );
-    assert_eq!(error.kind(), ToolErrorKind::InvalidArguments);
+    assert_eq!(error.code, ErrorCode::ToolInvalidArguments);
 }
 
 #[test]
@@ -299,7 +299,7 @@ fn a_bad_pattern_names_the_parameter_echoes_the_pattern_and_gives_the_reason() {
         "std_ListDir: `ignore_globs` is invalid: \"a***\" does not parse: \
          more than two consecutive '*' are not supported."
     );
-    assert_eq!(error.kind(), ToolErrorKind::InvalidArguments);
+    assert_eq!(error.code, ErrorCode::ToolInvalidArguments);
 }
 
 #[test]

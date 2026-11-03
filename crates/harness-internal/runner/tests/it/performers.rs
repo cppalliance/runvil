@@ -14,7 +14,8 @@ use harness_runner::recorder::{
 };
 use runvil::cancel::CancelHandle;
 use runvil::effect::ToolCallOrigin;
-use runvil::tools::{ToolError, ToolId, ToolOutput};
+use runvil::error::Error;
+use runvil::tools::{ToolId, ToolOutput};
 use runvil::vfs::Access;
 use serde_json::{Value, json};
 
@@ -112,7 +113,7 @@ impl ToolPerformer for DelayedTool {
         _access: Arc<Access>,
         _origin: ToolCallOrigin,
         _args: Value,
-    ) -> BoxFuture<Result<ToolOutput, ToolError>> {
+    ) -> BoxFuture<Result<ToolOutput, Error>> {
         let delay = self.delay;
         let text = self.text;
         Box::pin(async move {

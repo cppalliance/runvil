@@ -11,8 +11,8 @@ use std::task::{Context, Poll, Waker};
 use plugin_user_input::{ASK, INPUT_BROKER, InputBroker, install};
 use runvil_plugin::testing::TestCall;
 use runvil_plugin::{
-    HostServices, OutputTrust, Pack, PackId, PackInfo, PackRegistry, ToolError, ToolErrorKind,
-    ToolId,
+    Error, ErrorCode, HostServices, OutputTrust, Pack, PackId, PackInfo, PackRegistry, ToolId,
+    tool_error,
 };
 use serde_json::{Value, json};
 
@@ -21,21 +21,21 @@ struct Scripted(&'static str);
 
 #[async_trait::async_trait]
 impl InputBroker for Scripted {
-    async fn wait(&self) -> Result<String, ToolError> {
+    async fn wait(&self) -> Result<String, Error> {
         Ok(self.0.to_owned())
     }
 }
 
 /// A broker whose every wait fails with a hidden cause behind the
-/// message.
+/// prose.
 struct Failing;
 
 #[async_trait::async_trait]
 impl InputBroker for Failing {
-    async fn wait(&self) -> Result<String, ToolError> {
+    async fn wait(&self) -> Result<String, Error> {
         Err(
-            ToolError::new(ToolErrorKind::Backend, "the operator's window closed")
-                .with_source(std::io::Error::other("socket reset")),
+            tool_error(ErrorCode::ToolBackend, "the operator's window closed")
+                .with_cause(&std::io::Error::other("socket reset")),
         )
     }
 }
@@ -70,7 +70,7 @@ fn user_input() -> PackInfo {
 }
 
 /// The Pack built under the Pack id `name` with `config`.
-fn construct(name: &str, config: Value) -> Result<Arc<dyn Pack>, ToolError> {
+fn construct(name: &str, config: Value) -> Result<Arc<dyn Pack>, Error> {
     let name = PackId::parse(name).expect("a one-segment Pack id parses");
     (user_input().construct)(&name, config, &HostServices::new())
 }
@@ -94,7 +94,7 @@ fn with_broker(broker: impl InputBroker + 'static) -> HostServices {
 
 /// Asks once through the Pack built under `user-input`, with `services`
 /// as the run's services.
-fn ask(services: HostServices) -> Result<runvil_plugin::ToolOutput, ToolError> {
+fn ask(services: HostServices) -> Result<runvil_plugin::ToolOutput, Error> {
     let pack = built("user-input");
     let call = TestCall::new(pack.tools()[0].id.clone()).with_services(services);
     block_on(pack.call(call.context(), json!({})))
@@ -169,10 +169,12 @@ fn the_ask_tool_returns_the_brokers_text_trusted_and_byte_exact() {
 #[test]
 fn a_broker_failure_is_the_ask_calls_error_unchanged() {
     let error = ask(with_broker(Failing)).expect_err("a failed wait fails the call");
-    assert_eq!(error.to_string(), "the operator's window closed");
-    assert_eq!(error.kind(), ToolErrorKind::Backend);
-    let cause = std::error::Error::source(&error).map(ToString::to_string);
-    assert_eq!(cause.as_deref(), Some("socket reset"));
+    assert_eq!(error.prose, "the operator's window closed");
+    assert_eq!(error.code, ErrorCode::ToolBackend);
+    assert_eq!(
+        error.message, "the operator's window closed: socket reset",
+        "the cause stays in the message, out of the prose"
+    );
 }
 
 #[test]

@@ -14,11 +14,12 @@ use harness_runner::recorder::{
 };
 use runvil::cancel::CancelHandle;
 use runvil::effect::{Round, ToolCallOrigin};
+use runvil::error::Error;
 use runvil::model::{
     Completion, CompletionError, CompletionOptions, Message, ModelBinding, ModelCatalog, ToolSchema,
 };
 use runvil::timestamp::Timestamp;
-use runvil::tools::{ToolCatalog, ToolError, ToolId, ToolInfo, ToolOutput};
+use runvil::tools::{ToolCatalog, ToolId, ToolInfo, ToolOutput};
 use runvil::vfs::{
     Access, AcquireContext, Entry, ExecId, MemoryBackend, Stat, Vfs, VfsAccess, VfsError, VfsPath,
     VfsRef,
@@ -151,7 +152,7 @@ impl ToolPerformer for Unused {
         _access: Arc<Access>,
         _origin: ToolCallOrigin,
         _args: Value,
-    ) -> BoxFuture<Result<ToolOutput, ToolError>> {
+    ) -> BoxFuture<Result<ToolOutput, Error>> {
         unreachable!("this test issues no ToolCall effect")
     }
 }
@@ -184,7 +185,7 @@ impl ToolPerformer for TextTool {
         _access: Arc<Access>,
         _origin: ToolCallOrigin,
         _args: Value,
-    ) -> BoxFuture<Result<ToolOutput, ToolError>> {
+    ) -> BoxFuture<Result<ToolOutput, Error>> {
         let text = self.0;
         Box::pin(async move { Ok(ToolOutput::trusted(text)) })
     }
@@ -201,7 +202,7 @@ impl ToolPerformer for PendingTool {
         _access: Arc<Access>,
         _origin: ToolCallOrigin,
         _args: Value,
-    ) -> BoxFuture<Result<ToolOutput, ToolError>> {
+    ) -> BoxFuture<Result<ToolOutput, Error>> {
         Box::pin(std::future::pending())
     }
 }
@@ -218,9 +219,9 @@ impl ToolPerformer for PanickingTool {
         _access: Arc<Access>,
         _origin: ToolCallOrigin,
         _args: Value,
-    ) -> BoxFuture<Result<ToolOutput, ToolError>> {
+    ) -> BoxFuture<Result<ToolOutput, Error>> {
         Box::pin(std::future::poll_fn(
-            |_cx| -> Poll<Result<ToolOutput, ToolError>> {
+            |_cx| -> Poll<Result<ToolOutput, Error>> {
                 panic!("the tool performer panics instead of answering")
             },
         ))
@@ -242,7 +243,7 @@ impl ToolPerformer for ClosingTool {
         _access: Arc<Access>,
         _origin: ToolCallOrigin,
         _args: Value,
-    ) -> BoxFuture<Result<ToolOutput, ToolError>> {
+    ) -> BoxFuture<Result<ToolOutput, Error>> {
         let recorder = Arc::clone(&self.recorder);
         let run_id = self.run_id;
         Box::pin(async move {
@@ -377,7 +378,7 @@ impl ToolPerformer for GatedTool {
         _access: Arc<Access>,
         _origin: ToolCallOrigin,
         _args: Value,
-    ) -> BoxFuture<Result<ToolOutput, ToolError>> {
+    ) -> BoxFuture<Result<ToolOutput, Error>> {
         let gate = Arc::clone(&self.gate);
         Box::pin(async move {
             gate.acquire()

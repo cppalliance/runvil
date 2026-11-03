@@ -1,7 +1,7 @@
 //! Argument checking against a tool's own JSON Schema, and the helpers
 //! the file tools share to refuse what the schema alone cannot.
 
-use runvil_plugin::{ToolError, ToolErrorKind};
+use runvil_plugin::{Error, ErrorCode, tool_error};
 use serde_json::Value;
 
 use crate::matcher::PatternError;
@@ -16,9 +16,9 @@ use crate::text::clip_to_boundary;
 /// call, because the tool's own body decides what it can do with the value.
 ///
 /// # Errors
-/// Returns an invalid-arguments [`ToolError`] naming the parameter and
+/// Returns an invalid-arguments [`Error`] naming the parameter and
 /// what it expected.
-pub(crate) fn check(tool: &str, schema: &Value, args: &Value) -> Result<(), ToolError> {
+pub(crate) fn check(tool: &str, schema: &Value, args: &Value) -> Result<(), Error> {
     let args = if args.is_null() {
         &Value::Object(serde_json::Map::new())
     } else {
@@ -62,7 +62,7 @@ pub(crate) fn check(tool: &str, schema: &Value, args: &Value) -> Result<(), Tool
 }
 
 /// Checks one parameter's `value` against its `property` schema.
-fn check_value(tool: &str, name: &str, property: &Value, value: &Value) -> Result<(), ToolError> {
+fn check_value(tool: &str, name: &str, property: &Value, value: &Value) -> Result<(), Error> {
     if let Some(allowed) = property.get("enum").and_then(Value::as_array)
         && !allowed.contains(value)
     {
@@ -104,7 +104,7 @@ fn check_value(tool: &str, name: &str, property: &Value, value: &Value) -> Resul
 
 /// Checks every element of `value`, when it is an array with an `items`
 /// schema.
-fn check_items(tool: &str, name: &str, property: &Value, value: &Value) -> Result<(), ToolError> {
+fn check_items(tool: &str, name: &str, property: &Value, value: &Value) -> Result<(), Error> {
     let (Some(items), Some(elements)) = (
         property.get("items"),
         value.as_array().filter(|_| property.get("items").is_some()),
@@ -128,8 +128,8 @@ fn check_items(tool: &str, name: &str, property: &Value, value: &Value) -> Resul
 /// `properties`, and arguments that are not an object, refuse nothing.
 ///
 /// # Errors
-/// Returns an invalid-arguments [`ToolError`] naming the key.
-pub(crate) fn refuse_unknown(tool: &str, schema: &Value, args: &Value) -> Result<(), ToolError> {
+/// Returns an invalid-arguments [`Error`] naming the key.
+pub(crate) fn refuse_unknown(tool: &str, schema: &Value, args: &Value) -> Result<(), Error> {
     let (Some(properties), Some(object)) = (
         schema.get("properties").and_then(Value::as_object),
         args.as_object(),
@@ -164,8 +164,8 @@ pub(crate) fn refuse_unknown(tool: &str, schema: &Value, args: &Value) -> Result
 /// filesystem.
 ///
 /// # Errors
-/// Returns an invalid-arguments [`ToolError`] naming the parameter.
-pub(crate) fn refuse_blank(tool: &str, name: &str, value: &str) -> Result<(), ToolError> {
+/// Returns an invalid-arguments [`Error`] naming the parameter.
+pub(crate) fn refuse_blank(tool: &str, name: &str, value: &str) -> Result<(), Error> {
     if value.trim().is_empty() {
         return Err(invalid_arguments(
             tool,
@@ -184,12 +184,7 @@ const PATTERN_ECHO_BYTES: usize = 80;
 /// The error echoes the pattern, cut to 80 bytes on a character boundary
 /// with `...` added when it was cut, so a long pattern does not fill the
 /// message.
-pub(crate) fn invalid_pattern(
-    tool: &str,
-    name: &str,
-    pattern: &str,
-    error: PatternError,
-) -> ToolError {
+pub(crate) fn invalid_pattern(tool: &str, name: &str, pattern: &str, error: PatternError) -> Error {
     let shown = clip_to_boundary(pattern, 0, PATTERN_ECHO_BYTES);
     let dots = if shown.len() < pattern.len() {
         "..."
@@ -226,9 +221,9 @@ pub(crate) fn plural(n: usize, noun: &str) -> String {
 
 /// An invalid-arguments error whose message opens with the tool's id
 /// segment.
-pub(crate) fn invalid_arguments(tool: &str, reason: impl std::fmt::Display) -> ToolError {
-    ToolError::new(
-        ToolErrorKind::InvalidArguments,
+pub(crate) fn invalid_arguments(tool: &str, reason: impl std::fmt::Display) -> Error {
+    tool_error(
+        ErrorCode::ToolInvalidArguments,
         format!("std_{tool}: {reason}"),
     )
 }

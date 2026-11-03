@@ -8,7 +8,7 @@ use std::sync::Arc;
 
 use runvil_types::error::{Error, ErrorCode, FactKey};
 use runvil_types::packs::PackId;
-use runvil_types::tools::{ToolError, ToolInfo, ToolOutput};
+use runvil_types::tools::{ToolInfo, ToolOutput, tool_error};
 use serde_json::Value;
 
 use crate::{HostServices, Pack, PackFuture, PackInfo, ToolContext};
@@ -220,7 +220,7 @@ fn builtin(
     _name: &PackId,
     _config: Value,
     _services: &HostServices,
-) -> Result<Arc<dyn Pack>, ToolError> {
+) -> Result<Arc<dyn Pack>, Error> {
     Ok(Arc::new(Builtin))
 }
 
@@ -236,12 +236,12 @@ impl Pack for Builtin {
         &'a self,
         cx: ToolContext<'a>,
         _args: Value,
-    ) -> PackFuture<'a, Result<ToolOutput, ToolError>> {
+    ) -> PackFuture<'a, Result<ToolOutput, Error>> {
         let message = format!(
             "{} belongs to a built-in Pack, whose calls the Engine answers",
             cx.tool()
         );
-        Box::pin(async move { Err(ToolError::message(message)) })
+        Box::pin(async move { Err(tool_error(ErrorCode::ToolOther, message)) })
     }
 }
 

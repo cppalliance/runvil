@@ -10,8 +10,8 @@ use std::task::{Context, Poll, Waker};
 use plugin_std::{NOT_IMPLEMENTED, install};
 use runvil_plugin::testing::TestCall;
 use runvil_plugin::{
-    ErrorCode, FactKey, HostServices, OutputTrust, Pack, PackId, PackRegistry, ToolError,
-    ToolErrorKind, ToolId, ToolOutput,
+    Error, ErrorCode, FactKey, HostServices, OutputTrust, Pack, PackId, PackRegistry, ToolId,
+    ToolOutput,
 };
 use serde_json::{Value, json};
 
@@ -50,7 +50,7 @@ fn inserted(config: Value) -> Vec<(String, String, Value)> {
 }
 
 /// The Pack built under the Pack id `name` with `config`.
-fn construct(name: &str, config: Value) -> Result<Arc<dyn Pack>, ToolError> {
+fn construct(name: &str, config: Value) -> Result<Arc<dyn Pack>, Error> {
     let name = PackId::parse(name).expect("a one-segment Pack id parses");
     (std_pack().construct)(&name, config, &HostServices::new())
 }
@@ -69,17 +69,13 @@ pub(crate) fn id(segment: &str) -> ToolId {
 }
 
 /// Calls the tool `segment` with `args`.
-fn call(segment: &str, args: Value) -> Result<ToolOutput, ToolError> {
+fn call(segment: &str, args: Value) -> Result<ToolOutput, Error> {
     call_seeded(segment, &[], args)
 }
 
 /// Calls the tool `segment` with `args` after writing each of `files`, a
 /// path beside its bytes, through the call's own access.
-fn call_seeded(
-    segment: &str,
-    files: &[(&str, &[u8])],
-    args: Value,
-) -> Result<ToolOutput, ToolError> {
+fn call_seeded(segment: &str, files: &[(&str, &[u8])], args: Value) -> Result<ToolOutput, Error> {
     let pack = built();
     let call = TestCall::new(id(segment));
     for (path, bytes) in files {
@@ -246,7 +242,7 @@ fn a_missing_required_parameter_fails_naming_it() {
         error.to_string(),
         "std_Grep: `pattern` is required, and the call left it out"
     );
-    assert_eq!(error.kind(), ToolErrorKind::InvalidArguments);
+    assert_eq!(error.code, ErrorCode::ToolInvalidArguments);
 }
 
 #[test]
@@ -256,7 +252,7 @@ fn a_parameter_of_the_wrong_type_fails_naming_it() {
         error.to_string(),
         "std_Read: `path` must be a JSON string, and the call passed 7"
     );
-    assert_eq!(error.kind(), ToolErrorKind::InvalidArguments);
+    assert_eq!(error.code, ErrorCode::ToolInvalidArguments);
 }
 
 #[test]
@@ -268,7 +264,7 @@ fn a_value_outside_an_enum_fails_listing_the_allowed_values() {
         "std_Grep: `output_mode` must be one of \"content\", \"files_with_matches\", \"count\", \
          and the call passed \"lines\""
     );
-    assert_eq!(error.kind(), ToolErrorKind::InvalidArguments);
+    assert_eq!(error.code, ErrorCode::ToolInvalidArguments);
 }
 
 #[test]
@@ -381,7 +377,7 @@ fn grep_of_a_missing_path_fails_with_the_does_not_exist_text() {
 fn grep_refuses_an_undeclared_key_by_name_while_the_stubs_let_it_through() {
     let error = call("grep", json!({ "pattern": "x", "context": 3 }))
         .expect_err("context is not a parameter");
-    assert_eq!(error.kind(), ToolErrorKind::InvalidArguments);
+    assert_eq!(error.code, ErrorCode::ToolInvalidArguments);
     assert!(
         error
             .to_string()

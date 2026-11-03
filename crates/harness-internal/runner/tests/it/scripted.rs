@@ -12,13 +12,15 @@ use std::time::Duration;
 use harness_runner::HostContext;
 use harness_runner::performers::{BoxFuture, InferenceBroker, Timer};
 use runvil::effect::Round;
+use runvil::error::{Error, ErrorCode};
 use runvil::model::{
     Completion, CompletionError, CompletionErrorKind, CompletionOptions, CompletionResult, Message,
     ModelBinding, ModelCatalog, ModelId, ModelInfo, ThinkingMode, ToolSchema,
 };
+use runvil::tools::tool_error;
 use runvil_plugin::{
     HostServices, Pack, PackFuture, PackId, PackInfo, PackRegistry, ServiceKey, ToolContext,
-    ToolError, ToolId, ToolInfo, ToolOutput,
+    ToolId, ToolInfo, ToolOutput,
 };
 use serde_json::{Value, json};
 use tokio::sync::mpsc;
@@ -221,10 +223,10 @@ fn construct_hold(
     name: &PackId,
     config: Value,
     services: &HostServices,
-) -> Result<Arc<dyn Pack>, ToolError> {
+) -> Result<Arc<dyn Pack>, Error> {
     let held = services
         .get(&HELD)
-        .ok_or_else(|| ToolError::message("the hold Pack needs tests/held"))?;
+        .ok_or_else(|| tool_error(ErrorCode::ToolOther, "the hold Pack needs tests/held"))?;
     let info = ToolInfo::new(
         ToolId::parse(&format!("{name}/hold")).unwrap(),
         "Hold until the call is dropped.",
@@ -246,7 +248,7 @@ impl Pack for HoldPack {
         &'a self,
         _cx: ToolContext<'a>,
         _args: Value,
-    ) -> PackFuture<'a, Result<ToolOutput, ToolError>> {
+    ) -> PackFuture<'a, Result<ToolOutput, Error>> {
         self.held.hold()
     }
 }
@@ -303,12 +305,12 @@ impl Operator {
 
 #[async_trait::async_trait]
 impl AskBroker for Operator {
-    async fn wait(&self) -> Result<String, ToolError> {
+    async fn wait(&self) -> Result<String, Error> {
         self.asked.fetch_add(1, Ordering::SeqCst);
         let mut unanswered = Unanswered(Some(Arc::clone(&self.abandoned)));
         let text = self.answers.lock().await.recv().await;
         unanswered.0 = None;
-        text.ok_or_else(|| ToolError::message("the operator left"))
+        text.ok_or_else(|| tool_error(ErrorCode::ToolOther, "the operator left"))
     }
 }
 

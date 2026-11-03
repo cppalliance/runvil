@@ -10,7 +10,7 @@ mod render;
 mod window;
 
 use runvil_plugin::testing::TestCall;
-use runvil_plugin::{OutputTrust, ToolError, ToolId, ToolOutput};
+use runvil_plugin::{Error, OutputTrust, ToolId, ToolOutput};
 use serde_json::Value;
 
 use super::args::Request;
@@ -47,7 +47,7 @@ fn definition() -> &'static Definition {
 
 /// Calls Read with `args` as the Pack does: the schema check first, then
 /// the tool.
-fn read(call: &TestCall, args: &Value) -> Result<ToolOutput, ToolError> {
+fn read(call: &TestCall, args: &Value) -> Result<ToolOutput, Error> {
     let definition = definition();
     crate::check::check(&definition.wire_name, &definition.parameters, args)?;
     super::call(call.context().access(), definition, args)
@@ -61,7 +61,7 @@ fn read_capped(
     offset: Option<i64>,
     limit: Option<usize>,
     cap: usize,
-) -> Result<ToolOutput, ToolError> {
+) -> Result<ToolOutput, Error> {
     let request = Request {
         path,
         offset,
@@ -71,14 +71,14 @@ fn read_capped(
 }
 
 /// The text of a successful read, which must be untrusted output.
-fn text_of(result: Result<ToolOutput, ToolError>) -> String {
+fn text_of(result: Result<ToolOutput, Error>) -> String {
     let output = result.expect("the read succeeds");
     assert_eq!(output.trust(), OutputTrust::Untrusted, "{}", output.text());
     output.text().to_owned()
 }
 
 /// The message of a failed read.
-fn failure_of(result: Result<ToolOutput, ToolError>) -> String {
+fn failure_of(result: Result<ToolOutput, Error>) -> String {
     match result {
         Ok(output) => panic!("the read fails, but it answered {:?}", output.text()),
         Err(error) => error.to_string(),
