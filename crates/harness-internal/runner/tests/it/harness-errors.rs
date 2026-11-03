@@ -3,8 +3,8 @@
 //! fetch ends the recorded run as a `Completion` failure, a list without
 //! the selection as a `RequirementsUnmet` failure, and a cancel before
 //! `run` or while the broker holds its list as cancelled, each before the
-//! prompt is parsed; a recorder that refuses a write is
-//! `HarnessError::Recorder` holding the run id it issued; and a broker
+//! prompt is parsed; a recorder that refuses a write is a
+//! `RecorderFailed` failure naming the run id it issued; and a broker
 //! that panics answers its round `Dropped`.
 
 use std::sync::Arc;
@@ -13,9 +13,9 @@ use std::task::Poll;
 
 use harness_runner::display_chain;
 use harness_runner::environment::HostSnapshot;
-use harness_runner::recorder::{MemoryRecorder, RunErrorKind};
-use harness_runner::{Harness, HarnessError, HostContext, RunReport, RunRequest};
-use runvil::error::{Error, ErrorCode};
+use harness_runner::recorder::{MemoryRecorder, RunErrorKind, RunId};
+use harness_runner::{Harness, HostContext, RunReport, RunRequest};
+use runvil::error::{Error, ErrorCode, FactKey};
 use runvil::model::{Completion, phrase};
 use runvil_plugin::{HostServices, PackRegistry};
 
@@ -26,6 +26,15 @@ use crate::support::{FailingRecorder, assert_not_completed};
 /// A Pack-free prompt whose one section returns a constant.
 const PLAIN: &str = "---\nname: plain\ndescription: d\nrunvil: 0\n---\n\n\
     # Title\n\n## Only\n\n```lua\nreturn 'plain'\n```\n";
+
+/// The run a recorder failure names in its `Run` fact, if any.
+fn run_of(error: &Error) -> Option<RunId> {
+    error
+        .facts
+        .get(&FactKey::Run)
+        .and_then(serde_json::Value::as_i64)
+        .map(RunId::from_raw)
+}
 
 /// A prompt of one store write and one read.
 const STORES: &str = "---\nname: stores\ndescription: d\nrunvil: 0\n---\n\n\
@@ -160,10 +169,18 @@ async fn a_recorder_failure_returns_the_recorder_error_holding_the_issued_run_id
         .run(request(STORES))
         .await
         .expect_err("a refused begin is the run's error");
-    let HarnessError::Recorder { run, .. } = error else {
-        panic!("the refusal is the recorder's: {error:?}");
-    };
-    assert_eq!(run, None, "a refused begin issued no run");
+    assert_eq!(
+        error.code,
+        ErrorCode::RecorderFailed,
+        "the refusal is the recorder's"
+    );
+    assert_eq!(run_of(&error), None, "a refused begin issued no run");
+    assert!(
+        error
+            .message
+            .starts_with("the run could not be recorded: the run recorder failed: "),
+        "{error:?}"
+    );
 
     // A run that ends before its prompt is parsed has one write after its
     // begin: its end.
@@ -174,11 +191,9 @@ async fn a_recorder_failure_returns_the_recorder_error_holding_the_issued_run_id
         .run(request(STORES))
         .await
         .expect_err("a refused end is the run's error");
-    let HarnessError::Recorder { run, .. } = error else {
-        panic!("the refusal is the recorder's: {error:?}");
-    };
+    assert_eq!(error.code, ErrorCode::RecorderFailed);
     assert_eq!(
-        run,
+        run_of(&error),
         Some(refuses_end.begun()[0]),
         "the error holds the issued run id"
     );
@@ -202,20 +217,22 @@ async fn a_recorder_failure_returns_the_recorder_error_holding_the_issued_run_id
             .run(request(STORES))
             .await
             .expect_err("a refused write is the run's error");
-        let HarnessError::Recorder { run, source } = error else {
-            panic!("call {call} of {total}: the refusal is the recorder's: {error:?}");
-        };
+        assert_eq!(
+            error.code,
+            ErrorCode::RecorderFailed,
+            "call {call} of {total}: the refusal is the recorder's"
+        );
         let issued = recorder.begun();
         assert_eq!(issued.len(), 1, "call {call} of {total}: one run began");
         assert_eq!(
-            run,
+            run_of(&error),
             Some(issued[0]),
             "call {call} of {total}: the error holds the issued run id"
         );
         assert!(
-            display_chain(&source).contains(&format!("refuses call {call}")),
+            display_chain(&error).contains(&format!("refuses call {call}")),
             "call {call} of {total}: {}",
-            display_chain(&source)
+            display_chain(&error)
         );
         assert_eq!(recorder.calls(), call, "nothing is sent after the refusal");
     }

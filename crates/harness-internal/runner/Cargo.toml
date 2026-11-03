@@ -26,13 +26,14 @@ serde_json.workspace = true
 # The prompt's content hash for the run row, so a transcript can be
 # matched to the exact text that produced it.
 sha2.workspace = true
-thiserror.workspace = true
 tracing.workspace = true
 
 [dev-dependencies]
 # The scripted Packs' tools and input brokers are `async_trait`
 # traits.
 async-trait.workspace = true
+# The `display_chain` tests derive the source chains they render.
+thiserror.workspace = true
 # The suites drive runs on tokio's test runtime, pace performers with its
 # clock, and gate them with its semaphore and channels.
 tokio = { workspace = true, features = ["macros", "rt", "sync", "test-util", "time"] }

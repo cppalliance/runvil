@@ -13,13 +13,12 @@
 //! Every run gets a record and ends with one outcome: completed, failed
 //! with a kind and a message, or cancelled. The record begins before
 //! anything else, so a run cancelled before it starts, or one whose model
-//! cannot be resolved, is recorded too. The only [`HarnessError`] is a
-//! recorder that refuses a write.
+//! cannot be resolved, is recorded too. The only error [`Harness::run`]
+//! returns is a `RecorderFailed` failure: a recorder that refuses a write.
 //!
 //! The crate's `run-prompt` example runs one prompt from start to end.
 
 pub use harness_runner::Harness;
-pub use harness_runner::HarnessError;
 pub use harness_runner::RunControl;
 pub use harness_runner::RunReport;
 pub use harness_runner::RunRequest;

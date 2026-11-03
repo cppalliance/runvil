@@ -20,7 +20,8 @@ use std::time::Duration;
 
 use harness_runner::environment::HostSnapshot;
 use harness_runner::recorder::{MemoryRecorder, Record, RecordKind, RunErrorKind, RunOutcome};
-use harness_runner::{Harness, HarnessError, HostContext, RunControl, RunReport, RunRequest};
+use harness_runner::{Harness, HostContext, RunControl, RunReport, RunRequest};
+use runvil::error::Error;
 use runvil::vfs::VfsRef;
 use runvil_plugin::{HostServices, PackRegistry};
 use serde_json::{Value, json};
@@ -92,7 +93,7 @@ pub(crate) async fn run_beside<F>(
     harness: Harness,
     request: RunRequest,
     steer: impl FnOnce(RunControl) -> F,
-) -> Result<RunReport, HarnessError>
+) -> Result<RunReport, Error>
 where
     F: Future<Output = ()>,
 {

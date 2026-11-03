@@ -16,6 +16,7 @@ use std::sync::Arc;
 
 use futures_util::future::{Either, select};
 use runvil::cancel::CancelHandle;
+use runvil::error::{Error, ErrorCode, FactKey};
 use runvil::model::ModelInfo;
 use runvil::vfs::VfsRef;
 use runvil_plugin::HostServices;
@@ -104,24 +105,23 @@ pub struct RunReport {
     pub output: Result<String, runvil::error::Error>,
 }
 
-/// The error that stopped a run before `Harness::run` could record its
-/// outcome: the recorder refused a write.
+/// The failure that stops a run before `Harness::run` can record its
+/// outcome: the recorder refused a write for run `run`, or refused to
+/// begin it when `run` is `None`.
 ///
-/// `Harness::run` returns it as its `Err` value. Every other way a run
-/// ends is a recorded outcome in a [`RunReport`].
-#[derive(Debug, thiserror::Error)]
-#[non_exhaustive]
-pub enum HarnessError {
-    /// The recorder refused a write, so the Harness stops driving the run.
-    #[error("the run could not be recorded")]
-    Recorder {
-        /// The id of the run the recorder issued before it refused. `None`
-        /// when the recorder refused to begin the run.
-        run: Option<RunId>,
-        /// The error the recorder returned.
-        #[source]
-        source: Box<runvil::error::Error>,
-    },
+/// It is `RecorderFailed`, with the refusal after `the run could not be
+/// recorded: ` in its message, the refusal's facts, and the run's `Run`
+/// fact when the recorder issued one. Every other way a run ends is a
+/// recorded outcome in a [`RunReport`].
+fn unrecorded(run: Option<RunId>, refusal: &Error) -> Error {
+    let code = ErrorCode::RecorderFailed;
+    let mut error =
+        Error::new(code, "the run could not be recorded", code.prose()).with_cause(refusal);
+    error.facts.clone_from(&refusal.facts);
+    if let Some(run) = run {
+        error.facts.insert(FactKey::Run, run.get().into());
+    }
+    error
 }
 
 impl Harness {
@@ -187,14 +187,16 @@ impl Harness {
     /// `Internal`.
     ///
     /// # Errors
-    /// Returns [`HarnessError::Recorder`] when the recorder refuses a
-    /// write. That is the only error: the run is then not recorded to its
-    /// end.
-    pub async fn run(self, request: RunRequest) -> Result<RunReport, HarnessError> {
+    /// Returns `RecorderFailed` when the recorder refuses a write. That is
+    /// the only error: the run is then not recorded to its end. Its
+    /// message holds the refusal after `the run could not be recorded: `,
+    /// and its `Run` fact is the run the recorder issued, absent when the
+    /// recorder refused to begin the run.
+    pub async fn run(self, request: RunRequest) -> Result<RunReport, Error> {
         Box::pin(self.run_to_end(request)).await
     }
 
-    async fn run_to_end(self, request: RunRequest) -> Result<RunReport, HarnessError> {
+    async fn run_to_end(self, request: RunRequest) -> Result<RunReport, Error> {
         let Harness {
             recorder,
             broker,
@@ -213,18 +215,11 @@ impl Harness {
             host,
         } = request;
 
-        let begun =
-            begin(&*recorder, &name, &source)
-                .await
-                .map_err(|source| HarnessError::Recorder {
-                    run: None,
-                    source: Box::new(source),
-                })?;
+        let begun = begin(&*recorder, &name, &source)
+            .await
+            .map_err(|refusal| unrecorded(None, &refusal))?;
         let run_id = begun.run_id;
-        let recorded = |source| HarnessError::Recorder {
-            run: Some(run_id),
-            source: Box::new(source),
-        };
+        let recorded = |refusal: Error| unrecorded(Some(run_id), &refusal);
 
         let model = match resolve_model(&host, &*broker, control.cancel_handle()).await {
             Ok(model) => model,

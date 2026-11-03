@@ -7,8 +7,9 @@ use std::sync::Arc;
 
 use harness::pack::HostServices;
 use harness::record::{RunOutcome, RunRecorder};
-use harness::{Harness, HarnessError, RunReport, RunRequest, display_chain};
+use harness::{Harness, RunReport, RunRequest, display_chain};
 use plugin_user_input::{INPUT_BROKER, InputBroker};
+use runvil::error::Error;
 use runvil::ids::RoundId;
 use tokio::sync::broadcast;
 
@@ -72,7 +73,7 @@ impl Conversation {
 
     /// Notes the report's run and reports a run that failed or was cut
     /// short; a completed run reports nothing.
-    fn take_report(&self, result: Result<RunReport, HarnessError>) {
+    fn take_report(&self, result: Result<RunReport, Error>) {
         let message = match result {
             Ok(report) => {
                 self.note_run(report.run_id);
