@@ -12,12 +12,14 @@ use std::sync::Arc;
 
 use harness_runner::display_chain;
 use harness_runner::effect_loop::drive_run;
-use harness_runner::files::{InputFileError, read_output};
+use harness_runner::files::read_output;
 use harness_runner::prepare::{PrepareError, Prepared};
 use harness_runner::recorder::{MemoryRecorder, RunErrorKind, RunOutcome};
 use runvil::cancel::CancelHandle;
+use runvil::error::{Error, ErrorCode, FactKey};
 use runvil::event::Event;
-use runvil::vfs::{MemoryBackend, Mode, ModePolicy, Origin, VfsError, VfsRef};
+use runvil::vfs::{MemoryBackend, Mode, ModePolicy, Origin, VfsRef};
+use serde_json::json;
 
 use super::{PLAIN, bare, begin_and_prepare, completed, recorded_parse_events, recorder, services};
 
@@ -46,7 +48,7 @@ async fn prepare_over(
 /// Checks that `error` is an input refusal whose run ended under `kind`
 /// with the cause chain as its message, and that the recorder holds only
 /// the run's parse events. Returns the cause.
-fn refused(recorder: &MemoryRecorder, error: PrepareError, kind: RunErrorKind) -> InputFileError {
+fn refused(recorder: &MemoryRecorder, error: PrepareError, kind: RunErrorKind) -> Error {
     let PrepareError::Input { run_id, source, .. } = error else {
         panic!("the failure is an input refusal: {error}");
     };
@@ -63,7 +65,7 @@ fn refused(recorder: &MemoryRecorder, error: PrepareError, kind: RunErrorKind) -
         matches!(events.last(), Some(Event::ParseSucceeded { .. })),
         "the prompt parsed before its input was refused: {events:?}"
     );
-    source
+    *source
 }
 
 #[tokio::test]
@@ -120,7 +122,16 @@ async fn input_text_for_a_prompt_that_declares_no_input_is_refused() {
         prepared.expect_err("undeclared input refuses"),
         RunErrorKind::RequirementsUnmet,
     );
-    assert!(matches!(source, InputFileError::Undeclared), "{source:?}");
+    assert_eq!(source.code, ErrorCode::RequirementsUnmet);
+    assert_eq!(
+        source.message,
+        "the launch supplied input text, but the prompt declares no `input:` file"
+    );
+    assert_eq!(source.prose, ErrorCode::RequirementsUnmet.prose());
+    assert_eq!(
+        source.facts.get(&FactKey::Reason),
+        Some(&json!("input_undeclared"))
+    );
 }
 
 #[tokio::test]
@@ -131,10 +142,16 @@ async fn a_declared_input_neither_supplied_nor_in_the_store_is_refused() {
         prepared.expect_err("a missing input refuses"),
         RunErrorKind::RequirementsUnmet,
     );
-    let InputFileError::Missing { path } = source else {
-        panic!("the refusal names the missing file: {source:?}");
-    };
-    assert_eq!(path, "paper.md");
+    assert_eq!(source.code, ErrorCode::RequirementsUnmet);
+    assert_eq!(
+        source.facts.get(&FactKey::Reason),
+        Some(&json!("input_missing"))
+    );
+    assert_eq!(
+        source.facts.get(&FactKey::Path),
+        Some(&json!("paper.md")),
+        "the refusal names the missing file"
+    );
 }
 
 #[tokio::test]
@@ -149,14 +166,18 @@ async fn a_store_that_refuses_the_staging_write_refuses_the_run() {
         prepared.expect_err("a refused write refuses"),
         RunErrorKind::Vfs,
     );
-    let InputFileError::Vfs { path, source } = source else {
-        panic!("the refusal is the store's: {source:?}");
-    };
-    assert_eq!(path, "paper.md");
-    assert!(
-        matches!(source, VfsError::ApprovalRequired { .. }),
-        "{source:?}"
+    assert_eq!(
+        source.code,
+        ErrorCode::ApprovalRequired,
+        "the refusal is the store's"
     );
+    assert!(
+        source
+            .message
+            .starts_with("the input file `paper.md` could not be staged: "),
+        "the message holds the store's refusal: {source:?}"
+    );
+    assert_eq!(source.facts.get(&FactKey::Path), Some(&json!("paper.md")));
 }
 
 #[tokio::test]

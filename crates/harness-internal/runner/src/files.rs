@@ -17,46 +17,15 @@ use crate::recorder::{RunErrorKind, RunOutcome};
 #[path = "files-tests.rs"]
 mod tests;
 
-/// Why a run's declared input file could not be put in place.
-#[derive(Debug, thiserror::Error)]
-#[non_exhaustive]
-pub enum InputFileError {
-    /// The launch supplied input text, but the prompt declares no
-    /// `input:` file to stage it at.
-    #[error("the launch supplied input text, but the prompt declares no `input:` file")]
-    Undeclared,
-    /// The prompt declares an input file that the launch did not supply
-    /// and the store does not already hold.
-    #[error(
-        "the prompt declares the input file `{path}`, but the launch supplied no input text \
-         and the store has no such file"
-    )]
-    Missing {
-        /// The declared input path.
-        path: String,
-    },
-    /// The store refused the staging write or the existence check.
-    #[error("the input file `{path}` could not be staged")]
-    Vfs {
-        /// The declared input path.
-        path: String,
-        /// The store's failure.
-        #[source]
-        source: VfsError,
-    },
-}
-
-impl InputFileError {
-    /// The Engine's kind for the run this failure ends: input text the
-    /// prompt does not declare and a declared input nobody supplied are
-    /// unmet requirements, and a store refusal is a store failure.
-    pub(crate) fn kind(&self) -> RunErrorKind {
-        match self {
-            InputFileError::Undeclared | InputFileError::Missing { .. } => {
-                RunErrorKind::RequirementsUnmet
-            }
-            InputFileError::Vfs { .. } => RunErrorKind::Vfs,
-        }
+/// The Engine's kind for the run an input failure from [`stage_input`]
+/// ends: input text the prompt does not declare and a declared input
+/// nobody supplied are unmet requirements, and a store refusal is a store
+/// failure.
+pub(crate) fn input_kind(error: &Error) -> RunErrorKind {
+    if error.code == ErrorCode::RequirementsUnmet {
+        RunErrorKind::RequirementsUnmet
+    } else {
+        RunErrorKind::Vfs
     }
 }
 
@@ -65,23 +34,33 @@ impl InputFileError {
 /// supplied no text, checks that the store already holds the file.
 ///
 /// # Errors
-/// Returns [`InputFileError::Undeclared`] for text the prompt declares no
-/// file for, [`InputFileError::Missing`] for a declared file that is
-/// neither supplied nor present, and [`InputFileError::Vfs`] when the
-/// store refuses the write or the check.
+/// Returns `RequirementsUnmet` with the `Reason` fact `input_undeclared`
+/// for text the prompt declares no file for, `RequirementsUnmet` with the
+/// `Reason` fact `input_missing` for a declared file that is neither
+/// supplied nor present, and the store failure's code when the store
+/// refuses the write or the check. The last two carry the declared path
+/// as the `Path` fact. The prose is the code's default.
 pub fn stage_input(
     vfs: &VfsRef,
     declared: Option<&str>,
     text: Option<String>,
-) -> Result<(), InputFileError> {
+) -> Result<(), Error> {
     let path = match (declared, &text) {
         (None, None) => return Ok(()),
-        (None, Some(_)) => return Err(InputFileError::Undeclared),
+        (None, Some(_)) => {
+            return Err(reasoned(
+                ErrorCode::RequirementsUnmet,
+                "input_undeclared",
+                "the launch supplied input text, but the prompt declares no `input:` file",
+            ));
+        }
         (Some(path), _) => path,
     };
-    let store = |source| InputFileError::Vfs {
-        path: path.to_owned(),
-        source,
+    let store = |source: VfsError| {
+        let mut error = store_error(&source);
+        error.message = format!("the input file `{path}` could not be staged: {source}");
+        error.facts.insert(FactKey::Path, path.into());
+        error
     };
     let view = vfs
         .acquire_store(Origin::new(format!("input: {path}")))
@@ -93,7 +72,18 @@ pub fn stage_input(
             .map_err(store),
         None => match perform_vfs_op(&view, VfsOp::Exists { path: path.clone() }) {
             Ok(VfsOutcome::Bool(true)) => Ok(()),
-            Ok(_) => Err(InputFileError::Missing { path }),
+            Ok(_) => {
+                let mut error = reasoned(
+                    ErrorCode::RequirementsUnmet,
+                    "input_missing",
+                    format!(
+                        "the prompt declares the input file `{path}`, but the launch supplied no \
+                         input text and the store has no such file"
+                    ),
+                );
+                error.facts.insert(FactKey::Path, path.into());
+                Err(error)
+            }
             Err(source) => Err(store(source)),
         },
     }
@@ -135,8 +125,13 @@ pub(crate) fn report_output(
     if !matches!(outcome, RunOutcome::Completed { .. }) {
         return Err(not_completed());
     }
-    let path =
-        path.ok_or_else(|| no_output("undeclared", "the prompt declares no `output:` file"))?;
+    let path = path.ok_or_else(|| {
+        reasoned(
+            ErrorCode::NoOutput,
+            "undeclared",
+            "the prompt declares no `output:` file",
+        )
+    })?;
     read_output(vfs, path).map_err(|error| {
         let mut converted = store_error(&error);
         converted.message = if matches!(error, VfsError::NotFound { .. }) {
@@ -152,12 +147,16 @@ pub(crate) fn report_output(
 /// The output failure of a run that failed or was cancelled, possibly
 /// before it began: `NoOutput` with the `Reason` fact `not_completed`.
 pub(crate) fn not_completed() -> Error {
-    no_output("not_completed", "the run did not complete")
+    reasoned(
+        ErrorCode::NoOutput,
+        "not_completed",
+        "the run did not complete",
+    )
 }
 
-/// A `NoOutput` failure with `message` and the `Reason` fact `reason`.
-fn no_output(reason: &str, message: &str) -> Error {
-    let code = ErrorCode::NoOutput;
+/// A failure under `code` with `message`, the `Reason` fact `reason`, and
+/// the code's default prose.
+fn reasoned(code: ErrorCode, reason: &str, message: impl Into<String>) -> Error {
     let mut error = Error::new(code, message, code.prose());
     error.facts.insert(FactKey::Reason, reason.into());
     error

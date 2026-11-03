@@ -46,7 +46,7 @@ use runvil_plugin::HostServices;
 use sha2::{Digest as _, Sha256};
 
 use crate::display_chain::display_chain;
-use crate::files::{InputFileError, stage_input};
+use crate::files::{input_kind, stage_input};
 use crate::host::HostContext;
 use crate::performers::{InferenceBroker, Performers, Timer};
 use crate::recorder::{
@@ -159,7 +159,7 @@ pub enum PrepareError {
         run_id: RunId,
         /// Why the input could not be put in place.
         #[source]
-        source: InputFileError,
+        source: Box<Error>,
     },
     /// The recorder refused a write; the run cannot be recorded, so it is
     /// not prepared.
@@ -179,7 +179,7 @@ impl PrepareError {
     pub(crate) fn ended(self) -> Result<RunOutcome, Error> {
         match self {
             PrepareError::Parse { source, .. } => Ok(failed(RunErrorKind::Parse, &source)),
-            PrepareError::Input { source, .. } => Ok(failed(source.kind(), &source)),
+            PrepareError::Input { source, .. } => Ok(failed(input_kind(&source), &source)),
             PrepareError::Recorder { source, .. } => Err(*source),
         }
     }
@@ -282,10 +282,13 @@ pub async fn prepare(
     let declared = prompt.frontmatter().input().map(FileDecl::path);
     if let Err(source) = stage_input(&vfs, declared, input_text) {
         recorder
-            .end_run(run_id, failed(source.kind(), &source))
+            .end_run(run_id, failed(input_kind(&source), &source))
             .await
             .map_err(recorded)?;
-        return Err(PrepareError::Input { run_id, source });
+        return Err(PrepareError::Input {
+            run_id,
+            source: Box::new(source),
+        });
     }
     let output_path = prompt
         .frontmatter()
