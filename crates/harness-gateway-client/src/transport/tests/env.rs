@@ -3,8 +3,9 @@
 
 use runvil::model::Message;
 
+use runvil::error::{ErrorCode, FactKey};
+
 use super::*;
-use crate::config::SecretError;
 
 #[test]
 fn from_env_surfaces_non_unicode_value_instead_of_dropping_it() {
@@ -221,22 +222,18 @@ fn secret_string_never_prints_its_contents() {
 #[test]
 fn secret_string_construction_rejects_an_empty_credential() {
     // F12: an empty bearer credential is unrepresentable.
-    assert!(matches!(SecretString::new(""), Err(SecretError::Empty)));
-    assert!(SecretString::new("tok").is_ok());
-}
-
-#[test]
-fn an_unusable_secret_is_a_config_error_that_keeps_its_cause() {
-    // AUDIT-DISCARDED-SOURCE: the SecretError survives as the config
-    // error's source.
-    let secret_error = SecretString::new("").expect_err("blank key is rejected");
-    let config = GatewayConfigError::from(secret_error);
-    assert_eq!(config.to_string(), "gateway bearer key is unusable");
-    assert!(
-        std::error::Error::source(&config)
-            .is_some_and(|source| source.downcast_ref::<SecretError>().is_some()),
-        "the SecretError cause must survive"
+    let error = SecretString::new("").expect_err("blank key is rejected");
+    assert_eq!(error.code, ErrorCode::InvalidValue);
+    assert_eq!(
+        error.facts.get(&FactKey::Reason),
+        Some(&serde_json::Value::from("empty_secret"))
     );
+    assert_eq!(error.message, "secret must not be empty");
+    assert_eq!(
+        error.prose,
+        "The secret is empty. Supply a non-empty secret."
+    );
+    assert!(SecretString::new("tok").is_ok());
 }
 
 #[test]
@@ -285,12 +282,6 @@ fn constructor_errors_preserve_sources_without_leaking_secrets() {
             );
         }
     }
-    let secret =
-        GatewayConfigError::from(SecretString::new("").expect_err("blank key is rejected"));
-    assert!(
-        std::error::Error::source(&secret).is_some(),
-        "the empty-key failure must be preserved as the source"
-    );
 }
 
 #[test]

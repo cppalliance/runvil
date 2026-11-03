@@ -3,6 +3,8 @@
 
 use std::fmt;
 
+use runvil::error::{Error, ErrorCode, FactKey};
+
 /// The error returned when setting up the gateway client fails because an
 /// environment variable, the bearer key, or the endpoint URL is missing or
 /// unusable.
@@ -30,7 +32,7 @@ pub enum GatewayConfigError {
     /// A configuration input was invalid, and the error keeps the concrete
     /// cause as its `source`.
     ///
-    /// The cause is, for example, a URL parse failure or an unusable secret.
+    /// The cause is, for example, a URL parse failure.
     #[error("{message}")]
     Config {
         /// A human-readable description of the problem. The text of the
@@ -57,12 +59,21 @@ impl SecretString {
     /// Wraps a secret so it is redacted everywhere it is formatted.
     ///
     /// # Errors
-    /// Returns [`SecretError::Empty`] when `secret` is empty, so a client can
-    /// never be built to authenticate with a blank bearer credential.
-    pub fn new(secret: impl Into<String>) -> std::result::Result<SecretString, SecretError> {
+    /// Returns an [`InvalidValue`](ErrorCode::InvalidValue) error with the
+    /// reason `empty_secret` when `secret` is empty, so a client can never be
+    /// built to authenticate with a blank bearer credential.
+    pub fn new(secret: impl Into<String>) -> std::result::Result<SecretString, Error> {
         let secret = secret.into();
         if secret.is_empty() {
-            return Err(SecretError::Empty);
+            let mut error = Error::new(
+                ErrorCode::InvalidValue,
+                "secret must not be empty",
+                "The secret is empty. Supply a non-empty secret.",
+            );
+            error
+                .facts
+                .insert(FactKey::Reason, serde_json::Value::from("empty_secret"));
+            return Err(error);
         }
         Ok(SecretString(secret))
     }
@@ -71,27 +82,6 @@ impl SecretString {
     /// credential back out of the type.
     pub(crate) fn expose(&self) -> &str {
         &self.0
-    }
-}
-
-/// The reason constructing a [`SecretString`] failed.
-#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
-#[non_exhaustive]
-pub enum SecretError {
-    /// The supplied credential was empty.
-    #[error("secret must not be empty")]
-    Empty,
-}
-
-impl From<SecretError> for GatewayConfigError {
-    fn from(error: SecretError) -> GatewayConfigError {
-        // An unusable credential is a client setup problem. The concrete
-        // `SecretError` is preserved as the source rather than flattened
-        // into a string (AUDIT-DISCARDED-SOURCE).
-        GatewayConfigError::Config {
-            message: "gateway bearer key is unusable".to_owned(),
-            source: Box::new(error),
-        }
     }
 }
 
