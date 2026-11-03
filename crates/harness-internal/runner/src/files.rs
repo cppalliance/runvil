@@ -8,41 +8,14 @@
 //! each operation like any other. Both are synchronous, like the VFS, and
 //! the Harness runs them inline in the run's future.
 
-use runvil::vfs::{Origin, VfsError, VfsOp, VfsOutcome, VfsRef, perform_vfs_op};
+use runvil::error::{Error, ErrorCode, FactKey};
+use runvil::vfs::{Origin, VfsError, VfsOp, VfsOutcome, VfsRef, perform_vfs_op, store_error};
 
 use crate::recorder::{RunErrorKind, RunOutcome};
 
-/// Why a run's report omits its output text.
-///
-/// The report keeps the run's own outcome. This error replaces only its
-/// output text.
-#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
-#[non_exhaustive]
-pub enum OutputError {
-    /// The run failed or was cancelled, possibly before it began, so the
-    /// report skips its output file.
-    #[error("the run did not complete")]
-    NotCompleted,
-    /// The prompt's frontmatter omits the `output:` declaration.
-    #[error("the prompt declares no `output:` file")]
-    Undeclared,
-    /// The run completed, but its declared output file is missing from the
-    /// store.
-    #[error("the run completed without writing its declared output file `{path}`")]
-    Missing {
-        /// The declared output path.
-        path: String,
-    },
-    /// The store refused the read of the declared output file.
-    #[error("the output file `{path}` could not be read")]
-    Vfs {
-        /// The declared output path.
-        path: String,
-        /// The store's failure.
-        #[source]
-        source: VfsError,
-    },
-}
+#[cfg(test)]
+#[path = "files-tests.rs"]
+mod tests;
 
 /// Why a run's declared input file could not be put in place.
 #[derive(Debug, thiserror::Error)]
@@ -147,24 +120,45 @@ pub fn read_output(vfs: &VfsRef, path: &str) -> Result<String, VfsError> {
 }
 
 /// The output a run's report carries: what a completed run left at its
-/// declared `output:` path in `vfs`'s store, and
-/// [`OutputError::NotCompleted`] for every other outcome.
+/// declared `output:` path in `vfs`'s store, or why the report omits it.
+///
+/// A run that did not complete fails with [`not_completed`], and a prompt
+/// with no `output:` file with `NoOutput` and the `Reason` fact
+/// `undeclared`. A completed run that left no file fails with `NotFound`,
+/// and a refused read with the store failure's code. Both carry the
+/// declared path as the `Path` fact. The prose is the code's default.
 pub(crate) fn report_output(
     vfs: &VfsRef,
     path: Option<&str>,
     outcome: &RunOutcome,
-) -> Result<String, OutputError> {
+) -> Result<String, Error> {
     if !matches!(outcome, RunOutcome::Completed { .. }) {
-        return Err(OutputError::NotCompleted);
+        return Err(not_completed());
     }
-    let path = path.ok_or(OutputError::Undeclared)?;
-    read_output(vfs, path).map_err(|error| match error {
-        VfsError::NotFound { .. } => OutputError::Missing {
-            path: path.to_owned(),
-        },
-        source => OutputError::Vfs {
-            path: path.to_owned(),
-            source,
-        },
+    let path =
+        path.ok_or_else(|| no_output("undeclared", "the prompt declares no `output:` file"))?;
+    read_output(vfs, path).map_err(|error| {
+        let mut converted = store_error(&error);
+        converted.message = if matches!(error, VfsError::NotFound { .. }) {
+            format!("the run completed without writing its declared output file `{path}`")
+        } else {
+            format!("the output file `{path}` could not be read: {error}")
+        };
+        converted.facts.insert(FactKey::Path, path.into());
+        converted
     })
+}
+
+/// The output failure of a run that failed or was cancelled, possibly
+/// before it began: `NoOutput` with the `Reason` fact `not_completed`.
+pub(crate) fn not_completed() -> Error {
+    no_output("not_completed", "the run did not complete")
+}
+
+/// A `NoOutput` failure with `message` and the `Reason` fact `reason`.
+fn no_output(reason: &str, message: &str) -> Error {
+    let code = ErrorCode::NoOutput;
+    let mut error = Error::new(code, message, code.prose());
+    error.facts.insert(FactKey::Reason, reason.into());
+    error
 }

@@ -23,7 +23,7 @@ use runvil_plugin::HostServices;
 use crate::display_chain::display_chain;
 use crate::effect_loop::drive;
 use crate::environment::{HostSnapshot, current_model};
-use crate::files::{OutputError, report_output};
+use crate::files::{not_completed, report_output};
 use crate::host::HostContext;
 use crate::performers::{InferenceBroker, Timer};
 use crate::prepare::{Services, begin, prepare};
@@ -93,8 +93,11 @@ pub struct RunReport {
     /// How the run ended.
     pub outcome: RunOutcome,
     /// The text a completed run left at its declared `output:` file, or
-    /// the reason the report omits that text.
-    pub output: Result<String, OutputError>,
+    /// the reason the report omits that text: `NoOutput` with the `Reason`
+    /// fact `not_completed` or `undeclared`, `NotFound` for a completed
+    /// run that left no file, or the store's failure, each with the
+    /// declared path as the `Path` fact when there is one.
+    pub output: Result<String, runvil::error::Error>,
 }
 
 /// The error that stopped a run before `Harness::run` could record its
@@ -228,7 +231,7 @@ impl Harness {
                 return Ok(RunReport {
                     run_id,
                     outcome,
-                    output: Err(OutputError::NotCompleted),
+                    output: Err(not_completed()),
                 });
             }
         };
@@ -253,7 +256,7 @@ impl Harness {
                     Ok(outcome) => Ok(RunReport {
                         run_id,
                         outcome,
-                        output: Err(OutputError::NotCompleted),
+                        output: Err(not_completed()),
                     }),
                     Err(source) => Err(recorded(source)),
                 };

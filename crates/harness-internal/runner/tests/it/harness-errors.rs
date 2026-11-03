@@ -19,11 +19,9 @@ use runvil::error::{Error, ErrorCode};
 use runvil::model::{Completion, completion_error, phrase};
 use runvil_plugin::{HostServices, PackRegistry};
 
-use super::{
-    OutputError, PendingTimer, RunOutcome, answers_to, plain_harness, request, run_beside, until,
-};
+use super::{PendingTimer, RunOutcome, answers_to, plain_harness, request, run_beside, until};
 use crate::scripted::{Listing, ScriptedBroker};
-use crate::support::FailingRecorder;
+use crate::support::{FailingRecorder, assert_not_completed};
 
 /// A Pack-free prompt whose one section returns a constant.
 const PLAIN: &str = "---\nname: plain\ndescription: d\nrunvil: 0\n---\n\n\
@@ -69,7 +67,7 @@ fn assert_ended_before_the_parse(recorder: &FailingRecorder, report: &RunReport)
         "the run ended before its prompt was parsed"
     );
     assert_eq!(recorder.calls(), 2, "the run's begin and its end");
-    assert_eq!(report.output, Err(OutputError::NotCompleted));
+    assert_not_completed(&report.output);
 }
 
 #[tokio::test]

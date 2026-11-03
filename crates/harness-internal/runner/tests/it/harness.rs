@@ -19,7 +19,6 @@ use std::thread::{self, Thread, ThreadId};
 use std::time::Duration;
 
 use harness_runner::environment::HostSnapshot;
-use harness_runner::files::OutputError;
 use harness_runner::recorder::{MemoryRecorder, Record, RecordKind, RunErrorKind, RunOutcome};
 use harness_runner::{Harness, HarnessError, HostContext, RunControl, RunReport, RunRequest};
 use runvil::vfs::VfsRef;
@@ -27,7 +26,7 @@ use runvil_plugin::{HostServices, PackRegistry};
 use serde_json::{Value, json};
 
 use crate::scripted::{Kept, MODEL, ScriptedBroker};
-use crate::support::{HookedBackend, PendingTimer};
+use crate::support::{HookedBackend, PendingTimer, assert_not_completed};
 
 #[path = "harness-errors.rs"]
 mod errors;
@@ -240,7 +239,7 @@ async fn source_that_fails_to_parse_ends_as_a_recorded_failed_run_with_its_parse
     };
     assert_eq!(*kind, RunErrorKind::Parse);
     assert_eq!(recorder.outcome(run_id), Some(report.outcome.clone()));
-    assert_eq!(report.output, Err(OutputError::NotCompleted));
+    assert_not_completed(&report.output);
     let records = recorder.records(run_id);
     assert!(
         records

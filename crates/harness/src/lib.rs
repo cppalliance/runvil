@@ -25,7 +25,6 @@ pub use harness_runner::RunReport;
 pub use harness_runner::RunRequest;
 pub use harness_runner::display_chain;
 pub use harness_runner::environment::HostSnapshot;
-pub use harness_runner::files::OutputError;
 pub use harness_runner::performers::BoxFuture;
 pub use harness_runner::performers::InferenceBroker;
 pub use harness_runner::performers::Timer;

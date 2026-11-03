@@ -18,7 +18,6 @@ use std::time::Duration;
 
 use futures_util::FutureExt as _;
 use harness_runner::environment::HostSnapshot;
-use harness_runner::files::OutputError;
 use harness_runner::recorder::{Record, RecorderFuture, RunMeta, RunRecorder};
 use harness_runner::{Harness, RunControl, RunRequest};
 use runvil::vfs::VfsRef;
@@ -383,7 +382,7 @@ async fn a_cancel_while_a_declared_pack_is_still_starting_ends_the_run_cancelled
 
     let report = report.expect("a cancelled run is reported");
     assert_eq!(report.outcome, RunOutcome::Cancelled);
-    assert_eq!(report.output, Err(OutputError::NotCompleted));
+    crate::support::assert_not_completed(&report.output);
     assert_eq!(
         recorder.outcome(report.run_id),
         Some(RunOutcome::Cancelled),

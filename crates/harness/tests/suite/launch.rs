@@ -6,8 +6,9 @@ use std::sync::Arc;
 
 use harness::pack::{HostContext, HostServices, PackRegistry};
 use harness::record::{MemoryRecorder, RunOutcome};
-use harness::vfs::{Origin, VfsError, VfsRef};
-use harness::{Harness, HostSnapshot, OutputError, RunRequest};
+use harness::vfs::{Origin, VfsRef};
+use harness::{Harness, HostSnapshot, RunRequest};
+use runvil::error::{ErrorCode, FactKey};
 
 use crate::support::{Clock, Offline};
 
@@ -72,20 +73,10 @@ async fn a_run_that_does_not_complete_reports_no_output() {
         .await
         .expect("the run reaches an outcome");
     assert!(matches!(report.outcome, RunOutcome::Failed { .. }));
-    assert_eq!(report.output, Err(OutputError::NotCompleted));
-}
-
-#[test]
-fn an_output_store_failure_renders_its_own_message_and_sources_the_engines_error() {
-    let error = OutputError::Vfs {
-        path: "report.md".to_owned(),
-        source: VfsError::NotFound {
-            path: "report.md".to_owned(),
-        },
-    };
+    let error = report.output.expect_err("a failed run reports no output");
+    assert_eq!(error.code, ErrorCode::NoOutput);
     assert_eq!(
-        error.to_string(),
-        "the output file `report.md` could not be read"
+        error.facts.get(&FactKey::Reason),
+        Some(&serde_json::json!("not_completed"))
     );
-    assert!(std::error::Error::source(&error).is_some());
 }

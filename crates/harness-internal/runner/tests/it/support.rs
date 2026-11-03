@@ -14,7 +14,7 @@ use harness_runner::recorder::{
 };
 use runvil::cancel::CancelHandle;
 use runvil::effect::{Round, ToolCallOrigin};
-use runvil::error::Error;
+use runvil::error::{Error, ErrorCode, FactKey};
 use runvil::model::{
     Completion, CompletionOptions, Message, ModelBinding, ModelCatalog, ToolSchema,
 };
@@ -33,6 +33,19 @@ pub(crate) const EXECUTION: &str = "runner-test";
 
 /// The fixed seed every fixture run and recorded meta takes.
 pub(crate) const TEST_SEED: RunSeed = RunSeed::from_bytes([7; 32]);
+
+/// Asserts a report's `output` is the failure of a run that did not
+/// complete.
+pub(crate) fn assert_not_completed(output: &Result<String, Error>) {
+    let Err(error) = output else {
+        panic!("a run that did not complete reports no output: {output:?}");
+    };
+    assert_eq!(error.code, ErrorCode::NoOutput);
+    assert_eq!(
+        error.facts.get(&FactKey::Reason),
+        Some(&json!("not_completed"))
+    );
+}
 
 /// A registry holding the built-ins and each of `infos` with a `null`
 /// config, which a suite builds its Host over.
