@@ -9,7 +9,8 @@
 
 use std::path::PathBuf;
 
-use runvil::model::{CompletionError, ModelId, ModelInfo};
+use runvil::error::Error;
+use runvil::model::{ModelId, ModelInfo};
 
 use crate::performers::InferenceBroker;
 use crate::recorder::RunErrorKind;
@@ -52,7 +53,7 @@ pub enum CurrentModelError {
     /// The inference broker failed to fetch its model list. The broker's
     /// error is the source.
     #[error("the model catalog could not be fetched")]
-    CatalogFetchFailed(#[source] CompletionError),
+    CatalogFetchFailed(#[source] Error),
     /// The selected id is absent from the fetched catalog.
     #[error("the selected model `{0}` is absent from the fetched catalog")]
     SelectionAbsent(String),

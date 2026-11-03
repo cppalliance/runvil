@@ -117,33 +117,28 @@ fn typed_error_survives_the_lua_external_boundary() {
 
 #[test]
 fn completion_errors_preserve_their_causes_across_the_error_type_bridge() {
-    // A broker's failure arrives as a `CompletionError` with its concrete
-    // cause attached; the cause survives both the public
-    // `CompletionError::source` and the mapping onto this crate's error
-    // type.
-    use crate::model::CompletionError;
-    use runvil_model_client::model::CompletionErrorKind;
+    // A broker's failure arrives with its concrete cause in its message;
+    // the mapping onto this crate's error type keeps the failure whole, so
+    // the cause stays in the message and out of the prose.
+    use runvil_types::error::ErrorCode;
 
     let cause = std::io::Error::other("connection refused");
-    let completion = CompletionError::new(
-        CompletionErrorKind::Unavailable,
+    let completion = crate::model::completion_error(
+        ErrorCode::Unavailable,
         "model access is turned off or not configured",
     )
-    .with_source(cause);
-    assert_eq!(completion.kind(), CompletionErrorKind::Unavailable);
-    assert!(
-        std::error::Error::source(&completion).is_some(),
-        "the configuration cause must survive the public wrapper"
-    );
+    .with_cause(&cause);
     let bridged = Error::from(completion);
+    let Error::Completion(error) = &bridged else {
+        panic!("the error type holds the completion error whole, got {bridged:?}");
+    };
+    assert_eq!(error.code, ErrorCode::Unavailable);
     assert!(
-        matches!(&bridged, Error::Completion(error) if error.kind() == CompletionErrorKind::Unavailable),
-        "the error type holds the completion error whole, got {bridged:?}"
+        error.message.contains("connection refused"),
+        "the cause must survive the bridge: {error:?}"
     );
-    assert!(
-        std::error::Error::source(&bridged).is_some(),
-        "the cause must survive the bridge"
-    );
+    assert_eq!(error.prose, "model access is turned off or not configured");
+    assert!(bridged.to_string().contains("connection refused"));
 }
 
 #[test]

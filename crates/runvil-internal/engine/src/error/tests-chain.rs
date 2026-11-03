@@ -1,9 +1,9 @@
 //! The error-chain convention: a cause-bearing failure's message holds the
 //! cause's text, its source chain shows that text once, and its cause stays
-//! reachable through `originating_error()`; a variant that still keeps a `source()`
-//! shows each segment of its chain once, and so does the message a run
-//! ends with; an internal failure built with a cause appends it once; and
-//! the store probe names a missing store.
+//! reachable through `originating_error()`; a model failure's message holds
+//! its cause, so the message a run ends with shows it once; an internal
+//! failure built with a cause appends it once; and the store probe names a
+//! missing store.
 
 use runvil_lua::VfsOp;
 use runvil_types::error::ErrorCode;
@@ -77,15 +77,13 @@ fn cause_bearing() -> Vec<Error> {
     ]
 }
 
-/// One failure of each variant that still keeps its cause as a `source()`,
-/// so a chain printer walks more than one segment.
-#[track_caller]
-fn source_bearing() -> Vec<Error> {
-    let transport = crate::model::CompletionErrorKind::Transport;
-    vec![Error::Completion(
-        crate::model::CompletionError::new(transport, transport.phrase())
-            .with_source(std::io::Error::other("connection reset by peer")),
-    )]
+/// A model failure built with a cause, which its message holds.
+fn caused_completion() -> Error {
+    let transport = ErrorCode::Transport;
+    Error::Completion(
+        crate::model::completion_error(transport, crate::model::phrase(transport))
+            .with_cause(&std::io::Error::other("connection reset by peer")),
+    )
 }
 
 /// Asserts that no segment of `error`'s source chain repeats inside an
@@ -118,17 +116,13 @@ fn no_segment_of_an_error_chain_repeats() {
         );
         assert_eq!(assert_no_segment_repeats(&error), 1);
     }
-    for error in source_bearing() {
-        assert!(
-            assert_no_segment_repeats(&error) > 1,
-            "required a chain of at least two segments to walk, actual one for {error:?}"
-        );
-        assert_eq!(
-            error.message(),
-            chain(&error).join(": "),
-            "the run's message holds each segment of the chain once"
-        );
-    }
+    let completion = caused_completion();
+    assert_eq!(assert_no_segment_repeats(&completion), 1);
+    assert_eq!(
+        completion.message(),
+        "the connection to the model backend failed: connection reset by peer",
+        "the run's message holds the model failure's cause once"
+    );
 }
 
 #[test]

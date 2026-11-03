@@ -7,14 +7,15 @@ use std::pin::pin;
 use std::task::{Context, Poll, Waker};
 use std::time::{Duration, Instant};
 
-use runvil::model::{CompletionErrorKind, CompletionResult, RawExchange};
+use runvil::error::ErrorCode;
+use runvil::model::{CompletionResult, RawExchange, completion_error};
 use serde_json::json;
 
 use super::*;
 
 /// A chunk source over canned chunks; it never pends, so the tests need
 /// no executor.
-struct Canned(VecDeque<Result<Vec<u8>, CompletionError>>);
+struct Canned(VecDeque<Result<Vec<u8>, Error>>);
 
 impl Canned {
     fn of(chunks: &[&str]) -> Canned {
@@ -30,9 +31,7 @@ impl Canned {
 impl ChunkSource for Canned {
     type Chunk = Vec<u8>;
 
-    fn next_chunk(
-        &mut self,
-    ) -> impl Future<Output = Result<Option<Self::Chunk>, CompletionError>> + Send {
+    fn next_chunk(&mut self) -> impl Future<Output = Result<Option<Self::Chunk>, Error>> + Send {
         std::future::ready(self.0.pop_front().transpose())
     }
 }
@@ -67,13 +66,13 @@ fn read_body_capped_refuses_an_advertised_oversize_length_before_reading() {
     let mut source = Canned::of(&["never read"]);
     let err = block_on(read_body_capped(&mut source, Some(100), 8))
         .expect_err("an advertised length over the cap is refused");
-    assert_eq!(err.kind(), CompletionErrorKind::MalformedResponse);
+    assert_eq!(err.code, ErrorCode::MalformedResponse);
     assert_eq!(
         err.to_string(),
         "the model backend sent a reply that could not be understood: \
 response body of 100 bytes exceeds the 8-byte limit"
     );
-    assert_eq!(err.detail(), None);
+    assert_eq!(err.message, err.prose);
     assert_eq!(source.0.len(), 1, "nothing was read");
 }
 
@@ -82,7 +81,7 @@ fn read_body_capped_refuses_streamed_chunks_over_the_cap() {
     let mut source = Canned::of(&["12345", "6789"]);
     let err = block_on(read_body_capped(&mut source, None, 8))
         .expect_err("chunks past the cap are refused");
-    assert_eq!(err.kind(), CompletionErrorKind::MalformedResponse);
+    assert_eq!(err.code, ErrorCode::MalformedResponse);
     assert_eq!(
         err.to_string(),
         "the model backend sent a reply that could not be understood: \
@@ -255,7 +254,7 @@ fn read_completion_stream_refuses_a_stream_over_the_byte_cap() {
         || started,
     ))
     .expect_err("an oversize stream is refused");
-    assert_eq!(err.kind(), CompletionErrorKind::MalformedResponse);
+    assert_eq!(err.code, ErrorCode::MalformedResponse);
     assert_eq!(
         err.to_string(),
         "the model backend sent a reply that could not be understood: \
@@ -277,24 +276,23 @@ fn read_completion_stream_refuses_a_stream_without_the_sentinel() {
         || started,
     ))
     .expect_err("a cut-off stream is refused");
-    assert_eq!(err.kind(), CompletionErrorKind::MalformedResponse);
+    assert_eq!(err.code, ErrorCode::MalformedResponse);
     assert_eq!(
         err.to_string(),
         "the model backend sent a reply that could not be understood: \
 completion stream ended without the [DONE] sentinel"
     );
-    assert_eq!(err.detail(), None);
+    assert_eq!(err.message, err.prose);
 }
 
 #[test]
 fn read_completion_stream_returns_the_source_failure_as_is() {
-    let timed_out =
-        CompletionError::new(CompletionErrorKind::Timeout, "no chunk in time").with_source(
-            std::io::Error::new(std::io::ErrorKind::TimedOut, "deadline"),
-        );
+    let timed_out = completion_error(ErrorCode::Timeout, "no chunk in time").with_cause(
+        &std::io::Error::new(std::io::ErrorKind::TimedOut, "deadline"),
+    );
     let mut source = Canned(VecDeque::from([
         Ok(sse(&[text_chunk("par")]).into_bytes()),
-        Err(timed_out),
+        Err(timed_out.clone()),
     ]));
     let started = Instant::now();
     let err = block_on(read_completion_stream(
@@ -306,7 +304,8 @@ fn read_completion_stream_returns_the_source_failure_as_is() {
         || started,
     ))
     .expect_err("a read failure fails the round");
-    assert_eq!(err.kind(), CompletionErrorKind::Timeout);
-    assert_eq!(err.to_string(), "no chunk in time");
-    assert!(std::error::Error::source(&err).is_some());
+    assert_eq!(err, timed_out);
+    assert_eq!(err.code, ErrorCode::Timeout);
+    assert_eq!(err.prose, "no chunk in time");
+    assert_eq!(err.message, "no chunk in time: deadline");
 }

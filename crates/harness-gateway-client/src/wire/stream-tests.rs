@@ -1,6 +1,7 @@
 //! Tests for the streaming accumulator and the SSE data-line scanner.
 
-use runvil::model::{CompletionErrorKind, CompletionResult};
+use runvil::error::{ErrorCode, FactKey};
+use runvil::model::CompletionResult;
 use serde_json::Value;
 
 use super::*;
@@ -178,15 +179,15 @@ fn finish_fails_a_tool_call_batch_truncated_by_length_or_content_filter() {
             .finish(Value::Null, None)
             .expect_err("a truncated tool-call batch must fail");
         assert_eq!(
-            error.kind(),
-            CompletionErrorKind::MalformedResponse,
+            error.code,
+            ErrorCode::MalformedResponse,
             "finish_reason {reason:?}"
         );
         assert!(
             error.to_string().contains("truncated"),
             "the error's message names the truncation: {error:?}"
         );
-        assert_eq!(error.detail(), None);
+        assert_eq!(error.message, error.prose);
     }
 }
 
@@ -208,7 +209,7 @@ fn finish_fails_a_tool_call_batch_sharing_an_id_as_a_retryable_malformed_reply()
     ])
     .finish(Value::Null, None)
     .expect_err("two calls sharing an id must fail");
-    assert_eq!(error.kind(), CompletionErrorKind::MalformedResponse);
+    assert_eq!(error.code, ErrorCode::MalformedResponse);
 }
 
 #[test]
@@ -242,11 +243,14 @@ fn finish_hard_fails_on_an_empty_model_reply() {
     ])
     .finish(Value::Null, None)
     .expect_err("empty product must fail");
-    assert_eq!(error.kind(), CompletionErrorKind::EmptyReply);
+    assert_eq!(error.code, ErrorCode::EmptyReply);
     assert_eq!(
-        error.finish_reason(),
+        error
+            .facts
+            .get(&FactKey::FinishReason)
+            .and_then(Value::as_str),
         Some("stop"),
-        "the finish_reason must survive the conversion into CompletionError"
+        "the finish_reason must survive the conversion into the error"
     );
     assert_eq!(
         error.to_string(),
@@ -254,7 +258,7 @@ fn finish_hard_fails_on_an_empty_model_reply() {
 reasoning content was present but ignored",
         "the ignored-reasoning note extends the message"
     );
-    assert_eq!(error.detail(), None);
+    assert_eq!(error.message, error.prose);
 }
 
 #[test]
@@ -351,7 +355,7 @@ fn empty_choices_usage_chunk_is_metadata_not_a_turn() {
 }
 
 #[test]
-fn error_envelope_fails_the_stream_with_the_escaped_message_as_detail() {
+fn error_envelope_fails_the_stream_with_the_escaped_message_in_its_message_only() {
     let mut accumulator = StreamAccumulator::new();
     let error = accumulator
         .apply(
@@ -360,12 +364,12 @@ fn error_envelope_fails_the_stream_with_the_escaped_message_as_detail() {
             &no_delta,
         )
         .expect_err("an error envelope must fail the stream");
-    assert_eq!(error.kind(), CompletionErrorKind::Transport);
+    assert_eq!(error.code, ErrorCode::Transport);
+    assert_eq!(error.prose, "the connection to the model backend failed");
     assert_eq!(
-        error.to_string(),
-        "the connection to the model backend failed"
+        error.message,
+        "the connection to the model backend failed: upstream\\ndied"
     );
-    assert_eq!(error.detail(), Some("upstream\\ndied"));
 }
 
 #[test]
@@ -382,8 +386,14 @@ fn error_envelope_naming_a_context_limit_is_a_context_overflow() {
             &no_delta,
         )
         .expect_err("an error envelope must fail the stream");
-    assert_eq!(error.kind(), CompletionErrorKind::ContextOverflow);
-    assert_eq!(error.overflow(), (Some(5000), Some(4096)));
+    assert_eq!(error.code, ErrorCode::ContextOverflow);
+    assert_eq!(
+        (
+            error.facts.get(&FactKey::Count),
+            error.facts.get(&FactKey::Limit)
+        ),
+        (Some(&Value::from(5000)), Some(&Value::from(4096)))
+    );
 }
 
 #[test]
@@ -404,32 +414,33 @@ fn malformed_chunks_are_rejected_not_skipped() {
         let mut accumulator = StreamAccumulator::new();
         let error = accumulator.apply(payload, &no_delta).expect_err(label);
         assert_eq!(
-            error.kind(),
-            CompletionErrorKind::MalformedResponse,
+            error.code,
+            ErrorCode::MalformedResponse,
             "{label}: {error:?}"
         );
         assert!(
             error
-                .to_string()
+                .prose
                 .starts_with("the model backend sent a reply that could not be understood: "),
-            "{label}: the message extends the fixed phrase: {error}"
+            "{label}: the prose extends the fixed phrase: {error:?}"
         );
-        assert_eq!(error.detail(), None, "{label}");
     }
 }
 
 #[test]
-fn a_malformed_chunk_preserves_the_decode_source() {
+fn a_malformed_chunk_keeps_the_decode_error_in_its_message_only() {
+    let decode = serde_json::from_str::<Value>("{ not json")
+        .expect_err("the payload is not JSON")
+        .to_string();
     let mut accumulator = StreamAccumulator::new();
     let error = accumulator
         .apply("{ not json", &no_delta)
         .expect_err("undecodable chunk must fail");
-    let source =
-        std::error::Error::source(&error).expect("the decode error must be a preserved source");
     assert!(
-        source.downcast_ref::<serde_json::Error>().is_some(),
-        "the preserved source must be the JSON decode error, got {source}"
+        error.message.contains(&decode),
+        "the message holds the JSON decode error: {error:?}"
     );
+    assert!(!error.prose.contains(&decode), "{error:?}");
 }
 
 #[test]

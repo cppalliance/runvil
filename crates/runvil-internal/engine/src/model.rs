@@ -1,7 +1,8 @@
 //! The model vocabulary a caller exchanges with a run: what a `Chat` effect
 //! includes ([`Message`], [`ToolSchema`], [`ModelBinding`]) and what its
-//! answer returns ([`Completion`], [`CompletionResult`],
-//! [`CompletionError`]), plus the prompt-local binding vocabulary
+//! answer returns ([`Completion`], [`CompletionResult`], or the
+//! [`runvil_types::error::Error`] [`completion_error`] builds), plus the
+//! prompt-local binding vocabulary
 //! ([`ModelSet`], [`ModelInvocation`]) and the model
 //! identity a run's roles are bound to ([`ModelInfo`], [`ModelId`]).
 //!
@@ -30,7 +31,7 @@ pub(crate) use runvil_model_client::client::{
 // documented.
 pub(crate) use runvil_model_client::detail;
 pub(crate) use runvil_model_client::model::{
-    CompletionError, CompletionErrorKind, ModelBinding, ModelInvocation, ModelSet, Temperature,
+    ModelBinding, ModelInvocation, ModelSet, Temperature, completion_error, phrase,
 };
 pub(crate) use runvil_types::models::{ModelId, ModelInfo, ModelRole, ThinkingMode};
 

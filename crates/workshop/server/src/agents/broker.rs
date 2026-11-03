@@ -19,11 +19,13 @@ use std::num::NonZeroU32;
 use std::sync::{Arc, Mutex, PoisonError};
 
 use harness::{BoxFuture, InferenceBroker};
-use harness_gateway_client::{CompletionError, CompletionErrorKind, GatewayBroker, StreamDelta};
+use harness_gateway_client::{GatewayBroker, StreamDelta};
 use runvil::effect::Round;
+use runvil::error::{Error, ErrorCode};
 use runvil::event::ReplyOrigin;
 use runvil::model::{
     Completion, CompletionOptions, Message, ModelBinding, ModelCatalog, ToolSchema,
+    completion_error, phrase,
 };
 use workshop_agents::{Conversation, DeltaKind};
 use workshop_menu::{CatalogBus, MenuHandles};
@@ -54,11 +56,11 @@ impl WorkshopBroker {
 
     /// The Gateway broker for the current generation, built on the first
     /// call under it. No usable gateway fails as `Unavailable` with the
-    /// kind's fixed phrase, so no URL or key reaches the message.
-    fn current(&self) -> Result<GatewayBroker, CompletionError> {
-        let unavailable = CompletionErrorKind::Unavailable;
+    /// code's fixed phrase, so no URL or key reaches the message.
+    fn current(&self) -> Result<GatewayBroker, Error> {
+        let unavailable = ErrorCode::Unavailable;
         let gateway = usable_gateway(&self.registry)
-            .ok_or_else(|| CompletionError::new(unavailable, unavailable.phrase()))?;
+            .ok_or_else(|| completion_error(unavailable, phrase(unavailable)))?;
         // A poisoned lock holds a pair written whole by one store.
         let mut cached = self.cached.lock().unwrap_or_else(PoisonError::into_inner);
         if let Some((generation, broker)) = cached.as_ref()
@@ -124,7 +126,7 @@ impl WorkshopBroker {
         tools: Vec<ToolSchema>,
         options: CompletionOptions,
         on_piece: Arc<dyn Fn(StreamDelta) + Send + Sync>,
-    ) -> BoxFuture<Result<Box<Completion>, CompletionError>> {
+    ) -> BoxFuture<Result<Box<Completion>, Error>> {
         match self.current() {
             Ok(broker) => {
                 let options = self.routed(&binding, options);
@@ -136,7 +138,7 @@ impl WorkshopBroker {
 }
 
 impl InferenceBroker for WorkshopBroker {
-    fn models(&self) -> BoxFuture<Result<ModelCatalog, CompletionError>> {
+    fn models(&self) -> BoxFuture<Result<ModelCatalog, Error>> {
         let broker = self.clone();
         Box::pin(async move {
             broker.chat_model_ready().await;
@@ -151,7 +153,7 @@ impl InferenceBroker for WorkshopBroker {
         tools: Vec<ToolSchema>,
         options: CompletionOptions,
         round: Round,
-    ) -> BoxFuture<Result<Box<Completion>, CompletionError>> {
+    ) -> BoxFuture<Result<Box<Completion>, Error>> {
         match self.current() {
             Ok(broker) => {
                 let options = self.routed(&binding, options);
@@ -198,7 +200,7 @@ impl RunBroker {
 }
 
 impl InferenceBroker for RunBroker {
-    fn models(&self) -> BoxFuture<Result<ModelCatalog, CompletionError>> {
+    fn models(&self) -> BoxFuture<Result<ModelCatalog, Error>> {
         self.inner.models()
     }
 
@@ -209,7 +211,7 @@ impl InferenceBroker for RunBroker {
         tools: Vec<ToolSchema>,
         options: CompletionOptions,
         round: Round,
-    ) -> BoxFuture<Result<Box<Completion>, CompletionError>> {
+    ) -> BoxFuture<Result<Box<Completion>, Error>> {
         // Only a section's own round has a live reader; a nested
         // `models.infer` round is read whole from its answer.
         if round.origin != ReplyOrigin::Chat {

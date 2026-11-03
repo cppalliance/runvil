@@ -368,9 +368,15 @@ fn a_raised_table_maps_onto_the_executor_error_type_by_kind() {
     };
     match crate::Error::from(Error::Raised(empty)) {
         crate::Error::Completion(error) => {
-            assert_eq!(error.kind(), crate::model::CompletionErrorKind::EmptyReply);
-            assert_eq!(error.message(), "the model returned an empty turn");
-            assert_eq!(error.finish_reason(), Some("length"));
+            assert_eq!(error.code, runvil_types::error::ErrorCode::EmptyReply);
+            assert_eq!(error.prose, "the model returned an empty turn");
+            assert_eq!(
+                error
+                    .facts
+                    .get(&runvil_types::error::FactKey::FinishReason)
+                    .and_then(serde_json::Value::as_str),
+                Some("length")
+            );
         }
         other => panic!("expected the empty-reply failure, got {other:?}"),
     }

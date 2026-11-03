@@ -4,10 +4,10 @@
 use std::num::NonZeroU64;
 use std::time::Duration;
 
+use runvil::error::ErrorCode;
 use runvil::model::{CompletionResult, Message};
 
 use super::*;
-use crate::CompletionErrorKind;
 
 #[tokio::test]
 async fn complete_on_a_disabled_client_is_an_unavailable_error() {
@@ -17,7 +17,7 @@ async fn complete_on_a_disabled_client_is_an_unavailable_error() {
         .complete(&[Message::user("hi")], None, &openai_options(), |_| {})
         .await
         .expect_err("a disabled client cannot complete");
-    assert_eq!(err.kind(), CompletionErrorKind::Unavailable);
+    assert_eq!(err.code, ErrorCode::Unavailable);
     assert_eq!(
         err.to_string(),
         "model access is turned off or not configured"
@@ -25,7 +25,7 @@ async fn complete_on_a_disabled_client_is_an_unavailable_error() {
 }
 
 #[tokio::test]
-async fn backend_error_display_is_body_free_and_body_is_opt_in_and_escaped() {
+async fn backend_error_prose_is_body_free_and_the_message_holds_the_escaped_body() {
     use axum::Router;
     use axum::routing::post;
 
@@ -43,27 +43,30 @@ async fn backend_error_display_is_body_free_and_body_is_opt_in_and_escaped() {
         .await
         .expect_err("a 502 must surface as a classified failure");
 
-    // F5: the public Display names only the kind and the status, never the
-    // raw body.
-    assert_eq!(err.kind(), CompletionErrorKind::ServerError);
-    let shown = err.to_string();
+    // F5: the prose the model reads names only the code and the status,
+    // never the raw body.
+    assert_eq!(err.code, ErrorCode::ServerError);
+    let shown = &err.prose;
     assert_eq!(
         shown,
         "the model backend reported a fault of its own (status 502)"
     );
     assert!(
         !shown.contains("super-secret") && !shown.contains('\n'),
-        "the raw body must not appear in Display, got {shown}"
+        "the raw body must not appear in the prose, got {shown}"
     );
-    // The bounded, control-escaped body is available only via the opt-in.
-    let body = err.detail().expect("the body is available opt-in");
+    // The bounded, control-escaped body is in the message only.
+    let body = err
+        .message
+        .strip_prefix(&format!("{shown}: "))
+        .expect("the message holds the body");
     assert!(
         body.contains("\\n"),
         "control chars must be escaped, got {body}"
     );
     assert!(
-        !body.contains('\n'),
-        "no raw newline in the diagnostic body"
+        !err.message.contains('\n'),
+        "no raw newline in the diagnostic message"
     );
 }
 
@@ -84,7 +87,7 @@ async fn complete_refuses_a_success_stream_over_the_size_cap() {
         .complete(&[Message::user("hi")], None, &openai_options(), |_| {})
         .await
         .expect_err("an oversize stream must be refused");
-    assert_eq!(err.kind(), CompletionErrorKind::MalformedResponse);
+    assert_eq!(err.code, ErrorCode::MalformedResponse);
     assert_eq!(
         err.to_string(),
         "the model backend sent a reply that could not be understood: \
@@ -109,8 +112,8 @@ async fn complete_refuses_a_backend_error_body_over_the_size_cap() {
         .complete(&[Message::user("hi")], None, &openai_options(), |_| {})
         .await
         .expect_err("an oversize error body must be refused");
-    assert_eq!(err.kind(), CompletionErrorKind::MalformedResponse);
-    assert_eq!(err.detail(), None, "the refused body is never kept");
+    assert_eq!(err.code, ErrorCode::MalformedResponse);
+    assert_eq!(err.message, err.prose, "the refused body is never kept");
 }
 
 #[tokio::test]
@@ -133,8 +136,8 @@ async fn a_request_past_the_timeout_is_a_timeout_failure() {
         .await
         .expect_err("a stalled gateway must time out");
     assert_eq!(
-        err.kind(),
-        CompletionErrorKind::Timeout,
+        err.code,
+        ErrorCode::Timeout,
         "the timeout must be recognizable: {err:?}"
     );
 }
@@ -264,8 +267,8 @@ async fn a_stream_that_stalls_after_the_headers_is_a_timeout_failure() {
         .await
         .expect_err("a stream that stops arriving must time out");
     assert_eq!(
-        err.kind(),
-        CompletionErrorKind::Timeout,
+        err.code,
+        ErrorCode::Timeout,
         "the timeout must be recognizable: {err:?}"
     );
 }
@@ -305,17 +308,17 @@ async fn a_body_read_timeout_is_a_timeout_failure() {
         .expect_err("the body read stalls past the timeout");
     assert!(read.is_timeout(), "reqwest reports the read as a timeout");
 
+    let read_text = read.to_string();
     let err = transport_failure(read);
     assert_eq!(
-        err.kind(),
-        CompletionErrorKind::Timeout,
+        err.code,
+        ErrorCode::Timeout,
         "a timed-out body read is a Timeout: {err:?}"
     );
-    assert_eq!(err.to_string(), "the model backend did not answer in time");
+    assert_eq!(err.prose, "the model backend did not answer in time");
     assert!(
-        std::error::Error::source(&err)
-            .is_some_and(|source| source.downcast_ref::<reqwest::Error>().is_some()),
-        "the reqwest error is kept as the source"
+        err.message.contains(&read_text) && !err.prose.contains(&read_text),
+        "the reqwest error is kept in the message only: {err:?}"
     );
 }
 
@@ -329,31 +332,28 @@ async fn a_refused_connection_is_a_transport_failure() {
         .complete(&[Message::user("hi")], None, &openai_options(), |_| {})
         .await
         .expect_err("nothing listens on the port");
-    assert_eq!(err.kind(), CompletionErrorKind::Transport);
-    assert_eq!(
-        err.to_string(),
-        "the connection to the model backend failed"
+    assert_eq!(err.code, ErrorCode::Transport);
+    assert_eq!(err.prose, "the connection to the model backend failed");
+    assert!(
+        err.message.starts_with(&format!("{}: ", err.prose)),
+        "the connection error joins the message: {err:?}"
     );
-    assert!(std::error::Error::source(&err).is_some());
 }
 
 #[tokio::test]
 async fn complete_refuses_a_malformed_stream_chunk() {
     // F14: a 200 whose stream holds an undecodable chunk is
-    // MalformedResponse, and the decode failure is preserved as the
-    // error-chain source.
+    // MalformedResponse, and the decode failure is kept in the message.
     let base = spawn_raw_gateway(axum::http::StatusCode::OK, "data: { not json\n\n").await;
     let client = keyed_client(&base);
     let err = client
         .complete(&[Message::user("hi")], None, &openai_options(), |_| {})
         .await
         .expect_err("undecodable chunk must fail");
-    assert_eq!(err.kind(), CompletionErrorKind::MalformedResponse);
-    let source =
-        std::error::Error::source(&err).expect("the decode error must be a preserved source");
+    assert_eq!(err.code, ErrorCode::MalformedResponse);
     assert!(
-        source.downcast_ref::<serde_json::Error>().is_some(),
-        "the preserved source must be the JSON decode error, got {source}"
+        err.message.starts_with(&format!("{}: ", err.prose)),
+        "the decode error joins the message: {err:?}"
     );
 }
 
@@ -372,7 +372,7 @@ async fn complete_refuses_malformed_tool_call_fragments_at_the_boundary() {
         .complete(&[Message::user("hi")], None, &openai_options(), |_| {})
         .await
         .expect_err("malformed tool arguments must be rejected");
-    assert_eq!(err.kind(), CompletionErrorKind::MalformedResponse);
+    assert_eq!(err.code, ErrorCode::MalformedResponse);
 }
 
 #[tokio::test]
@@ -389,7 +389,7 @@ async fn stream_without_done_sentinel_is_malformed() {
         .complete(&[Message::user("hi")], None, &openai_options(), |_| {})
         .await
         .expect_err("a truncated stream must fail");
-    assert_eq!(err.kind(), CompletionErrorKind::MalformedResponse);
+    assert_eq!(err.code, ErrorCode::MalformedResponse);
     assert_eq!(
         err.to_string(),
         "the model backend sent a reply that could not be understood: \

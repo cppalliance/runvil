@@ -57,7 +57,7 @@ fn models_loop_raises_context_exhaustion_at_the_call_site() {
 #[test]
 fn an_explicit_compactors_fail_invocation_reports_the_provider_reason() {
     let gateway = ScriptedChat::new(vec![fail(
-        crate::model::CompletionErrorKind::ContextOverflow,
+        runvil_types::error::ErrorCode::ContextOverflow,
         400,
         "This model's maximum context length is 4096 tokens.",
     )]);

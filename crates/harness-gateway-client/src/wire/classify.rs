@@ -1,11 +1,11 @@
 //! The HTTP failure classifier: the one place that reads a status code and
-//! response text and turns them into a [`CompletionErrorKind`].
+//! response text and turns them into a model [`ErrorCode`].
 //!
 //! [`classify_http_failure`] takes a non-success status and its bounded,
 //! control-escaped body. [`classify_stream_error`] applies the same body-text
 //! rules to an error envelope that arrives inside a 200 stream, where there
-//! is no status. Both keep the body as the error's opt-in
-//! [`detail`](CompletionError::detail) and never put it in the message.
+//! is no status. Both append the body to the error's message and never put
+//! it in the prose.
 //!
 //! The rules run in this order, and the first match wins:
 //!
@@ -18,7 +18,10 @@
 //! 5. A 400 whose body names a content policy term is `Refused`.
 //! 6. Every other status is `Rejected`.
 
-use runvil::model::{CompletionError, CompletionErrorKind};
+use runvil::error::{Error, ErrorCode};
+use runvil::model::{completion_error, context_overflow, phrase};
+
+use crate::failure::with_detail;
 
 /// Body phrases the known backends emit when a request exceeds the model's
 /// context window (OpenAI and compatible gateways, Anthropic, llama.cpp,
@@ -48,50 +51,46 @@ const REFUSAL_WORDS: &[&str] = &["content_filter", "content policy", "safety", "
 /// unavailable phrase.
 const CREDENTIALS_PHRASE: &str = "the model backend did not accept the credentials";
 
-/// Classifies a failed HTTP response into a [`CompletionError`].
+/// Classifies a failed HTTP response into an [`Error`] under a model code.
 ///
 /// `body` must already be bounded and passed through
-/// [`escape_controls`](crate::escape_controls). The error keeps exactly that
-/// text as its [`detail`](CompletionError::detail). The message never
-/// includes it.
+/// [`escape_controls`](crate::escape_controls). The error's message ends
+/// with exactly that text after `: `. The prose never includes it.
 ///
-/// The message is the kind's fixed phrase with ` (status N)` appended. A 401
-/// or 403 is `Unavailable`, and its message uses
+/// The prose is the code's fixed phrase with ` (status N)` appended. A 401
+/// or 403 is `Unavailable`, and its prose uses
 /// `the model backend did not accept the credentials` in place of the
 /// phrase.
 ///
 /// The result is always an error. When the body matches a rule, that rule
-/// sets the kind. Otherwise a 429 is `RateLimited`, a 503 or 529 is
+/// sets the code. Otherwise a 429 is `RateLimited`, a 503 or 529 is
 /// `Overloaded`, any other 5xx is `ServerError`, and any other status except
 /// 401 and 403 is `Rejected`.
 #[must_use]
-pub fn classify_http_failure(status: u16, body: &str) -> CompletionError {
+pub fn classify_http_failure(status: u16, body: &str) -> Error {
     let lower = body.to_lowercase();
-    let http = |kind: CompletionErrorKind| {
-        http_error(kind, kind.phrase(), status).with_detail(body.to_owned())
-    };
+    let http = |code: ErrorCode| with_detail(http_error(code, phrase(code), status), body);
     if matches!(status, 400 | 413) && names_any(&lower, OVERFLOW_PHRASES) {
         let (prompt_tokens, window) = overflow_counts(&lower);
-        return CompletionError::context_overflow(
+        let overflow = context_overflow(
             prompt_tokens,
             window,
-            format!(
-                "{} (status {status})",
-                CompletionErrorKind::ContextOverflow.phrase()
-            ),
-        )
-        .with_detail(body.to_owned());
+            format!("{} (status {status})", phrase(ErrorCode::ContextOverflow)),
+        );
+        return with_detail(overflow, body);
     }
     match status {
-        429 if names_any(&lower, QUOTA_WORDS) => http(CompletionErrorKind::QuotaExhausted),
-        429 => http(CompletionErrorKind::RateLimited),
-        503 | 529 => http(CompletionErrorKind::Overloaded),
-        500..=599 if lower.contains("overloaded") => http(CompletionErrorKind::Overloaded),
-        500..=599 => http(CompletionErrorKind::ServerError),
-        401 | 403 => http_error(CompletionErrorKind::Unavailable, CREDENTIALS_PHRASE, status)
-            .with_detail(body.to_owned()),
-        400 if names_any(&lower, REFUSAL_WORDS) => http(CompletionErrorKind::Refused),
-        _ => http(CompletionErrorKind::Rejected),
+        429 if names_any(&lower, QUOTA_WORDS) => http(ErrorCode::QuotaExhausted),
+        429 => http(ErrorCode::RateLimited),
+        503 | 529 => http(ErrorCode::Overloaded),
+        500..=599 if lower.contains("overloaded") => http(ErrorCode::Overloaded),
+        500..=599 => http(ErrorCode::ServerError),
+        401 | 403 => with_detail(
+            http_error(ErrorCode::Unavailable, CREDENTIALS_PHRASE, status),
+            body,
+        ),
+        400 if names_any(&lower, REFUSAL_WORDS) => http(ErrorCode::Refused),
+        _ => http(ErrorCode::Rejected),
     }
 }
 
@@ -104,37 +103,33 @@ pub fn classify_http_failure(status: u16, body: &str) -> CompletionError {
 /// `Refused`. Any other text is `Transport`, because the stream died in
 /// flight.
 ///
-/// The message is the kind's fixed phrase alone. `body` must already be
-/// bounded and control-escaped. The error keeps it as its
-/// [`detail`](CompletionError::detail).
+/// The prose is the code's fixed phrase alone. `body` must already be
+/// bounded and control-escaped. The error's message ends with it after
+/// `: `.
 #[must_use]
-pub fn classify_stream_error(body: &str) -> CompletionError {
+pub fn classify_stream_error(body: &str) -> Error {
     let lower = body.to_lowercase();
     let error = if names_any(&lower, OVERFLOW_PHRASES) {
         let (prompt_tokens, window) = overflow_counts(&lower);
-        CompletionError::context_overflow(
-            prompt_tokens,
-            window,
-            CompletionErrorKind::ContextOverflow.phrase(),
-        )
+        context_overflow(prompt_tokens, window, phrase(ErrorCode::ContextOverflow))
     } else {
-        let kind = if names_any(&lower, QUOTA_WORDS) {
-            CompletionErrorKind::QuotaExhausted
+        let code = if names_any(&lower, QUOTA_WORDS) {
+            ErrorCode::QuotaExhausted
         } else if lower.contains("overloaded") {
-            CompletionErrorKind::Overloaded
+            ErrorCode::Overloaded
         } else if names_any(&lower, REFUSAL_WORDS) {
-            CompletionErrorKind::Refused
+            ErrorCode::Refused
         } else {
-            CompletionErrorKind::Transport
+            ErrorCode::Transport
         };
-        CompletionError::new(kind, kind.phrase())
+        completion_error(code, phrase(code))
     };
-    error.with_detail(body.to_owned())
+    with_detail(error, body)
 }
 
 /// Builds an HTTP failure: `phrase` with the status appended.
-fn http_error(kind: CompletionErrorKind, phrase: &str, status: u16) -> CompletionError {
-    CompletionError::new(kind, format!("{phrase} (status {status})"))
+fn http_error(code: ErrorCode, phrase: &str, status: u16) -> Error {
+    completion_error(code, format!("{phrase} (status {status})"))
 }
 
 fn names_any(lower: &str, words: &[&str]) -> bool {

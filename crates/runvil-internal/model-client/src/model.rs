@@ -9,10 +9,10 @@
 //! a section, and a section that never calls it runs on the `default` role.
 //! A model-facing section with no model fails with a model-binding failure
 //! surfaced through the run error the caller receives.
-mod error;
+pub(crate) mod error;
 mod options;
 
-pub use error::{CompletionError, CompletionErrorKind};
+pub use error::{completion_error, context_overflow, empty_reply, phrase};
 pub use options::{CompletionOptions, ModelBinding, ModelInvocation, ModelSet, Temperature};
 // `runvil-lua` names the model id through this path; the rest of the catalog
 // vocabulary is imported from `runvil-types` directly.

@@ -1,8 +1,9 @@
 //! The internal error as a Lua error value: the kind an author branches
 //! on and the kind's fields.
 
+use runvil_types::error::{ErrorCode, FactKey};
+
 use super::{Error, join_task_ids};
-use crate::model::CompletionErrorKind;
 
 /// The internal type's rendering into the Lua error table: the kind an author
 /// branches on and the kind's fields. A failed model round renders as
@@ -22,7 +23,7 @@ impl runvil_lua::ErrorValue for Error {
             | Error::CallDepthExceeded { .. }
             | Error::Substitution(_) => ErrorKind::Lua,
             Error::ContextExhausted { .. } => ErrorKind::ContextExhausted,
-            Error::Completion(error) if error.kind() == CompletionErrorKind::EmptyReply => {
+            Error::Completion(error) if error.code == ErrorCode::EmptyReply => {
                 ErrorKind::EmptyModelReply
             }
             Error::Completion(_) => ErrorKind::ModelFailure,
@@ -47,14 +48,26 @@ impl runvil_lua::ErrorValue for Error {
         }
     }
 
+    /// A model failure's table holds its prose, so the provider detail and
+    /// the causes its message keeps stay out of the text an author may hand
+    /// a model.
+    fn table_message(&self) -> String {
+        match self {
+            Error::Completion(error) => error.prose.clone(),
+            other => other.to_string(),
+        }
+    }
+
     fn fields(&self) -> Vec<(String, runvil_lua::ErrorField)> {
         use runvil_lua::ErrorField;
         match self {
             Error::ContextExhausted { reason } => {
                 vec![("reason".to_owned(), ErrorField::String(reason.clone()))]
             }
-            Error::Completion(error) if error.kind() == CompletionErrorKind::EmptyReply => error
-                .finish_reason()
+            Error::Completion(error) if error.code == ErrorCode::EmptyReply => error
+                .facts
+                .get(&FactKey::FinishReason)
+                .and_then(serde_json::Value::as_str)
                 .map(|reason| {
                     vec![(
                         "finish_reason".to_owned(),

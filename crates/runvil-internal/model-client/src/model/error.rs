@@ -1,303 +1,100 @@
-//! The model failure vocabulary: the closed set of kinds a broker maps its
-//! failures into, and the error that carries one.
+//! The model failure vocabulary: the fixed phrase each model code's text
+//! starts with, and the constructors of a model round's failure.
 //!
-//! The message is the kind's fixed phrase. A failure built from an HTTP
-//! status appends ` (status N)`, and a 401 or 403 is `Unavailable` with
-//! `the model backend did not accept the credentials`. Only
-//! `MalformedResponse`, `EmptyReply`, `Unavailable`, and `InvalidParts`
+//! A failure's message and prose start as the code's fixed phrase. A failure
+//! built from an HTTP status appends ` (status N)`, and a 401 or 403 is
+//! `Unavailable` with `the model backend did not accept the credentials`.
+//! Only `MalformedResponse`, `EmptyReply`, `Unavailable`, and `InvalidParts`
 //! extend it with `: ` and text this repository's own code wrote. Provider
-//! text never enters the message; it goes in `detail`.
+//! text never enters the prose; a broker appends it to the message only.
 
-/// A type-erased owned error cause.
-type BoxedSource = Box<dyn std::error::Error + Send + Sync>;
+use runvil_types::error::{Error, ErrorCode, FactKey};
+use serde_json::Value;
 
 /// The specific an empty reply adds to its phrase when the reader dropped a
 /// reasoning side channel that it could not use as answer text.
 const REASONING_IGNORED: &str = "reasoning content was present but ignored";
 
-/// The kind of failure a model round ended with.
-///
-/// The kinds form a closed set, so a caller can branch on the kind alone.
-/// The caller that performs a round maps every failure into one of these
-/// kinds. Each kind is either retryable or permanent, as its own doc says.
-/// The enum is `#[non_exhaustive]`, so a `match` on it needs a wildcard
-/// arm.
-#[non_exhaustive]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum CompletionErrorKind {
-    /// The request exceeds the model's context window. Permanent.
-    ContextOverflow,
-    /// The backend is limiting the request rate. Retryable.
-    RateLimited,
-    /// The billing or usage quota is spent. Permanent.
-    QuotaExhausted,
-    /// The backend is temporarily at capacity. Retryable.
-    Overloaded,
-    /// The provider declined the content on policy grounds. Permanent.
-    Refused,
-    /// The wait for a reply or the next chunk timed out. Retryable.
-    Timeout,
-    /// The connection failed or the stream broke. Retryable.
-    Transport,
-    /// The backend reported a fault of its own. Retryable.
-    ServerError,
-    /// The backend refused the request for any other reason. Permanent.
-    Rejected,
-    /// The reply was malformed, or it was larger than the size limit for a
-    /// reply. Retryable.
-    MalformedResponse,
-    /// The model's reply was empty of text and tool calls. Permanent.
-    EmptyReply,
-    /// Model access is turned off or lacks a configuration. Permanent.
-    Unavailable,
-    /// A caller built a tool call or completion from parts the validating
-    /// constructors refuse. Permanent.
-    InvalidParts,
-}
-
-impl CompletionErrorKind {
-    /// Returns the fixed phrase for this kind: one lowercase phrase written
-    /// for a model to read.
-    ///
-    /// The module page gives the message shapes a caller builds from it.
-    #[must_use]
-    pub fn phrase(self) -> &'static str {
-        match self {
-            CompletionErrorKind::ContextOverflow => {
-                "the request is larger than the model's context window"
-            }
-            CompletionErrorKind::RateLimited => "the model backend is limiting the request rate",
-            CompletionErrorKind::QuotaExhausted => {
-                "the model backend says the usage quota is spent"
-            }
-            CompletionErrorKind::Overloaded => "the model backend is overloaded",
-            CompletionErrorKind::Refused => {
-                "the model backend refused the request on content policy grounds"
-            }
-            CompletionErrorKind::Timeout => "the model backend did not answer in time",
-            CompletionErrorKind::Transport => "the connection to the model backend failed",
-            CompletionErrorKind::ServerError => "the model backend reported a fault of its own",
-            CompletionErrorKind::Rejected => "the model backend rejected the request",
-            CompletionErrorKind::MalformedResponse => {
-                "the model backend sent a reply that could not be understood"
-            }
-            CompletionErrorKind::EmptyReply => "the model replied with no text and no tool calls",
-            CompletionErrorKind::Unavailable => "model access is turned off or not configured",
-            CompletionErrorKind::InvalidParts => "the completion was built from invalid parts",
+/// Returns the fixed phrase of a model code: one lowercase phrase written
+/// for a model to read. Any other code returns its default prose.
+#[must_use]
+pub fn phrase(code: ErrorCode) -> &'static str {
+    match code {
+        ErrorCode::ContextOverflow => "the request is larger than the model's context window",
+        ErrorCode::RateLimited => "the model backend is limiting the request rate",
+        ErrorCode::QuotaExhausted => "the model backend says the usage quota is spent",
+        ErrorCode::Overloaded => "the model backend is overloaded",
+        ErrorCode::Refused => "the model backend refused the request on content policy grounds",
+        ErrorCode::Timeout => "the model backend did not answer in time",
+        ErrorCode::Transport => "the connection to the model backend failed",
+        ErrorCode::ServerError => "the model backend reported a fault of its own",
+        ErrorCode::Rejected => "the model backend rejected the request",
+        ErrorCode::MalformedResponse => {
+            "the model backend sent a reply that could not be understood"
         }
-    }
-
-    /// Returns the kind's stable tag: its name in snake_case, such as
-    /// `malformed_response`. A run log records a failed round under it.
-    #[must_use]
-    pub fn tag(self) -> &'static str {
-        match self {
-            CompletionErrorKind::ContextOverflow => "context_overflow",
-            CompletionErrorKind::RateLimited => "rate_limited",
-            CompletionErrorKind::QuotaExhausted => "quota_exhausted",
-            CompletionErrorKind::Overloaded => "overloaded",
-            CompletionErrorKind::Refused => "refused",
-            CompletionErrorKind::Timeout => "timeout",
-            CompletionErrorKind::Transport => "transport",
-            CompletionErrorKind::ServerError => "server_error",
-            CompletionErrorKind::Rejected => "rejected",
-            CompletionErrorKind::MalformedResponse => "malformed_response",
-            CompletionErrorKind::EmptyReply => "empty_reply",
-            CompletionErrorKind::Unavailable => "unavailable",
-            CompletionErrorKind::InvalidParts => "invalid_parts",
-        }
+        ErrorCode::EmptyReply => "the model replied with no text and no tool calls",
+        ErrorCode::Unavailable => "model access is turned off or not configured",
+        ErrorCode::InvalidParts => "the completion was built from invalid parts",
+        other => other.prose(),
     }
 }
 
-/// The error a model round or a catalog fetch fails with.
-///
-/// The caller that performs the round or fetch reports this error. For a
-/// model round, it comes back into the Engine in a `Chat` effect's answer.
-///
-/// It holds a [`kind`](CompletionError::kind) from a closed set, a
-/// [`message`](CompletionError::message) written for the operator and the
-/// model, and optional extras: the token counts of a context overflow, the
-/// backend's `finish_reason` for an empty reply, a provider
-/// [`detail`](CompletionError::detail), and the underlying cause behind
-/// [`std::error::Error::source`]. `Display` shows only the message. The
-/// detail is provider text that the caller bounded and control-escaped. It
-/// is an opt-in channel and never appears in `Display`.
-///
-/// The caller builds one with [`new`](CompletionError::new),
-/// [`empty_reply`](CompletionError::empty_reply), or
-/// [`context_overflow`](CompletionError::context_overflow) and adds the
-/// extras with the `with_` methods. `empty_reply` is the builder that
-/// chooses between the bare phrase and the phrase extended with the
-/// reasoning-ignored text.
-///
-/// See the module page for the message shapes.
-#[derive(Debug)]
-#[non_exhaustive]
-pub struct CompletionError {
-    kind: CompletionErrorKind,
-    message: String,
+/// Builds the failure of a model round or a catalog fetch, with `message` as
+/// both its message and its prose. `code` is one of the model codes, and
+/// `message` is its phrase, extended as the module page says.
+#[must_use]
+pub fn completion_error(code: ErrorCode, message: impl Into<String>) -> Error {
+    let message = message.into();
+    Error::new(code, message.clone(), message)
+}
+
+/// Builds an `EmptyReply` failure for a turn that carried no text and no tool
+/// calls. Its text is the phrase, extended with `: reasoning content was
+/// present but ignored` when `reasoning_present` says the turn's reasoning
+/// side channel was dropped rather than used as answer text. A caller that
+/// knows the backend's finish reason adds it as the `FinishReason` fact.
+#[must_use]
+pub fn empty_reply(reasoning_present: bool) -> Error {
+    if reasoning_present {
+        specific(ErrorCode::EmptyReply, REASONING_IGNORED)
+    } else {
+        phrased(ErrorCode::EmptyReply)
+    }
+}
+
+/// Builds a `ContextOverflow` failure with the token counts the provider
+/// stated: the prompt tokens as the `Count` fact and the window as the
+/// `Limit` fact. A count the provider omitted is absent.
+#[must_use]
+pub fn context_overflow(
     prompt_tokens: Option<u32>,
     window: Option<u32>,
-    finish_reason: Option<String>,
-    detail: Option<String>,
-    source: Option<BoxedSource>,
+    message: impl Into<String>,
+) -> Error {
+    let mut error = completion_error(ErrorCode::ContextOverflow, message);
+    if let Some(tokens) = prompt_tokens {
+        error.facts.insert(FactKey::Count, Value::from(tokens));
+    }
+    if let Some(window) = window {
+        error.facts.insert(FactKey::Limit, Value::from(window));
+    }
+    error
 }
 
-impl CompletionError {
-    /// Builds a failure of `kind` with `message` as its display text.
-    ///
-    /// The caller passes the kind's fixed
-    /// [`phrase`](CompletionErrorKind::phrase); the extension rules live on
-    /// the module page. Provider text goes to
-    /// [`with_detail`](CompletionError::with_detail).
-    #[must_use]
-    pub fn new(kind: CompletionErrorKind, message: impl Into<String>) -> CompletionError {
-        CompletionError {
-            kind,
-            message: message.into(),
-            prompt_tokens: None,
-            window: None,
-            finish_reason: None,
-            detail: None,
-            source: None,
-        }
-    }
-
-    /// Builds an [`EmptyReply`](CompletionErrorKind::EmptyReply) failure for a
-    /// turn that carried no text and no tool calls.
-    ///
-    /// The message is the kind's fixed phrase, extended with
-    /// `: reasoning content was present but ignored` when
-    /// `reasoning_present` says the turn's reasoning side channel was
-    /// dropped rather than used as answer text. A caller that knows the
-    /// backend's `finish_reason` adds it with
-    /// [`with_finish_reason`](CompletionError::with_finish_reason).
-    #[must_use]
-    pub fn empty_reply(reasoning_present: bool) -> CompletionError {
-        if reasoning_present {
-            CompletionError::specific(CompletionErrorKind::EmptyReply, REASONING_IGNORED)
-        } else {
-            CompletionError::phrased(CompletionErrorKind::EmptyReply)
-        }
-    }
-
-    /// Builds a [`ContextOverflow`](CompletionErrorKind::ContextOverflow)
-    /// failure with the token counts the provider stated. Pass `None` for a
-    /// count the provider omitted.
-    #[must_use]
-    pub fn context_overflow(
-        prompt_tokens: Option<u32>,
-        window: Option<u32>,
-        message: impl Into<String>,
-    ) -> CompletionError {
-        CompletionError {
-            prompt_tokens,
-            window,
-            ..CompletionError::new(CompletionErrorKind::ContextOverflow, message)
-        }
-    }
-
-    /// Keeps `source` as the underlying cause, reachable through
-    /// [`std::error::Error::source`].
-    #[must_use]
-    pub fn with_source(
-        mut self,
-        source: impl Into<Box<dyn std::error::Error + Send + Sync>>,
-    ) -> CompletionError {
-        self.source = Some(source.into());
-        self
-    }
-
-    /// Records the `finish_reason` the backend gave, for an
-    /// [`EmptyReply`](CompletionErrorKind::EmptyReply) failure.
-    #[must_use]
-    pub fn with_finish_reason(mut self, reason: impl Into<String>) -> CompletionError {
-        self.finish_reason = Some(reason.into());
-        self
-    }
-
-    /// Records provider text that explains the failure. The caller bounds
-    /// and control-escapes the text before passing it. The text never
-    /// appears in `Display`.
-    #[must_use]
-    pub fn with_detail(mut self, text: impl Into<String>) -> CompletionError {
-        self.detail = Some(text.into());
-        self
-    }
-
-    /// Builds a failure whose message is the kind's fixed phrase.
-    pub(crate) fn phrased(kind: CompletionErrorKind) -> CompletionError {
-        CompletionError::new(kind, kind.phrase())
-    }
-
-    /// Builds a failure whose message is the kind's fixed phrase extended
-    /// with `: ` and a specific this crate wrote.
-    fn specific(kind: CompletionErrorKind, specific: impl std::fmt::Display) -> CompletionError {
-        CompletionError::new(kind, format!("{}: {specific}", kind.phrase()))
-    }
-
-    /// Builds an `InvalidParts` failure naming which part was refused.
-    pub(crate) fn invalid_parts(specific: impl std::fmt::Display) -> CompletionError {
-        CompletionError::specific(CompletionErrorKind::InvalidParts, specific)
-    }
-
-    /// Returns the kind of this failure.
-    #[must_use]
-    pub fn kind(&self) -> CompletionErrorKind {
-        self.kind
-    }
-
-    /// Returns the token counts that a context overflow reported, as
-    /// `(prompt_tokens, window)`. A count is `None` when the provider
-    /// omitted it, and both are `None` for every kind other than
-    /// `ContextOverflow`.
-    #[must_use]
-    pub fn overflow(&self) -> (Option<u32>, Option<u32>) {
-        (self.prompt_tokens, self.window)
-    }
-
-    /// Returns the backend's `finish_reason` when the failure was an empty
-    /// model reply and the backend supplied one.
-    ///
-    /// The Engine's tool loop reads this value. An empty reply with
-    /// `Some("stop")` after at least one answered tool call, including a
-    /// call whose tool failed, is the model's clean exit. An empty reply
-    /// with a missing or `"length"` reason stays a hard failure.
-    #[must_use]
-    pub fn finish_reason(&self) -> Option<&str> {
-        self.finish_reason.as_deref()
-    }
-
-    /// Returns the message `Display` shows.
-    #[must_use]
-    pub fn message(&self) -> &str {
-        &self.message
-    }
-
-    /// Returns the provider text behind the failure, which the caller
-    /// bounded and control-escaped.
-    ///
-    /// The detail is an explicit opt-in diagnostic channel. The text never
-    /// appears in [`Display`](std::fmt::Display), so a hostile or sensitive
-    /// payload cannot forge log lines or leak into an error message.
-    #[must_use]
-    pub fn detail(&self) -> Option<&str> {
-        self.detail.as_deref()
-    }
+/// Builds a failure whose text is the code's fixed phrase.
+pub(crate) fn phrased(code: ErrorCode) -> Error {
+    completion_error(code, phrase(code))
 }
 
-impl std::fmt::Display for CompletionError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.message)
-    }
+/// Builds a failure whose text is the code's fixed phrase extended with `: `
+/// and a specific this crate wrote.
+fn specific(code: ErrorCode, specific: impl std::fmt::Display) -> Error {
+    completion_error(code, format!("{}: {specific}", phrase(code)))
 }
 
-impl std::error::Error for CompletionError {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        self.source
-            .as_deref()
-            .map(|source| source as &(dyn std::error::Error + 'static))
-    }
+/// Builds an `InvalidParts` failure naming which part was refused.
+pub(crate) fn invalid_parts(part: impl std::fmt::Display) -> Error {
+    specific(ErrorCode::InvalidParts, part)
 }
 
 #[cfg(test)]

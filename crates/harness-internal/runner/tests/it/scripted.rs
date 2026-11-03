@@ -14,8 +14,8 @@ use harness_runner::performers::{BoxFuture, InferenceBroker, Timer};
 use runvil::effect::Round;
 use runvil::error::{Error, ErrorCode};
 use runvil::model::{
-    Completion, CompletionError, CompletionErrorKind, CompletionOptions, CompletionResult, Message,
-    ModelBinding, ModelCatalog, ModelId, ModelInfo, ThinkingMode, ToolSchema,
+    Completion, CompletionOptions, CompletionResult, Message, ModelBinding, ModelCatalog, ModelId,
+    ModelInfo, ThinkingMode, ToolSchema, completion_error, phrase,
 };
 use runvil::tools::tool_error;
 use runvil_plugin::{
@@ -34,17 +34,16 @@ pub(crate) const MODEL: &str = "m";
 pub(crate) type Kept<T> = Arc<Mutex<Vec<T>>>;
 
 /// Plays one model round: the round and its messages in, its answer out.
-type ChatScript = dyn Fn(Round, Vec<Message>) -> BoxFuture<Result<Box<Completion>, CompletionError>>
-    + Send
-    + Sync;
+type ChatScript =
+    dyn Fn(Round, Vec<Message>) -> BoxFuture<Result<Box<Completion>, Error>> + Send + Sync;
 
 /// What a scripted broker's `models()` does.
 #[derive(Clone, Copy)]
 pub(crate) enum Listing {
     /// Lists the one scripted model.
     Lists,
-    /// Fails as this kind with the kind's fixed phrase.
-    Fails(CompletionErrorKind),
+    /// Fails under this code with the code's fixed phrase.
+    Fails(ErrorCode),
     /// Never answers.
     Holds,
 }
@@ -62,7 +61,7 @@ pub(crate) struct ScriptedBroker {
 impl ScriptedBroker {
     /// A broker that plays every round through `script`.
     pub(crate) fn new(
-        script: impl Fn(Round, Vec<Message>) -> BoxFuture<Result<Box<Completion>, CompletionError>>
+        script: impl Fn(Round, Vec<Message>) -> BoxFuture<Result<Box<Completion>, Error>>
         + Send
         + Sync
         + 'static,
@@ -104,12 +103,12 @@ impl ScriptedBroker {
 }
 
 impl InferenceBroker for ScriptedBroker {
-    fn models(&self) -> BoxFuture<Result<ModelCatalog, CompletionError>> {
+    fn models(&self) -> BoxFuture<Result<ModelCatalog, Error>> {
         self.listings.fetch_add(1, Ordering::SeqCst);
         match self.listing {
             Listing::Lists => Box::pin(async { Ok(catalog()) }),
-            Listing::Fails(kind) => {
-                Box::pin(async move { Err(CompletionError::new(kind, kind.phrase())) })
+            Listing::Fails(code) => {
+                Box::pin(async move { Err(completion_error(code, phrase(code))) })
             }
             Listing::Holds => Box::pin(std::future::pending()),
         }
@@ -122,7 +121,7 @@ impl InferenceBroker for ScriptedBroker {
         _tools: Vec<ToolSchema>,
         _options: CompletionOptions,
         round: Round,
-    ) -> BoxFuture<Result<Box<Completion>, CompletionError>> {
+    ) -> BoxFuture<Result<Box<Completion>, Error>> {
         self.rounds.lock().unwrap().push(round);
         (self.script)(round, messages)
     }
@@ -144,7 +143,7 @@ fn catalog() -> ModelCatalog {
 }
 
 /// A text completion of `text` from the scripted model.
-pub(crate) fn reply(text: impl Into<String>) -> Result<Box<Completion>, CompletionError> {
+pub(crate) fn reply(text: impl Into<String>) -> Result<Box<Completion>, Error> {
     Completion::from_result(CompletionResult::Text(text.into()), MODEL).map(Box::new)
 }
 

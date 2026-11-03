@@ -17,8 +17,7 @@ use runvil::cancel::CancelHandle;
 use runvil::effect::ToolCallOrigin;
 use runvil::error::Error;
 use runvil::model::{
-    Completion, CompletionError, CompletionResult, ModelId, ModelInfo, ModelRole, ThinkingMode,
-    ToolCall,
+    Completion, CompletionResult, ModelId, ModelInfo, ModelRole, ThinkingMode, ToolCall,
 };
 use runvil::timestamp::Timestamp;
 use runvil::tools::{ToolCatalog, ToolId, ToolInfo, ToolOutput};
@@ -174,7 +173,7 @@ impl Drop for TornDown {
 
 /// Plays each round through `script`, handed the round's last message.
 fn answering(
-    script: impl Fn(&str) -> BoxFuture<Result<Box<Completion>, CompletionError>> + Send + Sync + 'static,
+    script: impl Fn(&str) -> BoxFuture<Result<Box<Completion>, Error>> + Send + Sync + 'static,
 ) -> ScriptedBroker {
     ScriptedBroker::new(move |_round, messages| {
         let last = messages
@@ -187,7 +186,7 @@ fn answering(
 
 /// A completion asking for [`TOOL`] once per entry of `names`, each
 /// call's id and `name` argument the entry.
-fn parks(names: &[&str]) -> Result<Box<Completion>, CompletionError> {
+fn parks(names: &[&str]) -> Result<Box<Completion>, Error> {
     let calls = names
         .iter()
         .map(|name| ToolCall::from_parts(*name, WIRE, json!({ "name": name })))

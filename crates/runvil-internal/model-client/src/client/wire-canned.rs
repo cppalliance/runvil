@@ -8,11 +8,11 @@
 
 use std::collections::HashSet;
 
+use runvil_types::error::Error;
 use runvil_types::metrics::CallMetrics;
 use serde_json::Value;
 
 use super::{Completion, CompletionResult, RawExchange, ToolCall};
-use crate::model::CompletionError;
 use crate::normalize::{
     check_call_id, check_call_name, check_unique_call_id, checked_call_arguments, empty_reply_error,
 };
@@ -31,14 +31,14 @@ impl Completion {
     /// beyond the result.
     ///
     /// # Errors
-    /// Returns an `EmptyReply`-kind [`CompletionError`] for an empty
-    /// tool-call batch. Returns an `InvalidParts`-kind one when two calls in
-    /// the batch share an id. Neither is retryable: the same parts fail the
-    /// same way.
+    /// Returns an [`Error`] with code `EmptyReply` for an empty tool-call
+    /// batch. Returns one with code `InvalidParts` when two calls in the
+    /// batch share an id. Neither is retryable: the same parts fail the same
+    /// way.
     pub fn from_result(
         result: CompletionResult,
         model: impl Into<String>,
-    ) -> Result<Completion, CompletionError> {
+    ) -> Result<Completion, Error> {
         if let CompletionResult::ToolCalls(calls) = &result {
             if calls.is_empty() {
                 return Err(empty_reply_error());
@@ -128,14 +128,14 @@ impl ToolCall {
     /// JSON text.
     ///
     /// # Errors
-    /// Returns an `InvalidParts`-kind [`CompletionError`] when `id` or
-    /// `name` is blank or `arguments` is not a JSON object. It is not
-    /// retryable: the same parts fail the same way.
+    /// Returns an [`Error`] with code `InvalidParts` when `id` or `name` is
+    /// blank or `arguments` is not a JSON object. It is not retryable: the
+    /// same parts fail the same way.
     pub fn from_parts(
         id: impl Into<String>,
         name: impl Into<String>,
         arguments: Value,
-    ) -> Result<ToolCall, CompletionError> {
+    ) -> Result<ToolCall, Error> {
         let id = id.into();
         let name = name.into();
         check_call_id(&id)?;

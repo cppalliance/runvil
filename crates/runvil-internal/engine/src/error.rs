@@ -3,10 +3,10 @@
 //! [`Error`] is a `pub(crate)` internal error type, never part of the public API.
 //! A run it ends reports its kind and message in
 //! [`RunOutcome::Failed`](crate::RunOutcome::Failed), and
-//! [`ParseError`](crate::prompt::ParseError),
-//! [`CompletionError`](crate::model::CompletionError), and
-//! a tool's [`runvil_types::error::Error`] each reach that outcome through this
-//! type, which classifies them and keeps their causes.
+//! [`ParseError`](crate::prompt::ParseError), and the
+//! [`runvil_types::error::Error`] a model round or a tool fails with, each
+//! reach that outcome through this type, which classifies them and keeps
+//! their causes.
 //! The `From` bridges that let internal `?` reach this type live in `convert`.
 //!
 //! A variant that keeps an originating error renders that error's text in
@@ -125,14 +125,14 @@ pub(crate) enum Error {
     /// A model round or a catalog fetch failed, as the broker that performed
     /// it reported.
     ///
-    /// Holds the broker's [`CompletionError`](crate::model::CompletionError)
-    /// whole, so the closed kind, the fixed message, the opt-in detail, and
-    /// the cause chain survive until the run's failure message is built
+    /// Holds the broker's [`runvil_types::error::Error`] whole, so its model
+    /// code, its message with the provider detail and the cause chain, its
+    /// prose, and its facts survive until the run's failure message is built
     /// from them. The Engine branches on
-    /// its kind only: a context overflow takes the provider overflow path
+    /// its code only: a context overflow takes the provider overflow path
     /// and an empty reply takes the empty-answer path.
     #[error(transparent)]
-    Completion(crate::model::CompletionError),
+    Completion(runvil_types::error::Error),
 
     /// The run was cancelled, the caller dropped an effect the run was
     /// waiting on, or a block raised a caught `cancelled` error value again

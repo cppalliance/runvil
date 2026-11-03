@@ -1,27 +1,27 @@
 //! Tests for the failure vocabulary: the tags, the fixed phrases, the
-//! specifics that extend them, and the detail channel.
+//! specifics that extend them, and the constructors' facts.
 
 use super::*;
 
-const ALL_KINDS: [CompletionErrorKind; 13] = [
-    CompletionErrorKind::ContextOverflow,
-    CompletionErrorKind::RateLimited,
-    CompletionErrorKind::QuotaExhausted,
-    CompletionErrorKind::Overloaded,
-    CompletionErrorKind::Refused,
-    CompletionErrorKind::Timeout,
-    CompletionErrorKind::Transport,
-    CompletionErrorKind::ServerError,
-    CompletionErrorKind::Rejected,
-    CompletionErrorKind::MalformedResponse,
-    CompletionErrorKind::EmptyReply,
-    CompletionErrorKind::Unavailable,
-    CompletionErrorKind::InvalidParts,
+const ALL_CODES: [ErrorCode; 13] = [
+    ErrorCode::ContextOverflow,
+    ErrorCode::RateLimited,
+    ErrorCode::QuotaExhausted,
+    ErrorCode::Overloaded,
+    ErrorCode::Refused,
+    ErrorCode::Timeout,
+    ErrorCode::Transport,
+    ErrorCode::ServerError,
+    ErrorCode::Rejected,
+    ErrorCode::MalformedResponse,
+    ErrorCode::EmptyReply,
+    ErrorCode::Unavailable,
+    ErrorCode::InvalidParts,
 ];
 
 #[test]
-fn each_kind_tags_as_its_snake_case_name() {
-    let tags: Vec<&str> = ALL_KINDS.iter().map(|kind| kind.tag()).collect();
+fn each_code_tags_as_its_snake_case_name() {
+    let tags: Vec<&str> = ALL_CODES.iter().map(|code| code.tag()).collect();
     assert_eq!(
         tags,
         [
@@ -43,197 +43,183 @@ fn each_kind_tags_as_its_snake_case_name() {
 }
 
 #[test]
-fn each_kind_has_its_fixed_phrase() {
+fn each_code_has_its_fixed_phrase() {
     let phrases = [
         (
-            CompletionErrorKind::ContextOverflow,
+            ErrorCode::ContextOverflow,
             "the request is larger than the model's context window",
         ),
         (
-            CompletionErrorKind::RateLimited,
+            ErrorCode::RateLimited,
             "the model backend is limiting the request rate",
         ),
         (
-            CompletionErrorKind::QuotaExhausted,
+            ErrorCode::QuotaExhausted,
             "the model backend says the usage quota is spent",
         ),
+        (ErrorCode::Overloaded, "the model backend is overloaded"),
         (
-            CompletionErrorKind::Overloaded,
-            "the model backend is overloaded",
-        ),
-        (
-            CompletionErrorKind::Refused,
+            ErrorCode::Refused,
             "the model backend refused the request on content policy grounds",
         ),
         (
-            CompletionErrorKind::Timeout,
+            ErrorCode::Timeout,
             "the model backend did not answer in time",
         ),
         (
-            CompletionErrorKind::Transport,
+            ErrorCode::Transport,
             "the connection to the model backend failed",
         ),
         (
-            CompletionErrorKind::ServerError,
+            ErrorCode::ServerError,
             "the model backend reported a fault of its own",
         ),
         (
-            CompletionErrorKind::Rejected,
+            ErrorCode::Rejected,
             "the model backend rejected the request",
         ),
         (
-            CompletionErrorKind::MalformedResponse,
+            ErrorCode::MalformedResponse,
             "the model backend sent a reply that could not be understood",
         ),
         (
-            CompletionErrorKind::EmptyReply,
+            ErrorCode::EmptyReply,
             "the model replied with no text and no tool calls",
         ),
         (
-            CompletionErrorKind::Unavailable,
+            ErrorCode::Unavailable,
             "model access is turned off or not configured",
         ),
         (
-            CompletionErrorKind::InvalidParts,
+            ErrorCode::InvalidParts,
             "the completion was built from invalid parts",
         ),
     ];
-    assert_eq!(phrases.len(), ALL_KINDS.len());
-    for (kind, phrase) in phrases {
-        assert_eq!(kind.phrase(), phrase, "phrase of {kind:?}");
+    assert_eq!(phrases.len(), ALL_CODES.len());
+    for (code, text) in phrases {
+        assert_eq!(phrase(code), text, "phrase of {code:?}");
     }
 }
 
 #[test]
-fn display_shows_the_message_and_never_the_detail() {
-    let error = CompletionError::new(CompletionErrorKind::Rejected, "the message")
-        .with_detail("provider says: <secret>");
+fn a_code_outside_the_model_family_phrases_as_its_default_prose() {
+    for code in [
+        ErrorCode::NotFound,
+        ErrorCode::ContextExhausted,
+        ErrorCode::LuaRuntime,
+    ] {
+        assert_eq!(phrase(code), code.prose(), "phrase of {code:?}");
+    }
+}
+
+#[test]
+fn completion_error_uses_the_message_as_both_texts_and_adds_nothing_else() {
+    let error = completion_error(ErrorCode::Rejected, "the message");
+    assert_eq!(error.code, ErrorCode::Rejected);
+    assert_eq!(error.message, "the message");
+    assert_eq!(error.prose, "the message");
     assert_eq!(error.to_string(), "the message");
-    assert_eq!(error.message(), "the message");
-    assert_eq!(error.detail(), Some("provider says: <secret>"));
-    assert!(!format!("{error}").contains("secret"));
-    assert!(
-        !format!("{error:?}").is_empty(),
-        "Debug stays available to operators"
+    assert_eq!(error.at, None);
+    assert!(error.facts.is_empty());
+}
+
+#[test]
+fn context_overflow_holds_the_counts_it_was_given_as_facts() {
+    let both = context_overflow(Some(10), Some(8), "too big");
+    assert_eq!(both.code, ErrorCode::ContextOverflow);
+    assert_eq!(
+        (both.message.as_str(), both.prose.as_str()),
+        ("too big", "too big")
     );
+    assert_eq!(both.facts.get(&FactKey::Count), Some(&Value::from(10)));
+    assert_eq!(both.facts.get(&FactKey::Limit), Some(&Value::from(8)));
+
+    let prompt_only = context_overflow(Some(10), None, "too big");
+    assert_eq!(
+        prompt_only.facts.get(&FactKey::Count),
+        Some(&Value::from(10))
+    );
+    assert_eq!(prompt_only.facts.get(&FactKey::Limit), None);
+
+    let neither = context_overflow(None, None, "too big");
+    assert_eq!(neither.code, ErrorCode::ContextOverflow);
+    assert!(neither.facts.is_empty());
 }
 
 #[test]
-fn a_new_error_has_no_extras() {
-    let error = CompletionError::new(CompletionErrorKind::Transport, "down");
-    assert_eq!(error.overflow(), (None, None));
-    assert_eq!(error.finish_reason(), None);
-    assert_eq!(error.detail(), None);
-    assert!(std::error::Error::source(&error).is_none());
-}
-
-#[test]
-fn context_overflow_holds_the_counts() {
-    let error = CompletionError::context_overflow(Some(10), None, "too big");
-    assert_eq!(error.kind(), CompletionErrorKind::ContextOverflow);
-    assert_eq!(error.overflow(), (Some(10), None));
-}
-
-#[test]
-fn with_source_keeps_the_cause_in_the_chain() {
-    let error = CompletionError::new(CompletionErrorKind::Transport, "down")
-        .with_source(std::io::Error::other("reset by peer"));
-    let source = std::error::Error::source(&error).expect("the cause is kept");
-    assert_eq!(source.to_string(), "reset by peer");
-}
-
-#[test]
-fn with_finish_reason_is_read_back() {
-    let error =
-        CompletionError::new(CompletionErrorKind::EmptyReply, "empty").with_finish_reason("stop");
-    assert_eq!(error.finish_reason(), Some("stop"));
-}
-
-#[test]
-fn a_timeout_and_a_transport_failure_are_built_from_a_kind_and_a_source() {
-    let timed_out = CompletionError::new(
-        CompletionErrorKind::Timeout,
+fn a_timeout_and_a_transport_failure_keep_their_cause_out_of_the_prose() {
+    let timed_out = completion_error(
+        ErrorCode::Timeout,
         "the model backend did not answer in time",
     )
-    .with_source(std::io::Error::new(
+    .with_cause(&std::io::Error::new(
         std::io::ErrorKind::TimedOut,
         "deadline",
     ));
-    assert_eq!(timed_out.kind(), CompletionErrorKind::Timeout);
+    assert_eq!(timed_out.code, ErrorCode::Timeout);
     assert_eq!(
-        timed_out.to_string(),
-        "the model backend did not answer in time"
+        timed_out.message,
+        "the model backend did not answer in time: deadline"
     );
-    assert_eq!(
-        std::error::Error::source(&timed_out)
-            .expect("the cause is kept")
-            .to_string(),
-        "deadline"
-    );
+    assert_eq!(timed_out.prose, "the model backend did not answer in time");
 
-    let refused = CompletionError::new(
-        CompletionErrorKind::Transport,
+    let refused = completion_error(
+        ErrorCode::Transport,
         "the connection to the model backend failed",
     )
-    .with_source(std::io::Error::other("connection refused"));
-    assert_eq!(refused.kind(), CompletionErrorKind::Transport);
+    .with_cause(&std::io::Error::other("connection refused"));
+    assert_eq!(refused.code, ErrorCode::Transport);
+    assert!(refused.message.contains("connection refused"));
+    assert!(!refused.prose.contains("connection refused"));
 }
 
 #[test]
 fn a_phrased_failure_shows_only_the_fixed_phrase() {
-    for kind in ALL_KINDS {
-        let error = CompletionError::phrased(kind);
-        assert_eq!(error.kind(), kind);
-        assert_eq!(error.to_string(), kind.phrase());
-        assert_eq!(error.detail(), None);
+    for code in ALL_CODES {
+        let error = phrased(code);
+        assert_eq!(error.code, code);
+        assert_eq!(error.to_string(), phrase(code));
+        assert_eq!(error.prose, phrase(code));
+        assert!(error.facts.is_empty());
     }
 }
 
 #[test]
-fn a_specific_extends_the_phrase_after_a_colon_and_never_adds_detail() {
-    let malformed = CompletionError::specific(
-        CompletionErrorKind::MalformedResponse,
-        "no choices in response",
-    );
-    assert_eq!(malformed.kind(), CompletionErrorKind::MalformedResponse);
+fn a_specific_extends_the_phrase_after_a_colon_in_both_texts() {
+    let malformed = specific(ErrorCode::MalformedResponse, "no choices in response");
+    assert_eq!(malformed.code, ErrorCode::MalformedResponse);
     assert_eq!(
         malformed.to_string(),
         "the model backend sent a reply that could not be understood: no choices in response"
     );
-    assert_eq!(malformed.message(), malformed.to_string());
-    assert_eq!(malformed.detail(), None);
+    assert_eq!(malformed.prose, malformed.message);
 
-    let empty = CompletionError::specific(
-        CompletionErrorKind::EmptyReply,
-        "reasoning content was present but ignored",
-    )
-    .with_finish_reason("stop");
+    let refused = invalid_parts("tool call id was blank");
+    assert_eq!(refused.code, ErrorCode::InvalidParts);
     assert_eq!(
-        empty.to_string(),
-        "the model replied with no text and no tool calls: \
-         reasoning content was present but ignored"
+        refused.prose,
+        "the completion was built from invalid parts: tool call id was blank"
     );
-    assert_eq!(empty.finish_reason(), Some("stop"));
 }
 
 #[test]
 fn the_shared_empty_reply_owner_builds_the_phrase_and_the_reasoning_specific() {
-    // One owner for the empty-reply message: the bare phrase when the turn
-    // carried no reasoning, the phrase plus the reasoning-ignored specific
-    // when one was dropped, and the caller's finish reason either way.
-    let plain = CompletionError::empty_reply(false);
-    assert_eq!(plain.kind(), CompletionErrorKind::EmptyReply);
-    assert_eq!(plain.to_string(), CompletionErrorKind::EmptyReply.phrase());
-    assert_eq!(plain.finish_reason(), None);
+    // One owner for the empty-reply text: the bare phrase when the turn
+    // carried no reasoning, and the phrase plus the reasoning-ignored
+    // specific when one was dropped. The finish reason is the caller's fact.
+    let plain = empty_reply(false);
+    assert_eq!(plain.code, ErrorCode::EmptyReply);
+    assert_eq!(plain.to_string(), phrase(ErrorCode::EmptyReply));
+    assert_eq!(plain.prose, phrase(ErrorCode::EmptyReply));
+    assert_eq!(plain.facts.get(&FactKey::FinishReason), None);
 
-    let reasoned = CompletionError::empty_reply(true).with_finish_reason("stop");
-    assert_eq!(
-        reasoned.to_string(),
-        format!(
-            "{}: reasoning content was present but ignored",
-            CompletionErrorKind::EmptyReply.phrase()
-        )
+    let reasoned = empty_reply(true);
+    let expected = format!(
+        "{}: reasoning content was present but ignored",
+        phrase(ErrorCode::EmptyReply)
     );
-    assert_eq!(reasoned.finish_reason(), Some("stop"));
-    assert_eq!(reasoned.detail(), None);
+    assert_eq!(reasoned.code, ErrorCode::EmptyReply);
+    assert_eq!(reasoned.message, expected);
+    assert_eq!(reasoned.prose, expected);
+    assert!(reasoned.facts.is_empty());
 }

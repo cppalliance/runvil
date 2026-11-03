@@ -8,14 +8,16 @@ use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::rc::Rc;
 
+use runvil_model_client::model::context_overflow;
 use runvil_prompt::test_support::one_section;
+use runvil_types::error::ErrorCode;
 use runvil_types::ids::RoundId;
 
 use super::fixtures::echo_tool;
 use super::models_loop::loop_scenario;
 use super::*;
 use crate::execute::run::{Effect, EffectAnswer, EffectRecord};
-use crate::model::{CompletionError, CompletionErrorKind};
+use crate::model::completion_error;
 use crate::test_support::scenario::chat_answer;
 
 /// One issued round as the driver saw it: its record, and the wire
@@ -230,7 +232,7 @@ fn an_add_then_a_remove_between_two_sends_adds_nothing_to_the_log() {
 
 #[test]
 fn a_resend_with_no_changes_logs_no_messages_and_keeps_the_whole_request() {
-    let failure = CompletionError::new(CompletionErrorKind::MalformedResponse, "garbled reply");
+    let failure = completion_error(ErrorCode::MalformedResponse, "garbled reply");
     let (scenario, log) = echo_rounds(
         "messages:user('one')\n\
          assert(not pcall(models.loop), 'the first round fails')\n\
@@ -285,7 +287,7 @@ fn re_inserting_an_identical_record_adds_nothing_to_the_log() {
 
 #[test]
 fn a_run_that_compacted_after_an_overflow_rebuilds_every_request_from_its_records() {
-    let overflow = CompletionError::context_overflow(Some(5000), Some(4096), "too large");
+    let overflow = context_overflow(Some(5000), Some(4096), "too large");
     let (scenario, log) = echo_rounds(
         "messages:system('be brief')\n\
          messages:user('one')\n\

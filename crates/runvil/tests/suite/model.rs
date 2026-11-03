@@ -1,6 +1,7 @@
 //! Describing models and answering their rounds.
 
-use runvil::model::{CompletionErrorKind, ModelCatalog, ModelId, ThinkingMode};
+use runvil::error::ErrorCode;
+use runvil::model::{ModelCatalog, ModelId, ThinkingMode};
 use runvil::{RunErrorKind, RunOutcome};
 
 use super::support::{Reply, Scenario, TestResult, fail, model, prompt};
@@ -43,7 +44,7 @@ fn a_catalog_finds_a_model_by_id_and_refuses_a_repeated_id_as_a_whole() -> TestR
 
 #[test]
 fn a_failed_model_round_fails_the_run_as_a_completion_failure() -> TestResult {
-    let RunOutcome::Failed { kind, .. } = run_asking(fail(CompletionErrorKind::Overloaded))? else {
+    let RunOutcome::Failed { kind, .. } = run_asking(fail(ErrorCode::Overloaded))? else {
         return Err("a failed round fails the run".into());
     };
     assert_eq!(kind, RunErrorKind::Completion);

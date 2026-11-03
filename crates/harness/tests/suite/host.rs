@@ -17,8 +17,8 @@ use harness::{BoxFuture, Harness, HostSnapshot, InferenceBroker, RunRequest};
 use runvil::effect::Round;
 use runvil::event::ReplyOrigin;
 use runvil::model::{
-    Completion, CompletionError, CompletionOptions, CompletionResult, Message, ModelBinding,
-    ModelCatalog, ModelId, ModelInfo, ThinkingMode, ToolSchema,
+    Completion, CompletionOptions, CompletionResult, Message, ModelBinding, ModelCatalog, ModelId,
+    ModelInfo, ThinkingMode, ToolSchema,
 };
 
 use crate::asker::{AskBroker, asker_host, broker_services};
@@ -121,7 +121,7 @@ struct Stuck {
 }
 
 impl InferenceBroker for Stuck {
-    fn models(&self) -> BoxFuture<Result<ModelCatalog, CompletionError>> {
+    fn models(&self) -> BoxFuture<Result<ModelCatalog, runvil::error::Error>> {
         let catalog = self.catalog.clone();
         Box::pin(async move { Ok(catalog) })
     }
@@ -133,7 +133,7 @@ impl InferenceBroker for Stuck {
         _tools: Vec<ToolSchema>,
         _options: CompletionOptions,
         _round: Round,
-    ) -> BoxFuture<Result<Box<Completion>, CompletionError>> {
+    ) -> BoxFuture<Result<Box<Completion>, runvil::error::Error>> {
         self.started.raise();
         Box::pin(std::future::pending())
     }
@@ -166,7 +166,7 @@ struct Streaming {
 }
 
 impl InferenceBroker for Streaming {
-    fn models(&self) -> BoxFuture<Result<ModelCatalog, CompletionError>> {
+    fn models(&self) -> BoxFuture<Result<ModelCatalog, runvil::error::Error>> {
         let catalog = self.catalog.clone();
         Box::pin(async move { Ok(catalog) })
     }
@@ -178,7 +178,7 @@ impl InferenceBroker for Streaming {
         _tools: Vec<ToolSchema>,
         _options: CompletionOptions,
         round: Round,
-    ) -> BoxFuture<Result<Box<Completion>, CompletionError>> {
+    ) -> BoxFuture<Result<Box<Completion>, runvil::error::Error>> {
         let window = (round.origin == ReplyOrigin::Chat).then(|| self.window.clone());
         let said = messages
             .last()

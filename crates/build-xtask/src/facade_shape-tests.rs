@@ -114,7 +114,7 @@ fn every_allowed_form_passes() {
     let text = r#"#![doc = include_str!("lib.md")]
 
 pub use runvil_engine::Run;
-pub use runvil_model_client::model::CompletionError as ModelFailure;
+pub use runvil_model_client::model::CompletionOptions as ModelOptions;
 pub use ::runvil_engine::Step;
 
 /// The effects a run issues.

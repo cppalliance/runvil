@@ -12,11 +12,12 @@ use harness_runner::performers::{BoxFuture, InferenceBroker, Performers};
 use harness_runner::recorder::{RecordKind, RunOutcome};
 use runvil::cancel::CancelHandle;
 use runvil::effect::Round;
+use runvil::error::Error;
 use runvil::event::ReplyOrigin;
 use runvil::ids::RoundId;
 use runvil::model::{
-    Completion, CompletionError, CompletionOptions, CompletionResult, Message, ModelBinding,
-    ModelCatalog, ModelId, ModelInfo, ModelRole, ThinkingMode, ToolSchema,
+    Completion, CompletionOptions, CompletionResult, Message, ModelBinding, ModelCatalog, ModelId,
+    ModelInfo, ModelRole, ThinkingMode, ToolSchema,
 };
 use runvil::timestamp::Timestamp;
 use runvil::{Prompt, Run, RunConfig};
@@ -64,7 +65,7 @@ struct RecordingBroker {
 }
 
 impl InferenceBroker for RecordingBroker {
-    fn models(&self) -> BoxFuture<Result<ModelCatalog, CompletionError>> {
+    fn models(&self) -> BoxFuture<Result<ModelCatalog, Error>> {
         unreachable!("the effect loop never lists models")
     }
 
@@ -75,7 +76,7 @@ impl InferenceBroker for RecordingBroker {
         _tools: Vec<ToolSchema>,
         _options: CompletionOptions,
         round: Round,
-    ) -> BoxFuture<Result<Box<Completion>, CompletionError>> {
+    ) -> BoxFuture<Result<Box<Completion>, Error>> {
         let asked = messages
             .last()
             .map(|message| message.content().to_owned())

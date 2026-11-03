@@ -1,11 +1,11 @@
 //! Tests for the wire message constructors and tool schema validation.
 
+use runvil_types::error::{ErrorCode, FactKey};
 use runvil_types::metrics::{CallMetrics, Usage};
 use serde_json::{Value, json};
 
 use super::*;
 use crate::detail::{message_from_validated_parts, tool_call_arguments, tool_schema_new};
-use crate::model::CompletionErrorKind;
 use crate::test_support::{assert_json, pong};
 
 #[test]
@@ -150,8 +150,8 @@ fn from_parts_refuses_a_blank_id_a_blank_name_and_non_object_arguments() {
     ] {
         let error = ToolCall::from_parts(id, name, arguments).expect_err(label);
         assert_eq!(
-            error.kind(),
-            CompletionErrorKind::InvalidParts,
+            error.code,
+            ErrorCode::InvalidParts,
             "{label} must be refused"
         );
     }
@@ -163,12 +163,12 @@ fn from_parts_refuses_a_blank_id_a_blank_name_and_non_object_arguments() {
 fn from_result_refuses_an_empty_batch_and_duplicate_ids_and_accepts_text() {
     let empty = Completion::from_result(CompletionResult::ToolCalls(Vec::new()), "m")
         .expect_err("an empty batch is refused");
-    assert_eq!(empty.kind(), CompletionErrorKind::EmptyReply);
-    assert_eq!(empty.finish_reason(), None);
+    assert_eq!(empty.code, ErrorCode::EmptyReply);
+    assert_eq!(empty.facts.get(&FactKey::FinishReason), None);
     let call = ToolCall::from_parts("call_1", "fetch", json_object()).expect("a whole call");
     let twice = CompletionResult::ToolCalls(vec![call.clone(), call.clone()]);
     let duplicate = Completion::from_result(twice, "m").expect_err("a duplicate id is refused");
-    assert_eq!(duplicate.kind(), CompletionErrorKind::InvalidParts);
+    assert_eq!(duplicate.code, ErrorCode::InvalidParts);
     assert!(
         duplicate.to_string().contains("\"call_1\""),
         "the message names the repeated id: {duplicate}"

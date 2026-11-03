@@ -12,9 +12,10 @@ use harness::record::{MemoryRecorder, RunOutcome};
 use harness::vfs::VfsRef;
 use harness::{BoxFuture, Harness, HostSnapshot, InferenceBroker, RunRequest, Timer};
 use runvil::effect::Round;
+use runvil::error::{Error, ErrorCode};
 use runvil::model::{
-    Completion, CompletionError, CompletionErrorKind, CompletionOptions, Message, ModelBinding,
-    ModelCatalog, ToolSchema,
+    Completion, CompletionOptions, Message, ModelBinding, ModelCatalog, ToolSchema,
+    completion_error, phrase,
 };
 
 /// Reads the line in `name.txt` and writes its greeting to `reply.txt`.
@@ -31,7 +32,7 @@ const GREET: &str = concat!(
 struct Offline;
 
 impl InferenceBroker for Offline {
-    fn models(&self) -> BoxFuture<Result<ModelCatalog, CompletionError>> {
+    fn models(&self) -> BoxFuture<Result<ModelCatalog, Error>> {
         Box::pin(async { Ok(ModelCatalog::empty()) })
     }
 
@@ -42,9 +43,9 @@ impl InferenceBroker for Offline {
         _tools: Vec<ToolSchema>,
         _options: CompletionOptions,
         _round: Round,
-    ) -> BoxFuture<Result<Box<Completion>, CompletionError>> {
-        let kind = CompletionErrorKind::Unavailable;
-        Box::pin(async move { Err(CompletionError::new(kind, kind.phrase())) })
+    ) -> BoxFuture<Result<Box<Completion>, Error>> {
+        let code = ErrorCode::Unavailable;
+        Box::pin(async move { Err(completion_error(code, phrase(code))) })
     }
 }
 

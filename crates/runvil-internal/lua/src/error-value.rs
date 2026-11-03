@@ -221,8 +221,8 @@ impl ErrorField {
     }
 }
 
-/// A Rust error's rendering into the Lua error table: its kind and the
-/// kind's own fields. `Display` supplies `message`.
+/// A Rust error's rendering into the Lua error table: its kind, its
+/// message, and the kind's own fields.
 ///
 /// The envelope renderer requires this of the driver's error type, so a
 /// failure answered to Lua always has a kind; an internal type that gains a
@@ -230,6 +230,13 @@ impl ErrorField {
 pub trait ErrorValue: std::fmt::Display {
     /// The kind the table's `kind` field names.
     fn kind(&self) -> ErrorKind;
+
+    /// The text the table's `message` field holds, which an author may hand
+    /// a model. `Display` supplies it unless a variant keeps a model-safe
+    /// text apart from its diagnostic.
+    fn table_message(&self) -> String {
+        self.to_string()
+    }
 
     /// The kind's own fields, as `(name, value)` pairs set beside
     /// `kind` and `message`. Empty for kinds without fields.
@@ -346,13 +353,14 @@ fn finish_table(lua: &Lua, kind: ErrorKind, fields: Table) -> mlua::Result<Table
 }
 
 /// Renders a Rust error as the Lua error table: `kind`, `message` (its
-/// display), and the kind's fields, under the shared metatable.
+/// [`table_message`](ErrorValue::table_message)), and the kind's fields,
+/// under the shared metatable.
 ///
 /// # Errors
 /// Returns an `mlua` error if the table cannot be created on `lua`.
 pub(crate) fn error_table(lua: &Lua, error: &impl ErrorValue) -> mlua::Result<Table> {
     let table = lua.create_table()?;
-    table.raw_set("message", error.to_string())?;
+    table.raw_set("message", error.table_message())?;
     for (name, value) in error.fields() {
         let value = match value {
             ErrorField::String(value) => Value::String(lua.create_string(value)?),

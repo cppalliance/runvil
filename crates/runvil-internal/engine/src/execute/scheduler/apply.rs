@@ -27,7 +27,7 @@ use crate::lua::{
     Answer, ModelReport, ToolCallOutcome, VfsOp, VfsOutcome, prepare_dispatch,
     prepare_model_dispatch,
 };
-use crate::model::{Completion, CompletionError};
+use crate::model::Completion;
 use crate::{Error, Result};
 
 use super::tasks::Stop;
@@ -244,7 +244,7 @@ impl ChainOps<'_> {
     fn accept_infer(
         &self,
         round: RoundId,
-        result: std::result::Result<Box<Completion>, CompletionError>,
+        result: std::result::Result<Box<Completion>, runvil_types::error::Error>,
     ) -> Result<String> {
         let chain = &*self.chain;
         accept_infer(result, round, chain.ctx.reporting(), chain.section_name())

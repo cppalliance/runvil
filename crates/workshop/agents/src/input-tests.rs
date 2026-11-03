@@ -11,7 +11,7 @@ use harness::{BoxFuture, Harness, HostSnapshot, InferenceBroker, RunRequest};
 use plugin_user_input::{INPUT_BROKER, InputBroker};
 use runvil::effect::Round;
 use runvil::model::{
-    Completion, CompletionError, CompletionOptions, Message, ModelBinding, ModelCatalog, ToolSchema,
+    Completion, CompletionOptions, Message, ModelBinding, ModelCatalog, ToolSchema,
 };
 use tokio::sync::broadcast;
 
@@ -242,7 +242,7 @@ async fn a_registry_cancel_fails_the_broker_call_and_emits_cancelled() {
 struct NoChat;
 
 impl InferenceBroker for NoChat {
-    fn models(&self) -> BoxFuture<Result<ModelCatalog, CompletionError>> {
+    fn models(&self) -> BoxFuture<Result<ModelCatalog, runvil::error::Error>> {
         Box::pin(async { Ok(ModelCatalog::empty()) })
     }
 
@@ -253,7 +253,7 @@ impl InferenceBroker for NoChat {
         _tools: Vec<ToolSchema>,
         _options: CompletionOptions,
         _round: Round,
-    ) -> BoxFuture<Result<Box<Completion>, CompletionError>> {
+    ) -> BoxFuture<Result<Box<Completion>, runvil::error::Error>> {
         unreachable!("the prompt makes no model round")
     }
 }

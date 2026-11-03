@@ -8,7 +8,7 @@ use runvil_types::ids::RoundId;
 use serde_json::json;
 
 use super::*;
-use crate::model::{CompletionErrorKind, ToolCall};
+use crate::model::ToolCall;
 use crate::test_support::recording::null_emitter;
 
 #[test]
@@ -31,8 +31,8 @@ fn an_infer_round_answered_with_tool_calls_fails_as_a_retryable_malformed_reply(
         panic!("required a completion failure, actual {error:?}");
     };
     assert_eq!(
-        failure.kind(),
-        CompletionErrorKind::MalformedResponse,
+        failure.code,
+        ErrorCode::MalformedResponse,
         "a reply that broke protocol is malformed, so it may come back well formed"
     );
 }

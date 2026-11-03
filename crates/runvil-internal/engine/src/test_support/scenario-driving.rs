@@ -24,7 +24,7 @@ use super::{Chat, Matcher};
 use crate::Error;
 use crate::execute::{AnswerRecord, Effect, EffectAnswer, EffectId, EffectRecord, Run, RunOutcome};
 use crate::lua::run_store_op;
-use crate::model::{CompletionError, CompletionErrorKind};
+use crate::model::completion_error;
 
 /// How a scenario answers its run's effects: a store operation on the
 /// effect's own access, a timer at once, a render with every offered tool
@@ -74,8 +74,8 @@ impl Answers {
                     EffectAnswer::Chat(answer.map(Box::new))
                 }
                 Some(Chat::Closure(answer)) => answer(effect),
-                None => EffectAnswer::Chat(Err(CompletionError::new(
-                    CompletionErrorKind::Unavailable,
+                None => EffectAnswer::Chat(Err(completion_error(
+                    ErrorCode::Unavailable,
                     "model access is turned off or not configured",
                 ))),
             },

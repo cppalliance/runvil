@@ -9,13 +9,13 @@
 //! and `compaction`.
 
 use runvil_prompt::test_support::{one_section, prompt};
+use runvil_types::error::ErrorCode;
 use runvil_types::event::Event;
 
 use super::context::Recorder;
 use super::fixtures::{echo_tool, failing_tool, untrusted_echo_tool};
 use super::models_loop::{LOOP_TO_TEXT, loop_events, loop_scenario};
 use super::*;
-use crate::model::CompletionErrorKind;
 use crate::test_support::scenario::{EXECUTION, assert_model_failure};
 
 /// The one-section loop prompt running `lua` under an explicit
@@ -235,7 +235,7 @@ fn repeated_calls_to_a_failing_tool_exit_at_the_iteration_cap() {
 #[test]
 fn a_failing_model_turn_is_reported_before_the_error_propagates() {
     let gateway = ScriptedChat::new(vec![fail(
-        CompletionErrorKind::ServerError,
+        ErrorCode::ServerError,
         500,
         "private backend response",
     )]);
@@ -247,7 +247,7 @@ fn a_failing_model_turn_is_reported_before_the_error_propagates() {
     let trace = loop_scenario(source).chat(&gateway).run();
     assert_model_failure(
         trace.error(),
-        CompletionErrorKind::ServerError,
+        ErrorCode::ServerError,
         "the model backend reported a fault of its own (status 500)",
     );
     let recorder = Recorder::default();
@@ -267,11 +267,7 @@ fn a_failing_model_turn_is_reported_before_the_error_propagates() {
 
 #[test]
 fn a_caught_model_failure_reads_as_the_model_failure_kind() {
-    let gateway = ScriptedChat::new(vec![fail(
-        CompletionErrorKind::ServerError,
-        500,
-        "backend fault",
-    )]);
+    let gateway = ScriptedChat::new(vec![fail(ErrorCode::ServerError, 500, "backend fault")]);
     let source = one_section(
         "messages:user('go')
          local ok, err = pcall(models.loop)
@@ -307,7 +303,7 @@ fn a_client_rejection_without_overflow_signatures_stays_a_rejection() {
     // overflow, so the bare rejection propagates and no compactor is
     // invoked.
     let gateway = ScriptedChat::new(vec![fail(
-        CompletionErrorKind::Rejected,
+        ErrorCode::Rejected,
         400,
         "invalid request: unknown field",
     )]);
@@ -316,7 +312,7 @@ fn a_client_rejection_without_overflow_signatures_stays_a_rejection() {
         .run();
     assert_model_failure(
         trace.error(),
-        CompletionErrorKind::Rejected,
+        ErrorCode::Rejected,
         "the model backend rejected the request (status 400)",
     );
 }

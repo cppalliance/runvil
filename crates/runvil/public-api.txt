@@ -4,7 +4,6 @@
 #[non_exhaustive] pub enum runvil::event::Event
 #[non_exhaustive] pub enum runvil::event::ReplyOrigin
 #[non_exhaustive] pub enum runvil::ids::AbandonReason
-#[non_exhaustive] pub enum runvil::model::CompletionErrorKind
 #[non_exhaustive] pub enum runvil::model::CompletionResult
 #[non_exhaustive] pub enum runvil::model::ModelRole
 #[non_exhaustive] pub enum runvil::model::Role
@@ -33,7 +32,6 @@
 #[non_exhaustive] pub struct runvil::metrics::Usage { .. }
 #[non_exhaustive] pub struct runvil::metrics::VllmMetrics { .. }
 #[non_exhaustive] pub struct runvil::model::Completion { /* private fields */ }
-#[non_exhaustive] pub struct runvil::model::CompletionError { /* private fields */ }
 #[non_exhaustive] pub struct runvil::model::CompletionOptions { /* private fields */ }
 #[non_exhaustive] pub struct runvil::model::Message { /* private fields */ }
 #[non_exhaustive] pub struct runvil::model::ModelCatalog { /* private fields */ }
@@ -67,7 +65,7 @@ auto runvil::Step: Freeze, !RefUnwindSafe, Send, Sync, Unpin, !UnwindSafe
 auto runvil::cancel::CancelHandle: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::cancel::Cancelled: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::effect::Effect: Freeze, !RefUnwindSafe, Send, Sync, Unpin, !UnwindSafe
-auto runvil::effect::EffectAnswer: Freeze, !RefUnwindSafe, Send, Sync, Unpin, !UnwindSafe
+auto runvil::effect::EffectAnswer: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::effect::EffectId: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::effect::IssuedEffect: Freeze, !RefUnwindSafe, Send, Sync, Unpin, !UnwindSafe
 auto runvil::effect::Round: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
@@ -92,8 +90,6 @@ auto runvil::metrics::Usage: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSaf
 auto runvil::metrics::VllmMetrics: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::model::ArgumentNames: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::model::Completion: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
-auto runvil::model::CompletionError: Freeze, !RefUnwindSafe, Send, Sync, Unpin, !UnwindSafe
-auto runvil::model::CompletionErrorKind: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::model::CompletionOptions: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::model::CompletionResult: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::model::Message: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
@@ -192,8 +188,6 @@ derives runvil::metrics::Usage: Clone, Debug, Deserialize, Eq, PartialEq, Serial
 derives runvil::metrics::VllmMetrics: Clone, Debug, Default, Deserialize, PartialEq, Serialize
 derives runvil::model::ArgumentNames: Clone, Debug
 derives runvil::model::Completion: Debug
-derives runvil::model::CompletionError: Debug
-derives runvil::model::CompletionErrorKind: Clone, Copy, Debug, Eq, Hash, PartialEq
 derives runvil::model::CompletionOptions: Clone, Debug, Eq, PartialEq
 derives runvil::model::CompletionResult: Clone, Debug, Eq, PartialEq
 derives runvil::model::Message: Clone, Debug, Eq, PartialEq, Serialize
@@ -258,7 +252,6 @@ impl core::convert::From<runvil::ids::ChainId> for runvil::ids::TaskId
 impl core::convert::From<runvil::vfs::VfsPath> for runvil::vfs::VfsPathBuf
 impl core::error::Error for runvil::ParseError
 impl core::error::Error for runvil::error::Error
-impl core::error::Error for runvil::model::CompletionError
 impl core::error::Error for runvil::vfs::ParsePathReasonError
 impl core::error::Error for runvil::vfs::VfsError
 impl core::fmt::Display for runvil::ParseError
@@ -267,7 +260,6 @@ impl core::fmt::Display for runvil::effect::EffectId
 impl core::fmt::Display for runvil::error::Error
 impl core::fmt::Display for runvil::ids::ChainId
 impl core::fmt::Display for runvil::ids::TaskId
-impl core::fmt::Display for runvil::model::CompletionError
 impl core::fmt::Display for runvil::model::Role
 impl core::fmt::Display for runvil::packs::GlobalName
 impl core::fmt::Display for runvil::packs::PackId
@@ -329,6 +321,7 @@ pub const fn runvil::RunSeed::from_bytes(bytes: [u8; 32]) -> runvil::RunSeed
 pub const fn runvil::effect::EffectId::get(self) -> u64
 pub const fn runvil::error::ErrorCode::number(self) -> u16
 pub const fn runvil::error::ErrorCode::prose(self) -> &'static str
+pub const fn runvil::error::ErrorCode::tag(self) -> &'static str
 pub const fn runvil::ids::RoundId::get(self) -> u64
 pub const fn runvil::ids::RoundId::new(id: u64) -> Self
 pub const fn runvil::model::ModelRole::as_str(self) -> &'static str
@@ -418,7 +411,7 @@ pub fn runvil::metrics::VllmMetrics::with_queue_time_ms(self, ms: core::option::
 pub fn runvil::metrics::VllmMetrics::with_time_to_first_token_ms(self, ms: core::option::Option<f64>) -> runvil::metrics::VllmMetrics
 pub fn runvil::metrics::VllmMetrics::with_tokens_per_second(self, rate: core::option::Option<f64>) -> runvil::metrics::VllmMetrics
 pub fn runvil::model::Completion::finish_reason(&self) -> core::option::Option<&str>
-pub fn runvil::model::Completion::from_result(result: runvil::model::CompletionResult, model: impl core::convert::Into<alloc::string::String>) -> core::result::Result<runvil::model::Completion, runvil::model::CompletionError>
+pub fn runvil::model::Completion::from_result(result: runvil::model::CompletionResult, model: impl core::convert::Into<alloc::string::String>) -> core::result::Result<runvil::model::Completion, runvil::error::Error>
 pub fn runvil::model::Completion::metadata_diagnostics(&self) -> &[alloc::string::String]
 pub fn runvil::model::Completion::metrics(&self) -> core::option::Option<&runvil::metrics::CallMetrics>
 pub fn runvil::model::Completion::model(&self) -> &str
@@ -431,19 +424,6 @@ pub fn runvil::model::Completion::with_metrics(self, metrics: runvil::metrics::C
 pub fn runvil::model::Completion::with_model(self, model: impl core::convert::Into<alloc::string::String>) -> runvil::model::Completion
 pub fn runvil::model::Completion::with_raw(self, raw: runvil::model::RawExchange) -> runvil::model::Completion
 pub fn runvil::model::Completion::with_reasoning_content(self, reasoning_content: impl core::convert::Into<alloc::string::String>) -> runvil::model::Completion
-pub fn runvil::model::CompletionError::context_overflow(prompt_tokens: core::option::Option<u32>, window: core::option::Option<u32>, message: impl core::convert::Into<alloc::string::String>) -> runvil::model::CompletionError
-pub fn runvil::model::CompletionError::detail(&self) -> core::option::Option<&str>
-pub fn runvil::model::CompletionError::empty_reply(reasoning_present: bool) -> runvil::model::CompletionError
-pub fn runvil::model::CompletionError::finish_reason(&self) -> core::option::Option<&str>
-pub fn runvil::model::CompletionError::kind(&self) -> runvil::model::CompletionErrorKind
-pub fn runvil::model::CompletionError::message(&self) -> &str
-pub fn runvil::model::CompletionError::new(kind: runvil::model::CompletionErrorKind, message: impl core::convert::Into<alloc::string::String>) -> runvil::model::CompletionError
-pub fn runvil::model::CompletionError::overflow(&self) -> (core::option::Option<u32>, core::option::Option<u32>)
-pub fn runvil::model::CompletionError::with_detail(self, text: impl core::convert::Into<alloc::string::String>) -> runvil::model::CompletionError
-pub fn runvil::model::CompletionError::with_finish_reason(self, reason: impl core::convert::Into<alloc::string::String>) -> runvil::model::CompletionError
-pub fn runvil::model::CompletionError::with_source(self, source: impl core::convert::Into<alloc::boxed::Box<dyn core::error::Error + core::marker::Send + core::marker::Sync>>) -> runvil::model::CompletionError
-pub fn runvil::model::CompletionErrorKind::phrase(self) -> &'static str
-pub fn runvil::model::CompletionErrorKind::tag(self) -> &'static str
 pub fn runvil::model::CompletionOptions::invocation(&self) -> &runvil::model::ModelInvocation
 pub fn runvil::model::CompletionOptions::max_tokens(&self) -> core::option::Option<core::num::nonzero::NonZeroU32>
 pub fn runvil::model::CompletionOptions::model(&self) -> &str
@@ -502,12 +482,16 @@ pub fn runvil::model::ToolArguments::is_empty(&self) -> bool
 pub fn runvil::model::ToolArguments::names(&self) -> runvil::model::ArgumentNames<'_>
 pub fn runvil::model::ToolArguments::to_json_string(&self) -> alloc::string::String
 pub fn runvil::model::ToolCall::arguments(&self) -> runvil::model::ToolArguments<'_>
-pub fn runvil::model::ToolCall::from_parts(id: impl core::convert::Into<alloc::string::String>, name: impl core::convert::Into<alloc::string::String>, arguments: serde_json::value::Value) -> core::result::Result<runvil::model::ToolCall, runvil::model::CompletionError>
+pub fn runvil::model::ToolCall::from_parts(id: impl core::convert::Into<alloc::string::String>, name: impl core::convert::Into<alloc::string::String>, arguments: serde_json::value::Value) -> core::result::Result<runvil::model::ToolCall, runvil::error::Error>
 pub fn runvil::model::ToolCall::id(&self) -> &str
 pub fn runvil::model::ToolCall::name(&self) -> &str
 pub fn runvil::model::ToolSchema::description(&self) -> &str
 pub fn runvil::model::ToolSchema::name(&self) -> &str
 pub fn runvil::model::ToolSchema::parameters(&self) -> &serde_json::value::Value
+pub fn runvil::model::completion_error(code: runvil::error::ErrorCode, message: impl core::convert::Into<alloc::string::String>) -> runvil::error::Error
+pub fn runvil::model::context_overflow(prompt_tokens: core::option::Option<u32>, window: core::option::Option<u32>, message: impl core::convert::Into<alloc::string::String>) -> runvil::error::Error
+pub fn runvil::model::empty_reply(reasoning_present: bool) -> runvil::error::Error
+pub fn runvil::model::phrase(code: runvil::error::ErrorCode) -> &'static str
 pub fn runvil::packs::GlobalName::parse(s: &str) -> core::result::Result<runvil::packs::GlobalName, runvil::error::Error>
 pub fn runvil::packs::PackId::contains(&self, tool: &runvil::tools::ToolId) -> bool
 pub fn runvil::packs::PackId::is_reserved(&self) -> bool
@@ -700,7 +684,7 @@ pub runvil::effect::Effect::Vfs { .. }
 pub runvil::effect::Effect::Vfs::access: alloc::sync::Arc<runvil::vfs::Access>
 pub runvil::effect::Effect::Vfs::op: runvil::vfs::VfsOp
 pub runvil::effect::EffectAnswer::Chat(..)
-pub runvil::effect::EffectAnswer::Chat::0: core::result::Result<alloc::boxed::Box<runvil::model::Completion>, runvil::model::CompletionError>
+pub runvil::effect::EffectAnswer::Chat::0: core::result::Result<alloc::boxed::Box<runvil::model::Completion>, runvil::error::Error>
 pub runvil::effect::EffectAnswer::Dropped
 pub runvil::effect::EffectAnswer::Render(..)
 pub runvil::effect::EffectAnswer::Render::0: alloc::vec::Vec<runvil::effect::PackToolSets<runvil::tools::ToolInfo>>
@@ -1124,19 +1108,6 @@ pub runvil::metrics::VllmMetrics::mean_itl_ms: core::option::Option<f64>
 pub runvil::metrics::VllmMetrics::queue_time_ms: core::option::Option<f64>
 pub runvil::metrics::VllmMetrics::time_to_first_token_ms: core::option::Option<f64>
 pub runvil::metrics::VllmMetrics::tokens_per_second: core::option::Option<f64>
-pub runvil::model::CompletionErrorKind::ContextOverflow
-pub runvil::model::CompletionErrorKind::EmptyReply
-pub runvil::model::CompletionErrorKind::InvalidParts
-pub runvil::model::CompletionErrorKind::MalformedResponse
-pub runvil::model::CompletionErrorKind::Overloaded
-pub runvil::model::CompletionErrorKind::QuotaExhausted
-pub runvil::model::CompletionErrorKind::RateLimited
-pub runvil::model::CompletionErrorKind::Refused
-pub runvil::model::CompletionErrorKind::Rejected
-pub runvil::model::CompletionErrorKind::ServerError
-pub runvil::model::CompletionErrorKind::Timeout
-pub runvil::model::CompletionErrorKind::Transport
-pub runvil::model::CompletionErrorKind::Unavailable
 pub runvil::model::CompletionResult::Text(..)
 pub runvil::model::CompletionResult::Text::0: alloc::string::String
 pub runvil::model::CompletionResult::ToolCalls(..)

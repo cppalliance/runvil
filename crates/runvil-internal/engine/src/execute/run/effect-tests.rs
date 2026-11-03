@@ -6,7 +6,7 @@
 //! model and finish reason, never the bodies; a `Render` answer keeps its
 //! rendered tools whole; a `ToolCall` answer projects to its text and
 //! trust; and every failure projects to its kind's tag and its display
-//! text, a tool call's to its code's tag and its prose. Each record round-trips through serde, as a run log and a replay
+//! text, a model round's or a tool call's to its code's tag and its prose. Each record round-trips through serde, as a run log and a replay
 //! depend on, the public JSON record of every kind is the typed record's
 //! JSON and reads back identical, and a record written before the render
 //! existed reads unchanged. The store answer's records are in the `store`
@@ -15,7 +15,7 @@
 use std::fmt;
 
 use runvil_model_client::client::{CompletionResult, RawExchange, ToolCall};
-use runvil_model_client::model::CompletionErrorKind;
+use runvil_model_client::model::completion_error;
 use runvil_types::packs::PackId;
 use runvil_types::tools::{OutputTrust, tool_error};
 use serde::de::DeserializeOwned;
@@ -273,14 +273,18 @@ fn a_canned_chat_answer_records_no_finish_reason() {
 }
 
 #[test]
-fn a_failed_chat_answer_records_the_kinds_tag_and_the_errors_display_text() {
-    let error = CompletionError::new(
-        CompletionErrorKind::MalformedResponse,
+fn a_failed_chat_answer_records_the_codes_tag_and_the_errors_prose() {
+    let mut error = completion_error(
+        ErrorCode::MalformedResponse,
         "the model backend sent a reply that could not be understood: \
          completion stream ended without the [DONE] sentinel",
-    )
-    .with_detail("provider said <hidden>");
-    let expected = error.to_string();
+    );
+    error.message.push_str(": provider said <hidden>");
+    assert!(
+        error.message.contains("hidden"),
+        "the message holds the detail"
+    );
+    let expected = error.prose.clone();
     assert!(
         expected.ends_with("without the [DONE] sentinel"),
         "the recorded text keeps the crate-authored specific: {expected}"
@@ -354,8 +358,8 @@ fn a_failed_tool_call_answer_records_each_tool_codes_tag_and_any_other_code_as_o
 fn a_failure_record_of_each_kind_round_trips_through_json() {
     let cases = [
         (
-            EffectAnswer::Chat(Err(CompletionError::new(
-                CompletionErrorKind::RateLimited,
+            EffectAnswer::Chat(Err(completion_error(
+                ErrorCode::RateLimited,
                 "the model backend is limiting the request rate",
             ))),
             r#"{"Chat":{"Err":{"kind":"rate_limited","message":"the model backend is limiting the request rate"}}}"#,
@@ -451,8 +455,8 @@ fn every_kinds_public_record_is_json_that_round_trips_exactly() {
             CompletionResult::Text("the reply".to_owned()),
             "stop",
         )))),
-        EffectAnswer::Chat(Err(CompletionError::new(
-            CompletionErrorKind::RateLimited,
+        EffectAnswer::Chat(Err(completion_error(
+            ErrorCode::RateLimited,
             "the model backend is limiting the request rate",
         ))),
         EffectAnswer::Render(tools_pack("Shout the value.", "shout")),

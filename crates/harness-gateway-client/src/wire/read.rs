@@ -11,8 +11,9 @@
 use std::future::Future;
 use std::time::{Duration, Instant};
 
+use runvil::error::Error;
 use runvil::metrics::ClientTiming;
-use runvil::model::{Completion, CompletionError};
+use runvil::model::Completion;
 use serde_json::Value;
 
 use super::delta::StreamDelta;
@@ -46,15 +47,12 @@ pub trait ChunkSource {
 
     /// Returns the next chunk, or `None` once the body is exhausted.
     ///
-    /// When a read fails, the implementation returns the
-    /// [`CompletionError`] that the round fails with. It is a
-    /// `Timeout`-kind error when the read ran out of time and a
-    /// `Transport`-kind error otherwise. Build it with
-    /// [`CompletionError::new`] and attach the transport's own error with
-    /// [`CompletionError::with_source`].
-    fn next_chunk(
-        &mut self,
-    ) -> impl Future<Output = Result<Option<Self::Chunk>, CompletionError>> + Send;
+    /// When a read fails, the implementation returns the [`Error`] that
+    /// the round fails with. Its code is `Timeout` when the read ran out of
+    /// time and `Transport` otherwise. Build it with
+    /// [`completion_error`](runvil::model::completion_error) and attach the
+    /// transport's own error with [`Error::with_cause`].
+    fn next_chunk(&mut self) -> impl Future<Output = Result<Option<Self::Chunk>, Error>> + Send;
 }
 
 /// Reads a whole response body from `source`, refusing it once it would
@@ -71,13 +69,13 @@ pub trait ChunkSource {
 /// force an unbounded allocation before the body is decoded.
 ///
 /// # Errors
-/// Returns a `MalformedResponse`-kind [`CompletionError`] when the body
-/// would exceed `cap`, and the source's own error when a read fails.
+/// Returns an [`Error`] with code `MalformedResponse` when the body would
+/// exceed `cap`, and the source's own error when a read fails.
 pub async fn read_body_capped<S: ChunkSource>(
     source: &mut S,
     content_length: Option<u64>,
     cap: u64,
-) -> Result<Vec<u8>, CompletionError> {
+) -> Result<Vec<u8>, Error> {
     if let Some(len) = content_length
         && len > cap
     {
@@ -120,7 +118,7 @@ pub async fn read_body_capped<S: ChunkSource>(
 /// every clock reading from `started` and `now`.
 ///
 /// # Errors
-/// Returns a `MalformedResponse`-kind [`CompletionError`] when the stream
+/// Returns an [`Error`] with code `MalformedResponse` when the stream
 /// exceeds `max_bytes` or ends before the sentinel, and the source's own
 /// error when a read fails. Also returns the error that reassembling the
 /// reply raises for a malformed chunk, a mid-stream error envelope, a
@@ -132,7 +130,7 @@ pub async fn read_completion_stream<S: ChunkSource>(
     on_delta: impl Fn(StreamDelta),
     started: Instant,
     now: impl Fn() -> Instant,
-) -> Result<Completion, CompletionError> {
+) -> Result<Completion, Error> {
     let mut scanner = SseScanner::new();
     let mut accumulator = StreamAccumulator::new();
     let mut received: u64 = 0;

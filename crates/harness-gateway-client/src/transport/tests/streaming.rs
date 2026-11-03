@@ -1,10 +1,11 @@
 //! The streamed round end to end: what goes on the wire, and how the
 //! stream comes back as one completion.
 
+use runvil::error::{ErrorCode, FactKey};
 use runvil::model::{CompletionResult, Message};
 
 use super::*;
-use crate::{CompletionErrorKind, StreamDelta};
+use crate::StreamDelta;
 
 #[tokio::test]
 async fn complete_sends_completion_options_and_stream_flags_on_the_wire() {
@@ -65,11 +66,13 @@ async fn complete_hard_fails_on_empty_model_reply() {
         .complete(&[Message::user("hi")], None, &openai_options(), |_| {})
         .await
         .expect_err("empty product must fail");
-    assert_eq!(err.kind(), CompletionErrorKind::EmptyReply);
+    assert_eq!(err.code, ErrorCode::EmptyReply);
     assert_eq!(
-        err.finish_reason(),
+        err.facts
+            .get(&FactKey::FinishReason)
+            .and_then(Value::as_str),
         Some("stop"),
-        "the finish_reason must survive the conversion into CompletionError"
+        "the finish_reason must survive the conversion into the error"
     );
     assert_eq!(
         err.to_string(),
@@ -77,8 +80,7 @@ async fn complete_hard_fails_on_empty_model_reply() {
          reasoning content was present but ignored"
     );
     assert_eq!(
-        err.detail(),
-        None,
+        err.message, err.prose,
         "the specific is ours, not provider text"
     );
 }
@@ -260,8 +262,8 @@ async fn truncated_tool_call_batch_fails_the_completion() {
             .await
             .expect_err("a truncated tool-call batch must fail");
         assert_eq!(
-            err.kind(),
-            CompletionErrorKind::MalformedResponse,
+            err.code,
+            ErrorCode::MalformedResponse,
             "finish_reason {reason:?}"
         );
         assert!(
@@ -309,10 +311,10 @@ async fn mid_stream_error_envelope_is_a_transport_failure() {
         .complete(&[Message::user("hi")], None, &openai_options(), |_| {})
         .await
         .expect_err("an error envelope must fail the completion");
-    assert_eq!(err.kind(), CompletionErrorKind::Transport);
+    assert_eq!(err.code, ErrorCode::Transport);
+    assert_eq!(err.prose, "the connection to the model backend failed");
     assert_eq!(
-        err.to_string(),
-        "the connection to the model backend failed"
+        err.message,
+        "the connection to the model backend failed: upstream died"
     );
-    assert_eq!(err.detail(), Some("upstream died"));
 }

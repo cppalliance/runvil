@@ -35,8 +35,7 @@ use std::time::Duration;
 use runvil::effect::{PackToolSets, Round, ToolCallOrigin};
 use runvil::error::Error;
 use runvil::model::{
-    Completion, CompletionError, CompletionOptions, Message, ModelBinding, ModelCatalog, ModelInfo,
-    ToolSchema,
+    Completion, CompletionOptions, Message, ModelBinding, ModelCatalog, ModelInfo, ToolSchema,
 };
 use runvil::tools::{ToolId, ToolInfo, ToolOutput};
 use runvil::vfs::Access;
@@ -58,7 +57,7 @@ pub type BoxFuture<T> = Pin<Box<dyn Future<Output = T> + Send + 'static>>;
 /// to the Host's own runtime.
 pub trait InferenceBroker: Send + Sync {
     /// Lists the models the broker serves.
-    fn models(&self) -> BoxFuture<Result<ModelCatalog, CompletionError>>;
+    fn models(&self) -> BoxFuture<Result<ModelCatalog, Error>>;
 
     /// Runs one model round and returns the finished reply.
     ///
@@ -76,7 +75,7 @@ pub trait InferenceBroker: Send + Sync {
         tools: Vec<ToolSchema>,
         options: CompletionOptions,
         round: Round,
-    ) -> BoxFuture<Result<Box<Completion>, CompletionError>>;
+    ) -> BoxFuture<Result<Box<Completion>, Error>>;
 }
 
 /// The tool calls a run has in flight at once unless its performer says

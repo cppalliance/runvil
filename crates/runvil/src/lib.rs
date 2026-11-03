@@ -80,12 +80,14 @@ pub mod model {
     pub use runvil_model_client::client::ToolArguments;
     pub use runvil_model_client::client::ToolCall;
     pub use runvil_model_client::client::ToolSchema;
-    pub use runvil_model_client::model::CompletionError;
-    pub use runvil_model_client::model::CompletionErrorKind;
     pub use runvil_model_client::model::CompletionOptions;
     pub use runvil_model_client::model::ModelBinding;
     pub use runvil_model_client::model::ModelInvocation;
     pub use runvil_model_client::model::Temperature;
+    pub use runvil_model_client::model::completion_error;
+    pub use runvil_model_client::model::context_overflow;
+    pub use runvil_model_client::model::empty_reply;
+    pub use runvil_model_client::model::phrase;
     pub use runvil_types::models::ModelCatalog;
     pub use runvil_types::models::ModelId;
     pub use runvil_types::models::ModelInfo;

@@ -12,7 +12,7 @@ use std::num::NonZeroU64;
 use std::time::{Duration, Instant};
 
 use runvil::error::Error;
-use runvil::model::{Completion, CompletionError, CompletionOptions, Message, ToolSchema};
+use runvil::model::{Completion, CompletionOptions, Message, ToolSchema};
 
 use crate::config::{GatewayEndpoint, SecretString, invalid_env, missing_env};
 use crate::failure::{elapsed, transport_failure, unavailable};
@@ -63,7 +63,7 @@ struct ResponseChunks {
 impl ChunkSource for ResponseChunks {
     type Chunk = bytes::Bytes;
 
-    async fn next_chunk(&mut self) -> Result<Option<Self::Chunk>, CompletionError> {
+    async fn next_chunk(&mut self) -> Result<Option<Self::Chunk>, Error> {
         tokio::time::timeout(self.timeout, self.response.chunk())
             .await
             .map_err(elapsed)?
@@ -127,9 +127,9 @@ impl GatewayChat {
     /// Builds an offline client, for execution paths that must stay
     /// hermetic.
     ///
-    /// Any attempted model call fails with an `Unavailable`-kind
-    /// [`CompletionError`]. The client reads no gateway configuration and
-    /// sends no HTTP request.
+    /// Any attempted model call fails with an [`Error`] with code
+    /// `Unavailable`. The client reads no gateway configuration and sends no
+    /// HTTP request.
     #[must_use]
     pub fn disabled() -> GatewayChat {
         GatewayChat {
@@ -229,8 +229,8 @@ impl GatewayChat {
     /// settings in `options` extend the request when present.
     ///
     /// # Errors
-    /// Returns a [`CompletionError`] whose [`kind`](CompletionError::kind) is
-    /// always one of the following:
+    /// Returns an [`Error`] whose [`code`](Error::code) is always one of the
+    /// following:
     /// - `Unavailable` when this client was built with [`GatewayChat::disabled`],
     ///   or when the gateway answers 401 or 403.
     /// - `Timeout` when the request timeout elapses before the response
@@ -244,8 +244,8 @@ impl GatewayChat {
     ///   reads it.
     /// - `MalformedResponse` when the stream exceeds the response size cap,
     ///   a chunk fails to parse as usable JSON (a JSON decode error is kept
-    ///   as the error's source), or the stream ends before the `[DONE]`
-    ///   sentinel. It is also the kind when a `length` or `content_filter`
+    ///   in the error's message), or the stream ends before the `[DONE]`
+    ///   sentinel. It is also the code when a `length` or `content_filter`
     ///   finish reason cuts off a batch of tool calls, because partial
     ///   arguments must not run.
     /// - `EmptyReply` when the turn has zero tool calls and blank text.
@@ -255,7 +255,7 @@ impl GatewayChat {
         tools: Option<&[ToolSchema]>,
         options: &CompletionOptions,
         on_delta: impl Fn(StreamDelta),
-    ) -> Result<Completion, CompletionError> {
+    ) -> Result<Completion, Error> {
         let GatewayTransport::Http(http) = &self.transport else {
             return Err(unavailable());
         };
@@ -287,9 +287,8 @@ impl GatewayChat {
             let raw_body =
                 read_body_capped(&mut chunks, content_length, self.max_response_bytes).await?;
             // F5: bound the body, then escape control characters so a hostile
-            // payload cannot forge log lines. The classifier keeps the escaped
-            // body only as the opt-in `CompletionError::detail`, never in the
-            // public `Display`.
+            // payload cannot forge log lines. The classifier appends the
+            // escaped body to the error's message only, never to its prose.
             let body = String::from_utf8_lossy(&raw_body);
             let body = escape_controls(&body, 2000);
             return Err(classify_http_failure(status.as_u16(), &body));

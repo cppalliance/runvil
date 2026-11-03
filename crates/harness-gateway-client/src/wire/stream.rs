@@ -21,8 +21,9 @@
 
 use std::collections::BTreeMap;
 
+use runvil::error::Error;
 use runvil::metrics::ClientTiming;
-use runvil::model::{Completion, CompletionError, RawExchange};
+use runvil::model::{Completion, RawExchange};
 use serde_json::{Map, Value};
 
 use super::classify::classify_stream_error;
@@ -145,7 +146,7 @@ impl StreamAccumulator {
     /// reasoning fragment it contains.
     ///
     /// # Errors
-    /// Returns a `MalformedResponse`-kind [`CompletionError`] when the
+    /// Returns an [`Error`] with code `MalformedResponse` when the
     /// payload is not valid JSON or a recognized field has the wrong
     /// shape, and the [`classify_stream_error`] result when the payload is
     /// a mid-stream error envelope (`Transport` unless its text names a
@@ -154,12 +155,12 @@ impl StreamAccumulator {
         &mut self,
         data: &str,
         on_delta: &impl Fn(StreamDelta),
-    ) -> Result<Applied, CompletionError> {
+    ) -> Result<Applied, Error> {
         if data == "[DONE]" {
             return Ok(Applied::Done);
         }
         let chunk: Value = serde_json::from_str(data)
-            .map_err(|error| malformed("stream chunk was not valid JSON").with_source(error))?;
+            .map_err(|error| malformed("stream chunk was not valid JSON").with_cause(&error))?;
         // A mid-stream `error` envelope is how the gateway (and llama.cpp)
         // report a failure after the 200 has already been sent: the
         // completion died in flight, so it is a transport failure unless
@@ -208,7 +209,7 @@ impl StreamAccumulator {
         &mut self,
         choice: &Value,
         on_delta: &impl Fn(StreamDelta),
-    ) -> Result<bool, CompletionError> {
+    ) -> Result<bool, Error> {
         let Some(index) = choice.get("index").and_then(Value::as_u64) else {
             return Err(malformed("stream choice had no integer index"));
         };
@@ -270,7 +271,7 @@ impl StreamAccumulator {
     }
 
     /// Merges one tool-call fragment into its index-keyed buffer.
-    fn apply_tool_fragment(&mut self, fragment: &Value) -> Result<(), CompletionError> {
+    fn apply_tool_fragment(&mut self, fragment: &Value) -> Result<(), Error> {
         let Some(index) = fragment.get("index").and_then(Value::as_u64) else {
             return Err(malformed("stream tool-call fragment had no integer index"));
         };
@@ -321,7 +322,7 @@ impl StreamAccumulator {
     /// absent when nothing was measured.
     ///
     /// # Errors
-    /// Returns a `MalformedResponse`-kind [`CompletionError`] when a
+    /// Returns an [`Error`] with code `MalformedResponse` when a
     /// tool-call batch was cut short by a `length` or `content_filter`
     /// finish (partial arguments must not execute), the normalizer's own
     /// errors (`EmptyReply` for a turn with neither non-empty tool calls nor
@@ -331,7 +332,7 @@ impl StreamAccumulator {
         self,
         request_body: Value,
         client_timing: Option<ClientTiming>,
-    ) -> Result<Completion, CompletionError> {
+    ) -> Result<Completion, Error> {
         // The truncation rule runs before normalization: a tool-call batch
         // cut short by `length` or `content_filter` may hold partial JSON
         // arguments, and partial arguments must not execute.
@@ -434,7 +435,7 @@ fn append_string_fragment(
     key: &str,
     slot: &mut Option<String>,
     label: &str,
-) -> Result<Option<String>, CompletionError> {
+) -> Result<Option<String>, Error> {
     match delta.get(key) {
         None | Some(Value::Null) => Ok(None),
         Some(Value::String(text)) => {

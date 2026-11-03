@@ -209,7 +209,7 @@ fn the_chat_agent_shape_leaves_the_oldest_records_out_of_a_summary_past_its_budg
     let mut replies = vec![text("ok"); long_turns];
     replies.extend([
         fail(
-            crate::model::CompletionErrorKind::ContextOverflow,
+            runvil_types::error::ErrorCode::ContextOverflow,
             400,
             "This model's maximum context length is 131072 tokens.",
         ),

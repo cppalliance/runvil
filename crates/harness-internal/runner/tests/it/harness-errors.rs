@@ -15,7 +15,8 @@ use harness_runner::display_chain;
 use harness_runner::environment::{CurrentModelError, HostSnapshot};
 use harness_runner::recorder::{MemoryRecorder, RunErrorKind};
 use harness_runner::{Harness, HarnessError, HostContext, RunReport, RunRequest};
-use runvil::model::{Completion, CompletionError, CompletionErrorKind};
+use runvil::error::{Error, ErrorCode};
+use runvil::model::{Completion, completion_error, phrase};
 use runvil_plugin::{HostServices, PackRegistry};
 
 use super::{
@@ -74,14 +75,14 @@ fn assert_ended_before_the_parse(recorder: &FailingRecorder, report: &RunReport)
 #[tokio::test]
 async fn a_model_list_the_broker_cannot_fetch_ends_the_recorded_run_as_a_completion_failure() {
     let recorder = Arc::new(FailingRecorder::never_failing());
-    let kind = CompletionErrorKind::Transport;
-    let broker = ScriptedBroker::replying().listing(Listing::Fails(kind));
+    let code = ErrorCode::Transport;
+    let broker = ScriptedBroker::replying().listing(Listing::Fails(code));
 
     let report = harness_over(&recorder, broker)
         .run(request(PLAIN))
         .await
         .expect("a failed listing is the run's outcome");
-    let lookup = CurrentModelError::CatalogFetchFailed(CompletionError::new(kind, kind.phrase()));
+    let lookup = CurrentModelError::CatalogFetchFailed(completion_error(code, phrase(code)));
     assert_eq!(
         report.outcome,
         RunOutcome::Failed {
@@ -230,7 +231,7 @@ async fn a_panicking_broker_answers_its_round_dropped() {
     });
     let in_the_round = ScriptedBroker::new(|_round, _messages| {
         Box::pin(std::future::poll_fn(
-            |_cx| -> Poll<Result<Box<Completion>, CompletionError>> {
+            |_cx| -> Poll<Result<Box<Completion>, Error>> {
                 panic!("the broker panics in its round")
             },
         ))

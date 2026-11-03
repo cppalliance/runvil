@@ -25,6 +25,7 @@
 
 use std::sync::atomic::Ordering;
 
+use runvil_types::error::{ErrorCode, FactKey};
 use runvil_types::event::{ReplyOrigin, lifecycle};
 use runvil_types::ids::RoundId;
 use runvil_types::metrics::ToolCallEvent;
@@ -38,9 +39,7 @@ use crate::lua::{
     Answer, ChatOutcome, ChatResult, MessageList, OverflowReason, RenderedTools, ToolSet,
     output_reserve, precheck, project_messages, wire_name_of,
 };
-use crate::model::{
-    Completion, CompletionErrorKind, CompletionResult, ModelBinding, ToolCall, detail,
-};
+use crate::model::{Completion, CompletionResult, ModelBinding, ToolCall, detail};
 use crate::{Error, Result};
 
 use super::dispatch::Dispatched;
@@ -341,7 +340,7 @@ impl ArrivedRound {
     /// other failure is a failed turn and the call's error.
     fn failed(&self, error: Error) -> std::result::Result<Box<ChatResult>, Error> {
         match error {
-            Error::Completion(error) if error.kind() == CompletionErrorKind::ContextOverflow => {
+            Error::Completion(error) if error.code == ErrorCode::ContextOverflow => {
                 self.reporting
                     .emitter
                     .report(&self.section, lifecycle::MODEL_TURN_FAILED);
@@ -350,14 +349,18 @@ impl ArrivedRound {
                     self.reporting.turns.load(Ordering::Relaxed),
                 )))
             }
-            Error::Completion(error) if error.kind() == CompletionErrorKind::EmptyReply => {
+            Error::Completion(error) if error.code == ErrorCode::EmptyReply => {
                 let turn = advance_turn(&self.reporting.turns);
                 self.reporting
                     .emitter
                     .report(&self.section, lifecycle::MODEL_TURN_COMPLETED);
                 Ok(Box::new(ChatResult {
-                    outcome: ChatOutcome::Empty(Some(error.message().to_owned())),
-                    finish_reason: error.finish_reason().map(str::to_owned),
+                    outcome: ChatOutcome::Empty(Some(error.prose.clone())),
+                    finish_reason: error
+                        .facts
+                        .get(&FactKey::FinishReason)
+                        .and_then(serde_json::Value::as_str)
+                        .map(str::to_owned),
                     turn,
                 }))
             }

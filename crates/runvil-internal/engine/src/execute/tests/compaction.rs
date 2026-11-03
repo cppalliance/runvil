@@ -6,12 +6,12 @@
 //! `models_compact`.
 
 use runvil_prompt::test_support::{one_section, prompt};
+use runvil_types::error::ErrorCode;
 
 use super::fixtures::echo_tool;
 use super::gateway::overflowing;
 use super::models_loop::loop_scenario;
 use super::*;
-use crate::model::CompletionErrorKind;
 
 #[path = "compaction-rules.rs"]
 mod rules;
@@ -223,7 +223,7 @@ fn a_loop_inside_a_compactor_raises_loop_running() {
 fn a_compaction_a_restore_and_a_clear_leave_the_rendered_tool_list_attached() {
     let gateway = ScriptedChat::new(vec![
         fail(
-            CompletionErrorKind::ContextOverflow,
+            ErrorCode::ContextOverflow,
             400,
             "This model's maximum context length is 4096 tokens.",
         ),

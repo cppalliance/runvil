@@ -22,6 +22,7 @@ use std::thread;
 use runvil_lua::ToolOutputKind;
 use runvil_model_client::model::ModelInvocation;
 use runvil_types::cancel::CancelHandle;
+use runvil_types::error::ErrorCode;
 use runvil_types::event::Event;
 use runvil_types::seed::RunSeed;
 use runvil_types::timestamp::Timestamp;
@@ -33,9 +34,7 @@ use super::scripted_chat::ScriptedChat;
 use crate::Error;
 use crate::execute::{Effect, EffectAnswer, Run, RunConfig, RunLimits};
 use crate::lua::ToolBinding;
-use crate::model::{
-    CompletionErrorKind, ModelBinding, ModelId, ModelInfo, ModelRole, ModelSet, ThinkingMode,
-};
+use crate::model::{ModelBinding, ModelId, ModelInfo, ModelRole, ModelSet, ThinkingMode};
 use crate::prompt::Prompt;
 
 #[path = "scenario-driving.rs"]
@@ -95,16 +94,13 @@ pub(crate) fn test_binding(alias: &str, description: &str, model: &str) -> Model
     )
 }
 
-/// Asserts `error` is a model failure of `kind` whose message is `message`.
+/// Asserts `error` is a model failure of `code` whose prose is `prose`.
 #[track_caller]
-pub(crate) fn assert_model_failure(error: &Error, kind: CompletionErrorKind, message: &str) {
+pub(crate) fn assert_model_failure(error: &Error, code: ErrorCode, prose: &str) {
     let Error::Completion(failure) = error else {
         panic!("expected a model failure, got {error:?}");
     };
-    assert_eq!(
-        (failure.kind(), failure.to_string().as_str()),
-        (kind, message)
-    );
+    assert_eq!((failure.code, failure.prose.as_str()), (code, prose));
 }
 
 /// The edit a scenario applies to its run's config before the run is

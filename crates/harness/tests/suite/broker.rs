@@ -10,11 +10,12 @@ use harness::record::{MemoryRecorder, RunOutcome};
 use harness::vfs::VfsRef;
 use harness::{BoxFuture, Harness, HostSnapshot, InferenceBroker, RunRequest};
 use runvil::effect::Round;
+use runvil::error::Error;
 use runvil::event::ReplyOrigin;
 use runvil::ids::RoundId;
 use runvil::model::{
-    Completion, CompletionError, CompletionOptions, CompletionResult, Message, ModelBinding,
-    ModelCatalog, ModelId, ModelInfo, ThinkingMode, ToolSchema,
+    Completion, CompletionOptions, CompletionResult, Message, ModelBinding, ModelCatalog, ModelId,
+    ModelInfo, ThinkingMode, ToolSchema,
 };
 
 use crate::support::Clock;
@@ -42,7 +43,7 @@ struct ScriptedBroker {
 }
 
 impl InferenceBroker for ScriptedBroker {
-    fn models(&self) -> BoxFuture<Result<ModelCatalog, CompletionError>> {
+    fn models(&self) -> BoxFuture<Result<ModelCatalog, Error>> {
         let catalog = self.catalog.clone();
         Box::pin(async move { Ok(catalog) })
     }
@@ -54,7 +55,7 @@ impl InferenceBroker for ScriptedBroker {
         _tools: Vec<ToolSchema>,
         _options: CompletionOptions,
         round: Round,
-    ) -> BoxFuture<Result<Box<Completion>, CompletionError>> {
+    ) -> BoxFuture<Result<Box<Completion>, Error>> {
         self.rounds
             .lock()
             .unwrap_or_else(PoisonError::into_inner)

@@ -12,12 +12,13 @@
 //! reports the round and renders its text, and the yielding chain resumes
 //! with the outcome.
 
+use runvil_types::error::ErrorCode;
 use runvil_types::event::ReplyOrigin;
 use runvil_types::event::lifecycle;
 use runvil_types::ids::RoundId;
 
 use crate::Error;
-use crate::model::{Completion, CompletionError, CompletionErrorKind, CompletionResult};
+use crate::model::{Completion, CompletionResult, completion_error, phrase};
 
 use super::context::ReportingHandles;
 use super::turn;
@@ -59,10 +60,10 @@ fn accept_infer_completion(
 /// The malformed-reply failure for an infer round whose outcome breaks the
 /// round's protocol, with `specific` naming how.
 fn malformed_reply(specific: &str) -> Error {
-    let kind = CompletionErrorKind::MalformedResponse;
-    Error::Completion(CompletionError::new(
-        kind,
-        format!("{}: {specific}", kind.phrase()),
+    let code = ErrorCode::MalformedResponse;
+    Error::Completion(completion_error(
+        code,
+        format!("{}: {specific}", phrase(code)),
     ))
 }
 
@@ -76,11 +77,11 @@ fn malformed_reply(specific: &str) -> Error {
 /// cancellation, so no `MODEL_TURN_FAILED` fires for it.
 ///
 /// # Errors
-/// Returns the completion's failure, or an [`Error::Completion`] of kind
+/// Returns the completion's failure, or an [`Error::Completion`] with code
 /// `MalformedResponse` when the round produced tool calls (none were
 /// advertised) or an unrecognized outcome.
 pub(super) fn accept_infer(
-    result: std::result::Result<Box<Completion>, CompletionError>,
+    result: std::result::Result<Box<Completion>, runvil_types::error::Error>,
     round: RoundId,
     reporting: &ReportingHandles,
     section: &str,

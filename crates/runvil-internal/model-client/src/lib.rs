@@ -11,8 +11,9 @@
 //! caller supplies, the validated [`ModelId`](runvil_types::models::ModelId)
 //! identity, and the
 //! [`model::ModelBinding`]/[`model::ModelSet`] types
-//! model selections resolve and freeze through, with
-//! [`model::CompletionError`] as the failure a round reports.
+//! model selections resolve and freeze through, with the universal
+//! [`Error`](runvil_types::error::Error) under a model code, built through
+//! [`model::completion_error`], as the failure a round reports.
 //!
 //! The metrics vocabulary in [`runvil_types::metrics`] (`Usage`,
 //! `LlamaTimings`, `VllmMetrics`, `ClientTiming`, `CallMetrics`) is
@@ -41,4 +42,4 @@ mod normalize;
 mod test_support;
 
 /// Crate-internal result alias over the failure a model round reports.
-type Result<T> = std::result::Result<T, model::CompletionError>;
+type Result<T> = std::result::Result<T, runvil_types::error::Error>;

@@ -13,7 +13,8 @@
 use std::sync::{Arc, Mutex, PoisonError};
 
 use runvil_model_client::client::{Completion, CompletionResult, Message, ToolCall, ToolSchema};
-use runvil_model_client::model::{CompletionError, CompletionErrorKind, CompletionOptions};
+use runvil_model_client::model::{CompletionOptions, completion_error, empty_reply, phrase};
+use runvil_types::error::{Error, ErrorCode, FactKey};
 use runvil_types::metrics::CallMetrics;
 use serde_json::Value;
 
@@ -69,15 +70,15 @@ pub(crate) fn calls(calls: &[(&str, &str, &str)]) -> ScriptedReply {
     }
 }
 
-/// A failed round of `kind`, with HTTP `status` and response `body`.
+/// A failed round of `code`, with HTTP `status` and response `body`.
 ///
-/// For every kind it builds the kind's phrase with the status appended and
-/// the body as the detail, so each test names its kind directly.
+/// For every code it builds the code's phrase with the status appended and
+/// the body as the detail, so each test names its code directly.
 #[must_use]
-pub(crate) fn fail(kind: CompletionErrorKind, status: u16, body: &str) -> ScriptedReply {
+pub(crate) fn fail(code: ErrorCode, status: u16, body: &str) -> ScriptedReply {
     ScriptedReply::Failure {
-        kind,
-        message: format!("{} (status {status})", kind.phrase()),
+        code,
+        message: format!("{} (status {status})", phrase(code)),
         detail: Some(body.to_owned()),
     }
 }
@@ -109,11 +110,11 @@ pub enum ScriptedReply {
     },
     /// A failed round.
     ///
-    /// A fresh [`CompletionError`] is built for every answer, because the
-    /// error is not `Clone`.
+    /// A fresh [`Error`] is built for every answer, and the detail joins its
+    /// message only, never its prose.
     Failure {
-        /// The failure's kind.
-        kind: CompletionErrorKind,
+        /// The failure's code.
+        code: ErrorCode,
         /// The failure's message.
         message: String,
         /// The provider text behind the failure, when there is some.
@@ -124,7 +125,7 @@ pub enum ScriptedReply {
 impl ScriptedReply {
     /// Answers a round with this reply: the answer
     /// [`ScriptedChat::complete_now`] gives.
-    pub(crate) fn answer(&self) -> Result<Completion, CompletionError> {
+    pub(crate) fn answer(&self) -> Result<Completion, Error> {
         match self {
             ScriptedReply::Text {
                 model,
@@ -135,11 +136,13 @@ impl ScriptedReply {
             } => {
                 let reasoning = reasoning.as_deref().filter(|text| !text.trim().is_empty());
                 if content.trim().is_empty() {
-                    let error = CompletionError::empty_reply(reasoning.is_some());
-                    return Err(match finish_reason {
-                        Some(reason) => error.with_finish_reason(reason),
-                        None => error,
-                    });
+                    let mut error = empty_reply(reasoning.is_some());
+                    if let Some(reason) = finish_reason {
+                        error
+                            .facts
+                            .insert(FactKey::FinishReason, Value::from(reason.as_str()));
+                    }
+                    return Err(error);
                 }
                 let mut completion =
                     Completion::from_result(CompletionResult::Text(content.clone()), model)?;
@@ -162,13 +165,14 @@ impl ScriptedReply {
                 Completion::from_result(CompletionResult::ToolCalls(calls), model)
             }
             ScriptedReply::Failure {
-                kind,
+                code,
                 message,
                 detail,
             } => {
-                let mut error = CompletionError::new(*kind, message);
+                let mut error = completion_error(*code, message);
                 if let Some(detail) = detail {
-                    error = error.with_detail(detail);
+                    error.message.push_str(": ");
+                    error.message.push_str(detail);
                 }
                 Err(error)
             }
@@ -285,7 +289,7 @@ impl ScriptedChat {
         messages: &[Message],
         tools: &[ToolSchema],
         options: &CompletionOptions,
-    ) -> Result<Completion, CompletionError> {
+    ) -> Result<Completion, Error> {
         let index = {
             let mut requests = self.requests.lock().unwrap_or_else(PoisonError::into_inner);
             let index = requests.len();

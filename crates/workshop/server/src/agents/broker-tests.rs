@@ -17,12 +17,13 @@ use axum::http::{HeaderMap, StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use harness::InferenceBroker;
-use harness_gateway_client::{CompletionError, CompletionErrorKind, StreamDelta};
+use harness_gateway_client::StreamDelta;
 use runvil::effect::Round;
+use runvil::error::{Error, ErrorCode};
 use runvil::event::ReplyOrigin;
 use runvil::ids::RoundId;
 use runvil::model::{
-    CompletionOptions, CompletionResult, Message, ModelBinding, ModelId, ModelInvocation,
+    CompletionOptions, CompletionResult, Message, ModelBinding, ModelId, ModelInvocation, phrase,
 };
 use serde_json::json;
 use workshop_agents::{Conversations, DeltaKind};
@@ -112,7 +113,7 @@ fn binding() -> ModelBinding {
 }
 
 /// Runs one round on `broker` and returns its reply text.
-async fn round(broker: &WorkshopBroker) -> Result<String, CompletionError> {
+async fn round(broker: &WorkshopBroker) -> Result<String, Error> {
     let completion = broker
         .chat(
             binding(),
@@ -130,9 +131,7 @@ async fn round(broker: &WorkshopBroker) -> Result<String, CompletionError> {
 
 /// Runs one streaming round on `broker` and returns its reply text beside
 /// every piece its callback was handed.
-async fn streamed_round(
-    broker: &WorkshopBroker,
-) -> (Result<String, CompletionError>, Vec<StreamDelta>) {
+async fn streamed_round(broker: &WorkshopBroker) -> (Result<String, Error>, Vec<StreamDelta>) {
     let kept: Arc<Mutex<Vec<StreamDelta>>> = Arc::default();
     let sink = Arc::clone(&kept);
     let completion = broker
@@ -157,7 +156,7 @@ async fn streamed_round(
 }
 
 /// Lists the models on `broker` and returns their names.
-async fn listed(broker: &WorkshopBroker) -> Result<Vec<String>, CompletionError> {
+async fn listed(broker: &WorkshopBroker) -> Result<Vec<String>, Error> {
     let catalog = broker.models().await?;
     Ok(catalog
         .models()
@@ -166,14 +165,14 @@ async fn listed(broker: &WorkshopBroker) -> Result<Vec<String>, CompletionError>
         .collect())
 }
 
-/// Asserts `error` is `Unavailable` with exactly the kind's fixed phrase,
+/// Asserts `error` is `Unavailable` with exactly the code's fixed phrase,
 /// so no URL or key rides in its message.
-fn assert_unavailable(error: &CompletionError) {
-    let kind = CompletionErrorKind::Unavailable;
-    assert_eq!(error.kind(), kind);
+fn assert_unavailable(error: &Error) {
+    let code = ErrorCode::Unavailable;
+    assert_eq!(error.code, code);
     assert_eq!(
         error.to_string(),
-        kind.phrase(),
+        phrase(code),
         "the message is the fixed phrase alone"
     );
 }

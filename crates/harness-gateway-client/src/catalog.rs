@@ -2,10 +2,11 @@
 
 use std::num::NonZeroU32;
 
-use runvil::model::{CompletionError, ModelCatalog, ModelId, ModelInfo, ThinkingMode};
+use runvil::error::Error;
+use runvil::model::{ModelCatalog, ModelId, ModelInfo, ThinkingMode};
 use serde::Deserialize;
 
-use crate::failure::{malformed, transport_failure};
+use crate::failure::{malformed, transport_failure, with_detail};
 use crate::wire::classify::classify_http_failure;
 use crate::wire::stream::escape_controls;
 
@@ -54,7 +55,7 @@ const MAX_CATALOG_BODY: u64 = 16 * 1024 * 1024;
 async fn read_catalog_body_capped(
     mut response: reqwest::Response,
     cap: u64,
-) -> std::result::Result<Vec<u8>, CompletionError> {
+) -> std::result::Result<Vec<u8>, Error> {
     if let Some(len) = response.content_length()
         && len > cap
     {
@@ -78,8 +79,8 @@ async fn read_catalog_body_capped(
 /// an oversized error body cannot exhaust memory.
 ///
 /// A read failure is returned as the concrete [`reqwest::Error`] (MODEL-010) so
-/// the caller can retain it as an error-chain `#[source]`, rather than being
-/// flattened into display text that severs the cause.
+/// the caller can append it and its cause chain to the failure's message,
+/// rather than being flattened into display text that severs the cause.
 async fn read_error_body_bounded(
     mut response: reqwest::Response,
     limit: usize,
@@ -128,15 +129,12 @@ fn catalog_client() -> reqwest::Client {
 /// Sends a bearer-authed GET through the shared client (MODEL-018) and
 /// returns the success response, classifying every failure the same way for
 /// each gateway endpoint: `Transport` (or `Timeout`) when the send fails, the
-/// classified kind with a bounded, control-escaped body as its detail on a
-/// non-success status (MODEL-010: no unbounded buffering), and `Transport`
-/// (or `Timeout`) when that error body cannot be read, keeping the
-/// [`reqwest::Error`] as a typed source under the same timeout marking as a
+/// classified code with a bounded, control-escaped body appended to its
+/// message on a non-success status (MODEL-010: no unbounded buffering), and
+/// `Transport` (or `Timeout`) when that error body cannot be read, appending
+/// the [`reqwest::Error`] to the message under the same timeout marking as a
 /// send failure.
-async fn get_authed(
-    url: String,
-    token: &str,
-) -> std::result::Result<reqwest::Response, CompletionError> {
+async fn get_authed(url: String, token: &str) -> std::result::Result<reqwest::Response, Error> {
     let response = catalog_client()
         .get(url)
         .bearer_auth(token)
@@ -161,16 +159,16 @@ async fn get_authed(
 /// bearer token.
 ///
 /// # Errors
-/// Returns a [`CompletionError`]. Its [`kind`](CompletionError::kind) is:
+/// Returns an [`Error`]. Its [`code`](Error::code) is:
 ///
 /// - `Transport` or `Timeout` when the HTTP request or a response read fails;
-/// - the kind [`classify_http_failure`] picks for the response when the
+/// - the code [`classify_http_failure`] picks for the response when the
 ///   Gateway returns a status outside the 2xx range;
 /// - `MalformedResponse` when the body is not a valid model list.
 pub async fn fetch_model_catalog(
     base_url: &str,
     token: &str,
-) -> std::result::Result<ModelCatalog, CompletionError> {
+) -> std::result::Result<ModelCatalog, Error> {
     let base = base_url.trim_end_matches('/');
     let response = get_authed(format!("{base}/models"), token).await?;
     // Bound the success body BEFORE decoding so an oversized (or unbounded)
@@ -179,10 +177,9 @@ pub async fn fetch_model_catalog(
     // A body that does not decode as a model list is a malformed response, not a
     // transport failure - matching this function's documented error contract.
     let list: ModelsListResponse = serde_json::from_slice(&body).map_err(|error| {
-        // MODEL-009: keep the decode error as a private `#[source]` cause instead
-        // of flattening it into the message, while the classification stays
-        // `MalformedResponse`.
-        malformed("model list response was not valid JSON").with_source(error)
+        // MODEL-009: keep the decode error in the message and out of the
+        // prose, while the classification stays `MalformedResponse`.
+        malformed("model list response was not valid JSON").with_cause(&error)
     })?;
     let mut models = Vec::with_capacity(list.data.len());
     for entry in list.data {
@@ -196,12 +193,16 @@ pub async fn fetch_model_catalog(
             malformed(format!("model catalog entry has an invalid id: {error}"))
         })?;
         let context = NonZeroU32::new(context).ok_or_else(|| {
-            malformed("a model declares a zero-token context window")
-                .with_detail(escape_controls(id.name(), MAX_CATALOG_ERROR_BODY))
+            with_detail(
+                malformed("a model declares a zero-token context window"),
+                &escape_controls(id.name(), MAX_CATALOG_ERROR_BODY),
+            )
         })?;
         let thinking = entry.thinking.ok_or_else(|| {
-            malformed("a model declares a context window but no thinking mode")
-                .with_detail(escape_controls(id.name(), MAX_CATALOG_ERROR_BODY))
+            with_detail(
+                malformed("a model declares a context window but no thinking mode"),
+                &escape_controls(id.name(), MAX_CATALOG_ERROR_BODY),
+            )
         })?;
         let info = ModelInfo::new(id, entry.description, context, thinking);
         models.push(match entry.provider {
@@ -210,8 +211,10 @@ pub async fn fetch_model_catalog(
         });
     }
     ModelCatalog::new(models).map_err(|error| {
-        malformed("gateway returned an inconsistent model catalog")
-            .with_detail(escape_controls(&error.to_string(), MAX_CATALOG_ERROR_BODY))
+        with_detail(
+            malformed("gateway returned an inconsistent model catalog"),
+            &escape_controls(&error.to_string(), MAX_CATALOG_ERROR_BODY),
+        )
     })
 }
 

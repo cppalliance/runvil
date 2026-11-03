@@ -202,6 +202,62 @@ fn every_code_number_falls_in_its_family_hundred() {
 }
 
 #[test]
+fn every_code_has_its_own_snake_case_tag() {
+    let tags: BTreeSet<&str> = ALL.into_iter().map(ErrorCode::tag).collect();
+    assert_eq!(tags.len(), ALL.len(), "no two codes share a tag");
+    for tag in tags {
+        assert!(
+            tag.bytes()
+                .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'_'),
+            "{tag}"
+        );
+    }
+}
+
+#[test]
+fn store_and_model_codes_keep_the_tags_stored_records_hold() {
+    // The store and model tags a run log already holds.
+    for (code, tag) in [
+        (ErrorCode::NotFound, "not_found"),
+        (ErrorCode::AlreadyExists, "already_exists"),
+        (ErrorCode::NotADirectory, "not_a_directory"),
+        (ErrorCode::IsADirectory, "is_a_directory"),
+        (ErrorCode::DirectoryNotEmpty, "directory_not_empty"),
+        (ErrorCode::NotUtf8, "not_utf8"),
+        (ErrorCode::InvalidPath, "invalid_path"),
+        (ErrorCode::InvalidRange, "invalid_range"),
+        (ErrorCode::Anchor, "anchor"),
+        (ErrorCode::PermissionDenied, "permission_denied"),
+        (ErrorCode::ApprovalRequired, "approval_required"),
+        (ErrorCode::ScopeEnded, "scope_ended"),
+        (ErrorCode::ReadOnly, "read_only"),
+        (ErrorCode::OutsideRoot, "outside_root"),
+        (ErrorCode::RootProtected, "root_protected"),
+        (ErrorCode::NoStore, "no_store"),
+        (ErrorCode::CrossMount, "cross_mount"),
+        (ErrorCode::Io, "io"),
+        (ErrorCode::Unsupported, "unsupported"),
+        (ErrorCode::Conflict, "conflict"),
+        (ErrorCode::Backend, "backend"),
+        (ErrorCode::ContextOverflow, "context_overflow"),
+        (ErrorCode::RateLimited, "rate_limited"),
+        (ErrorCode::QuotaExhausted, "quota_exhausted"),
+        (ErrorCode::Overloaded, "overloaded"),
+        (ErrorCode::Refused, "refused"),
+        (ErrorCode::Timeout, "timeout"),
+        (ErrorCode::Transport, "transport"),
+        (ErrorCode::ServerError, "server_error"),
+        (ErrorCode::Rejected, "rejected"),
+        (ErrorCode::MalformedResponse, "malformed_response"),
+        (ErrorCode::EmptyReply, "empty_reply"),
+        (ErrorCode::Unavailable, "unavailable"),
+        (ErrorCode::InvalidParts, "invalid_parts"),
+    ] {
+        assert_eq!(code.tag(), tag);
+    }
+}
+
+#[test]
 fn every_code_has_default_prose_in_whole_sentences() {
     for code in ALL {
         let prose = code.prose();

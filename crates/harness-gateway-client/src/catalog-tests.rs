@@ -1,9 +1,19 @@
 //! Tests for the model catalog fetch against an axum mock gateway: the body
-//! bounds, the preserved failure sources, the entry filter, and failure
-//! messages that carry no Gateway-supplied text.
+//! bounds, the failure causes kept in the message, the entry filter, and
+//! failure prose that carries no Gateway-supplied text.
+
+use runvil::error::ErrorCode;
 
 use super::*;
-use crate::CompletionErrorKind;
+
+/// The text the fetch appended to `err`'s message after its prose: the
+/// provider detail or the cause, which the prose never holds.
+fn appended(err: &Error) -> &str {
+    err.message
+        .strip_prefix(err.prose.as_str())
+        .and_then(|rest| rest.strip_prefix(": "))
+        .unwrap_or_else(|| panic!("the message extends the prose: {err:?}"))
+}
 
 async fn spawn_models(app: axum::Router) -> std::net::SocketAddr {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -31,12 +41,12 @@ async fn fetch_model_catalog_bounds_and_reports_non_success_body() {
     let err = fetch_model_catalog(&format!("http://{addr}"), "tok")
         .await
         .expect_err("a 500 response must surface as an error");
-    assert_eq!(err.kind(), CompletionErrorKind::ServerError);
+    assert_eq!(err.code, ErrorCode::ServerError);
     assert_eq!(
-        err.to_string(),
+        err.prose,
         "the model backend reported a fault of its own (status 500)"
     );
-    let detail = err.detail().expect("the bounded body is the detail");
+    let detail = appended(&err);
     assert!(
         detail.len() < MAX_CATALOG_ERROR_BODY + 128,
         "the error-path body must be bounded, got {} bytes",
@@ -62,22 +72,25 @@ async fn fetch_model_catalog_bounds_an_oversized_success_body() {
     let err = fetch_model_catalog(&format!("http://{addr}"), "tok")
         .await
         .expect_err("an oversized success body must be refused");
-    assert_eq!(err.kind(), CompletionErrorKind::MalformedResponse);
+    assert_eq!(err.code, ErrorCode::MalformedResponse);
     assert!(
         err.to_string().contains("exceeds"),
         "the bound must report the size limit, got {err:?}"
     );
-    assert_eq!(err.detail(), None, "our own wording is not provider text");
+    assert_eq!(
+        err.message, err.prose,
+        "our own wording is not provider text"
+    );
 }
 
 #[tokio::test]
-async fn fetch_model_catalog_preserves_the_json_decode_source() {
+async fn fetch_model_catalog_keeps_the_json_decode_error_in_the_message() {
     use axum::Router;
     use axum::routing::get;
 
     // MODEL-009: a 200 body that is not a valid model list is classified as
-    // MalformedResponse, and the underlying `serde_json::Error` survives as
-    // the error-chain `#[source]` rather than being flattened into the text.
+    // MalformedResponse, and the underlying `serde_json::Error` is appended
+    // to the message and kept out of the prose.
     async fn models() -> (axum::http::StatusCode, String) {
         (axum::http::StatusCode::OK, "{ this is not json".to_owned())
     }
@@ -87,13 +100,12 @@ async fn fetch_model_catalog_preserves_the_json_decode_source() {
     let err = fetch_model_catalog(&format!("http://{addr}"), "tok")
         .await
         .expect_err("an undecodable body must surface as an error");
-    assert_eq!(err.kind(), CompletionErrorKind::MalformedResponse);
-    let source =
-        std::error::Error::source(&err).expect("the decode error must be a preserved source");
-    assert!(
-        source.downcast_ref::<serde_json::Error>().is_some(),
-        "the preserved source must be the JSON decode error, got {source}"
-    );
+    assert_eq!(err.code, ErrorCode::MalformedResponse);
+    let decode = serde_json::from_slice::<ModelsListResponse>(b"{ this is not json")
+        .expect_err("the body is not JSON")
+        .to_string();
+    assert_eq!(appended(&err), decode);
+    assert!(!err.prose.contains(&decode), "got {err:?}");
 }
 
 #[tokio::test]
@@ -194,17 +206,17 @@ async fn fetch_model_catalog_still_rejects_a_zero_context_window() {
     let err = fetch_model_catalog(&format!("http://{addr}"), "tok")
         .await
         .expect_err("a zero context window is malformed");
-    assert_eq!(err.kind(), CompletionErrorKind::MalformedResponse);
-    assert!(err.to_string().contains("zero-token"), "got {err:?}");
-    assert!(!err.to_string().contains("broken"), "got {err:?}");
+    assert_eq!(err.code, ErrorCode::MalformedResponse);
+    assert!(err.prose.contains("zero-token"), "got {err:?}");
+    assert!(!err.prose.contains("broken"), "got {err:?}");
     assert!(
-        err.detail().is_some_and(|detail| detail.contains("broken")),
-        "the model name belongs in the detail, got {err:?}"
+        appended(&err).contains("broken"),
+        "the model name belongs in the message only, got {err:?}"
     );
 }
 
 /// Serves `data` as the gateway model list and returns the fetch failure.
-async fn fetch_rejection(data: serde_json::Value) -> CompletionError {
+async fn fetch_rejection(data: serde_json::Value) -> Error {
     let list = serde_json::json!({ "object": "list", "data": data });
     let app = axum::Router::new().route(
         "/models",
@@ -217,34 +229,32 @@ async fn fetch_rejection(data: serde_json::Value) -> CompletionError {
 }
 
 #[tokio::test]
-async fn fetch_model_catalog_moves_the_name_of_a_model_without_a_thinking_mode_to_detail() {
+async fn fetch_model_catalog_keeps_the_name_of_a_model_without_a_thinking_mode_out_of_the_prose() {
     let err = fetch_rejection(serde_json::json!([
         { "id": "thoughtless", "object": "model", "kind": "chat",
           "description": "d", "context": 4096 }
     ]))
     .await;
-    assert_eq!(err.kind(), CompletionErrorKind::MalformedResponse);
-    assert!(!err.to_string().contains("thoughtless"), "got {err:?}");
+    assert_eq!(err.code, ErrorCode::MalformedResponse);
+    assert!(!err.prose.contains("thoughtless"), "got {err:?}");
     assert!(
-        err.detail()
-            .is_some_and(|detail| detail.contains("thoughtless")),
-        "the model name belongs in the detail, got {err:?}"
+        appended(&err).contains("thoughtless"),
+        "the model name belongs in the message only, got {err:?}"
     );
 }
 
 #[tokio::test]
-async fn fetch_model_catalog_moves_a_duplicate_id_to_detail() {
+async fn fetch_model_catalog_keeps_a_duplicate_id_out_of_the_prose() {
     let entry = serde_json::json!(
         { "id": "twin", "object": "model", "kind": "chat",
           "description": "d", "context": 4096, "thinking": "never" }
     );
     let err = fetch_rejection(serde_json::json!([entry.clone(), entry])).await;
-    assert_eq!(err.kind(), CompletionErrorKind::MalformedResponse);
-    assert!(!err.to_string().contains("twin"), "got {err:?}");
+    assert_eq!(err.code, ErrorCode::MalformedResponse);
+    assert!(!err.prose.contains("twin"), "got {err:?}");
     assert!(
-        err.detail()
-            .is_some_and(|detail| detail.contains("gateway/twin")),
-        "the duplicate identity belongs in the detail, got {err:?}"
+        appended(&err).contains("gateway/twin"),
+        "the duplicate identity belongs in the message only, got {err:?}"
     );
 }
 
@@ -262,8 +272,8 @@ async fn fetch_model_catalog_bounds_a_gateway_supplied_detail() {
     ];
     for data in rejections {
         let err = fetch_rejection(data).await;
-        assert_eq!(err.kind(), CompletionErrorKind::MalformedResponse);
-        let detail = err.detail().expect("the model name is the detail");
+        assert_eq!(err.code, ErrorCode::MalformedResponse);
+        let detail = appended(&err);
         assert!(
             detail.chars().count() <= MAX_CATALOG_ERROR_BODY,
             "a Gateway-supplied detail must be bounded, got {} chars",
@@ -279,20 +289,20 @@ async fn fetch_model_catalog_keeps_an_invalid_id_out_of_the_message() {
           "description": "d", "context": 4096, "thinking": "never" }
     ]))
     .await;
-    assert_eq!(err.kind(), CompletionErrorKind::MalformedResponse);
+    assert_eq!(err.code, ErrorCode::MalformedResponse);
     let message = err.to_string();
     assert!(!message.contains("smuggled"), "got {err:?}");
     assert!(!message.contains('\u{7}'), "got {err:?}");
 }
 
 #[tokio::test]
-async fn fetch_model_catalog_preserves_a_body_read_failure_source() {
+async fn fetch_model_catalog_keeps_a_body_read_failure_in_the_message() {
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
     // MODEL-010: a non-success response whose body cannot be fully read
     // (the server promises a large body then drops the connection) must
-    // surface as a typed transport failure that keeps the `reqwest::Error`
-    // as its `#[source]`, not display text.
+    // surface as a typed transport failure whose message, not its prose,
+    // holds the `reqwest::Error`.
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
     tokio::spawn(async move {
@@ -310,15 +320,10 @@ async fn fetch_model_catalog_preserves_a_body_read_failure_source() {
     let err = fetch_model_catalog(&format!("http://{addr}"), "tok")
         .await
         .expect_err("a truncated error body must surface as an error");
-    assert_eq!(err.kind(), CompletionErrorKind::Transport);
-    assert_eq!(
-        err.to_string(),
-        "the connection to the model backend failed"
-    );
-    let source =
-        std::error::Error::source(&err).expect("the read failure must be a preserved source");
+    assert_eq!(err.code, ErrorCode::Transport);
+    assert_eq!(err.prose, "the connection to the model backend failed");
     assert!(
-        source.downcast_ref::<reqwest::Error>().is_some(),
-        "the preserved source must be the reqwest read error, got {source}"
+        !appended(&err).is_empty(),
+        "the message holds the reqwest read error, got {err:?}"
     );
 }

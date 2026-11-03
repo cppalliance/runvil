@@ -2,18 +2,26 @@
 //! reasoning side channel.
 
 use super::*;
-use runvil::model::CompletionErrorKind;
+use runvil::error::ErrorCode;
 
 const EMPTY_REPLY_PHRASE: &str = "the model replied with no text and no tool calls";
 
 /// Whether `result` failed as a `MalformedResponse`.
-fn is_malformed<T>(result: Result<T, CompletionError>) -> bool {
-    result.is_err_and(|error| error.kind() == CompletionErrorKind::MalformedResponse)
+fn is_malformed<T>(result: Result<T, Error>) -> bool {
+    result.is_err_and(|error| error.code == ErrorCode::MalformedResponse)
 }
 
 /// Whether `result` failed as an `EmptyReply`.
-fn is_empty_reply<T>(result: Result<T, CompletionError>) -> bool {
-    result.is_err_and(|error| error.kind() == CompletionErrorKind::EmptyReply)
+fn is_empty_reply<T>(result: Result<T, Error>) -> bool {
+    result.is_err_and(|error| error.code == ErrorCode::EmptyReply)
+}
+
+/// The backend's finish reason an empty reply names, when it names one.
+fn finish_reason(error: &Error) -> Option<&str> {
+    error
+        .facts
+        .get(&FactKey::FinishReason)
+        .and_then(Value::as_str)
 }
 
 /// Wraps one assistant message in the gateway's one-choice envelope.
@@ -249,13 +257,13 @@ fn empty_content_with_reasoning_is_error() {
     });
 
     let error = normalize(&body).expect_err("an empty turn must fail");
-    assert_eq!(error.kind(), CompletionErrorKind::EmptyReply);
+    assert_eq!(error.code, ErrorCode::EmptyReply);
     assert_eq!(
         error.to_string(),
         format!("{EMPTY_REPLY_PHRASE}: reasoning content was present but ignored")
     );
     assert_eq!(
-        error.finish_reason(),
+        finish_reason(&error),
         Some("stop"),
         "the choice's finish_reason must survive on the error"
     );
@@ -269,9 +277,9 @@ fn empty_string_content_without_tools_is_error() {
     }));
 
     let error = normalize(&body).expect_err("an empty turn must fail");
-    assert_eq!(error.kind(), CompletionErrorKind::EmptyReply);
+    assert_eq!(error.code, ErrorCode::EmptyReply);
     assert_eq!(error.to_string(), EMPTY_REPLY_PHRASE);
-    assert_eq!(error.finish_reason(), None, "no finish_reason on the wire");
+    assert_eq!(finish_reason(&error), None, "no finish_reason on the wire");
 }
 
 #[test]
@@ -282,7 +290,7 @@ fn null_content_without_tools_is_error() {
     }));
 
     let error = normalize(&body).expect_err("an empty turn must fail");
-    assert_eq!(error.kind(), CompletionErrorKind::EmptyReply);
+    assert_eq!(error.code, ErrorCode::EmptyReply);
     assert_eq!(error.to_string(), EMPTY_REPLY_PHRASE);
 }
 

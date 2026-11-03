@@ -5,16 +5,17 @@ use std::time::Duration;
 
 use harness::{BoxFuture, InferenceBroker, Timer};
 use runvil::effect::Round;
+use runvil::error::{Error, ErrorCode};
 use runvil::model::{
-    Completion, CompletionError, CompletionErrorKind, CompletionOptions, Message, ModelBinding,
-    ModelCatalog, ToolSchema,
+    Completion, CompletionOptions, Message, ModelBinding, ModelCatalog, ToolSchema,
+    completion_error, phrase,
 };
 
 /// Lists no model and refuses every round as `Unavailable`.
 pub(crate) struct Offline;
 
 impl InferenceBroker for Offline {
-    fn models(&self) -> BoxFuture<Result<ModelCatalog, CompletionError>> {
+    fn models(&self) -> BoxFuture<Result<ModelCatalog, Error>> {
         Box::pin(async { Ok(ModelCatalog::empty()) })
     }
 
@@ -25,9 +26,9 @@ impl InferenceBroker for Offline {
         _tools: Vec<ToolSchema>,
         _options: CompletionOptions,
         _round: Round,
-    ) -> BoxFuture<Result<Box<Completion>, CompletionError>> {
-        let kind = CompletionErrorKind::Unavailable;
-        Box::pin(async move { Err(CompletionError::new(kind, kind.phrase())) })
+    ) -> BoxFuture<Result<Box<Completion>, Error>> {
+        let code = ErrorCode::Unavailable;
+        Box::pin(async move { Err(completion_error(code, phrase(code))) })
     }
 }
 

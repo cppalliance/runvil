@@ -39,7 +39,7 @@ use serde::Serialize;
 use serde_json::Value;
 
 use crate::lua::{VfsOp, VfsOutcome};
-use crate::model::{Completion, CompletionError, Message, ToolSchema};
+use crate::model::{Completion, Message, ToolSchema};
 use crate::model::{ModelBinding, Temperature};
 
 pub use record::PackToolSets;
@@ -319,7 +319,7 @@ impl Effect {
 #[derive(Debug)]
 pub enum EffectAnswer {
     /// The model round's completion or its failure.
-    Chat(std::result::Result<Box<Completion>, CompletionError>),
+    Chat(std::result::Result<Box<Completion>, runvil_types::error::Error>),
     /// Each offered Pack's rendered tools for each set, in the order the
     /// render asked: the same Packs, with each set the Pack was not
     /// offered into left empty. Every rendered tool's id starts with its
@@ -355,8 +355,9 @@ impl EffectAnswer {
     /// The value is keyed by the answer's kind, such as
     /// `{"ToolCall":{"Ok":{"text":"done","trust":"trusted"}}}` or
     /// `"Dropped"`, and it round-trips exactly through `serde_json`. A
-    /// failure is recorded as `{"kind":..,"message":..}`: its kind's stable
-    /// tag and its display text. A completion is recorded as its reply or
+    /// failure is recorded as `{"kind":..,"message":..}`: its stable tag and
+    /// its text, which is the prose of a model or tool failure and the
+    /// display text of a store failure. A completion is recorded as its reply or
     /// its requested tool names beside the model and finish reason, and a
     /// render as its rendered tools whole. The round's request and response
     /// bodies travel as debug events, and its metrics travel in the turn's
@@ -372,7 +373,7 @@ impl EffectAnswer {
         match self {
             EffectAnswer::Chat(result) => AnswerRecord::Chat(match result {
                 Ok(completion) => Ok(ChatAnswerRecord::from(completion.as_ref())),
-                Err(error) => Err(FailureRecord::new(error.kind().tag(), error.to_string())),
+                Err(error) => Err(FailureRecord::new(error.code.tag(), error.prose.clone())),
             }),
             EffectAnswer::Render(rendered) => AnswerRecord::Render(rendered.clone()),
             EffectAnswer::ToolCall(result) => AnswerRecord::ToolCall(match result {

@@ -123,8 +123,8 @@ impl From<crate::subst::SubstitutionError> for Error {
     }
 }
 
-impl From<crate::model::CompletionError> for Error {
-    fn from(error: crate::model::CompletionError) -> Error {
+impl From<runvil_types::error::Error> for Error {
+    fn from(error: runvil_types::error::Error) -> Error {
         Error::Completion(error)
     }
 }
@@ -310,20 +310,21 @@ impl Error {
                 None => Error::lua_message(raised.message),
             },
             runvil_lua::ErrorKind::EmptyModelReply => {
-                let error = crate::model::CompletionError::new(
-                    crate::model::CompletionErrorKind::EmptyReply,
+                let mut error = crate::model::completion_error(
+                    runvil_types::error::ErrorCode::EmptyReply,
                     raised.message,
                 );
-                Error::Completion(
-                    match raised
-                        .fields
-                        .get("finish_reason")
-                        .and_then(runvil_lua::ErrorField::as_str)
-                    {
-                        Some(reason) => error.with_finish_reason(reason),
-                        None => error,
-                    },
-                )
+                if let Some(reason) = raised
+                    .fields
+                    .get("finish_reason")
+                    .and_then(runvil_lua::ErrorField::as_str)
+                {
+                    error.facts.insert(
+                        runvil_types::error::FactKey::FinishReason,
+                        serde_json::Value::from(reason),
+                    );
+                }
+                Error::Completion(error)
             }
             runvil_lua::ErrorKind::Cancelled => Error::Interrupted,
             runvil_lua::ErrorKind::Tool => Error::Tool {

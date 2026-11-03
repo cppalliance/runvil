@@ -16,7 +16,7 @@ use runvil::cancel::CancelHandle;
 use runvil::effect::{Round, ToolCallOrigin};
 use runvil::error::Error;
 use runvil::model::{
-    Completion, CompletionError, CompletionOptions, Message, ModelBinding, ModelCatalog, ToolSchema,
+    Completion, CompletionOptions, Message, ModelBinding, ModelCatalog, ToolSchema,
 };
 use runvil::timestamp::Timestamp;
 use runvil::tools::{ToolCatalog, ToolId, ToolInfo, ToolOutput};
@@ -128,7 +128,7 @@ pub(crate) const TIMED_MAIN: &str = "local t = tasks.spawn('## Child')\n\
 pub(crate) struct Unused;
 
 impl InferenceBroker for Unused {
-    fn models(&self) -> BoxFuture<Result<ModelCatalog, CompletionError>> {
+    fn models(&self) -> BoxFuture<Result<ModelCatalog, Error>> {
         unreachable!("the effect loop never lists models")
     }
 
@@ -139,7 +139,7 @@ impl InferenceBroker for Unused {
         _tools: Vec<ToolSchema>,
         _options: CompletionOptions,
         _round: Round,
-    ) -> BoxFuture<Result<Box<Completion>, CompletionError>> {
+    ) -> BoxFuture<Result<Box<Completion>, Error>> {
         unreachable!("no test issues a Chat effect")
     }
 }

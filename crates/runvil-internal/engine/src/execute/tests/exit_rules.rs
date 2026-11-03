@@ -5,13 +5,21 @@
 //! raise `empty_model_reply`).
 
 use runvil_prompt::test_support::{PromptSource, one_section, prompt};
+use runvil_types::error::{ErrorCode, FactKey};
 
 use super::context::Recorder;
 use super::fixtures::echo_tool;
 use super::models_loop::{LOOP_TO_TEXT, loop_events, loop_scenario};
 use super::*;
-use crate::model::CompletionErrorKind;
 use crate::test_support::scenario::Trace;
+
+/// The backend's finish reason a model failure names, when it names one.
+fn finish_reason(error: &runvil_types::error::Error) -> Option<&str> {
+    error
+        .facts
+        .get(&FactKey::FinishReason)
+        .and_then(Value::as_str)
+}
 
 #[test]
 fn falls_through_to_next_section() {
@@ -272,12 +280,11 @@ fn empty_stop_turn_without_tool_calls_fails() {
         let events = exit_events(&trace);
         match trace.error() {
             Error::Completion(error) => {
-                assert_eq!(error.kind(), CompletionErrorKind::EmptyReply);
-                assert_eq!(error.finish_reason(), Some("stop"));
+                assert_eq!(error.code, ErrorCode::EmptyReply);
+                assert_eq!(finish_reason(error), Some("stop"));
                 assert_eq!(
-                    error.message(),
-                    "the model replied with no text and no tool calls",
-                    "the fixed phrase for the kind is the message"
+                    error.prose, "the model replied with no text and no tool calls",
+                    "the fixed phrase for the code is the prose"
                 );
             }
             other => panic!("expected an EmptyReply failure, got {other:?}"),
@@ -296,8 +303,8 @@ fn empty_truncated_final_text_fails_without_truncation_detail() {
     let events = exit_events(&trace);
     match trace.error() {
         Error::Completion(error) => {
-            assert_eq!(error.kind(), CompletionErrorKind::EmptyReply);
-            assert_eq!(error.finish_reason(), Some("length"));
+            assert_eq!(error.code, ErrorCode::EmptyReply);
+            assert_eq!(finish_reason(error), Some("length"));
         }
         other => panic!("expected an EmptyReply failure, got {other:?}"),
     }
@@ -316,8 +323,8 @@ fn empty_turn_without_finish_reason_after_tool_call_fails() {
     let events = exit_events(&trace);
     match trace.error() {
         Error::Completion(error) => {
-            assert_eq!(error.kind(), CompletionErrorKind::EmptyReply);
-            assert_eq!(error.finish_reason(), None);
+            assert_eq!(error.code, ErrorCode::EmptyReply);
+            assert_eq!(finish_reason(error), None);
         }
         other => panic!("expected an EmptyReply failure, got {other:?}"),
     }

@@ -1,0 +1,83 @@
+//! The stable tag of each code.
+
+use super::ErrorCode;
+
+impl ErrorCode {
+    /// Returns the code's stable tag: its name in snake_case, such as
+    /// `not_found` or `rate_limited`. No two codes share a tag. Each store
+    /// and model code keeps the tag a run log already records for it, so
+    /// stored records keep their meaning.
+    #[must_use]
+    pub const fn tag(self) -> &'static str {
+        match self {
+            ErrorCode::FrontmatterInvalid => "frontmatter_invalid",
+            ErrorCode::StructureInvalid => "structure_invalid",
+            ErrorCode::FenceInvalid => "fence_invalid",
+            ErrorCode::ListEmptyItem => "list_empty_item",
+            ErrorCode::UnsupportedVersion => "unsupported_version",
+            ErrorCode::InvalidValue => "invalid_value",
+            ErrorCode::LuaRuntime => "lua_runtime",
+            ErrorCode::LuaCompile => "lua_compile",
+            ErrorCode::LuaQuota => "lua_quota",
+            ErrorCode::CallDepthExceeded => "call_depth_exceeded",
+            ErrorCode::Substitution => "substitution",
+            ErrorCode::TasksLive => "tasks_live",
+            ErrorCode::TaskNotOwned => "task_not_owned",
+            ErrorCode::TaskConsumed => "task_consumed",
+            ErrorCode::TaskCancelled => "task_cancelled",
+            ErrorCode::ContextOverflow => "context_overflow",
+            ErrorCode::RateLimited => "rate_limited",
+            ErrorCode::QuotaExhausted => "quota_exhausted",
+            ErrorCode::Overloaded => "overloaded",
+            ErrorCode::Refused => "refused",
+            ErrorCode::Timeout => "timeout",
+            ErrorCode::Transport => "transport",
+            ErrorCode::ServerError => "server_error",
+            ErrorCode::Rejected => "rejected",
+            ErrorCode::MalformedResponse => "malformed_response",
+            ErrorCode::EmptyReply => "empty_reply",
+            ErrorCode::Unavailable => "unavailable",
+            ErrorCode::InvalidParts => "invalid_parts",
+            ErrorCode::ContextExhausted => "context_exhausted",
+            ErrorCode::ModelRequired => "model_required",
+            ErrorCode::ToolInvalidArguments => "tool_invalid_arguments",
+            ErrorCode::ToolBackend => "tool_backend",
+            ErrorCode::ToolTransport => "tool_transport",
+            ErrorCode::ToolOther => "tool_other",
+            ErrorCode::OutOfScopeTool => "out_of_scope_tool",
+            ErrorCode::UnboundTool => "unbound_tool",
+            ErrorCode::ModelOnlyTool => "model_only_tool",
+            ErrorCode::ToolLoopExhausted => "tool_loop_exhausted",
+            ErrorCode::ToolSchemaInvalid => "tool_schema_invalid",
+            ErrorCode::ToolSetsInvalid => "tool_sets_invalid",
+            ErrorCode::NotFound => "not_found",
+            ErrorCode::AlreadyExists => "already_exists",
+            ErrorCode::NotADirectory => "not_a_directory",
+            ErrorCode::IsADirectory => "is_a_directory",
+            ErrorCode::DirectoryNotEmpty => "directory_not_empty",
+            ErrorCode::NotUtf8 => "not_utf8",
+            ErrorCode::InvalidPath => "invalid_path",
+            ErrorCode::InvalidRange => "invalid_range",
+            ErrorCode::Anchor => "anchor",
+            ErrorCode::PermissionDenied => "permission_denied",
+            ErrorCode::ApprovalRequired => "approval_required",
+            ErrorCode::ScopeEnded => "scope_ended",
+            ErrorCode::ReadOnly => "read_only",
+            ErrorCode::OutsideRoot => "outside_root",
+            ErrorCode::RootProtected => "root_protected",
+            ErrorCode::NoStore => "no_store",
+            ErrorCode::CrossMount => "cross_mount",
+            ErrorCode::Io => "io",
+            ErrorCode::Unsupported => "unsupported",
+            ErrorCode::Conflict => "conflict",
+            ErrorCode::Backend => "backend",
+            ErrorCode::Determinism => "determinism",
+            ErrorCode::RequirementsUnmet => "requirements_unmet",
+            ErrorCode::Interrupted => "interrupted",
+            ErrorCode::Internal => "internal",
+            ErrorCode::RecorderFailed => "recorder_failed",
+            ErrorCode::PluginLoadFailed => "plugin_load_failed",
+            ErrorCode::NoOutput => "no_output",
+        }
+    }
+}

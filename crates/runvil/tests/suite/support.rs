@@ -9,8 +9,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use runvil::error::ErrorCode;
 use runvil::model::{
-    CompletionError, CompletionErrorKind, CompletionResult, ModelId, ModelInfo, ThinkingMode,
-    ToolCall,
+    CompletionResult, ModelId, ModelInfo, ThinkingMode, ToolCall, completion_error, phrase,
 };
 use runvil::tools::{ToolId, ToolInfo, ToolOutput, tool_error};
 use serde_json::Value;
@@ -79,7 +78,7 @@ fn push_trimmed(source: &mut String, text: &str) {
 
 pub(super) enum Reply {
     Completion(CompletionResult),
-    Failure(CompletionError),
+    Failure(runvil::error::Error),
 }
 
 pub(super) fn text(reply: &str) -> Reply {
@@ -92,8 +91,8 @@ pub(super) fn calls(name: &str, args: Value) -> TestResult<Reply> {
     Ok(Reply::Completion(CompletionResult::ToolCalls(vec![call])))
 }
 
-pub(super) fn fail(kind: CompletionErrorKind) -> Reply {
-    Reply::Failure(CompletionError::new(kind, kind.phrase()))
+pub(super) fn fail(code: ErrorCode) -> Reply {
+    Reply::Failure(completion_error(code, phrase(code)))
 }
 
 pub(super) fn shout() -> Tool {

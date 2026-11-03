@@ -30,7 +30,7 @@
 //! Under the client sits the OpenAI chat-completions wire code. It turns a
 //! round into a request body, a streamed reply into a
 //! [`Completion`](runvil::model::Completion), and a failed response
-//! into the [`CompletionError`] the round fails with.
+//! into the [`Error`](runvil::error::Error) the round fails with.
 //!
 //! - [`build_request_body`] builds the JSON body that every round sends.
 //! - [`read_completion_stream`] reads a streamed reply from a
@@ -42,8 +42,8 @@
 //!   decodes whole.
 //! - [`escape_controls`] cuts a backend error body to a length limit and
 //!   escapes its control characters.
-//! - [`classify_http_failure`] turns a failure status and its body into a
-//!   `CompletionError` of the matching kind. [`classify_stream_error`] does
+//! - [`classify_http_failure`] turns a failure status and its body into an
+//!   error of the matching model code. [`classify_stream_error`] does
 //!   the same for an error envelope that arrives inside the stream.
 //!
 //! The client, or another broker, owns the connection and supplies the
@@ -57,9 +57,8 @@
 //! - A Gateway bearer key is never written to logs, `Debug`, `Display`, or
 //!   error text.
 //! - A backend error body is bounded and control-escaped before it is
-//!   kept. A chat round keeps it only in the opt-in
-//!   `CompletionError::detail`, and a search keeps it in the
-//!   `GatewaySearchError` message.
+//!   kept. A chat round keeps it only in the error's message, never in its
+//!   prose, and a search keeps it in the `GatewaySearchError` message.
 //! - A client sends requests without a key only when the caller builds it
 //!   with `GatewayChat::keyless`, which does not check the endpoint's
 //!   address, or when `GatewayChat::from_env` finds no key for a loopback
@@ -78,8 +77,6 @@ pub use broker::GatewayBroker;
 pub use catalog::fetch_model_catalog;
 pub use config::GatewayEndpoint;
 pub use config::SecretString;
-pub use runvil::model::CompletionError;
-pub use runvil::model::CompletionErrorKind;
 pub use search::GatewaySearch;
 pub use search::GatewaySearchError;
 pub use search::GatewaySearchErrorKind;

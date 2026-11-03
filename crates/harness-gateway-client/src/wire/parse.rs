@@ -23,8 +23,9 @@
 //! completion: a malformed section degrades to `None` with a returned
 //! diagnostic naming it.
 
+use runvil::error::{Error, FactKey};
 use runvil::metrics::{CallMetrics, LlamaTimings, Usage, VllmMetrics};
-use runvil::model::{CompletionError, CompletionResult, ToolCall};
+use runvil::model::{CompletionResult, ToolCall, empty_reply};
 use serde::Deserialize;
 use serde_json::Value;
 
@@ -59,7 +60,7 @@ struct TurnContext<'a> {
 /// non-empty array of objects, `finish_reason` is a present non-string,
 /// `message` is missing or not an object, or a reasoning field has the wrong
 /// type.
-fn turn_context(body: &Value) -> Result<TurnContext<'_>, CompletionError> {
+fn turn_context(body: &Value) -> Result<TurnContext<'_>, Error> {
     let choices = match body.get("choices") {
         None => return Err(malformed("no choices in response")),
         Some(Value::Array(choices)) => choices,
@@ -96,7 +97,7 @@ fn turn_context(body: &Value) -> Result<TurnContext<'_>, CompletionError> {
 /// Returns a `MalformedResponse`-kind failure when the body has no usable
 /// choice shape, and an `EmptyReply`-kind one when the choice has neither
 /// non-empty tool calls nor non-empty text.
-pub(super) fn normalize(body: &Value) -> Result<NormalizedTurn, CompletionError> {
+pub(super) fn normalize(body: &Value) -> Result<NormalizedTurn, Error> {
     let TurnContext {
         message,
         finish_reason,
@@ -136,11 +137,13 @@ pub(super) fn normalize(body: &Value) -> Result<NormalizedTurn, CompletionError>
         });
     }
 
-    let error = CompletionError::empty_reply(reasoning_content.is_some());
-    Err(match finish_reason {
-        Some(reason) => error.with_finish_reason(reason),
-        None => error,
-    })
+    let mut error = empty_reply(reasoning_content.is_some());
+    if let Some(reason) = finish_reason {
+        error
+            .facts
+            .insert(FactKey::FinishReason, Value::from(reason));
+    }
+    Err(error)
 }
 
 /// Parses the OpenAI `message.tool_calls` array into [`ToolCall`]s.
@@ -151,7 +154,7 @@ pub(super) fn normalize(body: &Value) -> Result<NormalizedTurn, CompletionError>
 /// null arguments are rejected rather than coerced. [`ToolCall::from_parts`]
 /// then refuses a blank id, a blank name, and arguments that do not decode
 /// to an object.
-fn parse_openai_tool_calls(raw_calls: &[Value]) -> Result<Vec<ToolCall>, CompletionError> {
+fn parse_openai_tool_calls(raw_calls: &[Value]) -> Result<Vec<ToolCall>, Error> {
     let mut calls = Vec::with_capacity(raw_calls.len());
     for raw in raw_calls {
         if !raw.is_object() {
@@ -211,7 +214,7 @@ fn parse_openai_tool_calls(raw_calls: &[Value]) -> Result<Vec<ToolCall>, Complet
 /// # Errors
 /// Returns a `MalformedResponse`-kind failure when a present reasoning field is not a
 /// string or null.
-fn extract_reasoning(message: &Value) -> Result<Option<String>, CompletionError> {
+fn extract_reasoning(message: &Value) -> Result<Option<String>, Error> {
     for key in ["reasoning_content", "reasoning", "thinking"] {
         match message.get(key) {
             None | Some(Value::Null) => {}
