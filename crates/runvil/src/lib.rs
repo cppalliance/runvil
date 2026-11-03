@@ -142,6 +142,7 @@ pub mod vfs {
     pub use runvil_engine::perform_vfs_op;
     pub use runvil_lua::VfsOp;
     pub use runvil_lua::VfsOutcome;
+    pub use runvil_lua::store_error;
     pub use runvil_vfs::Access;
     pub use runvil_vfs::AcquireContext;
     pub use runvil_vfs::AllowAll;

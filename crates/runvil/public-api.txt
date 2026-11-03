@@ -658,6 +658,7 @@ pub fn runvil::vfs::VfsRefBuilder::on_op(self, sink: impl core::ops::function::F
 pub fn runvil::vfs::VfsRefBuilder::policy(self, policy: impl runvil::vfs::Policy + core::marker::Sync + 'static) -> runvil::vfs::VfsRefBuilder
 pub fn runvil::vfs::VfsRefBuilder::store(self, root: &str, backend: impl runvil::vfs::Vfs + 'static) -> runvil::vfs::VfsRefBuilder
 pub fn runvil::vfs::perform_vfs_op(access: &runvil::vfs::Access, op: runvil::vfs::VfsOp) -> core::result::Result<runvil::vfs::VfsOutcome, runvil::vfs::VfsError>
+pub fn runvil::vfs::store_error(error: &runvil::vfs::VfsError) -> runvil::error::Error
 pub mod runvil::cancel
 pub mod runvil::effect
 pub mod runvil::error

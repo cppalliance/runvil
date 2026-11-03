@@ -32,7 +32,7 @@ use mlua::{Function, Lua, Table, Value};
 use crate::error::{Error, accepted_tags};
 
 pub(crate) use classify::{install_normalize_failure, normalized};
-pub use store::store_error_value_fields;
+pub use store::{store_error, store_error_value_fields};
 
 /// The registry key of the shared error metatable, created on first use per
 /// VM so every error table on that VM - Lua-built or Rust-built - shares

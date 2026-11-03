@@ -1,5 +1,9 @@
 //! The field shape a store failure's error value carries: its `reason`
-//! tag and the [`VfsError`](runvil_vfs::VfsError) variant's fields.
+//! tag and the [`VfsError`](runvil_vfs::VfsError) variant's fields, and the
+//! universal error the failure becomes where it leaves the VFS.
+
+use runvil_types::error::{Error, ErrorCode, FactKey};
+use serde_json::Value;
 
 use super::ErrorField;
 
@@ -73,4 +77,60 @@ pub fn store_error_value_fields(error: &runvil_vfs::VfsError) -> Vec<(String, Er
     )];
     fields.extend(store_error_fields(error));
     fields
+}
+
+/// Returns the universal error a store failure becomes where it leaves the
+/// VFS: the code named after the variant, the variant's fields as facts under
+/// the names a Lua error table gives them, the failure's display text as the
+/// message, and the code's default prose.
+#[must_use]
+pub fn store_error(error: &runvil_vfs::VfsError) -> Error {
+    let code = store_error_code(error);
+    let mut converted = Error::new(code, error.to_string(), code.prose());
+    for (name, field) in store_error_fields(error) {
+        let key = match name.as_str() {
+            "path" => FactKey::Path,
+            "valid_up_to" => FactKey::ValidUpTo,
+            "rule" => FactKey::Rule,
+            "anchor" => FactKey::Anchor,
+            "count" => FactKey::Count,
+            _ => continue,
+        };
+        let value = match field {
+            ErrorField::String(text) => Value::from(text),
+            ErrorField::Integer(number) => Value::from(number),
+        };
+        converted.facts.insert(key, value);
+    }
+    converted
+}
+
+/// The code named after the variant.
+fn store_error_code(error: &runvil_vfs::VfsError) -> ErrorCode {
+    use runvil_vfs::VfsError;
+    match error {
+        VfsError::NotFound { .. } => ErrorCode::NotFound,
+        VfsError::AlreadyExists { .. } => ErrorCode::AlreadyExists,
+        VfsError::NotADirectory { .. } => ErrorCode::NotADirectory,
+        VfsError::IsADirectory { .. } => ErrorCode::IsADirectory,
+        VfsError::DirectoryNotEmpty { .. } => ErrorCode::DirectoryNotEmpty,
+        VfsError::NotUtf8 { .. } => ErrorCode::NotUtf8,
+        VfsError::InvalidPath { .. } => ErrorCode::InvalidPath,
+        VfsError::InvalidRange { .. } => ErrorCode::InvalidRange,
+        VfsError::Anchor { .. } => ErrorCode::Anchor,
+        VfsError::PermissionDenied { .. } => ErrorCode::PermissionDenied,
+        VfsError::ApprovalRequired { .. } => ErrorCode::ApprovalRequired,
+        VfsError::ScopeEnded { .. } => ErrorCode::ScopeEnded,
+        VfsError::ReadOnly { .. } => ErrorCode::ReadOnly,
+        VfsError::OutsideRoot { .. } => ErrorCode::OutsideRoot,
+        VfsError::RootProtected { .. } => ErrorCode::RootProtected,
+        VfsError::NoStore => ErrorCode::NoStore,
+        VfsError::CrossMount { .. } => ErrorCode::CrossMount,
+        VfsError::Io { .. } => ErrorCode::Io,
+        VfsError::Unsupported { .. } => ErrorCode::Unsupported,
+        VfsError::Conflict { .. } => ErrorCode::Conflict,
+        // `VfsError` is `#[non_exhaustive]`: a variant added later is a
+        // backend failure until it is named here.
+        _ => ErrorCode::Backend,
+    }
 }
