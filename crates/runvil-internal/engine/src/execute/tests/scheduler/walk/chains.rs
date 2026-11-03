@@ -253,8 +253,7 @@ fn a_jump_descent_does_not_consume_call_depth() {
     assert!(
         error
             == &crate::test_support::with_author_prose(crate::error::call_depth_exceeded(
-                8,
-                DepthVia::Call
+                8, "call"
             )),
         "the depth cap must fail the run, got {error:?}"
     );

@@ -18,7 +18,6 @@ use std::sync::Arc;
 
 use runvil_types::event::ReplyOrigin;
 
-use crate::error::DepthVia;
 use crate::execute::run::Effect;
 use crate::execute::section_context::TaskSeed;
 use crate::lua::{Answer, Request, VfsOp};
@@ -151,7 +150,7 @@ impl Scheduler {
         var: &serde_json::Value,
     ) -> Result<ChainIndex> {
         let chain = &self.chains[id];
-        let depth = chain.call_depth.deeper(DepthVia::Call)?;
+        let depth = chain.call_depth.deeper("call")?;
         // An explicit input forks the chain's args (and `argv` re-derives
         // from them); a no-input call inherits the caller's context whole,
         // so the run's frozen `argv` - H1's repair included - reaches the

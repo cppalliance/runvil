@@ -193,18 +193,14 @@ fn a_spent_quota_and_the_call_depth_cap_are_quotas_that_lua_reads_as_lua() {
             (ErrorKind::Lua, Vec::new())
         );
     }
-    for (via, tag, text) in [
-        (DepthVia::Call, "call", "call recursion exceeded cap of 8"),
-        (
-            DepthVia::Fanout,
-            "fanout",
-            "tasks.fanout recursion exceeded cap of 8",
-        ),
+    for (cap_name, text) in [
+        ("call", "call recursion exceeded cap of 8"),
+        ("tasks.fanout", "tasks.fanout recursion exceeded cap of 8"),
     ] {
-        let error = call_depth_exceeded(8, via);
+        let error = call_depth_exceeded(8, cap_name);
         assert_eq!(error.code, ErrorCode::CallDepthExceeded);
         assert_eq!(error.message, text);
-        assert_eq!(error.facts.get(&FactKey::Reason), Some(&Value::from(tag)));
+        assert_eq!(error.facts.get(&FactKey::Reason), None);
         assert_eq!(error.facts.get(&FactKey::Limit), Some(&Value::from(8)));
         assert_eq!(failed(&error), (RunErrorKind::Quota, text.to_owned()));
         assert_eq!(

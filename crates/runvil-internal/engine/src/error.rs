@@ -49,37 +49,6 @@ fn with_fact(mut error: Error, key: FactKey, value: impl Into<Value>) -> Error {
     error
 }
 
-/// The call that passed the call-depth cap, which a `CallDepthExceeded`
-/// failure names. The name is the cap's, not the author's construct:
-/// `tasks.fanout` for a fanout arm, and `call` for a `call` or a
-/// `tasks.spawn`, which shares its cap.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum DepthVia {
-    /// A `call`, or a `tasks.spawn`.
-    Call,
-    /// One arm of a `tasks.fanout`.
-    Fanout,
-}
-
-impl DepthVia {
-    /// The failure's `Reason` fact: `call` or `fanout`.
-    fn tag(self) -> &'static str {
-        match self {
-            DepthVia::Call => "call",
-            DepthVia::Fanout => "fanout",
-        }
-    }
-}
-
-impl std::fmt::Display for DepthVia {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(match self {
-            DepthVia::Call => "call",
-            DepthVia::Fanout => "tasks.fanout",
-        })
-    }
-}
-
 /// An internal invariant failure: a state the surrounding code has already
 /// guaranteed cannot occur, surfaced rather than skipped so it cannot pass
 /// for a successful fall-through. Its location is the Rust source position
@@ -141,18 +110,19 @@ pub(crate) fn model_required(section: &str) -> Error {
 }
 
 /// A `call`, `tasks.spawn`, or `tasks.fanout` arm that would run deeper
-/// than `cap`, through `via`. The dispatch's answer, so an author `pcall`
-/// catches it, and a quota when it ends the run.
-pub(crate) fn call_depth_exceeded(cap: usize, via: DepthVia) -> Error {
-    let error = with_fact(
+/// than `cap`. `cap_name` is the cap's name, not the author's construct:
+/// `tasks.fanout` for a fanout arm, and `call` for a `call` or a
+/// `tasks.spawn`, which shares its cap. The dispatch's answer, so an
+/// author `pcall` catches it, and a quota when it ends the run.
+pub(crate) fn call_depth_exceeded(cap: usize, cap_name: &str) -> Error {
+    with_fact(
         failure(
             ErrorCode::CallDepthExceeded,
-            format!("{via} recursion exceeded cap of {cap}"),
+            format!("{cap_name} recursion exceeded cap of {cap}"),
         ),
-        FactKey::Reason,
-        via.tag(),
-    );
-    with_fact(error, FactKey::Limit, cap)
+        FactKey::Limit,
+        cap,
+    )
 }
 
 /// A chain that ended while the tasks it owned were still live, which it

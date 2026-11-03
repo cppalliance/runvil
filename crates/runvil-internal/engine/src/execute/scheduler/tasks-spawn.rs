@@ -13,7 +13,6 @@ use std::sync::atomic::AtomicU32;
 use runvil_types::ids::TaskId;
 use runvil_vfs::detail;
 
-use crate::error::DepthVia;
 use crate::execute::section_context::TaskSeed;
 use crate::lua::{Answer, SpawnVia};
 use crate::{Result, error};
@@ -77,8 +76,8 @@ impl Scheduler {
     ) -> Result<(TaskId, ChainIndex, SpawnRecord)> {
         let chain = &self.chains[id];
         let depth = chain.call_depth.deeper(match via {
-            SpawnVia::Fanout => DepthVia::Fanout,
-            SpawnVia::Spawn => DepthVia::Call,
+            SpawnVia::Fanout => "tasks.fanout",
+            SpawnVia::Spawn => "call",
         })?;
         // The spawning section, captured now: the start event reports it
         // at admission, which may come after the spawner's walk moved to

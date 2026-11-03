@@ -11,7 +11,6 @@ use mlua::Thread;
 use runvil_types::ids::{ChainId, TaskId};
 use runvil_vfs::Access;
 
-use crate::error::DepthVia;
 use crate::execute::context::ChainState;
 use crate::execute::section_context::{SectionContext, TaskSeed};
 use crate::execute::walk_target::JumpTarget;
@@ -74,12 +73,12 @@ impl CallDepth {
     /// The depth a chain started one level deeper runs at.
     ///
     /// # Errors
-    /// Returns a `CallDepthExceeded` failure, named after `via`, when that
-    /// depth passes the cap.
-    pub(super) fn deeper(self, via: DepthVia) -> Result<CallDepth> {
+    /// Returns a `CallDepthExceeded` failure that names the cap `cap_name`
+    /// when that depth passes the cap.
+    pub(super) fn deeper(self, cap_name: &str) -> Result<CallDepth> {
         let depth = self.0 + 1;
         if depth > MAX_CALL_DEPTH {
-            return Err(error::call_depth_exceeded(MAX_CALL_DEPTH, via));
+            return Err(error::call_depth_exceeded(MAX_CALL_DEPTH, cap_name));
         }
         Ok(CallDepth(depth))
     }

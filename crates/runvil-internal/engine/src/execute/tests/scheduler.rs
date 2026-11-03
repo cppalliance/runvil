@@ -15,7 +15,6 @@ use runvil_types::ids::AbandonReason;
 
 use super::context::Recorder;
 use super::*;
-use crate::error::DepthVia;
 use crate::execute::EffectRecord;
 use crate::test_support::rig::RigTrace;
 use crate::test_support::scenario::{infer_prompt, test_binding};

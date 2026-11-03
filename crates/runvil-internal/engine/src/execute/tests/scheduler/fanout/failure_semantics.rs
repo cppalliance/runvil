@@ -93,7 +93,7 @@ fn fanout_depth_cap_reads_the_chain_field() {
         error,
         &crate::test_support::with_author_prose(crate::error::call_depth_exceeded(
             8,
-            DepthVia::Fanout
+            "tasks.fanout"
         )),
         "expected the typed depth-cap error named after fanout"
     );
