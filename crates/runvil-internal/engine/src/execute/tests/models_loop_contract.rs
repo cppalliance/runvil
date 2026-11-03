@@ -89,7 +89,7 @@ fn a_light_userdata_compactor_is_named_userdata_as_lua_names_it() {
         trace.text(),
         format!(
             "userdata|lua|{}|1",
-            refused("compactor must be a function, got userdata")
+            refused(16, "compactor must be a function, got userdata")
         )
     );
     assert_eq!(gateway.call_count(), 0, "no round runs");
@@ -122,7 +122,7 @@ fn the_arity_error_still_raises_when_the_author_has_rebound_error() {
     );
     assert_eq!(
         trace.text(),
-        refused("models.loop takes (compactor?) or (model, compactor?)")
+        refused(14, "models.loop takes (compactor?) or (model, compactor?)")
     );
     assert!(trace.effects().is_empty(), "no round runs");
 }
@@ -138,7 +138,7 @@ fn an_empty_list_raises_before_any_round() {
     let trace = loop_scenario(source).chat(&gateway).run();
     assert_eq!(
         trace.text(),
-        format!("lua:{}", refused("messages must not be empty"))
+        format!("lua:{}", refused(12, "messages must not be empty"))
     );
     assert_eq!(gateway.call_count(), 0, "the refused call sends no request");
 }
@@ -221,7 +221,7 @@ fn a_returning_compactor_that_shrank_nothing_raises_the_exact_exhaustion_text() 
     assert_eq!(
         trace.text(),
         format!(
-            "context_exhausted|{}|1",
+            "context_exhausted|prompt:13: {}|1",
             ErrorCode::ContextExhausted.prose()
         )
     );

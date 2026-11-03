@@ -52,10 +52,11 @@ fn direct_store_failure_caught_by_pcall_carries_the_reason_tag() {
     assert_eq!(
         out,
         Some(format!(
-            "store|not_found|missing.txt|prompt: file not found in store: missing.txt. {}",
+            "store|not_found|missing.txt|prompt:1: file not found in store: missing.txt. {}",
             ErrorCode::NotFound.prose()
         )),
-        "the direct store failure must carry the documented shape and its author prose"
+        "the direct store failure must carry the documented shape, its call's line, and its \
+         author prose"
     );
 }
 
@@ -341,7 +342,7 @@ fn store_error_messages_use_the_operations_wording() {
 
 /// A store failure raised through the Lua boundary renders as an error
 /// table of kind `store` whose `count` field is a Lua integer, and
-/// `tostring` returns the failure's prose.
+/// `tostring` of the unlocated failure returns its prose.
 #[test]
 fn a_raised_store_error_renders_an_integer_count_and_the_prose() {
     let anchor = runvil_vfs::VfsError::Anchor {

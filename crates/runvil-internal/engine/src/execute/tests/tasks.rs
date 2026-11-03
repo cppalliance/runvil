@@ -236,8 +236,9 @@ fn task_started_includes_the_spawn_seeds_and_the_child_sees_them() {
 fn spawn_shares_calls_target_resolution_and_raises_at_the_call_site() {
     // An unresolvable target is the call's answer: `pcall` catches it, and
     // the message is exactly the one `call` produces for the same heading.
+    // Both calls share a line, so both are placed on it.
     let md = spawner_prompt(
-        "local ok_s, err_s = pcall(tasks.spawn, '## Missing')\n\
+        "local ok_s, err_s = pcall(tasks.spawn, '## Missing'); \
          local ok_c, err_c = pcall(call, '## Missing')\n\
          assert(not ok_s and not ok_c, 'both resolutions fail')\n\
          assert(err_s.kind == 'lua', err_s.kind)\n\
@@ -289,9 +290,12 @@ fn spawn_shares_calls_depth_cap() {
     );
 
     let records = TaskRecorder::replayed(rig.trace()).records();
-    let logged = authored(
-        ErrorCode::CallDepthExceeded,
-        "call recursion exceeded cap of 8",
+    let logged = format!(
+        "prompt:12: {}",
+        authored(
+            ErrorCode::CallDepthExceeded,
+            "call recursion exceeded cap of 8",
+        )
     );
     let refusals = records
         .iter()
@@ -321,7 +325,10 @@ fn spawn_rejects_a_list_section_target_with_the_worker_message() {
     let rig = Rig::run(scheduler_scenario(md));
     assert_eq!(
         rig.trace().text(),
-        refused("section `Items` is a list section, not a worker template"),
+        refused(
+            12,
+            "section `Items` is a list section, not a worker template"
+        ),
         "the caught error ends the run normally"
     );
 }

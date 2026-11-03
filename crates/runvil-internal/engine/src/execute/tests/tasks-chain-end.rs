@@ -198,8 +198,8 @@ fn an_exhausted_tool_loop_abandons_its_running_task_as_tool_loop_exhausted() {
     let rig = run_abandoning_a_running_task(scenario, AbandonReason::ToolLoopExhausted);
     let error = rig.trace().error();
     assert!(
-        error == &crate::error::tool_loop_exhausted(),
-        "the owner's own error stands: {error:?}"
+        error == &crate::test_support::placed(crate::error::tool_loop_exhausted(), 17),
+        "the owner's own error stands, on its loop's line: {error:?}"
     );
 }
 

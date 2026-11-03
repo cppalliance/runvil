@@ -59,25 +59,33 @@ pub(crate) use recording::forward;
 #[cfg(test)]
 pub(crate) use tools::FnTool;
 
-/// The author prose of a failure with `code` whose own text is `what`,
-/// raised by a section of a prompt that came from no file, which is what
-/// `tostring` gives for it once a `pcall` caught it.
+/// The author prose of a failure with `code` whose own text is `what`.
 #[cfg(test)]
 pub(crate) fn authored(code: ErrorCode, what: &str) -> String {
-    format!("prompt: {what}. {}", code.prose())
+    format!("{what}. {}", code.prose())
 }
 
-/// [`authored`] for a `LuaRuntime` refusal: what a caught refusal's
-/// `tostring` gives.
+/// What `tostring` gives for a caught `LuaRuntime` refusal whose own text
+/// is `what`, placed on `line` of a prompt that came from no file: the
+/// line's coordinates, then the [`authored`] prose.
 #[cfg(test)]
-pub(crate) fn refused(what: &str) -> String {
-    authored(ErrorCode::LuaRuntime, what)
+pub(crate) fn refused(line: u32, what: &str) -> String {
+    format!("prompt:{line}: {}", authored(ErrorCode::LuaRuntime, what))
 }
 
-/// `error` as it crossed into a section's Lua, of a prompt that came from
-/// no file: with the [`authored`] prose of its message.
+/// `error` placed on `line` of a prompt that came from no file, as it
+/// arrives once it crossed into a section's Lua there.
 #[cfg(test)]
-pub(crate) fn with_author_prose(mut error: crate::Error) -> crate::Error {
+pub(crate) fn placed(error: crate::Error, line: u32) -> crate::Error {
+    runvil_types::error::place(error, "prompt", std::num::NonZeroU32::new(line))
+}
+
+/// `error` as it crossed into a section's Lua on `line` of a prompt that
+/// came from no file: [`placed`] there, with the [`authored`] prose of its
+/// message.
+#[cfg(test)]
+pub(crate) fn with_author_prose(error: crate::Error, line: u32) -> crate::Error {
+    let mut error = placed(error, line);
     error.prose = authored(error.code, &error.message);
     error
 }

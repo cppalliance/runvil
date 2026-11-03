@@ -1,13 +1,17 @@
 //! The classifier a Rust callback's failure runs through on its way to
 //! author code, and the `normalize_failure` capture built on it.
 
+use std::num::NonZeroU32;
+
 use mlua::{Function, Lua, Value};
-use runvil_types::error::{Error, ErrorCode};
+use runvil_types::error::Error;
 
 use super::error_table;
 use crate::error::{
-    authored, authored_at, failure_text, lua_runtime, prompt_file, root_cause, root_text,
+    author_line, authored_at, call_line, failure_text, internal, lua_runtime, prompt_file,
+    root_cause, root_text,
 };
+use crate::program::first_prompt_line;
 
 /// A Rust callback's failure as the universal error its table renders.
 ///
@@ -21,35 +25,42 @@ use crate::error::{
 /// an exhausted memory quota) is `LuaRuntime`, with the root error's text
 /// as its message and the author prose of what failed; anything else is
 /// mlua's own machinery failing, which the author cannot act on, so it is
-/// `Internal`. A universal failure the prompt's Lua caused gets its author
-/// prose.
+/// `Internal`, at its Rust line. Any other failure is placed on the line of
+/// the failing call, which the traceback mlua took as the callback failed
+/// names; when that names no author frame, on the line of the innermost
+/// author frame running, or else on the call line. A universal failure the
+/// prompt's Lua caused gets its author prose.
 fn classified(lua: &Lua, error: &mlua::Error) -> Error {
-    if let Some(typed) = error.downcast_ref::<Error>() {
-        return authored(lua, typed.clone());
-    }
-    let root = root_cause(error);
-    match root {
-        mlua::Error::RuntimeError(_)
-        | mlua::Error::SyntaxError { .. }
-        | mlua::Error::MemoryError(_)
-        | mlua::Error::BadArgument { .. }
-        | mlua::Error::FromLuaConversionError { .. }
-        | mlua::Error::SerializeError(_)
-        | mlua::Error::DeserializeError(_)
-        | mlua::Error::ExternalError(_) => {
-            let what = root_text(error);
-            authored_at(
-                lua_runtime(root.to_string()),
-                &prompt_file(lua),
-                None,
-                failure_text(&what),
-            )
+    let (failure, what) = match error.downcast_ref::<Error>() {
+        Some(typed) => (typed.clone(), typed.message.clone()),
+        None => match root_cause(error) {
+            root @ (mlua::Error::RuntimeError(_)
+            | mlua::Error::SyntaxError { .. }
+            | mlua::Error::MemoryError(_)
+            | mlua::Error::BadArgument { .. }
+            | mlua::Error::FromLuaConversionError { .. }
+            | mlua::Error::SerializeError(_)
+            | mlua::Error::DeserializeError(_)
+            | mlua::Error::ExternalError(_)) => (lua_runtime(root.to_string()), root_text(error)),
+            root => return internal(root.to_string()),
+        },
+    };
+    let line = traceback_line(error)
+        .or_else(|| author_line(lua))
+        .or_else(|| call_line(lua));
+    authored_at(failure, &prompt_file(lua), line, failure_text(&what))
+}
+
+/// The prompt line of the innermost author frame in the traceback mlua
+/// took as a callback in `error` failed: the innermost callback's that
+/// names one. Read before [`root_cause`] drops the tracebacks.
+fn traceback_line(error: &mlua::Error) -> Option<NonZeroU32> {
+    match error {
+        mlua::Error::CallbackError { traceback, cause } => {
+            traceback_line(cause).or_else(|| first_prompt_line(traceback))
         }
-        _ => Error::new(
-            ErrorCode::Internal,
-            root.to_string(),
-            ErrorCode::Internal.prose(),
-        ),
+        mlua::Error::WithContext { cause, .. } => traceback_line(cause),
+        _ => None,
     }
 }
 

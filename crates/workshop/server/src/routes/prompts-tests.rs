@@ -1,12 +1,17 @@
 //! Tests for the `POST /prompts/contract` route: the wire contract the
-//! Run window renders, and the `422` parse-failure envelope.
+//! Run window renders, and the `422` parse-failure envelope and its
+//! message.
+
+use std::num::NonZeroU32;
 
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
+use runvil::error::{Error, ErrorCode, Location};
 use tower::ServiceExt as _;
 
 use crate::app::router;
 use crate::app::test_helpers::{body_bytes, state_for};
+use crate::error::AppError;
 
 /// Posts `body` to `/prompts/contract` on the assembled server router and
 /// returns the status with the decoded JSON body.
@@ -124,6 +129,23 @@ async fn a_broken_yaml_key_answers_parse_frontmatter_with_the_line() {
         message.starts_with("line 2: "),
         "the YAML failure line is prefixed: {message}"
     );
+}
+
+#[test]
+fn an_internal_parse_failure_names_no_prompt_line() {
+    // An internal failure's location is a Rust line, never a prompt line.
+    let internal = ErrorCode::Internal;
+    let mut error = Error::new(
+        internal,
+        "internal invariant violated: a test fault",
+        internal.prose(),
+    );
+    error.at = NonZeroU32::new(9).map(|line| Location::line("crates/x/src/lib.rs", line));
+    let AppError::PromptParse { message, code } = AppError::prompt_parse(&error) else {
+        panic!("a parse failure answers as a prompt-parse wire error");
+    };
+    assert_eq!(code, "parse_internal");
+    assert_eq!(message, "internal invariant violated: a test fault");
 }
 
 #[tokio::test]

@@ -20,6 +20,7 @@ mod install;
 mod run;
 mod state;
 
+use std::num::NonZeroU32;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
@@ -272,8 +273,8 @@ impl SectionVm<Uninjected> {
     }
 
     /// Records `file`, the file the run's prompt came from, as the file
-    /// the author prose of this VM's Lua failures names; a VM given none
-    /// names `prompt`.
+    /// this VM's Lua failures are placed in; a VM given none places them
+    /// in `prompt`.
     pub fn set_prompt_file(&self, file: &str) {
         crate::error::set_prompt_file(&self.lua, file);
     }
@@ -360,5 +361,14 @@ impl SectionVm {
     #[must_use]
     pub fn lua(&self) -> &Lua {
         &self.lua
+    }
+
+    /// The prompt line of the author's call the running block last yielded
+    /// on, which holds while the block is suspended on that yield: `None`
+    /// before the block's first yield, or when that yield found no author
+    /// frame running.
+    #[must_use]
+    pub fn call_line(&self) -> Option<NonZeroU32> {
+        crate::error::call_line(&self.lua)
     }
 }

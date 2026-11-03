@@ -18,8 +18,8 @@ pub fn parse_error(code: ErrorCode, message: impl Into<String>) -> Error {
 }
 
 /// Gives a parse failure the Engine raises about a parsed prompt the
-/// prompt's frontmatter `name` as its `Name` fact, the prompt's `file` as
-/// its location's file, and the prose a failure the parse returns has.
+/// prompt's frontmatter `name` as its `Name` fact, its place in the
+/// prompt's `file`, and the prose a failure the parse returns has.
 #[must_use]
 pub fn with_prompt_context(error: Error, name: &str, file: &str) -> Error {
     crate::error::with_prompt_context(error, Some(name), file)

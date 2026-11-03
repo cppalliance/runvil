@@ -62,7 +62,7 @@ fn a_first_round_the_precheck_refuses_still_fixes_the_tool_list() {
         .run();
     assert_eq!(
         trace.text(),
-        format!("lua:{}", refused(&format!("tools.offer: {FIXED}")))
+        format!("lua:{}", refused(16, &format!("tools.offer: {FIXED}")))
     );
     let bodies = gateway.requests();
     assert_eq!(bodies.len(), 1, "only the round on the wide model left");
@@ -146,19 +146,22 @@ fn after_the_render_every_offer_raises_even_an_identical_one_while_defining_stil
     );
     let trace = loop_scenario(source).tool(echo_tool()).chat(&gateway).run();
     let lines: Vec<&str> = trace.text().lines().collect();
-    let offer = format!("lua:{}", refused(&format!("tools.offer: {FIXED}")));
+    let offer = |line| format!("lua:{}", refused(line, &format!("tools.offer: {FIXED}")));
     assert_eq!(
         lines[..5],
         [
-            offer.clone(),
-            offer.clone(),
-            offer.clone(),
-            offer.clone(),
-            format!("lua:{}", refused(&format!("tools.offer_dynamic: {FIXED}"))),
+            offer(16),
+            offer(23),
+            offer(24),
+            offer(25),
+            format!(
+                "lua:{}",
+                refused(26, &format!("tools.offer_dynamic: {FIXED}"))
+            ),
         ],
         "a handler's offer during the loop, then an identical re-offer of a tool \
          and of a Pack, an offer of a tool defined after the render, and a \
-         dynamic offer"
+         dynamic offer, each on its own call's line"
     );
     assert_eq!(lines.len(), 7, "{lines:?}");
     assert!(
@@ -220,7 +223,7 @@ fn a_first_round_refused_over_an_empty_list_renders_nothing() {
         .offer("echo", echo_tool())
         .chat(&gateway)
         .run();
-    assert_eq!(trace.text(), refused("messages must not be empty"));
+    assert_eq!(trace.text(), refused(12, "messages must not be empty"));
     let bodies = gateway.requests();
     assert_eq!(bodies.len(), 1, "the refused round never left");
     assert_eq!(
@@ -254,7 +257,7 @@ fn a_first_round_refused_for_a_missing_model_renders_nothing() {
         .run();
     assert_eq!(
         trace.text(),
-        ErrorCode::ModelRequired.prose(),
+        format!("prompt:13: {}", ErrorCode::ModelRequired.prose()),
         "a missing model keeps its remedy prose"
     );
     let bodies = gateway.requests();
@@ -292,7 +295,10 @@ fn a_first_round_whose_tool_build_fails_renders_nothing() {
         .run();
     assert_eq!(
         trace.text(),
-        format!("internal:{}", ErrorCode::ToolSchemaInvalid.prose())
+        format!(
+            "internal:prompt:14: {}",
+            ErrorCode::ToolSchemaInvalid.prose()
+        )
     );
     let bodies = gateway.requests();
     assert_eq!(bodies.len(), 1, "the failed round never left");

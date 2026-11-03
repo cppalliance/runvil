@@ -94,7 +94,7 @@ fn an_installed_require_is_runvils_and_loads_no_module() {
     assert_eq!(
         returned,
         format!(
-            "function|false|prompt: no section `os` within reach of require. {}|nil|nil",
+            "function|false|prompt:1: no section `os` within reach of require. {}|nil|nil",
             ErrorCode::LuaRuntime.prose()
         )
     );

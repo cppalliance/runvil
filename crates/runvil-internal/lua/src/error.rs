@@ -4,9 +4,10 @@
 //! here, which the Engine shares for the failures it raises itself, so
 //! each failure has one text. A failure raised through Lua crosses the
 //! `mlua` boundary as a typed value, `mlua::Error::external(error)`, and
-//! the boundary that reads it back downcasts to [`Error`]. A failure the
-//! prompt's own Lua caused gets author prose that names the prompt's file,
-//! which the VM holds.
+//! the boundary that reads it back downcasts to [`Error`]. A failure that
+//! crosses into Lua is placed on the author's line of the prompt's file,
+//! which the VM holds, and one the prompt's own Lua caused gets author
+//! prose that names what failed.
 
 use std::borrow::Cow;
 
@@ -19,7 +20,10 @@ mod universal;
 
 #[cfg(any(test, feature = "test-support"))]
 pub(crate) use author::UNNAMED_FILE;
-pub(crate) use author::{authored, authored_at, failure_text, prompt_file, set_prompt_file};
+pub(crate) use author::{
+    author_line, author_prose, authored, authored_at, call_line, failure_text, prompt_file,
+    set_call_line, set_prompt_file,
+};
 pub use universal::{
     context_exhausted, internal_at, interrupted, lua_quota, lua_runtime, task_cancelled,
     task_consumed, task_not_owned, tool_loop_exhausted,

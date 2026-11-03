@@ -61,7 +61,7 @@ pub(crate) enum AppError {
     #[error("{message}")]
     PromptParse {
         /// The pre-rendered message, including the `line N: ` prefix when
-        /// the parser located the failure.
+        /// the parser located the failure in the prompt.
         message: String,
         /// The wire code for the parse failure's code.
         code: &'static str,
@@ -72,7 +72,8 @@ impl AppError {
     /// Builds the wire error for a prompt that failed to parse: the code
     /// names the failure's code and the message carries the parser's
     /// `line N: ` prefix, the line the failure starts on, when it located
-    /// the failure.
+    /// the failure in the prompt. An internal failure's location is a Rust
+    /// line, so its message has no prefix.
     pub(crate) fn prompt_parse(error: &Error) -> Self {
         let code = match error.code {
             ErrorCode::FrontmatterInvalid => "parse_frontmatter",
@@ -85,8 +86,10 @@ impl AppError {
             _ => "parse_error",
         };
         let message = match &error.at {
-            Some(at) => format!("line {}: {}", at.start_line, error.message),
-            None => error.message.clone(),
+            Some(at) if error.code != ErrorCode::Internal => {
+                format!("line {}: {}", at.start_line, error.message)
+            }
+            _ => error.message.clone(),
         };
         Self::PromptParse { message, code }
     }

@@ -42,10 +42,13 @@ fn model_calling_an_offered_but_unscoped_tool_is_a_hard_error() {
     let trace = scoped_loop("").chat(&gateway).run();
     let error = trace.error();
     // The name is an offered tool's wire name, and the section offers no
-    // Dynamic Set.
+    // Dynamic Set. The refusal is placed on the loop's line.
     assert_eq!(
         error,
-        &crate::error::out_of_scope_tool("global_tool", true, &["scoped".to_owned()], false)
+        &placed(
+            crate::error::out_of_scope_tool("global_tool", true, &["scoped".to_owned()], false),
+            14
+        )
     );
     let message = error.to_string();
     assert!(
@@ -75,7 +78,10 @@ fn model_calling_an_advertised_tool_by_canonical_id_gets_no_not_offered_suffix()
     // Dynamic Set.
     assert_eq!(
         error,
-        &crate::error::out_of_scope_tool("tools/scoped", false, &["scoped".to_owned()], false)
+        &placed(
+            crate::error::out_of_scope_tool("tools/scoped", false, &["scoped".to_owned()], false),
+            14
+        )
     );
     let message = error.to_string();
     assert!(
@@ -103,7 +109,10 @@ fn model_calling_a_defined_but_unoffered_adhoc_tool_gets_no_not_offered_suffix()
     // offers no Dynamic Set.
     assert_eq!(
         error,
-        &crate::error::out_of_scope_tool("grab", false, &["scoped".to_owned()], false)
+        &placed(
+            crate::error::out_of_scope_tool("grab", false, &["scoped".to_owned()], false),
+            15
+        )
     );
     assert!(
         !error.to_string().contains("not offered in this section"),
@@ -171,7 +180,10 @@ fn with_dynamic_offers_a_name_outside_both_sets_fails_listing_only_the_static_se
     let aliases = ["scoped", "GetDynamicTools", "CallDynamicTool"].map(str::to_owned);
     assert_eq!(
         trace.error(),
-        &crate::error::out_of_scope_tool("rogue", false, &aliases, true)
+        &placed(
+            crate::error::out_of_scope_tool("rogue", false, &aliases, true),
+            18
+        )
     );
     let message = trace.error().to_string();
     assert!(
@@ -221,11 +233,14 @@ fn a_static_tool_wearing_a_discovery_wire_name_does_not_claim_a_dynamic_set() {
     // are ordinary static aliases here.
     assert_eq!(
         error,
-        &crate::error::out_of_scope_tool(
-            "rogue",
-            false,
-            &["GetDynamicTools".to_owned(), "CallDynamicTool".to_owned()],
-            false
+        &placed(
+            crate::error::out_of_scope_tool(
+                "rogue",
+                false,
+                &["GetDynamicTools".to_owned(), "CallDynamicTool".to_owned()],
+                false
+            ),
+            15
         )
     );
     let message = error.to_string();
@@ -252,7 +267,10 @@ fn model_calling_pure_unknown_tool_is_a_hard_error() {
     // The name is no offered tool, and the section offers no Dynamic Set.
     assert_eq!(
         error,
-        &crate::error::out_of_scope_tool("nonexistent", false, &["echo".to_owned()], false)
+        &placed(
+            crate::error::out_of_scope_tool("nonexistent", false, &["echo".to_owned()], false),
+            14
+        )
     );
     assert!(
         !error.to_string().contains("not offered in this section"),

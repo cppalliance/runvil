@@ -84,7 +84,7 @@ fn models_compact_refuses_while_a_loop_its_handler_or_a_compactor_runs() {
     let trace = loop_scenario(source).chat(&gateway).run();
     let expected: Vec<String> = ["handler", "compactor", "compact"]
         .iter()
-        .map(|label| format!("{label}:false:lua:{}", refused(COMPACT_RUNNING)))
+        .map(|label| format!("{label}:false:lua:{}", refused(14, COMPACT_RUNNING)))
         .chain(["5".to_owned()])
         .collect();
     assert_eq!(trace.text().lines().collect::<Vec<_>>(), expected);
@@ -116,7 +116,7 @@ fn models_compact_applies_the_structural_rules_but_not_the_size_rules() {
         trace.text(),
         format!(
             "lua|{}|1:100000|gave up|1:100000",
-            refused("messages[2] tool call \"c1\" has no tool result")
+            refused(14, "messages[2] tool call \"c1\" has no tool result")
         )
     );
     assert_eq!(gateway.call_count(), 0, "no request leaves");
@@ -150,7 +150,7 @@ fn models_compact_checks_the_compactor_then_the_reason() {
         "reason must be a string, got number",
         "models.compact takes (compactor, reason)",
     ]
-    .map(|message| format!("false:lua:{}", refused(message)));
+    .map(|message| format!("false:lua:{}", refused(14, message)));
     let lines: Vec<&str> = trace.text().lines().collect();
     assert_eq!(lines[..6], refusals);
     assert_eq!(lines[6], "1", "a refused call leaves the list alone");

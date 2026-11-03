@@ -14,7 +14,7 @@ use crate::execute::run_error_kind;
 /// A store failure the author caught with `pcall` is an error table of
 /// kind `store`: its `code`, `reason`, `path`, and `anchor` fields and its
 /// integer `count` read from Lua, and `tostring` returns the store code's
-/// remedy prose.
+/// remedy prose after the failing call's `file:line`.
 #[test]
 fn a_caught_store_error_is_a_store_table_with_reason_fields_and_prose() {
     let source = one_section(&format!(
@@ -25,7 +25,7 @@ fn a_caught_store_error_is_a_store_table_with_reason_fields_and_prose() {
         assert(err.code == 'not_found', 'code is not_found, got ' .. tostring(err.code))
         assert(err.reason == 'not_found', 'reason is not_found, got ' .. tostring(err.reason))
         assert(err.path == 'missing.txt', 'the path field names the file')
-        assert(tostring(err) == '{}', 'tostring is the prose, got ' .. tostring(err))
+        assert(tostring(err) == 'prompt:12: {}', 'tostring is the prose, got ' .. tostring(err))
         store.write('a.txt', 'na na na')
         local ok2, err2 = pcall(function() store.str_replace('a.txt', 'na', 'la') end)
         assert(ok2 == false, 'the ambiguous anchor fails')
@@ -33,12 +33,30 @@ fn a_caught_store_error_is_a_store_table_with_reason_fields_and_prose() {
         assert(err2.anchor == 'na', 'the anchor field names the anchor')
         assert(type(err2.count) == 'number' and err2.count % 1 == 0, 'count is an integer')
         assert(err2.count == 3, 'count is the match count')
-        assert(tostring(err2) == '{}', 'tostring is the prose, got ' .. tostring(err2))
+        assert(tostring(err2) == 'prompt:20: {}', 'tostring is the prose, got ' .. tostring(err2))
         return 'ok'",
         ErrorCode::NotFound.prose(),
         ErrorCode::Anchor.prose()
     ));
     assert_eq!(Scenario::new(source).run().text(), "ok");
+}
+
+/// A caught `store.read` failure names the read's own line, which the read's
+/// yield recorded, not the line of the `pcall` that caught it.
+#[test]
+fn a_caught_store_read_failure_names_its_calls_file_and_line() {
+    let source = one_section(
+        "
+        local ok, err = pcall(function()
+          local text = store.read('missing.txt')
+          return text
+        end)
+        return tostring(err)",
+    );
+    assert_eq!(
+        Scenario::new(source).run().text(),
+        format!("prompt:13: {}", ErrorCode::NotFound.prose())
+    );
 }
 
 /// A store argument type error stays kind `lua`, like every other Engine

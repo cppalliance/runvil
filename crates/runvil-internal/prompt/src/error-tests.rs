@@ -220,6 +220,19 @@ fn an_internal_failure_has_the_default_prose_and_no_name() {
 }
 
 #[test]
+fn an_internal_failure_keeps_its_rust_location_in_the_prompt_context() {
+    let fault = runvil_lua::internal_at("a test invariant broke", std::panic::Location::caller());
+    assert!(fault.at.is_some(), "an internal failure is located in Rust");
+    let error = with_prompt_context(fault.clone(), Some("x"), FILE);
+    assert_eq!(
+        error.at, fault.at,
+        "the prompt's file never replaces the Rust file"
+    );
+    assert_eq!(error.facts, BTreeMap::new());
+    assert_eq!(error.prose, ErrorCode::Internal.prose());
+}
+
+#[test]
 fn a_lua_compiler_that_cannot_start_is_internal() {
     let message = mlua::Error::MemoryError("not enough memory".to_owned()).to_string();
     let code = ErrorCode::Internal;

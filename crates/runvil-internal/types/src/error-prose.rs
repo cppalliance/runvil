@@ -7,7 +7,8 @@ impl ErrorCode {
     /// wrong and, when the model can act on it, what to do instead. It never
     /// names a file, a line, or an internal cause. A site with specifics
     /// writes its own. The text for a failure in the prompt itself speaks to
-    /// a model fixing the prompt, and its site puts the location in front.
+    /// a model fixing the prompt, and its site puts what failed in front,
+    /// after the location only for a parse failure.
     #[must_use]
     #[expect(
         clippy::too_many_lines,

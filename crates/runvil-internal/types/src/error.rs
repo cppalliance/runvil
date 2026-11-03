@@ -129,8 +129,10 @@ impl Location {
     }
 }
 
-/// Places `error` in the prompt `file`. This is the only code that writes a
-/// prompt location.
+/// Places `error` in the prompt `file`. This is the only code that gives a
+/// location its prompt file or turns a known line into a prompt location:
+/// the parser's span constructors build spans with no file, which this
+/// completes, and the Lua crate's `internal_at` writes Rust locations.
 ///
 /// An [`ErrorCode::Internal`] error comes back unchanged, so it keeps its
 /// Rust location. Any other error that has a location keeps it, so the

@@ -56,7 +56,10 @@ fn a_script_tools_call_with_an_unbound_name_lists_the_offered_ids() {
     let trace = scheduler_scenario(md).offer("echo", echo_tool()).run();
     assert_eq!(
         trace.error(),
-        &crate::error::unbound_tool("tools/missing", &["tools/echo".to_owned()])
+        &crate::test_support::placed(
+            crate::error::unbound_tool("tools/missing", &["tools/echo".to_owned()]),
+            13
+        )
     );
 }
 
@@ -96,7 +99,10 @@ fn a_script_tools_call_of_a_model_only_tool_is_refused_naming_it() {
         .run();
     assert_eq!(
         trace.error(),
-        &crate::error::model_only_tool("tools/replace", "tools/replace")
+        &crate::test_support::placed(
+            crate::error::model_only_tool("tools/replace", "tools/replace"),
+            13
+        )
     );
 }
 

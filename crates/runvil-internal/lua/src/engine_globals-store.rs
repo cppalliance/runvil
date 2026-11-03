@@ -12,7 +12,7 @@ use runvil_types::emitter::Emitter;
 use runvil_types::event::lifecycle::{self, Lifecycle};
 use runvil_vfs::{Access, VfsError};
 
-use crate::error::{self, Error, Result, authored_at, prompt_file};
+use crate::error::{self, Error, Result, author_prose};
 use crate::error_value::store_error;
 use crate::program::LuaProgram;
 use crate::protocol::{VfsOp, VfsOutcome};
@@ -82,8 +82,7 @@ impl StoreShared {
     /// `operation` over the store view, records a conflict, reports
     /// `outcomes` (success first), and raises a failure as the store's
     /// failure under the message rendered for the operation `op` rebuilds
-    /// from the arguments, with the author prose of that message in the
-    /// VM's prompt file.
+    /// from the arguments, with the author prose of that message.
     fn closure<A, T>(
         &self,
         lua: &Lua,
@@ -99,14 +98,15 @@ impl StoreShared {
         let reporter = Arc::clone(&self.reporter);
         let conflict = Arc::clone(&self.conflict);
         let (success, failure) = outcomes;
-        lua.create_function(move |lua, arguments: A| {
+        lua.create_function(move |_, arguments: A| {
             let result = operation(&view, &arguments);
             record_store_conflict(&conflict, &result);
             reporter.report(&result, success, failure);
             result.map_err(|source| {
                 let message = store_error_message(&op(arguments), &source);
-                let failure = store_failure(&source, message.clone());
-                mlua::Error::external(authored_at(failure, &prompt_file(lua), None, &message))
+                let mut failure = store_failure(&source, message);
+                failure.prose = author_prose(&failure.message, failure.code);
+                mlua::Error::external(failure)
             })
         })
         .map_err(error::lua)

@@ -78,7 +78,8 @@ fn call_depth_cap_reads_the_chain_field() {
     // Two sections calling each other ping-pong through nested call
     // chains; the cap must fire from the requesting chain's call-depth
     // field. The typed error then round-trips through every parent's
-    // answer envelope without flattening, and classifies as a quota.
+    // answer envelope without flattening, keeping the innermost call's
+    // line, and classifies as a quota.
     let md = "---\nname: depth\ndescription: d\nrunvil: 0\n---\n\n\
         # Depth\n\n\
         ## Alpha\n\n\
@@ -90,8 +91,8 @@ fn call_depth_cap_reads_the_chain_field() {
     let error = trace.error();
     assert_eq!(
         error,
-        &crate::test_support::with_author_prose(crate::error::call_depth_exceeded(8, "call")),
-        "expected the typed call-depth error"
+        &crate::test_support::with_author_prose(crate::error::call_depth_exceeded(8, "call"), 12),
+        "expected the typed call-depth error on Alpha's call line"
     );
     assert_eq!(run_error_kind(error.code), RunErrorKind::Quota, "{error}");
     assert_eq!(error.to_string(), "call recursion exceeded cap of 8");

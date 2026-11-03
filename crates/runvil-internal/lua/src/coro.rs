@@ -6,7 +6,9 @@
 //! (source in the `__impl_*.lua` files beside this one) that
 //! `coroutine.yield` a request table and interpret the resume values as the
 //! `(ok, result)` envelope; coroutine driving itself
-//! (`Thread::create`/`resume`) is pure Rust in the scheduler. The source is
+//! (`Thread::create`/`resume`) is pure Rust in the scheduler. Every shim
+//! yields through one wrapper, which first records the author's line as the
+//! VM's call line. The source is
 //! pulled in with `include_str!` so chunk line 1 is file line 1, compiled
 //! once through the usual [`LuaProgram`] machinery, and loaded per VM. The
 //! chunk is named with an `@` prefix, so PUC's `luaO_chunkid` renders shim
@@ -66,6 +68,15 @@ const FANOUT_CHUNK_NAME: &str = "@crates/runvil-internal/lua/src/__impl_fanout.l
 /// a captured cap, bounds how many arms run at once.
 const FANOUT_SOURCE: &str = include_str!("__impl_fanout.lua");
 
+/// The name of the chunk that builds the shims' recording `yield`,
+/// `@`-prefixed as the shim chunks' names are.
+const YIELD_CHUNK_NAME: &str = "@crates/runvil-internal/lua/src/coro.rs";
+
+/// The source of the shims' recording `yield`, over the `record` capture
+/// and the coroutine library's own `yield`.
+const YIELD_SOURCE: &str =
+    "local record, raw_yield = ...\nreturn function(...) record() return raw_yield(...) end";
+
 /// The registry key for the shim's model-issued `tool_call` form, which
 /// test builds stash for `install_model_tool_call_shim` to install as
 /// `tools.call_as_model`, so a fixture section can drive the driver's
@@ -104,7 +115,9 @@ static FANOUT_PROGRAM: LazyLock<Result<LuaProgram>> =
 /// test VM that never installs the shims keeps exactly
 /// `STRING | TABLE | MATH | UTF8`); the `coroutine` global is stripped again
 /// before returning, so author code cannot yield directly and a hand-rolled
-/// yield fails the driver's strict validation. The `models` and `tools`
+/// yield fails the driver's strict validation. All three chunks receive the
+/// [`recording_yield`] over it, so every yield records its call line. The
+/// `models` and `tools`
 /// tables are passed to the shim chunk as arguments, so the chunk never
 /// reads a global; the chunk shims `models.infer` and installs
 /// `tools.call`, and the `call` shim comes back for the Engine to install as
@@ -162,7 +175,7 @@ pub(crate) fn install_shim_prelude(
     lua.load_std_libs(StdLib::COROUTINE).map_err(error::lua)?;
     let globals = lua.globals();
     let coroutine: Table = globals.raw_get("coroutine").map_err(error::lua)?;
-    let yield_fn: Function = coroutine.raw_get("yield").map_err(error::lua)?;
+    let yield_fn = recording_yield(lua, coroutine.raw_get("yield").map_err(error::lua)?)?;
     let var_snapshot = lua
         .create_function(|lua, ()| var_snapshot_table(lua).map_err(mlua::Error::external))
         .map_err(error::lua)?;
@@ -243,6 +256,23 @@ pub(crate) fn install_shim_prelude(
         .raw_set("coroutine", Value::Nil)
         .map_err(error::lua)?;
     Ok(())
+}
+
+/// Builds the `yield` every shim chunk receives: a Lua function that
+/// records the author's line as the VM's call line, the line of the
+/// innermost author frame or `None`, and then yields through `raw_yield`.
+/// A Rust callback cannot yield, so only the recording runs in Rust.
+fn recording_yield(lua: &Lua, raw_yield: Function) -> Result<Function> {
+    let record = lua
+        .create_function(|lua, ()| {
+            error::set_call_line(lua, error::author_line(lua));
+            Ok(())
+        })
+        .map_err(error::lua)?;
+    lua.load(YIELD_SOURCE)
+        .set_name(YIELD_CHUNK_NAME)
+        .call((record, raw_yield))
+        .map_err(error::lua)
 }
 
 /// Runs the `fanout` chunk over the prelude's `yield` and `var_snapshot`

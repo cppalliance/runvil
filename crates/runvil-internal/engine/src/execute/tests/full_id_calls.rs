@@ -165,8 +165,8 @@ fn a_script_call_naming_a_string_without_a_slash_raises_before_any_resolution() 
         rig.trace().text(),
         format!(
             "lua:{}|{}",
-            refused("tools.call: \"tools_echo\" is not a tool id"),
-            refused("tools.call: \"echo\" is not a tool id")
+            refused(12, "tools.call: \"tools_echo\" is not a tool id"),
+            refused(13, "tools.call: \"echo\" is not a tool id")
         )
     );
     assert!(rig.issued().is_empty(), "nothing was issued");
@@ -216,11 +216,14 @@ fn a_name_that_is_no_catalog_id_is_unbound_and_lists_the_catalog_ids() {
     let error = rig.trace().error();
     assert_eq!(
         error,
-        &crate::error::unbound_tool(
-            "tools/missing",
-            &["tools/concrete".to_owned(), ECHO_ID.to_owned()]
+        &placed(
+            crate::error::unbound_tool(
+                "tools/missing",
+                &["tools/concrete".to_owned(), ECHO_ID.to_owned()]
+            ),
+            12
         ),
-        "every catalog tool's id is listed, in id order"
+        "every catalog tool's id is listed, in id order, on the returning call's line"
     );
     assert_eq!(
         error.to_string(),

@@ -80,10 +80,10 @@ fn assert_identity_only(recorder: &Recorder) {
 }
 
 /// The author prose of a `LuaRuntime` refusal whose own text is
-/// `message`, raised in a VM given no file: what `tostring` gives for it
-/// once a `pcall` caught it.
+/// `message`: what `tostring` gives for it once a `pcall` caught it where
+/// no prompt block runs, as in a probe chunk, which places it on no line.
 pub(crate) fn refused(message: &str) -> String {
-    format!("prompt: {message}. {}", ErrorCode::LuaRuntime.prose())
+    format!("{message}. {}", ErrorCode::LuaRuntime.prose())
 }
 
 /// Returns the message of a `LuaRuntime` failure.
@@ -347,12 +347,13 @@ pub(crate) fn assert_chunk_name_resolves(constant: &str, chunk_name: &str, embed
 }
 
 /// The refusal a `pcall` caught, from the caught error's `tostring`: the
-/// text its author prose names when the shim's `pcall` caught it in a VM
-/// given no file, or its first line without the `runtime error: ` prefix
-/// mlua renders when the base `pcall` did.
+/// text its author prose names when the shim's `pcall` caught it where no
+/// prompt block runs, or its first line without the `runtime error: `
+/// prefix mlua renders when the base `pcall` did.
 pub(crate) fn refusal_line(caught: &str) -> Option<&str> {
-    if let Some(text) = caught.strip_prefix("prompt: ") {
-        return text.strip_suffix(format!(". {}", ErrorCode::LuaRuntime.prose()).as_str());
+    if let Some(text) = caught.strip_suffix(format!(". {}", ErrorCode::LuaRuntime.prose()).as_str())
+    {
+        return Some(text);
     }
     caught.strip_prefix("runtime error: ")?.lines().next()
 }

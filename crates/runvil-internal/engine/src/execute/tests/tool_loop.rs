@@ -47,7 +47,7 @@ fn tool_loop_gives_up_after_exactly_the_configured_cap() {
         .chat(&gateway)
         .run();
     let error = trace.error();
-    assert_eq!(error, &crate::error::tool_loop_exhausted());
+    assert_eq!(error, &placed(crate::error::tool_loop_exhausted(), 15));
     assert_eq!(
         gateway.call_count(),
         cap,
@@ -79,7 +79,7 @@ fn tool_loop_exhaustion_is_readable_at_the_call_site_after_whole_exchanges() {
     assert_eq!(
         trace.text(),
         format!(
-            "tool_loop_exhausted|{}",
+            "tool_loop_exhausted|prompt:15: {}",
             ErrorCode::ToolLoopExhausted.prose()
         )
     );
@@ -98,7 +98,7 @@ fn tool_loop_uses_the_default_cap_when_unspecified() {
         .chat(&gateway)
         .run();
     let error = trace.error();
-    assert_eq!(error, &crate::error::tool_loop_exhausted());
+    assert_eq!(error, &placed(crate::error::tool_loop_exhausted(), 14));
     assert_eq!(gateway.call_count(), default_cap);
 }
 
@@ -227,7 +227,7 @@ fn repeated_calls_to_a_failing_tool_exit_at_the_iteration_cap() {
         .chat(&gateway)
         .run();
     let error = trace.error();
-    assert_eq!(error, &crate::error::tool_loop_exhausted());
+    assert_eq!(error, &placed(crate::error::tool_loop_exhausted(), 15));
     assert_eq!(
         gateway.call_count(),
         cap,
@@ -281,7 +281,7 @@ fn a_caught_model_failure_reads_as_the_model_failure_kind() {
     let trace = loop_scenario(source).chat(&gateway).run();
     assert_eq!(
         trace.text(),
-        "model_failure:the model backend reported a fault of its own (status 500)"
+        "model_failure:prompt:13: the model backend reported a fault of its own (status 500)"
     );
 }
 
@@ -296,7 +296,10 @@ fn a_caught_missing_model_reads_as_the_model_required_kind() {
     let trace = loop_scenario(source).models(ModelSet::default()).run();
     assert_eq!(
         trace.text(),
-        format!("model_required:{}", ErrorCode::ModelRequired.prose())
+        format!(
+            "model_required:prompt:13: {}",
+            ErrorCode::ModelRequired.prose()
+        )
     );
 }
 

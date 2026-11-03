@@ -348,9 +348,13 @@ fn the_loop_entry_takes_its_two_shapes_and_checks_the_compactor_before_a_running
         compactor,
         LOOP_RUNNING,
     ]
-    .map(|message| format!("false:lua:{}", refused(message)));
+    .map(|message| format!("false:lua:{}", refused(15, message)));
     let lines: Vec<&str> = out.lines().collect();
-    assert_eq!(lines[..7], expected);
+    assert_eq!(
+        lines[..7],
+        expected,
+        "each function tail-calls the loop, so every refusal lands on the `pcall` line"
+    );
     assert_eq!(
         lines[7], "4",
         "the user message, the call, its result, and the reply"

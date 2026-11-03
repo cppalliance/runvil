@@ -333,8 +333,9 @@ fn empty_turn_without_finish_reason_after_tool_call_fails() {
 #[test]
 fn an_empty_reply_is_readable_at_the_call_site_and_appends_nothing() {
     // The raise is pcall-able as the `empty_model_reply` kind holding the
-    // finish reason as its field and the client's phrase as its message,
-    // and the rejected round leaves the author's list untouched.
+    // finish reason as its field and the client's phrase, after the loop
+    // call's line, as its message, and the rejected round leaves the
+    // author's list untouched.
     let gateway = ScriptedChat::new(vec![text_finish("", "stop")]);
     let source = one_section(
         "messages:user('say nothing')
@@ -346,7 +347,7 @@ fn an_empty_reply_is_readable_at_the_call_site_and_appends_nothing() {
     let trace = loop_scenario(source).chat(&gateway).run();
     assert_eq!(
         trace.text(),
-        "empty_model_reply|stop|the model replied with no text and no tool calls"
+        "empty_model_reply|stop|prompt:13: the model replied with no text and no tool calls"
     );
 }
 
@@ -369,7 +370,7 @@ fn an_empty_reply_that_ignored_reasoning_says_so_at_the_call_site() {
     let trace = loop_scenario(source).chat(&gateway).run();
     assert_eq!(
         trace.text(),
-        "empty_model_reply|the model replied with no text and no tool calls: \
+        "empty_model_reply|prompt:13: the model replied with no text and no tool calls: \
          reasoning content was present but ignored"
     );
 }
@@ -393,6 +394,6 @@ fn an_empty_reply_with_whitespace_only_reasoning_keeps_the_plain_phrase() {
     let trace = loop_scenario(source).chat(&gateway).run();
     assert_eq!(
         trace.text(),
-        "empty_model_reply|the model replied with no text and no tool calls"
+        "empty_model_reply|prompt:13: the model replied with no text and no tool calls"
     );
 }

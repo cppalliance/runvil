@@ -10,7 +10,7 @@
 use std::num::NonZeroU32;
 use std::ops::Range;
 
-use runvil_types::error::{Error, ErrorCode, FactKey, Location, coordinates};
+use runvil_types::error::{Error, ErrorCode, FactKey, Location, coordinates, place};
 use runvil_types::packs::PackId;
 
 /// The parser's result type over the universal [`Error`].
@@ -105,23 +105,22 @@ pub(crate) fn lua(cause: &Error) -> Error {
 /// prose; the Engine reaches it through [`crate::detail::with_prompt_context`]
 /// for a failure it raises about a parsed prompt.
 ///
-/// `file` becomes the file of the failure's location. `name`, the prompt's
+/// The failure is placed in `file`: a location with no file yet gets it,
+/// and an internal failure keeps its Rust location. `name`, the prompt's
 /// frontmatter name, is `None` for a failure found before the name is
 /// known; otherwise it becomes the `Name` fact of every failure but an
 /// internal one. The prose of an internal failure is the code's default.
-/// Every other prose names the file, the start line when the failure has
-/// a location, the message, and the default:
-/// `{file}:{line}: {message}. {default}`, or without a location
+/// Every other prose names the location's file and start line when the
+/// failure has a location, and `file` otherwise, then the message and the
+/// default: `{file}:{line}: {message}. {default}`, or without a location
 /// `{file}: {message}. {default}`.
-pub(crate) fn with_prompt_context(mut error: Error, name: Option<&str>, file: &str) -> Error {
+pub(crate) fn with_prompt_context(error: Error, name: Option<&str>, file: &str) -> Error {
+    let mut error = place(error, file, None);
     let code = error.code;
     if let Some(name) = name
         && code != ErrorCode::Internal
     {
         error.facts.insert(FactKey::Name, name.into());
-    }
-    if let Some(at) = &mut error.at {
-        file.clone_into(&mut at.file);
     }
     error.prose = match (code, &error.at) {
         (ErrorCode::Internal, _) => code.prose().to_owned(),

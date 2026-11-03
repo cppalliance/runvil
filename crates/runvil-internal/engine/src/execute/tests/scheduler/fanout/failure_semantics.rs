@@ -60,41 +60,43 @@ fn fanout_worker_that_is_a_list_section_errors() {
     );
 }
 
+/// Alpha and Beta ping-pong calls through nested call chains, and the
+/// chain that lands at depth 8 calls fanout, on prompt line 13, where each
+/// arm would run one level deeper than the cap allows.
+const DEPTH_FANOUT: &str = "---\nname: t\ndescription: d\nrunvil: 0\n---\n\n\
+    # Depth\n\n\
+    ## Alpha\n\n\
+    ```lua\n\
+    var.n = (var.n or 0) + 1\n\
+    if var.n >= 9 then return tasks.fanout('### Worker', {'x'}) end\n\
+    return call('## Beta')\n\
+    ```\n\n\
+    ### Worker\n\n\
+    ```lua\nreturn item\n```\n\n\
+    ## Beta\n\n\
+    ```lua\n\
+    var.n = var.n + 1\n\
+    return call('## Alpha')\n\
+    ```\n";
+
 #[test]
 fn fanout_depth_cap_reads_the_chain_field() {
-    // Pin of the fanout depth-cap guard: Alpha and Beta ping-pong calls
-    // through nested call chains, and the chain that lands at depth 8 calls
-    // fanout - each arm would run one level deeper, so the cap fires from
-    // the requesting chain's call-depth field. The arm's spawn sets the
-    // fanout mark, so the spawn arm names the cap after `tasks.fanout` in the
-    // typed error itself; the shim re-raises that table and the retained
-    // typed error is substituted back at every `call` level, so the run's
-    // error is the typed error itself: the exact variant, the exact text,
-    // no runtime-error prefix or traceback.
-    let md = "---\nname: t\ndescription: d\nrunvil: 0\n---\n\n\
-        # Depth\n\n\
-        ## Alpha\n\n\
-        ```lua\n\
-        var.n = (var.n or 0) + 1\n\
-        if var.n >= 9 then return tasks.fanout('### Worker', {'x'}) end\n\
-        return call('## Beta')\n\
-        ```\n\n\
-        ### Worker\n\n\
-        ```lua\nreturn item\n```\n\n\
-        ## Beta\n\n\
-        ```lua\n\
-        var.n = var.n + 1\n\
-        return call('## Alpha')\n\
-        ```\n";
-    let trace = scheduler_scenario(md).run();
+    // Pin of the fanout depth-cap guard: the cap fires from the requesting
+    // chain's call-depth field. The arm's spawn sets the fanout mark, so
+    // the spawn arm names the cap after `tasks.fanout` in the typed error
+    // itself; the shim re-raises that table and the retained typed error
+    // is substituted back at every `call` level, so the run's error is the
+    // typed error itself: the exact variant, the exact text, no
+    // runtime-error prefix or traceback.
+    let trace = scheduler_scenario(DEPTH_FANOUT).run();
 
     let error = trace.error();
     assert_eq!(
         error,
-        &crate::test_support::with_author_prose(crate::error::call_depth_exceeded(
-            8,
-            "tasks.fanout"
-        )),
+        &crate::test_support::with_author_prose(
+            crate::error::call_depth_exceeded(8, "tasks.fanout"),
+            13
+        ),
         "expected the typed depth-cap error named after fanout"
     );
     assert_eq!(run_error_kind(error.code), RunErrorKind::Quota, "{error}");
@@ -102,6 +104,19 @@ fn fanout_depth_cap_reads_the_chain_field() {
         error.to_string(),
         "tasks.fanout recursion exceeded cap of 8",
         "the rendered text is exactly the fanout cap message: no call wording, no prefix"
+    );
+}
+
+#[test]
+fn an_uncaught_fanout_depth_error_lands_on_the_authors_fanout_line() {
+    // The refused spawn answers the fanout's yield, so the error is placed
+    // on that yield's call line, and every `call` level above keeps it.
+    let trace = scheduler_scenario(DEPTH_FANOUT).run();
+    assert_eq!(
+        trace.error().at,
+        std::num::NonZeroU32::new(13)
+            .map(|line| runvil_types::error::Location::line("prompt", line)),
+        "the run's error points at Alpha's `tasks.fanout(...)` line"
     );
 }
 

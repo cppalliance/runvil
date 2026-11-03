@@ -49,12 +49,12 @@ fn an_ok_spawn_answer_resumes_the_task_id_as_its_path_text() {
 }
 
 /// The quota failure every failed answer here holds, and the same failure
-/// as it crossed into a VM given no file, with its author prose.
+/// as it crossed into a VM with no call line, with its author prose.
 fn quota_and_answered() -> (Error, Error) {
     let quota = crate::lua_quota(crate::QuotaResource::LogEvent);
     let mut answered = quota.clone();
     answered.prose = format!(
-        "prompt: lua log event quota exceeded. {}",
+        "lua log event quota exceeded. {}",
         ErrorCode::LuaQuota.prose()
     );
     (quota, answered)
@@ -78,28 +78,42 @@ fn a_failed_answer_round_trips_and_retains_the_typed_error() {
 }
 
 #[test]
-fn a_failed_tool_answer_renders_the_tools_remedy_prose_with_no_file_or_line() {
+fn a_failed_tool_answer_keeps_the_tools_prose_and_names_coordinates_only_when_located() {
     let lua = Lua::new();
     crate::error::set_prompt_file(&lua, "agents/a.md");
+    let prose = "the backend refused; try another source";
     let failure = crate::error::tool(runvil_types::tools::tool_error(
         ErrorCode::ToolBackend,
-        "the backend refused; try another source",
+        prose,
     ));
     let (envelope, retained) =
         answer_envelope(&lua, Err(failure.clone())).expect("the envelope renders");
     assert_eq!(
         retained.as_ref(),
         Some(&failure),
-        "a tool failure crosses into the VM unchanged"
+        "with no call line, a tool failure crosses into the VM unchanged"
     );
     let (ok, result) = echo_through_lua(&lua, envelope);
     assert!(!ok);
     let (kind, message) = failure_parts(&lua, result);
     assert_eq!(
         (kind.as_str(), message.as_str()),
-        ("tool", "the backend refused; try another source"),
-        "the table's message is the tool's own prose, naming no file or line"
+        ("tool", prose),
+        "an unlocated table's message is the tool's own prose"
     );
+    crate::error::set_call_line(&lua, NonZeroU32::new(5));
+    let (envelope, retained) =
+        answer_envelope(&lua, Err(failure.clone())).expect("the envelope renders");
+    let retained = retained.expect("the failure is retained");
+    assert_eq!(retained.prose, prose, "the tool's prose is untouched");
+    assert_eq!(
+        retained.at,
+        NonZeroU32::new(5).map(|line| runvil_types::error::Location::line("agents/a.md", line)),
+        "the failure is placed on the call line"
+    );
+    let (_, result) = echo_through_lua(&lua, envelope);
+    let (_, message) = failure_parts(&lua, result);
+    assert_eq!(message, format!("agents/a.md:5: {prose}"));
 }
 
 #[test]

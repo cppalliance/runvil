@@ -3,11 +3,11 @@
 
 use mlua::thread::ThreadStatus;
 use mlua::{MultiValue, Thread, Value};
-use runvil_types::error::ErrorCode;
+use runvil_types::error::{ErrorCode, place};
 
 use super::SectionVm;
 use crate::coro::{StashedFailure, block_guard, take_failure};
-use crate::error::{self, Error, Result, interrupted, lua_runtime, prompt_file};
+use crate::error::{self, Error, Result, interrupted, lua_runtime, prompt_file, set_call_line};
 use crate::error_value::{ErrorKind, error_kind};
 use crate::program::LuaProgram;
 use crate::protocol::{Answer, Request, Retained, YieldParse, render_envelope};
@@ -52,9 +52,10 @@ impl SectionVm {
     /// programs, and the scalar-return rule applies to the return values.
     /// A coroutine that yields suspends with the shim's request table; the
     /// driver resumes it with
-    /// [`resume_block_coro_answer`](Self::resume_block_coro_answer). No
-    /// observation events fire here; the driver owns the chunk observation
-    /// boundaries.
+    /// [`resume_block_coro_answer`](Self::resume_block_coro_answer). The
+    /// start clears the VM's [`call_line`](Self::call_line), which each of
+    /// the block's yields then sets. No observation events fire here; the
+    /// driver owns the chunk observation boundaries.
     ///
     /// The coroutine body is the shim's block guard, resumed first with
     /// the block function: the guard runs the block under `xpcall`, whose
@@ -71,6 +72,7 @@ impl SectionVm {
     /// block failure returns the mapped runtime error.
     pub fn start_block_coro(&self, program: &LuaProgram) -> Result<CoroStep> {
         self.clear_jump()?;
+        set_call_line(&self.lua, None);
         let function = program.load(&self.lua)?;
         let guard = block_guard(&self.lua)?;
         let thread = self.lua.create_thread(guard).map_err(error::lua)?;
@@ -190,7 +192,8 @@ impl SectionVm {
     /// Classifies the failure of a block resumed with an answer, as
     /// [`block_failure`](Self::block_failure) does, except that a raise of
     /// `retained`'s error table, the answer's own, is the answer's typed
-    /// error, unless the block was cancelled or spent an Engine quota.
+    /// error, placed as [`kept_failure`] places a table's, unless the block
+    /// was cancelled or spent an Engine quota.
     fn answered_block_failure(
         &self,
         program: &LuaProgram,
@@ -205,7 +208,7 @@ impl SectionVm {
             && let Some(retained) = retained
             && stashed.raised_table_is(&retained.table)
         {
-            return retained.error;
+            return placed_like(retained.error, &mapped);
         }
         kept_failure(stashed, mapped)
     }
@@ -255,16 +258,28 @@ fn is_fatal(mapped: &Error) -> bool {
 /// Engine quota, a raise that is no error table, or a `lua`-kind table,
 /// whose mapped runtime error keeps the same message with its source and
 /// the mapped prompt line; any other structured table as the universal
-/// error it stands for. A raise that is no error table keeps its mapping,
-/// so an uncaught direct `compactors.fail` call is its context
-/// exhaustion.
+/// error it stands for, placed on the mapped line when it has no location
+/// yet. A raise that is no error table keeps its mapping, so an uncaught
+/// direct `compactors.fail` call is its context exhaustion.
 fn kept_failure(stashed: StashedFailure, mapped: Error) -> Error {
     if is_fatal(&mapped) {
         return mapped;
     }
     match stashed.raised {
-        Some(raised) if error_kind(&raised) != ErrorKind::Lua => raised,
+        Some(raised) if error_kind(&raised) != ErrorKind::Lua => placed_like(raised, &mapped),
         _ => mapped,
+    }
+}
+
+/// `error` placed on the prompt line `mapped` was located on, when the
+/// mapping found one; an internal mapping's location is in Rust and
+/// places nothing.
+fn placed_like(error: Error, mapped: &Error) -> Error {
+    match &mapped.at {
+        Some(at) if mapped.code != ErrorCode::Internal => {
+            place(error, &at.file, Some(at.start_line))
+        }
+        _ => error,
     }
 }
 

@@ -6,10 +6,12 @@
 //! guard) caught by `pcall`, or a shim raise such as
 //! `tool_loop_exhausted` - is one Lua table `{ kind, code, message, ... }`
 //! under a shared metatable whose `__tostring` returns `message`. The
-//! message is the failure's prose, the text an author may hand a model; a
-//! caller that branches reads `kind`, `code`, the stable tag of the
-//! failure's [`ErrorCode`], and the kind's own fields (`reason` for
-//! `context_exhausted`, `finish_reason` for `empty_model_reply`).
+//! message is the failure's prose, the text an author may hand a model,
+//! which a table rendered from a universal error placed on a prompt line
+//! puts after that line's `file:line`; a caller that branches reads
+//! `kind`, `code`, the stable tag of the failure's [`ErrorCode`], and the
+//! kind's own fields (`reason` for `context_exhausted`, `finish_reason`
+//! for `empty_model_reply`).
 //!
 //! [`ErrorKind`] names the closed vocabulary of kinds; [`error_kind`] and
 //! [`error_fields`] render a universal error into the shape;
@@ -35,7 +37,7 @@ use std::str::FromStr;
 
 use mlua::{AnyUserData, Function, Lua, Table, Value};
 
-use runvil_types::error::{Error, ErrorCode, FactKey};
+use runvil_types::error::{Error, ErrorCode, FactKey, coordinates};
 
 use crate::error::accepted_tags;
 
@@ -281,15 +283,23 @@ fn finish_table(lua: &Lua, kind: ErrorKind, code: ErrorCode, fields: Table) -> m
 }
 
 /// Renders a universal error as the Lua error table: the `kind`
-/// [`error_kind`] names, the error's code, its prose as the `message`, and
-/// the [`error_fields`] beside them, under the shared metatable. The table
+/// [`error_kind`] names, the error's code, its `message`, and the
+/// [`error_fields`] beside them, under the shared metatable. The `message`
+/// is the prose, after `{file}:{line}: ` when the error is located and not
+/// internal, since an internal failure's location is in Rust. The table
 /// keeps `error` beside it, for [`retained_error`].
 ///
 /// # Errors
 /// Returns an `mlua` error if the table cannot be created on `lua`.
 pub(crate) fn error_table(lua: &Lua, error: &Error) -> mlua::Result<Table> {
     let table = lua.create_table()?;
-    table.raw_set("message", error.prose.as_str())?;
+    let message = match &error.at {
+        Some(at) if error.code != ErrorCode::Internal => {
+            format!("{}: {}", coordinates(at), error.prose)
+        }
+        _ => error.prose.clone(),
+    };
+    table.raw_set("message", message)?;
     for (name, value) in error_fields(error) {
         let value = match value {
             ErrorField::String(value) => Value::String(lua.create_string(value)?),

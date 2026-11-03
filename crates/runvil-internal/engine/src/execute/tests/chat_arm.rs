@@ -199,7 +199,7 @@ fn an_out_of_scope_tool_name_fails_the_round_with_out_of_scope_tool() {
         .run();
     assert_eq!(
         trace.text(),
-        "out_of_scope_tool|rogue|tool \"rogue\" is not in this section's scope; \
+        "out_of_scope_tool|rogue|prompt:14: tool \"rogue\" is not in this section's scope; \
          aliases this section offers: [\"echo\"]"
     );
     let events = trace.events();
@@ -221,10 +221,14 @@ fn an_out_of_scope_tool_name_fails_the_round_with_out_of_scope_tool() {
         .offer("echo", echo_tool())
         .chat(&gateway)
         .run();
-    // Rogue is bound nowhere, and the section offers only echo.
+    // Rogue is bound nowhere, and the section offers only echo. The
+    // refusal is placed on the loop's line.
     assert_eq!(
         trace.error(),
-        &crate::error::out_of_scope_tool("rogue", false, &["echo".to_owned()], false)
+        &placed(
+            crate::error::out_of_scope_tool("rogue", false, &["echo".to_owned()], false),
+            14
+        )
     );
 }
 

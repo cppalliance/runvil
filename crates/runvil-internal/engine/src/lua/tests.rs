@@ -93,8 +93,8 @@ fn scheduler_vm_with_tools(
     })
 }
 
-/// The file every test VM's prompt comes from, which the author prose of
-/// its Lua failures names.
+/// The file every test VM's prompt comes from, which its Lua failures are
+/// placed in.
 const TEST_FILE: &str = "agents/test.md";
 
 /// What a test's section VM binds beyond an empty run's: its section, the

@@ -27,31 +27,41 @@ fn overflowing_with(body: &str) -> String {
 
 #[test]
 fn each_broken_rule_raises_its_error_and_restores_the_records() {
-    let exhausted = format!("context_exhausted|{}", ErrorCode::ContextExhausted.prose());
-    let lua = |what: &str| format!("lua|{}", refused(what));
+    // A refusal of the compacted list is placed on the loop's call, prompt
+    // line 17, and one the compactor's own `append` raises on that call's
+    // line, 19.
+    let exhausted = format!(
+        "context_exhausted|prompt:17: {}",
+        ErrorCode::ContextExhausted.prose()
+    );
+    let lua = |line: u32, what: &str| format!("lua|{}", refused(line, what));
     let cases = [
         (
             "an unanswered batch",
             "messages:replace(5, 5, { role = 'assistant', content = '', tool_calls = { \
              { id = 'c2', name = 'echo', arguments = { value = 'v' } } } })",
-            lua("messages[5] tool call \"c2\" has no tool result"),
+            lua(17, "messages[5] tool call \"c2\" has no tool result"),
         ),
         (
             "a split batch",
             "messages:replace(4, 3, { role = 'user', content = 'between' })",
-            lua("messages[3] tool call \"c1\" has no tool result"),
+            lua(17, "messages[3] tool call \"c1\" has no tool result"),
         ),
         (
             "a duplicate call id",
             "messages:replace(5, 5, { role = 'assistant', content = '', tool_calls = { \
              { id = 'c1', name = 'echo', arguments = { value = 'v' } } } }, \
              { role = 'tool', content = 'r2', tool_call_id = 'c1' })",
-            lua("messages[5] tool call id \"c1\" duplicates an earlier tool call"),
+            lua(
+                17,
+                "messages[5] tool call id \"c1\" duplicates an earlier tool call",
+            ),
         ),
         (
             "an orphan tool record",
             "messages:replace(3, 3)",
             lua(
+                17,
                 "messages[3] is an orphan tool record: no pending assistant tool call with id \
                  \"c1\"",
             ),
@@ -61,6 +71,7 @@ fn each_broken_rule_raises_its_error_and_restores_the_records() {
             "messages:replace(5, 5, { role = 'user', content = 'short' })
              messages:append({ role = 'system', content = 'late' })",
             lua(
+                19,
                 "messages[6] is a system message after a non-system message; system messages \
                  lead the list, and only a compactor can change the leading block",
             ),
@@ -69,6 +80,7 @@ fn each_broken_rule_raises_its_error_and_restores_the_records() {
             "a non-text composed system block",
             "messages:replace(1, 0, { role = 'system', content = { { type = 'text', text = 'rules' } } })",
             lua(
+                17,
                 "messages[1] is a system message with content parts; only plain text system \
                  messages can be composed",
             ),

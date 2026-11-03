@@ -1,12 +1,41 @@
 //! Tests for the error value's kind vocabulary: its tags parse back, and a
 //! rejected tag's error names every accepted one. Also the universal error a
-//! store failure becomes: its code, its facts, and its texts.
+//! store failure becomes: its code, its facts, and its texts; and the
+//! message a table rendered from a universal error holds.
 
-use runvil_types::error::{ErrorCode, FactKey};
+use std::num::NonZeroU32;
+
+use runvil_types::error::{Error, ErrorCode, FactKey, place};
 use runvil_vfs::{PathReason, VfsError};
 use serde_json::Value;
 
-use super::{ErrorKind, store_error, store_error_value_fields};
+use super::{ErrorKind, error_table, store_error, store_error_value_fields};
+use crate::error::{internal, lua_runtime};
+
+#[test]
+fn a_tables_message_puts_a_prompt_location_and_never_a_rust_one_before_the_prose() {
+    let lua = mlua::Lua::new();
+    let message = |error: &Error| -> String {
+        error_table(&lua, error)
+            .expect("the table builds")
+            .raw_get("message")
+            .expect("the message reads")
+    };
+    let unlocated = lua_runtime("boom");
+    assert_eq!(message(&unlocated), unlocated.prose);
+    let located = place(unlocated.clone(), "agents/a.md", NonZeroU32::new(7));
+    assert_eq!(
+        message(&located),
+        format!("agents/a.md:7: {}", located.prose)
+    );
+    let fault = internal("a test invariant broke");
+    assert!(fault.at.is_some(), "an internal failure is located in Rust");
+    assert_eq!(
+        message(&fault),
+        fault.prose,
+        "an internal failure's text shows no coordinates"
+    );
+}
 
 #[test]
 fn every_error_kind_tag_parses_back_to_its_kind() {

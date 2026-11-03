@@ -10,7 +10,8 @@ use super::*;
 /// refused loop call, under `pcall`, and returns the section's result:
 /// every error's `kind:message`, joined by `|`, then the list's size. No
 /// gateway reply is scripted, so a call that sends a request fails the
-/// run.
+/// run. Each function tail-calls the loop, which drops its frame, so every
+/// refusal is placed on the line of the `pcall`.
 #[track_caller]
 fn refusals(calls: &str) -> String {
     let gateway = ScriptedChat::new(vec![text("unreachable")]);
@@ -86,7 +87,7 @@ fn the_arity_error_counts_trailing_nils_in_both_shapes() {
     );
     let arity = format!(
         "lua:{}",
-        refused("models.loop takes (compactor?) or (model, compactor?)")
+        refused(20, "models.loop takes (compactor?) or (model, compactor?)")
     );
     assert_eq!(out, format!("{arity}|{arity}|{arity}|{arity}|{arity}|1"));
 }
@@ -101,8 +102,8 @@ fn the_compactor_is_checked_after_the_arity() {
          function() return models.loop(other, 42, nil) end,
          function() return models.loop(other, 42) end,",
     );
-    let arity = refused("models.loop takes (compactor?) or (model, compactor?)");
-    let compactor = refused("compactor must be a function, got integer");
+    let arity = refused(19, "models.loop takes (compactor?) or (model, compactor?)");
+    let compactor = refused(19, "compactor must be a function, got integer");
     assert_eq!(
         out,
         format!("lua:{arity}|lua:{compactor}|lua:{arity}|lua:{compactor}|1")

@@ -26,8 +26,9 @@ fn an_omitted_compactor_defaults_to_fail_with_typed_precheck_exhaustion() {
     let trace = loop_scenario(source).chat(&gateway).run();
     let error = trace.error();
     assert!(
-        error == &crate::error::context_exhausted("precheck"),
-        "the omitted compactor defaults to compactors.fail with the precheck reason, got {error:?}"
+        error == &placed(crate::error::context_exhausted("precheck"), 13),
+        "the omitted compactor defaults to compactors.fail with the precheck reason, on the \
+         loop's line, got {error:?}"
     );
     assert_eq!(
         gateway.call_count(),
@@ -49,8 +50,11 @@ fn models_loop_raises_context_exhaustion_at_the_call_site() {
     let trace = loop_scenario(source).chat(&gateway).run();
     assert_eq!(
         trace.text(),
-        runvil_types::error::ErrorCode::ContextExhausted.prose(),
-        "the raised error renders the typed exhaustion's prose"
+        format!(
+            "prompt:13: {}",
+            runvil_types::error::ErrorCode::ContextExhausted.prose()
+        ),
+        "the raised error renders the typed exhaustion's prose after the call's line"
     );
 }
 
@@ -69,7 +73,7 @@ fn an_explicit_compactors_fail_invocation_reports_the_provider_reason() {
     let trace = loop_scenario(source).chat(&gateway).run();
     let error = trace.error();
     assert!(
-        error == &crate::error::context_exhausted("provider"),
+        error == &placed(crate::error::context_exhausted("provider"), 13),
         "the explicit compactors.fail invocation reports the provider reason, got {error:?}"
     );
     assert_eq!(gateway.call_count(), 1, "the request left and was rejected");
@@ -95,7 +99,7 @@ fn an_uncaught_compactors_fail_with_a_callers_reason_ends_the_run_as_context_exh
         "the run's message holds the caller's reason, got: {error}"
     );
     assert!(
-        error == &crate::error::context_exhausted("manual"),
+        error == &placed(crate::error::context_exhausted("manual"), 13),
         "the reason survives as given, got {error:?}"
     );
     assert_eq!(
@@ -124,8 +128,8 @@ fn an_uncaught_direct_compactors_fail_ends_the_run_as_context_exhausted() {
         "the run's message holds the caller's reason, got: {error}"
     );
     assert!(
-        error == &crate::error::context_exhausted("manual"),
-        "the reason survives as given, got {error:?}"
+        error == &placed(crate::error::context_exhausted("manual"), 12),
+        "the reason survives as given, on the call's mapped line, got {error:?}"
     );
     assert_eq!(gateway.call_count(), 0, "no request leaves");
 }
@@ -159,7 +163,7 @@ fn a_non_function_compactor_is_the_calls_error_in_the_engines_type_names() {
     let expected: Vec<String> = ["integer", "number", "string", "table"]
         .iter()
         .flat_map(|kind| {
-            let refusal = refused(&format!("compactor must be a function, got {kind}"));
+            let refusal = refused(15, &format!("compactor must be a function, got {kind}"));
             [refusal.clone(), refusal]
         })
         .collect();

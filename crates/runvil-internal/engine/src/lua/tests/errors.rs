@@ -13,7 +13,7 @@ use mlua::MultiValue;
 
 use runvil_lua::LuaProgram;
 use runvil_lua::test_support::answer_envelope;
-use runvil_types::error::ErrorCode;
+use runvil_types::error::{ErrorCode, place};
 
 use crate::lua::{CoroStep, LuaBlockResult};
 use crate::model::ModelSet;
@@ -105,7 +105,8 @@ fn a_failure_envelope_raises_a_table_holding_the_kind_and_fields() {
     // A Rust-raised error answered through the envelope reaches the
     // author's `pcall` in the same shape as a shim raise: `kind` names the
     // failure, the kind's fields appear beside it, and `tostring` is the
-    // typed error's prose, a model failure's own remedy.
+    // typed error's prose, a model failure's own remedy, after the line of
+    // the call the answer resumed.
     for reason in ["provider", "manual"] {
         let vm = scheduler_vm(&ModelSet::default(), None);
         let program = compile_block(
@@ -126,7 +127,10 @@ fn a_failure_envelope_raises_a_table_holding_the_kind_and_fields() {
             .expect("the pcall'd block resumes")
         {
             CoroStep::Done(LuaBlockResult::Returned(Some(text))) => {
-                assert_eq!(text, format!("table|context_exhausted|{reason}|{display}"));
+                assert_eq!(
+                    text,
+                    format!("table|context_exhausted|{reason}|{TEST_FILE}:1: {display}")
+                );
             }
             other => panic!("expected the caught failure's rendering, got {other:?}"),
         }
@@ -138,9 +142,9 @@ fn an_engine_callback_failure_caught_by_pcall_is_the_same_error_table() {
     // An Engine call that fails directly from Rust - no envelope, no shim
     // raise - reaches the author's `pcall` as the same `{ kind, message }`
     // table: `kind` is readable at every call site, and `tostring` is the
-    // author prose of the failure's own text in the VM's file (mlua's
-    // label and appended traceback are not part of it). The
-    // `sys` guard fails from a metamethod rather than a call, and
+    // author prose of the failure's own text after the failing line of the
+    // VM's file (mlua's label and appended traceback are not part of it).
+    // The `sys` guard fails from a metamethod rather than a call, and
     // `xpcall`'s handler sees the same normalized value.
     let vm = scheduler_vm(&test_models(), None);
     let program = compile_block(
@@ -156,22 +160,55 @@ fn an_engine_callback_failure_caught_by_pcall_is_the_same_error_table() {
            assert(not ok3, "the handler runs for the callback failure")
            return first .. "\n" .. second .. "\n" .. third"#,
     );
-    let prose = |what: &str| format!("{TEST_FILE}: {what}. {}", ErrorCode::LuaRuntime.prose());
+    let prose = |line: u32, what: &str| {
+        format!(
+            "{TEST_FILE}:{line}: {what}. {}",
+            ErrorCode::LuaRuntime.prose()
+        )
+    };
     match vm.start_block_coro(&program).expect("the block runs") {
         CoroStep::Done(LuaBlockResult::Returned(Some(text))) => {
             assert_eq!(
                 text,
                 format!(
                     "table|lua|{}\ntable|lua|{}\ntable|lua",
-                    prose(
-                        "models.get label \"missing\" is not a model role: expected default, \
-                         strong, small, fast or creative"
-                    ),
-                    prose("unknown sys field 'nothing'")
+                    prose(1, MISSING_ROLE),
+                    prose(4, "unknown sys field 'nothing'")
                 )
             );
         }
         other => panic!("expected the caught failures' rendering, got {other:?}"),
+    }
+}
+
+/// The refusal of `models.get("missing")`.
+const MISSING_ROLE: &str = "models.get label \"missing\" is not a model role: expected default, \
+                            strong, small, fast or creative";
+
+#[test]
+fn a_callback_failure_caught_by_pcall_names_the_failing_line_not_the_pcall() {
+    // The line comes from the traceback mlua took as the callback failed,
+    // whose innermost author frame is the failing call inside the pcall'd
+    // function.
+    let vm = scheduler_vm(&test_models(), None);
+    let program = compile_block(
+        r#"local ok, err = pcall(function()
+             local label = "missing"
+             local role = models.get(label)
+             return role
+           end)
+           assert(not ok, "a label outside the five roles must fail")
+           return tostring(err)"#,
+    );
+    match vm.start_block_coro(&program).expect("the block runs") {
+        CoroStep::Done(LuaBlockResult::Returned(Some(text))) => assert_eq!(
+            text,
+            format!(
+                "{TEST_FILE}:3: {MISSING_ROLE}. {}",
+                ErrorCode::LuaRuntime.prose()
+            )
+        ),
+        other => panic!("expected the caught failure's rendering, got {other:?}"),
     }
 }
 
@@ -220,7 +257,7 @@ fn an_uncaught_lua_kind_shim_raise_keeps_the_mapped_runtime_error() {
     // the same message with its source and the prompt line the traceback
     // maps to, which is what an authoring error needs. The block is
     // compiled at prompt line 40 and fails at chunk line 2, so the mapped
-    // author frame is line 41, where its author prose locates it.
+    // author frame is line 41, where the failure is located.
     let vm = scheduler_vm(&test_models(), None);
     let program = LuaProgram::compile(
         "local h = models.get(\"fast\")\nmodels.infer(h, \"a\", \"b\")",
@@ -245,7 +282,7 @@ fn an_uncaught_lua_kind_shim_raise_keeps_the_mapped_runtime_error() {
             assert_eq!(
                 error.prose,
                 format!(
-                    "{TEST_FILE}:41: models.infer takes (prompt) or (model, prompt). {}",
+                    "models.infer takes (prompt) or (model, prompt). {}",
                     ErrorCode::LuaRuntime.prose()
                 )
             );
@@ -281,9 +318,9 @@ fn a_typed_error_substituted_at_the_coroutine_boundary_keeps_its_kind() {
             panic!("the shim yield must suspend the block");
         };
         let quota = crate::error::lua_quota(runvil_lua::QuotaResource::LogEvent);
-        let mut answered = quota.clone();
+        let mut answered = place(quota.clone(), TEST_FILE, NonZeroU32::new(1));
         answered.prose = format!(
-            "{TEST_FILE}: lua log event quota exceeded. {}",
+            "lua log event quota exceeded. {}",
             ErrorCode::LuaQuota.prose()
         );
         match vm.resume_block_coro_answer(&program, &thread, Err(quota)) {
@@ -301,8 +338,8 @@ fn a_structured_raise_surfacing_as_the_coroutine_failure_keeps_its_table() {
     // Without a retained typed error to substitute (the envelope was
     // rendered ahead of time, as a Lua-side raise would be), the failure
     // still arrives typed: the table the shim raised reads back as the
-    // universal error it was rendered from, never flattened to the
-    // message string.
+    // universal error it was rendered from, placed on the call line the
+    // block was suspended on, never flattened to the message string.
     let vm = scheduler_vm(&ModelSet::default(), None);
     let program = compile_block("models.infer(\"hi\")");
     let CoroStep::Yielded(thread, _values) =
@@ -316,7 +353,11 @@ fn a_structured_raise_surfacing_as_the_coroutine_failure_keeps_its_table() {
     match vm.resume_block_coro(&program, &thread, envelope) {
         Err(error) => assert_eq!(
             error,
-            crate::error::context_exhausted("precheck"),
+            place(
+                crate::error::context_exhausted("precheck"),
+                TEST_FILE,
+                NonZeroU32::new(1)
+            ),
             "the kept table reads back as its error, the message included"
         ),
         other => panic!("expected the kept table's failure, got {other:?}"),

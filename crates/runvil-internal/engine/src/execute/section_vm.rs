@@ -76,8 +76,8 @@ pub(crate) struct SectionVmSetup<'a> {
     pub(crate) emitter: &'a Emitter,
     /// The section name used in observations and error messages.
     pub(crate) section_name: &'a str,
-    /// The file the run's prompt came from, which the author prose of the
-    /// VM's Lua failures names.
+    /// The file the run's prompt came from, which the VM's Lua failures
+    /// are placed in.
     pub(crate) file: &'a str,
     /// The run's tool-loop cap, as `ChainState::max_tool_iterations`
     /// resolves it, captured by the `models.loop` shim as its round cap.

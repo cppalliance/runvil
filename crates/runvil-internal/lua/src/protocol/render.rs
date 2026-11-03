@@ -106,9 +106,10 @@ fn delivery_values(
 /// (`kind`, `code`, `message`, and the kind's fields, as
 /// [`error_table`] renders them, with `tostring` returning the message) -
 /// the shim raises it
-/// with `error(result, 0)`, so a printing author sees the error's prose,
-/// author prose for a failure the prompt's Lua caused, and a branching
-/// one reads `kind` - and the typed error is
+/// with `error(result, 0)`, so a printing author sees the error's prose
+/// after the prompt line it was placed on, the call line of the yield it
+/// answers unless it had a location, and a branching one reads `kind` -
+/// and the typed error, so placed, is
 /// retained beside that table, which identifies its raise. A successful
 /// `join_any` whose member failed retains the member's error the same
 /// way, since a shim may re-raise it at once.

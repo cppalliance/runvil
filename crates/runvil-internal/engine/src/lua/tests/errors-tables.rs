@@ -11,9 +11,9 @@ use crate::model::ModelSet;
 
 use super::super::{TEST_FILE, compile_block, scheduler_vm};
 
-/// What a block's `pcall` of `models.infer` sees when the Engine answers
-/// the round with `error`: the table's `kind`, the fields `fields` names,
-/// and its `tostring`, joined by `|`.
+/// What a block's `pcall` of `models.infer` on its first line sees when the
+/// Engine answers the round with `error`: the table's `kind`, the fields
+/// `fields` names, and its `tostring`, joined by `|`.
 fn caught_engine_failure(error: crate::Error, fields: &[&str]) -> String {
     let vm = scheduler_vm(&ModelSet::default(), None);
     let names = fields
@@ -45,6 +45,12 @@ fn task(path: &str) -> TaskId {
     path.parse().expect("the test task id parses")
 }
 
+/// `text` as a caught table's `tostring` renders it, after the line of the
+/// block's `pcall`.
+fn at_call(text: &str) -> String {
+    format!("{TEST_FILE}:1: {text}")
+}
+
 #[test]
 fn an_engine_failure_answered_through_the_envelope_is_the_table_its_code_names() {
     assert_eq!(
@@ -54,18 +60,14 @@ fn an_engine_failure_answered_through_the_envelope_is_the_table_its_code_names()
         ),
         format!(
             "cancelled|task_cancelled|0.1|{}",
-            ErrorCode::TaskCancelled.prose()
+            at_call(ErrorCode::TaskCancelled.prose())
         )
     );
     let leaked = crate::error::tasks_live(&[task("0.1"), task("0.2")]);
-    let leaked_prose = format!(
-        "{TEST_FILE}: {}. {}",
-        leaked.message,
-        ErrorCode::TasksLive.prose()
-    );
+    let leaked_prose = format!("{}. {}", leaked.message, ErrorCode::TasksLive.prose());
     assert_eq!(
         caught_engine_failure(leaked, &["code", "tasks"]),
-        format!("tasks_live|tasks_live|0.1, 0.2|{leaked_prose}"),
+        format!("tasks_live|tasks_live|0.1, 0.2|{}", at_call(&leaked_prose)),
         "a leak the prompt's Lua caused gets its author prose"
     );
     assert_eq!(
@@ -75,7 +77,7 @@ fn an_engine_failure_answered_through_the_envelope_is_the_table_its_code_names()
         ),
         format!(
             "context_exhausted|context_exhausted|precheck|{}",
-            ErrorCode::ContextExhausted.prose()
+            at_call(ErrorCode::ContextExhausted.prose())
         )
     );
     let anchor = runvil_vfs::VfsError::Anchor {
@@ -95,7 +97,7 @@ fn an_engine_failure_answered_through_the_envelope_is_the_table_its_code_names()
         ),
         format!(
             "store|anchor|anchor|notes.md|TODO|2|nil|{}",
-            ErrorCode::Anchor.prose()
+            at_call(ErrorCode::Anchor.prose())
         ),
         "a store answer keeps its remedy prose"
     );
@@ -109,6 +111,9 @@ fn an_engine_failure_answered_through_the_envelope_is_the_table_its_code_names()
         .insert(FactKey::FinishReason, serde_json::Value::from("length"));
     assert_eq!(
         caught_engine_failure(empty, &["code", "finish_reason"]),
-        "empty_model_reply|empty_reply|length|the model replied with no text and no tool calls"
+        format!(
+            "empty_model_reply|empty_reply|length|{}",
+            at_call("the model replied with no text and no tool calls")
+        )
     );
 }

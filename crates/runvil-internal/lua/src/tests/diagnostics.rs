@@ -320,7 +320,7 @@ fn a_block_failure_names_the_vms_file_and_its_mapped_line() {
     );
     assert_eq!(
         error.prose,
-        format!("agents/a.md:2: boom. {}", ErrorCode::LuaRuntime.prose())
+        format!("boom. {}", ErrorCode::LuaRuntime.prose())
     );
     vm.teardown();
 }

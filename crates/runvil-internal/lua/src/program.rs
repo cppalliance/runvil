@@ -11,6 +11,13 @@ use crate::error::{
     self, Error, Result, authored_at, failure_text, lua_compile, lua_runtime, root_text,
 };
 
+/// The statement every prompt block compiles behind, on its first line so
+/// no line moves. Lua compiles no tail call inside a to-be-closed
+/// variable's scope, so a main chunk's `return f()` keeps the author's
+/// frame on the stack for the call line to be read from; a nil
+/// to-be-closed value is never closed.
+const FRAME_GUARD: &str = "local __runvil_site <close> = nil; ";
+
 /// The fixed temporary VM a chunk compiles in.
 fn compiler() -> mlua::Result<Lua> {
     Lua::new_with(
@@ -76,17 +83,20 @@ impl LuaProgram {
     /// itself compiles under the name `line {source_line}`, which Lua
     /// renders as `[string "line 120"]`: no two blocks of one prompt start
     /// on the same line, and the name never reaches the length at which Lua
-    /// cuts it. Compilation reports contain only fixed strings and never
-    /// include `source` or `location`; each is stamped with the emitter's
-    /// coordinates.
+    /// cuts it. The chunk compiles behind a statement on its first line
+    /// that keeps a main-chunk tail call from dropping the author's frame;
+    /// [`source`](Self::source) is the source as given. Compilation reports
+    /// contain only fixed strings and never include `source` or `location`;
+    /// each is stamped with the emitter's coordinates.
     ///
     /// # Errors
     /// Returns a `LuaCompile` failure when `source` is not syntactically
     /// valid: its message names the region and holds the Lua diagnostic,
-    /// its `Section` fact names the region, and it is located on the line
-    /// of `file` the diagnostic names, which its author prose names too.
-    /// Returns an `Internal` failure, with the `mlua` error's text, if the
-    /// temporary compiler VM cannot be created.
+    /// its `Section` fact names the region, it is located on the line of
+    /// `file` the diagnostic names, and its author prose names what failed.
+    /// Returns an `Internal` failure located at this crate's Rust source,
+    /// whose message holds the `mlua` error's text, if the temporary
+    /// compiler VM cannot be created.
     pub fn compile(
         source: &str,
         file: &str,
@@ -98,13 +108,11 @@ impl LuaProgram {
         emitter.report(section, lifecycle::LUA_COMPILATION_STARTED);
 
         let chunk_name = format!("line {source_line}");
+        let guarded = format!("{FRAME_GUARD}{source}");
         let compiled = compiler()
-            .map_err(|error| {
-                let code = ErrorCode::Internal;
-                Error::new(code, error.to_string(), code.prose())
-            })
+            .map_err(|error| error::internal(error.to_string()))
             .and_then(|lua| {
-                compile_chunk(&lua, source, &chunk_name).map_err(|error| {
+                compile_chunk(&lua, &guarded, &chunk_name).map_err(|error| {
                     let diagnostic = match &error {
                         mlua::Error::SyntaxError { message, .. } => message.clone(),
                         other => other.to_string(),
@@ -189,19 +197,21 @@ impl LuaProgram {
     /// that ran beside `loaded`, the programs of the libraries loaded into
     /// its VM, from the prompt file `file`.
     ///
-    /// A typed context exhaustion, such as an uncaught direct
-    /// `compactors.fail` call's, returns as it was raised. An Engine quota
-    /// refusal, recognized by its typed value, returns its `LuaQuota`
-    /// failure, and every other failure, other typed failures included,
-    /// returns a `LuaRuntime` failure with each chunk-relative line
-    /// rewritten to an absolute prompt-source line by the program that owns
-    /// that chunk, this one first when two share a chunk name. Nested errors
-    /// from other chunks (for example a fanout arm) are left unchanged.
-    /// Either is located on the first line the mapping rewrote, of `file`,
-    /// and its author prose names that line and the failure's own text.
-    /// Cancellation is the VM's to classify: a chunk the instruction hook
-    /// aborted under the run's cancel flag is an `Interrupted` failure
-    /// before the raw error reaches here.
+    /// A typed internal or substitution failure that already has a
+    /// location returns as it was raised, so an internal failure keeps its
+    /// Rust line. A typed context exhaustion, such as an uncaught direct
+    /// `compactors.fail` call's, and an Engine quota refusal, recognized by
+    /// its typed value, keep their own failure, and every other failure,
+    /// other typed failures included, returns a `LuaRuntime` failure with
+    /// each chunk-relative line rewritten to an absolute prompt-source line
+    /// by the program that owns that chunk, this one first when two share a
+    /// chunk name. Nested errors from other chunks (for example a fanout
+    /// arm) are left unchanged. Each is placed on the first line the
+    /// mapping rewrote, of `file`, when it has no location yet, and the
+    /// quota and the runtime failure get the author prose of the failure's
+    /// own text. Cancellation is the VM's to classify: a chunk the
+    /// instruction hook aborted under the run's cancel flag is an
+    /// `Interrupted` failure before the raw error reaches here.
     pub(crate) fn map_runtime_error_among(
         &self,
         error: &mlua::Error,
@@ -209,8 +219,11 @@ impl LuaProgram {
         file: &str,
     ) -> Error {
         let typed = error.downcast_ref::<Error>();
-        if let Some(exhausted) = typed.filter(|typed| typed.code == ErrorCode::ContextExhausted) {
-            return exhausted.clone();
+        if let Some(located) = typed.filter(|typed| {
+            matches!(typed.code, ErrorCode::Internal | ErrorCode::Substitution)
+                && typed.at.is_some()
+        }) {
+            return located.clone();
         }
         let raw = error.to_string();
         let owners: Vec<(&str, &str, NonZeroU32)> = std::iter::once(self)
@@ -224,8 +237,14 @@ impl LuaProgram {
             })
             .collect();
         let (mapped, line) = map_chunk_line_to_absolute(&raw, &owners);
-        let (failure, what) = match typed.filter(|typed| typed.code == ErrorCode::LuaQuota) {
-            Some(quota) => (quota.clone(), quota.message.clone()),
+        let kept = typed.filter(|typed| {
+            matches!(
+                typed.code,
+                ErrorCode::ContextExhausted | ErrorCode::LuaQuota
+            )
+        });
+        let (failure, what) = match kept {
+            Some(kept) => (kept.clone(), kept.message.clone()),
             None => (lua_runtime(mapped), root_text(error)),
         };
         authored_at(failure, file, line, failure_text(&what))
@@ -252,10 +271,40 @@ fn compile_line(chunk_name: &str, source_line: NonZeroU32, diagnostic: &str) -> 
             let digits = rest
                 .find(|c: char| !c.is_ascii_digit())
                 .unwrap_or(rest.len());
-            absolute_line(source_line, &rest[..digits])
+            absolute_line(source_line, rest[..digits].parse().ok()?)
         })
         .and_then(NonZeroU32::new)
         .unwrap_or(source_line)
+}
+
+/// The prompt line of line `chunk_line` of the chunk named `chunk_name`,
+/// when that is a prompt block's name, `line N`: the block's line `N`
+/// mapped as [`absolute_line`] maps it. `None` for any other name, or when
+/// the line overflows `u32`.
+pub(crate) fn prompt_line(chunk_name: &str, chunk_line: u32) -> Option<NonZeroU32> {
+    let start = chunk_name.strip_prefix("line ")?;
+    if !start.bytes().all(|byte| byte.is_ascii_digit()) {
+        return None;
+    }
+    absolute_line(start.parse().ok()?, chunk_line).and_then(NonZeroU32::new)
+}
+
+/// The prompt line of the first position in `text` that Lua writes for a
+/// prompt block's line, `[string "line N"]:M:`, as a traceback names its
+/// innermost author frame. The `<[string "line N"]:K>` that names where a
+/// function is defined has no colon after its line and is skipped.
+pub(crate) fn first_prompt_line(text: &str) -> Option<NonZeroU32> {
+    const OPENING: &str = "[string \"";
+    text.match_indices(OPENING).find_map(|(at, _)| {
+        let (chunk_name, rest) = text[at + OPENING.len()..].split_once("\"]:")?;
+        let digits = rest
+            .find(|c: char| !c.is_ascii_digit())
+            .unwrap_or(rest.len());
+        if !rest[digits..].starts_with(':') {
+            return None;
+        }
+        prompt_line(chunk_name, rest[..digits].parse().ok()?)
+    })
 }
 
 /// Rewrites chunk-relative line numbers for the named chunks in `owners`,
@@ -303,7 +352,11 @@ pub(crate) fn map_chunk_line_to_absolute(
         let digit_end = after
             .find(|c: char| !c.is_ascii_digit())
             .unwrap_or(after.len());
-        if let Some(absolute) = absolute_line(*source_line, &after[..digit_end]) {
+        let absolute = after[..digit_end]
+            .parse()
+            .ok()
+            .and_then(|chunk_line| absolute_line(*source_line, chunk_line));
+        if let Some(absolute) = absolute {
             tag.get_or_insert((location, absolute));
             result.push_str(location);
             result.push(':');
@@ -328,18 +381,12 @@ pub(crate) fn map_chunk_line_to_absolute(
     }
 }
 
-/// The absolute prompt-source line of `chunk_line`, a chunk-relative line's
-/// digits, in a chunk starting at `source_line`: the two summed, less one.
-/// `None` when the digits or the sum overflow `u32`, so a pathological line
-/// count cannot wrap into a wrong number.
-fn absolute_line(source_line: NonZeroU32, chunk_line: &str) -> Option<u32> {
-    let Ok(chunk_line) = chunk_line.parse::<u32>() else {
-        return None;
-    };
-    match source_line.get().checked_add(chunk_line) {
-        Some(sum) => sum.checked_sub(1),
-        None => None,
-    }
+/// The absolute prompt-source line of `chunk_line`, a chunk-relative line,
+/// in a chunk starting at `source_line`: the two summed, less one. `None`
+/// when the sum overflows `u32`, so a pathological line count cannot wrap
+/// into a wrong number.
+fn absolute_line(source_line: NonZeroU32, chunk_line: u32) -> Option<u32> {
+    source_line.get().checked_add(chunk_line)?.checked_sub(1)
 }
 
 #[cfg(test)]
