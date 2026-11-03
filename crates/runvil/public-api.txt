@@ -8,7 +8,6 @@
 #[non_exhaustive] pub enum runvil::model::CompletionResult
 #[non_exhaustive] pub enum runvil::model::ModelRole
 #[non_exhaustive] pub enum runvil::model::Role
-#[non_exhaustive] pub enum runvil::model::TemperatureError
 #[non_exhaustive] pub enum runvil::model::ThinkingMode
 #[non_exhaustive] pub enum runvil::prompt::ArgType
 #[non_exhaustive] pub enum runvil::tools::OutputTrust
@@ -22,7 +21,6 @@
 #[non_exhaustive] pub enum runvil::vfs::VfsOp
 #[non_exhaustive] pub enum runvil::vfs::VfsOutcome
 #[non_exhaustive] pub enum runvil::vfs::Writability
-#[non_exhaustive] pub runvil::model::TemperatureError::OutOfRange { .. }
 #[non_exhaustive] pub struct runvil::RunLimits { .. }
 #[non_exhaustive] pub struct runvil::effect::IssuedEffect { .. }
 #[non_exhaustive] pub struct runvil::effect::PackToolSets<T> { .. }
@@ -110,7 +108,6 @@ auto runvil::model::ModelRole: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindS
 auto runvil::model::RawExchange: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::model::Role: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::model::Temperature: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
-auto runvil::model::TemperatureError: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::model::ThinkingMode: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::model::ToolArguments: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::model::ToolCall: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
@@ -213,7 +210,6 @@ derives runvil::model::ModelRole: Clone, Copy, Debug, Deserialize, Eq, Hash, Ord
 derives runvil::model::RawExchange: Clone, Debug, Eq, PartialEq
 derives runvil::model::Role: Clone, Copy, Debug, Deserialize, Eq, Hash, PartialEq, Serialize
 derives runvil::model::Temperature: Clone, Copy, Debug, Eq, PartialEq
-derives runvil::model::TemperatureError: Clone, Debug, PartialEq
 derives runvil::model::ThinkingMode: Clone, Copy, Debug, Deserialize, Eq, PartialEq
 derives runvil::model::ToolArguments: Clone, Copy, Debug
 derives runvil::model::ToolCall: Clone, Debug, Eq, PartialEq
@@ -269,7 +265,6 @@ impl core::convert::From<runvil::vfs::VfsPath> for runvil::vfs::VfsPathBuf
 impl core::error::Error for runvil::ParseError
 impl core::error::Error for runvil::error::Error
 impl core::error::Error for runvil::model::CompletionError
-impl core::error::Error for runvil::model::TemperatureError
 impl core::error::Error for runvil::tools::ToolError
 impl core::error::Error for runvil::vfs::ParsePathReasonError
 impl core::error::Error for runvil::vfs::VfsError
@@ -281,7 +276,6 @@ impl core::fmt::Display for runvil::ids::ChainId
 impl core::fmt::Display for runvil::ids::TaskId
 impl core::fmt::Display for runvil::model::CompletionError
 impl core::fmt::Display for runvil::model::Role
-impl core::fmt::Display for runvil::model::TemperatureError
 impl core::fmt::Display for runvil::packs::GlobalName
 impl core::fmt::Display for runvil::packs::PackId
 impl core::fmt::Display for runvil::prompt::ArgType
@@ -466,7 +460,7 @@ pub fn runvil::model::CompletionOptions::thinking(&self) -> core::option::Option
 pub fn runvil::model::CompletionOptions::with_invocation(self, invocation: runvil::model::ModelInvocation) -> runvil::model::CompletionOptions
 pub fn runvil::model::CompletionOptions::with_max_tokens(self, max_tokens: core::num::nonzero::NonZeroU32) -> runvil::model::CompletionOptions
 pub fn runvil::model::CompletionOptions::with_model(self, model: impl core::convert::Into<alloc::string::String>) -> runvil::model::CompletionOptions
-pub fn runvil::model::CompletionOptions::with_temperature(self, temperature: f64) -> core::result::Result<runvil::model::CompletionOptions, runvil::model::TemperatureError>
+pub fn runvil::model::CompletionOptions::with_temperature(self, temperature: f64) -> core::result::Result<runvil::model::CompletionOptions, runvil::error::Error>
 pub fn runvil::model::CompletionOptions::with_thinking(self, thinking: bool) -> runvil::model::CompletionOptions
 pub fn runvil::model::Message::assistant(content: impl core::convert::Into<alloc::string::String>) -> runvil::model::Message
 pub fn runvil::model::Message::content(&self) -> &str
@@ -509,7 +503,7 @@ pub fn runvil::model::RawExchange::request(&self) -> &serde_json::value::Value
 pub fn runvil::model::RawExchange::response(&self) -> &serde_json::value::Value
 pub fn runvil::model::Role::as_str(self) -> &'static str
 pub fn runvil::model::Temperature::get(self) -> f64
-pub fn runvil::model::Temperature::new(value: f64) -> core::result::Result<runvil::model::Temperature, runvil::model::TemperatureError>
+pub fn runvil::model::Temperature::new(value: f64) -> core::result::Result<runvil::model::Temperature, runvil::error::Error>
 pub fn runvil::model::ToolArguments::contains(&self, key: &str) -> bool
 pub fn runvil::model::ToolArguments::is_empty(&self) -> bool
 pub fn runvil::model::ToolArguments::names(&self) -> runvil::model::ArgumentNames<'_>
@@ -1171,8 +1165,6 @@ pub runvil::model::Role::Assistant
 pub runvil::model::Role::System
 pub runvil::model::Role::Tool
 pub runvil::model::Role::User
-pub runvil::model::TemperatureError::NotFinite
-pub runvil::model::TemperatureError::OutOfRange::value: f64
 pub runvil::model::ThinkingMode::Always
 pub runvil::model::ThinkingMode::Never
 pub runvil::model::ThinkingMode::Switchable

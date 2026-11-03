@@ -3,7 +3,9 @@
 
 use std::num::NonZeroU32;
 
+use runvil_types::error::{Error, ErrorCode, FactKey};
 use runvil_types::models::{ModelId, ModelInfo, ThinkingMode};
+use serde_json::Value;
 
 /// The largest sampling temperature the backend accepts.
 const TEMPERATURE_MAX: f64 = 2.0;
@@ -22,14 +24,21 @@ impl Temperature {
     /// Builds a temperature from a finite `value` within `[0.0, 2.0]`.
     ///
     /// # Errors
-    /// Returns [`TemperatureError`] when `value` is `NaN` or an infinity, or
-    /// falls outside `[0.0, 2.0]`.
-    pub fn new(value: f64) -> std::result::Result<Temperature, TemperatureError> {
+    /// Returns an [`InvalidValue`](ErrorCode::InvalidValue) error with the
+    /// reason `not_finite` when `value` is `NaN` or an infinity, or
+    /// `out_of_range` when it falls outside `[0.0, 2.0]`.
+    pub fn new(value: f64) -> std::result::Result<Temperature, Error> {
         if !value.is_finite() {
-            return Err(TemperatureError::NotFinite);
+            return Err(invalid_temperature(
+                "not_finite",
+                "temperature must be finite".to_owned(),
+            ));
         }
         if !(0.0..=TEMPERATURE_MAX).contains(&value) {
-            return Err(TemperatureError::OutOfRange { value });
+            return Err(invalid_temperature(
+                "out_of_range",
+                format!("temperature {value} is outside the supported range [0.0, 2.0]"),
+            ));
         }
         Ok(Temperature(value))
     }
@@ -41,20 +50,19 @@ impl Temperature {
     }
 }
 
-/// The reason a sampling temperature was rejected.
-#[derive(Debug, Clone, PartialEq, thiserror::Error)]
-#[non_exhaustive]
-pub enum TemperatureError {
-    /// The temperature was `NaN` or an infinity.
-    #[error("temperature must be finite")]
-    NotFinite,
-    /// The temperature fell outside the supported `[0.0, 2.0]` range.
-    #[error("temperature {value} is outside the supported range [0.0, 2.0]")]
-    #[non_exhaustive]
-    OutOfRange {
-        /// The rejected value.
-        value: f64,
-    },
+/// The error for a rejected temperature: an `InvalidValue` that names the
+/// `temperature` setting, with the broken rule as its reason.
+fn invalid_temperature(reason: &'static str, message: String) -> Error {
+    let mut error = Error::new(
+        ErrorCode::InvalidValue,
+        message,
+        "The temperature must be a finite number from 0.0 to 2.0. Use a value in that range.",
+    );
+    error
+        .facts
+        .insert(FactKey::Name, Value::from("temperature"));
+    error.facts.insert(FactKey::Reason, Value::from(reason));
+    error
 }
 
 /// The fixed request settings that a model binding applies to every completion.
@@ -271,12 +279,13 @@ impl CompletionOptions {
     /// the backend-supported range `[0.0, 2.0]`.
     ///
     /// # Errors
-    /// Returns [`TemperatureError`] when `temperature` is `NaN` or an infinity,
-    /// or falls outside `[0.0, 2.0]`, so only a valid temperature is sent.
+    /// Returns the [`InvalidValue`](ErrorCode::InvalidValue) error of
+    /// [`Temperature::new`] when `temperature` is `NaN` or an infinity, or
+    /// falls outside `[0.0, 2.0]`, so only a valid temperature is sent.
     pub fn with_temperature(
         mut self,
         temperature: f64,
-    ) -> std::result::Result<CompletionOptions, TemperatureError> {
+    ) -> std::result::Result<CompletionOptions, Error> {
         self.invocation.temperature = Some(Temperature::new(temperature)?);
         Ok(self)
     }

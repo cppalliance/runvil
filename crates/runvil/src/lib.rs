@@ -86,7 +86,6 @@ pub mod model {
     pub use runvil_model_client::model::ModelBinding;
     pub use runvil_model_client::model::ModelInvocation;
     pub use runvil_model_client::model::Temperature;
-    pub use runvil_model_client::model::TemperatureError;
     pub use runvil_types::models::ModelCatalog;
     pub use runvil_types::models::ModelId;
     pub use runvil_types::models::ModelInfo;

@@ -146,22 +146,29 @@ fn completion_options_reports_the_invocation_it_holds() {
 #[test]
 fn with_temperature_rejects_non_finite_and_out_of_range() {
     let base = || CompletionOptions::new("m");
+    let reason = |temperature: f64| {
+        let error = base()
+            .with_temperature(temperature)
+            .expect_err("the temperature must be rejected");
+        assert_eq!(error.code, ErrorCode::InvalidValue);
+        assert_eq!(
+            error.facts.get(&FactKey::Name),
+            Some(&Value::from("temperature"))
+        );
+        assert!(!error.prose.contains(&error.message), "{error:?}");
+        error.facts.get(&FactKey::Reason).cloned()
+    };
+    assert_eq!(reason(f64::NAN), Some(Value::from("not_finite")));
+    assert_eq!(reason(f64::INFINITY), Some(Value::from("not_finite")));
+    assert_eq!(reason(-0.1), Some(Value::from("out_of_range")));
+    assert_eq!(reason(2.5), Some(Value::from("out_of_range")));
     assert_eq!(
-        base().with_temperature(f64::NAN),
-        Err(TemperatureError::NotFinite)
+        base()
+            .with_temperature(2.5)
+            .expect_err("2.5 is out of range")
+            .message,
+        "temperature 2.5 is outside the supported range [0.0, 2.0]"
     );
-    assert_eq!(
-        base().with_temperature(f64::INFINITY),
-        Err(TemperatureError::NotFinite)
-    );
-    assert!(matches!(
-        base().with_temperature(-0.1),
-        Err(TemperatureError::OutOfRange { .. })
-    ));
-    assert!(matches!(
-        base().with_temperature(2.5),
-        Err(TemperatureError::OutOfRange { .. })
-    ));
     // The range endpoints and an interior value are accepted.
     assert_eq!(
         base()

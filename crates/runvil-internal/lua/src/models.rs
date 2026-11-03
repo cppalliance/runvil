@@ -14,9 +14,7 @@ use std::sync::Mutex;
 
 use mlua::{Lua, MultiValue, Table, Value};
 
-use runvil_model_client::model::{
-    ModelBinding, ModelId, ModelInvocation, ModelSet, Temperature, TemperatureError,
-};
+use runvil_model_client::model::{ModelBinding, ModelId, ModelInvocation, ModelSet, Temperature};
 use runvil_types::models::ModelRole;
 
 use crate::error::{Error, Result};
@@ -149,9 +147,12 @@ fn decode_temperature(value: &Value) -> mlua::Result<Temperature> {
         }
         other => Err(invalid_option("temperature", "a number", other.type_name())),
     }?;
-    Temperature::new(number).map_err(|error| match error {
-        TemperatureError::NotFinite => invalid_option("temperature", "finite", number),
-        other => mlua::Error::external(format!("models.use option {other}")),
+    Temperature::new(number).map_err(|error| {
+        if number.is_finite() {
+            mlua::Error::external(format!("models.use option {error}"))
+        } else {
+            invalid_option("temperature", "finite", number)
+        }
     })
 }
 
