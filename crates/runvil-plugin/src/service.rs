@@ -17,7 +17,9 @@ use std::hash::{Hash, Hasher};
 use std::marker::PhantomData;
 use std::sync::Arc;
 
+use runvil_types::error::{Error, ErrorCode, FactKey};
 use runvil_types::names::GlobalName;
+use serde_json::Value;
 
 #[cfg(test)]
 #[path = "service-tests.rs"]
@@ -157,22 +159,31 @@ impl HostServices {
     /// Adds `provider` to the map under the id of `key`.
     ///
     /// # Errors
-    /// Returns [`ServiceError::InvalidId`] when the id literal of `key`
-    /// fails to parse as a two-segment `namespace/name` id. Returns
-    /// [`ServiceError::DuplicateId`] when the map already holds a provider
-    /// under that literal, whatever the provider's type. The map stays as
-    /// it was on either error.
+    /// Returns an [`InvalidValue`](ErrorCode::InvalidValue) error that names
+    /// the literal, with the reason `invalid_id` when the id literal of `key`
+    /// fails to parse as a two-segment `namespace/name` id, and
+    /// `duplicate_id` when the map already holds a provider under that
+    /// literal, whatever the provider's type. The map stays as it was on
+    /// either error.
     pub fn provide<T: ?Sized + Send + Sync + 'static>(
         &mut self,
         key: &ServiceKey<T>,
         provider: Arc<T>,
-    ) -> Result<(), ServiceError> {
+    ) -> Result<(), Error> {
         let literal = key.id.literal;
         if GlobalName::parse(literal).is_err() || literal.matches('/').count() != 1 {
-            return Err(ServiceError::InvalidId { id: literal });
+            return Err(refusal(
+                "invalid_id",
+                format!("service id {literal} is not a namespace/name id"),
+                literal,
+            ));
         }
         if self.entries.contains_key(literal) {
-            return Err(ServiceError::DuplicateId { id: literal });
+            return Err(refusal(
+                "duplicate_id",
+                format!("a service with id {literal} is already provided"),
+                literal,
+            ));
         }
         self.insert(key, provider);
         Ok(())
@@ -222,33 +233,12 @@ impl fmt::Debug for HostServices {
     }
 }
 
-/// The error [`HostServices::provide`] returns when it refuses a provider.
-#[derive(Debug, Clone, PartialEq, Eq)]
-#[non_exhaustive]
-pub enum ServiceError {
-    /// The id literal fails to parse as a two-segment `namespace/name` id.
-    InvalidId {
-        /// The id literal that was refused.
-        id: &'static str,
-    },
-    /// The map already holds a provider under the id.
-    DuplicateId {
-        /// The id literal that already has a provider.
-        id: &'static str,
-    },
+/// The refusal of a provider: an `InvalidValue` that names the id literal,
+/// with the broken rule as its reason. Its prose is its message, which names
+/// the id and the rule.
+fn refusal(reason: &'static str, message: String, literal: &str) -> Error {
+    let mut error = Error::new(ErrorCode::InvalidValue, message.clone(), message);
+    error.facts.insert(FactKey::Name, Value::from(literal));
+    error.facts.insert(FactKey::Reason, Value::from(reason));
+    error
 }
-
-impl fmt::Display for ServiceError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            ServiceError::InvalidId { id } => {
-                write!(f, "service id {id} is not a namespace/name id")
-            }
-            ServiceError::DuplicateId { id } => {
-                write!(f, "a service with id {id} is already provided")
-            }
-        }
-    }
-}
-
-impl std::error::Error for ServiceError {}

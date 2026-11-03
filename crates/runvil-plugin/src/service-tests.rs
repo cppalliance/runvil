@@ -4,7 +4,28 @@
 use std::collections::HashSet;
 use std::sync::Arc;
 
-use super::{HostServices, ServiceError, ServiceId, ServiceKey, TOKIO_RUNTIME};
+use runvil_types::error::{Error, ErrorCode, FactKey};
+use serde_json::Value;
+
+use super::{HostServices, ServiceId, ServiceKey, TOKIO_RUNTIME};
+
+/// Asserts `error` refuses the provider under `literal` for `reason`, with
+/// its message as its prose.
+#[track_caller]
+fn assert_refused(error: &Error, reason: &str, literal: &str) {
+    assert_eq!(error.code, ErrorCode::InvalidValue, "{error:?}");
+    assert_eq!(
+        error.facts.get(&FactKey::Reason),
+        Some(&Value::from(reason)),
+        "{error:?}"
+    );
+    assert_eq!(
+        error.facts.get(&FactKey::Name),
+        Some(&Value::from(literal)),
+        "{error:?}"
+    );
+    assert_eq!(error.prose, error.message, "{error:?}");
+}
 
 /// A text service, built in a `const` as every key is.
 const GREETING: ServiceKey<str> = ServiceKey::new("acme/greeting");
@@ -59,15 +80,7 @@ fn a_second_provider_under_a_provided_id_is_refused_and_the_first_stays() {
     let error = services
         .provide(&GREETING, Arc::from("second"))
         .expect_err("a duplicate id is refused");
-    assert!(
-        matches!(
-            error,
-            ServiceError::DuplicateId {
-                id: "acme/greeting"
-            }
-        ),
-        "{error:?}"
-    );
+    assert_refused(&error, "duplicate_id", "acme/greeting");
     assert_eq!(
         error.to_string(),
         "a service with id acme/greeting is already provided"
@@ -76,15 +89,7 @@ fn a_second_provider_under_a_provided_id_is_refused_and_the_first_stays() {
     let other_type = services
         .provide(&GREETING_AS_NUMBER, Arc::new(7))
         .expect_err("a duplicate literal is refused whatever its type");
-    assert!(
-        matches!(
-            other_type,
-            ServiceError::DuplicateId {
-                id: "acme/greeting"
-            }
-        ),
-        "{other_type:?}"
-    );
+    assert_refused(&other_type, "duplicate_id", "acme/greeting");
     assert_eq!(services.get(&GREETING).as_deref(), Some("first"));
 }
 
@@ -102,10 +107,7 @@ fn an_id_outside_the_namespace_name_grammar_is_refused() {
         let error = services
             .provide(&key, Arc::from("hello"))
             .expect_err("an unparseable id is refused");
-        let ServiceError::InvalidId { id } = &error else {
-            panic!("{literal}: the refusal names an invalid id: {error:?}");
-        };
-        assert_eq!(*id, literal);
+        assert_refused(&error, "invalid_id", literal);
         assert_eq!(
             error.to_string(),
             format!("service id {literal} is not a namespace/name id")
@@ -129,10 +131,7 @@ fn a_service_id_is_a_global_name_with_exactly_one_slash() {
         let error = services
             .provide(&key, Arc::from("hello"))
             .expect_err("a literal outside the service id grammar is refused");
-        assert!(
-            matches!(&error, ServiceError::InvalidId { id, .. } if *id == literal),
-            "{literal}: {error:?}"
-        );
+        assert_refused(&error, "invalid_id", literal);
         assert!(
             std::error::Error::source(&error).is_none(),
             "{literal}: the refusal carries no Pack id parse failure: {error:?}"
