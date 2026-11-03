@@ -7,11 +7,11 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use runvil_plugin::PackRegistry;
 use runvil_plugin::abi::PluginEntry;
+use runvil_plugin::{Error, FactKey, PackRegistry};
 
 use crate::host::send_load;
-use crate::load::{Instance, LoadError, Loaded, open_entry, plugin_files};
+use crate::load::{Instance, Loaded, load_error, open_entry, plugin_files};
 
 #[cfg(test)]
 #[path = "plugin-tests.rs"]
@@ -54,26 +54,39 @@ pub fn insert_plugin_dir(packs: &mut PackRegistry, directory: &Path) -> io::Resu
                     .iter()
                     .any(|loaded| loaded.name == plugin.name) =>
             {
-                let repeat = LoadError::Duplicate(plugin.name.clone());
-                report
-                    .failures
-                    .push(PluginFailure::new(PluginSource::Library(path), &repeat));
+                let mut repeat = load_error(
+                    "duplicate",
+                    format!(
+                        "a Plugin named {} was already loaded from this directory",
+                        plugin.name
+                    ),
+                );
+                repeat
+                    .facts
+                    .insert(FactKey::Name, plugin.name.as_str().into());
+                report.failures.push(with_path(repeat, &path));
                 // It did load, so this drop sends RV_PLUGIN_UNLOAD and then
                 // closes its library, like any other Plugin's.
                 drop(plugin);
             }
             Ok(plugin) => report.plugins.push(Arc::new(plugin)),
-            Err(error) => report
-                .failures
-                .push(PluginFailure::new(PluginSource::Library(path), &error)),
+            Err(error) => report.failures.push(with_path(error, &path)),
         }
     }
     Ok(report)
 }
 
+/// `error` with the library's `path` as its `Path` fact.
+fn with_path(mut error: Error, path: &Path) -> Error {
+    error
+        .facts
+        .insert(FactKey::Path, path.display().to_string().into());
+    error
+}
+
 /// Opens the library at `path` and loads its Plugin. A failing load closes
 /// the library before this returns.
-fn load_library(path: &Path) -> Result<Plugin, LoadError> {
+fn load_library(path: &Path) -> Result<Plugin, Error> {
     let (library, entry) = open_entry(path)?;
     // SAFETY: `insert_plugin_dir`'s documentation requires every
     // `runvil_plugin` to follow the C contract and not unwind, and
@@ -93,7 +106,7 @@ unsafe fn load(
     source: PluginSource,
     entry: PluginEntry,
     library: Option<libloading::Library>,
-) -> Result<Plugin, LoadError> {
+) -> Result<Plugin, Error> {
     // SAFETY: the caller guarantees `entry` follows the C contract and does
     // not unwind.
     let (described, instance) = unsafe { send_load(entry) }?;
@@ -115,22 +128,17 @@ unsafe fn load(
 /// must not unwind.
 ///
 /// # Errors
-/// Returns the failure, with the source `Linked`, when the Plugin refuses,
-/// misuses the `RvHost` functions, or does not describe itself.
+/// Returns the `PluginLoadFailed` failure, with no `Path` fact, when the
+/// Plugin refuses, misuses the `RvHost` functions, or does not describe
+/// itself.
 #[expect(
     unused_variables,
     reason = "Plugins insert no Packs until insert_pack exists"
 )]
-pub fn insert_plugin(
-    packs: &mut PackRegistry,
-    entry: PluginEntry,
-) -> Result<Arc<Plugin>, PluginFailure> {
+pub fn insert_plugin(packs: &mut PackRegistry, entry: PluginEntry) -> Result<Arc<Plugin>, Error> {
     // SAFETY: this function's documentation requires `entry` to follow the
     // C contract and not unwind, and a linked Plugin has no library.
-    match unsafe { load(PluginSource::Linked, entry, None) } {
-        Ok(plugin) => Ok(Arc::new(plugin)),
-        Err(error) => Err(PluginFailure::new(PluginSource::Linked, &error)),
-    }
+    unsafe { load(PluginSource::Linked, entry, None) }.map(Arc::new)
 }
 
 /// What one `insert_plugin_dir` call loaded and what failed. It holds one
@@ -138,7 +146,7 @@ pub fn insert_plugin(
 #[derive(Debug)]
 pub struct PluginReport {
     plugins: Vec<Arc<Plugin>>,
-    failures: Vec<PluginFailure>,
+    failures: Vec<Error>,
 }
 
 impl PluginReport {
@@ -148,9 +156,12 @@ impl PluginReport {
         &self.plugins
     }
 
-    /// Every failure, in the order it happened.
+    /// Every failure, in the order it happened: a `PluginLoadFailed` error
+    /// whose message says why, with the library's path as its `Path` fact,
+    /// the failure's kind as its `Reason` fact, and, for a repeat, the
+    /// repeated Plugin name as its `Name` fact.
     #[must_use]
-    pub fn failures(&self) -> &[PluginFailure] {
+    pub fn failures(&self) -> &[Error] {
         &self.failures
     }
 }
@@ -208,37 +219,5 @@ impl fmt::Debug for Plugin {
             .field("version", &self.version)
             .field("source", &self.source)
             .finish_non_exhaustive()
-    }
-}
-
-/// One inserted entry point that did not open or load.
-#[derive(Debug, Clone)]
-pub struct PluginFailure {
-    source: PluginSource,
-    /// Readable, such as "RV_PLUGIN_LOAD returned without describing the
-    /// Plugin".
-    reason: String,
-}
-
-impl PluginFailure {
-    /// The failure of the entry point from `source`, with the message of
-    /// `error` as its reason.
-    fn new(source: PluginSource, error: &LoadError) -> PluginFailure {
-        PluginFailure {
-            source,
-            reason: error.to_string(),
-        }
-    }
-
-    /// Where the entry point that failed came from.
-    #[must_use]
-    pub fn source(&self) -> &PluginSource {
-        &self.source
-    }
-
-    /// Why it failed, readable.
-    #[must_use]
-    pub fn reason(&self) -> &str {
-        &self.reason
     }
 }

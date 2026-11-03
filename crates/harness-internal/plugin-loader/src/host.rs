@@ -7,13 +7,13 @@ use std::ffi::c_void;
 use std::mem::size_of;
 use std::{ptr, slice};
 
-use runvil_plugin::PackId;
 use runvil_plugin::abi::{
     PluginEntry, RV_API_MAJOR, RV_API_MINOR, RV_ERR_MISUSE, RV_ERR_REFUSED, RV_OK, RV_PLUGIN_LOAD,
     RV_PLUGIN_UNLOAD, RvCall, RvHost, RvPluginInfo, RvStatus, RvStr,
 };
+use runvil_plugin::{Error, PackId};
 
-use crate::load::LoadError;
+use crate::load::load_error;
 
 #[cfg(test)]
 #[path = "host-tests.rs"]
@@ -271,7 +271,7 @@ unsafe fn describe(session: &mut Session, info: *const RvPluginInfo) -> Result<(
 /// # Safety
 /// `entry` must follow the C contract in `runvil_plugin::abi`, and must
 /// not unwind.
-pub(crate) unsafe fn send_load(entry: PluginEntry) -> Result<(Described, *mut c_void), LoadError> {
+pub(crate) unsafe fn send_load(entry: PluginEntry) -> Result<(Described, *mut c_void), Error> {
     let mut call = RvCall {
         size: size_field::<RvCall>(),
         verb: RV_PLUGIN_LOAD,
@@ -291,17 +291,29 @@ pub(crate) unsafe fn send_load(entry: PluginEntry) -> Result<(Described, *mut c_
     // swap returns the session opened above.
     let session = SESSION.with(|cell| cell.replace(outer));
     if let Some(reason) = session.refusal {
-        return Err(LoadError::Refused(reason));
+        return Err(load_error(
+            "refused",
+            format!("the Plugin refused: {reason}"),
+        ));
     }
     if let Some(reason) = session.misuse {
-        return Err(LoadError::Misuse(reason));
+        return Err(load_error(
+            "misuse",
+            format!("the Plugin misused the RvHost table: {reason}"),
+        ));
     }
     if status != RV_OK {
-        return Err(LoadError::Status(status));
+        return Err(load_error(
+            "status",
+            format!("RV_PLUGIN_LOAD returned status {status}"),
+        ));
     }
     match session.described {
         Some(described) => Ok((described, call.plugin)),
-        None => Err(LoadError::Undescribed),
+        None => Err(load_error(
+            "undescribed",
+            "RV_PLUGIN_LOAD returned without describing the Plugin".to_owned(),
+        )),
     }
 }
 

@@ -6,7 +6,8 @@ use std::ffi::{OsStr, c_void};
 use std::io;
 use std::path::{Path, PathBuf};
 
-use runvil_plugin::abi::{PluginEntry, RvStatus};
+use runvil_plugin::abi::PluginEntry;
+use runvil_plugin::{Error, ErrorCode, FactKey};
 
 use crate::host::send_unload;
 
@@ -114,13 +115,18 @@ fn open_error(error: libloading::Error) -> io::Error {
 /// Opens the library at `path` and resolves `ENTRY_POINT`. The entry point
 /// is valid only while the returned library stays open. When the symbol is
 /// missing, the library closes before this returns.
-pub(crate) fn open_entry(path: &Path) -> Result<(libloading::Library, PluginEntry), LoadError> {
-    let library = open_library(path).map_err(LoadError::Open)?;
+pub(crate) fn open_entry(path: &Path) -> Result<(libloading::Library, PluginEntry), Error> {
+    let library = open_library(path)
+        .map_err(|error| load_error("open", format!("the library could not be opened: {error}")))?;
     let entry = {
         // SAFETY: the C contract gives `runvil_plugin` the shape of
         // `PluginEntry`, and `ENTRY_POINT` ends in NUL.
-        let symbol =
-            unsafe { library.get::<PluginEntry>(ENTRY_POINT) }.map_err(LoadError::MissingEntry)?;
+        let symbol = unsafe { library.get::<PluginEntry>(ENTRY_POINT) }.map_err(|error| {
+            load_error(
+                "missing_entry",
+                format!("runvil_plugin is missing: {error}"),
+            )
+        })?;
         *symbol
     };
     Ok((library, entry))
@@ -177,21 +183,12 @@ impl Loaded {
     }
 }
 
-/// Why one Plugin did not load; its message becomes the failure's reason.
-#[derive(Debug, thiserror::Error)]
-pub(crate) enum LoadError {
-    #[error("the library could not be opened: {0}")]
-    Open(io::Error),
-    #[error("runvil_plugin is missing: {0}")]
-    MissingEntry(libloading::Error),
-    #[error("the Plugin refused: {0}")]
-    Refused(String),
-    #[error("the Plugin misused the RvHost table: {0}")]
-    Misuse(&'static str),
-    #[error("RV_PLUGIN_LOAD returned status {0}")]
-    Status(RvStatus),
-    #[error("RV_PLUGIN_LOAD returned without describing the Plugin")]
-    Undescribed,
-    #[error("a Plugin named {0} was already loaded from this directory")]
-    Duplicate(String),
+/// Why one Plugin did not load: a `PluginLoadFailed` error with `message`
+/// and the `Reason` fact `reason`, one of `open`, `missing_entry`,
+/// `refused`, `misuse`, `status`, `undescribed`, or `duplicate`.
+pub(crate) fn load_error(reason: &str, message: String) -> Error {
+    let code = ErrorCode::PluginLoadFailed;
+    let mut error = Error::new(code, message, code.prose());
+    error.facts.insert(FactKey::Reason, reason.into());
+    error
 }

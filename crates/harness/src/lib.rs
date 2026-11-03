@@ -49,7 +49,6 @@ pub mod plugin {
     //! loaded.
 
     pub use harness_plugin_loader::Plugin;
-    pub use harness_plugin_loader::PluginFailure;
     pub use harness_plugin_loader::PluginReport;
     pub use harness_plugin_loader::PluginSource;
     pub use harness_plugin_loader::insert_plugin;

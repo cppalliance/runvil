@@ -31,6 +31,4 @@ mod host;
 mod load;
 mod plugin;
 
-pub use plugin::{
-    Plugin, PluginFailure, PluginReport, PluginSource, insert_plugin, insert_plugin_dir,
-};
+pub use plugin::{Plugin, PluginReport, PluginSource, insert_plugin, insert_plugin_dir};

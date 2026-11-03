@@ -6,16 +6,15 @@ use std::cell::RefCell;
 use std::sync::atomic::Ordering;
 use std::sync::{Arc, Mutex};
 
-use runvil_plugin::PackRegistry;
+use runvil_plugin::{ErrorCode, FactKey, PackRegistry};
 
 use crate::fakes::*;
-use crate::plugin::{Plugin, PluginFailure, PluginSource, insert_plugin};
+use crate::plugin::{Plugin, PluginSource, insert_plugin};
 
-/// A Plugin and a failure may cross threads, and a Plugin may be shared.
+/// A Plugin may cross threads and be shared.
 const _: () = {
     const fn send_and_sync<T: Send + Sync>() {}
     send_and_sync::<Plugin>();
-    send_and_sync::<PluginFailure>();
 };
 
 #[test]
@@ -48,18 +47,30 @@ fn a_load_that_returns_ok_without_describing_fails() {
     fake!(plug, |_call| RV_OK);
     let failure = failure(plug::entry);
     assert_eq!(
-        failure.reason(),
+        failure.message,
         "RV_PLUGIN_LOAD returned without describing the Plugin"
     );
-    assert_eq!(failure.source(), &PluginSource::Linked);
+    assert_eq!(reason(&failure), Some("undescribed"));
+    assert_eq!(
+        failure.facts.get(&FactKey::Path),
+        None,
+        "a linked Plugin has no path"
+    );
 }
 
 #[test]
 fn a_refusal_fails_with_its_reason() {
     fake!(plug, |call| refuse(call, "needs a license key"));
     let failure = failure(plug::entry);
-    assert_eq!(failure.reason(), "the Plugin refused: needs a license key");
-    assert_eq!(failure.source(), &PluginSource::Linked);
+    assert_eq!(failure.code, ErrorCode::PluginLoadFailed);
+    assert_eq!(failure.message, "the Plugin refused: needs a license key");
+    assert_eq!(failure.prose, ErrorCode::PluginLoadFailed.prose());
+    assert_eq!(reason(&failure), Some("refused"));
+    assert_eq!(
+        failure.facts.get(&FactKey::Path),
+        None,
+        "a linked Plugin has no path"
+    );
 }
 
 #[test]
@@ -70,7 +81,7 @@ fn a_refusal_wins_over_a_description_and_an_ok_status() {
         RV_OK
     });
     assert_eq!(
-        failure(plug::entry).reason(),
+        failure(plug::entry).message,
         "the Plugin refused: changed my mind"
     );
 }
@@ -82,16 +93,15 @@ fn a_refusal_before_the_description_still_wins() {
         describe(call, "acme-url", "1.0.0");
         RV_OK
     });
-    assert_eq!(failure(plug::entry).reason(), "the Plugin refused: first");
+    assert_eq!(failure(plug::entry).message, "the Plugin refused: first");
 }
 
 #[test]
 fn a_non_ok_status_alone_reports_the_status() {
     fake!(plug, |_call| ODD_STATUS);
-    assert_eq!(
-        failure(plug::entry).reason(),
-        "RV_PLUGIN_LOAD returned status 77"
-    );
+    let failure = failure(plug::entry);
+    assert_eq!(failure.message, "RV_PLUGIN_LOAD returned status 77");
+    assert_eq!(reason(&failure), Some("status"));
 }
 
 #[test]
@@ -101,7 +111,7 @@ fn a_non_ok_status_fails_a_load_that_described_itself() {
         ODD_STATUS
     });
     assert_eq!(
-        failure(plug::entry).reason(),
+        failure(plug::entry).message,
         "RV_PLUGIN_LOAD returned status 77"
     );
 }

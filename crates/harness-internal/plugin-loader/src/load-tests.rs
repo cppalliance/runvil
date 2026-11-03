@@ -252,13 +252,14 @@ fn system_library() -> PathBuf {
 ))]
 #[test]
 fn a_library_without_runvil_plugin_fails_as_a_missing_entry_point() {
-    use crate::load::{LoadError, open_entry};
+    use crate::fakes::reason;
+    use crate::load::open_entry;
 
     let error = open_entry(&system_library())
         .expect_err("a library with no `runvil_plugin` does not open as a Plugin");
-    assert!(matches!(error, LoadError::MissingEntry(_)), "{error:?}");
+    assert_eq!(reason(&error), Some("missing_entry"), "{error:?}");
     assert!(
-        error.to_string().starts_with("runvil_plugin is missing: "),
+        error.message.starts_with("runvil_plugin is missing: "),
         "{error}"
     );
 }

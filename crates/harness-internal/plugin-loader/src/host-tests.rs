@@ -40,7 +40,8 @@ macro_rules! misuse_test {
                 }
             );
             let failure = failure(plug::entry);
-            assert_eq!(failure.reason(), misuse_reason!($detail));
+            assert_eq!(failure.message, misuse_reason!($detail));
+            assert_eq!(reason(&failure), Some("misuse"));
             assert_eq!(plug::SEEN.load(Ordering::SeqCst), RV_ERR_MISUSE as usize);
             assert_eq!(plug::UNLOADS.load(Ordering::SeqCst), 0);
         }
@@ -261,7 +262,7 @@ fn a_refusal_reason_of_exactly_1024_bytes_is_accepted() {
     fake!(plug, |call| refuse(call, &"r".repeat(1024)));
     let failure = failure(plug::entry);
     assert_eq!(
-        failure.reason(),
+        failure.message,
         format!("the Plugin refused: {}", "r".repeat(1024))
     );
 }
@@ -286,7 +287,7 @@ fn a_refusal_with_no_reason_is_accepted() {
         }
     );
     let failure = failure(plug::entry);
-    assert_eq!(failure.reason(), "the Plugin refused: ");
+    assert_eq!(failure.message, "the Plugin refused: ");
     assert_eq!(plug::SEEN.load(Ordering::SeqCst), RV_ERR_REFUSED as usize);
 }
 
@@ -305,7 +306,7 @@ fn a_second_refusal_is_misuse_and_the_first_is_reported() {
         }
     );
     let failure = failure(plug::entry);
-    assert_eq!(failure.reason(), "the Plugin refused: first");
+    assert_eq!(failure.message, "the Plugin refused: first");
     assert_eq!(plug::SEEN.load(Ordering::SeqCst), RV_ERR_MISUSE as usize);
 }
 
@@ -316,7 +317,7 @@ fn a_refusal_wins_over_a_misuse_made_before_it() {
         refuse(call, "no thanks")
     });
     assert_eq!(
-        failure(plug::entry).reason(),
+        failure(plug::entry).message,
         "the Plugin refused: no thanks"
     );
 }
@@ -327,7 +328,7 @@ fn a_misuse_followed_by_a_non_ok_status_reports_the_misuse() {
         describe(call, "", "1.0.0");
         ODD_STATUS
     });
-    assert_eq!(failure(plug::entry).reason(), misuse_reason!(bad_name!()));
+    assert_eq!(failure(plug::entry).message, misuse_reason!(bad_name!()));
 }
 
 #[test]
@@ -344,7 +345,7 @@ fn a_misuse_is_reported_even_when_a_good_description_follows() {
         }
     );
     let failure = failure(plug::entry);
-    assert_eq!(failure.reason(), misuse_reason!(bad_name!()));
+    assert_eq!(failure.message, misuse_reason!(bad_name!()));
     assert_eq!(plug::SEEN.load(Ordering::SeqCst), RV_ERR_MISUSE as usize);
 }
 

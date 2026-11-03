@@ -7,7 +7,7 @@ use std::io;
 use std::path::Path;
 
 use harness_plugin_loader::{PluginReport, PluginSource, insert_plugin_dir};
-use runvil_plugin::PackRegistry;
+use runvil_plugin::{Error, FactKey, PackRegistry};
 
 use crate::support::{copy_fixture, remove, scratch};
 
@@ -19,6 +19,19 @@ fn insert(dir: &Path) -> PluginReport {
 /// The path `std::path::absolute` makes of `path`, as a library source.
 fn library_source(path: &Path) -> PluginSource {
     PluginSource::Library(std::path::absolute(path).expect("the working directory is known"))
+}
+
+/// The fact `key` of a load failure, as text.
+fn fact(failure: &Error, key: FactKey) -> Option<&str> {
+    failure.facts.get(&key)?.as_str()
+}
+
+/// The `Path` fact a failure of the library at `path` holds.
+fn library_path(path: &Path) -> String {
+    std::path::absolute(path)
+        .expect("the working directory is known")
+        .display()
+        .to_string()
 }
 
 #[test]
@@ -71,7 +84,8 @@ fn a_garbage_library_fails_at_insert_and_the_fixture_beside_it_still_loads() {
     let [failure] = report.failures() else {
         panic!("one file fails, got {:?}", report.failures());
     };
-    let reason = failure.reason();
+    let reason = &failure.message;
+    assert_eq!(fact(failure, FactKey::Reason), Some("open"));
     let cause = reason
         .strip_prefix("the library could not be opened: ")
         .unwrap_or_else(|| panic!("the reason starts with the open failure: {reason}"));
@@ -86,7 +100,10 @@ fn a_garbage_library_fails_at_insert_and_the_fixture_beside_it_still_loads() {
     );
     #[cfg(not(windows))]
     assert!(!cause.is_empty(), "{reason}");
-    assert_eq!(failure.source(), &library_source(&garbage));
+    assert_eq!(
+        fact(failure, FactKey::Path),
+        Some(library_path(&garbage).as_str())
+    );
     let [plugin] = report.plugins() else {
         panic!("the fixture loads, got {:?}", report.plugins());
     };
@@ -122,10 +139,15 @@ fn a_second_copy_with_the_same_plugin_name_fails_as_a_duplicate() {
         panic!("the repeat fails, got {:?}", report.failures());
     };
     assert_eq!(
-        failure.reason(),
+        failure.message,
         "a Plugin named test-plugin was already loaded from this directory"
     );
-    assert_eq!(failure.source(), &library_source(&second));
+    assert_eq!(fact(failure, FactKey::Reason), Some("duplicate"));
+    assert_eq!(fact(failure, FactKey::Name), Some("test-plugin"));
+    assert_eq!(
+        fact(failure, FactKey::Path),
+        Some(library_path(&second).as_str())
+    );
     drop(report);
     remove(&dir);
 }

@@ -7,14 +7,14 @@ use std::ffi::c_void;
 use std::ptr;
 use std::sync::Arc;
 
-use runvil_plugin::PackRegistry;
 pub(crate) use runvil_plugin::abi::{
     PluginEntry, RV_ERR_MISUSE, RV_ERR_REFUSED, RV_ERR_UNSUPPORTED, RV_OK, RV_PLUGIN_LOAD,
     RV_PLUGIN_UNLOAD, RvCall, RvHost, RvPluginInfo, RvStatus, RvStr, RvVerb,
 };
+use runvil_plugin::{Error, PackRegistry};
 
 use crate::host::HOST;
-use crate::plugin::{Plugin, PluginFailure, insert_plugin};
+use crate::plugin::{Plugin, insert_plugin};
 
 /// A status no verb returns, for a fake that fails with its own code.
 pub(crate) const ODD_STATUS: RvStatus = 77;
@@ -77,7 +77,7 @@ macro_rules! fake {
 pub(crate) use fake;
 
 /// Inserts the linked Plugin `entry` into a fresh Pack registry.
-pub(crate) fn insert(entry: PluginEntry) -> Result<Arc<Plugin>, PluginFailure> {
+pub(crate) fn insert(entry: PluginEntry) -> Result<Arc<Plugin>, Error> {
     insert_plugin(&mut PackRegistry::new(), entry)
 }
 
@@ -87,8 +87,13 @@ pub(crate) fn loaded(entry: PluginEntry) -> Arc<Plugin> {
 }
 
 /// Inserts `entry`, which must fail to load.
-pub(crate) fn failure(entry: PluginEntry) -> PluginFailure {
+pub(crate) fn failure(entry: PluginEntry) -> Error {
     insert(entry).expect_err("the Plugin fails to load")
+}
+
+/// The `Reason` fact of a load failure.
+pub(crate) fn reason(failure: &Error) -> Option<&str> {
+    failure.facts.get(&runvil_plugin::FactKey::Reason)?.as_str()
 }
 
 /// Whether `call` carries the fields the contract gives a call that sends
