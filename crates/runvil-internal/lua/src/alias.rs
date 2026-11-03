@@ -3,7 +3,7 @@
 
 use runvil_types::names::is_alias;
 
-use crate::error::{Error, Result};
+use crate::error::{Result, lua_runtime};
 
 /// A prompt-local alias that passed the supported wire grammar.
 ///
@@ -15,14 +15,14 @@ impl Alias {
     /// Validates `alias` against the wire grammar and wraps it.
     ///
     /// # Errors
-    /// Returns [`Error::Lua`] when `alias` is empty, exceeds 64 bytes, starts
+    /// Returns a `LuaRuntime` failure when `alias` is empty, exceeds 64 bytes, starts
     /// with a non-letter, or contains a character other than a letter,
     /// digit, `_`, or `-` after its first byte.
     pub(crate) fn parse(alias: String) -> Result<Alias> {
         if is_alias(&alias) {
             Ok(Alias(alias))
         } else {
-            Err(Error::Lua(format!(
+            Err(lua_runtime(format!(
                 "invalid alias {alias:?}: expected [A-Za-z][A-Za-z0-9_-]{{0,63}}"
             )))
         }

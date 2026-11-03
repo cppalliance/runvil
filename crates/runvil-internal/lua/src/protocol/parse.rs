@@ -22,7 +22,7 @@ use tasks::{
 };
 use tools::{parse_adhoc_tool_done, parse_tool_call, parse_tool_calls};
 
-use crate::error::Error;
+use crate::error::{self, Error, lua_runtime};
 use crate::models::LuaModelHandle;
 use crate::section::resolve_section_target;
 
@@ -38,7 +38,7 @@ const DIRECT_YIELD: &str = "scripts may not yield directly";
 
 /// The fixed direct-yield failure.
 fn direct_yield_error() -> Error {
-    Error::Lua(DIRECT_YIELD.to_owned())
+    lua_runtime(DIRECT_YIELD)
 }
 
 /// How reading one request field failed.
@@ -54,7 +54,7 @@ enum FieldFailure {
 
 /// Frames one author-argument failure as the call's error.
 fn call_error(message: String) -> FieldFailure {
-    FieldFailure::Argument(Error::Lua(message))
+    FieldFailure::Argument(lua_runtime(message))
 }
 
 /// Reads one author-supplied string value as UTF-8 text; invalid UTF-8 is
@@ -149,7 +149,7 @@ fn shim_var(
 fn call_target(table: &mlua::Table) -> std::result::Result<String, FieldFailure> {
     match table.raw_get::<Value>("target") {
         Ok(value) => {
-            resolve_section_target(value).map_err(|error| FieldFailure::Argument(Error::lua(error)))
+            resolve_section_target(value).map_err(|error| FieldFailure::Argument(error::lua(error)))
         }
         Err(_) => Err(FieldFailure::Malformed),
     }

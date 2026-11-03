@@ -11,7 +11,7 @@
 //! `messages` list in place; the loop then checks that the list shrank and
 //! retries the round. The shipped [`Compactor`] policies are
 //! `compactors.fail`, the omitted-compactor default, which always raises
-//! typed context exhaustion ([`Error::ContextExhausted`]), and
+//! typed context exhaustion (a `ContextExhausted` failure), and
 //! `compactors.clear`, which removes every record and works only inside a
 //! compactor.
 //!
@@ -29,7 +29,7 @@ use runvil_model_client::detail::{message_content_value, message_raw_tool_calls}
 use runvil_types::metrics::Usage;
 use serde_json::Value;
 
-use crate::error::{Error, Result};
+use crate::error::{self, Result, context_exhausted, lua_runtime};
 use crate::messages::MessageList;
 
 /// Why a request cannot fit the model's context window.
@@ -99,7 +99,7 @@ pub fn exhaustion_detail(reason: &str) -> Cow<'_, str> {
 /// the loop reads when the compactor argument is omitted.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Compactor {
-    /// `compactors.fail`: always raises [`Error::ContextExhausted`].
+    /// `compactors.fail`: always raises a `ContextExhausted` failure.
     Fail,
     /// `compactors.clear`: removes every record from the list, leaving its
     /// last send and its frozen sets. It works only inside a compactor.
@@ -111,15 +111,13 @@ impl Compactor {
     /// caller's own.
     ///
     /// # Errors
-    /// `Fail` always returns [`Error::ContextExhausted`] holding `reason`;
-    /// `Clear` returns [`Error::Lua`] when no compactor is running over
-    /// `list`, and leaves it unchanged.
+    /// `Fail` always returns a `ContextExhausted` failure holding `reason`;
+    /// `Clear` returns a `LuaRuntime` failure when no compactor is running
+    /// over `list`, and leaves it unchanged.
     pub(crate) fn invoke(self, list: &MessageList, reason: &str) -> Result<()> {
         match self {
-            Compactor::Fail => Err(Error::ContextExhausted {
-                reason: reason.to_owned(),
-            }),
-            Compactor::Clear if !list.compacting() => Err(Error::Lua(
+            Compactor::Fail => Err(context_exhausted(reason)),
+            Compactor::Clear if !list.compacting() => Err(lua_runtime(
                 "compactors.clear works only inside a compactor; empty messages with \
                  models.compact(compactors.clear, reason)"
                     .to_owned(),
@@ -283,7 +281,7 @@ fn message_chars(message: &Message) -> u64 {
 /// Each policy is a Rust-backed function taking one reason string, the
 /// overflow's tag or the caller's own. `compactors.fail` raises typed
 /// context exhaustion holding that reason as an external error, so
-/// the [`Error::ContextExhausted`] value crosses the Lua boundary
+/// the `ContextExhausted` failure crosses the Lua boundary
 /// downcastable rather than flattened to text. The loop, which calls the
 /// selected compactor on an overflow round, normalizes that raise into
 /// the structured error table before re-raising it, so the kind reaches
@@ -294,21 +292,21 @@ fn message_chars(message: &Message) -> u64 {
 /// section's `messages` list.
 ///
 /// # Errors
-/// Returns [`Error::LuaRuntime`] if a function or the global install fails.
+/// Returns a `LuaRuntime` failure if a function or the global install fails.
 pub(crate) fn install_compactors(lua: &Lua, globals: &Table, list: &MessageList) -> Result<()> {
-    let compactors = lua.create_table().map_err(Error::lua)?;
+    let compactors = lua.create_table().map_err(error::lua)?;
     for (name, policy) in [("fail", Compactor::Fail), ("clear", Compactor::Clear)] {
         let list = list.clone();
         let function: Function = lua
             .create_function(move |_lua, reason: String| {
                 policy.invoke(&list, &reason).map_err(mlua::Error::external)
             })
-            .map_err(Error::lua)?;
-        compactors.raw_set(name, function).map_err(Error::lua)?;
+            .map_err(error::lua)?;
+        compactors.raw_set(name, function).map_err(error::lua)?;
     }
     globals
         .raw_set("compactors", compactors)
-        .map_err(Error::lua)
+        .map_err(error::lua)
 }
 
 #[cfg(test)]

@@ -59,6 +59,29 @@ pub(crate) use recording::forward;
 #[cfg(test)]
 pub(crate) use tools::FnTool;
 
+/// The author prose of a failure with `code` whose own text is `what`,
+/// raised by a section of a prompt that came from no file, which is what
+/// `tostring` gives for it once a `pcall` caught it.
+#[cfg(test)]
+pub(crate) fn authored(code: ErrorCode, what: &str) -> String {
+    format!("prompt: {what}. {}", code.prose())
+}
+
+/// [`authored`] for a `LuaRuntime` refusal: what a caught refusal's
+/// `tostring` gives.
+#[cfg(test)]
+pub(crate) fn refused(what: &str) -> String {
+    authored(ErrorCode::LuaRuntime, what)
+}
+
+/// `error` as it crossed into a section's Lua, of a prompt that came from
+/// no file: with the [`authored`] prose of its message.
+#[cfg(test)]
+pub(crate) fn with_author_prose(mut error: crate::Error) -> crate::Error {
+    error.prose = authored(error.code, &error.message);
+    error
+}
+
 /// A fresh default handle's access capability, for tests that inject Engine
 /// values into a standalone VM.
 #[cfg(test)]

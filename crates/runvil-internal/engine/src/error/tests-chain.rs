@@ -42,7 +42,6 @@ fn a_requirements_refusal_appends_its_cause_once_after_the_notice() {
             format!("{notice}: assertion failed")
         )
     );
-    assert_eq!(error_table_message(&error), error.message);
 }
 
 #[test]
@@ -88,48 +87,54 @@ fn a_model_failure_holds_its_cause_in_the_run_message_and_not_in_its_table() {
     );
     assert_eq!(error_kind(&error), ErrorKind::ModelFailure);
     assert_eq!(
-        error_table_message(&error),
-        "the connection to the model backend failed"
+        error.prose, "the connection to the model backend failed",
+        "the table's message, the prose, holds no cause"
     );
 }
 
 #[test]
 fn the_lua_crates_failures_end_a_run_with_the_kind_and_text_they_always_had() {
-    use runvil_lua::{Error as LuaError, ErrorField, Raised};
-
     let site = std::panic::Location::caller();
+    let emitter = crate::test_support::recording::null_emitter();
+    let compiled = runvil_lua::LuaProgram::compile(
+        "x =",
+        "prompt",
+        "section `S` prologue",
+        NonZeroU32::new(7).expect("7 is non-zero"),
+        &emitter,
+        "S",
+    )
+    .expect_err("the block must not compile");
     let tool = runvil_types::tools::tool_error(ErrorCode::ToolBackend, "the backend refused");
-    let table = |kind, message: &str, fields: &[(&str, &str)]| {
-        LuaError::Raised(Raised {
-            kind,
-            message: message.to_owned(),
-            fields: fields
-                .iter()
-                .map(|(name, value)| ((*name).to_owned(), ErrorField::String((*value).to_owned())))
-                .collect(),
-        })
-    };
+    let info = runvil_types::tools::ToolInfo::new(
+        runvil_types::tools::ToolId::parse("tools/echo").expect("a valid tool id"),
+        "echo tool",
+        serde_json::json!({ "type": "object" }),
+    );
+    let dispatched = runvil_lua::prepare_dispatch(
+        &crate::lua::ToolBinding::from_info("echo", &info),
+        None,
+        Err(tool),
+        &runvil_types::untrusted::GuardNonce::from_seed(&crate::test_support::scenario::TEST_SEED),
+        &emitter,
+        "S",
+        crate::lua::ScriptReport { turn: 0 },
+    )
+    .expect_err("the tool's failure fails the dispatch");
+    let mut not_found = runvil_lua::store_error(&VfsError::NotFound {
+        path: "a.md".to_owned(),
+    });
+    "not found: a.md".clone_into(&mut not_found.message);
     for (failure, kind, message) in [
         (
-            LuaError::LuaCompile {
-                location: "section `S` prologue".to_owned(),
-                source_line: 7,
-                lua_source: "x =".to_owned(),
-                message: "syntax error near '='".to_owned(),
-                cause: Box::new(mlua::Error::SyntaxError {
-                    message: "syntax error near '='".to_owned(),
-                    incomplete_input: false,
-                }),
-            },
+            compiled,
             RunErrorKind::Lua,
-            "lua compilation error at section `S` prologue (line 7): syntax error near '='"
+            "lua compilation error at section `S` prologue (line 7): syntax error: \
+             [string \"line 7\"]:1: unexpected symbol near <eof>"
                 .to_owned(),
         ),
         (
-            LuaError::Internal {
-                message: "a test invariant".into(),
-                location: site,
-            },
+            runvil_lua::internal_at("a test invariant", site),
             RunErrorKind::Internal,
             format!(
                 "internal invariant violated: a test invariant (at {}:{})",
@@ -138,49 +143,32 @@ fn the_lua_crates_failures_end_a_run_with_the_kind_and_text_they_always_had() {
             ),
         ),
         (
-            LuaError::Tool {
-                message: tool.prose.clone(),
-                cause: Box::new(tool),
-            },
+            dispatched,
             RunErrorKind::Tool,
             "tool call failure: the backend refused".to_owned(),
         ),
         (
-            LuaError::LuaQuota {
-                resource: QuotaResource::LogEvent,
-            },
+            lua_quota(QuotaResource::LogEvent),
             RunErrorKind::Quota,
             "lua log event quota exceeded".to_owned(),
         ),
         (
-            table(
-                ErrorKind::Cancelled,
-                "task `0.1` was cancelled",
-                &[("task", "0.1")],
-            ),
+            task_cancelled(&"0.1".parse().expect("the test task id parses")),
             RunErrorKind::Lua,
             "task `0.1` was cancelled".to_owned(),
         ),
-        (
-            table(
-                ErrorKind::Store,
-                "not found: a.md",
-                &[("reason", "not_found"), ("path", "a.md")],
-            ),
-            RunErrorKind::Vfs,
-            "not found: a.md".to_owned(),
-        ),
+        (not_found, RunErrorKind::Vfs, "not found: a.md".to_owned()),
     ] {
-        assert_eq!(failed(&into_universal(failure)), (kind, message));
+        assert_eq!(failed(&failure), (kind, message));
     }
     assert_eq!(
-        crate::execute::outcome(&into_universal(table(ErrorKind::Cancelled, "x", &[]))),
+        crate::execute::outcome(&interrupted()),
         RunOutcome::Failed {
             kind: RunErrorKind::Internal,
             message: interrupted().message,
         },
-        "a cancelled table with no task is an interruption, which the scheduler ends as \
-         cancelled before it reaches a failed outcome"
+        "an interruption, which the scheduler ends as cancelled before it reaches a failed \
+         outcome"
     );
 }
 

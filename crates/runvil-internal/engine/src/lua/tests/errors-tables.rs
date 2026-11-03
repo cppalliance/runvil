@@ -9,7 +9,7 @@ use runvil_types::ids::TaskId;
 use crate::lua::{CoroStep, LuaBlockResult};
 use crate::model::ModelSet;
 
-use super::super::{compile_block, scheduler_vm};
+use super::super::{TEST_FILE, compile_block, scheduler_vm};
 
 /// What a block's `pcall` of `models.infer` sees when the Engine answers
 /// the round with `error`: the table's `kind`, the fields `fields` names,
@@ -48,22 +48,34 @@ fn task(path: &str) -> TaskId {
 #[test]
 fn an_engine_failure_answered_through_the_envelope_is_the_table_its_code_names() {
     assert_eq!(
-        caught_engine_failure(crate::error::task_cancelled(&task("0.1")), &["task"]),
-        "cancelled|0.1|task `0.1` was cancelled"
+        caught_engine_failure(
+            crate::error::task_cancelled(&task("0.1")),
+            &["code", "task"]
+        ),
+        format!(
+            "cancelled|task_cancelled|0.1|{}",
+            ErrorCode::TaskCancelled.prose()
+        )
+    );
+    let leaked = crate::error::tasks_live(&[task("0.1"), task("0.2")]);
+    let leaked_prose = format!(
+        "{TEST_FILE}: {}. {}",
+        leaked.message,
+        ErrorCode::TasksLive.prose()
+    );
+    assert_eq!(
+        caught_engine_failure(leaked, &["code", "tasks"]),
+        format!("tasks_live|tasks_live|0.1, 0.2|{leaked_prose}"),
+        "a leak the prompt's Lua caused gets its author prose"
     );
     assert_eq!(
         caught_engine_failure(
-            crate::error::tasks_live(&[task("0.1"), task("0.2")]),
-            &["tasks"]
+            crate::error::context_exhausted("precheck"),
+            &["code", "reason"]
         ),
-        "tasks_live|0.1, 0.2|chain ended with tasks still live: 0.1, 0.2; wait on or cancel \
-         every task a chain spawns before it ends"
-    );
-    assert_eq!(
-        caught_engine_failure(crate::error::context_exhausted("precheck"), &["reason"]),
         format!(
-            "context_exhausted|precheck|context exhausted: {}",
-            runvil_lua::exhaustion_detail("precheck")
+            "context_exhausted|context_exhausted|precheck|{}",
+            ErrorCode::ContextExhausted.prose()
         )
     );
     let anchor = runvil_vfs::VfsError::Anchor {
@@ -79,12 +91,13 @@ fn an_engine_failure_answered_through_the_envelope_is_the_table_its_code_names()
     assert_eq!(
         caught_engine_failure(
             crate::error::store_op(&op, &anchor),
-            &["reason", "path", "anchor", "count", "rule"]
+            &["code", "reason", "path", "anchor", "count", "rule"]
         ),
         format!(
-            "store|anchor|notes.md|TODO|2|nil|{}",
-            crate::lua::store_error_message(&op, &anchor)
-        )
+            "store|anchor|anchor|notes.md|TODO|2|nil|{}",
+            ErrorCode::Anchor.prose()
+        ),
+        "a store answer keeps its remedy prose"
     );
     let mut empty = crate::model::completion_error(
         ErrorCode::EmptyReply,
@@ -95,7 +108,7 @@ fn an_engine_failure_answered_through_the_envelope_is_the_table_its_code_names()
         .facts
         .insert(FactKey::FinishReason, serde_json::Value::from("length"));
     assert_eq!(
-        caught_engine_failure(empty, &["finish_reason"]),
-        "empty_model_reply|length|the model replied with no text and no tool calls"
+        caught_engine_failure(empty, &["code", "finish_reason"]),
+        "empty_model_reply|empty_reply|length|the model replied with no text and no tool calls"
     );
 }

@@ -18,7 +18,7 @@ use runvil_types::tools::ToolId;
 use super::refuse_after_render;
 use super::userdata::LuaToolHandle;
 use crate::bindings::{RosterEntry, ToolSet, wire_name_of};
-use crate::error::{Error, Result};
+use crate::error::{self, Result};
 use crate::messages::MessageList;
 use crate::packs::{LuaPackHandle, is_adhoc, pack_object};
 use crate::proxy::key_text;
@@ -41,7 +41,7 @@ pub(super) struct Offering {
 /// `mode`.
 ///
 /// # Errors
-/// Returns [`Error::LuaRuntime`] if the function cannot be created or
+/// Returns a `LuaRuntime` failure if the function cannot be created or
 /// installed.
 pub(super) fn install_offer(
     lua: &Lua,
@@ -68,8 +68,8 @@ pub(super) fn install_offer(
             }
             Ok(())
         })
-        .map_err(Error::lua)?;
-    tools.set(key, offer).map_err(Error::lua)
+        .map_err(error::lua)?;
+    tools.set(key, offer).map_err(error::lua)
 }
 
 impl Offering {

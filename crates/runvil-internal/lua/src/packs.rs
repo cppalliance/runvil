@@ -27,7 +27,7 @@ use runvil_types::packs::PackId;
 use runvil_types::tools::ToolId;
 
 use crate::bindings::{RosterEntry, ToolSet};
-use crate::error::{Error, Result};
+use crate::error::{self, Result};
 use crate::proxy::read_only_walk;
 use crate::tools::tool_object;
 use crate::vm::AdhocTools;
@@ -132,13 +132,13 @@ pub(crate) struct PackNames {
 /// Builds one Pack object per Pack `pack_tools` lists and returns their names.
 ///
 /// # Errors
-/// Returns [`Error::LuaRuntime`] if an object cannot be created or stored.
+/// Returns a `LuaRuntime` failure if an object cannot be created or stored.
 pub(crate) fn install_pack_objects(
     lua: &Lua,
     set: &ToolSet,
     adhoc: &AdhocTools,
 ) -> Result<PackNames> {
-    let objects = lua.create_table().map_err(Error::lua)?;
+    let objects = lua.create_table().map_err(error::lua)?;
     let mut names = PackNames {
         all: Vec::new(),
         extras: Vec::new(),
@@ -156,19 +156,19 @@ pub(crate) fn install_pack_objects(
                 required,
                 tools,
             })
-            .map_err(Error::lua)?;
-        objects.raw_set(key, object).map_err(Error::lua)?;
+            .map_err(error::lua)?;
+        objects.raw_set(key, object).map_err(error::lua)?;
     }
     lua.set_named_registry_value(PACK_OBJECTS_REGISTRY, objects)
-        .map_err(Error::lua)?;
+        .map_err(error::lua)?;
     Ok(names)
 }
 
 /// Installs `tools.packs` on `tools` over the Pack objects `names` lists.
 ///
 /// # Errors
-/// Returns [`Error::LuaRuntime`] if a function or table cannot be created
-/// or installed, and [`Error::Internal`] if the `tools.packs` proxy comes
+/// Returns a `LuaRuntime` failure if a function or table cannot be created
+/// or installed, and an `Internal` failure if the `tools.packs` proxy comes
 /// back without the metatable `__len` is set on.
 pub(crate) fn install_pack_list(lua: &Lua, tools: &Table, names: PackNames) -> Result<()> {
     let PackNames { all, extras } = names;
@@ -180,10 +180,10 @@ pub(crate) fn install_pack_list(lua: &Lua, tools: &Table, names: PackNames) -> R
                 other.type_name()
             ))),
         })
-        .map_err(Error::lua)?;
+        .map_err(error::lua)?;
     let extras = lua
         .create_function(move |lua, ()| pack_array(lua, &extras))
-        .map_err(Error::lua)?;
+        .map_err(error::lua)?;
 
     let indexed = all.clone();
     let index = lua
@@ -195,11 +195,11 @@ pub(crate) fn install_pack_list(lua: &Lua, tools: &Table, names: PackNames) -> R
                 None => Ok(Value::Nil),
             },
         })
-        .map_err(Error::lua)?;
+        .map_err(error::lua)?;
     let count = all.len();
     let len = lua
         .create_function(move |_, _: MultiValue| Ok(count))
-        .map_err(Error::lua)?;
+        .map_err(error::lua)?;
     let step = lua
         .create_function(move |lua, (_, key): (Value, Value)| {
             let next = match key {
@@ -214,13 +214,13 @@ pub(crate) fn install_pack_list(lua: &Lua, tools: &Table, names: PackNames) -> R
                 None => Ok((Value::Nil, Value::Nil)),
             }
         })
-        .map_err(Error::lua)?;
-    let proxy = read_only_walk(lua, index, step, "tools.packs").map_err(Error::lua)?;
+        .map_err(error::lua)?;
+    let proxy = read_only_walk(lua, index, step, "tools.packs").map_err(error::lua)?;
     let meta = proxy
         .metatable()
-        .ok_or_else(|| Error::internal("tools.packs was built without a metatable"))?;
-    meta.raw_set("__len", len).map_err(Error::lua)?;
-    tools.raw_set("packs", proxy).map_err(Error::lua)
+        .ok_or_else(|| error::internal("tools.packs was built without a metatable"))?;
+    meta.raw_set("__len", len).map_err(error::lua)?;
+    tools.raw_set("packs", proxy).map_err(error::lua)
 }
 
 /// The 0-based position an integer key of `tools.packs` names, or `None`

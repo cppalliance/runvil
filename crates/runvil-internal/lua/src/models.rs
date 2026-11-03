@@ -17,7 +17,7 @@ use mlua::{Lua, MultiValue, Table, Value};
 use runvil_model_client::model::{ModelBinding, ModelId, ModelInvocation, ModelSet, Temperature};
 use runvil_types::models::ModelRole;
 
-use crate::error::{Error, Result};
+use crate::error::{self, Result};
 
 #[path = "models-userdata.rs"]
 mod userdata;
@@ -262,7 +262,7 @@ fn parse_use_options(options: Value, rest: &MultiValue) -> mlua::Result<UseOptio
 /// Rust callback boundary.
 ///
 /// # Errors
-/// Returns [`Error::LuaRuntime`] if a Lua table or callback cannot be created or
+/// Returns a `LuaRuntime` failure if a Lua table or callback cannot be created or
 /// installed.
 pub(crate) fn install_models(
     lua: &Lua,
@@ -271,7 +271,7 @@ pub(crate) fn install_models(
     selection: &Arc<Mutex<Option<ModelBinding>>>,
     raw_ids: RawModelIds,
 ) -> Result<()> {
-    let models = lua.create_table().map_err(Error::lua)?;
+    let models = lua.create_table().map_err(error::lua)?;
 
     let frozen = Arc::clone(set);
     let current = Arc::clone(selection);
@@ -303,8 +303,8 @@ pub(crate) fn install_models(
                 Ok(LuaModelHandle::from_binding(binding))
             },
         )
-        .map_err(Error::lua)?;
-    models.set("use", use_fn).map_err(Error::lua)?;
+        .map_err(error::lua)?;
+    models.set("use", use_fn).map_err(error::lua)?;
 
     let frozen = Arc::clone(set);
     let get_fn = lua
@@ -320,8 +320,8 @@ pub(crate) fn install_models(
             };
             Ok(LuaModelHandle::from_binding(binding))
         })
-        .map_err(Error::lua)?;
-    models.set("get", get_fn).map_err(Error::lua)?;
+        .map_err(error::lua)?;
+    models.set("get", get_fn).map_err(error::lua)?;
 
     let current = Arc::clone(selection);
     let current_fn = lua
@@ -331,10 +331,10 @@ pub(crate) fn install_models(
                 .map(LuaModelHandle::from_binding)
                 .ok_or_else(|| mlua::Error::external("the caller supplied no model"))
         })
-        .map_err(Error::lua)?;
-    models.set("current", current_fn).map_err(Error::lua)?;
+        .map_err(error::lua)?;
+    models.set("current", current_fn).map_err(error::lua)?;
 
-    globals.raw_set("models", models).map_err(Error::lua)
+    globals.raw_set("models", models).map_err(error::lua)
 }
 #[cfg(test)]
 #[path = "models-tests.rs"]

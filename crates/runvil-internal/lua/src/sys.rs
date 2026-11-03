@@ -3,7 +3,7 @@
 use mlua::{Lua, LuaSerdeExt, Value};
 use serde_json::Value as Json;
 
-use crate::error::{Error, Result};
+use crate::error::{self, Result};
 use crate::proxy::{key_text, read_only_proxy};
 
 /// Builds a sealed Lua `sys` table from runtime metadata.
@@ -14,7 +14,7 @@ pub(crate) fn seal_sys(lua: &Lua, sys: &Json) -> Result<mlua::Table> {
     let data = match sys {
         Json::Object(map) => map.clone(),
         other => {
-            return Err(Error::internal(format!("sys must be a table, got {other}")));
+            return Err(error::internal(format!("sys must be a table, got {other}")));
         }
     };
 
@@ -32,7 +32,7 @@ pub(crate) fn seal_sys(lua: &Lua, sys: &Json) -> Result<mlua::Table> {
                 Some(value) => lua.to_value(value),
             }
         })
-        .map_err(Error::lua)?;
+        .map_err(error::lua)?;
 
     read_only_proxy(
         lua,
@@ -40,5 +40,5 @@ pub(crate) fn seal_sys(lua: &Lua, sys: &Json) -> Result<mlua::Table> {
         |key| format!("sys is read-only; cannot set '{}'", key_text(key)),
         "sys is sealed",
     )
-    .map_err(Error::lua)
+    .map_err(error::lua)
 }

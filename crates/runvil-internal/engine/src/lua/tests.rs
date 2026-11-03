@@ -93,6 +93,10 @@ fn scheduler_vm_with_tools(
     })
 }
 
+/// The file every test VM's prompt comes from, which the author prose of
+/// its Lua failures names.
+const TEST_FILE: &str = "agents/test.md";
+
 /// What a test's section VM binds beyond an empty run's: its section, the
 /// run's tool set and model set, and the conditional Engine globals.
 struct VmBinds<'a> {
@@ -131,6 +135,7 @@ fn set_up_vm(binds: &VmBinds<'_>) -> SectionVm {
         seed: binds.seed,
         emitter: &emitter,
         section_name: binds.section,
+        file: TEST_FILE,
         max_tool_iterations: 24,
         ui: binds.ui,
         preludes: &[],
@@ -200,6 +205,7 @@ fn resume_with(vm: &SectionVm, thread: &Thread, answer: Answer) -> MultiValue {
 fn compile_block(source: &str) -> LuaProgram {
     LuaProgram::compile(
         source,
+        "prompt",
         "section `Test` prologue",
         NonZeroU32::MIN,
         &null_emitter(),

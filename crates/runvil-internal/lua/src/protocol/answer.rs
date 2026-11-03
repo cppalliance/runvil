@@ -1,12 +1,13 @@
 //! The answer vocabulary: one dispatched request's successful outcome and
 //! the payload types its variants hold.
 
+use runvil_types::error::ErrorCode;
 use runvil_types::ids::TaskId;
 use runvil_types::metrics::ToolCallEvent;
 
 use crate::bindings::ToolOutputKind;
 use crate::compactors::OverflowReason;
-use crate::error::{Error, Result};
+use crate::error::{Error, Result, tool};
 
 /// The result of one [`VfsOp`](super::VfsOp) run against the run's store
 /// view.
@@ -69,17 +70,17 @@ impl ToolCallOutcome {
     /// structured output effectively restricted to trusted tools.
     ///
     /// # Errors
-    /// Returns [`Error::Tool`] when a structured binding's output is not
-    /// valid JSON, retaining the parse failure as the cause.
+    /// Returns a `ToolOther` tool failure when a structured binding's
+    /// output is not valid JSON, whose prose names the parse failure.
     pub fn from_dispatch(kind: ToolOutputKind, alias: &str, text: String) -> Result<Self> {
         match kind {
             ToolOutputKind::Plain => Ok(ToolCallOutcome::Plain(text)),
             ToolOutputKind::Structured => match serde_json::from_str(&text) {
                 Ok(json) => Ok(ToolCallOutcome::Structured(json)),
-                Err(error) => Err(Error::Tool {
-                    message: format!("structured tool {alias:?} returned invalid JSON: {error}"),
-                    cause: Box::new(error),
-                }),
+                Err(error) => {
+                    let text = format!("structured tool {alias:?} returned invalid JSON: {error}");
+                    Err(tool(Error::new(ErrorCode::ToolOther, text.clone(), text)))
+                }
             },
         }
     }
@@ -252,7 +253,7 @@ pub struct TaskStatus {
 /// `Result` owns the typed error until the envelope is rendered, so a
 /// `call` or `join_any` failure round-trips with its structure intact.
 ///
-/// The error is the universal [`Error`](runvil_types::error::Error), and
+/// The error is the universal [`Error`], and
 /// only a [`TaskDelivery`] holds one: a `join_any` member's failure is part
 /// of a successful wait, so a member's dispatch failure (a gateway
 /// completion error, a binding failure) round-trips typed.

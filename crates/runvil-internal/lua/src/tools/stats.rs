@@ -19,7 +19,7 @@ use mlua::{Lua, Table, Value};
 use runvil_types::tools::ToolId;
 
 use crate::bindings::ToolSet;
-use crate::error::{Error, Result};
+use crate::error::{self, Result};
 use crate::proxy::{key_text, read_only_walk};
 use crate::scope::ToolCallCounts;
 use crate::vm::AdhocTools;
@@ -141,7 +141,7 @@ impl Members {
 /// `adhoc`, and returns the counts so the scheduler can increment them.
 ///
 /// # Errors
-/// Returns [`Error::LuaRuntime`] when `tools.stats` cannot be built or
+/// Returns a `LuaRuntime` failure when `tools.stats` cannot be built or
 /// installed.
 pub(crate) fn install_tool_call_counts(
     lua: &Lua,
@@ -162,9 +162,9 @@ pub(crate) fn install_tool_call_counts(
         ),
         adhoc: adhoc.clone(),
     };
-    let tools: Table = lua.globals().raw_get("tools").map_err(Error::lua)?;
-    let proxy = stats_proxy(lua, &stats).map_err(Error::lua)?;
-    tools.raw_set("stats", proxy).map_err(Error::lua)?;
+    let tools: Table = lua.globals().raw_get("tools").map_err(error::lua)?;
+    let proxy = stats_proxy(lua, &stats).map_err(error::lua)?;
+    tools.raw_set("stats", proxy).map_err(error::lua)?;
     Ok(counts)
 }
 

@@ -168,17 +168,11 @@ impl ChainOps<'_> {
             if set == OfferMode::Dynamic || DiscoveryTool::of(binding.id()).is_some() {
                 return Ok(ToolRoute::Discovery(binding));
             }
-            let adhoc = vm
-                .adhoc_tools()
-                .binding(&binding.id().to_string())
-                .map_err(error::into_universal)?;
+            let adhoc = vm.adhoc_tools().binding(&binding.id().to_string())?;
             return Ok(adhoc.map_or(ToolRoute::Catalog(binding), ToolRoute::Adhoc));
         }
         if name.contains('/')
-            && let Some(binding) = vm
-                .adhoc_tools()
-                .binding(name)
-                .map_err(error::into_universal)?
+            && let Some(binding) = vm.adhoc_tools().binding(name)?
         {
             return Ok(ToolRoute::Adhoc(binding));
         }
@@ -222,11 +216,7 @@ impl ChainOps<'_> {
             for tool in frozen {
                 let seeded = DiscoveryTool::of(&tool).is_some()
                     || tool_set.catalog().get(&tool).is_some()
-                    || vm
-                        .adhoc_tools()
-                        .binding(&tool.to_string())
-                        .map_err(error::into_universal)?
-                        .is_some();
+                    || vm.adhoc_tools().binding(&tool.to_string())?.is_some();
                 if seeded {
                     ids.push(tool);
                 }
@@ -234,10 +224,8 @@ impl ChainOps<'_> {
             ids
         } else {
             let (runtime, adhoc) = (vm.offers(), vm.adhoc_tools());
-            let static_tools =
-                current_static_set(tool_set, runtime, adhoc).map_err(error::into_universal)?;
-            let dynamic_tools = current_dynamic_set(tool_set, runtime, adhoc, &static_tools)
-                .map_err(error::into_universal)?;
+            let static_tools = current_static_set(tool_set, runtime, adhoc)?;
+            let dynamic_tools = current_dynamic_set(tool_set, runtime, adhoc, &static_tools)?;
             static_tools
                 .iter()
                 .chain(&dynamic_tools)
@@ -358,7 +346,7 @@ impl ChainOps<'_> {
         // The attempt counts at dispatch - before the tool runs, so a
         // cancelled dispatch still counts.
         let counted = binding.id().to_string();
-        counts.increment(&counted).map_err(error::into_universal)?;
+        counts.increment(&counted)?;
         let prompt = self.prompt();
         let chain = &*self.chain;
         let frame = chain.frame()?;

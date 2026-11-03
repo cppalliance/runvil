@@ -213,8 +213,7 @@ impl ChainOps<'_> {
             chain
                 .frame()?
                 .vm()
-                .current_model()
-                .map_err(error::into_universal)?
+                .current_model()?
                 .ok_or_else(|| error::model_required(chain.section_name()))?
         };
         // A nested infer round consumes only the accumulated completion;

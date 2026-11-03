@@ -4,6 +4,7 @@
 use mlua::{Lua, LuaSerdeExt, MultiValue, Table, Value};
 use runvil_types::error::Error;
 
+use crate::error::authored;
 use crate::error_value::error_table;
 use crate::tools::adhoc_handler;
 
@@ -85,6 +86,7 @@ fn delivery_values(
     let (ok, result, retained) = match delivery.outcome {
         Ok(text) => (true, Value::String(lua.create_string(&text)?), None),
         Err(error) => {
+            let error = authored(lua, error);
             let table = error_table(lua, &error)?;
             (
                 false,
@@ -101,11 +103,12 @@ fn delivery_values(
 ///
 /// On success the envelope is `(true, value...)`. On failure it is
 /// `(false, table)`, where `table` is the error's structured value
-/// (`kind`, `message`, and the kind's fields, as
+/// (`kind`, `code`, `message`, and the kind's fields, as
 /// [`error_table`] renders them, with `tostring` returning the message) -
 /// the shim raises it
-/// with `error(result, 0)`, so a printing author sees exactly the Engine's
-/// message and a branching one reads `kind` - and the typed error is
+/// with `error(result, 0)`, so a printing author sees the error's prose,
+/// author prose for a failure the prompt's Lua caused, and a branching
+/// one reads `kind` - and the typed error is
 /// retained beside that table, which identifies its raise. A successful
 /// `join_any` whose member failed retains the member's error the same
 /// way, since a shim may re-raise it at once.
@@ -120,6 +123,7 @@ pub(crate) fn render_envelope(
     let answer = match answer {
         Ok(answer) => answer,
         Err(error) => {
+            let error = authored(lua, error);
             let table = error_table(lua, &error)?;
             return Ok((
                 MultiValue::from_vec(vec![Value::Boolean(false), Value::Table(table.clone())]),

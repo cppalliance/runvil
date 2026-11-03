@@ -26,15 +26,15 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use mlua::{AnyUserData, Function, Lua, LuaSerdeExt, MultiValue, Table, Value};
 use runvil_types::metrics::ToolCallEvent;
 
-use crate::error::{Error, Result};
-use crate::error_value::{ErrorKind, normalized, raised_table};
+use crate::error::{self, Result, authored, lua_runtime};
+use crate::error_value::{ErrorKind, error_table, message_table, normalized};
 use crate::hardening::CancelHook;
 use crate::messages::MessageList;
 use crate::protocol::ChatResult;
 
 mod machine;
 
-use machine::{Input, Machine, Phase, Then, raised, settle};
+use machine::{Input, Machine, Phase, Then, settle};
 
 /// `models.loop`'s refusal past its two argument shapes.
 const LOOP_ARITY: &str = "models.loop takes (compactor?) or (model, compactor?)";
@@ -76,7 +76,7 @@ const COMPACT_RUNNING: &str =
 /// called `cancel_requested()`.
 ///
 /// # Errors
-/// Returns [`Error::LuaRuntime`] if the function cannot be created.
+/// Returns a `LuaRuntime` failure if the function cannot be created.
 pub(crate) fn loop_begin(
     lua: &Lua,
     max_tool_iterations: usize,
@@ -89,7 +89,7 @@ pub(crate) fn loop_begin(
     lua.create_function(move |lua, args: MultiValue| {
         begin(lua, args, max_tool_iterations, &compactors, &running, &hook)
     })
-    .map_err(Error::lua)
+    .map_err(error::lua)
 }
 
 /// `loop_begin`'s body: the leading handle, then the arity; the
@@ -180,7 +180,7 @@ fn begin(
 /// VM's cancellation hook, whose cancel flag the step reads.
 ///
 /// # Errors
-/// Returns [`Error::LuaRuntime`] if the function cannot be created.
+/// Returns a `LuaRuntime` failure if the function cannot be created.
 pub(crate) fn compact_begin(
     lua: &Lua,
     loop_running: &Arc<AtomicBool>,
@@ -189,7 +189,7 @@ pub(crate) fn compact_begin(
     let running = Arc::clone(loop_running);
     let hook = hook.clone();
     lua.create_function(move |lua, args: MultiValue| compact(lua, args, &running, &hook))
-        .map_err(Error::lua)
+        .map_err(error::lua)
 }
 
 /// `compact_begin`'s body. The flag is set only once nothing here can
@@ -242,9 +242,9 @@ fn compact(
 }
 
 /// `loop_begin`'s answer to a refused argument: no step closure, then the
-/// `"raise"` action with a new `lua`-kind error.
+/// `"raise"` action with a new `LuaRuntime` failure.
 fn refuse(lua: &Lua, message: &str) -> mlua::Result<MultiValue> {
-    let mut action = act(lua, Then::RaiseNew(raised(ErrorKind::Lua, message)))?;
+    let mut action = act(lua, Then::RaiseNew(lua_runtime(message)))?;
     action.push_front(Value::Nil);
     Ok(action)
 }
@@ -308,8 +308,9 @@ fn answer<T>(
 /// Turns the machine's next step into the trampoline's tag and values:
 /// each request table built as the shim builds it, a call's arguments
 /// converted with `to_value`, the overflow reason as its `tag()`, a
-/// normalized failure through `error_value::normalized`, and a new error
-/// as `raised_table` over the new [`Raised`](crate::Raised).
+/// normalized failure through `error_value::normalized`, and a new
+/// failure as its error table, with author prose when the prompt's Lua
+/// caused it.
 fn act(lua: &Lua, then: Then<Value>) -> mlua::Result<MultiValue> {
     let (tag, values) = match then {
         Then::Chat { messages, handle } => {
@@ -355,8 +356,8 @@ fn act(lua: &Lua, then: Then<Value>) -> mlua::Result<MultiValue> {
         Then::Return => ("return", Vec::new()),
         Then::Raise(value) => ("raise", vec![value]),
         Then::RaiseNormalized(failure) => ("raise", vec![normalized(lua, failure)?]),
-        Then::RaiseNew(raised) => {
-            let table = raised_table(lua, &raised)?;
+        Then::RaiseNew(failure) => {
+            let table = error_table(lua, &authored(lua, failure))?;
             ("raise", vec![Value::Table(table)])
         }
     };
@@ -388,16 +389,16 @@ fn request<const N: usize>(lua: &Lua, op: &str, fields: [(&str, Value); N]) -> m
 
 /// The value `fail` raises for an envelope's failure: an error table
 /// unchanged; anything else a new `lua`-kind table whose message is what
-/// the `tostring` global returns for it. The Engine renders every failure
-/// as an error table, so only a hand-built envelope reaches the second
-/// branch.
+/// the `tostring` global returns for it, as `fail` builds it. The Engine
+/// renders every failure as an error table, so only a hand-built envelope
+/// reaches the second branch.
 fn envelope_failure(lua: &Lua, value: Value) -> mlua::Result<Value> {
     if let Value::Table(_) = value {
         return Ok(value);
     }
     let tostring: Function = lua.globals().get("tostring")?;
     let message: String = tostring.call(value)?;
-    let table = raised_table(lua, &raised(ErrorKind::Lua, &message))?;
+    let table = message_table(lua, ErrorKind::Lua, &message)?;
     Ok(Value::Table(table))
 }
 
@@ -429,7 +430,7 @@ fn truthy(value: &Value) -> bool {
 /// produces: a crate bug, raised as an mlua callback error.
 #[track_caller]
 fn malformed(what: &'static str) -> mlua::Error {
-    mlua::Error::external(Error::internal(what))
+    mlua::Error::external(error::internal(what))
 }
 
 /// Lua's `type()` name for `value`, with an integer named `integer`, as

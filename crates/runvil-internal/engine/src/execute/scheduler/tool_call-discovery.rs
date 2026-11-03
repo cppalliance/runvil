@@ -114,7 +114,7 @@ impl ChainOps<'_> {
         };
         let counted = tool.unwrap_or(DiscoveryTool::Call).id();
         let counts = self.section_call_counts()?;
-        counts.increment(counted).map_err(error::into_universal)?;
+        counts.increment(counted)?;
         let turn = self.call_turn(&site);
         let chain = &*self.chain;
         let text = match trust {
@@ -153,8 +153,7 @@ impl ChainOps<'_> {
             .frame()?
             .vm()
             .adhoc_tools()
-            .binding(&target.id().to_string())
-            .map_err(error::into_universal)?;
+            .binding(&target.id().to_string())?;
         if let Some(adhoc) = adhoc {
             return self.prepare_adhoc_call(&adhoc, args, &site);
         }

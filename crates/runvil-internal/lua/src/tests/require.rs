@@ -31,6 +31,7 @@ fn library(identity: &str, heading: &str, sources: &[&str]) -> Library {
             .map(|source| LibraryBlock {
                 program: LuaProgram::compile(
                     source,
+                    "prompt",
                     &format!("library {heading}"),
                     NonZeroU32::new(100).expect("100 is non-zero"),
                     &null_emitter(),
@@ -66,7 +67,9 @@ fn resolver(
                     .find(|(written, at, _)| *written == heading && at.is_none())
             })
             .map(|(_, _, library)| library.clone())
-            .ok_or_else(|| Error::Lua(format!("no section `{heading}` within reach of require")))
+            .ok_or_else(|| {
+                crate::lua_runtime(format!("no section `{heading}` within reach of require"))
+            })
     }
 }
 

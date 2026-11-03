@@ -12,7 +12,9 @@ use serde_json::Value as Json;
 use super::{SYS_LIVE_POISONED, SectionVm, pack_sequence};
 use crate::coro::install_shim_prelude;
 use crate::engine_globals::{install_log, install_store_table};
-use crate::error::{Error, Result};
+#[cfg(test)]
+use crate::error::Error;
+use crate::error::{self, Result};
 use crate::prose::ProseState;
 use crate::section::{Library, LibraryKey, SectionText, resolve_section_target};
 use crate::sys::seal_sys;
@@ -32,8 +34,8 @@ impl SectionVm {
     /// [`take_store_conflict`](Self::take_store_conflict).
     ///
     /// # Errors
-    /// Returns [`Error::LuaRuntime`] if the globals cannot be installed, or
-    /// [`Error::Store`] if the handle declares no store.
+    /// Returns a `LuaRuntime` failure if the globals cannot be installed, or
+    /// the store's failure if the handle declares no store.
     pub fn install_engine_globals(&self, emitter: &Emitter, section: &str) -> Result<()> {
         install_log(
             &self.lua,
@@ -90,7 +92,7 @@ impl SectionVm {
     /// never reach this VM.
     ///
     /// # Errors
-    /// Returns [`Error::LuaRuntime`] if any global cannot be installed.
+    /// Returns a `LuaRuntime` failure if any global cannot be installed.
     #[cfg(test)]
     pub(crate) fn install_control_globals<E, R>(&self, call_callback: E, read: R) -> Result<()>
     where
@@ -104,8 +106,8 @@ impl SectionVm {
                 let var = var_to_json(lua).map_err(mlua::Error::external)?;
                 call_callback(target, input, var).map_err(mlua::Error::external)
             })
-            .map_err(Error::lua)?;
-        globals.raw_set("call", call_fn).map_err(Error::lua)?;
+            .map_err(error::lua)?;
+        globals.raw_set("call", call_fn).map_err(error::lua)?;
         self.install_jump_global(&globals)?;
         self.install_prompt_table(&globals, read)
     }
@@ -118,7 +120,7 @@ impl SectionVm {
     /// [`install_coro_shims`](Self::install_coro_shims).
     ///
     /// # Errors
-    /// Returns [`Error::LuaRuntime`] if any global cannot be installed.
+    /// Returns a `LuaRuntime` failure if any global cannot be installed.
     pub fn install_scheduler_control_globals<R, E>(&self, read: R) -> Result<()>
     where
         R: Fn(String) -> std::result::Result<Option<SectionText>, E> + Send + Sync + 'static,
@@ -139,7 +141,7 @@ impl SectionVm {
     /// through captures over the selection injection received.
     ///
     /// # Errors
-    /// Returns [`Error::LuaRuntime`] if the shim prelude cannot install.
+    /// Returns a `LuaRuntime` failure if the shim prelude cannot install.
     pub fn install_coro_shims(&mut self, max_tool_iterations: usize) -> Result<()> {
         install_shim_prelude(
             &self.lua,
@@ -171,7 +173,7 @@ impl SectionVm {
     /// line.
     ///
     /// # Errors
-    /// Returns [`Error::LuaRuntime`] if the loader cannot install.
+    /// Returns a `LuaRuntime` failure if the loader cannot install.
     pub fn install_require<R, E, P>(
         &self,
         resolver: R,
@@ -227,8 +229,8 @@ impl SectionVm {
                 *slot = Some(heading);
                 Err(mlua::Error::external("jump transfer"))
             })
-            .map_err(Error::lua)?;
-        globals.raw_set("jump", jump_fn).map_err(Error::lua)
+            .map_err(error::lua)?;
+        globals.raw_set("jump", jump_fn).map_err(error::lua)
     }
 
     fn install_prompt_table<R, E>(&self, globals: &mlua::Table, read: R) -> Result<()>
@@ -245,7 +247,7 @@ impl SectionVm {
                     .map_err(mlua::Error::external)?;
                 Ok(text.map(|text| text.markdown))
             })
-            .map_err(Error::lua)?;
+            .map_err(error::lua)?;
         let list = self
             .lua
             .create_function(move |lua, target: Value| {
@@ -259,28 +261,28 @@ impl SectionVm {
                     Some(text) => pack_sequence(lua, text.items).map(Value::Table),
                 }
             })
-            .map_err(Error::lua)?;
-        let prompt = self.lua.create_table().map_err(Error::lua)?;
-        prompt.raw_set("section", section).map_err(Error::lua)?;
-        prompt.raw_set("list", list).map_err(Error::lua)?;
-        globals.raw_set("prompt", prompt).map_err(Error::lua)
+            .map_err(error::lua)?;
+        let prompt = self.lua.create_table().map_err(error::lua)?;
+        prompt.raw_set("section", section).map_err(error::lua)?;
+        prompt.raw_set("list", list).map_err(error::lua)?;
+        globals.raw_set("prompt", prompt).map_err(error::lua)
     }
 
     /// Replaces the sealed Lua `sys` global after scope close, to expose
     /// `sys.model` once the section's model binding is fixed.
     ///
     /// # Errors
-    /// Returns [`Error::Internal`] if the live slot is poisoned, or the
+    /// Returns an `Internal` failure if the live slot is poisoned, or the
     /// install failure if the sealed table cannot be installed.
     pub fn re_seal_sys(&self, sys: &Json) -> Result<()> {
         let globals = self.lua.globals();
         let sys_table = seal_sys(&self.lua, sys)?;
-        globals.raw_set("sys", sys_table).map_err(Error::lua)?;
+        globals.raw_set("sys", sys_table).map_err(error::lua)?;
         let mut live = self
             .state
             .sys_live
             .lock()
-            .map_err(|_| Error::internal(SYS_LIVE_POISONED))?;
+            .map_err(|_| error::internal(SYS_LIVE_POISONED))?;
         *live = sys.clone();
         Ok(())
     }
@@ -295,7 +297,7 @@ impl SectionVm {
     /// the template is rejected as recursive.
     ///
     /// # Errors
-    /// Returns [`Error::LuaRuntime`] if the read cannot be built or the `_G` guard
+    /// Returns a `LuaRuntime` failure if the read cannot be built or the `_G` guard
     /// cannot record it.
     pub fn install_lazy_prose<F>(&self, render: F) -> Result<()>
     where

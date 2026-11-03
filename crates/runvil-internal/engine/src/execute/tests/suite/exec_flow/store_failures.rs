@@ -12,19 +12,20 @@ use crate::execute::EffectRecord;
 use crate::execute::run_error_kind;
 
 /// A store failure the author caught with `pcall` is an error table of
-/// kind `store`: its `reason`, `path`, and `anchor` fields and its
-/// integer `count` read from Lua, and `tostring` returns the
-/// model-facing message.
+/// kind `store`: its `code`, `reason`, `path`, and `anchor` fields and its
+/// integer `count` read from Lua, and `tostring` returns the store code's
+/// remedy prose.
 #[test]
-fn a_caught_store_error_is_a_store_table_with_reason_fields_and_message() {
-    let source = one_section(
+fn a_caught_store_error_is_a_store_table_with_reason_fields_and_prose() {
+    let source = one_section(&format!(
         "
         local ok, err = pcall(function() return store.read('missing.txt') end)
         assert(ok == false, 'the missing read fails')
         assert(err.kind == 'store', 'kind is store, got ' .. tostring(err.kind))
+        assert(err.code == 'not_found', 'code is not_found, got ' .. tostring(err.code))
         assert(err.reason == 'not_found', 'reason is not_found, got ' .. tostring(err.reason))
         assert(err.path == 'missing.txt', 'the path field names the file')
-        assert(tostring(err) == 'file not found in store: missing.txt', 'tostring is the message')
+        assert(tostring(err) == '{}', 'tostring is the prose, got ' .. tostring(err))
         store.write('a.txt', 'na na na')
         local ok2, err2 = pcall(function() store.str_replace('a.txt', 'na', 'la') end)
         assert(ok2 == false, 'the ambiguous anchor fails')
@@ -32,9 +33,11 @@ fn a_caught_store_error_is_a_store_table_with_reason_fields_and_message() {
         assert(err2.anchor == 'na', 'the anchor field names the anchor')
         assert(type(err2.count) == 'number' and err2.count % 1 == 0, 'count is an integer')
         assert(err2.count == 3, 'count is the match count')
-        assert(tostring(err2):find('include more surrounding text', 1, true) ~= nil, 'the message carries the hint')
+        assert(tostring(err2) == '{}', 'tostring is the prose, got ' .. tostring(err2))
         return 'ok'",
-    );
+        ErrorCode::NotFound.prose(),
+        ErrorCode::Anchor.prose()
+    ));
     assert_eq!(Scenario::new(source).run().text(), "ok");
 }
 

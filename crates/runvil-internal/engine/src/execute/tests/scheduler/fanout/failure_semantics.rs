@@ -91,7 +91,10 @@ fn fanout_depth_cap_reads_the_chain_field() {
     let error = trace.error();
     assert_eq!(
         error,
-        &crate::error::call_depth_exceeded(8, DepthVia::Fanout),
+        &crate::test_support::with_author_prose(crate::error::call_depth_exceeded(
+            8,
+            DepthVia::Fanout
+        )),
         "expected the typed depth-cap error named after fanout"
     );
     assert_eq!(run_error_kind(error.code), RunErrorKind::Quota, "{error}");

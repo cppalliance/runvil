@@ -4,30 +4,25 @@
 use runvil_model_client::client::{Message, Role};
 use serde_json::json;
 
-use crate::messages::{ListEditError, MessageList};
+use runvil_types::error::{Error, ErrorCode};
+
+use crate::messages::{MessageList, late_system};
+use crate::project_messages;
 use crate::protocol::{MessageContent, MessageRecord, ToolCallRecord};
 use crate::test_vm::{BuiltVm, TestVm};
 use crate::tests::{assistant, system, tool_result, user};
-use crate::{Error, project_messages};
 
 #[path = "messages-tests-list-commit.rs"]
 mod commit;
 
-/// The message of the crate error a list method raised, not its
+/// The message of the `LuaRuntime` refusal a list method raised, not its
 /// flattened traceback.
 #[track_caller]
 pub(super) fn refusal(vm: &BuiltVm, source: &str) -> String {
     let error = vm.eval_err(source);
-    let cause = match &error {
-        mlua::Error::CallbackError { cause, .. } => cause.as_ref(),
-        other => other,
-    };
-    match cause {
-        mlua::Error::ExternalError(cause) => match cause.downcast_ref::<Error>() {
-            Some(Error::Lua(message)) => message.clone(),
-            other => panic!("expected an Error::Lua refusal, got {other:?}"),
-        },
-        other => panic!("expected the list's refusal, got {other:?}"),
+    match error.downcast_ref::<Error>() {
+        Some(refused) if refused.code == ErrorCode::LuaRuntime => refused.message.clone(),
+        other => panic!("expected the list's LuaRuntime refusal, got {other:?} from {error:?}"),
     }
 }
 
@@ -96,7 +91,7 @@ fn push_refuses_a_late_system_record_as_a_typed_edit_error_naming_its_position()
     let refusal = list
         .push(system("late"))
         .expect_err("a system record behind a user record");
-    assert_eq!(refusal, ListEditError::LateSystem { index: 3 });
+    assert_eq!(refusal, late_system(3));
     assert!(
         refusal
             .to_string()

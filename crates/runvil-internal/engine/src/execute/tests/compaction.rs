@@ -156,7 +156,10 @@ fn a_retry_that_fails_another_way_keeps_the_compacted_records() {
          return tostring(ok) .. '|' .. err.kind .. ':' .. tostring(err) .. '|' .. #messages",
     );
     let trace = loop_scenario(source).chat(&gateway).run();
-    assert_eq!(trace.text(), "false|lua:messages must not be empty|0");
+    assert_eq!(
+        trace.text(),
+        format!("false|lua:{}|0", refused("messages must not be empty"))
+    );
     assert_eq!(gateway.call_count(), 0, "no request leaves");
 }
 
@@ -215,7 +218,7 @@ fn a_loop_inside_a_compactor_raises_loop_running() {
          return err.kind .. ':' .. tostring(err) .. '|' .. #messages",
     );
     let trace = loop_scenario(source).chat(&gateway).run();
-    assert_eq!(trace.text(), format!("lua:{LOOP_RUNNING}|1"));
+    assert_eq!(trace.text(), format!("lua:{}|1", refused(LOOP_RUNNING)));
     assert_eq!(gateway.call_count(), 0, "no request leaves");
 }
 
@@ -254,7 +257,10 @@ fn a_compaction_a_restore_and_a_clear_leave_the_rendered_tool_list_attached() {
         .run();
     assert_eq!(
         trace.text(),
-        format!("false|2|0|false|tools.offer: {FIXED}")
+        format!(
+            "false|2|0|false|{}",
+            refused(&format!("tools.offer: {FIXED}"))
+        )
     );
     let bodies = gateway.requests();
     assert_eq!(bodies.len(), 2, "the overflowed round and its retry");

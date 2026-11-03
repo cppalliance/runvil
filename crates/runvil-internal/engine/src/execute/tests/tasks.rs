@@ -289,11 +289,13 @@ fn spawn_shares_calls_depth_cap() {
     );
 
     let records = TaskRecorder::replayed(rig.trace()).records();
+    let logged = authored(
+        ErrorCode::CallDepthExceeded,
+        "call recursion exceeded cap of 8",
+    );
     let refusals = records
         .iter()
-        .filter(|(_, event)| {
-            *event == Observation::Lua("call recursion exceeded cap of 8".to_owned())
-        })
+        .filter(|(_, event)| *event == Observation::Lua(logged.clone()))
         .count();
     assert_eq!(refusals, 1, "exactly one spawn is refused: {records:?}");
     let starts = records
@@ -319,7 +321,7 @@ fn spawn_rejects_a_list_section_target_with_the_worker_message() {
     let rig = Rig::run(scheduler_scenario(md));
     assert_eq!(
         rig.trace().text(),
-        "section `Items` is a list section, not a worker template",
+        refused("section `Items` is a list section, not a worker template"),
         "the caught error ends the run normally"
     );
 }

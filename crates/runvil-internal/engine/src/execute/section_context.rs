@@ -26,7 +26,7 @@ use runvil_types::ids::TaskId;
 use runvil_types::tools::ToolId;
 
 use crate::lua::{ProseState, ScriptReport, SectionVm, ToolCallCounts};
-use crate::{Result, error, subst};
+use crate::{Result, subst};
 
 use super::context::{ChainState, ReportingHandles};
 
@@ -157,7 +157,7 @@ impl SectionContext {
     /// cannot convert back to JSON (the write guard keeps that second case
     /// from happening in practice).
     pub(super) fn read_var(&self) -> Result<serde_json::Value> {
-        self.vm().var().map_err(error::into_universal)
+        self.vm().var()
     }
 
     /// Reads the H1 pass's `argv` back as JSON while the frame is live: the
@@ -167,7 +167,7 @@ impl SectionContext {
     /// # Errors
     /// Returns a `LuaRuntime` failure when H1 left `argv` as non-JSON data.
     pub(super) fn read_argv(&self) -> Result<Option<serde_json::Value>> {
-        self.vm().argv_json().map_err(error::into_universal)
+        self.vm().argv_json()
     }
 
     /// Arms the completion flag: the block walk completed (a jump or
@@ -205,7 +205,6 @@ impl SectionContext {
         let render = prose_renderer(ctx, self.item.clone());
         self.vm()
             .install_lazy_prose(move |state: ProseState<'_>| render(&template, state))
-            .map_err(error::into_universal)
     }
 
     /// The frame's effective reporting handles for the `chat` rounds the
@@ -240,9 +239,7 @@ impl SectionContext {
             None => counts.insert(install_first_call_state(vm, sys, ids)?),
         };
         for id in ids {
-            counts
-                .ensure(&id.to_string())
-                .map_err(error::into_universal)?;
+            counts.ensure(&id.to_string())?;
         }
         Ok(counts.clone())
     }
@@ -289,14 +286,13 @@ fn prose_renderer(
     let raw_args = Arc::clone(ctx.args());
     let argv = ctx.argv().cloned();
     move |template: &str, state: ProseState<'_>| -> mlua::Result<String> {
-        let globals = |name: &str| (state.globals)(name).map_err(error::into_universal);
         let sources = subst::Sources {
             args: &raw_args,
             argv: argv.as_deref(),
             item: item.as_ref(),
             var: &state.var,
             sys: &state.sys,
-            globals: &globals,
+            globals: state.globals,
         };
         subst::substitute(template, &sources).map_err(mlua::Error::external)
     }
@@ -320,15 +316,12 @@ fn install_first_call_state(
     sys: &mut SectionSys,
     ids: &[ToolId],
 ) -> Result<ToolCallCounts> {
-    let counts = vm
-        .install_tool_call_counts(ids)
-        .map_err(error::into_universal)?;
-    let resolved_model = vm.current_model().map_err(error::into_universal)?;
+    let counts = vm.install_tool_call_counts(ids)?;
+    let resolved_model = vm.current_model()?;
     if let Some(binding) = resolved_model.as_ref() {
         let mut enriched = sys.clone();
         enriched.model = Some(binding.id().name().to_owned());
-        vm.re_seal_sys(&enriched.to_json())
-            .map_err(error::into_universal)?;
+        vm.re_seal_sys(&enriched.to_json())?;
         *sys = enriched;
     }
     Ok(counts)

@@ -3,8 +3,9 @@
 use mlua::{Lua, Value};
 use serde_json::json;
 
+use runvil_types::error::ErrorCode;
+
 use super::project_messages;
-use crate::Error;
 use crate::protocol::{
     ContentPart, MessageContent, MessageRecord, NonEmpty, RecordRole, Request, ToolCallRecord,
     YieldParse,
@@ -35,7 +36,7 @@ fn wire(records: &[MessageRecord]) -> serde_json::Value {
 
 fn projection_error(records: &[MessageRecord]) -> String {
     match project_messages(records) {
-        Err(Error::Lua(message)) => message,
+        Err(error) if error.code == ErrorCode::LuaRuntime => error.message,
         other => panic!("expected a projection Lua error, got {other:?}"),
     }
 }

@@ -348,7 +348,7 @@ fn the_loop_entry_takes_its_two_shapes_and_checks_the_compactor_before_a_running
         compactor,
         LOOP_RUNNING,
     ]
-    .map(|message| format!("false:lua:{message}"));
+    .map(|message| format!("false:lua:{}", refused(message)));
     let lines: Vec<&str> = out.lines().collect();
     assert_eq!(lines[..7], expected);
     assert_eq!(

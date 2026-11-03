@@ -80,9 +80,10 @@ fn prepare_dispatch_turns_a_canned_tool_error_into_the_typed_error() {
         None,
     )
     .expect_err("a canned failure fails the preparation");
-    assert!(
-        matches!(error, Error::Tool { .. }),
-        "the canned failure is the typed tool error, got {error:?}"
+    assert_eq!(
+        error,
+        tool(tool_error(ErrorCode::ToolBackend, "canned failure")),
+        "the canned failure is the typed tool error"
     );
     assert_eq!(
         recorder.kinds(),
@@ -227,9 +228,13 @@ fn the_listing_rule_needs_the_flag_and_untrusted_output() {
         TEST_SECTION,
         ScriptReport { turn: 1 },
     );
-    assert!(
-        matches!(failed, Err(Error::Tool { .. })),
-        "a failed listing is the tool's error: {failed:?}"
+    assert_eq!(
+        failed,
+        Err(tool(tool_error(
+            ErrorCode::ToolOther,
+            "the servers are down"
+        ))),
+        "a failed listing is the tool's error"
     );
 }
 

@@ -70,6 +70,7 @@ fn message_building(c: &mut Criterion) {
          messages:assistant('a summary')\n\
          messages:user('now shorter')\n\
          return #messages",
+        "prompt",
         "bench",
         NonZeroU32::MIN,
         &emitter(),

@@ -31,8 +31,7 @@ use mlua::{Function, Lua, StdLib, Table, Value};
 use runvil_model_client::model::ModelBinding;
 
 use crate::engine_globals::route_store_to_shims;
-use crate::error::SharedSource;
-use crate::error::{Error, Result};
+use crate::error::{self, Result};
 use crate::error_value::{install_error_value, install_normalize_failure};
 use crate::hardening::CancelHook;
 use crate::models::{LuaModelHandle, selection_poisoned};
@@ -84,30 +83,20 @@ const STORE_REGISTRY: &str = "runvil.impl_coro.store";
 const GUARD_REGISTRY: &str = "runvil.impl_coro.guard";
 
 /// The shim program, compiled once and loaded per VM. Compilation of the
-/// bundled source fails only on a crate bug, so the payload is a shareable
-/// [`SharedSource`] cause (the crate `Error` is not `Clone`), re-wrapped as
-/// a typed error at each install.
-static SHIM_PROGRAM: LazyLock<std::result::Result<LuaProgram, SharedSource>> =
-    LazyLock::new(|| {
-        LuaProgram::compile_internal(SHIM_SOURCE, SHIM_CHUNK_NAME)
-            .map_err(crate::detail::shared_source_new)
-    });
+/// bundled source fails only on a crate bug, and each install clones the
+/// failure.
+static SHIM_PROGRAM: LazyLock<Result<LuaProgram>> =
+    LazyLock::new(|| LuaProgram::compile_internal(SHIM_SOURCE, SHIM_CHUNK_NAME));
 
 /// The `tasks` namespace program, compiled once and loaded per VM after the
 /// prelude, under the same failure contract.
-static TASKS_PROGRAM: LazyLock<std::result::Result<LuaProgram, SharedSource>> =
-    LazyLock::new(|| {
-        LuaProgram::compile_internal(TASKS_SOURCE, TASKS_CHUNK_NAME)
-            .map_err(crate::detail::shared_source_new)
-    });
+static TASKS_PROGRAM: LazyLock<Result<LuaProgram>> =
+    LazyLock::new(|| LuaProgram::compile_internal(TASKS_SOURCE, TASKS_CHUNK_NAME));
 
 /// The `fanout` program, compiled once and loaded per VM after the prelude,
 /// under the same failure contract.
-static FANOUT_PROGRAM: LazyLock<std::result::Result<LuaProgram, SharedSource>> =
-    LazyLock::new(|| {
-        LuaProgram::compile_internal(FANOUT_SOURCE, FANOUT_CHUNK_NAME)
-            .map_err(crate::detail::shared_source_new)
-    });
+static FANOUT_PROGRAM: LazyLock<Result<LuaProgram>> =
+    LazyLock::new(|| LuaProgram::compile_internal(FANOUT_SOURCE, FANOUT_CHUNK_NAME));
 
 /// Installs the yield shims on a VM whose Engine globals already exist.
 ///
@@ -160,7 +149,7 @@ static FANOUT_PROGRAM: LazyLock<std::result::Result<LuaProgram, SharedSource>> =
 /// call for the trampoline.
 ///
 /// # Errors
-/// Returns [`Error::LuaRuntime`] if the coroutine library, the shim chunk, or any
+/// Returns a `LuaRuntime` failure if the coroutine library, the shim chunk, or any
 /// install step fails.
 pub(crate) fn install_shim_prelude(
     lua: &Lua,
@@ -170,28 +159,28 @@ pub(crate) fn install_shim_prelude(
     loop_running: &Arc<AtomicBool>,
     cancel_hook: &CancelHook,
 ) -> Result<()> {
-    lua.load_std_libs(StdLib::COROUTINE).map_err(Error::lua)?;
+    lua.load_std_libs(StdLib::COROUTINE).map_err(error::lua)?;
     let globals = lua.globals();
-    let coroutine: Table = globals.raw_get("coroutine").map_err(Error::lua)?;
-    let yield_fn: Function = coroutine.raw_get("yield").map_err(Error::lua)?;
+    let coroutine: Table = globals.raw_get("coroutine").map_err(error::lua)?;
+    let yield_fn: Function = coroutine.raw_get("yield").map_err(error::lua)?;
     let var_snapshot = lua
         .create_function(|lua, ()| var_snapshot_table(lua).map_err(mlua::Error::external))
-        .map_err(Error::lua)?;
-    let models: Table = globals.raw_get("models").map_err(Error::lua)?;
-    let tools: Table = globals.raw_get("tools").map_err(Error::lua)?;
-    let compactors: Table = globals.raw_get("compactors").map_err(Error::lua)?;
-    let error_value = install_error_value(lua).map_err(Error::lua)?;
+        .map_err(error::lua)?;
+    let models: Table = globals.raw_get("models").map_err(error::lua)?;
+    let tools: Table = globals.raw_get("tools").map_err(error::lua)?;
+    let compactors: Table = globals.raw_get("compactors").map_err(error::lua)?;
+    let error_value = install_error_value(lua).map_err(error::lua)?;
     let stash_failure = stash_failure_capture(lua)?;
-    let normalize_failure = install_normalize_failure(lua).map_err(Error::lua)?;
+    let normalize_failure = install_normalize_failure(lua).map_err(error::lua)?;
     let (enter_adhoc_handler, leave_adhoc_handler) =
         adhoc_handler_captures(lua, adhoc_handler_depth)?;
     let hook = cancel_hook.clone();
     let cancel_requested = lua
         .create_function(move |_, ()| Ok(hook.is_cancelled()))
-        .map_err(Error::lua)?;
+        .map_err(error::lua)?;
     let is_model_handle = lua
         .create_function(|_, value: Value| Ok(crate::models::is_handle(&value)))
-        .map_err(Error::lua)?;
+        .map_err(error::lua)?;
     let loop_begin = crate::models_loop::loop_begin(
         lua,
         max_tool_iterations,
@@ -200,7 +189,7 @@ pub(crate) fn install_shim_prelude(
         cancel_hook,
     )?;
     let compact_begin = crate::models_loop::compact_begin(lua, loop_running, cancel_hook)?;
-    let program = SHIM_PROGRAM.as_ref().map_err(Error::shared)?;
+    let program = SHIM_PROGRAM.as_ref().map_err(Clone::clone)?;
     let shims: Table = program
         .load(lua)?
         .call((
@@ -218,24 +207,24 @@ pub(crate) fn install_shim_prelude(
             loop_begin,
             compact_begin,
         ))
-        .map_err(Error::lua)?;
-    let guard: Function = shims.raw_get("guard").map_err(Error::lua)?;
+        .map_err(error::lua)?;
+    let guard: Function = shims.raw_get("guard").map_err(error::lua)?;
     lua.set_named_registry_value(GUARD_REGISTRY, guard)
-        .map_err(Error::lua)?;
+        .map_err(error::lua)?;
     for name in ["pcall", "xpcall"] {
-        let protected: Function = shims.raw_get(name).map_err(Error::lua)?;
-        globals.raw_set(name, protected).map_err(Error::lua)?;
+        let protected: Function = shims.raw_get(name).map_err(error::lua)?;
+        globals.raw_set(name, protected).map_err(error::lua)?;
     }
-    let call: Function = shims.raw_get("call").map_err(Error::lua)?;
-    globals.raw_set("call", call).map_err(Error::lua)?;
-    let helpers: Table = shims.raw_get("helpers").map_err(Error::lua)?;
+    let call: Function = shims.raw_get("call").map_err(error::lua)?;
+    globals.raw_set("call", call).map_err(error::lua)?;
+    let helpers: Table = shims.raw_get("helpers").map_err(error::lua)?;
     let tasks: Table = TASKS_PROGRAM
         .as_ref()
-        .map_err(Error::shared)?
+        .map_err(Clone::clone)?
         .load(lua)?
         .call((yield_fn.clone(), var_snapshot.clone(), helpers.clone()))
-        .map_err(Error::lua)?;
-    globals.raw_set("tasks", &tasks).map_err(Error::lua)?;
+        .map_err(error::lua)?;
+    globals.raw_set("tasks", &tasks).map_err(error::lua)?;
     let fanout = fanout_shim(
         lua,
         yield_fn,
@@ -244,15 +233,15 @@ pub(crate) fn install_shim_prelude(
         selection,
         is_model_handle,
     )?;
-    tasks.raw_set("fanout", fanout).map_err(Error::lua)?;
+    tasks.raw_set("fanout", fanout).map_err(error::lua)?;
     stash_shims(lua, &shims)?;
     for name in ["loop", "compact"] {
-        let entry: Function = shims.raw_get(name).map_err(Error::lua)?;
-        models.raw_set(name, entry).map_err(Error::lua)?;
+        let entry: Function = shims.raw_get(name).map_err(error::lua)?;
+        models.raw_set(name, entry).map_err(error::lua)?;
     }
     globals
         .raw_set("coroutine", Value::Nil)
-        .map_err(Error::lua)?;
+        .map_err(error::lua)?;
     Ok(())
 }
 
@@ -282,16 +271,16 @@ fn fanout_shim(
                 )),
             }
         })
-        .map_err(Error::lua)?;
+        .map_err(error::lua)?;
     let render_item = lua
         .create_function(|lua, item: Value| {
             crate::collection::render_item_value(lua, item).map_err(mlua::Error::external)
         })
-        .map_err(Error::lua)?;
+        .map_err(error::lua)?;
     let (get_selection, set_selection) = selection_captures(lua, selection)?;
     FANOUT_PROGRAM
         .as_ref()
-        .map_err(Error::shared)?
+        .map_err(Clone::clone)?
         .load(lua)?
         .call((
             yield_fn,
@@ -303,7 +292,7 @@ fn fanout_shim(
             set_selection,
             is_model_handle,
         ))
-        .map_err(Error::lua)
+        .map_err(error::lua)
 }
 
 /// Builds the `fanout` chunk's `get_selection()` and `set_selection(value)`
@@ -328,7 +317,7 @@ fn selection_captures(
                 None => Ok(Value::Nil),
             }
         })
-        .map_err(Error::lua)?;
+        .map_err(error::lua)?;
     let write = Arc::clone(selection);
     let set = lua
         .create_function(move |_, value: Value| -> mlua::Result<()> {
@@ -347,7 +336,7 @@ fn selection_captures(
             *write.lock().map_err(|_| selection_poisoned())? = binding;
             Ok(())
         })
-        .map_err(Error::lua)?;
+        .map_err(error::lua)?;
     Ok((get, set))
 }
 
@@ -356,13 +345,13 @@ fn selection_captures(
 fn stash_shims(lua: &Lua, shims: &Table) -> Result<()> {
     #[cfg(any(test, feature = "test-support"))]
     {
-        let model_tool_call: Function = shims.raw_get("model_tool_call").map_err(Error::lua)?;
+        let model_tool_call: Function = shims.raw_get("model_tool_call").map_err(error::lua)?;
         lua.set_named_registry_value(MODEL_TOOL_CALL_REGISTRY, model_tool_call)
-            .map_err(Error::lua)?;
+            .map_err(error::lua)?;
     }
-    let store: Table = shims.raw_get("store").map_err(Error::lua)?;
+    let store: Table = shims.raw_get("store").map_err(error::lua)?;
     lua.set_named_registry_value(STORE_REGISTRY, store)
-        .map_err(Error::lua)
+        .map_err(error::lua)
 }
 
 /// Builds the prelude's `enter_adhoc_handler()` and `leave_adhoc_handler()`
@@ -375,14 +364,14 @@ fn adhoc_handler_captures(lua: &Lua, depth: &Arc<AtomicU32>) -> Result<(Function
             entered.fetch_add(1, Ordering::Relaxed);
             Ok(())
         })
-        .map_err(Error::lua)?;
+        .map_err(error::lua)?;
     let left = Arc::clone(depth);
     let leave = lua
         .create_function(move |_, ()| {
             left.fetch_sub(1, Ordering::Relaxed);
             Ok(())
         })
-        .map_err(Error::lua)?;
+        .map_err(error::lua)?;
     Ok((enter, leave))
 }
 
@@ -396,9 +385,9 @@ fn adhoc_handler_captures(lua: &Lua, depth: &Arc<AtomicU32>) -> Result<(Function
 /// intact instead of only as mlua's stringification.
 ///
 /// # Errors
-/// Returns [`Error::LuaRuntime`] if the shim prelude never ran on this VM.
+/// Returns a `LuaRuntime` failure if the shim prelude never ran on this VM.
 pub(crate) fn block_guard(lua: &Lua) -> Result<Function> {
-    lua.named_registry_value(GUARD_REGISTRY).map_err(Error::lua)
+    lua.named_registry_value(GUARD_REGISTRY).map_err(error::lua)
 }
 
 /// Installs the store yield shims onto a VM's `store` table, replacing the
@@ -415,18 +404,18 @@ pub(crate) fn block_guard(lua: &Lua) -> Result<Function> {
 /// The executor's section setup and live H1 setup are the only callers.
 ///
 /// # Errors
-/// Returns [`Error::LuaRuntime`] if the shim prelude never ran on this VM, the
+/// Returns a `LuaRuntime` failure if the shim prelude never ran on this VM, the
 /// `store` table is absent, or the install fails.
 pub fn install_store_shims(lua: &Lua) -> Result<()> {
     let shims: Table = lua
         .named_registry_value(STORE_REGISTRY)
-        .map_err(Error::lua)?;
-    let store: Table = lua.globals().raw_get("store").map_err(Error::lua)?;
+        .map_err(error::lua)?;
+    let store: Table = lua.globals().raw_get("store").map_err(error::lua)?;
     // `pairs` order is unspecified; every iteration only assigns one named
     // function into `store`, so the resulting table does not depend on it.
     for pair in shims.pairs::<String, Function>() {
-        let (name, function) = pair.map_err(Error::lua)?;
-        store.raw_set(name, function).map_err(Error::lua)?;
+        let (name, function) = pair.map_err(error::lua)?;
+        store.raw_set(name, function).map_err(error::lua)?;
     }
     route_store_to_shims(lua, &shims)
 }

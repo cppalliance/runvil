@@ -4,11 +4,11 @@
 use std::collections::BTreeMap;
 use std::num::NonZeroU32;
 
-use runvil_lua::{Error as LuaError, LuaProgram};
+use runvil_lua::LuaProgram;
 use runvil_types::emitter::{Emitter, EventSink};
 use runvil_types::error::{Error, ErrorCode, FactKey};
 
-use super::{compile_line, internal, lua, with_prompt_context};
+use super::{internal, lua, with_prompt_context};
 use crate::tests::location;
 use crate::{Frontmatter, Prompt};
 
@@ -189,7 +189,8 @@ fn a_lua_compile_failure_is_located_at_the_line_its_diagnostic_names() {
     let error = failure_of(&in_section(&format!("```lua\n{source}\n```\n")));
     let emitter = Emitter::root(EventSink::default(), "test", false);
     let start = NonZeroU32::new(11).expect("11 is non-zero");
-    let Err(compiled) = LuaProgram::compile(source, "section `S` prologue", start, &emitter, "S")
+    let Err(compiled) =
+        LuaProgram::compile(source, FILE, "section `S` prologue", start, &emitter, "S")
     else {
         panic!("the block must not compile");
     };
@@ -203,23 +204,6 @@ fn a_lua_compile_failure_is_located_at_the_line_its_diagnostic_names() {
     assert_eq!(location(&error), Some((FILE, 12, 1, 13, 1)));
     assert_eq!(error.facts, BTreeMap::from([(FactKey::Name, "x".into())]));
     assert_eq!(error.prose, prose_at(ErrorCode::LuaCompile, 12, &message));
-}
-
-#[test]
-fn a_compile_line_maps_the_chunk_line_or_keeps_the_block_line() {
-    let diagnostic = "syntax error: [string \"line 40\"]:3: unexpected symbol near <eof>";
-    assert_eq!(compile_line(40, diagnostic), 42);
-    assert_eq!(
-        compile_line(41, diagnostic),
-        41,
-        "another chunk's line is not this block's"
-    );
-    assert_eq!(compile_line(40, "syntax error: no chunk line"), 40);
-    assert_eq!(
-        compile_line(u32::MAX, &format!("[string \"line {}\"]:2: x", u32::MAX)),
-        u32::MAX,
-        "an overflowing mapping keeps the block line"
-    );
 }
 
 #[test]
@@ -237,12 +221,9 @@ fn an_internal_failure_has_the_default_prose_and_no_name() {
 
 #[test]
 fn a_lua_compiler_that_cannot_start_is_internal() {
-    let vm_failure = mlua::Error::MemoryError("not enough memory".to_owned());
-    let message = vm_failure.to_string();
-    let error = lua(&LuaError::LuaRuntime {
-        message: message.clone(),
-        cause: Box::new(vm_failure),
-    });
+    let message = mlua::Error::MemoryError("not enough memory".to_owned()).to_string();
+    let code = ErrorCode::Internal;
+    let error = lua(&Error::new(code, message.clone(), code.prose()));
     assert_eq!(error.code, ErrorCode::Internal);
     assert_eq!(error.message, message);
     assert_eq!(error.at, None);

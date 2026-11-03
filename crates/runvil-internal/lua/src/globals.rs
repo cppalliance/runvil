@@ -39,8 +39,7 @@ use std::sync::LazyLock;
 
 use mlua::{AnyUserData, Function, Lua, Table, Value};
 
-use crate::error::SharedSource;
-use crate::error::{Error, Result};
+use crate::error::{self, Error, Result};
 use crate::program::LuaProgram;
 
 /// The guard chunk's name, `@`-prefixed so PUC renders it verbatim as a
@@ -56,11 +55,8 @@ const STATE_REGISTRY: &str = "runvil.globals.state";
 
 /// The guard program, compiled once and loaded per VM, under the shim
 /// programs' failure contract.
-static GLOBALS_PROGRAM: LazyLock<std::result::Result<LuaProgram, SharedSource>> =
-    LazyLock::new(|| {
-        LuaProgram::compile_internal(GLOBALS_SOURCE, GLOBALS_CHUNK_NAME)
-            .map_err(crate::detail::shared_source_new)
-    });
+static GLOBALS_PROGRAM: LazyLock<Result<LuaProgram>> =
+    LazyLock::new(|| LuaProgram::compile_internal(GLOBALS_SOURCE, GLOBALS_CHUNK_NAME));
 
 /// Installs the `_G` guard and the `setmetatable` and `getmetatable`
 /// replacements on a fresh VM.
@@ -70,17 +66,17 @@ static GLOBALS_PROGRAM: LazyLock<std::result::Result<LuaProgram, SharedSource>> 
 /// `setmetatable` or `getmetatable`.
 ///
 /// # Errors
-/// Returns [`Error::LuaRuntime`] if the chunk cannot load or run, or the guard
+/// Returns a `LuaRuntime` failure if the chunk cannot load or run, or the guard
 /// and the replacements cannot be installed.
 pub(crate) fn install(lua: &Lua) -> Result<()> {
     let globals = lua.globals();
-    let state = lua.create_table().map_err(Error::lua)?;
+    let state = lua.create_table().map_err(error::lua)?;
     let refuse_argv = refusal(lua, crate::argv::ASSIGNMENT_REFUSAL)?;
     let refuse_prose = refusal(lua, crate::prose::ASSIGNMENT_REFUSAL)?;
     let refuse_messages = refusal(lua, crate::messages::ASSIGNMENT_REFUSAL)?;
     let (guard, replace_metatable, read_metatable): (Table, Function, Function) = GLOBALS_PROGRAM
         .as_ref()
-        .map_err(Error::shared)?
+        .map_err(Error::clone)?
         .load(lua)?
         .call((
             globals.clone(),
@@ -89,40 +85,40 @@ pub(crate) fn install(lua: &Lua) -> Result<()> {
             refuse_prose,
             refuse_messages,
         ))
-        .map_err(Error::lua)?;
+        .map_err(error::lua)?;
     lua.set_named_registry_value(STATE_REGISTRY, state)
-        .map_err(Error::lua)?;
+        .map_err(error::lua)?;
     globals
         .raw_set("setmetatable", replace_metatable)
-        .map_err(Error::lua)?;
+        .map_err(error::lua)?;
     globals
         .raw_set("getmetatable", read_metatable)
-        .map_err(Error::lua)?;
-    globals.set_metatable(Some(guard)).map_err(Error::lua)
+        .map_err(error::lua)?;
+    globals.set_metatable(Some(guard)).map_err(error::lua)
 }
 
 /// Freezes `argv` on the guard: reads return `frozen`, and every
 /// assignment of the global raises the freeze refusal.
 ///
 /// # Errors
-/// Returns [`Error::LuaRuntime`] if the guard's slot table is missing or cannot
+/// Returns a `LuaRuntime` failure if the guard's slot table is missing or cannot
 /// be written.
 pub(crate) fn freeze_argv(lua: &Lua, frozen: Value) -> Result<()> {
     let state = state(lua)?;
-    state.raw_set("argv", frozen).map_err(Error::lua)?;
-    state.raw_set("argv_frozen", true).map_err(Error::lua)
+    state.raw_set("argv", frozen).map_err(error::lua)?;
+    state.raw_set("argv_frozen", true).map_err(error::lua)
 }
 
 /// Puts `render` in the `prose` slot, nil leaving `prose` reading nil, and
 /// returns the render it replaced, nil before the first install.
 ///
 /// # Errors
-/// Returns [`Error::LuaRuntime`] if the guard's slot table is missing or cannot
+/// Returns a `LuaRuntime` failure if the guard's slot table is missing or cannot
 /// be read or written.
 pub(crate) fn replace_prose(lua: &Lua, render: Value) -> Result<Value> {
     let state = state(lua)?;
-    let replaced = state.raw_get("prose").map_err(Error::lua)?;
-    state.raw_set("prose", render).map_err(Error::lua)?;
+    let replaced = state.raw_get("prose").map_err(error::lua)?;
+    state.raw_set("prose", render).map_err(error::lua)?;
     Ok(replaced)
 }
 
@@ -130,24 +126,24 @@ pub(crate) fn replace_prose(lua: &Lua, render: Value) -> Result<Value> {
 /// `messages` slot, which every later read of the global returns.
 ///
 /// # Errors
-/// Returns [`Error::LuaRuntime`] if the guard's slot table is missing or cannot
+/// Returns a `LuaRuntime` failure if the guard's slot table is missing or cannot
 /// be written.
 pub(crate) fn set_messages(lua: &Lua, list: AnyUserData) -> Result<()> {
-    state(lua)?.raw_set("messages", list).map_err(Error::lua)
+    state(lua)?.raw_set("messages", list).map_err(error::lua)
 }
 
 /// The section's list, as the `messages` slot holds it.
 ///
 /// # Errors
-/// Returns [`Error::LuaRuntime`] if the guard's slot table is missing or cannot
-/// be read, and [`Error::Internal`] if no list is installed.
+/// Returns a `LuaRuntime` failure if the guard's slot table is missing or cannot
+/// be read, and an `Internal` failure if no list is installed.
 pub(crate) fn messages(lua: &Lua) -> Result<AnyUserData> {
     match state(lua)?
         .raw_get::<Value>("messages")
-        .map_err(Error::lua)?
+        .map_err(error::lua)?
     {
         Value::UserData(list) => Ok(list),
-        _ => Err(Error::internal(
+        _ => Err(error::internal(
             "the section's messages list is not installed",
         )),
     }
@@ -155,13 +151,13 @@ pub(crate) fn messages(lua: &Lua) -> Result<AnyUserData> {
 
 /// The guard's slot table.
 fn state(lua: &Lua) -> Result<Table> {
-    lua.named_registry_value(STATE_REGISTRY).map_err(Error::lua)
+    lua.named_registry_value(STATE_REGISTRY).map_err(error::lua)
 }
 
 /// An Engine function that raises `message` as a runtime error.
 fn refusal(lua: &Lua, message: &'static str) -> Result<Function> {
     lua.create_function(move |_, ()| -> mlua::Result<()> { Err(mlua::Error::runtime(message)) })
-        .map_err(Error::lua)
+        .map_err(error::lua)
 }
 
 /// Why a name is reserved in a section VM's global namespace.

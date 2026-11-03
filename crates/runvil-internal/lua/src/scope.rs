@@ -9,7 +9,7 @@ use runvil_types::packs::PackId;
 use runvil_types::tools::{ToolId, ToolInfo};
 
 use crate::bindings::ToolBinding;
-use crate::error::{Error, Result};
+use crate::error::{self, Result};
 
 /// Shared per-VM tool-call counts, keyed by tool id and seeded at 0 for
 /// every id the installer was given. `increment` seeds a missing id at 0,
@@ -37,13 +37,13 @@ impl ToolCallCounts {
     fn lock(&self) -> Result<std::sync::MutexGuard<'_, BTreeMap<String, u64>>> {
         self.inner
             .lock()
-            .map_err(|_| Error::internal("tool call counts mutex was poisoned"))
+            .map_err(|_| error::internal("tool call counts mutex was poisoned"))
     }
 
     /// Ensures `id` is present in the map, seeding it at 0 when new.
     ///
     /// # Errors
-    /// Returns [`Error::Internal`] if the mutex is poisoned.
+    /// Returns an `Internal` failure if the mutex is poisoned.
     pub fn ensure(&self, id: &str) -> Result<()> {
         let mut map = self.lock()?;
         map.entry(id.to_owned()).or_insert(0);
@@ -53,7 +53,7 @@ impl ToolCallCounts {
     /// Increments the count for `id`, seeding it at 0 first when new.
     ///
     /// # Errors
-    /// Returns [`Error::Internal`] if the mutex is poisoned.
+    /// Returns an `Internal` failure if the mutex is poisoned.
     pub fn increment(&self, id: &str) -> Result<()> {
         let mut map = self.lock()?;
         *map.entry(id.to_owned()).or_insert(0) += 1;
@@ -63,7 +63,7 @@ impl ToolCallCounts {
     /// Returns every seeded id with its count, read under one lock.
     ///
     /// # Errors
-    /// Returns [`Error::Internal`] if the mutex is poisoned.
+    /// Returns an `Internal` failure if the mutex is poisoned.
     pub(crate) fn snapshot(&self) -> Result<BTreeMap<String, u64>> {
         Ok(self.lock()?.clone())
     }

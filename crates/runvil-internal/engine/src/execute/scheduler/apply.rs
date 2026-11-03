@@ -288,7 +288,6 @@ impl ChainOps<'_> {
                     &report,
                 )
                 .map(|outcome| ToolCallOutcome::Plain(outcome.into_content()))
-                .map_err(error::into_universal)
             }
             CallSite::Script => match prepare_dispatch(
                 &call.binding,
@@ -308,9 +307,8 @@ impl ChainOps<'_> {
                         call.binding.alias(),
                         outcome.into_content(),
                     )
-                    .map_err(error::into_universal)
                 }
-                Err(failure) => Err(error::into_universal(failure)),
+                Err(failure) => Err(failure),
             },
         }
     }

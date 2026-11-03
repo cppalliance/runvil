@@ -163,7 +163,11 @@ fn a_script_call_naming_a_string_without_a_slash_raises_before_any_resolution() 
     let rig = Rig::run(loop_scenario(source).tool(echo_tool()));
     assert_eq!(
         rig.trace().text(),
-        "lua:tools.call: \"tools_echo\" is not a tool id|tools.call: \"echo\" is not a tool id"
+        format!(
+            "lua:{}|{}",
+            refused("tools.call: \"tools_echo\" is not a tool id"),
+            refused("tools.call: \"echo\" is not a tool id")
+        )
     );
     assert!(rig.issued().is_empty(), "nothing was issued");
 }

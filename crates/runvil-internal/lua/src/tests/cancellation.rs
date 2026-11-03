@@ -11,10 +11,11 @@ fn long_running_lua_block_cancels_cooperatively() {
     // An unbounded loop that, without cooperative cancellation, would run
     // forever: no instruction ceiling ends it. With the cancel flag set, the
     // very first instruction-hook firing aborts it; the hook's error is the
-    // raw cancellation message, which the VM classifies as
-    // `Error::Interrupted` once the flag is observed set.
+    // raw cancellation message, which the VM classifies as an
+    // `Interrupted` failure once the flag is observed set.
     let program = LuaProgram::compile(
         "local n = 0\nwhile true do n = n + 1 end",
+        "prompt",
         "cancel loop",
         NonZeroU32::MIN,
         &null_emitter(),
@@ -63,7 +64,7 @@ fn a_pre_cancelled_run_aborts_a_tight_loop_promptly() {
 
     vm.teardown();
     assert!(
-        matches!(outcome, Err(Error::Interrupted)),
+        outcome.as_ref().err() == Some(&crate::interrupted()),
         "expected Interrupted, got {outcome:?}"
     );
 }
@@ -84,7 +85,7 @@ fn a_cancelled_run_unwinds_through_an_author_pcall_loop() {
     let outcome =
         start_cancelled_block("while true do pcall(function() while true do end end) end");
     assert!(
-        matches!(outcome, Err(Error::Interrupted)),
+        outcome.as_ref().err() == Some(&crate::interrupted()),
         "an author pcall must not swallow cancellation, got {outcome:?}"
     );
 }
@@ -95,7 +96,7 @@ fn a_cancelled_run_unwinds_through_an_author_xpcall_loop() {
         "while true do xpcall(function() while true do end end, function(e) return e end) end",
     );
     assert!(
-        matches!(outcome, Err(Error::Interrupted)),
+        outcome.as_ref().err() == Some(&crate::interrupted()),
         "an author xpcall with a message handler must not swallow cancellation, got {outcome:?}"
     );
 }
@@ -121,7 +122,7 @@ fn a_cancelled_run_skips_a_looping_xpcall_message_handler() {
         "xpcall(function() while true do end end, function() while true do end end)",
     );
     assert!(
-        matches!(outcome, Err(Error::Interrupted)),
+        outcome.as_ref().err() == Some(&crate::interrupted()),
         "a message handler must not run under cancellation, got {outcome:?}"
     );
 }

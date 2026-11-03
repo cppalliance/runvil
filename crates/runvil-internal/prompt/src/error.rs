@@ -90,44 +90,15 @@ pub(crate) fn frontmatter_decode(cause: &serde_yaml_ng::Error) -> Error {
 }
 
 /// Builds the failure for a Lua block that did not compile, or for a
-/// compiler that could not start, which is internal.
+/// compiler that could not start, which is internal: the compiler's code
+/// and message.
 ///
-/// A compile failure is located on the file line its diagnostic names.
-pub(crate) fn lua(cause: &runvil_lua::Error) -> Error {
-    let runvil_lua::Error::LuaCompile {
-        source_line,
-        message,
-        ..
-    } = cause
-    else {
-        return failure(ErrorCode::Internal, cause.to_string());
-    };
-    let mut error = failure(ErrorCode::LuaCompile, cause.to_string());
-    error.at = NonZeroU32::new(compile_line(*source_line, message))
-        .map(|line| Location::line(String::new(), line));
+/// A compile failure is located on the file line its diagnostic names, as
+/// the compiler located it.
+pub(crate) fn lua(cause: &Error) -> Error {
+    let mut error = failure(cause.code, cause.message.clone());
+    error.at.clone_from(&cause.at);
     error
-}
-
-/// The file line a compiler diagnostic names, for a block whose source
-/// starts on file line `source_line`.
-///
-/// The compiler names a prompt block's chunk `line {source_line}` and puts
-/// the chunk-relative line after it, which maps to the file line
-/// `source_line + chunk_line - 1`. A diagnostic that names no chunk line,
-/// or one whose mapping overflows, gives `source_line`.
-fn compile_line(source_line: u32, message: &str) -> u32 {
-    let marker = format!("[string \"line {source_line}\"]:");
-    message
-        .find(&marker)
-        .map(|at| &message[at + marker.len()..])
-        .and_then(|rest| {
-            let digits = rest
-                .find(|c: char| !c.is_ascii_digit())
-                .unwrap_or(rest.len());
-            rest[..digits].parse::<u32>().ok()
-        })
-        .and_then(|chunk_line| source_line.checked_add(chunk_line)?.checked_sub(1))
-        .unwrap_or(source_line)
 }
 
 /// Gives a failure the parse returns its file, its prompt name, and its

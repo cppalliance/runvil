@@ -3,7 +3,7 @@
 use mlua::{Lua, LuaSerdeExt, Value};
 use serde_json::Value as Json;
 
-use crate::error::{Error, Result};
+use crate::error::{self, Result, lua_runtime};
 use crate::proxy::key_path;
 use crate::walk_budget::WalkBudget;
 
@@ -160,34 +160,34 @@ pub(crate) fn guarded_var(lua: &Lua, initial: Option<&Json>) -> Result<mlua::Tab
     let initial = match initial {
         Some(Json::Object(values)) => Json::Object(values.clone()),
         Some(other) => {
-            return Err(Error::internal(format!(
+            return Err(error::internal(format!(
                 "var must seed from a JSON object, got {}",
-                lua.to_value(other).map_err(Error::lua)?.type_name()
+                lua.to_value(other).map_err(error::lua)?.type_name()
             )));
         }
         None => Json::Object(serde_json::Map::new()),
     };
-    let guarded_data = lua.create_table().map_err(Error::lua)?;
+    let guarded_data = lua.create_table().map_err(error::lua)?;
     let Value::Table(proxy) =
-        guarded_json_value(lua, &initial, "var", &guarded_data).map_err(Error::lua)?
+        guarded_json_value(lua, &initial, "var", &guarded_data).map_err(error::lua)?
     else {
-        return Err(Error::internal("guarded var root was not a table"));
+        return Err(error::internal("guarded var root was not a table"));
     };
     let Value::Table(data) = guarded_data
         .raw_get::<Value>(proxy.clone())
-        .map_err(Error::lua)?
+        .map_err(error::lua)?
     else {
-        return Err(Error::internal("guarded var data table was missing"));
+        return Err(error::internal("guarded var data table was missing"));
     };
     // The named registry entries keep the data table alive and reachable for
     // Engine read-back, and the proxy reachable for the reassignment check in
     // `var_to_json`.
     lua.set_named_registry_value(VAR_DATA_REGISTRY, data)
-        .map_err(Error::lua)?;
+        .map_err(error::lua)?;
     lua.set_named_registry_value(VAR_PROXY_REGISTRY, proxy.clone())
-        .map_err(Error::lua)?;
+        .map_err(error::lua)?;
     lua.set_named_registry_value(VAR_GUARDED_DATA_REGISTRY, guarded_data)
-        .map_err(Error::lua)?;
+        .map_err(error::lua)?;
     Ok(proxy)
 }
 
@@ -199,42 +199,42 @@ pub(crate) fn guarded_var(lua: &Lua, initial: Option<&Json>) -> Result<mlua::Tab
 /// includes the caller's `var` as a clone.
 ///
 /// # Errors
-/// Returns [`Error::Lua`] if the author reassigned the `var` global,
-/// [`Error::LuaRuntime`] if a registry slot cannot be read (Engine values
+/// Returns a `LuaRuntime` failure if the author reassigned the `var`
+/// global or if a registry slot cannot be read (Engine values
 /// were never injected) or a nested proxy cannot be copied, and
-/// [`Error::Internal`] if the root data value is not a table.
+/// an `Internal` failure if the root data value is not a table.
 pub(crate) fn var_snapshot_table(lua: &Lua) -> Result<mlua::Table> {
     let proxy: mlua::Table = lua
         .named_registry_value(VAR_PROXY_REGISTRY)
-        .map_err(Error::lua)?;
-    let current: Value = lua.globals().get("var").map_err(Error::lua)?;
+        .map_err(error::lua)?;
+    let current: Value = lua.globals().get("var").map_err(error::lua)?;
     match current {
-        Value::Table(ref table) if table.equals(&proxy).map_err(Error::lua)? => {}
+        Value::Table(ref table) if table.equals(&proxy).map_err(error::lua)? => {}
         _ => {
-            return Err(Error::Lua(
+            return Err(lua_runtime(
                 "the `var` global was reassigned; write `var.<field>` instead".to_owned(),
             ));
         }
     }
     let data: mlua::Table = lua
         .named_registry_value(VAR_DATA_REGISTRY)
-        .map_err(Error::lua)?;
+        .map_err(error::lua)?;
     let guarded_data: mlua::Table = lua
         .named_registry_value(VAR_GUARDED_DATA_REGISTRY)
-        .map_err(Error::lua)?;
-    match materialize_guarded_value(lua, Value::Table(data), &guarded_data).map_err(Error::lua)? {
+        .map_err(error::lua)?;
+    match materialize_guarded_value(lua, Value::Table(data), &guarded_data).map_err(error::lua)? {
         Value::Table(plain) => Ok(plain),
         // The root data value is always a table; `guarded_var` builds it.
-        _ => Err(Error::internal("guarded var data table was not a table")),
+        _ => Err(error::internal("guarded var data table was not a table")),
     }
 }
 
 /// Reads the hidden `var` data table back as JSON.
 ///
 /// # Errors
-/// Fails as [`var_snapshot_table`] does, and with [`Error::LuaRuntime`] if
+/// Fails as [`var_snapshot_table`] does, and with a `LuaRuntime` failure if
 /// the data cannot be represented as JSON.
 pub(crate) fn var_to_json(lua: &Lua) -> Result<Json> {
     lua.from_value(Value::Table(var_snapshot_table(lua)?))
-        .map_err(Error::lua)
+        .map_err(error::lua)
 }

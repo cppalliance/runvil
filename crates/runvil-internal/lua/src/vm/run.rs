@@ -3,11 +3,12 @@
 
 use mlua::thread::ThreadStatus;
 use mlua::{MultiValue, Thread, Value};
+use runvil_types::error::ErrorCode;
 
 use super::SectionVm;
 use crate::coro::{StashedFailure, block_guard, take_failure};
-use crate::error::{Error, Result, into_universal};
-use crate::error_value::ErrorKind;
+use crate::error::{self, Error, Result, interrupted, lua_runtime, prompt_file};
+use crate::error_value::{ErrorKind, error_kind};
 use crate::program::LuaProgram;
 use crate::protocol::{Answer, Request, Retained, YieldParse, render_envelope};
 use crate::section::LuaBlockResult;
@@ -17,19 +18,19 @@ impl SectionVm {
     /// rather than silently coercing the failure into "no jump".
     ///
     /// # Errors
-    /// Returns [`Error::Internal`] when the jump-slot mutex is poisoned.
+    /// Returns an `Internal` failure when the jump-slot mutex is poisoned.
     pub(crate) fn take_jump(&self) -> Result<Option<String>> {
         let mut slot = self
             .jump_slot
             .lock()
-            .map_err(|_| Error::internal(JUMP_SLOT_POISONED))?;
+            .map_err(|_| error::internal(JUMP_SLOT_POISONED))?;
         Ok(slot.take())
     }
 
     /// Clears any jump target an earlier chunk recorded.
     ///
     /// # Errors
-    /// Returns [`Error::Internal`] when the jump-slot mutex is poisoned.
+    /// Returns an `Internal` failure when the jump-slot mutex is poisoned.
     pub(crate) fn clear_jump(&self) -> Result<()> {
         self.take_jump().map(drop)
     }
@@ -59,20 +60,20 @@ impl SectionVm {
     /// the block function: the guard runs the block under `xpcall`, whose
     /// handler stashes a failure and its raise-point traceback, and
     /// re-raises the same value, so a structured error table a shim raised
-    /// reaches the Engine as a typed [`Error::Raised`] rather than only as
-    /// mlua's stringification, and a Lua-raised error keeps the author's
-    /// frames for the prompt-line mapping.
+    /// reaches the Engine as the universal error it stands for rather than
+    /// only as mlua's stringification, and a Lua-raised error keeps the
+    /// author's frames for the prompt-line mapping.
     ///
     /// # Errors
-    /// Returns [`Error::Internal`] if the jump slot is poisoned, or
-    /// [`Error::LuaRuntime`] if the program cannot load, the shim prelude
+    /// Returns an `Internal` failure if the jump slot is poisoned, or a
+    /// `LuaRuntime` failure if the program cannot load, the shim prelude
     /// never ran on this VM, or the thread cannot be created or hooked; a
     /// block failure returns the mapped runtime error.
     pub fn start_block_coro(&self, program: &LuaProgram) -> Result<CoroStep> {
         self.clear_jump()?;
         let function = program.load(&self.lua)?;
         let guard = block_guard(&self.lua)?;
-        let thread = self.lua.create_thread(guard).map_err(Error::lua)?;
+        let thread = self.lua.create_thread(guard).map_err(error::lua)?;
         self.cancel_hook.install_on_thread(&thread)?;
         let result = thread.resume::<MultiValue>(function);
         match self.step_block_coro(thread, result)? {
@@ -118,34 +119,26 @@ impl SectionVm {
     ///
     /// The answer renders to its `(ok, result)` envelope on this VM. On a
     /// failure answer the envelope includes the error's structured table
-    /// (`kind`, `message`, fields) for the shim to raise. When the block's
-    /// failure is a raise of that very table - the shim's own raise, or the
-    /// block's re-raise of the value it caught - the typed error the answer
-    /// owned is substituted back, so the Rust caller receives the
+    /// (`kind`, `code`, `message`, fields) for the shim to raise. When the
+    /// block's failure is a raise of that very table - the shim's own raise,
+    /// or the block's re-raise of the value it caught - the typed error the
+    /// answer owned is substituted back, so the Rust caller receives the
     /// structured error rather than a string. A block that caught the
     /// table and failed with anything else, its message text included,
     /// keeps its own error.
     ///
-    /// This crate's own failures leave it as universal errors, through
-    /// [`into_universal`].
-    ///
     /// # Errors
-    /// Same contract as [`start_block_coro`](Self::start_block_coro), as
-    /// universal errors, plus a `LuaRuntime` failure if the envelope cannot
-    /// be rendered on this VM.
+    /// Same contract as [`start_block_coro`](Self::start_block_coro), plus
+    /// a `LuaRuntime` failure if the envelope cannot be rendered on this VM.
     pub fn resume_block_coro_answer(
         &self,
         program: &LuaProgram,
         thread: &Thread,
-        answer: std::result::Result<Answer, runvil_types::error::Error>,
-    ) -> std::result::Result<CoroStep, runvil_types::error::Error> {
-        let (envelope, retained) = render_envelope(&self.lua, answer)
-            .map_err(|error| into_universal(Error::lua(error)))?;
+        answer: std::result::Result<Answer, Error>,
+    ) -> Result<CoroStep> {
+        let (envelope, retained) = render_envelope(&self.lua, answer).map_err(error::lua)?;
         let result = thread.resume::<MultiValue>(envelope);
-        match self
-            .step_block_coro(thread.clone(), result)
-            .map_err(into_universal)?
-        {
+        match self.step_block_coro(thread.clone(), result)? {
             Ok(step) => Ok(step),
             Err(error) => Err(self.answered_block_failure(program, &error, retained)),
         }
@@ -203,10 +196,10 @@ impl SectionVm {
         program: &LuaProgram,
         error: &mlua::Error,
         retained: Option<Retained>,
-    ) -> runvil_types::error::Error {
+    ) -> Error {
         let (stashed, mapped) = match self.mapped_failure(program, error) {
             Ok(parts) => parts,
-            Err(failure) => return into_universal(failure),
+            Err(failure) => return failure,
         };
         if !is_fatal(&mapped)
             && let Some(retained) = retained
@@ -214,7 +207,7 @@ impl SectionVm {
         {
             return retained.error;
         }
-        into_universal(kept_failure(stashed, mapped))
+        kept_failure(stashed, mapped)
     }
 
     /// Takes the guard's stash for a block's failure and maps the failure,
@@ -230,17 +223,20 @@ impl SectionVm {
     }
 
     /// Maps one chunk's Lua failure to its typed outcome: a chunk the
-    /// instruction hook aborted under the run's cancel flag is
-    /// [`Error::Interrupted`], whatever the raw error says; everything
+    /// instruction hook aborted under the run's cancel flag is an
+    /// `Interrupted` failure, whatever the raw error says; everything
     /// else maps through `LuaProgram::map_runtime_error_among` of `program`
-    /// and of every library block `require` loaded into this VM.
+    /// and of every library block `require` loaded into this VM, in the
+    /// VM's prompt file.
     pub(crate) fn map_chunk_failure(&self, program: &LuaProgram, error: &mlua::Error) -> Error {
         if self.cancel_hook.is_cancelled() {
-            return Error::Interrupted;
+            return interrupted();
         }
         match self.library_programs.lock() {
-            Ok(libraries) => program.map_runtime_error_among(error, &libraries),
-            Err(_) => Error::internal("require's loaded library programs were poisoned"),
+            Ok(libraries) => {
+                program.map_runtime_error_among(error, &libraries, &prompt_file(&self.lua))
+            }
+            Err(_) => error::internal("require's loaded library programs were poisoned"),
         }
     }
 }
@@ -251,41 +247,24 @@ const JUMP_SLOT_POISONED: &str = "jump slot poisoned";
 /// Whether `mapped` is a cancellation or an exhausted Engine quota, which
 /// keep their mapping whatever the block raised.
 fn is_fatal(mapped: &Error) -> bool {
-    matches!(mapped, Error::Interrupted | Error::LuaQuota { .. })
+    matches!(mapped.code, ErrorCode::Interrupted | ErrorCode::LuaQuota)
 }
 
 /// The failure a block keeps, given what the guard `stashed` and the
 /// failure `mapped` to its prompt line: the mapping for a cancellation, an
 /// Engine quota, a raise that is no error table, or a `lua`-kind table,
 /// whose mapped runtime error keeps the same message with its source and
-/// the mapped prompt line; any other structured table as
-/// [`Error::Raised`]. A raise that is no error table keeps its mapping, so
-/// an uncaught direct `compactors.fail` call is
-/// [`Error::ContextExhausted`].
+/// the mapped prompt line; any other structured table as the universal
+/// error it stands for. A raise that is no error table keeps its mapping,
+/// so an uncaught direct `compactors.fail` call is its context
+/// exhaustion.
 fn kept_failure(stashed: StashedFailure, mapped: Error) -> Error {
     if is_fatal(&mapped) {
         return mapped;
     }
     match stashed.raised {
-        None => mapped,
-        Some(raised) => match raised.kind {
-            ErrorKind::Lua => mapped,
-            ErrorKind::ToolLoopExhausted
-            | ErrorKind::ContextExhausted
-            | ErrorKind::EmptyModelReply
-            | ErrorKind::ModelFailure
-            | ErrorKind::ModelRequired
-            | ErrorKind::OutOfScopeTool
-            | ErrorKind::UnboundTool
-            | ErrorKind::ModelOnlyTool
-            | ErrorKind::Tool
-            | ErrorKind::TaskNotOwned
-            | ErrorKind::TaskConsumed
-            | ErrorKind::TasksLive
-            | ErrorKind::Cancelled
-            | ErrorKind::Store
-            | ErrorKind::Internal => Error::Raised(raised),
-        },
+        Some(raised) if error_kind(&raised) != ErrorKind::Lua => raised,
+        _ => mapped,
     }
 }
 
@@ -297,7 +276,7 @@ fn value_to_string(value: &Value) -> Result<String> {
         Value::Integer(i) => Ok(i.to_string()),
         Value::Number(n) => Ok(n.to_string()),
         Value::Boolean(b) => Ok(b.to_string()),
-        other => Err(Error::Lua(format!(
+        other => Err(lua_runtime(format!(
             "cannot return a {} as a result",
             other.type_name()
         ))),
@@ -309,7 +288,8 @@ fn value_to_string(value: &Value) -> Result<String> {
 /// Later values are ignored. A missing or nil first value returns `None`.
 ///
 /// # Errors
-/// Returns [`Error::Lua`] when the first value is not a supported scalar.
+/// Returns a `LuaRuntime` failure when the first value is not a supported
+/// scalar.
 pub(crate) fn scalar_return(returned: MultiValue) -> Result<Option<String>> {
     match returned.into_iter().next() {
         None | Some(Value::Nil) => Ok(None),

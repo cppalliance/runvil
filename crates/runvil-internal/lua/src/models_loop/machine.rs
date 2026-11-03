@@ -18,13 +18,12 @@
 //! round compacts at most once, so a retry that overflows again puts the
 //! snapshot back and raises `context_exhausted`.
 
-use std::collections::BTreeMap;
-
+use runvil_model_client::model::completion_error;
+use runvil_types::error::{ErrorCode, FactKey};
 use runvil_types::metrics::ToolCallEvent;
 
 use crate::compactors::{OverflowReason, estimate_tokens};
-use crate::error::Error;
-use crate::error_value::{ErrorField, ErrorKind, Raised};
+use crate::error::{self, Error, context_exhausted, tool_loop_exhausted};
 use crate::messages::{MessageList, Snapshot};
 use crate::projection::project_messages;
 use crate::protocol::{
@@ -35,12 +34,8 @@ use crate::protocol::{
 /// empty detail.
 const EMPTY_MODEL_REPLY: &str = "empty model reply";
 
-/// The message the round cap raises.
-const NOT_CONVERGED: &str = "tool-call loop did not converge";
-
-/// The message raised for an input the machine's phase does not await.
-const UNEXPECTED_INPUT: &str =
-    "internal invariant violated: the models.loop step received an input its phase does not await";
+/// The invariant an input the machine's phase does not await breaks.
+const UNEXPECTED_INPUT: &str = "the models.loop step received an input its phase does not await";
 
 /// One loop call: its rules' state and the values it passes along.
 #[derive(Debug)]
@@ -154,8 +149,8 @@ pub(super) enum Then<V> {
     Raise(V),
     /// Raise a compactor's failure through `normalize_failure`.
     RaiseNormalized(V),
-    /// Raise a new error table.
-    RaiseNew(Raised),
+    /// Raise a new failure, as its error table.
+    RaiseNew(Error),
 }
 
 impl<V: Clone> Machine<V> {
@@ -233,7 +228,7 @@ impl<V: Clone> Machine<V> {
             | (Phase::Batching, Input::Batched(Err(failure)))
             | (Phase::Calling, Input::Dispatched(Err(failure)))
             | (Phase::Reporting(None), Input::Reported(Err(failure))) => Then::Raise(failure),
-            _ => Then::RaiseNew(raised(ErrorKind::Internal, UNEXPECTED_INPUT)),
+            _ => Then::RaiseNew(error::internal(UNEXPECTED_INPUT)),
         }
     }
 
@@ -241,7 +236,7 @@ impl<V: Clone> Machine<V> {
     /// `tool_loop_exhausted` once the cap's rounds have all started.
     fn next_round(&mut self) -> Then<V> {
         if self.rounds >= self.max_rounds {
-            return Then::RaiseNew(raised(ErrorKind::ToolLoopExhausted, NOT_CONVERGED));
+            return Then::RaiseNew(tool_loop_exhausted());
         }
         self.rounds += 1;
         self.chat(None)
@@ -283,14 +278,12 @@ impl<V: Clone> Machine<V> {
             let record = text_record(RecordRole::Assistant, String::new());
             return self.push(vec![record], |_| Then::Return);
         }
-        let mut empty = raised(ErrorKind::EmptyModelReply, EMPTY_MODEL_REPLY);
-        if let Some(detail) = detail {
-            empty.message = detail;
-        }
+        let mut empty = completion_error(
+            ErrorCode::EmptyReply,
+            detail.unwrap_or_else(|| EMPTY_MODEL_REPLY.to_owned()),
+        );
         if let Some(reason) = round.finish_reason {
-            empty
-                .fields
-                .insert("finish_reason".to_owned(), ErrorField::String(reason));
+            empty.facts.insert(FactKey::FinishReason, reason.into());
         }
         Then::RaiseNew(empty)
     }
@@ -319,7 +312,7 @@ impl<V: Clone> Machine<V> {
     fn take_batch(&mut self, texts: Vec<String>) -> Then<V> {
         let unanswered = self.calls.len() - self.results.len();
         if texts.len() > unanswered {
-            return Then::RaiseNew(raised(ErrorKind::Internal, UNEXPECTED_INPUT));
+            return Then::RaiseNew(error::internal(UNEXPECTED_INPUT));
         }
         let short = texts.len() < unanswered;
         self.results.extend(texts);
@@ -381,7 +374,7 @@ impl<V: Clone> Machine<V> {
         for record in records {
             if let Err(refused) = self.list.push(record) {
                 self.phase = Phase::Done;
-                return Then::RaiseNew(raised(ErrorKind::Internal, &refused.to_string()));
+                return Then::RaiseNew(error::internal(refused.message));
             }
         }
         next(self)
@@ -422,9 +415,8 @@ fn check(
     list: &MessageList,
     snapshot: &Snapshot,
     overflow: Option<OverflowReason>,
-) -> std::result::Result<(), Raised> {
-    let projected = project_messages(&list.to_records())
-        .map_err(|refused| raised(refused.to_raised().kind, &refused.to_string()))?;
+) -> std::result::Result<(), Error> {
+    let projected = project_messages(&list.to_records())?;
     let Some(reason) = overflow else {
         return Ok(());
     };
@@ -441,11 +433,8 @@ fn check(
 
 /// A new `context_exhausted` error for `reason`, as `compactors.fail`
 /// raises it.
-fn exhausted(reason: OverflowReason) -> Raised {
-    Error::ContextExhausted {
-        reason: reason.tag().to_owned(),
-    }
-    .to_raised()
+fn exhausted(reason: OverflowReason) -> Error {
+    context_exhausted(reason.tag())
 }
 
 /// A record of `role` holding the plain text `content` and no `meta`.
@@ -455,15 +444,6 @@ fn text_record(role: RecordRole, content: String) -> MessageRecord {
         content: MessageContent::Text(content),
         tool_calls: Vec::new(),
         meta: None,
-    }
-}
-
-/// A new error of `kind` with `message` and no fields.
-pub(super) fn raised(kind: ErrorKind, message: &str) -> Raised {
-    Raised {
-        kind,
-        message: message.to_owned(),
-        fields: BTreeMap::new(),
     }
 }
 

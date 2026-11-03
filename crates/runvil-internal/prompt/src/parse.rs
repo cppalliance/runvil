@@ -168,7 +168,8 @@ impl Prompt {
             .skip(*h1_index + 1)
             .filter(|h| h.level >= 2)
             .collect();
-        let mut walker = SectionWalker::new(&shared, &section_headings, frontmatter_lines, emitter);
+        let mut walker =
+            SectionWalker::new(&shared, &section_headings, frontmatter_lines, file, emitter);
         let mut h1_blocks = walker.compile_blocks(
             fence::split_section_blocks(h1_content, &title)?,
             h1_content_abs_line,

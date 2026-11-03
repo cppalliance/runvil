@@ -1,32 +1,34 @@
 //! The classifier a Rust callback's failure runs through on its way to
 //! author code, and the `normalize_failure` capture built on it.
 
-use std::collections::BTreeMap;
-
 use mlua::{Function, Lua, Value};
+use runvil_types::error::{Error, ErrorCode};
 
-use super::{ErrorKind, Raised, raised_table};
-use crate::error::Error;
+use super::error_table;
+use crate::error::{
+    authored, authored_at, failure_text, lua_runtime, prompt_file, root_cause, root_text,
+};
 
-/// A Rust callback's failure classified for the error table: the kind, the
-/// message `tostring` rendered before (the root cause's display, without
-/// the traceback mlua appends), and the kind's fields.
+/// A Rust callback's failure as the universal error its table renders.
 ///
 /// mlua raises a callback's `Err` into Lua as an opaque userdata whose
 /// `tostring` is the error's display; author code cannot index it, so
 /// `err.kind` fails at exactly the call sites that fail directly from
-/// Rust. The classifier reads the typed [`Error`] back out of the mlua
+/// Rust. The classifier reads the universal error back out of the mlua
 /// wrapper when the callback raised one, and otherwise sorts mlua's own
 /// variants: an authoring or argument failure (a runtime or syntax error,
 /// a bad argument, a value conversion, an external error of another type,
-/// an exhausted memory quota) is `lua`; anything else is mlua's own
-/// machinery failing, which the author cannot act on, so it is `internal`.
-fn classified(error: &mlua::Error) -> Raised {
+/// an exhausted memory quota) is `LuaRuntime`, with the root error's text
+/// as its message and the author prose of what failed; anything else is
+/// mlua's own machinery failing, which the author cannot act on, so it is
+/// `Internal`. A universal failure the prompt's Lua caused gets its author
+/// prose.
+fn classified(lua: &Lua, error: &mlua::Error) -> Error {
     if let Some(typed) = error.downcast_ref::<Error>() {
-        return typed.to_raised();
+        return authored(lua, typed.clone());
     }
     let root = root_cause(error);
-    let kind = match root {
+    match root {
         mlua::Error::RuntimeError(_)
         | mlua::Error::SyntaxError { .. }
         | mlua::Error::MemoryError(_)
@@ -34,24 +36,20 @@ fn classified(error: &mlua::Error) -> Raised {
         | mlua::Error::FromLuaConversionError { .. }
         | mlua::Error::SerializeError(_)
         | mlua::Error::DeserializeError(_)
-        | mlua::Error::ExternalError(_) => ErrorKind::Lua,
-        _ => ErrorKind::Internal,
-    };
-    Raised {
-        kind,
-        message: root.to_string(),
-        fields: BTreeMap::new(),
-    }
-}
-
-/// Strips mlua's wrapping layers (the callback frame and any context) down
-/// to the error a callback returned.
-fn root_cause(error: &mlua::Error) -> &mlua::Error {
-    match error {
-        mlua::Error::CallbackError { cause, .. } | mlua::Error::WithContext { cause, .. } => {
-            root_cause(cause)
+        | mlua::Error::ExternalError(_) => {
+            let what = root_text(error);
+            authored_at(
+                lua_runtime(root.to_string()),
+                &prompt_file(lua),
+                None,
+                failure_text(&what),
+            )
         }
-        other => other,
+        _ => Error::new(
+            ErrorCode::Internal,
+            root.to_string(),
+            ErrorCode::Internal.prose(),
+        ),
     }
 }
 
@@ -72,7 +70,7 @@ pub(crate) fn install_normalize_failure(lua: &Lua) -> mlua::Result<Function> {
 /// unchanged, for the capture and the loop's compactor rule alike.
 pub(crate) fn normalized(lua: &Lua, value: Value) -> mlua::Result<Value> {
     match value {
-        Value::Error(error) => Ok(Value::Table(raised_table(lua, &classified(&error))?)),
+        Value::Error(error) => Ok(Value::Table(error_table(lua, &classified(lua, &error))?)),
         other => Ok(other),
     }
 }

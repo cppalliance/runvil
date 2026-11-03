@@ -107,7 +107,7 @@ impl ChainOps<'_> {
         let binding = if let Some(binding) = binding {
             binding
         } else {
-            let current = vm.current_model().map_err(error::into_universal)?;
+            let current = vm.current_model()?;
             current.ok_or_else(|| error::model_required(&section))?
         };
         let handles = frame.reporting_handles().clone();
@@ -149,7 +149,7 @@ impl ChainOps<'_> {
             Ok(conversation) => conversation,
             Err(failure) => {
                 emitter.report(&section, lifecycle::MODEL_TURN_FAILED);
-                return Err(error::into_universal(failure));
+                return Err(failure);
             }
         };
         let context = binding.context();

@@ -47,10 +47,10 @@ fn models_loop_raises_context_exhaustion_at_the_call_site() {
          return tostring(err)",
     );
     let trace = loop_scenario(source).chat(&gateway).run();
-    let out = trace.text();
-    assert!(
-        out.starts_with("context exhausted: "),
-        "the raised error is the typed exhaustion's message, got: {out}"
+    assert_eq!(
+        trace.text(),
+        runvil_types::error::ErrorCode::ContextExhausted.prose(),
+        "the raised error renders the typed exhaustion's prose"
     );
 }
 
@@ -156,17 +156,14 @@ fn a_non_function_compactor_is_the_calls_error_in_the_engines_type_names() {
          return table.concat(out, '|')",
     );
     let trace = loop_scenario(source).chat(&gateway).run();
-    assert_eq!(
-        trace.text(),
-        "compactor must be a function, got integer\
-         |compactor must be a function, got integer\
-         |compactor must be a function, got number\
-         |compactor must be a function, got number\
-         |compactor must be a function, got string\
-         |compactor must be a function, got string\
-         |compactor must be a function, got table\
-         |compactor must be a function, got table"
-    );
+    let expected: Vec<String> = ["integer", "number", "string", "table"]
+        .iter()
+        .flat_map(|kind| {
+            let refusal = refused(&format!("compactor must be a function, got {kind}"));
+            [refusal.clone(), refusal]
+        })
+        .collect();
+    assert_eq!(trace.text(), expected.join("|"));
     assert_eq!(
         gateway.call_count(),
         0,

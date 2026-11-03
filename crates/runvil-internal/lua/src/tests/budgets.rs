@@ -29,13 +29,9 @@ fn the_first_chunk_consumes_the_configured_log_budget() {
         "Budget",
     )
     .expect_err("the second log must exhaust the configured budget");
+    let quota = crate::lua_quota(crate::QuotaResource::LogEvent);
     assert!(
-        matches!(
-            error,
-            Error::LuaQuota {
-                resource: crate::QuotaResource::LogEvent
-            }
-        ),
+        (error.code, &error.message, &error.facts) == (quota.code, &quota.message, &quota.facts),
         "log-budget exhaustion must surface as a typed LuaQuota: {error:?}"
     );
     vm.teardown();
@@ -58,7 +54,7 @@ fn an_author_raise_of_a_quota_refusals_text_is_an_ordinary_runtime_error() {
         )
         .expect_err("the author's raise must fail the block");
         assert!(
-            matches!(error, Error::LuaRuntime { .. }),
+            error.code == ErrorCode::LuaRuntime,
             "an author raise of {refusal:?} must stay a runtime error: {error:?}"
         );
     }

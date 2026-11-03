@@ -11,6 +11,7 @@ fn lua_program_retains_source_and_round_trips_bytecode() {
     let source = "return greeting .. ' world'";
     let program = LuaProgram::compile(
         source,
+        "prompt",
         "section Gather prologue",
         NonZeroU32::new(1).expect("compile source line is non-zero"),
         &null_emitter(),
@@ -35,6 +36,7 @@ fn runtime_assert_failure_reports_chunk_name_and_line() {
     let location = "section `Web Search` epilog";
     let program = LuaProgram::compile(
         "local x = 1\nassert(false)\nreturn x",
+        "prompt",
         location,
         NonZeroU32::new(1).expect("compile source line is non-zero"),
         &null_emitter(),
@@ -109,7 +111,11 @@ fn map_chunk_line_to_absolute_rewrites_line_numbers() {
     );
     assert_eq!(
         result,
-        "section `Web Search` epilog:51: section `Web Search` epilog:51: assertion failed!"
+        (
+            "section `Web Search` epilog:51: section `Web Search` epilog:51: assertion failed!"
+                .to_owned(),
+            NonZeroU32::new(51)
+        )
     );
 }
 
@@ -118,13 +124,18 @@ fn map_chunk_line_to_absolute_only_rewrites_matching_chunk() {
     let msg = r#"[string "line 50"]:51: assertion failed!
 stack traceback:
         [string "line 22"]:3: in main chunk"#;
-    let result = map_chunk_line_to_absolute(
+    let (result, line) = map_chunk_line_to_absolute(
         msg,
         &[(
             "line 22",
             "section `Main` prologue",
             NonZeroU32::new(22).expect("22 is non-zero"),
         )],
+    );
+    assert_eq!(
+        line,
+        NonZeroU32::new(24),
+        "the tag's line is the first rewritten"
     );
     assert!(
         result.contains("[string \"line 50\"]:51:"),
@@ -148,14 +159,15 @@ fn map_chunk_line_to_absolute_leaves_an_already_mapped_marker_alone() {
         "section `lib` prologue",
         NonZeroU32::new(50).expect("50 is non-zero"),
     );
-    let child = map_chunk_line_to_absolute(r#"[string "line 50"]:2: boom"#, &[lib]);
+    let (child, _) = map_chunk_line_to_absolute(r#"[string "line 50"]:2: boom"#, &[lib]);
     assert_eq!(
         child,
         "section `lib` prologue:51: section `lib` prologue:51: boom"
     );
     let parent = map_chunk_line_to_absolute(&child, &[lib]);
     assert_eq!(
-        parent, child,
+        parent,
+        (child, None),
         "a second pass through the same owner must not rewrite line 51 again"
     );
 }
@@ -165,7 +177,9 @@ fn map_chunk_line_to_absolute_keeps_original_digits_on_overflow() {
     // source_line + chunk_line - 1 must not wrap; on overflow the original
     // chunk-relative digits are preserved rather than a wrong absolute line.
     let msg = r#"[string "x"]:5: boom"#;
-    let result = map_chunk_line_to_absolute(msg, &[("x", "section `x` prologue", NonZeroU32::MAX)]);
+    let (result, line) =
+        map_chunk_line_to_absolute(msg, &[("x", "section `x` prologue", NonZeroU32::MAX)]);
+    assert_eq!(line, None, "an overflowing mapping names no line");
     assert!(
         result.contains(r#"[string "x"]:5:"#),
         "overflowing mapping must keep the original line 5: {result}"
@@ -187,7 +201,7 @@ fn map_chunk_line_to_absolute_no_match_passthrough() {
             NonZeroU32::new(10).expect("10 is non-zero"),
         )],
     );
-    assert_eq!(result, msg);
+    assert_eq!(result, (msg.to_owned(), None));
 }
 
 #[test]
@@ -210,10 +224,14 @@ stack traceback:
     ];
     assert_eq!(
         map_chunk_line_to_absolute(msg, &owners),
-        "lib:51: lib:51: boom
+        (
+            "lib:51: lib:51: boom
 stack traceback:
         lib:51: in function 'boom'
         caller:32: in main chunk"
+                .to_owned(),
+            NonZeroU32::new(51)
+        )
     );
 }
 
@@ -223,6 +241,7 @@ fn runtime_error_maps_to_absolute_prompt_line() {
     let source_line = NonZeroU32::new(50).expect("50 is non-zero");
     let program = LuaProgram::compile(
         "local x = 1\nassert(false)\nreturn x",
+        "prompt",
         location,
         source_line,
         &null_emitter(),
@@ -256,6 +275,7 @@ fn a_location_longer_than_lua_keeps_in_a_chunk_name_still_maps() {
     assert!(location.len() >= 60, "the fixture must exceed Lua's cut");
     let program = LuaProgram::compile(
         "assert(false)",
+        "prompt",
         location,
         NonZeroU32::new(40).expect("40 is non-zero"),
         &null_emitter(),
@@ -276,11 +296,42 @@ fn a_location_longer_than_lua_keeps_in_a_chunk_name_still_maps() {
 }
 
 #[test]
-fn malformed_lua_reports_location_and_retains_source_diagnostic() {
+fn a_block_failure_names_the_vms_file_and_its_mapped_line() {
+    let vm = TestVm::new().shims().build();
+    crate::error::set_prompt_file(vm.lua(), "agents/a.md");
+    let error = match vm.start_block_coro(&program("local x = 1\nerror('boom')")) {
+        Err(error) => error,
+        other => panic!("the block must fail, got {other:?}"),
+    };
+    assert_eq!(error.code, ErrorCode::LuaRuntime);
+    assert!(
+        error
+            .message
+            .starts_with("test program:2: runtime error: test program:2: boom"),
+        "the message keeps its mapped text: {}",
+        error.message
+    );
+    assert_eq!(
+        error.at,
+        Some(runvil_types::error::Location::line(
+            "agents/a.md",
+            NonZeroU32::new(2).expect("2 is non-zero")
+        ))
+    );
+    assert_eq!(
+        error.prose,
+        format!("agents/a.md:2: boom. {}", ErrorCode::LuaRuntime.prose())
+    );
+    vm.teardown();
+}
+
+#[test]
+fn malformed_lua_reports_its_region_and_the_diagnostic() {
     let source = "local secret =\nreturn secret";
     let location = "section Gather prologue";
     let error = LuaProgram::compile(
         source,
+        "prompt",
         location,
         NonZeroU32::new(1).expect("compile source line is non-zero"),
         &null_emitter(),
@@ -288,22 +339,15 @@ fn malformed_lua_reports_location_and_retains_source_diagnostic() {
     )
     .expect_err("malformed Lua must not compile");
 
-    match &error {
-        Error::LuaCompile {
-            location: actual_location,
-            lua_source: actual_source,
-            message,
-            ..
-        } => {
-            assert_eq!(actual_location, location);
-            assert_eq!(actual_source, source);
-            assert!(
-                message.contains(r#"[string "line 1"]"#),
-                "the Lua diagnostic must name the chunk by its first prompt line: {message}"
-            );
-        }
-        other => panic!("expected Error::LuaCompile, got {other:?}"),
-    }
+    assert_eq!(error.code, ErrorCode::LuaCompile);
+    assert_eq!(
+        error.facts.get(&runvil_types::error::FactKey::Section),
+        Some(&Json::from(location))
+    );
+    assert!(
+        error.message.contains(r#"[string "line 1"]"#),
+        "the Lua diagnostic must name the chunk by its first prompt line: {error}"
+    );
     assert!(
         error.to_string().contains(location),
         "the displayed error must identify its source region"
@@ -317,6 +361,7 @@ fn lua_compilation_reports_are_ordered_exact_and_payload_free() {
     let location = "private/location";
     LuaProgram::compile(
         source,
+        "prompt",
         location,
         NonZeroU32::new(1).expect("compile source line is non-zero"),
         recorder.emitter(),
@@ -341,6 +386,7 @@ fn lua_compilation_reports_are_ordered_exact_and_payload_free() {
     let recorder = Recorder::default();
     LuaProgram::compile(
         "local private =",
+        "prompt",
         location,
         NonZeroU32::new(1).expect("compile source line is non-zero"),
         recorder.emitter(),
@@ -361,24 +407,4 @@ fn lua_compilation_reports_are_ordered_exact_and_payload_free() {
         ]
     );
     assert_identity_only(&recorder);
-}
-
-#[test]
-fn lua_runtime_error_keeps_its_mlua_cause_out_of_the_source_chain() {
-    // A Lua runtime failure is the cause-bearing `LuaRuntime` variant: its
-    // message already holds the `mlua` error's text, so the originating
-    // error is kept behind `cause()` and a chain printer shows it once.
-    let err = run("error('boom')", "").expect_err("an explicit error() must raise");
-    assert!(
-        matches!(err, Error::LuaRuntime { .. }),
-        "a Lua runtime failure must use the cause-bearing variant, got {err:?}"
-    );
-    assert!(
-        matches!(err.cause(), Some(cause) if cause.is::<mlua::Error>()),
-        "the originating mlua error must stay reachable as the cause"
-    );
-    assert!(
-        std::error::Error::source(&err).is_none(),
-        "the cause must not repeat as a chain segment"
-    );
 }

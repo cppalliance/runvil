@@ -108,6 +108,8 @@ pub(crate) struct SectionWalker<'a> {
     /// The file lines before the body, added to a body line to give its file
     /// line.
     frontmatter_lines: u32,
+    /// The file the prompt came from, which a block's compile failure names.
+    file: &'a str,
     /// Receives each Lua block's compile events.
     emitter: &'a Emitter,
     /// Index in `headings` of the next heading to build.
@@ -120,12 +122,14 @@ impl<'a> SectionWalker<'a> {
         shared: &'a Arc<str>,
         headings: &'a [Heading<'a>],
         frontmatter_lines: u32,
+        file: &'a str,
         emitter: &'a Emitter,
     ) -> Self {
         Self {
             shared,
             headings,
             frontmatter_lines,
+            file,
             emitter,
             pos: 0,
         }
@@ -309,6 +313,7 @@ impl<'a> SectionWalker<'a> {
                     let abs_line = line_add(content_abs_line, line_offset)?;
                     let program = LuaProgram::compile(
                         &source,
+                        self.file,
                         &location(&role),
                         nz_source_line(abs_line)?,
                         self.emitter,

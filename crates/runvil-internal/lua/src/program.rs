@@ -4,28 +4,24 @@ use std::num::NonZeroU32;
 
 use mlua::{Function, Lua, LuaOptions, StdLib};
 use runvil_types::emitter::Emitter;
+use runvil_types::error::ErrorCode;
 use runvil_types::event::lifecycle;
 
-use crate::error::{Error, QuotaExceeded, Result};
+use crate::error::{
+    self, Error, Result, authored_at, failure_text, lua_compile, lua_runtime, root_text,
+};
 
-/// Identifies whether temporary compiler setup or chunk compilation failed.
-enum CompilerError {
-    Vm(mlua::Error),
-    Chunk(mlua::Error),
-}
-
-/// Compiles a named chunk in the fixed temporary VM and keeps debug info.
-fn compile_chunk(source: &str, chunk_name: &str) -> std::result::Result<Vec<u8>, CompilerError> {
-    let lua = Lua::new_with(
+/// The fixed temporary VM a chunk compiles in.
+fn compiler() -> mlua::Result<Lua> {
+    Lua::new_with(
         StdLib::STRING | StdLib::TABLE | StdLib::MATH | StdLib::UTF8,
         LuaOptions::default(),
     )
-    .map_err(CompilerError::Vm)?;
-    let function = lua
-        .load(source)
-        .set_name(chunk_name)
-        .into_function()
-        .map_err(CompilerError::Chunk)?;
+}
+
+/// Compiles a named chunk in `lua` and keeps debug info.
+fn compile_chunk(lua: &Lua, source: &str, chunk_name: &str) -> mlua::Result<Vec<u8>> {
+    let function = lua.load(source).set_name(chunk_name).into_function()?;
     // Keep debug info so runtime errors report the chunk name and line
     // (`dump(true)` strips them and leaves `?:` in the traceback).
     Ok(function.dump(false))
@@ -75,7 +71,8 @@ pub struct LuaProgram {
 impl LuaProgram {
     /// Compiles `source` as Lua 5.5 bytecode without executing it.
     ///
-    /// `location` identifies the source region in diagnostics. The chunk
+    /// `location` identifies the source region in diagnostics, and `file`
+    /// is the prompt file the region is in. The chunk
     /// itself compiles under the name `line {source_line}`, which Lua
     /// renders as `[string "line 120"]`: no two blocks of one prompt start
     /// on the same line, and the name never reaches the length at which Lua
@@ -84,11 +81,15 @@ impl LuaProgram {
     /// coordinates.
     ///
     /// # Errors
-    /// Returns [`Error::LuaCompile`] when `source` is not syntactically valid,
-    /// retaining the source, location, and Lua diagnostic. Returns
-    /// [`Error::LuaRuntime`] if the temporary compiler VM cannot be created.
+    /// Returns a `LuaCompile` failure when `source` is not syntactically
+    /// valid: its message names the region and holds the Lua diagnostic,
+    /// its `Section` fact names the region, and it is located on the line
+    /// of `file` the diagnostic names, which its author prose names too.
+    /// Returns an `Internal` failure, with the `mlua` error's text, if the
+    /// temporary compiler VM cannot be created.
     pub fn compile(
         source: &str,
+        file: &str,
         location: &str,
         source_line: NonZeroU32,
         emitter: &Emitter,
@@ -97,21 +98,31 @@ impl LuaProgram {
         emitter.report(section, lifecycle::LUA_COMPILATION_STARTED);
 
         let chunk_name = format!("line {source_line}");
-        let bytecode = match compile_chunk(source, &chunk_name) {
+        let compiled = compiler()
+            .map_err(|error| {
+                let code = ErrorCode::Internal;
+                Error::new(code, error.to_string(), code.prose())
+            })
+            .and_then(|lua| {
+                compile_chunk(&lua, source, &chunk_name).map_err(|error| {
+                    let diagnostic = match &error {
+                        mlua::Error::SyntaxError { message, .. } => message.clone(),
+                        other => other.to_string(),
+                    };
+                    let line = compile_line(&chunk_name, source_line, &diagnostic);
+                    authored_at(
+                        lua_compile(location, source_line.get(), &error.to_string()),
+                        file,
+                        Some(line),
+                        failure_text(&diagnostic),
+                    )
+                })
+            });
+        let bytecode = match compiled {
             Ok(bytecode) => bytecode,
-            Err(CompilerError::Vm(error)) => {
+            Err(error) => {
                 emitter.report(section, lifecycle::LUA_COMPILATION_FAILED);
-                return Err(Error::lua(error));
-            }
-            Err(CompilerError::Chunk(error)) => {
-                emitter.report(section, lifecycle::LUA_COMPILATION_FAILED);
-                return Err(Error::LuaCompile {
-                    location: location.to_owned(),
-                    source_line: source_line.get(),
-                    lua_source: source.to_owned(),
-                    message: error.to_string(),
-                    cause: Box::new(error),
-                });
+                return Err(error);
             }
         };
 
@@ -133,12 +144,12 @@ impl LuaProgram {
     /// file path in errors, which the line mapper never rewrites.
     ///
     /// # Errors
-    /// Returns [`Error::LuaRuntime`] if the temporary compiler VM cannot be
+    /// Returns a `LuaRuntime` failure if the temporary compiler VM cannot be
     /// created or the source fails to compile.
     pub fn compile_internal(source: &str, chunk_name: &str) -> Result<Self> {
-        let bytecode = compile_chunk(source, chunk_name).map_err(|error| match error {
-            CompilerError::Vm(error) | CompilerError::Chunk(error) => Error::lua(error),
-        })?;
+        let bytecode = compiler()
+            .and_then(|lua| compile_chunk(&lua, source, chunk_name))
+            .map_err(error::lua)?;
         Ok(Self {
             source: source.to_owned(),
             bytecode,
@@ -166,40 +177,40 @@ impl LuaProgram {
     /// exposed as a persistence format.
     ///
     /// # Errors
-    /// Returns [`Error::LuaRuntime`] if the VM rejects the internally
+    /// Returns a `LuaRuntime` failure if the VM rejects the internally
     /// compiled bytecode.
     pub fn load(&self, lua: &Lua) -> Result<Function> {
         lua.load(self.bytecode.as_slice())
             .into_function()
-            .map_err(Error::lua)
+            .map_err(error::lua)
     }
 
     /// Maps a Lua runtime failure to its ordered core outcome, for a chunk
     /// that ran beside `loaded`, the programs of the libraries loaded into
-    /// its VM.
+    /// its VM, from the prompt file `file`.
     ///
-    /// An Engine quota refusal, recognized by its typed value, returns
-    /// [`Error::LuaQuota`], and a typed context exhaustion, such as an
-    /// uncaught direct `compactors.fail` call's, returns
-    /// [`Error::ContextExhausted`] with its reason. All remaining failures,
-    /// other typed external errors included, return
-    /// [`Error::LuaRuntime`] with each chunk-relative line
+    /// A typed context exhaustion, such as an uncaught direct
+    /// `compactors.fail` call's, returns as it was raised. An Engine quota
+    /// refusal, recognized by its typed value, returns its `LuaQuota`
+    /// failure, and every other failure, other typed failures included,
+    /// returns a `LuaRuntime` failure with each chunk-relative line
     /// rewritten to an absolute prompt-source line by the program that owns
     /// that chunk, this one first when two share a chunk name. Nested errors
     /// from other chunks (for example a fanout arm) are left unchanged.
+    /// Either is located on the first line the mapping rewrote, of `file`,
+    /// and its author prose names that line and the failure's own text.
     /// Cancellation is the VM's to classify: a chunk the instruction hook
-    /// aborted under the run's cancel flag is [`Error::Interrupted`] before
-    /// the raw error reaches here.
-    pub(crate) fn map_runtime_error_among(&self, error: &mlua::Error, loaded: &[Self]) -> Error {
-        if let Some(QuotaExceeded(resource)) = error.downcast_ref::<QuotaExceeded>() {
-            return Error::LuaQuota {
-                resource: *resource,
-            };
-        }
-        if let Some(Error::ContextExhausted { reason }) = error.downcast_ref::<Error>() {
-            return Error::ContextExhausted {
-                reason: reason.clone(),
-            };
+    /// aborted under the run's cancel flag is an `Interrupted` failure
+    /// before the raw error reaches here.
+    pub(crate) fn map_runtime_error_among(
+        &self,
+        error: &mlua::Error,
+        loaded: &[Self],
+        file: &str,
+    ) -> Error {
+        let typed = error.downcast_ref::<Error>();
+        if let Some(exhausted) = typed.filter(|typed| typed.code == ErrorCode::ContextExhausted) {
+            return exhausted.clone();
         }
         let raw = error.to_string();
         let owners: Vec<(&str, &str, NonZeroU32)> = std::iter::once(self)
@@ -212,13 +223,12 @@ impl LuaProgram {
                 )
             })
             .collect();
-        let mapped = map_chunk_line_to_absolute(&raw, &owners);
-        // Retain the originating `mlua` error as the private source with the
-        // mapped prompt-location message, instead of flattening it to a string.
-        Error::LuaRuntime {
-            message: mapped,
-            cause: Box::new(error.clone()),
-        }
+        let (mapped, line) = map_chunk_line_to_absolute(&raw, &owners);
+        let (failure, what) = match typed.filter(|typed| typed.code == ErrorCode::LuaQuota) {
+            Some(quota) => (quota.clone(), quota.message.clone()),
+            None => (lua_runtime(mapped), root_text(error)),
+        };
+        authored_at(failure, file, line, failure_text(&what))
     }
 
     /// Display location recorded at compile time (parser location string),
@@ -229,9 +239,29 @@ impl LuaProgram {
     }
 }
 
+/// The prompt-source line a compiler `diagnostic` names, for the chunk
+/// named `chunk_name` that starts on `source_line`: the chunk-relative
+/// line after the chunk's marker, mapped to its absolute line, or
+/// `source_line` when the diagnostic names none or the mapping overflows.
+fn compile_line(chunk_name: &str, source_line: NonZeroU32, diagnostic: &str) -> NonZeroU32 {
+    let marker = format!("[string \"{chunk_name}\"]:");
+    diagnostic
+        .find(&marker)
+        .map(|at| &diagnostic[at + marker.len()..])
+        .and_then(|rest| {
+            let digits = rest
+                .find(|c: char| !c.is_ascii_digit())
+                .unwrap_or(rest.len());
+            absolute_line(source_line, &rest[..digits])
+        })
+        .and_then(NonZeroU32::new)
+        .unwrap_or(source_line)
+}
+
 /// Rewrites chunk-relative line numbers for the named chunks in `owners`,
 /// each a chunk name, the display location it maps to, and the
-/// prompt-source line its chunk starts at, to absolute prompt-source lines.
+/// prompt-source line its chunk starts at, to absolute prompt-source lines,
+/// and returns the rewritten message beside the first line it rewrote.
 ///
 /// Only `[string "{chunk name}"]:N:` occurrences of an owner's chunk name
 /// are rewritten, each through the first owner whose chunk name it names, to
@@ -240,12 +270,13 @@ impl LuaProgram {
 /// child's mapped error leaves the child's absolute lines alone, even for a
 /// library both VMs loaded. The message gains a single leading
 /// `{location}:{line}:` tag for the first occurrence rewritten; a message
-/// with none passes through unchanged. A chunk line whose absolute mapping
-/// would overflow `u32` keeps its original marker and digits.
+/// with none passes through unchanged, with no line. A chunk line whose
+/// absolute mapping would overflow `u32` keeps its original marker and
+/// digits.
 pub(crate) fn map_chunk_line_to_absolute(
     message: &str,
     owners: &[(&str, &str, NonZeroU32)],
-) -> String {
+) -> (String, Option<NonZeroU32>) {
     const OPENING: &str = "[string \"";
     let markers: Vec<(String, &str, NonZeroU32)> = owners
         .iter()
@@ -288,9 +319,12 @@ pub(crate) fn map_chunk_line_to_absolute(
     if let Some((location, absolute)) = tag {
         // Leading `location:line:` tag naming the prompt file and its
         // absolute line: `briefer.md:51: ...`
-        format!("{location}:{absolute}: {result}")
+        (
+            format!("{location}:{absolute}: {result}"),
+            NonZeroU32::new(absolute),
+        )
     } else {
-        result
+        (result, None)
     }
 }
 
@@ -307,3 +341,7 @@ fn absolute_line(source_line: NonZeroU32, chunk_line: &str) -> Option<u32> {
         None => None,
     }
 }
+
+#[cfg(test)]
+#[path = "program-tests.rs"]
+mod tests;

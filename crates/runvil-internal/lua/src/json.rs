@@ -18,41 +18,41 @@ pub(crate) use encode::to_json;
 
 use mlua::{Lua, LuaSerdeExt, Table, Value};
 
-use crate::error::{Error, Result, author_refusal};
+use crate::error::{self, Result, author_refusal};
 
 /// Installs the `json` table as a global.
 ///
 /// # Errors
-/// Returns [`Error::LuaRuntime`] if the table, its functions, or the
+/// Returns a `LuaRuntime` failure if the table, its functions, or the
 /// global cannot be created.
 pub(crate) fn install(lua: &Lua) -> Result<()> {
-    let json = lua.create_table().map_err(Error::lua)?;
-    json.raw_set("null", lua.null()).map_err(Error::lua)?;
-    json.raw_set("array", lua.create_function(array).map_err(Error::lua)?)
-        .map_err(Error::lua)?;
+    let json = lua.create_table().map_err(error::lua)?;
+    json.raw_set("null", lua.null()).map_err(error::lua)?;
+    json.raw_set("array", lua.create_function(array).map_err(error::lua)?)
+        .map_err(error::lua)?;
     json.raw_set(
         "decode",
-        lua.create_function(decode::decode).map_err(Error::lua)?,
+        lua.create_function(decode::decode).map_err(error::lua)?,
     )
-    .map_err(Error::lua)?;
+    .map_err(error::lua)?;
     json.raw_set(
         "decode_lines",
         lua.create_function(decode::decode_lines)
-            .map_err(Error::lua)?,
+            .map_err(error::lua)?,
     )
-    .map_err(Error::lua)?;
+    .map_err(error::lua)?;
     json.raw_set(
         "encode",
-        lua.create_function(encode::encode).map_err(Error::lua)?,
+        lua.create_function(encode::encode).map_err(error::lua)?,
     )
-    .map_err(Error::lua)?;
+    .map_err(error::lua)?;
     json.raw_set(
         "encode_lines",
         lua.create_function(encode::encode_lines)
-            .map_err(Error::lua)?,
+            .map_err(error::lua)?,
     )
-    .map_err(Error::lua)?;
-    lua.globals().raw_set("json", json).map_err(Error::lua)
+    .map_err(error::lua)?;
+    lua.globals().raw_set("json", json).map_err(error::lua)
 }
 
 /// `json.array(t)`: marks `t` as a list in place and returns it, or returns

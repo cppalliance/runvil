@@ -58,7 +58,7 @@ fn tool_loop_gives_up_after_exactly_the_configured_cap() {
 #[test]
 fn tool_loop_exhaustion_is_readable_at_the_call_site_after_whole_exchanges() {
     // The raise is pcall-able as the `tool_loop_exhausted` kind with the
-    // typed error's exact message, and every round before it appended a
+    // typed error's remedy prose, and every round before it appended a
     // complete exchange: the list holds no half-answered batch at the cap.
     let gateway = ScriptedChat::new(never_converging_script(2));
     let source = capped(
@@ -78,7 +78,10 @@ fn tool_loop_exhaustion_is_readable_at_the_call_site_after_whole_exchanges() {
         .run();
     assert_eq!(
         trace.text(),
-        "tool_loop_exhausted|tool-call loop did not converge"
+        format!(
+            "tool_loop_exhausted|{}",
+            ErrorCode::ToolLoopExhausted.prose()
+        )
     );
     assert_eq!(gateway.call_count(), 2);
 }
@@ -293,7 +296,7 @@ fn a_caught_missing_model_reads_as_the_model_required_kind() {
     let trace = loop_scenario(source).models(ModelSet::default()).run();
     assert_eq!(
         trace.text(),
-        "model_required:model binding required for section Only"
+        format!("model_required:{}", ErrorCode::ModelRequired.prose())
     );
 }
 

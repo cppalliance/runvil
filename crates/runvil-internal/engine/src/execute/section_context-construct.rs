@@ -48,8 +48,7 @@ fn limited_vm(ctx: &ChainState, name: &str) -> Result<SectionVm<Uninjected>> {
         &ctx.model_set(),
         ctx.emitter(),
         name,
-    )
-    .map_err(error::into_universal)?;
+    )?;
     // The run's cancel flag reaches every block coroutine's hook.
     vm.set_cancel(ctx.cancel().clone());
     // A limits failure propagates bare: no teardown runs here, so no
@@ -57,8 +56,7 @@ fn limited_vm(ctx: &ChainState, name: &str) -> Result<SectionVm<Uninjected>> {
     vm.apply_lua_limits(
         ctx.limits().lua_memory_bytes.get(),
         ctx.limits().lua_log_events.get(),
-    )
-    .map_err(error::into_universal)?;
+    )?;
     Ok(vm)
 }
 

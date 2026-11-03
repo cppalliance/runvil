@@ -40,22 +40,23 @@ use std::cmp::Ordering;
 
 use mlua::{Lua, MultiValue, Table, Value};
 
-use crate::error::{Error, Result};
+use crate::error::{self, Result};
 use crate::order::{SortKey, sort_key};
 
 /// Installs the deterministic `next` and `pairs` globals, replacing the base
 /// library's hash-order versions.
 ///
 /// # Errors
-/// Returns [`Error::LuaRuntime`] if either global cannot be created or installed.
+/// Returns a `LuaRuntime` failure if either global cannot be created or
+/// installed.
 pub(crate) fn install_deterministic_iteration(lua: &Lua) -> Result<()> {
     let globals = lua.globals();
     let next_fn = lua
         .create_function(deterministic_next)
-        .map_err(Error::lua)?;
-    globals.raw_set("next", &next_fn).map_err(Error::lua)?;
-    let pairs_fn = lua.create_function(pairs).map_err(Error::lua)?;
-    globals.raw_set("pairs", pairs_fn).map_err(Error::lua)
+        .map_err(error::lua)?;
+    globals.raw_set("next", &next_fn).map_err(error::lua)?;
+    let pairs_fn = lua.create_function(pairs).map_err(error::lua)?;
+    globals.raw_set("pairs", pairs_fn).map_err(error::lua)
 }
 
 /// One table key and its position in the deterministic walk order.

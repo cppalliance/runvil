@@ -145,6 +145,7 @@ fn a_prelude_function_called_from_a_block_yields_its_tool_call() {
     .expect("the prelude installs");
     let block = LuaProgram::compile(
         "return kit.run('ls')",
+        "prompt",
         "prelude test block",
         NonZeroU32::new(1).expect("a non-zero line"),
         &null_emitter(),

@@ -40,7 +40,7 @@ use runvil_types::ids::RoundId;
 use serde_json::{Map, Value as Json};
 
 use crate::bindings::ToolBinding;
-use crate::error::{Error, Result, author_refusal};
+use crate::error::{self, Error, Result, author_refusal, lua_runtime};
 use crate::protocol::{MessageRecord, RecordRole, parse_record};
 use crate::scope::{OfferMode, RenderedTools};
 
@@ -60,10 +60,10 @@ pub(crate) const ASSIGNMENT_REFUSAL: &str = "messages is the section's conversat
 /// Installs `list` as the `messages` global, served from the guard's slot.
 ///
 /// # Errors
-/// Returns [`Error::LuaRuntime`] if the userdata cannot be built or the guard's
-/// slot table cannot be written.
+/// Returns a `LuaRuntime` failure if the userdata cannot be built or the
+/// guard's slot table cannot be written.
 pub(crate) fn install_messages(lua: &Lua, list: &MessageList) -> Result<()> {
-    let userdata = lua.create_userdata(list.clone()).map_err(Error::lua)?;
+    let userdata = lua.create_userdata(list.clone()).map_err(error::lua)?;
     crate::globals::set_messages(lua, userdata)
 }
 
@@ -73,33 +73,13 @@ pub(crate) fn install_messages(lua: &Lua, list: &MessageList) -> Result<()> {
 #[derive(Clone, Debug, Default)]
 pub struct MessageList(Arc<Mutex<ListState>>);
 
-/// Why a [`MessageList`] refused an edit, which leaves the list unchanged.
-#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
-pub(crate) enum ListEditError {
-    /// A system record at the 1-based `index` would sit behind a
-    /// non-system record.
-    #[error(
+/// The refusal of an edit that would put the system record at the 1-based
+/// `index` behind a non-system record, which leaves the list unchanged.
+pub(crate) fn late_system(index: usize) -> Error {
+    lua_runtime(format!(
         "messages[{index}] is a system message after a non-system message; system messages \
          lead the list, and only a compactor can change the leading block"
-    )]
-    LateSystem {
-        /// The late record's 1-based position.
-        index: usize,
-    },
-    /// A `replace(first, last)` range falls outside a list of `len` records.
-    #[error(
-        "replace({first}, {last}) is out of bounds on a list of {len} records: it needs \
-         1 <= first <= last + 1 <= {}",
-        len.saturating_add(1)
-    )]
-    OutOfBounds {
-        /// The range's first position, as given.
-        first: i64,
-        /// The range's last position, as given.
-        last: i64,
-        /// The list's record count.
-        len: usize,
-    },
+    ))
 }
 
 /// What a list holds.
@@ -147,9 +127,9 @@ impl MessageList {
     /// refused.
     ///
     /// # Errors
-    /// Returns [`ListEditError::LateSystem`] naming a late system record's
+    /// Returns the [`late_system`] refusal naming a late system record's
     /// position.
-    pub(crate) fn push(&self, record: MessageRecord) -> std::result::Result<(), ListEditError> {
+    pub(crate) fn push(&self, record: MessageRecord) -> Result<()> {
         let mut state = self.state();
         if record.role == RecordRole::System
             && state
@@ -157,9 +137,7 @@ impl MessageList {
                 .iter()
                 .any(|held| held.role != RecordRole::System)
         {
-            return Err(ListEditError::LateSystem {
-                index: state.records.len() + 1,
-            });
+            return Err(late_system(state.records.len() + 1));
         }
         state.records.push(Arc::new(record));
         Ok(())
@@ -168,12 +146,7 @@ impl MessageList {
     /// Replaces the 1-based inclusive range `first..=last` with
     /// `records`, where `1 <= first <= last + 1 <= len + 1`, then checks
     /// the leading-system rule. A refused edit leaves the list unchanged.
-    fn replace(
-        &self,
-        first: usize,
-        last: usize,
-        records: Vec<MessageRecord>,
-    ) -> std::result::Result<(), ListEditError> {
+    fn replace(&self, first: usize, last: usize, records: Vec<MessageRecord>) -> Result<()> {
         let mut state = self.state();
         let len = state.records.len();
         if !in_bounds(first, last, len) {
@@ -245,18 +218,20 @@ fn in_bounds(first: usize, last: usize, len: usize) -> bool {
 }
 
 /// Returns the refusal for a `replace` range outside the list's bounds,
-/// from the range's positions as given.
-fn out_of_bounds(first: impl TryInto<i64>, last: impl TryInto<i64>, len: usize) -> ListEditError {
-    ListEditError::OutOfBounds {
-        first: first.try_into().unwrap_or(i64::MAX),
-        last: last.try_into().unwrap_or(i64::MAX),
-        len,
-    }
+/// from the range's positions as given, which leaves the list unchanged.
+fn out_of_bounds(first: impl TryInto<i64>, last: impl TryInto<i64>, len: usize) -> Error {
+    let first = first.try_into().unwrap_or(i64::MAX);
+    let last = last.try_into().unwrap_or(i64::MAX);
+    lua_runtime(format!(
+        "replace({first}, {last}) is out of bounds on a list of {len} records: it needs \
+         1 <= first <= last + 1 <= {}",
+        len.saturating_add(1)
+    ))
 }
 
 /// Refuses records whose system records do not all lead them, naming the
 /// first late one.
-fn check_leading_system(records: &[Arc<MessageRecord>]) -> std::result::Result<(), ListEditError> {
+fn check_leading_system(records: &[Arc<MessageRecord>]) -> Result<()> {
     let lead = records
         .iter()
         .take_while(|record| record.role == RecordRole::System)
@@ -265,9 +240,7 @@ fn check_leading_system(records: &[Arc<MessageRecord>]) -> std::result::Result<(
         .iter()
         .position(|record| record.role == RecordRole::System)
     {
-        Some(offset) => Err(ListEditError::LateSystem {
-            index: lead + offset + 1,
-        }),
+        Some(offset) => Err(late_system(lead + offset + 1)),
         None => Ok(()),
     }
 }
@@ -299,8 +272,7 @@ fn record_json(lua: &Lua, index: usize, value: Value) -> mlua::Result<Json> {
 /// appends it.
 fn add(list: &MessageList, index: usize, entry: &Json) -> mlua::Result<()> {
     let record = parse_record(index, entry).map_err(author_refusal)?;
-    list.push(record)
-        .map_err(|refused| author_refusal(refused.to_string()))
+    list.push(record).map_err(mlua::Error::external)
 }
 
 /// Appends the record a builder makes from `role` and `fields`, leaving
@@ -437,7 +409,7 @@ impl UserData for MessageList {
                 let len = target.len();
                 let (first, last) = match (usize::try_from(first), usize::try_from(last)) {
                     (Ok(first), Ok(last)) if in_bounds(first, last, len) => (first, last),
-                    _ => return Err(author_refusal(out_of_bounds(first, last, len).to_string())),
+                    _ => return Err(mlua::Error::external(out_of_bounds(first, last, len))),
                 };
                 let records = records
                     .into_iter()
@@ -450,7 +422,7 @@ impl UserData for MessageList {
                     .collect::<mlua::Result<Vec<_>>>()?;
                 target
                     .replace(first, last, records)
-                    .map_err(|refused| author_refusal(refused.to_string()))?;
+                    .map_err(mlua::Error::external)?;
                 Ok(this)
             },
         );

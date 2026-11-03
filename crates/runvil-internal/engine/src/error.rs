@@ -5,11 +5,10 @@
 //! [`RunOutcome::Failed`](crate::RunOutcome::Failed), both read from the
 //! error's code, message, location, and facts. A failure that reaches an
 //! author's Lua renders as the error table the Lua crate builds from the
-//! same code and facts. A parse, a model round, a tool, or a `{{ }}`
-//! substitution fails with this type already, and the Lua crate's own
-//! error and a raised error table become it at the crate boundary, through
-//! [`into_universal`], which the Lua crate owns with the constructors that
-//! conversion shares with the Engine.
+//! same code and facts. A parse, a model round, a tool, a `{{ }}`
+//! substitution, and the Lua crate fail with this type already; the Lua
+//! crate owns the constructors of the failures it shares with the Engine,
+//! which this module re-exports.
 //!
 //! Each constructor gives its failure the text it has always had as the
 //! message, and the code's default prose unless the failure has
@@ -21,7 +20,7 @@ use std::borrow::Cow;
 #[cfg(test)]
 pub(crate) use runvil_lua::{context_exhausted, lua_quota, tool_loop_exhausted};
 pub(crate) use runvil_lua::{
-    interrupted, into_universal, lua_runtime, task_cancelled, task_consumed, task_not_owned,
+    interrupted, lua_runtime, task_cancelled, task_consumed, task_not_owned,
 };
 pub(crate) use runvil_types::error::Error;
 use runvil_types::error::{ErrorCode, FactKey};

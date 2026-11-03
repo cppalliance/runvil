@@ -472,7 +472,8 @@ fn a_poisoned_selection_reaches_the_caller_as_an_internal_error() {
         .current_model()
         .expect_err("a poisoned selection cannot be read");
     assert!(
-        matches!(&error, crate::Error::Internal { message, .. } if message == "model selection lock was poisoned"),
+        error.code == runvil_types::error::ErrorCode::Internal
+            && error.message == "internal invariant violated: model selection lock was poisoned",
         "the lock failure is Engine misuse, neither an authoring nor a model failure: {error:?}"
     );
 }

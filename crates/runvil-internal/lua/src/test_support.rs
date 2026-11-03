@@ -16,7 +16,7 @@ use runvil_vfs::Access;
 use crate::argv::Argv;
 use crate::bindings::{RosterEntry, ToolBinding, ToolSet};
 use crate::coro::MODEL_TOOL_CALL_REGISTRY;
-use crate::error::{Error, Result};
+use crate::error::{self, Error, Result, UNNAMED_FILE};
 use crate::program::LuaProgram;
 use crate::protocol::{Answer, render_envelope};
 use crate::scope::Offers;
@@ -89,16 +89,16 @@ pub fn section_vm_peak() -> usize {
 /// simply absent.
 ///
 /// # Errors
-/// Returns [`Error::LuaRuntime`] if the shim prelude was never installed
+/// Returns a `LuaRuntime` failure if the shim prelude was never installed
 /// on this VM, the `tools` table is absent, or the install fails.
 pub fn install_model_tool_call_shim(lua: &Lua) -> Result<()> {
     let model_tool_call: Function = lua
         .named_registry_value(MODEL_TOOL_CALL_REGISTRY)
-        .map_err(Error::lua)?;
-    let tools: Table = lua.globals().raw_get("tools").map_err(Error::lua)?;
+        .map_err(error::lua)?;
+    let tools: Table = lua.globals().raw_get("tools").map_err(error::lua)?;
     tools
         .raw_set("call_as_model", model_tool_call)
-        .map_err(Error::lua)
+        .map_err(error::lua)
 }
 
 impl ToolBinding {
@@ -141,11 +141,11 @@ pub fn answer_envelope(
 
 impl LuaProgram {
     /// Maps a Lua runtime failure of a chunk that ran with no library
-    /// programs loaded beside it: `map_runtime_error_among` with none
-    /// loaded.
+    /// programs loaded beside it, in a VM given no file:
+    /// `map_runtime_error_among` with none loaded, in `prompt`.
     #[must_use]
     pub fn map_runtime_error(&self, error: &mlua::Error) -> Error {
-        self.map_runtime_error_among(error, &[])
+        self.map_runtime_error_among(error, &[], UNNAMED_FILE)
     }
 }
 
@@ -184,7 +184,7 @@ impl SectionVm {
     ///
     /// # Errors
     /// Returns the chunk's own failure when execution fails or the program
-    /// returns a non-scalar value, or [`Error::Internal`] if the jump slot
+    /// returns a non-scalar value, or an `Internal` failure if the jump slot
     /// is poisoned.
     pub fn run_chunk(
         &self,

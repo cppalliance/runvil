@@ -60,7 +60,10 @@ fn a_first_round_the_precheck_refuses_still_fixes_the_tool_list() {
         .offer("echo", echo_tool())
         .chat(&gateway)
         .run();
-    assert_eq!(trace.text(), format!("lua:tools.offer: {FIXED}"));
+    assert_eq!(
+        trace.text(),
+        format!("lua:{}", refused(&format!("tools.offer: {FIXED}")))
+    );
     let bodies = gateway.requests();
     assert_eq!(bodies.len(), 1, "only the round on the wide model left");
     assert_eq!(
@@ -143,7 +146,7 @@ fn after_the_render_every_offer_raises_even_an_identical_one_while_defining_stil
     );
     let trace = loop_scenario(source).tool(echo_tool()).chat(&gateway).run();
     let lines: Vec<&str> = trace.text().lines().collect();
-    let offer = format!("lua:tools.offer: {FIXED}");
+    let offer = format!("lua:{}", refused(&format!("tools.offer: {FIXED}")));
     assert_eq!(
         lines[..5],
         [
@@ -151,7 +154,7 @@ fn after_the_render_every_offer_raises_even_an_identical_one_while_defining_stil
             offer.clone(),
             offer.clone(),
             offer.clone(),
-            format!("lua:tools.offer_dynamic: {FIXED}"),
+            format!("lua:{}", refused(&format!("tools.offer_dynamic: {FIXED}"))),
         ],
         "a handler's offer during the loop, then an identical re-offer of a tool \
          and of a Pack, an offer of a tool defined after the render, and a \
@@ -217,7 +220,7 @@ fn a_first_round_refused_over_an_empty_list_renders_nothing() {
         .offer("echo", echo_tool())
         .chat(&gateway)
         .run();
-    assert_eq!(trace.text(), "messages must not be empty");
+    assert_eq!(trace.text(), refused("messages must not be empty"));
     let bodies = gateway.requests();
     assert_eq!(bodies.len(), 1, "the refused round never left");
     assert_eq!(
@@ -249,7 +252,11 @@ fn a_first_round_refused_for_a_missing_model_renders_nothing() {
         .offer("echo", echo_tool())
         .chat(&gateway)
         .run();
-    assert_eq!(trace.text(), "model binding required for section Only");
+    assert_eq!(
+        trace.text(),
+        ErrorCode::ModelRequired.prose(),
+        "a missing model keeps its remedy prose"
+    );
     let bodies = gateway.requests();
     assert_eq!(bodies.len(), 1, "the refused round never left");
     assert_eq!(bodies[0].tool_names(), ["echo"]);
@@ -285,8 +292,7 @@ fn a_first_round_whose_tool_build_fails_renders_nothing() {
         .run();
     assert_eq!(
         trace.text(),
-        "internal:model-facing schema build failure for tool alias \"shape\": tool \"shape\" \
-         parameters schema must be a JSON object"
+        format!("internal:{}", ErrorCode::ToolSchemaInvalid.prose())
     );
     let bodies = gateway.requests();
     assert_eq!(bodies.len(), 1, "the failed round never left");

@@ -84,7 +84,10 @@ fn the_arity_error_counts_trailing_nils_in_both_shapes() {
          function() return models.loop(other, nil, nil) end,
          function() return models.loop(other, compactors.fail, nil) end,",
     );
-    let arity = "lua:models.loop takes (compactor?) or (model, compactor?)";
+    let arity = format!(
+        "lua:{}",
+        refused("models.loop takes (compactor?) or (model, compactor?)")
+    );
     assert_eq!(out, format!("{arity}|{arity}|{arity}|{arity}|{arity}|1"));
 }
 
@@ -98,12 +101,10 @@ fn the_compactor_is_checked_after_the_arity() {
          function() return models.loop(other, 42, nil) end,
          function() return models.loop(other, 42) end,",
     );
+    let arity = refused("models.loop takes (compactor?) or (model, compactor?)");
+    let compactor = refused("compactor must be a function, got integer");
     assert_eq!(
         out,
-        "lua:models.loop takes (compactor?) or (model, compactor?)\
-         |lua:compactor must be a function, got integer\
-         |lua:models.loop takes (compactor?) or (model, compactor?)\
-         |lua:compactor must be a function, got integer\
-         |1"
+        format!("lua:{arity}|lua:{compactor}|lua:{arity}|lua:{compactor}|1")
     );
 }

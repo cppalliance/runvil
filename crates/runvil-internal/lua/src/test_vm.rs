@@ -18,7 +18,7 @@ use runvil_types::untrusted::GuardNonce;
 use runvil_vfs::{Access, Origin, VfsRef};
 use serde_json::{Value as Json, json};
 
-use crate::error::{Error, Result};
+use crate::error::{self, Result};
 use crate::tests::recording::null_emitter;
 use crate::vm::scalar_return;
 use crate::{Argv, OfferedTool, RosterEntry, SectionText, SectionVm, ToolSet};
@@ -87,7 +87,7 @@ pub(crate) fn run_chunk(
     .inject_values(args, sys, access)
     .map_err(|failure| failure.teardown(emitter, section))?;
     vm.install_engine_globals(emitter, section)?;
-    let returned: MultiValue = vm.lua().load(source).eval().map_err(Error::lua)?;
+    let returned: MultiValue = vm.lua().load(source).eval().map_err(error::lua)?;
     let returned = scalar_return(returned)?;
     let var = vm.var()?;
     Ok(LuaOutcome { returned, var })

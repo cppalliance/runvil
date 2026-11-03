@@ -190,7 +190,7 @@ fn a_handlers_loop_during_a_loop_raises_loop_running_as_a_lua_error() {
     let trace = loop_scenario(source).chat(&gateway).run();
     assert_eq!(
         trace.text(),
-        format!("false|lua|{LOOP_RUNNING}|final answer")
+        format!("false|lua|{}|final answer", refused(LOOP_RUNNING))
     );
     assert_eq!(
         gateway.call_count(),
@@ -209,7 +209,7 @@ fn an_overflow_compactors_loop_raises_loop_running() {
          return tostring(ok) .. '|' .. err.kind .. '|' .. tostring(err)",
     ));
     let trace = loop_scenario(source).chat(&gateway).run();
-    assert_eq!(trace.text(), format!("false|lua|{LOOP_RUNNING}"));
+    assert_eq!(trace.text(), format!("false|lua|{}", refused(LOOP_RUNNING)));
     assert_eq!(
         gateway.call_count(),
         0,

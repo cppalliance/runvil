@@ -11,14 +11,15 @@ use std::num::NonZeroU32;
 
 use mlua::MultiValue;
 
+use runvil_lua::LuaProgram;
 use runvil_lua::test_support::answer_envelope;
-use runvil_lua::{Error, ErrorKind, LuaProgram};
+use runvil_types::error::ErrorCode;
 
 use crate::lua::{CoroStep, LuaBlockResult};
 use crate::model::ModelSet;
 use crate::test_support::recording::null_emitter;
 
-use super::{compile_block, scheduler_vm, start, test_models};
+use super::{TEST_FILE, compile_block, scheduler_vm, start, test_models};
 
 #[path = "errors-tables.rs"]
 mod tables;
@@ -104,7 +105,7 @@ fn a_failure_envelope_raises_a_table_holding_the_kind_and_fields() {
     // A Rust-raised error answered through the envelope reaches the
     // author's `pcall` in the same shape as a shim raise: `kind` names the
     // failure, the kind's fields appear beside it, and `tostring` is the
-    // typed error's display text unchanged.
+    // typed error's prose, a model failure's own remedy.
     for reason in ["provider", "manual"] {
         let vm = scheduler_vm(&ModelSet::default(), None);
         let program = compile_block(
@@ -118,7 +119,8 @@ fn a_failure_envelope_raises_a_table_holding_the_kind_and_fields() {
             panic!("the shim yield must suspend the block");
         };
         let error = crate::error::context_exhausted(reason);
-        let display = error.to_string();
+        let display = error.prose.clone();
+        assert_eq!(display, ErrorCode::ContextExhausted.prose());
         match vm
             .resume_block_coro_answer(&program, &thread, Err(error))
             .expect("the pcall'd block resumes")
@@ -136,7 +138,8 @@ fn an_engine_callback_failure_caught_by_pcall_is_the_same_error_table() {
     // An Engine call that fails directly from Rust - no envelope, no shim
     // raise - reaches the author's `pcall` as the same `{ kind, message }`
     // table: `kind` is readable at every call site, and `tostring` is the
-    // message text (mlua's appended traceback is not part of it). The
+    // author prose of the failure's own text in the VM's file (mlua's
+    // label and appended traceback are not part of it). The
     // `sys` guard fails from a metamethod rather than a call, and
     // `xpcall`'s handler sees the same normalized value.
     let vm = scheduler_vm(&test_models(), None);
@@ -153,13 +156,19 @@ fn an_engine_callback_failure_caught_by_pcall_is_the_same_error_table() {
            assert(not ok3, "the handler runs for the callback failure")
            return first .. "\n" .. second .. "\n" .. third"#,
     );
+    let prose = |what: &str| format!("{TEST_FILE}: {what}. {}", ErrorCode::LuaRuntime.prose());
     match vm.start_block_coro(&program).expect("the block runs") {
         CoroStep::Done(LuaBlockResult::Returned(Some(text))) => {
             assert_eq!(
                 text,
-                "table|lua|models.get label \"missing\" is not a model role: expected default, strong, small, fast or creative\n\
-                 table|lua|runtime error: unknown sys field 'nothing'\n\
-                 table|lua"
+                format!(
+                    "table|lua|{}\ntable|lua|{}\ntable|lua",
+                    prose(
+                        "models.get label \"missing\" is not a model role: expected default, \
+                         strong, small, fast or creative"
+                    ),
+                    prose("unknown sys field 'nothing'")
+                )
             );
         }
         other => panic!("expected the caught failures' rendering, got {other:?}"),
@@ -199,21 +208,23 @@ fn an_authors_plain_table_with_a_kind_is_not_read_back_as_a_raise() {
     let vm = scheduler_vm(&ModelSet::default(), None);
     let program = compile_block(r#"error({ kind = "tool_loop_exhausted", message = "x" }, 0)"#);
     match vm.start_block_coro(&program) {
-        Err(Error::LuaRuntime { .. }) => {}
+        Err(error) if error.code == ErrorCode::LuaRuntime => {}
         other => panic!("an author's table is an ordinary runtime failure, got {other:?}"),
     }
 }
 
 #[test]
 fn an_uncaught_lua_kind_shim_raise_keeps_the_mapped_runtime_error() {
-    // A `lua`-kind table that propagates out of the block is not kept as a
-    // `Raised`: the mapped runtime error already holds the same message
-    // with its source and the prompt line the traceback maps to, which is
-    // what an authoring error needs. The block is compiled at prompt line
-    // 40 and fails at chunk line 2, so the mapped author frame is line 41.
+    // A `lua`-kind table that propagates out of the block is not kept as
+    // the error it reads back as: the mapped runtime error already holds
+    // the same message with its source and the prompt line the traceback
+    // maps to, which is what an authoring error needs. The block is
+    // compiled at prompt line 40 and fails at chunk line 2, so the mapped
+    // author frame is line 41, where its author prose locates it.
     let vm = scheduler_vm(&test_models(), None);
     let program = LuaProgram::compile(
         "local h = models.get(\"fast\")\nmodels.infer(h, \"a\", \"b\")",
+        "prompt",
         "section `Test` prologue",
         NonZeroU32::new(40).expect("40 is non-zero"),
         &null_emitter(),
@@ -221,7 +232,8 @@ fn an_uncaught_lua_kind_shim_raise_keeps_the_mapped_runtime_error() {
     )
     .expect("the driver block compiles");
     match vm.start_block_coro(&program) {
-        Err(Error::LuaRuntime { message, .. }) => {
+        Err(error) if error.code == ErrorCode::LuaRuntime => {
+            let message = &error.message;
             assert!(
                 message.contains("models.infer takes (prompt) or (model, prompt)"),
                 "the mapped error keeps the shim's message: {message}"
@@ -229,6 +241,21 @@ fn an_uncaught_lua_kind_shim_raise_keeps_the_mapped_runtime_error() {
             assert!(
                 message.contains("section `Test` prologue:41: in"),
                 "the author frame maps to the absolute prompt line: {message}"
+            );
+            assert_eq!(
+                error.prose,
+                format!(
+                    "{TEST_FILE}:41: models.infer takes (prompt) or (model, prompt). {}",
+                    ErrorCode::LuaRuntime.prose()
+                )
+            );
+            assert_eq!(
+                error.at,
+                Some(runvil_types::error::Location::line(
+                    TEST_FILE,
+                    NonZeroU32::new(41).expect("41 is non-zero")
+                )),
+                "the failure is located on its mapped line of the setup's file"
             );
         }
         other => panic!("a lua-kind raise must surface as the mapped runtime error, got {other:?}"),
@@ -254,9 +281,17 @@ fn a_typed_error_substituted_at_the_coroutine_boundary_keeps_its_kind() {
             panic!("the shim yield must suspend the block");
         };
         let quota = crate::error::lua_quota(runvil_lua::QuotaResource::LogEvent);
-        match vm.resume_block_coro_answer(&program, &thread, Err(quota.clone())) {
-            Err(error) if error == quota => {}
-            other => panic!("block {source:?} must surface the typed quota error, got {other:?}"),
+        let mut answered = quota.clone();
+        answered.prose = format!(
+            "{TEST_FILE}: lua log event quota exceeded. {}",
+            ErrorCode::LuaQuota.prose()
+        );
+        match vm.resume_block_coro_answer(&program, &thread, Err(quota)) {
+            Err(error) if error == answered => {}
+            other => panic!(
+                "block {source:?} must surface the typed quota error with its author prose, \
+                 got {other:?}"
+            ),
         }
     }
 }
@@ -265,8 +300,8 @@ fn a_typed_error_substituted_at_the_coroutine_boundary_keeps_its_kind() {
 fn a_structured_raise_surfacing_as_the_coroutine_failure_keeps_its_table() {
     // Without a retained typed error to substitute (the envelope was
     // rendered ahead of time, as a Lua-side raise would be), the failure
-    // still arrives typed: the table the shim raised is kept as a
-    // `Raised` value holding its kind and fields, never flattened to the
+    // still arrives typed: the table the shim raised reads back as the
+    // universal error it was rendered from, never flattened to the
     // message string.
     let vm = scheduler_vm(&ModelSet::default(), None);
     let program = compile_block("models.infer(\"hi\")");
@@ -279,22 +314,12 @@ fn a_structured_raise_surfacing_as_the_coroutine_failure_keeps_its_table() {
         answer_envelope(vm.lua(), Err(crate::error::context_exhausted("precheck")))
             .expect("the envelope renders");
     match vm.resume_block_coro(&program, &thread, envelope) {
-        Err(Error::Raised(raised)) => {
-            assert_eq!(raised.kind, ErrorKind::ContextExhausted);
-            assert!(
-                raised.message.starts_with("context exhausted: "),
-                "the table keeps the display message: {}",
-                raised.message
-            );
-            assert_eq!(
-                raised
-                    .fields
-                    .get("reason")
-                    .and_then(runvil_lua::ErrorField::as_str),
-                Some("precheck")
-            );
-        }
-        other => panic!("expected the kept table as a Raised failure, got {other:?}"),
+        Err(error) => assert_eq!(
+            error,
+            crate::error::context_exhausted("precheck"),
+            "the kept table reads back as its error, the message included"
+        ),
+        other => panic!("expected the kept table's failure, got {other:?}"),
     }
 }
 
@@ -323,6 +348,7 @@ fn a_traceback_through_a_shim_shows_unmapped_impl_frames() {
     // unexpected shim error, whose frames must render verbatim.
     let program = LuaProgram::compile(
         "var = 5\ncall(\"## Child\")",
+        "prompt",
         "section `Test` prologue",
         NonZeroU32::new(40).expect("40 is non-zero"),
         &null_emitter(),

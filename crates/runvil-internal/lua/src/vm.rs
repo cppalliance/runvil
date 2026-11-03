@@ -33,7 +33,7 @@ use serde_json::Value as Json;
 
 use crate::bindings::ToolSet;
 use crate::engine_globals::{LUA_LOG_CHARACTER_LIMIT, install_untrusted};
-use crate::error::{Error, Result};
+use crate::error::{self, Error, Result};
 use crate::hardening::{CancelHook, harden, install_cancel_hook};
 use crate::iteration::install_deterministic_iteration;
 use crate::messages::MessageList;
@@ -188,20 +188,20 @@ impl SectionVm<Uninjected> {
     /// every id.
     ///
     /// # Errors
-    /// Returns [`Error::LuaRuntime`] if the VM cannot be built or hardened.
+    /// Returns a `LuaRuntime` failure if the VM cannot be built or hardened.
     pub(crate) fn new(nonce: &GuardNonce, emitter: &Emitter, section: &str) -> Result<Self> {
         let lua = Lua::new_with(
             StdLib::STRING | StdLib::TABLE | StdLib::MATH | StdLib::UTF8,
             LuaOptions::default(),
         )
-        .map_err(Error::lua)?;
+        .map_err(error::lua)?;
         #[cfg(any(test, feature = "test-support"))]
         crate::test_support::count_live_vm(&lua);
         // Bound the VM heap by default; `apply_lua_limits` may tighten or relax
         // it to the caller's `RunLimits`. A default keeps every VM
         // bounded even when the run installs no explicit limits.
         lua.set_memory_limit(DEFAULT_LUA_MEMORY_BYTES)
-            .map_err(Error::lua)?;
+            .map_err(error::lua)?;
         lua.set_app_data(HeapCeiling(DEFAULT_LUA_MEMORY_BYTES));
         let mut vm = Self {
             lua,
@@ -247,7 +247,7 @@ impl SectionVm<Uninjected> {
     /// path.
     ///
     /// # Errors
-    /// Returns [`Error::LuaRuntime`] if the VM cannot be built or hardened.
+    /// Returns a `LuaRuntime` failure if the VM cannot be built or hardened.
     pub fn new_for_section(
         nonce: &GuardNonce,
         tools: &Arc<ToolSet>,
@@ -271,6 +271,13 @@ impl SectionVm<Uninjected> {
         self.raw_model_ids = RawModelIds::Resolved;
     }
 
+    /// Records `file`, the file the run's prompt came from, as the file
+    /// the author prose of this VM's Lua failures names; a VM given none
+    /// names `prompt`.
+    pub fn set_prompt_file(&self, file: &str) {
+        crate::error::set_prompt_file(&self.lua, file);
+    }
+
     /// Applies the run's Lua resource limits to this VM.
     ///
     /// Sets the heap ceiling (`lua_memory_bytes`), records it for the
@@ -281,12 +288,12 @@ impl SectionVm<Uninjected> {
     /// `SectionVm::new` installs.
     ///
     /// # Errors
-    /// Returns [`Error::LuaRuntime`] if the underlying VM rejects the memory
+    /// Returns a `LuaRuntime` failure if the underlying VM rejects the memory
     /// limit.
     pub fn apply_lua_limits(&self, memory_bytes: usize, log_events: u32) -> Result<()> {
         self.lua
             .set_memory_limit(memory_bytes)
-            .map_err(Error::lua)?;
+            .map_err(error::lua)?;
         self.lua.set_app_data(HeapCeiling(memory_bytes));
         self.log_budget.store(log_events, Ordering::Relaxed);
         self.log_byte_budget
@@ -310,7 +317,7 @@ impl SectionVm<Uninjected> {
 impl<S> SectionVm<S> {
     /// Installs the run's cancel flag on this VM's instruction hook: every
     /// block coroutine the VM starts polls it, and a set flag aborts the
-    /// running chunk as [`Error::Interrupted`]. A VM without one is never
+    /// running chunk as an `Interrupted` failure. A VM without one is never
     /// cancelled. The first install wins.
     pub fn set_cancel(&self, cancel: runvil_types::cancel::CancelHandle) {
         self.cancel_hook.set_cancel(cancel);

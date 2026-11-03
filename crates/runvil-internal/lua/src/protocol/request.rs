@@ -17,7 +17,7 @@ use runvil_types::ids::TaskId;
 
 use super::non_empty::NonEmpty;
 use super::record::ToolCallRecord;
-use crate::Error;
+use crate::error::Error;
 use crate::messages::MessageList;
 
 /// Which author-facing call started a task chain. The Engine reports a

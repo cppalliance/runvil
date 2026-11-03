@@ -4,7 +4,7 @@
 //! `@`-named chunk errors rendering verbatim, and scalar returns and VM
 //! state rolling forward across block coroutines.
 
-use runvil_lua::{Error, LuaProgram};
+use runvil_lua::LuaProgram;
 use runvil_types::cancel::CancelHandle;
 
 use crate::lua::{CoroStep, LuaBlockResult, Request, YieldParse};
@@ -26,7 +26,7 @@ fn the_cancellation_hook_fires_inside_a_resumed_coroutine() {
     let program = compile_block("while true do end");
     match vm.start_block_coro(&program) {
         Err(error) => assert!(
-            matches!(error, Error::Interrupted),
+            error == crate::error::interrupted(),
             "the per-coroutine hook must observe cancellation: {error:?}"
         ),
         other => panic!("a cancelled infinite loop can only fail, got {other:?}"),
@@ -51,7 +51,7 @@ fn every_block_coroutine_has_the_cancellation_hook() {
         let program = compile_block(source);
         match vm.start_block_coro(&program) {
             Err(error) => assert!(
-                matches!(error, Error::Interrupted),
+                error == crate::error::interrupted(),
                 "block {source:?} must abort on the cancelled run: {error:?}"
             ),
             other => panic!("a cancelled block can only fail, got {other:?}"),

@@ -15,14 +15,9 @@ fn a_store_install_without_a_store_names_why_in_its_message() {
     let error = vm
         .install_engine_globals(&null_emitter(), "Test")
         .expect_err("a handle without a store cannot install the store table");
-    assert!(
-        matches!(
-            &error,
-            Error::Store {
-                cause: VfsError::NoStore,
-                ..
-            }
-        ),
+    assert_eq!(
+        error.code,
+        ErrorCode::NoStore,
         "required a store error over NoStore, actual {error:?}"
     );
     assert_eq!(
@@ -55,9 +50,12 @@ fn direct_store_failure_caught_by_pcall_carries_the_reason_tag() {
     )
     .expect("the section chunk must run");
     assert_eq!(
-        out.as_deref(),
-        Some("store|not_found|missing.txt|file not found in store: missing.txt"),
-        "the direct store failure must carry the documented shape"
+        out,
+        Some(format!(
+            "store|not_found|missing.txt|prompt: file not found in store: missing.txt. {}",
+            ErrorCode::NotFound.prose()
+        )),
+        "the direct store failure must carry the documented shape and its author prose"
     );
 }
 
@@ -343,46 +341,47 @@ fn store_error_messages_use_the_operations_wording() {
 
 /// A store failure raised through the Lua boundary renders as an error
 /// table of kind `store` whose `count` field is a Lua integer, and
-/// `tostring` returns the model-facing message.
+/// `tostring` returns the failure's prose.
 #[test]
-fn a_raised_store_error_renders_an_integer_count_and_the_message() {
+fn a_raised_store_error_renders_an_integer_count_and_the_prose() {
     let anchor = runvil_vfs::VfsError::Anchor {
         path: "notes.md".to_owned(),
         anchor: "TODO".to_owned(),
         count: 3,
     };
-    let error = Error::store(
-        &crate::VfsOp::StrReplace {
-            path: "notes.md".to_owned(),
-            old: "TODO".to_owned(),
-            new: "DONE".to_owned(),
-        },
-        anchor,
-    );
-    let own = error.to_raised();
-    assert_eq!(own.kind, crate::ErrorKind::Store);
-    assert_eq!(
-        own.fields.get("count"),
-        Some(&crate::ErrorField::Integer(3))
-    );
+    let op = crate::VfsOp::StrReplace {
+        path: "notes.md".to_owned(),
+        old: "TODO".to_owned(),
+        new: "DONE".to_owned(),
+    };
+    let mut error = crate::store_error(&anchor);
+    error.message = crate::store_error_message(&op, &anchor);
     assert!(
-        error.to_string().contains("include more surrounding text"),
+        error.message.contains("include more surrounding text"),
         "the message carries the recovery hint: {error}"
     );
-    // The same failure answered to Lua as a universal error renders the
-    // same table.
     let lua = mlua::Lua::new();
-    for table in [
-        crate::error_value::raised_table(&lua, &own),
-        crate::error_value::error_table(&lua, &crate::into_universal(error)),
-    ] {
-        let table = table.expect("the table builds");
-        let raised = crate::error_value::raised_from(&lua, &Value::Table(table))
-            .expect("the table reads back")
-            .expect("the table is a structured error table");
-        assert_eq!(
-            raised, own,
-            "the count field stays an integer through the boundary"
-        );
-    }
+    let table = crate::error_value::error_table(&lua, &error).expect("the table builds");
+    assert_eq!(
+        table.raw_get::<String>("kind").expect("the kind reads"),
+        "store"
+    );
+    assert_eq!(
+        table.raw_get::<Value>("count").expect("the count reads"),
+        Value::Integer(3)
+    );
+    assert_eq!(
+        table
+            .raw_get::<String>("message")
+            .expect("the message reads"),
+        error.prose
+    );
+    let raised = crate::error_value::raised_from(&lua, &Value::Table(table))
+        .expect("the table reads back")
+        .expect("the table is a structured error table");
+    assert_eq!(
+        (raised.code, &raised.facts),
+        (error.code, &error.facts),
+        "the count stays an integer through the boundary"
+    );
 }

@@ -17,7 +17,7 @@
 use mlua::{Lua, LuaSerdeExt, Value};
 use serde_json::Value as Json;
 
-use crate::error::{Error, Result};
+use crate::error::{self, Result};
 use crate::proxy::{key_text, read_only_proxy};
 
 /// How a section VM installs the `argv` global at Engine injection. `None`
@@ -40,20 +40,20 @@ pub(crate) const ASSIGNMENT_REFUSAL: &str = "argv is frozen outside H1: assign i
 /// (malformed args, or JSON null) installs nil.
 ///
 /// # Errors
-/// Returns [`Error::LuaRuntime`] if the value cannot be bridged or installed.
+/// Returns a `LuaRuntime` failure if the value cannot be bridged or installed.
 pub(crate) fn install_writable(lua: &Lua, argv: Option<&Json>) -> Result<()> {
     let value = match argv {
         None | Some(Json::Null) => Value::Nil,
-        Some(json) => lua.to_value(json).map_err(Error::lua)?,
+        Some(json) => lua.to_value(json).map_err(error::lua)?,
     };
-    lua.globals().raw_set("argv", value).map_err(Error::lua)
+    lua.globals().raw_set("argv", value).map_err(error::lua)
 }
 
 /// Installs `argv` frozen, the mode of every section but H1: the value H1
 /// left behind at the freeze.
 ///
 /// # Errors
-/// Returns [`Error::LuaRuntime`] if the value cannot be bridged or the guard
+/// Returns a `LuaRuntime` failure if the value cannot be bridged or the guard
 /// cannot record it.
 pub(crate) fn install_frozen(lua: &Lua, argv: Option<&Json>) -> Result<()> {
     let frozen = match argv {
@@ -75,26 +75,26 @@ fn frozen_json_value(lua: &Lua, value: &Json) -> Result<Value> {
         Json::Array(values) => {
             let data = lua
                 .create_table_with_capacity(values.len(), 0)
-                .map_err(Error::lua)?;
+                .map_err(error::lua)?;
             data.set_metatable(Some(lua.array_metatable()))
-                .map_err(Error::lua)?;
+                .map_err(error::lua)?;
             for (index, value) in values.iter().enumerate() {
                 data.raw_set(index + 1, frozen_json_value(lua, value)?)
-                    .map_err(Error::lua)?;
+                    .map_err(error::lua)?;
             }
             freeze_table(lua, data).map(Value::Table)
         }
         Json::Object(values) => {
             let data = lua
                 .create_table_with_capacity(0, values.len())
-                .map_err(Error::lua)?;
+                .map_err(error::lua)?;
             for (key, value) in values {
                 data.raw_set(key.as_str(), frozen_json_value(lua, value)?)
-                    .map_err(Error::lua)?;
+                    .map_err(error::lua)?;
             }
             freeze_table(lua, data).map(Value::Table)
         }
-        scalar => lua.to_value(scalar).map_err(Error::lua),
+        scalar => lua.to_value(scalar).map_err(error::lua),
     }
 }
 
@@ -114,5 +114,5 @@ fn freeze_table(lua: &Lua, data: mlua::Table) -> Result<mlua::Table> {
         },
         "argv is frozen",
     )
-    .map_err(Error::lua)
+    .map_err(error::lua)
 }

@@ -6,7 +6,7 @@ use std::sync::{Arc, OnceLock};
 use mlua::{HookTriggers, Lua, Thread, Value, VmState};
 use runvil_types::cancel::CancelHandle;
 
-use crate::error::{Error, Result};
+use crate::error::{self, Result};
 
 /// How many instructions between hook firings.
 const HOOK_INTERVAL: u32 = 10_000;
@@ -44,7 +44,7 @@ pub(crate) fn harden(lua: &Lua) -> Result<()> {
         "print",
         "warn",
     ] {
-        globals.set(name, Value::Nil).map_err(Error::lua)?;
+        globals.set(name, Value::Nil).map_err(error::lua)?;
     }
     lua.load(
         r#"
@@ -81,7 +81,7 @@ end
 "#,
     )
     .exec()
-    .map_err(Error::lua)?;
+    .map_err(error::lua)?;
     Ok(())
 }
 
@@ -108,14 +108,14 @@ impl CancelHook {
     /// Installs the cancellation hook on a block coroutine.
     ///
     /// # Errors
-    /// Returns [`Error::LuaRuntime`] if the VM rejects the hook callback.
+    /// Returns a `LuaRuntime` failure if the VM rejects the hook callback.
     pub(crate) fn install_on_thread(&self, thread: &Thread) -> Result<()> {
         thread
             .set_hook(
                 HookTriggers::new().every_nth_instruction(HOOK_INTERVAL),
                 cancel_poll(Arc::clone(&self.cancel)),
             )
-            .map_err(Error::lua)
+            .map_err(error::lua)
     }
 
     /// Installs the run's cancel flag. The first install wins: a VM serves
@@ -146,7 +146,7 @@ fn cancel_poll(
     move |_lua, _debug| {
         // Cooperative cancellation: abort a long-running Lua block promptly
         // when the run's CancelHandle is signaled (mapped to
-        // Error::Interrupted at the VM's failure boundary).
+        // an `Interrupted` failure at the VM's failure boundary).
         if cancelled(&cancel) {
             return Err(mlua::Error::RuntimeError(
                 "lua execution cancelled".to_string(),
@@ -162,13 +162,13 @@ fn cancel_poll(
 /// [`CancelHook::install_on_thread`] with the returned hook.
 ///
 /// # Errors
-/// Returns [`Error::LuaRuntime`] if the VM rejects the hook callback.
+/// Returns a `LuaRuntime` failure if the VM rejects the hook callback.
 pub(crate) fn install_cancel_hook(lua: &Lua) -> Result<CancelHook> {
     let hook = CancelHook::default();
     lua.set_hook(
         HookTriggers::new().every_nth_instruction(HOOK_INTERVAL),
         cancel_poll(Arc::clone(&hook.cancel)),
     )
-    .map_err(Error::lua)?;
+    .map_err(error::lua)?;
     Ok(hook)
 }

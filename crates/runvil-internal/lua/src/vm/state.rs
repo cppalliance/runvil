@@ -12,7 +12,7 @@ use serde_json::Value as Json;
 
 use super::{AdhocTools, SectionVm};
 use crate::bindings::{ToolBinding, ToolSet};
-use crate::error::{Error, Result};
+use crate::error::{self, Result, lua_runtime};
 use crate::packs::is_adhoc;
 use crate::scope::{OfferMode, OfferTarget, OfferedTool, Offers, RenderedTools, ToolCallCounts};
 use crate::tools::install_tool_call_counts as install_tool_call_counts_impl;
@@ -23,8 +23,8 @@ impl SectionVm {
     /// table behind the guarded proxy (not the proxy, which stays empty).
     ///
     /// # Errors
-    /// Returns [`Error::Lua`] if the author reassigned the `var` global, or
-    /// [`Error::LuaRuntime`] if `var` cannot be represented as JSON.
+    /// Returns a `LuaRuntime` failure if the author reassigned the `var`
+    /// global, or if `var` cannot be represented as JSON.
     pub fn var(&self) -> Result<Json> {
         var_to_json(&self.lua)
     }
@@ -35,18 +35,17 @@ impl SectionVm {
     /// read-back path.
     ///
     /// # Errors
-    /// Returns [`Error::Lua`] when H1 left `argv` as a function, userdata,
-    /// or thread, and [`Error::LuaRuntime`] when its value cannot be
-    /// represented as JSON.
+    /// Returns a `LuaRuntime` failure when H1 left `argv` as a function,
+    /// userdata, or thread, or when its value cannot be represented as
+    /// JSON.
     pub fn argv_json(&self) -> Result<Option<Json>> {
-        let value: Value = self.lua.globals().get("argv").map_err(Error::lua)?;
+        let value: Value = self.lua.globals().get("argv").map_err(error::lua)?;
         match value {
             Value::Nil => Ok(None),
-            Value::Function(_) | Value::UserData(_) | Value::Thread(_) => Err(Error::Lua(format!(
-                "argv must be JSON data, got {}",
-                value.type_name()
-            ))),
-            other => Ok(Some(self.lua.from_value(other).map_err(Error::lua)?)),
+            Value::Function(_) | Value::UserData(_) | Value::Thread(_) => Err(lua_runtime(
+                format!("argv must be JSON data, got {}", value.type_name()),
+            )),
+            other => Ok(Some(self.lua.from_value(other).map_err(error::lua)?)),
         }
     }
 
@@ -57,11 +56,11 @@ impl SectionVm {
     /// is the same `LuaSerdeExt` bridge that seeds `var`.
     ///
     /// # Errors
-    /// Returns [`Error::LuaRuntime`] if the value cannot convert or the global
+    /// Returns a `LuaRuntime` failure if the value cannot convert or the global
     /// cannot be set.
     pub fn set_global_json(&self, name: &str, value: &Json) -> Result<()> {
-        let value = self.lua.to_value(value).map_err(Error::lua)?;
-        self.lua.globals().raw_set(name, value).map_err(Error::lua)
+        let value = self.lua.to_value(value).map_err(error::lua)?;
+        self.lua.globals().raw_set(name, value).map_err(error::lua)
     }
 
     /// Installs `tools.stats`, the read-only Lua view of a fresh
@@ -75,7 +74,7 @@ impl SectionVm {
     /// it.
     ///
     /// # Errors
-    /// Returns [`Error::LuaRuntime`] when installing `tools.stats` fails.
+    /// Returns a `LuaRuntime` failure when installing `tools.stats` fails.
     pub fn install_tool_call_counts(&self, ids: &[ToolId]) -> Result<ToolCallCounts> {
         install_tool_call_counts_impl(&self.lua, &self.tool_set, &self.adhoc_tools, ids)
     }
@@ -115,13 +114,13 @@ impl SectionVm {
     /// supplied no model.
     ///
     /// # Errors
-    /// Returns [`Error::Internal`] if the selection's mutex is poisoned.
+    /// Returns an `Internal` failure if the selection's mutex is poisoned.
     pub fn current_model(&self) -> Result<Option<ModelBinding>> {
         self.state
             .selection
             .lock()
             .map(|selection| selection.clone())
-            .map_err(|_| Error::internal("model selection lock was poisoned"))
+            .map_err(|_| error::internal("model selection lock was poisoned"))
     }
 }
 
@@ -137,7 +136,7 @@ impl SectionVm {
 /// sets instead.
 ///
 /// # Errors
-/// Returns [`Error::Internal`] if the offers' mutex or the adhoc
+/// Returns an `Internal` failure if the offers' mutex or the adhoc
 /// tools are poisoned, or an offered id names no tool.
 pub fn current_static_set(
     set: &ToolSet,
@@ -158,7 +157,7 @@ pub fn current_static_set(
 /// holds its id.
 ///
 /// # Errors
-/// Returns [`Error::Internal`] if the offers' mutex or the adhoc
+/// Returns an `Internal` failure if the offers' mutex or the adhoc
 /// tools are poisoned, or an offered id names no tool.
 pub fn current_dynamic_set(
     set: &ToolSet,
@@ -185,7 +184,7 @@ pub fn current_dynamic_set(
 /// section entry's render asks its Packs in.
 ///
 /// # Errors
-/// Returns [`Error::Internal`] if the offers' mutex or the adhoc
+/// Returns an `Internal` failure if the offers' mutex or the adhoc
 /// tools are poisoned, or an offered id names no tool.
 pub fn current_catalog_packs(
     set: &ToolSet,
@@ -216,7 +215,7 @@ fn expanded(
 ) -> Result<Vec<OfferedTool>> {
     let runtime = runtime
         .lock()
-        .map_err(|_| Error::internal("section offers lock was poisoned"))?;
+        .map_err(|_| error::internal("section offers lock was poisoned"))?;
     let mut tools = Vec::new();
     let offers = runtime
         .offers
@@ -232,7 +231,7 @@ fn expanded(
                 };
                 tools.push(
                     tool.ok_or_else(|| {
-                        Error::internal(format!("offered tool {id} names no tool"))
+                        error::internal(format!("offered tool {id} names no tool"))
                     })?,
                 );
             }

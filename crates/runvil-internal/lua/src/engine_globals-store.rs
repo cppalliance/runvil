@@ -12,8 +12,8 @@ use runvil_types::emitter::Emitter;
 use runvil_types::event::lifecycle::{self, Lifecycle};
 use runvil_vfs::{Access, VfsError};
 
-use crate::error::SharedSource;
-use crate::error::{Error, Result};
+use crate::error::{self, Error, Result, authored_at, prompt_file};
+use crate::error_value::store_error;
 use crate::program::LuaProgram;
 use crate::protocol::{VfsOp, VfsOutcome};
 use read::{read_store, read_store_numbered};
@@ -34,11 +34,15 @@ const STORE_PHASE_REGISTRY: &str = "runvil.engine.store_phase";
 /// The store dispatcher program, compiled once and loaded per VM under the
 /// shim programs' failure contract: compiling the bundled source fails
 /// only on a crate bug.
-static STORE_PROGRAM: LazyLock<std::result::Result<LuaProgram, SharedSource>> =
-    LazyLock::new(|| {
-        LuaProgram::compile_internal(STORE_SOURCE, STORE_CHUNK_NAME)
-            .map_err(crate::detail::shared_source_new)
-    });
+static STORE_PROGRAM: LazyLock<Result<LuaProgram>> =
+    LazyLock::new(|| LuaProgram::compile_internal(STORE_SOURCE, STORE_CHUNK_NAME));
+
+/// The store failure `cause` with `message` in place of its own text.
+fn store_failure(cause: &VfsError, message: String) -> Error {
+    let mut error = store_error(cause);
+    error.message = message;
+    error
+}
 
 /// Owned reporting context captured by the persistent `store` closures.
 struct StoreReporter {
@@ -76,9 +80,10 @@ struct StoreShared {
 impl StoreShared {
     /// Builds one direct store closure taking the Lua arguments `A`: it runs
     /// `operation` over the store view, records a conflict, reports
-    /// `outcomes` (success first), and raises a failure as
-    /// [`Error::store`] under the operation `op` rebuilds from the
-    /// arguments.
+    /// `outcomes` (success first), and raises a failure as the store's
+    /// failure under the message rendered for the operation `op` rebuilds
+    /// from the arguments, with the author prose of that message in the
+    /// VM's prompt file.
     fn closure<A, T>(
         &self,
         lua: &Lua,
@@ -94,13 +99,17 @@ impl StoreShared {
         let reporter = Arc::clone(&self.reporter);
         let conflict = Arc::clone(&self.conflict);
         let (success, failure) = outcomes;
-        lua.create_function(move |_, arguments: A| {
+        lua.create_function(move |lua, arguments: A| {
             let result = operation(&view, &arguments);
             record_store_conflict(&conflict, &result);
             reporter.report(&result, success, failure);
-            result.map_err(|source| mlua::Error::external(Error::store(&op(arguments), source)))
+            result.map_err(|source| {
+                let message = store_error_message(&op(arguments), &source);
+                let failure = store_failure(&source, message.clone());
+                mlua::Error::external(authored_at(failure, &prompt_file(lua), None, &message))
+            })
         })
-        .map_err(Error::lua)
+        .map_err(error::lua)
     }
 }
 
@@ -224,9 +233,9 @@ fn record_store_conflict<T>(
 /// `read(path, start, end)` slices); `read_numbered` returns it with
 /// absolute line numbers under the same optional bounds; `glob` returns an
 /// array table of matching paths. A [`VfsError`] from any op is raised as
-/// a structured error value of kind `store` via
-/// [`Error::store`], so it aborts the chunk and a `pcall` caller reads
-/// `err.kind`, `err.reason`, and the variant's fields.
+/// its store failure, a structured error value of kind `store`, so it
+/// aborts the chunk and a `pcall` caller reads `err.kind`, `err.reason`,
+/// and the variant's fields.
 ///
 /// Every closure captures an `Arc` clone of the section's store view.
 /// The view locks the backend per call and is synchronous, so nothing is
@@ -246,9 +255,10 @@ fn record_store_conflict<T>(
 /// the install and yields like `store.*` afterward.
 ///
 /// # Errors
-/// Returns [`Error::LuaRuntime`] if the `store` table or any of its
+/// Returns a `LuaRuntime` failure if the `store` table or any of its
 /// functions cannot be created or installed into the sandbox globals, or
-/// [`Error::Store`] if the handle the access came from declares no store.
+/// the store's failure if the handle the access came from declares no
+/// store.
 pub(crate) fn install_store_table(
     lua: &Lua,
     globals: &mlua::Table,
@@ -257,16 +267,14 @@ pub(crate) fn install_store_table(
     section: &str,
     conflict: &Arc<Mutex<Option<String>>>,
 ) -> Result<()> {
-    let table = lua.create_table().map_err(Error::lua)?;
+    let table = lua.create_table().map_err(error::lua)?;
     // One store view for the section's whole life: derived once from the
     // chain's access, so the closures share it and the strict path rules
     // run on every operation through it.
     let shared = StoreShared {
         view: Arc::new(
-            runvil_vfs::detail::store_view(access).map_err(|cause| Error::Store {
-                message: store_probe_message(&cause),
-                cause,
-            })?,
+            runvil_vfs::detail::store_view(access)
+                .map_err(|cause| store_failure(&cause, store_probe_message(&cause)))?,
         ),
         reporter: Arc::new(StoreReporter {
             emitter: emitter.clone(),
@@ -274,13 +282,13 @@ pub(crate) fn install_store_table(
         }),
         conflict: Arc::clone(conflict),
     };
-    let program = STORE_PROGRAM.as_ref().map_err(Error::shared)?;
-    let (dispatcher, phase): (Function, Table) = program.load(lua)?.call(()).map_err(Error::lua)?;
+    let program = STORE_PROGRAM.as_ref().map_err(Error::clone)?;
+    let (dispatcher, phase): (Function, Table) = program.load(lua)?.call(()).map_err(error::lua)?;
     lua.set_named_registry_value(STORE_PHASE_REGISTRY, phase)
-        .map_err(Error::lua)?;
+        .map_err(error::lua)?;
     let install = |name: &str, direct: Function| -> Result<()> {
-        let function: Function = dispatcher.call((name, direct)).map_err(Error::lua)?;
-        table.raw_set(name, function).map_err(Error::lua)
+        let function: Function = dispatcher.call((name, direct)).map_err(error::lua)?;
+        table.raw_set(name, function).map_err(error::lua)
     };
 
     let write = shared.closure(
@@ -355,7 +363,7 @@ pub(crate) fn install_store_table(
     )?;
     install("exists", exists)?;
 
-    globals.raw_set("store", table).map_err(Error::lua)?;
+    globals.raw_set("store", table).map_err(error::lua)?;
     Ok(())
 }
 
@@ -365,13 +373,13 @@ pub(crate) fn install_store_table(
 /// from here on exactly as `store.*` does.
 ///
 /// # Errors
-/// Returns [`Error::LuaRuntime`] if the VM's store table was never installed or
-/// the switch fails.
+/// Returns a `LuaRuntime` failure if the VM's store table was never
+/// installed or the switch fails.
 pub(crate) fn route_store_to_shims(lua: &Lua, shims: &Table) -> Result<()> {
     let phase: Table = lua
         .named_registry_value(STORE_PHASE_REGISTRY)
-        .map_err(Error::lua)?;
-    phase.raw_set("shims", shims.clone()).map_err(Error::lua)
+        .map_err(error::lua)?;
+    phase.raw_set("shims", shims.clone()).map_err(error::lua)
 }
 
 /// Executes one validated store operation against the store view: the

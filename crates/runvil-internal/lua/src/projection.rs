@@ -36,14 +36,14 @@ use runvil_model_client::client::Message;
 use runvil_model_client::detail::message_from_validated_parts;
 use serde_json::Value;
 
-use crate::error::{Error, Result};
+use crate::error::{Result, lua_runtime};
 use crate::protocol::{ContentPart, MessageContent, MessageRecord, NonEmpty, RecordRole};
 
 /// Validates and projects one author-built message list into the wire
 /// messages for one model dispatch.
 ///
 /// # Errors
-/// Returns [`Error::Lua`] naming the offending 1-based index when the list
+/// Returns a `LuaRuntime` failure naming the offending 1-based index when the list
 /// violates a cross-record rule: a malformed record (tool calls on a
 /// non-assistant, a system message outside the leading block, content
 /// parts in a system block that must be composed), a duplicate tool-call
@@ -60,7 +60,7 @@ fn validate(messages: &[MessageRecord]) -> Result<()> {
     if system_len > 1 {
         for (position, record) in messages[..system_len].iter().enumerate() {
             if matches!(record.content, MessageContent::Parts(_)) {
-                return Err(Error::Lua(format!(
+                return Err(lua_runtime(format!(
                     "messages[{}] is a system message with content parts; only plain \
                      text system messages can be composed",
                     position + 1
@@ -77,13 +77,13 @@ fn validate(messages: &[MessageRecord]) -> Result<()> {
     for (position, record) in messages.iter().enumerate() {
         let index = position + 1;
         if record.role != RecordRole::Assistant && !record.tool_calls.is_empty() {
-            return Err(Error::Lua(format!(
+            return Err(lua_runtime(format!(
                 "messages[{index}] sets tool_calls but is not an assistant message"
             )));
         }
         match &record.role {
             RecordRole::System if position >= system_len => {
-                return Err(Error::Lua(format!(
+                return Err(lua_runtime(format!(
                     "messages[{index}] is a system message outside the leading system block"
                 )));
             }
@@ -91,7 +91,7 @@ fn validate(messages: &[MessageRecord]) -> Result<()> {
                 reject_unanswered(pending.as_ref())?;
                 for call in &record.tool_calls {
                     if !seen.insert(call.id.as_str()) {
-                        return Err(Error::Lua(format!(
+                        return Err(lua_runtime(format!(
                             "messages[{index}] tool call id {:?} duplicates an earlier \
                              tool call",
                             call.id
@@ -117,7 +117,7 @@ fn validate(messages: &[MessageRecord]) -> Result<()> {
                         }
                     }
                     Some(_) | None => {
-                        return Err(Error::Lua(format!(
+                        return Err(lua_runtime(format!(
                             "messages[{index}] is an orphan tool record: no pending \
                              assistant tool call with id {id:?}"
                         )));
@@ -139,7 +139,7 @@ fn reject_unanswered(pending: Option<&(usize, Vec<&str>)>) -> Result<()> {
     if let Some((index, unanswered)) = pending
         && let Some(id) = unanswered.first()
     {
-        return Err(Error::Lua(format!(
+        return Err(lua_runtime(format!(
             "messages[{index}] tool call {id:?} has no tool result"
         )));
     }

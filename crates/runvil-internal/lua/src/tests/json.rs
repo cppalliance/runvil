@@ -37,9 +37,10 @@ fn caught(vm: &BuiltVm, call: &str) -> (String, String) {
     (kind, message)
 }
 
-/// The `(kind, message)` pair of a caught `lua` error.
+/// The `(kind, message)` pair of a caught `lua` error whose own text is
+/// `message`: its kind and the author prose `tostring` gives for it.
 fn lua_error(message: &str) -> (String, String) {
-    ("lua".to_owned(), message.to_owned())
+    ("lua".to_owned(), refused(message))
 }
 
 /// Evaluates the Lua expression `call` on `vm` and returns the string it

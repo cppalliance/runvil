@@ -217,11 +217,13 @@ fn json_encode_of_var_inside_a_prelude_function_cannot_read_the_view() {
     );
     assert!(!ok, "encoding the prelude's var view raises");
     assert_eq!(
-        (kind.as_str(), message.as_str()),
+        (kind.as_str(), message),
         (
             "lua",
-            "json.encode: value cannot be read (var is read-only); \
-             copy the fields you need into a plain table"
+            crate::tests::refused(
+                "json.encode: value cannot be read (var is read-only); \
+                 copy the fields you need into a plain table"
+            )
         )
     );
     let section_text: String = vm.eval("return json.encode(var)");

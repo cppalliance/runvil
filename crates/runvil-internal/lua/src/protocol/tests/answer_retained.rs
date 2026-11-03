@@ -11,12 +11,25 @@ fn quota() -> runvil_types::error::Error {
     crate::lua_quota(crate::QuotaResource::LogEvent)
 }
 
+/// [`quota`] as it crossed into the block's VM, which names no file: with
+/// the author prose of its message.
+fn answered_quota() -> runvil_types::error::Error {
+    let mut quota = quota();
+    quota.prose = format!(
+        "prompt: {}. {}",
+        quota.message,
+        runvil_types::error::ErrorCode::LuaQuota.prose()
+    );
+    quota
+}
+
 /// Runs `source` on a shim VM to its `models.infer` yield, answers the
 /// yield with [`quota`], and returns how the block ended.
 fn answered(source: &str) -> std::result::Result<CoroStep, runvil_types::error::Error> {
     let vm = TestVm::new().shims().build();
     let program = LuaProgram::compile(
         source,
+        "prompt",
         "test program",
         NonZeroU32::MIN,
         &null_emitter(),
@@ -41,7 +54,7 @@ fn a_block_raising_the_answered_error_table_surfaces_the_typed_error() {
         "local ok, err = pcall(models.infer, 'hi')\nerror(err, 0)",
     ] {
         match answered(source) {
-            Err(error) if error == quota() => {}
+            Err(error) if error == answered_quota() => {}
             other => panic!("block {source:?} must surface the typed quota error, got {other:?}"),
         }
     }

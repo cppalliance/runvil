@@ -4,9 +4,7 @@
 
 use std::num::NonZeroU32;
 
-use runvil_lua::{
-    ErrorField, ErrorKind, QuotaResource, error_fields, error_kind, error_table_message,
-};
+use runvil_lua::{ErrorField, ErrorKind, QuotaResource, error_fields, error_kind};
 use runvil_types::error::{ErrorCode, FactKey, Location};
 use runvil_types::ids::TaskId;
 use serde_json::Value;
@@ -65,7 +63,6 @@ fn an_internal_fault_is_located_at_its_rust_call_site_and_ends_its_message_there
         )
     );
     assert_eq!(error_kind(&error), ErrorKind::Internal);
-    assert_eq!(error_table_message(&error), error.message);
 }
 
 #[test]
@@ -126,7 +123,6 @@ fn a_refusal_notice_is_the_prose_and_the_whole_message_without_a_cause() {
         (RunErrorKind::RequirementsUnmet, notice.to_owned())
     );
     assert_eq!(error_kind(&error), ErrorKind::Internal);
-    assert_eq!(error_table_message(&error), notice);
 }
 
 #[test]

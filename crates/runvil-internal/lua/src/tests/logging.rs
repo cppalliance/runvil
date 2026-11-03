@@ -218,13 +218,9 @@ fn log_cumulative_byte_budget_is_enforced_before_the_event_budget() {
         .expect_err("the cumulative byte budget must refuse the third message");
     // The refusal is the stable typed quota error, not an opaque
     // Lua authoring string.
+    let quota = crate::lua_quota(crate::QuotaResource::LogByte);
     assert!(
-        matches!(
-            error,
-            Error::LuaQuota {
-                resource: crate::QuotaResource::LogByte
-            }
-        ),
+        (error.code, &error.message, &error.facts) == (quota.code, &quota.message, &quota.facts),
         "the byte ceiling must surface as a typed LuaQuota: {error:?}"
     );
     let logged = recorder

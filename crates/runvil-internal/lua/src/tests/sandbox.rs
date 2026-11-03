@@ -72,7 +72,7 @@ fn an_installed_require_is_runvils_and_loads_no_module() {
     let vm = TestVm::new().shims().build();
     vm.install_require(
         |heading, _| {
-            Err::<Library, _>(Error::Lua(format!(
+            Err::<Library, _>(crate::lua_runtime(format!(
                 "no section `{heading}` within reach of require"
             )))
         },
@@ -93,7 +93,10 @@ fn an_installed_require_is_runvils_and_loads_no_module() {
     };
     assert_eq!(
         returned,
-        "function|false|no section `os` within reach of require|nil|nil"
+        format!(
+            "function|false|prompt: no section `os` within reach of require. {}|nil|nil",
+            ErrorCode::LuaRuntime.prose()
+        )
     );
 }
 
@@ -171,7 +174,7 @@ fn untrusted_global_wraps_every_call_under_the_run_nonce() {
 fn untrusted_global_rejects_a_non_string_argument() {
     let error = run("return untrusted({})", "").expect_err("a table is not a string");
     assert!(
-        matches!(error, Error::Lua(_) | Error::LuaRuntime { .. }),
+        error.code == ErrorCode::LuaRuntime,
         "a non-string argument must surface as a Lua error, got {error:?}"
     );
 }

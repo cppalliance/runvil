@@ -12,7 +12,7 @@ use serde_json::Value as Json;
 use super::{Injected, SectionVm, Uninjected};
 use crate::argv::Argv;
 use crate::compactors::install_compactors;
-use crate::error::{Error, Result};
+use crate::error::{self, Error, Result};
 use crate::messages::install_messages;
 use crate::models::install_models;
 use crate::sys::seal_sys;
@@ -24,7 +24,7 @@ use crate::var::guarded_var;
 #[derive(Debug)]
 pub struct InjectFailure {
     vm: Box<SectionVm<Uninjected>>,
-    error: Error,
+    error: Box<Error>,
 }
 
 impl InjectFailure {
@@ -40,7 +40,7 @@ impl InjectFailure {
     #[must_use]
     pub fn teardown(self, emitter: &Emitter, section: &str) -> Error {
         self.vm.teardown(emitter, section);
-        self.error
+        *self.error
     }
 }
 
@@ -89,7 +89,7 @@ impl SectionVm<Uninjected> {
         if let Err(error) = self.install_values(args, sys, initial_var, argv, selection) {
             return Err(InjectFailure {
                 vm: Box::new(self),
-                error,
+                error: Box::new(error),
             });
         }
         Ok(self.injected(Injected {
@@ -112,15 +112,15 @@ impl SectionVm<Uninjected> {
         selection: &Arc<Mutex<Option<ModelBinding>>>,
     ) -> Result<()> {
         let globals = self.lua.globals();
-        globals.raw_set("args", args).map_err(Error::lua)?;
+        globals.raw_set("args", args).map_err(error::lua)?;
         match argv {
             Argv::Writable(value) => crate::argv::install_writable(&self.lua, value)?,
             Argv::Frozen(value) => crate::argv::install_frozen(&self.lua, value)?,
         }
         let sys_table = seal_sys(&self.lua, sys)?;
-        globals.raw_set("sys", sys_table).map_err(Error::lua)?;
+        globals.raw_set("sys", sys_table).map_err(error::lua)?;
         let var = guarded_var(&self.lua, initial_var)?;
-        globals.raw_set("var", var).map_err(Error::lua)?;
+        globals.raw_set("var", var).map_err(error::lua)?;
         install_tools(
             &self.lua,
             &globals,

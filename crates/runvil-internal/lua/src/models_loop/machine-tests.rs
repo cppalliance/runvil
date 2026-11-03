@@ -2,9 +2,11 @@
 //! place of the Lua values it passes along, and a plain list read back
 //! through `records()`.
 
+use runvil_types::error::FactKey;
+
 use super::{Input, Machine, Phase, Then};
 use crate::compactors::OverflowReason;
-use crate::error_value::ErrorField;
+use crate::error_value::error_kind;
 use crate::messages::MessageList;
 use crate::models_loop::tests::{echo_call, round};
 use crate::protocol::{ChatOutcome, ChatResult, MessageContent, MessageRecord};
@@ -34,15 +36,16 @@ fn show(then: &Then<V>) -> String {
         Then::Return => "return".to_owned(),
         Then::Raise(value) => format!("raise {value}"),
         Then::RaiseNormalized(value) => format!("normalize {value}"),
-        Then::RaiseNew(raised) => match raised.fields.get("finish_reason") {
-            Some(ErrorField::String(reason)) => {
-                format!("new {}|{}|{reason}", raised.kind, raised.message)
+        Then::RaiseNew(raised) => {
+            let kind = error_kind(raised);
+            match raised.facts.get(&FactKey::FinishReason) {
+                Some(serde_json::Value::String(reason)) => {
+                    format!("new {kind}|{}|{reason}", raised.message)
+                }
+                Some(other) => panic!("finish_reason must be a string fact, actual {other}"),
+                None => format!("new {kind}|{}", raised.message),
             }
-            Some(ErrorField::Integer(reason)) => {
-                panic!("finish_reason must be a string field, actual the integer {reason}")
-            }
-            None => format!("new {}|{}", raised.kind, raised.message),
-        },
+        }
     }
 }
 

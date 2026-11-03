@@ -87,7 +87,10 @@ fn a_light_userdata_compactor_is_named_userdata_as_lua_names_it() {
         .run();
     assert_eq!(
         trace.text(),
-        "userdata|lua|compactor must be a function, got userdata|1"
+        format!(
+            "userdata|lua|{}|1",
+            refused("compactor must be a function, got userdata")
+        )
     );
     assert_eq!(gateway.call_count(), 0, "no round runs");
 }
@@ -119,7 +122,7 @@ fn the_arity_error_still_raises_when_the_author_has_rebound_error() {
     );
     assert_eq!(
         trace.text(),
-        "models.loop takes (compactor?) or (model, compactor?)"
+        refused("models.loop takes (compactor?) or (model, compactor?)")
     );
     assert!(trace.effects().is_empty(), "no round runs");
 }
@@ -133,7 +136,10 @@ fn an_empty_list_raises_before_any_round() {
          return err.kind .. ':' .. tostring(err)",
     );
     let trace = loop_scenario(source).chat(&gateway).run();
-    assert_eq!(trace.text(), "lua:messages must not be empty");
+    assert_eq!(
+        trace.text(),
+        format!("lua:{}", refused("messages must not be empty"))
+    );
     assert_eq!(gateway.call_count(), 0, "the refused call sends no request");
 }
 
@@ -214,8 +220,10 @@ fn a_returning_compactor_that_shrank_nothing_raises_the_exact_exhaustion_text() 
     ));
     assert_eq!(
         trace.text(),
-        "context_exhausted|context exhausted: the provider rejected the request as exceeding \
-         the model's context window|1"
+        format!(
+            "context_exhausted|{}|1",
+            ErrorCode::ContextExhausted.prose()
+        )
     );
     assert_eq!(rounds, 1, "the one round left and overflowed");
 }

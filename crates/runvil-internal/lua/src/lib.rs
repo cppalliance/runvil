@@ -73,7 +73,6 @@ mod bindings;
 mod collection;
 mod compactors;
 mod coro;
-mod detail;
 mod dispatch;
 mod engine_globals;
 mod error;
@@ -126,12 +125,11 @@ pub use crate::engine_globals::{
     install_ui, run_store_op, store_error_message, store_probe_message,
 };
 pub use crate::error::{
-    Error, QuotaResource, context_exhausted, internal_at, interrupted, into_universal, lua_quota,
-    lua_runtime, task_cancelled, task_consumed, task_not_owned, tool_loop_exhausted,
+    QuotaResource, context_exhausted, internal_at, interrupted, lua_quota, lua_runtime,
+    task_cancelled, task_consumed, task_not_owned, tool_loop_exhausted,
 };
 pub use crate::error_value::{
-    ErrorField, ErrorKind, Raised, error_fields, error_kind, error_table_message, store_error,
-    store_error_value_fields,
+    ErrorField, ErrorKind, error_fields, error_kind, store_error, store_error_value_fields,
 };
 pub use crate::globals::{RESERVED_NAMES, Reserved, reserved_name};
 pub use crate::messages::MessageList;

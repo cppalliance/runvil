@@ -125,6 +125,7 @@ fn a_section_offer_by_id_scopes_the_tool_and_dispatches_it() {
     // snapshot over it includes the offered tool's wire name.
     let offer = LuaProgram::compile(
         "tools.offer('tools/section')",
+        "prompt",
         "prologue",
         NonZeroU32::new(1).expect("compile source line is non-zero"),
         &null_emitter(),

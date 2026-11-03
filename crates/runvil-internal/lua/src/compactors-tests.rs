@@ -5,6 +5,7 @@ use std::num::NonZeroU32;
 use mlua::Lua;
 use runvil_model_client::client::{Message, Role};
 use runvil_model_client::detail::message_from_validated_parts;
+use runvil_types::error::{ErrorCode, FactKey};
 use runvil_types::ids::RoundId;
 use runvil_types::metrics::Usage;
 use serde_json::{Value, json};
@@ -13,7 +14,7 @@ use super::{
     Compactor, OverflowReason, UsageAnchor, exhaustion_detail, install_compactors, output_reserve,
     precheck,
 };
-use crate::Error;
+use crate::error::{Error, context_exhausted, lua_runtime};
 use crate::messages::MessageList;
 use crate::scope::RenderedTools;
 use crate::tests::user;
@@ -37,7 +38,7 @@ fn fail_invoked(reason: OverflowReason) -> Error {
         .expect_err("the fail policy always fails")
 }
 
-/// Extracts the typed crate error a `compactors.fail` raise brought across
+/// Extracts the universal error a `compactors.fail` raise brought across
 /// the Lua boundary (the typed error, never its flattened text).
 /// mlua wraps a callback's error in `CallbackError` for the traceback; the
 /// original external error is kept as its cause.
@@ -49,42 +50,44 @@ fn raised_crate_error_ref(error: &mlua::Error) -> &Error {
     match cause {
         mlua::Error::ExternalError(cause) => cause
             .downcast_ref::<Error>()
-            .expect("the raise must hold the typed crate error, not text"),
+            .expect("the raise must hold the universal error, not text"),
         other => panic!("expected an ExternalError holding the typed error, got {other:?}"),
     }
 }
 
 /// The reason a raise held, when it was a context exhaustion.
 fn raised_reason(error: &mlua::Error) -> &str {
-    match raised_crate_error_ref(error) {
-        Error::ContextExhausted { reason } => reason,
-        other => panic!("expected ContextExhausted, got {other:?}"),
-    }
+    let raised = raised_crate_error_ref(error);
+    assert_eq!(
+        raised.code,
+        ErrorCode::ContextExhausted,
+        "expected ContextExhausted, got {raised:?}"
+    );
+    raised
+        .facts
+        .get(&FactKey::Reason)
+        .and_then(Value::as_str)
+        .expect("a context exhaustion names its reason")
 }
 
 #[test]
 fn fail_raises_typed_exhaustion_for_a_provider_overflow() {
     let error = fail_invoked(OverflowReason::Provider);
-    assert!(
-        matches!(&error, Error::ContextExhausted { reason } if reason == "provider"),
-        "the default policy must raise typed context exhaustion, got {error:?}"
+    assert_eq!(
+        error,
+        context_exhausted("provider"),
+        "the default policy must raise typed context exhaustion"
     );
 }
 
 #[test]
 fn fail_invocation_raises_typed_exhaustion_holding_the_reason() {
     for reason in [OverflowReason::Precheck, OverflowReason::Provider] {
-        let error = fail_invoked(reason);
-        match error {
-            Error::ContextExhausted { reason: raised } => {
-                assert_eq!(
-                    raised,
-                    reason.tag(),
-                    "the exhaustion must hold the invoking reason's tag"
-                );
-            }
-            other => panic!("expected ContextExhausted, got {other:?}"),
-        }
+        assert_eq!(
+            fail_invoked(reason),
+            context_exhausted(reason.tag()),
+            "the exhaustion must hold the invoking reason's tag"
+        );
     }
     let precheck = fail_invoked(OverflowReason::Precheck).to_string();
     let provider = fail_invoked(OverflowReason::Provider).to_string();
@@ -116,12 +119,7 @@ fn compactors_fail_raises_typed_exhaustion_with_any_reason_from_lua() {
 
 #[test]
 fn the_exhaustion_message_details_an_overflow_tag_and_otherwise_gives_the_reason() {
-    let message = |reason: &str| {
-        Error::ContextExhausted {
-            reason: reason.to_owned(),
-        }
-        .to_string()
-    };
+    let message = |reason: &str| context_exhausted(reason).message;
     assert_eq!(
         message("precheck"),
         "context exhausted: the request precheck overflowed the model's context window"
@@ -150,12 +148,13 @@ fn exhaustion_detail_is_an_overflow_tags_display_and_any_other_reason_itself() {
 #[test]
 fn the_fail_policy_invokes_as_typed_exhaustion_for_either_reason() {
     for reason in [OverflowReason::Precheck, OverflowReason::Provider] {
-        match fail_invoked(reason) {
-            Error::ContextExhausted { reason: raised } => {
-                assert_eq!(raised, reason.tag(), "the policy holds the invoking reason");
-            }
-            other => panic!("expected ContextExhausted, got {other:?}"),
-        }
+        let error = fail_invoked(reason);
+        assert_eq!(error.code, ErrorCode::ContextExhausted);
+        assert_eq!(
+            error.facts.get(&FactKey::Reason),
+            Some(&Value::from(reason.tag())),
+            "the policy holds the invoking reason"
+        );
     }
 }
 
@@ -197,14 +196,16 @@ fn compactors_clear_raises_outside_a_compactor_and_leaves_the_records() {
         .load("compactors.clear('manual')")
         .exec()
         .expect_err("compactors.clear refuses outside a compactor");
-    assert!(
-        matches!(raised_crate_error_ref(&error), Error::Lua(message) if message == outside),
-        "the Lua raise holds the lua-kind refusal: {error:?}"
+    assert_eq!(
+        raised_crate_error_ref(&error),
+        &lua_runtime(outside),
+        "the Lua raise holds the lua-kind refusal"
     );
     let refused = Compactor::Clear.invoke(&list, "precheck");
-    assert!(
-        matches!(&refused, Err(Error::Lua(message)) if message == outside),
-        "the policy refuses the same way from Rust: {refused:?}"
+    assert_eq!(
+        refused,
+        Err(lua_runtime(outside)),
+        "the policy refuses the same way from Rust"
     );
     assert_eq!(list.to_records(), vec![user("one")], "no record is removed");
 }

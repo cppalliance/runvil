@@ -145,7 +145,11 @@ fn an_adhoc_tool_done_return_becomes_its_scalar_text() {
 fn an_adhoc_tool_done_table_return_is_a_bad_return() {
     let lua = Lua::new();
     match adhoc_tool_done_returning(&lua, "{ 1, 2 }") {
-        AdhocToolOutcome::BadReturn(Error::Lua(message)) => {
+        AdhocToolOutcome::BadReturn(Error {
+            code: ErrorCode::LuaRuntime,
+            message,
+            ..
+        }) => {
             assert_eq!(message, "cannot return a table as a result");
         }
         other => panic!("a table return must be rejected, got {other:?}"),
@@ -218,7 +222,11 @@ fn an_infer_with_a_missing_or_non_string_prompt_is_the_calls_error() {
     ] {
         let table = lua_table(&lua, source);
         match Request::from_yield(&lua, &Value::Table(table)) {
-            YieldParse::Refused(Error::Lua(message)) => {
+            YieldParse::Refused(Error {
+                code: ErrorCode::LuaRuntime,
+                message,
+                ..
+            }) => {
                 assert_eq!(message, expected, "{source}");
             }
             other => panic!("expected the prompt call error for {source}, got {other:?}"),
@@ -238,7 +246,11 @@ fn an_infer_with_a_wrong_handle_type_is_the_calls_error() {
         "{ op = 'infer', prompt = 'hi', handle = 'not a handle' }",
     );
     match Request::from_yield(&lua, &Value::Table(as_string)) {
-        YieldParse::Refused(Error::Lua(message)) => {
+        YieldParse::Refused(Error {
+            code: ErrorCode::LuaRuntime,
+            message,
+            ..
+        }) => {
             assert_eq!(
                 message,
                 "models.infer handle must be a model handle, got string"
@@ -255,7 +267,11 @@ fn an_infer_with_a_wrong_handle_type_is_the_calls_error() {
         wrong,
     );
     match Request::from_yield(&lua, &Value::Table(as_other_userdata)) {
-        YieldParse::Refused(Error::Lua(message)) => {
+        YieldParse::Refused(Error {
+            code: ErrorCode::LuaRuntime,
+            message,
+            ..
+        }) => {
             assert_eq!(message, "models.infer handle must be a model handle");
         }
         other => panic!("expected the handle call error, got {other:?}"),
@@ -267,7 +283,11 @@ fn a_call_with_a_non_string_target_keeps_the_resolve_error() {
     let lua = Lua::new();
     let table = lua_table(&lua, "{ op = 'call', target = 42, var = { k = 1 } }");
     match Request::from_yield(&lua, &Value::Table(table)) {
-        YieldParse::Refused(Error::LuaRuntime { message, .. }) => {
+        YieldParse::Refused(Error {
+            code: ErrorCode::LuaRuntime,
+            message,
+            ..
+        }) => {
             assert!(
                 message.contains("section target must be a string, got integer"),
                 "unexpected message: {message}"

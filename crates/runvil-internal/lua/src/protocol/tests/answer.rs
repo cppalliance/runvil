@@ -48,18 +48,58 @@ fn an_ok_spawn_answer_resumes_the_task_id_as_its_path_text() {
     assert_eq!(text.to_str().expect("the text is UTF-8"), "0.2");
 }
 
+/// The quota failure every failed answer here holds, and the same failure
+/// as it crossed into a VM given no file, with its author prose.
+fn quota_and_answered() -> (Error, Error) {
+    let quota = crate::lua_quota(crate::QuotaResource::LogEvent);
+    let mut answered = quota.clone();
+    answered.prose = format!(
+        "prompt: lua log event quota exceeded. {}",
+        ErrorCode::LuaQuota.prose()
+    );
+    (quota, answered)
+}
+
 #[test]
 fn a_failed_answer_round_trips_and_retains_the_typed_error() {
     let lua = Lua::new();
-    let quota = crate::lua_quota(crate::QuotaResource::LogEvent);
-    let (envelope, retained) =
-        answer_envelope(&lua, Err(quota.clone())).expect("the envelope renders");
-    assert_eq!(retained, Some(quota), "the typed error is retained");
+    let (quota, answered) = quota_and_answered();
+    let (envelope, retained) = answer_envelope(&lua, Err(quota)).expect("the envelope renders");
+    assert_eq!(
+        retained.as_ref(),
+        Some(&answered),
+        "the typed error is retained"
+    );
     let (ok, result) = echo_through_lua(&lua, envelope);
     assert!(!ok);
     let (kind, message) = failure_parts(&lua, result);
     assert_eq!(kind, "lua");
-    assert_eq!(message, "lua log event quota exceeded");
+    assert_eq!(message, answered.prose);
+}
+
+#[test]
+fn a_failed_tool_answer_renders_the_tools_remedy_prose_with_no_file_or_line() {
+    let lua = Lua::new();
+    crate::error::set_prompt_file(&lua, "agents/a.md");
+    let failure = crate::error::tool(runvil_types::tools::tool_error(
+        ErrorCode::ToolBackend,
+        "the backend refused; try another source",
+    ));
+    let (envelope, retained) =
+        answer_envelope(&lua, Err(failure.clone())).expect("the envelope renders");
+    assert_eq!(
+        retained.as_ref(),
+        Some(&failure),
+        "a tool failure crosses into the VM unchanged"
+    );
+    let (ok, result) = echo_through_lua(&lua, envelope);
+    assert!(!ok);
+    let (kind, message) = failure_parts(&lua, result);
+    assert_eq!(
+        (kind.as_str(), message.as_str()),
+        ("tool", "the backend refused; try another source"),
+        "the table's message is the tool's own prose, naming no file or line"
+    );
 }
 
 #[test]
@@ -70,18 +110,18 @@ fn a_join_any_delivery_of_a_failed_member_retains_the_members_typed_error() {
     // substitute the member's own error for the raised table.
     let lua = Lua::new();
     let task: TaskId = "0.1".parse().expect("a task id parses");
-    let quota = crate::lua_quota(crate::QuotaResource::LogEvent);
+    let (quota, answered) = quota_and_answered();
     let (envelope, retained) = answer_envelope(
         &lua,
         Ok(Answer::JoinAny(TaskDelivery {
             task,
-            outcome: Err(quota.clone()),
+            outcome: Err(quota),
         })),
     )
     .expect("the envelope renders");
     assert_eq!(
-        retained,
-        Some(quota),
+        retained.as_ref(),
+        Some(&answered),
         "the member's typed error is retained"
     );
     let (ok, id, member_ok, kind, message): (bool, String, bool, String, String) = lua
@@ -95,7 +135,7 @@ fn a_join_any_delivery_of_a_failed_member_retains_the_members_typed_error() {
     assert_eq!(id, "0.1");
     assert!(!member_ok, "the member failed");
     assert_eq!(kind, "lua");
-    assert_eq!(message, "lua log event quota exceeded");
+    assert_eq!(message, answered.prose);
 }
 
 #[test]
@@ -275,7 +315,8 @@ fn a_cancelled_answer_round_trips_as_the_cancelled_kind_and_retains_the_typed_er
     assert_eq!(kind, "cancelled");
     assert_eq!(
         message,
-        "interrupted: the run was cancelled or this call was stopped"
+        ErrorCode::Interrupted.prose(),
+        "an interruption keeps its default prose"
     );
 }
 
@@ -300,14 +341,18 @@ fn from_dispatch_classifies_by_the_declared_output_kind() {
     // Invalid JSON from a structured binding is the tool's error.
     match ToolCallOutcome::from_dispatch(ToolOutputKind::Structured, "form", "not json".to_owned())
     {
-        Err(Error::Tool { message, cause }) => {
-            let detail = cause
-                .downcast_ref::<serde_json::Error>()
-                .expect("the parse failure must survive as the cause");
+        Err(error) => {
+            let detail = serde_json::from_str::<serde_json::Value>("not json")
+                .expect_err("the output is not JSON");
+            let text = format!("structured tool \"form\" returned invalid JSON: {detail}");
             assert_eq!(
-                message,
-                format!("structured tool \"form\" returned invalid JSON: {detail}"),
-                "the message holds the cause's text, which no chain segment repeats"
+                (error.code, &error.message, &error.prose),
+                (
+                    ErrorCode::ToolOther,
+                    &format!("tool call failure: {text}"),
+                    &text
+                ),
+                "the prose names the parse failure, under a message that names the call"
             );
         }
         other => panic!("expected the typed tool error, got {other:?}"),

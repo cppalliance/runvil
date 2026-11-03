@@ -1,81 +1,59 @@
-//! Tests for the internal error: the cause-bearing variants' chains and the
-//! quota variant's message.
+//! Tests for the crate's failure helpers: an `mlua` failure's text, a
+//! refusal that crosses the `mlua` boundary as its typed value, and a tool
+//! failure's message and code.
 
-use runvil_types::error::ErrorCode;
+use std::sync::Arc;
+
+use runvil_types::error::{Error, ErrorCode, FactKey};
 use runvil_types::tools::tool_error;
 use runvil_vfs::VfsError;
+use serde_json::Value;
 
-use super::{Error, QuotaResource};
-use crate::protocol::VfsOp;
+use super::{author_refusal, lua, lua_runtime, tool};
 
-/// The display text of each segment of `error`'s source chain, the error
-/// itself first.
-fn chain(error: &(dyn std::error::Error + 'static)) -> Vec<String> {
-    let mut segments = Vec::new();
-    let mut next = Some(error);
-    while let Some(segment) = next {
-        segments.push(segment.to_string());
-        next = segment.source();
-    }
-    segments
+#[test]
+fn an_mlua_failure_is_a_lua_runtime_failure_with_its_text() {
+    let error = lua(mlua::Error::RuntimeError("boom".to_owned()));
+    assert_eq!(error, lua_runtime("runtime error: boom"));
+    assert_eq!(error.prose, ErrorCode::LuaRuntime.prose());
 }
 
 #[test]
-fn no_segment_of_a_cause_bearing_error_chain_repeats() {
-    let syntax = mlua::Error::SyntaxError {
-        message: "unexpected symbol near <eof>".to_owned(),
-        incomplete_input: true,
+fn a_refusal_crosses_the_mlua_boundary_as_its_typed_failure() {
+    let raised = author_refusal("a refused edit".to_owned());
+    let expected = lua_runtime("a refused edit");
+    assert_eq!(raised.downcast_ref::<Error>(), Some(&expected));
+    let framed = mlua::Error::CallbackError {
+        traceback: "stack traceback:".to_owned(),
+        cause: Arc::new(raised),
     };
-    let errors = [
-        Error::lua(mlua::Error::RuntimeError("boom".to_owned())),
-        Error::LuaCompile {
-            location: "section `S` prologue".to_owned(),
-            source_line: 1,
-            lua_source: "x =".to_owned(),
-            message: syntax.to_string(),
-            cause: Box::new(syntax),
-        },
-        Error::tool(tool_error(ErrorCode::ToolBackend, "the backend refused")),
-        Error::store(
-            &VfsOp::Read {
-                path: "a.txt".to_owned(),
-                start: None,
-                end: None,
-            },
-            VfsError::NotFound {
-                path: "a.txt".to_owned(),
-            },
-        ),
-    ];
-    for error in &errors {
-        assert!(
-            error.cause().is_some(),
-            "the cause stays reachable: {error:?}"
-        );
-        assert!(
-            std::error::Error::source(error).is_none(),
-            "required no source, since Display already holds the cause, actual a source on \
-             {error:?}"
-        );
-        let segments = chain(error);
-        for (index, segment) in segments.iter().enumerate() {
-            for later in &segments[index + 1..] {
-                assert!(
-                    !segment.contains(later.as_str()),
-                    "required each chain segment once, actual {later:?} repeated inside \
-                     {segment:?}"
-                );
-            }
-        }
-    }
+    assert_eq!(
+        framed.downcast_ref::<Error>(),
+        Some(&expected),
+        "a callback frame keeps the typed failure"
+    );
 }
 
 #[test]
-fn a_quota_error_names_its_exhausted_resource() {
-    for (resource, expected) in [
-        (QuotaResource::LogEvent, "lua log event quota exceeded"),
-        (QuotaResource::LogByte, "lua log byte quota exceeded"),
-    ] {
-        assert_eq!(Error::LuaQuota { resource }.to_string(), expected);
-    }
+fn a_tool_failure_keeps_the_tools_error_under_a_message_that_names_the_call() {
+    let mut failure = tool_error(ErrorCode::ToolBackend, "the backend refused");
+    failure.facts.insert(FactKey::Path, Value::from("a.md"));
+    let error = tool(failure.clone());
+    assert_eq!(error.code, ErrorCode::ToolBackend);
+    assert_eq!(
+        error.message,
+        format!("tool call failure: {}", failure.prose)
+    );
+    assert_eq!(
+        (&error.prose, &error.facts),
+        (&failure.prose, &failure.facts)
+    );
+}
+
+#[test]
+fn a_tool_failure_outside_the_tool_codes_is_tool_other() {
+    let foreign = crate::store_error(&VfsError::NotFound {
+        path: "a.md".to_owned(),
+    });
+    assert_eq!(tool(foreign).code, ErrorCode::ToolOther);
 }

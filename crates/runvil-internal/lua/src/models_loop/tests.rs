@@ -7,6 +7,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use mlua::{Function, Lua, MultiValue, Value};
 use runvil_model_client::model::{ModelBinding, ModelId, ModelInvocation};
+use runvil_types::error::{ErrorCode, FactKey};
 use runvil_types::metrics::ToolCallEvent;
 use runvil_types::tools::ToolId;
 use serde_json::json;
@@ -14,13 +15,13 @@ use serde_json::json;
 use super::machine::{Input, Phase, Then};
 use super::{LOOP_RUNNING, act, envelope_failure, loop_begin, lua_type_name, read_input};
 use crate::compactors::OverflowReason;
-use crate::error::Error;
-use crate::error_value::{ErrorField, ErrorKind, Raised, error_table, raised_from};
+use crate::error_value::{ErrorKind, error_kind, error_table, raised_from};
 use crate::hardening::CancelHook;
 use crate::messages::MessageList;
 use crate::models::LuaModelHandle;
 use crate::protocol::{AdhocToolOutcome, Answer, ChatOutcome, ChatResult, Request, YieldParse};
 use crate::test_support::answer_envelope;
+use crate::tests::refused;
 
 /// A requested call named `echo`, its arguments naming its id.
 pub(super) fn echo_call(id: &str) -> ToolCallEvent {
@@ -119,33 +120,35 @@ fn the_entry_checks_its_arguments_in_order_with_the_shims_texts() {
         )
         .call((begin, handle(&lua), Value::NULL))
         .unwrap();
-    let arity = "nil|raise|models.loop takes (compactor?) or (model, compactor?)";
-    let integer = "nil|raise|compactor must be a function, got integer";
-    let number = "nil|raise|compactor must be a function, got number";
-    let started = "function|yield|chat";
+    let raise = |message: &str| format!("nil|raise|{}", refused(message));
+    let arity = raise("models.loop takes (compactor?) or (model, compactor?)");
+    let integer = raise("compactor must be a function, got integer");
+    let number = raise("compactor must be a function, got number");
+    let userdata = raise("compactor must be a function, got userdata");
+    let started = "function|yield|chat".to_owned();
     assert_eq!(
         outcomes,
         [
             // Three arguments, whichever shape the first one starts.
-            arity,
+            arity.clone(),
             // A handle then one argument is the handle shape.
-            started,
+            started.clone(),
             // A handle then a non-function compactor.
             number,
-            arity,
+            arity.clone(),
             // A non-handle first argument takes the section-model shape, so
             // it may carry only one argument.
-            arity,
-            arity,
-            arity,
+            arity.clone(),
+            arity.clone(),
+            arity.clone(),
             arity,
             // That one argument is the compactor, checked after the arity.
-            integer,
-            "nil|raise|compactor must be a function, got userdata",
+            integer.clone(),
+            userdata,
             // No arguments, a nil argument, a handle alone, and a handle
             // with nil all take a documented shape.
-            started,
-            started,
+            started.clone(),
+            started.clone(),
             started,
             integer,
         ]
@@ -217,7 +220,7 @@ fn a_running_loop_refuses_another_until_its_step_ends_or_fails() {
         )
         .call((begin, capped, is_running, handle(&lua)))
         .unwrap();
-    let refused = format!("nil|raise|{LOOP_RUNNING}=true");
+    let refused = format!("nil|raise|{}=true", refused(LOOP_RUNNING));
     assert_eq!(
         seen,
         format!(
@@ -282,8 +285,8 @@ fn envelope_failure_keeps_an_error_table_and_wraps_anything_else() {
         .unwrap()
         .expect("an error table");
     assert_eq!(
-        (raised.kind, raised.message.as_str()),
-        (ErrorKind::Lua, "boom")
+        (error_kind(&raised), raised.code, raised.message.as_str()),
+        (ErrorKind::Lua, ErrorCode::LuaRuntime, "boom")
     );
 }
 
@@ -407,18 +410,9 @@ fn act_names_each_call_return_and_raise_with_its_values() {
     );
     let plain = Then::RaiseNormalized(value("plain"));
     assert_eq!(action(&lua, plain), tagged("raise", vec![value("plain")]));
-    let typed = mlua::Error::external(Error::ContextExhausted {
-        reason: "precheck".to_owned(),
-    });
-    let new = Raised {
-        kind: ErrorKind::EmptyModelReply,
-        message: "empty".to_owned(),
-        fields: [(
-            "finish_reason".to_owned(),
-            ErrorField::String("stop".to_owned()),
-        )]
-        .into(),
-    };
+    let typed = mlua::Error::external(crate::context_exhausted("precheck"));
+    let mut new = runvil_model_client::model::completion_error(ErrorCode::EmptyReply, "empty");
+    new.facts.insert(FactKey::FinishReason, "stop".into());
     let raised = [
         (
             Then::RaiseNormalized(Value::Error(Box::new(typed))),
@@ -433,12 +427,13 @@ fn act_names_each_call_return_and_raise_with_its_values() {
             panic!("an error table");
         };
         let read = |name| table.raw_get::<String>(name).unwrap();
-        let field_name = if kind == "context_exhausted" {
-            "reason"
+        let (field_name, code) = if kind == "context_exhausted" {
+            ("reason", ErrorCode::ContextExhausted)
         } else {
-            "finish_reason"
+            ("finish_reason", ErrorCode::EmptyReply)
         };
         assert_eq!((tag.as_str(), read("kind").as_str()), ("raise", kind));
+        assert_eq!(read("code"), code.tag());
         assert_eq!(read(field_name), field);
     }
 }

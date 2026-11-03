@@ -414,8 +414,7 @@ fn a_render_answer_that_breaks_the_merge_fails_its_round_and_fixes_no_tools() {
     });
     assert_eq!(
         text_of(result),
-        "internal:the tools Pack's render returned kit/sneak of the kit Pack in the Static Set; \
-         a Pack renders only tools whose id starts with its own Pack id|done"
+        format!("internal:{}|done", ErrorCode::ToolSetsInvalid.prose())
     );
     assert_eq!(
         renders, 2,

@@ -13,7 +13,7 @@ use mlua::{Lua, LuaSerdeExt, MultiValue, Value};
 use runvil_types::emitter::Emitter;
 use runvil_types::untrusted::GuardNonce;
 
-use crate::error::{Error, QuotaExceeded, QuotaResource, Result};
+use crate::error::{self, QuotaResource, Result, lua_quota};
 
 pub(crate) use store::{install_store_table, route_store_to_shims};
 pub use store::{run_store_op, store_error_message, store_probe_message};
@@ -38,9 +38,7 @@ fn log_checkpoint(
         .try_update(Ordering::Relaxed, Ordering::Relaxed, |n| n.checked_sub(1))
         .is_err()
     {
-        return Err(mlua::Error::external(QuotaExceeded(
-            QuotaResource::LogEvent,
-        )));
+        return Err(mlua::Error::external(lua_quota(QuotaResource::LogEvent)));
     }
     let Some(Value::String(message)) = arguments.into_iter().next() else {
         return Err(mlua::Error::external("log message must be a UTF-8 string"));
@@ -67,7 +65,7 @@ fn log_checkpoint(
         })
         .is_err()
     {
-        return Err(mlua::Error::external(QuotaExceeded(QuotaResource::LogByte)));
+        return Err(mlua::Error::external(lua_quota(QuotaResource::LogByte)));
     }
     emitter.lua(section, &message);
     Ok(())
@@ -90,8 +88,8 @@ pub(crate) fn install_log(
         .create_function(move |_, arguments: MultiValue| {
             log_checkpoint(&emitter, &section, &log_budget, &log_byte_budget, arguments)
         })
-        .map_err(Error::lua)?;
-    lua.globals().raw_set("log", log).map_err(Error::lua)
+        .map_err(error::lua)?;
+    lua.globals().raw_set("log", log).map_err(error::lua)
 }
 
 fn is_log_line_break_or_control(character: char) -> bool {
@@ -105,10 +103,10 @@ pub(crate) fn install_untrusted(lua: &Lua, nonce: &GuardNonce) -> Result<()> {
     let nonce = nonce.clone();
     let untrusted = lua
         .create_function(move |_, s: String| Ok(nonce.wrap(&s)))
-        .map_err(Error::lua)?;
+        .map_err(error::lua)?;
     lua.globals()
         .raw_set("untrusted", untrusted)
-        .map_err(Error::lua)
+        .map_err(error::lua)
 }
 
 /// `ui()` snapshot conversion: a JSON null field reads as nil in author
@@ -131,10 +129,11 @@ const UI_SNAPSHOT_OPTIONS: mlua::serde::SerializeOptions = mlua::serde::Serializ
 /// its own copy of the JSON tree.
 ///
 /// # Errors
-/// Returns [`Error::LuaRuntime`] if the function or the global cannot be created.
+/// Returns a `LuaRuntime` failure if the function or the global cannot be
+/// created.
 pub fn install_ui(lua: &Lua, snapshot: Arc<serde_json::Value>) -> Result<()> {
     let snapshot = lua
         .create_function(move |lua, ()| lua.to_value_with(snapshot.as_ref(), UI_SNAPSHOT_OPTIONS))
-        .map_err(Error::lua)?;
-    lua.globals().raw_set("ui", snapshot).map_err(Error::lua)
+        .map_err(error::lua)?;
+    lua.globals().raw_set("ui", snapshot).map_err(error::lua)
 }

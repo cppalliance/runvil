@@ -19,8 +19,10 @@ use serde_json::{Value as Json, json};
 
 use self::recording::{Observation, Recorder, boundary, null_emitter};
 use super::*;
+use runvil_types::error::ErrorCode;
+
 use crate::engine_globals::LUA_LOG_CHARACTER_LIMIT;
-use crate::error::Result;
+use crate::error::{Error, Result};
 use crate::hardening::install_cancel_hook;
 use crate::section::resolve_section_target;
 use crate::test_vm::{
@@ -77,12 +79,22 @@ fn assert_identity_only(recorder: &Recorder) {
     }
 }
 
-/// Returns the message held by either Lua-category error representation.
+/// The author prose of a `LuaRuntime` refusal whose own text is
+/// `message`, raised in a VM given no file: what `tostring` gives for it
+/// once a `pcall` caught it.
+pub(crate) fn refused(message: &str) -> String {
+    format!("prompt: {message}. {}", ErrorCode::LuaRuntime.prose())
+}
+
+/// Returns the message of a `LuaRuntime` failure.
+#[track_caller]
 fn lua_error_message(error: &Error) -> &str {
-    match error {
-        Error::Lua(message) | Error::LuaRuntime { message, .. } => message,
-        other => panic!("expected a Lua-category error, got {other:?}"),
-    }
+    assert_eq!(
+        error.code,
+        ErrorCode::LuaRuntime,
+        "expected a Lua runtime failure, got {error:?}"
+    );
+    &error.message
 }
 
 /// A backend whose every operation fails. The error is `Backend` rather
@@ -211,13 +223,16 @@ fn run_scalar(
 ) -> Result<Option<String>> {
     match vm.run_chunk(program, emitter, section)? {
         LuaBlockResult::Returned(value) => Ok(value),
-        LuaBlockResult::Jump(heading) => Err(Error::Lua(format!("unexpected jump to {heading}"))),
+        LuaBlockResult::Jump(heading) => Err(crate::error::lua_runtime(format!(
+            "unexpected jump to {heading}"
+        ))),
     }
 }
 
 fn program(source: &str) -> LuaProgram {
     LuaProgram::compile(
         source,
+        "prompt",
         "test program",
         NonZeroU32::new(1).expect("compile source line is non-zero"),
         &null_emitter(),
@@ -331,8 +346,13 @@ pub(crate) fn assert_chunk_name_resolves(constant: &str, chunk_name: &str, embed
     );
 }
 
-/// The refusal a `pcall` caught, from the caught error's `tostring`: its
-/// first line without the `runtime error: ` prefix mlua renders.
+/// The refusal a `pcall` caught, from the caught error's `tostring`: the
+/// text its author prose names when the shim's `pcall` caught it in a VM
+/// given no file, or its first line without the `runtime error: ` prefix
+/// mlua renders when the base `pcall` did.
 pub(crate) fn refusal_line(caught: &str) -> Option<&str> {
+    if let Some(text) = caught.strip_prefix("prompt: ") {
+        return text.strip_suffix(format!(". {}", ErrorCode::LuaRuntime.prose()).as_str());
+    }
     caught.strip_prefix("runtime error: ")?.lines().next()
 }

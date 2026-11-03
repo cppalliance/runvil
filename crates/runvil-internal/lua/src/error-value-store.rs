@@ -2,6 +2,8 @@
 //! tag and the [`VfsError`](runvil_vfs::VfsError) variant's fields, and the
 //! universal error the failure becomes where it leaves the VFS.
 
+use std::collections::BTreeMap;
+
 use runvil_types::error::{Error, ErrorCode, FactKey};
 use serde_json::Value;
 
@@ -132,6 +134,23 @@ pub(super) fn store_fact_fields(error: &Error) -> Vec<(String, ErrorField)> {
         fields.push((name.to_owned(), field));
     }
     fields
+}
+
+/// Returns the store facts a store failure's Lua error table `fields`
+/// hold, the inverse of [`store_fact_fields`]: each store field under its
+/// fact, a string field as a string and an integer field as a number.
+/// `reason` is the code's tag, not a fact.
+pub(super) fn store_field_facts(fields: &BTreeMap<String, ErrorField>) -> BTreeMap<FactKey, Value> {
+    STORE_FACTS
+        .iter()
+        .filter_map(|&(name, key)| {
+            let value = match fields.get(name)? {
+                ErrorField::String(text) => Value::from(text.as_str()),
+                ErrorField::Integer(number) => Value::from(*number),
+            };
+            Some((key, value))
+        })
+        .collect()
 }
 
 /// The code named after the variant.

@@ -71,12 +71,10 @@ fn settle_block(
         CoroStep::Yielded(coroutine, values) => {
             let settled = match entered.frame.vm().request_from_yield(&values) {
                 YieldParse::Request(request) => Settled::Dispatch(request),
-                YieldParse::Refused(refusal) => {
-                    Settled::Answer(Err(error::into_universal(refusal)))
-                }
+                YieldParse::Refused(refusal) => Settled::Answer(Err(refusal)),
                 YieldParse::Malformed(malformed) => {
                     emitter.report(name, lifecycle::LUA_CHUNK_FAILED);
-                    return Err(error::into_universal(malformed));
+                    return Err(malformed);
                 }
             };
             entered.running = Some(Running {
@@ -163,11 +161,7 @@ impl Scheduler {
                         emitter.report(&name, lifecycle::LUA_CHUNK_FAILED);
                         return Err(error);
                     }
-                    entered
-                        .frame
-                        .vm()
-                        .start_block_coro(program)
-                        .map_err(error::into_universal)
+                    entered.frame.vm().start_block_coro(program)
                 }
                 Some(Block::Prose { text, .. }) => {
                     // The parser emits one prose block per inter-fence gap,

@@ -19,7 +19,7 @@ use std::ffi::c_void;
 use mlua::{Lua, LuaSerdeExt, LuaString, Table, Value};
 use serde_json::{Map, Number, Value as Json};
 
-use super::keys::{Entries, Rule, Shape, entries, shape};
+use super::keys::{Entries, Shape, entries, shape};
 use crate::error::author_refusal;
 use crate::proxy::{key_path, key_text};
 use crate::walk_budget::{HELD_KEY_LIMIT, TooLarge, WalkBudget};
@@ -114,35 +114,35 @@ fn too_large(prefix: &str) -> mlua::Error {
     author_refusal(format!("{prefix}: value is too large to encode"))
 }
 
-/// Why a value cannot be encoded, before the prefix and path are added.
-enum Failure {
-    NotData(&'static str),
-    NotUtf8,
-    NotFinite,
-    Unreadable(Option<String>),
-    Keys(Rule),
-    Cycle,
-    TooDeep,
+/// Why a string or a key that is not UTF-8 cannot be encoded, the text
+/// after the path.
+const NOT_UTF8: &str = "is not valid UTF-8";
+
+/// Why NaN or an infinity cannot be encoded.
+const NOT_FINITE: &str = "is not a finite number";
+
+/// Why a table on its own path cannot be encoded.
+const CYCLE: &str = "contains itself";
+
+/// Why a value of the Lua type `kind` cannot be encoded.
+fn not_data(kind: &str) -> String {
+    format!("must be JSON data, got {kind}")
 }
 
-impl Failure {
-    /// The message's text after the path.
-    fn text(&self) -> String {
-        match self {
-            Failure::NotData(kind) => format!("must be JSON data, got {kind}"),
-            Failure::NotUtf8 => "is not valid UTF-8".to_owned(),
-            Failure::NotFinite => "is not a finite number".to_owned(),
-            Failure::Unreadable(Some(label)) => {
-                format!("cannot be read ({label}); copy the fields you need into a plain table")
-            }
-            Failure::Unreadable(None) => {
-                "cannot be read; copy the fields you need into a plain table".to_owned()
-            }
-            Failure::Keys(rule) => rule.text(),
-            Failure::Cycle => "contains itself".to_owned(),
-            Failure::TooDeep => format!("is nested more than {DEPTH_LIMIT} levels deep"),
+/// Why a sealed view whose data cannot be read, labelled by `label`,
+/// cannot be encoded.
+fn unreadable(label: Option<&str>) -> String {
+    match label {
+        Some(label) => {
+            format!("cannot be read ({label}); copy the fields you need into a plain table")
         }
+        None => "cannot be read; copy the fields you need into a plain table".to_owned(),
     }
+}
+
+/// Why a table nested past the depth limit cannot be encoded.
+fn too_deep() -> String {
+    format!("is nested more than {DEPTH_LIMIT} levels deep")
 }
 
 /// What a table stands for once sealed views are read through.
@@ -201,17 +201,18 @@ impl Encoder {
             .map_err(|TooLarge| self.too_large())
     }
 
-    /// The error for `failure` at the current path.
-    fn error(&self, failure: &Failure) -> mlua::Error {
+    /// The refusal of the value at the current path, which `failure` says
+    /// why.
+    fn error(&self, failure: &str) -> mlua::Error {
         let path = self
             .keys
             .iter()
             .fold("value".to_owned(), |path, key| key_path(&path, key));
-        author_refusal(format!("{}: {path} {}", self.prefix, failure.text()))
+        author_refusal(format!("{}: {path} {failure}", self.prefix))
     }
 
     /// `placeholder` in debug mode, or the error for `failure`.
-    fn fail(&self, failure: &Failure, placeholder: String) -> mlua::Result<Json> {
+    fn fail(&self, failure: &str, placeholder: String) -> mlua::Result<Json> {
         if self.debug {
             Ok(Json::String(placeholder))
         } else {
@@ -230,14 +231,14 @@ impl Encoder {
             Value::Number(number) => match finite(*number) {
                 Some(json) => Ok(json),
                 None if self.debug => Ok(Json::String(non_finite_text(*number))),
-                None => Err(self.error(&Failure::NotFinite)),
+                None => Err(self.error(NOT_FINITE)),
             },
             Value::String(text) => {
                 self.charge_bytes(text.as_bytes().len())?;
                 match text.to_str() {
                     Ok(text) => Ok(Json::String(text.to_owned())),
                     Err(_) if self.debug => Ok(Json::String(text.to_string_lossy())),
-                    Err(_) => Err(self.error(&Failure::NotUtf8)),
+                    Err(_) => Err(self.error(NOT_UTF8)),
                 }
             }
             Value::Table(table) => self.table(table, level),
@@ -247,7 +248,7 @@ impl Encoder {
                     Value::Function(_) | Value::Thread(_) => format!("[{kind}]"),
                     _ => "[userdata]".to_owned(),
                 };
-                self.fail(&Failure::NotData(kind), placeholder)
+                self.fail(&not_data(kind), placeholder)
             }
         }
     }
@@ -262,16 +263,16 @@ impl Encoder {
                     Some(label) => format!("[cannot read: {label}]"),
                     None => "[cannot read]".to_owned(),
                 };
-                return self.fail(&Failure::Unreadable(label), placeholder);
+                return self.fail(&unreadable(label.as_deref()), placeholder);
             }
-            Resolved::Loop => return self.fail(&Failure::Cycle, "[cycle]".to_owned()),
+            Resolved::Loop => return self.fail(CYCLE, "[cycle]".to_owned()),
         };
         let pointer = data.to_pointer();
         if self.tables.contains(&pointer) {
-            return self.fail(&Failure::Cycle, "[cycle]".to_owned());
+            return self.fail(CYCLE, "[cycle]".to_owned());
         }
         if level > DEPTH_LIMIT {
-            return self.fail(&Failure::TooDeep, "[too deep]".to_owned());
+            return self.fail(&too_deep(), "[too deep]".to_owned());
         }
         let Entries { keys, held } = self.keys_of(&data)?;
         let shape = shape(&keys, self.is_marked(&data));
@@ -281,7 +282,7 @@ impl Encoder {
             Shape::List => self.list(&data, keys, level).map(Json::Array),
             Shape::Object => self.object(&data, keys, level),
             Shape::Broken(_) if self.debug => self.fallback(&data, keys, level),
-            Shape::Broken(rule) => Err(self.error(&Failure::Keys(rule))),
+            Shape::Broken(rule) => Err(self.error(&rule.text())),
         };
         self.held -= held;
         self.tables.pop();
@@ -330,7 +331,7 @@ impl Encoder {
                 Err(_) if self.debug => names.push(name.to_string_lossy()),
                 Err(_) => {
                     self.keys.push(key.clone());
-                    return Err(self.error(&Failure::NotUtf8));
+                    return Err(self.error(NOT_UTF8));
                 }
             }
         }
@@ -373,8 +374,10 @@ impl Encoder {
     fn items(&mut self, list: &Table) -> mlua::Result<Vec<Json>> {
         let data = match self.resolve(list)? {
             Resolved::Data(data) => data,
-            Resolved::Unreadable(label) => return Err(self.error(&Failure::Unreadable(label))),
-            Resolved::Loop => return Err(self.error(&Failure::Cycle)),
+            Resolved::Unreadable(label) => {
+                return Err(self.error(&unreadable(label.as_deref())));
+            }
+            Resolved::Loop => return Err(self.error(CYCLE)),
         };
         // Only integer keys reach the list below, and they hold no
         // reference, so `held` has nothing to add for this table.
@@ -389,7 +392,7 @@ impl Encoder {
             )));
         }
         if let Shape::Broken(rule) = shape(&keys, marked) {
-            return Err(self.error(&Failure::Keys(rule)));
+            return Err(self.error(&rule.text()));
         }
         self.tables.push(data.to_pointer());
         let items = self.list(&data, keys, 0);

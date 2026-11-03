@@ -10,6 +10,7 @@ use super::*;
 fn at(source: &str, location: &str, line: u32) -> LuaProgram {
     LuaProgram::compile(
         source,
+        "prompt",
         location,
         NonZeroU32::new(line).expect("prompt lines start at 1"),
         &null_emitter(),

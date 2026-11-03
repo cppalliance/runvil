@@ -289,7 +289,7 @@ fn an_encode_error_under_pcall_has_kind_lua() {
          return err.kind, tostring(err)",
     );
     assert_eq!(
-        (kind.as_str(), message.as_str()),
-        ("lua", "json.encode: value must be JSON data, got function")
+        (kind, message),
+        lua_error("json.encode: value must be JSON data, got function")
     );
 }

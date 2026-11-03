@@ -13,9 +13,10 @@ use mlua::{AnyUserData, Function, IntoLuaMulti, Lua, LuaSerdeExt, MultiValue, Va
 use serde_json::json;
 
 use runvil_model_client::model::{ModelBinding, ModelId, ModelInvocation};
+use runvil_types::error::ErrorCode;
 use runvil_types::ids::TaskId;
 
-use crate::Error;
+use crate::error::Error;
 use crate::models::LuaModelHandle;
 use crate::test_support::answer_envelope;
 
@@ -44,7 +45,11 @@ fn handle_userdata(lua: &Lua) -> AnyUserData {
 
 fn assert_direct_yield(parse: YieldParse) {
     match parse {
-        YieldParse::Malformed(Error::Lua(message)) => {
+        YieldParse::Malformed(Error {
+            code: ErrorCode::LuaRuntime,
+            message,
+            ..
+        }) => {
             assert_eq!(message, "scripts may not yield directly");
         }
         other => panic!("expected the direct-yield Lua error, got {other:?}"),

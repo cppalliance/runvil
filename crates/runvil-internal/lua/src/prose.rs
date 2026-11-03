@@ -26,7 +26,7 @@ use std::sync::{Arc, Mutex};
 use mlua::{Lua, LuaSerdeExt, Value};
 use serde_json::Value as Json;
 
-use crate::error::{Error, Result};
+use crate::error::{self, Result, lua_runtime};
 use crate::var::var_to_json;
 use crate::vm::SYS_LIVE_POISONED;
 
@@ -68,7 +68,7 @@ impl fmt::Debug for ProseState<'_> {
 /// install and first read is visible to the render.
 ///
 /// # Errors
-/// Returns [`Error::LuaRuntime`] if the read cannot be built or the guard cannot
+/// Returns a `LuaRuntime` failure if the read cannot be built or the guard cannot
 /// record it.
 pub(crate) fn install<F>(lua: &Lua, sys_live: &Arc<Mutex<Json>>, render: F) -> Result<()>
 where
@@ -84,7 +84,7 @@ where
 /// hands back text the caller already read without rendering again.
 ///
 /// # Errors
-/// Returns [`Error::LuaRuntime`] if the read cannot be built or the guard cannot
+/// Returns a `LuaRuntime` failure if the read cannot be built or the guard cannot
 /// record it.
 pub(crate) fn swap<F>(lua: &Lua, sys_live: &Arc<Mutex<Json>>, render: F) -> Result<Value>
 where
@@ -97,7 +97,7 @@ where
 /// Puts back the read [`swap`] replaced.
 ///
 /// # Errors
-/// Returns [`Error::LuaRuntime`] if the guard cannot record it.
+/// Returns a `LuaRuntime` failure if the guard cannot record it.
 pub(crate) fn restore(lua: &Lua, saved: Value) -> Result<()> {
     crate::globals::replace_prose(lua, saved).map(drop)
 }
@@ -106,7 +106,7 @@ pub(crate) fn restore(lua: &Lua, saved: Value) -> Result<()> {
 /// the Engine callback and memoizes, and every later call returns the memo.
 ///
 /// # Errors
-/// Returns [`Error::LuaRuntime`] if the closure cannot be created.
+/// Returns a `LuaRuntime` failure if the closure cannot be created.
 fn lazy_read<F>(lua: &Lua, sys_live: &Arc<Mutex<Json>>, render: F) -> Result<mlua::Function>
 where
     F: Fn(ProseState<'_>) -> mlua::Result<String> + Send + Sync + 'static,
@@ -125,24 +125,24 @@ where
         let var = var_to_json(lua).map_err(mlua::Error::external)?;
         let sys = sys_live
             .lock()
-            .map_err(|_| mlua::Error::external(Error::internal(SYS_LIVE_POISONED)))?
+            .map_err(|_| mlua::Error::external(error::internal(SYS_LIVE_POISONED)))?
             .clone();
         let globals_lookup = |name: &str| -> Result<Option<Json>> {
             if name == "prose" {
-                return Err(Error::Lua(
+                return Err(lua_runtime(
                     "recursive {{ prose }}: prose cannot reference itself".to_owned(),
                 ));
             }
-            let value: Value = lua.globals().get(name).map_err(Error::lua)?;
+            let value: Value = lua.globals().get(name).map_err(error::lua)?;
             match value {
                 Value::Nil => Ok(None),
                 Value::Function(_) | Value::UserData(_) | Value::Thread(_) => {
-                    Err(Error::Lua(format!(
+                    Err(lua_runtime(format!(
                         "global `{name}` is a {}; bare globals in prose must be JSON data",
                         value.type_name()
                     )))
                 }
-                other => Ok(Some(lua.from_value(other).map_err(Error::lua)?)),
+                other => Ok(Some(lua.from_value(other).map_err(error::lua)?)),
             }
         };
         let rendered = render(ProseState {
@@ -155,11 +155,11 @@ where
         drop(guard);
         lua.create_string(&rendered)
     })
-    .map_err(Error::lua)
+    .map_err(error::lua)
 }
 
 /// Returns the failure of a poisoned memo slot.
 #[track_caller]
 fn memo_poisoned() -> mlua::Error {
-    mlua::Error::external(Error::internal("prose memo slot was poisoned"))
+    mlua::Error::external(error::internal("prose memo slot was poisoned"))
 }

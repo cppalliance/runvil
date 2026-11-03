@@ -18,7 +18,8 @@ use runvil_types::tools::{OutputTrust, ToolOutput};
 use runvil_types::untrusted::GuardNonce;
 
 use crate::bindings::ToolBinding;
-use crate::error::{Error, Result};
+use crate::error::{Result, tool};
+use crate::error_value::{ErrorKind, error_kind};
 
 /// The run coordinates a script-initiated dispatch reports under.
 ///
@@ -103,8 +104,8 @@ impl ToolDispatch {
 /// `call_result` is the tool's own answer, however the caller obtained it.
 ///
 /// # Errors
-/// Returns [`Error::Tool`] when `call_result` is the tool's failure (its
-/// typed error retained as the cause).
+/// Returns the tool's failure when `call_result` is one: the tool's error
+/// under a message that names the call, with the tool's own prose.
 pub fn prepare_dispatch(
     binding: &ToolBinding,
     vendor: Option<&str>,
@@ -130,8 +131,8 @@ pub fn prepare_dispatch(
 /// [`ToolDispatch`] under the model's call id.
 ///
 /// # Errors
-/// Returns [`Error::Tool`] when `call_result` is the tool's failure (its
-/// typed error retained as the cause).
+/// Returns the tool's failure when `call_result` is one, as
+/// [`prepare_dispatch`] does.
 pub(crate) fn dispatch_body(
     binding: &ToolBinding,
     vendor: Option<&str>,
@@ -149,7 +150,7 @@ pub(crate) fn dispatch_body(
             lifecycle::TOOL_CALL_FAILED
         },
     );
-    let output = call_result.map_err(Error::tool)?;
+    let output = call_result.map_err(tool)?;
     // Trust travels with the output: an untrusted result is nonce-wrapped
     // before it can reach the next model turn or the calling script, except
     // a listing a script reads, which passes verbatim. Its `listing` flag
@@ -195,14 +196,14 @@ pub(crate) fn dispatch_body(
 /// under the model's call id.
 ///
 /// A model-issued call always resumes with content: the tool's own failure
-/// ([`Error::Tool`]) becomes the call's result - the error message
-/// nonce-wrapped as untrusted - so the model reads the failure and the
-/// round continues; the shared rules have already fired the failed
-/// observation. Every other dispatch failure still propagates.
+/// becomes the call's result - its prose nonce-wrapped as untrusted - so
+/// the model reads the failure and the round continues; the shared rules
+/// have already fired the failed observation. Every other dispatch failure
+/// still propagates.
 ///
 /// # Errors
 /// Propagates any error of [`prepare_dispatch`] other than the tool's own
-/// failure ([`Error::Tool`]), which becomes the call's result.
+/// failure, which becomes the call's result.
 pub fn prepare_model_dispatch(
     binding: &ToolBinding,
     vendor: Option<&str>,
@@ -214,8 +215,8 @@ pub fn prepare_model_dispatch(
 ) -> Result<ToolDispatch> {
     let outcome = match dispatch_body(binding, vendor, call_result, nonce, emitter, section, None) {
         Ok(outcome) => outcome,
-        Err(Error::Tool { message, .. }) => ToolDispatch {
-            content: nonce.wrap(&message),
+        Err(failure) if error_kind(&failure) == ErrorKind::Tool => ToolDispatch {
+            content: nonce.wrap(&failure.prose),
             trust: OutputTrust::Untrusted,
             listing: false,
         },

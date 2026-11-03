@@ -21,8 +21,7 @@ use mlua::{AnyUserData, Function, Lua, Value};
 use runvil_types::emitter::{Emitter, LibraryLoad};
 use serde_json::Value as Json;
 
-use crate::error::SharedSource;
-use crate::error::{Error, Result};
+use crate::error::{self, Error, Result};
 use crate::error_value::install_error_value;
 use crate::program::LuaProgram;
 use crate::prose::ProseState;
@@ -36,11 +35,8 @@ const REQUIRE_SOURCE: &str = include_str!("__impl_require.lua");
 
 /// The loader program, compiled once and loaded per VM, under the shim
 /// programs' failure contract.
-static REQUIRE_PROGRAM: LazyLock<std::result::Result<LuaProgram, SharedSource>> =
-    LazyLock::new(|| {
-        LuaProgram::compile_internal(REQUIRE_SOURCE, REQUIRE_CHUNK_NAME)
-            .map_err(crate::detail::shared_source_new)
-    });
+static REQUIRE_PROGRAM: LazyLock<Result<LuaProgram>> =
+    LazyLock::new(|| LuaProgram::compile_internal(REQUIRE_SOURCE, REQUIRE_CHUNK_NAME));
 
 /// The loads under way on one VM, outermost first: each library's key,
 /// which a `require` made during its load passes to the resolver, and its
@@ -63,7 +59,7 @@ pub(crate) struct VmShare<'a> {
 /// through a clone of `emitter` under `section`, and working on `vm`.
 ///
 /// # Errors
-/// Returns [`Error::LuaRuntime`] if the loader chunk or its helpers cannot be
+/// Returns a `LuaRuntime` failure if the loader chunk or its helpers cannot be
 /// built or installed.
 pub(crate) fn install<R, E, P>(
     lua: &Lua,
@@ -83,10 +79,10 @@ where
     let begin_load = begin_load_capture(lua, &loading, vm, emitter, section)?;
     let end_load = end_load_capture(lua, &loading, vm.depth, emitter, section)?;
     let (swap_prose, restore_prose) = prose_captures(lua, render, vm.sys_live)?;
-    let error_value = install_error_value(lua).map_err(Error::lua)?;
+    let error_value = install_error_value(lua).map_err(error::lua)?;
     let require: Function = REQUIRE_PROGRAM
         .as_ref()
-        .map_err(Error::shared)?
+        .map_err(Error::clone)?
         .load(lua)?
         .call((
             resolve,
@@ -96,10 +92,10 @@ where
             restore_prose,
             error_value,
         ))
-        .map_err(Error::lua)?;
+        .map_err(error::lua)?;
     lua.globals()
         .raw_set("require", require)
-        .map_err(Error::lua)
+        .map_err(error::lua)
 }
 
 /// Builds `resolve(heading)`: the resolver's library for `heading`, asked
@@ -129,7 +125,7 @@ where
         let library_heading = library.heading.clone();
         Ok((identity, library_heading, lua.create_any_userdata(library)?))
     })
-    .map_err(Error::lua)
+    .map_err(error::lua)
 }
 
 /// Builds `begin_load(library)`: reports the load's start, loads the
@@ -184,7 +180,7 @@ fn begin_load_capture(
         depth.fetch_add(1, Ordering::Relaxed);
         Ok((blocks, templates))
     })
-    .map_err(Error::lua)
+    .map_err(error::lua)
 }
 
 /// Builds `swap_prose(template)`, which installs a library block's own
@@ -206,12 +202,12 @@ where
             crate::prose::swap(lua, &sys_live, move |state| render(&template, state))
                 .map_err(mlua::Error::external)
         })
-        .map_err(Error::lua)?;
+        .map_err(error::lua)?;
     let restore = lua
         .create_function(|lua, saved: Value| {
             crate::prose::restore(lua, saved).map_err(mlua::Error::external)
         })
-        .map_err(Error::lua)?;
+        .map_err(error::lua)?;
     Ok((swap, restore))
 }
 
@@ -230,7 +226,7 @@ fn end_load_capture(
     let section = section.to_owned();
     lua.create_function(move |_, finished: bool| {
         let Some((_, heading)) = lock(&loading, "library-load state")?.pop() else {
-            return Err(mlua::Error::external(Error::internal(
+            return Err(mlua::Error::external(error::internal(
                 "require ended a library load that never began",
             )));
         };
@@ -243,14 +239,14 @@ fn end_load_capture(
         emitter.library_load(&section, &heading, phase);
         Ok(())
     })
-    .map_err(Error::lua)
+    .map_err(error::lua)
 }
 
 /// Locks one of `require`'s shared slots, `what`, mapping a poisoned lock
 /// to an internal error.
 fn lock<'a, T>(slot: &'a Mutex<T>, what: &str) -> mlua::Result<MutexGuard<'a, T>> {
     slot.lock().map_err(|_| {
-        mlua::Error::external(Error::internal(format!("require's {what} was poisoned")))
+        mlua::Error::external(error::internal(format!("require's {what} was poisoned")))
     })
 }
 

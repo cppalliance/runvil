@@ -80,7 +80,7 @@ fn store_reports_are_ordered_exact_and_payload_free_on_failure() {
         "Gather",
     )
     .expect_err("the missing anchor must fail");
-    assert!(matches!(error, Error::Lua(_) | Error::LuaRuntime { .. }));
+    assert_eq!(error.code, ErrorCode::LuaRuntime);
 
     assert_eq!(
         recorder.observations(),
@@ -200,7 +200,7 @@ fn every_store_operation_reports_its_exact_success_and_failure() {
         let error = run_chunk(case.source, "", &json!({}), &access, &observer, "Store")
             .expect_err("the failing backend rejects every operation");
         assert!(
-            matches!(error, Error::Lua(_) | Error::LuaRuntime { .. }),
+            error.code == ErrorCode::LuaRuntime,
             "a store failure surfaces through the Lua boundary, got {error:?}"
         );
         assert_eq!(

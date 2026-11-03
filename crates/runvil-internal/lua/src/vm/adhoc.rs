@@ -4,7 +4,7 @@
 use std::sync::{Arc, Mutex, MutexGuard};
 
 use crate::bindings::ToolBinding;
-use crate::error::{Error, Result};
+use crate::error::{self, Result};
 
 /// The adhoc tools `tools.adhoc` defined on a section VM, in definition
 /// order.
@@ -23,17 +23,17 @@ impl AdhocTools {
     /// Locks the registry.
     ///
     /// # Errors
-    /// Returns [`Error::Internal`] if the entries lock was poisoned.
+    /// Returns an `Internal` failure if the entries lock was poisoned.
     fn entries(&self) -> Result<MutexGuard<'_, Vec<ToolBinding>>> {
         self.entries
             .lock()
-            .map_err(|_| Error::internal("adhoc tools registry was poisoned"))
+            .map_err(|_| error::internal("adhoc tools registry was poisoned"))
     }
 
     /// Registers the adhoc tool `binding` binds.
     ///
     /// # Errors
-    /// Returns [`Error::Internal`] if the entries lock was poisoned.
+    /// Returns an `Internal` failure if the entries lock was poisoned.
     pub(crate) fn register(&self, binding: ToolBinding) -> Result<()> {
         self.entries()?.push(binding);
         Ok(())
@@ -43,7 +43,7 @@ impl AdhocTools {
     /// holds a `/`, else whose wire name is `name`.
     ///
     /// # Errors
-    /// Returns [`Error::Internal`] if the entries lock was poisoned.
+    /// Returns an `Internal` failure if the entries lock was poisoned.
     pub fn binding(&self, name: &str) -> Result<Option<ToolBinding>> {
         let by_id = name.contains('/');
         Ok(self
@@ -62,7 +62,7 @@ impl AdhocTools {
     /// Returns every adhoc tool's binding, in id order.
     ///
     /// # Errors
-    /// Returns [`Error::Internal`] if the entries lock was poisoned.
+    /// Returns an `Internal` failure if the entries lock was poisoned.
     pub(crate) fn bindings(&self) -> Result<Vec<ToolBinding>> {
         let mut bindings = self.entries()?.clone();
         bindings.sort_by(|left, right| left.id().cmp(right.id()));

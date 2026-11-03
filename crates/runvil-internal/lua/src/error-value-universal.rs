@@ -1,11 +1,13 @@
 //! The universal error as a Lua error value: the kind an author branches
-//! on, which its code names, the text the table holds, and the kind's
-//! fields, which its facts hold.
+//! on, which its code names, and the kind's fields, which its facts hold,
+//! in both directions.
+
+use std::collections::BTreeMap;
 
 use runvil_types::error::{Error, ErrorCode, FactKey};
 use serde_json::Value;
 
-use super::store::store_fact_fields;
+use super::store::{store_fact_fields, store_field_facts};
 use super::{ErrorField, ErrorKind};
 
 /// The kind a failure with `code` renders as. A model round's failure is
@@ -120,20 +122,8 @@ pub fn error_kind(error: &Error) -> ErrorKind {
     kind_of(error.code)
 }
 
-/// Returns the text a universal error's Lua error table holds as its
-/// `message`, which an author may hand a model: a model failure's prose,
-/// so the provider detail and the causes its message keeps stay out of
-/// it, and every other failure's message.
-#[must_use]
-pub fn error_table_message(error: &Error) -> String {
-    match kind_of(error.code) {
-        ErrorKind::ModelFailure | ErrorKind::EmptyModelReply => error.prose.clone(),
-        _ => error.message.clone(),
-    }
-}
-
 /// Returns the fields a universal error's Lua error table holds beside
-/// `kind` and `message`, from its facts: `reason` for context exhaustion,
+/// `kind`, `code`, and `message`, from its facts: `reason` for context exhaustion,
 /// `finish_reason` for an empty reply when the backend gave one, `name` for
 /// a refused tool call, `tasks` for leaked tasks, `task` for a task
 /// operation's refusal or a cancelled task's delivery, and a store
@@ -153,6 +143,46 @@ pub fn error_fields(error: &Error) -> Vec<(String, ErrorField)> {
         }
         code if kind_of(code) == ErrorKind::Store => store_fact_fields(error),
         _ => Vec::new(),
+    }
+}
+
+/// Returns the facts an error table's `fields` hold for a failure with
+/// `code`, the inverse of [`error_fields`]: each field that code's table
+/// gives, under its fact, with `tasks` split back into the ids it joins.
+/// A field of another shape, or one the code's table never gives, holds
+/// no fact.
+pub(super) fn field_facts(
+    code: ErrorCode,
+    fields: &BTreeMap<String, ErrorField>,
+) -> BTreeMap<FactKey, Value> {
+    let string = |name: &str, key: FactKey| {
+        fields
+            .get(name)
+            .and_then(ErrorField::as_str)
+            .map(|value| (key, Value::from(value)))
+            .into_iter()
+            .collect()
+    };
+    match code {
+        ErrorCode::ContextExhausted => string("reason", FactKey::Reason),
+        ErrorCode::EmptyReply => string("finish_reason", FactKey::FinishReason),
+        ErrorCode::OutOfScopeTool | ErrorCode::UnboundTool | ErrorCode::ModelOnlyTool => {
+            string("name", FactKey::Name)
+        }
+        ErrorCode::TasksLive => fields
+            .get("tasks")
+            .and_then(ErrorField::as_str)
+            .map(|joined| {
+                let tasks: Vec<&str> = joined.split(", ").filter(|id| !id.is_empty()).collect();
+                (FactKey::Tasks, Value::from(tasks))
+            })
+            .into_iter()
+            .collect(),
+        ErrorCode::TaskNotOwned | ErrorCode::TaskConsumed | ErrorCode::TaskCancelled => {
+            string("task", FactKey::Task)
+        }
+        code if kind_of(code) == ErrorKind::Store => store_field_facts(fields),
+        _ => BTreeMap::new(),
     }
 }
 

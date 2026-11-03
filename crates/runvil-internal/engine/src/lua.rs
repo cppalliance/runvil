@@ -8,10 +8,9 @@
 //!
 //! Three groups still name `runvil_lua` itself:
 //!
-//! - The error module, which re-exports the Lua crate's boundary,
-//!   [`into_universal`](runvil_lua::into_universal), with the failure
-//!   constructors it shares with the Engine, and whose store constructors
-//!   build a store failure through [`store_error`](runvil_lua::store_error).
+//! - The error module, which re-exports the failure constructors the Lua
+//!   crate shares with the Engine, and whose store constructors build a
+//!   store failure through [`store_error`](runvil_lua::store_error).
 //! - Test-only code: the `#[cfg(test)]` shim install in `execute::section_vm`,
 //!   which reaches `runvil_lua::test_support`, and this crate's test support,
 //!   which takes `ToolOutputKind` from the crate root.

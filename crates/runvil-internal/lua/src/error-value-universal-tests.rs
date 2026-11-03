@@ -6,7 +6,7 @@ use serde_json::Value;
 
 use super::super::tests::every_store_failure;
 use super::super::{ErrorField, ErrorKind, store_error, store_error_value_fields};
-use super::{error_fields, error_kind, error_table_message};
+use super::{error_fields, error_kind};
 
 /// An error with `code` and `facts`, whose message and prose say which
 /// they are.
@@ -16,13 +16,10 @@ fn error(code: ErrorCode, facts: &[(FactKey, Value)]) -> Error {
     error
 }
 
-/// What `error`'s table holds: its kind, its message, and its fields.
+/// What `error`'s table holds: its kind, its message, which is the error's
+/// prose, and its fields.
 fn rendered(error: &Error) -> (ErrorKind, String, Vec<(String, ErrorField)>) {
-    (
-        error_kind(error),
-        error_table_message(error),
-        error_fields(error),
-    )
+    (error_kind(error), error.prose.clone(), error_fields(error))
 }
 
 /// The string field `name` with `value`.
@@ -40,14 +37,14 @@ fn a_task_refusal_renders_its_kind_and_its_task_field() {
         let refusal = error(code, &[(FactKey::Task, Value::from("1.2"))]);
         assert_eq!(
             rendered(&refusal),
-            (kind, "the message".to_owned(), vec![string("task", "1.2")]),
+            (kind, "the prose".to_owned(), vec![string("task", "1.2")]),
             "{code:?}"
         );
     }
     let interrupted = error(ErrorCode::Interrupted, &[]);
     assert_eq!(
         rendered(&interrupted),
-        (ErrorKind::Cancelled, "the message".to_owned(), Vec::new())
+        (ErrorKind::Cancelled, "the prose".to_owned(), Vec::new())
     );
 }
 
@@ -69,7 +66,7 @@ fn every_store_failure_renders_the_fields_its_variant_gives() {
             rendered(&converted),
             (
                 ErrorKind::Store,
-                converted.message.clone(),
+                converted.prose.clone(),
                 store_error_value_fields(&failure)
             ),
             "{code:?}"
@@ -114,7 +111,7 @@ fn context_exhaustion_renders_its_reason() {
         rendered(&exhausted),
         (
             ErrorKind::ContextExhausted,
-            "the message".to_owned(),
+            "the prose".to_owned(),
             vec![string("reason", "precheck")]
         )
     );
@@ -156,7 +153,7 @@ fn a_code_without_table_fields_renders_none_whatever_facts_it_holds() {
     ] {
         assert_eq!(
             rendered(&error(code, &facts)),
-            (kind, "the message".to_owned(), Vec::new()),
+            (kind, "the prose".to_owned(), Vec::new()),
             "{code:?}"
         );
     }

@@ -10,7 +10,7 @@ use mlua::{AnyUserData, Lua, Table, Value};
 
 use super::userdata::LuaToolHandle;
 use crate::bindings::{ToolBinding, ToolSet};
-use crate::error::{Error, Result};
+use crate::error::{self, Result};
 
 /// The registry key of the VM's tool-object table: one object per tool,
 /// keyed by id.
@@ -35,20 +35,20 @@ pub(crate) fn tool_object(lua: &Lua, id: &str) -> mlua::Result<Option<AnyUserDat
 /// Builds the VM's tool-object table over the run catalog.
 ///
 /// # Errors
-/// Returns [`Error::LuaRuntime`] if an object or the table cannot be created or
+/// Returns a `LuaRuntime` failure if an object or the table cannot be created or
 /// stored.
 pub(super) fn install_tool_objects(lua: &Lua, set: &ToolSet) -> Result<()> {
-    let objects = lua.create_table().map_err(Error::lua)?;
+    let objects = lua.create_table().map_err(error::lua)?;
     for info in set.catalog().tools() {
         let object = lua
             .create_userdata(LuaToolHandle::from_info(info))
-            .map_err(Error::lua)?;
+            .map_err(error::lua)?;
         objects
             .raw_set(info.id.to_string(), object)
-            .map_err(Error::lua)?;
+            .map_err(error::lua)?;
     }
     lua.set_named_registry_value(TOOL_OBJECTS_REGISTRY, objects)
-        .map_err(Error::lua)
+        .map_err(error::lua)
 }
 
 /// Adds the tool object of the adhoc tool `binding` binds and returns it.
@@ -75,7 +75,7 @@ pub(super) fn remove_tool_object(lua: &Lua, id: &str) -> mlua::Result<()> {
 /// Installs `tools.get(id)`.
 ///
 /// # Errors
-/// Returns [`Error::LuaRuntime`] if the function cannot be created or installed.
+/// Returns a `LuaRuntime` failure if the function cannot be created or installed.
 pub(super) fn install_tool_get(lua: &Lua, tools: &Table) -> Result<()> {
     let get = lua
         .create_function(|lua, id: Value| match id {
@@ -85,6 +85,6 @@ pub(super) fn install_tool_get(lua: &Lua, tools: &Table) -> Result<()> {
                 other.type_name()
             ))),
         })
-        .map_err(Error::lua)?;
-    tools.set("get", get).map_err(Error::lua)
+        .map_err(error::lua)?;
+    tools.set("get", get).map_err(error::lua)
 }

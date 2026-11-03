@@ -113,12 +113,13 @@ fn a_refused_injection_hands_back_the_vm_for_its_teardown() {
         )
         .expect_err("a non-object var seed is refused");
     assert!(
-        matches!(failure.error(), Error::Internal { message, .. } if message.contains("JSON object")),
+        failure.error().code == ErrorCode::Internal
+            && failure.error().message.contains("JSON object"),
         "the refusal names the seed's shape: {:?}",
         failure.error()
     );
     let error = failure.teardown(recorder.emitter(), "Seed");
-    assert!(matches!(error, Error::Internal { .. }));
+    assert_eq!(error.code, ErrorCode::Internal);
     assert_eq!(
         recorder.observations(),
         [
@@ -350,8 +351,8 @@ fn call_with_a_non_string_target_errors() {
     // heading, and the error says so.
     let vm = TestVm::new().build();
     vm.install_control_globals(
-        |target, _, _| resolve_section_target(target).map_err(Error::lua),
-        |_| Err(Error::Lua("prompt reads are not needed here".to_owned())),
+        |target, _, _| resolve_section_target(target).map_err(crate::error::lua),
+        |_| Err(crate::lua_runtime("prompt reads are not needed here")),
     )
     .expect("control globals must install");
     let out = run_scalar(

@@ -420,6 +420,7 @@ impl ChainState {
             seed,
             emitter: &self.reporting.emitter,
             section_name,
+            file: self.shared.prompt.file(),
             max_tool_iterations: self.max_tool_iterations(),
             ui: self.shared.ui.as_ref(),
             preludes: &self.shared.preludes,

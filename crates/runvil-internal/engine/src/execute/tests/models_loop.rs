@@ -259,8 +259,10 @@ fn an_offer_after_the_first_loop_raises_and_the_second_loop_sends_the_same_empty
         .run();
     assert_eq!(
         trace.text(),
-        "tools.offer: the section's tool list is fixed at its first models.loop round; \
-         make every offer before the first loop, or offer in another section"
+        refused(
+            "tools.offer: the section's tool list is fixed at its first models.loop round; \
+             make every offer before the first loop, or offer in another section"
+        )
     );
     let bodies = gateway.requests();
     assert_eq!(bodies.len(), 2, "one tool-free round per loop");

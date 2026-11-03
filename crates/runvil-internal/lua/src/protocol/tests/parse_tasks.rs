@@ -109,7 +109,11 @@ fn spawn_seed_shape_errors_are_the_calls_error() {
            var = { k = 1 } }",
     );
     match Request::from_yield(&lua, &Value::Table(table)) {
-        YieldParse::Refused(Error::Lua(message)) => {
+        YieldParse::Refused(Error {
+            code: ErrorCode::LuaRuntime,
+            message,
+            ..
+        }) => {
             assert_eq!(message, "item must be JSON data, got function");
         }
         other => panic!("expected the item call error, got {other:?}"),
@@ -120,7 +124,11 @@ fn spawn_seed_shape_errors_are_the_calls_error() {
         "{ op = 'spawn', target = '## Child', index = -1, var = { k = 1 } }",
     );
     match Request::from_yield(&lua, &Value::Table(table)) {
-        YieldParse::Refused(Error::Lua(message)) => {
+        YieldParse::Refused(Error {
+            code: ErrorCode::LuaRuntime,
+            message,
+            ..
+        }) => {
             assert_eq!(message, "index must be a non-negative integer, got -1");
         }
         other => panic!("expected the index call error, got {other:?}"),
@@ -142,7 +150,11 @@ fn an_unconvertible_spawn_item_is_the_calls_error_naming_the_conversion_failure(
         .from_value::<serde_json::Value>(item)
         .expect_err("a table holding a function has no JSON form");
     match Request::from_yield(&lua, &Value::Table(table)) {
-        YieldParse::Refused(Error::Lua(message)) => {
+        YieldParse::Refused(Error {
+            code: ErrorCode::LuaRuntime,
+            message,
+            ..
+        }) => {
             assert_eq!(
                 message,
                 format!("item must be a JSON-representable value: {cause}")
@@ -158,7 +170,11 @@ fn a_malformed_task_id_is_the_calls_error_naming_the_parse_failure() {
     let cause = "0.x".parse::<TaskId>().expect_err("`0.x` is not a task id");
     let table = lua_table(&lua, "{ op = 'ready', task = '0.x' }");
     match Request::from_yield(&lua, &Value::Table(table)) {
-        YieldParse::Refused(Error::Lua(message)) => {
+        YieldParse::Refused(Error {
+            code: ErrorCode::LuaRuntime,
+            message,
+            ..
+        }) => {
             assert_eq!(
                 message,
                 format!("`0.x` is not a task id such as `0.1`: {cause}")
@@ -181,7 +197,11 @@ fn a_spawn_with_a_non_string_target_keeps_the_resolve_error() {
     let lua = Lua::new();
     let table = lua_table(&lua, "{ op = 'spawn', target = 42, var = { k = 1 } }");
     match Request::from_yield(&lua, &Value::Table(table)) {
-        YieldParse::Refused(Error::LuaRuntime { message, .. }) => {
+        YieldParse::Refused(Error {
+            code: ErrorCode::LuaRuntime,
+            message,
+            ..
+        }) => {
             assert!(
                 message.contains("section target must be a string, got integer"),
                 "unexpected message: {message}"
@@ -224,7 +244,11 @@ fn timer_seconds_out_of_domain_are_the_calls_error() {
     for (seconds, needle) in cases {
         let table = lua_table(&lua, &format!("{{ op = 'timer', seconds = {seconds} }}"));
         match Request::from_yield(&lua, &Value::Table(table)) {
-            YieldParse::Refused(Error::Lua(message)) => {
+            YieldParse::Refused(Error {
+                code: ErrorCode::LuaRuntime,
+                message,
+                ..
+            }) => {
                 assert!(
                     message.contains("timeout") && message.contains(needle),
                     "the message names the option and the value: {message}"
@@ -235,7 +259,11 @@ fn timer_seconds_out_of_domain_are_the_calls_error() {
     }
     let table = lua_table(&lua, "{ op = 'timer', seconds = 'soon' }");
     match Request::from_yield(&lua, &Value::Table(table)) {
-        YieldParse::Refused(Error::Lua(message)) => {
+        YieldParse::Refused(Error {
+            code: ErrorCode::LuaRuntime,
+            message,
+            ..
+        }) => {
             assert_eq!(message, "timeout must be a number, got string");
         }
         other => panic!("expected the timeout type error, got {other:?}"),
@@ -288,7 +316,11 @@ fn concurrency_converts_a_whole_number_float_and_refuses_an_out_of_range_one() {
     }
     let table = lua_table(&lua, "{ op = 'concurrency', limit = 1e20 }");
     match Request::from_yield(&lua, &Value::Table(table)) {
-        YieldParse::Refused(Error::Lua(message)) => assert!(
+        YieldParse::Refused(Error {
+            code: ErrorCode::LuaRuntime,
+            message,
+            ..
+        }) => assert!(
             message.contains("positive whole number") && message.contains("64-bit"),
             "the message names the requirement and the range: {message}"
         ),

@@ -7,12 +7,12 @@
 use super::*;
 use crate::execute::tests::context::Recorder;
 
-/// The refusal of a section that offers both `dup/a/b` and `dup/a.b`,
-/// whose default wire names are both `dup_a_b`.
-const DUP_CLASH: &str = "the tools dup/a/b of the dup Pack in the Static Set and dup/a.b of the \
-                         dup Pack in the Static Set share the wire name \"dup_a_b\", and a wire \
-                         name names one tool across a section's Static Set and Dynamic Set; \
-                         offer only one of them";
+/// What a caught refusal of a section that offers both `dup/a/b` and
+/// `dup/a.b`, whose default wire names are both `dup_a_b`, renders: its
+/// kind and the prose of a broken tool-set rule.
+fn dup_clash() -> String {
+    format!("internal:{}", ErrorCode::ToolSetsInvalid.prose())
+}
 
 /// One section's Lua that offers `offer`, then runs one loop round whose
 /// failure it catches, returning the failure's kind and text.
@@ -55,7 +55,7 @@ fn two_catalog_tools_whose_default_names_clash_fail_only_the_section_that_offers
         .text()
         .split_once('|')
         .expect("the section joins its refusal and its catalog reads");
-    assert_eq!(refusal, format!("internal:{DUP_CLASH}"));
+    assert_eq!(refusal, dup_clash());
     assert_eq!(catalog, "truetrue", "both tools stay in the run catalog");
     let (advertised, _) = rounds_and_calls(rig.issued());
     assert_eq!(
@@ -90,8 +90,10 @@ fn a_catalog_tool_whose_default_name_is_invalid_fails_only_the_sections_that_off
     );
     assert_eq!(
         rig.trace().text(),
-        "internal:model-facing schema build failure for tool alias \"9lives_fetch\": invalid \
-         tool wire name \"9lives_fetch\": expected [A-Za-z][A-Za-z0-9_-]{0,63}|9lives/fetch: x",
+        format!(
+            "internal:{}|9lives/fetch: x",
+            ErrorCode::ToolSchemaInvalid.prose()
+        ),
         "the section that offers the tool fails, and a script still calls it by id"
     );
     let (advertised, _) = rounds_and_calls(rig.issued());
@@ -134,9 +136,14 @@ fn the_offer_hint_names_a_catalog_tool_by_its_own_wire_name_only() {
         .text()
         .split_once('|')
         .expect("the section joins both refusals");
-    assert!(
-        own.ends_with("(did you mean 'tools/echo'?)"),
-        "the tool's own wire name hints its id: {own}"
+    assert_eq!(
+        own,
+        refused(
+            "tools.offer: no Pack named \"echo\" in this run; declare it under uses: to \
+             require it, or offer it only when tools.packs.get(\"echo\") returns it (did you \
+             mean 'tools/echo'?)"
+        ),
+        "the tool's own wire name hints its id"
     );
     assert!(
         !default.contains("did you mean"),
@@ -193,7 +200,7 @@ fn the_scope_validation_events_bracket_the_merge_whether_it_holds_or_fails() {
         .tool(offered_tool("dup/a/b"))
         .chat(&gateway)
         .run();
-    assert_eq!(trace.text(), format!("internal:{DUP_CLASH}"));
+    assert_eq!(trace.text(), dup_clash());
     let recorder = Recorder::default();
     trace.replay(&recorder);
     let validation = [

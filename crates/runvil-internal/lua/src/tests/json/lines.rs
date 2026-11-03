@@ -47,7 +47,7 @@ fn an_error_names_its_line_and_column_across_the_whole_text() {
     );
     assert_eq!(
         message,
-        "json.decode_lines: expected value at line 3 column 6"
+        refused("json.decode_lines: expected value at line 3 column 6")
     );
 }
 

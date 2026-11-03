@@ -4,6 +4,7 @@
 use std::sync::Arc;
 
 use mlua::{Lua, LuaSerdeExt, Value};
+use runvil_types::error::ErrorCode;
 use runvil_types::tools::{ToolId, ToolInfo};
 use serde_json::json;
 
@@ -11,7 +12,7 @@ use super::MessageList;
 use crate::protocol::{Request, YieldParse};
 use crate::test_vm::TestVm;
 use crate::tests::{system, user};
-use crate::{Error, OfferMode, RenderedTools, ToolBinding};
+use crate::{OfferMode, RenderedTools, ToolBinding};
 
 #[path = "messages-tests-list.rs"]
 mod list;
@@ -147,7 +148,7 @@ fn a_list_or_a_record_view_is_refused_by_the_var_and_prose_guards() {
     let vm = TestVm::new().build();
     vm.install_lazy_prose(|state| {
         let refusals = ["messages", "record"].map(|name| match (state.globals)(name) {
-            Err(Error::Lua(message)) => message,
+            Err(error) if error.code == ErrorCode::LuaRuntime => error.message,
             other => format!("{name} was not refused: {other:?}"),
         });
         Ok(refusals.join("|"))

@@ -66,8 +66,8 @@ fn read_tool_call(
     };
     let alias = match table.raw_get::<Value>("alias") {
         // Flatten to the call-error string so the answer frames exactly as
-        // the other author-argument failures (`Error::Lua`, not a runtime
-        // wrapper).
+        // the other author-argument failures (the bare message, not a
+        // runtime wrapper).
         Ok(value) => decode(&value).map_err(|error| call_error(error.to_string()))?,
         Err(_) => return Err(FieldFailure::Malformed),
     };

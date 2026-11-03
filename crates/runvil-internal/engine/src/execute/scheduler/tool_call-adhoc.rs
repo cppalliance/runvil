@@ -43,7 +43,7 @@ impl ChainOps<'_> {
         // The attempt counts at dispatch, before the handler runs, so a
         // handler that then fails still counts.
         let counted = binding.id().to_string();
-        counts.increment(&counted).map_err(error::into_universal)?;
+        counts.increment(&counted)?;
         self.chain.frame_mut()?.push_adhoc_call(AdhocCall {
             tool: binding.id().clone(),
             alias: binding.alias().to_owned(),
@@ -106,7 +106,7 @@ impl ChainOps<'_> {
             }
             AdhocToolOutcome::BadReturn(failure) => {
                 emitter.report(&section, lifecycle::TOOL_CALL_FAILED);
-                Err(error::into_universal(failure))
+                Err(failure)
             }
             AdhocToolOutcome::Raised => {
                 emitter.report(&section, lifecycle::TOOL_CALL_FAILED);
