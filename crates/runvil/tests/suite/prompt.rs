@@ -1,7 +1,8 @@
 //! Reading what a prompt declares before it runs.
 
+use runvil::Prompt;
+use runvil::error::ErrorCode;
 use runvil::model::{ModelRole, ThinkingMode};
-use runvil::{ParseErrorKind, Prompt};
 
 use super::prepare::refusal;
 use super::support::{Built, Scenario, TestResult, model, prompt};
@@ -67,8 +68,8 @@ fn the_frontmatter_lists_every_declaration_with_arguments_sorted_by_name() -> Te
     let misspelled = source.replace("uses:", "use:");
     let parsed = Prompt::parse(&misspelled, "prompt", "greeter").0;
     assert_eq!(
-        parsed.err().map(|error| error.kind()),
-        Some(ParseErrorKind::Frontmatter)
+        parsed.err().map(|error| error.code),
+        Some(ErrorCode::FrontmatterInvalid)
     );
     Ok(())
 }

@@ -1,6 +1,8 @@
 //! The stable [`RunErrorKind`] of a failed run, and the kind and message
 //! the Engine's own error ends a run with.
 
+use runvil_types::error::FactKey;
+
 use crate::Error;
 
 use super::RunOutcome;
@@ -188,9 +190,19 @@ impl Error {
         match self {
             Error::Parse(error) => {
                 let parts: Vec<String> = [
-                    error.name().map(|name| format!("prompt {name}")),
-                    error.line().map(|line| format!("line {line}")),
-                    error.column().map(|column| format!("column {column}")),
+                    error
+                        .facts
+                        .get(&FactKey::Name)
+                        .and_then(serde_json::Value::as_str)
+                        .map(|name| format!("prompt {name}")),
+                    error
+                        .at
+                        .as_ref()
+                        .map(|at| format!("line {}", at.start_line)),
+                    error
+                        .at
+                        .as_ref()
+                        .map(|at| format!("column {}", at.start_column)),
                 ]
                 .into_iter()
                 .flatten()

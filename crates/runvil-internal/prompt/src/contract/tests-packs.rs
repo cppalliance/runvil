@@ -31,7 +31,7 @@ fn an_entry_of_three_or_more_segments_is_refused_with_the_uses_entry_reason() {
     for entry in ["a/b/c", "acme/web/extra/more"] {
         assert_parse_error(
             &prompt(&format!("uses: [{entry}]"), &[]),
-            ParseErrorKind::Frontmatter,
+            ErrorCode::FrontmatterInvalid,
             &format!(
                 "invalid uses entry `{entry}`: a uses entry is a Pack id, such as `web`, \
                  or vendor/name, such as `acme/web`"
@@ -45,7 +45,7 @@ fn an_entry_with_an_empty_segment_keeps_the_pack_id_reason() {
     for entry in ["web/", "runvil//web"] {
         assert_parse_error(
             &prompt(&format!("uses: [\"{entry}\"]"), &[]),
-            ParseErrorKind::Frontmatter,
+            ErrorCode::FrontmatterInvalid,
             &format!("invalid uses entry `{entry}`: segments must not be empty"),
         );
     }
@@ -56,7 +56,7 @@ fn an_at_sign_in_an_entry_is_rejected_with_the_charset_reason() {
     // A Pack id carries no version, so `@` is a parse error.
     assert_parse_error(
         &prompt("uses: [web@1]", &[]),
-        ParseErrorKind::Frontmatter,
+        ErrorCode::FrontmatterInvalid,
         "invalid uses entry `web@1`: segments may contain only lowercase ASCII letters, \
          digits, '-', '_', '.'",
     );
@@ -67,8 +67,8 @@ fn an_entry_with_uppercase_is_rejected() {
     for entry in ["Web", "Acme/web"] {
         let error = parse_err(&prompt(&format!("uses: [{entry}]"), &[]));
         assert_eq!(
-            error.kind(),
-            ParseErrorKind::Frontmatter,
+            error.code,
+            ErrorCode::FrontmatterInvalid,
             "{entry}: {error}"
         );
     }
@@ -78,7 +78,7 @@ fn an_entry_with_uppercase_is_rejected() {
 fn an_entry_that_is_not_a_string_is_refused_naming_both_entry_forms() {
     assert_parse_error(
         &prompt("uses: [42]", &[]),
-        ParseErrorKind::Frontmatter,
+        ErrorCode::FrontmatterInvalid,
         "expected a Pack id, such as `web`, or vendor/name, such as `acme/web`",
     );
 }
@@ -93,8 +93,8 @@ fn the_map_form_of_an_entry_is_refused_naming_both_entry_forms() {
         let src = format!("---\nname: x\ndescription: d\nuses:\n{entry}---\n\n# T\n\n## S\n\np\n");
         let error = parse_err(&src);
         assert_eq!(
-            error.kind(),
-            ParseErrorKind::Frontmatter,
+            error.code,
+            ErrorCode::FrontmatterInvalid,
             "{entry}: {error}"
         );
         assert!(
@@ -104,8 +104,8 @@ fn the_map_form_of_an_entry_is_refused_naming_both_entry_forms() {
             "the refusal names both entry forms: {error}"
         );
         assert_eq!(
-            error.line(),
-            NonZeroU32::new(5),
+            location(&error).map(|(_, line, ..)| line),
+            Some(5),
             "the entry's own line: {error}"
         );
     }
@@ -121,8 +121,8 @@ fn a_pack_id_declared_twice_is_refused() {
     ] {
         let error = parse_err(&prompt(&format!("uses: {entries}"), &[]));
         assert_eq!(
-            error.kind(),
-            ParseErrorKind::Frontmatter,
+            error.code,
+            ErrorCode::FrontmatterInvalid,
             "{entries}: {error}"
         );
         assert_eq!(
@@ -146,8 +146,8 @@ fn a_reserved_pack_id_is_refused_from_any_vendor_naming_the_first_one_declared()
     ] {
         let error = parse_err(&prompt(&format!("uses: {entries}"), &[]));
         assert_eq!(
-            error.kind(),
-            ParseErrorKind::Frontmatter,
+            error.code,
+            ErrorCode::FrontmatterInvalid,
             "{entries}: {error}"
         );
         assert_eq!(
@@ -183,7 +183,7 @@ fn entries_keep_their_declaration_order() {
 fn the_old_plugins_key_is_refused_as_an_unknown_field() {
     let old_key = "plugins";
     let error = parse_err(&prompt(&format!("{old_key}: [web]"), &[]));
-    assert_eq!(error.kind(), ParseErrorKind::Frontmatter, "{error}");
+    assert_eq!(error.code, ErrorCode::FrontmatterInvalid, "{error}");
     assert!(
         error.to_string().contains("unknown field `plugins`"),
         "the parser names the key it does not know: {error}"

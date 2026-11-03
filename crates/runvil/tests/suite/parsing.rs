@@ -1,38 +1,39 @@
 //! Public-parser contracts: invalid fixtures report their exact
-//! [`ParseErrorKind`] and message.
+//! [`ErrorCode`] and message.
 
 use std::fs;
 use std::path::Path;
 
-use runvil::{ParseErrorKind, Prompt};
+use runvil::Prompt;
+use runvil::error::ErrorCode;
 
 use super::support::TestResult;
 
-const INVALID_FIXTURES: [(&str, ParseErrorKind, &str); 6] = [
-    ("missing-h1", ParseErrorKind::Structure, "requires an H1"),
+const INVALID_FIXTURES: [(&str, ErrorCode, &str); 6] = [
+    ("missing-h1", ErrorCode::StructureInvalid, "requires an H1"),
     (
         "unrecognized-lua-label",
-        ParseErrorKind::Fence,
+        ErrorCode::FenceInvalid,
         "unrecognized fence label",
     ),
     (
         "lua-fence-opener",
-        ParseErrorKind::Fence,
+        ErrorCode::FenceInvalid,
         "fence opening line must be exactly",
     ),
     (
         "lua-fence-closer",
-        ParseErrorKind::Fence,
+        ErrorCode::FenceInvalid,
         "fence closing line must be exactly",
     ),
     (
         "malformed-epilog",
-        ParseErrorKind::Lua,
+        ErrorCode::LuaCompile,
         "section `Transform` epilog",
     ),
     (
         "list-h3-non-list-content",
-        ParseErrorKind::List,
+        ErrorCode::ListEmptyItem,
         "empty bullet item",
     ),
 ];
@@ -40,19 +41,18 @@ const INVALID_FIXTURES: [(&str, ParseErrorKind, &str); 6] = [
 #[test]
 fn invalid_prompt_files_report_public_error_contracts() -> TestResult {
     let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/prompts/invalid");
-    for (stem, kind, message_fragment) in INVALID_FIXTURES {
+    for (stem, code, message_fragment) in INVALID_FIXTURES {
         let name = format!("invalid/{stem}.md");
         let source = fs::read_to_string(dir.join(format!("{stem}.md")))?;
         let Err(error) = Prompt::parse(&source, &name, &name).0 else {
             return Err(format!("fixture {name} unexpectedly parsed").into());
         };
         assert_eq!(
-            error.kind(),
-            kind,
-            "fixture {name} returned the wrong error kind: {error:?}"
+            error.code, code,
+            "fixture {name} returned the wrong error code: {error:?}"
         );
         assert!(
-            error.to_string().contains(message_fragment),
+            error.message.contains(message_fragment),
             "fixture {name} error did not contain {message_fragment:?}: {error}"
         );
     }

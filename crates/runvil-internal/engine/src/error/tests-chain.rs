@@ -11,7 +11,6 @@ use runvil_types::tools::tool_error;
 use runvil_vfs::VfsError;
 
 use super::*;
-use crate::prompt::Prompt;
 
 /// The display text of each segment of `error`'s source chain, the error
 /// itself first.
@@ -28,13 +27,6 @@ fn chain(error: &(dyn std::error::Error + 'static)) -> Vec<String> {
 /// One failure of each variant that keeps its cause in a plain field.
 #[track_caller]
 fn cause_bearing() -> Vec<Error> {
-    let frontmatter = Prompt::parse(
-        "---\nname: [unclosed\n---\n\n# T\n\n## S\n\np\n",
-        "prompt",
-        "test",
-    )
-    .0
-    .expect_err("an unclosed YAML list is refused");
     let syntax = mlua::Error::SyntaxError {
         message: "unexpected symbol near <eof>".to_owned(),
         incomplete_input: true,
@@ -43,7 +35,6 @@ fn cause_bearing() -> Vec<Error> {
     let schema = runvil_model_client::detail::tool_schema_new("echo", "", serde_json::json!([]))
         .expect_err("an array is not an object schema");
     vec![
-        Error::from(frontmatter),
         Error::BindSchema {
             alias: "echo".to_owned(),
             cause: Box::new(schema),

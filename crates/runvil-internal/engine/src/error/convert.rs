@@ -1,32 +1,32 @@
 //! Building the internal error: its constructors, the `From` bridges that
-//! map the model-client, parser, and Lua crates' errors onto it variant
-//! for variant, and the rebuild of a raised Lua error table into the
-//! variant it stands in for.
+//! map the model-client and Lua crates' errors onto it variant for
+//! variant, and the rebuild of a raised Lua error table into the variant
+//! it stands in for.
 
 use std::borrow::Cow;
 
 use runvil_lua::Error as LuaError;
-use runvil_prompt::Error as ParserError;
+use runvil_types::error::ErrorCode;
 use runvil_types::ids::TaskId;
 use runvil_vfs::VfsError;
 
 use super::{BoxedSource, Error};
 
 impl Error {
-    /// Builds a parse failure with a stable classification and no source span.
-    pub(crate) fn parse(kind: crate::prompt::ParseErrorKind, message: impl Into<String>) -> Error {
-        Error::Parse(crate::prompt::detail::parse_error(kind, message))
+    /// Builds a parse failure with `code` and no location.
+    pub(crate) fn parse(code: ErrorCode, message: impl Into<String>) -> Error {
+        Error::Parse(crate::prompt::detail::parse_error(code, message))
     }
 
-    /// Stamps the prompt's frontmatter name onto a parse failure raised by
-    /// `run` itself: the prompt is already parsed at that point, so the
-    /// name is known and the failure's message can name it. Any other variant passes
-    /// through unchanged.
-    pub(crate) fn with_prompt_name(self, name: &str) -> Error {
+    /// Gives a parse failure raised by `run` itself the prompt's
+    /// frontmatter `name` and its `file`: the prompt is already parsed at
+    /// that point, so the failure's message can name it and its prose name
+    /// the file. Any other variant passes through unchanged.
+    pub(crate) fn with_prompt_context(self, name: &str, file: &str) -> Error {
         match self {
-            Error::Parse(error) => {
-                Error::Parse(crate::prompt::detail::with_prompt_name(error, name))
-            }
+            Error::Parse(error) => Error::Parse(crate::prompt::detail::with_prompt_context(
+                error, name, file,
+            )),
             other => other,
         }
     }
@@ -126,24 +126,6 @@ impl From<crate::subst::SubstitutionError> for Error {
 impl From<runvil_types::error::Error> for Error {
     fn from(error: runvil_types::error::Error) -> Error {
         Error::Completion(error)
-    }
-}
-
-/// Maps a parse failure onto this internal type: a frontmatter or
-/// structured failure stays a parse failure whole, and a Lua compile or
-/// internal failure maps onto its own variant. The parser crate's error
-/// type is not `#[non_exhaustive]` (the two crates version together), so
-/// this match is total.
-impl From<crate::prompt::ParseError> for Error {
-    fn from(error: crate::prompt::ParseError) -> Self {
-        match crate::prompt::detail::parse_error_into_inner(error) {
-            inner
-            @ (ParserError::ParseFrontmatter { .. } | ParserError::ParseStructured { .. }) => {
-                Error::Parse(crate::prompt::detail::parse_error_from_inner(inner))
-            }
-            ParserError::Lua(lua) => Error::from(lua),
-            ParserError::Internal(message) => Error::internal(message),
-        }
     }
 }
 

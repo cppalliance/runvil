@@ -43,7 +43,6 @@ pub mod test_support;
 pub use body_text::BodyText;
 pub use contract::{ArgDecl, ArgType, ArgsDecl, ArgsDeclIter, RoleRequirements};
 use error::Result;
-pub use error::{Error, ParseError, ParseErrorKind};
 #[cfg(test)]
 use frontmatter::MAX_TOOL_ITERATIONS;
 pub use frontmatter::{FileDecl, Frontmatter};

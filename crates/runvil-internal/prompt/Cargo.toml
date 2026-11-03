@@ -13,7 +13,6 @@ runvil-types.workspace = true
 pulldown-cmark.workspace = true
 serde.workspace = true
 serde_yaml_ng.workspace = true
-thiserror.workspace = true
 
 [dev-dependencies]
 mlua.workspace = true

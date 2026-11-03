@@ -41,7 +41,7 @@ use runvil::model::{ModelInfo, ModelRole};
 use runvil::prompt::FileDecl;
 use runvil::timestamp::Timestamp;
 use runvil::vfs::VfsRef;
-use runvil::{ParseError, Prompt, Run, RunConfig, RunSeed};
+use runvil::{Prompt, Run, RunConfig, RunSeed};
 use runvil_plugin::HostServices;
 use sha2::{Digest as _, Sha256};
 
@@ -148,7 +148,7 @@ pub enum PrepareError {
         run_id: RunId,
         /// The parse failure.
         #[source]
-        source: ParseError,
+        source: Box<Error>,
     },
     /// The prompt's declared input file could not be put in place: the
     /// launch supplied text the prompt declares no file for, the prompt
@@ -276,7 +276,10 @@ pub async fn prepare(
                 .end_run(run_id, failed(RunErrorKind::Parse, &source))
                 .await
                 .map_err(recorded)?;
-            return Err(PrepareError::Parse { run_id, source });
+            return Err(PrepareError::Parse {
+                run_id,
+                source: Box::new(source),
+            });
         }
     };
 

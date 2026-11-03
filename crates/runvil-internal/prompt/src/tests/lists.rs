@@ -30,7 +30,7 @@ fn all_marker_list_with_empty_item_is_rejected() {
     // then a hard error rather than a detector miss.
     let body = "- alpha\n1.\n- beta";
     let error = parse_err(&PromptSource::new().prose("S", body).build());
-    assert_eq!(error.kind(), ParseErrorKind::List);
+    assert_eq!(error.code, ErrorCode::ListEmptyItem);
 }
 
 #[test]
@@ -45,7 +45,7 @@ fn an_empty_marker_before_a_prose_line_stays_prose() {
 fn list_error_kind_does_not_depend_on_the_section_name() {
     for section in ["frontmatter", "fence"] {
         let error = parse_err(&PromptSource::new().prose(section, "- alpha\n1.").build());
-        assert_eq!(error.kind(), ParseErrorKind::List);
+        assert_eq!(error.code, ErrorCode::ListEmptyItem);
     }
 }
 

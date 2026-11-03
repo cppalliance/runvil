@@ -121,9 +121,12 @@ fn missing_version_is_not_a_runvil_prompt() {
     let trace = Scenario::new(ran_under("")).run();
     match trace.error() {
         Error::Parse(error) => {
-            assert_eq!(error.kind(), ParseErrorKind::Structure);
+            assert_eq!(error.code, ErrorCode::StructureInvalid);
             assert_eq!(
-                error.name(),
+                error
+                    .facts
+                    .get(&FactKey::Name)
+                    .and_then(serde_json::Value::as_str),
                 Some("t"),
                 "the error reports the parsed prompt's frontmatter name"
             );

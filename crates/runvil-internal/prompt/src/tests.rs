@@ -1,8 +1,7 @@
 //! Crate-wide parser tests: frontmatter, headings, fences, lists, breaks, and line mapping.
 
-use std::num::NonZeroU32;
-
 use runvil_lua::LuaProgram;
+use runvil_types::error::{Error, ErrorCode, FactKey};
 use runvil_types::event::Event;
 
 use super::*;
@@ -35,81 +34,69 @@ const NON_EXACT_LUA_OPENERS: [&str; 9] = [
 const OPENER_MESSAGE: &str = "`lua` fence opening line must be exactly ```lua";
 const CLOSER_MESSAGE: &str = "`lua` fence closing line must be exactly ```";
 
-#[test]
-fn invalid_frontmatter_keeps_the_yaml_failure_as_its_cause() {
-    let error = parse_err(&prompt(": : :", &[]));
-    assert_eq!(error.kind(), ParseErrorKind::Frontmatter);
-    let cause = error
-        .cause()
-        .expect("the YAML decode failure stays reachable as the cause");
-    assert!(
-        cause.is::<serde_yaml_ng::Error>(),
-        "required a YAML decode failure, actual {cause:?}"
-    );
+/// The failure's location as its file, start line, start column, end
+/// line, and end column, when it has one.
+pub(crate) fn location(error: &Error) -> Option<(&str, u32, u32, u32, u32)> {
+    error.at.as_ref().map(|at| {
+        (
+            at.file.as_str(),
+            at.start_line.get(),
+            at.start_column.get(),
+            at.end_line.get(),
+            at.end_column.get(),
+        )
+    })
 }
 
 #[test]
 fn frontmatter_syntax_errors_report_a_position_without_a_name() {
-    // A malformed-YAML frontmatter surfaces the retained
-    // serde_yaml_ng position (1-based, file-absolute); the failure predates
-    // the prompt's name, so none is reported.
+    // A malformed-YAML frontmatter is located at the serde_yaml_ng position
+    // (1-based, file-absolute), a point at the line and column; the failure
+    // predates the prompt's name, so none is reported.
     let error = parse_err("---\nname: p\ndescription: d\n: : :\n---\n\n# T\n\n## S\n\nhi\n");
-    assert_eq!(error.kind(), ParseErrorKind::Frontmatter);
-    assert_eq!(
-        error.line(),
-        NonZeroU32::new(4),
-        "the malformed line: {error}"
-    );
-    assert!(
-        error.column().is_some(),
-        "a column accompanies the line: {error}"
-    );
-    assert_eq!(error.name(), None);
+    assert_eq!(error.code, ErrorCode::FrontmatterInvalid);
+    let Some((file, line, column, end_line, end_column)) = location(&error) else {
+        panic!("the malformed line is located: {error:?}");
+    };
+    assert_eq!((file, line), ("prompt", 4), "the malformed line: {error}");
+    assert_eq!((end_line, end_column), (line, column), "{error:?}");
+    assert_eq!(error.facts.get(&FactKey::Name), None);
 }
 
 #[test]
 fn structured_errors_report_the_prompt_name_and_source_position() {
     // A structured failure postdates the frontmatter, so the parse
     // error reports the prompt's frontmatter name plus the offending
-    // span's 1-based line and column, computed against the source.
+    // span's 1-based start and end lines and columns, computed against the
+    // source.
     let src = concat!(
         "---\nname: dup\ndescription: d\n---\n", // lines 1-4
         "\n# T\n\n## S\n\np\n\n## S\n\nq\n",     // the second `## S` heads line 12
     );
     let error = parse_err(src);
-    assert_eq!(error.kind(), ParseErrorKind::Structure);
-    assert_eq!(error.name(), Some("dup"));
+    assert_eq!(error.code, ErrorCode::StructureInvalid);
+    assert_eq!(error.facts.get(&FactKey::Name), Some(&"dup".into()));
     assert_eq!(
-        error.line(),
-        NonZeroU32::new(12),
-        "the duplicate heading's line: {error}"
-    );
-    assert_eq!(
-        error.column(),
-        NonZeroU32::new(1),
-        "the duplicate heading's column: {error}"
-    );
-    assert!(
-        error.span().is_some(),
-        "the byte span is preserved alongside the line/column"
+        location(&error),
+        Some(("prompt", 12, 1, 13, 1)),
+        "the duplicate heading's line, through its newline: {error}"
     );
 }
 
 #[test]
 fn orphan_and_empty_heading_errors_report_a_line() {
     // The frontmatter takes lines 1-4, `# T` is line 6, and the body starts
-    // on line 8.
-    for (body, line, kind) in [
-        ("## A\n\na\n\n#### D\n\nd\n", 12, ParseErrorKind::Structure),
-        ("## \n\na\n", 8, ParseErrorKind::Structure),
-    ] {
+    // on line 8. Each span is the heading line through its newline.
+    for (body, line) in [("## A\n\na\n\n#### D\n\nd\n", 12), ("## \n\na\n", 8)] {
         let error = parse_err(&format!(
             "---\nname: x\ndescription: d\n---\n\n# T\n\n{body}"
         ));
-        assert_eq!(error.kind(), kind, "{error}");
-        assert_eq!(error.line(), NonZeroU32::new(line), "{error}");
-        assert_eq!(error.column(), NonZeroU32::new(1), "{error}");
-        assert!(error.span().is_some(), "{error}");
+        assert_eq!(error.code, ErrorCode::StructureInvalid, "{error}");
+        assert_eq!(
+            location(&error),
+            Some(("prompt", line, 1, line + 1, 1)),
+            "{error}"
+        );
     }
 }
 

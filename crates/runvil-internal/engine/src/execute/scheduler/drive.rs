@@ -9,13 +9,13 @@
 //! every issued effect has its answer, so every effect the caller was
 //! handed has exactly one answer.
 
+use runvil_types::error::ErrorCode;
 use runvil_types::event::lifecycle;
 use runvil_types::ids::AbandonReason;
 use runvil_vfs::Origin;
 
 use crate::execute::RunOutcome;
 use crate::execute::run::{EffectAnswer, EffectId, Step};
-use crate::prompt::ParseErrorKind;
 use crate::{Error, Result};
 
 use super::chain::ChainStep;
@@ -190,16 +190,17 @@ impl Scheduler {
     /// the config lacks a declared Pack or a model the prompt's roles
     /// require, or names a Pack id the Engine reserves.
     fn check_start(&self) -> Result<()> {
-        let frontmatter = self.ctx.prompt().frontmatter();
+        let prompt = self.ctx.prompt();
+        let frontmatter = prompt.frontmatter();
         match frontmatter.runvil() {
             Some(0) => {}
             Some(other) => return Err(Error::UnsupportedVersion(other)),
             None => {
                 return Err(Error::parse(
-                    ParseErrorKind::Structure,
+                    ErrorCode::StructureInvalid,
                     "not a runvil prompt: no runvil version",
                 )
-                .with_prompt_name(frontmatter.name()));
+                .with_prompt_context(frontmatter.name(), prompt.file()));
             }
         }
         // Every run and every store call needs a declared store: the probe

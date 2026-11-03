@@ -20,9 +20,11 @@ use std::marker::PhantomData;
 
 use runvil_types::models::ModelRole;
 use runvil_types::names::is_alias;
-use runvil_types::packs::{PackId, PackRef};
+use runvil_types::packs::PackRef;
 use serde::de::{self, MapAccess, Visitor};
 use serde::{Deserialize, Deserializer};
+
+use crate::error;
 
 mod args;
 mod models;
@@ -132,28 +134,22 @@ where
     }
 }
 
-/// A refused `uses:` list.
-#[derive(Debug, thiserror::Error)]
-pub(crate) enum PackListError {
-    /// The list names this Pack more than once.
-    #[error("invalid frontmatter: Pack id {0} is declared more than once under uses")]
-    Duplicate(PackId),
-    /// The list names this reserved Pack id, from any vendor.
-    #[error(
-        "invalid frontmatter: Pack id {0} is reserved by the Engine and is never declared \
-         under uses"
-    )]
-    Reserved(PackId),
-}
-
 /// Refuses a `uses:` list that names one Pack id twice, whatever the
 /// vendors, because a run holds one Pack per Pack id.
 ///
-/// The refusal names the first Pack id declared again.
-pub(crate) fn check_distinct_packs(packs: &[PackRef]) -> Result<(), PackListError> {
+/// The refusal names the first Pack id declared again, with the `Reason`
+/// fact `pack_duplicate`.
+pub(crate) fn check_distinct_packs(packs: &[PackRef]) -> crate::Result<()> {
     let mut seen = BTreeSet::new();
     match packs.iter().find(|pack| !seen.insert(pack.id())) {
-        Some(pack) => Err(PackListError::Duplicate(pack.id().clone())),
+        Some(pack) => Err(error::pack_refusal(
+            "pack_duplicate",
+            pack.id(),
+            format!(
+                "invalid frontmatter: Pack id {} is declared more than once under uses",
+                pack.id()
+            ),
+        )),
         None => Ok(()),
     }
 }
@@ -161,10 +157,19 @@ pub(crate) fn check_distinct_packs(packs: &[PackRef]) -> Result<(), PackListErro
 /// Refuses a `uses:` list that names a reserved Pack id, such as `adhoc`,
 /// whatever the vendor, because the Engine holds the tools under it.
 ///
-/// The refusal names the first reserved Pack id declared.
-pub(crate) fn check_no_reserved_pack(packs: &[PackRef]) -> Result<(), PackListError> {
+/// The refusal names the first reserved Pack id declared, with the
+/// `Reason` fact `pack_reserved`.
+pub(crate) fn check_no_reserved_pack(packs: &[PackRef]) -> crate::Result<()> {
     match packs.iter().find(|pack| pack.id().is_reserved()) {
-        Some(pack) => Err(PackListError::Reserved(pack.id().clone())),
+        Some(pack) => Err(error::pack_refusal(
+            "pack_reserved",
+            pack.id(),
+            format!(
+                "invalid frontmatter: Pack id {} is reserved by the Engine and is never declared \
+                 under uses",
+                pack.id()
+            ),
+        )),
         None => Ok(()),
     }
 }

@@ -12,7 +12,7 @@ fn h1_only_prompt_parses_with_empty_sections() {
 #[test]
 fn empty_h1_title_errors() {
     let src = "---\nname: x\ndescription: d\n---\n\n#\n\n## S\n\np\n";
-    assert_parse_error(src, ParseErrorKind::Structure, "title must not be empty");
+    assert_parse_error(src, ErrorCode::StructureInvalid, "title must not be empty");
 }
 
 #[test]
@@ -21,7 +21,7 @@ fn more_than_one_h1_is_refused_naming_the_count_and_lines() {
     let src = "---\nname: x\ndescription: d\n---\n\n# T\n\n## S\n\np\n\n# U\n\nq\n\n# V\n";
     assert_parse_error(
         src,
-        ParseErrorKind::Structure,
+        ErrorCode::StructureInvalid,
         "prompt must contain exactly one H1 title, found 3 at lines 6, 12, 16",
     );
 }
@@ -86,24 +86,24 @@ fn skipped_heading_level_is_rejected_as_orphan() {
         .prose("A", "a")
         .prose("#### D", "d")
         .build();
-    assert_parse_error(&src, ParseErrorKind::Structure, "orphan");
+    assert_parse_error(&src, ErrorCode::StructureInvalid, "orphan");
 }
 
 #[test]
 fn orphan_top_level_deep_heading_is_rejected() {
     // The first section heading is an H3 with no parent H2: an orphan.
     let src = PromptSource::new().prose("### A", "a").build();
-    assert_parse_error(&src, ParseErrorKind::Structure, "orphan");
+    assert_parse_error(&src, ErrorCode::StructureInvalid, "orphan");
 
     // An H4 top-level section (double skip) is likewise rejected.
     let src = PromptSource::new().prose("#### A", "a").build();
-    assert_parse_error(&src, ParseErrorKind::Structure, "orphan");
+    assert_parse_error(&src, ErrorCode::StructureInvalid, "orphan");
 }
 
 #[test]
 fn empty_section_heading_is_rejected() {
     let src = PromptSource::new().prose("", "a").build();
-    assert_parse_error(&src, ParseErrorKind::Structure, "must not be empty");
+    assert_parse_error(&src, ErrorCode::StructureInvalid, "must not be empty");
 }
 
 #[test]
@@ -122,13 +122,13 @@ fn duplicate_sibling_section_names_are_rejected() {
         message.contains("first declared at line 8") && message.contains("again at line 12"),
         "both duplicate locations must be reported, got: {message}"
     );
-    // A structured parse error reports a stable kind and a byte span rather
-    // than inferring them from the message.
-    assert_eq!(err.kind(), ParseErrorKind::Structure);
-    let span = err.span().expect("duplicate section has a span");
-    assert!(
-        !span.is_empty(),
-        "span must be a non-empty range, got {span:?}"
+    // A structured parse error reports a stable code and the location of
+    // the second heading rather than inferring them from the message.
+    assert_eq!(err.code, ErrorCode::StructureInvalid);
+    assert_eq!(
+        location(&err),
+        Some(("prompt", 12, 1, 13, 1)),
+        "the second `## S` heading line, through its newline: {err:?}"
     );
 
     // The same name under DIFFERENT parents (not siblings) is allowed.

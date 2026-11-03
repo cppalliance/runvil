@@ -18,7 +18,7 @@
 use axum::http::{StatusCode, header};
 use axum::response::{IntoResponse, Response};
 
-use runvil::{ParseError, ParseErrorKind};
+use runvil::error::{Error, ErrorCode};
 use workshop_gateway::GatewayError;
 use workshop_protocol::ErrorEnvelope;
 use workshop_support::{LEAK_DETAIL, envelope_response, render_message};
@@ -56,36 +56,37 @@ pub(crate) enum AppError {
     #[error("ui asset not found: {0}")]
     AssetMissing(String),
 
-    /// A posted prompt failed to parse; the code names the failure kind
+    /// A posted prompt failed to parse; the code names the failure's code
     /// and the message carries the parser's `line N: ` prefix.
     #[error("{message}")]
     PromptParse {
         /// The pre-rendered message, including the `line N: ` prefix when
         /// the parser located the failure.
         message: String,
-        /// The wire code for the parse-failure kind.
+        /// The wire code for the parse failure's code.
         code: &'static str,
     },
 }
 
 impl AppError {
     /// Builds the wire error for a prompt that failed to parse: the code
-    /// names the failure kind and the message carries the parser's
-    /// `line N: ` prefix when it located the failure.
-    pub(crate) fn prompt_parse(error: &ParseError) -> Self {
-        let code = match error.kind() {
-            ParseErrorKind::Frontmatter => "parse_frontmatter",
-            ParseErrorKind::Structure => "parse_structure",
-            ParseErrorKind::Fence => "parse_fence",
-            ParseErrorKind::List => "parse_list",
-            ParseErrorKind::Lua => "parse_lua",
-            ParseErrorKind::Internal => "parse_internal",
-            // Any other kind has no wire code of its own.
+    /// names the failure's code and the message carries the parser's
+    /// `line N: ` prefix, the line the failure starts on, when it located
+    /// the failure.
+    pub(crate) fn prompt_parse(error: &Error) -> Self {
+        let code = match error.code {
+            ErrorCode::FrontmatterInvalid => "parse_frontmatter",
+            ErrorCode::StructureInvalid => "parse_structure",
+            ErrorCode::FenceInvalid => "parse_fence",
+            ErrorCode::ListEmptyItem => "parse_list",
+            ErrorCode::LuaCompile => "parse_lua",
+            ErrorCode::Internal => "parse_internal",
+            // Any other code has no wire code of its own.
             _ => "parse_error",
         };
-        let message = match error.line() {
-            Some(line) => format!("line {line}: {error}"),
-            None => error.to_string(),
+        let message = match &error.at {
+            Some(at) => format!("line {}: {}", at.start_line, error.message),
+            None => error.message.clone(),
         };
         Self::PromptParse { message, code }
     }

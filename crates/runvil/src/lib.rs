@@ -20,8 +20,6 @@ pub use runvil_engine::RunErrorKind;
 pub use runvil_engine::RunLimits;
 pub use runvil_engine::RunOutcome;
 pub use runvil_engine::Step;
-pub use runvil_prompt::ParseError;
-pub use runvil_prompt::ParseErrorKind;
 pub use runvil_prompt::Prompt;
 pub use runvil_types::seed::RunSeed;
 

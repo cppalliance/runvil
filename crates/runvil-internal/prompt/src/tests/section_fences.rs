@@ -75,7 +75,7 @@ fn exact_middle_lua_fences_become_compiled_blocks() {
 fn invalid_middle_lua_fence_fails_parse() {
     let body = "Before.\n\n```lua\nnot valid lua =\n```\n\nAfter.";
     let err = parse_err(&PromptSource::new().prose("S", body).build());
-    assert_eq!(err.kind(), ParseErrorKind::Lua);
+    assert_eq!(err.code, ErrorCode::LuaCompile);
 }
 
 #[test]
@@ -100,7 +100,7 @@ fn non_exact_lua_openers_fail_in_a_section() {
             let src =
                 format!("---\nname: x\ndescription: d\n---\n\n# T\n\n## S\n\n{intro}{fence}\n");
             let error = parse_err(&src);
-            assert_eq!(error.kind(), ParseErrorKind::Fence, "{error}");
+            assert_eq!(error.code, ErrorCode::FenceInvalid, "{error}");
             assert_eq!(error.to_string(), OPENER_MESSAGE, "{src:?}");
         }
     }
@@ -118,7 +118,7 @@ fn lua_fence_lookalikes_outside_every_fence_are_parse_errors() {
     ] {
         let src = format!("---\nname: x\ndescription: d\n---\n\n# T\n\n## S\n\n{content}\n");
         let error = parse_err(&src);
-        assert_eq!(error.kind(), ParseErrorKind::Fence, "{error}");
+        assert_eq!(error.code, ErrorCode::FenceInvalid, "{error}");
         assert_eq!(error.to_string(), OPENER_MESSAGE, "{src:?}");
     }
 }
@@ -128,7 +128,7 @@ fn section_fence_label_near_misses_are_parse_errors() {
     for label in ["Lua", "lua extra", "LUA", "luau"] {
         let body = format!("```{label}\nreturn 1\n```");
         let error = parse_err(&PromptSource::new().prose("S", &body).build());
-        assert_eq!(error.kind(), ParseErrorKind::Fence, "{error}");
+        assert_eq!(error.code, ErrorCode::FenceInvalid, "{error}");
         assert_eq!(
             error.to_string(),
             format!("unrecognized fence label `{label}`; the only Lua fence label is `lua`")
@@ -162,7 +162,7 @@ fn non_exact_section_closing_lines_fail_the_parse() {
                 "---\nname: x\ndescription: d\n---\n\n# T\n\n## S\n\n```lua\nvar.a = 1\n{bad_close}\n\n{after}\n"
             );
             let error = parse_err(&src);
-            assert_eq!(error.kind(), ParseErrorKind::Fence, "{error} in {src:?}");
+            assert_eq!(error.code, ErrorCode::FenceInvalid, "{error} in {src:?}");
             assert_eq!(error.to_string(), CLOSER_MESSAGE, "{src:?}");
         }
     }
@@ -178,29 +178,39 @@ fn a_lookalike_line_and_a_bad_closing_line_report_whichever_comes_first() {
     ] {
         let src = format!("---\nname: x\ndescription: d\n---\n\n# T\n\n## S\n\n{content}\n");
         let error = parse_err(&src);
-        assert_eq!(error.kind(), ParseErrorKind::Fence, "{error}");
+        assert_eq!(error.code, ErrorCode::FenceInvalid, "{error}");
         assert_eq!(error.to_string(), message, "{src:?}");
     }
 }
 
 #[test]
 fn closer_and_lookalike_errors_report_the_offending_line() {
-    // `## S` is on line 8 and the content starts on line 10.
-    for (content, message, line) in [
-        ("```lua\nvar.a = 1\nvar.b = 2\n  ```\n", CLOSER_MESSAGE, 13),
+    // `## S` is on line 8 and the content starts on line 10. Each span is
+    // the offending line without its newline.
+    for (content, message, line, end_column) in [
+        (
+            "```lua\nvar.a = 1\nvar.b = 2\n  ```\n",
+            CLOSER_MESSAGE,
+            13,
+            6,
+        ),
         (
             "Prose.\n\n    ```lua\n    return 1\n    ```\n",
             OPENER_MESSAGE,
             12,
+            11,
         ),
     ] {
         let error = parse_err(&format!(
             "---\nname: x\ndescription: d\n---\n\n# T\n\n## S\n\n{content}"
         ));
-        assert_eq!(error.kind(), ParseErrorKind::Fence, "{error}");
+        assert_eq!(error.code, ErrorCode::FenceInvalid, "{error}");
         assert_eq!(error.to_string(), message);
-        assert_eq!(error.line(), NonZeroU32::new(line), "{error}");
-        assert_eq!(error.column(), NonZeroU32::new(1), "{error}");
+        assert_eq!(
+            location(&error),
+            Some(("prompt", line, 1, line, end_column)),
+            "{error}"
+        );
     }
 }
 
@@ -212,10 +222,12 @@ fn a_fence_split_that_disagrees_with_the_markdown_parser_is_an_internal_error() 
     let Err(error) = crate::fence::split_section_blocks(content, "S") else {
         panic!("required a split failure, actual a split of {content:?}");
     };
-    assert!(matches!(error, Error::Internal(_)), "{error:?}");
-    assert_eq!(
-        ParseError::from_inner(error).kind(),
-        ParseErrorKind::Internal
+    assert_eq!(error.code, ErrorCode::Internal, "{error:?}");
+    assert!(
+        error
+            .message
+            .starts_with("internal invariant violated: parser: "),
+        "{error:?}"
     );
 }
 
@@ -280,17 +292,13 @@ fn malformed_section_phases_report_locations_and_safe_boundaries() {
         let Err(error) = outcome else {
             panic!("malformed {phase} unexpectedly parsed");
         };
-        match error.into_inner() {
-            Error::Lua(runvil_lua::Error::LuaCompile {
-                location,
-                lua_source,
-                ..
-            }) => {
-                assert_eq!(location, expected_location);
-                assert_eq!(lua_source, "private_payload =");
-            }
-            other => panic!("expected LuaCompile, got {other:?}"),
-        }
+        assert_eq!(error.code, ErrorCode::LuaCompile, "{error:?}");
+        assert!(
+            error.message.starts_with(&format!(
+                "lua compilation error at {expected_location} (line "
+            )),
+            "{error:?}"
+        );
 
         let observations = recorder.observations();
         assert_eq!(
@@ -330,7 +338,7 @@ fn backtick_lines_that_cannot_close_a_lua_fence_leave_it_unclosed() {
             "---\nname: x\ndescription: d\n---\n\n# T\n\n## S\n\n```lua\nreturn 1\n{last_line}\n"
         );
         let error = parse_err(&src);
-        assert_eq!(error.kind(), ParseErrorKind::Fence, "{error}");
+        assert_eq!(error.code, ErrorCode::FenceInvalid, "{error}");
         assert_eq!(
             error.to_string(),
             "section `S` prologue `lua` fence is not closed",

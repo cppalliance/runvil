@@ -4804,7 +4804,6 @@ dependencies = [
  "runvil-types",
  "serde",
  "serde_yaml_ng",
- "thiserror 2.0.19",
 ]
 
 [[package]]

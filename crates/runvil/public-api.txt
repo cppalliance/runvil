@@ -1,4 +1,3 @@
-#[non_exhaustive] pub enum runvil::ParseErrorKind
 #[non_exhaustive] pub enum runvil::RunErrorKind
 #[non_exhaustive] pub enum runvil::effect::ToolCaller
 #[non_exhaustive] pub enum runvil::event::Event
@@ -52,8 +51,6 @@
 #[non_exhaustive] pub struct runvil::vfs::Origin { .. }
 #[non_exhaustive] pub struct runvil::vfs::RealBackend { /* private fields */ }
 #[non_exhaustive] pub struct runvil::vfs::Stat { .. }
-auto runvil::ParseError: Freeze, !RefUnwindSafe, Send, Sync, Unpin, !UnwindSafe
-auto runvil::ParseErrorKind: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::Prompt: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::Run: Freeze, !RefUnwindSafe, Send, Sync, Unpin, !UnwindSafe
 auto runvil::RunConfig: Freeze, !RefUnwindSafe, Send, Sync, Unpin, !UnwindSafe
@@ -150,8 +147,6 @@ auto runvil::vfs::VfsPathBuf: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSa
 auto runvil::vfs::VfsRef: Freeze, !RefUnwindSafe, Send, Sync, Unpin, !UnwindSafe
 auto runvil::vfs::VfsRefBuilder: Freeze, !RefUnwindSafe, Send, Sync, Unpin, !UnwindSafe
 auto runvil::vfs::Writability: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
-derives runvil::ParseError: Debug
-derives runvil::ParseErrorKind: Clone, Copy, Debug, Eq, Hash, PartialEq
 derives runvil::Prompt: Clone, Debug, Eq, PartialEq
 derives runvil::Run: Debug
 derives runvil::RunConfig: Debug
@@ -250,11 +245,9 @@ derives runvil::vfs::VfsRefBuilder: Debug
 derives runvil::vfs::Writability: Clone, Copy, Debug, Eq, Hash, PartialEq
 impl core::convert::From<runvil::ids::ChainId> for runvil::ids::TaskId
 impl core::convert::From<runvil::vfs::VfsPath> for runvil::vfs::VfsPathBuf
-impl core::error::Error for runvil::ParseError
 impl core::error::Error for runvil::error::Error
 impl core::error::Error for runvil::vfs::ParsePathReasonError
 impl core::error::Error for runvil::vfs::VfsError
-impl core::fmt::Display for runvil::ParseError
 impl core::fmt::Display for runvil::RunSeed
 impl core::fmt::Display for runvil::effect::EffectId
 impl core::fmt::Display for runvil::error::Error
@@ -338,15 +331,9 @@ pub enum runvil::effect::EffectAnswer
 pub enum runvil::error::ErrorCode
 pub enum runvil::error::FactKey
 pub enum runvil::packs::RosterEntry
-pub fn runvil::ParseError::cause(&self) -> core::option::Option<&dyn core::error::Error + core::marker::Send + core::marker::Sync + 'static>
-pub fn runvil::ParseError::column(&self) -> core::option::Option<core::num::nonzero::NonZeroU32>
-pub fn runvil::ParseError::kind(&self) -> runvil::ParseErrorKind
-pub fn runvil::ParseError::line(&self) -> core::option::Option<core::num::nonzero::NonZeroU32>
-pub fn runvil::ParseError::name(&self) -> core::option::Option<&str>
-pub fn runvil::ParseError::span(&self) -> core::option::Option<core::ops::range::Range<usize>>
 pub fn runvil::Prompt::file(&self) -> &str
 pub fn runvil::Prompt::frontmatter(&self) -> &runvil::prompt::Frontmatter
-pub fn runvil::Prompt::parse(input: &str, file: &str, execution: &str) -> (core::result::Result<runvil::Prompt, runvil::ParseError>, alloc::vec::Vec<runvil::event::Event>)
+pub fn runvil::Prompt::parse(input: &str, file: &str, execution: &str) -> (core::result::Result<runvil::Prompt, runvil::error::Error>, alloc::vec::Vec<runvil::event::Event>)
 pub fn runvil::Prompt::title(&self) -> &str
 pub fn runvil::Run::new(prompt: alloc::sync::Arc<runvil::Prompt>, args: &str, config: runvil::RunConfig) -> runvil::Run
 pub fn runvil::Run::resume(&mut self, id: runvil::effect::EffectId, answer: runvil::effect::EffectAnswer)
@@ -629,12 +616,6 @@ pub mod runvil::prompt
 pub mod runvil::timestamp
 pub mod runvil::tools
 pub mod runvil::vfs
-pub runvil::ParseErrorKind::Fence
-pub runvil::ParseErrorKind::Frontmatter
-pub runvil::ParseErrorKind::Internal
-pub runvil::ParseErrorKind::List
-pub runvil::ParseErrorKind::Lua
-pub runvil::ParseErrorKind::Structure
 pub runvil::RunErrorKind::Binding
 pub runvil::RunErrorKind::Completion
 pub runvil::RunErrorKind::ContextExhausted
@@ -1285,7 +1266,6 @@ pub runvil::vfs::VfsOutcome::Text::0: alloc::string::String
 pub runvil::vfs::VfsOutcome::Unit
 pub runvil::vfs::Writability::ReadOnly
 pub runvil::vfs::Writability::ReadWrite
-pub struct runvil::ParseError { /* private fields */ }
 pub struct runvil::Prompt { /* private fields */ }
 pub struct runvil::Run { /* private fields */ }
 pub struct runvil::RunConfig { /* private fields */ }

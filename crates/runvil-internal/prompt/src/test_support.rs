@@ -8,7 +8,9 @@
 //! parse assertions show the source and the actual outcome when a parse goes
 //! the other way.
 
-use crate::{Block, BodyText, ParseError, ParseErrorKind, Prompt, Section};
+use runvil_types::error::{Error, ErrorCode};
+
+use crate::{Block, BodyText, Prompt, Section};
 
 /// Builds a synthetic section with the given blocks, so each test fixture
 /// states only its own deltas (a prose block) instead of restating the
@@ -174,7 +176,7 @@ pub fn parse_ok(src: &str) -> Prompt {
 /// When `src` parses, naming its title and showing the source's first lines.
 #[track_caller]
 #[must_use]
-pub fn parse_err(src: &str) -> ParseError {
+pub fn parse_err(src: &str) -> Error {
     match Prompt::parse(src, "prompt", "test").0 {
         Ok(prompt) => panic!(
             "expected an error, parsed `{}`\n{}",
@@ -185,18 +187,18 @@ pub fn parse_err(src: &str) -> ParseError {
     }
 }
 
-/// Asserts that `src` fails to parse with a `kind` error whose message
+/// Asserts that `src` fails to parse with a `code` error whose message
 /// contains `fragment`.
 ///
 /// # Panics
 ///
-/// When `src` parses, or fails with another kind or message, naming the
+/// When `src` parses, or fails with another code or message, naming the
 /// actual error and showing the source's first lines.
 #[track_caller]
-pub fn assert_parse_error(src: &str, kind: ParseErrorKind, fragment: &str) {
+pub fn assert_parse_error(src: &str, code: ErrorCode, fragment: &str) {
     let error = parse_err(src);
-    let expected = format!("expected a {kind:?} error containing {fragment:?}");
-    let matched = error.kind() == kind && error.to_string().contains(fragment);
+    let expected = format!("expected a {code:?} error containing {fragment:?}");
+    let matched = error.code == code && error.message.contains(fragment);
     assert!(matched, "{expected}, got {error:?}\n{}", excerpt(src));
 }
 

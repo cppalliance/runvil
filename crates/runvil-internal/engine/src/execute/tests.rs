@@ -18,7 +18,6 @@ use super::*;
 use crate::Error;
 use crate::lua::{SectionVm, current_static_set};
 use crate::model::{ModelInfo, ModelSet};
-use crate::prompt::ParseErrorKind;
 use crate::prompt::Prompt;
 use crate::test_support::recording::{Observation, Observer, detail, null_emitter};
 use crate::test_support::scenario::{Scenario, Trace};

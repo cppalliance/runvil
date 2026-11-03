@@ -2,11 +2,12 @@
 
 use std::num::NonZeroU32;
 
+use runvil_types::error::ErrorCode;
 use runvil_types::models::ModelRole;
 use runvil_types::packs::PackRef;
 
 use crate::contract::RoleMap;
-use crate::{ArgsDecl, Error, ParseErrorKind, Result, RoleRequirements};
+use crate::{ArgsDecl, Result, RoleRequirements, error};
 
 /// A declared input or output file in a prompt's frontmatter.
 ///
@@ -208,8 +209,8 @@ pub(crate) fn split_frontmatter(input: &str) -> Result<SplitSource> {
     match lines.next() {
         Some(l) if l.trim() == "---" => {}
         _ => {
-            return Err(Error::parse(
-                ParseErrorKind::Frontmatter,
+            return Err(error::failure(
+                ErrorCode::FrontmatterInvalid,
                 "file must begin with a --- frontmatter delimiter",
             ));
         }
@@ -227,8 +228,8 @@ pub(crate) fn split_frontmatter(input: &str) -> Result<SplitSource> {
         yaml.push('\n');
     }
     if !closed {
-        return Err(Error::parse(
-            ParseErrorKind::Frontmatter,
+        return Err(error::failure(
+            ErrorCode::FrontmatterInvalid,
             "frontmatter was not closed with ---",
         ));
     }

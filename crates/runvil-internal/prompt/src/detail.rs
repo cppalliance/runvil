@@ -4,38 +4,25 @@
 //! The `runvil` facade never re-exports this module, so only Engine
 //! crates reach it.
 
-use crate::{Block, Error, ParseError, ParseErrorKind, Prompt, Section};
+use runvil_types::error::{Error, ErrorCode};
 
-/// Unwraps a parse failure into the internal error it classifies, so the
-/// Engine can map it onto its own internal error type variant for variant.
+use crate::{Block, Prompt, Section};
+
+/// Builds a parse failure with no location, for a failure the Engine
+/// raises about a parsed prompt.
+///
+/// Its prose is the code's default until [`with_prompt_context`] writes it.
 #[must_use]
-pub fn parse_error_into_inner(error: ParseError) -> Error {
-    error.into_inner()
+pub fn parse_error(code: ErrorCode, message: impl Into<String>) -> Error {
+    crate::error::failure(code, message)
 }
 
-/// Classifies an internal error back into the parse failure that wraps
-/// it, the inverse of [`parse_error_into_inner`].
+/// Gives a parse failure the Engine raises about a parsed prompt the
+/// prompt's frontmatter `name` as its `Name` fact, the prompt's `file` as
+/// its location's file, and the prose a failure the parse returns has.
 #[must_use]
-pub fn parse_error_from_inner(inner: Error) -> ParseError {
-    ParseError::from_inner(inner)
-}
-
-/// Builds a parse failure with a stable classification and no source span,
-/// for a failure the Engine raises about a parsed prompt.
-#[must_use]
-pub fn parse_error(kind: ParseErrorKind, message: impl Into<String>) -> ParseError {
-    ParseError::from_inner(Error::parse(kind, message))
-}
-
-/// Stamps the prompt's frontmatter name onto a spanless structured parse
-/// failure. A failure with a span passes through unchanged, because
-/// locating a span needs the prompt body.
-#[must_use]
-pub fn with_prompt_name(error: ParseError, name: &str) -> ParseError {
-    if error.span().is_some() {
-        return error;
-    }
-    ParseError::from_inner(error.into_inner().with_prompt_context(name, "", 0))
+pub fn with_prompt_context(error: Error, name: &str, file: &str) -> Error {
+    crate::error::with_prompt_context(error, Some(name), file)
 }
 
 /// Returns the ordered live Lua and prose blocks from the H1.

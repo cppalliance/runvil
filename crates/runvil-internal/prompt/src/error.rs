@@ -1,370 +1,204 @@
-//! Defines the parser's internal error type and its public classification.
+//! Builds the parser's failures as the universal [`Error`].
 //!
-//! [`Error`] is the internal error type every parsing module returns
-//! through [`Result`]. [`ParseError`] is the public wrapper returned
-//! by [`Prompt::parse`](crate::Prompt::parse): it classifies the internal
-//! type into a stable [`ParseErrorKind`] and surfaces the failure's
-//! location fields.
-//!
-//! A variant that keeps an originating error renders that error's text in
-//! its own `Display` and holds the error as a plain `cause` field behind
-//! [`Error::cause`], never as a `#[source]`, so a printer that walks the
-//! source chain shows the cause's text once.
+//! Every parsing module returns its failure through [`Result`], built by
+//! the constructors here: the code names what failed and the message is
+//! the full diagnostic. [`with_prompt_context`] runs once on every failure
+//! [`Prompt::parse`](crate::Prompt::parse) returns: it names the file the
+//! failure is in, the prompt a failure in the body belongs to, and writes
+//! the prose.
 
 use std::num::NonZeroU32;
 use std::ops::Range;
 
-/// A type-erased owned error cause used by the internal error type.
-type BoxedSource = Box<dyn std::error::Error + Send + Sync>;
+use runvil_types::error::{Error, ErrorCode, FactKey, Location};
+use runvil_types::packs::PackId;
 
-/// The parser's internal error type, classified into [`ParseError`] at
-/// the public boundary.
-///
-/// Public only so `runvil-engine` can convert it back onto its own
-/// internal type variant-for-variant; the facade does not re-export it.
-#[derive(Debug, thiserror::Error)]
-pub enum Error {
-    /// The prompt frontmatter did not decode: it was not valid YAML, or a key
-    /// or value broke the frontmatter schema, such as an unknown key or an arg
-    /// default of the wrong type.
-    ///
-    /// Keeps the decode failure as the cause beside the location it reports.
-    #[error("invalid frontmatter: {message}")]
-    ParseFrontmatter {
-        /// The human-readable diagnostic (no raw source dump).
-        message: String,
-        /// The originating YAML decode failure, whose text `message` holds.
-        cause: BoxedSource,
-        /// The 1-based file line of the YAML failure, surfaced from the
-        /// cause's location when it has one.
-        line: Option<NonZeroU32>,
-        /// The 1-based file column of the YAML failure, counted in characters
-        /// as the YAML parser counts them, when known.
-        column: Option<NonZeroU32>,
-    },
-
-    /// A structurally-classified parse failure with a stable kind and an
-    /// optional source byte span.
-    ///
-    /// [`ParseError`] exposes the classification and location from these
-    /// stored fields instead of inferring them from message text.
-    #[error("{message}")]
-    ParseStructured {
-        /// The stable classification of this parse failure.
-        kind: ParseErrorKind,
-        /// The byte span of the offending region within the body (after the
-        /// frontmatter and a leading BOM, CRLF normalized to LF), when known.
-        span: Option<Range<usize>>,
-        /// The human-readable diagnostic.
-        message: String,
-        /// The prompt's frontmatter name, stamped on a failure found in the
-        /// body or raised by the Engine.
-        name: Option<String>,
-        /// The 1-based file line of the span's start, computed against the
-        /// source when a span is known.
-        line: Option<NonZeroU32>,
-        /// The 1-based byte column of the span's start, when a span is known.
-        column: Option<NonZeroU32>,
-    },
-
-    /// A Lua region failed to compile at parse time, or the compiler VM could
-    /// not start, preserved as the `runvil-lua` internal error type so the
-    /// compiler diagnostic chain survives unchanged.
-    #[error(transparent)]
-    Lua(#[from] runvil_lua::Error),
-
-    /// An internal parser invariant was violated (a state the surrounding code
-    /// has already guaranteed cannot occur).
-    #[error("internal invariant violated: {0}")]
-    Internal(&'static str),
-}
-
-/// The parser's internal result type over [`Error`].
+/// The parser's result type over the universal [`Error`].
 pub(crate) type Result<T> = std::result::Result<T, Error>;
 
-impl Error {
-    /// Builds a parse failure with a stable classification and no source span.
-    pub(crate) fn parse(kind: ParseErrorKind, message: impl Into<String>) -> Error {
-        Error::ParseStructured {
-            kind,
-            span: None,
-            message: message.into(),
-            name: None,
-            line: None,
-            column: None,
-        }
-    }
+/// Builds a failure with no location, whose prose is the code's default
+/// until [`with_prompt_context`] writes it.
+pub(crate) fn failure(code: ErrorCode, message: impl Into<String>) -> Error {
+    Error::new(code, message, code.prose())
+}
 
-    /// Builds a parse failure with a stable classification and the byte span
-    /// of the offending region within the body.
-    ///
-    /// [`with_prompt_context`](Error::with_prompt_context) locates the span.
-    pub(crate) fn parse_at(
-        kind: ParseErrorKind,
-        span: Range<usize>,
-        message: impl Into<String>,
-    ) -> Error {
-        Error::ParseStructured {
-            kind,
-            span: Some(span),
-            message: message.into(),
-            name: None,
-            line: None,
-            column: None,
-        }
-    }
+/// Builds a failure at `span`, the byte range of the offending region
+/// within `body` (after the frontmatter and a leading BOM, CRLF normalized
+/// to LF), which starts in the file after `frontmatter_lines` lines.
+///
+/// The location runs from the span's start to its end, each a 1-based file
+/// line and byte column. It is `None` when either end is out of bounds or
+/// its arithmetic overflows - an invariant break that must not replace the
+/// original failure.
+pub(crate) fn failure_at(
+    code: ErrorCode,
+    message: impl Into<String>,
+    body: &str,
+    span: Range<usize>,
+    frontmatter_lines: u32,
+) -> Error {
+    let mut error = failure(code, message);
+    error.at = span_location(body, span, frontmatter_lines);
+    error
+}
 
-    /// Returns the originating error a cause-bearing failure keeps.
-    ///
-    /// The failure's `Display` already holds the cause's text. Every other
-    /// failure returns `None`.
-    #[must_use]
-    pub(crate) fn cause(&self) -> Option<&(dyn std::error::Error + Send + Sync + 'static)> {
-        match self {
-            Error::ParseFrontmatter { cause, .. } => Some(cause.as_ref()),
-            Error::Lua(lua) => lua.cause(),
-            Error::ParseStructured { .. } | Error::Internal(_) => None,
-        }
-    }
+/// Builds the failure for a broken parser invariant: a state the
+/// surrounding code has already guaranteed cannot occur.
+pub(crate) fn internal(message: &str) -> Error {
+    failure(
+        ErrorCode::Internal,
+        format!("internal invariant violated: {message}"),
+    )
+}
 
-    /// Stamps a structured parse failure with the prompt's frontmatter name
-    /// and its span's position.
-    ///
-    /// The position is the span's 1-based file line and byte column, when
-    /// the failure has a span. Every other variant passes through unchanged:
-    /// a frontmatter failure predates the name, a Lua failure reports its own
-    /// position, if it has one, and an internal failure has none.
-    pub(crate) fn with_prompt_context(
-        self,
-        name: &str,
-        body: &str,
-        frontmatter_lines: u32,
-    ) -> Error {
-        match self {
-            Error::ParseStructured {
-                kind,
-                span,
-                message,
-                ..
-            } => {
-                let (line, column) = match &span {
-                    Some(span) => body_line_column(body, span.start, frontmatter_lines),
-                    None => (None, None),
-                };
-                Error::ParseStructured {
-                    kind,
-                    span,
-                    message,
-                    name: Some(name.to_owned()),
-                    line,
-                    column,
-                }
-            }
-            other @ (Error::ParseFrontmatter { .. } | Error::Lua(_) | Error::Internal(_)) => other,
+/// Builds the frontmatter failure for a refused `uses:` list: `reason` is
+/// its `Reason` fact and the refused Pack id its `Name` fact.
+pub(crate) fn pack_refusal(reason: &str, pack: &PackId, message: String) -> Error {
+    let mut error = failure(ErrorCode::FrontmatterInvalid, message);
+    error.facts.insert(FactKey::Reason, reason.into());
+    error.facts.insert(FactKey::Name, pack.to_string().into());
+    error
+}
+
+/// Builds the failure for frontmatter that did not decode: it was not
+/// valid YAML, or a key or value broke the frontmatter schema.
+///
+/// The location is the file position the YAML parser reported: its line
+/// and column when it reported both, or the whole line when the column is
+/// unknown.
+pub(crate) fn frontmatter_decode(cause: &serde_yaml_ng::Error) -> Error {
+    let mut error = failure(
+        ErrorCode::FrontmatterInvalid,
+        format!("invalid frontmatter: {cause}"),
+    );
+    error.at = cause.location().and_then(|location| {
+        // The location is relative to the frontmatter block, which starts
+        // on file line 2 (line 1 is the opening `---` delimiter).
+        let line = u32::try_from(location.line())
+            .ok()
+            .and_then(|line| line.checked_add(1))
+            .and_then(NonZeroU32::new)?;
+        match u32::try_from(location.column())
+            .ok()
+            .and_then(NonZeroU32::new)
+        {
+            Some(column) => Location::new(String::new(), line, column, line, column),
+            None => Some(Location::line(String::new(), line)),
         }
+    });
+    error
+}
+
+/// Builds the failure for a Lua block that did not compile, or for a
+/// compiler that could not start, which is internal.
+///
+/// A compile failure is located on the file line its diagnostic names.
+pub(crate) fn lua(cause: &runvil_lua::Error) -> Error {
+    let runvil_lua::Error::LuaCompile {
+        source_line,
+        message,
+        ..
+    } = cause
+    else {
+        return failure(ErrorCode::Internal, cause.to_string());
+    };
+    let mut error = failure(ErrorCode::LuaCompile, cause.to_string());
+    error.at = NonZeroU32::new(compile_line(*source_line, message))
+        .map(|line| Location::line(String::new(), line));
+    error
+}
+
+/// The file line a compiler diagnostic names, for a block whose source
+/// starts on file line `source_line`.
+///
+/// The compiler names a prompt block's chunk `line {source_line}` and puts
+/// the chunk-relative line after it, which maps to the file line
+/// `source_line + chunk_line - 1`. A diagnostic that names no chunk line,
+/// or one whose mapping overflows, gives `source_line`.
+fn compile_line(source_line: u32, message: &str) -> u32 {
+    let marker = format!("[string \"line {source_line}\"]:");
+    message
+        .find(&marker)
+        .map(|at| &message[at + marker.len()..])
+        .and_then(|rest| {
+            let digits = rest
+                .find(|c: char| !c.is_ascii_digit())
+                .unwrap_or(rest.len());
+            rest[..digits].parse::<u32>().ok()
+        })
+        .and_then(|chunk_line| source_line.checked_add(chunk_line)?.checked_sub(1))
+        .unwrap_or(source_line)
+}
+
+/// Gives a failure the parse returns its file, its prompt name, and its
+/// prose; the Engine reaches it through [`crate::detail::with_prompt_context`]
+/// for a failure it raises about a parsed prompt.
+///
+/// `file` becomes the file of the failure's location. `name`, the prompt's
+/// frontmatter name, is `None` for a failure found before the name is
+/// known; otherwise it becomes the `Name` fact of every failure but an
+/// internal one. The prose of an internal failure is the code's default.
+/// Every other prose names the file, the start line when the failure has
+/// a location, the message, and the default:
+/// `{file}:{line}: {message}. {default}`, or without a location
+/// `{file}: {message}. {default}`.
+pub(crate) fn with_prompt_context(mut error: Error, name: Option<&str>, file: &str) -> Error {
+    let code = error.code;
+    if let Some(name) = name
+        && code != ErrorCode::Internal
+    {
+        error.facts.insert(FactKey::Name, name.into());
     }
+    if let Some(at) = &mut error.at {
+        file.clone_into(&mut at.file);
+    }
+    error.prose = match (code, &error.at) {
+        (ErrorCode::Internal, _) => code.prose().to_owned(),
+        (_, Some(at)) => format!(
+            "{file}:{}: {}. {}",
+            at.start_line,
+            error.message,
+            code.prose()
+        ),
+        (_, None) => format!("{file}: {}. {}", error.message, code.prose()),
+    };
+    error
+}
+
+/// Returns the location of `span` within `body`, offset past the
+/// frontmatter lines, or `None` when either end cannot be located.
+fn span_location(body: &str, span: Range<usize>, frontmatter_lines: u32) -> Option<Location> {
+    let (start_line, start_column) = body_line_column(body, span.start, frontmatter_lines)?;
+    let (end_line, end_column) = body_line_column(body, span.end, frontmatter_lines)?;
+    Location::new(
+        String::new(),
+        start_line,
+        start_column,
+        end_line,
+        end_column,
+    )
 }
 
 /// Returns the 1-based file line and byte column of `byte_offset` within
 /// `body`, offset past the frontmatter lines.
 ///
-/// Both are `None` when the offset is out of bounds, and either is `None`
-/// alone when its own arithmetic overflows - an invariant break that must not
-/// replace the original parse failure.
+/// `None` when the offset is out of bounds or either value's arithmetic
+/// overflows.
 fn body_line_column(
     body: &str,
     byte_offset: usize,
     frontmatter_lines: u32,
-) -> (Option<NonZeroU32>, Option<NonZeroU32>) {
-    let Some(prefix) = body.get(..byte_offset) else {
-        return (None, None);
-    };
+) -> Option<(NonZeroU32, NonZeroU32)> {
+    let prefix = body.get(..byte_offset)?;
     let line = u32::try_from(prefix.matches('\n').count())
         .ok()
         .and_then(|newlines| NonZeroU32::MIN.checked_add(newlines))
-        .and_then(|line| line.checked_add(frontmatter_lines));
+        .and_then(|line| line.checked_add(frontmatter_lines))?;
     let column = u32::try_from(prefix.len() - prefix.rfind('\n').map_or(0, |index| index + 1))
         .ok()
-        .and_then(|offset| NonZeroU32::MIN.checked_add(offset));
-    (line, column)
+        .and_then(|offset| NonZeroU32::MIN.checked_add(offset))?;
+    Some((line, column))
 }
-
-/// A stable, matchable classification of a [`ParseError`].
-///
-/// Adding a new kind is a compatible change, so a `match` on this type
-/// needs a wildcard arm.
-#[non_exhaustive]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum ParseErrorKind {
-    /// The YAML frontmatter block was missing, left open, or invalid.
-    Frontmatter,
-    /// The document structure was invalid, for example a missing or duplicate
-    /// H1 title, or two sibling sections with the same name.
-    Structure,
-    /// A reserved `lua` code fence was left open, or a fence or line broke the
-    /// strict Lua fence rule.
-    ///
-    /// The rule breaks are: a fence's label started with `lua` in any letter
-    /// case without being exactly `lua` (Label), a `lua` fence's opening line
-    /// was not exactly three backticks then `lua` (Opener), its closing line
-    /// was not exactly three backticks (Closer), or a line outside every
-    /// fence looked like a `lua` opening line (Lookalike). Lines inside the
-    /// body of another fenced code block are never inspected.
-    Fence,
-    /// A list section had an empty item.
-    List,
-    /// A Lua region failed to compile because of a syntax error.
-    Lua,
-    /// The parser failed through no fault of the prompt: one of its own
-    /// invariants broke, or the Lua compiler could not start.
-    Internal,
-}
-
-/// The error returned by [`Prompt::parse`](crate::Prompt::parse).
-///
-/// It holds a stable [`kind`](ParseError::kind) and, when known, where the
-/// failure happened. It keeps the originating error, when there is one,
-/// which [`cause`](ParseError::cause) returns.
-#[derive(Debug)]
-pub struct ParseError {
-    inner: Box<Error>,
-}
-
-/// The classified parts of an internal error: the stable kind plus the
-/// location fields the internal error holds.
-///
-/// The location fields are the source span and the 1-based line/column -
-/// surfaced from the retained YAML failure, or computed from the span.
-struct Classification {
-    kind: ParseErrorKind,
-    span: Option<Range<usize>>,
-    line: Option<NonZeroU32>,
-    column: Option<NonZeroU32>,
-}
-
-/// Classifies an internal error into its stable kind and location fields.
-fn classify_parse_error(inner: &Error) -> Classification {
-    let unlocated = |kind| Classification {
-        kind,
-        span: None,
-        line: None,
-        column: None,
-    };
-    match inner {
-        Error::ParseStructured {
-            kind,
-            span,
-            line,
-            column,
-            ..
-        } => Classification {
-            kind: *kind,
-            span: span.clone(),
-            line: *line,
-            column: *column,
-        },
-        Error::ParseFrontmatter { line, column, .. } => Classification {
-            line: *line,
-            column: *column,
-            ..unlocated(ParseErrorKind::Frontmatter)
-        },
-        Error::Lua(lua) => unlocated(match lua {
-            runvil_lua::Error::LuaCompile { .. } => ParseErrorKind::Lua,
-            // Compiling a block fails otherwise only when the compiler VM
-            // cannot start.
-            _ => ParseErrorKind::Internal,
-        }),
-        Error::Internal(_) => unlocated(ParseErrorKind::Internal),
-    }
-}
-
-impl ParseError {
-    /// Returns the stable classification of this failure.
-    #[must_use]
-    pub fn kind(&self) -> ParseErrorKind {
-        classify_parse_error(&self.inner).kind
-    }
-
-    /// Returns the byte span of the offending region, when one is available.
-    ///
-    /// A failure that can locate the offending region, such as a duplicate
-    /// sibling section, has a byte span. Other failures return `None`. The
-    /// offsets are relative to the document body after the frontmatter and a
-    /// leading BOM, with CRLF normalized to LF. To locate the failure in the
-    /// original file, use [`line`](ParseError::line) and
-    /// [`column`](ParseError::column).
-    #[must_use]
-    pub fn span(&self) -> Option<Range<usize>> {
-        classify_parse_error(&self.inner).span
-    }
-
-    /// Returns the prompt's frontmatter name for a `Structure`, `Fence`, or
-    /// `List` failure found past the frontmatter.
-    ///
-    /// Every other failure returns `None`, including every `Frontmatter`
-    /// failure, a refused `uses:` list among them, and every `Lua` and
-    /// `Internal` failure. The caller can use its own label for the source.
-    #[must_use]
-    pub fn name(&self) -> Option<&str> {
-        match &*self.inner {
-            Error::ParseStructured { name, .. } => name.as_deref(),
-            _ => None,
-        }
-    }
-
-    /// Returns the 1-based file line of the failure, when known.
-    ///
-    /// For a frontmatter YAML failure, this is the line the YAML parser
-    /// reported. For a failure with a byte span, it is the line where the
-    /// span starts.
-    #[must_use]
-    pub fn line(&self) -> Option<NonZeroU32> {
-        classify_parse_error(&self.inner).line
-    }
-
-    /// Returns the 1-based column of the failure, when known.
-    ///
-    /// For a frontmatter YAML failure, this is the column the YAML parser
-    /// reported, which counts characters. For a failure with a byte span, it
-    /// is the byte column where the span starts.
-    #[must_use]
-    pub fn column(&self) -> Option<NonZeroU32> {
-        classify_parse_error(&self.inner).column
-    }
-
-    /// Returns the originating error this failure keeps, when it has one.
-    ///
-    /// A frontmatter failure keeps the YAML decode failure, and a Lua compile
-    /// failure keeps the compiler's own error. The failure's message already
-    /// holds the cause's text, so [`std::error::Error::source`] returns
-    /// `None` and a printer that walks the source chain shows the text once.
-    #[must_use]
-    pub fn cause(&self) -> Option<&(dyn std::error::Error + Send + Sync + 'static)> {
-        self.inner.cause()
-    }
-
-    /// Unwraps the internal error; the Engine reaches it through
-    /// [`crate::detail::parse_error_into_inner`].
-    #[must_use]
-    pub(crate) fn into_inner(self) -> Error {
-        *self.inner
-    }
-
-    /// Wraps the internal error in its public form.
-    pub(crate) fn from_inner(inner: Error) -> ParseError {
-        ParseError {
-            inner: Box::new(inner),
-        }
-    }
-}
-
-impl std::fmt::Display for ParseError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.inner)
-    }
-}
-
-impl std::error::Error for ParseError {}
 
 #[cfg(test)]
 #[path = "error-tests.rs"]

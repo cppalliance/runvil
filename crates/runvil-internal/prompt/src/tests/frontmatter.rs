@@ -12,8 +12,8 @@ fn name_and_description_are_sufficient_frontmatter_for_parsing() {
 #[test]
 fn missing_frontmatter_delimiter_errors() {
     assert_eq!(
-        parse_err("# T\n\n## S\n\np\n").kind(),
-        ParseErrorKind::Frontmatter
+        parse_err("# T\n\n## S\n\np\n").code,
+        ErrorCode::FrontmatterInvalid
     );
 }
 
@@ -27,7 +27,7 @@ fn an_indented_delimiter_in_a_block_scalar_does_not_close_the_frontmatter() {
 #[test]
 fn unknown_frontmatter_field_is_rejected() {
     let src = prompt("not_a_real_field: 1", &[]);
-    assert_parse_error(&src, ParseErrorKind::Frontmatter, "not_a_real_field");
+    assert_parse_error(&src, ErrorCode::FrontmatterInvalid, "not_a_real_field");
     // A known-field-only frontmatter still parses.
     parse_ok(&prompt("", &[]));
 }
@@ -49,8 +49,8 @@ fn max_tool_iterations_rejects_zero_negative_and_overflow() {
     for bad in ["0", "-1", "1001", "100000000000"] {
         let error = parse_err(&prompt(&format!("max_tool_iterations: {bad}"), &[]));
         assert_eq!(
-            error.kind(),
-            ParseErrorKind::Frontmatter,
+            error.code,
+            ErrorCode::FrontmatterInvalid,
             "value {bad}: {error}"
         );
     }
@@ -61,14 +61,14 @@ fn max_tool_iterations_reports_the_guides_messages() {
     for raw in ["0", "-1"] {
         assert_parse_error(
             &prompt(&format!("max_tool_iterations: {raw}"), &[]),
-            ParseErrorKind::Frontmatter,
+            ErrorCode::FrontmatterInvalid,
             &format!("max_tool_iterations must be a positive integer (>= 1), got {raw}"),
         );
     }
     for raw in ["1001", "100000000000"] {
         assert_parse_error(
             &prompt(&format!("max_tool_iterations: {raw}"), &[]),
-            ParseErrorKind::Frontmatter,
+            ErrorCode::FrontmatterInvalid,
             &format!("max_tool_iterations must be <= 1000, got {raw}"),
         );
     }

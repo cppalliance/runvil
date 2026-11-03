@@ -10,8 +10,13 @@
 use std::ops::Range;
 
 use pulldown_cmark::{CodeBlockKind, CowStr, Event, Options, Parser, Tag};
+use runvil_types::error::{Error, ErrorCode, FactKey};
 
-use crate::{Error, ParseErrorKind, Result, position};
+use crate::{Result, error, position};
+
+/// The message for a `lua` fence whose opening line breaks the Opener rule,
+/// and for a Lookalike line.
+const OPENER_MESSAGE: &str = "`lua` fence opening line must be exactly ```lua";
 
 /// Uncompiled block produced while scanning section content.
 pub(crate) enum RawBlock<'a> {
@@ -61,7 +66,7 @@ fn extract_exact_fence<'a>(content: &'a str, location: &str) -> Result<(String, 
         let text = text.strip_suffix('\r').unwrap_or(text);
         if closes_three_backtick_fence(text) {
             if text != "```" {
-                return Err(Error::Internal(
+                return Err(error::internal(
                     "parser: fence split met a closing line the validator refuses",
                 ));
             }
@@ -70,8 +75,8 @@ fn extract_exact_fence<'a>(content: &'a str, location: &str) -> Result<(String, 
         }
         offset += line.len();
     }
-    Err(Error::parse(
-        ParseErrorKind::Fence,
+    Err(error::failure(
+        ErrorCode::FenceInvalid,
         format!("{location} fence is not closed"),
     ))
 }
@@ -114,21 +119,9 @@ fn exact_lua_openings(content: &str) -> Vec<usize> {
         .collect()
 }
 
-/// The rule a fence or line breaks, as found by [`first_fence_violation`].
-pub(crate) enum FenceViolation {
-    /// Label: the fence's label starts with `lua` in any letter case without
-    /// being exactly `lua`.
-    Label(String),
-    /// Opener: a fence labeled exactly `lua` whose opening line is not exactly
-    /// three backticks then `lua`, or a Lookalike line.
-    Opener,
-    /// Closer: a fence whose opening line is exact and whose closing line is
-    /// not exactly three backticks.
-    Closer,
-}
-
-/// Returns the line's byte range, without its terminator, and the rule
-/// broken by the first violation in `body` in source order.
+/// Returns the first violation in `body` in source order, as a fence
+/// failure located at its line without the terminator, for a body that
+/// starts in the file after `frontmatter_lines` lines.
 ///
 /// Each fence the Markdown parser reports is checked against the Label rule,
 /// then the Opener rule, then the Closer rule. A fence the parser leaves
@@ -136,10 +129,12 @@ pub(crate) enum FenceViolation {
 /// other line is checked against the Lookalike rule: after leading spaces and
 /// tabs, three or more backticks or tildes, optional spaces or tabs, then
 /// `lua` in any letter case. Such a line sits where the parser reports no
-/// fence, such as in an indented code block or a raw HTML block, and breaks
-/// the Opener rule. Lines inside a fence's extent are never checked against
-/// the Lookalike rule, so a fence nested in another fence's body never fails.
-pub(crate) fn first_fence_violation(body: &str) -> Option<(Range<usize>, FenceViolation)> {
+/// fence, such as in an indented code block or a raw HTML block, and fails
+/// with the Opener rule's message. Lines inside a fence's extent are never
+/// checked against the Lookalike rule, so a fence nested in another fence's
+/// body never fails. The failure's `Reason` fact names the rule: `label`,
+/// `opener`, `closer`, or `lookalike`.
+pub(crate) fn first_fence_violation(body: &str, frontmatter_lines: u32) -> Option<Error> {
     let mut extents = Vec::new();
     let mut fence = None;
     for (extent, label) in fence_openings(body) {
@@ -156,29 +151,46 @@ pub(crate) fn first_fence_violation(body: &str) -> Option<(Range<usize>, FenceVi
         .filter(|start| !extents.iter().any(|extent| extent.contains(start)))
         .map(|start| line_at(body, start))
         .find(|line| is_lua_lookalike(&body[line.clone()]))
-        .map(|line| (line, FenceViolation::Opener));
-    [fence, lookalike]
+        .map(|line| (line, "lookalike", OPENER_MESSAGE.to_owned()));
+    let (line, rule, message) = [fence, lookalike]
         .into_iter()
         .flatten()
-        .min_by_key(|(line, _)| line.start)
+        .min_by_key(|(line, ..)| line.start)?;
+    let mut violation = error::failure_at(
+        ErrorCode::FenceInvalid,
+        message,
+        body,
+        line,
+        frontmatter_lines,
+    );
+    violation.facts.insert(FactKey::Reason, rule.into());
+    Some(violation)
 }
 
 /// Checks one reported fence against the Label, Opener, and Closer rules, in
-/// that order.
+/// that order, and returns the offending line's byte range, without its
+/// terminator, the rule it breaks, and the message.
 fn fence_violation(
     body: &str,
     extent: Range<usize>,
     label: &str,
-) -> Option<(Range<usize>, FenceViolation)> {
+) -> Option<(Range<usize>, &'static str, String)> {
     let opening = line_at(body, extent.start);
     if label != "lua" {
-        return is_lua_like(label).then(|| (opening, FenceViolation::Label(label.to_owned())));
+        return is_lua_like(label).then(|| {
+            let message =
+                format!("unrecognized fence label `{label}`; the only Lua fence label is `lua`");
+            (opening, "label", message)
+        });
     }
     if &body[opening.clone()] != "```lua" {
-        return Some((opening, FenceViolation::Opener));
+        return Some((opening, "opener", OPENER_MESSAGE.to_owned()));
     }
     let closing = closing_line(body, extent)?;
-    (&body[closing.clone()] != "```").then_some((closing, FenceViolation::Closer))
+    (&body[closing.clone()] != "```").then(|| {
+        let message = "`lua` fence closing line must be exactly ```".to_owned();
+        (closing, "closer", message)
+    })
 }
 
 /// Byte range of the line starting at `start`, without its terminator.
@@ -277,8 +289,8 @@ fn pending_prose<'a>(content: &'a str, segment: Range<usize>, rules: &[Range<usi
 /// parser closes the fence on.
 ///
 /// # Errors
-/// Returns a fence-classified parse error when an exact `lua` fence is not
-/// closed, and [`Error::Internal`] when an opening the Markdown parser
+/// Returns a `FenceInvalid` failure when an exact `lua` fence is not
+/// closed, and an `Internal` failure when an opening the Markdown parser
 /// reports falls inside the previous fence's extracted source.
 pub(crate) fn split_section_blocks<'a>(
     content: &'a str,
@@ -302,7 +314,7 @@ pub(crate) fn split_section_blocks<'a>(
             strip_exact_lua_opening(&content[opening..])
         };
         let Some(after_open) = after_open else {
-            return Err(Error::Internal(
+            return Err(error::internal(
                 "parser: section fence split disagrees with the Markdown parser",
             ));
         };

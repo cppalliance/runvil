@@ -158,7 +158,7 @@ fn a_frontmatter_failure_message_ends_with_its_line_and_column() {
     let parse = Prompt::parse(source, "prompt", "test")
         .0
         .expect_err("a Pack id with spaces must be rejected");
-    let error = Error::from(parse);
+    let error = Error::Parse(parse);
     assert_eq!(error.kind(), crate::RunErrorKind::Parse);
     assert_eq!(error.message(), format!("{error} (line 5, column 5)"));
 }
@@ -172,10 +172,59 @@ fn a_structured_failure_message_ends_with_the_prompt_name_and_position() {
     let parse = Prompt::parse(source, "prompt", "test")
         .0
         .expect_err("duplicate sibling sections must be rejected");
-    let error = Error::from(parse);
+    let error = Error::Parse(parse);
     assert_eq!(
         error.message(),
         format!("{error} (prompt dup, line 12, column 1)")
+    );
+}
+
+#[test]
+fn a_parse_failure_run_raises_names_the_prompt_and_its_file() {
+    // A parse failure `run` raises about a parsed prompt gets the prompt's
+    // name as its `Name` fact and the prompt's file in its prose, and its
+    // message ends with the name, then the start line and column when it
+    // has a location.
+    use std::num::NonZeroU32;
+
+    use runvil_types::error::{ErrorCode, FactKey, Location};
+
+    let code = ErrorCode::StructureInvalid;
+    let message = "not a runvil prompt: no runvil version";
+    let stamped = crate::prompt::detail::with_prompt_context(
+        crate::prompt::detail::parse_error(code, message),
+        "greeter",
+        "agents/greeter.md",
+    );
+    assert_eq!(stamped.code, code);
+    assert_eq!(stamped.message, message);
+    assert_eq!(stamped.at, None);
+    assert_eq!(
+        stamped.facts.get(&FactKey::Name),
+        Some(&serde_json::Value::from("greeter"))
+    );
+    assert_eq!(
+        stamped.prose,
+        format!("agents/greeter.md: {message}. {}", code.prose())
+    );
+
+    let error = Error::parse(code, message).with_prompt_context("greeter", "agents/greeter.md");
+    assert_eq!(error.kind(), crate::RunErrorKind::Parse);
+    assert!(error.originating_error().is_none());
+    assert_eq!(error.message(), format!("{message} (prompt greeter)"));
+
+    let mut located = stamped;
+    located.at = Location::new(
+        "agents/greeter.md",
+        NonZeroU32::new(3).expect("3 is non-zero"),
+        NonZeroU32::new(7).expect("7 is non-zero"),
+        NonZeroU32::new(4).expect("4 is non-zero"),
+        NonZeroU32::MIN,
+    );
+    assert_eq!(
+        Error::Parse(located).message(),
+        format!("{message} (prompt greeter, line 3, column 7)"),
+        "the location names the start line and column, not the end"
     );
 }
 

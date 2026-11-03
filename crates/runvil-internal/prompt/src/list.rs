@@ -1,6 +1,8 @@
 //! Detects list-only sections and extracts their bullet items.
 
-use crate::{Error, ParseErrorKind, Result};
+use runvil_types::error::ErrorCode;
+
+use crate::{Result, error};
 
 /// Returns the items of a list section's prose, or `None` when the prose is
 /// not a list. Prose is a list when every nonblank line is a bullet marker
@@ -8,8 +10,8 @@ use crate::{Error, ParseErrorKind, Result};
 /// prose.
 ///
 /// # Errors
-/// Returns a list-classified parse error when the prose is a list and a
-/// marker has no content.
+/// Returns a `ListEmptyItem` failure when the prose is a list and a marker
+/// has no content.
 pub(crate) fn bullet_items<'a>(prose: &'a str, section: &str) -> Result<Option<Vec<&'a str>>> {
     let mut items = Vec::new();
     let mut has_empty_marker = false;
@@ -25,8 +27,8 @@ pub(crate) fn bullet_items<'a>(prose: &'a str, section: &str) -> Result<Option<V
         }
     }
     if has_empty_marker {
-        return Err(Error::parse(
-            ParseErrorKind::List,
+        return Err(error::failure(
+            ErrorCode::ListEmptyItem,
             format!("empty bullet item in list section `{section}`"),
         ));
     }

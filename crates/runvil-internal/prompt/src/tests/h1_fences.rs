@@ -7,7 +7,7 @@ const LABEL_NEAR_MISSES: [&str; 4] = ["lua extra", "Lua", "LUA", "luau"];
 #[track_caller]
 fn assert_unrecognized_label(src: &str, label: &str) {
     let error = parse_err(src);
-    assert_eq!(error.kind(), ParseErrorKind::Fence, "{error}");
+    assert_eq!(error.code, ErrorCode::FenceInvalid, "{error}");
     assert_eq!(
         error.to_string(),
         format!("unrecognized fence label `{label}`; the only Lua fence label is `lua`")
@@ -95,7 +95,7 @@ fn h1_label_near_misses_fail_whatever_the_opener_shape() {
 #[track_caller]
 fn assert_opener_violation(src: &str) {
     let error = parse_err(src);
-    assert_eq!(error.kind(), ParseErrorKind::Fence, "{error}");
+    assert_eq!(error.code, ErrorCode::FenceInvalid, "{error}");
     assert_eq!(error.to_string(), OPENER_MESSAGE, "{src:?}");
 }
 
@@ -143,7 +143,7 @@ fn unrecognized_lua_label_fails_before_any_lua_compiles() {
     );
     let recorder = Recorder(events);
     let error = error.expect_err("the label near-miss must fail");
-    assert_eq!(error.kind(), ParseErrorKind::Fence, "{error}");
+    assert_eq!(error.code, ErrorCode::FenceInvalid, "{error}");
     assert!(!error.to_string().contains(source), "{error}");
     let observations = recorder.observations();
     assert_eq!(
@@ -167,7 +167,7 @@ fn non_exact_lua_opener_fails_before_any_lua_compiles() {
     );
     let recorder = Recorder(events);
     let error = error.expect_err("the non-exact opener must fail");
-    assert_eq!(error.kind(), ParseErrorKind::Fence, "{error}");
+    assert_eq!(error.code, ErrorCode::FenceInvalid, "{error}");
     assert!(!error.to_string().contains(source), "{error}");
     assert_eq!(
         recorder.observations(),

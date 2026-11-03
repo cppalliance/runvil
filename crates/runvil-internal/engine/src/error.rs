@@ -2,11 +2,10 @@
 //!
 //! [`Error`] is a `pub(crate)` internal error type, never part of the public API.
 //! A run it ends reports its kind and message in
-//! [`RunOutcome::Failed`](crate::RunOutcome::Failed), and
-//! [`ParseError`](crate::prompt::ParseError), and the
-//! [`runvil_types::error::Error`] a model round or a tool fails with, each
-//! reach that outcome through this type, which classifies them and keeps
-//! their causes.
+//! [`RunOutcome::Failed`](crate::RunOutcome::Failed), and the
+//! [`runvil_types::error::Error`] a parse, a model round, or a tool fails
+//! with reaches that outcome through this type, which classifies it and
+//! keeps its cause.
 //! The `From` bridges that let internal `?` reach this type live in `convert`.
 //!
 //! A variant that keeps an originating error renders that error's text in
@@ -18,8 +17,7 @@
 //! of their own: `Parse`, `Completion`, and `Substitution` hand their whole
 //! `Display` and `source` to the error they hold. That is the exception to
 //! the field rule above, and it is why `Error::originating_error` answers
-//! `None` for `Completion` and `Substitution` and the loader's own cause for
-//! `Parse`.
+//! `None` for all three.
 
 use runvil_types::ids::TaskId;
 
@@ -112,15 +110,14 @@ impl std::fmt::Display for DepthVia {
 /// client's error type leaks through its `source()`.
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum Error {
-    /// The prompt failed to parse: invalid frontmatter YAML or a
-    /// structurally-classified failure.
+    /// The prompt failed to parse, or `run` refused a parsed prompt that is
+    /// not a runvil prompt.
     ///
-    /// Holds the loader's [`ParseError`](crate::prompt::ParseError) whole, so
-    /// its stable kind, its location fields, and the YAML decode failure a
-    /// frontmatter failure keeps as its cause survive until the run's
+    /// Holds the parse failure's [`runvil_types::error::Error`] whole, so
+    /// its code, its location, and its `Name` fact survive until the run's
     /// failure message is built from them.
     #[error(transparent)]
-    Parse(crate::prompt::ParseError),
+    Parse(runvil_types::error::Error),
 
     /// A model round or a catalog fetch failed, as the broker that performed
     /// it reported.
@@ -462,7 +459,6 @@ impl Error {
         &self,
     ) -> Option<&(dyn std::error::Error + Send + Sync + 'static)> {
         match self {
-            Error::Parse(error) => error.cause(),
             Error::BindSchema { cause, .. }
             | Error::LuaCompile { cause, .. }
             | Error::Tool { cause, .. } => Some(cause.as_ref()),
@@ -470,7 +466,8 @@ impl Error {
             | Error::RequirementsUnmet { cause, .. }
             | Error::Internal { cause, .. } => cause.as_deref(),
             Error::Store { cause, .. } => Some(cause),
-            Error::Completion(_)
+            Error::Parse(_)
+            | Error::Completion(_)
             | Error::Interrupted
             | Error::ToolSets { .. }
             | Error::Substitution(_)

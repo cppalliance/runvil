@@ -3,11 +3,12 @@
 
 use std::num::NonZeroU32;
 
+use runvil_types::error::{ErrorCode, FactKey};
 use runvil_types::models::ModelRole;
 
 use super::{ArgType, ArgsDeclIter};
-use crate::ParseErrorKind;
 use crate::test_support::{assert_parse_error, parse_err, parse_ok, prompt};
+use crate::tests::location;
 
 #[path = "tests-packs.rs"]
 mod packs;
@@ -91,7 +92,7 @@ fn an_unknown_key_inside_a_contract_entry_is_rejected() {
         "models: { strong: { tier: 1 } }",
     ] {
         let error = parse_err(&prompt(front, &[]));
-        assert_eq!(error.kind(), ParseErrorKind::Frontmatter, "{error}");
+        assert_eq!(error.code, ErrorCode::FrontmatterInvalid, "{error}");
     }
 }
 
@@ -132,7 +133,7 @@ fn an_arg_default_must_match_the_declared_type() {
         let front = format!("args: {{ flag: {{ type: {kind}, default: {default} }} }}");
         assert_parse_error(
             &prompt(&front, &[]),
-            ParseErrorKind::Frontmatter,
+            ErrorCode::FrontmatterInvalid,
             &format!(
                 "the default has type `{actual}`, which does not match the declared type `{kind}`"
             ),
@@ -156,7 +157,7 @@ fn an_arg_default_must_match_the_declared_type() {
 #[test]
 fn an_arg_name_must_match_the_alias_grammar() {
     let error = parse_err(&prompt("args: { '1bad': { type: string } }", &[]));
-    assert_eq!(error.kind(), ParseErrorKind::Frontmatter);
+    assert_eq!(error.code, ErrorCode::FrontmatterInvalid);
 }
 
 #[test]
@@ -192,7 +193,7 @@ fn an_absent_args_key_marks_the_default_declaration() {
 #[test]
 fn an_unknown_arg_type_is_rejected() {
     let error = parse_err(&prompt("args: { flag: { type: text } }", &[]));
-    assert_eq!(error.kind(), ParseErrorKind::Frontmatter);
+    assert_eq!(error.code, ErrorCode::FrontmatterInvalid);
 }
 
 #[test]
@@ -253,7 +254,7 @@ fn args_iterate_in_name_order_through_a_named_iterator() {
 fn an_unknown_role_name_is_a_parse_error_that_lists_the_five_roles() {
     assert_parse_error(
         &prompt("models: { reviewer: {} }", &[]),
-        ParseErrorKind::Frontmatter,
+        ErrorCode::FrontmatterInvalid,
         "expected one of `default`, `strong`, `small`, `fast`, `creative`",
     );
 }
@@ -262,7 +263,7 @@ fn an_unknown_role_name_is_a_parse_error_that_lists_the_five_roles() {
 fn an_unknown_field_in_a_role_is_a_parse_error_that_names_the_two_fields() {
     assert_parse_error(
         &prompt("models: { strong: { tier: 1 } }", &[]),
-        ParseErrorKind::Frontmatter,
+        ErrorCode::FrontmatterInvalid,
         "unknown field `tier`, expected `min_context` or `thinking`",
     );
 }
@@ -273,13 +274,13 @@ fn a_duplicate_role_key_is_rejected() {
         "models: { strong: { min_context: 1 }, strong: { thinking: true } }",
         &[],
     ));
-    assert_eq!(error.kind(), ParseErrorKind::Frontmatter, "{error}");
+    assert_eq!(error.code, ErrorCode::FrontmatterInvalid, "{error}");
 }
 
 #[test]
 fn a_zero_min_context_is_rejected() {
     let error = parse_err(&prompt("models: { strong: { min_context: 0 } }", &[]));
-    assert_eq!(error.kind(), ParseErrorKind::Frontmatter);
+    assert_eq!(error.code, ErrorCode::FrontmatterInvalid);
 }
 
 #[test]
@@ -297,19 +298,14 @@ fn contract_errors_report_their_frontmatter_line_and_column() {
         "\n# T\n\n## S\n\np\n",
     );
     let error = parse_err(src);
-    assert_eq!(error.kind(), ParseErrorKind::Frontmatter);
+    assert_eq!(error.code, ErrorCode::FrontmatterInvalid);
     assert_eq!(
-        error.line(),
-        NonZeroU32::new(5),
-        "the offending scalar's line: {error}"
+        location(&error),
+        Some(("prompt", 5, 5, 5, 5)),
+        "the offending scalar's line and column: {error}"
     );
     assert_eq!(
-        error.column(),
-        NonZeroU32::new(5),
-        "the offending scalar's column: {error}"
-    );
-    assert_eq!(
-        error.name(),
+        error.facts.get(&FactKey::Name),
         None,
         "a frontmatter failure predates the prompt's name"
     );

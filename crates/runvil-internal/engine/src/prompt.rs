@@ -9,16 +9,12 @@
 //! crate's own algorithms, called where the rule each one implements is
 //! documented.
 //!
-//! Three groups still name `runvil_prompt` itself:
+//! Two groups still name `runvil_prompt` itself:
 //!
-//! - `error::convert`, the error bridge, which maps the loader's error type
-//!   variant for variant.
 //! - The test suites, which import the prompt fixtures under
 //!   `runvil_prompt::test_support` and call a `detail` helper directly.
 //! - The crate's bench, `benches/models_loop.rs`, a separate crate that
 //!   cannot see a `pub(crate)` surface.
 
 pub(crate) use runvil_prompt::detail;
-pub(crate) use runvil_prompt::{
-    Block, BodyText, ParseError, ParseErrorKind, Prompt, RoleRequirements, Section,
-};
+pub(crate) use runvil_prompt::{Block, BodyText, Prompt, RoleRequirements, Section};
