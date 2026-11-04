@@ -10,12 +10,9 @@ pub struct NonEmpty<T>(Vec<T>);
 
 impl<T> NonEmpty<T> {
     /// The sequence of `first` followed by `rest`.
-    ///
-    /// The way a consumer outside this crate builds one, so a non-empty
-    /// sequence needs no fallible step where the first element is already
-    /// in hand.
+    #[cfg(test)]
     #[must_use]
-    pub fn new(first: T, rest: Vec<T>) -> Self {
+    pub(crate) fn new(first: T, rest: Vec<T>) -> Self {
         let mut items = Vec::with_capacity(rest.len() + 1);
         items.push(first);
         items.extend(rest);

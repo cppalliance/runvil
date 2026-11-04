@@ -8,7 +8,7 @@ use runvil_model_client::client::Role;
 use super::non_empty::NonEmpty;
 
 /// The most bytes a record's `meta` may take as compact JSON.
-pub(crate) const MAX_RECORD_META_BYTES: usize = 8 * 1024;
+const MAX_RECORD_META_BYTES: usize = 8 * 1024;
 
 /// One content part of a multimodal message: visible text or an image URL.
 #[derive(Debug, Clone, PartialEq, Eq)]

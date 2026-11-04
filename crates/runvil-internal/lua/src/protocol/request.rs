@@ -42,7 +42,8 @@ pub enum Request {
     Call {
         /// The heading string.
         target: String,
-        /// The optional input override; `None` runs under the run's own args.
+        /// The optional input override; `None` runs under the caller's own
+        /// args.
         input: Option<String>,
         /// The caller's `var` snapshot, seeded into the chain and discarded
         /// when it ends.
@@ -283,7 +284,8 @@ pub enum VfsOp {
         /// The replacement text.
         new: String,
     },
-    /// `store.delete(path)`: deletes the file at `path`. Deleting a missing
+    /// `store.delete(path)`: removes the file or empty directory at `path`;
+    /// a directory that still holds entries is refused. Deleting a missing
     /// path succeeds.
     Delete {
         /// The author-supplied logical path.
