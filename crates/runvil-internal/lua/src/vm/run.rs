@@ -128,7 +128,8 @@ impl SectionVm {
     /// answer owned is substituted back, so the Rust caller receives the
     /// structured error rather than a string. A block that caught the
     /// table and failed with anything else, its message text included,
-    /// keeps its own error.
+    /// keeps its own error. A block that was cancelled or spent an Engine
+    /// quota keeps that failure whatever it raised.
     ///
     /// # Errors
     /// Same contract as [`start_block_coro`](Self::start_block_coro), plus

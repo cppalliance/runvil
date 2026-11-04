@@ -10,9 +10,9 @@ use crate::tools::adhoc_handler;
 
 use super::answer::{Answer, TaskDelivery, TaskPhase, TaskStatus, ToolCallOutcome, VfsOutcome};
 
-/// An answer's typed error, retained while the shim raises its rendered
-/// error table, beside that table: the block's raise of this very table,
-/// and no other value, is the retained error's.
+/// An answer's typed error and the error table rendered from it.
+/// [`SectionVm::resume_block_coro_answer`](crate::SectionVm::resume_block_coro_answer)
+/// states when the block's raise of that table reports the error.
 #[derive(Debug)]
 pub(crate) struct Retained {
     /// The typed error the answer owned.
@@ -98,21 +98,14 @@ fn delivery_values(
     Ok((vec![id, Value::Boolean(ok), result], retained))
 }
 
-/// Renders one answered request's `(ok, result)` resume values for the
-/// shim.
+/// Renders one answered request's resume values for the shim, with the
+/// typed error to retain when they hold one.
 ///
 /// On success the envelope is `(true, value...)`. On failure it is
-/// `(false, table)`, where `table` is the error's structured value
-/// (`kind`, `code`, `message`, and the kind's fields, as
-/// [`error_table`] renders them, with `tostring` returning the message) -
-/// the shim raises it
-/// with `error(result, 0)`, so a printing author sees the error's prose
-/// after the prompt line it was placed on, the call line of the yield it
-/// answers unless it had a location, and a branching one reads `kind` -
-/// and the typed error, so placed, is
-/// retained beside that table, which identifies its raise. A successful
-/// `join_any` whose member failed retains the member's error the same
-/// way, since a shim may re-raise it at once.
+/// `(false, table)`: the error, placed by [`authored`], as [`error_table`]
+/// renders it, which the shim raises with `error(result, 0)`. A successful
+/// `join_any` whose member failed retains the member's error too, since a
+/// shim may re-raise it at once.
 ///
 /// # Errors
 /// Returns an `mlua` error if a Lua string, userdata, or table cannot be

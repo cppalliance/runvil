@@ -238,20 +238,17 @@ pub struct TaskStatus {
     pub note: Option<String>,
 }
 
-/// One dispatched request's successful outcome, one variant per request.
+/// One dispatched request's successful outcome. Each request kind has its
+/// own variant except
+/// [`Request::AdhocToolDone`](super::Request::AdhocToolDone), which the
+/// driver answers with [`Answer::ToolCallResult`] for the `tools.call` it
+/// closes.
 ///
 /// The driver answers a request with a `Result` over it, rendered to the
 /// `(ok, result)` envelope at resume time, and a failure is the `Err` side
-/// whatever the request. On failure the envelope holds the error's
-/// structured table for the shim to raise, and the driver
-/// ([`SectionVm::resume_block_coro_answer`](crate::SectionVm::resume_block_coro_answer))
-/// retains the typed error beside that very table. When the block fails
-/// by raising that table, the shim's own raise or the block's re-raise of
-/// the value it caught, the typed error is substituted back; any other
-/// failure, one carrying the same message included, stays the block's
-/// own. This holds uniformly for leaf and structural requests: the
-/// `Result` owns the typed error until the envelope is rendered, so a
-/// `call` or `join_any` failure round-trips with its structure intact.
+/// whatever the request;
+/// [`SectionVm::resume_block_coro_answer`](crate::SectionVm::resume_block_coro_answer)
+/// states how its typed error survives the envelope.
 ///
 /// The error is the universal [`Error`], and
 /// only a [`TaskDelivery`] holds one: a `join_any` member's failure is part
