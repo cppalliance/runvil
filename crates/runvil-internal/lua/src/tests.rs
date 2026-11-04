@@ -29,7 +29,8 @@ use crate::test_vm::{
     BuiltVm, LuaOutcome, TEST_SECTION, TestVm, fresh_access, run_chunk, test_nonce,
 };
 use crate::var::{guarded_var, var_snapshot_table, var_to_json};
-use crate::vm::{DEFAULT_LUA_LOG_EVENTS, DEFAULT_LUA_MEMORY_BYTES};
+use crate::vm::DEFAULT_LUA_LOG_EVENTS;
+use crate::walk_budget::DEFAULT_LUA_MEMORY_BYTES;
 
 #[path = "tests-recording.rs"]
 pub(crate) mod recording;

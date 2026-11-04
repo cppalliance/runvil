@@ -7,11 +7,11 @@ use runvil_types::error::{ErrorCode, place};
 
 use super::{Jump, SectionVm};
 use crate::coro::{StashedFailure, block_guard, take_failure};
-use crate::error::{self, Error, Result, interrupted, lua_runtime, prompt_file, set_call_line};
+use crate::error::{self, Error, Result, interrupted, prompt_file, set_call_line};
 use crate::error_value::{ErrorKind, error_kind};
 use crate::program::LuaProgram;
 use crate::protocol::{Answer, Request, Retained, YieldParse, render_envelope};
-use crate::section::LuaBlockResult;
+use crate::section::{LuaBlockResult, scalar_return};
 
 impl SectionVm {
     /// Takes any recorded jump: its target and the prompt line of the
@@ -282,35 +282,6 @@ fn placed_like(error: Error, mapped: &Error) -> Error {
             place(error, &at.file, Some(at.start_line))
         }
         _ => error,
-    }
-}
-
-/// Renders a returned Lua scalar as the section's result string. Tables and other
-/// non-scalar returns are errors.
-fn value_to_string(value: &Value) -> Result<String> {
-    match value {
-        Value::String(s) => Ok(s.to_string_lossy()),
-        Value::Integer(i) => Ok(i.to_string()),
-        Value::Number(n) => Ok(n.to_string()),
-        Value::Boolean(b) => Ok(b.to_string()),
-        other => Err(lua_runtime(format!(
-            "cannot return a {} as a result",
-            other.type_name()
-        ))),
-    }
-}
-
-/// Converts only the first returned Lua value into an optional scalar string.
-///
-/// Later values are ignored. A missing or nil first value returns `None`.
-///
-/// # Errors
-/// Returns a `LuaRuntime` failure when the first value is not a supported
-/// scalar.
-pub(crate) fn scalar_return(returned: MultiValue) -> Result<Option<String>> {
-    match returned.into_iter().next() {
-        None | Some(Value::Nil) => Ok(None),
-        Some(value) => value_to_string(&value).map(Some),
     }
 }
 

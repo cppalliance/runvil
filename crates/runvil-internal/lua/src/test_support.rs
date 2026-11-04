@@ -20,8 +20,8 @@ use crate::error::{self, Error, Result, UNNAMED_FILE};
 use crate::program::LuaProgram;
 use crate::protocol::{Answer, render_envelope};
 use crate::scope::Offers;
-use crate::section::LuaBlockResult;
-use crate::vm::{InjectFailure, SectionVm, Uninjected, scalar_return};
+use crate::section::{LuaBlockResult, scalar_return};
+use crate::vm::{InjectFailure, SectionVm, Uninjected};
 
 /// A per-thread tally of live section VMs.
 ///

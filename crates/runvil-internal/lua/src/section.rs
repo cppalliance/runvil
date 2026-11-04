@@ -4,7 +4,9 @@
 
 use std::num::NonZeroU32;
 
-use mlua::Value;
+use mlua::{MultiValue, Value};
+
+use crate::error::{Result, lua_runtime};
 
 /// Outcome of a Lua block that may invoke `jump`.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -15,6 +17,35 @@ pub enum LuaBlockResult {
     /// this prompt line, which is `None` when the call found no author
     /// frame running.
     Jump(String, Option<NonZeroU32>),
+}
+
+/// Renders a returned Lua scalar as the section's result string. Tables and other
+/// non-scalar returns are errors.
+fn value_to_string(value: &Value) -> Result<String> {
+    match value {
+        Value::String(s) => Ok(s.to_string_lossy()),
+        Value::Integer(i) => Ok(i.to_string()),
+        Value::Number(n) => Ok(n.to_string()),
+        Value::Boolean(b) => Ok(b.to_string()),
+        other => Err(lua_runtime(format!(
+            "cannot return a {} as a result",
+            other.type_name()
+        ))),
+    }
+}
+
+/// Converts only the first returned Lua value into an optional scalar string.
+///
+/// Later values are ignored. A missing or nil first value returns `None`.
+///
+/// # Errors
+/// Returns a `LuaRuntime` failure when the first value is not a supported
+/// scalar.
+pub(crate) fn scalar_return(returned: MultiValue) -> Result<Option<String>> {
+    match returned.into_iter().next() {
+        None | Some(Value::Nil) => Ok(None),
+        Some(value) => value_to_string(&value).map(Some),
+    }
 }
 
 /// Resolves a `call` / `jump` target from a heading string.

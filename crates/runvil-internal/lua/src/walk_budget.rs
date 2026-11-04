@@ -10,8 +10,6 @@ use std::ffi::c_void;
 
 use mlua::{Lua, Value};
 
-use crate::vm::DEFAULT_LUA_MEMORY_BYTES;
-
 /// The smallest cost of one value in the Lua heap, rounded down: an array
 /// slot takes at least about 9 bytes, so an unshared value that fits the
 /// heap has at most `ceiling / 9` values, and `ceiling / 8` leaves room
@@ -38,6 +36,10 @@ pub(crate) struct TooLarge;
 /// The VM's Lua heap limit, kept as Lua app data because mlua has no getter
 /// for the memory limit.
 pub(crate) struct HeapCeiling(pub usize);
+
+/// The Lua heap ceiling a VM holds from construction until
+/// [`apply_lua_limits`](crate::SectionVm::apply_lua_limits) sets the run's.
+pub(crate) const DEFAULT_LUA_MEMORY_BYTES: usize = 64 * 1024 * 1024;
 
 /// What one walk has left to spend: values visited and bytes of text read.
 pub(crate) struct WalkBudget {

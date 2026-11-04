@@ -10,7 +10,7 @@ use mlua::Value;
 use runvil_types::emitter::Emitter;
 use serde_json::Value as Json;
 
-use super::{SYS_LIVE_POISONED, SectionVm, pack_sequence};
+use super::{SectionVm, pack_sequence};
 use crate::coro::install_shims;
 use crate::engine_globals::{install_log, install_store_table};
 #[cfg(test)]
@@ -18,7 +18,7 @@ use crate::error::Error;
 use crate::error::{self, Result};
 use crate::prose::ProseState;
 use crate::section::{Library, LibraryKey, SectionText, resolve_section_target};
-use crate::sys::seal_sys;
+use crate::sys::{SYS_LIVE_POISONED, seal_sys};
 #[cfg(test)]
 use crate::var::var_to_json;
 

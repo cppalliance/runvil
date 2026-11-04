@@ -6,6 +6,9 @@ use serde_json::Value as Json;
 use crate::error::{self, Result};
 use crate::proxy::{key_text, read_only_proxy};
 
+/// The failure of a poisoned live `sys` slot.
+pub(crate) const SYS_LIVE_POISONED: &str = "sys live slot was poisoned";
+
 /// Builds a sealed Lua `sys` table from runtime metadata.
 ///
 /// A [`read_only_proxy`] over the JSON object: a read of an absent field

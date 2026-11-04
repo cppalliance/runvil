@@ -41,22 +41,16 @@ use crate::messages::MessageList;
 use crate::models::RawModelIds;
 use crate::program::LuaProgram;
 use crate::scope::Offers;
-use crate::walk_budget::HeapCeiling;
+use crate::walk_budget::{DEFAULT_LUA_MEMORY_BYTES, HeapCeiling};
 
 pub use adhoc::AdhocTools;
 pub use inject::InjectFailure;
 pub use run::CoroStep;
-pub(crate) use run::scalar_return;
 pub use state::{current_catalog_packs, current_dynamic_set, current_static_set};
 
-/// Default per-VM Lua heap ceiling, matching the executor's `RunLimits`.
-pub(crate) const DEFAULT_LUA_MEMORY_BYTES: usize = 64 * 1024 * 1024;
-
-/// Default per-VM `log()` event budget, matching the executor's `RunLimits`.
+/// The `log()` event budget a VM holds from construction until
+/// [`apply_lua_limits`](SectionVm::apply_lua_limits) sets the run's.
 pub(crate) const DEFAULT_LUA_LOG_EVENTS: u32 = 1024;
-
-/// The failure of a poisoned live `sys` slot.
-pub(crate) const SYS_LIVE_POISONED: &str = "sys live slot was poisoned";
 
 /// Returns the cumulative `log()` byte ceiling derived from the event budget.
 ///
@@ -201,8 +195,8 @@ impl SectionVm<Uninjected> {
         #[cfg(any(test, feature = "test-support"))]
         crate::test_support::count_live_vm(&lua);
         // Bound the VM heap by default; `apply_lua_limits` may tighten or relax
-        // it to the caller's `RunLimits`. A default keeps every VM
-        // bounded even when the run installs no explicit limits.
+        // it to the caller's `RunLimits`. The default covers construction
+        // and any VM that never applies limits.
         lua.set_memory_limit(DEFAULT_LUA_MEMORY_BYTES)
             .map_err(error::lua)?;
         lua.set_app_data(HeapCeiling(DEFAULT_LUA_MEMORY_BYTES));

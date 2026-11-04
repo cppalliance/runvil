@@ -4,8 +4,8 @@
 use mlua::{Lua, LuaSerdeExt, MultiValue, Value};
 
 use crate::protocol::{AdhocToolOutcome, ModelCall, Request, ToolCallRecord};
+use crate::section::scalar_return;
 use crate::tools::{model_tool_name, tool_id};
-use crate::vm::scalar_return;
 
 use super::{FieldFailure, call_error, shim_optional_string, shim_optional_u32};
 

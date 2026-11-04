@@ -19,8 +19,8 @@ use runvil_vfs::{Access, Origin, VfsRef};
 use serde_json::{Value as Json, json};
 
 use crate::error::{self, Result};
+use crate::section::scalar_return;
 use crate::tests::recording::null_emitter;
-use crate::vm::scalar_return;
 use crate::{Argv, OfferedTool, RosterEntry, SectionText, SectionVm, ToolSet};
 
 /// The one guard-nonce seed of every test VM.
