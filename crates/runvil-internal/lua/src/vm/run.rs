@@ -68,7 +68,7 @@ impl SectionVm {
     ///
     /// # Errors
     /// Returns an `Internal` failure if the jump slot is poisoned, or a
-    /// `LuaRuntime` failure if the program cannot load, the shim prelude
+    /// `LuaRuntime` failure if the program cannot load, the shim install
     /// never ran on this VM, or the thread cannot be created or hooked; a
     /// block failure returns the mapped runtime error.
     pub fn start_block_coro(&self, program: &LuaProgram) -> Result<CoroStep> {

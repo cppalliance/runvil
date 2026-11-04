@@ -13,7 +13,7 @@ const HOOK_INTERVAL: u32 = 10_000;
 
 /// Removes code-loading, direct output, and reflection globals the base library
 /// provides. The `io`, `os`, `package`, and `debug` libraries are never
-/// loaded; the coroutine library loads only while the shim prelude installs,
+/// loaded; the coroutine library loads only while the shim chunk installs,
 /// and its global is stripped again.
 ///
 /// First installs the `_G` guard with its `setmetatable` and

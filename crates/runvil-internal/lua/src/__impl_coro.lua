@@ -1,4 +1,4 @@
--- Coroutine-protocol shim prelude for a section VM.
+-- Coroutine-protocol shim chunk for a section VM.
 --
 -- The Engine installs this after the Engine globals exist and before the
 -- Pack preludes. The chunk arguments are privileged captures, never
@@ -337,7 +337,7 @@ return {
   call = call_section,
   -- The failure helpers, handed to the `tasks` and `fanout` chunks
   -- (`__impl_tasks.lua`, `__impl_fanout.lua`) so their shims raise the one
-  -- error shape this prelude defines.
+  -- error shape this chunk defines.
   helpers = { raise = raise, fail = fail, engine_type = engine_type },
   loop = models_loop,
   compact = models_compact,

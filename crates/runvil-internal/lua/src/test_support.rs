@@ -83,13 +83,13 @@ pub fn section_vm_peak() -> usize {
 }
 
 /// Installs the model-issued `tool_call` form as `tools.call_as_model` on a
-/// VM whose shim prelude already ran, so a fixture section can yield a
+/// VM whose shim install already ran, so a fixture section can yield a
 /// `tool_call` with a `call_id` straight at the driver's dispatch arm. In
 /// production `tools.call_as_model` never exists in any VM - not stubbed,
 /// simply absent.
 ///
 /// # Errors
-/// Returns a `LuaRuntime` failure if the shim prelude was never installed
+/// Returns a `LuaRuntime` failure if the shim chunk was never installed
 /// on this VM, the `tools` table is absent, or the install fails.
 pub fn install_model_tool_call_shim(lua: &Lua) -> Result<()> {
     let model_tool_call: Function = lua

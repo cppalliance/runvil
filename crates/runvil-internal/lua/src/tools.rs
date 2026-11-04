@@ -10,7 +10,7 @@
 //! `get` reads one tool object by id, `packs` reads the Pack objects,
 //! `offer` and `offer_dynamic` remember tools and Packs for the section's
 //! Static Set and Dynamic Set, `call` dispatches a tool by id or object
-//! (installed by the coroutine shim prelude, since dispatch suspends), and
+//! (installed by the coroutine shim chunk, since dispatch suspends), and
 //! `stats`, which the `stats` child installs, is the read-only view of the
 //! section's call counts: a total, and counts per Pack and per tool by id.
 //! Offering a tool the run does not hold is a hard error, and so is every

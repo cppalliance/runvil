@@ -28,14 +28,13 @@ use crate::program::LuaProgram;
 use crate::prose::ProseState;
 use crate::section::{Library, LibraryKey};
 
-/// The loader chunk's name, `@`-prefixed as the shim chunks' names are.
+/// The loader chunk's name.
 const REQUIRE_CHUNK_NAME: &str = "@crates/runvil-internal/lua/src/__impl_require.lua";
 
-/// The loader source, embedded verbatim so chunk line 1 is file line 1.
+/// The loader source.
 const REQUIRE_SOURCE: &str = include_str!("__impl_require.lua");
 
-/// The loader program, compiled once and loaded per VM, under the shim
-/// programs' failure contract.
+/// The loader program.
 static REQUIRE_PROGRAM: LazyLock<Result<LuaProgram>> =
     LazyLock::new(|| LuaProgram::compile_internal(REQUIRE_SOURCE, REQUIRE_CHUNK_NAME));
 

@@ -42,19 +42,17 @@ use mlua::{AnyUserData, Function, Lua, Table, Value};
 use crate::error::{self, Error, Result};
 use crate::program::LuaProgram;
 
-/// The guard chunk's name, `@`-prefixed so PUC renders it verbatim as a
-/// file path, as the shim chunks' names are.
+/// The guard chunk's name.
 const GLOBALS_CHUNK_NAME: &str = "@crates/runvil-internal/lua/src/__impl_globals.lua";
 
-/// The guard source, embedded verbatim so chunk line 1 is file line 1.
+/// The guard source.
 const GLOBALS_SOURCE: &str = include_str!("__impl_globals.lua");
 
 /// The registry key of the slot table the guard chunk reads: `argv_frozen`
 /// and `argv`, `prose`, `messages`, and `author`.
 const STATE_REGISTRY: &str = "runvil.globals.state";
 
-/// The guard program, compiled once and loaded per VM, under the shim
-/// programs' failure contract.
+/// The guard program.
 static GLOBALS_PROGRAM: LazyLock<Result<LuaProgram>> =
     LazyLock::new(|| LuaProgram::compile_internal(GLOBALS_SOURCE, GLOBALS_CHUNK_NAME));
 

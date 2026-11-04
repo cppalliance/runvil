@@ -11,7 +11,7 @@ use runvil_types::emitter::Emitter;
 use serde_json::Value as Json;
 
 use super::{SYS_LIVE_POISONED, SectionVm, pack_sequence};
-use crate::coro::install_shim_prelude;
+use crate::coro::install_shims;
 use crate::engine_globals::{install_log, install_store_table};
 #[cfg(test)]
 use crate::error::Error;
@@ -134,7 +134,7 @@ impl SectionVm {
 
     /// Installs the coroutine yield shims (`models.infer`, `models.loop`,
     /// `models.compact`, `call`, `tasks.fanout`, `tools.call`, the `tasks`
-    /// namespace) through `install_shim_prelude`, which also puts
+    /// namespace) through `install_shims`, which also puts
     /// `models.loop` and `models.compact` on the `models` table.
     /// `max_tool_iterations` is the run's resolved round cap, which every
     /// `models.loop` and model handle `loop` call on this VM spends. The
@@ -142,9 +142,9 @@ impl SectionVm {
     /// through captures over the selection injection received.
     ///
     /// # Errors
-    /// Returns a `LuaRuntime` failure if the shim prelude cannot install.
+    /// Returns a `LuaRuntime` failure if the shim install fails.
     pub fn install_coro_shims(&mut self, max_tool_iterations: usize) -> Result<()> {
-        install_shim_prelude(
+        install_shims(
             &self.lua,
             max_tool_iterations,
             &self.state.selection,

@@ -149,7 +149,10 @@ impl LuaProgram {
     /// Internal chunks are crate source, not author prompt source, so the
     /// compilation is bookkeeping. `chunk_name` serves as both the chunk
     /// name and the display location; an `@`-prefixed name renders as a
-    /// file path in errors, which the line mapper never rewrites.
+    /// file path in errors, which the line mapper never rewrites. Every
+    /// embedded chunk is included with `include_str!`, so chunk line 1 is
+    /// file line 1, and compiles once in a `LazyLock`; a compile failure is
+    /// a crate bug that each install clones.
     ///
     /// # Errors
     /// Returns a `LuaRuntime` failure if the temporary compiler VM cannot be

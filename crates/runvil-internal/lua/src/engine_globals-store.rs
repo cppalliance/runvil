@@ -18,12 +18,10 @@ use crate::program::LuaProgram;
 use crate::protocol::{VfsOp, VfsOutcome};
 use read::{read_store, read_store_numbered};
 
-/// The store dispatcher chunk's name, `@`-prefixed as the shim chunks'
-/// names are, so its frames render as verbatim `file:line:` references.
+/// The store dispatcher chunk's name.
 const STORE_CHUNK_NAME: &str = "@crates/runvil-internal/lua/src/__impl_store.lua";
 
-/// The store dispatcher source, embedded verbatim so chunk line 1 is file
-/// line 1.
+/// The store dispatcher source.
 const STORE_SOURCE: &str = include_str!("__impl_store.lua");
 
 /// The registry key of the store dispatchers' phase table, kept by
@@ -31,9 +29,7 @@ const STORE_SOURCE: &str = include_str!("__impl_store.lua");
 /// dispatcher to the yield shims once the Pack preludes have installed.
 const STORE_PHASE_REGISTRY: &str = "runvil.engine.store_phase";
 
-/// The store dispatcher program, compiled once and loaded per VM under the
-/// shim programs' failure contract: compiling the bundled source fails
-/// only on a crate bug.
+/// The store dispatcher program.
 static STORE_PROGRAM: LazyLock<Result<LuaProgram>> =
     LazyLock::new(|| LuaProgram::compile_internal(STORE_SOURCE, STORE_CHUNK_NAME));
 
@@ -418,7 +414,13 @@ pub fn run_store_op(view: &Access, op: VfsOp) -> std::result::Result<VfsOutcome,
 mod tests {
     use std::sync::Mutex;
 
-    use super::{VfsError, record_store_conflict};
+    use super::{STORE_CHUNK_NAME, STORE_SOURCE, VfsError, record_store_conflict};
+    use crate::tests::assert_chunk_name_resolves;
+
+    #[test]
+    fn the_store_chunk_name_resolves_to_the_store_file() {
+        assert_chunk_name_resolves("STORE_CHUNK_NAME", STORE_CHUNK_NAME, STORE_SOURCE);
+    }
 
     #[test]
     fn a_conflict_reaches_a_poisoned_slot() {

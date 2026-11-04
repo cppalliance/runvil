@@ -8,12 +8,9 @@
 //! `(ok, result)` envelope; coroutine driving itself
 //! (`Thread::create`/`resume`) is pure Rust in the scheduler. Every shim
 //! yields through one wrapper, which first records the author's line as the
-//! VM's call line. The source is pulled in with `include_str!` so chunk
-//! line 1 is file line 1, compiled once through the usual [`LuaProgram`]
-//! machinery, and loaded per VM. The chunk is named with an `@` prefix, so
-//! PUC's `luaO_chunkid` renders shim frames as verbatim `file:line:`
-//! references with no `[string "..."]` wrapper, and the line mapper
-//! (`program.rs`) never touches them.
+//! VM's call line. Each chunk compiles through
+//! [`LuaProgram::compile_internal`], whose doc states the embed, `@`-name,
+//! and compile-once rules.
 //!
 //! An adhoc tool call is a two-yield handshake inside the calling block
 //! coroutine. The `tools.call` shim yields `tool_call`; for an adhoc tool
@@ -43,33 +40,31 @@ use crate::var::var_snapshot_table;
 use failure::stash_failure_capture;
 pub(crate) use failure::{StashedFailure, take_failure};
 
-/// The shim chunk's name: `@`-prefixed so PUC renders it verbatim as a file
-/// path, making unexpected shim errors clickable `file:line:` references.
+/// The shim chunk's name.
 const SHIM_CHUNK_NAME: &str = "@crates/runvil-internal/lua/src/__impl_coro.lua";
 
-/// The shim source, embedded verbatim so chunk line 1 is file line 1.
+/// The shim chunk's source.
 const SHIM_SOURCE: &str = include_str!("__impl_coro.lua");
 
-/// The `tasks` namespace chunk's name, `@`-prefixed as the prelude's is.
+/// The `tasks` namespace chunk's name.
 const TASKS_CHUNK_NAME: &str = "@crates/runvil-internal/lua/src/__impl_tasks.lua";
 
 /// The `tasks` namespace source: spawn, the waits, the checks, note, and
-/// cancel, split from the prelude so neither chunk outgrows the file
-/// ceiling. It runs over the prelude's failure helpers.
+/// cancel, split from the shim chunk so neither chunk outgrows the file
+/// ceiling. It runs over the shim chunk's failure helpers.
 const TASKS_SOURCE: &str = include_str!("__impl_tasks.lua");
 
-/// The `fanout` chunk's name, `@`-prefixed as the prelude's is.
+/// The `fanout` chunk's name.
 const FANOUT_CHUNK_NAME: &str = "@crates/runvil-internal/lua/src/__impl_fanout.lua";
 
 /// The `fanout` shim source: Lua over the task protocol (`spawn`,
-/// `join_any`, `cancel`), split from the prelude for the same file-ceiling
-/// reason. It runs over the prelude's failure helpers plus the collection
-/// enumerator and the item renderer; the scheduler's admission limit, not
-/// a captured cap, bounds how many arms run at once.
+/// `join_any`, `cancel`), split from the shim chunk for the same
+/// file-ceiling reason. It runs over the shim chunk's failure helpers plus
+/// the collection enumerator and the item renderer; the scheduler's
+/// admission limit, not a captured cap, bounds how many arms run at once.
 const FANOUT_SOURCE: &str = include_str!("__impl_fanout.lua");
 
-/// The name of the chunk that builds the shims' recording `yield`,
-/// `@`-prefixed as the shim chunks' names are.
+/// The name of the chunk that builds the shims' recording `yield`.
 const YIELD_CHUNK_NAME: &str = "@crates/runvil-internal/lua/src/coro.rs";
 
 /// The source of the shims' recording `yield`, over the `record` capture
@@ -85,27 +80,23 @@ const YIELD_SOURCE: &str =
 pub(crate) const MODEL_TOOL_CALL_REGISTRY: &str = "runvil.impl_coro.model_tool_call";
 
 /// The registry key for the shim's store function table, stashed by the
-/// prelude install so the executor can install the store yield shims onto a
+/// shim install so the executor can install the store yield shims onto a
 /// VM's `store` table after the Pack preludes install.
 const STORE_REGISTRY: &str = "runvil.impl_coro.store";
 
-/// The registry key for the shim's block guard, stashed by the prelude
+/// The registry key for the shim's block guard, stashed by the shim
 /// install so [`block_guard`] can wrap every block coroutine the VM starts.
 const GUARD_REGISTRY: &str = "runvil.impl_coro.guard";
 
-/// The shim program, compiled once and loaded per VM. Compilation of the
-/// bundled source fails only on a crate bug, and each install clones the
-/// failure.
+/// The shim program.
 static SHIM_PROGRAM: LazyLock<Result<LuaProgram>> =
     LazyLock::new(|| LuaProgram::compile_internal(SHIM_SOURCE, SHIM_CHUNK_NAME));
 
-/// The `tasks` namespace program, compiled once and loaded per VM after the
-/// prelude, under the same failure contract.
+/// The `tasks` namespace program, loaded after the shim chunk.
 static TASKS_PROGRAM: LazyLock<Result<LuaProgram>> =
     LazyLock::new(|| LuaProgram::compile_internal(TASKS_SOURCE, TASKS_CHUNK_NAME));
 
-/// The `fanout` program, compiled once and loaded per VM after the prelude,
-/// under the same failure contract.
+/// The `fanout` program, loaded after the shim chunk.
 static FANOUT_PROGRAM: LazyLock<Result<LuaProgram>> =
     LazyLock::new(|| LuaProgram::compile_internal(FANOUT_SOURCE, FANOUT_CHUNK_NAME));
 
@@ -121,7 +112,7 @@ static FANOUT_PROGRAM: LazyLock<Result<LuaProgram>> =
 /// the chunk never reads a global; the chunk shims `models.infer` and installs
 /// `tools.call`, and the `call` shim comes back for the Engine to install as
 /// a global. The `tasks` namespace is a second chunk, run over the same
-/// `yield` and `var_snapshot` captures plus the prelude's returned failure
+/// `yield` and `var_snapshot` captures plus the shim chunk's returned failure
 /// helpers, and installed as the `tasks` global; `fanout` is a third, run
 /// over the same captures plus the collection enumerator and the item
 /// renderer, and installed on the `tasks` table as `tasks.fanout`. The
@@ -147,9 +138,6 @@ static FANOUT_PROGRAM: LazyLock<Result<LuaProgram>> =
 /// two captures, `enter_adhoc_handler` and `leave_adhoc_handler`, count up
 /// and down on `adhoc_handler_depth`, the counter the VM's `jump` reads, so
 /// `jump` refuses while an adhoc tool's handler runs, whatever reference
-/// the two captures, `enter_adhoc_handler` and `leave_adhoc_handler`, count up
-/// and down on `adhoc_handler_depth`, the counter the VM's `jump` reads, so
-/// `jump` refuses while an adhoc tool's handler runs, whatever reference
 /// the handler calls it through. Then `cancel_requested` reads the
 /// cancel flag of `cancel_hook`, so the chunk's protected calls
 /// raise a failure caught under cancellation again instead of returning
@@ -163,7 +151,7 @@ static FANOUT_PROGRAM: LazyLock<Result<LuaProgram>> =
 /// # Errors
 /// Returns a `LuaRuntime` failure if the coroutine library, the shim chunk, or any
 /// install step fails.
-pub(crate) fn install_shim_prelude(
+pub(crate) fn install_shims(
     lua: &Lua,
     max_tool_iterations: usize,
     selection: &Arc<Mutex<Option<ModelBinding>>>,
@@ -274,10 +262,10 @@ fn recording_yield(lua: &Lua, raw_yield: Function) -> Result<Function> {
         .map_err(error::lua)
 }
 
-/// Runs the `fanout` chunk over the prelude's `yield` and `var_snapshot`
+/// Runs the `fanout` chunk over the shim chunk's `yield` and `var_snapshot`
 /// captures and failure `helpers`, plus the collection enumerator, the item
 /// renderer, the two captures over the chain's current model `selection`,
-/// and the prelude's `is_model_handle`, and returns the shim installed as
+/// and the shim chunk's `is_model_handle`, and returns the shim installed as
 /// `tasks.fanout`.
 fn fanout_shim(
     lua: &Lua,
@@ -370,7 +358,9 @@ fn selection_captures(
 }
 
 /// Stashes the shim chunk's `store` under its registry key, for the store
-/// install that reads it after the prelude.
+/// install that reads it after the Pack preludes install, and in test
+/// builds its model-issued `tool_call` form under
+/// `MODEL_TOOL_CALL_REGISTRY`.
 fn stash_shims(lua: &Lua, shims: &Table) -> Result<()> {
     #[cfg(any(test, feature = "test-support"))]
     {
@@ -383,7 +373,7 @@ fn stash_shims(lua: &Lua, shims: &Table) -> Result<()> {
         .map_err(error::lua)
 }
 
-/// Builds the prelude's `enter_adhoc_handler()` and `leave_adhoc_handler()`
+/// Builds the shim chunk's `enter_adhoc_handler()` and `leave_adhoc_handler()`
 /// captures over `depth`: one step up and one step down, so nested
 /// handlers balance.
 fn adhoc_handler_captures(lua: &Lua, depth: &Arc<AtomicU32>) -> Result<(Function, Function)> {
@@ -404,7 +394,7 @@ fn adhoc_handler_captures(lua: &Lua, depth: &Arc<AtomicU32>) -> Result<(Function
     Ok((enter, leave))
 }
 
-/// Returns the shim's block guard for a VM whose shim prelude already ran.
+/// Returns the shim's block guard for a VM whose shim install already ran.
 ///
 /// The Engine creates every block coroutine from the guard and resumes it
 /// first with the block function: the guard runs the block under `xpcall`
@@ -414,7 +404,7 @@ fn adhoc_handler_captures(lua: &Lua, depth: &Arc<AtomicU32>) -> Result<(Function
 /// intact instead of only as mlua's stringification.
 ///
 /// # Errors
-/// Returns a `LuaRuntime` failure if the shim prelude never ran on this VM.
+/// Returns a `LuaRuntime` failure if the shim install never ran on this VM.
 pub(crate) fn block_guard(lua: &Lua) -> Result<Function> {
     lua.named_registry_value(GUARD_REGISTRY).map_err(error::lua)
 }
@@ -424,16 +414,16 @@ pub(crate) fn block_guard(lua: &Lua) -> Result<Function> {
 /// dispatchers to the shims too, so a store function a Pack prelude
 /// captured before this call (`local write = store.write`) yields as well.
 /// Every store operation, through whichever reference the prompt holds,
-/// then suspends the block as a leaf yield - uniformly for all backends,
-/// with no inline fast path, so interleaving behavior never depends on
-/// which backend serves the mount. The Harness performs each one as an
-/// `Effect::Vfs`, and a claims-model conflict through any of them ends
-/// the run with a determinism violation that `pcall` cannot catch.
+/// then suspends the block as a leaf yield.
+/// [`Request::Store`](crate::Request::Store) states why every backend takes
+/// this path. The Harness performs each one as an `Effect::Vfs`, and a
+/// claims-model conflict through any of them ends the run with a
+/// determinism violation that `pcall` cannot catch.
 ///
 /// The executor's section setup and live H1 setup are the only callers.
 ///
 /// # Errors
-/// Returns a `LuaRuntime` failure if the shim prelude never ran on this VM, the
+/// Returns a `LuaRuntime` failure if the shim install never ran on this VM, the
 /// `store` table is absent, or the install fails.
 pub fn install_store_shims(lua: &Lua) -> Result<()> {
     let shims: Table = lua

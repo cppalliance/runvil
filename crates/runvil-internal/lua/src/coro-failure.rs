@@ -20,7 +20,7 @@ const FAILURE_REGISTRY: &str = "runvil.impl_coro.failure";
 /// only the guard's own frame; this one holds the author's.
 const FAILURE_TRACEBACK_REGISTRY: &str = "runvil.impl_coro.failure_traceback";
 
-/// Builds the prelude's `stash_failure(failure)` capture: records the
+/// Builds the shim chunk's `stash_failure(failure)` capture: records the
 /// block's raised value and its raise-point traceback for [`take_failure`].
 pub(super) fn stash_failure_capture(lua: &Lua) -> Result<Function> {
     lua.create_function(|lua, failure: Value| {
@@ -97,9 +97,9 @@ impl StashedFailure {
 }
 
 /// Takes what the guard stashed for the last failure of a guarded block.
-/// Both slots are cleared on every call, so a later failure never sees a
-/// stale value; the default (nothing raised, no traceback) when nothing
-/// was stashed.
+/// When a failure was stashed, both slots are cleared, so a later failure
+/// never sees a stale value; when none was, the result is the default
+/// (nothing raised, no traceback).
 ///
 /// # Errors
 /// Returns a `LuaRuntime` failure if a registry slot cannot be read or
