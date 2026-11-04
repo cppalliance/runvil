@@ -31,15 +31,16 @@ fn task_status_table(lua: &Lua, status: TaskStatus) -> mlua::Result<mlua::Table>
     table.raw_set("target", status.target)?;
     table.raw_set("state", status.state.tag())?;
     match status.state {
-        TaskPhase::Running => {}
+        TaskPhase::Running { section, blocked } => {
+            if let Some(section) = section {
+                table.raw_set("section", section)?;
+            }
+            if let Some(blocked) = blocked {
+                table.raw_set("blocked", blocked.tag())?;
+            }
+        }
         TaskPhase::Done { ok } => table.raw_set("ok", ok)?,
         TaskPhase::Cancelled | TaskPhase::Abandoned => table.raw_set("ok", false)?,
-    }
-    if let Some(section) = status.section {
-        table.raw_set("section", section)?;
-    }
-    if let Some(blocked) = status.blocked {
-        table.raw_set("blocked", blocked.tag())?;
     }
     table.raw_set("turns", status.turns)?;
     table.raw_set("tasks", task_id_sequence(lua, &status.tasks)?)?;

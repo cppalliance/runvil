@@ -46,7 +46,10 @@ use super::{ChainIndex, Scheduler};
 /// delivery is the owner's bookkeeping, not a lifecycle change.
 fn task_phase(state: TaskState) -> TaskPhase {
     match state {
-        TaskState::Running => TaskPhase::Running,
+        TaskState::Running => TaskPhase::Running {
+            section: None,
+            blocked: None,
+        },
         TaskState::Done { ok } | TaskState::Delivered { ok } => TaskPhase::Done { ok },
         TaskState::Cancelled => TaskPhase::Cancelled,
         TaskState::Abandoned => TaskPhase::Abandoned,
@@ -137,8 +140,6 @@ impl Scheduler {
         let mut status = TaskStatus {
             target: entry.target.clone(),
             state: task_phase(entry.state.view()),
-            section: None,
-            blocked: None,
             turns: 0,
             tasks: Vec::new(),
             depth: 0,
@@ -149,11 +150,14 @@ impl Scheduler {
             status.turns = chain.ctx.turns().load(Ordering::Relaxed);
             status.depth = u32::try_from(chain.call_depth.get()).unwrap_or(u32::MAX);
             if entry.state.is_live() {
-                status.section = chain
+                let section = chain
                     .entered
                     .is_some()
                     .then(|| chain.section_name().to_owned());
-                status.blocked = chain.blocked();
+                status.state = TaskPhase::Running {
+                    section,
+                    blocked: chain.blocked(),
+                };
                 status.tasks = self.tasks.live_author_tasks(backing);
             }
         }

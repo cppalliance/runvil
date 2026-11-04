@@ -151,10 +151,16 @@ pub struct TaskDelivery {
 }
 
 /// A task's lifecycle phase, as `tasks.status` reports it in `state`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TaskPhase {
     /// The task's backing chain or request is still running.
-    Running,
+    Running {
+        /// The section the backing chain is currently in, while it is live
+        /// and inside one.
+        section: Option<String>,
+        /// What the backing chain is waiting on, while it waits.
+        blocked: Option<Blocked>,
+    },
     /// The task ended with a result, whether or not a wait delivered it.
     Done {
         /// Whether the task returned rather than failed.
@@ -170,9 +176,9 @@ impl TaskPhase {
     /// The tag `tasks.status` reports: `running`, `done`, `cancelled`, or
     /// `abandoned`.
     #[must_use]
-    pub(crate) fn tag(self) -> &'static str {
+    pub(crate) fn tag(&self) -> &'static str {
         match self {
-            TaskPhase::Running => "running",
+            TaskPhase::Running { .. } => "running",
             TaskPhase::Done { .. } => "done",
             TaskPhase::Cancelled => "cancelled",
             TaskPhase::Abandoned => "abandoned",
@@ -223,11 +229,6 @@ pub struct TaskStatus {
     pub target: String,
     /// The lifecycle phase; a delivered task reports [`TaskPhase::Done`].
     pub state: TaskPhase,
-    /// The section the backing chain is currently in, while it is live and
-    /// inside one.
-    pub section: Option<String>,
-    /// What the backing chain is waiting on, while it waits.
-    pub blocked: Option<Blocked>,
     /// The task's model-turn count so far.
     pub turns: u32,
     /// The live tasks the task's chain owns, in spawn order.

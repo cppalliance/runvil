@@ -180,7 +180,13 @@ fn a_status_answer_derives_ok_from_the_phase() {
     // and false for a task that was cancelled or abandoned.
     let lua = Lua::new();
     for (state, expected) in [
-        (TaskPhase::Running, "nil"),
+        (
+            TaskPhase::Running {
+                section: None,
+                blocked: None,
+            },
+            "nil",
+        ),
         (TaskPhase::Done { ok: true }, "true"),
         (TaskPhase::Done { ok: false }, "false"),
         (TaskPhase::Cancelled, "false"),
@@ -188,9 +194,7 @@ fn a_status_answer_derives_ok_from_the_phase() {
     ] {
         let status = TaskStatus {
             target: "Child".to_owned(),
-            state,
-            section: None,
-            blocked: None,
+            state: state.clone(),
             turns: 0,
             tasks: Vec::new(),
             depth: 0,
