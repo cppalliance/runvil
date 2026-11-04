@@ -19,17 +19,14 @@
 
 use std::collections::BTreeMap;
 
-use mlua::{
-    AnyUserData, Lua, MetaMethod, MultiValue, Table, UserData, UserDataFields, UserDataMethods,
-    Value,
-};
+use mlua::{AnyUserData, Lua, MultiValue, Table, UserData, UserDataFields, UserDataMethods, Value};
 use runvil_types::packs::PackId;
 use runvil_types::tools::ToolId;
 
 use crate::adhoc::AdhocTools;
 use crate::bindings::{RosterEntry, ToolSet};
 use crate::error::{self, Result};
-use crate::proxy::read_only_walk;
+use crate::proxy::{add_frozen_guard, read_only_walk, registry_object};
 use crate::tools::tool_object;
 
 /// The id of the adhoc Pack, which holds every tool `tools.adhoc` defines.
@@ -95,14 +92,7 @@ impl UserData for LuaPackHandle {
     }
 
     fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
-        methods.add_meta_method(
-            MetaMethod::NewIndex,
-            |_, _, (key, _): (String, Value)| -> mlua::Result<()> {
-                Err(mlua::Error::external(format!(
-                    "Pack objects are frozen: cannot assign field {key:?}"
-                )))
-            },
-        );
+        add_frozen_guard(methods, "Pack objects");
     }
 }
 
@@ -112,14 +102,7 @@ impl UserData for LuaPackHandle {
 /// # Errors
 /// Returns an `mlua` error when the registry cannot be read.
 pub(crate) fn pack_object(lua: &Lua, name: &str) -> mlua::Result<Option<AnyUserData>> {
-    let objects: Option<Table> = lua.named_registry_value(PACK_OBJECTS_REGISTRY)?;
-    match objects
-        .map(|objects| objects.raw_get::<Value>(name))
-        .transpose()?
-    {
-        Some(Value::UserData(object)) => Ok(Some(object)),
-        _ => Ok(None),
-    }
+    registry_object(lua, PACK_OBJECTS_REGISTRY, name)
 }
 
 /// The names of the VM's Pack objects, in name order: every one, and the

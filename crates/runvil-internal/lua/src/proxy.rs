@@ -2,8 +2,11 @@
 //! a sealed prelude global, and a prelude's `var` view - and the key
 //! formatter their refusals and field paths share.
 //! `tools.stats` and `tools.packs` build on the walkable [`read_only_walk`].
+//! Tool and Pack objects share [`registry_object`] and [`add_frozen_guard`].
 
-use mlua::{Function, Lua, MaybeSend, MultiValue, Table, Value};
+use mlua::{
+    AnyUserData, Function, Lua, MaybeSend, MetaMethod, MultiValue, Table, UserDataMethods, Value,
+};
 
 /// Renders a table key for a refusal: a string as its text, an integer as
 /// its digits, and any other key by its type name.
@@ -72,4 +75,37 @@ pub(crate) fn read_only_walk(
     let proxy = lua.create_table()?;
     proxy.set_metatable(Some(meta))?;
     Ok(proxy)
+}
+
+/// The userdata under `key` in the registry table `registry`, or `None`
+/// when the table is absent or the entry is no userdata.
+///
+/// # Errors
+/// Returns an `mlua` error when the registry cannot be read.
+pub(crate) fn registry_object(
+    lua: &Lua,
+    registry: &str,
+    key: &str,
+) -> mlua::Result<Option<AnyUserData>> {
+    let objects: Option<Table> = lua.named_registry_value(registry)?;
+    match objects
+        .map(|objects| objects.raw_get::<Value>(key))
+        .transpose()?
+    {
+        Some(Value::UserData(object)) => Ok(Some(object)),
+        _ => Ok(None),
+    }
+}
+
+/// Installs the `__newindex` refusal of a frozen userdata: assigning any
+/// field raises `{label} are frozen: cannot assign field {key:?}`.
+pub(crate) fn add_frozen_guard<T, M: UserDataMethods<T>>(methods: &mut M, label: &'static str) {
+    methods.add_meta_method(
+        MetaMethod::NewIndex,
+        move |_, _, (key, _): (String, Value)| -> mlua::Result<()> {
+            Err(mlua::Error::external(format!(
+                "{label} are frozen: cannot assign field {key:?}"
+            )))
+        },
+    );
 }

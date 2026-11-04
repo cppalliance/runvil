@@ -11,12 +11,13 @@
 //! envelope. Unlike a model handle, which carries `infer` and `loop`, it
 //! is invoked only through `tools.call(tool, arguments)`.
 
-use mlua::{LuaSerdeExt, MetaMethod, UserData, UserDataFields, UserDataMethods, Value};
+use mlua::{LuaSerdeExt, UserData, UserDataFields, UserDataMethods};
 use runvil_types::tools::{ToolId, ToolInfo};
 use serde_json::Value as Json;
 
 use crate::bindings::ToolBinding;
 use crate::packs::pack_object;
+use crate::proxy::add_frozen_guard;
 
 /// One tool as Lua sees it: `id`, `description`, `parameters`, `pack`, and
 /// `model_only_call`, all read-only.
@@ -76,13 +77,6 @@ impl UserData for LuaToolHandle {
     }
 
     fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
-        methods.add_meta_method(
-            MetaMethod::NewIndex,
-            |_, _, (key, _): (String, Value)| -> mlua::Result<()> {
-                Err(mlua::Error::external(format!(
-                    "Tool objects are frozen: cannot assign field {key:?}"
-                )))
-            },
-        );
+        add_frozen_guard(methods, "Tool objects");
     }
 }

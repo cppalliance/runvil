@@ -11,6 +11,7 @@ use mlua::{AnyUserData, Lua, Table, Value};
 use super::userdata::LuaToolHandle;
 use crate::bindings::{ToolBinding, ToolSet};
 use crate::error::{self, Result};
+use crate::proxy::registry_object;
 
 /// The registry key of the VM's tool-object table: one object per tool,
 /// keyed by id.
@@ -22,14 +23,7 @@ pub(super) const TOOL_OBJECTS_REGISTRY: &str = "runvil.tools.objects";
 /// # Errors
 /// Returns an `mlua` error when the registry cannot be read.
 pub(crate) fn tool_object(lua: &Lua, id: &str) -> mlua::Result<Option<AnyUserData>> {
-    let objects: Option<Table> = lua.named_registry_value(TOOL_OBJECTS_REGISTRY)?;
-    match objects
-        .map(|objects| objects.raw_get::<Value>(id))
-        .transpose()?
-    {
-        Some(Value::UserData(object)) => Ok(Some(object)),
-        _ => Ok(None),
-    }
+    registry_object(lua, TOOL_OBJECTS_REGISTRY, id)
 }
 
 /// Builds the VM's tool-object table over the run catalog.
