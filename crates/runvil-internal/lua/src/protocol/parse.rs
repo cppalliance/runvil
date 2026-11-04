@@ -3,7 +3,8 @@
 //! direct-yield message, and an author-argument failure becomes the call's
 //! answer so the shim raises it at the call site. Field reads are raw: the
 //! table comes from script space, so a metatable must not intercept or
-//! forge a field. The per-op parsers sit in the siblings: `chat`, `store`,
+//! forge a field. `infer`, `call`, and the argument-free `pending` parse
+//! here; the other per-op parsers sit in the child modules `chat`, `store`,
 //! `tasks`, and `tools`.
 
 mod chat;
@@ -97,8 +98,7 @@ fn call_optional_string(
 }
 
 /// Reads one shim-produced optional string field: absent or nil is `None`,
-/// a string is `Some`, and any other shape is a malformed yield, since the
-/// shims set the field by construction and no author argument reaches it.
+/// a string is `Some`, and any other shape is a malformed yield.
 fn shim_optional_string(
     table: &mlua::Table,
     name: &str,
@@ -115,8 +115,7 @@ fn shim_optional_string(
 
 /// Reads one shim-produced optional integer field: absent or nil is
 /// `None`, an integer within `u32` range is `Some`, and any other shape (a
-/// float included) is a malformed yield, since the shims set the field by
-/// construction and no author argument reaches it.
+/// float included) is a malformed yield.
 fn shim_optional_u32(
     table: &mlua::Table,
     name: &str,

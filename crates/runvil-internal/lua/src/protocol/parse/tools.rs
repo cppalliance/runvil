@@ -48,12 +48,10 @@ pub(super) fn parse_tool_call(
 /// names it by the wire name the model sent. An absent or nil `args`
 /// parses as the empty object (the empty-argument call every tool
 /// accepts). A wrong `alias` for a script call, or a non-table or
-/// JSON-unrepresentable `args`, is the call's error, framed as the other
-/// author-argument failures are, so an author `pcall` catches it at the
-/// call site. `call_id` is set only by the loop shim for a model-issued
-/// call, so a present non-string is a malformed yield rather than a call
-/// error; `turn`, set by the same shim, is likewise malformed unless it is
-/// an integer within `u32` range.
+/// JSON-unrepresentable `args`, is the call's error. `call_id` is set only
+/// by the loop shim for a model-issued call, so a present non-string is a
+/// malformed yield rather than a call error; `turn`, set by the same shim,
+/// is likewise malformed unless it is an integer within `u32` range.
 fn read_tool_call(
     lua: &Lua,
     table: &mlua::Table,

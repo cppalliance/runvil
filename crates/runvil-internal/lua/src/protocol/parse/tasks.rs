@@ -1,7 +1,7 @@
 //! The task-operation request parsers: `spawn` and its seeds, the wait
 //! shims' internal `timer` and its author-supplied seconds, the `join_any`
-//! set, the single-task `ready`, `status`, and `cancel`, the argument-free
-//! `pending`, the `note` text, and the `concurrency` limit. The shims
+//! set, the single-task `ready`, `status`, and `cancel`, the `note` text,
+//! and the `concurrency` limit. The shims
 //! resolve a `Task` handle to its bare id before yielding, so every task
 //! field arrives as a path string; an id that does not parse is the
 //! author's argument error, raised at the call site.
@@ -187,10 +187,8 @@ pub(super) fn parse_concurrency(table: &mlua::Table) -> std::result::Result<Requ
         Ok(Value::Number(limit)) => {
             // A float with an integral value is the author writing `8.0`:
             // the shim's whole-number check let it through, so the parser
-            // converts it. An integral magnitude past `u64` (an author's
-            // `1e20`) is the call's error, raised at the call site like
-            // the shim's own refusal; a fractional, negative, or
-            // non-finite float is a hand-rolled yield and stays malformed.
+            // converts it. A fractional, negative, or non-finite float is a
+            // hand-rolled yield and stays malformed.
             if limit.fract() != 0.0 || limit < 1.0 {
                 return Err(FieldFailure::Malformed);
             }

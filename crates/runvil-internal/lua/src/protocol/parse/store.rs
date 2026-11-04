@@ -38,8 +38,7 @@ fn call_optional_line(
 }
 
 /// Parses a `store` request: the operation name and its author-supplied
-/// arguments. Every wrong shape is the call's error, resumed as the answer
-/// so the shim raises it at the call site - an author `pcall` catches it.
+/// arguments. Every wrong shape is the call's error.
 pub(super) fn parse_store(table: &mlua::Table) -> std::result::Result<Request, FieldFailure> {
     let op = call_string(table, "store_op")?;
     let op = match op.as_str() {
