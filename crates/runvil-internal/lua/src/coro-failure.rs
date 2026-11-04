@@ -4,7 +4,7 @@
 
 use mlua::{Function, Lua, Table, Value};
 
-use crate::error::{self, Error, Result};
+use crate::error::{self, Error, Result, TRACEBACK_HEADING};
 use crate::error_value::{raised_from, retained_error};
 
 /// The registry key of the last value a guarded block raised, written by
@@ -82,7 +82,7 @@ impl StashedFailure {
             return std::borrow::Cow::Borrowed(error);
         }
         let (head, tail) = message
-            .rfind("\nstack traceback:")
+            .rfind(TRACEBACK_HEADING)
             .map_or((message.as_str(), ""), |at| message.split_at(at));
         let head = self
             .raised

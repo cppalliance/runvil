@@ -9,7 +9,8 @@ use runvil_types::emitter::{Emitter, EventSink};
 use runvil_types::error::{ErrorCode, FactKey, Location};
 use serde_json::Value;
 
-use super::{LuaProgram, compile_line, first_prompt_line, map_chunk_line_to_absolute, prompt_line};
+use super::LuaProgram;
+use crate::chunk_line::{compile_line, first_prompt_line, map_chunk_line_to_absolute, prompt_line};
 use crate::error::{QuotaResource, context_exhausted, internal, lua_quota};
 
 /// The file every program here comes from.

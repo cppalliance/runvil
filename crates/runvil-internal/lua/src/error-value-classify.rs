@@ -7,11 +7,11 @@ use mlua::{Function, Lua, Value};
 use runvil_types::error::Error;
 
 use super::error_table;
+use crate::chunk_line::first_prompt_line;
 use crate::error::{
     author_line, authored_at, call_line, failure_text, internal, lua_runtime, prompt_file,
     root_cause, root_text,
 };
-use crate::program::first_prompt_line;
 
 /// A Rust callback's failure as the universal error its table renders.
 ///

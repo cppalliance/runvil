@@ -25,7 +25,7 @@ use mlua::chunk::ChunkMode;
 use mlua::{Lua, Table, Value};
 use runvil_types::packs::{PackId, Prelude};
 
-use crate::error::{self, Error, Result, lua_runtime};
+use crate::error::{self, Error, Result, TRACEBACK_HEADING, lua_runtime};
 use crate::proxy::{key_path, key_text, read_only_proxy};
 
 /// The `_G` names a prelude's environment reads, as bound when it installs.
@@ -218,7 +218,7 @@ fn load_failure(pack: &PackId, error: &mlua::Error) -> Error {
         mlua::Error::RuntimeError(message) => message.clone(),
         other => other.to_string(),
     };
-    let (head, traceback) = match rendered.split_once("\nstack traceback:") {
+    let (head, traceback) = match rendered.split_once(TRACEBACK_HEADING) {
         Some((head, traceback)) => (head, Some(traceback)),
         None => (rendered.as_str(), None),
     };
@@ -227,7 +227,7 @@ fn load_failure(pack: &PackId, error: &mlua::Error) -> Error {
          defines functions; it must not call tools while loading."
     );
     if let Some(traceback) = traceback {
-        message.push_str("\nstack traceback:");
+        message.push_str(TRACEBACK_HEADING);
         message.push_str(traceback);
     }
     lua_runtime(message)

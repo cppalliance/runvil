@@ -10,7 +10,7 @@ use std::num::NonZeroU32;
 use mlua::Lua;
 use runvil_types::error::{Error, ErrorCode, place};
 
-use crate::program::prompt_line;
+use crate::chunk_line::{STRING_CHUNK_OPENING, prompt_line};
 
 /// The file label of a VM that was given none: the label a prompt that
 /// came from no file has.
@@ -126,13 +126,17 @@ pub(crate) fn authored(lua: &Lua, error: Error) -> Error {
     authored_at(error, &prompt_file(lua), line, &what)
 }
 
+/// The heading Lua puts on its own line between a failure's text and its
+/// traceback.
+pub(crate) const TRACEBACK_HEADING: &str = "\nstack traceback:";
+
 /// The failure's own text in `message`: the text before the traceback,
 /// without the `[string "..."]:N: ` positions Lua puts in front of it.
 pub(crate) fn failure_text(message: &str) -> &str {
     let mut text = message
-        .find("\nstack traceback:")
+        .find(TRACEBACK_HEADING)
         .map_or(message, |at| &message[..at]);
-    while let Some(rest) = text.strip_prefix("[string \"") {
+    while let Some(rest) = text.strip_prefix(STRING_CHUNK_OPENING) {
         let Some(close) = rest.find("\"]:") else {
             break;
         };

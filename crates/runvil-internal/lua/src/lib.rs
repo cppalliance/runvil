@@ -79,6 +79,7 @@
 mod alias;
 mod argv;
 mod bindings;
+mod chunk_line;
 mod collection;
 mod compactors;
 mod coro;

@@ -3,7 +3,7 @@
 //! that fail closed on a poisoned lock.
 
 use super::*;
-use crate::program::map_chunk_line_to_absolute;
+use crate::chunk_line::map_chunk_line_to_absolute;
 use crate::vm::AdhocTools;
 
 #[test]

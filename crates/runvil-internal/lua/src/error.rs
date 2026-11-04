@@ -21,8 +21,8 @@ mod universal;
 #[cfg(any(test, feature = "test-support"))]
 pub(crate) use author::UNNAMED_FILE;
 pub(crate) use author::{
-    author_line, author_prose, authored, authored_at, call_line, failure_text, prompt_file,
-    set_call_line, set_prompt_file,
+    TRACEBACK_HEADING, author_line, author_prose, authored, authored_at, call_line, failure_text,
+    prompt_file, set_call_line, set_prompt_file,
 };
 pub use universal::{
     context_exhausted, internal_at, interrupted, lua_quota, lua_runtime, task_cancelled,
