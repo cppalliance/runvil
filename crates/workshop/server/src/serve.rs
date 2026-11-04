@@ -191,7 +191,8 @@ fn spawn_inner(
 ) -> Result<ServerHandle, SpawnError> {
     // Composing state sweeps the state directory and reopening follows
     // the workspace pointer, so a refused address must fail before either.
-    loopback_address(&config.server.bind)?;
+    // `loopback_address` names the address in its message already.
+    loopback_address(&config.server.bind).map_err(SpawnError::Io)?;
     // Discovery runs before the server thread starts: a resolution
     // failure is the plain no-gateway error, never a bind-then-fail.
     let gateway = match gateway {
@@ -204,7 +205,13 @@ fn spawn_inner(
     let (stopped_tx, stopped_rx) = mpsc::channel();
     let thread = std::thread::Builder::new()
         .name("workshop-server".to_string())
-        .spawn(move || serve_thread(config, gateway, ready_tx, shutdown_rx, &stopped_tx, grace))?;
+        .spawn(move || serve_thread(config, gateway, ready_tx, shutdown_rx, &stopped_tx, grace))
+        .map_err(|e| {
+            SpawnError::Io(std::io::Error::new(
+                e.kind(),
+                format!("spawn the workshop-server thread: {e}"),
+            ))
+        })?;
     match ready_rx.recv() {
         Ok(Ok((url, gateway))) => Ok(ServerHandle {
             url,
@@ -333,9 +340,12 @@ fn serve_thread(
 /// Parses `address` as a socket address and refuses any that is not
 /// loopback, with [`std::io::ErrorKind::InvalidInput`] either way.
 fn loopback_address(address: &str) -> std::io::Result<std::net::SocketAddr> {
-    let addr: std::net::SocketAddr = address
-        .parse()
-        .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, e))?;
+    let addr: std::net::SocketAddr = address.parse().map_err(|e| {
+        std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            format!("parse bind address {address}: {e}"),
+        )
+    })?;
     if !addr.ip().is_loopback() {
         return Err(std::io::Error::new(
             std::io::ErrorKind::InvalidInput,

@@ -1,6 +1,8 @@
 //! Integration tests for the `build-ui` helper.
 
 use std::collections::BTreeSet;
+
+use anyhow::Context as _;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -30,8 +32,8 @@ fn both_implementers_emit_the_same_layout() -> anyhow::Result<()> {
         return Ok(());
     }
 
-    let rust_dist = tempfile::TempDir::new()?;
-    let node_dist = tempfile::TempDir::new()?;
+    let rust_dist = tempfile::TempDir::new().context("create the Rust build's temp dir")?;
+    let node_dist = tempfile::TempDir::new().context("create the Node build's temp dir")?;
 
     build_ui::build_in(
         &ui_dir,
@@ -48,7 +50,8 @@ fn both_implementers_emit_the_same_layout() -> anyhow::Result<()> {
         .arg("--out")
         .arg(node_dist.path())
         .current_dir(&ui_dir)
-        .output()?;
+        .output()
+        .with_context(|| format!("run node build.mjs in {}", ui_dir.display()))?;
     anyhow::ensure!(
         output.status.success(),
         "node build.mjs --out failed (status {}):\n{}",
@@ -99,8 +102,12 @@ fn file_set(root: &Path) -> anyhow::Result<BTreeSet<String>> {
     let mut files = BTreeSet::new();
     let mut stack = vec![root.to_path_buf()];
     while let Some(dir) = stack.pop() {
-        for entry in std::fs::read_dir(&dir)? {
-            let path = entry?.path();
+        let entries =
+            std::fs::read_dir(&dir).with_context(|| format!("read dir {}", dir.display()))?;
+        for entry in entries {
+            let path = entry
+                .with_context(|| format!("read an entry of {}", dir.display()))?
+                .path();
             if path.is_dir() {
                 stack.push(path);
             } else {
@@ -117,7 +124,10 @@ fn file_set(root: &Path) -> anyhow::Result<BTreeSet<String>> {
 
 /// Reads one file under `root` with its content hashes normalized.
 fn normalized_file(root: &Path, name: &str) -> anyhow::Result<String> {
-    Ok(normalize_hashes(&std::fs::read_to_string(root.join(name))?))
+    let path = root.join(name);
+    let text =
+        std::fs::read_to_string(&path).with_context(|| format!("read {}", path.display()))?;
+    Ok(normalize_hashes(&text))
 }
 
 /// Replaces esbuild content hashes (`-XXXXXXXX` in base32, A-Z and 2-7)

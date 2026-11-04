@@ -22,10 +22,10 @@ todos:
     status: completed
   - id: fix-sites
     content: "Add context at the 29 existing sites, then run `cargo dylint --all` with the lint at its Deny default"
-    status: pending
+    status: completed
   - id: ci
     content: "Add a CI job that installs cargo-dylint and dylint-link, runs `cargo test` in lints/build-lints, and runs `cargo dylint --all -- --workspace --all-targets --all-features`; document the command in AGENTS.md Verification"
-    status: pending
+    status: completed
   - id: naming
     content: "Rename runvil-lints to build-lints: `runvil-*` crates are by definition the Engine, and this crate is not"
     status: completed
@@ -132,6 +132,31 @@ These counts may include a site twice when it compiles for both a lib and
 its lib test target. The Engine and Harness crates have no sites outside
 the `runvil` facade's test suite.
 
+### How each site was fixed
+
+- anyhow callers (`build-xtask`'s `new_crate.rs`, `build-ui`'s tests): add
+  `.context` or `.with_context` naming the operation and the path.
+  `new_crate.rs` uses two local closures, `create` and `write`, so each of
+  the six file operations names its path once.
+- `Box<dyn Error>` test helpers (the `runvil` suite, `workshop-server`'s
+  language guide tests): `.map_err(|e| format!("read {}: {e}", ...))`.
+- `workshop-desktop`'s `build.rs`: `copy_forward` returns
+  `Result<(), String>` and names the source, the sidecar, and the
+  directory it creates, instead of returning a bare `io::Result` to two
+  callers.
+- `workshop-run-log`: `LogError::Io` gains a `context: String` field
+  (`run log file: {context}`), and `impl From<io::Error> for LogError`
+  is replaced by `LogError::io(context, source)`. Without the `From`, a
+  bare `?` on an `io::Result` no longer compiles anywhere in the crate,
+  so the type system enforces the rule there as well as the lint. A
+  private `rename` helper in `layout.rs` names both paths.
+- `workshop-server`'s `serve.rs`: `SpawnError::Io` keeps its
+  `io::Error`, because tests match on its kind. The context goes into the
+  error's own message: `loopback_address` names the address when it fails
+  to parse it, and the thread spawn failure says
+  `spawn the workshop-server thread`. The call site converts with an
+  explicit `.map_err(SpawnError::Io)`.
+
 ## The crate name: `build-lints`
 
 The dylint library name is `build_lints`.
@@ -145,3 +170,32 @@ The dylint library name is `build_lints`.
   the root manifest's metadata table break no structural check.
 - `node --test crates/workshop/ui/test/docs-claims.mjs`: 4 passed.
 - `cargo fmt --all --check`: clean.
+- After the site fixes: `cargo dylint --all -- --workspace --all-targets
+  --all-features` at the Deny default finds nothing. Both clippy gates
+  with `CARGO_BUILD_WARNINGS=deny` are clean. nextest for `runvil`,
+  `build-xtask`, `build-ui`, and `workshop-run-log`: 340 passed. Workshop
+  crates: 313 passed, and 1 failed:
+  `realtime_relay::overload::stalled_browser_cleanup_is_bounded_after_gateway_disconnect`.
+  That test also fails with the site fixes stashed, so the failure was
+  already there before this change.
+
+## CI
+
+The `dylint` job in `.github/workflows/ci.yml`, listed in `ci-green`'s
+`needs`:
+
+- installs `cargo-dylint` and `dylint-link` 6.3.2 through
+  `taiki-e/install-action`;
+- reads the nightly from `lints/build-lints/rust-toolchain.toml` with
+  `sed`, as `api-surface` and `msrv` read their toolchains, and installs it
+  with `rustc-dev` and `llvm-tools-preview`. A bare
+  `rustup toolchain install` reads the file only on rustup 1.28 and later;
+- runs on `ubuntu-22.04` with `check-workshop-linux`'s Tauri packages,
+  `npm ci`, and stub Gateway sidecar, because `cargo dylint` compiles the
+  desktop app too;
+- runs `cargo test --locked` in `lints/build-lints`, then
+  `cargo dylint --all -- --locked --workspace --all-targets --all-features`,
+  then checks that the tree is clean.
+
+AGENTS.md gains the rule under Engineering and the command under
+Verification.

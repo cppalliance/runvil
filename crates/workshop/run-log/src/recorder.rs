@@ -73,7 +73,9 @@ impl TursoRecorder {
         if let Some(log) = slot {
             Ok(log)
         } else {
-            tokio::fs::create_dir_all(&self.dir).await?;
+            tokio::fs::create_dir_all(&self.dir)
+                .await
+                .map_err(|e| LogError::io(format!("create {}", self.dir.display()), e))?;
             let log = RunLog::open(&self.path).await?;
             Ok(slot.insert(log))
         }

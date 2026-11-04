@@ -22,9 +22,13 @@ pub enum LogError {
         #[source]
         source: DatabaseSource,
     },
-    /// The log file could not be addressed; the I/O error is the source.
-    #[error("run log file")]
+    /// The log file could not be addressed; `context` names the operation
+    /// and the path, and the I/O error is the source.
+    #[error("run log file: {context}")]
     Io {
+        /// The operation and the path it addressed, such as
+        /// `rename /a/runs.db to /a/runs.db.stale-1`.
+        context: String,
         /// The I/O error.
         #[source]
         source: io::Error,
@@ -49,9 +53,15 @@ pub enum LogError {
     Corrupt(String),
 }
 
-impl From<io::Error> for LogError {
-    fn from(source: io::Error) -> Self {
-        LogError::Io { source }
+impl LogError {
+    /// [`LogError::Io`] for `source`, with `context` naming the operation
+    /// and the path. There is no `From<io::Error>`: a bare `?` would drop
+    /// both.
+    pub(crate) fn io(context: impl Into<String>, source: io::Error) -> Self {
+        LogError::Io {
+            context: context.into(),
+            source,
+        }
     }
 }
 
