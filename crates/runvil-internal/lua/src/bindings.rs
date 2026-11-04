@@ -1,5 +1,6 @@
-//! Tool bindings, the per-binding output kind, the run's shared tool set,
-//! and how bound tools reach Lua.
+//! Tool bindings, the per-binding output kind, the run's roster entries
+//! and shared tool set, the Engine's discovery tools, and the wire name a
+//! model calls a tool by.
 
 use std::borrow::Cow;
 use std::collections::BTreeMap;
@@ -7,8 +8,6 @@ use std::collections::BTreeMap;
 use runvil_types::packs::PackId;
 use runvil_types::tools::{ToolCatalog, ToolId, ToolInfo};
 use serde_json::Value as Json;
-
-use crate::scope::DiscoveryTool;
 
 /// How a bound tool's output resumes into Lua at the `tools.call` boundary.
 ///
@@ -28,8 +27,8 @@ pub enum ToolOutputKind {
 
 /// One tool bound under the name its caller reaches it by, holding the
 /// tool's data - its schema, description, output kind, whether it lists
-/// tools, and whether a stop leaves its calls running - and never its
-/// implementation.
+/// tools, whether only a model may call it, and whether a stop leaves its
+/// calls running - and never its implementation.
 ///
 /// Run-time execution (schema preparation, script dispatch) reads the
 /// binding alone; a call is issued as an effect naming the identity, and
@@ -62,8 +61,8 @@ pub struct ToolBinding {
 impl ToolBinding {
     /// Binds `alias` to the tool `info` describes: the description is the
     /// tool's own, the output kind follows the tool info's
-    /// structured-output flag, and the listing and stop flags are the tool
-    /// info's.
+    /// structured-output flag, and the listing, model-only, and stop flags
+    /// are the tool info's.
     #[must_use]
     pub fn from_info(alias: &str, info: &ToolInfo) -> Self {
         Self {
@@ -238,6 +237,50 @@ impl ToolSet {
             return Some(DiscoveryTool::VENDOR);
         }
         self.roster.get(&id.pack()).and_then(RosterEntry::vendor)
+    }
+}
+
+/// One of the Engine's two discovery tools, which join the end of a
+/// section entry's Static Set when its Dynamic Set holds a tool: the model
+/// finds Dynamic Set tools with the first and calls them with the second.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DiscoveryTool {
+    /// `dynamic/search`, which the model calls as `GetDynamicTools`.
+    Search,
+    /// `dynamic/call`, which the model calls as `CallDynamicTool`.
+    Call,
+}
+
+impl DiscoveryTool {
+    /// Both discovery tools, in the order they join the Static Set.
+    pub const ALL: [DiscoveryTool; 2] = [DiscoveryTool::Search, DiscoveryTool::Call];
+
+    /// The vendor both discovery tools report.
+    pub const VENDOR: &'static str = "runvil";
+
+    /// The tool's id, under the reserved Pack id `dynamic`.
+    #[must_use]
+    pub fn id(self) -> &'static str {
+        match self {
+            DiscoveryTool::Search => "dynamic/search",
+            DiscoveryTool::Call => "dynamic/call",
+        }
+    }
+
+    /// The wire name the model calls the tool by.
+    #[must_use]
+    pub fn wire_name(self) -> &'static str {
+        match self {
+            DiscoveryTool::Search => "GetDynamicTools",
+            DiscoveryTool::Call => "CallDynamicTool",
+        }
+    }
+
+    /// The discovery tool whose id is `id`, if it is one.
+    #[must_use]
+    pub fn of(id: &ToolId) -> Option<DiscoveryTool> {
+        let id = id.to_string();
+        DiscoveryTool::ALL.into_iter().find(|tool| tool.id() == id)
     }
 }
 

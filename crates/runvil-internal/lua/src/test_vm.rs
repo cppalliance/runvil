@@ -184,8 +184,8 @@ pub(crate) fn offers(vm: &SectionVm) -> Vec<String> {
                 crate::OfferMode::Dynamic => "dynamic",
             };
             match &offer.target {
-                crate::OfferTarget::Tool(id) => format!("{mode}:{id}"),
-                crate::OfferTarget::Pack(pack) => format!("{mode}:{pack}"),
+                crate::scope::OfferTarget::Tool(id) => format!("{mode}:{id}"),
+                crate::scope::OfferTarget::Pack(pack) => format!("{mode}:{pack}"),
             }
         })
         .collect()

@@ -3,7 +3,8 @@
 //! selects the binding's output kind. A catalog tool's wire name is its
 //! own when set and its default otherwise, and the tool set reads the run
 //! catalog and derives each tool's vendor from its Pack, `runvil` for the
-//! Engine's discovery tools.
+//! Engine's discovery tools. The discovery tools' ids stay under a
+//! reserved Pack id, so no vendor Pack can take the discovery namespace.
 
 use std::collections::BTreeMap;
 
@@ -11,7 +12,7 @@ use runvil_types::packs::PackId;
 use runvil_types::tools::{ToolCatalog, ToolId, ToolInfo};
 use serde_json::json;
 
-use super::{RosterEntry, ToolBinding, ToolOutputKind, ToolSet, wire_name_of};
+use super::{DiscoveryTool, RosterEntry, ToolBinding, ToolOutputKind, ToolSet, wire_name_of};
 
 /// A tool info for `tools/fetch`.
 fn tool_info(structured: bool) -> ToolInfo {
@@ -128,6 +129,18 @@ fn the_tool_set_reads_the_catalog_and_takes_each_tools_vendor_from_its_pack() {
             set.vendor_for(&id(discovery)),
             Some("runvil"),
             "the Engine's discovery tool {discovery} reports runvil"
+        );
+    }
+}
+
+#[test]
+fn every_discovery_tool_id_sits_under_a_reserved_pack() {
+    for tool in DiscoveryTool::ALL {
+        let id = ToolId::parse(tool.id()).expect("a discovery tool id is a valid tool id");
+        assert!(
+            id.pack().is_reserved(),
+            "{} is not under a reserved Pack id",
+            tool.id()
         );
     }
 }

@@ -1,6 +1,5 @@
-//! Per-VM tool state: call counts, the offers a section made, the frozen
-//! sets its first loop round built from them, and the Engine's two
-//! discovery tools, which join the Static Set beside a Dynamic Set.
+//! Per-VM tool state: call counts, the offers a section made, and the
+//! frozen sets its first loop round built from them.
 
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
@@ -72,7 +71,7 @@ impl ToolCallCounts {
 /// What one offer names: a tool by id, or a Pack, whose tools the render
 /// expands.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum OfferTarget {
+pub(crate) enum OfferTarget {
     /// One tool, by id.
     Tool(ToolId),
     /// Every tool of a Pack, read when the section renders.
@@ -100,11 +99,11 @@ impl std::fmt::Display for OfferMode {
 
 /// One remembered offer: what it names and which set it feeds.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Offer {
+pub(crate) struct Offer {
     /// What the offer names.
-    pub target: OfferTarget,
+    pub(crate) target: OfferTarget,
     /// Which set the offer feeds.
-    pub mode: OfferMode,
+    pub(crate) mode: OfferMode,
 }
 
 /// One tool a section's offers name, as the merge takes it: a catalog
@@ -163,8 +162,7 @@ impl Offers {
 /// merge order, and no wire name appears twice across them.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct RenderedTools {
-    /// The Static Set: the tools every round of the section advertises,
-    /// in schema order.
+    /// The Static Set: the tools every round of the section advertises.
     pub static_set: Vec<ToolBinding>,
     /// The Dynamic Set: the tools the section offered dynamically, which
     /// no round advertises.
@@ -186,50 +184,6 @@ impl RenderedTools {
                 .find(|binding| binding.alias() == wire_name)
                 .map(|binding| (binding, mode))
         })
-    }
-}
-
-/// One of the Engine's two discovery tools, which join the end of a
-/// section entry's Static Set when its Dynamic Set holds a tool: the model
-/// finds Dynamic Set tools with the first and calls them with the second.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum DiscoveryTool {
-    /// `dynamic/search`, which the model calls as `GetDynamicTools`.
-    Search,
-    /// `dynamic/call`, which the model calls as `CallDynamicTool`.
-    Call,
-}
-
-impl DiscoveryTool {
-    /// Both discovery tools, in the order they join the Static Set.
-    pub const ALL: [DiscoveryTool; 2] = [DiscoveryTool::Search, DiscoveryTool::Call];
-
-    /// The vendor both discovery tools report.
-    pub const VENDOR: &'static str = "runvil";
-
-    /// The tool's id, under the reserved Pack id `dynamic`.
-    #[must_use]
-    pub fn id(self) -> &'static str {
-        match self {
-            DiscoveryTool::Search => "dynamic/search",
-            DiscoveryTool::Call => "dynamic/call",
-        }
-    }
-
-    /// The wire name the model calls the tool by.
-    #[must_use]
-    pub fn wire_name(self) -> &'static str {
-        match self {
-            DiscoveryTool::Search => "GetDynamicTools",
-            DiscoveryTool::Call => "CallDynamicTool",
-        }
-    }
-
-    /// The discovery tool whose id is `id`, if it is one.
-    #[must_use]
-    pub fn of(id: &ToolId) -> Option<DiscoveryTool> {
-        let id = id.to_string();
-        DiscoveryTool::ALL.into_iter().find(|tool| tool.id() == id)
     }
 }
 

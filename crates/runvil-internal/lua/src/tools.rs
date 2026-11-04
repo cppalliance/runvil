@@ -26,13 +26,13 @@ use runvil_types::tools::{ToolId, ToolInfo};
 use serde_json::{Value as Json, json};
 
 use crate::alias::Alias;
-use crate::bindings::{ToolBinding, ToolSet};
+use crate::bindings::{DiscoveryTool, ToolBinding, ToolSet};
 use crate::error::{self, Result};
 use crate::json::to_json;
 use crate::messages::MessageList;
 use crate::packs::{ADHOC_PACK, install_pack_list, install_pack_objects};
 use crate::proxy::key_text;
-use crate::scope::{DiscoveryTool, OfferMode, Offers};
+use crate::scope::{OfferMode, Offers};
 use crate::vm::AdhocTools;
 
 mod decode;

@@ -122,7 +122,9 @@ mod tests;
 // The executor-facing surface: every item `runvil-engine` names crosses
 // here. The facade re-exports only `VfsOp` and `VfsOutcome`.
 pub use crate::argv::Argv;
-pub use crate::bindings::{RosterEntry, ToolBinding, ToolOutputKind, ToolSet, wire_name_of};
+pub use crate::bindings::{
+    DiscoveryTool, RosterEntry, ToolBinding, ToolOutputKind, ToolSet, wire_name_of,
+};
 pub use crate::collection::render_item;
 pub use crate::compactors::{
     OverflowReason, UsageAnchor, exhaustion_detail, output_reserve, precheck,
@@ -150,10 +152,7 @@ pub use crate::protocol::{
     MessageRecord, ModelCall, NonEmpty, RecordRole, Request, TaskDelivery, TaskPhase, TaskStatus,
     ToolCallOutcome, ToolCallRecord, VfsOp, VfsOutcome, YieldParse,
 };
-pub use crate::scope::{
-    DiscoveryTool, Offer, OfferMode, OfferTarget, OfferedTool, Offers, RenderedTools,
-    ToolCallCounts,
-};
+pub use crate::scope::{OfferMode, OfferedTool, Offers, RenderedTools, ToolCallCounts};
 pub use crate::section::{Library, LibraryBlock, LibraryKey, LuaBlockResult, SectionText};
 pub use crate::vm::{
     AdhocTools, CoroStep, InjectFailure, Injected, SectionVm, Uninjected, current_catalog_packs,
