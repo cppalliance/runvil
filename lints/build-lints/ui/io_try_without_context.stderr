@@ -1,0 +1,35 @@
+error: `?` converts a `std::io::Error` that names no operation or path
+  --> $DIR/io_try_without_context.rs:33:16
+   |
+LL |     let byte = io_op()?;
+   |                ^^^^^^^^
+   |
+   = help: convert the error before `?` with a message naming the operation and the path, e.g. `.map_err(|e| ...)`
+   = note: `#[deny(io_try_without_context)]` on by default
+
+error: `?` converts a `std::io::Error` that names no operation or path
+  --> $DIR/io_try_without_context.rs:39:8
+   |
+LL |     Ok(spelled_out()?)
+   |        ^^^^^^^^^^^^^^
+   |
+   = help: convert the error before `?` with a message naming the operation and the path, e.g. `.map_err(|e| ...)`
+
+error: `?` converts a `std::io::Error` that names no operation or path
+  --> $DIR/io_try_without_context.rs:44:8
+   |
+LL |     Ok(io_op()?)
+   |        ^^^^^^^^
+   |
+   = help: convert the error before `?` with a message naming the operation and the path, e.g. `.map_err(|e| ...)`
+
+error: `?` converts a `std::io::Error` that names no operation or path
+  --> $DIR/io_try_without_context.rs:49:45
+   |
+LL |     let read = || -> Result<u8, Error> { Ok(io_op()?) };
+   |                                             ^^^^^^^^
+   |
+   = help: convert the error before `?` with a message naming the operation and the path, e.g. `.map_err(|e| ...)`
+
+error: aborting due to 4 previous errors
+

@@ -41,7 +41,10 @@ impl RunLog {
     /// apply the schema.
     pub async fn open(path: &Path) -> Result<Self, LogError> {
         let name = path.to_str().ok_or_else(|| {
-            io::Error::new(io::ErrorKind::InvalidInput, "run log path must be utf-8")
+            LogError::io(
+                format!("open {}", path.display()),
+                io::Error::new(io::ErrorKind::InvalidInput, "run log path must be utf-8"),
+            )
         })?;
         let conn = connect(name).await?;
         if layout::is_stale(&conn).await? {

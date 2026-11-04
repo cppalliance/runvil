@@ -43,7 +43,9 @@ fn invalid_prompt_files_report_public_error_contracts() -> TestResult {
     let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/prompts/invalid");
     for (stem, code, message_fragment) in INVALID_FIXTURES {
         let name = format!("invalid/{stem}.md");
-        let source = fs::read_to_string(dir.join(format!("{stem}.md")))?;
+        let path = dir.join(format!("{stem}.md"));
+        let source =
+            fs::read_to_string(&path).map_err(|e| format!("read {}: {e}", path.display()))?;
         let Err(error) = Prompt::parse(&source, &name, &name).0 else {
             return Err(format!("fixture {name} unexpectedly parsed").into());
         };

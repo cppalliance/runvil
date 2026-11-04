@@ -169,6 +169,11 @@ tauri-plugin-process = "2.3.1"
 tauri-plugin-updater = { version = "2.11.0", default-features = false, features = ["system-proxy"] }
 tauri-plugin-single-instance = "2.4.4"
 
+# The dylint libraries `cargo dylint --all` runs. Each lives outside the
+# workspace because it builds on its own nightly with `rustc_private`.
+[workspace.metadata.dylint]
+libraries = [{ path = "lints/build-lints" }]
+
 [workspace.lints.rust]
 unsafe_code = "deny"
 missing_docs = "warn"

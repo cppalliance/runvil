@@ -31,8 +31,9 @@ const TEXT: &str = "# Hello from a local page\n";
 
 /// A directory holding the one page.
 fn local_directory() -> Result<tempfile::TempDir, Box<dyn Error>> {
-    let directory = tempfile::tempdir()?;
-    std::fs::write(directory.path().join(PAGE), TEXT)?;
+    let directory = tempfile::tempdir().map_err(|e| format!("create a temp dir: {e}"))?;
+    let page = directory.path().join(PAGE);
+    std::fs::write(&page, TEXT).map_err(|e| format!("write {}: {e}", page.display()))?;
     Ok(directory)
 }
 
@@ -96,7 +97,10 @@ fn the_mapping_refuses_a_write_and_leaves_the_page_alone() -> Outcome {
         matches!(replaced, Err(VfsError::ReadOnly { .. })),
         "{replaced:?}"
     );
-    assert_eq!(std::fs::read_to_string(directory.path().join(PAGE))?, TEXT);
+    let page = directory.path().join(PAGE);
+    let text =
+        std::fs::read_to_string(&page).map_err(|e| format!("read {}: {e}", page.display()))?;
+    assert_eq!(text, TEXT);
     assert!(!directory.path().join("new.md").exists());
     Ok(())
 }

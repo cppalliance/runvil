@@ -55,14 +55,24 @@ pub(crate) async fn stamp(conn: &turso::Connection) -> Result<(), LogError> {
 /// Returns [`LogError::Io`] when a rename fails.
 pub(crate) async fn set_aside(path: &Path, stamp: i64) -> Result<PathBuf, LogError> {
     let aside = with_suffix(path, &format!(".stale-{stamp}"));
-    tokio::fs::rename(path, &aside).await?;
+    rename(path, &aside).await?;
     for sidecar in SIDECARS {
         let from = with_suffix(path, sidecar);
-        if tokio::fs::try_exists(&from).await? {
-            tokio::fs::rename(&from, with_suffix(&aside, sidecar)).await?;
+        let exists = tokio::fs::try_exists(&from)
+            .await
+            .map_err(|e| LogError::io(format!("check {}", from.display()), e))?;
+        if exists {
+            rename(&from, &with_suffix(&aside, sidecar)).await?;
         }
     }
     Ok(aside)
+}
+
+/// Renames `from` to `to`, naming both in the error.
+async fn rename(from: &Path, to: &Path) -> Result<(), LogError> {
+    tokio::fs::rename(from, to)
+        .await
+        .map_err(|e| LogError::io(format!("rename {} to {}", from.display(), to.display()), e))
 }
 
 /// The version the file was stamped with, `None` when it holds no stamp.
