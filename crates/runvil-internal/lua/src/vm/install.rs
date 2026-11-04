@@ -139,9 +139,9 @@ impl SectionVm {
     /// namespace) through `install_shims`, which also puts
     /// `models.loop` and `models.compact` on the `models` table.
     /// `max_tool_iterations` is the run's resolved round cap, which every
-    /// `models.loop` and model handle `loop` call on this VM spends. The
-    /// `tasks.fanout` shim reads and writes the chain's current model
-    /// through captures over the selection injection received.
+    /// `models.loop` call on this VM spends. The `tasks.fanout` shim reads
+    /// and writes the chain's current model through captures over the
+    /// selection injection received.
     ///
     /// # Errors
     /// Returns a `LuaRuntime` failure if the shim install fails.
