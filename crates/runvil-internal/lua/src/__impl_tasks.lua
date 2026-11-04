@@ -4,7 +4,7 @@
 --
 -- The Engine installs this after the coroutine prelude (`__impl_coro.lua`)
 -- and installs the returned table as the `tasks` global. The chunk
--- arguments are privileged captures, never globals: `yield` is
+-- arguments are privileged captures, never globals: `yield` wraps
 -- coroutine.yield, `var_snapshot` is the Engine helper returning the hidden
 -- `var` data table as a plain deep copy, and `helpers` is the prelude's
 -- shared trio - `raise(kind, fields)` builds and raises the structured

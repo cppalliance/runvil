@@ -134,6 +134,30 @@ fn unsupported_major_is_refused() {
 }
 
 #[test]
+fn unsupported_major_refusal_gets_the_prompt_context() {
+    // The gate's refusal goes through the parser's prompt context, so its
+    // prose leads with the `runvil:` line, as a parse failure's does.
+    let trace = Scenario::new(ran_under("runvil: 3\n")).run();
+    let message = "unsupported runvil version: 3 (this build supports major 0)";
+    let mut expected = runvil_types::error::Error::new(
+        ErrorCode::UnsupportedVersion,
+        message,
+        format!(
+            "prompt:4: {message}. {}",
+            ErrorCode::UnsupportedVersion.prose()
+        ),
+    );
+    let line = std::num::NonZeroU32::new(4).expect("4 is non-zero");
+    expected.at = Some(Location::line("prompt", line));
+    expected.facts.insert(FactKey::Name, Value::from("t"));
+    assert_eq!(
+        trace.error(),
+        &expected,
+        "the whole refusal: its prose, its line, and the prompt's name"
+    );
+}
+
+#[test]
 fn missing_version_is_not_a_runvil_prompt() {
     // No `runvil:` key: not our prompt, so `run` declines with a Parse
     // error rather than executing it.

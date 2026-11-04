@@ -8,12 +8,12 @@
 //! `(ok, result)` envelope; coroutine driving itself
 //! (`Thread::create`/`resume`) is pure Rust in the scheduler. Every shim
 //! yields through one wrapper, which first records the author's line as the
-//! VM's call line. The source is
-//! pulled in with `include_str!` so chunk line 1 is file line 1, compiled
-//! once through the usual [`LuaProgram`] machinery, and loaded per VM. The
-//! chunk is named with an `@` prefix, so PUC's `luaO_chunkid` renders shim
-//! frames as verbatim `file:line:` references with no `[string "..."]`
-//! wrapper, and the line mapper (`program.rs`) never touches them.
+//! VM's call line. The source is pulled in with `include_str!` so chunk
+//! line 1 is file line 1, compiled once through the usual [`LuaProgram`]
+//! machinery, and loaded per VM. The chunk is named with an `@` prefix, so
+//! PUC's `luaO_chunkid` renders shim frames as verbatim `file:line:`
+//! references with no `[string "..."]` wrapper, and the line mapper
+//! (`program.rs`) never touches them.
 //!
 //! An adhoc tool call is a two-yield handshake inside the calling block
 //! coroutine. The `tools.call` shim yields `tool_call`; for an adhoc tool
@@ -117,9 +117,8 @@ static FANOUT_PROGRAM: LazyLock<Result<LuaProgram>> =
 /// before returning, so author code cannot yield directly and a hand-rolled
 /// yield fails the driver's strict validation. All three chunks receive the
 /// [`recording_yield`] over it, so every yield records its call line. The
-/// `models` and `tools`
-/// tables are passed to the shim chunk as arguments, so the chunk never
-/// reads a global; the chunk shims `models.infer` and installs
+/// `models` and `tools` tables are passed to the shim chunk as arguments, so
+/// the chunk never reads a global; the chunk shims `models.infer` and installs
 /// `tools.call`, and the `call` shim comes back for the Engine to install as
 /// a global. The `tasks` namespace is a second chunk, run over the same
 /// `yield` and `var_snapshot` captures plus the prelude's returned failure

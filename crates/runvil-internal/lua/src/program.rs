@@ -370,8 +370,8 @@ pub(crate) fn map_chunk_line_to_absolute(
     result.push_str(rest);
 
     if let Some((location, absolute)) = tag {
-        // Leading `location:line:` tag naming the prompt file and its
-        // absolute line: `briefer.md:51: ...`
+        // Leading `location:line:` tag naming the block's display location
+        // and its absolute line: ``section `Web Search` epilog:51: ...``
         (
             format!("{location}:{absolute}: {result}"),
             NonZeroU32::new(absolute),

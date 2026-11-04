@@ -33,6 +33,12 @@
 //! - [`untrusted`] neutralizes chat-template control delimiters in
 //!   untrusted tool and Lua text, and is never applied to assistant
 //!   replay or tool-call wire payloads.
+//! - [`place`](error::place) is the only code that gives a location its
+//!   prompt file or turns a known line into a prompt location, and
+//!   [`coordinates`](error::coordinates) is the only code that formats a
+//!   location as `file:line`. The parser's span constructors build
+//!   file-less spans that `place` completes, and the Lua crate's
+//!   `internal_at` writes Rust locations.
 
 pub mod cancel;
 pub mod emitter;

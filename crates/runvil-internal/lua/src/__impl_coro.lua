@@ -2,7 +2,7 @@
 --
 -- The Engine installs this after the Engine globals exist and before the
 -- Pack preludes. The chunk arguments are privileged captures, never
--- globals: `yield` is coroutine.yield (the coroutine global is stripped
+-- globals: `yield` wraps coroutine.yield (the coroutine global is stripped
 -- after install, so author code cannot yield directly), `var_snapshot` is
 -- the Engine helper returning the hidden `var` data table as a plain deep
 -- copy, `models`/`tools` are the section's namespace tables, passed in so

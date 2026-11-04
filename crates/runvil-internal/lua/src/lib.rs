@@ -66,6 +66,15 @@
 //! - Scheduler state changes only through a typed `Request` yielded by the
 //!   installed shim; a direct or malformed yield fails the block without
 //!   changing scheduler state.
+//! - Every Engine-call yield goes through the recording `yield` that a
+//!   VM's shim chunks share, which first sets the VM's call line to the
+//!   author's line, or clears it when no author frame runs.
+//! - Every universal error that crosses into a VM's Lua as an error table
+//!   is placed through `authored_at`, except an internal one, which keeps
+//!   its Rust location. The table's `message`, which `tostring` returns,
+//!   is the error's prose after its `file:line` when it is placed on a
+//!   prompt line; the `file:line` goes into that `message` only, never
+//!   into the prose.
 
 mod alias;
 mod argv;

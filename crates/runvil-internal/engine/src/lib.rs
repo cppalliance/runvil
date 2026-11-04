@@ -14,6 +14,10 @@
 //!   `runvil-prompt`, `runvil-vfs`, and
 //!   `runvil-model-client`. `cargo test -p build-xtask` enforces the
 //!   product and container boundaries.
+//! - A failed run's message ends with ` (at file:line)` when its failure
+//!   is located, except that a structure, fence, or list failure, the
+//!   parser's own, ends with ` (prompt ..., line ..., column ...)`, and a
+//!   frontmatter failure with ` (line ..., column ...)`.
 
 mod error;
 mod execute;
