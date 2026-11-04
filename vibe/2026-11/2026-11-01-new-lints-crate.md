@@ -190,9 +190,12 @@ The `dylint` job in `.github/workflows/ci.yml`, listed in `ci-green`'s
   `sed`, as `api-surface` and `msrv` read their toolchains, and installs it
   with `rustc-dev` and `llvm-tools-preview`. A bare
   `rustup toolchain install` reads the file only on rustup 1.28 and later;
-- runs on `ubuntu-22.04` with `check-workshop-linux`'s Tauri packages,
+- runs on `ubuntu-24.04` with `check-workshop-linux`'s Tauri packages,
   `npm ci`, and stub Gateway sidecar, because `cargo dylint` compiles the
-  desktop app too;
+  desktop app too. It does not use `check-workshop-linux`'s `ubuntu-22.04`,
+  because the prebuilt `cargo-dylint` and `dylint-link` binaries need
+  glibc 2.38 or later and 22.04 ships 2.35. The first CI run on 22.04
+  failed with "version `GLIBC_2.38' not found";
 - runs `cargo test --locked` in `lints/build-lints`, then
   `cargo dylint --all -- --locked --workspace --all-targets --all-features`,
   then checks that the tree is clean.

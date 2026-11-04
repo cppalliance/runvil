@@ -315,6 +315,82 @@ jobs:
       - name: Nightly-only fixtures
         run: cargo nextest run --locked -p build-xtask --run-ignored only
 
+  # The workspace's own lints, the dylint library in lints/build-lints. It
+  # builds on the nightly in that crate's rust-toolchain.toml, never on the
+  # workspace's stable. The date is read from that file, never repeated
+  # here. `cargo dylint` checks every crate, the desktop app included, so
+  # this job installs what check-workshop-linux does. It runs on 24.04,
+  # not check-workshop-linux's 22.04: the prebuilt cargo-dylint and
+  # dylint-link binaries need glibc 2.38 or later, and 22.04 ships 2.35.
+  dylint:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      # The same release as the `dylint_linting` the library depends on.
+      - name: Install cargo-dylint and dylint-link
+        uses: taiki-e/install-action@3f74d7c16a4242f1c95561e98edc25d36adb4375 # v2
+        with:
+          tool: cargo-dylint@6.3.2, dylint-link@6.3.2
+
+      - name: Install the lints' nightly
+        shell: bash
+        run: |
+          set -euo pipefail
+          nightly="$(sed -n 's/^channel = "\(nightly-[0-9-]*\)"$/\1/p' lints/build-lints/rust-toolchain.toml)"
+          case "$nightly" in
+            nightly-[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]) ;;
+            *)
+              echo "expected one nightly channel in lints/build-lints/rust-toolchain.toml, found: '$nightly'"
+              exit 1
+              ;;
+          esac
+          rustup toolchain install "$nightly" --profile minimal --component rustc-dev,llvm-tools-preview
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+        with:
+          workspaces: |
+            . -> target
+            lints/build-lints -> target
+
+      - name: Install Tauri system packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libwebkit2gtk-4.1-dev libssl-dev librsvg2-dev
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: crates/workshop/package-lock.json
+
+      - name: Install UI dependencies
+        run: npm ci --prefix crates/workshop
+
+      - name: Stage a stub Gateway sidecar
+        run: node tools/fetch-gateway-sidecar.mjs --stub --target x86_64-unknown-linux-gnu
+
+      - name: Lint UI tests
+        working-directory: lints/build-lints
+        run: cargo test --locked
+
+      - name: Dylint
+        run: cargo dylint --all -- --locked --workspace --all-targets --all-features
+
+      - name: Remove Gateway sidecar
+        if: always()
+        run: node tools/stage-gateway-sidecar.mjs remove --target x86_64-unknown-linux-gnu
+
+      - name: Clean tree
+        shell: bash
+        run: |
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "the build dirtied the repository:"
+            git status --porcelain
+            exit 1
+          fi
+
   # The Engine crates inherit `rust-version` from the root Cargo.toml's
   # [workspace.package]; this job builds them at that toolchain. The version
   # is read from the manifest, never repeated here, so the two cannot drift.
@@ -351,7 +427,7 @@ jobs:
   # or that job bypasses this gate.
   ci-green:
     runs-on: ubuntu-latest
-    needs: [fmt, clippy, test, docs, check-workshop, check-workshop-linux, ui, supply-chain, api-surface, msrv]
+    needs: [fmt, clippy, test, docs, check-workshop, check-workshop-linux, ui, supply-chain, api-surface, dylint, msrv]
     if: always()
     steps:
       - name: Verify every job succeeded
