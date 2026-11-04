@@ -161,11 +161,9 @@ pub struct SectionVm<S = Injected> {
     /// The VM's cancellation hook, shared with every block coroutine's hook
     /// (hooks are per-coroutine in PUC Lua).
     cancel_hook: CancelHook,
-    /// The raw-model-id fallback, resolved whenever the caller passes an
-    /// application-state snapshot (`RunConfig::with_ui`): then `models.get`
-    /// resolves a label outside the five roles as a raw gateway model id. Set
-    /// by [`allow_raw_model_ids`](SectionVm::allow_raw_model_ids) before
-    /// Engine injection; refused everywhere else.
+    /// The [`RawModelIds`] fallback `models.get` applies; set by
+    /// [`allow_raw_model_ids`](SectionVm::allow_raw_model_ids) before Engine
+    /// injection, refused everywhere else.
     raw_model_ids: RawModelIds,
     /// The section's one conversation, served as the `messages` global.
     messages: MessageList,

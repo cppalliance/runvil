@@ -72,8 +72,8 @@ const COMPACT_RUNNING: &str =
 /// `max_tool_iterations` is the round cap, `compactors` the table that
 /// `compactors.fail` is read from at each call, `loop_running` the VM's
 /// flag that is set while one of its loops runs, and `hook` the VM's
-/// cancellation hook, whose cancel flag the step reads where the shim
-/// called `cancel_requested()`.
+/// cancellation hook, whose cancel flag the step reads beside each raw
+/// `pcall` outcome.
 ///
 /// # Errors
 /// Returns a `LuaRuntime` failure if the function cannot be created.
@@ -241,8 +241,8 @@ fn compact(
     Ok(action)
 }
 
-/// `loop_begin`'s answer to a refused argument: no step closure, then the
-/// `"raise"` action with a new `LuaRuntime` failure.
+/// The answer of `loop_begin` or `compact_begin` to a refused call: no step
+/// closure, then the `"raise"` action with a new `LuaRuntime` failure.
 fn refuse(lua: &Lua, message: &str) -> mlua::Result<MultiValue> {
     let mut action = act(lua, Then::RaiseNew(lua_runtime(message)))?;
     action.push_front(Value::Nil);
@@ -306,10 +306,10 @@ fn answer<T>(
 }
 
 /// Turns the machine's next step into the trampoline's tag and values:
-/// each request table built as the shim builds it, a call's arguments
-/// converted with `to_value`, the overflow reason as its `tag()`, a
-/// normalized failure through `error_value::normalized`, and a new
-/// failure as its error table, with author prose when the prompt's Lua
+/// each request table in the shape its [`Then`] variant documents, a
+/// call's arguments converted with `to_value`, the overflow reason as its
+/// `tag()`, a normalized failure through `error_value::normalized`, and a
+/// new failure as its error table, with author prose when the prompt's Lua
 /// caused it.
 fn act(lua: &Lua, then: Then<Value>) -> mlua::Result<MultiValue> {
     let (tag, values) = match then {
@@ -376,8 +376,7 @@ fn call_fields(lua: &Lua, call: &ToolCallEvent) -> mlua::Result<[(&'static str, 
     ])
 }
 
-/// A request table as the shim built it: `op` and the given fields, each
-/// nil field left unset.
+/// A request table: `op` and the given fields, each nil field left unset.
 fn request<const N: usize>(lua: &Lua, op: &str, fields: [(&str, Value); N]) -> mlua::Result<Value> {
     let table = lua.create_table()?;
     table.raw_set("op", op)?;

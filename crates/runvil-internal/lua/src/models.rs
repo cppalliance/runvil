@@ -1,13 +1,15 @@
 //! The Lua `models` Engine global: `use` / `get` / `current`.
 //!
-//! The five roles arrive filled, when the run is built, in the shared
-//! [`ModelSet`], and the table selects among them by role name. `models.use` takes a role
-//! name or a model handle and stores the binding it selects, with its
-//! optional sampling options applied, as the section's current model.
-//! `models.get` inspects a role without selecting it, and `models.current`
-//! returns the handle for the current model. The suspending `models.infer`,
-//! `models.loop`, and `models.compact` are coroutine shims added to this
-//! table afterward.
+//! The run builds the shared [`ModelSet`] once, holding all five roles or,
+//! when the caller supplied no model, none, and the table selects among them
+//! by role name; a role read from the empty set fails saying so. `models.use`
+//! takes a role name or a model handle and stores the binding it selects,
+//! with its optional sampling options applied, as the section's current
+//! model. `models.get` inspects a role without selecting it, and
+//! `models.current` returns the handle for the current model. The suspending
+//! `models.infer`, `models.loop`, and `models.compact` are coroutine shims
+//! added to this table afterward, because yield cannot cross the Rust
+//! callback boundary.
 use std::num::NonZeroU32;
 use std::sync::Arc;
 use std::sync::Mutex;
@@ -42,9 +44,8 @@ const RAW_ID_CONTEXT: NonZeroU32 = match NonZeroU32::new(8192) {
     None => unreachable!(),
 };
 
-/// Builds the raw-model-id fallback's binding: a `models.get` label outside
-/// the five roles, resolved as a raw gateway catalog model id with no
-/// invocation overrides and the fallback context window.
+/// Builds the [`RawModelIds::Resolved`] binding for `alias`: no invocation
+/// overrides and [`RAW_ID_CONTEXT`].
 fn raw_gateway_binding(alias: &str) -> mlua::Result<ModelBinding> {
     let id = ModelId::gateway(alias).map_err(|error| {
         mlua::Error::external(format!("models.get model id {alias:?} is invalid: {error}"))
@@ -110,14 +111,14 @@ fn role_binding(set: &ModelSet, role: ModelRole) -> mlua::Result<ModelBinding> {
 /// The sampling options a `models.use` call sets on its selection. An
 /// omitted field keeps the role's own value.
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
-pub(crate) struct UseOptions {
+struct UseOptions {
     temperature: Option<Temperature>,
     max_tokens: Option<NonZeroU32>,
 }
 
 impl UseOptions {
     /// Overrides the binding's invocation with the fields these options set.
-    pub(crate) fn apply(self, binding: ModelBinding) -> ModelBinding {
+    fn apply(self, binding: ModelBinding) -> ModelBinding {
         let mut invocation = binding.invocation().clone();
         invocation.temperature = self.temperature.or(invocation.temperature);
         invocation.max_tokens = self.max_tokens.or(invocation.max_tokens);
@@ -238,28 +239,11 @@ fn parse_use_options(options: Value, rest: &MultiValue) -> mlua::Result<UseOptio
     Ok(parsed)
 }
 
-/// Installs the `models` table into one section VM (H1 included: there is
-/// one install path for every section).
-///
-/// `models.use(role_or_handle, options?)` takes a role name, which it looks up
-/// in the shared [`ModelSet`], or a model handle, whose binding it uses as it
-/// is. It applies the optional `temperature` / `max_tokens` table on top of
-/// that binding, stores the result in `selection` as the section's current
-/// model, and returns the handle. `models.get(label)` returns the handle for
-/// a role without selecting it, and `models.current()` returns the handle
-/// for the current model. A label outside the five roles is an error, and a
-/// role the caller gave no model fails saying so.
-///
-/// `raw_ids` is the raw-model-id fallback, resolved whenever the caller
-/// passes an application-state snapshot (`RunConfig::with_ui`): then
-/// `models.get` resolves a label outside the five roles as a raw gateway
-/// catalog model id, so the built-in chat prompt can run
-/// `models.get(ui().selected_model)`. Refused, such a label is the usual
-/// error.
-///
-/// The coroutine shim layer installs the suspending `models.infer`,
-/// `models.loop`, and `models.compact`, because yield cannot cross the
-/// Rust callback boundary.
+/// Installs the `models` table the module doc describes into one section VM;
+/// every section, H1 included, installs it through this one path.
+/// `models.use` stores its selection in `selection`, and `raw_ids` is the
+/// [`RawModelIds`] fallback `models.get` applies to a label outside the five
+/// roles.
 ///
 /// # Errors
 /// Returns a `LuaRuntime` failure if a Lua table or callback cannot be created or
@@ -309,10 +293,8 @@ pub(crate) fn install_models(
     let frozen = Arc::clone(set);
     let get_fn = lua
         .create_function(move |_, label: String| -> mlua::Result<LuaModelHandle> {
-            // The raw-model-id fallback: with raw ids resolved, a label
-            // outside the five roles resolves as a raw gateway catalog model
-            // id under the fallback context window. Gateway ids include `/`,
-            // `.`, and `:`, so the id's own validation is the only gate.
+            // Gateway ids include `/`, `.`, and `:`, so the id's own
+            // validation is the only gate.
             let binding = match (find_role(&label), raw_ids) {
                 (Some(role), _) => role_binding(&frozen, role)?,
                 (None, RawModelIds::Resolved) => raw_gateway_binding(&label)?,

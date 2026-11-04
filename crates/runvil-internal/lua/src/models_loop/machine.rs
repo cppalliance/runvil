@@ -55,7 +55,7 @@ pub(super) struct Machine<V> {
     /// `None` when the call named no handle.
     handle: Option<V>,
     /// The compactor argument, or `compactors.fail` as read when the
-    /// call began, which is not type-checked, as in the shim.
+    /// call began, which is not type-checked.
     compactor: V,
     /// The current batch's turn, sent back on every `tool_calls` and
     /// `tool_call` request.
