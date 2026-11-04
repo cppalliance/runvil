@@ -76,6 +76,7 @@
 //!   prompt line; the `file:line` goes into that `message` only, never
 //!   into the prose.
 
+mod adhoc;
 mod argv;
 mod bindings;
 mod chunk_line;
@@ -120,6 +121,7 @@ mod tests;
 
 // The executor-facing surface: every item `runvil-engine` names crosses
 // here. The facade re-exports only `VfsOp` and `VfsOutcome`.
+pub use crate::adhoc::AdhocTools;
 pub use crate::argv::Argv;
 pub use crate::bindings::{
     DiscoveryTool, RosterEntry, ToolBinding, ToolOutputKind, ToolSet, wire_name_of,
@@ -154,6 +156,6 @@ pub use crate::protocol::{
 pub use crate::scope::{OfferMode, OfferedTool, Offers, RenderedTools, ToolCallCounts};
 pub use crate::section::{Library, LibraryBlock, LibraryKey, LuaBlockResult, SectionText};
 pub use crate::vm::{
-    AdhocTools, CoroStep, InjectFailure, Injected, SectionVm, Uninjected, current_catalog_packs,
+    CoroStep, InjectFailure, Injected, SectionVm, Uninjected, current_catalog_packs,
     current_dynamic_set, current_static_set,
 };

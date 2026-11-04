@@ -18,11 +18,11 @@ use std::sync::Arc;
 use mlua::{Lua, Table, Value};
 use runvil_types::tools::ToolId;
 
+use crate::adhoc::AdhocTools;
 use crate::bindings::ToolSet;
 use crate::error::{self, Result};
 use crate::proxy::{key_text, read_only_walk};
 use crate::scope::ToolCallCounts;
-use crate::vm::AdhocTools;
 
 /// The path of the table itself, which its refusals open with.
 const STATS: &str = "tools.stats";
@@ -63,6 +63,15 @@ impl View {
 }
 
 impl Stats {
+    /// Whether `key` is a defined adhoc tool's id; a key that is no tool
+    /// id names none.
+    fn is_adhoc(&self, key: &str) -> Result<bool> {
+        match ToolId::parse(key) {
+            Ok(id) => Ok(self.adhoc.by_id(&id)?.is_some()),
+            Err(_) => Ok(false),
+        }
+    }
+
     /// Every count, summed.
     fn total(&self) -> Result<u64> {
         Ok(self.counts.snapshot()?.values().sum())
@@ -79,7 +88,7 @@ impl Stats {
                     *held.entry(pack.to_owned()).or_default() += count;
                 }
                 View::Tools => {
-                    if self.catalog.contains(&id) || self.adhoc.binding(&id)?.is_some() {
+                    if self.catalog.contains(&id) || self.is_adhoc(&id)? {
                         held.insert(id, count);
                     }
                 }
@@ -96,7 +105,7 @@ impl Stats {
         let tools = view == View::Tools;
         let hint = if tools && self.catalog.contains(key) {
             " (a catalog tool that was neither offered in this section nor called with tools.call)"
-        } else if tools && key.contains('/') && self.adhoc.binding(key)?.is_some() {
+        } else if tools && self.is_adhoc(key)? {
             " (an adhoc tool that was neither offered in this section nor called with tools.call)"
         } else if held.is_empty() {
             ""

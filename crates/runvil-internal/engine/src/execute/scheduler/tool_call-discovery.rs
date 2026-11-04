@@ -148,12 +148,7 @@ impl ChainOps<'_> {
         args: Value,
         site: CallSite,
     ) -> Result<Dispatched> {
-        let adhoc = self
-            .chain
-            .frame()?
-            .vm()
-            .adhoc_tools()
-            .binding(&target.id().to_string())?;
+        let adhoc = self.chain.frame()?.vm().adhoc_tools().by_id(target.id())?;
         if let Some(adhoc) = adhoc {
             return self.prepare_adhoc_call(&adhoc, args, &site);
         }

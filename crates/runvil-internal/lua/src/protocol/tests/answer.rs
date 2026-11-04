@@ -257,7 +257,7 @@ fn lua_with_adhoc_grab() -> Lua {
         &lua.globals(),
         &std::sync::Arc::new(crate::ToolSet::default()),
         &std::sync::Arc::new(std::sync::Mutex::new(crate::Offers::default())),
-        &crate::vm::AdhocTools::default(),
+        &crate::adhoc::AdhocTools::default(),
         &crate::MessageList::default(),
     )
     .expect("the tools install cannot fail on a fresh VM");

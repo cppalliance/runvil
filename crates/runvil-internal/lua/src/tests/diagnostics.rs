@@ -3,8 +3,8 @@
 //! that fail closed on a poisoned lock.
 
 use super::*;
+use crate::adhoc::AdhocTools;
 use crate::chunk_line::map_chunk_line_to_absolute;
-use crate::vm::AdhocTools;
 
 #[test]
 fn lua_program_retains_source_and_round_trips_bytecode() {
@@ -85,7 +85,7 @@ fn adhoc_tools_list_and_lookup_reads_fail_closed_on_poison() {
         .bindings()
         .expect_err("list reads must fail on a poisoned registry");
     let looked_up = adhoc
-        .binding("adhoc/grab")
+        .by_id(&runvil_types::tools::ToolId::parse("adhoc/grab").expect("a valid adhoc id"))
         .expect_err("lookups must fail on a poisoned registry");
     for error in [listed, looked_up] {
         assert!(

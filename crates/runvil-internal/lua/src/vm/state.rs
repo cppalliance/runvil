@@ -11,7 +11,8 @@ use runvil_types::packs::PackId;
 use runvil_types::tools::{ToolId, ToolInfo};
 use serde_json::Value as Json;
 
-use super::{AdhocTools, SectionVm};
+use super::SectionVm;
+use crate::adhoc::AdhocTools;
 use crate::bindings::{ToolBinding, ToolSet};
 use crate::error::{self, Result, lua_runtime};
 use crate::packs::is_adhoc;
@@ -226,7 +227,7 @@ fn expanded(
         match &offer.target {
             OfferTarget::Tool(id) => {
                 let tool = if is_adhoc(&id.pack()) {
-                    adhoc.binding(&id.to_string())?.map(OfferedTool::Adhoc)
+                    adhoc.by_id(id)?.map(OfferedTool::Adhoc)
                 } else {
                     set.catalog().get(id).cloned().map(OfferedTool::Catalog)
                 };

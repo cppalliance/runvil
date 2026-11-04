@@ -16,13 +16,13 @@ use runvil_types::packs::PackId;
 use runvil_types::tools::ToolId;
 
 use super::userdata::LuaToolHandle;
+use crate::adhoc::AdhocTools;
 use crate::bindings::{RosterEntry, ToolSet, wire_name_of};
 use crate::error::{self, Result};
 use crate::messages::MessageList;
 use crate::packs::{LuaPackHandle, is_adhoc, pack_object};
 use crate::proxy::key_text;
 use crate::scope::{OfferMode, OfferTarget, Offers};
-use crate::vm::AdhocTools;
 use crate::walk_budget::HELD_KEY_LIMIT;
 
 /// The refusal of an offer verb once the section's sets are frozen,
@@ -151,7 +151,7 @@ impl Offering {
             let known = match ToolId::parse(name) {
                 Ok(id) if is_adhoc(&id.pack()) => self
                     .adhoc
-                    .binding(name)
+                    .by_id(&id)
                     .map_err(mlua::Error::external)?
                     .is_some()
                     .then_some(id),
@@ -196,7 +196,7 @@ impl Offering {
         }
         Ok(self
             .adhoc
-            .binding(name)
+            .by_wire_name(name)
             .map_err(mlua::Error::external)?
             .map(|binding| binding.id().clone()))
     }

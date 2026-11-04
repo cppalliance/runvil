@@ -26,6 +26,7 @@ use runvil_types::names::is_alias;
 use runvil_types::tools::{ToolId, ToolInfo};
 use serde_json::{Value as Json, json};
 
+use crate::adhoc::AdhocTools;
 use crate::bindings::{DiscoveryTool, ToolBinding, ToolSet};
 use crate::error::{self, Result};
 use crate::json::to_json;
@@ -33,7 +34,6 @@ use crate::messages::MessageList;
 use crate::packs::{ADHOC_PACK, install_pack_list, install_pack_objects};
 use crate::proxy::key_text;
 use crate::scope::{OfferMode, Offers};
-use crate::vm::AdhocTools;
 
 mod decode;
 mod objects;
@@ -211,9 +211,14 @@ fn adhoc_info(lua: &Lua, attrs: &Table, adhoc: &AdhocTools) -> mlua::Result<(Str
         )));
     }
     let description = attr_text(attrs, "description")?;
-    let id = format!("{ADHOC_PACK}/{}", name.to_ascii_lowercase());
+    let id =
+        ToolId::parse(&format!("{ADHOC_PACK}/{}", name.to_ascii_lowercase())).map_err(|error| {
+            mlua::Error::external(error::internal(format!(
+                "an adhoc tool's id is a tool id: {error}"
+            )))
+        })?;
     if adhoc
-        .binding(&name)
+        .by_wire_name(&name)
         .map_err(mlua::Error::external)?
         .is_some()
     {
@@ -221,7 +226,7 @@ fn adhoc_info(lua: &Lua, attrs: &Table, adhoc: &AdhocTools) -> mlua::Result<(Str
             "tools.adhoc name {name:?} is already registered"
         )));
     }
-    if let Some(holder) = adhoc.binding(&id).map_err(mlua::Error::external)? {
+    if let Some(holder) = adhoc.by_id(&id).map_err(mlua::Error::external)? {
         return Err(mlua::Error::external(format!(
             "tools.adhoc name {name:?} has the id {id}, which {:?} already holds",
             holder.alias()
@@ -239,11 +244,6 @@ fn adhoc_info(lua: &Lua, attrs: &Table, adhoc: &AdhocTools) -> mlua::Result<(Str
     };
     tool_schema_new(name.clone(), description.clone(), parameters.clone())
         .map_err(|error| mlua::Error::external(format!("tools.adhoc: {error}")))?;
-    let id = ToolId::parse(&id).map_err(|error| {
-        mlua::Error::external(error::internal(format!(
-            "an adhoc tool's id is a tool id: {error}"
-        )))
-    })?;
     Ok((name, ToolInfo::new(id, description, parameters)))
 }
 

@@ -1,7 +1,18 @@
 //! The adhoc tools a section VM defines: each one's binding, looked up by
 //! wire name or by id.
+//!
+//! An adhoc tool, defined with `tools.adhoc`, runs inside the calling
+//! block's coroutine, never as an Engine function. The VM keeps each
+//! tool's binding; the handler sits in the VM's handler table. A call
+//! takes two yields: the shim's `tool_call`, which the scheduler answers
+//! with the handler itself, and the shim's `adhoc_tool_done` after the
+//! handler ran, which carries its result for the scheduler to report.
+//! Every suspending call the handler makes in between is an ordinary
+//! yield of the same coroutine.
 
 use std::sync::{Arc, Mutex, MutexGuard};
+
+use runvil_types::tools::ToolId;
 
 use crate::bindings::ToolBinding;
 use crate::error::{self, Result};
@@ -39,23 +50,27 @@ impl AdhocTools {
         Ok(())
     }
 
-    /// Returns the binding of the adhoc tool whose id is `name` when it
-    /// holds a `/`, else whose wire name is `name`.
+    /// Returns the binding of the adhoc tool whose id is `id`.
     ///
     /// # Errors
     /// Returns an `Internal` failure if the entries lock was poisoned.
-    pub fn binding(&self, name: &str) -> Result<Option<ToolBinding>> {
-        let by_id = name.contains('/');
+    pub fn by_id(&self, id: &ToolId) -> Result<Option<ToolBinding>> {
         Ok(self
             .entries()?
             .iter()
-            .find(|binding| {
-                if by_id {
-                    binding.id().to_string() == name
-                } else {
-                    binding.alias() == name
-                }
-            })
+            .find(|binding| binding.id() == id)
+            .cloned())
+    }
+
+    /// Returns the binding of the adhoc tool whose wire name is `name`.
+    ///
+    /// # Errors
+    /// Returns an `Internal` failure if the entries lock was poisoned.
+    pub fn by_wire_name(&self, name: &str) -> Result<Option<ToolBinding>> {
+        Ok(self
+            .entries()?
+            .iter()
+            .find(|binding| binding.alias() == name)
             .cloned())
     }
 

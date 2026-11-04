@@ -1,20 +1,9 @@
 //! The per-section Lua VM: its construction, the typestate that orders
-//! Engine injection before every later step, the section's one
-//! `messages` list it creates, and the adhoc tools it defines.
-//! Injection is in `inject`, the later installs in `install`, block
-//! coroutines in `run`, state reads in `state`, and the adhoc tools in
-//! `adhoc`.
-//!
-//! An adhoc tool, defined with `tools.adhoc`, runs inside the calling
-//! block's coroutine, never as an Engine function. The VM keeps each
-//! tool's binding; the handler sits in the VM's handler table. A call
-//! takes two yields: the shim's `tool_call`, which the scheduler answers
-//! with the handler itself, and the shim's `adhoc_tool_done` after the
-//! handler ran, which carries its result for the scheduler to report.
-//! Every suspending call the handler makes in between is an ordinary
-//! yield of the same coroutine.
+//! Engine injection before every later step, and the section's one
+//! `messages` list it creates. Injection is in `inject`, the later
+//! installs in `install`, block coroutines in `run`, and state reads in
+//! `state`.
 
-mod adhoc;
 mod inject;
 mod install;
 mod run;
@@ -32,6 +21,7 @@ use runvil_types::untrusted::GuardNonce;
 use runvil_vfs::Access;
 use serde_json::Value as Json;
 
+use crate::adhoc::AdhocTools;
 use crate::bindings::ToolSet;
 use crate::engine_globals::{LUA_LOG_CHARACTER_LIMIT, install_untrusted};
 use crate::error::{self, Error, Result};
@@ -43,7 +33,6 @@ use crate::program::LuaProgram;
 use crate::scope::Offers;
 use crate::walk_budget::{DEFAULT_LUA_MEMORY_BYTES, HeapCeiling};
 
-pub use adhoc::AdhocTools;
 pub use inject::InjectFailure;
 pub use run::CoroStep;
 pub use state::{current_catalog_packs, current_dynamic_set, current_static_set};

@@ -21,7 +21,7 @@ const GRAB: &str = "local grab = tools.adhoc({\n\
 /// The schema the adhoc tool with wire name `name` on `vm` binds.
 fn adhoc_schema(vm: &crate::SectionVm, name: &str) -> Json {
     vm.adhoc_tools()
-        .binding(name)
+        .by_wire_name(name)
         .expect("the adhoc tools read")
         .unwrap_or_else(|| panic!("{name} is defined"))
         .schema()
@@ -176,7 +176,7 @@ fn the_discovery_tools_wire_names_are_refused() {
     );
     assert!(
         vm.adhoc_tools()
-            .binding("GetDynamicTools")
+            .by_wire_name("GetDynamicTools")
             .expect("the adhoc tools read")
             .is_none(),
         "no refused definition registers"
@@ -201,7 +201,7 @@ fn a_definition_whose_tool_object_cannot_be_stored_leaves_no_tool_behind() {
         .expect("the tool-object table is restored");
     assert_eq!(
         vm.adhoc_tools()
-            .binding("adhoc/x")
+            .by_id(&runvil_types::tools::ToolId::parse("adhoc/x").expect("a valid id"))
             .expect("the adhoc tools read"),
         None,
         "a failed definition registers nothing"
@@ -273,7 +273,7 @@ fn a_wrapper_of_a_catalog_tool_takes_its_description_and_schema_unchanged() {
         .expect("the catalog holds the tool");
     let wrapper = vm
         .adhoc_tools()
-        .binding("adhoc/search")
+        .by_id(&runvil_types::tools::ToolId::parse("adhoc/search").expect("a valid id"))
         .expect("the adhoc tools read")
         .expect("the wrapper is defined");
     assert_eq!(wrapper.description(), catalog.description);

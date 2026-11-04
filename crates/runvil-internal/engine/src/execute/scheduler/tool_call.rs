@@ -168,18 +168,16 @@ impl ChainOps<'_> {
             if set == OfferMode::Dynamic || DiscoveryTool::of(binding.id()).is_some() {
                 return Ok(ToolRoute::Discovery(binding));
             }
-            let adhoc = vm.adhoc_tools().binding(&binding.id().to_string())?;
+            let adhoc = vm.adhoc_tools().by_id(binding.id())?;
             return Ok(adhoc.map_or(ToolRoute::Catalog(binding), ToolRoute::Adhoc));
         }
-        if name.contains('/')
-            && let Some(binding) = vm.adhoc_tools().binding(name)?
+        let tool = ToolId::parse(name).ok();
+        if let Some(tool) = &tool
+            && let Some(binding) = vm.adhoc_tools().by_id(tool)?
         {
             return Ok(ToolRoute::Adhoc(binding));
         }
-        let Some(info) = ToolId::parse(name)
-            .ok()
-            .and_then(|tool| tool_set.catalog().get(&tool))
-        else {
+        let Some(info) = tool.and_then(|tool| tool_set.catalog().get(&tool)) else {
             return Err(unbound_tool_call(tool_set, name));
         };
         // A script cannot know the arguments a render shapes for a model,
@@ -216,7 +214,7 @@ impl ChainOps<'_> {
             for tool in frozen {
                 let seeded = DiscoveryTool::of(&tool).is_some()
                     || tool_set.catalog().get(&tool).is_some()
-                    || vm.adhoc_tools().binding(&tool.to_string())?.is_some();
+                    || vm.adhoc_tools().by_id(&tool)?.is_some();
                 if seeded {
                     ids.push(tool);
                 }

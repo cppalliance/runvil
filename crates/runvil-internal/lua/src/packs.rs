@@ -26,11 +26,11 @@ use mlua::{
 use runvil_types::packs::PackId;
 use runvil_types::tools::ToolId;
 
+use crate::adhoc::AdhocTools;
 use crate::bindings::{RosterEntry, ToolSet};
 use crate::error::{self, Result};
 use crate::proxy::read_only_walk;
 use crate::tools::tool_object;
-use crate::vm::AdhocTools;
 
 /// The id of the adhoc Pack, which holds every tool `tools.adhoc` defines.
 pub(crate) const ADHOC_PACK: &str = "adhoc";
