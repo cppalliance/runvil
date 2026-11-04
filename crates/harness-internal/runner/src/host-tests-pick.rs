@@ -79,7 +79,7 @@ fn a_bare_entry_that_only_another_vendor_has_is_unavailable_naming_each_fqn() {
         refusal(&run, &declares),
         "the environment cannot satisfy this prompt:\n\
          - poop is unavailable: poop means runvil/poop, which is not installed; \
-         write acme/poop to use that Pack",
+         write acme/poop to use that Pack (at prompt:5)",
         "the run names the reason and does not call the Pack missing"
     );
 
@@ -116,7 +116,7 @@ fn an_entry_no_vendor_has_is_missing_and_an_absent_vendor_name_is_unavailable() 
         refusal(&run, &declares),
         "the environment cannot satisfy this prompt:\n\
          - missing required Pack: nope\n\
-         - gone is unavailable: acme/gone is not installed"
+         - gone is unavailable: acme/gone is not installed (at prompt:5)"
     );
 }
 
@@ -152,7 +152,8 @@ fn the_roster_covers_every_declared_pack_the_run_cannot_serve() {
         "the environment cannot satisfy this prompt:\n\
          - missing required Pack: absent\n\
          - needy is unavailable: the run lacks the services it needs: tests/session\n\
-         - broken is unavailable: backed needs tests/backend, and this host provides none"
+         - broken is unavailable: backed needs tests/backend, and this host provides none \
+         (at prompt:5)"
     );
 }
 

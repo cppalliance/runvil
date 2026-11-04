@@ -147,7 +147,7 @@ fn a_context_minimum_above_the_filling_models_is_refused() -> TestResult {
         refusal_under(STRONG, 32_000, ThinkingMode::Always)?,
         "the environment cannot satisfy this prompt:\n\
          - role 'strong': requires a context of at least 200000 tokens; \
-         the model filling it provides 32000"
+         the model filling it provides 32000 (at prompt:5)"
     );
     Ok(())
 }
@@ -159,14 +159,14 @@ fn a_thinking_requirement_the_filling_model_fails_is_refused() -> TestResult {
         refusal_under(STRONG, 200_000, ThinkingMode::Never)?,
         "the environment cannot satisfy this prompt:\n\
          - role 'strong': requires 'thinking: true'; \
-         the thinking capability of the model filling it is Never"
+         the thinking capability of the model filling it is Never (at prompt:5)"
     );
     let small = "models: { small: { thinking: false } }";
     assert_eq!(
         refusal_under(small, 32_000, ThinkingMode::Always)?,
         "the environment cannot satisfy this prompt:\n\
          - role 'small': requires 'thinking: false'; \
-         the thinking capability of the model filling it is Always"
+         the thinking capability of the model filling it is Always (at prompt:5)"
     );
     Ok(())
 }

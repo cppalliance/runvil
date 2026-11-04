@@ -4,6 +4,7 @@
 //! fired ending the run cancelled.
 
 use runvil_types::cancel::CancelHandle;
+use runvil_types::error::ErrorCode;
 use runvil_types::event::Event;
 use runvil_types::models::ThinkingMode;
 
@@ -151,9 +152,17 @@ fn an_unsupported_version_is_reported_before_an_unmet_requirement() {
     let trace = under_model(&source, "version-first", model).run();
     let error = trace.error();
     assert_eq!(
-        error,
-        &crate::error::unsupported_version(7),
+        (error.code, error.message.as_str()),
+        (
+            ErrorCode::UnsupportedVersion,
+            "unsupported runvil version: 7 (this build supports major 0)"
+        ),
         "the version gate refuses the run first"
+    );
+    assert_eq!(
+        error.at.as_ref().map(|at| at.start_line.get()),
+        Some(4),
+        "on the `runvil:` line, not the `models:` line of the unmet requirement"
     );
     assert_eq!(run_error_kind(error.code), RunErrorKind::Parse, "{error}");
     assert!(

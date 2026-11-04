@@ -197,12 +197,14 @@ pub(crate) fn run_error_kind(code: ErrorCode) -> RunErrorKind {
 /// Returns the self-contained text a failed run reports: the error's
 /// message, with its causes, then where the failure happened.
 ///
-/// A frontmatter, structure, fence, or list failure, the parser's own,
-/// ends with its prompt name, line, and column, each when known, as
-/// `(prompt {name}, line {line}, column {column})`. Any other failure with
-/// a location ends with it as `(at {file}:{line})`: its prompt file and
-/// line, or for an internal fault the Rust source file and line of the
-/// broken invariant.
+/// A structure, fence, or list failure, the parser's own, ends with its
+/// prompt name, line, and column, each when known, as
+/// `(prompt {name}, line {line}, column {column})`. A frontmatter failure
+/// ends with its line and column alone, each when known: it predates the
+/// prompt's name, and its `Name` fact, when it has one, is a refused
+/// Pack's id. Any other failure with a location ends with it as
+/// `(at {file}:{line})`: its prompt file and line, or for an internal
+/// fault the Rust source file and line of the broken invariant.
 pub(crate) fn failure_message(error: &Error) -> String {
     let mut rendered = error.message.clone();
     if let Some(location) = location(error) {
@@ -226,6 +228,7 @@ fn location(error: &Error) -> Option<String> {
                 error
                     .facts
                     .get(&FactKey::Name)
+                    .filter(|_| error.code != ErrorCode::FrontmatterInvalid)
                     .and_then(serde_json::Value::as_str)
                     .map(|name| format!("prompt {name}")),
                 error

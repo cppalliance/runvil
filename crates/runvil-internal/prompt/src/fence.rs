@@ -7,6 +7,7 @@
 //! and splits content into [`RawBlock`]s, which this crate compiles into
 //! [`Block`](crate::Block)s.
 
+use std::num::NonZeroU32;
 use std::ops::Range;
 
 use pulldown_cmark::{CodeBlockKind, CowStr, Event, Options, Parser, Tag};
@@ -58,8 +59,13 @@ pub(crate) fn trim_leading_blank_lines(content: &str) -> &str {
 /// Extracts source through the first closing line, the line the Markdown parser
 /// closes the fence on. The validator refuses any closing line that is not
 /// exactly three backticks before a split runs, so a split that meets one has
-/// broken an invariant, and it reports an internal error.
-fn extract_exact_fence<'a>(content: &'a str, location: &str) -> Result<(String, &'a str)> {
+/// broken an invariant, and it reports an internal error. A fence with no
+/// closing line fails on `opening_line`, the file line of its opening line.
+fn extract_exact_fence<'a>(
+    content: &'a str,
+    location: &str,
+    opening_line: Option<NonZeroU32>,
+) -> Result<(String, &'a str)> {
     let mut offset = 0;
     for line in content.split_inclusive('\n') {
         let text = line.strip_suffix('\n').unwrap_or(line);
@@ -75,9 +81,12 @@ fn extract_exact_fence<'a>(content: &'a str, location: &str) -> Result<(String, 
         }
         offset += line.len();
     }
-    Err(error::failure(
-        ErrorCode::FenceInvalid,
-        format!("{location} fence is not closed"),
+    Err(error::on_line(
+        error::failure(
+            ErrorCode::FenceInvalid,
+            format!("{location} fence is not closed"),
+        ),
+        opening_line,
     ))
 }
 
@@ -288,13 +297,17 @@ fn pending_prose<'a>(content: &'a str, segment: Range<usize>, rules: &[Range<usi
 /// first exact closing line after an exact opener is the line the Markdown
 /// parser closes the fence on.
 ///
+/// `content` starts on file line `content_abs_line`.
+///
 /// # Errors
-/// Returns a `FenceInvalid` failure when an exact `lua` fence is not
-/// closed, and an `Internal` failure when an opening the Markdown parser
-/// reports falls inside the previous fence's extracted source.
+/// Returns a `FenceInvalid` failure on its opening line when an exact `lua`
+/// fence is not closed, and an `Internal` failure when an opening the
+/// Markdown parser reports falls inside the previous fence's extracted
+/// source.
 pub(crate) fn split_section_blocks<'a>(
     content: &'a str,
     section: &str,
+    content_abs_line: u32,
 ) -> Result<Vec<RawBlock<'a>>> {
     let openings = exact_lua_openings(content);
     let rules = rule_ranges(content);
@@ -324,7 +337,13 @@ pub(crate) fn split_section_blocks<'a>(
         } else {
             format!("section `{section}` epilog `lua`")
         };
-        let (source, rest) = extract_exact_fence(after_open, &location)?;
+        let before = position::newlines_before(content, opening);
+        let opening_line = before
+            .as_ref()
+            .ok()
+            .and_then(|&newlines| content_abs_line.checked_add(newlines))
+            .and_then(NonZeroU32::new);
+        let (source, rest) = extract_exact_fence(after_open, &location, opening_line)?;
         let fence_end = content.len() - rest.len();
 
         if !(pos == 0 && opening == leading_start) {
@@ -332,7 +351,7 @@ pub(crate) fn split_section_blocks<'a>(
             blocks.push(RawBlock::Prose(pending.trim()));
         }
 
-        let line_offset = position::line_add(position::newlines_before(content, opening)?, 1)?;
+        let line_offset = position::line_add(before?, 1)?;
         blocks.push(RawBlock::Lua {
             source,
             line_offset,

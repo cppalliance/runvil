@@ -274,7 +274,7 @@ impl<'a> SectionWalker<'a> {
         location: &str,
     ) -> Result<Vec<Block>> {
         let content_abs_line = line_add(self.frontmatter_lines, heading.content_body_line)?;
-        let raw_blocks = fence::split_section_blocks(heading.content, name)?;
+        let raw_blocks = fence::split_section_blocks(heading.content, name, content_abs_line)?;
         self.compile_blocks(raw_blocks, content_abs_line, name, |role| {
             fence::lua_block_location(location, role)
         })
@@ -332,6 +332,9 @@ impl<'a> SectionWalker<'a> {
     ///
     /// A section is a list when it has no Lua and [`list::bullet_items`] returns
     /// items.
+    ///
+    /// # Errors
+    /// Returns a `ListEmptyItem` failure at the first marker with no content.
     fn list_items(&self, blocks: &[Block], name: &str) -> Result<Vec<BodyText>> {
         let has_no_lua = blocks
             .iter()
@@ -342,7 +345,7 @@ impl<'a> SectionWalker<'a> {
         });
         if has_no_lua
             && let Some(prose) = prose_for_items
-            && let Some(items) = list::bullet_items(prose, name)?
+            && let Some(items) = list::bullet_items(prose, |marker| self.empty_item(marker, name))?
         {
             items
                 .into_iter()
@@ -350,6 +353,27 @@ impl<'a> SectionWalker<'a> {
                 .collect()
         } else {
             Ok(Vec::new())
+        }
+    }
+
+    /// Builds the failure for a list item with no content at `marker`, its
+    /// marker sliced from `shared`, or with no location when `marker` is not
+    /// a slice of it.
+    fn empty_item(&self, marker: &str, name: &str) -> Error {
+        let message = format!("empty bullet item in list section `{name}`");
+        match marker
+            .as_ptr()
+            .addr()
+            .checked_sub(self.shared.as_ptr().addr())
+        {
+            Some(start) => error::failure_at(
+                ErrorCode::ListEmptyItem,
+                message,
+                self.shared,
+                start..start + marker.len(),
+                self.frontmatter_lines,
+            ),
+            None => error::failure(ErrorCode::ListEmptyItem, message),
         }
     }
 

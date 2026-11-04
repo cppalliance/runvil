@@ -21,6 +21,7 @@ use runvil_types::packs::Prelude;
 use runvil_types::untrusted::GuardNonce;
 use runvil_vfs::{Access, VfsRef};
 
+use crate::Error;
 use crate::lua::{Argv, ToolSet};
 use crate::model::{ModelBinding, ModelRole, ModelSet};
 use crate::prompt::Prompt;
@@ -83,9 +84,9 @@ struct SharedState {
     /// by nothing during the run, so every reader shares it with no lock and
     /// no copy.
     model_set: Arc<ModelSet>,
-    /// The refusal notice the run's first step fails with: what the prompt
+    /// The refusal the run's first step fails with: what the prompt
     /// requires that the config lacks, or `None` when it lacks nothing.
-    refusal: Option<Arc<str>>,
+    refusal: Option<Error>,
     /// The run's `started_at` rendered as RFC 3339, stamped into every
     /// section's `sys.when`, the H1 pass included.
     when: Arc<str>,
@@ -137,7 +138,7 @@ impl ChainState {
     /// is minted here (starting at zero), as are the run's shared tool and
     /// model sets - the tool set built from the catalog and the roster,
     /// the model set filled from the role map (it stays empty for an empty
-    /// map) - and the refusal notice of what the prompt requires that
+    /// map) - and the refusal for what the prompt requires that
     /// `config` lacks; the nonce derives from `config`'s seed and `when`
     /// renders `config`'s `started_at`, so two states over the same inputs
     /// agree on both.
@@ -161,7 +162,7 @@ impl ChainState {
         let mut requirements = Requirements::default();
         let model_set = Arc::new(fill::fill_model_set(&prompt, models, &mut requirements));
         requirements.check_packs(&prompt, &tools, packs.as_ref());
-        let refusal = requirements.notice().map(Arc::from);
+        let refusal = requirements.refusal(&prompt);
         let tool_set = Arc::new(bound::run_tool_set(
             &prompt,
             tools,
@@ -323,10 +324,10 @@ impl ChainState {
         Arc::clone(&self.shared.model_set)
     }
 
-    /// The refusal notice the run's first step fails with, or `None` when
-    /// the config lacks nothing the prompt requires.
-    pub(super) fn refusal(&self) -> Option<&str> {
-        self.shared.refusal.as_deref()
+    /// The refusal the run's first step fails with, or `None` when the
+    /// config lacks nothing the prompt requires.
+    pub(super) fn refusal(&self) -> Option<&Error> {
+        self.shared.refusal.as_ref()
     }
 
     /// The resolved tool-loop cap per `models.loop` or model handle `loop`

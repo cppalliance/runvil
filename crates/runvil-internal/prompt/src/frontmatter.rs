@@ -1,5 +1,6 @@
 //! Splits a prompt's YAML frontmatter from its body and models what it declares.
 
+use std::collections::BTreeMap;
 use std::num::NonZeroU32;
 
 use runvil_types::error::ErrorCode;
@@ -195,42 +196,70 @@ pub(crate) struct SplitSource {
     /// The number of lines consumed by the frontmatter block (both `---`
     /// delimiters and everything between them).
     pub(crate) frontmatter_lines: u32,
+    /// The file line of each top-level key that exactly one YAML line
+    /// declares, by the key's name.
+    pub(crate) key_lines: BTreeMap<String, NonZeroU32>,
 }
 
-/// Splits a file into its YAML frontmatter and its markdown body.
+/// Splits a file into its YAML frontmatter and its markdown body, and finds
+/// the line of each top-level key.
 ///
 /// The file must open with a `---` line and close the frontmatter with another
 /// `---` line starting at column 0; an indented `---` is YAML block scalar
 /// text. `str::lines` handles both `\n` and `\r\n`. Whitespace before or after
 /// the dashes of the opening line is ignored.
+///
+/// A YAML line declares a key when it starts at column 0 with the key, plain
+/// or in double or single quotes, then optional spaces or tabs, a colon, and
+/// the end of the line, a space, or a tab. A plain key runs to the first such
+/// colon and never starts with whitespace or a YAML indicator such as `#` or
+/// `-`, so a comment, an indented line, block scalar text, and a sequence
+/// entry declare none. A key two lines declare has no line.
+///
+/// # Errors
+/// Returns a `FrontmatterInvalid` failure on line 1, the opening delimiter,
+/// when the file does not open with `---` or the frontmatter is never closed.
 pub(crate) fn split_frontmatter(input: &str) -> Result<SplitSource> {
     let input = input.strip_prefix('\u{feff}').unwrap_or(input); // drop BOM
     let mut lines = input.lines();
     match lines.next() {
         Some(l) if l.trim() == "---" => {}
         _ => {
-            return Err(error::failure(
-                ErrorCode::FrontmatterInvalid,
-                "file must begin with a --- frontmatter delimiter",
+            return Err(error::on_line(
+                error::failure(
+                    ErrorCode::FrontmatterInvalid,
+                    "file must begin with a --- frontmatter delimiter",
+                ),
+                Some(NonZeroU32::MIN),
             ));
         }
     }
     let mut yaml = String::new();
     let mut closed = false;
     let mut line_count: u32 = 1; // opening ---
+    let mut declared: BTreeMap<&str, Option<NonZeroU32>> = BTreeMap::new();
     for line in lines.by_ref() {
         line_count += 1;
         if line.trim_end() == "---" {
             closed = true;
             break;
         }
+        if let Some(key) = declared_key(line) {
+            declared
+                .entry(key)
+                .and_modify(|first| *first = None)
+                .or_insert(NonZeroU32::new(line_count));
+        }
         yaml.push_str(line);
         yaml.push('\n');
     }
     if !closed {
-        return Err(error::failure(
-            ErrorCode::FrontmatterInvalid,
-            "frontmatter was not closed with ---",
+        return Err(error::on_line(
+            error::failure(
+                ErrorCode::FrontmatterInvalid,
+                "frontmatter was not closed with ---",
+            ),
+            Some(NonZeroU32::MIN),
         ));
     }
     let body = lines.collect::<Vec<_>>().join("\n");
@@ -238,5 +267,28 @@ pub(crate) fn split_frontmatter(input: &str) -> Result<SplitSource> {
         yaml,
         body,
         frontmatter_lines: line_count,
+        key_lines: declared
+            .into_iter()
+            .filter_map(|(key, line)| Some((key.to_owned(), line?)))
+            .collect(),
     })
+}
+
+/// Returns the top-level key `line` declares, as [`split_frontmatter`] reads
+/// a declaration.
+fn declared_key(line: &str) -> Option<&str> {
+    let ends = |rest: &str| rest.is_empty() || rest.starts_with([' ', '\t']);
+    let first = line.chars().next()?;
+    let (key, rest) = match first {
+        '"' | '\'' => line[1..].split_once(first)?,
+        _ if first.is_whitespace() || "#-?:,[]{}&*!|>%@`".contains(first) => return None,
+        _ => {
+            let (colon, _) = line
+                .match_indices(':')
+                .find(|&(at, _)| ends(&line[at + 1..]))?;
+            (line[..colon].trim_end_matches([' ', '\t']), &line[colon..])
+        }
+    };
+    let rest = rest.trim_start_matches([' ', '\t']).strip_prefix(':')?;
+    ends(rest).then_some(key)
 }

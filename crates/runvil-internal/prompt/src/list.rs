@@ -1,8 +1,8 @@
 //! Detects list-only sections and extracts their bullet items.
 
-use runvil_types::error::ErrorCode;
+use runvil_types::error::Error;
 
-use crate::{Result, error};
+use crate::Result;
 
 /// Returns the items of a list section's prose, or `None` when the prose is
 /// not a list. Prose is a list when every nonblank line is a bullet marker
@@ -10,11 +10,14 @@ use crate::{Result, error};
 /// prose.
 ///
 /// # Errors
-/// Returns a `ListEmptyItem` failure when the prose is a list and a marker
-/// has no content.
-pub(crate) fn bullet_items<'a>(prose: &'a str, section: &str) -> Result<Option<Vec<&'a str>>> {
+/// Returns the failure `empty_item` builds from the first marker with no
+/// content, trimmed and sliced from `prose`, when the prose is a list.
+pub(crate) fn bullet_items<'a>(
+    prose: &'a str,
+    empty_item: impl FnOnce(&'a str) -> Error,
+) -> Result<Option<Vec<&'a str>>> {
     let mut items = Vec::new();
-    let mut has_empty_marker = false;
+    let mut empty_marker = None;
     for line in prose.lines() {
         let trimmed = line.trim();
         if trimmed.is_empty() {
@@ -22,17 +25,14 @@ pub(crate) fn bullet_items<'a>(prose: &'a str, section: &str) -> Result<Option<V
         }
         match classify_list_line(trimmed) {
             ListLine::Item(content) => items.push(content),
-            ListLine::EmptyMarker => has_empty_marker = true,
+            ListLine::EmptyMarker => empty_marker = empty_marker.or(Some(trimmed)),
             ListLine::NotAMarker => return Ok(None),
         }
     }
-    if has_empty_marker {
-        return Err(error::failure(
-            ErrorCode::ListEmptyItem,
-            format!("empty bullet item in list section `{section}`"),
-        ));
+    match empty_marker {
+        Some(marker) => Err(empty_item(marker)),
+        None => Ok((!items.is_empty()).then_some(items)),
     }
-    Ok((!items.is_empty()).then_some(items))
 }
 
 /// The classification of a single nonblank prose line as a list marker.
@@ -121,11 +121,12 @@ mod tests {
 
     #[test]
     fn all_markers_predicate() {
-        assert_eq!(
-            bullet_items("- a\n1. b", "test").unwrap(),
-            Some(vec!["a", "b"])
-        );
-        assert_eq!(bullet_items("- a\nplain line", "test").unwrap(), None);
-        assert_eq!(bullet_items("   \n  ", "test").unwrap(), None);
+        fn items(prose: &str) -> Option<Vec<&str>> {
+            bullet_items(prose, |marker| panic!("no empty marker, got {marker:?}"))
+                .expect("a prose with no empty marker is never refused")
+        }
+        assert_eq!(items("- a\n1. b"), Some(vec!["a", "b"]));
+        assert_eq!(items("- a\nplain line"), None);
+        assert_eq!(items("   \n  "), None);
     }
 }

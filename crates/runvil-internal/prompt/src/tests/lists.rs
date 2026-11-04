@@ -49,30 +49,52 @@ fn list_error_kind_does_not_depend_on_the_section_name() {
     }
 }
 
+/// The items of `prose`, which has no empty marker.
+#[track_caller]
+fn items(prose: &str) -> Option<Vec<&str>> {
+    bullet_items(prose, |marker| panic!("no empty marker, got {marker:?}"))
+        .expect("a prose with no empty marker is never refused")
+}
+
 #[test]
 fn bullet_parser_strips_unordered_markers() {
-    let items = bullet_items("- alpha\n* beta\n- gamma", "test").unwrap();
-    assert_eq!(items, Some(vec!["alpha", "beta", "gamma"]));
+    assert_eq!(
+        items("- alpha\n* beta\n- gamma"),
+        Some(vec!["alpha", "beta", "gamma"])
+    );
 }
 
 #[test]
 fn bullet_parser_strips_ordered_markers() {
-    let items = bullet_items("1. first\n2. second\n3) third", "test").unwrap();
-    assert_eq!(items, Some(vec!["first", "second", "third"]));
+    assert_eq!(
+        items("1. first\n2. second\n3) third"),
+        Some(vec!["first", "second", "third"])
+    );
 }
 
 #[test]
 fn bullet_parser_ignores_blank_lines() {
-    let items = bullet_items("- alpha\n\n- beta\n  \n- gamma", "test").unwrap();
-    assert_eq!(items, Some(vec!["alpha", "beta", "gamma"]));
+    assert_eq!(
+        items("- alpha\n\n- beta\n  \n- gamma"),
+        Some(vec!["alpha", "beta", "gamma"])
+    );
 }
 
 #[test]
-fn bullet_parser_rejects_empty_item() {
-    let err = bullet_items("- alpha\n- \n- gamma", "test").expect_err("empty item must error");
-    assert!(
-        err.to_string().contains("empty bullet item"),
-        "error was: {err}"
+fn bullet_parser_fails_with_the_failure_built_from_the_first_empty_marker() {
+    let prose = "- alpha\n  - \n1.\n- gamma";
+    let mut seen = None;
+    let error = bullet_items(prose, |marker| {
+        seen = Some(marker);
+        Error::new(ErrorCode::ListEmptyItem, "empty item", "empty item")
+    })
+    .expect_err("an empty item must be refused");
+    assert_eq!(error.code, ErrorCode::ListEmptyItem, "the caller's failure");
+    assert_eq!(seen, Some("-"));
+    assert_eq!(
+        seen.map(str::as_ptr),
+        Some(prose[10..].as_ptr()),
+        "the trimmed marker of the first empty item, sliced from the prose"
     );
 }
 

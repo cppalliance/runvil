@@ -51,7 +51,7 @@ fn a_declared_pack_the_roster_lacks_or_cannot_use_refuses_the_run() -> TestResul
         refusal(scenario, &source)?,
         "the environment cannot satisfy this prompt:\n\
          - missing required Pack: web\n\
-         - kit is unavailable: the kit server is down"
+         - kit is unavailable: the kit server is down (at prompt:5)"
     );
     Ok(())
 }

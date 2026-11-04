@@ -3,12 +3,14 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
+use runvil_types::error::place;
 use runvil_types::models::ModelRole;
 use runvil_types::packs::PackId;
 use runvil_types::tools::ToolCatalog;
 
 use crate::lua::RosterEntry;
 use crate::prompt::Prompt;
+use crate::{Error, error};
 
 #[cfg(test)]
 #[path = "requirements-tests.rs"]
@@ -66,6 +68,39 @@ impl Requirements {
             .collect();
     }
 
+    /// Returns the `RequirementsUnmet` failure the run's first step ends
+    /// with, whose message and prose are the refusal notice, or `None` when
+    /// nothing blocks the run.
+    ///
+    /// The failure is placed on the frontmatter key of the first gap in the
+    /// notice that the prompt caused: `uses:` for a missing or unavailable
+    /// Pack, and `models:` for a model that falls short of a role's
+    /// requirement. A reserved Pack id and a role map with no `default`
+    /// entry are the caller's gaps and point at no key, so a refusal made
+    /// only of those has no location.
+    pub(super) fn refusal(&self, prompt: &Prompt) -> Option<Error> {
+        let notice = self.notice()?;
+        let key = if self.missing_packs.is_empty() && self.unavailable_packs.is_empty() {
+            self.unmet_models
+                .iter()
+                .any(|unmet| {
+                    matches!(
+                        unmet.check,
+                        RequirementCheck::ContextMinimum | RequirementCheck::Thinking
+                    )
+                })
+                .then_some("models")
+        } else {
+            Some("uses")
+        };
+        let line = key.and_then(|key| crate::prompt::detail::key_line(prompt, key));
+        Some(place(
+            error::requirements_unmet(&notice, None),
+            prompt.file(),
+            line,
+        ))
+    }
+
     /// Returns the refusal notice, which explains what blocks the run, or
     /// `None` when nothing does.
     ///
@@ -73,7 +108,7 @@ impl Requirements {
     /// carry required versus actual; the Pack lines name the Pack and, for
     /// an unavailable Pack, the reason. The notice is written for a model
     /// to read: concise, factual, and self-contained.
-    pub(super) fn notice(&self) -> Option<String> {
+    fn notice(&self) -> Option<String> {
         // Writing to a String is infallible, so each `write!` result is
         // discarded under the denied `unwrap_used`/`expect_used` lints.
         use std::fmt::Write as _;

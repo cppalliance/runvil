@@ -210,6 +210,28 @@ fn a_parsed_prompts_failure_message_ends_with_its_name_and_position() {
 }
 
 #[test]
+fn a_refused_uses_list_ends_with_its_line_and_never_names_the_pack_as_the_prompt() {
+    let source = "---\nname: x\ndescription: d\nuses: [web, web]\n---\n\n# T\n";
+    let refused = Prompt::parse(source, "prompt", "test")
+        .0
+        .expect_err("a Pack id declared twice must be refused");
+    assert_eq!(
+        refused.facts.get(&FactKey::Name),
+        Some(&serde_json::Value::from("web")),
+        "the refused Pack's id is the failure's name"
+    );
+    assert_eq!(
+        outcome(&refused),
+        RunOutcome::Failed {
+            kind: RunErrorKind::Parse,
+            message: "invalid frontmatter: Pack id web is declared more than once under uses \
+                      (line 4, column 1)"
+                .to_owned(),
+        }
+    );
+}
+
+#[test]
 fn a_parse_failure_run_raises_names_the_prompt_and_its_file() {
     let code = ErrorCode::StructureInvalid;
     let message = "not a runvil prompt: no runvil version";

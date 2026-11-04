@@ -1,5 +1,8 @@
 //! Frontmatter tests: required keys and delimiters, the tool-loop cap,
-//! the `runvil:` key, and declared files.
+//! the `runvil:` key, declared files, and the line of each key.
+
+use std::collections::BTreeMap;
+use std::num::NonZeroU32;
 
 use super::*;
 
@@ -126,4 +129,51 @@ fn runvil_zero_is_accepted() {
     // the frontmatter.
     let src = "---\nname: x\ndescription: d\nrunvil: 0\n---\n\n# T\n\n## S\n\np\n";
     assert_eq!(parse_ok(src).frontmatter().runvil(), Some(0));
+}
+
+#[test]
+fn a_key_line_is_the_one_column_0_line_that_declares_the_key() {
+    // The scan reads lines, not YAML, so this frontmatter need not decode.
+    let src = concat!(
+        "---\n",
+        "name: x\n",                 // 2: plain
+        "\"description\": |\n",      // 3: double-quoted
+        "  uses: [block scalar]\n",  // 4: indented block scalar text
+        "  runvil: 1\n",             // 5: indented block scalar text
+        "'runvil' \t: 0\n",          // 6: single-quoted, spaces and a tab
+        "# output: x\n",             // 7: a comment
+        "args:\n",                   // 8: the colon ends the line
+        "input:x\n",                 // 9: no space after the colon
+        "x-team.owner: a: b\n",      // 10: any key, up to the first such colon
+        "models: {}\n",              // 11: declared twice
+        "models: {}\n",              // 12: declared twice
+        "max_tool_iterations : 3\n", // 13: a space before the colon
+        "- uses: [web]\n",           // 14: a sequence entry
+        "---\n\n# T\n",
+    );
+    let split = crate::frontmatter::split_frontmatter(src).expect("the frontmatter splits");
+    let lines: BTreeMap<&str, u32> = split
+        .key_lines
+        .iter()
+        .map(|(key, line)| (key.as_str(), line.get()))
+        .collect();
+    assert_eq!(
+        lines,
+        BTreeMap::from([
+            ("args", 8),
+            ("description", 3),
+            ("max_tool_iterations", 13),
+            ("name", 2),
+            ("runvil", 6),
+            ("x-team.owner", 10),
+        ])
+    );
+}
+
+#[test]
+fn a_parsed_prompt_gives_the_engine_the_line_of_each_key_it_declares() {
+    let prompt = parse_ok("---\nname: x\ndescription: d\nrunvil: 0\nuses: [web]\n---\n\n# T\n");
+    let line = |key| crate::detail::key_line(&prompt, key).map(NonZeroU32::get);
+    assert_eq!((line("runvil"), line("uses")), (Some(4), Some(5)));
+    assert_eq!(line("models"), None, "an absent key has no line");
 }

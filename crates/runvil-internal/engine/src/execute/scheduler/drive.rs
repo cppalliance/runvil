@@ -9,7 +9,7 @@
 //! every issued effect has its answer, so every effect the caller was
 //! handed has exactly one answer.
 
-use runvil_types::error::ErrorCode;
+use runvil_types::error::{ErrorCode, place};
 use runvil_types::event::lifecycle;
 use runvil_types::ids::AbandonReason;
 use runvil_vfs::Origin;
@@ -183,28 +183,34 @@ impl Scheduler {
     /// store, then what the prompt requires of the config.
     ///
     /// # Errors
-    /// Returns an `UnsupportedVersion` or a structural parse failure for a
-    /// prompt that is not a supported runvil prompt, a store failure when
-    /// the handle declares no store or the store's backend fails the probe,
-    /// or `RequirementsUnmet` with the refusal notice when the config lacks
-    /// a declared Pack or a model the prompt's roles require, or names a
-    /// Pack id the Engine reserves.
+    /// Returns an `UnsupportedVersion` failure on the `runvil:` line, or a
+    /// structural parse failure for a prompt with no `runvil:` key, either
+    /// naming the prompt; a store failure when the handle declares no store
+    /// or the store's backend fails the probe; or `RequirementsUnmet` with
+    /// the refusal notice when the config lacks a declared Pack or a model
+    /// the prompt's roles require, or names a Pack id the Engine reserves,
+    /// placed on the frontmatter key of the first gap the prompt caused.
     fn check_start(&self) -> Result<()> {
         let prompt = self.ctx.prompt();
         let frontmatter = prompt.frontmatter();
-        match frontmatter.runvil() {
-            Some(0) => {}
-            Some(other) => return Err(error::unsupported_version(other)),
-            None => {
-                return Err(crate::prompt::detail::with_prompt_context(
-                    crate::prompt::detail::parse_error(
-                        ErrorCode::StructureInvalid,
-                        "not a runvil prompt: no runvil version",
-                    ),
-                    frontmatter.name(),
-                    prompt.file(),
-                ));
-            }
+        let declined = match frontmatter.runvil() {
+            Some(0) => None,
+            Some(other) => Some(place(
+                error::unsupported_version(other),
+                prompt.file(),
+                crate::prompt::detail::key_line(prompt, "runvil"),
+            )),
+            None => Some(crate::prompt::detail::parse_error(
+                ErrorCode::StructureInvalid,
+                "not a runvil prompt: no runvil version",
+            )),
+        };
+        if let Some(error) = declined {
+            return Err(crate::prompt::detail::with_prompt_context(
+                error,
+                frontmatter.name(),
+                prompt.file(),
+            ));
         }
         // Every run and every store call needs a declared store: the probe
         // stats the store root through a throwaway capability, so a handle
@@ -216,8 +222,8 @@ impl Scheduler {
             .acquire(Origin::new("store mount probe"))
             .map_err(|cause| error::store(&cause))?;
         runvil_vfs::detail::probe_store(&probe).map_err(|cause| error::store(&cause))?;
-        if let Some(notice) = self.ctx.refusal() {
-            return Err(error::requirements_unmet(notice, None));
+        if let Some(refusal) = self.ctx.refusal() {
+            return Err(refusal.clone());
         }
         Ok(())
     }

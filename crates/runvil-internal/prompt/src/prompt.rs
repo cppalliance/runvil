@@ -6,6 +6,7 @@
 //! Construction happens in the parsing modules; this module holds the value
 //! types and their accessors.
 
+use std::collections::BTreeMap;
 use std::num::NonZeroU32;
 
 use crate::{BodyText, Frontmatter};
@@ -143,6 +144,10 @@ pub struct Prompt {
     pub(crate) h1_blocks: Vec<Block>,
     /// Top-level sections (H2s) in file order.
     pub(crate) sections: Vec<Section>,
+    /// The file line of each top-level frontmatter key that exactly one
+    /// line declares, by the key's name; the Engine reaches it through
+    /// [`crate::detail::key_line`].
+    pub(crate) key_lines: BTreeMap<String, NonZeroU32>,
 }
 
 impl Prompt {

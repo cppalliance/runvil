@@ -313,7 +313,8 @@ fn a_construct_failure_is_stored_and_reported_as_unavailable_with_its_reason() {
     assert_eq!(
         refusal(&run, &declares),
         "the environment cannot satisfy this prompt:\n\
-         - backed is unavailable: backed needs tests/backend, and this host provides none",
+         - backed is unavailable: backed needs tests/backend, and this host provides none \
+         (at prompt:5)",
         "the run names the reason, and never calls the built Pack missing"
     );
 

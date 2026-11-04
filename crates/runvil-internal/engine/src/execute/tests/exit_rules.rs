@@ -5,7 +5,7 @@
 //! raise `empty_model_reply`).
 
 use runvil_prompt::test_support::{PromptSource, one_section, prompt};
-use runvil_types::error::{ErrorCode, FactKey};
+use runvil_types::error::{ErrorCode, FactKey, Location};
 
 use super::context::Recorder;
 use super::fixtures::echo_tool;
@@ -97,9 +97,13 @@ fn unsupported_major_one_is_refused() {
     // declared version rather than silently degrading to major 0.
     let trace = Scenario::new(ran_under("runvil: 1\n")).run();
     assert_eq!(
-        trace.error(),
-        &crate::error::unsupported_version(1),
-        "the gate refuses major 1 by name"
+        trace.outcome(),
+        &RunOutcome::Failed {
+            kind: RunErrorKind::Parse,
+            message: "unsupported runvil version: 1 (this build supports major 0) (at prompt:4)"
+                .to_owned(),
+        },
+        "the gate refuses major 1 by name, on its `runvil:` line"
     );
 }
 
@@ -107,10 +111,25 @@ fn unsupported_major_one_is_refused() {
 fn unsupported_major_is_refused() {
     // Any major other than 0 is refused, never silently degraded to major 0.
     let trace = Scenario::new(ran_under("runvil: 2\n")).run();
+    let error = trace.error();
     assert_eq!(
-        trace.error(),
-        &crate::error::unsupported_version(2),
+        (error.code, error.message.as_str()),
+        (
+            ErrorCode::UnsupportedVersion,
+            "unsupported runvil version: 2 (this build supports major 0)"
+        ),
         "the gate refuses major 2 by name"
+    );
+    let line = std::num::NonZeroU32::new(4).expect("4 is non-zero");
+    assert_eq!(
+        error.at,
+        Some(Location::line("prompt", line)),
+        "the refusal points at the `runvil:` line"
+    );
+    assert_eq!(
+        error.facts.get(&FactKey::Name).and_then(Value::as_str),
+        Some("t"),
+        "the refusal names the prompt"
     );
 }
 
@@ -121,6 +140,7 @@ fn missing_version_is_not_a_runvil_prompt() {
     let trace = Scenario::new(ran_under("")).run();
     let error = trace.error();
     assert_eq!(error.code, ErrorCode::StructureInvalid, "got {error:?}");
+    assert_eq!(error.at, None, "a key the prompt lacks has no line");
     assert_eq!(
         error
             .facts

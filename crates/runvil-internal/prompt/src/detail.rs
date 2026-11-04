@@ -4,6 +4,8 @@
 //! The `runvil` facade never re-exports this module, so only Engine
 //! crates reach it.
 
+use std::num::NonZeroU32;
+
 use runvil_types::error::{Error, ErrorCode};
 
 use crate::{Block, Prompt, Section};
@@ -41,4 +43,14 @@ pub fn sections(prompt: &Prompt) -> &[Section] {
 #[must_use]
 pub fn entry(prompt: &Prompt) -> Option<&Section> {
     prompt.entry()
+}
+
+/// Returns the file line of the frontmatter's top-level `key`, such as
+/// `uses`, when exactly one line declares it at column 0.
+///
+/// The line comes from a scan of the text, not the YAML parse, so it is
+/// meaningful only for a key that decoded to a value.
+#[must_use]
+pub fn key_line(prompt: &Prompt, key: &str) -> Option<NonZeroU32> {
+    prompt.key_lines.get(key).copied()
 }

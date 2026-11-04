@@ -219,7 +219,7 @@ fn a_fence_split_that_disagrees_with_the_markdown_parser_is_an_internal_error() 
     // The parse refuses the four-backtick closing line before any split, so
     // only a direct split can reach the disagreement.
     let content = "```lua\nvar.a = 1\n````\n\n```lua\nvar.b = 2\n```\n";
-    let Err(error) = crate::fence::split_section_blocks(content, "S") else {
+    let Err(error) = crate::fence::split_section_blocks(content, "S", 10) else {
         panic!("required a split failure, actual a split of {content:?}");
     };
     assert_eq!(error.code, ErrorCode::Internal, "{error:?}");

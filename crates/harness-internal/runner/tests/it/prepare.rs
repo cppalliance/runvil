@@ -214,14 +214,14 @@ async fn an_unmet_requirement_ends_the_prepared_run_as_failed_with_the_engines_n
     let (run_id, outcome) = prepare_and_drive(NEEDS_WEB, services(&recorder, bare())).await;
 
     let notice = "the environment cannot satisfy this prompt:\n\
-        - missing required Pack: web";
+        - missing required Pack: web (at prompt:5)";
     assert_eq!(
         outcome,
         RunOutcome::Failed {
             kind: RunErrorKind::RequirementsUnmet,
             message: notice.to_owned(),
         },
-        "the failure is the engine's notice, verbatim"
+        "the failure is the engine's notice, verbatim, on the `uses:` line"
     );
     assert_eq!(
         recorder.outcome(run_id),
@@ -460,7 +460,7 @@ async fn a_bare_entry_another_vendor_answers_is_refused_naming_its_fqn() {
         refusal(drive_over(declares_bare, building(TOOLS)).await),
         "the environment cannot satisfy this prompt:\n\
          - tools is unavailable: tools means runvil/tools, which is not installed; \
-         write tests/tools to use that Pack",
+         write tests/tools to use that Pack (at prompt:5)",
         "a bare id means the runvil Pack, which the Host lacks"
     );
 }

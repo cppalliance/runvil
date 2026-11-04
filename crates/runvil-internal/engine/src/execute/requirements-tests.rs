@@ -1,7 +1,8 @@
 //! Tests for the run's start checks against its config: each declared
 //! Pack against the roster, the reserved Pack ids `adhoc` and `dynamic`,
-//! and the order of the refusal notice's lines. The model role checks sit
-//! in the execution suite's `prepare` module.
+//! the order of the refusal notice's lines, and the frontmatter key the
+//! refusal is placed on. The model role checks sit in the execution
+//! suite's `prepare` module.
 
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -170,7 +171,7 @@ fn a_declared_pack_the_roster_lists_as_unavailable_is_refused_with_its_reason_no
         refusal(prompt("uses: [web]\n"), ctx),
         Some(
             "the environment cannot satisfy this prompt:\n\
-             - web is unavailable: the search provider is missing"
+             - web is unavailable: the search provider is missing (at prompt:5)"
                 .to_owned()
         )
     );
@@ -190,7 +191,7 @@ fn declared_packs_the_roster_lacks_are_missing_and_list_before_the_unavailable_o
              - missing required Pack: other\n\
              - missing required Pack: gone\n\
              - web is unavailable: the search provider is missing\n\
-             - mcp is unavailable: the server is down"
+             - mcp is unavailable: the server is down (at prompt:5)"
                 .to_owned()
         ),
         "each kind of gap lists in declaration order"
@@ -207,7 +208,8 @@ fn a_run_given_no_roster_checks_no_declared_pack_and_an_empty_roster_lacks_every
     assert_eq!(
         refusal(prompt("uses: [web]\n"), config().with_packs([])),
         Some(
-            "the environment cannot satisfy this prompt:\n- missing required Pack: web".to_owned()
+            "the environment cannot satisfy this prompt:\n- missing required Pack: web (at prompt:5)"
+                .to_owned()
         ),
         "an empty roster is a roster"
     );
@@ -229,8 +231,50 @@ fn the_notice_lists_missing_then_unavailable_packs_then_reserved_ids_then_model_
         "- kit is unavailable: the kit server is down",
         &reserved,
         "- role 'strong': requires a context of at least 200000 tokens; \
-         the model filling it provides 32000",
+         the model filling it provides 32000 (at prompt:5)",
     ];
     let source = "uses: [kit, web]\nmodels: { strong: { min_context: 200000 } }\n";
     assert_eq!(refusal(prompt(source), ctx), Some(expected.join("\n")));
+}
+
+#[test]
+fn the_refusal_is_placed_on_the_key_of_the_first_gap_the_prompt_caused() {
+    // `models:` is file line 5 and `uses:` file line 6.
+    let source = "models: { strong: { min_context: 200000 } }\nuses: [web]\n";
+    let small = BTreeMap::from([(
+        ModelRole::Default,
+        test_model_with("small", 32_000, ThinkingMode::Switchable),
+    )]);
+    let no_default = BTreeMap::from([(
+        ModelRole::Strong,
+        test_model_with("big", 200_000, ThinkingMode::Switchable),
+    )]);
+    for (ctx, suffix, why) in [
+        (
+            config().with_packs([]).with_models(small.clone()),
+            Some(" (at prompt:6)"),
+            "a Pack line lists before a model line",
+        ),
+        (
+            config()
+                .with_tools(catalog(&["adhoc/grab"]))
+                .with_models(small),
+            Some(" (at prompt:5)"),
+            "the reserved id lists first but is the caller's gap",
+        ),
+        (
+            config()
+                .with_tools(catalog(&["adhoc/grab"]))
+                .with_models(no_default),
+            None,
+            "a reserved id and a role map with no default are both the caller's",
+        ),
+    ] {
+        let message = refusal(prompt(source), ctx).expect("the run is refused");
+        assert_eq!(
+            message.find(" (at ").map(|at| &message[at..]),
+            suffix,
+            "{why}: {message}"
+        );
+    }
 }

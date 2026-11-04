@@ -1,5 +1,6 @@
 //! Parses a prompt's source into a [`Prompt`]: frontmatter, H1, and sections.
 
+use std::num::NonZeroU32;
 use std::sync::Arc;
 
 use runvil_types::emitter::{Emitter, EventSink};
@@ -36,7 +37,8 @@ impl Prompt {
     ///   nor vendor/name, two entries share a Pack id, or an entry names a
     ///   Pack id the Engine reserves. A refused `uses:` list has the
     ///   `Reason` fact `pack_duplicate` or `pack_reserved` and the Pack id
-    ///   as its `Name` fact.
+    ///   as its `Name` fact, and is located on the `uses:` line when one
+    ///   line declares the key.
     /// - `StructureInvalid` when the H1 is missing, there is more than one
     ///   H1, the H1 title is empty, a section heading skips a level (such as
     ///   an H4 directly under an H2), a section heading is empty, or two
@@ -64,9 +66,10 @@ impl Prompt {
     /// - `Internal` when the parser fails through no fault of the prompt:
     ///   one of its own invariants breaks, or the Lua compiler cannot start.
     ///
-    /// The failure's location, when known, is in `file`. A failure found
-    /// past the frontmatter, other than an `Internal` one, has the prompt's
-    /// frontmatter name as its `Name` fact.
+    /// The failure's location, when known, is in `file`, except that an
+    /// `Internal` failure is located at the Rust source position of the
+    /// fault. A failure found past the frontmatter, other than an
+    /// `Internal` one, has the prompt's frontmatter name as its `Name` fact.
     pub fn parse(
         input: &str,
         file: &str,
@@ -98,13 +101,14 @@ impl Prompt {
     }
 
     /// Splits the frontmatter from the body, decodes it, and checks its
-    /// `uses:` list.
+    /// `uses:` list, placing a refused list on the `uses:` line.
     fn parse_frontmatter(input: &str) -> Result<(Frontmatter, SplitSource)> {
         let split = frontmatter::split_frontmatter(input)?;
         let frontmatter: Frontmatter = serde_yaml_ng::from_str(&split.yaml)
             .map_err(|cause| error::frontmatter_decode(&cause))?;
-        contract::check_distinct_packs(frontmatter.uses())?;
-        contract::check_no_reserved_pack(frontmatter.uses())?;
+        contract::check_distinct_packs(frontmatter.uses())
+            .and_then(|()| contract::check_no_reserved_pack(frontmatter.uses()))
+            .map_err(|refusal| error::on_line(refusal, split.key_lines.get("uses").copied()))?;
         Ok((frontmatter, split))
     }
 
@@ -133,25 +137,29 @@ impl Prompt {
             }
             let lines = h1_positions
                 .iter()
-                .map(|&index| {
-                    position::line_add(frontmatter_lines, headings[index].body_line)
-                        .map(|line| line.to_string())
-                })
+                .map(|&index| position::line_add(frontmatter_lines, headings[index].body_line))
                 .collect::<Result<Vec<_>>>()?;
-            return Err(error::failure(
-                ErrorCode::StructureInvalid,
-                format!(
-                    "prompt must contain exactly one H1 title, found {} at lines {}",
-                    lines.len(),
-                    lines.join(", ")
-                ),
+            let listed: Vec<String> = lines.iter().map(u32::to_string).collect();
+            let message = format!(
+                "prompt must contain exactly one H1 title, found {} at lines {}",
+                lines.len(),
+                listed.join(", ")
+            );
+            return Err(error::on_line(
+                error::failure(ErrorCode::StructureInvalid, message),
+                lines.get(1).copied().and_then(NonZeroU32::new),
             ));
         };
         let h1 = &headings[*h1_index];
         if h1.title.is_empty() {
-            return Err(error::failure(
-                ErrorCode::StructureInvalid,
-                "prompt H1 title must not be empty",
+            return Err(error::on_line(
+                error::failure(
+                    ErrorCode::StructureInvalid,
+                    "prompt H1 title must not be empty",
+                ),
+                frontmatter_lines
+                    .checked_add(h1.body_line)
+                    .and_then(NonZeroU32::new),
             ));
         }
         let title = h1.title.clone();
@@ -171,7 +179,7 @@ impl Prompt {
         let mut walker =
             SectionWalker::new(&shared, &section_headings, frontmatter_lines, file, emitter);
         let mut h1_blocks = walker.compile_blocks(
-            fence::split_section_blocks(h1_content, &title)?,
+            fence::split_section_blocks(h1_content, &title, h1_content_abs_line)?,
             h1_content_abs_line,
             &title,
             |_| format!("H1 `{title}` lua"),
@@ -190,6 +198,7 @@ impl Prompt {
             title,
             h1_blocks,
             sections,
+            key_lines: split.key_lines,
         })
     }
 }

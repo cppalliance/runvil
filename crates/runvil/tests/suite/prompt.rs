@@ -115,7 +115,7 @@ fn a_role_check_by_hand_finds_the_same_shortfall_the_run_reports() -> TestResult
         refusal(scenario, &source)?,
         "the environment cannot satisfy this prompt:\n\
          - role 'small': requires 'thinking: false'; \
-         the thinking capability of the model filling it is Always",
+         the thinking capability of the model filling it is Always (at prompt:5)",
         "only the small role falls short, on its thinking requirement"
     );
     Ok(())
