@@ -35,7 +35,7 @@ use crate::messages::MessageList;
 /// Why a request cannot fit the model's context window.
 ///
 /// These are the two overflow tags the loop passes to a compactor, which
-/// [`exhaustion_detail`] turns into a description. A compactor may also
+/// `exhaustion_detail` turns into a description. A compactor may also
 /// receive a caller's own reason through `models.compact`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OverflowReason {
@@ -88,7 +88,7 @@ impl std::fmt::Display for OverflowReason {
 /// `OverflowReason::tag` reads as that overflow's [`Display`](std::fmt::Display),
 /// and a caller's own reason reads as itself.
 #[must_use]
-pub fn exhaustion_detail(reason: &str) -> Cow<'_, str> {
+pub(crate) fn exhaustion_detail(reason: &str) -> Cow<'_, str> {
     match OverflowReason::from_tag(reason) {
         Some(overflow) => Cow::Owned(overflow.to_string()),
         None => Cow::Borrowed(reason),

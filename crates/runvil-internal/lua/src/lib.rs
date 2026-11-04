@@ -27,15 +27,14 @@
 //! in a run shares one set of virtual files even though contexts clear on each
 //! transition. A failed store op raises a structured error value of kind
 //! `store` carrying its `reason` and fields, which surfaces from the
-//! block's coroutine (`SectionVm::start_block_coro` and its resumes) as a
-//! Lua-category error.
+//! block's coroutine (`SectionVm::start_block_coro` and its resumes) as
+//! that store failure, never as a Lua runtime error.
 //!
 //! The VM also holds `tasks`, the shims for spawning,
-//! waiting on, checking, noting, and cancelling tasks. Pack preludes
-//! are the Lua source each Pack the prompt declares contributes: each
-//! runs once per VM in an environment of its own before `require`
-//! installs, and its globals are checked against the reserved-name list and
-//! raw-set into `_G`. The `input` table that `user-input` defines is one:
+//! waiting on, checking, noting, and cancelling tasks. Each Pack the
+//! prompt declares can contribute a prelude, Lua that defines globals once
+//! per VM before `require` installs ([`install_preludes`] states the
+//! rules). The `input` table that `user-input` defines is one such global:
 //! `input.ask()` is an ordinary tool call to that Pack's ask tool.
 //!
 //! The `tools` table names every tool by its id: `tools.get` reads a tool
@@ -54,7 +53,9 @@
 //!
 //! Most of this crate's public items exist for `runvil-engine`'s
 //! executor, which drives the VM and the coroutine protocol; the facade
-//! re-exports only the store protocol ([`VfsOp`], [`VfsOutcome`]). The
+//! re-exports the store protocol ([`VfsOp`], [`VfsOutcome`],
+//! [`store_error`]) and the roster entry ([`RosterEntry`]);
+//! `crates/runvil/public-api.txt` holds the full surface. The
 //! `test_support` module, built for this crate's tests and under the
 //! `test-support` feature, holds what tests reach beyond that surface.
 //!
@@ -119,17 +120,14 @@ pub(crate) mod test_vm;
 #[cfg(test)]
 mod tests;
 
-// The executor-facing surface: every item `runvil-engine` names crosses
-// here. The facade re-exports only `VfsOp` and `VfsOutcome`.
+// The executor-facing surface: every item `runvil-engine` names crosses here.
 pub use crate::adhoc::AdhocTools;
 pub use crate::argv::Argv;
 pub use crate::bindings::{
     DiscoveryTool, RosterEntry, ToolBinding, ToolOutputKind, ToolSet, wire_name_of,
 };
 pub use crate::collection::render_item;
-pub use crate::compactors::{
-    OverflowReason, UsageAnchor, exhaustion_detail, output_reserve, precheck,
-};
+pub use crate::compactors::{OverflowReason, UsageAnchor, output_reserve, precheck};
 pub use crate::coro::install_store_shims;
 pub use crate::dispatch::{ScriptReport, ToolDispatch, prepare_dispatch, prepare_model_dispatch};
 pub use crate::engine_globals::{
