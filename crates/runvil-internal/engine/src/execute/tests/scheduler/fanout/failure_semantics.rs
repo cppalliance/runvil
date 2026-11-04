@@ -82,28 +82,24 @@ const DEPTH_FANOUT: &str = "---\nname: t\ndescription: d\nrunvil: 0\n---\n\n\
 #[test]
 fn fanout_depth_cap_reads_the_chain_field() {
     // Pin of the fanout depth-cap guard: the cap fires from the requesting
-    // chain's call-depth field. The arm's spawn sets the fanout mark, so
-    // the spawn arm names the cap after `tasks.fanout` in the typed error
-    // itself; the shim re-raises that table and the retained typed error
-    // is substituted back at every `call` level, so the run's error is the
-    // typed error itself: the exact variant, the exact text, no
-    // runtime-error prefix or traceback.
+    // chain's call-depth field, and the spawn arm answers the arm's spawn
+    // with the typed error; the shim re-raises that table and the retained
+    // typed error is substituted back at every `call` level, so the run's
+    // error is the typed error itself: the exact variant, the exact text,
+    // no runtime-error prefix or traceback.
     let trace = scheduler_scenario(DEPTH_FANOUT).run();
 
     let error = trace.error();
     assert_eq!(
         error,
-        &crate::test_support::with_author_prose(
-            crate::error::call_depth_exceeded(8, "tasks.fanout"),
-            13
-        ),
-        "expected the typed depth-cap error named after fanout"
+        &crate::test_support::with_author_prose(crate::error::call_depth_exceeded(8), 13),
+        "expected the typed depth-cap error on Alpha's fanout line"
     );
     assert_eq!(run_error_kind(error.code), RunErrorKind::Quota, "{error}");
     assert_eq!(
         error.to_string(),
-        "tasks.fanout recursion exceeded cap of 8",
-        "the rendered text is exactly the fanout cap message: no call wording, no prefix"
+        "recursion exceeded cap of 8",
+        "the rendered text is exactly the cap message: no prefix"
     );
 }
 

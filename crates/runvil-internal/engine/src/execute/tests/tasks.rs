@@ -258,8 +258,8 @@ fn spawn_shares_calls_target_resolution_and_raises_at_the_call_site() {
 fn spawn_shares_calls_depth_cap() {
     // Alpha and Beta spawn each other, each spawned chain one level
     // deeper (a section's visible set excludes itself, as for `call`); the
-    // chain at depth 8 is refused with `call`'s own cap message, as the
-    // spawn's answer, so the deepest chain catches and logs it.
+    // chain at depth 8 is refused under `call`'s cap, as the spawn's
+    // answer, so the deepest chain catches and logs it.
     let md = "---\nname: depth\ndescription: d\nrunvil: 0\n---\n\n\
         # Depth\n\n\
         ## Alpha\n\n\
@@ -292,10 +292,7 @@ fn spawn_shares_calls_depth_cap() {
     let records = TaskRecorder::replayed(rig.trace()).records();
     let logged = format!(
         "prompt:12: {}",
-        authored(
-            ErrorCode::CallDepthExceeded,
-            "call recursion exceeded cap of 8",
-        )
+        authored(ErrorCode::CallDepthExceeded, "recursion exceeded cap of 8")
     );
     let refusals = records
         .iter()

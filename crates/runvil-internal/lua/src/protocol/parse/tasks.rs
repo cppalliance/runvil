@@ -12,7 +12,7 @@ use std::time::Duration;
 use mlua::{Lua, LuaSerdeExt, Value};
 use runvil_types::ids::TaskId;
 
-use crate::protocol::{NonEmpty, Request, SpawnVia};
+use crate::protocol::{NonEmpty, Request};
 
 use super::{FieldFailure, call_error, call_optional_string, call_string, call_target, shim_var};
 
@@ -34,7 +34,7 @@ fn call_task(table: &mlua::Table) -> std::result::Result<TaskId, FieldFailure> {
 
 /// Parses a `spawn` request: the author-supplied `target`, the optional
 /// author-supplied `input`, `item`, and `index` seeds, plus the
-/// shim-produced `var` snapshot and `fanout` mark.
+/// shim-produced `var` snapshot.
 pub(super) fn parse_spawn(
     lua: &Lua,
     table: &mlua::Table,
@@ -84,19 +84,7 @@ pub(super) fn parse_spawn(
         item,
         index,
         var,
-        via: shim_via(table)?,
     })
-}
-
-/// Reads a spawn's shim-produced `fanout` mark: the `fanout` shim marks its
-/// arms, `tasks.spawn` leaves the field absent, and any other shape is a
-/// hand-built yield.
-fn shim_via(table: &mlua::Table) -> std::result::Result<SpawnVia, FieldFailure> {
-    match table.raw_get::<Value>("fanout") {
-        Ok(Value::Nil | Value::Boolean(false)) => Ok(SpawnVia::Spawn),
-        Ok(Value::Boolean(true)) => Ok(SpawnVia::Fanout),
-        Ok(_) | Err(_) => Err(FieldFailure::Malformed),
-    }
 }
 
 /// Parses a `timer` request: the author-supplied `seconds` (the wait's

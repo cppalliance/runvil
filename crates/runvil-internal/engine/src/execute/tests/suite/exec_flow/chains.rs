@@ -362,8 +362,8 @@ fn call_recursion_is_capped() {
     );
     let rendered = error.to_string();
     assert!(
-        rendered.contains("call recursion exceeded cap of 8"),
-        "expected the call recursion-cap error, got: {rendered}"
+        rendered.contains("recursion exceeded cap of 8"),
+        "expected the recursion-cap error, got: {rendered}"
     );
 }
 

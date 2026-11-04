@@ -91,11 +91,11 @@ fn call_depth_cap_reads_the_chain_field() {
     let error = trace.error();
     assert_eq!(
         error,
-        &crate::test_support::with_author_prose(crate::error::call_depth_exceeded(8, "call"), 12),
+        &crate::test_support::with_author_prose(crate::error::call_depth_exceeded(8), 12),
         "expected the typed call-depth error on Alpha's call line"
     );
     assert_eq!(run_error_kind(error.code), RunErrorKind::Quota, "{error}");
-    assert_eq!(error.to_string(), "call recursion exceeded cap of 8");
+    assert_eq!(error.to_string(), "recursion exceeded cap of 8");
 }
 
 #[test]

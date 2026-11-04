@@ -9,8 +9,8 @@ use runvil_types::metrics::ToolCallEvent;
 use serde_json::json;
 
 use crate::lua::{
-    AdhocToolOutcome, Answer, ChatOutcome, ChatResult, Request, SpawnVia, ToolCallOutcome, VfsOp,
-    VfsOutcome, YieldParse,
+    AdhocToolOutcome, Answer, ChatOutcome, ChatResult, Request, ToolCallOutcome, VfsOp, VfsOutcome,
+    YieldParse,
 };
 use crate::model::ModelSet;
 
@@ -49,8 +49,8 @@ fn call_yields_target_input_and_the_var_snapshot() {
 fn fanout_yields_a_spawn_per_member_starting_with_the_first() {
     // The fanout shim is Lua over the task protocol: its first yield is the
     // `spawn` of the first member, including the worker as the target, the
-    // member as the `item` seed, its 1-based position as `index`, the
-    // caller's `var` snapshot, and the fanout mark.
+    // member as the `item` seed, its 1-based position as `index`, and the
+    // caller's `var` snapshot.
     let vm = scheduler_vm(&ModelSet::default(), None);
     match yielded_request(
         &vm,
@@ -62,14 +62,12 @@ fn fanout_yields_a_spawn_per_member_starting_with_the_first() {
             item,
             index,
             var,
-            via,
         } => {
             assert_eq!(target, "### Worker");
             assert_eq!(input, None);
             assert_eq!(item, Some(json!("a")));
             assert_eq!(index, Some(1));
             assert_eq!(var, json!({}));
-            assert_eq!(via, SpawnVia::Fanout, "an arm's spawn sets the fanout mark");
         }
         other => panic!("expected a spawn request, got {other:?}"),
     }
@@ -110,14 +108,12 @@ fn tasks_spawn_yields_the_target_seeds_and_var() {
             item,
             index,
             var,
-            via,
         } => {
             assert_eq!(target, "## Child");
             assert_eq!(input.as_deref(), Some("in"));
             assert_eq!(item, Some(json!({ "name": "a" })));
             assert_eq!(index, Some(2));
             assert_eq!(var, json!({ "k": 1 }));
-            assert_eq!(via, SpawnVia::Spawn, "`tasks.spawn` is not a fanout arm");
         }
         other => panic!("expected a spawn request, got {other:?}"),
     }

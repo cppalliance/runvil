@@ -20,18 +20,6 @@ use super::record::ToolCallRecord;
 use crate::error::Error;
 use crate::messages::MessageList;
 
-/// Which author-facing call started a task chain. The Engine reports a
-/// depth-cap refusal under the cap's name, not the call's: a `tasks.spawn`
-/// shares the `call` cap and reports `call`, and a fanout arm reports
-/// `tasks.fanout`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SpawnVia {
-    /// `tasks.spawn`.
-    Spawn,
-    /// One arm of `tasks.fanout`.
-    Fanout,
-}
-
 /// A validated suspending Engine call, parsed from the yielded table.
 ///
 /// The parse happens at the resume boundary while the VM handle is live: a
@@ -79,9 +67,6 @@ pub enum Request {
         /// The caller's `var` snapshot, seeded into the chain and discarded
         /// when it ends.
         var: serde_json::Value,
-        /// Which call started the task. Shim-produced: the `fanout` shim
-        /// marks its arms, and `tasks.spawn` leaves the mark absent.
-        via: SpawnVia,
     },
     /// The wait shims' internal timeout timer: a leaf request whose work
     /// is one sleep, registered as an effect-backed task slot the caller

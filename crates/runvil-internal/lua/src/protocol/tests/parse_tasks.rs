@@ -1,8 +1,7 @@
-//! The task-operation request parsers: `spawn`'s target, seeds, var
-//! snapshot, and fanout mark; the `timer` leaf request's author-supplied
-//! `seconds`, its domain checks, and the `Duration` it parses into;
-//! `pending`'s refusal of any argument; and `concurrency`'s optional
-//! shim-validated limit.
+//! The task-operation request parsers: `spawn`'s target, seeds, and var
+//! snapshot; the `timer` leaf request's author-supplied `seconds`, its
+//! domain checks, and the `Duration` it parses into; `pending`'s refusal
+//! of any argument; and `concurrency`'s optional shim-validated limit.
 
 use super::*;
 
@@ -22,48 +21,15 @@ fn spawn_parses_target_seeds_and_var() {
             item,
             index,
             var,
-            via,
         } => {
             assert_eq!(target, "## Child");
             assert_eq!(input.as_deref(), Some("override"));
             assert_eq!(item, Some(json!({ "name": "alpha" })));
             assert_eq!(index, Some(3));
             assert_eq!(var, json!({ "k": 1 }));
-            assert_eq!(
-                via,
-                crate::SpawnVia::Spawn,
-                "an absent mark is a plain `tasks.spawn`"
-            );
         }
         other => panic!("expected a spawn request, got {other:?}"),
     }
-}
-
-#[test]
-fn spawn_reads_the_fanout_mark_and_rejects_a_non_boolean_one() {
-    // The mark is shim-produced: `true` from the fanout shim, absent from
-    // `tasks.spawn`; any other shape is a hand-built yield.
-    let lua = Lua::new();
-    let table = lua_table(
-        &lua,
-        "{ op = 'spawn', target = '### Worker', fanout = true, \
-           var = { k = 1 } }",
-    );
-    match expect_request(Request::from_yield(&lua, &Value::Table(table))) {
-        Request::Spawn { via, .. } => assert_eq!(
-            via,
-            crate::SpawnVia::Fanout,
-            "the fanout shim's mark is read"
-        ),
-        other => panic!("expected a spawn request, got {other:?}"),
-    }
-
-    let table = lua_table(
-        &lua,
-        "{ op = 'spawn', target = '### Worker', fanout = 'yes', \
-           var = { k = 1 } }",
-    );
-    assert_direct_yield(Request::from_yield(&lua, &Value::Table(table)));
 }
 
 #[test]

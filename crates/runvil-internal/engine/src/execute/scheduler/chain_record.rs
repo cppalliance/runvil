@@ -86,12 +86,11 @@ impl CallDepth {
     /// The depth a chain started one level deeper runs at.
     ///
     /// # Errors
-    /// Returns a `CallDepthExceeded` failure that names the cap `cap_name`
-    /// when that depth passes the cap.
-    pub(super) fn deeper(self, cap_name: &str) -> Result<CallDepth> {
+    /// Returns a `CallDepthExceeded` failure when that depth passes the cap.
+    pub(super) fn deeper(self) -> Result<CallDepth> {
         let depth = self.0 + 1;
         if depth > MAX_CALL_DEPTH {
-            return Err(error::call_depth_exceeded(MAX_CALL_DEPTH, cap_name));
+            return Err(error::call_depth_exceeded(MAX_CALL_DEPTH));
         }
         Ok(CallDepth(depth))
     }

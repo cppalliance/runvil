@@ -148,8 +148,8 @@ pub use crate::projection::project_messages;
 pub use crate::prose::ProseState;
 pub use crate::protocol::{
     AdhocToolOutcome, Answer, Blocked, ChatOutcome, ChatResult, ContentPart, MessageContent,
-    MessageRecord, ModelCall, NonEmpty, RecordRole, Request, SpawnVia, TaskDelivery, TaskPhase,
-    TaskStatus, ToolCallOutcome, ToolCallRecord, VfsOp, VfsOutcome, YieldParse,
+    MessageRecord, ModelCall, NonEmpty, RecordRole, Request, TaskDelivery, TaskPhase, TaskStatus,
+    ToolCallOutcome, ToolCallRecord, VfsOp, VfsOutcome, YieldParse,
 };
 pub use crate::scope::{
     DiscoveryTool, Offer, OfferMode, OfferTarget, OfferedTool, Offers, RenderedTools,

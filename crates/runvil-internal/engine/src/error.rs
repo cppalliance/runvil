@@ -110,15 +110,13 @@ pub(crate) fn model_required(section: &str) -> Error {
 }
 
 /// A `call`, `tasks.spawn`, or `tasks.fanout` arm that would run deeper
-/// than `cap`. `cap_name` is the cap's name, not the author's construct:
-/// `tasks.fanout` for a fanout arm, and `call` for a `call` or a
-/// `tasks.spawn`, which shares its cap. The dispatch's answer, so an
-/// author `pcall` catches it, and a quota when it ends the run.
-pub(crate) fn call_depth_exceeded(cap: usize, cap_name: &str) -> Error {
+/// than `cap`. The dispatch's answer, so an author `pcall` catches it, and
+/// a quota when it ends the run.
+pub(crate) fn call_depth_exceeded(cap: usize) -> Error {
     with_fact(
         failure(
             ErrorCode::CallDepthExceeded,
-            format!("{cap_name} recursion exceeded cap of {cap}"),
+            format!("recursion exceeded cap of {cap}"),
         ),
         FactKey::Limit,
         cap,

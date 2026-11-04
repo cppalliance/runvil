@@ -71,10 +71,9 @@ end
 -- any spawn, and every arm is spawned up front - before any join - so no
 -- arm is ordered after a sibling: arms never see each other's writes,
 -- whatever the scheduler's admission order. Each arm is spawned with the
--- member as its `item`, its 1-based position as `sys.index`, and the
--- `fanout` mark (so the spawn arm's depth-cap refusal is named after
--- `tasks.fanout` rather than `call`, and re-raises here as the retained
--- typed error). The scheduler admits the arms under the chain's
+-- member as its `item` and its 1-based position as `sys.index`; a spawn
+-- refusal, such as the depth cap's, re-raises here as the retained typed
+-- error. The scheduler admits the arms under the chain's
 -- concurrency limit, and `join_any` over the live set delivers the arms
 -- as they end. A `tool_loop_exhausted` arm
 -- becomes the incomplete stub and the fanout continues; any other arm
@@ -152,7 +151,6 @@ local function fanout(...)
       item = members[index],
       index = index,
       var = var,
-      fanout = true,
     })
     if not ok then
       restore()

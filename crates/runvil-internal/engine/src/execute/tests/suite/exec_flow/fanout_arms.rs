@@ -6,6 +6,7 @@ use super::*;
 use crate::RunErrorKind;
 use crate::execute::run_error_kind;
 use crate::execute::tests::context::arm_fanout;
+use crate::test_support::at_line;
 
 /// `prompt.list` inside a fanout arm reads a list section's items: the arm
 /// resolves like any section (the worker's siblings minus the worker, plus
@@ -265,8 +266,13 @@ fn fanout_recursion_across_the_boundary_trips_the_depth_cap() {
     );
     let rendered = error.to_string();
     assert!(
-        rendered.contains("tasks.fanout recursion exceeded cap of 8"),
-        "expected the fanout recursion-cap error, got: {rendered}"
+        rendered.contains("recursion exceeded cap of 8"),
+        "expected the recursion-cap error, got: {rendered}"
+    );
+    assert_eq!(
+        error.at,
+        at_line(16),
+        "the cap trips on A's `tasks.fanout` line: {error:?}"
     );
 }
 
@@ -304,8 +310,13 @@ fn call_inside_an_arm_spawned_near_the_cap_trips_the_depth_cap() {
     );
     let rendered = error.to_string();
     assert!(
-        rendered.contains("call recursion exceeded cap of 8"),
-        "expected the call recursion-cap error, got: {rendered}"
+        rendered.contains("recursion exceeded cap of 8"),
+        "expected the recursion-cap error, got: {rendered}"
+    );
+    assert_eq!(
+        error.at,
+        at_line(33),
+        "the cap trips on the arm's own `call` line: {error:?}"
     );
 }
 

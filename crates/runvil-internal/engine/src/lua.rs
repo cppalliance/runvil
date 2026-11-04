@@ -20,12 +20,11 @@ pub(crate) use runvil_lua::{
     AdhocToolOutcome, Answer, Argv, Blocked, ChatOutcome, ChatResult, CoroStep, DiscoveryTool,
     Library, LibraryBlock, LibraryKey, LuaBlockResult, MessageList, ModelCall, ModelReport,
     NonEmpty, OfferMode, OfferedTool, OverflowReason, ProseState, RenderedTools, Request,
-    RosterEntry, ScriptReport, SectionText, SectionVm, SpawnVia, TaskDelivery, TaskPhase,
-    TaskStatus, ToolBinding, ToolCallCounts, ToolCallOutcome, ToolCallRecord, ToolSet, Uninjected,
-    UsageAnchor, VfsOp, VfsOutcome, YieldParse, current_catalog_packs, current_dynamic_set,
-    current_static_set, install_preludes, install_store_shims, install_ui, output_reserve,
-    precheck, prepare_dispatch, prepare_model_dispatch, project_messages, render_item,
-    wire_name_of,
+    RosterEntry, ScriptReport, SectionText, SectionVm, TaskDelivery, TaskPhase, TaskStatus,
+    ToolBinding, ToolCallCounts, ToolCallOutcome, ToolCallRecord, ToolSet, Uninjected, UsageAnchor,
+    VfsOp, VfsOutcome, YieldParse, current_catalog_packs, current_dynamic_set, current_static_set,
+    install_preludes, install_store_shims, install_ui, output_reserve, precheck, prepare_dispatch,
+    prepare_model_dispatch, project_messages, render_item, wire_name_of,
 };
 
 // The store operation behind `execute::perform_vfs_op`, the entry point

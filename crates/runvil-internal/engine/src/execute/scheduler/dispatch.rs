@@ -86,15 +86,7 @@ impl Scheduler {
                 item,
                 index,
                 var,
-                via,
-            } => self.dispatch_spawn(
-                id,
-                &target,
-                input.as_deref(),
-                TaskSeed { item, index },
-                var,
-                via,
-            ),
+            } => self.dispatch_spawn(id, &target, input.as_deref(), TaskSeed { item, index }, var),
             Request::Timer { duration } => self.dispatch_timer(id, duration),
             Request::JoinAny { tasks } => self.dispatch_join_any(id, tasks),
             Request::Ready { task } => self.dispatch_ready(id, &task),
@@ -151,7 +143,7 @@ impl Scheduler {
         var: &serde_json::Value,
     ) -> Result<ChainIndex> {
         let chain = &self.chains[id];
-        let depth = chain.call_depth.deeper("call")?;
+        let depth = chain.call_depth.deeper()?;
         // An explicit input forks the chain's args (and `argv` re-derives
         // from them); a no-input call inherits the caller's context whole,
         // so the run's frozen `argv` - H1's repair included - reaches the

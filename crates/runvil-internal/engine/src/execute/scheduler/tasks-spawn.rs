@@ -14,7 +14,7 @@ use runvil_types::ids::TaskId;
 use runvil_vfs::detail;
 
 use crate::execute::section_context::TaskSeed;
-use crate::lua::{Answer, SpawnVia};
+use crate::lua::Answer;
 use crate::{Result, error};
 
 use super::super::admission::SpawnRecord;
@@ -28,9 +28,7 @@ impl Scheduler {
     /// its entry, and resumes the spawner with the task's id; the child is
     /// enqueued behind the spawner, so `spawn` returns before the child
     /// runs. Its preparation fails on the depth cap, target resolution,
-    /// the worker check, or chain construction. `via` names the call that
-    /// started the task: a `fanout` arm's depth-cap refusal is named after
-    /// `tasks.fanout`.
+    /// the worker check, or chain construction.
     pub(in crate::execute::scheduler) fn dispatch_spawn(
         &mut self,
         id: ChainIndex,
@@ -38,9 +36,8 @@ impl Scheduler {
         input: Option<&str>,
         seed: TaskSeed,
         var: serde_json::Value,
-        via: SpawnVia,
     ) -> Result<()> {
-        match self.prepare_spawn(id, target, input, seed, var, via) {
+        match self.prepare_spawn(id, target, input, seed, var) {
             Ok((task, child, record)) => {
                 // The child waits for admission, queued behind the
                 // spawner; the drain admits it when a slot frees up at
@@ -53,12 +50,10 @@ impl Scheduler {
     }
 
     /// The fallible half of spawn dispatch: `call`'s depth cap against the
-    /// spawner's call-depth field (the refusal named `tasks.fanout` for an
-    /// arm, and `call` for a `call` or a `tasks.spawn`), `call`'s target
-    /// resolution over the spawner's
-    /// visible set, the worker-template check (a list section is not a
-    /// target), then the task chain one level deeper under the spawn's
-    /// `args` and `var` snapshot, with its own access capability (a
+    /// spawner's call-depth field, `call`'s target resolution over the
+    /// spawner's visible set, the worker-template check (a list section is
+    /// not a target), then the task chain one level deeper under the
+    /// spawn's `args` and `var` snapshot, with its own access capability (a
     /// concurrent thread of execution, forked from the spawner's so the
     /// spawn is the happens-before edge; every delivery of the task joins
     /// it back) and a fresh turn counter. The task's entry keeps the
@@ -74,13 +69,9 @@ impl Scheduler {
         input: Option<&str>,
         seed: TaskSeed,
         var: serde_json::Value,
-        via: SpawnVia,
     ) -> Result<(TaskId, ChainIndex, SpawnRecord)> {
         let chain = &self.chains[id];
-        let depth = chain.call_depth.deeper(match via {
-            SpawnVia::Fanout => "tasks.fanout",
-            SpawnVia::Spawn => "call",
-        })?;
+        let depth = chain.call_depth.deeper()?;
         // The spawning section, captured now: the start event reports it
         // at admission, which may come after the spawner's walk moved to
         // another section.
