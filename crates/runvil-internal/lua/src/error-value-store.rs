@@ -20,7 +20,7 @@ const STORE_FACTS: [(&str, FactKey); 5] = [
 ];
 
 /// Returns the variant's own fields, without `reason`, in the shape
-/// `store_error_value_fields` documents.
+/// `store_error` documents.
 fn store_error_fields(error: &runvil_vfs::VfsError) -> Vec<(String, ErrorField)> {
     use runvil_vfs::VfsError;
     let integer = |value: usize| ErrorField::Integer(i64::try_from(value).unwrap_or(i64::MAX));
@@ -70,17 +70,9 @@ fn store_error_fields(error: &runvil_vfs::VfsError) -> Vec<(String, ErrorField)>
     }
 }
 
-/// Returns the full field set a store error value carries: the `reason`
-/// tag, as [`VfsError::tag`](runvil_vfs::VfsError::tag) names it,
-/// first, then the variant's own fields: the paths the failure names, plus
-/// `anchor` and its integer `count` for an anchor error, `rule` for an
-/// invalid path, or the integer `valid_up_to` for text that is not UTF-8.
-/// The rule is the [`PathReason`](runvil_vfs::PathReason) tag, which
-/// `PathReason::from_tag` parses back.
-///
-/// One source for the shape, so a failure the direct closures raise
-/// while a Pack prelude installs and one answered through the
-/// executor's effect path are indistinguishable to Lua code.
+/// Returns the full field set a store error value carries, `reason` first,
+/// in the shape [`store_error`] documents.
+#[cfg(any(test, feature = "test-support"))]
 #[must_use]
 pub fn store_error_value_fields(error: &runvil_vfs::VfsError) -> Vec<(String, ErrorField)> {
     let mut fields = vec![(
@@ -95,6 +87,19 @@ pub fn store_error_value_fields(error: &runvil_vfs::VfsError) -> Vec<(String, Er
 /// VFS: the code named after the variant, the variant's fields as facts under
 /// the names a Lua error table gives them, the failure's display text as the
 /// message, and the code's default prose.
+///
+/// A store error value carries the `reason` tag, as `VfsError::tag` names
+/// it, first, then the variant's own fields: the paths the failure names,
+/// plus `anchor` and its integer `count` for an anchor error, `rule` for an
+/// invalid path, or the integer `valid_up_to` for text that is not UTF-8.
+/// The rule is the `PathReason` tag, which `PathReason::from_tag` parses
+/// back.
+///
+/// Both store paths, the direct closures a Pack prelude's install calls
+/// and the executor's effect path, build their failure here, so a store
+/// error value has the same `kind`, `code`, `reason`, and fields on both;
+/// only the direct closures put the store's message ahead of the default
+/// prose.
 #[must_use]
 pub fn store_error(error: &runvil_vfs::VfsError) -> Error {
     let code = store_error_code(error);
@@ -115,7 +120,7 @@ pub fn store_error(error: &runvil_vfs::VfsError) -> Error {
 /// Returns the fields a store failure's universal error renders into its
 /// Lua error table, the inverse of [`store_error`]: the code's tag as
 /// `reason`, then each store fact under the field name
-/// [`store_error_value_fields`] gives it, a string fact as a string and a
+/// [`store_error`] documents for it, a string fact as a string and a
 /// count or an offset as an integer.
 pub(super) fn store_fact_fields(error: &Error) -> Vec<(String, ErrorField)> {
     let mut fields = vec![(

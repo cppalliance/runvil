@@ -137,9 +137,9 @@ pub use crate::error::{
     QuotaResource, context_exhausted, internal, internal_at, interrupted, lua_quota, lua_runtime,
     task_cancelled, task_consumed, task_not_owned, tool_loop_exhausted,
 };
-pub use crate::error_value::{
-    ErrorField, ErrorKind, error_fields, error_kind, store_error, store_error_value_fields,
-};
+#[cfg(any(test, feature = "test-support"))]
+pub use crate::error_value::store_error_value_fields;
+pub use crate::error_value::{ErrorField, ErrorKind, error_fields, error_kind, store_error};
 pub use crate::globals::{RESERVED_NAMES, Reserved, reserved_name};
 pub use crate::messages::MessageList;
 pub use crate::prelude::install_preludes;

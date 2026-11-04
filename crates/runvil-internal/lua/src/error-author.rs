@@ -105,9 +105,9 @@ pub(crate) fn author_prose(what: &str, code: ErrorCode) -> String {
     format!("{what}. {}", code.prose())
 }
 
-/// Places `error` on `line` of `file`, and gives a failure the prompt's
-/// Lua caused whose prose is still its code's default the author prose
-/// for `what`.
+/// Places `error` on `line` of `file` as [`place`] does. When the prompt's
+/// Lua caused the failure and its prose is still its code's default, the
+/// prose becomes the author prose for `what`.
 pub(crate) fn authored_at(error: Error, file: &str, line: Option<NonZeroU32>, what: &str) -> Error {
     let mut error = place(error, file, line);
     if is_authored(error.code) && error.prose == error.code.prose() {

@@ -10,8 +10,9 @@
 //! which a table rendered from a universal error placed on a prompt line
 //! puts after that line's `file:line`; a caller that branches reads
 //! `kind`, `code`, the stable tag of the failure's [`ErrorCode`], and the
-//! kind's own fields (`reason` for `context_exhausted`, `finish_reason`
-//! for `empty_model_reply`).
+//! kind's own fields (such as `reason` for `context_exhausted` and
+//! `finish_reason` for `empty_model_reply`; [`error_fields`] gives them
+//! all).
 //!
 //! [`ErrorKind`] names the closed vocabulary of kinds; [`error_kind`] and
 //! [`error_fields`] render a universal error into the shape;
@@ -43,7 +44,9 @@ use crate::error::accepted_tags;
 
 pub(crate) use classify::{install_normalize_failure, normalized};
 pub(crate) use raised::raised_from;
-pub use store::{store_error, store_error_value_fields};
+pub use store::store_error;
+#[cfg(any(test, feature = "test-support"))]
+pub use store::store_error_value_fields;
 pub use universal::{error_fields, error_kind};
 
 /// The registry key of the shared error metatable, created on first use per
@@ -76,20 +79,25 @@ pub enum ErrorKind {
     ModelFailure,
     /// A model round found no selected model and no prompt-wide default.
     ModelRequired,
-    /// The model named a tool outside the section's advertised scope.
+    /// The model named a tool outside the section's advertised scope;
+    /// includes `name`.
     OutOfScopeTool,
-    /// A script `tools.call` named an alias with no binding in the run.
+    /// A script `tools.call` named an id that is no adhoc tool and no
+    /// catalog tool in the run; includes `name`.
     UnboundTool,
     /// A script `tools.call` named a catalog tool that only a model may
-    /// call, because a render shapes its arguments for the model.
+    /// call, because a render shapes its arguments for the model; includes
+    /// `name`.
     ModelOnlyTool,
     /// A dispatched tool's own failure.
     Tool,
-    /// A task operation named a task the caller does not own.
+    /// A task operation named a task the caller does not own; includes
+    /// `task`.
     TaskNotOwned,
-    /// A task's result was already delivered once.
+    /// A task's result was already delivered once; includes `task`.
     TaskConsumed,
-    /// A section ended while tasks it owns were still live.
+    /// A section ended while tasks it owns were still live; includes
+    /// `tasks`, the ids joined by `, `.
     TasksLive,
     /// The run was cancelled, the caller dropped a call the run was waiting
     /// on, or a wait delivered a task its owner cancelled (that value
@@ -99,7 +107,9 @@ pub enum ErrorKind {
     /// [`VfsError`](runvil_vfs::VfsError) variant's fields.
     Store,
     /// A Lua authoring or runtime failure: a compile error, a runtime error
-    /// in author code, a shim's argument error, or an exhausted Engine quota.
+    /// or memory refusal in author code, an Engine function's argument
+    /// error, a failed substitution, the call-depth cap, or an exhausted
+    /// Engine quota.
     Lua,
     /// An internal invariant was violated, or a failure outside the prompt the
     /// author cannot act on that has no kind of its own.
@@ -221,15 +231,6 @@ impl ErrorField {
         match self {
             ErrorField::String(value) => Some(value),
             ErrorField::Integer(_) => None,
-        }
-    }
-
-    /// The field's integer value, when it is one.
-    #[must_use]
-    pub fn as_integer(&self) -> Option<i64> {
-        match self {
-            ErrorField::String(_) => None,
-            ErrorField::Integer(value) => Some(*value),
         }
     }
 }

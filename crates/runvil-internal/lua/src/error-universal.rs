@@ -1,5 +1,7 @@
-//! The failures this crate raises that the Engine raises too, through the
-//! same constructors, so each failure has one text.
+//! The constructors of the universal failures this crate raises, each the
+//! one source of its failure's text. The Engine raises `lua_runtime`,
+//! `interrupted`, the task refusals, and `internal_at`'s failures through
+//! these same constructors.
 
 use std::borrow::Cow;
 use std::num::NonZeroU32;
