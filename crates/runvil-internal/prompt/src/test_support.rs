@@ -8,6 +8,8 @@
 //! parse assertions show the source and the actual outcome when a parse goes
 //! the other way.
 
+use std::num::NonZeroU32;
+
 use runvil_types::error::{Error, ErrorCode};
 
 use crate::{Block, BodyText, Prompt, Section};
@@ -27,12 +29,13 @@ pub fn synthetic_section(name: &str, level: u8, blocks: Vec<Block>) -> Section {
     }
 }
 
-/// Builds a prose block, the one `Block` variant the executor's test
-/// fixtures need to construct directly.
+/// Builds a prose block on line 1, the one `Block` variant the executor's
+/// test fixtures need to construct directly.
 #[must_use]
 pub fn prose_block(text: String) -> Block {
     Block::Prose {
         text: BodyText::from_owned(text),
+        line: NonZeroU32::MIN,
     }
 }
 

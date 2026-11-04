@@ -2,6 +2,8 @@
 //! `call` or `jump` target, the text a prompt read sees, and the library
 //! sections `require` loads.
 
+use std::num::NonZeroU32;
+
 use mlua::Value;
 
 /// Outcome of a Lua block that may invoke `jump`.
@@ -9,8 +11,10 @@ use mlua::Value;
 pub enum LuaBlockResult {
     /// Normal completion with an optional scalar return.
     Returned(Option<String>),
-    /// `jump` transferred control to this heading (`## Name`).
-    Jump(String),
+    /// `jump` transferred control to this heading (`## Name`), called on
+    /// this prompt line, which is `None` when the call found no author
+    /// frame running.
+    Jump(String, Option<NonZeroU32>),
 }
 
 /// Resolves a `call` / `jump` target from a heading string.
@@ -78,4 +82,7 @@ pub struct LibraryBlock {
     pub program: crate::LuaProgram,
     /// The block's prose template, the Markdown before it.
     pub prose: String,
+    /// The prompt line the prose template starts on, which its render
+    /// receives; `None` when no prose comes right before the block.
+    pub line: Option<NonZeroU32>,
 }

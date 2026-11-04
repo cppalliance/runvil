@@ -1,8 +1,8 @@
 //! Jumps and observation boundaries: a jump skips the jumper's remaining
 //! blocks, cannot target its own section, runs an off-walk target, and
 //! keeps `var`; the jumper finishes before its target starts, even when
-//! the target does not resolve, and an erroring section reports started
-//! but not finished.
+//! the target does not resolve, which fails on the `jump` call's line, and
+//! an erroring section reports started but not finished.
 
 use super::*;
 use crate::execute::tests::context::sequence;
@@ -173,5 +173,25 @@ fn a_failed_jump_resolution_still_finishes_the_jumper() {
     assert!(
         observed.contains(&("A".to_string(), detail::SECTION_FINISHED.to_string())),
         "the jumper completed before the resolution failed: {observed:?}"
+    );
+}
+
+#[test]
+fn a_jump_to_a_missing_heading_fails_on_the_jump_line() {
+    let md = "---\nname: t\ndescription: d\nrunvil: 0\n---\n\n\
+        # Unresolved\n\n\
+        ## A\n\n\
+        ```lua\n\
+        var.before = true\n\
+        jump('## Missing')\n\
+        ```\n";
+    let trace = scheduler_scenario(md).run();
+
+    let error = trace.error();
+    assert!(error.to_string().contains("not found"), "{error}");
+    assert_eq!(
+        error.at,
+        at_line(13),
+        "the `jump` call's line, not the block's first: {error:?}"
     );
 }

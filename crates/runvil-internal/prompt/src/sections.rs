@@ -8,7 +8,7 @@ use runvil_types::emitter::Emitter;
 use runvil_types::error::{Error, ErrorCode};
 
 use crate::fence::{self, LuaRole, RawBlock};
-use crate::position::{body_text, line_add, newlines_before, nz_source_line};
+use crate::position::{body_text, file_line_of, line_add, newlines_before, nz_source_line};
 use crate::{Block, BodyText, Result, Section, error, list};
 use runvil_lua::LuaProgram;
 
@@ -283,9 +283,9 @@ impl<'a> SectionWalker<'a> {
     /// Compiles split content into blocks, in source order.
     ///
     /// Every prose block must be a slice of `shared`, which it reads from in
-    /// place. `content_abs_line` is the 1-based file line where the content
-    /// begins, and `location` gives each Lua block's compile location from its
-    /// role.
+    /// place, and its file line is where that slice starts.
+    /// `content_abs_line` is the 1-based file line where the content begins,
+    /// and `location` gives each Lua block's compile location from its role.
     ///
     /// # Errors
     /// Returns a Lua compile failure for a block that does not compile, and
@@ -304,6 +304,7 @@ impl<'a> SectionWalker<'a> {
             match raw {
                 RawBlock::Prose(text) => blocks.push(Block::Prose {
                     text: body_text(self.shared, text)?,
+                    line: file_line_of(self.shared, text, self.frontmatter_lines)?,
                 }),
                 RawBlock::Lua {
                     source,

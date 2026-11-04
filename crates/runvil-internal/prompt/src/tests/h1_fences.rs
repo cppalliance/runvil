@@ -50,7 +50,7 @@ fn h1_plain_lua_and_prose_are_live_blocks() {
     ));
     assert!(matches!(
         &prompt.h1_blocks[1],
-        Block::Prose { text } if text == "Plan {{ args }}."
+        Block::Prose { text, .. } if text == "Plan {{ args }}."
     ));
     assert!(matches!(
         &prompt.h1_blocks[2],
@@ -125,7 +125,7 @@ fn label_near_misses_inside_longer_fences_remain_prose() {
             .all(|block| matches!(block, Block::Prose { .. }))
     );
     assert!(prompt.h1_blocks.iter().any(
-        |block| matches!(block, Block::Prose { text } if text.as_str().contains("```lua extra"))
+        |block| matches!(block, Block::Prose { text, .. } if text.as_str().contains("```lua extra"))
     ));
     assert!(prompt.sections[0].prologue().is_none());
     assert!(prompt.sections[0].prose().contains("```lua extra"));

@@ -1,6 +1,7 @@
 //! Library prose: each library block reads its own lazy `prose`, filled
-//! from the caller's environment, and the caller's `prose` comes back
-//! exactly as it was after every load, a failed one included.
+//! from the caller's environment and rendered with the prompt line its
+//! template starts on, and the caller's `prose` comes back exactly as it
+//! was after every load, a failed one included.
 
 use super::*;
 
@@ -26,7 +27,11 @@ fn var_x(var: &Json) -> String {
     clippy::unnecessary_wraps,
     reason = "a library prose renderer returns a Result"
 )]
-fn fill_var_x(template: &str, state: ProseState<'_>) -> mlua::Result<String> {
+fn fill_var_x(
+    template: &str,
+    _: Option<NonZeroU32>,
+    state: ProseState<'_>,
+) -> mlua::Result<String> {
     let ProseState { var, .. } = state;
     Ok(template.replace("{{ var.x }}", &var_x(&var)))
 }
@@ -57,6 +62,29 @@ fn a_library_block_reads_its_own_prose_filled_from_the_callers_var() {
         "var.x = 'seven'\nlocal seen = require '## lib'\nreturn seen .. '|' .. prose",
     );
     assert_eq!(value.as_deref(), Some("lib sees seven|false|caller text"));
+}
+
+#[test]
+fn a_library_blocks_prose_renders_with_the_line_its_template_starts_on() {
+    let mut lib = with_prose(
+        library(
+            "lib",
+            "## lib",
+            &["first = prose", "return first .. '|' .. prose"],
+        ),
+        &["one", "two"],
+    );
+    lib.blocks[0].line = NonZeroU32::new(40);
+    let (vm, _) = require_vm_rendering(
+        vec![("## lib", None, lib)],
+        |template, line, _| Ok(format!("{template}@{line:?}")),
+        &null_emitter(),
+    );
+    assert_eq!(
+        returned(&vm, "return require '## lib'").as_deref(),
+        Some("one@Some(40)|two@None"),
+        "a block with no prose before it renders with no line"
+    );
 }
 
 #[test]

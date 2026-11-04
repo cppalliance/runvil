@@ -178,7 +178,7 @@ impl Prompt {
         )?;
         if matches!(
             h1_blocks.as_slice(),
-            [Block::Prose { text }] if text.as_str().is_empty()
+            [Block::Prose { text, .. }] if text.as_str().is_empty()
         ) {
             h1_blocks.clear();
         }

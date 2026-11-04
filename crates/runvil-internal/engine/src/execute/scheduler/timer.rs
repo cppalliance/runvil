@@ -57,6 +57,7 @@ impl Scheduler {
             TaskBacking::Effect(effect),
             id,
             "timer".to_owned(),
+            None,
         );
         Ok(task)
     }

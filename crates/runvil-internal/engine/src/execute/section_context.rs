@@ -19,6 +19,7 @@
 #[path = "section_context-construct.rs"]
 mod construct;
 
+use std::num::NonZeroU32;
 use std::sync::Arc;
 
 use runvil_types::event::lifecycle;
@@ -195,16 +196,21 @@ impl SectionContext {
     /// Installs the scheduler's pending Markdown buffer, empty when no
     /// Markdown accumulated, as the VM's lazy `prose` template before one
     /// Lua coroutine starts, rendered through this frame's
-    /// [`prose_renderer`]; [`SectionVm::install_lazy_prose`] states when it
-    /// renders.
+    /// [`prose_renderer`] with `line`, the prompt line the buffer starts
+    /// on; [`SectionVm::install_lazy_prose`] states when it renders.
     ///
     /// # Errors
     /// Returns a `LuaRuntime` failure if the guard cannot be installed.
-    pub(super) fn install_lazy_prose(&self, ctx: &ChainState, template: &str) -> Result<()> {
+    pub(super) fn install_lazy_prose(
+        &self,
+        ctx: &ChainState,
+        template: &str,
+        line: Option<NonZeroU32>,
+    ) -> Result<()> {
         let template = template.to_owned();
         let render = prose_renderer(ctx, self.item.clone());
         self.vm()
-            .install_lazy_prose(move |state: ProseState<'_>| render(&template, state))
+            .install_lazy_prose(move |state: ProseState<'_>| render(&template, line, state))
     }
 
     /// The frame's effective reporting handles for the `chat` rounds the
@@ -278,14 +284,18 @@ fn live_vm(vm: Option<&SectionVm>) -> &SectionVm {
 /// The `{{ }}` renderer for one frame's prose templates, its own blocks'
 /// and the libraries `require` loads alike: each render substitutes from
 /// the run's `args` and `argv`, shared with the run rather than copied,
-/// the frame's `item`, and the section state the first read snapshots.
+/// the frame's `item`, and the section state the first read snapshots,
+/// and places a failure in the run's prompt file from the line the
+/// template starts on.
 fn prose_renderer(
     ctx: &ChainState,
     item: Option<serde_json::Value>,
-) -> impl Fn(&str, ProseState<'_>) -> mlua::Result<String> + Send + Sync + 'static {
+) -> impl Fn(&str, Option<NonZeroU32>, ProseState<'_>) -> mlua::Result<String> + Send + Sync + 'static
+{
     let raw_args = Arc::clone(ctx.args());
     let argv = ctx.argv().cloned();
-    move |template: &str, state: ProseState<'_>| -> mlua::Result<String> {
+    let prompt = Arc::clone(ctx.prompt());
+    move |template: &str, line: Option<NonZeroU32>, state: ProseState<'_>| -> mlua::Result<String> {
         let sources = subst::Sources {
             args: &raw_args,
             argv: argv.as_deref(),
@@ -293,6 +303,8 @@ fn prose_renderer(
             var: &state.var,
             sys: &state.sys,
             globals: state.globals,
+            file: prompt.file(),
+            line,
         };
         subst::substitute(template, &sources).map_err(mlua::Error::external)
     }

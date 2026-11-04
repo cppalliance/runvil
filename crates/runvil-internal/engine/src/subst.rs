@@ -31,7 +31,9 @@
 //! replacement that itself contains `{{ ... }}` is emitted verbatim and never
 //! triggers a second round of substitution.
 
-use runvil_types::error::{Error, ErrorCode, FactKey};
+use std::num::NonZeroU32;
+
+use runvil_types::error::{Error, ErrorCode, FactKey, place};
 use serde_json::Value;
 
 use crate::Result;
@@ -106,6 +108,10 @@ pub(crate) struct Sources<'a> {
     /// unset, `Ok(Some(_))` with its JSON form when set, and `Err` when the
     /// lookup fails, which a placeholder reports as `serialize`.
     pub(crate) globals: &'a dyn Fn(&str) -> Result<Option<Value>>,
+    /// The prompt file the prose comes from, which a failure is placed in.
+    pub(crate) file: &'a str,
+    /// The prompt line the prose starts on, when known.
+    pub(crate) line: Option<NonZeroU32>,
 }
 
 /// Resolves every `{{ path }}` in `prose` against the [`Sources`].
@@ -119,7 +125,8 @@ pub(crate) struct Sources<'a> {
 /// placeholder can fail with. Its message names the reason and the byte
 /// offset of the offending placeholder after a detail with its bounded,
 /// control-escaped path preview, and a `serialize` message then holds the
-/// lookup failure.
+/// lookup failure. It is placed in the sources' file on the offending
+/// placeholder's line, when the line the prose starts on is known.
 pub(crate) fn substitute(prose: &str, sources: &Sources<'_>) -> Result<String> {
     let mut out = String::with_capacity(prose.len());
     let bytes = prose.as_bytes();
@@ -137,12 +144,23 @@ pub(crate) fn substitute(prose: &str, sources: &Sources<'_>) -> Result<String> {
         }
         if bytes[i] == b'{' && i + 1 < prose.len() && bytes[i + 1] == b'{' {
             let start = i;
+            let placed = |error| {
+                place(
+                    error,
+                    sources.file,
+                    placeholder_line(sources.line, &prose[..start]),
+                )
+            };
             let after = &prose[i + 2..];
-            let end = after
-                .find("}}")
-                .ok_or_else(|| failure("unclosed", start, "unclosed '{{' in prose".to_string()))?;
+            let end = after.find("}}").ok_or_else(|| {
+                placed(failure(
+                    "unclosed",
+                    start,
+                    "unclosed '{{' in prose".to_string(),
+                ))
+            })?;
             let path = after[..end].trim();
-            out.push_str(&resolve(path, start, sources)?);
+            out.push_str(&resolve(path, start, sources).map_err(placed)?);
             i += 2 + end + 2;
             continue;
         }
@@ -153,6 +171,14 @@ pub(crate) fn substitute(prose: &str, sources: &Sources<'_>) -> Result<String> {
         i += ch.len_utf8();
     }
     Ok(out)
+}
+
+/// The prompt line of a placeholder that `before` comes ahead of, in prose
+/// that starts on `line`; `None` when `line` is unknown or the sum
+/// overflows.
+fn placeholder_line(line: Option<NonZeroU32>, before: &str) -> Option<NonZeroU32> {
+    let newlines = u32::try_from(before.matches('\n').count()).ok()?;
+    line?.checked_add(newlines)
 }
 
 /// The nil-`argv` failure shared by the bare and dotted `{{ argv }}` paths.

@@ -6,12 +6,13 @@
 -- none is, of the section, and returns the library's identity, its
 -- heading, and the library itself; `begin_load(library)` reports the
 -- load's start, loads the library's blocks, marks the library as the one
--- loading, which makes `jump` refuse, and returns the blocks and their
--- prose templates in order; `end_load(finished)` takes that mark back and
--- reports how the load ended; `swap_prose(template)` installs a block's
--- own lazy `prose` over its template and returns the read it replaced;
--- `restore_prose(saved)` puts that read back; and `error_value` builds the
--- structured error table.
+-- loading, which makes `jump` refuse, and returns the blocks, their prose
+-- templates, and the prompt lines the templates start on, in order;
+-- `end_load(finished)` takes that mark back and reports how the load
+-- ended; `swap_prose(template, line)` installs a block's own lazy `prose`
+-- over its template, which starts on `line`, and returns the read it
+-- replaced; `restore_prose(saved)` puts that read back; and `error_value`
+-- builds the structured error table.
 --
 -- `require` is Lua rather than an Engine function, so the blocks run
 -- inside the calling block's coroutine and a block's suspending call is an
@@ -72,9 +73,10 @@ local restoring = {
 -- The first block that returns a value other than nil ends the library
 -- with it; a library whose blocks all fall through hands back `true`.
 -- Each block reads its own `prose` while it runs.
-local function run(blocks, templates)
+local function run(blocks, templates, lines)
   for index = 1, #blocks do
-    local scope <close> = setmetatable({ saved = swap_prose(templates[index]) }, restoring)
+    local scope <close> =
+      setmetatable({ saved = swap_prose(templates[index], lines[index]) }, restoring)
     local value = blocks[index]()
     if value ~= nil then return value end
   end
@@ -92,9 +94,9 @@ local function require(heading)
   )
   cache[identity] = LOADING
   loading[#loading + 1] = entry
-  local blocks, templates = begin_load(library)
+  local blocks, templates, lines = begin_load(library)
   entry.begun = true
-  local value = run(blocks, templates)
+  local value = run(blocks, templates, lines)
   cache[identity] = value
   entry.finished = true
   return value

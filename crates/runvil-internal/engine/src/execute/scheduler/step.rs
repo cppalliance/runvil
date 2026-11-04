@@ -4,14 +4,16 @@
 //! dispatch, advance or finish a completed block, and report the chunk's
 //! closing observation boundary.
 
+use std::num::NonZeroU32;
+
 use runvil_types::emitter::Emitter;
-use runvil_types::error::ErrorCode;
+use runvil_types::error::{ErrorCode, place};
 use runvil_types::event::lifecycle;
 
 use crate::execute::requirements::NOTICE_HEADER;
 use crate::heading_address::{SectionIndex, SectionPos};
 use crate::lua::{Answer, CoroStep, LuaBlockResult, Request, YieldParse};
-use crate::prompt::{Block, BodyText};
+use crate::prompt::Block;
 use crate::{Result, error};
 
 use super::chain::ChainStep;
@@ -27,8 +29,9 @@ enum Settled {
     Dispatch(Request),
     /// The block suspended on a call answered on the spot.
     Answer(Result<Answer>),
-    /// The block jumped to the heading.
-    Jump(String),
+    /// The block jumped to the heading, from the `jump` call on the
+    /// prompt line, when known.
+    Jump(String, Option<NonZeroU32>),
     /// The block returned a scalar.
     Returned(String),
     /// The block returned no value; the section's next block is next.
@@ -38,10 +41,14 @@ enum Settled {
 /// Settles one Lua block coroutine step in `entered`, the block's
 /// section, and reports the chunk's closing observation boundary under
 /// `name`: a yield parses into its request and leaves the block
-/// suspended, and a completion moves past the block.
+/// suspended, and a completion moves past the block. A failure settled
+/// here is placed in the prompt `file`; `block_line` is the line the
+/// block starts on.
 fn settle_block(
     entered: &mut Entered,
     result: Result<CoroStep>,
+    file: &str,
+    block_line: NonZeroU32,
     is_h1: bool,
     emitter: &Emitter,
     name: &str,
@@ -53,16 +60,23 @@ fn settle_block(
             // A failed H1 assertion ends the run before the walk:
             // H1's remaining job is the prompt's hard gates, so the
             // prompt chunk's own Lua failure IS the failed assertion,
-            // kept whole as the refusal's cause. Only the chunk's
-            // error remaps: the machinery around it (section setup,
-            // the final `var` read-back, jump-target resolution)
-            // keeps its own kind - a prompt bug under
-            // `LuaRuntime`, not an unsatisfiable environment. Fatal
-            // run conditions (cancellation, the claims violation)
-            // keep their own classification either way.
+            // kept whole as the refusal's cause, and the refusal is
+            // placed where the cause failed, else on the block's first
+            // line. Only the chunk's error remaps: the machinery around
+            // it (section setup, the final `var` read-back, jump-target
+            // resolution) keeps its own kind - a prompt bug under
+            // `LuaRuntime`, not an unsatisfiable environment. Fatal run
+            // conditions (cancellation, the claims violation) keep their
+            // own classification either way, and so does a failed `{{ }}`
+            // substitution, which arrives placed on its template's line.
             if is_h1 && error.code == ErrorCode::LuaRuntime {
                 let notice = format!("{NOTICE_HEADER}\n- the H1 gate failed");
-                return Err(error::requirements_unmet(&notice, Some(&error)));
+                let (file, line) = error
+                    .at
+                    .as_ref()
+                    .map_or((file, block_line), |at| (at.file.as_str(), at.start_line));
+                let refusal = error::requirements_unmet(&notice, Some(&error));
+                return Err(place(refusal, file, Some(line)));
             }
             return Err(error);
         }
@@ -74,7 +88,7 @@ fn settle_block(
                 YieldParse::Refused(refusal) => Settled::Answer(Err(refusal)),
                 YieldParse::Malformed(malformed) => {
                     emitter.report(name, lifecycle::LUA_CHUNK_FAILED);
-                    return Err(malformed);
+                    return Err(place(malformed, file, entered.frame.vm().call_line()));
                 }
             };
             entered.running = Some(Running {
@@ -89,14 +103,17 @@ fn settle_block(
             // resolved target.
             emitter.report(name, lifecycle::LUA_CHUNK_SUCCEEDED);
             match done {
-                LuaBlockResult::Jump(heading) => Ok(Settled::Jump(heading)),
+                LuaBlockResult::Jump(heading, line) => Ok(Settled::Jump(heading, line)),
                 LuaBlockResult::Returned(Some(value)) => {
                     // The H1 pass's final `var` read-back runs here
                     // exactly as the walk reads it on every exit, so a
                     // reassigned `var` global fails the run instead of
                     // returning the value.
                     if is_h1 {
-                        entered.frame.read_var()?;
+                        entered
+                            .frame
+                            .read_var()
+                            .map_err(|error| place(error, file, Some(block_line)))?;
                     }
                     Ok(Settled::Returned(value))
                 }
@@ -130,7 +147,7 @@ impl Scheduler {
             // when the slice is exhausted.
             return self.advance_entry(id);
         };
-        let result = if let Some(running) = entered.running.take() {
+        let (block_line, result) = if let Some(running) = entered.running.take() {
             let Running {
                 coroutine,
                 answer: Some(answer),
@@ -145,10 +162,11 @@ impl Scheduler {
             let Some(Block::Lua(program)) = entered.block_in(blocks) else {
                 return Err(error::internal("a suspended coroutine's block is Lua"));
             };
-            entered
+            let result = entered
                 .frame
                 .vm()
-                .resume_block_coro_answer(program, &coroutine, answer)
+                .resume_block_coro_answer(program, &coroutine, answer);
+            (program.source_line(), result)
         } else {
             match entered.block_in(blocks) {
                 Some(Block::Lua(program)) => {
@@ -156,20 +174,26 @@ impl Scheduler {
                     // fresh read-only lazy `prose` template first.
                     emitter.report(&name, lifecycle::LUA_CHUNK_STARTED);
                     let pending = entered.pending_prose.take();
-                    let template = pending.as_ref().map_or("", BodyText::as_str);
-                    if let Err(error) = entered.frame.install_lazy_prose(&chain.ctx, template) {
+                    let (template, line) = pending
+                        .as_ref()
+                        .map_or(("", None), |(text, line)| (text.as_str(), Some(*line)));
+                    if let Err(error) = entered.frame.install_lazy_prose(&chain.ctx, template, line)
+                    {
                         emitter.report(&name, lifecycle::LUA_CHUNK_FAILED);
-                        return Err(error);
+                        return Err(place(error, prompt.file(), Some(program.source_line())));
                     }
-                    entered.frame.vm().start_block_coro(program)
+                    (
+                        program.source_line(),
+                        entered.frame.vm().start_block_coro(program),
+                    )
                 }
-                Some(Block::Prose { text, .. }) => {
+                Some(Block::Prose { text, line, .. }) => {
                     // The parser emits one prose block per inter-fence gap,
                     // already accumulated and reset at thematic breaks, so the
                     // block IS the pending buffer the next Lua fence consumes.
                     // Prose never infers: the buffer waits for the following
                     // block's lazy `prose` install, unevaluated until read.
-                    entered.pending_prose = Some(text.clone());
+                    entered.pending_prose = Some((text.clone(), *line));
                     entered.block = entered.block.next();
                     self.ready.push_back(id);
                     return Ok(ChainStep::Continue);
@@ -190,7 +214,15 @@ impl Scheduler {
                 }
             }
         };
-        let settled = settle_block(entered, result, is_h1, emitter, &name)?;
+        let settled = settle_block(
+            entered,
+            result,
+            prompt.file(),
+            block_line,
+            is_h1,
+            emitter,
+            &name,
+        )?;
         self.apply_settled(id, settled, is_h1)
     }
 
@@ -209,9 +241,11 @@ impl Scheduler {
             Settled::Answer(answer) => self.answer_inline(id, answer)?,
             // A jump out of H1 ends the pass and starts the walk at the
             // target.
-            Settled::Jump(heading) if is_h1 => return self.end_h1_at_jump(id, &heading),
-            Settled::Jump(heading) => {
-                self.with_chain(id, |ops| ops.apply_jump(&heading))?;
+            Settled::Jump(heading, line) if is_h1 => {
+                return self.end_h1_at_jump(id, &heading, line);
+            }
+            Settled::Jump(heading, line) => {
+                self.with_chain(id, |ops| ops.apply_jump(&heading, line))?;
                 self.ready.push_back(id);
             }
             Settled::Returned(value) if is_h1 => {

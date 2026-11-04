@@ -60,7 +60,8 @@ impl Tree {
             exec: runvil_vfs::detail::access_id(&access),
         };
         let task = self.chains[id].task.clone();
-        self.tasks.insert(task, backing, owner, "worker".to_owned());
+        self.tasks
+            .insert(task, backing, owner, "worker".to_owned(), None);
         id
     }
 

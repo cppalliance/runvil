@@ -6,6 +6,8 @@
 //! Construction happens in the parsing modules; this module holds the value
 //! types and their accessors.
 
+use std::num::NonZeroU32;
+
 use crate::{BodyText, Frontmatter};
 use runvil_lua::LuaProgram;
 
@@ -24,6 +26,8 @@ pub enum Block {
     Prose {
         /// Captured Markdown, trimmed of leading and trailing whitespace.
         text: BodyText,
+        /// The 1-based line of the prompt file that `text` starts on.
+        line: NonZeroU32,
     },
 }
 
@@ -101,7 +105,7 @@ impl Section {
             .iter()
             .rev()
             .find_map(|block| match block {
-                Block::Prose { text } => Some(text.as_str()),
+                Block::Prose { text, .. } => Some(text.as_str()),
                 _ => None,
             })
             .unwrap_or("")

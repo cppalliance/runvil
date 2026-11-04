@@ -58,7 +58,7 @@ fn exact_middle_lua_fences_become_compiled_blocks() {
     assert_eq!(section.prose(), "After.");
     assert_eq!(section.blocks.len(), 3);
     match &section.blocks[0] {
-        Block::Prose { text } => assert_eq!(text, "Before."),
+        Block::Prose { text, .. } => assert_eq!(text, "Before."),
         other => panic!("expected leading prose, got {other:?}"),
     }
     match &section.blocks[1] {
@@ -66,7 +66,7 @@ fn exact_middle_lua_fences_become_compiled_blocks() {
         other => panic!("expected lua block, got {other:?}"),
     }
     match &section.blocks[2] {
-        Block::Prose { text } => assert_eq!(text, "After."),
+        Block::Prose { text, .. } => assert_eq!(text, "After."),
         other => panic!("expected trailing prose, got {other:?}"),
     }
 }

@@ -7,7 +7,7 @@
 use std::num::NonZeroUsize;
 use std::sync::{Arc, Mutex};
 
-use runvil_types::error::ErrorCode;
+use runvil_types::error::{ErrorCode, place};
 use runvil_types::ids::{AbandonReason, ChainId, TaskId};
 use runvil_vfs::Access;
 
@@ -180,7 +180,9 @@ impl Scheduler {
     /// `outcome` is the chain's end: a scalar return's value, `None` for a
     /// walk that ran off its slice's last section, or the chain's failure.
     pub(super) fn finish(&mut self, id: ChainIndex, outcome: Result<Option<String>>) -> ChainStep {
+        let prompt = self.prompt();
         let chain = &mut self.chains[id];
+        let blocks = chain.blocks(&prompt);
         let parent = chain.kind.parent();
         let is_task = matches!(chain.kind, ChainKind::Task);
         // `None` when the chain ended by exhausting its slice: the last
@@ -203,9 +205,14 @@ impl Scheduler {
             // at fall-through (the walk rolls it forward; a call chain
             // or a task chain discards its clone), and arms the completion
             // flag so the frame's drop fires SECTION_FINISHED. A failure -
-            // the read-back's included - drops the frame unarmed.
+            // the read-back's included, placed on the returning block -
+            // drops the frame unarmed.
             if let Some(entered) = entered.as_mut() {
-                entered.frame.read_var()?;
+                let line = entered.block.lua_line(blocks);
+                entered
+                    .frame
+                    .read_var()
+                    .map_err(|error| place(error, prompt.file(), line))?;
                 if !is_h1 {
                     entered.frame.mark_completed();
                 }

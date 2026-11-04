@@ -4,6 +4,8 @@
 
 use std::collections::BTreeMap;
 
+use runvil_types::error::Location;
+
 use super::*;
 use serde_json::json;
 
@@ -17,8 +19,12 @@ fn no_globals(_: &str) -> Result<Option<Value>> {
     Ok(None)
 }
 
+/// The prompt line the stock sources' prose starts on.
+const PROSE_LINE: NonZeroU32 = NonZeroU32::new(7).expect("7 is non-zero");
+
 /// Sources with the stock args string and no argv/item, over the given
-/// `var`/`sys`; tests override fields with struct-update syntax.
+/// `var`/`sys`, for prose that starts on [`PROSE_LINE`] of `prompt`; tests
+/// override fields with struct-update syntax.
 fn test_sources<'a>(var: &'a Value, sys: &'a Value) -> Sources<'a> {
     Sources {
         args: "Acme Corp",
@@ -27,6 +33,8 @@ fn test_sources<'a>(var: &'a Value, sys: &'a Value) -> Sources<'a> {
         var,
         sys,
         globals: &no_globals,
+        file: "prompt",
+        line: Some(PROSE_LINE),
     }
 }
 
@@ -268,7 +276,40 @@ fn a_failure_is_a_substitution_error_with_its_reason_fact() {
         e.facts,
         BTreeMap::from([(FactKey::Reason, Value::from("missing_key"))])
     );
-    assert_eq!(e.at, None);
+    assert_eq!(
+        e.at,
+        Some(Location::line("prompt", PROSE_LINE)),
+        "a placeholder on the prose's first line fails there"
+    );
+}
+
+#[test]
+fn a_failure_is_placed_on_its_placeholders_line_of_the_prose() {
+    let var = json!({});
+    let sys = json!({});
+    let sources = test_sources(&var, &sys);
+    for (prose, newlines) in [
+        ("one\ntwo {{ var.nope }}", 1),
+        ("one\n\nthree\n{{ unclosed", 3),
+    ] {
+        let e = substitute(prose, &sources).expect_err("the placeholder fails");
+        assert_eq!(
+            e.at.map(|at| at.start_line.get()),
+            Some(PROSE_LINE.get() + newlines),
+            "{prose:?}"
+        );
+    }
+    let unplaced = Sources {
+        line: None,
+        ..test_sources(&var, &sys)
+    };
+    assert_eq!(
+        substitute("{{ var.nope }}", &unplaced)
+            .expect_err("the placeholder fails")
+            .at,
+        None,
+        "prose whose line is unknown places nothing"
+    );
 }
 
 #[test]

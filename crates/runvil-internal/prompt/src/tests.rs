@@ -187,6 +187,7 @@ fn parses_multi_section_with_all_features() {
         p.h1_blocks,
         vec![Block::Prose {
             text: BodyText::from_owned("Human-readable intro text.".to_owned()),
+            line: std::num::NonZeroU32::new(9).expect("9 is non-zero"),
         }]
     );
 

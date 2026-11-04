@@ -52,8 +52,8 @@ fn a_chain_ending_with_live_author_tasks_fails_as_tasks_live_naming_the_ids() {
 
     assert_eq!(
         error,
-        &crate::error::tasks_live(&[task("0.0"), task("0.1")]),
-        "leaked ids in spawn order"
+        &crate::test_support::placed(crate::error::tasks_live(&[task("0.0"), task("0.1")]), 12),
+        "leaked ids in spawn order, on the line that spawned the first"
     );
     let text = error.to_string();
     assert!(
@@ -157,7 +157,7 @@ fn a_returning_owner_abandons_its_running_task_as_owner_returned() {
     let rig = run_abandoning_a_running_task(scheduler_scenario(md), AbandonReason::OwnerReturned);
     assert_eq!(
         rig.trace().error(),
-        &crate::error::tasks_live(&[task("0.0")])
+        &crate::test_support::placed(crate::error::tasks_live(&[task("0.0")]), 12)
     );
 }
 
@@ -235,8 +235,8 @@ fn assert_task_outlives_movement(md: String) {
 
     assert_eq!(
         rig.trace().error(),
-        &crate::error::tasks_live(&[task("0.0")]),
-        "the walk still owns the task when the sibling returns"
+        &crate::test_support::placed(crate::error::tasks_live(&[task("0.0")]), 12),
+        "the walk still owns the task when the sibling returns, spawned on the spawner's line"
     );
     assert_eq!(
         rig.task_state_for_test(&task("0.0")),
@@ -309,6 +309,47 @@ fn a_call_chain_ending_with_a_live_task_answers_tasks_live_to_its_caller() {
 }
 
 #[test]
+fn a_fanout_arm_leaking_a_task_fails_on_the_arms_own_spawn_line() {
+    // The arm's `tasks_live` is placed in the arm, on its spawn's line,
+    // before the fanout delivers it, so the parent's re-raise and the run
+    // keep that line rather than the parent's `tasks.fanout` line.
+    let md = "---\nname: t\ndescription: d\nrunvil: 0\n---\n\n\
+        # Tasks\n\n\
+        ## Main\n\n\
+        ```lua\n\
+        return tasks.fanout('## Worker', {'only'})[1].text\n\
+        ```\n\n\
+        ## Worker\n\n\
+        ```lua\n\
+        local note = item\n\
+        tasks.spawn('## Child')\n\
+        return note\n\
+        ```\n\n\
+        ## Child\n\n\
+        ```lua\n\
+        store.write('park', 'x')\n\
+        return 'never'\n\
+        ```\n";
+    let trace = scheduler_scenario(md).run();
+
+    let error = trace.error();
+    assert_eq!(error.code, ErrorCode::TasksLive, "{error:?}");
+    assert_eq!(
+        error.at,
+        at_line(19),
+        "the Worker's `tasks.spawn` line, not Main's fanout line: {error:?}"
+    );
+    assert!(
+        matches!(
+            trace.outcome(),
+            RunOutcome::Failed { message, .. } if message.ends_with(" (at prompt:19)")
+        ),
+        "the run's message ends with where it failed: {:?}",
+        trace.outcome()
+    );
+}
+
+#[test]
 fn a_task_spawned_in_h1_belongs_to_the_main_walk() {
     // H1 spawns a child that parks; the walk's first section returns at
     // once. The hand-off made the walk the task's owner, so the walk's end
@@ -335,8 +376,8 @@ fn a_task_spawned_in_h1_belongs_to_the_main_walk() {
 
     assert_eq!(
         rig.trace().error(),
-        &crate::error::tasks_live(&[task("0.0")]),
-        "the walk owns H1's task and leaks it"
+        &crate::test_support::placed(crate::error::tasks_live(&[task("0.0")]), 10),
+        "the walk owns H1's task and leaks it, placed on the H1's spawn"
     );
     assert_eq!(
         rig.task_state_for_test(&task("0.0")),

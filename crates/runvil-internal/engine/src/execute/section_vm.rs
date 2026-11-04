@@ -17,6 +17,7 @@
 //! consumes the uninjected VM, so a setup failure tears it down here, the
 //! one place a VM that never reached its frame is torn down.
 
+use std::num::NonZeroU32;
 use std::sync::{Arc, Mutex};
 
 use runvil_types::emitter::Emitter;
@@ -134,7 +135,7 @@ where
         + Send
         + Sync
         + 'static,
-    P: Fn(&str, ProseState<'_>) -> mlua::Result<String> + Send + Sync + 'static,
+    P: Fn(&str, Option<NonZeroU32>, ProseState<'_>) -> mlua::Result<String> + Send + Sync + 'static,
 {
     vm.set_prompt_file(setup.file);
     // The raw-model-id fallback reads its flag during Engine injection, so
@@ -175,7 +176,7 @@ where
         + Send
         + Sync
         + 'static,
-    P: Fn(&str, ProseState<'_>) -> mlua::Result<String> + Send + Sync + 'static,
+    P: Fn(&str, Option<NonZeroU32>, ProseState<'_>) -> mlua::Result<String> + Send + Sync + 'static,
 {
     vm.install_engine_globals(setup.emitter, setup.section_name)?;
     if let Some(snapshot) = setup.ui {

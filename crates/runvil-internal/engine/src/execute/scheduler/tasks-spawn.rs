@@ -61,10 +61,12 @@ impl Scheduler {
     /// `args` and `var` snapshot, with its own access capability (a
     /// concurrent thread of execution, forked from the spawner's so the
     /// spawn is the happens-before edge; every delivery of the task joins
-    /// it back) and a fresh turn counter. The child leaves this call
-    /// holding no Lua VM yet, with its `var` snapshot moved into the chain,
-    /// and its spawn record comes back for the admission queue; the drain
-    /// admits it when an admission slot frees up.
+    /// it back) and a fresh turn counter. The task's entry keeps the
+    /// spawner's call line, the prompt line it spawned from. The child
+    /// leaves this call holding no Lua VM yet, with its `var` snapshot
+    /// moved into the chain, and its spawn record comes back for the
+    /// admission queue; the drain admits it when an admission slot frees
+    /// up.
     fn prepare_spawn(
         &mut self,
         id: ChainIndex,
@@ -83,6 +85,7 @@ impl Scheduler {
         // at admission, which may come after the spawner's walk moved to
         // another section.
         let spawner_section = chain.section_name().to_owned();
+        let spawn_line = chain.frame()?.vm().call_line();
         // An explicit input forks the chain's args (and `argv` re-derives
         // from them), as a `call` with input does; otherwise the chain
         // inherits the spawner's context whole, but for the turn counter,
@@ -156,6 +159,7 @@ impl Scheduler {
             TaskBacking::Chain { chain: child, exec },
             id,
             worker.name().to_owned(),
+            spawn_line,
         );
         // The task waits for admission from here, and the spawn record
         // holds what the start event reports once the task first runs.

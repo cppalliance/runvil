@@ -1,10 +1,11 @@
 //! The globals a section reads: the `tasks` namespace, `item`, `var` across
-//! the walk, `call`, and fanout arms, bare globals in prose, and the `sys`
-//! metadata.
+//! the walk, `call`, and fanout arms and the line its failed read-back is
+//! placed on, bare globals in prose, and the `sys` metadata.
 
 use super::*;
 use crate::RunErrorKind;
 use crate::execute::run_error_kind;
+use crate::test_support::at_line;
 
 /// The `tasks` global is the task namespace (`tasks.spawn` and the
 /// waits), not a control-flow table: indexing it by a heading string reads
@@ -160,6 +161,88 @@ fn var_write_of_a_function_fails_the_run() {
             .contains("var.f must be JSON data, got function"),
         "the guard error must name the field and the type: {error}"
     );
+}
+
+/// The `var` read-back at a section's fall-through fails on the section's
+/// last Lua block, the walk having moved past it and its trailing prose.
+#[test]
+fn a_var_read_back_failure_at_fall_through_is_placed_on_the_last_lua_block() {
+    let source = PromptSource::new().prose(
+        "Only",
+        "
+        ```lua
+        var.first = true
+        ```
+
+        ```lua
+        local later = true
+        var = 5
+        ```
+
+        Trailing commentary.",
+    );
+    let error = Scenario::new(source.build()).run().error().clone();
+    assert!(
+        error.to_string().contains("global was reassigned"),
+        "{error}"
+    );
+    assert_eq!(error.at, at_line(16), "{error:?}");
+}
+
+/// The `var` read-back at a jump fails on the jumping block, not on the
+/// section's last one.
+#[test]
+fn a_var_read_back_failure_at_a_jump_is_placed_on_the_jumping_block() {
+    let source = PromptSource::new()
+        .prose(
+            "A",
+            "
+            ```lua
+            local leaving = true
+            var = 5
+            jump('## B')
+            ```
+
+            ```lua
+            error('the jump leaves this block unrun')
+            ```",
+        )
+        .section("B", "return 'unreached'");
+    let error = Scenario::new(source.build()).run().error().clone();
+    assert!(
+        error.to_string().contains("global was reassigned"),
+        "{error}"
+    );
+    assert_eq!(error.at, at_line(12), "{error:?}");
+}
+
+/// The `var` read-back at a scalar return fails on the returning block,
+/// not on the section's last one.
+#[test]
+fn a_var_read_back_failure_at_a_return_is_placed_on_the_returning_block() {
+    let source = PromptSource::new().prose(
+        "Only",
+        "
+        ```lua
+        var.first = true
+        ```
+
+        ```lua
+        local done = true
+        var = 5
+        return 'early'
+        ```
+
+        ```lua
+        error('the return leaves this block unrun')
+        ```",
+    );
+    let error = Scenario::new(source.build()).run().error().clone();
+    assert!(
+        error.to_string().contains("global was reassigned"),
+        "{error}"
+    );
+    assert_eq!(error.at, at_line(16), "{error:?}");
 }
 
 /// A bare global (`x = 42` without `local`) resolves in prose read through

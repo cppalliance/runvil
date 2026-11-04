@@ -37,7 +37,7 @@ fn chain_backing(raw: u32) -> TaskBacking {
 /// backed by the chain at arena index `100 + index`.
 fn spawn(arena: &mut TaskArena, owner: ChainIndex, index: u32) -> (TaskId, TaskBacking) {
     let backing = chain_backing(100 + index);
-    arena.insert(task(index), backing, owner, format!("worker {index}"));
+    arena.insert(task(index), backing, owner, format!("worker {index}"), None);
     (task(index), backing)
 }
 
@@ -45,7 +45,7 @@ fn spawn(arena: &mut TaskArena, owner: ChainIndex, index: u32) -> (TaskId, TaskB
 /// owned by `owner`.
 fn timer(arena: &mut TaskArena, owner: ChainIndex, index: u32) -> TaskId {
     let backing = TaskBacking::Effect(EffectId(u64::from(index)));
-    arena.insert(task(index), backing, owner, "timer".to_owned());
+    arena.insert(task(index), backing, owner, "timer".to_owned(), None);
     task(index)
 }
 

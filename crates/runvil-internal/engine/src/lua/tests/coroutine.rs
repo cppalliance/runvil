@@ -104,7 +104,7 @@ fn jump_transfers_through_thread_resume_unchanged() {
         .start_block_coro(&program)
         .expect("a jump is not a failure")
     {
-        CoroStep::Done(LuaBlockResult::Jump(heading)) => assert_eq!(heading, "## Target"),
+        CoroStep::Done(LuaBlockResult::Jump(heading, _)) => assert_eq!(heading, "## Target"),
         other => panic!("expected the jump transfer, got {other:?}"),
     }
 }

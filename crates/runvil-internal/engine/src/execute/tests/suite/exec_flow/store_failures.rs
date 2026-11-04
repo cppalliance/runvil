@@ -1,6 +1,6 @@
 //! How store failures reach the author and the run: caught error tables,
-//! uncaught run errors, the store view's confinement, and write conflicts
-//! from library code.
+//! uncaught run errors, the store view's confinement and the line its
+//! failure is placed on, and write conflicts from library code.
 
 use runvil_lua::VfsOp;
 use runvil_types::error::ErrorCode;
@@ -8,8 +8,10 @@ use runvil_types::error::ErrorCode;
 use super::*;
 
 use crate::RunErrorKind;
-use crate::execute::EffectRecord;
 use crate::execute::run_error_kind;
+use crate::execute::{Effect, EffectRecord};
+use crate::test_support::at_line;
+use crate::test_support::rig::Rig;
 
 /// A store failure the author caught with `pcall` is an error table of
 /// kind `store`: its `code`, `reason`, `path`, and `anchor` fields and its
@@ -39,6 +41,30 @@ fn a_caught_store_error_is_a_store_table_with_reason_fields_and_prose() {
         ErrorCode::Anchor.prose()
     ));
     assert_eq!(Scenario::new(source).run().text(), "ok");
+}
+
+/// A store view the chain cannot derive ends the chain without reaching
+/// Lua, so it is placed on the store call's line. The run's start probe
+/// rules out a missing store, so the hook re-dispatches the parked write
+/// through an access whose handle declares none.
+#[test]
+fn a_store_view_failure_is_placed_on_the_store_calls_line() {
+    let source = one_section(
+        "local ready = true
+         store.write('a.txt', 'x')",
+    );
+    let mut rig =
+        Rig::start(Scenario::new(source).hold(|effect| matches!(effect, Effect::Vfs { .. })));
+    rig.settle();
+    let error = rig
+        .scheduler_for_test()
+        .dispatch_store_without_a_store_for_test(VfsOp::Write {
+            path: "a.txt".to_owned(),
+            contents: "x".to_owned(),
+        })
+        .expect_err("a handle that declares no store has no store view");
+    assert_eq!(error.code, ErrorCode::NoStore, "{error:?}");
+    assert_eq!(error.at, at_line(13), "{error:?}");
 }
 
 /// A caught `store.read` failure names the read's own line, which the read's

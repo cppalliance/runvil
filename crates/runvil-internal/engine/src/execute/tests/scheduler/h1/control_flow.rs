@@ -95,6 +95,29 @@ fn jump_from_h1_to_an_unknown_section_fails_the_run() {
 }
 
 #[test]
+fn a_jump_from_h1_to_a_missing_heading_fails_on_the_jump_line() {
+    // Jump-target resolution is the machinery around the chunk, not the
+    // failed gate, so it keeps its own kind on the `jump` call's line.
+    let md = "---\nname: t\ndescription: d\nrunvil: 0\n---\n\n\
+        # Test prompt\n\n\
+        ```lua\n\
+        var.before = true\n\
+        jump('## Nope')\n\
+        ```\n\n\
+        ## Result\n\n\
+        ```lua\nreturn 'unexpected'\n```\n";
+    let trace = h1_scenario(md).run();
+
+    let error = trace.error();
+    assert_eq!(error.code, ErrorCode::LuaRuntime, "{error:?}");
+    assert_eq!(
+        error.at,
+        at_line(11),
+        "the `jump` call's line, not the block's first: {error:?}"
+    );
+}
+
+#[test]
 fn fanout_from_h1_runs_the_worker_over_the_collection() {
     // `fanout` works in H1 as in any section: the worker resolves against
     // the top-level sections and the arms join in collection order.

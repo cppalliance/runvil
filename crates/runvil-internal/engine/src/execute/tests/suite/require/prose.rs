@@ -1,9 +1,38 @@
 //! Library prose: a library block reads its own `prose`, rendered from
 //! the caller's environment, and the caller's `prose` comes back
 //! unchanged, whether the caller read it first or not and whether the
-//! library finished or raised.
+//! library finished or raised; a failed substitution in it is placed on
+//! the library's own template line.
+
+use runvil_types::error::ErrorCode;
 
 use super::*;
+use crate::test_support::at_line;
+
+#[test]
+fn a_failed_substitution_in_library_prose_is_placed_on_the_librarys_template_line() {
+    let source = PromptSource::new()
+        .section("Main", "return require '## lib'")
+        .prose(
+            "lib",
+            "
+            Intro.
+            Needs {{ var.missing }}.
+
+            ```lua
+            return prose
+            ```",
+        );
+    let trace = require_case(source.build()).run();
+
+    let error = trace.error();
+    assert_eq!(error.code, ErrorCode::Substitution, "{error:?}");
+    assert_eq!(
+        error.at,
+        at_line(18),
+        "the placeholder's line in the library, not the caller's `require` line: {error:?}"
+    );
+}
 
 #[test]
 fn a_library_hands_its_prose_to_the_caller_and_leaves_the_callers_prose_alone() {

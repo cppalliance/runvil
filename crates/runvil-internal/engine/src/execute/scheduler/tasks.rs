@@ -22,6 +22,7 @@
 mod spawn;
 
 use std::collections::BTreeMap;
+use std::num::NonZeroU32;
 
 use runvil_types::ids::TaskId;
 use runvil_vfs::ExecId;
@@ -126,6 +127,11 @@ pub(super) struct TaskEntry {
     /// The latest progress note published through `tasks.note` from inside
     /// the task, reported by `tasks.status`.
     pub(super) note: Option<String>,
+    /// The prompt line of the author's call that spawned the task, which a
+    /// `tasks_live` failure that names it first is placed on: `None` for
+    /// an internal timer, and for a spawn whose yield found no author
+    /// frame.
+    pub(super) spawn_line: Option<NonZeroU32>,
 }
 
 impl TaskEntry {
@@ -159,13 +165,14 @@ pub(super) struct TaskArena {
 
 impl TaskArena {
     /// Registers a running task that `owner` started over `backing`,
-    /// reporting under `target`.
+    /// reporting under `target`, by the call on `spawn_line`.
     pub(super) fn insert(
         &mut self,
         task: TaskId,
         backing: TaskBacking,
         owner: ChainIndex,
         target: String,
+        spawn_line: Option<NonZeroU32>,
     ) {
         let entry = TaskEntry {
             backing,
@@ -173,6 +180,7 @@ impl TaskArena {
             target,
             state: EntryState::Running,
             note: None,
+            spawn_line,
         };
         self.entries.insert(task, entry);
     }
@@ -371,6 +379,11 @@ impl TaskArena {
     /// The section `task`'s observations report under.
     pub(super) fn target_of(&self, task: &TaskId) -> Option<&str> {
         self.entries.get(task).map(|entry| entry.target.as_str())
+    }
+
+    /// The prompt line of the call that spawned `task`, when known.
+    pub(super) fn spawn_line_of(&self, task: &TaskId) -> Option<NonZeroU32> {
+        self.entries.get(task)?.spawn_line
     }
 
     /// `task`'s state, or `None` when no task with that id was started.

@@ -118,8 +118,10 @@ pub enum RunOutcome {
         /// each kind.
         kind: RunErrorKind,
         /// The failure's self-contained message, with the text of each
-        /// cause it keeps and, for a parse or internal failure, where it
-        /// happened.
+        /// cause it keeps and then where it happened, when known: the
+        /// prompt name, line, and column for a failure in the prompt's
+        /// frontmatter, structure, fences, or lists, and
+        /// `(at {file}:{line})` for any other.
         message: String,
     },
     /// The caller cancelled the run or dropped an effect the run was waiting

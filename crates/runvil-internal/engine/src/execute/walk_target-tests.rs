@@ -71,6 +71,15 @@ fn templates(library: &Library) -> Vec<&str> {
         .collect()
 }
 
+/// The prompt line each block's template starts on.
+fn template_lines(library: &Library) -> Vec<Option<u32>> {
+    library
+        .blocks
+        .iter()
+        .map(|block| block.line.map(std::num::NonZeroU32::get))
+        .collect()
+}
+
 #[test]
 fn a_library_pairs_each_program_with_the_prose_right_before_it() {
     let section = synthetic_section(
@@ -90,6 +99,11 @@ fn a_library_pairs_each_program_with_the_prose_right_before_it() {
     assert_eq!(library.heading, "## Lib");
     assert_eq!(sources(&library), ["first = 1", "second = 2", "third = 3"]);
     assert_eq!(templates(&library), ["Intro.", "", "Later."]);
+    assert_eq!(
+        template_lines(&library),
+        [Some(1), None, Some(1)],
+        "a block with no prose right before it has no template line"
+    );
 }
 
 #[test]
@@ -100,6 +114,12 @@ fn resolve_library_builds_a_parsed_section_without_its_trailing_prose() {
     assert_eq!(library.heading, "## Lib");
     assert_eq!(sources(&library), ["first = 1", "second = 2", "third = 3"]);
     assert_eq!(templates(&library), ["Intro.", "", "Later."]);
+    let lines = template_lines(&library);
+    assert_eq!(
+        (lines[0], lines[2]),
+        (Some(43), Some(53)),
+        "each template keeps the file line it starts on: {lines:?}"
+    );
 }
 
 #[test]

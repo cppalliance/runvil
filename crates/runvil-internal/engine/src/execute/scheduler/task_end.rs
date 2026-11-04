@@ -13,7 +13,7 @@
 
 use std::sync::Arc;
 
-use runvil_types::error::ErrorCode;
+use runvil_types::error::{ErrorCode, place};
 use runvil_types::event::Event;
 use runvil_types::ids::{AbandonReason, Provenance, TaskId};
 use runvil_vfs::Access;
@@ -71,8 +71,9 @@ impl Scheduler {
     /// owner ended: the section ended, the tool loop was exhausted, or the
     /// owner failed some other way), and an `Ok` outcome that leaked
     /// tasks becomes a `TasksLive` failure naming them in
-    /// spawn order. A failing chain keeps its own error - the leak is the
-    /// lesser fault - but its tasks end all the same.
+    /// spawn order, placed on the line that spawned the first of them. A
+    /// failing chain keeps its own error - the leak is the lesser fault -
+    /// but its tasks end all the same.
     pub(super) fn settle_owned_tasks(
         &mut self,
         owner: ChainIndex,
@@ -87,7 +88,16 @@ impl Scheduler {
         };
         let leaked = self.abandon_owned_tasks(owner, reason);
         match outcome {
-            Ok(_) if !leaked.is_empty() => Err(error::tasks_live(&leaked)),
+            Ok(_) if !leaked.is_empty() => {
+                let line = leaked
+                    .first()
+                    .and_then(|task| self.tasks.spawn_line_of(task));
+                Err(place(
+                    error::tasks_live(&leaked),
+                    self.ctx.prompt().file(),
+                    line,
+                ))
+            }
             outcome => outcome,
         }
     }

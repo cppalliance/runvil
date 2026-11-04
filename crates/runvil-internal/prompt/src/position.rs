@@ -39,6 +39,24 @@ pub(crate) fn body_text(shared: &Arc<str>, part: &str) -> Result<BodyText> {
         .ok_or_else(|| error::internal("parser: section text is not a slice of the prompt body"))
 }
 
+/// The 1-based file line that `part`, a slice of `body`, starts on, for a
+/// body that starts in the file after `frontmatter_lines` lines.
+///
+/// # Errors
+/// Returns an `Internal` failure when `part` is not a slice of `body`, or
+/// when the line overflows `u32`.
+pub(crate) fn file_line_of(body: &str, part: &str, frontmatter_lines: u32) -> Result<NonZeroU32> {
+    let start = part
+        .as_ptr()
+        .addr()
+        .checked_sub(body.as_ptr().addr())
+        .ok_or_else(|| error::internal("parser: section text is not a slice of the prompt body"))?;
+    nz_source_line(line_add(
+        line_add(frontmatter_lines, newlines_before(body, start)?)?,
+        1,
+    )?)
+}
+
 /// Counts the number of `\n` characters in `text[..byte_offset]`.
 ///
 /// # Errors

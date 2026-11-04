@@ -147,7 +147,7 @@ fn set_up_vm(binds: &VmBinds<'_>) -> SectionVm {
             "no library `{heading}` in reach"
         )))
     };
-    setup_section_vm(vm, &setup, read, resolve, |template, _| {
+    setup_section_vm(vm, &setup, read, resolve, |template, _, _| {
         Ok(template.to_owned())
     })
     .expect("the setup installs")

@@ -4,10 +4,9 @@
 //! started, indexed by [`ChainIndex`].
 
 use std::fmt;
-use std::num::NonZeroUsize;
+use std::num::{NonZeroU32, NonZeroUsize};
 use std::sync::{Arc, Mutex};
 
-use mlua::Thread;
 use runvil_types::ids::{ChainId, TaskId};
 use runvil_vfs::Access;
 
@@ -16,15 +15,17 @@ use crate::execute::section_context::{SectionContext, TaskSeed};
 use crate::execute::walk_target::JumpTarget;
 use crate::heading_address::SectionPos;
 use crate::lua::{Answer, Blocked};
-use crate::prompt::{Block, BodyText, Prompt, Section};
+use crate::prompt::{Block, Prompt, Section};
 use crate::{Result, error};
 
 mod anchor;
 mod arena;
+mod entered;
 mod kind;
 
 pub(super) use anchor::ChatAnchor;
 pub(super) use arena::{ChainArena, ChainIndex};
+pub(super) use entered::{Entered, Running};
 pub(super) use kind::ChainKind;
 
 /// A chain's local id counters: the indices its next child chain and its
@@ -53,6 +54,18 @@ impl BlockIndex {
     /// The block after this one.
     pub(super) fn next(self) -> BlockIndex {
         BlockIndex(self.0 + 1)
+    }
+
+    /// The line the last Lua block in `blocks` at or before this one
+    /// starts on, which a failure of the whole block is placed on: the
+    /// section's last Lua block once this index has moved past its end.
+    /// `None` when no Lua block comes at or before it.
+    pub(super) fn lua_line(self, blocks: &[Block]) -> Option<NonZeroU32> {
+        let last = self.0.min(blocks.len().checked_sub(1)?);
+        blocks[..=last].iter().rev().find_map(|block| match block {
+            Block::Lua(program) => Some(program.source_line()),
+            _ => None,
+        })
     }
 }
 
@@ -129,61 +142,6 @@ impl Parked {
             Parked::Call => Blocked::Call,
             Parked::Queued => Blocked::Queued,
         }
-    }
-}
-
-/// A Lua block that is running or suspended: its coroutine and the answer
-/// delivered for it.
-#[derive(Debug)]
-pub(super) struct Running {
-    /// The block's coroutine handle; a block that returns disposes of it.
-    pub(super) coroutine: Thread,
-    /// The answer delivered for the suspended coroutine, taken at resume.
-    pub(super) answer: Option<Result<Answer>>,
-}
-
-/// The section a chain has entered: built at each section entry, the H1
-/// pass's included, and taken at the section's end, at chain end, and at
-/// an abort. The frame's drop is the teardown boundary on every path that
-/// takes the `Entered`, and it reports `SECTION_FINISHED` only where the
-/// section completed: `end_section`, `apply_jump`, and `finish` arm the
-/// frame first, while the H1 pass's fall-through and scalar return, an
-/// abort, and the run's teardown take it unarmed and are deliberately
-/// silent.
-pub(super) struct Entered {
-    /// The section's running or suspended Lua block, `None` between
-    /// blocks. Declared first: a suspended coroutine drops before the
-    /// frame it runs in.
-    pub(super) running: Option<Running>,
-    /// The per-section frame (VM, `sys`, conversation, counts).
-    pub(super) frame: SectionContext,
-    /// The section's in-flight or next Lua/prose block: the running
-    /// block's index while `running` is `Some`, otherwise the next block
-    /// to start.
-    pub(super) block: BlockIndex,
-    /// The pending Markdown buffer: the prose block the next Lua fence
-    /// consumes, installed as that block's lazy `prose` template when the
-    /// coroutine starts. An unconsumed buffer drops with the section,
-    /// never evaluated.
-    pub(super) pending_prose: Option<BodyText>,
-}
-
-impl Entered {
-    /// A fresh entry into `frame`'s section: no block running, the first
-    /// block next, and no pending prose.
-    pub(super) fn new(frame: SectionContext) -> Entered {
-        Entered {
-            running: None,
-            frame,
-            block: BlockIndex::FIRST,
-            pending_prose: None,
-        }
-    }
-
-    /// The block at the section's block position in `blocks`, or `None`
-    /// once they are exhausted.
-    pub(super) fn block_in<'p>(&self, blocks: &'p [Block]) -> Option<&'p Block> {
-        blocks.get(self.block.0)
     }
 }
 

@@ -67,6 +67,10 @@ fn log_byte_budget(log_events: u32) -> usize {
     (log_events as usize).saturating_mul(LUA_LOG_CHARACTER_LIMIT)
 }
 
+/// A `jump` the running chunk recorded: the target heading, and the prompt
+/// line of the author's `jump` call.
+type Jump = (String, Option<NonZeroU32>);
+
 /// Collects owned values into a 1-based Lua sequence table.
 fn pack_sequence<T: mlua::IntoLua>(lua: &Lua, values: Vec<T>) -> mlua::Result<mlua::Table> {
     let table = lua.create_table_with_capacity(values.len(), 0)?;
@@ -129,7 +133,7 @@ pub struct SectionVm<S = Injected> {
     /// The section's offers, read by the executor's scope path.
     offers: Arc<Mutex<Offers>>,
     /// Set by Lua `jump` before it aborts the current chunk.
-    jump_slot: Arc<Mutex<Option<String>>>,
+    jump_slot: Arc<Mutex<Option<Jump>>>,
     /// How many adhoc tool handlers are running on this VM; `jump` refuses
     /// while it is above zero.
     adhoc_handler_depth: Arc<AtomicU32>,

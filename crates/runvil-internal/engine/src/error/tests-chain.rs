@@ -1,8 +1,9 @@
 //! The cause convention: a failure built with a cause holds the cause's
 //! text once in its message, after its own, and keeps its prose free of
 //! it; a model failure's table holds only its prose; the Lua crate's
-//! failures end a run as they always did; and the store probe names a
-//! missing store.
+//! failures end a run with their own kind and text, a located one's
+//! ending with where it failed; and the store probe names a missing
+//! store.
 
 use runvil_types::error::ErrorCode;
 use runvil_vfs::VfsError;
@@ -93,7 +94,7 @@ fn a_model_failure_holds_its_cause_in_the_run_message_and_not_in_its_table() {
 }
 
 #[test]
-fn the_lua_crates_failures_end_a_run_with_the_kind_and_text_they_always_had() {
+fn the_lua_crates_failures_end_a_run_with_their_own_kind_and_text() {
     let site = std::panic::Location::caller();
     let emitter = crate::test_support::recording::null_emitter();
     let compiled = runvil_lua::LuaProgram::compile(
@@ -130,7 +131,7 @@ fn the_lua_crates_failures_end_a_run_with_the_kind_and_text_they_always_had() {
             compiled,
             RunErrorKind::Lua,
             "lua compilation error at section `S` prologue (line 7): syntax error: \
-             [string \"line 7\"]:1: unexpected symbol near <eof>"
+             [string \"line 7\"]:1: unexpected symbol near <eof> (at prompt:7)"
                 .to_owned(),
         ),
         (

@@ -14,7 +14,7 @@ fn leading_break_resets_prose_and_content_below_parses() {
     assert_eq!(section.blocks().len(), 3);
     assert!(matches!(
         &section.blocks()[0],
-        Block::Prose { text } if text.as_str().is_empty()
+        Block::Prose { text, .. } if text.as_str().is_empty()
     ));
     assert!(matches!(
         &section.blocks()[1],
@@ -84,7 +84,7 @@ fn h1_break_resets_prose_and_lua_fence_below_stays_live() {
     let prompt = parse_ok(&PromptSource::new().h1_prose(h1).prose("S", "p").build());
     assert!(matches!(
         prompt.h1_blocks.as_slice(),
-        [Block::Prose { text: above }, Block::Lua(program), Block::Prose { text: below }]
+        [Block::Prose { text: above, .. }, Block::Lua(program), Block::Prose { text: below, .. }]
             if above.as_str().is_empty()
                 && program.source() == "local live = 1"
                 && below == "Below prose."
@@ -133,7 +133,7 @@ fn pending_markdown_binds_to_the_following_lua_fence() {
     assert_eq!(section.blocks().len(), 2);
     assert!(matches!(
         &section.blocks()[0],
-        Block::Prose { text } if text == "Gather the facts."
+        Block::Prose { text, .. } if text == "Gather the facts."
     ));
     assert!(matches!(
         &section.blocks()[1],
@@ -164,7 +164,7 @@ fn a_lua_fence_consumes_the_pending_buffer() {
     assert_eq!(section.blocks().len(), 4);
     assert!(matches!(
         &section.blocks()[0],
-        Block::Prose { text } if text == "First."
+        Block::Prose { text, .. } if text == "First."
     ));
     assert!(matches!(
         &section.blocks()[1],
@@ -172,7 +172,7 @@ fn a_lua_fence_consumes_the_pending_buffer() {
     ));
     assert!(matches!(
         &section.blocks()[2],
-        Block::Prose { text } if text == "Second."
+        Block::Prose { text, .. } if text == "Second."
     ));
     assert!(matches!(
         &section.blocks()[3],
@@ -189,7 +189,7 @@ fn a_thematic_break_resets_the_pending_buffer() {
     let section = &prompt.sections[0];
     assert_eq!(section.blocks().len(), 2);
     match &section.blocks()[0] {
-        Block::Prose { text } => {
+        Block::Prose { text, .. } => {
             assert_eq!(text, "Ask the question.");
             assert!(!text.as_str().contains("Draft notes."));
             assert!(!text.as_str().contains("---"));
@@ -213,7 +213,7 @@ fn per_fence_commentary_is_excluded_by_a_break() {
     ));
     assert!(matches!(
         &section.blocks()[1],
-        Block::Prose { text } if text == "Pending for step two."
+        Block::Prose { text, .. } if text == "Pending for step two."
     ));
     assert!(matches!(
         &section.blocks()[2],

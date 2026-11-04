@@ -197,10 +197,12 @@ pub(crate) fn run_error_kind(code: ErrorCode) -> RunErrorKind {
 /// Returns the self-contained text a failed run reports: the error's
 /// message, with its causes, then where the failure happened.
 ///
-/// A parse failure ends with its prompt name, line, and column, each when
-/// known, as `(prompt {name}, line {line}, column {column})`, and an
-/// internal fault with the Rust source file and line of the broken
-/// invariant, as `(at {file}:{line})`.
+/// A frontmatter, structure, fence, or list failure, the parser's own,
+/// ends with its prompt name, line, and column, each when known, as
+/// `(prompt {name}, line {line}, column {column})`. Any other failure with
+/// a location ends with it as `(at {file}:{line})`: its prompt file and
+/// line, or for an internal fault the Rust source file and line of the
+/// broken invariant.
 pub(crate) fn failure_message(error: &Error) -> String {
     let mut rendered = error.message.clone();
     if let Some(location) = location(error) {
@@ -215,8 +217,11 @@ pub(crate) fn failure_message(error: &Error) -> String {
 /// when the failure has no location or the parser found none of its
 /// parts.
 fn location(error: &Error) -> Option<String> {
-    match run_error_kind(error.code) {
-        RunErrorKind::Parse => {
+    match error.code {
+        ErrorCode::FrontmatterInvalid
+        | ErrorCode::StructureInvalid
+        | ErrorCode::FenceInvalid
+        | ErrorCode::ListEmptyItem => {
             let parts: Vec<String> = [
                 error
                     .facts
@@ -237,11 +242,10 @@ fn location(error: &Error) -> Option<String> {
             .collect();
             (!parts.is_empty()).then(|| parts.join(", "))
         }
-        _ if error.code == ErrorCode::Internal => error
+        _ => error
             .at
             .as_ref()
             .map(|at| format!("at {}", coordinates(at))),
-        _ => None,
     }
 }
 

@@ -248,6 +248,12 @@ fn two_arms_writing_one_path_terminate_the_run_with_a_determinism_violation() {
         2,
         "both arms' identities are named: {detail}"
     );
+    assert_eq!(
+        error.at,
+        at_line(19),
+        "the violation, which never reaches Lua, is placed on the losing arm's \
+         `store.write` line: {error:?}"
+    );
     let recorder = recorded(&trace);
     assert_eq!(
         terminal_count(&trace, task_started),

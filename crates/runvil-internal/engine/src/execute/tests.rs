@@ -24,7 +24,7 @@ use crate::test_support::scripted_chat::{
     MOCK_MODEL, ScriptedCall, ScriptedChat, ScriptedReply, calls, fail, text, text_finish,
 };
 use crate::test_support::seeded::Seeded;
-use crate::test_support::{FnTool, authored, fresh_access, placed, refused};
+use crate::test_support::{FnTool, at_line, authored, fresh_access, placed, refused};
 
 mod context;
 mod fixtures;

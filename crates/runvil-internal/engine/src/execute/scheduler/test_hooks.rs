@@ -1,7 +1,8 @@
 //! Test-only hooks over the scheduler's private state: the seams the
 //! `execute::tests` suites drive the scheduler's edge paths through
-//! (overflow bounds, the effect table, task entries, and answer delivery)
-//! and the turn counter and tool set they read. Compiled only under test; nothing here
+//! (overflow bounds, the effect table, task entries, answer delivery, and
+//! a store dispatch with no store) and the turn counter and tool set they
+//! read. Compiled only under test; nothing here
 //! exists in a shipped Engine.
 
 use std::num::NonZeroUsize;
@@ -9,11 +10,11 @@ use std::sync::Arc;
 use std::sync::atomic::Ordering;
 
 use runvil_types::ids::{ChainId, TaskId};
-use runvil_vfs::{Origin, detail};
+use runvil_vfs::{MemoryBackend, Origin, VfsRef, detail};
 
 use crate::execute::run::EffectId;
 use crate::heading_address::{SectionIndex, SectionPos};
-use crate::lua::{Answer, ToolSet};
+use crate::lua::{Answer, Request, ToolSet, VfsOp};
 use crate::{Error, Result};
 
 use super::chain::ChainStart;
@@ -70,6 +71,7 @@ impl Scheduler {
                 TaskBacking::Chain { chain: wedge, exec },
                 owner,
                 "wedge".to_owned(),
+                None,
             );
             self.admission.hold_for_test(wedge);
         }
@@ -156,6 +158,26 @@ impl Scheduler {
             Some(Ok(Answer::Note))
         );
         ([first, second], holds_first)
+    }
+
+    /// Dispatches `op` again for the chain at arena index 0, whose block
+    /// is suspended on a store request, through an access from a handle
+    /// that declares no store: the store-view failure the run's start
+    /// probe otherwise rules out.
+    ///
+    /// # Errors
+    /// Returns the dispatch's store failure.
+    pub(crate) fn dispatch_store_without_a_store_for_test(&mut self, op: VfsOp) -> Result<()> {
+        let (id, _) = self
+            .chains
+            .iter()
+            .next()
+            .expect("the run has started a chain");
+        let access = VfsRef::new(MemoryBackend::new())
+            .acquire(Origin::new("no store"))
+            .expect("a memory backend acquires");
+        self.chains[id].access = Some(Arc::new(access));
+        self.dispatch(id, Request::Store { op })
     }
 
     /// Starts a root chain over the top-level slice at `index` under a

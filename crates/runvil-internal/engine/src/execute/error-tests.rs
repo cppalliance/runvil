@@ -256,14 +256,41 @@ fn an_internal_failure_message_ends_with_its_rust_file_and_line() {
 }
 
 #[test]
-fn any_other_failure_ends_with_its_own_text_whatever_its_location() {
+fn any_other_located_failure_ends_with_its_file_and_line() {
     let mut error = failure(
         ErrorCode::LuaCompile,
         "lua compilation error at x (line 2): y",
     );
-    error.at = Some(Location::line("x", at(2)));
+    error.at = Some(Location::line("agents/a.md", at(2)));
     error.facts.insert(FactKey::Name, "p".into());
-    assert_eq!(failure_message(&error), error.message);
+    assert_eq!(
+        failure_message(&error),
+        "lua compilation error at x (line 2): y (at agents/a.md:2)",
+        "the suffix adds the file to the line the message names"
+    );
     let interrupted = crate::error::interrupted();
-    assert_eq!(failure_message(&interrupted), interrupted.message);
+    assert_eq!(
+        failure_message(&interrupted),
+        interrupted.message,
+        "a failure with no location ends with its own text"
+    );
+}
+
+#[test]
+fn a_run_time_invalid_value_takes_the_located_form_not_the_parse_form() {
+    let mut error = failure(ErrorCode::InvalidValue, "unknown model role `bogus`");
+    error.facts.insert(FactKey::Name, "bogus".into());
+    assert_eq!(
+        failure_message(&error),
+        "unknown model role `bogus`",
+        "the value its `Name` fact holds is no prompt name"
+    );
+    error.at = Some(Location::line("agents/a.md", at(9)));
+    assert_eq!(
+        outcome(&error),
+        RunOutcome::Failed {
+            kind: RunErrorKind::Parse,
+            message: "unknown model role `bogus` (at agents/a.md:9)".to_owned(),
+        }
+    );
 }

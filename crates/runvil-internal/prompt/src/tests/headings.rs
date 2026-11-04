@@ -33,7 +33,7 @@ fn preface_before_h1_is_ignored() {
     assert_eq!(prompt.title, "T");
     assert!(matches!(
         prompt.h1_blocks.as_slice(),
-        [Block::Prose { text }] if text == "Description."
+        [Block::Prose { text, .. }] if text == "Description."
     ));
     assert_eq!(prompt.entry().expect("has sections").name, "S");
 }

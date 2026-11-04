@@ -1,8 +1,39 @@
 //! Line-mapping tests: a runtime error in each Lua block reports its
-//! file-absolute line.
+//! file-absolute line, and each prose block records the file line its
+//! text starts on.
 
 use super::*;
 use runvil_lua::LuaProgram;
+
+#[test]
+fn each_prose_block_records_the_file_line_its_trimmed_text_starts_on() {
+    //  8: Plan.          <- the H1's prose
+    // 12: Notes above.   <- dropped by the break below it
+    // 14: ---
+    // 16: Pending.       <- the prose the fence on line 19 consumes
+    // 17: Second line.
+    // 23: Trailing.      <- after the last fence
+    let src = "---\nname: x\ndescription: d\n---\n\n# T\n\nPlan.\n\n## S\n\nNotes above.\n\n---\n\n\
+               Pending.\nSecond line.\n\n```lua\nx = 1\n```\n\nTrailing.\n";
+    let prompt = parse_ok(src);
+    let prose = |blocks: &[Block]| -> Vec<(String, u32)> {
+        blocks
+            .iter()
+            .filter_map(|block| match block {
+                Block::Prose { text, line } => Some((text.as_str().to_owned(), line.get())),
+                Block::Lua(_) => None,
+            })
+            .collect()
+    };
+    assert_eq!(prose(&prompt.h1_blocks), [("Plan.".to_owned(), 8)]);
+    assert_eq!(
+        prose(prompt.sections[0].blocks()),
+        [
+            ("Pending.\nSecond line.".to_owned(), 16),
+            ("Trailing.".to_owned(), 23)
+        ]
+    );
+}
 
 fn assert_runtime_error_line(program: &LuaProgram, absolute_line: u32) {
     let lua = mlua::Lua::new();

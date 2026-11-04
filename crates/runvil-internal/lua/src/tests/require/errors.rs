@@ -30,6 +30,7 @@ fn placed(identity: &str, heading: &str, blocks: &[(&str, &str, u32)]) -> Librar
             .map(|(source, location, line)| LibraryBlock {
                 program: at(source, location, *line),
                 prose: String::new(),
+                line: None,
             })
             .collect(),
     }

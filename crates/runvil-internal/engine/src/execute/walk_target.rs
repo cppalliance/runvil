@@ -196,22 +196,27 @@ pub(super) fn resolve_library(
 }
 
 /// The library `section` makes under `key`: each Lua block in order,
-/// paired with the prose block right before it, or with an empty template
-/// when no prose block comes right before it. Prose after the last Lua
-/// block pairs with nothing.
+/// paired with the prose block right before it and the line that prose
+/// starts on, or with an empty template and no line when no prose block
+/// comes right before it. Prose after the last Lua block pairs with
+/// nothing.
 ///
 /// # Errors
 /// Returns an `Internal` failure for a block kind the Engine cannot run.
 fn build_library(section: &Section, key: LibraryKey) -> Result<Library> {
     let mut blocks = Vec::new();
-    let mut pending = "";
+    let mut pending = None;
     for block in section.blocks() {
         match block {
-            Block::Prose { text, .. } => pending = text.as_str(),
-            Block::Lua(program) => blocks.push(LibraryBlock {
-                program: program.clone(),
-                prose: std::mem::take(&mut pending).to_owned(),
-            }),
+            Block::Prose { text, line, .. } => pending = Some((text.as_str(), *line)),
+            Block::Lua(program) => {
+                let (prose, line) = pending.take().unzip();
+                blocks.push(LibraryBlock {
+                    program: program.clone(),
+                    prose: prose.unwrap_or_default().to_owned(),
+                    line,
+                });
+            }
             // `Block` is `#[non_exhaustive]` across the crate seam; an
             // unlisted variant has no library form.
             _ => return Err(error::internal("an unrecognized block kind cannot load")),

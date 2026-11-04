@@ -5,7 +5,7 @@ use mlua::thread::ThreadStatus;
 use mlua::{MultiValue, Thread, Value};
 use runvil_types::error::{ErrorCode, place};
 
-use super::SectionVm;
+use super::{Jump, SectionVm};
 use crate::coro::{StashedFailure, block_guard, take_failure};
 use crate::error::{self, Error, Result, interrupted, lua_runtime, prompt_file, set_call_line};
 use crate::error_value::{ErrorKind, error_kind};
@@ -14,12 +14,13 @@ use crate::protocol::{Answer, Request, Retained, YieldParse, render_envelope};
 use crate::section::LuaBlockResult;
 
 impl SectionVm {
-    /// Takes any recorded jump target, propagating a poisoned jump-slot lock
-    /// rather than silently coercing the failure into "no jump".
+    /// Takes any recorded jump: its target and the prompt line of the
+    /// `jump` call, propagating a poisoned jump-slot lock rather than
+    /// silently coercing the failure into "no jump".
     ///
     /// # Errors
     /// Returns an `Internal` failure when the jump-slot mutex is poisoned.
-    pub(crate) fn take_jump(&self) -> Result<Option<String>> {
+    pub(crate) fn take_jump(&self) -> Result<Option<Jump>> {
         let mut slot = self
             .jump_slot
             .lock()
@@ -163,8 +164,8 @@ impl SectionVm {
                 Ok(Ok(CoroStep::Yielded(thread, values)))
             }
             result => {
-                if let Some(heading) = self.take_jump()? {
-                    return Ok(Ok(CoroStep::Done(LuaBlockResult::Jump(heading))));
+                if let Some((heading, line)) = self.take_jump()? {
+                    return Ok(Ok(CoroStep::Done(LuaBlockResult::Jump(heading, line))));
                 }
                 match result {
                     Ok(returned) => Ok(Ok(CoroStep::Done(LuaBlockResult::Returned(

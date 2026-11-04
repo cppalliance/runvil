@@ -1,13 +1,17 @@
 //! Lazy `prose` behavior and section-boundary handoff: the pending
 //! Markdown buffer installs as a fresh read-only lazy `prose` template
 //! before each Lua coroutine starts, every `{{ }}` substitution evaluates
-//! once on the first runtime read and memoizes, unconsumed buffers discard
-//! at section end, and no `reply` global or automatic result handoff
-//! crosses a section boundary.
+//! once on the first runtime read and memoizes, a failed one is placed on
+//! its placeholder's line, unconsumed buffers discard at section end, and
+//! no `reply` global or automatic result handoff crosses a section
+//! boundary.
 
 use runvil_prompt::test_support::{PromptSource, one_section, prompt};
+use runvil_types::error::ErrorCode;
 
+use crate::test_support::at_line;
 use crate::test_support::scenario::Scenario;
+use crate::{RunErrorKind, RunOutcome};
 
 /// The prompt whose one section `Only` holds the Markdown `body`.
 fn only(body: &str) -> String {
@@ -125,6 +129,7 @@ fn recursive_prose_reference_is_rejected_at_the_read_site() {
 
 #[test]
 fn pcall_catches_a_read_site_substitution_error() {
+    // The caught error names the template's line, not the read's.
     let source = only(
         "
         Missing: {{ var.missing }}.
@@ -132,17 +137,23 @@ fn pcall_catches_a_read_site_substitution_error() {
         ```lua
         local ok, err = pcall(function() return prose end)
         assert(not ok, 'the read must fail')
-        assert(tostring(err):match('missing'), 'the substitution error surfaces: ' .. tostring(err))
-        return 'caught'
+        return tostring(err)
         ```",
     );
-    assert_eq!(Scenario::new(source).run().text(), "caught");
+    let caught = Scenario::new(source).run().text().to_owned();
+    assert!(
+        caught.starts_with("prompt:11: missing {{ var.missing }}"),
+        "the substitution error surfaces on its template's line: {caught}"
+    );
 }
 
 #[test]
 fn an_uncaught_read_error_fails_the_run() {
+    // The placeholder is on the template's second line, and the run fails
+    // with the substitution's own code there.
     let source = only(
         "
+        Intro.
         Missing: {{ var.missing }}.
 
         ```lua
@@ -150,10 +161,25 @@ fn an_uncaught_read_error_fails_the_run() {
         ```",
     );
     let trace = Scenario::new(source).run();
-    let rendered = trace.error().to_string();
+    let error = trace.error();
+    let rendered = error.to_string();
     assert!(
         rendered.contains("missing {{ var.missing }}"),
         "the substitution error reaches the run failure: {rendered}"
+    );
+    assert_eq!(error.code, ErrorCode::Substitution, "{error:?}");
+    assert_eq!(
+        error.at,
+        at_line(12),
+        "the placeholder's line, not the read's: {error:?}"
+    );
+    assert!(
+        matches!(
+            trace.outcome(),
+            RunOutcome::Failed { kind: RunErrorKind::Lua, message } if message.ends_with(" (at prompt:12)")
+        ),
+        "{:?}",
+        trace.outcome()
     );
 }
 

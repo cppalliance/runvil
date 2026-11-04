@@ -1,7 +1,8 @@
 //! Tests for the scheduler's `tool_call` arm: the model-issued form
 //! (`model: Some`), which always resumes with content and reports its
 //! `ToolResult` under the model's call id; the script form (`model:
-//! None`), which keeps the raise-at-call-site behavior; adhoc tools,
+//! None`), which keeps the raise-at-call-site behavior; a malformed
+//! model-issued yield, which fails the block on its call line; adhoc tools,
 //! whose handlers run inside the calling block coroutine - store calls,
 //! nested adhoc calls, and bound calls included - with no leaf work of
 //! their own.
@@ -169,6 +170,22 @@ fn a_bound_alias_with_no_implementation_in_the_test_driver_table_resumes_as_a_to
         !lines.iter().any(|line| line.contains("tool_result")),
         "nothing was called, so no ToolResult is reported: {lines:?}"
     );
+}
+
+#[test]
+fn a_malformed_yield_fails_the_block_on_the_line_that_yielded() {
+    // A `call_id` with no `turn` is a shim-internal field of the wrong
+    // shape, which only a broken shim yields: the block fails before any
+    // dispatch, on the call line its yield recorded.
+    let source = one_section(
+        "local ready = true
+         return tools.call_as_model('call_1', 'tools/echo', {}, nil)",
+    );
+    let trace = arm_scenario(source).run();
+    let error = trace.error();
+    assert_eq!(error.code, ErrorCode::LuaRuntime, "{error:?}");
+    assert!(error.message.contains("yield directly"), "{error:?}");
+    assert_eq!(error.at, at_line(13), "{error:?}");
 }
 
 /// The `tool_result` lines `recorder` saw, in order.

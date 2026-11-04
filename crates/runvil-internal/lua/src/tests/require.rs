@@ -7,6 +7,7 @@
 use super::*;
 
 mod errors;
+mod jump;
 mod prose;
 mod reports;
 
@@ -39,6 +40,7 @@ fn library(identity: &str, heading: &str, sources: &[&str]) -> Library {
                 )
                 .expect("library Lua must compile"),
                 prose: String::new(),
+                line: None,
             })
             .collect(),
     }
@@ -78,14 +80,14 @@ fn resolver(
 /// resolver calls.
 #[track_caller]
 fn require_vm(entries: Vec<Entry>, emitter: &Emitter) -> (BuiltVm, Calls) {
-    require_vm_rendering(entries, |template, _| Ok(template.to_owned()), emitter)
+    require_vm_rendering(entries, |template, _, _| Ok(template.to_owned()), emitter)
 }
 
 /// [`require_vm`] with library prose rendered through `render`.
 #[track_caller]
 fn require_vm_rendering<P>(entries: Vec<Entry>, render: P, emitter: &Emitter) -> (BuiltVm, Calls)
 where
-    P: Fn(&str, ProseState<'_>) -> mlua::Result<String> + Send + Sync + 'static,
+    P: Fn(&str, Option<NonZeroU32>, ProseState<'_>) -> mlua::Result<String> + Send + Sync + 'static,
 {
     let calls = Calls::default();
     let vm = TestVm::new().shims().build();
@@ -426,45 +428,6 @@ fn a_non_string_heading_raises_without_reaching_the_resolver() {
             .expect("the calls lock must not be poisoned")
             .is_empty(),
         "a number heading must never reach the resolver"
-    );
-}
-
-#[test]
-fn jump_during_a_load_raises_and_the_refusal_ends_with_the_load() {
-    let (vm, _) = require_vm(
-        vec![("## a", None, library("a", "## a", &["jump '## elsewhere'"]))],
-        &null_emitter(),
-    );
-    let error = failure(&vm, "require '## a'");
-    assert!(
-        error.contains("jump is unavailable while a library loads"),
-        "jump must refuse during a load, got {error}"
-    );
-    let step = vm
-        .start_block_coro(&program("pcall(require, '## a')\njump '## after'"))
-        .expect("the jump after a failed load must transfer");
-    assert!(
-        matches!(step, CoroStep::Done(LuaBlockResult::Jump(ref heading)) if heading == "## after"),
-        "a jump after the load must transfer, got {step:?}"
-    );
-}
-
-#[test]
-fn a_library_function_that_jumps_after_the_load_jumps_for_the_caller() {
-    let (vm, _) = require_vm(
-        vec![(
-            "## a",
-            None,
-            library("a", "## a", &["function go() jump '## next' end"]),
-        )],
-        &null_emitter(),
-    );
-    let step = vm
-        .start_block_coro(&program("require '## a'\ngo()"))
-        .expect("the jump must transfer");
-    assert!(
-        matches!(step, CoroStep::Done(LuaBlockResult::Jump(ref heading)) if heading == "## next"),
-        "the library function's jump must transfer the caller, got {step:?}"
     );
 }
 

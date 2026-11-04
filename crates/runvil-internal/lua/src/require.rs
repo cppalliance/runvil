@@ -14,6 +14,7 @@
 //! The standard package library stays unloaded: `require` reaches
 //! sections only, through the resolver, never files or native modules.
 
+use std::num::NonZeroU32;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, LazyLock, Mutex, MutexGuard};
 
@@ -55,8 +56,9 @@ pub(crate) struct VmShare<'a> {
 }
 
 /// Installs `require` as a global over `resolver`, rendering each library
-/// block's `prose` template through `render`, reporting each first load
-/// through a clone of `emitter` under `section`, and working on `vm`.
+/// block's `prose` template through `render` with the prompt line it
+/// starts on, reporting each first load through a clone of `emitter` under
+/// `section`, and working on `vm`.
 ///
 /// # Errors
 /// Returns a `LuaRuntime` failure if the loader chunk or its helpers cannot be
@@ -72,7 +74,7 @@ pub(crate) fn install<R, E, P>(
 where
     R: Fn(String, Option<LibraryKey>) -> std::result::Result<Library, E> + Send + Sync + 'static,
     E: std::error::Error + Send + Sync + 'static,
-    P: Fn(&str, ProseState<'_>) -> mlua::Result<String> + Send + Sync + 'static,
+    P: Fn(&str, Option<NonZeroU32>, ProseState<'_>) -> mlua::Result<String> + Send + Sync + 'static,
 {
     let loading = Loading::default();
     let resolve = resolve_capture(lua, resolver, &loading)?;
@@ -130,9 +132,9 @@ where
 
 /// Builds `begin_load(library)`: reports the load's start, loads the
 /// library's blocks, keeps their programs on the VM, and marks the library
-/// as the one loading, returning the blocks and their prose templates in
-/// order. A block that fails to load reports the load as failed and leaves
-/// nothing marked.
+/// as the one loading, returning the blocks, their prose templates, and
+/// the prompt lines the templates start on, in order. A block that fails
+/// to load reports the load as failed and leaves nothing marked.
 fn begin_load_capture(
     lua: &Lua,
     loading: &Loading,
@@ -162,8 +164,10 @@ fn begin_load_capture(
         };
         let mut programs = lock(&programs, "loaded library programs")?;
         let mut templates = Vec::with_capacity(library.blocks.len());
+        let mut lines = Vec::with_capacity(library.blocks.len());
         for block in library.blocks {
             templates.push(block.prose);
+            lines.push(block.line.map(NonZeroU32::get));
             if !programs.contains(&block.program) {
                 programs.push(block.program);
             }
@@ -178,28 +182,30 @@ fn begin_load_capture(
         };
         loading.push((library.key, library.heading));
         depth.fetch_add(1, Ordering::Relaxed);
-        Ok((blocks, templates))
+        Ok((blocks, templates, lines))
     })
     .map_err(error::lua)
 }
 
-/// Builds `swap_prose(template)`, which installs a library block's own
-/// lazy `prose` over `template`, rendered through `render`, and returns the
-/// read it replaced, and `restore_prose(saved)`, which puts that read back.
+/// Builds `swap_prose(template, line)`, which installs a library block's
+/// own lazy `prose` over `template`, starting on prompt `line` when one is
+/// given, rendered through `render`, and returns the read it replaced, and
+/// `restore_prose(saved)`, which puts that read back.
 fn prose_captures<P>(
     lua: &Lua,
     render: P,
     sys_live: &Arc<Mutex<Json>>,
 ) -> Result<(Function, Function)>
 where
-    P: Fn(&str, ProseState<'_>) -> mlua::Result<String> + Send + Sync + 'static,
+    P: Fn(&str, Option<NonZeroU32>, ProseState<'_>) -> mlua::Result<String> + Send + Sync + 'static,
 {
     let render = Arc::new(render);
     let sys_live = Arc::clone(sys_live);
     let swap = lua
-        .create_function(move |lua, template: String| {
+        .create_function(move |lua, (template, line): (String, Option<u32>)| {
             let render = Arc::clone(&render);
-            crate::prose::swap(lua, &sys_live, move |state| render(&template, state))
+            let line = line.and_then(NonZeroU32::new);
+            crate::prose::swap(lua, &sys_live, move |state| render(&template, line, state))
                 .map_err(mlua::Error::external)
         })
         .map_err(error::lua)?;

@@ -2,6 +2,7 @@
 //! the control globals and yield shims, `require`, and the `sys` and
 //! `prose` globals.
 
+use std::num::NonZeroU32;
 use std::sync::atomic::Ordering;
 use std::sync::{Arc, PoisonError};
 
@@ -165,7 +166,8 @@ impl SectionVm {
     ///
     /// While a library block runs, its `prose` is its own: a lazy read of
     /// the block's prose template, rendered at most once through `render`
-    /// with the template and the same [`ProseState`] snapshot
+    /// with the template, the prompt line it starts on, and the same
+    /// [`ProseState`] snapshot that
     /// [`install_lazy_prose`](Self::install_lazy_prose)'s render takes, read
     /// from the caller's environment. The caller's `prose`, memo included,
     /// comes back when the block ends, however it ends. A failure anywhere
@@ -187,7 +189,10 @@ impl SectionVm {
             + Sync
             + 'static,
         E: std::error::Error + Send + Sync + 'static,
-        P: Fn(&str, ProseState<'_>) -> mlua::Result<String> + Send + Sync + 'static,
+        P: Fn(&str, Option<NonZeroU32>, ProseState<'_>) -> mlua::Result<String>
+            + Send
+            + Sync
+            + 'static,
     {
         crate::require::install(
             &self.lua,
@@ -209,7 +214,7 @@ impl SectionVm {
         let library_load_depth = Arc::clone(&self.library_load_depth);
         let jump_fn = self
             .lua
-            .create_function(move |_, target: Value| -> mlua::Result<()> {
+            .create_function(move |lua, target: Value| -> mlua::Result<()> {
                 if adhoc_handler_depth.load(Ordering::Relaxed) > 0 {
                     return Err(mlua::Error::external(
                         "jump is unavailable inside an adhoc tool handler: return a value from \
@@ -223,10 +228,11 @@ impl SectionVm {
                     ));
                 }
                 let heading = resolve_section_target(target)?;
+                let line = error::author_line(lua);
                 let mut slot = jump_slot
                     .lock()
                     .map_err(|_| mlua::Error::external("jump slot poisoned"))?;
-                *slot = Some(heading);
+                *slot = Some((heading, line));
                 Err(mlua::Error::external("jump transfer"))
             })
             .map_err(error::lua)?;

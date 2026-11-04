@@ -10,7 +10,10 @@
 //! ([`Chain::lineage`](super::Chain::lineage)); a prompt without H1 blocks
 //! starts the root walk directly.
 
+use std::num::NonZeroU32;
 use std::sync::Arc;
+
+use runvil_types::error::place;
 
 use crate::execute::section_context::SectionContext;
 use crate::execute::walk_target::{
@@ -163,14 +166,21 @@ impl ChainOps<'_> {
     ///
     /// # Errors
     /// Returns a `LuaRuntime` failure when the final `var` read-back fails (the
-    /// frame drops unarmed), or an `Internal` failure when the chain holds no
-    /// frame.
+    /// frame drops unarmed), placed on the section's last Lua block, or an
+    /// `Internal` failure when the chain holds no frame.
     pub(super) fn end_section(&mut self) -> Result<()> {
+        let prompt = self.prompt();
         let chain = &mut *self.chain;
-        let Some(Entered { mut frame, .. }) = chain.entered.take() else {
+        let blocks = chain.blocks(&prompt);
+        let Some(Entered {
+            mut frame, block, ..
+        }) = chain.entered.take()
+        else {
             return Err(error::internal("a section end implies a live frame"));
         };
-        chain.var = frame.read_var()?;
+        chain.var = frame
+            .read_var()
+            .map_err(|error| place(error, prompt.file(), block.lua_line(blocks)))?;
         frame.mark_completed();
         drop(frame);
         chain.walk.advance();
@@ -188,20 +198,30 @@ impl ChainOps<'_> {
     ///
     /// # Errors
     /// Returns a `LuaRuntime` failure when the `var` read-back fails (the
-    /// frame drops unarmed) or when the heading matches no visible section
-    /// or more than one - the jumper's frame has already closed as
-    /// completed.
-    pub(super) fn apply_jump(&mut self, heading: &str) -> Result<()> {
+    /// frame drops unarmed), placed on the jumping block's line, or when
+    /// the heading matches no visible section or more than one, placed on
+    /// `line`, the `jump` call's - the jumper's frame has already closed
+    /// as completed.
+    pub(super) fn apply_jump(&mut self, heading: &str, line: Option<NonZeroU32>) -> Result<()> {
+        let prompt = self.prompt();
         {
             let chain = &mut *self.chain;
-            let Some(Entered { mut frame, .. }) = chain.entered.take() else {
+            let blocks = chain.blocks(&prompt);
+            let Some(Entered {
+                mut frame, block, ..
+            }) = chain.entered.take()
+            else {
                 return Err(error::internal("a jump implies a live frame"));
             };
-            chain.var = frame.read_var()?;
+            chain.var = frame
+                .read_var()
+                .map_err(|error| place(error, prompt.file(), block.lua_line(blocks)))?;
             frame.mark_completed();
             drop(frame);
         }
-        let target = self.resolve_chain_target(heading)?;
+        let target = self
+            .resolve_chain_target(heading)
+            .map_err(|error| place(error, prompt.file(), line))?;
         self.chain.walk.jump(target);
         Ok(())
     }

@@ -17,7 +17,7 @@
 //! call's identity: what the tool did is joined back into the chain, and
 //! the call's access refuses every later operation.
 
-use runvil_types::error::ErrorCode;
+use runvil_types::error::{ErrorCode, place};
 use runvil_types::event::lifecycle::{self, Lifecycle};
 use runvil_types::ids::{RoundId, TaskId};
 use runvil_types::tools::ToolOutput;
@@ -317,7 +317,9 @@ impl ChainOps<'_> {
     /// failed observation (pushed before the chain resumes, so the op's
     /// outcome precedes the chunk's closing boundary), then the outcome,
     /// with a failure classified for the answer channel under the
-    /// operation's own wording.
+    /// operation's own wording and placed on the call line of the block
+    /// parked on it, so a claims-model conflict, which never reaches Lua,
+    /// is located too.
     fn accept_vfs(
         &self,
         op: &VfsOp,
@@ -330,6 +332,13 @@ impl ChainOps<'_> {
                 if result.is_ok() { succeeded } else { failed },
             );
         }
-        result.map_err(|cause| classify_vfs_failure(op, &cause))
+        result.map_err(|cause| {
+            let line = chain.frame().ok().and_then(|frame| frame.vm().call_line());
+            place(
+                classify_vfs_failure(op, &cause),
+                chain.ctx.prompt().file(),
+                line,
+            )
+        })
     }
 }

@@ -1,8 +1,9 @@
 //! The H1 pass itself: its infer and default-model selection, the
 //! root entry ids of the chunk and the first walked section, H1 assertion
-//! failures and their reports, `var` read back after a scalar return, a
-//! failing H1 library as the failed gate, and the section boundaries the
-//! pass does not fire.
+//! failures and their reports and lines, `var` and `argv` read back after a
+//! scalar return and at the pass's end, a failed substitution that keeps
+//! its own code, a failing H1 library as the failed gate, and the section
+//! boundaries the pass does not fire.
 
 use super::*;
 use crate::execute::tests::context::sequence;
@@ -173,6 +174,75 @@ fn an_h1_scalar_return_still_reads_var_back() {
         error.to_string().contains("global was reassigned"),
         "the read-back failure must name the cause: {error}"
     );
+    assert_eq!(
+        error.at,
+        at_line(10),
+        "the read-back fails on the returning block's line: {error:?}"
+    );
+}
+
+#[test]
+fn an_h1_argv_read_back_failure_is_placed_on_the_pass_last_lua_block() {
+    // The pass falls through, so its block index is past its last block:
+    // the failure lands on the last Lua block's first line.
+    let md = "---\nname: t\ndescription: d\nrunvil: 0\n---\n\n\
+        # Repair\n\n\
+        ```lua\n\
+        local broken = true\n\
+        argv = function() end\n\
+        ```\n\n\
+        Trailing commentary.\n\n\
+        ## Result\n\n\
+        ```lua\nreturn 'unexpected'\n```\n";
+    let trace = h1_scenario(md).run();
+
+    let error = trace.error();
+    assert_eq!(error.code, ErrorCode::LuaRuntime, "{error:?}");
+    assert_eq!(error.at, at_line(10), "{error:?}");
+}
+
+#[test]
+fn a_failed_h1_gate_is_placed_on_its_causes_line() {
+    let md = "---\nname: h1-gate\ndescription: d\nrunvil: 0\n---\n\n\
+        # Gate\n\n\
+        ```lua\n\
+        local ready = false\n\
+        assert(ready, 'the gate cannot hold')\n\
+        ```\n";
+    let trace = h1_scenario(md).run();
+
+    let error = trace.error();
+    assert_eq!(error.code, ErrorCode::RequirementsUnmet, "{error:?}");
+    assert_eq!(
+        error.at,
+        at_line(11),
+        "the refusal is where its cause failed, not the block's first line: {error:?}"
+    );
+    assert!(
+        matches!(
+            trace.outcome(),
+            RunOutcome::Failed { message, .. } if message.ends_with(" (at prompt:11)")
+        ),
+        "{:?}",
+        trace.outcome()
+    );
+}
+
+#[test]
+fn a_failed_substitution_in_h1_keeps_its_code_on_its_template_line() {
+    // A `{{ }}` failure is no failed gate: it arrives placed on its
+    // template's line with its own code, which the gate never remaps.
+    let md = "---\nname: t\ndescription: d\nrunvil: 0\n---\n\n\
+        # Prose Gate\n\n\
+        Needs {{ var.missing }}.\n\n\
+        ```lua\n\
+        return prose\n\
+        ```\n";
+    let trace = h1_scenario(md).run();
+
+    let error = trace.error();
+    assert_eq!(error.code, ErrorCode::Substitution, "{error:?}");
+    assert_eq!(error.at, at_line(9), "{error:?}");
 }
 
 #[test]
