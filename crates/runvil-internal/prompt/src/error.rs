@@ -10,17 +10,13 @@
 use std::num::NonZeroU32;
 use std::ops::Range;
 
+pub(crate) use runvil_lua::internal;
+pub(crate) use runvil_types::error::failure;
 use runvil_types::error::{Error, ErrorCode, FactKey, Location, coordinates, place};
 use runvil_types::packs::PackId;
 
 /// The parser's result type over the universal [`Error`].
 pub(crate) type Result<T> = std::result::Result<T, Error>;
-
-/// Builds a failure with no location, whose prose is the code's default
-/// until [`with_prompt_context`] writes it.
-pub(crate) fn failure(code: ErrorCode, message: impl Into<String>) -> Error {
-    Error::new(code, message, code.prose())
-}
 
 /// Places `error` on the whole file `line`, when known, as [`place`] does,
 /// leaving the location's file for [`with_prompt_context`] to fill.
@@ -46,14 +42,6 @@ pub(crate) fn failure_at(
     let mut error = failure(code, message);
     error.at = span_location(body, span, frontmatter_lines);
     error
-}
-
-/// Builds the failure for a broken parser invariant: a state the
-/// surrounding code has already guaranteed cannot occur. Its location is
-/// the Rust source position of the call site.
-#[track_caller]
-pub(crate) fn internal(message: &'static str) -> Error {
-    runvil_lua::internal_at(message, std::panic::Location::caller())
 }
 
 /// Builds the frontmatter failure for a refused `uses:` list: `reason` is

@@ -153,6 +153,19 @@ pub fn place(mut error: Error, file: &str, line: Option<NonZeroU32>) -> Error {
     error
 }
 
+/// Builds a failure with `code`, `message`, and the code's default prose.
+#[must_use]
+pub fn failure(code: ErrorCode, message: impl Into<String>) -> Error {
+    Error::new(code, message, code.prose())
+}
+
+/// Gives `error` the fact `key` with `value`.
+#[must_use]
+pub fn with_fact(mut error: Error, key: FactKey, value: impl Into<serde_json::Value>) -> Error {
+    error.facts.insert(key, value.into());
+    error
+}
+
 /// Formats `at` as `{file}:{line}`: its file and start line, with no
 /// column. This is the only code that formats a location as `file:line`.
 #[must_use]

@@ -4,26 +4,14 @@
 use std::borrow::Cow;
 use std::num::NonZeroU32;
 
-use runvil_types::error::{Error, ErrorCode, FactKey, Location};
+use runvil_types::error::{Error, ErrorCode, FactKey, Location, failure, with_fact};
 use runvil_types::ids::TaskId;
-use serde_json::Value;
 
 use super::QuotaResource;
 
 #[cfg(test)]
 #[path = "error-universal-tests.rs"]
 mod tests;
-
-/// Builds a failure with `code`, `message`, and the code's default prose.
-fn failure(code: ErrorCode, message: impl Into<String>) -> Error {
-    Error::new(code, message, code.prose())
-}
-
-/// Gives `error` the fact `key` with `value`.
-fn with_fact(mut error: Error, key: FactKey, value: impl Into<Value>) -> Error {
-    error.facts.insert(key, value.into());
-    error
-}
 
 /// A condition the prompt author caused and can fix in Lua, such as an
 /// empty `messages` list or a heading that names no section, as a

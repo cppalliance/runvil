@@ -20,12 +20,11 @@ use std::borrow::Cow;
 #[cfg(test)]
 pub(crate) use runvil_lua::{context_exhausted, lua_quota, tool_loop_exhausted};
 pub(crate) use runvil_lua::{
-    interrupted, lua_runtime, task_cancelled, task_consumed, task_not_owned,
+    internal, interrupted, lua_runtime, task_cancelled, task_consumed, task_not_owned,
 };
 pub(crate) use runvil_types::error::Error;
-use runvil_types::error::{ErrorCode, FactKey};
+use runvil_types::error::{ErrorCode, FactKey, failure, with_fact};
 use runvil_types::ids::TaskId;
-use serde_json::Value;
 
 #[cfg(test)]
 mod tests;
@@ -37,27 +36,6 @@ pub(crate) use tools::{
 
 /// Crate-internal result alias over [`Error`].
 pub(crate) type Result<T> = std::result::Result<T, Error>;
-
-/// Builds a failure with `code`, `message`, and the code's default prose.
-fn failure(code: ErrorCode, message: impl Into<String>) -> Error {
-    Error::new(code, message, code.prose())
-}
-
-/// Gives `error` the fact `key` with `value`.
-fn with_fact(mut error: Error, key: FactKey, value: impl Into<Value>) -> Error {
-    error.facts.insert(key, value.into());
-    error
-}
-
-/// An internal invariant failure: a state the surrounding code has already
-/// guaranteed cannot occur, surfaced rather than skipped so it cannot pass
-/// for a successful fall-through. Its location is the Rust source position
-/// of the call site, which the run's failure message ends with. The message
-/// is owned when it names a value.
-#[track_caller]
-pub(crate) fn internal(message: impl Into<Cow<'static, str>>) -> Error {
-    runvil_lua::internal_at(message, std::panic::Location::caller())
-}
 
 /// An internal invariant failure that names the failure which broke the
 /// invariant after its own text, capturing the call site as [`internal`]
@@ -140,20 +118,13 @@ pub(crate) fn tasks_live(tasks: &[TaskId]) -> Error {
 /// and a message that tells a run that declares no store so and follows
 /// the fixed probe text for any other failure.
 pub(crate) fn store(cause: &runvil_vfs::VfsError) -> Error {
-    store_with_message(cause, crate::lua::store_probe_message(cause))
+    runvil_lua::store_failure(cause, crate::lua::store_probe_message(cause))
 }
 
 /// One store operation's failure: the store's code and facts, and the
 /// model-facing message rendered with the operation for its wording.
 pub(crate) fn store_op(op: &crate::lua::VfsOp, cause: &runvil_vfs::VfsError) -> Error {
-    store_with_message(cause, crate::lua::store_error_message(op, cause))
-}
-
-/// The store failure `cause` with `message` in place of its own text.
-fn store_with_message(cause: &runvil_vfs::VfsError, message: String) -> Error {
-    let mut error = runvil_lua::store_error(cause);
-    error.message = message;
-    error
+    runvil_lua::store_failure(cause, crate::lua::store_error_message(op, cause))
 }
 
 /// Two execution identities that claimed one store path: `detail` is the

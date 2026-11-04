@@ -10,7 +10,7 @@
 //!
 //! - The error module, which re-exports the failure constructors the Lua
 //!   crate shares with the Engine, and whose store constructors build a
-//!   store failure through [`store_error`](runvil_lua::store_error).
+//!   store failure through [`store_failure`](runvil_lua::store_failure).
 //! - Test-only code: the `#[cfg(test)]` shim install in `execute::section_vm`,
 //!   which reaches `runvil_lua::test_support`, and this crate's test support,
 //!   which takes `ToolOutputKind` from the crate root.

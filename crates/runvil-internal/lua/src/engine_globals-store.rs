@@ -34,7 +34,8 @@ static STORE_PROGRAM: LazyLock<Result<LuaProgram>> =
     LazyLock::new(|| LuaProgram::compile_internal(STORE_SOURCE, STORE_CHUNK_NAME));
 
 /// The store failure `cause` with `message` in place of its own text.
-fn store_failure(cause: &VfsError, message: String) -> Error {
+#[must_use]
+pub fn store_failure(cause: &VfsError, message: String) -> Error {
     let mut error = store_error(cause);
     error.message = message;
     error

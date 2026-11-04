@@ -17,7 +17,7 @@ use runvil_types::untrusted::GuardNonce;
 use crate::error::{self, QuotaResource, Result, lua_quota};
 
 pub(crate) use store::{install_store_table, route_store_to_shims};
-pub use store::{run_store_op, store_error_message, store_probe_message};
+pub use store::{run_store_op, store_error_message, store_failure, store_probe_message};
 
 /// Maximum number of Unicode scalar values accepted by `log`.
 pub(crate) const LUA_LOG_CHARACTER_LIMIT: usize = 256;

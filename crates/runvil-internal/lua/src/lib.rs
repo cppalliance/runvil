@@ -131,10 +131,10 @@ pub use crate::dispatch::{
     ModelReport, ScriptReport, ToolDispatch, prepare_dispatch, prepare_model_dispatch,
 };
 pub use crate::engine_globals::{
-    install_ui, run_store_op, store_error_message, store_probe_message,
+    install_ui, run_store_op, store_error_message, store_failure, store_probe_message,
 };
 pub use crate::error::{
-    QuotaResource, context_exhausted, internal_at, interrupted, lua_quota, lua_runtime,
+    QuotaResource, context_exhausted, internal, internal_at, interrupted, lua_quota, lua_runtime,
     task_cancelled, task_consumed, task_not_owned, tool_loop_exhausted,
 };
 pub use crate::error_value::{

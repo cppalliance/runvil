@@ -60,8 +60,9 @@ pub(crate) fn lua(source: mlua::Error) -> Error {
 
 /// An internal invariant failure, at the call site as its construction
 /// site. The message is owned when it names a value.
+#[must_use]
 #[track_caller]
-pub(crate) fn internal(message: impl Into<Cow<'static, str>>) -> Error {
+pub fn internal(message: impl Into<Cow<'static, str>>) -> Error {
     internal_at(message, std::panic::Location::caller())
 }
 
