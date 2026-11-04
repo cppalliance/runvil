@@ -4,8 +4,7 @@
 //! a plain writable value, so the repair pattern lives there: read the
 //! broken input from `args`, assign `argv = repaired`, and the executor
 //! reads the value back when the pass completes. Every other section gets
-//! the frozen value: reads work (absent fields read nil), and any
-//! assignment - `argv = ...` or `argv.field = ...` at any depth - raises.
+//! the frozen value ([`Argv::Frozen`]).
 //!
 //! The freeze sits on the `_G` guard ([`crate::globals`]): `argv` is never
 //! a raw global in a frozen section, so every read and every write of the

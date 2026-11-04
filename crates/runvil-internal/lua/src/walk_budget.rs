@@ -20,13 +20,14 @@ const BYTES_PER_NODE: usize = 8;
 /// level 1. A table nested past it is not counted.
 const CHECK_DEPTH_LIMIT: usize = 200;
 
-/// The most keys one encode path may hold as Lua references at once:
-/// string, table, function, thread, and userdata keys, each of which takes
-/// a slot on the auxiliary reference stack until it is dropped. Integer,
-/// number, and boolean keys hold no slot, so lists are exempt. A Lua stack
-/// caps at 1,000,000 slots and mlua panics when a reference cannot get
-/// one, so 10 times headroom below that cap covers the references the
-/// path itself keeps alive.
+/// The most Lua references one Rust walk may hold at once: an encode path's
+/// string, table, function, thread, and userdata keys, the entries of
+/// `json.encode`'s options table, or an offer verb's array entries, each of
+/// which takes a slot on the auxiliary reference stack until it is dropped.
+/// An encode path's integer, number, and boolean keys hold no slot. A Lua
+/// stack caps at 1,000,000 slots and mlua panics when a reference cannot get
+/// one, so 10 times headroom below that cap covers the references the path
+/// itself keeps alive.
 pub(crate) const HELD_KEY_LIMIT: usize = 100_000;
 
 /// The walk went past its budget.

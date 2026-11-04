@@ -150,12 +150,9 @@ fn materialize_guarded_value(
 /// removes the key. Every nested table is itself an empty proxy over hidden
 /// data, so later incremental writes cross the same validation boundary instead
 /// of mutating a stored table directly. `__metatable` is set so author code
-/// cannot replace the guard. The root data table is stashed in the Lua registry
-/// (unreachable from sandboxed author code) and is the read-back source for
-/// [`var_to_json`], which materializes nested proxies before serde conversion;
-/// proxies never hold entries themselves. The root proxy is stashed alongside
-/// it so [`var_to_json`] can reject an author reassigning the `var` global
-/// instead of silently reading stale data.
+/// cannot replace the guard. The root data table and the proxy live under
+/// [`VAR_DATA_REGISTRY`] and [`VAR_PROXY_REGISTRY`] for [`var_to_json`]'s
+/// read-back.
 pub(crate) fn guarded_var(lua: &Lua, initial: Option<&Json>) -> Result<mlua::Table> {
     let initial = match initial {
         Some(Json::Object(values)) => Json::Object(values.clone()),
@@ -179,9 +176,6 @@ pub(crate) fn guarded_var(lua: &Lua, initial: Option<&Json>) -> Result<mlua::Tab
     else {
         return Err(error::internal("guarded var data table was missing"));
     };
-    // The named registry entries keep the data table alive and reachable for
-    // Engine read-back, and the proxy reachable for the reassignment check in
-    // `var_to_json`.
     lua.set_named_registry_value(VAR_DATA_REGISTRY, data)
         .map_err(error::lua)?;
     lua.set_named_registry_value(VAR_PROXY_REGISTRY, proxy.clone())
@@ -194,9 +188,9 @@ pub(crate) fn guarded_var(lua: &Lua, initial: Option<&Json>) -> Result<mlua::Tab
 /// Returns the hidden `var` data table as a plain deep-copied table.
 ///
 /// The guarded `var` proxy itself serializes empty; this reads what
-/// [`var_to_json`] reads, materializing nested proxies, for the coroutine
-/// shim's `var_snapshot` capture: a `call` or `tasks.fanout` request
-/// includes the caller's `var` as a clone.
+/// [`var_to_json`] reads, materializing nested proxies, for the shims'
+/// `var_snapshot` capture: every `call` and `tasks.spawn` request, each
+/// `tasks.fanout` arm included, holds the caller's `var` as a clone.
 ///
 /// # Errors
 /// Returns a `LuaRuntime` failure if the author reassigned the `var`

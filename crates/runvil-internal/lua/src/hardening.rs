@@ -1,5 +1,5 @@
-//! Sandbox hardening for section VMs: the `_G` guard, global removal, and
-//! the cancellation hook.
+//! Sandbox hardening for section VMs: the `_G` guard, global removal, the
+//! `table.concat` wrapper, and the cancellation hook.
 
 use std::sync::{Arc, OnceLock};
 
@@ -128,7 +128,7 @@ impl CancelHook {
     /// Returns whether the installed cancel flag is set, `false` when no
     /// executor installed one.
     pub(crate) fn is_cancelled(&self) -> bool {
-        self.cancel.get().is_some_and(CancelHandle::is_cancelled)
+        cancelled(&self.cancel)
     }
 }
 

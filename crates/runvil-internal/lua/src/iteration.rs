@@ -232,9 +232,10 @@ fn ordered_keys(table: &Table) -> mlua::Result<Vec<WalkKey>> {
 }
 
 /// The index in `keys` to return for a `next` call with `previous` as the
-/// last key. An exact match advances one slot. A key whose value was cleared
-/// (`previous` absent) resumes at the first key that sorts strictly after it,
-/// so the cleared key is skipped rather than revisited.
+/// last key. An exact match advances one slot. A cleared array or scalar key
+/// (`previous` absent) resumes at the first key that sorts strictly after it;
+/// a cleared unordered key resumes at the start of the unordered segment,
+/// the fallback the module doc describes.
 fn next_index(keys: &[WalkKey], previous: &Value) -> Option<usize> {
     if matches!(previous, Value::Nil) {
         return (!keys.is_empty()).then_some(0);
