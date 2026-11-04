@@ -8,9 +8,10 @@
 //! dispatch, on every model call, over whichever records the section's list
 //! holds at that moment:
 //!
-//! - `tool_calls` belong to assistant records (a record holds a
-//!   `tool_call_id` only as a tool result, by its type); a system message
-//!   is legal only in the leading block.
+//! - A system message is legal only in the leading block. A record's role
+//!   rules sit with the record: it holds a `tool_call_id` only as a tool
+//!   result, by its type, and the record parse refuses `tool_calls` on
+//!   every role but assistant.
 //! - Tool-call IDs are unique across the whole list, and every assistant
 //!   tool-call batch is answered atomically: the records immediately
 //!   following the batch are its results, one per call, each exactly once.
@@ -44,9 +45,9 @@ use crate::protocol::{ContentPart, MessageContent, MessageRecord, NonEmpty, Reco
 ///
 /// # Errors
 /// Returns a `LuaRuntime` failure naming the offending 1-based index when the list
-/// violates a cross-record rule: a malformed record (tool calls on a
-/// non-assistant, a system message outside the leading block, content
-/// parts in a system block that must be composed), a duplicate tool-call
+/// violates a cross-record rule: a malformed record (a system message
+/// outside the leading block, content parts in a system block that must
+/// be composed), a duplicate tool-call
 /// ID, an orphan tool record, or an assistant tool call with no result.
 pub fn project_messages(messages: &[MessageRecord]) -> Result<Vec<Message>> {
     validate(messages)?;
@@ -76,11 +77,6 @@ fn validate(messages: &[MessageRecord]) -> Result<()> {
     let mut pending: Option<(usize, Vec<&str>)> = None;
     for (position, record) in messages.iter().enumerate() {
         let index = position + 1;
-        if record.role != RecordRole::Assistant && !record.tool_calls.is_empty() {
-            return Err(lua_runtime(format!(
-                "messages[{index}] sets tool_calls but is not an assistant message"
-            )));
-        }
         match &record.role {
             RecordRole::System if position >= system_len => {
                 return Err(lua_runtime(format!(

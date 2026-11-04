@@ -91,9 +91,8 @@ pub struct MessageRecord {
     pub role: RecordRole,
     /// The visible content.
     pub content: MessageContent,
-    /// The normalized tool calls the record holds. Only an assistant
-    /// record may send them: the record parse accepts them on any role,
-    /// and the projection refuses them on every other role.
+    /// The normalized tool calls the record holds; the record parse refuses
+    /// them on every role but assistant.
     pub tool_calls: Vec<ToolCallRecord>,
     /// Metadata the projection never sends; `None` when absent or JSON null.
     pub meta: Option<serde_json::Value>,
@@ -177,7 +176,8 @@ const CHAT_PART_TYPES: [&str; 2] = ["text", "image_url"];
 /// content-parts array with known part types and payloads; a
 /// `tool_call_id` a string, required on tool records and refused on every
 /// other; a present `tool_calls` an array of normalized
-/// `{id, name, arguments}` records; a `meta` of any JSON value, none when
+/// `{id, name, arguments}` records, refused when non-empty on every role
+/// but assistant; a `meta` of any JSON value, none when
 /// null, at most [`MAX_RECORD_META_BYTES`] as compact JSON. Fields beyond
 /// the five a record holds (`role`, `content`, `tool_call_id`,
 /// `tool_calls`, `meta`) are dropped.
@@ -259,6 +259,11 @@ pub(crate) fn parse_record(
             return Err(format!("messages[{index}] tool_calls must be an array"));
         }
     };
+    if role != RecordRole::Assistant && !tool_calls.is_empty() {
+        return Err(format!(
+            "messages[{index}] sets tool_calls but is not an assistant message"
+        ));
+    }
     let meta = match entry.get("meta") {
         None | Some(serde_json::Value::Null) => None,
         Some(meta) => {

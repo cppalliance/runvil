@@ -48,6 +48,10 @@ fn malformed_tool_calls_are_refused_naming_the_index() {
             r#"{ { role = "assistant", content = "", tool_calls = "raw" } }"#,
             "messages[1] tool_calls must be an array",
         ),
+        (
+            r#"{ { role = "user", content = "hi", tool_calls = { { id = "call_1", name = "echo" } } } }"#,
+            "messages[1] sets tool_calls but is not an assistant message",
+        ),
     ]);
 }
 

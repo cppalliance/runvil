@@ -344,12 +344,6 @@ fn metadata_beyond_the_contract_is_stripped_from_the_wire() {
 
 #[test]
 fn malformed_records_fail_at_projection_naming_the_index() {
-    let mut with_calls = user("hi");
-    with_calls.tool_calls = vec![call("call_1", "echo")];
-    assert_eq!(
-        projection_error(&[with_calls]),
-        "messages[1] sets tool_calls but is not an assistant message"
-    );
     assert_eq!(
         projection_error(&[user("hi"), system("late")]),
         "messages[2] is a system message outside the leading system block"
