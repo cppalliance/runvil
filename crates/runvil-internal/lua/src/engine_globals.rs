@@ -1,7 +1,8 @@
-//! Engine globals installed into section VMs: `log`, `untrusted`, and the
-//! `store` table in every one, and `ui` when the run has an
-//! application-state snapshot. Each is a persistent global: installed once
-//! per section and valid across every chunk the VM runs.
+//! The persistent `log`, `untrusted`, and `store` Engine globals every
+//! section VM gets, and `ui` when the run has an application-state
+//! snapshot. Each is installed once per section and stays valid across
+//! every chunk the VM runs; the other Engine globals install from their own
+//! modules.
 
 #[path = "engine_globals-store.rs"]
 mod store;
@@ -33,7 +34,7 @@ fn log_checkpoint(
         return Err(mlua::Error::external("log expects exactly one argument"));
     }
     // Spend one unit of the per-VM log budget before doing any work; an
-    // exhausted budget refuses further checkpoints (lua 002).
+    // exhausted budget refuses further checkpoints.
     if log_budget
         .try_update(Ordering::Relaxed, Ordering::Relaxed, |n| n.checked_sub(1))
         .is_err()
@@ -57,8 +58,7 @@ fn log_checkpoint(
         ));
     }
     // Enforce a cumulative byte ceiling in addition to the event count,
-    // so many small events cannot emit unbounded total log volume
-    // (lua 002).
+    // so many small events cannot emit unbounded total log volume.
     if log_byte_budget
         .try_update(Ordering::Relaxed, Ordering::Relaxed, |remaining| {
             remaining.checked_sub(message.len())

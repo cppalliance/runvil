@@ -228,10 +228,10 @@ fn record_store_conflict<T>(
 /// inclusive line range (`read(path, start)` reads to end of file,
 /// `read(path, start, end)` slices); `read_numbered` returns it with
 /// absolute line numbers under the same optional bounds; `glob` returns an
-/// array table of matching paths. A [`VfsError`] from any op is raised as
-/// its store failure, a structured error value of kind `store`, so it
-/// aborts the chunk and a `pcall` caller reads `err.kind`, `err.reason`,
-/// and the variant's fields.
+/// array table of matching paths, and `exists` returns a boolean. A
+/// [`VfsError`] from any op is raised as its store failure, a structured
+/// error value of kind `store`, so it aborts the chunk and a `pcall` caller
+/// reads `err.kind`, `err.reason`, and the variant's fields.
 ///
 /// Every closure captures an `Arc` clone of the section's store view.
 /// The view locks the backend per call and is synchronous, so nothing is
