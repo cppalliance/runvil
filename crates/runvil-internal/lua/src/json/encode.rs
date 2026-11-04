@@ -161,7 +161,7 @@ struct Encoder {
     prefix: &'static str,
     debug: bool,
     marker: Table,
-    keys: Vec<Value>,
+    path: Vec<Value>,
     tables: Vec<*const c_void>,
     budget: WalkBudget,
     held: usize,
@@ -173,7 +173,7 @@ impl Encoder {
             prefix,
             debug,
             marker: lua.array_metatable(),
-            keys: Vec::new(),
+            path: Vec::new(),
             tables: Vec::new(),
             budget: WalkBudget::for_vm(lua),
             held: 0,
@@ -204,11 +204,11 @@ impl Encoder {
     /// The refusal of the value at the current path, which `failure` says
     /// why.
     fn error(&self, failure: &str) -> mlua::Error {
-        let path = self
-            .keys
+        let shown = self
+            .path
             .iter()
-            .fold("value".to_owned(), |path, key| key_path(&path, key));
-        author_refusal(format!("{}: {path} {failure}", self.prefix))
+            .fold("value".to_owned(), |shown, key| key_path(&shown, key));
+        author_refusal(format!("{}: {shown} {failure}", self.prefix))
     }
 
     /// `placeholder` in debug mode, or the error for `failure`.
@@ -309,9 +309,9 @@ impl Encoder {
         let mut items = Vec::with_capacity(keys.len());
         for key in keys {
             let value: Value = data.raw_get(key.clone())?;
-            self.keys.push(key);
+            self.path.push(key);
             let item = self.value(&value, level + 1);
-            self.keys.pop();
+            self.path.pop();
             items.push(item?);
         }
         Ok(items)
@@ -330,7 +330,7 @@ impl Encoder {
                 Ok(text) => names.push(text.to_owned()),
                 Err(_) if self.debug => names.push(name.to_string_lossy()),
                 Err(_) => {
-                    self.keys.push(key.clone());
+                    self.path.push(key.clone());
                     return Err(self.error(NOT_UTF8));
                 }
             }
@@ -338,9 +338,9 @@ impl Encoder {
         let mut object = Map::new();
         for (name, key) in names.into_iter().zip(keys) {
             let value: Value = data.raw_get(key.clone())?;
-            self.keys.push(key);
+            self.path.push(key);
             let encoded = self.value(&value, level + 1);
-            self.keys.pop();
+            self.path.pop();
             object.insert(name, encoded?);
         }
         Ok(Json::Object(object))

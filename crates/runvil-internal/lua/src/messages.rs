@@ -88,7 +88,7 @@ struct ListState {
     /// The records, in order, shared with the views read from them.
     records: Vec<Arc<MessageRecord>>,
     /// The last issued send: its round, model name, and wire request.
-    last: Option<(RoundId, String, Vec<Message>)>,
+    last_send: Option<(RoundId, String, Vec<Message>)>,
     /// Attached at the first successful build and never detached.
     rendered: Option<Arc<RenderedTools>>,
     /// Set while a compactor runs over the list.
@@ -169,7 +169,7 @@ impl MessageList {
     #[must_use]
     pub fn commit(&self, round: RoundId, model: &str, sent: &[Message]) -> Option<(RoundId, u64)> {
         let latest = (round, model.to_owned(), sent.to_vec());
-        let previous = self.state().last.replace(latest);
+        let previous = self.state().last_send.replace(latest);
         previous.map(|(after, _, earlier)| {
             let keep = earlier
                 .iter()
@@ -183,7 +183,10 @@ impl MessageList {
     /// The name of the model the last send went to; none before the first.
     #[must_use]
     pub fn last_model(&self) -> Option<String> {
-        self.state().last.as_ref().map(|(_, name, _)| name.clone())
+        self.state()
+            .last_send
+            .as_ref()
+            .map(|(_, name, _)| name.clone())
     }
 
     /// The attached frozen sets, if they are attached.
