@@ -1,0 +1,28 @@
+[package]
+name = "build-lints"
+version = "0.3.0"
+description = "Dylint lints for the runvil workspace"
+edition = "2024"
+license = "BSL-1.0"
+repository = "https://github.com/cppalliance/runvil"
+publish = false
+
+[lib]
+# Dylint loads the library as a dynamic library named after `lib.name`.
+crate-type = ["cdylib"]
+
+[dependencies]
+# clippy_utils is unpublished and tied to one nightly; this rev and the
+# channel in rust-toolchain.toml move together (`cargo dylint upgrade`).
+clippy_utils = { git = "https://github.com/rust-lang/rust-clippy", rev = "21baba9c10c5d179915cae82e6247bc2337872fb" }
+dylint_linting = "6.3"
+
+[dev-dependencies]
+dylint_testing = "6.3"
+
+# Its own workspace: the library builds on a nightly with `rustc_private`,
+# while the runvil workspace builds on the pinned stable release.
+[workspace]
+
+[package.metadata.rust-analyzer]
+rustc_private = true

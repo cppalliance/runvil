@@ -1,0 +1,5 @@
+# The nightly the clippy_utils rev in Cargo.toml builds against. It moves
+# only together with that rev.
+[toolchain]
+channel = "nightly-2026-08-20"
+components = ["llvm-tools-preview", "rustc-dev"]
