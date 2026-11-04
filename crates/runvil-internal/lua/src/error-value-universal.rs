@@ -90,6 +90,23 @@ fn kind_of(code: ErrorCode) -> ErrorKind {
     }
 }
 
+/// The one string field a failure with `code` holds and the fact behind
+/// it, which both [`error_fields`] and [`field_facts`] read; `None` for a
+/// code whose table holds no such field.
+fn string_fact(code: ErrorCode) -> Option<(&'static str, FactKey)> {
+    match code {
+        ErrorCode::ContextExhausted => Some(("reason", FactKey::Reason)),
+        ErrorCode::EmptyReply => Some(("finish_reason", FactKey::FinishReason)),
+        ErrorCode::OutOfScopeTool | ErrorCode::UnboundTool | ErrorCode::ModelOnlyTool => {
+            Some(("name", FactKey::Name))
+        }
+        ErrorCode::TaskNotOwned | ErrorCode::TaskConsumed | ErrorCode::TaskCancelled => {
+            Some(("task", FactKey::Task))
+        }
+        _ => None,
+    }
+}
+
 /// The fact `key` of `error` as the string field `name`, or nothing when
 /// the fact is absent or not a string.
 fn string_field(error: &Error, name: &str, key: FactKey) -> Vec<(String, ErrorField)> {
@@ -132,17 +149,11 @@ pub fn error_kind(error: &Error) -> ErrorKind {
 #[must_use]
 pub fn error_fields(error: &Error) -> Vec<(String, ErrorField)> {
     match error.code {
-        ErrorCode::ContextExhausted => string_field(error, "reason", FactKey::Reason),
-        ErrorCode::EmptyReply => string_field(error, "finish_reason", FactKey::FinishReason),
-        ErrorCode::OutOfScopeTool | ErrorCode::UnboundTool | ErrorCode::ModelOnlyTool => {
-            string_field(error, "name", FactKey::Name)
-        }
         ErrorCode::TasksLive => joined_tasks(error),
-        ErrorCode::TaskNotOwned | ErrorCode::TaskConsumed | ErrorCode::TaskCancelled => {
-            string_field(error, "task", FactKey::Task)
-        }
         code if kind_of(code) == ErrorKind::Store => store_fact_fields(error),
-        _ => Vec::new(),
+        code => string_fact(code)
+            .map(|(name, key)| string_field(error, name, key))
+            .unwrap_or_default(),
     }
 }
 
@@ -155,20 +166,7 @@ pub(super) fn field_facts(
     code: ErrorCode,
     fields: &BTreeMap<String, ErrorField>,
 ) -> BTreeMap<FactKey, Value> {
-    let string = |name: &str, key: FactKey| {
-        fields
-            .get(name)
-            .and_then(ErrorField::as_str)
-            .map(|value| (key, Value::from(value)))
-            .into_iter()
-            .collect()
-    };
     match code {
-        ErrorCode::ContextExhausted => string("reason", FactKey::Reason),
-        ErrorCode::EmptyReply => string("finish_reason", FactKey::FinishReason),
-        ErrorCode::OutOfScopeTool | ErrorCode::UnboundTool | ErrorCode::ModelOnlyTool => {
-            string("name", FactKey::Name)
-        }
         ErrorCode::TasksLive => fields
             .get("tasks")
             .and_then(ErrorField::as_str)
@@ -178,11 +176,14 @@ pub(super) fn field_facts(
             })
             .into_iter()
             .collect(),
-        ErrorCode::TaskNotOwned | ErrorCode::TaskConsumed | ErrorCode::TaskCancelled => {
-            string("task", FactKey::Task)
-        }
         code if kind_of(code) == ErrorKind::Store => store_field_facts(fields),
-        _ => BTreeMap::new(),
+        code => string_fact(code)
+            .and_then(|(name, key)| {
+                let value = fields.get(name)?.as_str()?;
+                Some((key, Value::from(value)))
+            })
+            .into_iter()
+            .collect(),
     }
 }
 

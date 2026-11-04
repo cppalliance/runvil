@@ -11,8 +11,8 @@ use super::super::tests::every_store_failure;
 use super::super::{error_table, install_error_value, retained_error};
 use super::raised_from;
 use crate::error::{
-    QuotaResource, context_exhausted, internal, lua_quota, lua_runtime, task_not_owned, tool,
-    tool_loop_exhausted,
+    QuotaResource, context_exhausted, internal, lua_quota, lua_runtime, task_cancelled,
+    task_consumed, task_not_owned, tool, tool_loop_exhausted,
 };
 
 /// The task id `path` names.
@@ -36,11 +36,15 @@ fn located_by_their_fields() -> Vec<Error> {
             &[(FactKey::FinishReason, "length".into())],
         ),
         failure(ErrorCode::OutOfScopeTool, &[(FactKey::Name, "echo".into())]),
+        failure(ErrorCode::UnboundTool, &[(FactKey::Name, "echo".into())]),
+        failure(ErrorCode::ModelOnlyTool, &[(FactKey::Name, "echo".into())]),
         failure(
             ErrorCode::TasksLive,
             &[(FactKey::Tasks, serde_json::Value::from(vec!["1", "1.2"]))],
         ),
         task_not_owned(&task("0.4")),
+        task_consumed(&task("0.5")),
+        task_cancelled(&task("0.6")),
         lua_runtime("a refused edit"),
         tool_loop_exhausted(),
     ];
