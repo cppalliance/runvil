@@ -48,11 +48,7 @@ impl SectionVm<Uninjected> {
     /// Installs Engine values while seeding `var` from an earlier VM, and
     /// gives back the injected VM.
     ///
-    /// Injection consumes the uninjected VM, so it runs once. The store
-    /// callbacks own a clone of the run-scoped store. `log` and `store` are
-    /// installed once for the section's whole lifecycle by
-    /// [`install_engine_globals`](SectionVm::install_engine_globals), which
-    /// captures a clone of the emitter rather than a per-chunk borrow.
+    /// Injection consumes the uninjected VM, so it runs once.
     ///
     /// The `var` global is a guarded proxy (see `guarded_var`): writes are
     /// validated for JSON-representability at the assigning line, and the

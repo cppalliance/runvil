@@ -1,6 +1,7 @@
-//! Section VM state reads: `var`, bare globals, `argv`, the tool call
-//! counts, the frozen sets' entries, the section's offered tools and the
-//! catalog Packs they come from, and its current model.
+//! Section VM state reads, and the two installs that follow injection:
+//! `var`, `argv`, the frozen sets' entries, the section's offered tools
+//! and the catalog Packs they come from, and its current model;
+//! `set_global_json` for fanout's `item`, and `tools.stats`.
 
 use std::sync::{Arc, Mutex};
 

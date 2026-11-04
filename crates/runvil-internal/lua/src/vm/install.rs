@@ -116,9 +116,11 @@ impl SectionVm {
     /// Installs the control surface: `jump` and the `prompt` reads as Rust
     /// callbacks (none suspends).
     ///
-    /// The suspending calls (`models.infer`, `call`, `tasks.fanout`,
-    /// `tools.call`, `tasks.*`) are the yield shims installed by
-    /// [`install_coro_shims`](Self::install_coro_shims).
+    /// The suspending calls are the yield shims
+    /// [`install_coro_shims`](Self::install_coro_shims) installs, and the
+    /// `store` calls, which suspend once
+    /// [`install_store_shims`](crate::install_store_shims) runs after the
+    /// Pack preludes.
     ///
     /// # Errors
     /// Returns a `LuaRuntime` failure if any global cannot be installed.
@@ -274,8 +276,9 @@ impl SectionVm {
         globals.raw_set("prompt", prompt).map_err(error::lua)
     }
 
-    /// Replaces the sealed Lua `sys` global after scope close, to expose
-    /// `sys.model` once the section's model binding is fixed.
+    /// Replaces the sealed Lua `sys` global at the section entry's first
+    /// tool call, to expose `sys.model` once the section's current model is
+    /// fixed.
     ///
     /// # Errors
     /// Returns an `Internal` failure if the live slot is poisoned, or the
@@ -309,6 +312,6 @@ impl SectionVm {
     where
         F: Fn(ProseState<'_>) -> mlua::Result<String> + Send + Sync + 'static,
     {
-        crate::prose::install(&self.lua, &self.state.sys_live, render)
+        crate::prose::swap(&self.lua, &self.state.sys_live, render).map(drop)
     }
 }

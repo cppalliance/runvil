@@ -60,25 +60,8 @@ impl fmt::Debug for ProseState<'_> {
     }
 }
 
-/// Installs `prose` as a fresh read-only lazy global on this VM.
-///
-/// `render` runs at most once, on the first runtime read of `prose`, with
-/// the section state snapshot; its result is memoized for later reads.
-/// `sys_live` is the VM's live `sys` mirror, so a `sys` enrichment between
-/// install and first read is visible to the render.
-///
-/// # Errors
-/// Returns a `LuaRuntime` failure if the read cannot be built or the guard cannot
-/// record it.
-pub(crate) fn install<F>(lua: &Lua, sys_live: &Arc<Mutex<Json>>, render: F) -> Result<()>
-where
-    F: Fn(ProseState<'_>) -> mlua::Result<String> + Send + Sync + 'static,
-{
-    swap(lua, sys_live, render).map(drop)
-}
-
-/// Installs a fresh lazy `prose` over `render`, as [`install`] does, and
-/// returns the read it replaced for [`restore`].
+/// Installs a fresh lazy `prose` over `render` and returns the read it
+/// replaced for [`restore`].
 ///
 /// The replaced read is the caller's own, memo included, so restoring it
 /// hands back text the caller already read without rendering again.

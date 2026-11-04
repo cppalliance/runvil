@@ -131,7 +131,7 @@ pub struct SectionVm<S = Injected> {
     /// How many adhoc tool handlers are running on this VM; `jump` refuses
     /// while it is above zero.
     adhoc_handler_depth: Arc<AtomicU32>,
-    /// Set while a `models.loop` or `handle:loop` runs on this VM.
+    /// Set while a `models.loop` call runs on this VM.
     loop_running: Arc<AtomicBool>,
     /// How many libraries `require` is loading on this VM; `jump` refuses
     /// while it is above zero.

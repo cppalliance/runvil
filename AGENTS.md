@@ -11,7 +11,7 @@ Seven terms have exactly one meaning each, everywhere in this repository: code c
 - **Host**: an application that runs prompts through the Harness, such as Workshop or Papergate. The Host makes every policy decision. It runs prompts only through the Harness; it may also use the Engine's parser and types to read prompts and show events.
 - **Pack**: code which installs an optional native prelude, an optional Lua prelude, and zero or more tools.
 - **Plugin**: an entry point which installs zero or more Packs.
-- **Static Set**: the tools a section entry renders into the model's tool list at its first loop round, the first round a `models.loop` or a model handle's `loop` sends. It is frozen after that.
+- **Static Set**: the tools a section entry renders into the model's tool list at its first loop round, the first round a `models.loop` call sends. It is frozen after that.
 - **Dynamic Set**: the tools the model finds and calls through the Engine's two discovery tools.
 
 ### Using the terms
