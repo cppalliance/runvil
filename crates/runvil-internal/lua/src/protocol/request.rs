@@ -183,10 +183,11 @@ pub enum Request {
     },
 }
 
-/// The model's side of a model-issued [`Request::ToolCall`]: the id the
-/// model attached to the call and the turn of the round that requested it.
-/// Shim-produced in both fields, never author-supplied, so a `call_id`
-/// without a `turn`, or a `turn` without a `call_id`, is a malformed yield.
+/// The model's side of a model-issued tool call: the id the model attached
+/// to the call and the turn of the round that requested it. In a
+/// [`Request::ToolCall`] both fields are shim-produced, never
+/// author-supplied, so a `call_id` without a `turn`, or a `turn` without a
+/// `call_id`, is a malformed yield.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ModelCall {
     /// The id the model attached to its tool call; `ToolResult` fires

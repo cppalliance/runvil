@@ -1,4 +1,4 @@
-//! The shared tool-dispatch body every executor invokes.
+//! The tool-dispatch bodies the executor applies when a bound tool's answer lands.
 //!
 //! [`prepare_dispatch`] is the one place a bound tool's answer composes the
 //! succeeded/failed observation, the untrusted nonce wrap, and the
@@ -8,9 +8,7 @@
 //! as untrusted failure text, and the `ToolResult` fires under the model's
 //! call id). Nothing here performs a call: the executor issues the call as
 //! an effect, the Harness performs it, and one of the two bodies applies the
-//! rules when the answer lands. Keeping both bodies here - the crate every
-//! executor already depends on - is what stops dispatch semantics from
-//! forking.
+//! rules when the answer lands.
 
 use runvil_types::emitter::Emitter;
 use runvil_types::event::lifecycle;
@@ -20,6 +18,7 @@ use runvil_types::untrusted::GuardNonce;
 use crate::bindings::ToolBinding;
 use crate::error::{Result, tool};
 use crate::error_value::{ErrorKind, error_kind};
+use crate::protocol::ModelCall;
 
 /// The run coordinates a script-initiated dispatch reports under.
 ///
@@ -32,16 +31,6 @@ use crate::error_value::{ErrorKind, error_kind};
 pub struct ScriptReport {
     /// The section's completed model-turn count at dispatch.
     pub turn: u32,
-}
-
-/// The run coordinates a model-issued dispatch reports under: the turn the
-/// call fired in and the call id the model issued.
-#[derive(Debug, Clone)]
-pub struct ModelReport {
-    /// The section's completed model-turn count at dispatch.
-    pub turn: u32,
-    /// The model-issued call id the result answers.
-    pub call_id: String,
 }
 
 /// The resolved outcome of one dispatched tool call: the final content -
@@ -90,8 +79,8 @@ impl ToolDispatch {
     }
 }
 
-/// Applies the dispatch rules to one bound tool call's answer: the shared
-/// synchronous body every executor invokes once the tool has spoken.
+/// Applies the dispatch rules to one bound tool call's answer: the
+/// synchronous body the executor runs once the tool has spoken.
 ///
 /// The sequence is fixed: the succeeded/failed observation, then the trust
 /// rule - a trusted output passes verbatim, anything else is
@@ -211,7 +200,7 @@ pub fn prepare_model_dispatch(
     nonce: &GuardNonce,
     emitter: &Emitter,
     section: &str,
-    report: &ModelReport,
+    report: &ModelCall,
 ) -> Result<ToolDispatch> {
     let outcome = match dispatch_body(binding, vendor, call_result, nonce, emitter, section, None) {
         Ok(outcome) => outcome,

@@ -128,9 +128,7 @@ pub use crate::compactors::{
     OverflowReason, UsageAnchor, exhaustion_detail, output_reserve, precheck,
 };
 pub use crate::coro::install_store_shims;
-pub use crate::dispatch::{
-    ModelReport, ScriptReport, ToolDispatch, prepare_dispatch, prepare_model_dispatch,
-};
+pub use crate::dispatch::{ScriptReport, ToolDispatch, prepare_dispatch, prepare_model_dispatch};
 pub use crate::engine_globals::{
     install_ui, run_store_op, store_error_message, store_failure, store_probe_message,
 };

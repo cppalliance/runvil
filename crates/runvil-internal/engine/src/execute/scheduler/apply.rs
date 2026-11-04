@@ -25,8 +25,7 @@ use runvil_vfs::{ExecId, VfsError, detail};
 
 use crate::execute::infer::accept_infer;
 use crate::lua::{
-    Answer, ModelReport, ToolCallOutcome, VfsOp, VfsOutcome, prepare_dispatch,
-    prepare_model_dispatch,
+    Answer, ModelCall, ToolCallOutcome, VfsOp, VfsOutcome, prepare_dispatch, prepare_model_dispatch,
 };
 use crate::model::Completion;
 use crate::{Error, Result, error};
@@ -274,9 +273,9 @@ impl ChainOps<'_> {
             // plain - it is the tool record's text for the next round,
             // never classified by output kind.
             CallSite::Model { call_id, .. } | CallSite::Batch { call_id, .. } => {
-                let report = ModelReport {
-                    turn: call.report.turn,
+                let report = ModelCall {
                     call_id: call_id.clone(),
+                    turn: call.report.turn,
                 };
                 prepare_model_dispatch(
                     &call.binding,

@@ -92,10 +92,10 @@ fn prepare_dispatch_turns_a_canned_tool_error_into_the_typed_error() {
     );
 }
 
-fn model_report(call_id: &str) -> ModelReport {
-    ModelReport {
-        turn: 1,
+fn model_call(call_id: &str) -> ModelCall {
+    ModelCall {
         call_id: call_id.to_owned(),
+        turn: 1,
     }
 }
 
@@ -114,7 +114,7 @@ fn a_model_issued_tool_failure_becomes_untrusted_failure_text_under_its_call_id(
         &nonce,
         recorder.emitter(),
         TEST_SECTION,
-        &model_report("call_1"),
+        &model_call("call_1"),
     )
     .expect("a model-issued call never fails for the tool's own failure");
     assert_eq!(
@@ -187,7 +187,7 @@ fn a_models_listing_call_receives_the_envelope() {
         &nonce,
         Recorder::default().emitter(),
         TEST_SECTION,
-        &model_report("call_1"),
+        &model_call("call_1"),
     )
     .expect("a listing dispatches");
     assert_eq!(outcome.content(), nonce.wrap("the listing"));
@@ -249,7 +249,7 @@ fn a_model_issued_dispatch_reports_its_result_under_the_call_id() {
         &test_nonce(),
         recorder.emitter(),
         TEST_SECTION,
-        &model_report("call_2"),
+        &model_call("call_2"),
     )
     .expect("the dispatch succeeds");
     assert_eq!(outcome.content(), "echoed: hi");
