@@ -45,10 +45,10 @@ local error = error
 -- names must not move when author code rebinds `math`.
 local math_type = math.type
 
--- The Engine's name for a value's type, as the protocol parse reports it:
--- Lua folds integers and floats into "number", while the Engine names an
--- integer "integer" and a float "number", so a shim-raised argument error
--- reads exactly as the parse-raised one for the same value.
+-- The Engine's name for a value's type: Lua's `type()`, except that an
+-- integer is "integer", as the protocol parse names it. The parse names a
+-- light userdata such as `json.null` "lightuserdata", which `type()` cannot
+-- tell from a full userdata, so a shim-raised error names it "userdata".
 local function engine_type(value)
   if math_type(value) == "integer" then return "integer" end
   return type(value)

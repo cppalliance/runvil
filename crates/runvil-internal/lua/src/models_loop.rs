@@ -131,7 +131,7 @@ fn begin(
         other => {
             let message = format!(
                 "compactor must be a function, got {}",
-                lua_type_name(&other)
+                engine_type_name(&other)
             );
             return refuse(lua, &message);
         }
@@ -212,7 +212,7 @@ fn compact(
         ("reason", &reason, "string"),
     ] {
         if value.type_name() != wanted {
-            let message = format!("{name} must be a {wanted}, got {}", lua_type_name(value));
+            let message = format!("{name} must be a {wanted}, got {}", engine_type_name(value));
             return refuse(lua, &message);
         }
     }
@@ -436,7 +436,7 @@ fn malformed(what: &'static str) -> mlua::Error {
 /// the shim's `engine_type` names it. mlua's `type_name` differs for a
 /// light userdata (`lightuserdata`) and an mlua error value (`error`),
 /// both of which Lua names `userdata`.
-fn lua_type_name(value: &Value) -> &'static str {
+fn engine_type_name(value: &Value) -> &'static str {
     match value {
         Value::LightUserData(_) | Value::Error(_) => "userdata",
         other => other.type_name(),

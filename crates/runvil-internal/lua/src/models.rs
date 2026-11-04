@@ -64,8 +64,9 @@ pub(crate) fn selection_poisoned() -> mlua::Error {
     mlua::Error::external("model selection lock was poisoned")
 }
 
-/// The Lua type name of `value`, as `type(value)` reports it: an integer is a
-/// `number`.
+/// The type name the `models.use` target and `set_selection` refusals give
+/// `value`: mlua's type name, except that an integer is a `number`, so
+/// `json.null` reads `lightuserdata`.
 pub(crate) fn lua_type_name(value: &Value) -> &'static str {
     match value {
         Value::Integer(_) | Value::Number(_) => "number",

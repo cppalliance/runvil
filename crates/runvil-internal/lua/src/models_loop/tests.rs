@@ -13,7 +13,7 @@ use runvil_types::tools::ToolId;
 use serde_json::json;
 
 use super::machine::{Input, Phase, Then};
-use super::{LOOP_RUNNING, act, envelope_failure, loop_begin, lua_type_name, read_input};
+use super::{LOOP_RUNNING, act, engine_type_name, envelope_failure, loop_begin, read_input};
 use crate::compactors::OverflowReason;
 use crate::error_value::{ErrorKind, error_kind, error_table, raised_from};
 use crate::hardening::CancelHook;
@@ -74,7 +74,7 @@ fn lua_type_name_is_luas_type_with_an_integer_named_integer() {
             Value::Integer(_) => "integer".to_owned(),
             _ => lua_type.call::<String>(value.clone()).unwrap(),
         };
-        assert_eq!(lua_type_name(&value), expected, "{value:?}");
+        assert_eq!(engine_type_name(&value), expected, "{value:?}");
     }
 }
 

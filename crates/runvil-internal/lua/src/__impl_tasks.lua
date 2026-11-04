@@ -9,7 +9,8 @@
 -- `var` data table as a plain deep copy, and `helpers` is the prelude's
 -- shared trio - `raise(kind, fields)` builds and raises the structured
 -- error table, `fail(result)` raises an envelope's failure value, and
--- `engine_type(value)` names a value's type as the protocol parse would.
+-- `engine_type(value)` names a value's type as Lua's `type()` does, with
+-- an integer named "integer".
 --
 -- A Task handle is a plain methodless table `{ task = id }`: every
 -- operation here is a namespace function that accepts the handle or the
