@@ -3,6 +3,8 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use anyhow::Context as _;
+
 /// Scaffold `crates/<name>/` with a manifest, a facade `lib.rs` holding
 /// the invariant docs, and the crate's integration-test binary.
 ///
@@ -18,13 +20,19 @@ pub(crate) fn scaffold(root: &Path, name: &str) -> anyhow::Result<PathBuf> {
         "crate directory already exists: {}",
         dir.display()
     );
-    fs::create_dir_all(dir.join("src"))?;
-    fs::create_dir_all(dir.join("tests").join("it"))?;
-    fs::write(dir.join("Cargo.toml"), manifest(name))?;
-    fs::write(dir.join("src").join("lib.rs"), lib_rs(name))?;
-    fs::write(
+    let create = |path: PathBuf| {
+        fs::create_dir_all(&path).with_context(|| format!("create {}", path.display()))
+    };
+    let write = |path: PathBuf, contents: &str| {
+        fs::write(&path, contents).with_context(|| format!("write {}", path.display()))
+    };
+    create(dir.join("src"))?;
+    create(dir.join("tests").join("it"))?;
+    write(dir.join("Cargo.toml"), &manifest(name))?;
+    write(dir.join("src").join("lib.rs"), &lib_rs(name))?;
+    write(
         dir.join("tests").join("it").join("main.rs"),
-        test_main_rs(name),
+        &test_main_rs(name),
     )?;
     Ok(dir)
 }

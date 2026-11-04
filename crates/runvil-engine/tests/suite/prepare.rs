@@ -58,7 +58,9 @@ fn two_runs_writing_the_same_real_file_through_the_shared_base_conflict() -> Tes
         matches!(error, VfsError::Conflict { .. }),
         "a determinism violation, not a backend error: {error}"
     );
-    assert_eq!(std::fs::read(temp.path().join("shared.txt"))?, b"from a");
+    let shared = temp.path().join("shared.txt");
+    let bytes = std::fs::read(&shared).map_err(|e| format!("read {}: {e}", shared.display()))?;
+    assert_eq!(bytes, b"from a");
     Ok(())
 }
 
