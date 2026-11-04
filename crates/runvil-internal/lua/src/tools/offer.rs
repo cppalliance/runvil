@@ -15,7 +15,6 @@ use mlua::{Lua, Table, Value, Variadic};
 use runvil_types::packs::PackId;
 use runvil_types::tools::ToolId;
 
-use super::refuse_after_render;
 use super::userdata::LuaToolHandle;
 use crate::bindings::{RosterEntry, ToolSet, wire_name_of};
 use crate::error::{self, Result};
@@ -25,6 +24,12 @@ use crate::proxy::key_text;
 use crate::scope::{OfferMode, OfferTarget, Offers};
 use crate::vm::AdhocTools;
 use crate::walk_budget::HELD_KEY_LIMIT;
+
+/// The refusal of an offer verb once the section's sets are frozen,
+/// after the verb's name.
+const TOOL_LIST_FIXED: &str = "the section's tool list is fixed at its first models.loop round; \
+                               make every offer before the first loop, or offer in another \
+                               section";
 
 /// What an offer verb checks its entries against and records into: the
 /// run's tool set, the section's offers, the VM's adhoc tools, and the
@@ -70,6 +75,14 @@ pub(super) fn install_offer(
         })
         .map_err(error::lua)?;
     tools.set(key, offer).map_err(error::lua)
+}
+
+/// Refuses the offer verb `verb` once `list` holds the section's frozen sets.
+fn refuse_after_render(verb: &str, list: &MessageList) -> mlua::Result<()> {
+    if list.rendered_tools().is_some() {
+        return Err(mlua::Error::external(format!("{verb}: {TOOL_LIST_FIXED}")));
+    }
+    Ok(())
 }
 
 impl Offering {

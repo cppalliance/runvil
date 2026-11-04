@@ -29,9 +29,7 @@ pub(crate) struct LuaToolHandle {
 }
 
 impl LuaToolHandle {
-    /// Builds the object for an adhoc tool from its binding: the id, the
-    /// declared description, the parameter schema, and whether only a
-    /// model may call it.
+    /// Builds the object for an adhoc tool from its binding.
     #[must_use]
     pub(crate) fn from_binding(binding: &ToolBinding) -> Self {
         Self {
@@ -42,9 +40,7 @@ impl LuaToolHandle {
         }
     }
 
-    /// Builds the object for a catalog tool from its info: the id, the
-    /// declared description, the parameter schema, and whether only a
-    /// model may call it.
+    /// Builds the object for a catalog tool from its info.
     #[must_use]
     pub(crate) fn from_info(info: &ToolInfo) -> Self {
         Self {

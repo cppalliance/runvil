@@ -22,10 +22,10 @@ use std::sync::{Arc, Mutex};
 
 use mlua::{Function, Lua, MultiValue, Table, Value};
 use runvil_model_client::detail::tool_schema_new;
+use runvil_types::names::is_alias;
 use runvil_types::tools::{ToolId, ToolInfo};
 use serde_json::{Value as Json, json};
 
-use crate::alias::Alias;
 use crate::bindings::{DiscoveryTool, ToolBinding, ToolSet};
 use crate::error::{self, Result};
 use crate::json::to_json;
@@ -54,24 +54,9 @@ use offer::{Offering, install_offer};
 /// `Adhoc` answer reads it back to hand the function to the shim.
 const ADHOC_HANDLERS_REGISTRY: &str = "runvil.tools.adhoc_handlers";
 
-/// The refusal of an offer function once the section's sets are frozen,
-/// after the calling function's name.
-const TOOL_LIST_FIXED: &str = "the section's tool list is fixed at its first models.loop round; \
-                               make every offer before the first loop, or offer in another \
-                               section";
-
 /// The prefix of a `tools.adhoc` JSON Schema `parameters` table that has no
 /// JSON form.
 const PARAMETERS_NOT_JSON: &str = "tools.adhoc: parameters schema cannot be encoded as JSON";
-
-/// Refuses `call`, an offer function, once `list` holds the section's
-/// frozen sets.
-pub(crate) fn refuse_after_render(call: &str, list: &MessageList) -> mlua::Result<()> {
-    if list.rendered_tools().is_some() {
-        return Err(mlua::Error::external(format!("{call}: {TOOL_LIST_FIXED}")));
-    }
-    Ok(())
-}
 
 /// Reads the handler `tools.adhoc` registered under the wire name `name`
 /// from the VM's handler table.
@@ -212,11 +197,11 @@ fn adhoc_info(lua: &Lua, attrs: &Table, adhoc: &AdhocTools) -> mlua::Result<(Str
         )));
     }
     let name = attr_text(attrs, "name")?;
-    let name = String::from(Alias::parse(name.clone()).map_err(|_| {
-        mlua::Error::external(format!(
+    if !is_alias(&name) {
+        return Err(mlua::Error::external(format!(
             "tools.adhoc: invalid name {name:?}: expected [A-Za-z][A-Za-z0-9_-]{{0,63}}"
-        ))
-    })?);
+        )));
+    }
     if DiscoveryTool::ALL
         .iter()
         .any(|tool| tool.wire_name() == name)

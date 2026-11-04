@@ -57,7 +57,7 @@ pub(crate) fn model_tool_name(value: &Value) -> mlua::Result<String> {
 
 /// The id of the tool object `value` is, or `None` for any other value,
 /// a userdata that is not a tool object included.
-pub(super) fn object_id(value: &Value) -> Option<String> {
+fn object_id(value: &Value) -> Option<String> {
     match value {
         Value::UserData(object) => object
             .borrow::<LuaToolHandle>()

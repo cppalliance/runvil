@@ -76,7 +76,6 @@
 //!   prompt line; the `file:line` goes into that `message` only, never
 //!   into the prose.
 
-mod alias;
 mod argv;
 mod bindings;
 mod chunk_line;
