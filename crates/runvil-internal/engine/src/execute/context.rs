@@ -330,9 +330,8 @@ impl ChainState {
         self.shared.refusal.as_ref()
     }
 
-    /// The resolved tool-loop cap per `models.loop` or model handle `loop`
-    /// call: the frontmatter's `max_tool_iterations` over the limits
-    /// default.
+    /// The resolved tool-loop cap per `models.loop` call: the frontmatter's
+    /// `max_tool_iterations` over the limits default.
     fn max_tool_iterations(&self) -> usize {
         self.shared
             .prompt

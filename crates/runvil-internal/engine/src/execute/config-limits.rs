@@ -10,8 +10,7 @@ use std::num::{NonZero, NonZeroU32, NonZeroUsize};
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[non_exhaustive]
 pub struct RunLimits {
-    /// The default maximum number of tool iterations per `models.loop` or
-    /// model handle `loop` call.
+    /// The default maximum number of tool iterations per `models.loop` call.
     ///
     /// A tool iteration is one model round of such a call; `models.infer`
     /// rounds do not count. A prompt's frontmatter `max_tool_iterations`

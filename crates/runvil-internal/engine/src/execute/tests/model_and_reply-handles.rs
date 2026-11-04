@@ -1,4 +1,4 @@
-//! `models.get` and a handle's `infer`: a handle leaves the section
+//! `models.get` and `models.infer(handle, ...)`: a handle leaves the section
 //! model alone, `models.infer` uses the section model and never binds
 //! `reply`, `models.use` re-selection steers the next round, a run whose
 //! caller gave no model fails `models.infer`, and a handle's `provider` reads
@@ -101,7 +101,7 @@ fn handle_infer_uses_that_model_regardless_of_the_section_model() {
     assert_eq!(
         body.options.model(),
         "strong-model",
-        "a handle's infer must use the handle's model, not the section default"
+        "models.infer on a handle must use the handle's model, not the section default"
     );
 }
 

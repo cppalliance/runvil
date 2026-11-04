@@ -1,9 +1,8 @@
 //! The yield shims installed on a scheduler-mode section VM produce
 //! well-formed protocol requests: `models.infer`, `call`, `tasks.fanout`, and
 //! `tools.call` in their id and tool-object forms, the adhoc tool
-//! handshake, the loop's batch and its requesting turn, a model handle's
-//! `infer` method, and the `infer` and `loop` methods a model handle
-//! carries.
+//! handshake, the loop's batch and its requesting turn, `models.infer` with a
+//! leading model handle, and a model handle's fields and lack of methods.
 
 use runvil_types::metrics::ToolCallEvent;
 use serde_json::json;

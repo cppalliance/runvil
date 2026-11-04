@@ -1,6 +1,6 @@
 //! Tests for section model selection and the prologue and epilog phases.
 //! The `sys.model`, `item`, and `reply` reads sit in `globals`, and the
-//! `models.get` and handle `infer` cases in `handles`.
+//! `models.get` and `models.infer(handle, ...)` cases in `handles`.
 
 use runvil_prompt::test_support::{PromptSource, parse_ok};
 
