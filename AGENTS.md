@@ -47,6 +47,7 @@ Seven terms have exactly one meaning each, everywhere in this repository: code c
 - Format: `cargo fmt --all --check`.
 - Docs: `cargo doc --workspace --no-deps --all-features --exclude workshop --exclude workshop-server --exclude workshop-server-api` and `cargo doc -p runvil-engine --no-deps` (default features), both with `RUSTDOCFLAGS="-D warnings"`. Clippy does not run rustdoc lints, so never skip these.
 - Facade surface: `cargo +<nightly> xtask api --check`, with the nightly named in `crates/build-xtask/src/api/toolchain.rs` and `CARGO_BUILD_WARNINGS` unset (`Remove-Item Env:CARGO_BUILD_WARNINGS` in PowerShell). It checks both facades, and fails when a surface names an item its facade does not re-export or differs from its listing, `crates/runvil-engine/public-api.txt` or `crates/runvil/public-api.txt`.
+- Custom lints: `cargo dylint --all -- --locked --workspace --all-targets --all-features`, with `cargo-dylint` and `dylint-link` installed. The lints and their UI tests live in `cppalliance/dylints`, at the `rev` the root `Cargo.toml`'s `[workspace.metadata.dylint]` pins; a new lint lands there first.
 - Structural checks: `cargo test -p build-xtask`.
 - Wording: `node --test crates/workshop/ui/test/docs-claims.mjs`, from any directory, no `npm ci` needed.
 

@@ -39,7 +39,10 @@ impl RunLog {
     /// cannot open the file or apply the schema.
     pub async fn open(path: &Path) -> Result<Self, LogError> {
         let name = path.to_str().ok_or_else(|| {
-            io::Error::new(io::ErrorKind::InvalidInput, "run log path must be utf-8")
+            LogError::io(
+                format!("open {}", path.display()),
+                io::Error::new(io::ErrorKind::InvalidInput, "run log path must be utf-8"),
+            )
         })?;
         Self::open_str(name).await
     }

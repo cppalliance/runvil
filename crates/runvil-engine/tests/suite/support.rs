@@ -188,7 +188,8 @@ fn temp_roots_with_one_label_get_distinct_paths_and_drop_removes_the_folder() ->
     let (first, second) = (TempRoot::new(label), TempRoot::new(label));
     assert_ne!(first.path(), second.path());
     let dropped = first.path().to_owned();
-    fs::write(dropped.join("f.txt"), b"x")?;
+    let file = dropped.join("f.txt");
+    fs::write(&file, b"x").map_err(|e| format!("write {}: {e}", file.display()))?;
     drop(first);
     assert!(!dropped.exists(), "{} survived its drop", dropped.display());
     assert!(second.path().is_dir(), "the second root outlives the first");

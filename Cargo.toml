@@ -178,6 +178,13 @@ tauri-plugin-process = "2.3.1"
 tauri-plugin-updater = { version = "2.11.0", default-features = false, features = ["system-proxy"] }
 tauri-plugin-single-instance = "2.4.4"
 
+# The dylint libraries `cargo dylint --all` runs. The lints live in their
+# own repository, shared across the runvil project, because they build on
+# their own nightly with `rustc_private`. Moving to a newer lint set is a
+# change of `rev`.
+[workspace.metadata.dylint]
+libraries = [{ git = "https://github.com/cppalliance/dylints", rev = "982b297ede90d37cdf8f3bf9995d1d706dcc51d4" }]
+
 [workspace.lints.rust]
 unsafe_code = "deny"
 missing_docs = "warn"

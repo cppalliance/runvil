@@ -27,7 +27,7 @@ fn research_ada_lovelace() -> TestResult<Trace> {
     )
     .args("Ada Lovelace")
     .params(move |ctx| ctx.with_tools(catalog.clone()))
-    .run(&fs::read_to_string(path)?)
+    .run(&fs::read_to_string(&path).map_err(|e| format!("read {}: {e}", path.display()))?)
 }
 
 #[test]
