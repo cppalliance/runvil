@@ -8,6 +8,8 @@ mod inject;
 mod install;
 mod run;
 mod state;
+#[cfg(test)]
+mod tests;
 
 use std::num::NonZeroU32;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering};
@@ -53,6 +55,9 @@ fn log_byte_budget(log_events: u32) -> usize {
 /// A `jump` the running chunk recorded: the target heading, and the prompt
 /// line of the author's `jump` call.
 type Jump = (String, Option<NonZeroU32>);
+
+/// The failure of a poisoned jump slot.
+const JUMP_SLOT_POISONED: &str = "jump slot poisoned";
 
 /// Collects owned values into a 1-based Lua sequence table.
 fn pack_sequence<T: mlua::IntoLua>(lua: &Lua, values: Vec<T>) -> mlua::Result<mlua::Table> {

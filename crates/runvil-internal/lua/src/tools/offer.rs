@@ -22,7 +22,7 @@ use crate::error::{self, Result};
 use crate::messages::MessageList;
 use crate::packs::{LuaPackHandle, is_adhoc, pack_object};
 use crate::proxy::key_text;
-use crate::scope::{OfferMode, OfferTarget, Offers};
+use crate::scope::{OFFERS_POISONED, OfferMode, OfferTarget, Offers};
 use crate::walk_budget::HELD_KEY_LIMIT;
 
 /// The refusal of an offer verb once the section's sets are frozen,
@@ -64,7 +64,7 @@ pub(super) fn install_offer(
             let mut offers = offering
                 .offers
                 .lock()
-                .map_err(|_| mlua::Error::external("section offers lock was poisoned"))?;
+                .map_err(|_| mlua::Error::external(error::internal(OFFERS_POISONED)))?;
             for target in targets {
                 match target {
                     OfferTarget::Tool(id) => offers.add_tool(id, mode),

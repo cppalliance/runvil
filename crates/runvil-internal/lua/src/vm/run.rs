@@ -5,7 +5,7 @@ use mlua::thread::ThreadStatus;
 use mlua::{MultiValue, Thread, Value};
 use runvil_types::error::{ErrorCode, place};
 
-use super::{Jump, SectionVm};
+use super::{JUMP_SLOT_POISONED, Jump, SectionVm};
 use crate::coro::{StashedFailure, block_guard, take_failure};
 use crate::error::{self, Error, Result, interrupted, prompt_file, set_call_line};
 use crate::error_value::{ErrorKind, error_kind};
@@ -245,9 +245,6 @@ impl SectionVm {
         }
     }
 }
-
-/// The failure of a poisoned jump slot.
-const JUMP_SLOT_POISONED: &str = "jump slot poisoned";
 
 /// Whether `mapped` is a cancellation or an exhausted Engine quota, which
 /// keep their mapping whatever the block raised.

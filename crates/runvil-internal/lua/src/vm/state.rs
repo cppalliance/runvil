@@ -15,8 +15,9 @@ use super::SectionVm;
 use crate::adhoc::AdhocTools;
 use crate::bindings::{ToolBinding, ToolSet};
 use crate::error::{self, Result, lua_runtime};
+use crate::models::SELECTION_POISONED;
 use crate::packs::is_adhoc;
-use crate::scope::{OfferMode, OfferTarget, OfferedTool, Offers, ToolCallCounts};
+use crate::scope::{OFFERS_POISONED, OfferMode, OfferTarget, OfferedTool, Offers, ToolCallCounts};
 use crate::tools::install_tool_call_counts as install_tool_call_counts_impl;
 use crate::var::var_to_json;
 
@@ -115,7 +116,7 @@ impl SectionVm {
             .selection
             .lock()
             .map(|selection| selection.clone())
-            .map_err(|_| error::internal("model selection lock was poisoned"))
+            .map_err(|_| error::internal(SELECTION_POISONED))
     }
 }
 
@@ -210,7 +211,7 @@ fn expanded(
 ) -> Result<Vec<OfferedTool>> {
     let offers = offers
         .lock()
-        .map_err(|_| error::internal("section offers lock was poisoned"))?;
+        .map_err(|_| error::internal(OFFERS_POISONED))?;
     let mut tools = Vec::new();
     let held = offers
         .offers

@@ -59,9 +59,14 @@ fn raw_gateway_binding(alias: &str) -> mlua::Result<ModelBinding> {
     ))
 }
 
-/// The error every selection read or write raises when its lock is poisoned.
+/// The failure of a poisoned model selection lock.
+pub(crate) const SELECTION_POISONED: &str = "model selection lock was poisoned";
+
+/// The error a selection read or write inside a Lua callback raises when
+/// its lock is poisoned.
+#[track_caller]
 pub(crate) fn selection_poisoned() -> mlua::Error {
-    mlua::Error::external("model selection lock was poisoned")
+    mlua::Error::external(error::internal(SELECTION_POISONED))
 }
 
 /// The type name the `models.use` target and `set_selection` refusals give

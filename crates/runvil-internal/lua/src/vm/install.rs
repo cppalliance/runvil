@@ -10,7 +10,7 @@ use mlua::Value;
 use runvil_types::emitter::Emitter;
 use serde_json::Value as Json;
 
-use super::{SectionVm, pack_sequence};
+use super::{JUMP_SLOT_POISONED, SectionVm, pack_sequence};
 use crate::coro::install_shims;
 use crate::engine_globals::{install_log, install_store_table};
 #[cfg(test)]
@@ -233,7 +233,7 @@ impl SectionVm {
                 let line = error::author_line(lua);
                 let mut slot = jump_slot
                     .lock()
-                    .map_err(|_| mlua::Error::external("jump slot poisoned"))?;
+                    .map_err(|_| mlua::Error::external(error::internal(JUMP_SLOT_POISONED)))?;
                 *slot = Some((heading, line));
                 Err(mlua::Error::external("jump transfer"))
             })

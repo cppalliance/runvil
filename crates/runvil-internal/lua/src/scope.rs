@@ -128,6 +128,9 @@ impl OfferedTool {
     }
 }
 
+/// The failure of a poisoned section offers lock.
+pub(crate) const OFFERS_POISONED: &str = "section offers lock was poisoned";
+
 /// The offers one section VM made, in call order.
 #[derive(Debug, Default)]
 pub struct Offers {

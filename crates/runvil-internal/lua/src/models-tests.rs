@@ -477,3 +477,23 @@ fn a_poisoned_selection_reaches_the_caller_as_an_internal_error() {
         "the lock failure is Engine misuse, neither an authoring nor a model failure: {error:?}"
     );
 }
+
+#[test]
+fn a_poisoned_selection_raises_the_internal_failure_inside_lua() {
+    let mut models = ModelSet::default();
+    models.push(bound_role("default", "m1"));
+    let vm = TestVm::new().models(models).shims().build();
+    let poisoner = std::sync::Arc::clone(&vm.selection);
+    let _ = std::thread::spawn(move || {
+        let _guard = poisoner.lock();
+        panic!("poison the model selection");
+    })
+    .join();
+
+    let kinds: (String, String) = vm.eval(
+        "local _, current = pcall(models.current)\n\
+         local _, chosen = pcall(models.use, 'default')\n\
+         return tostring(current.kind), tostring(chosen.kind)",
+    );
+    assert_eq!(kinds, ("internal".to_owned(), "internal".to_owned()));
+}
