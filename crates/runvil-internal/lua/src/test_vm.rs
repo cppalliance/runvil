@@ -84,7 +84,7 @@ pub(crate) fn run_chunk(
         emitter,
         section,
     )?
-    .inject_values(args, sys, access)
+    .inject_test_values(args, sys, access)
     .map_err(|failure| failure.teardown(emitter, section))?;
     vm.install_engine_globals(emitter, section)?;
     let returned: MultiValue = vm.lua().load(source).eval().map_err(error::lua)?;
@@ -175,7 +175,7 @@ pub(crate) fn offer_set() -> ToolSet {
 pub(crate) fn offers(vm: &SectionVm) -> Vec<String> {
     vm.offers()
         .lock()
-        .expect("the runtime mutex is not poisoned")
+        .expect("the offers mutex is not poisoned")
         .offers
         .iter()
         .map(|offer| {
@@ -215,8 +215,8 @@ pub(crate) fn lua_over(set: ToolSet) -> BuiltVm {
 /// catalog tool's wire name and an adhoc tool's name.
 #[track_caller]
 pub(crate) fn scoped(vm: &SectionVm) -> Vec<String> {
-    let (set, runtime) = vm.tool_bag_handles();
-    crate::current_static_set(&set, &runtime, vm.adhoc_tools())
+    let (tool_set, offers) = vm.tool_set_and_offers();
+    crate::current_static_set(&tool_set, &offers, vm.adhoc_tools())
         .expect("the scope resolves")
         .iter()
         .map(|tool| match tool {
@@ -229,10 +229,10 @@ pub(crate) fn scoped(vm: &SectionVm) -> Vec<String> {
 /// The ids of the tools `vm`'s dynamic offers name, in order.
 #[track_caller]
 pub(crate) fn dynamic(vm: &SectionVm) -> Vec<String> {
-    let (set, runtime) = vm.tool_bag_handles();
+    let (tool_set, offers) = vm.tool_set_and_offers();
     let adhoc = vm.adhoc_tools();
-    let bound = crate::current_static_set(&set, &runtime, adhoc).expect("the scope resolves");
-    crate::current_dynamic_set(&set, &runtime, adhoc, &bound)
+    let bound = crate::current_static_set(&tool_set, &offers, adhoc).expect("the scope resolves");
+    crate::current_dynamic_set(&tool_set, &offers, adhoc, &bound)
         .expect("the dynamic set resolves")
         .iter()
         .map(|tool| tool.id().to_string())
@@ -384,7 +384,7 @@ impl<'a> TestVm<'a> {
         vm.install_engine_globals(&self.emitter, self.section)
             .expect("the Engine globals install");
         if self.shims {
-            vm.install_scheduler_control_globals(|_| {
+            vm.install_control_globals(|_| {
                 Ok::<Option<SectionText>, std::convert::Infallible>(None)
             })
             .expect("the control globals install");
@@ -422,7 +422,7 @@ impl<'a> TestVm<'a> {
         }
         let empty = json!({});
         let vm = fresh
-            .inject_values_with_var(
+            .inject_values(
                 self.args,
                 self.sys.unwrap_or(&empty),
                 &access,

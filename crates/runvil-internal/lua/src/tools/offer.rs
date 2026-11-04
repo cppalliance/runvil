@@ -37,7 +37,7 @@ const TOOL_LIST_FIXED: &str = "the section's tool list is fixed at its first mod
 #[derive(Clone)]
 pub(super) struct Offering {
     pub(super) set: Arc<ToolSet>,
-    pub(super) runtime: Arc<Mutex<Offers>>,
+    pub(super) offers: Arc<Mutex<Offers>>,
     pub(super) adhoc: AdhocTools,
     pub(super) list: MessageList,
 }
@@ -61,14 +61,14 @@ pub(super) fn install_offer(
         .create_function(move |lua, args: Variadic<Value>| {
             refuse_after_render(&verb, &offering.list)?;
             let targets = offering.targets(lua, &verb, args)?;
-            let mut runtime = offering
-                .runtime
+            let mut offers = offering
+                .offers
                 .lock()
                 .map_err(|_| mlua::Error::external("section offers lock was poisoned"))?;
             for target in targets {
                 match target {
-                    OfferTarget::Tool(id) => runtime.add_tool(id, mode),
-                    OfferTarget::Pack(pack) => runtime.add_pack(pack, mode),
+                    OfferTarget::Tool(id) => offers.add_tool(id, mode),
+                    OfferTarget::Pack(pack) => offers.add_pack(pack, mode),
                 }
             }
             Ok(())

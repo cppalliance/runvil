@@ -3,7 +3,7 @@
 //! and the catalog Packs they come from, and its current model;
 //! `set_global_json` for fanout's `item`, and `tools.stats`.
 
-use std::sync::{Arc, Mutex};
+use std::sync::Mutex;
 
 use mlua::{LuaSerdeExt, Value};
 use runvil_model_client::model::ModelBinding;
@@ -16,7 +16,7 @@ use crate::adhoc::AdhocTools;
 use crate::bindings::{ToolBinding, ToolSet};
 use crate::error::{self, Result, lua_runtime};
 use crate::packs::is_adhoc;
-use crate::scope::{OfferMode, OfferTarget, OfferedTool, Offers, RenderedTools, ToolCallCounts};
+use crate::scope::{OfferMode, OfferTarget, OfferedTool, Offers, ToolCallCounts};
 use crate::tools::install_tool_call_counts as install_tool_call_counts_impl;
 use crate::var::var_to_json;
 
@@ -104,13 +104,6 @@ impl SectionVm {
         )
     }
 
-    /// Returns the section's frozen sets, or `None` when it has not frozen
-    /// them.
-    #[must_use]
-    pub fn rendered_tools(&self) -> Option<Arc<RenderedTools>> {
-        self.messages.rendered_tools()
-    }
-
     /// Returns the section's current model: the binding `models.use` last
     /// stored, else the model the section started on. `None` means the caller
     /// supplied no model.
@@ -142,11 +135,11 @@ impl SectionVm {
 /// tools are poisoned, or an offered id names no tool.
 pub fn current_static_set(
     set: &ToolSet,
-    runtime: &Mutex<Offers>,
+    offers: &Mutex<Offers>,
     adhoc: &AdhocTools,
 ) -> Result<Vec<OfferedTool>> {
     let mut tools: Vec<OfferedTool> = Vec::new();
-    for tool in expanded(set, runtime, adhoc, Some(OfferMode::Static))? {
+    for tool in expanded(set, offers, adhoc, Some(OfferMode::Static))? {
         if !tools.iter().any(|held| held.id() == tool.id()) {
             tools.push(tool);
         }
@@ -163,12 +156,12 @@ pub fn current_static_set(
 /// tools are poisoned, or an offered id names no tool.
 pub fn current_dynamic_set(
     set: &ToolSet,
-    runtime: &Mutex<Offers>,
+    offers: &Mutex<Offers>,
     adhoc: &AdhocTools,
     static_tools: &[OfferedTool],
 ) -> Result<Vec<OfferedTool>> {
     let mut tools: Vec<OfferedTool> = Vec::new();
-    for tool in expanded(set, runtime, adhoc, Some(OfferMode::Dynamic))? {
+    for tool in expanded(set, offers, adhoc, Some(OfferMode::Dynamic))? {
         let held = static_tools
             .iter()
             .chain(&tools)
@@ -190,11 +183,11 @@ pub fn current_dynamic_set(
 /// tools are poisoned, or an offered id names no tool.
 pub fn current_catalog_packs(
     set: &ToolSet,
-    runtime: &Mutex<Offers>,
+    offers: &Mutex<Offers>,
     adhoc: &AdhocTools,
 ) -> Result<Vec<PackId>> {
     let mut packs: Vec<PackId> = Vec::new();
-    for tool in expanded(set, runtime, adhoc, None)? {
+    for tool in expanded(set, offers, adhoc, None)? {
         if let OfferedTool::Catalog(info) = tool {
             let pack = info.id.pack();
             if !packs.contains(&pack) {
@@ -211,19 +204,19 @@ pub fn current_catalog_packs(
 /// offer names.
 fn expanded(
     set: &ToolSet,
-    runtime: &Mutex<Offers>,
+    offers: &Mutex<Offers>,
     adhoc: &AdhocTools,
     mode: Option<OfferMode>,
 ) -> Result<Vec<OfferedTool>> {
-    let runtime = runtime
+    let offers = offers
         .lock()
         .map_err(|_| error::internal("section offers lock was poisoned"))?;
     let mut tools = Vec::new();
-    let offers = runtime
+    let held = offers
         .offers
         .iter()
         .filter(|offer| mode.is_none_or(|mode| offer.mode == mode));
-    for offer in offers {
+    for offer in held {
         match &offer.target {
             OfferTarget::Tool(id) => {
                 let tool = if is_adhoc(&id.pack()) {

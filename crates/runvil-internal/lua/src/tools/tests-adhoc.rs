@@ -266,8 +266,8 @@ fn a_wrapper_of_a_catalog_tool_takes_its_description_and_schema_unchanged() {
          tools.adhoc({ name = 'search', description = t.description, parameters = t.parameters }, \
            function(args) return tools.call(t, args) end)",
     );
-    let (set, _) = vm.tool_bag_handles();
-    let catalog = set
+    let (tool_set, _) = vm.tool_set_and_offers();
+    let catalog = tool_set
         .catalog()
         .get(&runvil_types::tools::ToolId::parse("web/search").expect("a valid id"))
         .expect("the catalog holds the tool");
@@ -327,8 +327,8 @@ fn an_offered_adhoc_tool_counts_from_zero_and_an_unoffered_one_from_its_first_ca
          tools.adhoc({{ name = 'other', description = 'Other' }}, function() end)\n\
          tools.offer(grab)"
     ));
-    let (set, runtime) = vm.tool_bag_handles();
-    let ids: Vec<_> = crate::current_static_set(&set, &runtime, vm.adhoc_tools())
+    let (tool_set, offers) = vm.tool_set_and_offers();
+    let ids: Vec<_> = crate::current_static_set(&tool_set, &offers, vm.adhoc_tools())
         .expect("the scope resolves")
         .iter()
         .map(|tool| tool.id().clone())

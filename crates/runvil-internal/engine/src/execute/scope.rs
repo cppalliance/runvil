@@ -65,10 +65,10 @@ impl SectionOffers {
     /// # Errors
     /// Returns the expansion's error.
     pub(super) fn read(tool_set: &ToolSet, vm: &SectionVm) -> Result<Self> {
-        let (runtime, adhoc) = (vm.offers(), vm.adhoc_tools());
-        let static_tools = current_static_set(tool_set, runtime, adhoc)?;
-        let dynamic_tools = current_dynamic_set(tool_set, runtime, adhoc, &static_tools)?;
-        let packs = current_catalog_packs(tool_set, runtime, adhoc)?;
+        let (offers, adhoc) = (vm.offers(), vm.adhoc_tools());
+        let static_tools = current_static_set(tool_set, offers, adhoc)?;
+        let dynamic_tools = current_dynamic_set(tool_set, offers, adhoc, &static_tools)?;
+        let packs = current_catalog_packs(tool_set, offers, adhoc)?;
         Ok(Self {
             static_tools,
             dynamic_tools,

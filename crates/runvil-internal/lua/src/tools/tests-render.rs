@@ -81,8 +81,8 @@ fn offers_that_share_a_wire_name_all_reach_the_merge_and_only_an_id_dedupes() {
          tools.offer(tools.adhoc({ name = 'web_search', description = 'Mine' }, function() end))\n\
          tools.offer_dynamic('web')",
     );
-    let (set, runtime) = vm.tool_bag_handles();
-    let ids: Vec<String> = crate::current_static_set(&set, &runtime, vm.adhoc_tools())
+    let (tool_set, offers) = vm.tool_set_and_offers();
+    let ids: Vec<String> = crate::current_static_set(&tool_set, &offers, vm.adhoc_tools())
         .expect("the static offers resolve")
         .iter()
         .map(|tool| tool.id().to_string())
@@ -141,8 +141,8 @@ fn each_catalog_pack_comes_once_where_one_of_its_tools_was_first_offered_into_ei
          tools.offer('gh/search')\n\
          tools.offer_dynamic('web/fetch')",
     );
-    let (set, runtime) = vm.tool_bag_handles();
-    let packs: Vec<String> = crate::current_catalog_packs(&set, &runtime, vm.adhoc_tools())
+    let (tool_set, offers) = vm.tool_set_and_offers();
+    let packs: Vec<String> = crate::current_catalog_packs(&tool_set, &offers, vm.adhoc_tools())
         .expect("the offers resolve")
         .iter()
         .map(ToString::to_string)
@@ -171,8 +171,8 @@ fn dynamic_offers_leave_the_static_bindings_unchanged() {
          tools.offer_dynamic(tools.packs)",
     );
     let bindings = |vm: &crate::SectionVm| {
-        let (set, runtime) = vm.tool_bag_handles();
-        crate::current_static_set(&set, &runtime, vm.adhoc_tools()).expect("the scope resolves")
+        let (tool_set, offers) = vm.tool_set_and_offers();
+        crate::current_static_set(&tool_set, &offers, vm.adhoc_tools()).expect("the scope resolves")
     };
     assert_eq!(bindings(&plain), bindings(&with_dynamic));
 }

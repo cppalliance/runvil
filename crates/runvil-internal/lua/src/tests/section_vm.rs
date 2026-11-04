@@ -103,7 +103,7 @@ fn a_refused_injection_hands_back_the_vm_for_its_teardown() {
     let recorder = Recorder::default();
     let failure = SectionVm::new(&test_nonce(), recorder.emitter(), "Seed")
         .expect("VM must build")
-        .inject_values_with_var(
+        .inject_values(
             "",
             &json!({}),
             &fresh_access(),
@@ -176,7 +176,7 @@ fn section_vm_value_injection_bypasses_chunk_global_metatables() {
         "Test",
     )
     .expect("VM must build")
-    .inject_values("private input", &json!({}), &fresh_access())
+    .inject_test_values("private input", &json!({}), &fresh_access())
     .expect("Engine values must inject");
     let observer = null_emitter();
     vm.install_engine_globals(&observer, "Test")
@@ -289,7 +289,7 @@ fn section_lifecycle_reports_are_ordered_exact_and_payload_free() {
     let recorder = Recorder::default();
     let vm = SectionVm::new(&test_nonce(), recorder.emitter(), "Gather")
         .expect("VM must build")
-        .inject_values("private input", &json!({}), &fresh_access())
+        .inject_test_values("private input", &json!({}), &fresh_access())
         .expect("Engine values must inject");
     let observer = recorder.emitter().clone();
     vm.install_engine_globals(&observer, "Gather")
@@ -350,7 +350,7 @@ fn call_with_a_non_string_target_errors() {
     // `resolve_section_target` boundary as the Engine: a number is not a
     // heading, and the error says so.
     let vm = TestVm::new().build();
-    vm.install_control_globals(
+    vm.install_test_control_globals(
         |target, _, _| resolve_section_target(target).map_err(crate::error::lua),
         |_| Err(crate::lua_runtime("prompt reads are not needed here")),
     )

@@ -221,9 +221,9 @@ impl ChainOps<'_> {
             }
             ids
         } else {
-            let (runtime, adhoc) = (vm.offers(), vm.adhoc_tools());
-            let static_tools = current_static_set(tool_set, runtime, adhoc)?;
-            let dynamic_tools = current_dynamic_set(tool_set, runtime, adhoc, &static_tools)?;
+            let (offers, adhoc) = (vm.offers(), vm.adhoc_tools());
+            let static_tools = current_static_set(tool_set, offers, adhoc)?;
+            let dynamic_tools = current_dynamic_set(tool_set, offers, adhoc, &static_tools)?;
             static_tools
                 .iter()
                 .chain(&dynamic_tools)

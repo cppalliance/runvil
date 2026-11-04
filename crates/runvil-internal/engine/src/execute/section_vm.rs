@@ -107,7 +107,7 @@ pub(crate) struct SectionVmSetup<'a> {
 /// [`SectionVm::install_engine_globals`], the
 /// `ui()` global when the run supplied a snapshot, the `item` global when
 /// the seed includes one, the control surface
-/// ([`SectionVm::install_scheduler_control_globals`] for `jump` and the
+/// ([`SectionVm::install_control_globals`] for `jump` and the
 /// `prompt` reads, plus [`SectionVm::install_coro_shims`] for the
 /// suspending calls, which the scheduler drives as yield shims,
 /// `models.loop` and `models.compact` included), the run's Pack preludes,
@@ -144,7 +144,7 @@ where
         vm.allow_raw_model_ids();
     }
     let mut vm = vm
-        .inject_values_with_var(
+        .inject_values(
             setup.args,
             setup.sys,
             setup.access,
@@ -185,7 +185,7 @@ where
     if let Some(item) = setup.seed.item {
         vm.set_global_json("item", item)?;
     }
-    vm.install_scheduler_control_globals(read)?;
+    vm.install_control_globals(read)?;
     vm.install_coro_shims(setup.max_tool_iterations)?;
     // The preludes read `tools` and `store` from `_G` as they install, so
     // they follow the yield shims.

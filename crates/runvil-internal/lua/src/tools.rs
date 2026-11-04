@@ -94,7 +94,7 @@ pub(crate) fn install_tools(
     lua: &Lua,
     globals: &Table,
     set: &Arc<ToolSet>,
-    runtime: &Arc<Mutex<Offers>>,
+    offers: &Arc<Mutex<Offers>>,
     adhoc_tools: &AdhocTools,
     list: &MessageList,
 ) -> Result<()> {
@@ -104,7 +104,7 @@ pub(crate) fn install_tools(
     install_pack_list(lua, &tools, names)?;
     let offering = Offering {
         set: Arc::clone(set),
-        runtime: Arc::clone(runtime),
+        offers: Arc::clone(offers),
         adhoc: adhoc_tools.clone(),
         list: list.clone(),
     };

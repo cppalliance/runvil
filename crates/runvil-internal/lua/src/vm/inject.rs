@@ -73,7 +73,7 @@ impl SectionVm<Uninjected> {
         clippy::similar_names,
         reason = "args and argv are the spec'd global names; the pair is intentional"
     )]
-    pub fn inject_values_with_var(
+    pub fn inject_values(
         self,
         args: &str,
         sys: &Json,

@@ -275,7 +275,7 @@ impl ChainOps<'_> {
                 // absence is a scheduler fault, never an author-visible
                 // out-of-scope refusal.
                 let vm = chain.frame()?.vm();
-                let frozen = vm.rendered_tools().ok_or_else(|| {
+                let frozen = vm.messages().rendered_tools().ok_or_else(|| {
                     error::internal("a parked chat round's section holds its frozen sets")
                 })?;
                 let scope = Scope {

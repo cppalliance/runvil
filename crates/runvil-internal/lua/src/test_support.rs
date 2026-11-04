@@ -157,7 +157,7 @@ impl SectionVm<Uninjected> {
     /// # Errors
     /// Returns the [`InjectFailure`] holding the bridging failure if Engine
     /// values cannot be bridged.
-    pub fn inject_values(
+    pub fn inject_test_values(
         self,
         args: &str,
         sys: &serde_json::Value,
@@ -165,7 +165,7 @@ impl SectionVm<Uninjected> {
     ) -> std::result::Result<SectionVm, InjectFailure> {
         let set = &self.bound_models;
         let selection = Arc::new(Mutex::new(set.binding("default").cloned()));
-        self.inject_values_with_var(args, sys, access, None, Argv::Frozen(None), &selection)
+        self.inject_values(args, sys, access, None, Argv::Frozen(None), &selection)
     }
 }
 
@@ -217,7 +217,7 @@ impl SectionVm {
 
     /// Returns the shared tool set and the live section offers.
     #[must_use]
-    pub fn tool_bag_handles(&self) -> (Arc<ToolSet>, Arc<Mutex<Offers>>) {
+    pub fn tool_set_and_offers(&self) -> (Arc<ToolSet>, Arc<Mutex<Offers>>) {
         (Arc::clone(&self.tool_set), Arc::clone(self.offers()))
     }
 }

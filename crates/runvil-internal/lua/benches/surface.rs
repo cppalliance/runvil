@@ -47,7 +47,7 @@ fn builder_vm() -> SectionVm {
         SECTION,
     )
     .expect("the bench VM builds")
-    .inject_values(
+    .inject_test_values(
         "",
         &json!({}),
         &std::sync::Arc::new(

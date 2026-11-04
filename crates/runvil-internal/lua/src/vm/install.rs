@@ -81,7 +81,7 @@ impl SectionVm {
     /// lifecycle.
     ///
     /// Test-only: production installs `jump` and the `prompt` reads through
-    /// [`install_scheduler_control_globals`](Self::install_scheduler_control_globals)
+    /// [`install_control_globals`](Self::install_control_globals)
     /// and `call` as a yield shim. The
     /// callbacks own their run context, so the closures stay valid across
     /// every chunk this VM runs. The `jump`
@@ -95,7 +95,7 @@ impl SectionVm {
     /// # Errors
     /// Returns a `LuaRuntime` failure if any global cannot be installed.
     #[cfg(test)]
-    pub(crate) fn install_control_globals<E, R>(&self, call_callback: E, read: R) -> Result<()>
+    pub(crate) fn install_test_control_globals<E, R>(&self, call_callback: E, read: R) -> Result<()>
     where
         E: Fn(Value, Option<String>, Json) -> std::result::Result<String, Error> + Send + 'static,
         R: Fn(String) -> std::result::Result<Option<SectionText>, Error> + Send + Sync + 'static,
@@ -124,7 +124,7 @@ impl SectionVm {
     ///
     /// # Errors
     /// Returns a `LuaRuntime` failure if any global cannot be installed.
-    pub fn install_scheduler_control_globals<R, E>(&self, read: R) -> Result<()>
+    pub fn install_control_globals<R, E>(&self, read: R) -> Result<()>
     where
         R: Fn(String) -> std::result::Result<Option<SectionText>, E> + Send + Sync + 'static,
         E: std::error::Error + Send + Sync + 'static,

@@ -170,7 +170,7 @@ impl SectionVm<Uninjected> {
     ///
     /// The VM shares an empty tool and model set, so the validating
     /// `tools.offer` installed by
-    /// [`inject_values_with_var`](Self::inject_values_with_var) refuses
+    /// [`inject_values`](Self::inject_values) refuses
     /// every id.
     ///
     /// # Errors
@@ -228,7 +228,7 @@ impl SectionVm<Uninjected> {
     ///
     /// The sets are the run's own handles, not snapshots: the run catalog
     /// and the filled roles back the validating `tools`/`models` tables that
-    /// [`inject_values_with_var`](Self::inject_values_with_var) installs.
+    /// [`inject_values`](Self::inject_values) installs.
     /// Nothing writes either set during a run. H1 is section 0 on this same
     /// path.
     ///

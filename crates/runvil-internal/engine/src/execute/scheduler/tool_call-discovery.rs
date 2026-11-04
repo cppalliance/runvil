@@ -82,14 +82,15 @@ impl ChainOps<'_> {
         site: CallSite,
     ) -> Result<Dispatched> {
         let tool = DiscoveryTool::of(binding.id());
-        let frozen = self
-            .chain
-            .frame()?
-            .vm()
-            .rendered_tools()
-            .ok_or(error::internal(
-                "a model call's section holds its frozen sets",
-            ))?;
+        let frozen =
+            self.chain
+                .frame()?
+                .vm()
+                .messages()
+                .rendered_tools()
+                .ok_or(error::internal(
+                    "a model call's section holds its frozen sets",
+                ))?;
         let discovered = match tool {
             Some(DiscoveryTool::Search) => search(&frozen, &args)?,
             Some(DiscoveryTool::Call) => reach(&frozen, args),
