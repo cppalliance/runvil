@@ -39,6 +39,7 @@ Seven terms have exactly one meaning each, everywhere in this repository: code c
   3. Add a new facility. New machinery must have a material benefit beyond tidiness.
 - When improving an existing facility, prefer an improvement that serves a problem class beyond the current case over one that solves only the case at hand, when the general shape costs no more.
 - Error and status messages are designed assuming model consumption: concise, factual, and self-contained, naming what is missing or unmet with required versus actual, because a message may arrive as tool output that a model reasons about.
+- There are no users and no recorded runs, logs, or stored data to preserve, so backward compatibility does not matter: change formats, schemas, and APIs freely, and never bump a format, schema, or crate version number.
 
 ## Engineering
 
