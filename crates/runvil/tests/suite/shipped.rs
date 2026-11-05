@@ -26,7 +26,7 @@ fn research_ada_lovelace() -> TestResult<Trace> {
         [search, text("a factual summary")],
     )
     .args("Ada Lovelace")
-    .config(move |ctx| ctx.with_tools(catalog.clone()))
+    .params(move |ctx| ctx.with_tools(catalog.clone()))
     .run(&fs::read_to_string(path)?)
 }
 

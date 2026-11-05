@@ -18,8 +18,8 @@ fn h1_handle_infer() -> String {
 }
 
 #[test]
-fn the_callers_client_serves_a_run_the_config_never_names() {
-    // The config is the Engine's input; the scripted model lives on the
+fn the_callers_client_serves_a_run_the_params_never_name() {
+    // The params are the Engine's input; the scripted model lives on the
     // scenario, which answers the run's completions with it. Nothing about
     // the gateway crosses the Engine's boundary.
     let gateway = ScriptedChat::new(vec![text("canned answer")]);
@@ -196,7 +196,7 @@ fn cancelled_nested_infer_does_not_report_model_turn_failed() {
     let mut driving = Scenario::new(source.build())
         .bound()
         .chat(&gateway)
-        .config(move |ctx| ctx.with_cancel(canceller))
+        .params(move |ctx| ctx.with_cancel(canceller))
         .hold(|effect| matches!(effect, Effect::Chat { .. }))
         .start();
     while driving.step() {}

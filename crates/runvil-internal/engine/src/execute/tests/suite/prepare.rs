@@ -11,8 +11,8 @@ use std::sync::{Arc, Mutex};
 use crate::RunErrorKind;
 use crate::execute::context::ChainState;
 use crate::execute::run_error_kind;
-use crate::execute::tests::context::test_config;
-use crate::execute::{Effect, EffectAnswer, RunConfig};
+use crate::execute::tests::context::test_params;
+use crate::execute::{Effect, EffectAnswer, RunParams};
 use crate::model::ModelBinding;
 use crate::prompt::Prompt;
 use crate::test_support::scenario::Scenario;
@@ -37,7 +37,7 @@ const DECLARES_NOTHING: &str = concat!(
 
 #[test]
 fn two_runs_writing_the_same_store_path_do_not_conflict() {
-    let (ctx_a, ctx_b) = (test_config("run-a"), test_config("run-b"));
+    let (ctx_a, ctx_b) = (test_params("run-a"), test_params("run-b"));
     let access_a = ctx_a
         .vfs
         .acquire(Origin::new("run-a"))
@@ -99,10 +99,10 @@ fn declaring(front: &str, lua: &str) -> String {
         .build()
 }
 
-/// The state a run of `prompt` builds over `config`, as `Run::new` builds
+/// The state a run of `prompt` builds over `params`, as `Run::new` builds
 /// it.
-fn state_of(prompt: &Prompt, config: RunConfig) -> ChainState {
-    ChainState::root(Arc::new(prompt.clone()), "", config)
+fn state_of(prompt: &Prompt, params: RunParams) -> ChainState {
+    ChainState::root(Arc::new(prompt.clone()), "", params)
 }
 
 /// The refusal notice of `scenario`'s run, after asserting that its first
@@ -131,7 +131,7 @@ fn a_one_model_map_gives_all_five_roles_that_model() {
     let model = model_named("only", 32_000, ThinkingMode::Switchable);
     let state = state_of(
         &parse_ok(DECLARES_NOTHING),
-        test_config("one-model").with_models(role_map([(ModelRole::Default, model.clone())])),
+        test_params("one-model").with_models(role_map([(ModelRole::Default, model.clone())])),
     );
     assert_eq!(state.refusal(), None);
     let set = state.model_set();
@@ -152,7 +152,7 @@ fn a_map_with_a_strong_entry_gives_strong_that_model_and_the_other_roles_the_def
     let strong = model_named("strong-model", 200_000, ThinkingMode::Always);
     let state = state_of(
         &parse_ok(DECLARES_NOTHING),
-        test_config("two-models").with_models(role_map([
+        test_params("two-models").with_models(role_map([
             (ModelRole::Default, default.clone()),
             (ModelRole::Strong, strong.clone()),
         ])),
@@ -216,7 +216,7 @@ fn a_role_binding_carries_the_description_of_the_model_that_fills_it() {
     let prompt = parse_ok(&declaring("models: { strong: {} }", "return 'x'"));
     let state = state_of(
         &prompt,
-        test_config("description").with_models(role_map([(
+        test_params("description").with_models(role_map([(
             ModelRole::Default,
             current_model(32_000, ThinkingMode::Never),
         )])),
@@ -261,7 +261,7 @@ fn a_non_empty_map_without_a_default_entry_leaves_the_roles_empty_and_refuses_th
     let strong = model_named("strong-model", 200_000, ThinkingMode::Switchable);
     let state = state_of(
         &parse_ok(DECLARES_NOTHING),
-        test_config("unbound").with_models(role_map([(ModelRole::Strong, strong.clone())])),
+        test_params("unbound").with_models(role_map([(ModelRole::Strong, strong.clone())])),
     );
     assert!(
         state.model_set().bindings().is_empty(),
@@ -279,7 +279,7 @@ fn a_non_empty_map_without_a_default_entry_leaves_the_roles_empty_and_refuses_th
 fn an_empty_map_leaves_the_model_set_empty_and_a_model_call_raises_model_required() {
     let state = state_of(
         &parse_ok(DECLARES_NOTHING),
-        test_config("empty").with_models(BTreeMap::new()),
+        test_params("empty").with_models(BTreeMap::new()),
     );
     assert_eq!(state.refusal(), None);
     assert!(state.model_set().bindings().is_empty());
@@ -471,7 +471,7 @@ fn a_raw_id_handle_runs_the_next_round_on_its_gateway_model() {
         models.use(models.get('vendor/raw-model'))
         return models.infer('one')",
     )
-    .config(|ctx| ctx.with_ui(serde_json::json!({})))
+    .params(|ctx| ctx.with_ui(serde_json::json!({})))
     .chat(&gateway)
     .run();
     assert_eq!(trace.text(), "a");

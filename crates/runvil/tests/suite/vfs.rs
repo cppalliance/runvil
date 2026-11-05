@@ -10,7 +10,7 @@ use runvil::vfs::{
 use super::support::{Scenario, TestResult, note};
 
 fn run_note(vfs: VfsRef) -> TestResult<String> {
-    let scenario = Scenario::default().config(move |ctx| ctx.with_vfs(vfs.clone()));
+    let scenario = Scenario::default().params(move |ctx| ctx.with_vfs(vfs.clone()));
     Ok(scenario.run(&note("'hello'"))?.text()?.to_owned())
 }
 

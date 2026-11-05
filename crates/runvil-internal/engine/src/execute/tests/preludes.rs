@@ -1,5 +1,5 @@
 //! Pack preludes in a run: every section VM installs the preludes
-//! handed to `RunConfig::with_preludes`, fanout arms and spawned task chains
+//! handed to `RunParams::with_preludes`, fanout arms and spawned task chains
 //! included, and the libraries a section requires see them; a prelude
 //! that fails to load or whose global collides fails the run as a Lua
 //! failure before it issues any effect; a store conflict a prelude's
@@ -41,7 +41,7 @@ fn prelude_run(md: &str, preludes: Vec<Prelude>) -> Trace {
     Scenario::new(md)
         .bound()
         .tool(echo_tool())
-        .config(move |ctx| ctx.with_preludes(preludes))
+        .params(move |ctx| ctx.with_preludes(preludes))
         .run()
 }
 

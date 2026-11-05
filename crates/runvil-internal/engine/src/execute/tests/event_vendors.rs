@@ -23,8 +23,8 @@ const BOTH_CALLERS: &str = "tools.offer('tools/echo')
      return tools.call('tools/echo', { value = 'script' })";
 
 /// The run of [`BOTH_CALLERS`] with `tools/echo` in the catalog, its
-/// config edited by `roster`.
-fn both_callers(roster: impl FnOnce(RunConfig) -> RunConfig + 'static) -> Trace {
+/// params edited by `roster`.
+fn both_callers(roster: impl FnOnce(RunParams) -> RunParams + 'static) -> Trace {
     let gateway = ScriptedChat::new(vec![
         calls(&[
             ("call_1", "grab", r#"{"value":"x"}"#),
@@ -34,7 +34,7 @@ fn both_callers(roster: impl FnOnce(RunConfig) -> RunConfig + 'static) -> Trace 
     ]);
     let trace = loop_scenario(one_section(BOTH_CALLERS))
         .tool(echo_tool())
-        .config(roster)
+        .params(roster)
         .chat(&gateway)
         .run();
     assert_eq!(trace.text(), "echoed: script");

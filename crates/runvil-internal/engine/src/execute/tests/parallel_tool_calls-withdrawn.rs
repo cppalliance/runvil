@@ -48,7 +48,7 @@ fn echo_run(source: &str, cancel: &CancelHandle) -> Run {
     let cancel = cancel.clone();
     loop_scenario(source)
         .offer("echo", echo_tool())
-        .config(move |ctx| ctx.with_cancel(cancel))
+        .params(move |ctx| ctx.with_cancel(cancel))
         .into_run()
 }
 

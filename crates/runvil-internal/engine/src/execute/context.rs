@@ -26,8 +26,8 @@ use crate::lua::{Argv, ToolSet};
 use crate::model::{ModelBinding, ModelRole, ModelSet};
 use crate::prompt::Prompt;
 
-use super::config::{RunConfig, RunLimits};
 use super::fill;
+use super::params::{RunLimits, RunParams};
 use super::requirements::Requirements;
 use super::section_context::SectionSys;
 use super::section_vm::{SectionVmSetup, VmSeed};
@@ -70,22 +70,22 @@ struct SharedState {
     /// returned to the caller.
     events: EventSink,
     /// The run's cancel flag: polled between chain steps and installed on
-    /// every section VM's instruction hook. It is the config's one handle,
-    /// the flag the caller supplies with `RunConfig::with_cancel` and keeps
-    /// its own clone of.
+    /// every section VM's instruction hook. It is the one handle the params
+    /// hold, the flag the caller supplies with `RunParams::with_cancel` and
+    /// keeps its own clone of.
     cancel: CancelHandle,
-    /// The run's tool set: built from the config's catalog at construction
+    /// The run's tool set: built from the params' catalog at construction
     /// and changed by nothing during the run, so every reader, every
     /// section VM (H1 included) among them, shares it with no lock and no
     /// copy.
     tool_set: Arc<ToolSet>,
-    /// The run's model set: filled from the config's role map at
+    /// The run's model set: filled from the params' role map at
     /// construction, shared with every section VM (H1 included) and changed
     /// by nothing during the run, so every reader shares it with no lock and
     /// no copy.
     model_set: Arc<ModelSet>,
     /// The refusal the run's first step fails with: what the prompt
-    /// requires that the config lacks, or `None` when it lacks nothing.
+    /// requires that the params lack, or `None` when they lack nothing.
     refusal: Option<Error>,
     /// The run's `started_at` rendered as RFC 3339, stamped into every
     /// section's `sys.when`, the H1 pass included.
@@ -134,17 +134,17 @@ pub(crate) struct ChainState {
 
 impl ChainState {
     /// Builds the run's shared state and the root chain's state for one
-    /// run of `prompt` over `config`, which it consumes. The turn counter
+    /// run of `prompt` over `params`, which it consumes. The turn counter
     /// is minted here (starting at zero), as are the run's shared tool and
     /// model sets - the tool set built from the catalog and the roster,
     /// the model set filled from the role map (it stays empty for an empty
     /// map) - and the refusal for what the prompt requires that
-    /// `config` lacks; the nonce derives from `config`'s seed and `when`
-    /// renders `config`'s `started_at`, so two states over the same inputs
+    /// `params` lacks; the nonce derives from `params`'s seed and `when`
+    /// renders `params`'s `started_at`, so two states over the same inputs
     /// agree on both.
     #[must_use]
-    pub(super) fn root(prompt: Arc<Prompt>, args: &str, config: RunConfig) -> Self {
-        let RunConfig {
+    pub(super) fn root(prompt: Arc<Prompt>, args: &str, params: RunParams) -> Self {
+        let RunParams {
             name,
             seed,
             started_at,
@@ -158,7 +158,7 @@ impl ChainState {
             tools,
             packs,
             preludes,
-        } = config;
+        } = params;
         let mut requirements = Requirements::default();
         let model_set = Arc::new(fill::fill_model_set(&prompt, models, &mut requirements));
         requirements.check_packs(&prompt, &tools, packs.as_ref());
@@ -169,7 +169,7 @@ impl ChainState {
             packs.unwrap_or_default(),
         ));
         let execution: Arc<str> = Arc::from(name);
-        // The root task's event sequence starts at the config's
+        // The root task's event sequence starts at the params'
         // `provenance_start`: past any parse events the caller put in the
         // stream ahead of the run, or at zero.
         let events = EventSink::seeded(provenance_start);
@@ -325,7 +325,7 @@ impl ChainState {
     }
 
     /// The refusal the run's first step fails with, or `None` when the
-    /// config lacks nothing the prompt requires.
+    /// params lack nothing the prompt requires.
     pub(super) fn refusal(&self) -> Option<&Error> {
         self.shared.refusal.as_ref()
     }

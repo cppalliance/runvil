@@ -5,20 +5,20 @@
 //! [`Run::step`] returns [`Step::Pending`] with the effects the run waits on.
 //! The caller performs each effect and hands its answer to [`Run::resume`].
 //! The run ends at [`Step::Done`] with its [`RunOutcome`].
-//! Before the run starts, the caller puts on its [`RunConfig`] the tools
+//! Before the run starts, the caller puts on its [`RunParams`] the tools
 //! a run may offer, the Packs it holds, and the role map that fills the
-//! five model roles. The run's first step checks the config against what
-//! the prompt requires, and a config that falls short ends the run there
+//! five model roles. The run's first step checks the params against what
+//! the prompt requires, and params that fall short end the run there
 //! with a [`RequirementsUnmet`](RunErrorKind::RequirementsUnmet) failure
 //! that names every gap.
 //!
 //! The crate's `greeter` example is that whole loop in one program.
 
 pub use runvil_engine::Run;
-pub use runvil_engine::RunConfig;
 pub use runvil_engine::RunErrorKind;
 pub use runvil_engine::RunLimits;
 pub use runvil_engine::RunOutcome;
+pub use runvil_engine::RunParams;
 pub use runvil_engine::Step;
 pub use runvil_prompt::Prompt;
 pub use runvil_types::seed::RunSeed;
@@ -175,7 +175,7 @@ pub mod cancel {
 }
 
 pub mod timestamp {
-    //! The start time a run's config carries, which a prompt reads as
+    //! The start time a run's params carry, which a prompt reads as
     //! `sys.when`.
 
     pub use runvil_types::timestamp::Timestamp;

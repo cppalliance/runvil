@@ -7,7 +7,7 @@
 //! reaches every task while one task can be cancelled without touching its
 //! siblings or its owner.
 //!
-//! This is the handle the Engine's `RunConfig` holds. A caller that must
+//! This is the handle the Engine's `RunParams` holds. A caller that must
 //! wait on the flag itself awaits [`CancelHandle::cancelled`], a std-only
 //! future the cancel itself wakes, in place of a timer that polls the flag.
 

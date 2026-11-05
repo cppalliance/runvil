@@ -6,7 +6,7 @@ use super::*;
 
 #[test]
 fn a_run_whose_only_section_returns_a_literal_is_done_at_its_first_step() {
-    let mut run = run_of("return 'hello'", run_config());
+    let mut run = run_of("return 'hello'", run_params());
     let Step::Done {
         outcome: RunOutcome::Completed { final_text },
         ..
@@ -23,7 +23,7 @@ fn a_run_that_cannot_start_reports_its_failure_on_the_first_step() {
     let prompt = Prompt::parse(source, "prompt", "run-test")
         .0
         .expect("the prompt parses whatever version it declares");
-    let mut run = Run::new(Arc::new(prompt), "", run_config());
+    let mut run = Run::new(Arc::new(prompt), "", run_params());
     let Step::Done { outcome, events } = run.step() else {
         panic!("a run that cannot start is done at once");
     };
@@ -52,7 +52,7 @@ fn a_run_that_cannot_start_reports_its_failure_on_the_first_step() {
 
 #[test]
 fn an_answer_before_the_first_step_fails_the_run_with_no_run_events() {
-    let mut run = run_of("return 'never runs'", run_config());
+    let mut run = run_of("return 'never runs'", run_params());
     run.resume(EffectId(7), EffectAnswer::Timer);
     assert!(run.decided_for_test(), "the stray answer decides the run");
     let Step::Done { outcome, events } = run.step() else {

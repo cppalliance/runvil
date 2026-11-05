@@ -17,7 +17,7 @@ use runvil::model::{Completion, CompletionResult, ModelId, ModelInfo, ModelRole,
 use runvil::timestamp::Timestamp;
 use runvil::tools::{ToolCatalog, ToolId, ToolInfo, ToolOutput};
 use runvil::vfs::perform_vfs_op;
-use runvil::{Prompt, Run, RunConfig, RunOutcome, RunSeed, Step};
+use runvil::{Prompt, Run, RunOutcome, RunParams, RunSeed, Step};
 
 /// Writes a note, asks the default model to reply, and shouts the reply.
 pub const GREETER: &str = concat!(
@@ -58,7 +58,7 @@ pub fn answer(effect: Effect) -> EffectAnswer {
 /// # Errors
 ///
 /// Returns an error when the greeter fails to parse or the run ends
-/// without text, as it does when its first step finds that the config
+/// without text, as it does when its first step finds that the params
 /// cannot satisfy the prompt.
 ///
 /// # Panics
@@ -72,10 +72,10 @@ pub fn greet() -> Result<String, Box<dyn Error>> {
     let mut log: Vec<Event> = parse_events.clone();
     let prompt = parsed?;
 
-    // 2. Build the config: run events number on from the parse events. A
+    // 2. Build the params: run events number on from the parse events. A
     //    live caller draws the seed's 32 bytes from a CSPRNG; the example
     //    fixes them.
-    let ctx = RunConfig::new(
+    let ctx = RunParams::new(
         "greeter",
         RunSeed::from_bytes([7; 32]),
         Timestamp::UNIX_EPOCH,
@@ -100,7 +100,7 @@ pub fn greet() -> Result<String, Box<dyn Error>> {
         .with_tools(catalog)
         .with_models(BTreeMap::from([(ModelRole::Default, model)]));
 
-    // 4. Give the config a cancel flag, keep a clone for anything that may
+    // 4. Give the params a cancel flag, keep a clone for anything that may
     //    need to stop the run, and create the run.
     let cancel = CancelHandle::new();
     let mut run = Run::new(Arc::new(prompt), "", ctx.with_cancel(cancel.clone()));

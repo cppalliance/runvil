@@ -50,7 +50,7 @@ impl Chain {
         use runvil_types::ids::TaskId;
 
         use super::{CallDepth, ChatAnchor, Counters, Walk};
-        use crate::execute::RunConfig;
+        use crate::execute::RunParams;
         use crate::execute::context::ChainState;
         use crate::execute::section_context::TaskSeed;
         use crate::heading_address::{SectionIndex, SectionPos};
@@ -67,7 +67,7 @@ impl Chain {
         let ctx = ChainState::root(
             Arc::new(prompt),
             "",
-            RunConfig::new("chain-test", TEST_SEED, TEST_STARTED_AT),
+            RunParams::new("chain-test", TEST_SEED, TEST_STARTED_AT),
         );
         Chain {
             task: TaskId::from(lineage.clone()),

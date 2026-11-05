@@ -16,7 +16,7 @@ use runvil::model::{
 };
 use runvil::timestamp::Timestamp;
 use runvil::tools::{ToolCatalog, ToolId, ToolInfo, ToolOutput};
-use runvil::{Prompt, Run, RunConfig, RunOutcome, RunSeed, Step};
+use runvil::{Prompt, Run, RunOutcome, RunParams, RunSeed, Step};
 use serde_json::json;
 
 use super::*;
@@ -68,7 +68,7 @@ fn tool_round(offered: &[Offered]) -> Round {
         NonZeroU32::new(8_192).expect("8192 is non-zero"),
         ThinkingMode::Never,
     );
-    let ctx = RunConfig::new("round", RunSeed::from_bytes([7; 32]), Timestamp::UNIX_EPOCH);
+    let ctx = RunParams::new("round", RunSeed::from_bytes([7; 32]), Timestamp::UNIX_EPOCH);
     let catalog = ToolCatalog::new(tools).expect("the offered tools are distinct");
     let ctx = ctx
         .with_tools(catalog)

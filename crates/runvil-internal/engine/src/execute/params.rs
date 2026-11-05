@@ -1,9 +1,9 @@
-//! Per-run config and resource limits: [`RunConfig`] and [`RunLimits`].
+//! Per-run params and resource limits: [`RunParams`] and [`RunLimits`].
 
 use std::collections::BTreeMap;
 use std::fmt;
 
-#[path = "config-limits.rs"]
+#[path = "params-limits.rs"]
 mod limits;
 
 use runvil_types::cancel::CancelHandle;
@@ -20,23 +20,23 @@ use crate::model::{ModelInfo, ModelRole};
 
 /// The inputs for one run of a prompt.
 ///
-/// The caller builds a config with `new` and the `with_*` builder
+/// The caller builds the params with `new` and the `with_*` builder
 /// methods, among them the run's tool catalog
-/// ([`with_tools`](RunConfig::with_tools)), Pack roster
-/// ([`with_packs`](RunConfig::with_packs)), Pack preludes
-/// ([`with_preludes`](RunConfig::with_preludes)), and role map
-/// ([`with_models`](RunConfig::with_models)). Building the run fills the
+/// ([`with_tools`](RunParams::with_tools)), Pack roster
+/// ([`with_packs`](RunParams::with_packs)), Pack preludes
+/// ([`with_preludes`](RunParams::with_preludes)), and role map
+/// ([`with_models`](RunParams::with_models)). Building the run fills the
 /// five model roles from the role map, and the run's first step checks
-/// the config against what the prompt requires. The Engine owns the
-/// config for the run. Each config belongs to exactly one run.
+/// the params against what the prompt requires. The Engine owns the
+/// params for the run. Each `RunParams` belongs to exactly one run.
 ///
-/// The config holds only the Engine's input. The observer, client, tool
+/// The params hold only the Engine's input. The observer, client, tool
 /// implementations, broker, and capture belong to the caller. The Engine
 /// reports events and issues effects as values, and returns each one to
 /// the caller from `step`.
 ///
 /// The caller supplies the run's clock and randomness through `new`.
-pub struct RunConfig {
+pub struct RunParams {
     /// The caller's run label, moved into `SharedState::execution` at start
     /// and read nowhere else.
     pub(super) name: String,
@@ -71,11 +71,11 @@ pub struct RunConfig {
     pub(super) preludes: Vec<Prelude>,
 }
 
-impl RunConfig {
-    /// Builds a config for a run named `name`, with the given `seed` and
+impl RunParams {
+    /// Builds the params for a run named `name`, with the given `seed` and
     /// `started_at`.
     ///
-    /// The new config has a fresh cancel flag, a `ui` snapshot of `None`,
+    /// The new params have a fresh cancel flag, a `ui` snapshot of `None`,
     /// debug reporting off, default [`RunLimits`], and the default
     /// filesystem, which is a fresh memory store at `/`.
     ///
@@ -85,8 +85,8 @@ impl RunConfig {
     /// the instant every section reads as `sys.when`. The caller records
     /// both values, and a replay passes them back verbatim.
     #[must_use]
-    pub fn new(name: impl Into<String>, seed: RunSeed, started_at: Timestamp) -> RunConfig {
-        RunConfig {
+    pub fn new(name: impl Into<String>, seed: RunSeed, started_at: Timestamp) -> RunParams {
+        RunParams {
             name: name.into(),
             seed,
             started_at,
@@ -110,7 +110,7 @@ impl RunConfig {
     /// clone a body for them. A caller that wants the pair in the event
     /// stream, such as for a debug capture, passes `true`.
     #[must_use]
-    pub fn with_report_debug(mut self, report: bool) -> RunConfig {
+    pub fn with_report_debug(mut self, report: bool) -> RunParams {
         self.report_debug = report;
         self
     }
@@ -133,14 +133,14 @@ impl RunConfig {
     /// A caller that cancels through an awaitable token must bridge the
     /// token to this flag by setting the flag when the token fires.
     #[must_use]
-    pub fn with_cancel(mut self, handle: CancelHandle) -> RunConfig {
+    pub fn with_cancel(mut self, handle: CancelHandle) -> RunParams {
         self.cancel = handle;
         self
     }
 
     /// Sets the resource limits honored across the run.
     #[must_use]
-    pub fn with_limits(mut self, limits: RunLimits) -> RunConfig {
+    pub fn with_limits(mut self, limits: RunLimits) -> RunParams {
         self.limits = limits;
         self
     }
@@ -157,7 +157,7 @@ impl RunConfig {
     /// user picked. The default is `None`, which leaves the `ui` global
     /// absent and limits `models.get` to the five roles.
     #[must_use]
-    pub fn with_ui(mut self, snapshot: serde_json::Value) -> RunConfig {
+    pub fn with_ui(mut self, snapshot: serde_json::Value) -> RunParams {
         self.ui = Some(snapshot);
         self
     }
@@ -171,7 +171,7 @@ impl RunConfig {
     /// past them and every `(task, seq)` in the stream stays unique.
     /// Spawned tasks count from zero.
     #[must_use]
-    pub fn with_provenance_start(mut self, start: u32) -> RunConfig {
+    pub fn with_provenance_start(mut self, start: u32) -> RunParams {
         self.provenance_start = start;
         self
     }
@@ -187,7 +187,7 @@ impl RunConfig {
     /// before the run and extracts output after it through its own clone of
     /// `vfs`.
     #[must_use]
-    pub fn with_vfs(mut self, vfs: VfsRef) -> RunConfig {
+    pub fn with_vfs(mut self, vfs: VfsRef) -> RunParams {
         self.vfs = vfs;
         self
     }
@@ -198,7 +198,7 @@ impl RunConfig {
     /// and a section offers one to its model with `tools.offer`. The caller
     /// performs every call.
     #[must_use]
-    pub fn with_tools(mut self, tools: ToolCatalog) -> RunConfig {
+    pub fn with_tools(mut self, tools: ToolCatalog) -> RunParams {
         self.tools = tools;
         self
     }
@@ -225,7 +225,7 @@ impl RunConfig {
     pub fn with_packs(
         mut self,
         roster: impl IntoIterator<Item = (PackId, RosterEntry)>,
-    ) -> RunConfig {
+    ) -> RunParams {
         self.packs = Some(roster.into_iter().collect());
         self
     }
@@ -247,7 +247,7 @@ impl RunConfig {
     /// The failure happens when the first section VM is set up, before the
     /// run issues any effect.
     #[must_use]
-    pub fn with_preludes(mut self, preludes: Vec<Prelude>) -> RunConfig {
+    pub fn with_preludes(mut self, preludes: Vec<Prelude>) -> RunParams {
         self.preludes = preludes;
         self
     }
@@ -272,15 +272,15 @@ impl RunConfig {
     /// fails. A non-empty `models` with no `default` entry leaves the roles
     /// empty and fails the run's first step.
     #[must_use]
-    pub fn with_models(mut self, models: BTreeMap<ModelRole, ModelInfo>) -> RunConfig {
+    pub fn with_models(mut self, models: BTreeMap<ModelRole, ModelInfo>) -> RunParams {
         self.models = models;
         self
     }
 }
 
-impl fmt::Debug for RunConfig {
+impl fmt::Debug for RunParams {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let mut state = f.debug_struct("RunConfig");
+        let mut state = f.debug_struct("RunParams");
         state
             .field("name", &self.name)
             .field("started_at", &self.started_at)

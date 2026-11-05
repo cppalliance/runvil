@@ -1,4 +1,4 @@
-//! What a run starts with: its store handle, a default config, and the
+//! What a run starts with: its store handle, default params, and the
 //! tool and model bindings its frontmatter declares.
 
 use std::sync::Arc;
@@ -8,7 +8,7 @@ use super::*;
 use crate::RunErrorKind;
 use crate::RunOutcome;
 use crate::execute::run_error_kind;
-use crate::execute::tests::context::test_config;
+use crate::execute::tests::context::test_params;
 use crate::execute::tests::fixtures::echo_tool;
 use crate::test_support::scenario::EXECUTION;
 use runvil_vfs::{VfsError, VfsRef};
@@ -60,7 +60,7 @@ fn a_store_backend_that_refuses_its_session_fails_the_run_at_the_first_step() {
     let mut run = crate::execute::run::Run::new(
         Arc::new(prompt.expect("the fixture parses")),
         "",
-        test_config(EXECUTION).with_vfs(vfs),
+        test_params(EXECUTION).with_vfs(vfs),
     );
     match run.step() {
         crate::execute::run::Step::Done {
@@ -72,16 +72,16 @@ fn a_store_backend_that_refuses_its_session_fails_the_run_at_the_first_step() {
 }
 
 #[test]
-fn a_default_config_runs_a_pack_free_prompt() {
-    // A prompt declaring no Packs runs under a default config: no
+fn default_params_run_a_pack_free_prompt() {
+    // A prompt declaring no Packs runs under default params: no
     // catalog, no roster, no client, no real roots.
     let trace = Scenario::new(one_section("return 'no Packs'")).run();
     assert_eq!(trace.text(), "no Packs");
 }
 
 #[test]
-fn default_run_config_store_handle_declares_a_fresh_store() {
-    // `RunConfig` absorbs the filesystem handle with a `VfsRef::default()`
+fn default_run_params_store_handle_declares_a_fresh_store() {
+    // `RunParams` absorbs the filesystem handle with a `VfsRef::default()`
     // (a fresh memory store at `/`) default: a store-using run needs no
     // caller-supplied handle.
     let source = prompt(

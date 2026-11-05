@@ -253,7 +253,7 @@ impl SectionVm<Uninjected> {
     }
 
     /// Opts the VM into the raw-model-id fallback, on whenever the caller
-    /// passes an application-state snapshot (`RunConfig::with_ui`): `models.get`
+    /// passes an application-state snapshot (`RunParams::with_ui`): `models.get`
     /// resolves a label outside the five roles as a raw gateway catalog model
     /// id. Engine injection's `models` table install reads the flag, so only
     /// an uninjected VM takes it. A run without a snapshot never calls it, so

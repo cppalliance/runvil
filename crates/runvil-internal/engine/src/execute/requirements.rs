@@ -1,4 +1,4 @@
-//! What a run's config lacks for its prompt: [`Requirements`], which the
+//! What a run's params lack for its prompt: [`Requirements`], which the
 //! run's first step reports as its refusal notice.
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -19,7 +19,7 @@ mod tests;
 /// The first line of every refusal notice.
 pub(super) const NOTICE_HEADER: &str = "the environment cannot satisfy this prompt:";
 
-/// What the run's config lacks for its prompt, gathered when the run is
+/// What the run's params lack for its prompt, gathered when the run is
 /// built. The run's first step fails with its notice unless it is empty.
 #[derive(Debug, Default)]
 pub(super) struct Requirements {

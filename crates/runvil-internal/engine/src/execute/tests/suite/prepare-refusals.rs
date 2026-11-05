@@ -175,7 +175,7 @@ fn an_unsupported_version_is_reported_before_an_unmet_requirement() {
 fn cancelled_before_it_starts(scenario: Scenario) -> Scenario {
     let cancel = CancelHandle::new();
     cancel.cancel();
-    scenario.config(move |ctx| ctx.with_cancel(cancel))
+    scenario.params(move |ctx| ctx.with_cancel(cancel))
 }
 
 #[test]

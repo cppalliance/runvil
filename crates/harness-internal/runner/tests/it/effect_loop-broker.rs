@@ -20,7 +20,7 @@ use runvil::model::{
     ModelInfo, ModelRole, ThinkingMode, ToolSchema,
 };
 use runvil::timestamp::Timestamp;
-use runvil::{Prompt, Run, RunConfig};
+use runvil::{Prompt, Run, RunParams};
 use serde_json::{Value, json};
 
 use super::begun_log;
@@ -49,7 +49,7 @@ fn infers_then_chats() -> Run {
         NonZeroU32::new(131_072).expect("131072 is non-zero"),
         ThinkingMode::Never,
     );
-    let ctx = RunConfig::new(EXECUTION, TEST_SEED, Timestamp::UNIX_EPOCH)
+    let ctx = RunParams::new(EXECUTION, TEST_SEED, Timestamp::UNIX_EPOCH)
         .with_models(BTreeMap::from([(ModelRole::Default, model)]));
     Run::new(prompt, "", ctx)
 }

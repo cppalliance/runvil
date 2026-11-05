@@ -25,8 +25,8 @@ pub use effect::{Effect, EffectAnswer, EffectId, PackToolSets, Round, ToolCallOr
 use crate::prompt::Prompt;
 
 use super::RunOutcome;
-use super::config::RunConfig;
 use super::context::ChainState;
+use super::params::RunParams;
 use super::scheduler::Scheduler;
 
 /// The outcome of one call to [`Run::step`]: the run either continues or
@@ -87,7 +87,7 @@ pub struct IssuedEffect {
 /// One run of one prompt, which the caller drives through
 /// [`step`](Self::step) and [`resume`](Self::resume), and cancels through
 /// the flag it supplies with
-/// [`RunConfig::with_cancel`](super::RunConfig::with_cancel).
+/// [`RunParams::with_cancel`](super::RunParams::with_cancel).
 ///
 /// `Run` is `Send`: one caller drives it at a time, and the thread may
 /// change between calls. It holds its prompt through an `Arc`, so the
@@ -107,18 +107,18 @@ impl fmt::Debug for Run {
 }
 
 impl Run {
-    /// Builds a run of `prompt` with the arguments `args` and the config
-    /// `config`.
+    /// Builds a run of `prompt` with the arguments `args` and the params
+    /// `params`.
     ///
-    /// Building a run fills its five model roles from the config's role
-    /// map, as [`RunConfig::with_models`](super::RunConfig::with_models)
+    /// Building a run fills its five model roles from the params' role
+    /// map, as [`RunParams::with_models`](super::RunParams::with_models)
     /// describes, and an empty map leaves the model set empty. Its tool set
-    /// holds whatever catalog and roster the config's builders set.
+    /// holds whatever catalog and roster the params' builders set.
     ///
     /// Building a run never fails. The first `step` checks, in order,
     /// that the prompt declares a supported `runvil:` version, that the
-    /// config's filesystem declares a store whose backend passes its
-    /// probe, and that the config meets what the prompt requires: each
+    /// params' filesystem declares a store whose backend passes its
+    /// probe, and that the params meet what the prompt requires: each
     /// Pack the prompt declares is on the roster and can serve (a run given
     /// no roster skips this check), each declared role's requirements hold
     /// for the model that fills it, a non-empty role map has a `default`
@@ -131,8 +131,8 @@ impl Run {
     /// check fails, the run ends [`Cancelled`](RunOutcome::Cancelled)
     /// instead.
     #[must_use]
-    pub fn new(prompt: Arc<Prompt>, args: &str, config: RunConfig) -> Run {
-        Self::from_state(ChainState::root(prompt, args, config))
+    pub fn new(prompt: Arc<Prompt>, args: &str, params: RunParams) -> Run {
+        Self::from_state(ChainState::root(prompt, args, params))
     }
 
     /// [`Run::new`], with `edit` applied to the assembled state before the
@@ -142,10 +142,10 @@ impl Run {
     pub(crate) fn new_for_test(
         prompt: Arc<Prompt>,
         args: &str,
-        config: RunConfig,
+        params: RunParams,
         edit: impl FnOnce(ChainState) -> ChainState,
     ) -> Run {
-        Self::from_state(edit(ChainState::root(prompt, args, config)))
+        Self::from_state(edit(ChainState::root(prompt, args, params)))
     }
 
     /// Builds the run over its assembled state.

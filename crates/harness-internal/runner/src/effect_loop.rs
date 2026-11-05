@@ -82,7 +82,7 @@ const STALLED: &str = "the effect loop has nothing to await for a pending run";
 /// Drives `run` to its end inside the returned future: performs its
 /// effects through `performers`, hands every event, effect, and answer to
 /// `recorder` under `run_id`, and drops every effect in flight when
-/// `cancel` fires. `cancel` must be the flag the run's config was built
+/// `cancel` fires. `cancel` must be the flag the run's params were built
 /// with, so the run sees the same cancel. Ends the run at the recorder with
 /// its one outcome and returns it.
 ///

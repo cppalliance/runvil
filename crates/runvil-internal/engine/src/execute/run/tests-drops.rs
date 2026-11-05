@@ -16,7 +16,7 @@ use runvil_types::models::{ModelRole, ThinkingMode};
 use runvil_types::tools::{ToolCatalog, ToolId, ToolInfo};
 use serde_json::json;
 
-use super::run_config;
+use super::run_params;
 use crate::execute::RunOutcome;
 use crate::execute::run::{
     AnswerRecord, Effect, EffectAnswer, EffectId, EffectRecord, Round, Run, Step,
@@ -53,7 +53,7 @@ fn bound_sections(sections: &str, cancel: &CancelHandle) -> Run {
         json!({ "type": "object" }),
     );
     let catalog = ToolCatalog::new([echo]).expect("one tool is a valid catalog");
-    let ctx = run_config()
+    let ctx = run_params()
         .with_tools(catalog)
         .with_models(BTreeMap::from([(ModelRole::Default, model)]))
         .with_cancel(cancel.clone());

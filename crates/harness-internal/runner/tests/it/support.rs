@@ -24,7 +24,7 @@ use runvil::vfs::{
     Access, AcquireContext, Entry, ExecId, MemoryBackend, Stat, Vfs, VfsAccess, VfsError, VfsPath,
     VfsRef,
 };
-use runvil::{Prompt, Run, RunConfig, RunSeed};
+use runvil::{Prompt, Run, RunParams, RunSeed};
 use runvil_plugin::{PackInfo, PackRegistry};
 use serde_json::{Value, json};
 
@@ -91,7 +91,7 @@ fn prompt(sections: &[(&str, &str)]) -> Arc<Prompt> {
 /// prepared against the fixture [`catalog`], over the run's filesystem
 /// `vfs`, under the cancel flag `cancel`.
 fn prepared(prompt: Arc<Prompt>, vfs: VfsRef, cancel: &CancelHandle) -> Run {
-    let ctx = RunConfig::new(EXECUTION, TEST_SEED, Timestamp::UNIX_EPOCH)
+    let ctx = RunParams::new(EXECUTION, TEST_SEED, Timestamp::UNIX_EPOCH)
         .with_vfs(vfs)
         .with_tools(catalog())
         .with_cancel(cancel.clone());

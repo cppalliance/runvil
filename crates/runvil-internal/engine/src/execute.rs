@@ -9,9 +9,6 @@
 //! The run's outcome type ([`RunOutcome`]) is defined here; the rest lives in
 //! focused private children:
 //!
-//! - `config` - the public [`RunConfig`], which carries the caller's
-//!   role map for the five model roles, and [`RunLimits`]; installing
-//!   Packs and taking each run's catalog from them is the Harness's job.
 //! - `context` - the ambient run state: the run-wide `SharedState` and
 //!   each chain's `ChainState`.
 //! - `error` - the stable [`RunErrorKind`] of a failed outcome, and the
@@ -19,7 +16,10 @@
 //! - `fill` - the fill function, which builds the model set from the
 //!   caller's role map when the run is built.
 //! - `infer` - the nested-inference round's answer.
-//! - `requirements` - what a run's config lacks for its prompt, which the
+//! - `params` - the public [`RunParams`], which carries the caller's
+//!   role map for the five model roles, and [`RunLimits`]; installing
+//!   Packs and taking each run's catalog from them is the Harness's job.
+//! - `requirements` - what a run's params lack for its prompt, which the
 //!   run's first step reports as its refusal notice.
 //! - `run` - the boundary with the caller: the `Run` state machine with its
 //!   `step` and `resume`, the `Step` it returns, and the effect
@@ -40,11 +40,11 @@
 //!   completion goes through.
 //! - `walk_target` - the walk-target resolution helpers.
 
-mod config;
 pub(crate) mod context;
 mod error;
 mod fill;
 mod infer;
+mod params;
 mod requirements;
 mod run;
 pub(crate) mod scheduler;
@@ -55,11 +55,11 @@ mod turn;
 mod walk_target;
 
 // Public API surface.
-pub use config::{RunConfig, RunLimits};
 pub use error::RunErrorKind;
 pub(crate) use error::outcome;
 #[cfg(test)]
 pub(crate) use error::run_error_kind;
+pub use params::{RunLimits, RunParams};
 #[cfg(test)]
 pub(crate) use run::{AnswerRecord, ChatAnswerRecord, EffectRecord};
 pub use run::{

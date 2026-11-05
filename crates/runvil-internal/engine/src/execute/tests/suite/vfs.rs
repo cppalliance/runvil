@@ -11,7 +11,7 @@ use std::sync::Arc;
 
 use crate::execute::RunOutcome;
 use crate::execute::run::{Effect, IssuedEffect, Run, Step};
-use crate::execute::tests::context::{parse, test_config};
+use crate::execute::tests::context::{parse, test_params};
 use crate::prompt::Prompt;
 use crate::test_support::perform_locally;
 use crate::test_support::scenario::{EXECUTION, Scenario};
@@ -228,7 +228,7 @@ const HELD_STORE: &str = "---\nname: held-store\ndescription: d\nrunvil: 0\n---\
 
 /// Starts the `HELD_STORE` run over `vfs`.
 fn held_store_run(vfs: &VfsRef) -> Run {
-    let ctx = test_config(EXECUTION).with_vfs(vfs.clone());
+    let ctx = test_params(EXECUTION).with_vfs(vfs.clone());
     Run::new(Arc::new(parse(HELD_STORE)), "", ctx)
 }
 

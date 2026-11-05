@@ -180,14 +180,14 @@ impl Scheduler {
     }
 
     /// Checks that the run can start: the version gate, then the declared
-    /// store, then what the prompt requires of the config.
+    /// store, then what the prompt requires of the params.
     ///
     /// # Errors
     /// Returns an `UnsupportedVersion` failure on the `runvil:` line, or a
     /// structural parse failure for a prompt with no `runvil:` key, either
     /// naming the prompt; a store failure when the handle declares no store
     /// or the store's backend fails the probe; or `RequirementsUnmet` with
-    /// the refusal notice when the config lacks a declared Pack or a model
+    /// the refusal notice when the params lack a declared Pack or a model
     /// the prompt's roles require, or names a Pack id the Engine reserves,
     /// placed on the frontmatter key of the first gap the prompt caused.
     fn check_start(&self) -> Result<()> {

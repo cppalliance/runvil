@@ -1,5 +1,5 @@
 //! The run-level test driver. A [`Scenario`] holds a run's setup as data:
-//! its source, args, run name, seed, config edits, store, tools, model,
+//! its source, args, run name, seed, params edits, store, tools, model,
 //! the sets it fills in before the run starts, the effects it holds, and
 //! the effect that cancels it. It parses the source, builds the run, and
 //! steps it on the calling thread, answering every effect it does not hold
@@ -32,7 +32,7 @@ use runvil_vfs::VfsRef;
 use super::FnTool;
 use super::scripted_chat::ScriptedChat;
 use crate::Error;
-use crate::execute::{Effect, EffectAnswer, Run, RunConfig, RunLimits};
+use crate::execute::{Effect, EffectAnswer, Run, RunLimits, RunParams};
 use crate::lua::ToolBinding;
 use crate::model::{ModelBinding, ModelId, ModelInfo, ModelRole, ModelSet, ThinkingMode};
 use crate::prompt::Prompt;
@@ -54,7 +54,7 @@ pub(crate) const EXECUTION: &str = "execute-test";
 
 /// The fixed caller inputs every test run shares: a seed and a start instant
 /// a test that does not care about them never has to choose. The tests of
-/// the inputs themselves (`run_inputs`) build their configs directly.
+/// the inputs themselves (`run_inputs`) build their params directly.
 pub(crate) const TEST_SEED: RunSeed = RunSeed::from_bytes([1; 32]);
 pub(crate) const TEST_STARTED_AT: Timestamp = Timestamp::from_unix_millis(1_700_000_000_000);
 
@@ -104,9 +104,9 @@ pub(crate) fn assert_model_failure(error: &Error, code: ErrorCode, prose: &str) 
     );
 }
 
-/// The edit a scenario applies to its run's config before the run is
+/// The edit a scenario applies to its run's params before the run is
 /// built.
-type ConfigEdit = Box<dyn FnOnce(RunConfig) -> RunConfig>;
+type ParamsEdit = Box<dyn FnOnce(RunParams) -> RunParams>;
 
 /// A test over an effect: which effects a scenario holds, or which answer
 /// signals its canceller.
@@ -128,7 +128,7 @@ pub(crate) struct Scenario {
     args: String,
     name: String,
     seed: RunSeed,
-    config: ConfigEdit,
+    params: ParamsEdit,
     store: TestStore,
     /// The catalog's tools.
     tools: Vec<FnTool>,
@@ -140,7 +140,7 @@ pub(crate) struct Scenario {
     signal: Option<Matcher>,
     /// The role map the run fills its model set from.
     roles: BTreeMap<ModelRole, ModelInfo>,
-    /// The cancel flag the run's config takes, which the scenario keeps.
+    /// The cancel flag the run's params take, which the scenario keeps.
     cancel: CancelHandle,
 }
 
@@ -154,7 +154,7 @@ impl Scenario {
             args: String::new(),
             name: EXECUTION.to_owned(),
             seed: TEST_SEED,
-            config: Box::new(|ctx| ctx),
+            params: Box::new(|ctx| ctx),
             store: TestStore::new(),
             tools: Vec::new(),
             listed: Vec::new(),
@@ -206,21 +206,21 @@ impl Scenario {
 
     /// Runs under `limits` in place of the default limits.
     pub(crate) fn limits(self, limits: RunLimits) -> Scenario {
-        self.config(move |ctx| ctx.with_limits(limits))
+        self.params(move |ctx| ctx.with_limits(limits))
     }
 
-    /// Adds `edit` to the edits applied to the run's config, after the
+    /// Adds `edit` to the edits applied to the run's params, after the
     /// scenario's own settings, its role map and cancel flag included. An
     /// edit that replaces the cancel flag leaves [`cancel_when`] and
     /// [`Driving::cancel`] setting a flag the run never reads.
     ///
     /// [`cancel_when`]: Scenario::cancel_when
-    pub(crate) fn config(
+    pub(crate) fn params(
         mut self,
-        edit: impl FnOnce(RunConfig) -> RunConfig + 'static,
+        edit: impl FnOnce(RunParams) -> RunParams + 'static,
     ) -> Scenario {
-        let earlier = self.config;
-        self.config = Box::new(move |ctx| edit(earlier(ctx)));
+        let earlier = self.params;
+        self.params = Box::new(move |ctx| edit(earlier(ctx)));
         self
     }
 
@@ -320,7 +320,7 @@ impl Scenario {
     /// When the source fails to parse, naming the error.
     #[track_caller]
     pub(crate) fn start(mut self) -> Driving {
-        let (prompt, events, ctx) = self.config_of();
+        let (prompt, events, ctx) = self.params_of();
         let (signal, signalled) = match self.signal {
             Some(signal) => {
                 let (sender, receiver) = mpsc::channel();
@@ -380,20 +380,20 @@ impl Scenario {
     /// When the source fails to parse, naming the error.
     #[track_caller]
     pub(crate) fn into_run(mut self) -> Run {
-        let (prompt, _, ctx) = self.config_of();
+        let (prompt, _, ctx) = self.params_of();
         self.prefill.start(Arc::new(prompt), &self.args, ctx)
     }
 
-    /// Parses the source and builds the run's config, beside the parse
+    /// Parses the source and builds the run's params, beside the parse
     /// events.
     #[track_caller]
-    fn config_of(&mut self) -> (Prompt, Vec<Event>, RunConfig) {
+    fn params_of(&mut self) -> (Prompt, Vec<Event>, RunParams) {
         let (parsed, events) = Prompt::parse(&self.source, "prompt", &self.name);
         let prompt = match parsed {
             Ok(prompt) => prompt,
             Err(error) => panic!("expected the scenario source to parse, got {error}"),
         };
-        let mut ctx = RunConfig::new(self.name.clone(), self.seed, TEST_STARTED_AT)
+        let mut ctx = RunParams::new(self.name.clone(), self.seed, TEST_STARTED_AT)
             .with_vfs(self.store.vfs())
             .with_models(std::mem::take(&mut self.roles))
             .with_cancel(self.cancel.clone());
@@ -403,7 +403,7 @@ impl Scenario {
                 .expect("the scenario's tool ids differ");
             ctx = ctx.with_tools(catalog);
         }
-        let edit = std::mem::replace(&mut self.config, Box::new(|ctx| ctx));
+        let edit = std::mem::replace(&mut self.params, Box::new(|ctx| ctx));
         (prompt, events, edit(ctx))
     }
 }
@@ -417,13 +417,13 @@ struct Prefill {
 }
 
 impl Prefill {
-    /// Builds the run of `prompt` under `config` with the state filled in,
+    /// Builds the run of `prompt` under `params` with the state filled in,
     /// or as [`Run::new`] builds it when there is nothing to fill.
-    fn start(self, prompt: Arc<Prompt>, args: &str, config: RunConfig) -> Run {
+    fn start(self, prompt: Arc<Prompt>, args: &str, params: RunParams) -> Run {
         if self.models.is_none() && !self.raw_shims {
-            return Run::new(prompt, args, config);
+            return Run::new(prompt, args, params);
         }
-        Run::new_for_test(prompt, args, config, |mut state| {
+        Run::new_for_test(prompt, args, params, |mut state| {
             if let Some(set) = self.models {
                 state = state.with_models_for_test(set);
             }

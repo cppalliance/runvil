@@ -53,10 +53,10 @@
 #[non_exhaustive] pub struct runvil::vfs::Stat { .. }
 auto runvil::Prompt: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::Run: Freeze, !RefUnwindSafe, Send, Sync, Unpin, !UnwindSafe
-auto runvil::RunConfig: Freeze, !RefUnwindSafe, Send, Sync, Unpin, !UnwindSafe
 auto runvil::RunErrorKind: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::RunLimits: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::RunOutcome: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
+auto runvil::RunParams: Freeze, !RefUnwindSafe, Send, Sync, Unpin, !UnwindSafe
 auto runvil::RunSeed: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::Step: Freeze, !RefUnwindSafe, Send, Sync, Unpin, !UnwindSafe
 auto runvil::cancel::CancelHandle: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
@@ -149,10 +149,10 @@ auto runvil::vfs::VfsRefBuilder: Freeze, !RefUnwindSafe, Send, Sync, Unpin, !Unw
 auto runvil::vfs::Writability: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 derives runvil::Prompt: Clone, Debug, Eq, PartialEq
 derives runvil::Run: Debug
-derives runvil::RunConfig: Debug
 derives runvil::RunErrorKind: Clone, Copy, Debug, Eq, Hash, PartialEq
 derives runvil::RunLimits: Clone, Copy, Debug, Default, Eq, Hash, PartialEq
 derives runvil::RunOutcome: Clone, Debug, Eq, PartialEq
+derives runvil::RunParams: Debug
 derives runvil::RunSeed: Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize
 derives runvil::Step: Debug
 derives runvil::cancel::CancelHandle: Clone, Debug, Default
@@ -335,22 +335,22 @@ pub fn runvil::Prompt::file(&self) -> &str
 pub fn runvil::Prompt::frontmatter(&self) -> &runvil::prompt::Frontmatter
 pub fn runvil::Prompt::parse(input: &str, file: &str, execution: &str) -> (core::result::Result<runvil::Prompt, runvil::error::Error>, alloc::vec::Vec<runvil::event::Event>)
 pub fn runvil::Prompt::title(&self) -> &str
-pub fn runvil::Run::new(prompt: alloc::sync::Arc<runvil::Prompt>, args: &str, config: runvil::RunConfig) -> runvil::Run
+pub fn runvil::Run::new(prompt: alloc::sync::Arc<runvil::Prompt>, args: &str, params: runvil::RunParams) -> runvil::Run
 pub fn runvil::Run::resume(&mut self, id: runvil::effect::EffectId, answer: runvil::effect::EffectAnswer)
 pub fn runvil::Run::step(&mut self) -> runvil::Step
-pub fn runvil::RunConfig::new(name: impl core::convert::Into<alloc::string::String>, seed: runvil::RunSeed, started_at: runvil::timestamp::Timestamp) -> runvil::RunConfig
-pub fn runvil::RunConfig::with_cancel(self, handle: runvil::cancel::CancelHandle) -> runvil::RunConfig
-pub fn runvil::RunConfig::with_limits(self, limits: runvil::RunLimits) -> runvil::RunConfig
-pub fn runvil::RunConfig::with_models(self, models: alloc::collections::btree::map::BTreeMap<runvil::model::ModelRole, runvil::model::ModelInfo>) -> runvil::RunConfig
-pub fn runvil::RunConfig::with_packs(self, roster: impl core::iter::traits::collect::IntoIterator<Item = (runvil::packs::PackId, runvil::packs::RosterEntry)>) -> runvil::RunConfig
-pub fn runvil::RunConfig::with_preludes(self, preludes: alloc::vec::Vec<runvil::packs::Prelude>) -> runvil::RunConfig
-pub fn runvil::RunConfig::with_provenance_start(self, start: u32) -> runvil::RunConfig
-pub fn runvil::RunConfig::with_report_debug(self, report: bool) -> runvil::RunConfig
-pub fn runvil::RunConfig::with_tools(self, tools: runvil::tools::ToolCatalog) -> runvil::RunConfig
-pub fn runvil::RunConfig::with_ui(self, snapshot: serde_json::value::Value) -> runvil::RunConfig
-pub fn runvil::RunConfig::with_vfs(self, vfs: runvil::vfs::VfsRef) -> runvil::RunConfig
 pub fn runvil::RunErrorKind::as_str(self) -> &'static str
 pub fn runvil::RunErrorKind::from_tag(tag: &str) -> core::option::Option<runvil::RunErrorKind>
+pub fn runvil::RunParams::new(name: impl core::convert::Into<alloc::string::String>, seed: runvil::RunSeed, started_at: runvil::timestamp::Timestamp) -> runvil::RunParams
+pub fn runvil::RunParams::with_cancel(self, handle: runvil::cancel::CancelHandle) -> runvil::RunParams
+pub fn runvil::RunParams::with_limits(self, limits: runvil::RunLimits) -> runvil::RunParams
+pub fn runvil::RunParams::with_models(self, models: alloc::collections::btree::map::BTreeMap<runvil::model::ModelRole, runvil::model::ModelInfo>) -> runvil::RunParams
+pub fn runvil::RunParams::with_packs(self, roster: impl core::iter::traits::collect::IntoIterator<Item = (runvil::packs::PackId, runvil::packs::RosterEntry)>) -> runvil::RunParams
+pub fn runvil::RunParams::with_preludes(self, preludes: alloc::vec::Vec<runvil::packs::Prelude>) -> runvil::RunParams
+pub fn runvil::RunParams::with_provenance_start(self, start: u32) -> runvil::RunParams
+pub fn runvil::RunParams::with_report_debug(self, report: bool) -> runvil::RunParams
+pub fn runvil::RunParams::with_tools(self, tools: runvil::tools::ToolCatalog) -> runvil::RunParams
+pub fn runvil::RunParams::with_ui(self, snapshot: serde_json::value::Value) -> runvil::RunParams
+pub fn runvil::RunParams::with_vfs(self, vfs: runvil::vfs::VfsRef) -> runvil::RunParams
 pub fn runvil::cancel::CancelHandle::cancel(&self)
 pub fn runvil::cancel::CancelHandle::cancelled(&self) -> runvil::cancel::Cancelled
 pub fn runvil::cancel::CancelHandle::child(&self) -> runvil::cancel::CancelHandle
@@ -1269,7 +1269,7 @@ pub runvil::vfs::Writability::ReadOnly
 pub runvil::vfs::Writability::ReadWrite
 pub struct runvil::Prompt { /* private fields */ }
 pub struct runvil::Run { /* private fields */ }
-pub struct runvil::RunConfig { /* private fields */ }
+pub struct runvil::RunParams { /* private fields */ }
 pub struct runvil::RunSeed(/* private fields */)
 pub struct runvil::cancel::CancelHandle { /* private fields */ }
 pub struct runvil::cancel::Cancelled { /* private fields */ }

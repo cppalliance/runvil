@@ -1,6 +1,6 @@
 //! A UTC instant in milliseconds, rendered to RFC 3339 over std alone.
 //!
-//! A run's `started_at` is an input the caller passes to `RunConfig::new`;
+//! A run's `started_at` is an input the caller passes to `RunParams::new`;
 //! the clock belongs to the Harness.
 //! [`Timestamp`] is the value that crosses that boundary. Its one
 //! rendering, [`to_rfc3339`](Timestamp::to_rfc3339), is what a prompt

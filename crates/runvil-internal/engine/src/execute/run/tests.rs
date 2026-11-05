@@ -25,10 +25,10 @@ mod drops;
 #[path = "tests-start.rs"]
 mod start;
 
-/// A config for the run `run-test` under fixed caller inputs; nothing here
-/// reads the seed or `sys.when`.
-fn run_config() -> RunConfig {
-    RunConfig::new(
+/// The params for the run `run-test` under fixed caller inputs; nothing
+/// here reads the seed or `sys.when`.
+fn run_params() -> RunParams {
+    RunParams::new(
         "run-test",
         TEST_SEED,
         runvil_types::timestamp::Timestamp::UNIX_EPOCH,
@@ -222,8 +222,8 @@ fn prompt_of(body: &str) -> Arc<Prompt> {
 }
 
 /// A run of [`prompt_of`]`(body)`.
-fn run_of(body: &str, config: RunConfig) -> Run {
-    Run::new(prompt_of(body), "", config)
+fn run_of(body: &str, params: RunParams) -> Run {
+    Run::new(prompt_of(body), "", params)
 }
 
 /// Whether `events` include the run's end boundary.
@@ -248,7 +248,7 @@ fn done_is_withheld_while_a_store_effect_is_outstanding_and_delivered_after_drop
     let cancel = CancelHandle::new();
     let mut run = run_of(
         "store.write('notes.md', 'kept')\nreturn 'unreachable'",
-        run_config().with_cancel(cancel.clone()),
+        run_params().with_cancel(cancel.clone()),
     );
     let (id, effect) = only_effect(run.step());
     assert!(
@@ -285,7 +285,7 @@ fn done_is_withheld_while_a_store_effect_is_outstanding_and_delivered_after_drop
 
 #[test]
 fn a_dropped_answer_resumes_a_waiting_chain_with_the_cancelled_error() {
-    let mut run = run_of("return store.exists('x')", run_config());
+    let mut run = run_of("return store.exists('x')", run_params());
     let (id, effect) = only_effect(run.step());
     assert!(matches!(effect, Effect::Vfs { .. }));
     run.resume(id, EffectAnswer::Dropped);
@@ -305,7 +305,7 @@ fn an_orphaned_effects_real_answer_is_discarded_and_still_counts_as_the_answer()
     let cancel = CancelHandle::new();
     let mut run = run_of(
         "store.write('notes.md', 'kept')\nreturn 'unreachable'",
-        run_config().with_cancel(cancel.clone()),
+        run_params().with_cancel(cancel.clone()),
     );
     let (id, _) = only_effect(run.step());
     cancel.cancel();
@@ -327,7 +327,7 @@ fn an_orphaned_effects_real_answer_is_discarded_and_still_counts_as_the_answer()
 
 #[test]
 fn an_answer_for_an_unissued_effect_is_an_internal_error() {
-    let mut run = run_of("return store.exists('x')", run_config());
+    let mut run = run_of("return store.exists('x')", run_params());
     let (id, _) = only_effect(run.step());
     run.resume(EffectId(id.0 + 99), EffectAnswer::Timer);
     // The unknown id ended the run; the real effect is now an orphan whose
@@ -352,7 +352,7 @@ fn an_answer_for_an_unissued_effect_is_an_internal_error() {
 
 #[test]
 fn an_answer_of_the_wrong_kind_for_a_pending_effect_fails_loudly() {
-    let mut run = run_of("return store.exists('x')", run_config());
+    let mut run = run_of("return store.exists('x')", run_params());
     let (id, _) = only_effect(run.step());
     run.resume(id, EffectAnswer::Timer);
     let Step::Done { outcome, .. } = run.step() else {
@@ -377,7 +377,7 @@ fn a_child_cancel_handles_cancel_is_observed_by_the_instruction_hook() {
             "local n = 0\nwhile true do\n  n = n + 1\n  if n == 1 then log('looping') end\nend",
         ),
         "",
-        run_config().with_cancel(child),
+        run_params().with_cancel(child),
         |fresh| {
             state = Some(fresh.clone());
             fresh
@@ -411,18 +411,18 @@ fn a_child_cancel_handles_cancel_is_observed_by_the_instruction_hook() {
 }
 
 #[test]
-fn a_config_without_a_caller_handle_shares_its_one_flag_with_the_run() {
-    let ctx = run_config();
-    let config_flag = ctx.cancel.clone();
+fn params_without_a_caller_handle_share_their_one_flag_with_the_run() {
+    let ctx = run_params();
+    let params_flag = ctx.cancel.clone();
     let mut run = run_of("return 'x'", ctx);
-    config_flag.cancel();
+    params_flag.cancel();
     let Step::Done { outcome, .. } = run.step() else {
         panic!("the cancelled run has nothing outstanding");
     };
     assert_eq!(
         outcome,
         RunOutcome::Cancelled,
-        "the run polls the flag the config minted"
+        "the run polls the flag the params minted"
     );
 }
 
@@ -431,7 +431,7 @@ fn the_step_that_decides_the_run_withdraws_its_outstanding_effect_while_done_is_
     let cancel = CancelHandle::new();
     let mut run = run_of(
         "store.write('notes.md', 'kept')\nreturn 'unreachable'",
-        run_config().with_cancel(cancel.clone()),
+        run_params().with_cancel(cancel.clone()),
     );
     assert!(!run.decided_for_test(), "a fresh run is undecided");
     let Step::Pending {

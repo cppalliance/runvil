@@ -109,7 +109,7 @@ pub(crate) struct Driving {
     /// them or the run withdraws them.
     pub(super) held: Vec<(EffectId, Effect)>,
     pub(super) store: TestStore,
-    /// The cancel flag the scenario handed the run's config.
+    /// The cancel flag the scenario handed the run's params.
     pub(super) cancel: CancelHandle,
     /// The thread that cancels the run on the scenario's signal.
     pub(super) canceller: Option<JoinHandle<()>>,
@@ -359,8 +359,8 @@ impl Trace {
     }
 
     /// The debug pair of every model turn the run reported, request before
-    /// response, in order. The run reports the pair only when its config
-    /// turns debug reporting on.
+    /// response, in order. The run reports the pair only when its params
+    /// turn debug reporting on.
     pub(crate) fn captures(&self) -> Vec<Capture> {
         let captures = Captures::default();
         for event in self.events.iter().cloned() {
@@ -404,7 +404,7 @@ impl TestStore {
         TestStore(Mutex::new(vfs))
     }
 
-    /// The handle the run and the config builders take: the run's whole
+    /// The handle the run and the params builders take: the run's whole
     /// filesystem, store included.
     pub(crate) fn vfs(&self) -> VfsRef {
         self.0

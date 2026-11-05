@@ -22,7 +22,7 @@ use runvil::model::{
 use runvil::timestamp::Timestamp;
 use runvil::tools::{ToolCatalog, ToolId, ToolInfo, ToolOutput};
 use runvil::vfs::Access;
-use runvil::{Prompt, Run, RunConfig};
+use runvil::{Prompt, Run, RunParams};
 use serde_json::{Value, json};
 use tokio::sync::{Notify, Semaphore};
 
@@ -87,7 +87,7 @@ fn run_of(sections: &str, cancel: &CancelHandle) -> Run {
         json!({ "type": "object", "properties": { "name": { "type": "string" } } }),
     );
     let catalog = ToolCatalog::new([tool]).expect("the one-tool catalog is valid");
-    let ctx = RunConfig::new(EXECUTION, TEST_SEED, Timestamp::UNIX_EPOCH)
+    let ctx = RunParams::new(EXECUTION, TEST_SEED, Timestamp::UNIX_EPOCH)
         .with_tools(catalog)
         .with_models(BTreeMap::from([(ModelRole::Default, model)]))
         .with_cancel(cancel.clone());

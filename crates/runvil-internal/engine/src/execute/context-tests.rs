@@ -28,7 +28,7 @@ fn test_prompt() -> Prompt {
 fn test_state(prompt: &Prompt) -> ChainState {
     state_over(
         prompt,
-        RunConfig::new(
+        RunParams::new(
             "run-context-test",
             TEST_SEED,
             runvil_types::timestamp::Timestamp::UNIX_EPOCH,
@@ -36,10 +36,10 @@ fn test_state(prompt: &Prompt) -> ChainState {
     )
 }
 
-/// The state a run of `prompt` assembles from `config`, as `Run::new`
+/// The state a run of `prompt` assembles from `params`, as `Run::new`
 /// assembles it.
-fn state_over(prompt: &Prompt, config: RunConfig) -> ChainState {
-    ChainState::root(Arc::new(prompt.clone()), "", config)
+fn state_over(prompt: &Prompt, params: RunParams) -> ChainState {
+    ChainState::root(Arc::new(prompt.clone()), "", params)
 }
 
 #[test]
@@ -119,10 +119,10 @@ fn forks_swap_only_their_own_fields() {
 }
 
 #[test]
-fn the_root_task_sequence_starts_where_the_config_says() {
+fn the_root_task_sequence_starts_where_the_params_say() {
     let ctx = state_over(
         &test_prompt(),
-        RunConfig::new(
+        RunParams::new(
             "run-context-test",
             TEST_SEED,
             runvil_types::timestamp::Timestamp::UNIX_EPOCH,
@@ -162,7 +162,7 @@ fn a_filled_role_binds_with_the_catalog_info_its_render_receives() {
     let prompt = test_prompt();
     let info =
         test_model_with("catalog-model", 65_536, ThinkingMode::Switchable).with_provider("acme");
-    let ctx = RunConfig::new(
+    let ctx = RunParams::new(
         "run-context-test",
         TEST_SEED,
         runvil_types::timestamp::Timestamp::UNIX_EPOCH,
@@ -186,7 +186,7 @@ fn an_unavailable_roster_pack_records_no_vendor_and_a_pack_listed_twice_keeps_it
     };
     let state = state_over(
         &test_prompt(),
-        RunConfig::new(
+        RunParams::new(
             "run-context-test",
             TEST_SEED,
             runvil_types::timestamp::Timestamp::UNIX_EPOCH,

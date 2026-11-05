@@ -26,7 +26,7 @@ use std::sync::Arc;
 use criterion::{Criterion, criterion_group, criterion_main};
 use runvil_engine::test_support::scripted_chat::{ScriptedChat, ScriptedReply};
 use runvil_engine::test_support::{drive, perform_locally};
-use runvil_engine::{Effect, EffectAnswer, Run, RunConfig, RunOutcome};
+use runvil_engine::{Effect, EffectAnswer, Run, RunOutcome, RunParams};
 use runvil_prompt::Prompt;
 use runvil_types::models::{ModelCatalog, ModelId, ModelInfo, ModelRole, ThinkingMode};
 use runvil_types::seed::RunSeed;
@@ -83,7 +83,7 @@ fn parse_loop_prompt() -> Prompt {
 /// A prompt the run's start checks refuse ends with the refusal.
 fn run_once(prompt: &Prompt, chat: &ScriptedChat, context: u32) -> RunOutcome {
     let model = bench_catalog(context).models()[0].clone();
-    let ctx = RunConfig::new(EXECUTION, SEED, Timestamp::UNIX_EPOCH)
+    let ctx = RunParams::new(EXECUTION, SEED, Timestamp::UNIX_EPOCH)
         .with_models(BTreeMap::from([(ModelRole::Default, model)]));
     let run = Run::new(Arc::new(prompt.clone()), "", ctx);
     let (outcome, _) = drive(run, |_, effect| {

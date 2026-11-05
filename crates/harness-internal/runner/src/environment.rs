@@ -1,6 +1,6 @@
 //! A run's environment: the Host snapshot a request carries and the
 //! resolution of the Host's selected model, through its inference broker,
-//! into the run's config.
+//! into the run's params.
 //!
 //! Everything here arrives as data or through the broker. The Harness
 //! never resolves a gateway, reads a menu, or names a workspace crate: the
@@ -54,7 +54,7 @@ pub(crate) fn model_kind(error: &Error) -> RunErrorKind {
     }
 }
 
-/// Resolves the Host's current model for one run's config: lists
+/// Resolves the Host's current model for one run's params: lists
 /// `broker`'s models and looks up `host`'s selection in the list. A launch
 /// with no selection binds the first model the broker lists.
 ///

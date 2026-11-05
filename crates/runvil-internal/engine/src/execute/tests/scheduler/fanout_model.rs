@@ -76,7 +76,7 @@ fn a_raw_id_handle_fans_out_with_no_model_supplied() {
     let trace = Scenario::new(md)
         .models(ModelSet::default())
         .limits(ceiling(4))
-        .config(|ctx| ctx.with_ui(serde_json::json!({})))
+        .params(|ctx| ctx.with_ui(serde_json::json!({})))
         .run();
     assert_eq!(trace.text(), "vendor/raw-model,vendor/raw-model");
 }

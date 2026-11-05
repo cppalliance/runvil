@@ -42,7 +42,7 @@ fn one_parent_cancel_ends_every_run_holding_one_of_its_children() -> TestResult 
         let parent = parent.clone();
         let mut driver = Scenario::default()
             .hold(|effect| matches!(effect, Effect::Vfs { .. }))
-            .config(move |ctx| ctx.with_cancel(parent.child()))
+            .params(move |ctx| ctx.with_cancel(parent.child()))
             .start(&source)?;
         driver.pump_until_held()?;
         drivers.push(driver);
@@ -63,7 +63,7 @@ fn a_cancelled_future_wakes_when_another_thread_cancels_the_run() -> TestResult 
     let handle = CancelHandle::new();
     let handed = handle.clone();
     let driver = Scenario::default()
-        .config(move |ctx| ctx.with_cancel(handed.clone()))
+        .params(move |ctx| ctx.with_cancel(handed.clone()))
         .start(&note("'hello'"))?;
     let waiting = handle.cancelled();
 
@@ -78,7 +78,7 @@ fn a_cancelled_future_wakes_when_another_thread_cancels_the_run() -> TestResult 
     assert_eq!(
         driver.finish()?.outcome,
         RunOutcome::Cancelled,
-        "the run reads the flag the caller handed its config"
+        "the run reads the flag the caller handed its params"
     );
     Ok(())
 }
