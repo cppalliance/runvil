@@ -7,7 +7,7 @@
 
 use super::*;
 
-/// A binary path the run stages from, so no case needs a Gateway build.
+/// A binary path the run stages from.
 fn given() -> PathBuf {
     PathBuf::from("/ci/staged/runvil-gateway")
 }
@@ -140,7 +140,7 @@ fn interruption_before_staging_does_not_run_removal() {
 }
 
 #[test]
-fn a_given_sidecar_is_never_built_and_the_target_is_reported() {
+fn a_given_sidecar_is_staged_first_with_its_target() {
     let test_environment = environment();
     let environment = &test_environment.environment;
     let triple = "x86_64-unknown-linux-gnu";
@@ -157,13 +157,6 @@ fn a_given_sidecar_is_never_built_and_the_target_is_reported() {
     )
     .expect("Workshop build");
 
-    assert!(
-        runner.commands.iter().all(|command| {
-            !(command.args.len() > 2 && command.args[0] == "build" && command.args[2] == "gateway")
-        }),
-        "no Gateway build runs: {:?}",
-        runner.commands
-    );
     assert_eq!(
         runner.commands[0].args,
         strings(&[

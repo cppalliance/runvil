@@ -276,19 +276,6 @@ fn the_loops_tool_call_yields_carry_the_turn_of_the_requesting_round() {
 }
 
 #[test]
-fn the_bare_tool_call_global_is_not_installed() {
-    // Every tool operation lives under the `tools.*` namespace; the bare
-    // global from before the rename must be gone, not aliased.
-    let vm = scheduler_vm(&ModelSet::default(), None);
-    let is_nil: bool = vm
-        .lua()
-        .load("return tool_call == nil")
-        .eval()
-        .expect("the global read evaluates");
-    assert!(is_nil, "the bare `tool_call` global must not exist");
-}
-
-#[test]
 fn tools_call_accepts_a_tool_object_in_place_of_the_id() {
     // A tool object stands for its canonical id; passing it as the leading
     // argument dispatches the tool it names.

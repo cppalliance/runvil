@@ -1,9 +1,10 @@
-// Guard for the workspace-debt removal (plan step 7): the repository's
-// prose describes the shipped behavior. Each phrase below was once true
-// and is now stale, so its return would mean a doc was reverted or a
-// paragraph copied from history. Reads the files with node:fs rather
-// than importing anything, so the check needs no bundle and runs in the
-// plain SPA suite.
+// Guard: the repository's prose follows the root AGENTS.md. Every
+// rulebook uses Engine, Harness, Host, and Plugin as the Definitions
+// section defines them; the Engine crates name the caller, never the
+// Host or the Harness's crates and types; and neither the root AGENTS.md
+// nor the Pack-facing crates' comments describe Pack activation. Reads
+// the files with node:fs rather than importing anything, so the check
+// needs no bundle and runs in the plain SPA suite.
 // Run: node --test test/docs-claims.mjs
 import assert from "node:assert/strict";
 import { readdir, readFile } from "node:fs/promises";
@@ -22,15 +23,6 @@ async function offendingLines(file, phrase) {
     .filter(({ line }) => (phrase instanceof RegExp ? phrase.test(line) : line.includes(phrase)))
     .map(({ line, number }) => `${file}:${number}: ${line.trim()}`);
 }
-
-test("AGENTS.md names two UI-state homes, not a TOML config or three buckets", async () => {
-  // UM-002: the SPA rule once routed "account preferences" to a
-  // "machine-written TOML config" that no code, route, or allow-list
-  // implements, and counted three buckets where two exist.
-  for (const phrase of ["TOML config", "three named buckets", "three homes"]) {
-    assert.deepEqual(await offendingLines("AGENTS.md", phrase), [], `AGENTS.md still says "${phrase}"`);
-  }
-});
 
 // Guard for the Engine, Harness, Host, and Plugin definitions in the root AGENTS.md.
 // Coding sessions read the rulebooks (every AGENTS.md, every .cursor/rules
@@ -102,12 +94,9 @@ test("rulebooks use Engine, Harness, Host, and Plugin as the root AGENTS.md defi
     if (/\bhost(s|ed|ing)?\b|\bhost-/.test(text.replace(HOST_ALLOWED, " "))) {
       offenders.push(`${where} (lowercase "host": required "Host" for the application, another word for any other sense)`);
     }
-    // The Gateway's speech tree once carried its own exemption here, because
-    // the root AGENTS.md lets a bare "engine" mean the speech engine inside
-    // that tree. Workshop no longer reads Gateway test data, and no rulebook
-    // there says a bare "engine" today, so the scan applies the one rule
-    // everywhere. A Gateway rulebook that needs the looser sense gets it from
-    // the allowlisted "speech engine" wording.
+    // The scan applies one rule everywhere, the Gateway tree included: a
+    // Gateway rulebook that means the speech engine says "speech engine",
+    // which TERM_ALLOWED allows.
     const terms = /(?<![-_/:\w])(engine|harness)(?![-_/:\w])/;
     if (terms.test(text.replace(TERM_ALLOWED, " "))) {
       offenders.push(`${where} (lowercase "engine" or "harness": required "Engine" or "Harness" for the defined term)`);
@@ -136,7 +125,6 @@ const ENGINE_RULES = [
   [/\b(workshop|papergate)\b/i, "names a Host application"],
   [/(?<![A-Za-z])harness(?![A-Za-z])/, 'lowercase "harness": a Harness crate, type path, or code name'],
   [/Harness-/, '"Harness-" compound: Engine crates say "caller-supplied" and the like'],
-  [/RunHarness/, "the old test-bundle name: the fixture is RunFixture"],
 ];
 
 test("Engine crates name the caller, never the Host or the Harness's crates and types", async () => {

@@ -95,7 +95,7 @@ fn tool_turns(gateway: &ScriptedChat) -> Vec<String> {
 }
 
 /// Every `ToolResult` as `<call id> <alias>=<tool> <vendor> <trust>`, `-`
-/// standing for none, in order.
+/// standing for no vendor, in order.
 fn results(trace: &Trace) -> Vec<String> {
     trace
         .events()
@@ -109,8 +109,7 @@ fn results(trace: &Trace) -> Vec<String> {
                 trusted,
                 ..
             } => Some(format!(
-                "{tool_call_id} {alias}={} {} {}",
-                tool.as_ref().map_or("-".to_owned(), ToString::to_string),
+                "{tool_call_id} {alias}={tool} {} {}",
                 vendor.as_deref().unwrap_or("-"),
                 if *trusted { "trusted" } else { "untrusted" }
             )),

@@ -192,7 +192,7 @@ fn no_definition_names_behavior_this_build_does_not_have() {
         for absent in ["PDF", "Shell tool", "Cursor workspace"] {
             assert!(
                 !text.contains(absent),
-                "the {} tool still mentions {absent}: {text}",
+                "the {} tool mentions {absent}: {text}",
                 definition.segment
             );
         }
@@ -235,7 +235,7 @@ fn the_grep_description_names_the_dialect_the_limits_and_what_is_skipped() {
     for absent in ["ripgrep", "rg ", "several thousand", "Shell"] {
         assert!(
             !text.contains(absent),
-            "the description no longer names {absent}: {text}"
+            "the description does not name {absent}: {text}"
         );
     }
     for placeholder in ["{body_cap}", "{file_ceiling}"] {

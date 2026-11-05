@@ -66,10 +66,9 @@ pub(super) struct PendingWrite {
 /// The persisted shape of [`WORKSHOP_STATE_FILE`]. Server state only:
 /// the UI's panel layout is view state and persists through the UI-state
 /// buckets (`workshop-user-state` and the workspace file), never here.
-#[derive(Debug, Default, serde::Deserialize)]
+#[derive(Debug, serde::Deserialize)]
 struct StoredState {
     /// Remembered model selection per profile name.
-    #[serde(default)]
     last_selected: HashMap<String, String>,
 }
 

@@ -8,14 +8,15 @@
 //! trust; and every failure projects to its kind's tag and its display
 //! text, a model round's or a tool call's to its code's tag and its prose. Each record round-trips through serde, as a run log and a replay
 //! depend on, the public JSON record of every kind is the typed record's
-//! JSON and reads back identical, and a record written before the render
-//! existed reads unchanged. The store answer's records are in the `store`
+//! JSON and reads back identical, and an effect or answer record reads
+//! from its JSON form. The store answer's records are in the `store`
 //! child.
 
 use std::fmt;
 
 use runvil_model_client::client::{CompletionResult, RawExchange, ToolCall};
 use runvil_model_client::model::completion_error;
+use runvil_types::error::ErrorCode;
 use runvil_types::packs::PackId;
 use runvil_types::tools::{OutputTrust, tool_error};
 use serde::de::DeserializeOwned;
@@ -168,9 +169,9 @@ fn a_render_answer_records_each_rendered_tool_whole() {
 }
 
 #[test]
-fn records_written_before_the_render_existed_read_unchanged() {
+fn effect_and_answer_records_read_from_their_json_form() {
     let effect: EffectRecord =
-        serde_json::from_str(r#"{"Timer":{"seconds":0.5}}"#).expect("an older record reads");
+        serde_json::from_str(r#"{"Timer":{"seconds":0.5}}"#).expect("the record reads");
     assert_eq!(effect, EffectRecord::Timer { seconds: 0.5 });
     for (line, expected) in [
         (
@@ -181,7 +182,7 @@ fn records_written_before_the_render_existed_read_unchanged() {
         ),
         (r#""Dropped""#, AnswerRecord::Dropped),
     ] {
-        let read: AnswerRecord = serde_json::from_str(line).expect("an older record reads");
+        let read: AnswerRecord = serde_json::from_str(line).expect("the record reads");
         assert_eq!(read, expected, "{line}");
     }
 }
@@ -330,25 +331,25 @@ fn a_failed_tool_call_answer_records_the_errors_prose_and_hides_its_cause() {
     let record = EffectAnswer::ToolCall(Err(error)).to_record();
     assert_eq!(
         record,
-        AnswerRecord::ToolCall(Err(FailureRecord::new("backend", "backend failed"))),
+        AnswerRecord::ToolCall(Err(FailureRecord::new("tool_backend", "backend failed"))),
         "the prose is the model-safe text; the cause stays in the message"
     );
     assert_eq!(answer_round_trip(&record), record);
 }
 
 #[test]
-fn a_failed_tool_call_answer_records_each_tool_codes_tag_and_any_other_code_as_other() {
-    for (code, tag) in [
-        (ErrorCode::ToolInvalidArguments, "invalid_arguments"),
-        (ErrorCode::ToolBackend, "backend"),
-        (ErrorCode::ToolTransport, "transport"),
-        (ErrorCode::ToolOther, "other"),
-        (ErrorCode::Internal, "other"),
+fn a_failed_tool_call_answer_records_its_codes_tag() {
+    for code in [
+        ErrorCode::ToolInvalidArguments,
+        ErrorCode::ToolBackend,
+        ErrorCode::ToolTransport,
+        ErrorCode::ToolOther,
+        ErrorCode::Internal,
     ] {
         let record = EffectAnswer::ToolCall(Err(tool_error(code, "failed"))).to_record();
         assert_eq!(
             record,
-            AnswerRecord::ToolCall(Err(FailureRecord::new(tag, "failed"))),
+            AnswerRecord::ToolCall(Err(FailureRecord::new(code.tag(), "failed"))),
             "{code:?}"
         );
     }
@@ -369,7 +370,7 @@ fn a_failure_record_of_each_kind_round_trips_through_json() {
                 ErrorCode::ToolInvalidArguments,
                 "path is required",
             ))),
-            r#"{"ToolCall":{"Err":{"kind":"invalid_arguments","message":"path is required"}}}"#,
+            r#"{"ToolCall":{"Err":{"kind":"tool_invalid_arguments","message":"path is required"}}}"#,
         ),
         (
             EffectAnswer::Vfs(Err(VfsError::ReadOnly {

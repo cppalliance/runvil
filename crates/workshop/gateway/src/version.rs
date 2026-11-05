@@ -1,11 +1,11 @@
 //! The Gateway version check: does the Gateway Workshop attached to meet
 //! the lowest release the pin allows?
 //!
-//! After the split, Workshop and the Gateway no longer come from one
-//! commit, so a running Gateway may be older than the pin. Nothing else
-//! proves the API surface matches: the pin's `min_gateway` is the lowest
-//! release with every operation Workshop calls, so a Gateway below it is
-//! missing calls that exist only in later releases.
+//! Workshop and the Gateway ship as separate releases, so a running
+//! Gateway may be older than the pin. Nothing else proves the API surface
+//! matches: the pin's `min_gateway` is the lowest release with every
+//! operation Workshop calls, so a Gateway below it is missing calls that
+//! exist only in later releases.
 //!
 //! Both versions are logged, and a Gateway below the minimum is announced
 //! on the status bar through the same push facade every other startup

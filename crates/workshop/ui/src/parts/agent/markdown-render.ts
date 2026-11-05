@@ -7,8 +7,8 @@
 // skin's --syntax-* tokens); DOMPurify sanitizes the final string before it
 // touches the DOM. Sanitizing here, at the render boundary, means no
 // caller can bypass it: marked deliberately does not sanitize (it emits
-// javascript: hrefs and passes raw <script> through) and its own
-// sanitize option was removed for giving false confidence.
+// javascript: hrefs and passes raw <script> through) and has no sanitize
+// option.
 //
 // Shiki init is async but renderMarkdown is sync, so the highlighter is
 // created at module scope and readiness is exported as markdownReady for

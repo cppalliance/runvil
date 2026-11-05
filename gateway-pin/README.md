@@ -16,8 +16,8 @@ cargo-dist writes for it:
 The release's own asset list supplies the size of each archive. The script
 reads the name and hash from `dist-manifest.json` and requires `sha256.sum`
 to state the same hash for that name, then checks the digest GitHub reports
-for the uploaded asset when the release carries one. Any disagreement stops
-the run before a byte is written.
+for the uploaded asset. Any disagreement stops the run before a byte is
+written.
 
 No OpenAPI or AsyncAPI document is expected. The Gateway repository
 publishes none, so the pin records no spec and says nothing about one. If a

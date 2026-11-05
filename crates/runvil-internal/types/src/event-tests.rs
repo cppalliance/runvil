@@ -221,7 +221,7 @@ fn content_samples() -> Vec<Event> {
             turn: 2,
             tool_call_id: "call_1".to_owned(),
             alias: "read_file".to_owned(),
-            tool: Some(read_tool()),
+            tool: read_tool(),
             vendor: Some("acme".to_owned()),
             content: "file contents".to_owned(),
             trusted: false,
@@ -318,40 +318,23 @@ fn a_reply_serializes_its_origin_and_its_round() {
 }
 
 #[test]
-fn a_reply_without_origin_reads_back_as_chat() {
-    // A line that leaves `origin` out still parses, defaulting to a chat
-    // reply. Without `#[serde(default)]` this deserialization fails.
-    let line = r#"{"kind":"assistant_reply","execution":"run-1","section":"Gather","provenance":{"task":"0","seq":1},"turn":1,"round":0,"text":"hi","finish_reason":null,"model":"llama-3","metrics":null}"#;
-    let event: Event = serde_json::from_str(line).expect("an old reply parses");
-    match event {
-        Event::AssistantReply { origin, .. } => assert_eq!(origin, ReplyOrigin::Chat),
-        other => panic!("expected an assistant reply, got {other:?}"),
-    }
-}
-
-#[test]
-fn a_tool_result_without_a_bound_tool_keeps_its_logged_shape() {
-    // A result logged without `tool` or `vendor` reads back with neither,
-    // and a result with neither writes that same line.
-    let line = r#"{"kind":"tool_result","execution":"run-1","section":"Gather","provenance":{"task":"0","seq":5},"turn":2,"tool_call_id":"","alias":"ask","content":"hi","trusted":true}"#;
-    let event: Event = serde_json::from_str(line).expect("an older tool result parses");
+fn a_tool_result_without_a_vendor_keeps_its_logged_shape() {
+    // A result with no vendor writes no `vendor` key, and that line reads
+    // back with no vendor.
+    let line = r#"{"kind":"tool_result","execution":"run-1","section":"Gather","provenance":{"task":"0","seq":5},"turn":2,"tool_call_id":"","alias":"read_file","tool":"files/read","content":"hi","trusted":true}"#;
+    let event: Event = serde_json::from_str(line).expect("a tool result without a vendor parses");
     assert!(matches!(
         &event,
-        Event::ToolResult {
-            tool: None,
-            vendor: None,
-            ..
-        }
+        Event::ToolResult { tool, vendor: None, .. } if *tool == read_tool()
     ));
     assert_wire(&event, line);
 }
 
 #[test]
 fn a_serialized_event_is_tagged_by_kind_with_its_coordinates_beside_the_payload() {
-    // The tag and the three coordinates are the serialized form's stable
-    // keys: a caller can key an event by them without inspecting the
-    // payload, and renaming any of them breaks every event serialized
-    // before it.
+    // The tag and the three coordinates sit beside the payload in every
+    // event's serialized form, so a caller can key an event by them
+    // without inspecting the payload.
     let event = Event::VfsWriteSucceeded {
         execution: "run-1".to_owned(),
         section: "Gather".to_owned(),
@@ -370,19 +353,6 @@ fn a_serialized_event_is_tagged_by_kind_with_its_coordinates_beside_the_payload(
     assert_wire(
         &succeeded,
         r#"{"kind":"task_succeeded","execution":"run-1","section":"Worker","provenance":{"task":"0.1","seq":10},"task":"0.1"}"#,
-    );
-}
-
-#[test]
-fn a_task_started_line_carrying_an_origin_still_reads_back() {
-    // Logs written by earlier versions carry an `origin` key on
-    // `task_started`; it must be ignored, never rejected, so those logs
-    // still load.
-    let line = r#"{"kind":"task_started","execution":"run-1","section":"Gather","provenance":{"task":"0","seq":2},"task":"0.0","target":"Worker","origin":"author","input":null,"item":null,"index":null,"var":{}}"#;
-    let event: Event = serde_json::from_str(line).expect("an older task_started line parses");
-    assert!(
-        matches!(&event, Event::TaskStarted { task: started, target, .. } if *started == task("0.0") && target == "Worker"),
-        "the line must read back as the task's start: {event:?}"
     );
 }
 

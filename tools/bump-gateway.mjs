@@ -166,15 +166,15 @@ export function executableName(manifest) {
 /**
  * One pin target entry per released triple: the archive's name, its sha256,
  * and its size. The name and hash come from `dist-manifest.json` and must
- * also appear in `sha256.sum` with the same hash, and the release's own
- * asset digest must agree when GitHub states one. `sizes` and `digests` come
- * from the release's asset list, because neither checksum file records a
- * size.
+ * also appear in `sha256.sum` with the same hash, and the digest the
+ * release states for the asset must be that hash too. `sizes` and `digests`
+ * come from the release's asset list, because neither checksum file records
+ * a size.
  *
  * Every disagreement is collected and reported together, by pin field, so a
  * release that is wrong in several places says so in one run.
  */
-export function selectTargets({ manifest, checksums, sizes, digests = new Map() }) {
+export function selectTargets({ manifest, checksums, sizes, digests }) {
   const artifacts = manifest?.["artifacts"];
   if (artifacts === null || typeof artifacts !== "object" || Array.isArray(artifacts)) {
     throw new Error(`${DIST_MANIFEST_ASSET} holds no artifacts object`);
@@ -215,7 +215,11 @@ export function selectTargets({ manifest, checksums, sizes, digests = new Map() 
       continue;
     }
     const digest = digests.get(asset);
-    if (digest !== undefined && digest.toLowerCase() !== recorded.toLowerCase()) {
+    if (digest === undefined) {
+      problems.push(`targets.${target}.sha256 is absent from the release's asset list for ${asset}`);
+      continue;
+    }
+    if (digest.toLowerCase() !== recorded.toLowerCase()) {
       problems.push(
         `targets.${target}.sha256 is ${recorded.toLowerCase()} in ${DIST_MANIFEST_ASSET} ` +
           `but the release states ${digest.toLowerCase()}`,
@@ -326,9 +330,9 @@ function readIfPresent(path) {
 
 /**
  * Reads the release's asset list, returning each asset's size and the
- * sha256 GitHub states for it. `gh` prints the digest as `sha256:<hex>`, and
- * the field is absent on an older release, so a missing digest is reported
- * as no digest rather than as a mismatch.
+ * sha256 GitHub states for it. `gh` prints the digest as `sha256:<hex>`. An
+ * asset with no digest in that form gets no entry, so `selectTargets`
+ * refuses a target whose archive has none.
  */
 export function readReleaseAssets(release) {
   const sizes = new Map();
@@ -342,9 +346,7 @@ export function readReleaseAssets(release) {
       sizes.set(name, asset["size"]);
     }
     const digest = asset["digest"];
-    if (isSha256(digest)) {
-      digests.set(name, digest);
-    } else if (typeof digest === "string" && digest.startsWith("sha256:")) {
+    if (typeof digest === "string" && digest.startsWith("sha256:")) {
       const hex = digest.slice("sha256:".length);
       if (isSha256(hex)) {
         digests.set(name, hex);
@@ -479,9 +481,9 @@ function placeholderValues(pin) {
  * Runs the bump: downloads, checks, prints the diff, and writes the spec
  * copies and then the pin. `dryRun` stops before the writes.
  *
- * A spec copy the release no longer publishes is left in place rather than
- * deleted: the pin stops naming it, and a person decides whether the file
- * stays as a reference.
+ * A spec copy in `gateway-pin/` that the release does not publish is left in
+ * place rather than deleted: the pin does not name it, and a person decides
+ * whether the file stays as a reference.
  */
 export function bumpGateway({
   root = REPOSITORY_ROOT,

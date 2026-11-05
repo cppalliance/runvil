@@ -1,6 +1,6 @@
-// Unit test for the editor commands catalog (plan step 13,
-// src/parts/editor/editor-commands.ts and editor.contribution.ts) and the
-// editor lifecycle (plan step 15: untitled buffers, the closed-editor
+// Unit test for the editor commands catalog
+// (src/parts/editor/editor-commands.ts and editor.contribution.ts) and the
+// editor lifecycle (untitled buffers, the closed-editor
 // stack, the CodeMirror text-control adapter, the ":" go-to-line
 // provider, recent-files recording, and the activeEditor/editorLangId
 // context keys). Every
@@ -538,8 +538,7 @@ const selJson = (view) => JSON.stringify(view.state.selection.ranges.map((r) => 
     "workbench.action.files.newUntitledFile",
     "workbench.action.reopenClosedEditor",
     "workbench.action.gotoLine",
-    // Step 20: the workbench-level editor rows registered when the menu
-    // tree assembled - Save, the four splits, and cycling.
+    // The workbench-level editor rows: Save, the four splits, and cycling.
     "workbench.action.files.save",
     "workbench.action.splitEditorUp",
     "workbench.action.splitEditorDown",
@@ -554,8 +553,8 @@ const selJson = (view) => JSON.stringify(view.state.selection.ranges.map((r) => 
     EXPECTED_IDS.every((id) => Commands.lookup(id) !== undefined),
   );
   const palette = Menus.getMenuItems(MenuId.CommandPalette).map((row) => row.command);
-  // The catalog rows plus step 14's four settings toggles; EXPECTED_IDS
-  // includes step 15's three lifecycle actions.
+  // The catalog rows plus the four settings toggles; EXPECTED_IDS
+  // includes the three lifecycle actions.
   check(
     "every catalog row reaches the palette",
     palette.length === EXPECTED_IDS.length + 4 && EXPECTED_IDS.every((id) => palette.includes(id)),
@@ -564,7 +563,7 @@ const selJson = (view) => JSON.stringify(view.state.selection.ranges.map((r) => 
   check("commentLine keeps its catalog title", Commands.lookup("editor.action.commentLine")?.title === "Toggle Line Comment");
 
   const selectionMenu = Menus.getMenuItems(MenuId.MenubarSelectionMenu).map((row) => row.command);
-  // The thirteen catalog rows plus step 14's Column Selection Mode toggle.
+  // The thirteen catalog rows plus the Column Selection Mode toggle.
   check(
     "the Selection menu lists its thirteen rows",
     selectionMenu.length === 14 &&
@@ -585,9 +584,8 @@ const selJson = (view) => JSON.stringify(view.state.selection.ranges.map((r) => 
         .every((id) => goMenu.includes(id)),
   );
   const fileMenu = Menus.getMenuItems(MenuId.MenubarFileMenu).map((row) => row.command);
-  // Updated in step 20: the editor contribution also registers Save
-  // (File 4_save) when the menu tree assembled; Close Editor registers
-  // from the layout contribution.
+  // The editor contribution also registers Save (File 4_save); Close
+  // Editor registers from the layout contribution.
   check(
     "the File menu lists New Text File and Save",
     fileMenu.length === 2 &&
@@ -652,7 +650,7 @@ const selJson = (view) => JSON.stringify(view.state.selection.ranges.map((r) => 
   panel.dispose();
 }
 
-// --- Step 15: editor lifecycle --------------------------------------------
+// --- Editor lifecycle -----------------------------------------------------
 // A stub surface with the EditorSurface contract's dirty semantics, for
 // panel-level tests that never touch CodeMirror.
 function createStubSurface() {

@@ -8,7 +8,7 @@
 // sorting (navigation group first, then groups lexically, then order,
 // then title) so group boundaries - never a separator item kind - fall
 // between contiguous group clusters. Also covers the workspace feature's
-// Open Recent provider (plan step 17): dynamic root and recent-file rows
+// Open Recent provider: dynamic root and recent-file rows
 // merged with the static Reopen/More/Clear rows in sort order, and no
 // rows when roots and history are both empty. Bundles the modules with
 // esbuild and drives them DOM-free.
@@ -193,7 +193,7 @@ function check(name, condition) {
   );
 }
 
-// --- Open Recent: the workspace provider's dynamic rows (step 17) -------------
+// --- Open Recent: the workspace provider's dynamic rows -----------------------
 
 {
   const menus = new MenuRegistry();

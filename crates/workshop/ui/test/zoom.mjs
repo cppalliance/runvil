@@ -228,7 +228,7 @@ async function scenario({ desktop = false } = {}) {
   module.restoreZoom(4.2998);
   check("the upper bound restores", module.getZoom() === 4.2998 && module.getZoomLevel() === 8);
   module.resetZoom();
-  // A factor an older build persisted (0.1 steps) snaps to the nearest level.
+  // An off-grid factor snaps to the nearest level.
   module.restoreZoom(1.1);
   check("an off-grid factor snaps up to the nearest level", module.getZoomLevel() === 1 && module.getZoom() === 1.2);
   module.restoreZoom(0.7);

@@ -31,12 +31,11 @@ fn an_idle_document_decodes_to_an_empty_text() {
 #[test]
 fn the_field_names_and_json_types_are_the_contract() {
     // Pins the wire names and types through a decode of each, so a rename
-    // on either side fails here even if nobody updates a fixture. The
-    // future OpenAPI spec describes these same two fields.
+    // on either side fails here even if nobody updates a fixture.
     //
     // Both fields are required: the Gateway writes the whole snapshot on
-    // every event, so a missing field is a version skew the decoder should
-    // report rather than paper over with a default.
+    // every event, so a document missing either one is malformed, and the
+    // decoder reports it rather than filling in a default.
     for document in [r#"{"busy":true}"#, r#"{"text":"Loading"}"#] {
         let decoded = serde_json::from_str::<Progress>(document);
         assert!(
@@ -64,22 +63,4 @@ fn an_unknown_field_is_tolerated() {
         serde_json::from_str(r#"{"busy":true,"text":"Loading","fraction":0.45}"#)
             .expect("an unknown field is ignored");
     assert_eq!(snapshot.text, "Loading");
-}
-
-#[test]
-fn the_old_operation_event_shape_is_not_a_progress_snapshot() {
-    // A gateway emitting the retired weighted-tree operation events is a
-    // version skew the decoder reports, never renders.
-    let stale = serde_json::json!({
-        "operation": 7,
-        "path": "local-models/ggml/download",
-        "label": "Download",
-        "state": {"Updated": {"fraction": 0.5}},
-    })
-    .to_string();
-    let decoded = serde_json::from_str::<Progress>(&stale);
-    assert!(
-        decoded.is_err(),
-        "a payload without busy and text is not a snapshot: {decoded:?}"
-    );
 }

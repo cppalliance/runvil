@@ -303,8 +303,8 @@ export interface AgentCancelFrame {
 // --- Inbound frame guards ---------------------------------------------------
 // Each guard checks every field its type declares: required fields must be
 // present, and optional fields, when present, must hold their type (absent
-// optionals are omitted keys, never `null`). Extra fields pass, so the
-// server may add fields without breaking older UIs.
+// optionals are omitted keys, never `null`). Extra fields pass, so a
+// frame may hold fields the UI does not read.
 
 type Check = (value: unknown) => boolean;
 type Guard<T> = (value: unknown) => value is T;

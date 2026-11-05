@@ -79,10 +79,9 @@ fn content_events_pair_each_tool_result_with_its_caller_into_a_transcript() -> T
                 } else {
                     "script"
                 };
-                let tool = match (vendor, tool) {
-                    (Some(vendor), Some(tool)) => format!("{vendor}/{tool}"),
-                    (None, Some(tool)) => tool.to_string(),
-                    (_, None) => "no tool".to_owned(),
+                let tool = match vendor {
+                    Some(vendor) => format!("{vendor}/{tool}"),
+                    None => tool.to_string(),
                 };
                 transcript.push(format!("{alias} ({tool}) for the {caller}: {content}"));
             }

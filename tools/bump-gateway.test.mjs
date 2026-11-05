@@ -122,15 +122,12 @@ function checksumSum(manifest) {
  * `sizes` value of `null` models a release that states no size for that
  * asset.
  */
-function releaseView({ manifest, sizes = sizesFor(), extras = {}, omitDigest = false }) {
+function releaseView({ manifest, sizes = sizesFor(), extras = {} }) {
   const assets = [];
   const push = (name, size, digest) => {
     const asset = { name, digest: `sha256:${digest}`, state: "uploaded" };
     if (Number.isInteger(size)) {
       asset.size = size;
-    }
-    if (omitDigest) {
-      delete asset.digest;
     }
     assets.push(asset);
   };
@@ -188,11 +185,10 @@ function fakeGh({
   manifest = distManifest(),
   specs = { "openapi.yaml": OPENAPI, "asyncapi.yaml": ASYNCAPI },
   sizes = sizesFor(),
-  omitDigest = false,
   view = null,
   calls = [],
 } = {}) {
-  const listed = releaseView({ manifest, sizes, extras: specs, omitDigest });
+  const listed = releaseView({ manifest, sizes, extras: specs });
   return (args) => {
     calls.push(args);
     if (args[0] === "release" && args[1] === "view") {
@@ -397,9 +393,15 @@ test("a release digest that disagrees with the manifest is refused", () => {
   );
 });
 
-test("a release that states no digest still pins from the two files", () => {
-  const result = downloadRelease({ tag: TAG, gh: fakeGh({ omitDigest: true }) });
-  assert.equal(result.pin["targets"]["aarch64-apple-darwin"]["sha256"], digestFor("aarch64-apple-darwin"));
+test("a target whose release asset states no digest is refused by pin field", () => {
+  const manifest = distManifest();
+  const view = JSON.parse(releaseView({ manifest }));
+  const linux = view["assets"].find((asset) => asset["name"] === assetFor("x86_64-unknown-linux-gnu"));
+  delete linux["digest"];
+  assert.throws(
+    () => downloadRelease({ tag: TAG, gh: fakeGh({ manifest, view: JSON.stringify(view) }) }),
+    /targets\.x86_64-unknown-linux-gnu\.sha256 is absent from the release's asset list for gateway-x86_64-unknown-linux-gnu\.tar\.xz/,
+  );
 });
 
 test("a target with no published size is refused rather than pinned as zero", () => {
@@ -468,6 +470,7 @@ test("an ambiguous triple is refused rather than pinned by guess", () => {
         manifest,
         checksums: parseChecksumSum(checksumSum(manifest)),
         sizes: sizesFor(),
+        digests: new Map(TARGETS.map((target) => [assetFor(target), digestFor(target)])),
       }),
     /targets\.x86_64-unknown-linux-gnu\.asset is ambiguous/,
   );

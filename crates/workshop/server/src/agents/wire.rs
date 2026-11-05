@@ -279,7 +279,7 @@ impl AgentEvent {
             // answers its own tool call and stays a tool result.
             Event::ToolResult {
                 tool_call_id,
-                tool: Some(tool),
+                tool,
                 vendor: Some(vendor),
                 content,
                 ..

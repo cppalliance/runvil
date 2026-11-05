@@ -146,7 +146,7 @@ check("the spacer is 14px plus the 240px ceiling for a tall feed", spacerHeight(
 
 // --- Pinned, released, re-pinned -----------------------------------------------------
 
-check("the thresholds are the plan's", PIN_THRESHOLD_PX === 4 && INPUT_WINDOW_MS === 250 && FOLLOW_SPEED_PX_PER_MS === 3.6 && FOLLOW_SNAP_MS === 250);
+check("the thresholds hold their pinned values", PIN_THRESHOLD_PX === 4 && INPUT_WINDOW_MS === 250 && FOLLOW_SPEED_PX_PER_MS === 3.6 && FOLLOW_SNAP_MS === 250);
 
 {
   const feed = start();

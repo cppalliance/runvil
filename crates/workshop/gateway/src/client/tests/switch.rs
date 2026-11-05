@@ -91,22 +91,6 @@ async fn the_no_profile_selection_posts_null_and_decodes_a_null_profile() {
 }
 
 #[tokio::test]
-async fn an_answer_without_a_profile_key_still_decodes() {
-    let (app, _received) = recording_switch_route(r#"{"restart_required":true}"#);
-    let base_url = serve(app).await;
-    let client = GatewayClient::new(&base_url, "").expect("client builds in tests");
-    let response = client
-        .switch_profile(Some("beta"))
-        .await
-        .expect("the request completes");
-    let SwitchResponse::Selected(outcome) = response else {
-        panic!("an accepted selection decodes, got {response:?}");
-    };
-    assert_eq!(outcome.profile, None, "an absent profile reads as none");
-    assert!(outcome.restart_required);
-}
-
-#[tokio::test]
 async fn a_declined_switch_is_buffered_not_an_error() {
     let app = axum::Router::new().route(
         "/admin/switch-profile",

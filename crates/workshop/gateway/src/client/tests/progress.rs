@@ -105,31 +105,6 @@ async fn subscribe_progress_decodes_snapshots_and_skips_heartbeat_comments() {
 }
 
 #[tokio::test]
-async fn subscribe_progress_refuses_the_old_operation_event_shape_as_malformed() {
-    // A gateway emitting weighted-tree operation events is a version
-    // skew the decoder reports, never renders.
-    let stale = serde_json::json!({
-        "operation": 7,
-        "path": "local-models/ggml/download",
-        "label": "Download",
-        "state": {"Updated": {"fraction": 0.5}},
-    })
-    .to_string();
-    let body = format!("data: {stale}\n\n");
-
-    let events = collect_events(mock_progress(body)).await;
-
-    assert_eq!(events.len(), 1, "one item per data block");
-    let error = events[0]
-        .as_ref()
-        .expect_err("a payload without busy and text is not a snapshot");
-    assert!(
-        matches!(error, GatewayError::Malformed { .. }),
-        "the stale shape is a malformed error, got {error}"
-    );
-}
-
-#[tokio::test]
 async fn subscribe_progress_classifies_a_non_success_status() {
     let base_url = serve(mock_progress(String::new())).await;
     let client = GatewayClient::new(&base_url, "wrong-token").expect("client builds in tests");

@@ -18,8 +18,8 @@ export interface LayoutPolicy {
   readonly anchors: readonly string[];
   /**
    * Zones that always have a group, even with no panel in it: after every
-   * layout apply, a zone with no live group gets an empty one. A layout
-   * saved before the zone had one gains it on restore.
+   * layout apply, a zone with no live group gets an empty one. A restored
+   * layout without one gains it.
    */
   readonly emptyZones?: readonly ZoneName[];
   /** Opens the default layout into a blank dock. */

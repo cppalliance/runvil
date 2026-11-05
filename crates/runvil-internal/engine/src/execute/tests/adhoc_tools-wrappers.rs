@@ -73,17 +73,13 @@ fn a_model_call_to_the_wrapper_gives_the_model_the_catalog_calls_text_byte_for_b
                 vendor,
                 trusted,
                 ..
-            } if tool_call_id == "call_1" => Some((
-                tool.as_ref().map(ToString::to_string),
-                vendor.clone(),
-                *trusted,
-            )),
+            } if tool_call_id == "call_1" => Some((tool.to_string(), vendor.clone(), *trusted)),
             _ => None,
         })
         .expect("the wrapper's call reports its result");
     assert_eq!(
         result,
-        (Some("adhoc/search".to_owned()), None, true),
+        ("adhoc/search".to_owned(), None, true),
         "the result names the adhoc tool's id and no vendor, and is trusted because \
          the author's function produced the text"
     );

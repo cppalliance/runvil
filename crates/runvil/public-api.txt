@@ -971,7 +971,7 @@ pub runvil::event::Event::ToolResult::content: alloc::string::String
 pub runvil::event::Event::ToolResult::execution: alloc::string::String
 pub runvil::event::Event::ToolResult::provenance: runvil::ids::Provenance
 pub runvil::event::Event::ToolResult::section: alloc::string::String
-pub runvil::event::Event::ToolResult::tool: core::option::Option<runvil::tools::ToolId>
+pub runvil::event::Event::ToolResult::tool: runvil::tools::ToolId
 pub runvil::event::Event::ToolResult::tool_call_id: alloc::string::String
 pub runvil::event::Event::ToolResult::trusted: bool
 pub runvil::event::Event::ToolResult::turn: u32

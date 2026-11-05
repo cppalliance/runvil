@@ -130,7 +130,7 @@ impl ChainOps<'_> {
             turn,
             site.call_id().unwrap_or_default(),
             binding.alias(),
-            Some(binding.id()),
+            binding.id(),
             chain.ctx.tool_set().vendor_for(binding.id()),
             &text,
             trust,

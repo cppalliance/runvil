@@ -1,4 +1,4 @@
-// Boot-queue test for WorkshopSocket (step 13): status/models pushes that
+// Boot-queue test for WorkshopSocket: status/models pushes that
 // arrive before ready() are queued, then replayed in arrival order when
 // ready() is called; pushes after ready() deliver immediately; ready() is
 // idempotent; disposal and a connection drop each clear the queue; the

@@ -9,7 +9,7 @@
 // the change a mid-session fromJSON produces is dropped, not written.
 // Only identity is stored - panels re-create through their registered
 // factories on load. A restore that fails for any reason (a value that is
-// not an envelope, a schema version bump, a fromJSON throw) clears the
+// not an envelope, another schema version, a fromJSON throw) clears the
 // dock and reports failure so the caller boots the known-good default
 // layout.
 
@@ -18,8 +18,7 @@ import type { DockviewApi, SerializedDockview } from "dockview";
 import { DisposableStore, toDisposable, type IDisposable } from "@workshop/platform/lifecycle";
 import { resetZones, restoreZoneState, serializeZoneState, withZoneRestore } from "./zones";
 
-// v5: every panel's tab is the generic "panel-tab". A snapshot of any
-// other version falls back to the default layout.
+// A snapshot of any other version falls back to the default layout.
 export const LAYOUT_SCHEMA_VERSION = 5;
 
 const SAVE_DEBOUNCE_MS = 250;

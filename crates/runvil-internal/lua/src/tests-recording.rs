@@ -236,7 +236,7 @@ impl Recorder {
     }
 
     /// The tool each `ToolResult` content report names, in order.
-    pub(crate) fn tool_result_tools(&self) -> Vec<Option<ToolId>> {
+    pub(crate) fn tool_result_tools(&self) -> Vec<ToolId> {
         self.events()
             .iter()
             .filter_map(|event| match event {

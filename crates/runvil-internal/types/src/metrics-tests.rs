@@ -83,16 +83,17 @@ fn a_tool_call_without_a_bound_tool_keeps_its_logged_shape() {
     // A call logged without `tool` or `vendor` reads back with neither,
     // and a call with neither writes that same line.
     let line = r#"{"id":"call_1","name":"fetch","arguments":{}}"#;
-    let call: ToolCallEvent = serde_json::from_str(line).expect("an older call deserializes");
+    let call: ToolCallEvent =
+        serde_json::from_str(line).expect("a call without a bound tool deserializes");
     assert_eq!((&call.tool, &call.vendor), (&None, &None));
     assert_wire(&call, line);
 }
 
 #[test]
 fn metrics_line_shape_is_stable() {
-    // The pinned line is the persisted-log schema for a call's metrics:
-    // a change that renames a field, reorders serialization, or makes
-    // an absent field required breaks every log written before it.
+    // The pinned line is the serialized form of a call's metrics: each
+    // field's name, the field order, and which absent sections are left
+    // out.
     let line = concat!(
         r#"{"usage":{"prompt_tokens":7,"completion_tokens":3,"#,
         r#""total_tokens":10,"cached_tokens":2,"reasoning_tokens":1},"#,

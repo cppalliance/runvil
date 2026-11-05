@@ -74,6 +74,7 @@ fn success_router() -> Router {
             "expected the query to be forwarded in the body"
         );
         Json(serde_json::json!({
+            "query": "hi",
             "results": [
                 { "title": "T", "url": "https://e.com", "description": "D" }
             ]
@@ -127,7 +128,7 @@ async fn forwards_validated_optional_fields() {
             body.get("include_domains"),
             Some(&serde_json::json!(["example.com"]))
         );
-        Json(serde_json::json!({ "results": [{ "url": "https://e.com" }] }))
+        Json(serde_json::json!({ "query": "hi", "results": [{ "url": "https://e.com" }] }))
     }
     let mock = MockServer::spawn(Router::new().route("/tools/web_search", post(web_search))).await;
     let request = GatewaySearchRequest {

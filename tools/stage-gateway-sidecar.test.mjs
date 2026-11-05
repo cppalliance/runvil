@@ -226,8 +226,8 @@ test("marking a staged sidecar pinned records which kind it was", () => {
       kind: "release",
       tag: "gateway-v0.4.0",
     });
-    // Removal takes the marker with the sidecar, so a later build is free
-    // to refresh from the workspace again.
+    // Removal takes the marker with the sidecar, so a sidecar staged
+    // later never reads this one's record.
     removeGatewaySidecar({ root, target });
     assert.throws(() => readFileSync(marker), /ENOENT/);
     assert.equal(readGatewaySidecarPin({ root, target }), null);

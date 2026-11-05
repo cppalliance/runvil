@@ -66,13 +66,12 @@ struct GatewaySearchRequest {
 /// The reply to a Gateway web search, mirroring the Gateway's
 /// `POST /v1/tools/web_search` response.
 ///
-/// `results` and each result's `url` are required, so a reply without them
-/// is a malformed response. Every other field defaults when absent, and
-/// unknown fields are ignored so the Gateway can grow its reply.
+/// `query`, `results` and each result's `url` are required, so a reply
+/// without them is a malformed response. Every other field defaults when
+/// absent, and unknown fields are ignored so the Gateway can grow its reply.
 #[derive(Clone, Debug, PartialEq, Eq, serde::Deserialize)]
 struct GatewaySearchResponse {
     /// The query the Gateway ran, after its trimming.
-    #[serde(default)]
     query: String,
     /// The result rows, in the Gateway's order.
     results: Vec<GatewaySearchResult>,

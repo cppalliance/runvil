@@ -260,7 +260,7 @@ fn one_of_every_event_variant() -> Vec<(Event, Seam)> {
                 turn: 1,
                 tool_call_id: "call_1".to_owned(),
                 alias: "search".to_owned(),
-                tool: None,
+                tool: ToolId::parse("web/search").expect("a valid tool id"),
                 vendor: None,
                 content: "found".to_owned(),
                 trusted: false,

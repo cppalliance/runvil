@@ -4,9 +4,8 @@ use super::ErrorCode;
 
 impl ErrorCode {
     /// Returns the code's stable tag: its name in snake_case, such as
-    /// `not_found` or `rate_limited`. No two codes share a tag. Each store
-    /// and model code keeps the tag a run log already records for it, so
-    /// stored records keep their meaning.
+    /// `not_found` or `rate_limited`. No two codes share a tag. Store and
+    /// model codes are named after the store and model failure kinds.
     #[must_use]
     pub const fn tag(self) -> &'static str {
         match self {

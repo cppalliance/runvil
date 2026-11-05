@@ -7,10 +7,9 @@
 // subscribes to onDidChange and reconfigures one Compartment per setting;
 // the toggle actions in editor.contribution.ts call toggle().
 //
-// Render Whitespace is a three-way mode (none, selection, all). Earlier
-// builds stored it as a boolean, so a stored true reads as all and a
-// stored false as the default selection. Its context key stays boolean:
-// true unless the mode is none, which is what the menu's check shows.
+// Render Whitespace is a three-way mode (none, selection, all). Its
+// context key stays boolean: true unless the mode is none, which is what
+// the menu's check shows.
 //
 // The persisted value arrives as unknown and passes a hand-written shape
 // check - a malformed or hostile payload reads as the defaults, never

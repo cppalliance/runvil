@@ -1,11 +1,11 @@
 // Save-race test for the editor panel (src/parts/editor/editor-panel.ts,
 // editor-surface.ts): the saved baseline is the text the write persisted,
 // not whatever the editor holds when the PUT resolves. Keystrokes typed
-// while a write is in flight must stay dirty - previously markSaved()
-// snapshotted the live text, so those keystrokes were baselined as saved
-// and confirmClose() skipped the unsaved-changes prompt: silent data
-// loss. Drives the real EditorPanel with a stubbed surface and a writer
-// that stalls until the test releases it.
+// while a write is in flight must stay dirty: baselining the live text
+// instead would count them as saved, and confirmClose() would skip the
+// unsaved-changes prompt and lose them silently. Drives the real
+// EditorPanel with a stubbed surface and a writer that stalls until the
+// test releases it.
 // Run: node test/editor-save-race.mjs
 import { writeFile } from "node:fs/promises";
 import os from "node:os";

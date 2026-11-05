@@ -1,5 +1,5 @@
-// Unit test for the workspace switch moving UI state (plan step 13:
-// src/parts/workspace-document/workspace-document.contribution.ts over the
+// Unit test for the workspace switch moving UI state
+// (src/parts/workspace-document/workspace-document.contribution.ts over the
 // UI-state adapter, the dock, the tree state, and the closed-editor
 // stack). Bundles the contribution with esbuild - the Tauri dialog and
 // event modules aliased to the recording stubs in test/helpers - and

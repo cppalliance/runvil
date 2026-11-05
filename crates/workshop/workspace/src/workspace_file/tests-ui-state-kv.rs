@@ -175,10 +175,10 @@ async fn a_row_that_no_longer_parses_reads_as_none_beside_intact_rows() {
 }
 
 #[tokio::test]
-async fn an_old_file_with_no_ui_state_rows_reads_all_three_as_none() {
+async fn a_file_with_no_ui_state_rows_reads_all_three_as_none() {
     let dir = tempfile::TempDir::new().expect("tempdir");
-    let path = dir.path().join("old.rvwork");
-    // A v1 file holding only the stamp and the window row.
+    let path = dir.path().join("bare.rvwork");
+    // A file holding only the stamp and the window row.
     let conn = open_database(&path).await.expect("seed database opens");
     conn.execute_batch(SCHEMA_V1)
         .await
@@ -186,6 +186,7 @@ async fn an_old_file_with_no_ui_state_rows_reads_all_three_as_none() {
     for (key, value) in [
         (META_FORMAT, FORMAT_NAME),
         (META_VERSION, SUPPORTED_VERSION),
+        (META_NAME, "Bare"),
     ] {
         conn.execute(
             "INSERT INTO meta (key, value) VALUES (?1, ?2)",
@@ -205,9 +206,7 @@ async fn an_old_file_with_no_ui_state_rows_reads_all_three_as_none() {
     .expect("window row inserts");
     drop(conn);
 
-    let file = WorkspaceFile::open(&path)
-        .await
-        .expect("the old file opens");
+    let file = WorkspaceFile::open(&path).await.expect("the file opens");
     let contents = file.contents().await.expect("contents read");
     file.close().await;
 

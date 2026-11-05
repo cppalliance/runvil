@@ -6,7 +6,6 @@ use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::error::LogError;
-use crate::layout;
 use crate::record::{Record, RunId, RunMeta, RunOutcome, Seq};
 use crate::schema;
 
@@ -30,26 +29,17 @@ impl fmt::Debug for RunLog {
 impl RunLog {
     /// Opens the log at `path`, creating the file and the schema when
     /// absent. The parent directory must already exist: this creates the
-    /// file, never a directory. A file written in another layout is
-    /// renamed to `<file name>.stale-<millis>` beside `path`, with its
-    /// write-ahead log, and a fresh log opens in its place.
+    /// file, never a directory.
     ///
     /// # Errors
     /// Returns [`LogError::Io`] when `path` is not UTF-8 (Turso addresses
-    /// databases by string) or a stale file cannot be renamed, and
-    /// [`LogError::Database`] when the database cannot open the file or
-    /// apply the schema.
+    /// databases by string), and [`LogError::Database`] when the database
+    /// cannot open the file or apply the schema.
     pub async fn open(path: &Path) -> Result<Self, LogError> {
         let name = path.to_str().ok_or_else(|| {
             io::Error::new(io::ErrorKind::InvalidInput, "run log path must be utf-8")
         })?;
-        let conn = connect(name).await?;
-        if layout::is_stale(&conn).await? {
-            drop(conn);
-            layout::set_aside(path, now_ms()).await?;
-            return Self::open_str(name).await;
-        }
-        Self::over(conn).await
+        Self::open_str(name).await
     }
 
     /// Opens a log that lives only as long as this value: for tests and
@@ -66,10 +56,9 @@ impl RunLog {
         Self::over(connect(path).await?).await
     }
 
-    /// The log over `conn`, with the schema applied and the layout stamped.
+    /// The log over `conn`, with the schema applied.
     async fn over(conn: turso::Connection) -> Result<Self, LogError> {
         conn.execute_batch(schema::SCHEMA).await?;
-        layout::stamp(&conn).await?;
         Ok(Self { conn })
     }
 

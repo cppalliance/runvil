@@ -55,7 +55,7 @@ fn ask() -> AskTool {
 /// result: the fixture's `agent_event_minimal` entry as the Engine event
 /// it projects from.
 fn operator_message(text: &str) -> Event {
-    tool_result("", "ask", Some(ask_id()), RUNVIL, text)
+    tool_result("", "ask", ask_id(), RUNVIL, text)
 }
 
 /// The fixture's `agent_event_stamped` entry as the Engine event it
@@ -222,7 +222,7 @@ fn an_agent_event_frame_keeps_the_model_on_thinking_and_the_call_id_on_tool_resu
         turn: 2,
         tool_call_id: "call_7".to_owned(),
         alias: "read_file".to_owned(),
-        tool: None,
+        tool: ToolId::parse("files/read").expect("a valid tool id"),
         vendor: None,
         content: "the file's text".to_owned(),
         trusted: false,
@@ -245,7 +245,7 @@ fn an_agent_event_frame_keeps_the_model_on_thinking_and_the_call_id_on_tool_resu
 fn tool_result(
     tool_call_id: &str,
     alias: &str,
-    tool: Option<ToolId>,
+    tool: ToolId,
     vendor: Option<&str>,
     content: &str,
 ) -> Event {

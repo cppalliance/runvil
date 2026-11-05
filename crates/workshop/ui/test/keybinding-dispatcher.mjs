@@ -11,10 +11,10 @@
 // rejected command reported by the registry (the toast's source) and
 // logged rather than posted to the sink, the default status-bar sink's
 // chord prompts and its empty idle text, and the zoom chords
-// moved here from test/zoom.mjs (Ctrl+= / Ctrl+Shift+= / Ctrl+- /
-// Ctrl+0 through event.code, Alt chords unbound, dispose uninstalling
-// the listener). Bundles the module with esbuild and drives it against
-// jsdom; the timer exits use mocked timers.
+// (Ctrl+= / Ctrl+Shift+= / Ctrl+- / Ctrl+0 through event.code, Alt
+// chords unbound, dispose uninstalling the listener). Bundles the
+// module with esbuild and drives it against jsdom; the timer exits use
+// mocked timers.
 // Run: node --test test/keybinding-dispatcher.mjs
 import { mock } from "node:test";
 import path from "node:path";
@@ -283,16 +283,15 @@ function scenario() {
   press("x", { code: "KeyX" });
   mock.timers.tick(3000);
   check(
-    "the bar returns to an empty idle text, not 'Ready'",
+    "the bar returns to an empty idle text",
     barLog.at(-1)?.[0] === "" && barLog.at(-1)?.[1] === "info",
   );
-  check("nothing posted the old idle text", !barLog.some(([label]) => label === "Ready"));
   dispatcher.dispose();
   contextKeys.dispose();
   mock.timers.reset();
 }
 
-// --- Zoom chords (moved from test/zoom.mjs): Ctrl+= / Ctrl+Shift+= / Ctrl+- / Ctrl+0
+// --- Zoom chords: Ctrl+= / Ctrl+Shift+= / Ctrl+- / Ctrl+0
 
 {
   const s = scenario();

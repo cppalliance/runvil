@@ -92,16 +92,15 @@ describes behavior this Pack does not have. `dir.json` is this crate's own.
   key.
 - Added `literal`, a boolean that defaults to false: the pattern is matched as
   plain text, so a pattern such as `foo(` needs no escape.
-- `output_mode` now defaults to `content`, where the earlier snapshot said
-  `files_with_matches`. Its text no longer mentions `-n`, and its enum is
-  unchanged.
-- `head_limit` has no default and `"minimum": 0`. Cursor's text said it
+- `output_mode` keeps Cursor's default, `content`, and Cursor's enum. Its
+  text does not mention `-n`.
+- `head_limit` has no default and `"minimum": 0`. Cursor's text says it
   defaults to 250 and that 0 is unlimited, and this one says that 0 means no
   limit and so does leaving it out. Its text says it counts matching lines in
   `content` mode, files in `files_with_matches`, and file rows in `count`.
 - `path` reads `File or directory to search in, as an absolute path. Defaults
-  to the run's filesystem root.`, where Cursor's text said `Cursor workspace
-  root`, so the earlier edit to that default still holds.
+  to the run's filesystem root.`, where Cursor's text says `Cursor workspace
+  root`.
 - `glob` reads `Glob pattern to filter files, for example "*.js" or
   "**/*.tsx". Only * and ** are special, and matching is case-sensitive. A
   pattern that does not start with "/" is matched at any depth. A pattern
@@ -120,6 +119,4 @@ describes behavior this Pack does not have. `dir.json` is this crate's own.
   are absolute and work as the `path` argument of the other file tools. The
   two placeholders are filled when the definition is built, from the
   constants the code enforces, so the text and the limits cannot drift apart.
-- The removals from the earlier snapshot still hold: the sentence that
-  pointed at `rg` and the sentence that pointed at the `Shell` tool for
-  piping are gone, and the new text names neither.
+- The description names neither `rg` nor the `Shell` tool.

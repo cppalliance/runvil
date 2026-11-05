@@ -1,4 +1,4 @@
-// Editor idiom test (step 16, src/parts/editor/editor-surface.ts): the
+// Editor idiom test (src/parts/editor/editor-surface.ts): the
 // readOnly toggle runs through a Compartment - one reconfigure dispatch,
 // so document text, dirty tracking, and the live view all survive a
 // toggle - and reloads into a live view dispatch a transaction tagged
@@ -200,7 +200,7 @@ await assertNoLeaks(lifecycle, async () => {
   check("the reload replaced the document text", surface.text() === "from the server\n");
   check("a reload is not dirty", !surface.isDirty());
 
-  // The reload deliberately enters undo history (plan step 16, decision 3):
+  // The reload deliberately enters undo history:
   // undo can cross it back into pre-reload text, and dirty tracking flags
   // the result against the reloaded baseline.
   check("the reload keeps undo history", undoDepth(view.state) > 0);

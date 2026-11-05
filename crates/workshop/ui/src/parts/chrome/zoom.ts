@@ -13,7 +13,7 @@
 // bucket: the composition root restores it with restoreZoom(initial) at
 // boot and installs the writer with persistZoom, and every later change
 // goes through that writer. A stored factor maps back to the nearest
-// level, so a value an older build wrote on a 0.1 grid still restores.
+// level, which absorbs the four-decimal rounding levelToFactor applies.
 // The contribution's run bodies call zoomIn and
 // friends directly, so the writer lives in this module rather than on an
 // instance.

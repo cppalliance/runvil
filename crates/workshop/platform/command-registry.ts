@@ -3,9 +3,9 @@
 // rows, keybinding rules, command-palette entries - is an action
 // registered once and dispatched by id, so the surfaces that trigger a
 // command never name the code that performs it. An action is a run
-// function plus metadata (title, category, precondition, toggled); the
-// presentation extras of the old descriptor (label, shortcut, enabled)
-// now live with the surfaces that render them.
+// function plus metadata (title, category, precondition, toggled);
+// presentation (label, shortcut, enabled state) lives with the surfaces
+// that render it.
 //
 // The module-level Commands instance is the shared registry the
 // composition root and feature contribution files populate; the menu

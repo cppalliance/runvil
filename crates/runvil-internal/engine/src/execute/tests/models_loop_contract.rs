@@ -1,4 +1,4 @@
-//! Contract tests for `models.loop`: the behaviors the loop's earlier
+//! Contract tests for `models.loop`: the behaviors the loop's other
 //! suites leave unpinned, each driven through the public Lua surface over
 //! the section's `messages` list and asserting only what an author or the
 //! caller sees. The default and argument compactor, the empty-list check,

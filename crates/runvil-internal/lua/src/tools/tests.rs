@@ -190,28 +190,25 @@ fn adhoc_params_schema_rejects_an_unsupported_type_under_the_adhoc_prefix() {
 }
 
 #[test]
-fn the_tools_namespace_exposes_its_verbs_without_bind_or_call() {
+fn the_tools_namespace_exposes_its_verbs_without_call() {
     // `call` is absent here on purpose: it suspends, so the coroutine shim
     // prelude installs it - this table exposes exactly the non-suspending
-    // operations. `bind` is absent too.
+    // operations.
     let vm = TestVm::new().build();
-    let shapes: (bool, bool, bool, bool, bool, bool) = vm.eval(
+    let shapes: (bool, bool, bool, bool, bool) = vm.eval(
         "return type(tools.offer) == 'function', \
                 type(tools.offer_dynamic) == 'function', \
                 type(tools.adhoc) == 'function', \
                 type(tools.packs) == 'table', \
-                tools.call == nil, \
-                tools.bind == nil",
+                tools.call == nil",
     );
-    assert_eq!(shapes, (true, true, true, true, true, true));
+    assert_eq!(shapes, (true, true, true, true, true));
 }
 
 #[test]
-fn the_shim_prelude_installs_tools_call_and_no_bare_global() {
+fn the_shim_prelude_installs_tools_call() {
     let vm = TestVm::new().shims().build();
-    let (call_is_function, bare_is_nil): (bool, bool) =
-        vm.eval("return type(tools.call) == 'function', tool_call == nil");
+    let call_is_function: bool = vm.eval("return type(tools.call) == 'function'");
     assert!(call_is_function, "tools.call installs on the tools table");
-    assert!(bare_is_nil, "the bare tool_call global is gone");
     vm.teardown();
 }

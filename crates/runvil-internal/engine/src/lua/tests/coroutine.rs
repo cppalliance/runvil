@@ -17,7 +17,7 @@ fn the_cancellation_hook_fires_inside_a_resumed_coroutine() {
     // Spike (a): instruction hooks are per-coroutine in PUC Lua, so the
     // main-state hook installed at construction cannot bite here. The
     // VM installs its hook on the block coroutine via `Thread::set_hook`;
-    // no instruction ceiling remains, so if that install regressed, this
+    // no instruction ceiling applies, so if that install regressed, this
     // pre-cancelled loop would hang the test instead of aborting.
     let handle = CancelHandle::new();
     handle.cancel();

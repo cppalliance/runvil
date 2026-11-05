@@ -243,8 +243,8 @@ fn every_tag_parses_back_to_its_code_and_no_other_text_parses() {
 }
 
 #[test]
-fn store_and_model_codes_keep_the_tags_stored_records_hold() {
-    // The store and model tags a run log already holds.
+fn store_and_model_codes_are_tagged_with_their_failure_kinds() {
+    // Each store and model code's tag is the name of its failure kind.
     for (code, tag) in [
         (ErrorCode::NotFound, "not_found"),
         (ErrorCode::AlreadyExists, "already_exists"),

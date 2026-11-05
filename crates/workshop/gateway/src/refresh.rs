@@ -50,15 +50,14 @@ struct ProfileList {
 #[derive(serde::Deserialize)]
 struct ProfileStatus {
     /// The profile the gateway is serving.
-    #[serde(default)]
     profile: Option<String>,
 }
 
 /// Fetches the gateway's profile list and active profile and publishes
 /// them into the workbench snapshot.
 ///
-/// A gateway without profile support is a state, not an error: a failed,
-/// declined, or malformed answer degrades that half to empty, so the menu
+/// A failed or declined profile fetch is a state, not an error: it
+/// degrades its half to empty, as a malformed answer does, so the menu
 /// shows no profiles rather than stale names.
 pub async fn refresh_profiles(client: &GatewayClient, push: &Push) -> bool {
     let (profiles, active) = tokio::join!(fetch_profile_list(client), fetch_active_profile(client));

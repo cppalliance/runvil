@@ -29,7 +29,6 @@ mod record;
 use std::sync::Arc;
 use std::time::Duration;
 
-use runvil_types::error::ErrorCode;
 use runvil_types::event::ReplyOrigin;
 use runvil_types::ids::RoundId;
 pub use runvil_types::tools::{ToolCallOrigin, ToolCaller};
@@ -378,10 +377,7 @@ impl EffectAnswer {
             EffectAnswer::Render(rendered) => AnswerRecord::Render(rendered.clone()),
             EffectAnswer::ToolCall(result) => AnswerRecord::ToolCall(match result {
                 Ok(output) => Ok(ToolAnswerRecord::new(output.text(), output.trust())),
-                Err(error) => Err(FailureRecord::new(
-                    tool_failure_tag(error.code),
-                    error.prose.clone(),
-                )),
+                Err(error) => Err(FailureRecord::new(error.code.tag(), error.prose.clone())),
             }),
             EffectAnswer::Vfs(result) => AnswerRecord::Vfs(match result {
                 Ok(outcome) => Ok(outcome.clone()),
@@ -390,18 +386,6 @@ impl EffectAnswer {
             EffectAnswer::Timer => AnswerRecord::Timer,
             EffectAnswer::Dropped => AnswerRecord::Dropped,
         }
-    }
-}
-
-/// The tag a failed tool call's record keeps. Stored run logs hold these
-/// tags, so each tool code keeps the tag its kind had, and any other code is
-/// `other`.
-fn tool_failure_tag(code: ErrorCode) -> &'static str {
-    match code {
-        ErrorCode::ToolInvalidArguments => "invalid_arguments",
-        ErrorCode::ToolBackend => "backend",
-        ErrorCode::ToolTransport => "transport",
-        _ => "other",
     }
 }
 

@@ -1,4 +1,4 @@
-// Workbench frame and event sends for WorkshopSocket (step 15): a pushed
+// Workbench frame and event sends for WorkshopSocket: a pushed
 // workbench frame routes to the onWorkbench emitter; workbench pushes that
 // arrive before ready() replay through the boot queue in arrival order
 // beside status and models pushes; selectModel/switchProfile put the

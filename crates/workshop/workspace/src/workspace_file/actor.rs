@@ -21,10 +21,10 @@ type Ack = oneshot::Sender<Result<(), WorkspaceFileError>>;
 /// this small holds nothing the main file lacks.
 const WAL_HEADER_SIZE: u64 = 32;
 
-/// The v1 schema, as applied at create time. `user_version` is
-/// the migration counter; `meta` stores the format stamp and display
-/// name; `grants` mirrors the in-memory grant set in tree order; `kv`
-/// holds JSON values keyed by name (`window` and the ui-state keys).
+/// The v1 schema, as applied at create time. `user_version` holds the
+/// schema version; `meta` stores the format stamp and display name;
+/// `grants` mirrors the in-memory grant set in tree order; `kv` holds
+/// JSON values keyed by name (`window` and the ui-state keys).
 pub(super) const SCHEMA_V1: &str = "\
 PRAGMA user_version = 1;
 
@@ -113,11 +113,10 @@ pub(super) enum Command {
 /// way the connection closes through [`close_database`], so the file is
 /// left alone at `path` with no sidecar beside it.
 pub(super) async fn run(mut rx: mpsc::Receiver<Command>, conn: turso::Connection, path: PathBuf) {
-    let default_name = super::stem_of(&path);
     while let Some(command) = rx.recv().await {
         match command {
             Command::Contents { reply } => {
-                let _ = reply.send(read_contents(&conn, &default_name).await);
+                let _ = reply.send(read_contents(&conn, &path).await);
             }
             Command::AddGrant { row, reply } => {
                 let _ = reply.send(add_grant(&conn, &row).await);
@@ -360,14 +359,19 @@ pub(super) fn wal_sidecar_of(path: &Path) -> PathBuf {
 }
 
 /// Reads the display name, the grants in position order, the saved
-/// window, and the ui-state values from an already validated connection.
+/// window, and the ui-state values from an already validated connection
+/// to the file at `path`. A file without a display name is refused as
+/// not a workspace.
 async fn read_contents(
     conn: &turso::Connection,
-    default_name: &str,
+    path: &Path,
 ) -> Result<WorkspaceContents, WorkspaceFileError> {
-    let name = read_meta(conn, META_NAME)
-        .await?
-        .unwrap_or_else(|| default_name.to_string());
+    let name =
+        read_meta(conn, META_NAME)
+            .await?
+            .ok_or_else(|| WorkspaceFileError::NotAWorkspace {
+                path: path.to_path_buf(),
+            })?;
     let grants = read_grants(conn).await?;
     let window_state = read_window(conn).await?;
     let ui_state = read_ui_state_rows(conn).await?;

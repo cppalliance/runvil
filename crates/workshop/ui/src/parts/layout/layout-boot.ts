@@ -28,8 +28,7 @@ import { ensureZoneGroup, openInZone, resetZones } from "./zones";
  * the save) gets it back. Anchors are singletons, so re-opening an
  * existing one only focuses it. The policy's empty zones get the same
  * guarantee: a zone with no live group gets an empty one, so the editor
- * area exists whether the layout was seeded, restored whole, or saved
- * before the area did.
+ * area exists whether the layout was seeded or restored.
  */
 export function applyLayoutOrDefault(dock: DockviewApi, envelope: unknown): void {
   const policy = getService(LAYOUT_POLICY);

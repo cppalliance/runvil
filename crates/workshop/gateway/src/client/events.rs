@@ -48,7 +48,6 @@ pub enum SwitchResponse {
 pub struct SwitchProfileBody {
     /// The selection now persisted: a profile name, or `None` for no
     /// profile.
-    #[serde(default)]
     pub profile: Option<String>,
     /// Whether the gateway must restart before the selection is served;
     /// `false` when the selection already matches the running profile.

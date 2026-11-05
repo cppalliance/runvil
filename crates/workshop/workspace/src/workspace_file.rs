@@ -40,7 +40,7 @@ const META_FORMAT: &str = "format";
 /// Meta key holding the schema version; always [`SUPPORTED_VERSION`]
 /// for files this build writes.
 const META_VERSION: &str = "version";
-/// Meta key holding the display name; absent means "use the file stem".
+/// Meta key holding the display name; a file without it is refused.
 const META_NAME: &str = "name";
 /// Meta key holding the RFC 3339 creation time.
 const META_CREATED_AT: &str = "created_at";
@@ -117,7 +117,7 @@ impl From<turso::Error> for WorkspaceFileError {
 /// Everything a workspace file holds between sessions.
 #[derive(Debug, Clone)]
 pub(crate) struct WorkspaceContents {
-    /// Display name (meta 'name'); defaults to the file stem.
+    /// Display name (meta 'name').
     pub(crate) name: String,
     /// Granted roots in tree order (grants table, ordered by position).
     pub(crate) grants: Vec<GrantRow>,

@@ -163,30 +163,6 @@ async fn create_then_open_round_trips_name_grants_and_window_state() {
 }
 
 #[tokio::test]
-async fn name_defaults_to_the_file_stem_when_meta_name_is_absent() {
-    let dir = tempfile::TempDir::new().expect("tempdir");
-    let path = dir.path().join("Quarterly Report.rvwork");
-    seed_schema_with_meta(
-        &path,
-        &[
-            (META_FORMAT, FORMAT_NAME),
-            (META_VERSION, SUPPORTED_VERSION),
-        ],
-    )
-    .await;
-
-    let opened = WorkspaceFile::open(&path)
-        .await
-        .expect("a v1 file without a name opens");
-    let contents = opened.contents().await.expect("contents read");
-    opened.close().await;
-
-    assert_eq!(contents.name, "Quarterly Report");
-    assert!(contents.grants.is_empty());
-    assert!(contents.window_state.is_none());
-}
-
-#[tokio::test]
 async fn a_database_without_a_meta_table_is_refused_and_left_byte_identical() {
     let dir = tempfile::TempDir::new().expect("tempdir");
     let path = dir.path().join("foreign.rvwork");
@@ -252,6 +228,34 @@ async fn meta_version_two_is_refused_as_unsupported_version() {
                 if found == "2" && *supported == SUPPORTED_VERSION
         ),
         "expected UnsupportedVersion {{ found: \"2\", supported: \"1\" }}, got {error:?}"
+    );
+}
+
+#[tokio::test]
+async fn a_file_without_a_display_name_is_refused_when_its_contents_are_read() {
+    let dir = tempfile::TempDir::new().expect("tempdir");
+    let path = dir.path().join("nameless.rvwork");
+    seed_schema_with_meta(
+        &path,
+        &[
+            (META_FORMAT, FORMAT_NAME),
+            (META_VERSION, SUPPORTED_VERSION),
+        ],
+    )
+    .await;
+
+    let file = WorkspaceFile::open(&path)
+        .await
+        .expect("the format and version rows validate");
+    let error = file
+        .contents()
+        .await
+        .expect_err("a file without a display name is not a workspace");
+    file.close().await;
+
+    assert!(
+        matches!(&error, WorkspaceFileError::NotAWorkspace { path: refused } if refused == &path),
+        "expected NotAWorkspace naming the path, got {error:?}"
     );
 }
 

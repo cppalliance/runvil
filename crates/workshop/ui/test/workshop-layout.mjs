@@ -7,16 +7,14 @@
 // UI-state adapter (test/helpers/ui-storage.mjs) standing in for the
 // workspace bucket. Covers: the layout survives a reload (build the
 // envelope -> restore it), including the tree's close-button-free tab;
-// the envelope omits the lock state; a burst of layout changes coalesces
-// into one debounced write; a mid-session restore (the Open path) writes
-// nothing while the next real change still saves; a throwing writer is
-// logged, never escapes;
-// stale schema versions (1, 2, and 4) are rejected; a null, non-object,
-// version-mismatched, or unloadable envelope falls back to defaults;
-// applyLayoutOrDefault seeds the registered layout policy (the product's
-// shape: tree left, agent right) from null, clearing a live dock's panels
-// first (the Open path), and restores a valid envelope through fromJSON
-// without seeding; re-ensuring the tree after a restore
+// a burst of layout changes coalesces into one debounced write; a
+// mid-session restore (the Open path) writes nothing while the next real
+// change still saves; a throwing writer is logged, never escapes; a null,
+// non-object, version-mismatched, or unloadable envelope falls back to
+// defaults; applyLayoutOrDefault seeds the registered layout policy (the
+// product's shape: tree left, agent right) from null, clearing a live
+// dock's panels first (the Open path), and restores a valid envelope
+// through fromJSON without seeding; re-ensuring the tree after a restore
 // never duplicates it; each shortcut dispatches its command; the status
 // bar never enters the serialized layout.
 // Run: node test/workshop-layout.mjs
@@ -360,7 +358,6 @@ const envelope = JSON.parse(JSON.stringify(built));
 check("the envelope survives the JSON wire round trip",
   isDeepStrictEqual(envelope, withoutUndefined(built)));
 check("the envelope includes the schema version", envelope.version === LAYOUT_SCHEMA_VERSION);
-check("the envelope omits the lock state", !("locked" in envelope));
 check("the envelope includes zones and overrides",
   typeof envelope.zones === "object" && typeof envelope.overrides === "object");
 check("the envelope records the zone groups",
@@ -423,8 +420,6 @@ check("the debounced write stores the settled layout",
     !Object.keys(debounced.layout.panels).includes(editorCId));
 check("the debounced write includes the schema version",
   debounced !== null && debounced.version === LAYOUT_SCHEMA_VERSION);
-check("the debounced write omits the lock state",
-  debounced !== null && !("locked" in debounced));
 
 // A mid-session restore is not a change to save. Open Workspace applies
 // the opened file's envelope onto the live dock through
@@ -455,9 +450,9 @@ check("the debounced write omits the lock state",
 
 // The real contribution surface (imported into the bundle above)
 // registered every action and keybinding rule into the shared
-// registries; one dispatcher over them replaces the old shortcuts.ts
-// listener. Chords resolve through event.code, so each press names
-// the physical key's code.
+// registries; one dispatcher over them handles every chord. Chords
+// resolve through event.code, so each press names the physical key's
+// code.
 const dispatcher = new KeybindingDispatcher();
 const contextKeys = getService(CONTEXT_KEY_SERVICE);
 // Save and Close are gated on activeEditor, which main.ts binds to the dock.
@@ -519,8 +514,7 @@ dispatcher.dispose();
 // --- Restore failures fall back to the default layout ---------------------
 
 // A stored value that is not an envelope object at all (the server hands
-// back whatever JSON was stored; a string is the closest thing to the old
-// corrupt-text case).
+// back whatever JSON was stored, so a string stands in for a corrupt value).
 const dock3 = createDock(window.document.createElement("div"));
 initZones(dock3);
 check("a non-object value fails the restore", restoreLayout(dock3, "not json{") === false);
@@ -529,18 +523,12 @@ openInZone("agent", {});
 openInZone("tree", {});
 check("the non-object fallback mounts the default layout", dock3.panels.length === 2);
 
-// Stale schema versions are rejected: v1 (the locked-era envelope), v2
-// (before panels serialized their tab component), and v4 (panels naming
-// the per-type tab components the generic tab replaced).
+// A snapshot of any other schema version fails the restore.
 const dock4 = createDock(window.document.createElement("div"));
 initZones(dock4);
-check("a version 1 snapshot fails the restore",
-  restoreLayout(dock4, { version: 1, locked: false, zones: {}, overrides: {}, layout: { grid: {} } }) ===
-    false);
-check("a version 2 snapshot fails the restore",
-  restoreLayout(dock4, { version: 2, zones: {}, overrides: {}, layout: { grid: {} } }) === false);
-check("a version 4 snapshot fails the restore",
-  restoreLayout(dock4, { ...envelope, version: 4 }) === false && dock4.panels.length === 0);
+check("a snapshot of another schema version fails the restore",
+  restoreLayout(dock4, { ...envelope, version: LAYOUT_SCHEMA_VERSION + 1 }) === false &&
+    dock4.panels.length === 0);
 
 // A structurally valid envelope whose layout fromJSON rejects.
 const dock5 = createDock(window.document.createElement("div"));
@@ -709,19 +697,22 @@ check("the unloadable-layout fallback mounts the default layout", dock5.panels.l
       "left,main,right",
   );
 
-  // A stored layout saved before the main group existed gets one on restore.
-  const dockOld = createDock(window.document.createElement("div"));
-  initZones(dockOld);
+  // A stored layout with no main group gets one on restore.
+  const dockNoMain = createDock(window.document.createElement("div"));
+  initZones(dockNoMain);
   resetZones();
   openInZone("tree", {});
   openInZone("agent", {});
   await flush();
-  const oldEnvelope = JSON.parse(JSON.stringify(buildLayoutEnvelope(dockOld)));
-  check("the old layout had no main group", oldEnvelope.zones.main === undefined && dockOld.groups.length === 2);
+  const noMainEnvelope = JSON.parse(JSON.stringify(buildLayoutEnvelope(dockNoMain)));
+  check(
+    "the stored layout has no main group",
+    noMainEnvelope.zones.main === undefined && dockNoMain.groups.length === 2,
+  );
   const dockRestored = createDock(window.document.createElement("div"));
   initZones(dockRestored);
   resetZones();
-  applyLayoutOrDefault(dockRestored, oldEnvelope);
+  applyLayoutOrDefault(dockRestored, noMainEnvelope);
   await flush();
   check(
     "restoring a layout with no main group adds the empty one",

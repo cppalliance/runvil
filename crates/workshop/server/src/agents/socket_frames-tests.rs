@@ -95,7 +95,7 @@ fn operator_message(text: &str) -> Event {
         turn: 0,
         tool_call_id: String::new(),
         alias: ASK_TOOL.to_owned(),
-        tool: Some(ask.id),
+        tool: ask.id,
         vendor: Some(ask.vendor),
         content: text.to_owned(),
         trusted: true,

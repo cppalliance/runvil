@@ -101,18 +101,6 @@ fn a_tool_info_has_the_tools_surface_and_round_trips_through_serde() {
 }
 
 #[test]
-fn a_tool_info_logged_without_survives_stop_reads_as_not_surviving() {
-    let wire = r#"{"id":"web/fetch","description":"d",
-        "parameters_schema":{"type":"object"},"structured_output":false}"#;
-    let info: ToolInfo =
-        serde_json::from_str(wire).expect("a tool info from before the flag deserializes");
-    assert!(
-        !info.survives_stop,
-        "an absent flag reads as false, so a stop still reaches the call"
-    );
-}
-
-#[test]
 fn survives_stop_sets_the_flag_and_round_trips_through_serde() {
     assert!(
         !inspect_info().survives_stop,
@@ -121,19 +109,6 @@ fn survives_stop_sets_the_flag_and_round_trips_through_serde() {
     let info = inspect_info().survives_stop(true);
     assert!(info.survives_stop);
     assert_eq!(round_trip(&info), info);
-}
-
-#[test]
-fn a_tool_info_logged_before_wire_name_existed_reads_absent_flags_as_false() {
-    let line = r#"{"id":"fixtures/tools/inspect","description":"Inspect a fixture.","parameters_schema":{"properties":{"path":{"type":"string"}},"required":["path"],"type":"object"},"structured_output":false,"survives_stop":false}"#;
-    let info: ToolInfo =
-        serde_json::from_str(line).expect("a tool info from before the field deserializes");
-    assert_eq!(
-        info.wire_name, None,
-        "an absent wire name reads as none, so the model sees the default"
-    );
-    assert!(!info.describes_tools, "an absent flag reads as false");
-    assert!(!info.model_only_call, "an absent flag reads as false");
 }
 
 #[test]
@@ -172,11 +147,11 @@ fn a_tool_call_origin_keeps_its_logged_shape() {
 }
 
 #[test]
-fn a_tool_call_origin_logged_before_entry_and_model_existed_reads_both_as_absent() {
+fn a_tool_call_origin_without_entry_or_model_reads_both_as_absent() {
     use super::ToolCallOrigin;
     let line = r#"{"execution":"run-1","section":"Chat","caller":"script"}"#;
     let origin: ToolCallOrigin =
-        serde_json::from_str(line).expect("an origin from before the fields deserializes");
+        serde_json::from_str(line).expect("an origin without entry or model deserializes");
     assert_eq!(
         (origin.entry.as_deref(), origin.model.as_deref()),
         (None, None),
@@ -334,7 +309,7 @@ fn a_tool_id_from_str_parses_like_parse() {
 }
 
 #[test]
-fn the_migrated_built_in_ids_parse() {
+fn the_built_in_tool_ids_parse() {
     assert!(ToolId::parse("web/fetch").is_ok());
     assert!(ToolId::parse("web/search").is_ok());
     assert!(ToolId::parse("user-input/ask").is_ok());

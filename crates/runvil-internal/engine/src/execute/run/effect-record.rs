@@ -149,8 +149,8 @@ pub(crate) enum AnswerRecord {
 /// `{"kind": .., "message": ..}`.
 ///
 /// `kind` is the stable tag of the failure's kind: the model code's tag for
-/// a model round (such as `malformed_response`), the tool kind's tag for a
-/// tool call (such as `invalid_arguments`), or the `VfsError` tag for a
+/// a model round (such as `malformed_response`), the tool code's tag for a
+/// tool call (such as `tool_invalid_arguments`), or the `VfsError` tag for a
 /// store operation (such as `not_found`). `message` is the failure's
 /// display text, which for a model round or a tool call is the prose the
 /// model read.

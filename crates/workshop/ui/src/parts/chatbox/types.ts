@@ -141,7 +141,7 @@ export interface ChatBoxProps {
    * paste is ProseMirror's default.
    */
   readonly onPasteFiles?: (files: File[]) => Promise<ChipRef[]>;
-  /** The owning part's text-control registrar; replaces the service-registry lookup. */
+  /** The owning part's text-control registrar; absent, the box registers no text control. */
   readonly textControls?: TextControlRegistrar;
 }
 

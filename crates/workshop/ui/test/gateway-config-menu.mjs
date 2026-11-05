@@ -265,8 +265,8 @@ const menu = new Menu();
 const anchor = window.document.createElement("button");
 anchor.type = "button";
 window.document.body.appendChild(anchor);
-// The menubar's submenu declarations land with the menubar contribution
-// (plan step 20); the test declares the one flyout it drives.
+// The menubar's submenu declarations land with the menubar contribution;
+// the test declares the one flyout it drives.
 Menus.appendMenuItem("menubar/file", {
   submenu: "menubar/file/preferences",
   title: "Preferences",

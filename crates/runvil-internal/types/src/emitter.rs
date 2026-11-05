@@ -336,7 +336,7 @@ impl Emitter {
     }
 
     /// Reports the result of one dispatched tool call. `tool` is the tool
-    /// `alias` resolved to, and `vendor` the vendor of the Pack that
+    /// `alias` resolved to. `vendor` is the vendor of the Pack that
     /// answered it, or `None` for an adhoc tool or when the caller reported
     /// none. The event records `trust` as its `trusted` flag: `true` only
     /// for [`OutputTrust::Trusted`].
@@ -350,7 +350,7 @@ impl Emitter {
         turn: u32,
         tool_call_id: &str,
         alias: &str,
-        tool: Option<&ToolId>,
+        tool: &ToolId,
         vendor: Option<&str>,
         content: &str,
         trust: OutputTrust,
@@ -364,7 +364,7 @@ impl Emitter {
                 turn,
                 tool_call_id: tool_call_id.to_owned(),
                 alias: alias.to_owned(),
-                tool: tool.cloned(),
+                tool: tool.clone(),
                 vendor: vendor.map(str::to_owned),
                 content: content.to_owned(),
                 trusted,

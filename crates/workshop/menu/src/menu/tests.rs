@@ -347,7 +347,7 @@ fn an_empty_profile_list_replaces_a_populated_one() {
     let after = snapshot(&menu);
     assert!(
         after.profiles.is_empty(),
-        "a gateway without profile support publishes an empty list"
+        "a failed or declined profile fetch publishes an empty list"
     );
     assert_eq!(after.active, None);
 }

@@ -1,5 +1,5 @@
 //! Unit tests for where the sidecar comes from: the flag, the environment
-//! variable, an already-staged file, and the build fallback.
+//! variable, an already-staged file, and the refusal when there is none.
 
 use super::*;
 
@@ -55,7 +55,7 @@ fn stage_fake_sidecar(environment: &BuildEnvironment, target: &str) -> PathBuf {
 }
 
 #[test]
-fn a_given_gateway_binary_replaces_the_gateway_build() {
+fn a_given_gateway_binary_is_staged_around_the_workshop_build() {
     let test_environment = environment();
     let environment = &test_environment.environment;
     let triple = "x86_64-unknown-linux-gnu";
@@ -90,7 +90,7 @@ fn a_given_gateway_binary_replaces_the_gateway_build() {
                 OutputMode::Inherit,
             ),
         ],
-        "no Gateway build runs when a binary is given"
+        "a given binary is staged, the Workshop builds, and the staged sidecar is removed"
     );
 }
 
@@ -149,7 +149,7 @@ fn the_flag_wins_over_the_environment_variable() {
 }
 
 #[test]
-fn an_already_staged_sidecar_is_reused_without_building_or_removing_it() {
+fn an_already_staged_sidecar_is_reused_and_left_in_place() {
     let temp = repository();
     let environment = environment_at(&temp);
     let triple = "x86_64-pc-windows-msvc";
@@ -202,7 +202,7 @@ fn a_staged_sidecar_is_reused_for_the_host_target_too() {
     assert_eq!(
         runner.commands.len(),
         2,
-        "host discovery then the Workshop build, with no Gateway build"
+        "host discovery then the Workshop build"
     );
     assert_eq!(
         runner.commands[1].args,

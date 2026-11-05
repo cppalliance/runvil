@@ -1,13 +1,13 @@
-// Unit test for the workspace-file actions (plan steps 10 and 11:
-// src/parts/workspace-document/workspace-document.contribution.ts over
+// Unit test for the workspace-file actions
+// (src/parts/workspace-document/workspace-document.contribution.ts over
 // src/services/workspace-file-client.ts). Bundles the contribution with
 // esbuild - "@tauri-apps/plugin-dialog" and "@tauri-apps/api/event"
 // aliased to the recording stubs in test/helpers - and drives the Open
 // Workspace from File..., Save Workspace As..., and Duplicate
 // Workspace... commands through the shared registries against jsdom
-// with a scripted fetch. Covers: the catalog wiring (the stub rows' ids
-// and labels, now wired: File > 2_open and 3_workspace, in the palette,
-// no always-false precondition, Duplicate gaining its ellipsis); a
+// with a scripted fetch. Covers: the catalog wiring (the rows' ids and
+// labels: File > 2_open and 3_workspace, in the palette, no
+// always-false precondition, Duplicate with its ellipsis); a
 // cancelled picker performing no fetch; a successful open posting the
 // picked path to /workspace/file/open, firing the
 // runvil:workspace-changed invalidation, emitting the
@@ -26,7 +26,7 @@
 // new path, with a cancel posting nothing and a refusal painting the
 // error; and the client's typed parse of the wire shape (snake_case
 // window_state) with a malformed answer refused. The UI state the switch
-// moves (plan step 13) is covered by test/workspace-switch.mjs; here a
+// moves is covered by test/workspace-switch.mjs; here a
 // minimal dock is bound through initZones so the actions' state apply and
 // snapshot have something to run against, and the UI-state adapter stays
 // the empty default.

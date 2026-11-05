@@ -121,15 +121,16 @@ fn an_adhoc_calls_events_name_its_id() {
     let answered = events.iter().find_map(|event| match event {
         Event::ToolResult {
             tool_call_id, tool, ..
-        } if tool_call_id == "call_1" => Some(tool.as_ref().map(ToString::to_string)),
+        } if tool_call_id == "call_1" => Some(tool.to_string()),
         _ => None,
     });
-    let id = Some(Some("adhoc/grab".to_owned()));
+    let id = "adhoc/grab".to_owned();
     assert_eq!(
-        requested, id,
+        requested,
+        Some(Some(id.clone())),
         "the requested call names the adhoc tool's id"
     );
-    assert_eq!(answered, id, "its result names the same id");
+    assert_eq!(answered, Some(id), "its result names the same id");
 }
 
 #[test]

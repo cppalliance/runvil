@@ -187,7 +187,7 @@ fn content_reports_land_in_the_buffer_in_order() {
         3,
         "call_1",
         "echo",
-        Some(&echo),
+        &echo,
         Some("acme"),
         "out",
         OutputTrust::Trusted,
@@ -196,7 +196,7 @@ fn content_reports_land_in_the_buffer_in_order() {
     let events = sink.take();
     assert!(matches!(
         &events[0],
-        Event::ToolResult { turn: 3, tool_call_id, alias, tool: Some(tool), vendor: Some(vendor), content, trusted: true, .. }
+        Event::ToolResult { turn: 3, tool_call_id, alias, tool, vendor: Some(vendor), content, trusted: true, .. }
             if tool_call_id == "call_1" && alias == "echo" && *tool == echo && vendor == "acme" && content == "out"
     ));
     assert!(matches!(
@@ -210,12 +210,13 @@ fn content_reports_land_in_the_buffer_in_order() {
 fn an_untrusted_tool_result_reports_the_event_with_trusted_false() {
     let sink = EventSink::default();
     let walk = emitter(&sink, root());
+    let fetch = ToolId::parse("web/fetch").expect("a valid tool id");
     walk.tool_result(
         "Chat",
         2,
         "call_9",
         "fetch",
-        None,
+        &fetch,
         None,
         "<html>",
         OutputTrust::Untrusted,
@@ -229,7 +230,7 @@ fn an_untrusted_tool_result_reports_the_event_with_trusted_false() {
             turn: 2,
             tool_call_id: "call_9".to_owned(),
             alias: "fetch".to_owned(),
-            tool: None,
+            tool: fetch,
             vendor: None,
             content: "<html>".to_owned(),
             trusted: false,

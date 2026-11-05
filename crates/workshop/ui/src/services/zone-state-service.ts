@@ -1,12 +1,11 @@
 // The zone-state service: the workbench's zone group map (which Dockview
 // group currently holds each named zone) and the per-panel placement
-// overrides recorded when the user drags a panel to another zone. This
-// state used to sit at module scope in zones.ts; as a registry-held
-// service it is named, observable through onDidChange, and shared by
-// every consumer through the service registry rather than through imports
-// of one module's internals. The service self-registers with a default
-// factory, so any bundle that touches it gets the singleton without
-// composition-root wiring.
+// overrides recorded when the user drags a panel to another zone. The
+// state lives in a registry-held service so it is named, observable
+// through onDidChange, and shared by every consumer through the service
+// registry rather than through imports of one module's internals. The
+// service self-registers with a default factory, so any bundle that
+// touches it gets the singleton without composition-root wiring.
 //
 // The service owns state only: Dockview placement APIs stay in zones.ts.
 

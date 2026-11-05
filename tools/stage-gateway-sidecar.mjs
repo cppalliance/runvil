@@ -79,14 +79,11 @@ export function stageGatewaySidecar({ root = REPOSITORY_ROOT, target, source }) 
 }
 
 /**
- * Marks the staged sidecar as authoritative: the desktop build script then
- * leaves it alone instead of refreshing it from a workspace-built Gateway.
- * Without this, a stale `target/<profile>/runvil-gateway` silently replaces
- * a downloaded and checksummed release binary.
- *
- * `kind` records which of the two it was, `release` or `stub`, so a
- * developer running `cargo workshop` can be told when the sidecar it reuses
- * is only a placeholder.
+ * Writes the marker beside the staged sidecar that records what it is:
+ * `kind` is `release` for a binary checked against the pin, with `tag`
+ * naming its release, or `stub` for the compile-only placeholder. The
+ * desktop build script and `cargo workshop` read `kind`, so a developer is
+ * told when the sidecar a build reuses is only a placeholder.
  */
 export function markGatewaySidecarPinned({ root = REPOSITORY_ROOT, target, kind = "release", tag = null }) {
   const marker = gatewaySidecarPinMarkerPath({ root, target });
@@ -100,9 +97,8 @@ export function markGatewaySidecarPinned({ root = REPOSITORY_ROOT, target, kind 
 
 /**
  * The marker's record, or `null` when the sidecar was not staged by the
- * fetch script. A malformed marker still counts as a marker: the desktop
- * build script only needs to know the file is not its to refresh, and an
- * unknown kind is reported as unknown rather than assumed to be a release.
+ * fetch script. A malformed marker still counts as a marker, and its kind
+ * is reported as unknown rather than assumed to be a release.
  */
 export function readGatewaySidecarPin({ root = REPOSITORY_ROOT, target }) {
   const marker = gatewaySidecarPinMarkerPath({ root, target });
@@ -121,9 +117,9 @@ export function readGatewaySidecarPin({ root = REPOSITORY_ROOT, target }) {
 }
 
 /**
- * The marker beside the staged sidecar saying it is authoritative. Named
- * so the sidecar's own name stays exactly what Tauri expects; the marker
- * sits next to it and is never bundled.
+ * The marker beside the staged sidecar recording what it is. Named so the
+ * sidecar's own name stays exactly what Tauri expects; the marker sits next
+ * to it and is never bundled.
  */
 export function gatewaySidecarPinMarkerPath({ root = REPOSITORY_ROOT, target }) {
   return `${gatewaySidecarPath({ root, target })}.pinned`;

@@ -9,6 +9,7 @@ use std::sync::Mutex;
 use runvil_types::event::ReplyOrigin;
 use runvil_types::ids::{ChainId, Provenance, RoundId, TaskId};
 use runvil_types::metrics::ToolCallEvent;
+use runvil_types::tools::ToolId;
 
 use super::*;
 
@@ -242,7 +243,7 @@ fn a_tool_result_forwards_its_coordinates_and_trust_to_the_observer() {
         turn: 2,
         tool_call_id: "call_1".to_owned(),
         alias: "search".to_owned(),
-        tool: None,
+        tool: ToolId::parse("web/search").expect("a valid tool id"),
         vendor: None,
         content: "found".to_owned(),
         trusted,

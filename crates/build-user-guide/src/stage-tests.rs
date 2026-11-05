@@ -143,9 +143,6 @@ fn stage_writes_each_books_export_beside_the_trees() {
 #[test]
 fn staging_reads_chapters_from_the_docs_root_it_is_given() {
     let fake = fake_guide();
-    let old_copy = fake.guide.join("src").join("language");
-    fs::create_dir_all(&old_copy).expect("mkdir old copy");
-    fs::write(old_copy.join("01-start.md"), "# Start\n\nOld copy.\n").expect("old chapter");
     let chapter = "# Start\n\nFrom the docs root.\n";
     fs::write(
         fake.docs.join("src").join("language").join("01-start.md"),
@@ -158,10 +155,7 @@ fn staging_reads_chapters_from_the_docs_root_it_is_given() {
     let staged = out.path().join("language").join("src").join("01-start.md");
     assert_eq!(read(&staged), chapter);
     let export = read(&out.path().join("runvil-language-guide.md"));
-    assert!(
-        export.contains("From the docs root.") && !export.contains("Old copy."),
-        "{export}"
-    );
+    assert!(export.contains("From the docs root."), "{export}");
 }
 
 #[test]

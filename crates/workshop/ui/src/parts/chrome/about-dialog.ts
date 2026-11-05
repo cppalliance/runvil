@@ -234,9 +234,8 @@ export function showAboutDialog(updates?: UpdateService): IDisposable {
     }
   }
 
-  // Teardown order matters and mirrors the old dismiss(): the trap
-  // listener detaches first, then the overlay leaves the DOM and focus
-  // returns to the invoker.
+  // Teardown order matters: the trap listener detaches first, then the
+  // overlay leaves the DOM and focus returns to the invoker.
   store.add(toDisposable(() => document.removeEventListener("keydown", onKeydown, true)));
   store.add(
     toDisposable(() => {

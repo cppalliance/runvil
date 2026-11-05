@@ -197,7 +197,7 @@ end
 -- content (a tool's own failure becomes untrusted failure text) and fires
 -- ToolResult under the id and that turn, however far an adhoc handler
 -- earlier in the batch moved the counter. Only the test-only
--- `tools.call_as_model` hook calls it now, since the loop builds its
+-- `tools.call_as_model` hook calls it, because the loop builds its
 -- `tool_call` requests in Rust; authors never see it, and a hand-built
 -- yield including `call_id` or `turn` is refused as a malformed request
 -- when its shape is wrong.

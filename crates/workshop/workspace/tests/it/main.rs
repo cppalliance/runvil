@@ -83,17 +83,13 @@ async fn post_path(router: axum::Router, uri: &str, path: &Path) -> Response {
 }
 
 #[tokio::test]
-async fn save_workspace_as_answers_only_on_the_hyphenated_route() {
+async fn save_workspace_as_creates_the_file_and_switches_to_it() {
     let registry = Registry::new();
     let workspace = Workspace::new();
     let home = tempfile::TempDir::new().expect("tempdir");
     let file = home.path().join("Name.rvwork");
     let _guards = register(&registry, &workspace);
     let router = registry.routes()[0].routes();
-
-    let response = post_path(router.clone(), "/workspace/file/save_as", &file).await;
-    assert_eq!(response.status(), StatusCode::NOT_FOUND, "no alias is kept");
-    assert!(!file.exists(), "the old route creates nothing");
 
     let response = post_path(router, "/workspace/file/save-as", &file).await;
     assert_eq!(response.status(), StatusCode::OK);

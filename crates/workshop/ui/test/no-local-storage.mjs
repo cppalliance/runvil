@@ -1,10 +1,9 @@
-// Guard for the UI-state migration (plan step 13): the SPA keeps no
-// browser-storage state. The desktop app binds the server to an OS-assigned
-// loopback port, so the page origin - and every origin-scoped storage
-// entry with it - changes on each launch; every store now reads and
-// writes through the server-backed UI-state adapter instead. Walks every
-// file under src/ and fails on any that names the browser storage API,
-// so a store cannot quietly grow a per-origin fallback again.
+// Guard: the SPA keeps no browser-storage state. The desktop app binds
+// the server to an OS-assigned loopback port, so the page origin, and
+// every origin-scoped storage entry with it, changes on each launch;
+// every store reads and writes through the server-backed UI-state
+// adapter. Walks every file under src/ and fails on any that names the
+// browser storage API.
 // Run: node --test test/no-local-storage.mjs
 import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";

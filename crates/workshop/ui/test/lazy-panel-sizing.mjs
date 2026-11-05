@@ -212,7 +212,6 @@ const computed = (element) => window.getComputedStyle(element);
 
 // --- The agent session mounts through the lazy placeholder into the dock ----------
 
-window.localStorage.clear();
 const dock = createDockview(window.document.getElementById("dock"), {
   createComponent: createPanelComponent,
   createTabComponent: createPanelTabComponent,

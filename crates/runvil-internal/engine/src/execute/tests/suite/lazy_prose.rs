@@ -217,7 +217,7 @@ fn prose_with_no_pending_markdown_renders_empty() {
 }
 
 #[test]
-fn the_reply_register_is_gone_and_nothing_hands_off_at_fall_through() {
+fn a_global_written_in_one_section_reads_nil_in_the_next() {
     // `reply` is an ordinary global: a write dies with the section VM,
     // and the next section sees nil - no register, no roll-forward.
     let source = prompt(

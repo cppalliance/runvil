@@ -97,7 +97,7 @@ window.IntersectionObserver = class {
 window.Element.prototype.scrollTo = () => {};
 window.HTMLElement.prototype.scrollIntoView = () => {};
 
-// Opening a file mounts a real CodeMirror editor (step 14); jsdom has no
+// Opening a file mounts a real CodeMirror editor; jsdom has no
 // layout, so Range and element measurement get zero-rect shims. The test
 // never asserts editor geometry.
 const zeroRect = () => ({

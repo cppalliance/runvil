@@ -24,8 +24,8 @@ return tostring(#files) .. ":" .. table.concat(replies, ",")
 -- Arm-scoped writes: the pattern the claims model teaches. Each arm writes
 -- only its own path, so no two live identities ever claim one path, and the
 -- parent's post-join glob reads the merged state after every arm's claims
--- released at its end. (The old ready-*.md rendezvous - polling a sibling
--- arm's files while that arm is live - is exactly the cross-arm
+-- released at its end. (Polling a sibling arm's files while that arm is
+-- live, as a ready-*.md rendezvous does, is exactly the cross-arm
 -- read-while-written pattern the claims model rejects.)
 store.write("arm-" .. sys.index .. ".md", item)
 return item

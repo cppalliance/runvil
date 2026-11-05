@@ -236,8 +236,8 @@ fn build_products(
         }
     }
     // The Workshop build is told where the sidecar is, so the desktop
-    // build script copies exactly this file rather than guessing from
-    // modification times. The path Tauri resolves is the same one.
+    // build script copies exactly this file. The path Tauri resolves is
+    // the same one.
     let staged = sidecar_path(environment, target);
     build_workshop_product(request, environment, runner, Some(staged))
 }

@@ -1,10 +1,9 @@
-// The menu-spec test (plan step 20): the plan's Menu spec and Flyout
-// contents restated as one table, driven against the shared registries
-// after bundling every contribution module - the menubar and stub
-// tables from this step plus the feature contributions from steps
-// 13-19. Covers: the eight top-level menus in order; every spec row in
-// its menu and group, in spec render order within each menu, the editor
-// tab menu and the second placement of Move Editor into New Window
+// The menu-spec test: the menu and flyout contents restated as one spec
+// table, driven against the shared registries after bundling every
+// contribution module - the menubar and stub tables plus the feature
+// contributions. Covers: the eight top-level menus in order; every spec
+// row in its menu and group, in spec render order within each menu, the
+// editor tab menu and the second placement of Move Editor into New Window
 // (titled Move into New Window there) included; every
 // wired row listed in the command palette (f1); every stub row
 // registered with precondition "false" (always disabled) and absent

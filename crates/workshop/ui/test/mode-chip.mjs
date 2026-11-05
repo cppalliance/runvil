@@ -77,7 +77,7 @@ await assertNoLeaks(lifecycle, async () => {
   // --- The mode constants ----------------------------------------------------
 
   check(
-    "the modes are the as-const map the plan fixes",
+    "the modes are a fixed as-const map",
     UNIFIED_MODES.Agent === "agent" &&
       UNIFIED_MODES.Plan === "plan" &&
       UNIFIED_MODES.Debug === "debug" &&
@@ -85,7 +85,7 @@ await assertNoLeaks(lifecycle, async () => {
       UNIFIED_MODES.Ask === "ask",
   );
   check(
-    "the mode-changed event name is the literal the plan fixes",
+    "the mode-changed event name is a fixed literal",
     AGENT_MODE_CHANGED_EVENT === "agent-mode-changed",
   );
 

@@ -195,7 +195,7 @@ probe.dispose();
 // render never touches indicators: no color on any LED from a frame.
 const watched = bar.register({ id: "watched", name: "Watched", order: 0 });
 bar.render({ type: "status", label: "x", description: "", severity: "info", activity: "generating", busy: false });
-check("render no longer lights an indicator", litColors(byId("watched")).length === 0);
+check("render never lights an indicator", litColors(byId("watched")).length === 0);
 watched.dispose();
 
 // Non-LED slots stand in the same group as the LEDs.

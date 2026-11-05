@@ -40,8 +40,8 @@ pub struct ToolInfo {
     /// The tool's stable identity. The catalog uses it as the key.
     pub id: ToolId,
     /// The name the model calls the tool by, or `None` for the default
-    /// derived from the id. A `ToolInfo` serialized without the field
-    /// reads as `None`, and a `None` is left out when serializing.
+    /// derived from the id. A `None` is left out when serializing and
+    /// reads back as `None`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub wire_name: Option<String>,
     /// The one-sentence description the model reads.
@@ -56,17 +56,13 @@ pub struct ToolInfo {
     /// every other call in flight and lets the run go on; the run's end
     /// and the early end of the task that made the call still end this
     /// one. A question to the operator sets it, so the question
-    /// stays open. A `ToolInfo` serialized without the field reads as
-    /// `false`.
-    #[serde(default)]
+    /// stays open.
     pub survives_stop: bool,
     /// Whether the tool's output lists tools, such as the tools of the
     /// servers a Pack reaches. A script that calls such a tool receives
     /// its untrusted output as plain text, so the script can read the
     /// listing, while a model's call still receives the untrusted
-    /// envelope. A `ToolInfo` serialized without the field reads as
-    /// `false`.
-    #[serde(default)]
+    /// envelope.
     pub describes_tools: bool,
     /// Whether only a model may call the tool, so a script's `tools.call`
     /// refuses it.
@@ -76,9 +72,7 @@ pub struct ToolInfo {
     /// while the arguments a model sends follow whatever schema the
     /// section's render answered for that model. The tool stays in the
     /// catalog, so Lua names it and a section offers it with
-    /// `tools.offer`; only the call is refused. A `ToolInfo` serialized
-    /// without the field reads as `false`.
-    #[serde(default)]
+    /// `tools.offer`; only the call is refused.
     pub model_only_call: bool,
 }
 

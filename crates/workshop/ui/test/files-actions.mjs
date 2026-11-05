@@ -1,6 +1,6 @@
-// Unit test for the File menu's pickers and file actions (plan step 16:
-// src/parts/workspace/workspace.contribution.ts, file-actions.ts, and
-// the add-folder flow lifted out of the Workshop tree panel). Bundles the
+// Unit test for the File menu's pickers and file actions
+// (src/parts/workspace/workspace.contribution.ts, file-actions.ts, and
+// the add-folder flow in add-folder.ts). Bundles the
 // contribution with esbuild - "@tauri-apps/plugin-dialog" aliased to the
 // scripted stub in test/helpers - and drives the commands through the
 // shared registries against jsdom. Covers: the catalog wiring (titles,
@@ -11,7 +11,7 @@
 // the target's parent before writing and retargeting the panel, with
 // cancel a no-op; Save All writing every dirty editor sequentially and
 // skipping clean ones; and Revert File prompting on unsaved changes
-// before reloading from disk. Plan step 17 adds: the Open Recent menu's
+// before reloading from disk. Also covers: the Open Recent menu's
 // dynamic root and recent-file rows merged with the static More... and
 // Clear Recently Opened... rows; the "" quick-access provider over the
 // recent-files store and the tree's fetched listings, deduped and
@@ -543,7 +543,7 @@ initZones({
   panel.dispose();
 }
 
-// --- Step 17: Open Recent catalog wiring -------------------------------------
+// --- Open Recent catalog wiring ----------------------------------------------
 
 // Real DOM-free service instances bound over the self-registered defaults;
 // the contribution's provider and run bodies resolve them at call time.
@@ -581,7 +581,7 @@ registerService(RECENT_FILES_STORE, () => recentStore);
   );
 }
 
-// --- Step 17: provider rows and the "" quick-access provider -----------------
+// --- Provider rows and the "" quick-access provider --------------------------
 
 {
   // Seed: one granted root with a fetched listing, two recent files.
@@ -651,7 +651,7 @@ registerService(RECENT_FILES_STORE, () => recentStore);
   );
 }
 
-// --- Step 17: More... opens quick open; vscode.openFolder focuses a root ----
+// --- More... opens quick open; vscode.openFolder focuses a root --------------
 
 {
   const shown = [];

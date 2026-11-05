@@ -51,7 +51,7 @@ fn long_running_lua_block_cancels_cooperatively() {
 fn a_pre_cancelled_run_aborts_a_tight_loop_promptly() {
     use runvil_types::cancel::CancelHandle;
 
-    // No instruction ceiling aborts a runaway block anymore; the cancel flag,
+    // No instruction ceiling aborts a runaway block; the cancel flag,
     // polled by the instruction hook, is the kill switch. With the flag set
     // before the chunk starts, the first hook firing inside a tight
     // `while true do end` aborts it.

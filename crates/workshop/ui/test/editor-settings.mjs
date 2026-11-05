@@ -1,8 +1,8 @@
 // Unit test for the editor settings service and its surface wiring
-// (plan step 14, src/parts/editor/editor-settings-service.ts,
+// (src/parts/editor/editor-settings-service.ts,
 // editor-surface.ts, editor.contribution.ts). The service seeds four
-// boolean settings from the UI-state adapter's user bucket behind a
-// shape check, writes every change back through the adapter, publishes
+// settings (three booleans and the three-way Render Whitespace mode)
+// from the UI-state adapter's user bucket behind a shape check, writes every change back through the adapter, publishes
 // them as the config.editor.* context keys, and fires onDidChange; the
 // CodeMirror surface holds one Compartment per setting and follows
 // the service in place - no state rebuild. The contribution's four

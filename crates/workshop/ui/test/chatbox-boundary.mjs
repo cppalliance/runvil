@@ -1,5 +1,4 @@
-// The chat box boundary guard: the exit check from the chatbox
-// extraction's Testing Plan. `src/parts/chatbox/` is an isolated
+// The chat box boundary guard: `src/parts/chatbox/` is an isolated
 // component - it imports only `@workshop/platform/lifecycle`, `@workshop/look/icons`, the
 // shared menu surface `@workshop/look/dropdown.css`, skin tokens through CSS, and
 // `@tiptap/*` - so this test walks

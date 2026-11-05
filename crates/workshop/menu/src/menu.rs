@@ -328,8 +328,8 @@ impl MenuBus {
 
     /// Records the gateway's profile list and active profile and
     /// publishes a fresh snapshot. The boot and reconnect paths feed
-    /// this from the gateway's profile endpoints; a gateway without
-    /// profile support feeds an empty list. The selection is untouched:
+    /// this from the gateway's profile endpoints; a failed or declined
+    /// profile fetch feeds an empty list. The selection is untouched:
     /// catalog reconciliation owns selection validity, not the profile
     /// list.
     pub fn set_profiles(&self, profiles: Vec<String>, active: Option<String>) {

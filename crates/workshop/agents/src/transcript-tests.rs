@@ -25,7 +25,7 @@ fn answered(content: &str) -> Event {
         turn: 0,
         tool_call_id: String::new(),
         alias: "ask".to_owned(),
-        tool: None,
+        tool: "user-input/ask".parse().unwrap(),
         vendor: None,
         content: content.to_owned(),
         trusted: true,

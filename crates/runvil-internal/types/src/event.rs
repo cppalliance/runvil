@@ -122,9 +122,8 @@ macro_rules! events {
 /// user-facing chat turn ([`Chat`](Self::Chat)) or a programmatic
 /// inference round ([`Infer`](Self::Infer)).
 ///
-/// The default is `chat`, so a serialized reply that omits `origin`
-/// reads back as a chat reply. A `Chat` effect's round carries the same
-/// value in its `origin` field.
+/// The default is `chat`. A `Chat` effect's round carries the same value
+/// in its `origin` field.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 #[non_exhaustive]
@@ -355,9 +354,7 @@ events! {
             metrics: Option<CallMetrics>,
             /// The kind of round that produced the reply: a programmatic
             /// inference round (`infer`) or a user-facing chat turn
-            /// (`chat`). Defaults to `chat` when a serialized reply omits
-            /// `origin`.
-            #[serde(default)]
+            /// (`chat`).
             origin: ReplyOrigin,
         },
         /// One batch of tool calls the model requested, reported before
@@ -381,13 +378,11 @@ events! {
             tool_call_id: String,
             /// The alias the call named.
             alias: String,
-            /// The tool `alias` resolved to; `None` for an event logged
-            /// before the field.
-            #[serde(default, skip_serializing_if = "Option::is_none")]
-            tool: Option<ToolId>,
+            /// The tool `alias` resolved to.
+            tool: ToolId,
             /// The vendor of the Pack that answered `tool`, as the caller
-            /// reported it; `None` for an adhoc tool, a run given no
-            /// roster, or an event logged before the field.
+            /// reported it; `None` for an adhoc tool or a run given no
+            /// roster.
             #[serde(default, skip_serializing_if = "Option::is_none")]
             vendor: Option<String>,
             /// The tool's output: untrusted unless `trusted`.

@@ -5,15 +5,14 @@
 // and routes the edit commands to that adapter. When no adapter claims
 // focus - a native input, textarea, or contentEditable - the commands
 // fall back to document.execCommand on the last focused editable, which
-// preserves the native undo stack the way the old window-menu edit
-// commands did.
+// preserves the native undo stack.
 //
-// The service owns the document focus tracker (lifted from
-// parts/menu/window-menu.ts) and binds the inputFocus, editorTextFocus, and
-// textInputFocus context keys, so menus and keybindings see focus state
-// from first paint: main.ts resolves the TEXT_CONTROL_SERVICE token at
-// boot. The tracker also remembers the last editable target, because
-// clicking a menu row moves focus to the menu before the command runs.
+// The service owns the document focus tracker and binds the inputFocus,
+// editorTextFocus, and textInputFocus context keys, so menus and
+// keybindings see focus state from first paint: main.ts resolves the
+// TEXT_CONTROL_SERVICE token at boot. The tracker also remembers the
+// last editable target, because clicking a menu row moves focus to the
+// menu before the command runs.
 //
 // DOM-aware but app-free: imports only this package's own files.
 

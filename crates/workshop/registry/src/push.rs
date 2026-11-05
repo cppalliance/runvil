@@ -156,8 +156,8 @@ impl MenuPush {
         }
     }
 
-    /// Records the gateway's profile list and active profile. A gateway
-    /// without profile support feeds an empty list - a state, not an
+    /// Records the gateway's profile list and active profile. A failed
+    /// or declined profile fetch feeds an empty list - a state, not an
     /// error.
     pub fn set_profiles(&self, profiles: Vec<String>, active: Option<String>) {
         if let Some(menu) = self.registry.sink::<dyn MenuSink>() {

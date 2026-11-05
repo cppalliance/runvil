@@ -1,4 +1,4 @@
-// Integration test for the Disposable adoption (step 4): representative
+// Integration test for the Disposable adoption: representative
 // workshop components register their listeners, subscriptions, and timers
 // through the lifecycle primitives, so one root dispose() severs them all.
 // Bundles the TS modules with esbuild and drives them against jsdom built

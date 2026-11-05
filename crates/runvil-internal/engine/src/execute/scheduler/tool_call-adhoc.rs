@@ -97,7 +97,7 @@ impl ChainOps<'_> {
                     call.report.turn,
                     call.call_id.as_deref().unwrap_or(""),
                     &call.alias,
-                    Some(&call.tool),
+                    &call.tool,
                     None,
                     &text,
                     trust,

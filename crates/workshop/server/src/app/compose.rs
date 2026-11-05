@@ -117,7 +117,7 @@ fn register_gateway(
     // Startup phases are reported as they run; with no client connected
     // yet these land on an empty bus, ready for the first session.
     workshop_gateway::report(gateway, push);
-    // The Gateway is now a separate release, so the running one may be
+    // The Gateway ships as a separate release, so the running one may be
     // older than this Workshop needs. Its version arrives in the discovery
     // file; an explicit config has no discovery file, so there is nothing
     // to compare and the pin's minimum is simply not checked.
