@@ -176,13 +176,11 @@ async fn two_models_get_their_own_renders_and_a_stop_spares_only_the_surviving_c
         },
     )
     .await
-    .expect("the run reaches an outcome");
+    .expect("the run is reported");
 
     assert_eq!(
-        report.outcome,
-        RunOutcome::Completed {
-            final_text: "true:done|false:canceled".to_owned()
-        },
+        report.result,
+        Ok("true:done|false:canceled".to_owned()),
         "the spared call answers and its loop goes on, and the dropped call's loop raises"
     );
     let mut models: Vec<ModelId> = seen

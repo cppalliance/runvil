@@ -11,23 +11,9 @@
 use runvil::error::{Error, ErrorCode, FactKey};
 use runvil::vfs::{Origin, VfsError, VfsOp, VfsOutcome, VfsRef, perform_vfs_op, store_error};
 
-use crate::recorder::{RunErrorKind, RunOutcome};
-
 #[cfg(test)]
 #[path = "files-tests.rs"]
 mod tests;
-
-/// The Engine's kind for the run an input failure from [`stage_input`]
-/// ends: input text the prompt does not declare and a declared input
-/// nobody supplied are unmet requirements, and a store refusal is a store
-/// failure.
-pub(crate) fn input_kind(error: &Error) -> RunErrorKind {
-    if error.code == ErrorCode::RequirementsUnmet {
-        RunErrorKind::RequirementsUnmet
-    } else {
-        RunErrorKind::Vfs
-    }
-}
 
 /// Puts the prompt's declared input in place in `vfs`'s store: writes
 /// `text` at `declared`, overwriting any file there, or, when the launch
@@ -112,17 +98,18 @@ pub fn read_output(vfs: &VfsRef, path: &str) -> Result<String, VfsError> {
 /// The output a run's report carries: what a completed run left at its
 /// declared `output:` path in `vfs`'s store, or why the report omits it.
 ///
-/// A run that did not complete fails with [`not_completed`], and a prompt
-/// with no `output:` file with `NoOutput` and the `Reason` fact
-/// `undeclared`. A completed run that left no file fails with `NotFound`,
-/// and a refused read with the store failure's code. Both carry the
-/// declared path as the `Path` fact. The prose is the code's default.
+/// A run whose `result` is an error did not complete and fails with
+/// [`not_completed`], and a prompt with no `output:` file with `NoOutput`
+/// and the `Reason` fact `undeclared`. A completed run that left no file
+/// fails with `NotFound`, and a refused read with the store failure's
+/// code. Both carry the declared path as the `Path` fact. The prose is the
+/// code's default.
 pub(crate) fn report_output(
     vfs: &VfsRef,
     path: Option<&str>,
-    outcome: &RunOutcome,
+    result: &Result<String, Error>,
 ) -> Result<String, Error> {
-    if !matches!(outcome, RunOutcome::Completed { .. }) {
+    if result.is_err() {
         return Err(not_completed());
     }
     let path = path.ok_or_else(|| {

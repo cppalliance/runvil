@@ -10,7 +10,7 @@ use std::time::{Duration, Instant};
 use harness_runner::effect_loop::drive_run;
 use harness_runner::performers::{BoxFuture, Timer, ToolPerformer};
 use harness_runner::recorder::{
-    MemoryRecorder, Record, RecordKind, RecorderFuture, RunId, RunMeta, RunOutcome, RunRecorder,
+    MemoryRecorder, Record, RecordKind, RecorderFuture, RunId, RunMeta, RunRecorder,
 };
 use runvil::cancel::CancelHandle;
 use runvil::effect::ToolCallOrigin;
@@ -20,7 +20,7 @@ use runvil::vfs::Access;
 use serde_json::{Value, json};
 
 use crate::support::{
-    PendingTool, RaiseOnDrop, TEST_SEED, TIMED_MAIN, WAITS, run, run_with_child,
+    PendingTool, RaiseOnDrop, TEST_SEED, TIMED_MAIN, WAITS, assert_canceled, run, run_with_child,
     run_with_child_and_cancel, unused,
 };
 
@@ -93,8 +93,8 @@ impl RunRecorder for StampedRecorder {
         })
     }
 
-    fn end_run(&self, run: RunId, outcome: RunOutcome) -> RecorderFuture<'_, ()> {
-        self.inner.end_run(run, outcome)
+    fn end_run(&self, run: RunId, result: Result<String, Error>) -> RecorderFuture<'_, ()> {
+        self.inner.end_run(run, result)
     }
 }
 
@@ -124,11 +124,8 @@ impl ToolPerformer for DelayedTool {
 }
 
 /// The final text of a completed run.
-fn completed(outcome: RunOutcome) -> String {
-    match outcome {
-        RunOutcome::Completed { final_text } => final_text,
-        other => panic!("the run completes: {other:?}"),
-    }
+fn completed(result: Result<String, Error>) -> String {
+    result.expect("the run completes")
 }
 
 #[tokio::test]
@@ -148,17 +145,16 @@ async fn a_timer_effect_is_answered_after_its_duration() {
         local first = tasks.join_any({ t }, { timeout = 0.05 })\n\
         local _task, ok, result = tasks.join_any({ t })\n\
         return tostring(first == nil) .. '|' .. tostring(ok) .. '|' .. result";
-    let outcome = drive_run(
+    let result = drive_run(
         run_with_child(main, WAITS),
         performers,
         recorder.clone(),
         run_id,
         CancelHandle::new(),
     )
-    .await
-    .unwrap();
+    .await;
     assert_eq!(
-        completed(outcome),
+        completed(result),
         "true|true|late",
         "the timed wait returns nil when the timer fires first, and the plain wait \
          then delivers the child"
@@ -213,16 +209,15 @@ async fn a_pending_timer_is_torn_down_by_a_cancel() {
     // The main section's 30-second timer is out when the cancel lands; the
     // run must end at the cancel, not when the timer would have fired.
     let started = Instant::now();
-    let outcome = drive_run(
+    let result = drive_run(
         run_with_child_and_cancel(TIMED_MAIN, WAITS, &cancel),
         performers,
         recorder.clone(),
         run_id,
         cancel,
     )
-    .await
-    .unwrap();
-    assert_eq!(outcome, RunOutcome::Cancelled);
+    .await;
+    assert_canceled(&result);
     assert!(
         started.elapsed() < Duration::from_secs(10),
         "the cancel tore the sleep down instead of waiting it out"
@@ -248,7 +243,7 @@ async fn an_inline_vfs_answer_performs_the_operation_the_effect_names() {
     let (recorder, run_id) = begun_log().await;
     let performers = unused();
 
-    let outcome = drive_run(
+    let result = drive_run(
         run("store.write('notes.md', 'kept')\n\
              store.append('notes.md', ' and more')\n\
              local ok, err = pcall(store.read, 'missing.md')\n\
@@ -258,10 +253,9 @@ async fn an_inline_vfs_answer_performs_the_operation_the_effect_names() {
         run_id,
         CancelHandle::new(),
     )
-    .await
-    .unwrap();
+    .await;
     assert_eq!(
-        completed(outcome),
+        completed(result),
         "kept and more|false|true",
         "writes land, reads see them, and a missing path is the store's own failure"
     );

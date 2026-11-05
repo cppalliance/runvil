@@ -96,7 +96,7 @@ where
 pub(crate) const fn assert_send_sync<T: Send + Sync + 'static>() {}
 
 #[test]
-fn seeded_failure_messages_name_the_seed() {
+fn a_failing_seeded_check_names_the_seed() {
     let rng = Seeded::new(0x5EED);
     let seed = format!("seed {}", rng.seed());
     let failures = [

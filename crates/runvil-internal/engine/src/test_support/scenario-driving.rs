@@ -22,7 +22,7 @@ use super::super::recording::{
 use super::super::{drive_step, forward};
 use super::{Chat, Matcher};
 use crate::Error;
-use crate::execute::{AnswerRecord, Effect, EffectAnswer, EffectId, EffectRecord, Run, RunOutcome};
+use crate::execute::{AnswerRecord, Effect, EffectAnswer, EffectId, EffectRecord, Run};
 use crate::lua::run_store_op;
 use crate::model::completion_error;
 
@@ -97,8 +97,8 @@ impl Answers {
 pub(crate) struct Driving {
     /// The run, kept once it is done.
     pub(super) run: Run,
-    /// The run's outcome, once it is done.
-    pub(super) outcome: Option<RunOutcome>,
+    /// The run's result, once it is done.
+    pub(super) result: Option<Result<String, Error>>,
     pub(super) answers: Answers,
     /// The parse events, then every event the run reported, in order.
     pub(super) events: Vec<Event>,
@@ -137,7 +137,7 @@ impl Driving {
         mut issued: impl FnMut(&Effect),
         order: impl FnOnce(&mut [(EffectId, Effect)]),
     ) -> bool {
-        if self.outcome.is_some() {
+        if self.result.is_some() {
             return false;
         }
         let run = &mut self.run;
@@ -157,8 +157,8 @@ impl Driving {
             &mut self.held,
             &mut self.events,
         );
-        if let Some(outcome) = stepped {
-            self.outcome = Some(outcome);
+        if let Some(result) = stepped {
+            self.result = Some(result);
             return false;
         }
         // The step dropped what it withdrew, so what it left held beyond
@@ -227,7 +227,7 @@ impl Driving {
     /// Sets the run's cancel flag between steps, as a caller canceling a
     /// run it steps would. A run that is done ignores it.
     pub(crate) fn cancel(&mut self) {
-        if self.outcome.is_none() {
+        if self.result.is_none() {
             self.cancel.cancel();
         }
     }
@@ -250,8 +250,8 @@ impl Driving {
     /// When the run is not done: it waits only on held effects, which
     /// nothing releases until the run withdraws them.
     #[track_caller]
-    pub(crate) fn end(mut self) -> (Trace, Run) {
-        let Some(outcome) = self.outcome else {
+    pub(crate) fn end(self) -> (Trace, Run) {
+        let Some(result) = self.result else {
             panic!(
                 "the run waits only on {} held effects, and no cancel has withdrawn them",
                 self.held.len()
@@ -266,8 +266,7 @@ impl Driving {
                 .expect("the canceller thread does not panic");
         }
         let trace = Trace {
-            outcome,
-            failure: self.run.take_failure_for_test(),
+            result,
             events: self.events,
             parsed: self.parsed,
             effects: self.effects,
@@ -278,12 +277,10 @@ impl Driving {
     }
 }
 
-/// What a scenario's run produced: its outcome, the Engine error behind a
-/// failed one, its events, every effect it issued paired with its answer,
-/// its store, and its turn count.
+/// What a scenario's run produced: its result, its events, every effect it
+/// issued paired with its answer, its store, and its turn count.
 pub(crate) struct Trace {
-    outcome: RunOutcome,
-    failure: Option<Error>,
+    result: Result<String, Error>,
     /// The parse events, then every event the run reported, in order.
     events: Vec<Event>,
     /// How many of the events the parse reported.
@@ -294,32 +291,32 @@ pub(crate) struct Trace {
 }
 
 impl Trace {
-    /// The run's outcome.
-    pub(crate) fn outcome(&self) -> &RunOutcome {
-        &self.outcome
+    /// The run's result.
+    pub(crate) fn result(&self) -> &Result<String, Error> {
+        &self.result
     }
 
     /// The text of a run that succeeded.
     ///
     /// # Panics
-    /// When the run did not succeed, naming its outcome.
+    /// When the run ended with an error, naming it.
     #[track_caller]
     pub(crate) fn text(&self) -> &str {
-        match &self.outcome {
-            RunOutcome::Completed { final_text } => final_text,
-            other => panic!("expected the run to succeed, got {other:?}"),
+        match &self.result {
+            Ok(text) => text,
+            Err(error) => panic!("expected the run to succeed, got {error:?}"),
         }
     }
 
-    /// The Engine error behind the outcome of a run that failed.
+    /// The error a run ended with: a failure, or a cancel.
     ///
     /// # Panics
-    /// When the run did not fail, naming its outcome.
+    /// When the run succeeded, naming its text.
     #[track_caller]
     pub(crate) fn error(&self) -> &Error {
-        match (&self.outcome, &self.failure) {
-            (RunOutcome::Failed { .. }, Some(error)) => error,
-            (other, _) => panic!("expected the run to fail, got {other:?}"),
+        match &self.result {
+            Err(error) => error,
+            Ok(text) => panic!("expected the run to end with an error, got the text {text:?}"),
         }
     }
 

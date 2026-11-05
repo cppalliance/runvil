@@ -63,22 +63,22 @@ impl Pack for Greeter {
 
 /// Prepares [`GREETS`] with `run` as the run's services and drives the
 /// run to its end, returning the recorder and the run's id beside its
-/// outcome.
-async fn drive_greeter(run: HostServices) -> (Arc<MemoryRecorder>, RunId, RunOutcome) {
+/// result.
+async fn drive_greeter(run: HostServices) -> (Arc<MemoryRecorder>, RunId, Result<String, Error>) {
     let recorder = recorder();
     let mut services = services(&recorder, building(GREETER));
     services.services = run;
-    let (run_id, outcome) = prepare_and_drive(GREETS, services).await;
-    (recorder, run_id, outcome)
+    let (run_id, result) = prepare_and_drive(GREETS, services).await;
+    (recorder, run_id, result)
 }
 
 #[tokio::test]
 async fn a_pack_serves_a_call_with_the_service_the_runs_map_provides() {
     let mut run = HostServices::new();
     run.provide(&GREETING, Arc::from("hello")).unwrap();
-    let (_recorder, _run_id, outcome) = drive_greeter(run).await;
+    let (_recorder, _run_id, result) = drive_greeter(run).await;
     assert_eq!(
-        completed(outcome),
+        completed(result),
         "hello",
         "the call read the run's provider"
     );
@@ -86,8 +86,8 @@ async fn a_pack_serves_a_call_with_the_service_the_runs_map_provides() {
 
 #[tokio::test]
 async fn a_pack_whose_service_the_run_lacks_is_refused_naming_the_service() {
-    let (recorder, run_id, outcome) = drive_greeter(HostServices::new()).await;
-    let notice = refusal(outcome);
+    let (recorder, run_id, result) = drive_greeter(HostServices::new()).await;
+    let notice = refusal(result);
     assert!(
         notice.contains(
             "- greeter is unavailable: the run lacks the services it needs: tests/greeting"

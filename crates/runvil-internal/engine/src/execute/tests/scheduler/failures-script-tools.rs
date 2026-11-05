@@ -187,9 +187,9 @@ fn cancellation_cancels_a_slow_script_tools_call() {
         .run();
 
     assert!(
-        matches!(trace.outcome(), RunOutcome::Cancelled),
+        trace.error().is_canceled(),
         "canceling a suspended tools.call must cancel the run, got {:?}",
-        trace.outcome()
+        trace.result()
     );
     assert_eq!(
         started.load(Ordering::SeqCst),

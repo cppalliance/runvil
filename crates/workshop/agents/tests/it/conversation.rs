@@ -13,7 +13,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use harness::record::{MemoryRecorder, RunOutcome};
+use harness::record::MemoryRecorder;
 use tokio::sync::broadcast;
 use workshop_agents::{
     Conversation, Conversations, FailureKind, SessionFailure, SessionState, WaitFrame,
@@ -79,10 +79,15 @@ async fn a_failed_report_becomes_a_run_failed_report_and_ends_the_conversation()
     );
     assert_eq!(conversation.state(), SessionState::Closed);
     let run = conversation.run_id().expect("the recorder began the run");
-    assert!(matches!(
-        recorder.outcome(run),
-        Some(RunOutcome::Failed { .. })
-    ));
+    let Some(Err(error)) = recorder.result(run) else {
+        panic!("the run is recorded as failed");
+    };
+    assert!(!error.is_canceled(), "a failure is not a cancel: {error:?}");
+    assert_eq!(
+        reports[0].message,
+        error.located_message(),
+        "the report is the recorded failure's located message"
+    );
     assert!(
         table.get(conversation.id()).is_none(),
         "an ended conversation leaves the table"
@@ -112,12 +117,7 @@ async fn a_completed_report_reports_nothing_and_ends_the_conversation() {
     );
     assert_eq!(conversation.state(), SessionState::Closed);
     let run = conversation.run_id().expect("the recorder began the run");
-    assert_eq!(
-        recorder.outcome(run),
-        Some(RunOutcome::Completed {
-            final_text: "done".to_owned()
-        })
-    );
+    assert_eq!(recorder.result(run), Some(Ok("done".to_owned())));
     assert!(table.get(conversation.id()).is_none());
 }
 
@@ -156,7 +156,10 @@ async fn a_close_with_a_question_open_cancels_it_and_reports_the_cancel() {
     assert_eq!(conversation.state(), SessionState::Closed);
     assert!(conversation.unresolved_waits().is_empty());
     let run = conversation.run_id().expect("the recorder began the run");
-    assert_eq!(recorder.outcome(run), Some(RunOutcome::Cancelled));
+    assert!(matches!(
+        recorder.result(run),
+        Some(Err(error)) if error.is_canceled()
+    ));
     assert!(!table.close(conversation.id()), "a second close is a no-op");
 }
 
@@ -171,7 +174,10 @@ async fn a_close_before_the_run_starts_ends_its_recorded_run_canceled() {
     ended(start(&conversation, &recorder, "return 'never'")).await;
 
     let run = conversation.run_id().expect("the recorder began the run");
-    assert_eq!(recorder.outcome(run), Some(RunOutcome::Cancelled));
+    assert!(matches!(
+        recorder.result(run),
+        Some(Err(error)) if error.is_canceled()
+    ));
     assert!(
         recorder.records(run).is_empty(),
         "the run ended before its prompt was parsed"
@@ -219,10 +225,8 @@ async fn a_stop_with_only_a_question_open_leaves_it_open_and_its_token_answers()
     assert!(reports(&mut errors).is_empty(), "a stop is never an error");
     let run = conversation.run_id().expect("the recorder began the run");
     assert_eq!(
-        recorder.outcome(run),
-        Some(RunOutcome::Completed {
-            final_text: "still here".to_owned()
-        }),
+        recorder.result(run),
+        Some(Ok("still here".to_owned())),
         "the run went on past the stop to the operator's answer"
     );
 }

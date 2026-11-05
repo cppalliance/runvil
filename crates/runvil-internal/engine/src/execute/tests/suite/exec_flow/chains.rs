@@ -2,9 +2,9 @@
 //! `sys.taskid` values chains and fanout arms take, and the recursion and
 //! self-address limits.
 
+use runvil_types::error::ErrorCode;
+
 use super::*;
-use crate::RunErrorKind;
-use crate::execute::run_error_kind;
 
 /// A jump transfers control and the jumper's remaining blocks never run.
 #[test]
@@ -356,9 +356,9 @@ fn call_recursion_is_capped() {
     let trace = Scenario::new(source).run();
     let error = trace.error();
     assert_eq!(
-        run_error_kind(error.code),
-        RunErrorKind::Quota,
-        "the cap is a quota: {error}"
+        error.code,
+        ErrorCode::CallDepthExceeded,
+        "the cap keeps its own code: {error}"
     );
     let rendered = error.to_string();
     assert!(

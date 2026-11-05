@@ -3,9 +3,8 @@
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use harness::record::{
-    Record, RecorderFuture, RunId, RunMeta, RunOutcome, RunRecorder, recorder_error,
-};
+use harness::record::{Record, RecorderFuture, RunId, RunMeta, RunRecorder, recorder_error};
+use runvil::error::Error;
 use tokio::sync::Mutex;
 
 use crate::{LogError, RunLog};
@@ -121,7 +120,7 @@ impl RunRecorder for AgentRecorder {
         })
     }
 
-    fn end_run(&self, run: RunId, outcome: RunOutcome) -> RecorderFuture<'_, ()> {
+    fn end_run(&self, run: RunId, result: Result<String, Error>) -> RecorderFuture<'_, ()> {
         Box::pin(async move {
             let mut slot = self.recorder.log.lock().await;
             let log = self
@@ -129,7 +128,7 @@ impl RunRecorder for AgentRecorder {
                 .open(&mut slot)
                 .await
                 .map_err(recorder_error)?;
-            log.end_run(run, outcome).await.map_err(recorder_error)
+            log.end_run(run, result).await.map_err(recorder_error)
         })
     }
 }

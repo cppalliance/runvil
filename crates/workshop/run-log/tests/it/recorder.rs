@@ -12,7 +12,7 @@ use std::fs;
 use std::path::Path;
 use std::sync::Arc;
 
-use harness::record::{Record, RecordKind, RunId, RunMeta, RunOutcome, RunRecorder, RunSeed};
+use harness::record::{Record, RecordKind, RunId, RunMeta, RunRecorder, RunSeed};
 use runvil::error::{Error, ErrorCode};
 use serde_json::json;
 use workshop_run_log::{LogError, RecordFilter, RunLog, TursoRecorder};
@@ -89,17 +89,14 @@ async fn a_whole_run_goes_in_through_the_recorder_and_reads_back_through_the_log
         .append(run, record(RecordKind::Event, 2, None, "a"))
         .await
         .unwrap();
-    let outcome = RunOutcome::Completed {
-        final_text: "done".to_owned(),
-    };
-    recorder.end_run(run, outcome.clone()).await.unwrap();
+    recorder.end_run(run, Ok("done".to_owned())).await.unwrap();
     drop((recorder, turso));
 
     let log = read_back(&path).await;
     let row = log.run(run).await.unwrap();
     assert_eq!(row.meta, meta("session-1"));
     assert_eq!(row.agent, AGENT, "the handle writes its agent");
-    assert_eq!(row.outcome, Some(outcome));
+    assert_eq!(row.result, Some(Ok("done".to_owned())));
     assert!(row.ended_at.is_some());
 
     let records = log.records(run, ALL).await.unwrap();
@@ -141,8 +138,8 @@ async fn each_handle_writes_its_own_agent_into_the_shared_log() {
     let first = chat.begin_run(meta("session-1")).await.unwrap();
     let second = echo.begin_run(meta("session-2")).await.unwrap();
     assert_ne!(first, second, "both handles write one log");
-    chat.end_run(first, RunOutcome::Cancelled).await.unwrap();
-    echo.end_run(second, RunOutcome::Cancelled).await.unwrap();
+    chat.end_run(first, Err(Error::canceled())).await.unwrap();
+    echo.end_run(second, Err(Error::canceled())).await.unwrap();
     drop((chat, echo, turso));
 
     let log = read_back(&path).await;
@@ -173,15 +170,15 @@ async fn a_failed_open_is_retried_by_the_next_call() {
         .append(run, record(RecordKind::Event, 0, None, "a"))
         .await
         .unwrap();
-    recorder.end_run(run, RunOutcome::Cancelled).await.unwrap();
+    recorder.end_run(run, Err(Error::canceled())).await.unwrap();
     let path = turso.path().to_path_buf();
     drop((recorder, turso));
 
     let log = read_back(&path).await;
-    assert_eq!(
-        log.run(run).await.unwrap().outcome,
-        Some(RunOutcome::Cancelled)
-    );
+    assert!(matches!(
+        log.run(run).await.unwrap().result,
+        Some(Err(error)) if error.is_canceled()
+    ));
     assert_eq!(log.records(run, ALL).await.unwrap().len(), 1);
 }
 
@@ -198,7 +195,7 @@ async fn the_same_file_reopens_with_its_rows() {
         .await
         .unwrap();
     handle
-        .end_run(earlier, RunOutcome::Cancelled)
+        .end_run(earlier, Err(Error::canceled()))
         .await
         .unwrap();
     drop((handle, first));
@@ -216,11 +213,11 @@ async fn the_same_file_reopens_with_its_rows() {
     let log = read_back(&path).await;
     let kept = log.run(earlier).await.unwrap();
     assert_eq!(kept.meta.name, "session-1");
-    assert_eq!(kept.outcome, Some(RunOutcome::Cancelled));
+    assert!(matches!(kept.result, Some(Err(error)) if error.is_canceled()));
     assert_eq!(log.records(earlier, ALL).await.unwrap().len(), 1);
     let open = log.run(later).await.unwrap();
     assert_eq!(open.meta.name, "session-2");
-    assert_eq!(open.outcome, None);
+    assert_eq!(open.result, None);
 }
 
 #[tokio::test]
@@ -239,9 +236,9 @@ async fn a_write_the_log_refuses_reaches_the_caller_as_a_recorder_error() {
     );
 
     let run = recorder.begin_run(meta("session-1")).await.unwrap();
-    recorder.end_run(run, RunOutcome::Cancelled).await.unwrap();
+    recorder.end_run(run, Err(Error::canceled())).await.unwrap();
     let error = recorder
-        .end_run(run, RunOutcome::Cancelled)
+        .end_run(run, Err(Error::canceled()))
         .await
         .unwrap_err();
     assert!(
@@ -259,7 +256,7 @@ async fn whole_run(recorder: &impl RunRecorder, owner: &str) -> RunId {
             .await
             .unwrap();
     }
-    recorder.end_run(run, RunOutcome::Cancelled).await.unwrap();
+    recorder.end_run(run, Err(Error::canceled())).await.unwrap();
     run
 }
 

@@ -59,9 +59,9 @@ fn cancellation_while_suspended_on_infer_cancels_the_run() {
         .run();
 
     assert!(
-        matches!(trace.outcome(), RunOutcome::Cancelled),
+        trace.error().is_canceled(),
         "canceling a suspended infer must cancel the run, got {:?}",
-        trace.outcome()
+        trace.result()
     );
     assert!(
         matches!(
@@ -79,7 +79,7 @@ fn call_depth_cap_reads_the_chain_field() {
     // chains; the cap must fire from the requesting chain's call-depth
     // field. The typed error then round-trips through every parent's
     // answer envelope without flattening, keeping the innermost call's
-    // line, and classifies as a quota.
+    // line and its own code.
     let md = "---\nname: depth\ndescription: d\nrunvil: 0\n---\n\n\
         # Depth\n\n\
         ## Alpha\n\n\
@@ -94,7 +94,7 @@ fn call_depth_cap_reads_the_chain_field() {
         &crate::test_support::with_author_prose(crate::error::call_depth_exceeded(8), 12),
         "expected the typed call-depth error on Alpha's call line"
     );
-    assert_eq!(run_error_kind(error.code), RunErrorKind::Quota, "{error}");
+    assert_eq!(error.code, ErrorCode::CallDepthExceeded, "{error}");
     assert_eq!(error.to_string(), "recursion exceeded cap of 8");
 }
 

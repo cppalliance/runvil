@@ -1,7 +1,7 @@
 //! A `Chat`, `ToolCall`, or `Timer` effect the caller drops while the
 //! run's cancel flag is clear: the chain resumes with the canceled error,
 //! which a `pcall` catches so the run continues, and which ends the run
-//! `Cancelled` when nothing catches it. A `Chat` drop is covered for both
+//! as a cancel when nothing catches it. A `Chat` drop is covered for both
 //! kinds of round, a nested `models.infer` round and a `models.loop` round.
 //! A `Timer` drop is covered for the timed `tasks.join_any` and
 //! `tasks.join` waits, and under a run cancel, where the drop wakes no one.
@@ -17,7 +17,6 @@ use runvil_types::tools::{ToolCatalog, ToolId, ToolInfo};
 use serde_json::json;
 
 use super::run_params;
-use crate::execute::RunOutcome;
 use crate::execute::run::{
     AnswerRecord, Effect, EffectAnswer, EffectId, EffectRecord, Round, Run, Step,
 };
@@ -110,12 +109,10 @@ fn a_dropped_chat_or_tool_call_resumes_a_pcall_with_the_canceled_error_and_the_r
     let completion = Completion::from_result(CompletionResult::Text("kept".to_owned()), "m")
         .expect("a text result is accepted");
     run.resume(id, EffectAnswer::Chat(Ok(Box::new(completion))));
-    let Step::Done { outcome, events } = run.step() else {
+    let Step::Done { result, events } = run.step() else {
         panic!("the run ends once its last round is answered");
     };
-    let RunOutcome::Completed { final_text: text } = outcome else {
-        panic!("a caught drop leaves the run to succeed: {outcome:?}");
-    };
+    let text = result.expect("a caught drop leaves the run to succeed");
     assert_eq!(text, "false:canceled|false:canceled|kept");
     let turns: Vec<u32> = events
         .iter()
@@ -177,12 +174,10 @@ fn a_dropped_loop_round_resumes_a_pcall_with_the_canceled_error_and_the_run_cont
     let completion = Completion::from_result(CompletionResult::Text("kept".to_owned()), "m")
         .expect("a text result is accepted");
     run.resume(id, EffectAnswer::Chat(Ok(Box::new(completion))));
-    let Step::Done { outcome, events } = run.step() else {
+    let Step::Done { result, events } = run.step() else {
         panic!("the run ends once its last round is answered");
     };
-    let RunOutcome::Completed { final_text: text } = outcome else {
-        panic!("a caught drop leaves the run to succeed: {outcome:?}");
-    };
+    let text = result.expect("a caught drop leaves the run to succeed");
     assert_eq!(
         text, "false:canceled|1|2:kept",
         "the dropped round appended nothing, and the answered one appended its reply"
@@ -210,12 +205,12 @@ fn an_uncaught_dropped_chat_or_tool_call_ends_the_run_canceled() {
     ] {
         let mut run = bound_run(body, &CancelHandle::new());
         let _ = drop_next(&mut run);
-        let Step::Done { outcome, .. } = run.step() else {
+        let Step::Done { result, .. } = run.step() else {
             panic!("{body}: the uncaught drop ends the run with nothing outstanding");
         };
         assert!(
-            matches!(outcome, RunOutcome::Cancelled),
-            "{body}: the canceled error ends the run canceled: {outcome:?}"
+            matches!(&result, Err(error) if error.is_canceled()),
+            "{body}: the canceled error ends the run canceled: {result:?}"
         );
     }
 }
@@ -287,12 +282,12 @@ fn a_dropped_timer_raises_the_canceled_error_into_a_timed_waits_pcall_and_the_ru
             "{wait}: the caught drop issued nothing new: {effects:?}"
         );
         run.resume(chat, chat_answer(&text("child")));
-        let Step::Done { outcome, .. } = run.step() else {
+        let Step::Done { result, .. } = run.step() else {
             panic!("{wait}: the run ends once the child's round is answered");
         };
-        let RunOutcome::Completed { final_text: out } = outcome else {
-            panic!("{wait}: a caught drop leaves the run to succeed: {outcome:?}");
-        };
+        let out = result.unwrap_or_else(|error| {
+            panic!("{wait}: a caught drop leaves the run to succeed: {error:?}")
+        });
         assert_eq!(
             out, "false:canceled|child",
             "{wait}: the wait raised the canceled error and the child kept running"
@@ -326,12 +321,12 @@ fn an_uncaught_dropped_timer_ends_the_run_canceled() {
             "{wait}: the uncaught error decided the run and withdrew the child's round"
         );
         run.resume(chat, EffectAnswer::Dropped);
-        let Step::Done { outcome, .. } = run.step() else {
+        let Step::Done { result, .. } = run.step() else {
             panic!("{wait}: the run ends once the orphan is answered");
         };
         assert!(
-            matches!(outcome, RunOutcome::Cancelled),
-            "{wait}: the canceled error ends the run canceled: {outcome:?}"
+            matches!(&result, Err(error) if error.is_canceled()),
+            "{wait}: the canceled error ends the run canceled: {result:?}"
         );
     }
 }
@@ -344,11 +339,11 @@ fn under_a_run_cancel_a_dropped_timer_ends_the_run_canceled_without_resuming_the
     cancel.cancel();
     run.resume(timer, EffectAnswer::Dropped);
     run.resume(chat, EffectAnswer::Dropped);
-    let Step::Done { outcome, .. } = run.step() else {
+    let Step::Done { result, .. } = run.step() else {
         panic!("the cancel ends the run once both effects are answered");
     };
     assert!(
-        matches!(outcome, RunOutcome::Cancelled),
-        "the wait's pcall never resumed, so the run did not go on: {outcome:?}"
+        matches!(&result, Err(error) if error.is_canceled()),
+        "the wait's pcall never resumed, so the run did not go on: {result:?}"
     );
 }

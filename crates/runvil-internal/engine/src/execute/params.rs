@@ -240,10 +240,9 @@ impl RunParams {
     /// every block, and every library a block loads with `require`, can
     /// call what the preludes define.
     ///
-    /// A prelude fails the run as
-    /// [`RunErrorKind::Lua`](super::RunErrorKind::Lua) if it fails to load,
-    /// or if it defines a global that another prelude, an Engine global, or
-    /// a reserved name already holds.
+    /// A prelude fails the run with an `ErrorCode::LuaRuntime` error if it
+    /// fails to load, or if it defines a global that another prelude, an
+    /// Engine global, or a reserved name already holds.
     /// The failure happens when the first section VM is set up, before the
     /// run issues any effect.
     #[must_use]

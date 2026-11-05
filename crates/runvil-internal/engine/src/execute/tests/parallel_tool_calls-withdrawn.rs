@@ -122,7 +122,7 @@ fn canceling_a_task_withdraws_its_unanswered_tool_calls() {
     }
     run.resume(linger, chat_answer(&text("done")));
     let result = match run.step() {
-        Step::Done { outcome, .. } => outcome,
+        Step::Done { result, .. } => result,
         other @ Step::Pending { .. } => panic!("Main's second round ends the run: {other:?}"),
     };
     assert_eq!(text_of(result), "canceled");
@@ -149,7 +149,7 @@ fn a_call_issued_and_withdrawn_in_one_step_is_listed_twice() {
         run.resume(*id, answer);
     }
     let result = match run.step() {
-        Step::Done { outcome, .. } => outcome,
+        Step::Done { result, .. } => result,
         other @ Step::Pending { .. } => panic!("Main's second round ends the run: {other:?}"),
     };
     assert_eq!(text_of(result), "canceled");
@@ -178,13 +178,13 @@ fn the_step_that_decides_the_run_withdraws_every_outstanding_effect() {
         run.resume(id, EffectAnswer::Dropped);
     }
     let result = match run.step() {
-        Step::Done { outcome, .. } => outcome,
+        Step::Done { result, .. } => result,
         other @ Step::Pending { .. } => {
             panic!("every orphan is answered, so the run is done: {other:?}")
         }
     };
     assert!(
-        matches!(result, RunOutcome::Cancelled),
+        matches!(&result, Err(error) if error.is_canceled()),
         "the run ends canceled: {result:?}"
     );
 }
@@ -254,7 +254,7 @@ fn one_step_lists_every_tasks_withdrawn_calls_in_effect_id_order() {
     };
     run.resume(linger, chat_answer(&text("done")));
     let result = match run.step() {
-        Step::Done { outcome, .. } => outcome,
+        Step::Done { result, .. } => result,
         other @ Step::Pending { .. } => panic!("Main's second round ends the run: {other:?}"),
     };
     assert_eq!(text_of(result), "canceled");
@@ -307,7 +307,7 @@ fn the_step_that_decides_the_run_withdraws_the_effects_it_issued_of_every_kind()
         run.resume(id, EffectAnswer::Dropped);
     }
     let result = match run.step() {
-        Step::Done { outcome, .. } => outcome,
+        Step::Done { result, .. } => result,
         other @ Step::Pending { .. } => panic!("every orphan is answered: {other:?}"),
     };
     assert_eq!(text_of(result), "fast");

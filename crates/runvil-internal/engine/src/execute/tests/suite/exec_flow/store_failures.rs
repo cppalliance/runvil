@@ -7,8 +7,6 @@ use runvil_types::error::ErrorCode;
 
 use super::*;
 
-use crate::RunErrorKind;
-use crate::execute::run_error_kind;
 use crate::execute::{Effect, EffectRecord};
 use crate::test_support::at_line;
 use crate::test_support::rig::Rig;
@@ -100,15 +98,15 @@ fn a_store_argument_type_error_is_kind_lua() {
     assert_eq!(Scenario::new(source).run().text(), "ok");
 }
 
-/// An uncaught store failure ends the run as a `Vfs` run error whose
+/// An uncaught store failure ends the run with the store's code, and its
 /// message is the model-facing rendering.
 #[test]
 fn an_uncaught_store_failure_ends_the_run_as_a_store_error() {
     let trace = Scenario::new(one_section("return store.read('missing.txt')")).run();
     let error = trace.error();
     assert_eq!(
-        run_error_kind(error.code),
-        RunErrorKind::Vfs,
+        error.code,
+        ErrorCode::NotFound,
         "the run fails as a store error: {error:?}"
     );
     assert!(
@@ -119,9 +117,9 @@ fn an_uncaught_store_failure_ends_the_run_as_a_store_error() {
     );
 }
 
-/// An uncaught store failure in the H1 pass ends the run as a `Vfs`
-/// run error: the H1 blocks run through the same coroutine machinery as
-/// any section.
+/// An uncaught store failure in the H1 pass ends the run with the store's
+/// code: the H1 blocks run through the same coroutine machinery as any
+/// section.
 #[test]
 fn an_uncaught_store_failure_in_h1_ends_the_run_as_a_store_error() {
     let source = PromptSource::new()
@@ -130,15 +128,15 @@ fn an_uncaught_store_failure_in_h1_ends_the_run_as_a_store_error() {
     let trace = Scenario::new(source.build()).run();
     let error = trace.error();
     assert_eq!(
-        run_error_kind(error.code),
-        RunErrorKind::Vfs,
+        error.code,
+        ErrorCode::NotFound,
         "the H1 failure is a store error: {error:?}"
     );
 }
 
 /// A caught store error raised again, after another suspending call,
-/// keeps its classification: the run ends as a `Vfs` run error whose
-/// message is the original rendering.
+/// keeps its code: the run ends with the store's code, and its message is
+/// the original rendering.
 #[test]
 fn a_caught_store_error_raised_again_after_a_suspending_call_keeps_store() {
     let source = prompt(
@@ -158,9 +156,9 @@ fn a_caught_store_error_raised_again_after_a_suspending_call_keeps_store() {
     let trace = Scenario::new(source).run();
     let error = trace.error();
     assert_eq!(
-        run_error_kind(error.code),
-        RunErrorKind::Vfs,
-        "the re-raised error keeps its store classification: {error:?}"
+        error.code,
+        ErrorCode::NotFound,
+        "the re-raised error keeps its store code: {error:?}"
     );
     assert!(
         error
@@ -235,7 +233,6 @@ fn a_library_write_across_two_arms_ends_the_run_with_determinism() {
         error.code == ErrorCode::Determinism,
         "the load-time conflict is a determinism violation: {error:?}"
     );
-    assert_eq!(run_error_kind(error.code), RunErrorKind::Vfs, "{error:?}");
 }
 
 /// A conflict a library caught with its own `pcall` while loading still
@@ -251,7 +248,6 @@ fn a_library_conflict_caught_with_pcall_still_ends_the_run_with_determinism() {
         error.code == ErrorCode::Determinism,
         "a caught load-time conflict is still fatal: {error:?}"
     );
-    assert_eq!(run_error_kind(error.code), RunErrorKind::Vfs, "{error:?}");
 }
 
 /// The library the captured-store cases require: `store.write` captured
@@ -293,7 +289,6 @@ fn a_captured_store_function_conflict_caught_with_pcall_still_ends_the_run_with_
         error.code == ErrorCode::Determinism,
         "a conflict through a captured store function is fatal: {error:?}"
     );
-    assert_eq!(run_error_kind(error.code), RunErrorKind::Vfs, "{error:?}");
 }
 
 /// A store function a library captured at load time reaches the caller

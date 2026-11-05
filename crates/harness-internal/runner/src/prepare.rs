@@ -16,16 +16,17 @@
 //! model on the params; and build the `Run` beside its performers.
 //!
 //! A prompt that fails to parse, or an input file that cannot be put in
-//! place, is a run that ended before it began: the recorder ends it as
-//! failed with the cause as the message, so the record answers "why did
-//! this run fail" for a run the loop never saw. `Harness::run_to_end`
-//! reports that ended run, and its caller reads the events recorded so
-//! far from the recorder. An environment that cannot satisfy the prompt
-//! fails no preparation: the run is built, and its first step ends it
-//! with the Engine's model-readable notice, or as canceled when the
-//! run's cancel fired first, as when a cancel cuts the wait short while a
-//! needed Pack is still starting. The effect loop records that end like
-//! any other, and the record holds no run event after the parse events.
+//! place, is a run that ended before it began: the recorder ends it with
+//! that failure as its result, the same error `prepare` returns, so the
+//! record answers "why did this run fail" for a run the loop never saw.
+//! `Harness::run_to_end` reports that ended run, and its caller reads the
+//! events recorded so far from the recorder. An environment that cannot
+//! satisfy the prompt fails no preparation: the run is built, and its
+//! first step ends it with the Engine's model-readable notice, or
+//! canceled when the run's cancel fired first, as when a cancel cuts the
+//! wait short while a needed Pack is still starting. The effect loop
+//! records that end like any other, and the record holds no run event
+//! after the parse events.
 //!
 //! The input staging is store work and runs inline, like every other VFS
 //! operation of the run.
@@ -35,7 +36,7 @@ use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use runvil::cancel::CancelHandle;
-use runvil::error::{Error, ErrorCode, FactKey};
+use runvil::error::Error;
 use runvil::event::Event;
 use runvil::model::{ModelInfo, ModelRole};
 use runvil::prompt::FileDecl;
@@ -45,12 +46,11 @@ use runvil::{Prompt, Run, RunParams, RunSeed};
 use runvil_plugin::HostServices;
 use sha2::{Digest as _, Sha256};
 
-use crate::display_chain::display_chain;
-use crate::files::{input_kind, stage_input};
+use crate::files::stage_input;
 use crate::host::HostContext;
 use crate::performers::{InferenceBroker, Performers, Timer};
 use crate::recorder::{
-    Record, RecordKind, RunErrorKind, RunId, RunMeta, RunOutcome, RunRecorder, recorder_error,
+    Record, RecordKind, RunId, RunMeta, RunRecorder, of_run, recorder_error, refused,
 };
 
 /// What the caller owns and preparation borrows: the Host's built
@@ -136,43 +136,6 @@ pub struct Prepared {
     pub output_path: Option<String>,
 }
 
-/// The failed outcome a [`prepare`] failure ended its run with, or, for a
-/// `RecorderFailed` refusal, which ends nothing, the refusal.
-pub(crate) fn ended(error: Error) -> Result<RunOutcome, Error> {
-    if error.code == ErrorCode::RecorderFailed {
-        return Err(error);
-    }
-    Ok(failed(ended_kind(&error), &error))
-}
-
-/// The kind a [`prepare`] failure ends its run under: the input's kind for
-/// an unmet or refused input, and `Parse` for a prompt that does not parse.
-fn ended_kind(error: &Error) -> RunErrorKind {
-    if error.code == ErrorCode::RequirementsUnmet || error.code.number() / 100 == 6 {
-        input_kind(error)
-    } else {
-        RunErrorKind::Parse
-    }
-}
-
-/// `error` with run `run`'s id as its `Run` fact.
-fn of_run(run: RunId, mut error: Error) -> Error {
-    error.facts.insert(FactKey::Run, run.get().into());
-    error
-}
-
-/// A recorder's refusal of a write for run `run`: `RecorderFailed` with
-/// the run's `Run` fact, the refusal built with [`recorder_error`] when
-/// the recorder returned another code.
-fn refused(run: RunId, error: Error) -> Error {
-    let error = if error.code == ErrorCode::RecorderFailed {
-        error
-    } else {
-        recorder_error(error)
-    };
-    of_run(run, error)
-}
-
 /// Begins one run named `name` of the prompt `source` at `recorder`: draws
 /// the run's seed and start and hands both to the recorder with the
 /// prompt's hash.
@@ -214,11 +177,11 @@ pub async fn begin(recorder: &dyn RunRecorder, name: &str, source: &str) -> Resu
 /// # Errors
 /// Returns the parse failure when the source does not parse and the input
 /// failure from `stage_input` when its declared input file cannot be put
-/// in place. In both cases the run is ended as failed, the failure keeps
-/// its own code and gains the run's `Run` fact, and `Harness::run_to_end`
-/// reports it while the events recorded so far stay at the recorder.
-/// Returns `RecorderFailed` with the `Run` fact when the recorder refuses
-/// a write.
+/// in place. In both cases the failure keeps its own code and gains the
+/// run's `Run` fact, the run is ended with it as its result, and
+/// `Harness::run_to_end` reports it while the events recorded so far stay
+/// at the recorder. Returns `RecorderFailed` with the `Run` fact when the
+/// recorder refuses a write, and neither failure has that code.
 pub async fn prepare(
     source: &str,
     args: &str,
@@ -256,11 +219,12 @@ pub async fn prepare(
     let prompt = match prompt {
         Ok(prompt) => prompt,
         Err(source) => {
+            let error = of_run(run_id, source);
             recorder
-                .end_run(run_id, failed(ended_kind(&source), &source))
+                .end_run(run_id, Err(error.clone()))
                 .await
                 .map_err(recorded)?;
-            return Err(of_run(run_id, source));
+            return Err(error);
         }
     };
 
@@ -268,11 +232,12 @@ pub async fn prepare(
     // store: the run's first section may read it.
     let declared = prompt.frontmatter().input().map(FileDecl::path);
     if let Err(source) = stage_input(&vfs, declared, input_text) {
+        let error = of_run(run_id, source);
         recorder
-            .end_run(run_id, failed(ended_kind(&source), &source))
+            .end_run(run_id, Err(error.clone()))
             .await
             .map_err(recorded)?;
-        return Err(of_run(run_id, source));
+        return Err(error);
     }
     let output_path = prompt
         .frontmatter()
@@ -325,15 +290,6 @@ pub async fn prepare(
         performers,
         output_path,
     })
-}
-
-/// The failed outcome of a run that ended in preparation: `kind` is the
-/// Engine's kind for the failure and the message is the cause chain.
-fn failed(kind: RunErrorKind, source: &dyn std::error::Error) -> RunOutcome {
-    RunOutcome::Failed {
-        kind,
-        message: display_chain(source),
-    }
 }
 
 /// One event's record under its own provenance.

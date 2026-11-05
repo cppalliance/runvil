@@ -217,7 +217,7 @@ async fn a_launched_run_is_recorded_in_the_run_log_under_the_state_directory() {
         loop {
             if let Ok(log) = RunLog::open(&log_file).await
                 && let Ok(row) = log.run(run).await
-                && row.outcome.is_some()
+                && row.result.is_some()
             {
                 return (log, row);
             }

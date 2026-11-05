@@ -3,9 +3,9 @@
 //!
 //! A `thiserror` variant renders only its own message; its `#[source]` is
 //! reachable through `source()` but not repeated in the text. Where the
-//! text leaves the program - a run's failed outcome in the log, a
-//! failure pushed to a session's client - the chain is walked here so the
-//! reader sees the cause and not just the outermost frame.
+//! text leaves the program - a run's failure in the log, a failure pushed
+//! to a session's client - the chain is walked here so the reader sees
+//! the cause and not just the outermost frame.
 
 use std::error::Error;
 

@@ -1,12 +1,13 @@
 //! Tests for `ErrorCode` numbering, `Location` ranges, the cause chain
-//! `with_cause` appends, the text of `Error::canceled`, and how `place`
-//! locates an error and `coordinates` formats its location.
+//! `with_cause` appends, the text of `Error::canceled` and the errors
+//! `is_canceled` holds for, the location `located_message` ends with, and
+//! how `place` locates an error and `coordinates` formats its location.
 
 use std::collections::BTreeSet;
 use std::fmt;
 use std::num::NonZeroU32;
 
-use super::{Error, ErrorCode, Location, coordinates, place};
+use super::{Error, ErrorCode, FactKey, Location, coordinates, failure, place};
 
 /// A cause with an optional cause of its own.
 #[derive(Debug)]
@@ -69,6 +70,21 @@ fn a_canceled_failure_keeps_its_message_and_the_default_prose() {
     );
     assert_eq!(error.prose, ErrorCode::Canceled.prose());
     assert!(error.at.is_none() && error.facts.is_empty(), "{error:?}");
+}
+
+#[test]
+fn an_error_is_a_cancel_exactly_when_its_code_is_canceled() {
+    assert!(Error::canceled().is_canceled());
+    assert!(
+        Error::new(ErrorCode::Canceled, "stopped", "Stopped.").is_canceled(),
+        "the code decides, not the text"
+    );
+    for code in ALL.into_iter().filter(|&code| code != ErrorCode::Canceled) {
+        assert!(
+            !failure(code, "canceled: the run was canceled").is_canceled(),
+            "{code:?} is a failure"
+        );
+    }
 }
 
 /// Every code, in declaration order.
@@ -387,5 +403,91 @@ fn coordinates_formats_the_file_and_start_line() {
     assert_eq!(
         coordinates(&Location::line("src/a.rs", nonzero(12))),
         "src/a.rs:12"
+    );
+}
+
+#[test]
+fn a_parse_failures_located_message_ends_with_the_prompt_name_and_the_start_position() {
+    let mut error = failure(ErrorCode::StructureInvalid, "duplicate section");
+    assert_eq!(error.located_message(), "duplicate section");
+    error.facts.insert(FactKey::Name, "greeter".into());
+    assert_eq!(
+        error.located_message(),
+        "duplicate section (prompt greeter)"
+    );
+    error.at = Location::new(
+        "agents/greeter.md",
+        nonzero(3),
+        nonzero(7),
+        nonzero(4),
+        nonzero(1),
+    );
+    assert_eq!(
+        error.located_message(),
+        "duplicate section (prompt greeter, line 3, column 7)",
+        "the location names the start line and column, not the end"
+    );
+    error.facts.clear();
+    assert_eq!(
+        error.located_message(),
+        "duplicate section (line 3, column 7)"
+    );
+}
+
+#[test]
+fn an_internal_failures_located_message_ends_with_its_rust_file_and_line() {
+    let mut error = failure(ErrorCode::Internal, "internal invariant violated: x");
+    assert_eq!(
+        error.located_message(),
+        "internal invariant violated: x",
+        "an internal failure with no location ends with its own text"
+    );
+    error.at = Some(Location::line("src/a.rs", nonzero(12)));
+    assert_eq!(
+        error.located_message(),
+        "internal invariant violated: x (at src/a.rs:12)"
+    );
+    error.facts.insert(FactKey::Name, "ignored".into());
+    assert_eq!(
+        error.located_message(),
+        "internal invariant violated: x (at src/a.rs:12)",
+        "an internal failure names no prompt"
+    );
+}
+
+#[test]
+fn any_other_located_failure_ends_with_its_file_and_line() {
+    let mut error = failure(
+        ErrorCode::LuaCompile,
+        "lua compilation error at x (line 2): y",
+    );
+    error.at = Some(Location::line("agents/a.md", nonzero(2)));
+    error.facts.insert(FactKey::Name, "p".into());
+    assert_eq!(
+        error.located_message(),
+        "lua compilation error at x (line 2): y (at agents/a.md:2)",
+        "the suffix adds the file to the line the message names"
+    );
+    let canceled = Error::canceled();
+    assert_eq!(
+        canceled.located_message(),
+        canceled.message,
+        "a failure with no location ends with its own text"
+    );
+}
+
+#[test]
+fn a_run_time_invalid_value_takes_the_located_form_not_the_parse_form() {
+    let mut error = failure(ErrorCode::InvalidValue, "unknown model role `bogus`");
+    error.facts.insert(FactKey::Name, "bogus".into());
+    assert_eq!(
+        error.located_message(),
+        "unknown model role `bogus`",
+        "the value its `Name` fact holds is no prompt name"
+    );
+    error.at = Some(Location::line("agents/a.md", nonzero(9)));
+    assert_eq!(
+        error.located_message(),
+        "unknown model role `bogus` (at agents/a.md:9)"
     );
 }

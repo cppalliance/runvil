@@ -14,10 +14,9 @@
 //!   `runvil-prompt`, `runvil-vfs`, and
 //!   `runvil-model-client`. `cargo test -p build-xtask` enforces the
 //!   product and container boundaries.
-//! - A failed run's message ends with ` (at file:line)` when its failure
-//!   is located, except that a structure, fence, or list failure, the
-//!   parser's own, ends with ` (prompt ..., line ..., column ...)`, and a
-//!   frontmatter failure with ` (line ..., column ...)`.
+//! - A run ends with `Ok` holding its final text or `Err` holding the
+//!   error that ended it, never one with a caller code; a cancel is the
+//!   error whose code is `Canceled`.
 
 mod error;
 mod execute;
@@ -36,6 +35,6 @@ use crate::error::{Error, Result};
 // is re-exported here, so the `runvil` facade names
 // `runvil_engine::X`, not a module path.
 pub use crate::execute::{
-    Effect, EffectAnswer, EffectId, IssuedEffect, PackToolSets, Round, Run, RunErrorKind,
-    RunLimits, RunOutcome, RunParams, Step, ToolCallOrigin, ToolCaller, perform_vfs_op,
+    Effect, EffectAnswer, EffectId, IssuedEffect, PackToolSets, Round, Run, RunLimits, RunParams,
+    Step, ToolCallOrigin, ToolCaller, perform_vfs_op,
 };

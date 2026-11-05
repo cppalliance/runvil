@@ -1,7 +1,10 @@
 //! The run log's tables.
 //!
 //! Two tables. `runs` holds one row per run: written at `begin_run`, closed
-//! exactly once at `end_run` when `ended_at` and the outcome columns fill.
+//! exactly once at `end_run` when `ended_at` and the result columns fill.
+//! `status` is `completed`, `failed`, or `canceled`. A completed run fills
+//! `final_text`; a failed or canceled run fills `error_code` with its
+//! error's `ErrorCode::tag` and `error_message` with its located message.
 //! `records` holds, per run, every effect, answer, and event in effect-loop
 //! order. `seq` is the loop's order, not the clock's; `at` is the wall
 //! clock at append, kept for display only. `(task_id, task_seq)` is the
@@ -26,9 +29,9 @@ CREATE TABLE IF NOT EXISTS runs (
     flags         INTEGER NOT NULL,
     started_at    INTEGER NOT NULL,
     ended_at      INTEGER,
-    outcome       TEXT    CHECK (outcome IN ('completed', 'failed', 'cancelled')),
+    status        TEXT    CHECK (status IN ('completed', 'failed', 'canceled')),
     final_text    TEXT,
-    error_kind    TEXT,
+    error_code    TEXT,
     error_message TEXT
 );
 
@@ -65,13 +68,13 @@ pub(crate) const INSERT_RECORD: &str = "INSERT INTO records \
 /// Closes a run. The `ended_at IS NULL` guard makes a second close a
 /// no-op the caller detects through the change count.
 pub(crate) const UPDATE_RUN_ENDED: &str = "UPDATE runs SET \
-    ended_at = ?2, outcome = ?3, final_text = ?4, error_kind = ?5, error_message = ?6 \
+    ended_at = ?2, status = ?3, final_text = ?4, error_code = ?5, error_message = ?6 \
     WHERE run_id = ?1 AND ended_at IS NULL";
 
 /// One run row, columns in [`crate::read`]'s order.
 pub(crate) const SELECT_RUN: &str = "SELECT \
     name, agent, prompt_hash, seed, flags, started_at, \
-    ended_at, outcome, final_text, error_kind, error_message \
+    ended_at, status, final_text, error_code, error_message \
     FROM runs WHERE run_id = ?1";
 
 /// A run's records, newest first by `seq`, optionally one kind only

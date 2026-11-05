@@ -4,8 +4,8 @@
 
 use std::collections::BTreeSet;
 
-use crate::RunErrorKind;
-use crate::execute::run_error_kind;
+use runvil_types::error::ErrorCode;
+
 use crate::test_support::recording::detail;
 use crate::test_support::scenario::{Record, Scenario};
 
@@ -32,26 +32,27 @@ struct ExecutionErrorFixture {
     name: &'static str,
     source: &'static str,
     execution: &'static str,
-    kind: RunErrorKind,
+    code: ErrorCode,
     message_fragment: &'static str,
 }
 
 const EXECUTION_ERROR_FIXTURES: &[ExecutionErrorFixture] = &[
     // Both fixtures fail at the lazy-`prose` read site inside the section's
-    // Lua, so the run-level kind is Lua: the substitution error is an
-    // ordinary, pcall-able Lua error there, not a run-phase failure.
+    // Lua, so the run ends with the substitution's own code: the
+    // substitution error is an ordinary, pcall-able Lua error there, not a
+    // run-phase failure.
     ExecutionErrorFixture {
         name: "invalid/reply-substitution-nil.md",
         source: REPLY_SUBSTITUTION_NIL,
         execution: REPLY_SUBST_NIL_EXECUTION,
-        kind: RunErrorKind::Lua,
+        code: ErrorCode::Substitution,
         message_fragment: "reply",
     },
     ExecutionErrorFixture {
         name: "invalid/item-outside-fanout.md",
         source: ITEM_OUTSIDE_FANOUT,
         execution: ITEM_OUTSIDE_EXECUTION,
-        kind: RunErrorKind::Lua,
+        code: ErrorCode::Substitution,
         message_fragment: "nil",
     },
 ];
@@ -191,9 +192,8 @@ fn execution_error_fixtures_report_their_typed_contract() {
         let trace = Scenario::new(fixture.source).name(fixture.execution).run();
         let error = trace.error();
         assert_eq!(
-            run_error_kind(error.code),
-            fixture.kind,
-            "fixture {} returned the wrong error kind: {error:?}",
+            error.code, fixture.code,
+            "fixture {} returned the wrong error code: {error:?}",
             fixture.name
         );
         assert!(

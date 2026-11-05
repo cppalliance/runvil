@@ -7,13 +7,14 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
+use runvil_types::error::ErrorCode;
 use runvil_types::models::{ModelRole, ThinkingMode};
 use runvil_types::packs::PackId;
 use runvil_types::timestamp::Timestamp;
 use runvil_types::tools::{ToolCatalog, ToolId, ToolInfo};
 use serde_json::json;
 
-use crate::execute::{Run, RunErrorKind, RunOutcome, RunParams, Step};
+use crate::execute::{Run, RunParams, Step};
 use crate::lua::RosterEntry;
 use crate::prompt::Prompt;
 use crate::test_support::scenario::{TEST_SEED, test_model_with};
@@ -84,23 +85,23 @@ fn unavailable(pack: &str, reason: &str) -> (PackId, RosterEntry) {
 #[track_caller]
 fn refusal(prompt: Prompt, ctx: RunParams) -> Option<String> {
     let mut run = Run::new(Arc::new(prompt), "", ctx);
-    let Step::Done { outcome, events } = run.step() else {
+    let Step::Done { result, events } = run.step() else {
         panic!("the fixture run is done at its first step");
     };
-    match outcome {
-        RunOutcome::Completed { final_text } => {
+    match result {
+        Ok(final_text) => {
             assert_eq!(final_text, "done");
             None
         }
-        RunOutcome::Failed { kind, message } => {
-            assert_eq!(kind, RunErrorKind::RequirementsUnmet, "{message}");
+        Err(error) => {
+            let message = error.located_message();
+            assert_eq!(error.code, ErrorCode::RequirementsUnmet, "{message}");
             assert!(
                 events.is_empty(),
                 "a refused run reports no run events: {events:?}"
             );
             Some(message)
         }
-        RunOutcome::Cancelled => panic!("expected a completion or a refusal, got a cancellation"),
     }
 }
 

@@ -25,6 +25,12 @@
 //!   hierarchical task path stored as text; timestamps are UTC
 //!   milliseconds since the Unix epoch. `started_at` is the caller's;
 //!   `at` and `ended_at` are the log's wall clock.
+//! - A run's result is stored under its `status`: `completed` with its
+//!   final text, or `failed` or `canceled` with its error's code tag and
+//!   located message, `canceled` exactly when the code is `canceled`. It
+//!   reads back as the same final text, or as an error with the same code
+//!   and located message, the code's default prose, no location, and no
+//!   facts. A row in any other shape reads as `LogError::Corrupt`.
 //! - A stored payload round-trips: `Record::payload` is written with
 //!   `serde_json::to_string` and read back with `from_str`, and the parsed
 //!   value equals the original with the same text. The workspace enables
@@ -49,8 +55,5 @@ mod schema;
 
 pub use append::RunLog;
 pub use error::LogError;
-pub use record::{
-    Record, RecordFilter, RecordKind, RunErrorKind, RunId, RunMeta, RunOutcome, RunRow, Seq,
-    StoredRecord,
-};
+pub use record::{Record, RecordFilter, RecordKind, RunId, RunMeta, RunRow, Seq, StoredRecord};
 pub use recorder::{AgentRecorder, TursoRecorder};

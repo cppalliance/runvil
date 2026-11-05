@@ -6,10 +6,12 @@
 //! [`HostContext`]'s Packs), steps it, performs each chat, render,
 //! tool-call, and timer effect through its performer and answers each Vfs
 //! effect inline, feeds the answers back, hands every event, effect, and
-//! answer to the run's recorder, ends the run there with its one outcome,
-//! and reads the declared output file, all inside the one future
-//! [`Harness::run`] returns. A recorder that refuses a write is the only
-//! way a run ends without a recorded outcome.
+//! answer to the run's recorder, ends the run there with its result, the
+//! final text or the error that ended it, and reads the declared output
+//! file, all inside the one future [`Harness::run`] returns. A cancel is
+//! the error whose code is `canceled`. A recorder that refuses a write is
+//! the only way a run ends without a recorded result, and that refusal,
+//! a `RecorderFailed` error, is the only error [`Harness::run`] returns.
 //!
 //! ## Invariants
 //!
@@ -49,6 +51,5 @@ pub use display_chain::display_chain;
 pub use harness::{Harness, RunControl, RunReport, RunRequest};
 pub use host::HostContext;
 pub use recorder::{
-    MemoryRecorder, Record, RecordKind, RecorderFuture, RunErrorKind, RunId, RunMeta, RunOutcome,
-    RunRecorder, recorder_error,
+    MemoryRecorder, Record, RecordKind, RecorderFuture, RunId, RunMeta, RunRecorder, recorder_error,
 };

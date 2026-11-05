@@ -26,11 +26,11 @@
 //! suites hold without rewriting their assertions. `FnTool` is the
 //! fixture tool, a closure answered at once.
 
-use runvil_types::error::ErrorCode;
+use runvil_types::error::{Error, ErrorCode};
 use runvil_types::event::Event;
 use runvil_types::tools::tool_error;
 
-use crate::execute::{Effect, EffectAnswer, EffectId, IssuedEffect, Run, RunOutcome, Step};
+use crate::execute::{Effect, EffectAnswer, EffectId, IssuedEffect, Run, Step};
 use crate::lua::run_store_op;
 
 #[cfg(test)]
@@ -136,7 +136,7 @@ pub fn perform_locally(
 }
 
 /// Drives `run` to its end on the calling thread, performing every effect
-/// through `perform` as it is issued, and returns the run's outcome with
+/// through `perform` as it is issued, and returns the run's result with
 /// every event it reported, in order.
 ///
 /// The driver is the simplest correct caller of a run. After each `step`
@@ -152,12 +152,12 @@ pub fn perform_locally(
 /// # Panics
 ///
 /// Only when `perform` panics. An answer of the wrong kind ends the run
-/// with an internal failure in its outcome, and so does a pending step
+/// with an internal failure in its result, and so does a pending step
 /// that issued no effect.
 pub fn drive(
     mut run: Run,
     mut perform: impl FnMut(EffectId, &Effect) -> EffectAnswer,
-) -> (RunOutcome, Vec<Event>) {
+) -> (Result<String, Error>, Vec<Event>) {
     let mut reported = Vec::new();
     let mut answer = |id: EffectId, effect: &Effect| Some(perform(id, effect));
     loop {
@@ -169,8 +169,8 @@ pub fn drive(
             &mut Vec::new(),
             &mut reported,
         );
-        if let Some(outcome) = stepped {
-            return (outcome, reported);
+        if let Some(result) = stepped {
+            return (result, reported);
         }
     }
 }
@@ -178,13 +178,13 @@ pub fn drive(
 /// One step of [`drive`]: steps `run`, appends the step's events to
 /// `reported`, hands every effect the step issued to `issued` in issue
 /// order, answers each through `perform`, hands each effect and its answer
-/// to `answered`, `Dropped` ones included, and returns the run's outcome
+/// to `answered`, `Dropped` ones included, and returns the run's result
 /// once it has one.
 ///
 /// An effect `perform` answers `None` joins `held`, unanswered. Every
 /// effect the step withdraws, whether it issued the effect or an earlier
 /// step did and `held` keeps it, is answered `Dropped`, so the step that
-/// decides the run's outcome drops every held effect.
+/// decides the run's result drops every held effect.
 pub(crate) fn drive_step(
     run: &mut Run,
     issued: &mut impl FnMut(&Effect),
@@ -192,11 +192,11 @@ pub(crate) fn drive_step(
     answered: &mut impl FnMut(&Effect, &EffectAnswer),
     held: &mut Vec<(EffectId, Effect)>,
     reported: &mut Vec<Event>,
-) -> Option<RunOutcome> {
+) -> Option<Result<String, Error>> {
     match run.step() {
-        Step::Done { outcome, events } => {
+        Step::Done { result, events } => {
             reported.extend(events);
-            Some(outcome)
+            Some(result)
         }
         Step::Pending {
             effects,
@@ -209,10 +209,9 @@ pub(crate) fn drive_step(
                 // is held, so a pending step that issued nothing while
                 // holding nothing has nothing to wait on: an invariant
                 // failure reported rather than a hang.
-                let error = crate::error::internal(
+                return Some(Err(crate::error::internal(
                     "the serial driver was handed a pending run with no effect to answer",
-                );
-                return Some(crate::execute::outcome(&error));
+                )));
             }
             for IssuedEffect { id, effect, .. } in effects {
                 issued(&effect);

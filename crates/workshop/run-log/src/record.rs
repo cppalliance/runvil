@@ -1,12 +1,14 @@
 //! The values the run log stores and returns.
 //!
-//! The values the Harness hands a recorder (`Record`, `RunMeta`,
-//! `RunOutcome`, and their parts) are re-exported from `harness::record`,
-//! so a log and the effect loop share one definition of each.
+//! The values the Harness hands a recorder (`Record`, `RunMeta`, and
+//! their parts) are re-exported from `harness::record`, so a log and the
+//! effect loop share one definition of each. A run's result is the
+//! Engine's own `Result<String, Error>`.
 
 use std::fmt;
 
-pub use harness::record::{Record, RecordKind, RunErrorKind, RunId, RunMeta, RunOutcome};
+pub use harness::record::{Record, RecordKind, RunId, RunMeta};
+use runvil::error::Error;
 
 /// A record's position in its run: the effect loop's order, assigned by
 /// the log in call order, starting at `0` and strictly increasing.
@@ -70,6 +72,9 @@ pub struct RunRow {
     /// When the run ended, UTC milliseconds since the Unix epoch; `None`
     /// while the run is open.
     pub ended_at: Option<i64>,
-    /// How the run ended; `None` while the run is open.
-    pub outcome: Option<RunOutcome>,
+    /// How the run ended: its final text, or the error that ended it,
+    /// which holds the stored code and located message, the code's
+    /// default prose, no location, and no facts. A cancel is the error
+    /// whose code is `canceled`. `None` while the run is open.
+    pub result: Option<Result<String, Error>>,
 }

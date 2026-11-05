@@ -1,4 +1,3 @@
-#[non_exhaustive] pub enum runvil::RunErrorKind
 #[non_exhaustive] pub enum runvil::effect::ToolCaller
 #[non_exhaustive] pub enum runvil::event::Event
 #[non_exhaustive] pub enum runvil::event::ReplyOrigin
@@ -53,9 +52,7 @@
 #[non_exhaustive] pub struct runvil::vfs::Stat { .. }
 auto runvil::Prompt: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::Run: Freeze, !RefUnwindSafe, Send, Sync, Unpin, !UnwindSafe
-auto runvil::RunErrorKind: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::RunLimits: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
-auto runvil::RunOutcome: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::RunParams: Freeze, !RefUnwindSafe, Send, Sync, Unpin, !UnwindSafe
 auto runvil::RunSeed: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::Step: Freeze, !RefUnwindSafe, Send, Sync, Unpin, !UnwindSafe
@@ -149,9 +146,7 @@ auto runvil::vfs::VfsRefBuilder: Freeze, !RefUnwindSafe, Send, Sync, Unpin, !Unw
 auto runvil::vfs::Writability: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 derives runvil::Prompt: Clone, Debug, Eq, PartialEq
 derives runvil::Run: Debug
-derives runvil::RunErrorKind: Clone, Copy, Debug, Eq, Hash, PartialEq
 derives runvil::RunLimits: Clone, Copy, Debug, Default, Eq, Hash, PartialEq
-derives runvil::RunOutcome: Clone, Debug, Eq, PartialEq
 derives runvil::RunParams: Debug
 derives runvil::RunSeed: Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize
 derives runvil::Step: Debug
@@ -308,7 +303,6 @@ impl<T> core::panic::unwind_safe::RefUnwindSafe for runvil::effect::PackToolSets
 impl<T> core::panic::unwind_safe::UnwindSafe for runvil::effect::PackToolSets<T> where alloc::vec::Vec<T>: core::panic::unwind_safe::UnwindSafe + core::panic::unwind_safe::UnwindSafe
 impl<T> runvil::effect::PackToolSets<T>
 impl<T> serde_core::ser::Serialize for runvil::effect::PackToolSets<T> where T: serde_core::ser::Serialize
-pub const fn runvil::RunOutcome::as_str(&self) -> &'static str
 pub const fn runvil::RunSeed::as_bytes(&self) -> &[u8; 32]
 pub const fn runvil::RunSeed::from_bytes(bytes: [u8; 32]) -> runvil::RunSeed
 pub const fn runvil::effect::EffectId::get(self) -> u64
@@ -324,7 +318,6 @@ pub const runvil::model::ModelId::GATEWAY: &'static str
 pub const runvil::model::ModelRole::ALL: [runvil::model::ModelRole; 5]
 pub const runvil::model::Role::ALL: &'static [runvil::model::Role]
 pub const runvil::timestamp::Timestamp::UNIX_EPOCH: runvil::timestamp::Timestamp
-pub enum runvil::RunOutcome
 pub enum runvil::Step
 pub enum runvil::effect::Effect
 pub enum runvil::effect::EffectAnswer
@@ -338,8 +331,6 @@ pub fn runvil::Prompt::title(&self) -> &str
 pub fn runvil::Run::new(prompt: alloc::sync::Arc<runvil::Prompt>, args: &str, params: runvil::RunParams) -> runvil::Run
 pub fn runvil::Run::resume(&mut self, id: runvil::effect::EffectId, answer: runvil::effect::EffectAnswer)
 pub fn runvil::Run::step(&mut self) -> runvil::Step
-pub fn runvil::RunErrorKind::as_str(self) -> &'static str
-pub fn runvil::RunErrorKind::from_tag(tag: &str) -> core::option::Option<runvil::RunErrorKind>
 pub fn runvil::RunParams::new(name: impl core::convert::Into<alloc::string::String>, seed: runvil::RunSeed, started_at: runvil::timestamp::Timestamp) -> runvil::RunParams
 pub fn runvil::RunParams::with_cancel(self, handle: runvil::cancel::CancelHandle) -> runvil::RunParams
 pub fn runvil::RunParams::with_limits(self, limits: runvil::RunLimits) -> runvil::RunParams
@@ -364,6 +355,8 @@ pub fn runvil::effect::ToolCallOrigin::new(execution: impl core::convert::Into<a
 pub fn runvil::effect::ToolCallOrigin::with_entry(self, entry: impl core::convert::Into<alloc::string::String>) -> runvil::effect::ToolCallOrigin
 pub fn runvil::effect::ToolCallOrigin::with_model(self, model: impl core::convert::Into<alloc::string::String>) -> runvil::effect::ToolCallOrigin
 pub fn runvil::error::Error::canceled() -> runvil::error::Error
+pub fn runvil::error::Error::is_canceled(&self) -> bool
+pub fn runvil::error::Error::located_message(&self) -> alloc::string::String
 pub fn runvil::error::Error::new(code: runvil::error::ErrorCode, message: impl core::convert::Into<alloc::string::String>, prose: impl core::convert::Into<alloc::string::String>) -> runvil::error::Error
 pub fn runvil::error::Error::with_cause(self, cause: &dyn core::error::Error + 'static) -> runvil::error::Error
 pub fn runvil::error::ErrorCode::from_tag(tag: &str) -> core::option::Option<runvil::error::ErrorCode>
@@ -618,29 +611,13 @@ pub mod runvil::prompt
 pub mod runvil::timestamp
 pub mod runvil::tools
 pub mod runvil::vfs
-pub runvil::RunErrorKind::Binding
-pub runvil::RunErrorKind::Completion
-pub runvil::RunErrorKind::ContextExhausted
-pub runvil::RunErrorKind::Internal
-pub runvil::RunErrorKind::Lua
-pub runvil::RunErrorKind::Parse
-pub runvil::RunErrorKind::Quota
-pub runvil::RunErrorKind::RequirementsUnmet
-pub runvil::RunErrorKind::Tool
-pub runvil::RunErrorKind::Vfs
 pub runvil::RunLimits::lua_log_events: core::num::nonzero::NonZeroU32
 pub runvil::RunLimits::lua_memory_bytes: core::num::nonzero::NonZeroUsize
 pub runvil::RunLimits::max_concurrency: core::num::nonzero::NonZeroUsize
 pub runvil::RunLimits::max_tool_iterations: core::num::nonzero::NonZeroU32
-pub runvil::RunOutcome::Cancelled
-pub runvil::RunOutcome::Completed { .. }
-pub runvil::RunOutcome::Completed::final_text: alloc::string::String
-pub runvil::RunOutcome::Failed { .. }
-pub runvil::RunOutcome::Failed::kind: runvil::RunErrorKind
-pub runvil::RunOutcome::Failed::message: alloc::string::String
 pub runvil::Step::Done { .. }
 pub runvil::Step::Done::events: alloc::vec::Vec<runvil::event::Event>
-pub runvil::Step::Done::outcome: runvil::RunOutcome
+pub runvil::Step::Done::result: core::result::Result<alloc::string::String, runvil::error::Error>
 pub runvil::Step::Pending { .. }
 pub runvil::Step::Pending::effects: alloc::vec::Vec<runvil::effect::IssuedEffect>
 pub runvil::Step::Pending::events: alloc::vec::Vec<runvil::event::Event>

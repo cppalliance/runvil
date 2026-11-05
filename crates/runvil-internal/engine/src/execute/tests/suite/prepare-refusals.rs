@@ -9,9 +9,6 @@ use runvil_types::event::Event;
 use runvil_types::models::ThinkingMode;
 
 use super::{current_model, refusal, under_model};
-use crate::RunErrorKind;
-use crate::execute::RunOutcome;
-use crate::execute::run_error_kind;
 use crate::test_support::scenario::Scenario;
 use crate::test_support::scripted_chat::{ScriptedChat, text};
 
@@ -164,7 +161,10 @@ fn an_unsupported_version_is_reported_before_an_unmet_requirement() {
         Some(4),
         "on the `runvil:` line, not the `models:` line of the unmet requirement"
     );
-    assert_eq!(run_error_kind(error.code), RunErrorKind::Parse, "{error}");
+    assert_eq!(
+        error.located_message(),
+        "unsupported runvil version: 7 (this build supports major 0) (at prompt:4)"
+    );
     assert!(
         trace.run_events().is_empty(),
         "nothing ran, nothing reported"
@@ -188,9 +188,9 @@ fn a_refusal_after_the_runs_cancel_fired_ends_the_run_canceled_with_no_run_event
     ] {
         let trace = canceled_before_it_starts(under_model(source, "canceled", model.clone())).run();
         assert!(
-            matches!(trace.outcome(), RunOutcome::Cancelled),
+            trace.error().is_canceled(),
             "{refused_for} after a cancel ends the run canceled, got {:?}",
-            trace.outcome()
+            trace.result()
         );
         assert!(
             trace.run_events().is_empty(),
@@ -204,11 +204,7 @@ fn a_refusal_after_the_runs_cancel_fired_ends_the_run_canceled_with_no_run_event
 fn a_run_that_passes_its_start_checks_after_a_cancel_starts_and_ends_canceled() {
     let model = current_model(200_000, ThinkingMode::Always);
     let trace = canceled_before_it_starts(under_model(DECLARES_STRONG, "started", model)).run();
-    assert!(
-        matches!(trace.outcome(), RunOutcome::Cancelled),
-        "got {:?}",
-        trace.outcome()
-    );
+    assert!(trace.error().is_canceled(), "got {:?}", trace.result());
     assert!(
         matches!(trace.run_events().first(), Some(Event::RunStarted { .. })),
         "the run started before it saw the cancel: {:?}",

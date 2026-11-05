@@ -50,17 +50,16 @@ async fn a_preludes_tool_calls_are_recorded_as_script_calls_from_the_section_tha
         .await
         .unwrap();
     let run_id = prepared.run_id;
-    let outcome = drive_run(
+    let result = drive_run(
         prepared.run,
         prepared.performers,
         recorder.clone(),
         run_id,
         CancelHandle::new(),
     )
-    .await
-    .unwrap();
+    .await;
     assert_eq!(
-        completed(outcome),
+        completed(result),
         "two|true",
         "both sections reached the prelude's function, and its table refused a write"
     );
@@ -87,11 +86,11 @@ async fn preludes_run_in_the_prompts_declaration_order_not_the_registry_order() 
     let host = HostContext::new(registry(&infos), HostServices::new());
     let declares_second_first = "---\nname: order\ndescription: d\nrunvil: 0\n\
         uses:\n  - tests/second\n  - tests/first\n---\n\n# Title\n\n## Only\n\n```lua\nreturn 'ran'\n```\n";
-    let outcome = drive_over(declares_second_first, host).await;
-    let RunOutcome::Failed { kind, message } = outcome else {
-        panic!("the two preludes collide: {outcome:?}");
-    };
-    assert_eq!(kind, RunErrorKind::Lua);
+    let error = drive_over(declares_second_first, host)
+        .await
+        .expect_err("the two preludes collide");
+    assert_eq!(error.code, ErrorCode::LuaRuntime);
+    let message = error.located_message();
     assert!(
         message.contains(
             "Pack `first`: its prelude defines the global `shared`, \

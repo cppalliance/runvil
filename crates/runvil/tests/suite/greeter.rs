@@ -1,9 +1,9 @@
 //! The greeter, one tour at a time, up to the complete program in
 //! `examples/greeter.rs`.
 
+use runvil::Prompt;
 use runvil::cancel::CancelHandle;
 use runvil::effect::{Effect, EffectAnswer};
-use runvil::{Prompt, RunOutcome};
 
 use super::support::{Scenario, TestResult, note, prompt, shout, text};
 
@@ -79,7 +79,7 @@ fn a_cancel_from_another_thread_ends_the_run_canceled_once_held_effects_drop() -
         driver.pump()? == 0 && driver.held() == 0,
         "the step that decides the run withdraws the held chat effect"
     );
-    assert_eq!(driver.finish()?.outcome, RunOutcome::Cancelled);
+    assert!(driver.finish()?.error()?.is_canceled());
     Ok(())
 }
 

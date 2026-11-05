@@ -5,7 +5,7 @@
 use std::sync::Arc;
 
 use harness::pack::{HostContext, HostServices, PackRegistry};
-use harness::record::{MemoryRecorder, RunOutcome};
+use harness::record::MemoryRecorder;
 use harness::vfs::{Origin, VfsRef};
 use harness::{Harness, HostSnapshot, RunRequest};
 use runvil::error::{ErrorCode, FactKey};
@@ -50,8 +50,12 @@ async fn a_run_over_a_prompt_string_reports_its_output() {
     let report = harness()
         .run(request(SHOUTS, vfs.clone()))
         .await
-        .expect("the run reaches an outcome");
-    assert!(matches!(report.outcome, RunOutcome::Completed { .. }));
+        .expect("the run is reported");
+    assert!(
+        report.result.is_ok(),
+        "the run completes: {:?}",
+        report.result
+    );
     assert_eq!(
         report.output,
         Ok("HELLO".to_owned()),
@@ -72,8 +76,12 @@ async fn a_run_that_does_not_complete_reports_no_output() {
     let report = harness()
         .run(request(&failing, VfsRef::default()))
         .await
-        .expect("the run reaches an outcome");
-    assert!(matches!(report.outcome, RunOutcome::Failed { .. }));
+        .expect("the run is reported");
+    assert_eq!(
+        report.result.as_ref().map_err(|error| error.code),
+        Err(ErrorCode::LuaRuntime),
+        "the raised error ends the run"
+    );
     let error = report.output.expect_err("a failed run reports no output");
     assert_eq!(error.code, ErrorCode::NoOutput);
     assert_eq!(

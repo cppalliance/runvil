@@ -3,11 +3,11 @@
 //! isolation case and the start-check refusals that reach engine-only
 //! items sit in `runvil-engine`'s own suite.
 
+use runvil::error::ErrorCode;
 use runvil::event::Event;
 use runvil::model::{ModelRole, ThinkingMode};
 use runvil::tools::{ToolCatalog, ToolInfo, ToolOutput};
 use runvil::vfs::{MemoryBackend, Origin, RealBackend, VfsError, VfsRef};
-use runvil::{RunErrorKind, RunOutcome};
 
 use super::support::{Scenario, TempRoot, TestResult, Tool, Trace, model, prompt, text, tool_info};
 
@@ -15,22 +15,21 @@ fn declaring(front: &str) -> String {
     prompt(front, &[("Only", "return 'done'")])
 }
 
-/// The refusal notice of `scenario`'s run of `source`, after checking that
-/// its first step failed it as `RequirementsUnmet`, reporting nothing
-/// after the parse events and issuing no effect.
+/// The located refusal notice of `scenario`'s run of `source`, after
+/// checking that its first step failed it as `RequirementsUnmet`,
+/// reporting nothing after the parse events and issuing no effect.
 pub(super) fn refusal(scenario: Scenario, source: &str) -> TestResult<String> {
     let trace = scenario.run(source)?;
-    let RunOutcome::Failed { kind, message } = &trace.outcome else {
-        return Err(format!("expected a refusal, got {:?}", trace.outcome).into());
-    };
-    assert_eq!(*kind, RunErrorKind::RequirementsUnmet, "{message}");
+    let error = trace.error()?;
+    let message = error.located_message();
+    assert_eq!(error.code, ErrorCode::RequirementsUnmet, "{message}");
     assert!(
         matches!(trace.events.last(), Some(Event::ParseSucceeded { .. })),
         "a refused run reports no run events: {:?}",
         trace.events
     );
     assert!(trace.effects.is_empty(), "a refused run issues nothing");
-    Ok(message.clone())
+    Ok(message)
 }
 
 /// The refusal notice of a run of `declaring(front)` under one model of

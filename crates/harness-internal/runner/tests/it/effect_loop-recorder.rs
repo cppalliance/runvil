@@ -1,6 +1,7 @@
 //! A recorder that refuses a write ends the drive: whichever call it
-//! refuses, the loop returns the recorder's error and sends the recorder
-//! nothing more, and a refusal mid-run aborts the performers still out.
+//! refuses, the loop returns the refusal and sends the recorder nothing
+//! more; a recorder error under another code is still a `RecorderFailed`
+//! refusal; and a refusal mid-run aborts the performers still out.
 
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
@@ -8,11 +9,14 @@ use std::time::Duration;
 
 use harness_runner::display_chain;
 use harness_runner::effect_loop::drive_run;
-use harness_runner::recorder::{RecordKind, RunRecorder};
+use harness_runner::recorder::{MemoryRecorder, RecordKind, RunRecorder};
 use runvil::cancel::CancelHandle;
+use runvil::error::{ErrorCode, FactKey};
 use runvil::vfs::VfsRef;
+use serde_json::json;
 
 use super::{answers, await_raised, cancel_after, meta};
+use crate::prepare::RefusingAppends;
 use crate::support::{
     FailingRecorder, PendingTimer, TIMED_MAIN, TextTool, WAITS, run_over, run_with_child,
     run_with_child_and_cancel, unused,
@@ -57,6 +61,11 @@ async fn a_recorder_that_refuses_its_nth_call_ends_the_drive_with_a_recorder_err
         .await
         .expect_err("a refused call ends the drive");
 
+        assert_eq!(
+            error.code,
+            ErrorCode::RecorderFailed,
+            "call {call} of {total}: a refusal, not the run's result"
+        );
         assert!(
             display_chain(&error).contains(&format!("refuses call {call}")),
             "call {call} of {total}: {}",
@@ -73,11 +82,41 @@ async fn a_recorder_that_refuses_its_nth_call_ends_the_drive_with_a_recorder_err
             "the refused call recorded nothing, and every call before it was a record"
         );
         assert_eq!(
-            recorder.inner().outcome(run_id),
+            recorder.inner().result(run_id),
             None,
             "an abandoned run is not ended at the recorder"
         );
     }
+}
+
+#[tokio::test]
+async fn a_recorder_error_under_another_code_ends_the_drive_as_a_recorder_failure() {
+    // Every append fails with the recorder's own `Io` error, so the run's
+    // first write is refused.
+    let recorder = Arc::new(RefusingAppends(MemoryRecorder::new()));
+    let run_id = recorder.begin_run(meta()).await.unwrap();
+    let error = drive_run(
+        store_round_trip(),
+        unused(),
+        recorder.clone(),
+        run_id,
+        CancelHandle::new(),
+    )
+    .await
+    .expect_err("the refused append ends the drive");
+
+    assert_eq!(
+        error.code,
+        ErrorCode::RecorderFailed,
+        "the recorder's `Io` error becomes a refusal, never the run's result"
+    );
+    assert_eq!(error.message, "the run recorder failed: the disk is full");
+    assert_eq!(error.facts.get(&FactKey::Run), Some(&json!(run_id.get())));
+    assert_eq!(
+        recorder.0.result(run_id),
+        None,
+        "an abandoned run is not ended at the recorder"
+    );
 }
 
 #[tokio::test]
@@ -94,15 +133,19 @@ async fn a_recorder_that_refuses_an_answer_aborts_the_performers_still_out() {
     });
     let cancel = CancelHandle::new();
     cancel_after(&cancel, Duration::from_millis(50));
-    drive_run(
+    let dry_result = drive_run(
         run_with_child_and_cancel(TIMED_MAIN, WAITS, &cancel),
         performers,
         dry.clone(),
         dry_run,
         cancel,
     )
-    .await
-    .unwrap();
+    .await;
+    assert_ne!(
+        dry_result.map_err(|error| error.code),
+        Err(ErrorCode::RecorderFailed),
+        "the dry run is not refused"
+    );
     let first_answer = dry
         .inner()
         .records(dry_run)
@@ -130,6 +173,11 @@ async fn a_recorder_that_refuses_an_answer_aborts_the_performers_still_out() {
     .await
     .expect_err("the refused answer ends the drive");
 
+    assert_eq!(
+        error.code,
+        ErrorCode::RecorderFailed,
+        "a refusal: {error:?}"
+    );
     assert!(
         display_chain(&error).contains(&format!("refuses call {}", first_answer + 1)),
         "the chain names the recorder's reason: {}",

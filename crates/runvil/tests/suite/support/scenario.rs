@@ -17,13 +17,14 @@ use std::collections::{BTreeMap, VecDeque};
 use std::sync::Arc;
 
 use runvil::effect::{Effect, EffectAnswer, EffectId, IssuedEffect};
+use runvil::error::Error;
 use runvil::event::Event;
 use runvil::ids::Provenance;
 use runvil::model::{Completion, ModelInfo, ModelRole};
 use runvil::timestamp::Timestamp;
 use runvil::tools::ToolCatalog;
 use runvil::vfs::perform_vfs_op;
-use runvil::{Prompt, Run, RunOutcome, RunParams, RunSeed, Step};
+use runvil::{Prompt, Run, RunParams, RunSeed, Step};
 use serde_json::{Value, json};
 
 use super::{Reply, TestResult, Tool, canned, tool_info};
@@ -156,7 +157,7 @@ impl Scenario {
             held: Vec::new(),
             events,
             effects: Vec::new(),
-            outcome: None,
+            result: None,
         })
     }
 
@@ -182,7 +183,7 @@ pub(crate) struct Driver {
     held: Vec<Issued>,
     events: Vec<Event>,
     effects: Vec<Logged>,
-    outcome: Option<RunOutcome>,
+    result: Option<Result<String, Error>>,
 }
 
 struct Issued {
@@ -195,7 +196,7 @@ impl Driver {
     /// Steps the run once, answers or holds each effect the step issued,
     /// and drops each effect the step withdrew. Returns how many it issued.
     pub(crate) fn pump(&mut self) -> TestResult<usize> {
-        if self.outcome.is_some() {
+        if self.result.is_some() {
             return Err("the run is done, so there is nothing left to step".into());
         }
         let (mut effects, withdrawn) = match self.run.step() {
@@ -207,7 +208,7 @@ impl Driver {
                 self.events.extend(events);
                 (effects, withdrawn)
             }
-            Step::Done { outcome, events } => {
+            Step::Done { result, events } => {
                 self.events.extend(events);
                 let held = self.held.len();
                 if held > 0 {
@@ -217,7 +218,7 @@ impl Driver {
                 if left > 0 {
                     return Err(format!("the run ended with {left} scripted replies left").into());
                 }
-                self.outcome = Some(outcome);
+                self.result = Some(result);
                 return Ok(0);
             }
         };
@@ -274,7 +275,7 @@ impl Driver {
     pub(crate) fn pump_until_held(&mut self) -> TestResult {
         while self.held.is_empty() {
             self.advance()?;
-            if self.outcome.is_some() {
+            if self.result.is_some() {
                 return Err("the run finished without issuing an effect to hold".into());
             }
         }
@@ -283,9 +284,9 @@ impl Driver {
 
     pub(crate) fn finish(mut self) -> TestResult<Trace> {
         loop {
-            if let Some(outcome) = self.outcome.take() {
+            if let Some(result) = self.result.take() {
                 return Ok(Trace {
-                    outcome,
+                    result,
                     events: self.events,
                     effects: self.effects,
                 });
@@ -300,7 +301,7 @@ impl Driver {
     fn advance(&mut self) -> TestResult {
         let held = self.held.len();
         let issued = self.pump()?;
-        if self.outcome.is_none() && issued == 0 && self.held.len() == held {
+        if self.result.is_none() && issued == 0 && self.held.len() == held {
             return Err(format!(
                 "the run issued and withdrew nothing while only {held} held effects remain"
             )
@@ -342,7 +343,8 @@ impl Driver {
 }
 
 pub(crate) struct Trace {
-    pub(crate) outcome: RunOutcome,
+    /// The run's final text, or the error that ended it.
+    pub(crate) result: Result<String, Error>,
     /// The parse events, then the run's events, in report order.
     pub(crate) events: Vec<Event>,
     /// Every effect the run issued, in the order the driver answered them.
@@ -350,11 +352,21 @@ pub(crate) struct Trace {
 }
 
 impl Trace {
-    /// The text of a `RunOutcome::Completed`. Fails on any other outcome.
+    /// The text of a run that succeeded. Fails on the error a run ended
+    /// with.
     pub(crate) fn text(&self) -> TestResult<&str> {
-        match &self.outcome {
-            RunOutcome::Completed { final_text } => Ok(final_text),
-            outcome => Err(format!("expected RunOutcome::Completed, got {outcome:?}").into()),
+        match &self.result {
+            Ok(text) => Ok(text),
+            Err(error) => Err(format!("expected the run's text, got {error:?}").into()),
+        }
+    }
+
+    /// The error a run ended with: a failure, or a cancel. Fails on the
+    /// text of a run that succeeded.
+    pub(crate) fn error(&self) -> TestResult<&Error> {
+        match &self.result {
+            Err(error) => Ok(error),
+            Ok(text) => Err(format!("expected the run to end with an error, got {text:?}").into()),
         }
     }
 }

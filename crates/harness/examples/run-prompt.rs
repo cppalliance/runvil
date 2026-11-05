@@ -8,7 +8,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use harness::pack::{HostContext, HostServices, PackRegistry};
-use harness::record::{MemoryRecorder, RunOutcome};
+use harness::record::MemoryRecorder;
 use harness::vfs::VfsRef;
 use harness::{BoxFuture, Harness, HostSnapshot, InferenceBroker, RunRequest, Timer};
 use runvil::effect::Round;
@@ -87,9 +87,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let report = harness.run(request).await?;
 
     // 4. The report says how the run ended and what it left at its output
-    //    file, and the recorder holds the run's outcome.
-    assert!(matches!(report.outcome, RunOutcome::Completed { .. }));
-    assert!(recorder.outcome(report.run_id).is_some());
+    //    file, and the recorder holds the run's result.
+    assert!(report.result.is_ok());
+    assert_eq!(recorder.result(report.run_id), Some(report.result));
     let greeting = report.output?;
     assert_eq!(greeting, "Hello, desk.");
     println!("{greeting}");

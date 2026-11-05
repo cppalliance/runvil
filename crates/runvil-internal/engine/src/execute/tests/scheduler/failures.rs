@@ -266,9 +266,9 @@ fn cancellation_while_suspended_in_a_fanout_arm_cancels_the_run() {
     let rig = rig.finish();
 
     assert!(
-        matches!(rig.trace().outcome(), RunOutcome::Cancelled),
+        rig.trace().error().is_canceled(),
         "canceling suspended arms must cancel the run, got {:?}",
-        rig.trace().outcome()
+        rig.trace().result()
     );
     assert_eq!(
         issued_prompts(&rig),

@@ -3,7 +3,6 @@
 //! queue that can never be admitted reported as a stall.
 
 use super::*;
-use crate::execute::RunOutcome;
 use crate::test_support::rig::Rig;
 use crate::test_support::scenario::{Batching, drive_batched};
 
@@ -36,10 +35,10 @@ fn two_tasks_whose_call_children_finish_in_any_order_both_complete() {
         let run = scheduler_scenario(md).limits(ceiling(2)).into_run();
         let outcome = drive_batched(run, batching);
         match &outcome.result {
-            RunOutcome::Completed { final_text } => {
+            Ok(final_text) => {
                 assert_eq!(final_text, "r(a)|r(b)", "under {batching:?}");
             }
-            other => panic!("both calls complete under {batching:?}: {other:?}"),
+            Err(error) => panic!("both calls complete under {batching:?}: {error:?}"),
         }
     }
 }
@@ -75,11 +74,11 @@ fn a_queued_task_that_can_never_be_admitted_is_reported_as_a_stall() {
         "a stalled run must not return Pending with more effects: {:?}",
         rig.issued()
     );
-    match rig.trace().outcome() {
-        RunOutcome::Failed { message, .. } => assert!(
-            message.contains("stalled"),
-            "the run reports the stall: {message}"
-        ),
-        outcome => panic!("the stalled run must fail, got {outcome:?}"),
-    }
+    let error = rig.trace().error();
+    let message = error.located_message();
+    assert_eq!(error.code, ErrorCode::Internal, "{message}");
+    assert!(
+        message.contains("stalled"),
+        "the run reports the stall: {message}"
+    );
 }

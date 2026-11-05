@@ -13,7 +13,7 @@ async fn answered_models(server: &GateServer, run: RunId) -> Vec<String> {
         loop {
             if let Ok(log) = RunLog::open(&log_file).await
                 && let Ok(row) = log.run(run).await
-                && row.outcome.is_some()
+                && row.result.is_some()
             {
                 return log;
             }

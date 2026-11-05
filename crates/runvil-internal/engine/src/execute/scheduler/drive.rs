@@ -14,7 +14,6 @@ use runvil_types::event::lifecycle;
 use runvil_types::ids::AbandonReason;
 use runvil_vfs::Origin;
 
-use crate::execute::RunOutcome;
 use crate::execute::run::{EffectAnswer, EffectId, Step};
 use crate::{Error, Result, error};
 
@@ -86,14 +85,12 @@ impl Scheduler {
                 // orphan's store effect still runs in the live scope.
                 self.end_scope();
                 Step::Done {
-                    outcome: self.outcome(result),
+                    result: finished(result),
                     events,
                 }
             }
             Phase::Done => Step::Done {
-                outcome: self.outcome(Err(error::internal(
-                    "a finished run cannot be stepped again",
-                ))),
+                result: Err(error::internal("a finished run cannot be stepped again")),
                 events,
             },
             phase @ (Phase::Fresh | Phase::Running | Phase::Ending(_)) => {
@@ -103,30 +100,6 @@ impl Scheduler {
                     events,
                     withdrawn,
                 }
-            }
-        }
-    }
-
-    /// The outcome the run ends with for `result`: a `Canceled` failure that
-    /// reached the end is a cancellation, and any other error a failure.
-    #[cfg_attr(
-        not(test),
-        expect(
-            clippy::unused_self,
-            reason = "only a test build keeps the failure's error on the scheduler"
-        )
-    )]
-    fn outcome(&mut self, result: Result<String>) -> RunOutcome {
-        match result {
-            Ok(final_text) => RunOutcome::Completed { final_text },
-            Err(error) if error.code == ErrorCode::Canceled => RunOutcome::Cancelled,
-            Err(error) => {
-                let outcome = crate::execute::outcome(&error);
-                #[cfg(test)]
-                {
-                    self.failure = Some(error);
-                }
-                outcome
             }
         }
     }
@@ -274,7 +247,7 @@ impl Scheduler {
     /// with the caller becomes an orphan the caller still answers, listed
     /// as withdrawn), reports the run's end boundary after every task
     /// terminal, and holds `result` until the orphans are answered. A
-    /// second decision keeps the first: the outcome that ended the run is
+    /// second decision keeps the first: the result that ended the run is
     /// the record. A run that has not started ends like one that could not
     /// start: it holds `result` and reports nothing.
     fn end(&mut self, result: Result<String>) {
@@ -323,4 +296,24 @@ impl Scheduler {
         }
         self.effects.orphan_all();
     }
+}
+
+/// The result `Done` reports for a run that ended with `result`: `result`
+/// as it is, except that an error with a caller code, one in the 8xx
+/// family, becomes an `Internal` error with the same message, location,
+/// and facts, and with the `Internal` prose. A caller code names a failure
+/// of the caller's own machinery, never of the run, yet a run can end with
+/// one: a raised error table's `code` field names any valid tag, and a
+/// model error from the caller keeps its code.
+fn finished(result: Result<String>) -> Result<String> {
+    result.map_err(|error| {
+        if error.code.number() / 100 != 8 {
+            return error;
+        }
+        Error {
+            code: ErrorCode::Internal,
+            prose: ErrorCode::Internal.prose().to_owned(),
+            ..error
+        }
+    })
 }

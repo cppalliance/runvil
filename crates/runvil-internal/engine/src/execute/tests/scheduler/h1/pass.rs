@@ -218,14 +218,8 @@ fn a_failed_h1_gate_is_placed_on_its_causes_line() {
         at_line(11),
         "the refusal is where its cause failed, not the block's first line: {error:?}"
     );
-    assert!(
-        matches!(
-            trace.outcome(),
-            RunOutcome::Failed { message, .. } if message.ends_with(" (at prompt:11)")
-        ),
-        "{:?}",
-        trace.outcome()
-    );
+    let message = error.located_message();
+    assert!(message.ends_with(" (at prompt:11)"), "{message}");
 }
 
 #[test]

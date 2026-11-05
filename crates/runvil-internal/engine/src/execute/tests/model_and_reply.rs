@@ -330,8 +330,8 @@ fn model_required_when_infer_has_no_binding() {
     let trace = Scenario::new(source.build()).run();
     let error = trace.error();
     assert_eq!(
-        run_error_kind(error.code),
-        RunErrorKind::RequirementsUnmet,
+        error.code,
+        ErrorCode::ModelRequired,
         "expected ModelRequired, got {error}"
     );
     assert!(

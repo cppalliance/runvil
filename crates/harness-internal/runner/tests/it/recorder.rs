@@ -8,13 +8,17 @@ use std::sync::Arc;
 
 use harness_runner::display_chain;
 use harness_runner::recorder::{
-    MemoryRecorder, Record, RecordKind, RunErrorKind, RunId, RunMeta, RunOutcome, RunRecorder,
-    recorder_error,
+    MemoryRecorder, Record, RecordKind, RunId, RunMeta, RunRecorder, recorder_error,
 };
 use runvil::error::{ErrorCode, FactKey};
 use serde_json::json;
 
 use crate::support::TEST_SEED;
+
+/// The result of a canceled run.
+fn canceled() -> Result<String, runvil::error::Error> {
+    Err(runvil::error::Error::canceled())
+}
 
 /// Asserts `error` is the memory recorder's refusal of run `run` for
 /// `reason`.
@@ -132,26 +136,23 @@ async fn a_run_keeps_the_meta_it_began_with() {
 }
 
 #[tokio::test]
-async fn outcome_is_none_while_a_run_is_open_and_set_when_it_ends() {
+async fn result_is_none_while_a_run_is_open_and_set_when_it_ends() {
     let recorder = MemoryRecorder::new();
     let run = recorder.begin_run(meta("open")).await.unwrap();
-    assert_eq!(recorder.outcome(run), None, "a fresh run is open");
+    assert_eq!(recorder.result(run), None, "a fresh run is open");
 
     recorder
         .append(run, record(RecordKind::Event, 0, "started"))
         .await
         .unwrap();
     assert_eq!(
-        recorder.outcome(run),
+        recorder.result(run),
         None,
         "a run with records is still open"
     );
 
-    let outcome = RunOutcome::Completed {
-        final_text: "done".to_owned(),
-    };
-    recorder.end_run(run, outcome.clone()).await.unwrap();
-    assert_eq!(recorder.outcome(run), Some(outcome));
+    recorder.end_run(run, Ok("done".to_owned())).await.unwrap();
+    assert_eq!(recorder.result(run), Some(Ok("done".to_owned())));
 }
 
 #[tokio::test]
@@ -160,13 +161,10 @@ async fn ending_one_run_leaves_the_other_open() {
     let first = recorder.begin_run(meta("first")).await.unwrap();
     let second = recorder.begin_run(meta("second")).await.unwrap();
 
-    recorder
-        .end_run(first, RunOutcome::Cancelled)
-        .await
-        .unwrap();
+    recorder.end_run(first, canceled()).await.unwrap();
 
-    assert_eq!(recorder.outcome(first), Some(RunOutcome::Cancelled));
-    assert_eq!(recorder.outcome(second), None);
+    assert_eq!(recorder.result(first), Some(canceled()));
+    assert_eq!(recorder.result(second), None);
     recorder
         .append(second, record(RecordKind::Event, 0, "still open"))
         .await
@@ -174,12 +172,12 @@ async fn ending_one_run_leaves_the_other_open() {
 }
 
 #[tokio::test]
-async fn an_unknown_run_has_no_records_and_no_outcome() {
+async fn an_unknown_run_has_no_records_and_no_result() {
     let recorder = MemoryRecorder::new();
     let unknown = RunId::from_raw(41);
 
     assert!(recorder.records(unknown).is_empty());
-    assert_eq!(recorder.outcome(unknown), None);
+    assert_eq!(recorder.result(unknown), None);
 }
 
 #[tokio::test]
@@ -205,7 +203,7 @@ async fn ending_an_unknown_run_fails() {
     let recorder = MemoryRecorder::new();
 
     let error = recorder
-        .end_run(RunId::from_raw(5), RunOutcome::Cancelled)
+        .end_run(RunId::from_raw(5), canceled())
         .await
         .expect_err("run 5 was never begun");
 
@@ -225,7 +223,7 @@ async fn an_append_after_end_run_fails_and_changes_nothing() {
         .append(run, record(RecordKind::Event, 0, "before"))
         .await
         .unwrap();
-    recorder.end_run(run, RunOutcome::Cancelled).await.unwrap();
+    recorder.end_run(run, canceled()).await.unwrap();
 
     let error = recorder
         .append(run, record(RecordKind::Event, 1, "after"))
@@ -246,19 +244,15 @@ async fn an_append_after_end_run_fails_and_changes_nothing() {
 }
 
 #[tokio::test]
-async fn a_second_end_run_fails_and_keeps_the_first_outcome() {
+async fn a_second_end_run_fails_and_keeps_the_first_result() {
     let recorder = MemoryRecorder::new();
     let run = recorder.begin_run(meta("twice")).await.unwrap();
-    recorder.end_run(run, RunOutcome::Cancelled).await.unwrap();
+    recorder.end_run(run, canceled()).await.unwrap();
 
+    let code = ErrorCode::Internal;
+    let second = runvil::error::Error::new(code, "a second end", code.prose());
     let error = recorder
-        .end_run(
-            run,
-            RunOutcome::Failed {
-                kind: RunErrorKind::Internal,
-                message: "a second end".to_owned(),
-            },
-        )
+        .end_run(run, Err(second))
         .await
         .expect_err("a run ends exactly once");
 
@@ -269,9 +263,9 @@ async fn a_second_end_run_fails_and_keeps_the_first_outcome() {
         "the failure says the run ended: {text}"
     );
     assert_eq!(
-        recorder.outcome(run),
-        Some(RunOutcome::Cancelled),
-        "the first outcome stands"
+        recorder.result(run),
+        Some(canceled()),
+        "the first result stands"
     );
 }
 
@@ -288,27 +282,14 @@ async fn an_arc_dyn_recorder_drives_a_whole_run() {
         )
         .await
         .unwrap();
-    recorder
-        .end_run(
-            run,
-            RunOutcome::Completed {
-                final_text: "ok".to_owned(),
-            },
-        )
-        .await
-        .unwrap();
+    recorder.end_run(run, Ok("ok".to_owned())).await.unwrap();
 
     assert_eq!(
         labels(&memory.records(run)),
         ["through the trait object"],
         "writes through the trait object reach the concrete recorder"
     );
-    assert_eq!(
-        memory.outcome(run),
-        Some(RunOutcome::Completed {
-            final_text: "ok".to_owned()
-        })
-    );
+    assert_eq!(memory.result(run), Some(Ok("ok".to_owned())));
 }
 
 #[derive(Debug)]
@@ -369,19 +350,4 @@ fn record_kind_text_round_trips_and_rejects_unknown_text() {
     }
     assert_eq!(RecordKind::parse("Effect"), None, "the text is exact");
     assert_eq!(RecordKind::parse("nope"), None);
-}
-
-#[test]
-fn run_outcome_text_names_each_variant() {
-    let completed = RunOutcome::Completed {
-        final_text: String::new(),
-    };
-    let failed = RunOutcome::Failed {
-        kind: RunErrorKind::Parse,
-        message: "bad".to_owned(),
-    };
-
-    assert_eq!(completed.as_str(), "completed");
-    assert_eq!(failed.as_str(), "failed");
-    assert_eq!(RunOutcome::Cancelled.as_str(), "cancelled");
 }

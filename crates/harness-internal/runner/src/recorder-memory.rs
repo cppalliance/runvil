@@ -5,7 +5,7 @@ use std::sync::{Mutex, MutexGuard, PoisonError};
 use runvil::error::{Error, FactKey};
 use serde_json::Value;
 
-use super::{Record, RecorderFuture, RunId, RunMeta, RunOutcome, RunRecorder, recorder_error};
+use super::{Record, RecorderFuture, RunId, RunMeta, RunRecorder, recorder_error};
 
 /// A recorder that keeps every run in memory, for tests and doc examples.
 ///
@@ -24,7 +24,7 @@ pub struct MemoryRecorder {
 struct MemoryRun {
     meta: RunMeta,
     records: Vec<Record>,
-    outcome: Option<RunOutcome>,
+    result: Option<Result<String, Error>>,
 }
 
 impl MemoryRecorder {
@@ -53,15 +53,16 @@ impl MemoryRecorder {
         self.lock().get(slot(run)).map(|found| found.meta.clone())
     }
 
-    /// Returns how run `run` ended.
+    /// Returns the result run `run` ended with: its final text, or the
+    /// error that ended it.
     ///
     /// Returns `None` while the run is still open, or when `run` lies outside
     /// the runs this recorder began.
     #[must_use]
-    pub fn outcome(&self, run: RunId) -> Option<RunOutcome> {
+    pub fn result(&self, run: RunId) -> Option<Result<String, Error>> {
         self.lock()
             .get(slot(run))
-            .and_then(|found| found.outcome.clone())
+            .and_then(|found| found.result.clone())
     }
 
     fn lock(&self) -> MutexGuard<'_, Vec<MemoryRun>> {
@@ -89,7 +90,7 @@ fn open_run(runs: &mut [MemoryRun], run: RunId) -> Result<&mut MemoryRun, Error>
             format!("memory recorder: unknown run {run}"),
         )
     })?;
-    if found.outcome.is_some() {
+    if found.result.is_some() {
         return Err(refused(
             run,
             "run_ended",
@@ -116,7 +117,7 @@ impl RunRecorder for MemoryRecorder {
             runs.push(MemoryRun {
                 meta,
                 records: Vec::new(),
-                outcome: None,
+                result: None,
             });
             Ok(RunId::from_raw(id))
         })
@@ -129,10 +130,10 @@ impl RunRecorder for MemoryRecorder {
         })
     }
 
-    fn end_run(&self, run: RunId, outcome: RunOutcome) -> RecorderFuture<'_, ()> {
+    fn end_run(&self, run: RunId, result: Result<String, Error>) -> RecorderFuture<'_, ()> {
         Box::pin(async move {
             let mut runs = self.lock();
-            open_run(&mut runs, run).map(|open| open.outcome = Some(outcome))
+            open_run(&mut runs, run).map(|open| open.result = Some(result))
         })
     }
 }

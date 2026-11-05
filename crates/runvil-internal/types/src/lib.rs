@@ -39,6 +39,11 @@
 //!   location as `file:line`. The parser's span constructors build
 //!   file-less spans that `place` completes, and the Lua crate's
 //!   `internal_at` writes Rust locations.
+//! - A located failure's
+//!   [`located_message`](error::Error::located_message) ends with
+//!   ` (at file:line)`, except that a structure, fence, or list failure,
+//!   the parser's own, ends with ` (prompt ..., line ..., column ...)`,
+//!   and a frontmatter failure with ` (line ..., column ...)`.
 
 pub mod cancel;
 pub mod emitter;

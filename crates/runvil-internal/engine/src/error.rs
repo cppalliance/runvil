@@ -1,14 +1,13 @@
 //! The crate's error: the universal [`Error`] every Engine failure is, and
 //! the constructors that build each failure the Engine raises itself.
 //!
-//! A run a failure ends reports a kind and a message in
-//! [`RunOutcome::Failed`](crate::RunOutcome::Failed), both read from the
-//! error's code, message, location, and facts. A failure that reaches an
-//! author's Lua renders as the error table the Lua crate builds from the
-//! same code and facts. A parse, a model round, a tool, a `{{ }}`
-//! substitution, and the Lua crate fail with this type already; the Lua
-//! crate owns the constructors of the failures it shares with the Engine,
-//! which this module re-exports.
+//! A run a failure ends reports the error itself in the result of
+//! [`Step::Done`](crate::Step::Done), with a caller code reported as an
+//! internal one. A failure that reaches an author's Lua renders as the
+//! error table the Lua crate builds from the same code and facts. A
+//! parse, a model round, a tool, a `{{ }}` substitution, and the Lua crate
+//! fail with this type already; the Lua crate owns the constructors of the
+//! failures it shares with the Engine, which this module re-exports.
 //!
 //! Each constructor gives its failure the text it has always had as the
 //! message, and the code's default prose unless the failure has

@@ -6,7 +6,7 @@ use std::num::NonZeroU32;
 use std::sync::{Arc, Mutex, PoisonError};
 
 use harness::pack::{HostContext, HostServices, PackRegistry};
-use harness::record::{MemoryRecorder, RunOutcome};
+use harness::record::MemoryRecorder;
 use harness::vfs::VfsRef;
 use harness::{BoxFuture, Harness, HostSnapshot, InferenceBroker, RunRequest};
 use runvil::effect::Round;
@@ -105,13 +105,11 @@ async fn a_sections_round_reaches_the_broker_as_chat_and_a_nested_infer_round_as
             },
         })
         .await
-        .expect("the run reaches an outcome");
+        .expect("the run is reported");
 
     assert_eq!(
-        report.outcome,
-        RunOutcome::Completed {
-            final_text: "re: infer round|re: chat round".to_owned()
-        }
+        report.result,
+        Ok("re: infer round|re: chat round".to_owned())
     );
     assert_eq!(
         *broker.rounds.lock().expect("the round log is healthy"),

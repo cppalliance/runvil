@@ -13,6 +13,7 @@
 use std::fmt;
 use std::sync::Arc;
 
+use runvil_types::error::Error;
 use runvil_types::event::Event;
 use runvil_types::ids::Provenance;
 
@@ -24,7 +25,6 @@ pub use effect::{Effect, EffectAnswer, EffectId, PackToolSets, Round, ToolCallOr
 
 use crate::prompt::Prompt;
 
-use super::RunOutcome;
 use super::context::ChainState;
 use super::params::RunParams;
 use super::scheduler::Scheduler;
@@ -50,7 +50,7 @@ pub enum Step {
         /// unperformed, or abort it, and answer it
         /// [`EffectAnswer::Dropped`]; it still owes each one answer. A step
         /// withdraws a tool call whose chain stopped waiting on it. The
-        /// step that decides the run's outcome withdraws every effect still
+        /// step that decides the run's result withdraws every effect still
         /// outstanding, of every kind, so a caller that follows this list
         /// drops everything it holds for the run. It may name an effect
         /// that `effects` lists, because one step can issue an effect and
@@ -59,13 +59,17 @@ pub enum Step {
     },
     /// The run is over.
     ///
-    /// Carries the run's outcome and its last events. A step returns `Done`
+    /// Carries the run's result and its last events. A step returns `Done`
     /// only after every issued effect has been answered. The event that
     /// marks the run's end comes with `Done`, or with an earlier `Pending`
     /// step when effects were still outstanding as the run ended.
     Done {
-        /// The run's outcome.
-        outcome: RunOutcome,
+        /// The run's result. `Ok` holds the run's final text, which for a
+        /// prompt that declines its task is its reason for declining. `Err`
+        /// holds the error that ended the run: a cancel is the error whose
+        /// code is `ErrorCode::Canceled`, and any other error is a failure.
+        /// An `Err` never holds a caller code, one in the 8xx family.
+        result: Result<String, Error>,
         /// The events reported since the previous step.
         events: Vec<Event>,
     },
@@ -125,11 +129,9 @@ impl Run {
     /// entry, and no tool of the catalog and no Pack of the roster has a
     /// Pack id the Engine reserves, such as `adhoc`. When a check fails,
     /// that step returns `Done` with the failure and no events. The
-    /// requirements failure is a
-    /// [`RequirementsUnmet`](super::RunErrorKind::RequirementsUnmet) whose
-    /// message names every gap. When the run's cancel flag is set as a
-    /// check fails, the run ends [`Cancelled`](RunOutcome::Cancelled)
-    /// instead.
+    /// requirements failure has the code `ErrorCode::RequirementsUnmet`,
+    /// and its message names every gap. When the run's cancel flag is set
+    /// as a check fails, the run ends with the cancel instead.
     #[must_use]
     pub fn new(prompt: Arc<Prompt>, args: &str, params: RunParams) -> Run {
         Self::from_state(ChainState::root(prompt, args, params))
@@ -167,8 +169,8 @@ impl Run {
     /// The first call checks that the run can start, as
     /// [`new`](Self::new) describes.
     ///
-    /// `step` cannot fail: a run's failures are values in
-    /// [`RunOutcome::Failed`]. So the caller drives the loop and owns the
+    /// `step` cannot fail: a run's failures are values, the error in the
+    /// result of [`Step::Done`]. So the caller drives the loop and owns the
     /// retry policy without catching a panic.
     pub fn step(&mut self) -> Step {
         self.scheduler.step()
@@ -187,13 +189,14 @@ impl Run {
     /// an id the run never issued, or a second answer for one effect. An
     /// answer for an effect whose chain stopped waiting is discarded.
     ///
-    /// `resume` cannot fail: a bad answer ends the run with a
-    /// [`RunOutcome::Failed`] instead of returning an error or panicking.
+    /// `resume` cannot fail: a bad answer ends the run with an internal
+    /// error, which the result of [`Step::Done`] holds, instead of
+    /// returning an error or panicking.
     pub fn resume(&mut self, id: EffectId, answer: EffectAnswer) {
         self.scheduler.resume(id, answer);
     }
 
-    /// Whether the run's outcome is decided: it has reported its end
+    /// Whether the run's result is decided: it has reported its end
     /// event, or found at its first step that it cannot start. For the
     /// suites that pin when a run is decided apart from what its steps
     /// return.
@@ -213,13 +216,6 @@ impl Run {
     #[cfg(test)]
     pub(crate) fn turns_for_test(&self) -> u32 {
         self.scheduler.turns_for_test()
-    }
-
-    /// Takes the Engine error behind the failed outcome the last `Done`
-    /// carried, for the suites that match on its variant.
-    #[cfg(test)]
-    pub(crate) fn take_failure_for_test(&mut self) -> Option<crate::Error> {
-        self.scheduler.take_failure_for_test()
     }
 }
 

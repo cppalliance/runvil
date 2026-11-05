@@ -44,15 +44,14 @@ pub(super) fn test_params(name: impl Into<String>) -> RunParams {
 ///
 /// `RunParams` holds the cancel flag and the filesystem handle, which the
 /// caller shares through its own clones, and must be `Send + Sync + 'static`
-/// to cross the run's task boundaries; the typed error/limit/result surfaces
+/// to cross the run's task boundaries; the typed limit and result surfaces
 /// must be too.
 const fn _public_execution_types_are_send_sync_static() {
     const fn assert_send_sync_static<T: Send + Sync + 'static>() {}
     const fn assert_send_sync<T: Send + Sync>() {}
     assert_send_sync_static::<RunParams>();
     assert_send_sync_static::<RunLimits>();
-    assert_send_sync_static::<RunOutcome>();
-    assert_send_sync_static::<RunErrorKind>();
+    assert_send_sync_static::<Result<String, crate::Error>>();
 }
 
 /// Parses `md`, adding a `# Test prompt` title when the source has none.

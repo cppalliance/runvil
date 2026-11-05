@@ -21,14 +21,13 @@ use runvil::model::ModelInfo;
 use runvil::vfs::VfsRef;
 use runvil_plugin::HostServices;
 
-use crate::display_chain::display_chain;
 use crate::effect_loop::drive;
-use crate::environment::{HostSnapshot, current_model, model_kind};
+use crate::environment::{HostSnapshot, current_model};
 use crate::files::{not_completed, report_output};
 use crate::host::HostContext;
 use crate::performers::{InferenceBroker, Timer};
-use crate::prepare::{Services, begin, ended, prepare};
-use crate::recorder::{RunId, RunOutcome, RunRecorder};
+use crate::prepare::{Services, begin, prepare};
+use crate::recorder::{RunId, RunRecorder, is_refusal};
 
 #[path = "harness-control.rs"]
 mod control;
@@ -90,13 +89,14 @@ pub struct RunRequest {
 
 /// How one run ended, and what it left at its declared output file.
 ///
-/// The recorder holds the same outcome under the same run id.
+/// The recorder holds the same result under the same run id.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RunReport {
     /// The id the recorder issued for the run.
     pub run_id: RunId,
-    /// How the run ended.
-    pub outcome: RunOutcome,
+    /// How the run ended: its final text, or the error that ended it. A
+    /// cancel is the error whose code is `canceled`.
+    pub result: Result<String, Error>,
     /// The text a completed run left at its declared `output:` file, or
     /// the reason the report omits that text: `NoOutput` with the `Reason`
     /// fact `not_completed` or `undeclared`, `NotFound` for a completed
@@ -106,13 +106,13 @@ pub struct RunReport {
 }
 
 /// The failure that stops a run before `Harness::run` can record its
-/// outcome: the recorder refused a write for run `run`, or refused to
+/// result: the recorder refused a write for run `run`, or refused to
 /// begin it when `run` is `None`.
 ///
 /// It is `RecorderFailed`, with the refusal after `the run could not be
 /// recorded: ` in its message, the refusal's facts, and the run's `Run`
 /// fact when the recorder issued one. Every other way a run ends is a
-/// recorded outcome in a [`RunReport`].
+/// recorded result in a [`RunReport`].
 fn unrecorded(run: Option<RunId>, refusal: &Error) -> Error {
     let code = ErrorCode::RecorderFailed;
     let mut error =
@@ -169,22 +169,24 @@ impl Harness {
     /// output file if the run completed. The returned future is `Send`.
     /// Its only runtime needs are those of the Host's performers and Packs.
     ///
-    /// Every run gets a record and ends with one outcome, which the report
-    /// carries beside the run's id. The record begins before anything
-    /// else, so a run that ends before it starts is recorded too. A cancel
-    /// raised before calling `run`, or while the broker lists its models,
-    /// ends the run as `Cancelled`. A model list the broker fails to fetch
-    /// ends it as failed with the kind `Completion`, and a list that omits
-    /// the selected model ends it as failed with the kind
-    /// `RequirementsUnmet`. A source that fails to parse, a declared input
-    /// file the Harness fails to put in place, and an environment that
+    /// Every run gets a record and ends with its result, which the report
+    /// carries beside the run's id: the final text, or the error that
+    /// ended the run, where a cancel is the error whose code is
+    /// `canceled`. The record begins before anything else, so a run that
+    /// ends before it starts is recorded too. A cancel raised before
+    /// calling `run`, or while the broker lists its models, ends the run
+    /// canceled. A model list the broker fails to fetch ends it with the
+    /// broker's failure, and a list that omits the selected model with a
+    /// `RequirementsUnmet` failure. A source that fails to parse ends it
+    /// with the parse failure, a declared input file the Harness fails to
+    /// put in place with the input's failure, and an environment that
     /// falls short of the prompt's requirements, which the run's first
-    /// step finds, also end it as failed. An environment that falls short
-    /// after a cancel was raised, as when the cancel cuts short the wait
-    /// for a Pack that is still starting, ends the run as `Cancelled`
-    /// instead. A run that is pending with nothing to await, which means
-    /// the Harness lost track of an effect, ends as failed with the kind
-    /// `Internal`.
+    /// step finds, with a `RequirementsUnmet` failure. An environment that
+    /// falls short after a cancel is raised, as when the cancel cuts short
+    /// the wait for a Pack that is still starting, ends the run canceled
+    /// instead. A run that is pending with nothing to await,
+    /// which means the Harness lost track of an effect, ends with an
+    /// `Internal` error.
     ///
     /// # Errors
     /// Returns `RecorderFailed` when the recorder refuses a write. That is
@@ -223,14 +225,14 @@ impl Harness {
 
         let model = match resolve_model(&host, &*broker, control.cancel_handle()).await {
             Ok(model) => model,
-            Err(outcome) => {
+            Err(error) => {
                 recorder
-                    .end_run(run_id, outcome.clone())
+                    .end_run(run_id, Err(error.clone()))
                     .await
                     .map_err(recorded)?;
                 return Ok(RunReport {
                     run_id,
-                    outcome,
+                    result: Err(error),
                     output: Err(not_completed()),
                 });
             }
@@ -252,19 +254,17 @@ impl Harness {
         };
         let prepared = match prepare(&source, &args, begun, services).await {
             Ok(prepared) => prepared,
+            Err(refusal) if is_refusal(&refusal) => return Err(recorded(refusal)),
             Err(error) => {
-                return match ended(error) {
-                    Ok(outcome) => Ok(RunReport {
-                        run_id,
-                        outcome,
-                        output: Err(not_completed()),
-                    }),
-                    Err(source) => Err(recorded(source)),
-                };
+                return Ok(RunReport {
+                    run_id,
+                    result: Err(error),
+                    output: Err(not_completed()),
+                });
             }
         };
 
-        let outcome = drive(
+        let result = match drive(
             prepared.run,
             prepared.performers,
             recorder,
@@ -273,33 +273,33 @@ impl Harness {
             Arc::clone(control.stop_signal()),
         )
         .await
-        .map_err(recorded)?;
-        let output = report_output(&vfs, prepared.output_path.as_deref(), &outcome);
+        {
+            Err(refusal) if is_refusal(&refusal) => return Err(recorded(refusal)),
+            result => result,
+        };
+        let output = report_output(&vfs, prepared.output_path.as_deref(), &result);
         Ok(RunReport {
             run_id,
-            outcome,
+            result,
             output,
         })
     }
 }
 
 /// Resolves the Host's current model through `broker`, or returns the
-/// outcome that ends the run instead: `Cancelled` when `cancel` fires
-/// first, and a failure with the lookup's kind and cause chain when the
-/// broker's list cannot be fetched or lacks the selection.
+/// error that ends the run instead: the cancel when `cancel` fires first,
+/// and the lookup's failure when the broker's list cannot be fetched or
+/// lacks the selection.
 async fn resolve_model(
     host: &HostSnapshot,
     broker: &dyn InferenceBroker,
     cancel: &CancelHandle,
-) -> Result<Option<ModelInfo>, RunOutcome> {
+) -> Result<Option<ModelInfo>, Error> {
     let resolving = pin!(current_model(host, broker));
     // The cancel arm is polled first, so a cancel raised before the run,
     // or before a listing that is ready at once, wins.
     match select(cancel.canceled(), resolving).await {
-        Either::Left(((), _)) => Err(RunOutcome::Cancelled),
-        Either::Right((resolved, _)) => resolved.map_err(|error| RunOutcome::Failed {
-            kind: model_kind(&error),
-            message: display_chain(&error),
-        }),
+        Either::Left(((), _)) => Err(Error::canceled()),
+        Either::Right((resolved, _)) => resolved,
     }
 }

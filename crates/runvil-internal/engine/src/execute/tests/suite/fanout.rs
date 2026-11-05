@@ -4,8 +4,6 @@
 use runvil_prompt::test_support::prompt;
 use runvil_types::error::ErrorCode;
 
-use crate::RunErrorKind;
-use crate::execute::run_error_kind;
 use crate::test_support::scenario::{Record, Scenario};
 
 const FANOUT_BASIC_EXECUTION: &str = "fixture-fanout-basic";
@@ -126,11 +124,6 @@ fn a_cross_arm_append_terminates_the_run_with_a_determinism_violation() {
         error.code == ErrorCode::Determinism,
         "a conflicting access is a determinism violation: {error:?}"
     );
-    assert_eq!(
-        run_error_kind(error.code),
-        RunErrorKind::Vfs,
-        "a determinism violation classifies as a store failure: {error:?}"
-    );
     let text = error.to_string();
     assert!(
         text.contains("evidence.md"),
@@ -160,11 +153,11 @@ fn fanout_arm_failure_propagates() {
         .name(FANOUT_FAILURE_EXECUTION)
         .run();
     let error = trace.error();
-    // Assert the stable classification first, then the preserved source context.
+    // Assert the stable code first, then the preserved source context.
     assert_eq!(
-        run_error_kind(error.code),
-        RunErrorKind::Lua,
-        "a raised arm error must classify as a Lua failure: {error:?}"
+        error.code,
+        ErrorCode::LuaRuntime,
+        "a raised arm error must keep the Lua runtime code: {error:?}"
     );
     assert!(
         error.to_string().contains("deliberately failed"),

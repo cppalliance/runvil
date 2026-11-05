@@ -13,7 +13,6 @@ use runvil::error::{Error, ErrorCode, FactKey};
 use runvil::model::{ModelId, ModelInfo};
 
 use crate::performers::InferenceBroker;
-use crate::recorder::RunErrorKind;
 
 /// The Host state a run reads when it launches.
 ///
@@ -43,17 +42,6 @@ impl HostSnapshot {
     }
 }
 
-/// The Engine's kind for the run a failure of [`current_model`] ends: a
-/// model list the broker cannot fetch is a completion failure, and a
-/// selection the list lacks is an unmet requirement.
-pub(crate) fn model_kind(error: &Error) -> RunErrorKind {
-    if error.code == ErrorCode::RequirementsUnmet {
-        RunErrorKind::RequirementsUnmet
-    } else {
-        RunErrorKind::Completion
-    }
-}
-
 /// Resolves the Host's current model for one run's params: lists
 /// `broker`'s models and looks up `host`'s selection in the list. A launch
 /// with no selection binds the first model the broker lists.
@@ -62,8 +50,8 @@ pub(crate) fn model_kind(error: &Error) -> RunErrorKind {
 /// lists no model, or the selected id is not representable; the prompt's
 /// declared roles then stay unbound. A failed listing or a selection
 /// absent from the list is a reported failure, never a fabricated
-/// fallback model info. The recorded run ends as failed, with the
-/// failure's message.
+/// fallback model info. The recorded run ends with that failure as its
+/// result.
 ///
 /// # Errors
 /// Returns the broker's own failure, its message after `the model catalog

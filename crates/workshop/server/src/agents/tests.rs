@@ -15,7 +15,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use harness::pack::{HostContext, HostServices};
-use harness::record::{MemoryRecorder, RunErrorKind, RunOutcome};
+use harness::record::MemoryRecorder;
 use harness::vfs::VfsRef;
 use harness::{BoxFuture, Harness, HostSnapshot, InferenceBroker, RunRequest};
 use plugin_web::SEARCH_PROVIDER;
@@ -71,8 +71,8 @@ impl InferenceBroker for OfflineBroker {
 
 /// Runs the prompt `source` as one conversation over `host` and the
 /// default in-memory filesystem, then reads the conversation's state and
-/// the outcome of its one run.
-async fn run_prompt(host: &Arc<HostContext>, source: String) -> Option<RunOutcome> {
+/// the result of its one run.
+async fn run_prompt(host: &Arc<HostContext>, source: String) -> Option<Result<String, Error>> {
     run_prompt_over(host, source, VfsRef::default()).await
 }
 
@@ -82,7 +82,7 @@ pub(super) async fn run_prompt_over(
     host: &Arc<HostContext>,
     source: String,
     vfs: VfsRef,
-) -> Option<RunOutcome> {
+) -> Option<Result<String, Error>> {
     let recorder = Arc::new(MemoryRecorder::new());
     let conversation = Conversations::new().open("browses");
     let harness = Harness::new(
@@ -109,7 +109,7 @@ pub(super) async fn run_prompt_over(
         SessionState::Closed,
         "the conversation ends with its run"
     );
-    recorder.outcome(conversation.run_id().expect("the recorder began the run"))
+    recorder.result(conversation.run_id().expect("the recorder began the run"))
 }
 
 /// An `mcp.json` file in a new directory holding `text`.
@@ -132,9 +132,7 @@ async fn every_run_holds_the_packs_the_three_plugins_add_and_the_builtin() {
     let (host, _ask) = host_context(&Registry::new(), None);
     assert_eq!(
         run_prompt(&Arc::new(host), lists.to_owned()).await,
-        Some(RunOutcome::Completed {
-            final_text: "web,user-input,subagents,mcp,std".to_owned(),
-        }),
+        Some(Ok("web,user-input,subagents,mcp,std".to_owned())),
         "a run that declares nothing holds every runvil Pack the server built"
     );
 }
@@ -144,9 +142,7 @@ async fn a_prompt_declaring_web_prepares_on_the_servers_built_packs() {
     let (host, _ask) = host_context(&Registry::new(), None);
     assert_eq!(
         run_prompt(&Arc::new(host), requiring("web")).await,
-        Some(RunOutcome::Completed {
-            final_text: "browsed".to_owned(),
-        }),
+        Some(Ok("browsed".to_owned())),
         "the server adds web and provides both services its construct reads"
     );
 }
@@ -156,9 +152,7 @@ async fn a_prompt_declaring_subagents_prepares_on_the_servers_built_packs() {
     let (host, _ask) = host_context(&Registry::new(), None);
     assert_eq!(
         run_prompt(&Arc::new(host), requiring("subagents")).await,
-        Some(RunOutcome::Completed {
-            final_text: "browsed".to_owned(),
-        }),
+        Some(Ok("browsed".to_owned())),
         "the server's Host builds the built-in subagents"
     );
 }
@@ -171,11 +165,12 @@ async fn a_host_without_the_search_provider_refuses_a_prompt_requiring_web() {
         .expect("an empty map takes the runtime");
     let (host, _ask) = with_plugins(runtime_only, json!({}));
 
-    let outcome = run_prompt(&Arc::new(host), requiring("web")).await;
-    let Some(RunOutcome::Failed { kind, message }) = outcome else {
-        panic!("the run is refused as it prepares: {outcome:?}");
+    let result = run_prompt(&Arc::new(host), requiring("web")).await;
+    let Some(Err(error)) = result else {
+        panic!("the run is refused as it prepares: {result:?}");
     };
-    assert_eq!(kind, RunErrorKind::RequirementsUnmet);
+    assert_eq!(error.code, ErrorCode::RequirementsUnmet);
+    let message = error.located_message();
     assert!(
         message.contains(
             "- web is unavailable: web needs runvil/search-provider, and this host provides none"
@@ -215,9 +210,7 @@ async fn a_prompt_declaring_mcp_prepares_on_the_runtime_the_server_provides() {
     let (host, _ask) = host_context(&Registry::new(), None);
     assert_eq!(
         run_prompt(&Arc::new(host), requiring("mcp")).await,
-        Some(RunOutcome::Completed {
-            final_text: "browsed".to_owned(),
-        }),
+        Some(Ok("browsed".to_owned())),
         "the server adds mcp once, and its construct finds the server's runtime"
     );
 }
@@ -228,11 +221,12 @@ async fn the_servers_value_is_the_mcp_packs_configuration() {
     // the construct refuses, so only that value reaching it fails the run.
     let (host, _ask) = with_plugins(services(&Registry::new()), json!([]));
 
-    let outcome = run_prompt(&Arc::new(host), requiring("mcp")).await;
-    let Some(RunOutcome::Failed { kind, message }) = outcome else {
-        panic!("the run is refused as it prepares: {outcome:?}");
+    let result = run_prompt(&Arc::new(host), requiring("mcp")).await;
+    let Some(Err(error)) = result else {
+        panic!("the run is refused as it prepares: {result:?}");
     };
-    assert_eq!(kind, RunErrorKind::RequirementsUnmet);
+    assert_eq!(error.code, ErrorCode::RequirementsUnmet);
+    let message = error.located_message();
     assert!(
         message.contains("- mcp is unavailable: the MCP configuration must be a JSON object"),
         "the refusal names the mcp Pack and its configuration rule: {message}"

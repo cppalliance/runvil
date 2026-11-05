@@ -9,7 +9,6 @@ use std::error::Error;
 use std::path::Path;
 use std::sync::Arc;
 
-use harness::record::RunOutcome;
 use runvil::vfs::{Access, FileType, Origin, VfsError, VfsRef};
 use workshop_registry::Registry;
 
@@ -149,15 +148,15 @@ async fn a_prompt_sees_the_directory_mapped_under_the_runvil_mount() -> Outcome 
     let directory = local_directory()?;
     let (host, _ask) = host_context(&Registry::new(), None);
 
-    let outcome = run_prompt_over(
+    let result = run_prompt_over(
         &Arc::new(host),
         PROMPT.to_owned(),
         filesystem_with(directory.path()),
     )
     .await;
 
-    let Some(RunOutcome::Completed { final_text }) = outcome else {
-        return Err(format!("the prompt did not complete: {outcome:?}").into());
+    let Some(Ok(final_text)) = result else {
+        return Err(format!("the prompt did not complete: {result:?}").into());
     };
     assert!(
         final_text.contains("  - test/"),

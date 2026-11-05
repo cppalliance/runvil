@@ -95,7 +95,7 @@ fn fanout_depth_cap_reads_the_chain_field() {
         &crate::test_support::with_author_prose(crate::error::call_depth_exceeded(8), 13),
         "expected the typed depth-cap error on Alpha's fanout line"
     );
-    assert_eq!(run_error_kind(error.code), RunErrorKind::Quota, "{error}");
+    assert_eq!(error.code, ErrorCode::CallDepthExceeded, "{error}");
     assert_eq!(
         error.to_string(),
         "recursion exceeded cap of 8",

@@ -5,16 +5,14 @@ use std::sync::Arc;
 
 use super::*;
 
-use crate::RunErrorKind;
-use crate::RunOutcome;
-use crate::execute::run_error_kind;
 use crate::execute::tests::context::test_params;
 use crate::execute::tests::fixtures::echo_tool;
 use crate::test_support::scenario::EXECUTION;
+use runvil_types::error::ErrorCode;
 use runvil_vfs::{VfsError, VfsRef};
 
 /// A hand-built `VfsRef` that declares no store fails the run up front
-/// with [`RunErrorKind::Vfs`], saying what is missing: every run needs a
+/// with a `NoStore` error, saying what is missing: every run needs a
 /// declared store. (Nothing replaces the handle, so the raw handle's
 /// declaration is what the run sees.)
 #[test]
@@ -24,8 +22,8 @@ fn a_handle_without_a_declared_store_fails_the_run() {
     let trace = Scenario::new(source).vfs(vfs).run();
     let error = trace.error();
     assert_eq!(
-        run_error_kind(error.code),
-        RunErrorKind::Vfs,
+        error.code,
+        ErrorCode::NoStore,
         "the run fails as a store error: {error}"
     );
     assert_eq!(
@@ -64,9 +62,15 @@ fn a_store_backend_that_refuses_its_session_fails_the_run_at_the_first_step() {
     );
     match run.step() {
         crate::execute::run::Step::Done {
-            outcome: RunOutcome::Failed { kind, message },
-            ..
-        } => assert_eq!(kind, RunErrorKind::Vfs, "{message}"),
+            result: Err(error), ..
+        } => assert_eq!(
+            (error.code, error.located_message()),
+            (
+                ErrorCode::Backend,
+                "store operation failed: backend failure: the store backend refuses every session"
+                    .to_owned()
+            )
+        ),
         other => panic!("expected the first step to fail the run, got {other:?}"),
     }
 }
@@ -111,7 +115,7 @@ fn offering_a_tool_its_present_pack_does_not_offer_fails_the_section() {
     );
     let trace = Scenario::new(source).tool(echo_tool()).run();
     let error = trace.error();
-    assert_eq!(run_error_kind(error.code), RunErrorKind::Lua, "{error}");
+    assert_eq!(error.code, ErrorCode::LuaRuntime, "{error}");
     assert!(
         error
             .to_string()

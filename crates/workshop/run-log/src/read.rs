@@ -1,13 +1,11 @@
 //! The read side: one run's row and its records, whole or sliced by kind.
 
 use harness::record::RunSeed;
+use runvil::error::{Error, ErrorCode};
 
 use crate::append::{RunLog, unsigned};
 use crate::error::LogError;
-use crate::record::{
-    Record, RecordFilter, RecordKind, RunErrorKind, RunId, RunMeta, RunOutcome, RunRow, Seq,
-    StoredRecord,
-};
+use crate::record::{Record, RecordFilter, RecordKind, RunId, RunMeta, RunRow, Seq, StoredRecord};
 use crate::schema;
 
 impl RunLog {
@@ -31,21 +29,24 @@ impl RunLog {
         };
         let agent = row.get(1)?;
         let ended_at: Option<i64> = row.get(6)?;
-        let outcome = match row.get::<Option<String>>(7)? {
+        let result = match row.get::<Option<String>>(7)? {
             None => None,
-            Some(kind) => Some(parse_outcome(
-                &kind,
-                row.get(8)?,
-                row.get(9)?,
-                row.get(10)?,
-            )?),
+            Some(status) => {
+                let error_code: Option<String> = row.get(9)?;
+                Some(parse_result(
+                    &status,
+                    row.get(8)?,
+                    error_code.as_deref(),
+                    row.get(10)?,
+                )?)
+            }
         };
         Ok(RunRow {
             id: run,
             meta,
             agent,
             ended_at,
-            outcome,
+            result,
         })
     }
 
@@ -126,27 +127,46 @@ fn to_seed(text: String) -> Result<RunSeed, LogError> {
         .map_err(|error| LogError::Corrupt(format!("seed: {error}")))
 }
 
-/// Rebuilds a [`RunOutcome`] from its four columns.
+/// A stored `error_code` column, parsed as [`ErrorCode::from_tag`] reads it.
+fn to_code(tag: &str) -> Result<ErrorCode, LogError> {
+    ErrorCode::from_tag(tag).ok_or_else(|| {
+        LogError::Corrupt(format!(
+            "expected error_code to be an ErrorCode tag, found {tag:?}"
+        ))
+    })
+}
+
+/// Rebuilds a run's result from its four result columns.
 ///
-/// A failed run's kind reads back through [`RunErrorKind::from_tag`]. A
-/// stored tag the Engine does not name, such as the `Input` that older
-/// rows hold, reads as [`RunErrorKind::Internal`] with its stored message.
-fn parse_outcome(
-    kind: &str,
+/// Three shapes read back: `completed` with its final text and no error
+/// columns, `failed` with a code other than `canceled` and a message, and
+/// `canceled` with the code `canceled` and a message. The rebuilt error
+/// has its code's default prose and no location or facts, since the
+/// stored message is the located message and already ends with any
+/// location.
+fn parse_result(
+    status: &str,
     final_text: Option<String>,
-    error_kind: Option<String>,
+    error_code: Option<&str>,
     error_message: Option<String>,
-) -> Result<RunOutcome, LogError> {
-    match (kind, final_text, error_kind, error_message) {
-        ("completed", Some(final_text), None, None) => Ok(RunOutcome::Completed { final_text }),
-        ("failed", None, Some(kind), Some(message)) => Ok(RunOutcome::Failed {
-            kind: RunErrorKind::from_tag(&kind).unwrap_or(RunErrorKind::Internal),
-            message,
-        }),
-        ("cancelled", None, None, None) => Ok(RunOutcome::Cancelled),
-        (kind, final_text, error_kind, error_message) => Err(LogError::Corrupt(format!(
-            "expected outcome columns to match {kind:?}, found final_text={final_text:?} \
-             error_kind={error_kind:?} error_message={error_message:?}"
+) -> Result<Result<String, Error>, LogError> {
+    if !matches!(status, "completed" | "failed" | "canceled") {
+        return Err(LogError::Corrupt(format!(
+            "expected status completed, failed, or canceled, found {status:?}"
+        )));
+    }
+    let code = error_code.map(to_code).transpose()?;
+    match (status, final_text, code, error_message) {
+        ("completed", Some(final_text), None, None) => Ok(Ok(final_text)),
+        ("failed", None, Some(code), Some(message)) if code != ErrorCode::Canceled => {
+            Ok(Err(Error::new(code, message, code.prose())))
+        }
+        ("canceled", None, Some(code @ ErrorCode::Canceled), Some(message)) => {
+            Ok(Err(Error::new(code, message, code.prose())))
+        }
+        (status, final_text, _, error_message) => Err(LogError::Corrupt(format!(
+            "expected result columns to match {status:?}, found final_text={final_text:?} \
+             error_code={error_code:?} error_message={error_message:?}"
         ))),
     }
 }

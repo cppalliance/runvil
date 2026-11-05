@@ -2,9 +2,9 @@
 //! `fanout`, and `jump` over the worker's visible set, the depth cap
 //! across the arm boundary, and an arm's text when it replies nothing.
 
+use runvil_types::error::ErrorCode;
+
 use super::*;
-use crate::RunErrorKind;
-use crate::execute::run_error_kind;
 use crate::execute::tests::context::arm_fanout;
 use crate::test_support::at_line;
 
@@ -199,8 +199,8 @@ fn jump_inside_a_fanout_arm_to_a_non_visible_heading_errors() {
     let trace = Scenario::new(source.build()).run();
     let error = trace.error();
     assert_eq!(
-        run_error_kind(error.code),
-        RunErrorKind::Lua,
+        error.code,
+        ErrorCode::LuaRuntime,
         "the jump raises in Lua: {error}"
     );
     let rendered = error.to_string();
@@ -260,9 +260,9 @@ fn fanout_recursion_across_the_boundary_trips_the_depth_cap() {
     let trace = Scenario::new(source.build()).run();
     let error = trace.error();
     assert_eq!(
-        run_error_kind(error.code),
-        RunErrorKind::Quota,
-        "the cap is a quota: {error}"
+        error.code,
+        ErrorCode::CallDepthExceeded,
+        "the cap keeps its own code: {error}"
     );
     let rendered = error.to_string();
     assert!(
@@ -304,9 +304,9 @@ fn call_inside_an_arm_spawned_near_the_cap_trips_the_depth_cap() {
     let trace = Scenario::new(source.build()).run();
     let error = trace.error();
     assert_eq!(
-        run_error_kind(error.code),
-        RunErrorKind::Quota,
-        "the cap is a quota: {error}"
+        error.code,
+        ErrorCode::CallDepthExceeded,
+        "the cap keeps its own code: {error}"
     );
     let rendered = error.to_string();
     assert!(

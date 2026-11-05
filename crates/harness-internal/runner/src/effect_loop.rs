@@ -46,10 +46,10 @@
 //! performer can never leave the run waiting forever. A Vfs operation that
 //! panics is caught where it runs and answered `Dropped` the same way.
 //!
-//! The run's `Done` ends the run with its outcome at the recorder. A run
-//! that is pending with nothing issued and nothing in flight ends there as
-//! an internal failure: the run reports a stall itself, so reaching this
-//! means the loop lost an effect.
+//! The run's `Done` ends the run at the recorder with its result. A run
+//! that is pending with nothing issued and nothing in flight ends there
+//! with an `Internal` error: the run reports a stall itself, so reaching
+//! this means the loop lost an effect.
 
 use std::future::{Future, poll_fn};
 use std::panic::{AssertUnwindSafe, catch_unwind};
@@ -59,7 +59,7 @@ use std::task::Poll;
 
 use runvil::cancel::CancelHandle;
 use runvil::effect::{Effect, EffectAnswer, EffectId, IssuedEffect};
-use runvil::error::Error;
+use runvil::error::{Error, ErrorCode};
 use runvil::event::Event;
 use runvil::ids::Provenance;
 use runvil::vfs::{Access, VfsOp, perform_vfs_op};
@@ -67,9 +67,7 @@ use runvil::{Run, Step};
 
 use crate::harness::StopSignal;
 use crate::performers::{BoxFuture, Performers};
-use crate::recorder::{
-    Record, RecordKind, RunErrorKind, RunId, RunOutcome, RunRecorder, recorder_error,
-};
+use crate::recorder::{Record, RecordKind, RunId, RunRecorder, recorder_error, refused};
 
 #[path = "effect_loop-flight.rs"]
 mod flight;
@@ -84,26 +82,28 @@ const STALLED: &str = "the effect loop has nothing to await for a pending run";
 /// `recorder` under `run_id`, and drops every effect in flight when
 /// `cancel` fires. `cancel` must be the flag the run's params were built
 /// with, so the run sees the same cancel. Ends the run at the recorder with
-/// its one outcome and returns it.
+/// its result, the final text or the error that ended it, and returns it.
 ///
-/// A run that is pending with nothing to await ends as failed with the
-/// kind `Internal`, once every future the loop still holds is torn down.
+/// A run that is pending with nothing to await ends with an `Internal`
+/// error, once every future the loop still holds is torn down.
 ///
 /// The future is boxed internally: the step machinery is large, and the
 /// caller's own future stays small. It is `Send`, and it needs no runtime
 /// of its own: every performer future is polled inside it.
 ///
 /// # Errors
-/// Returns the recorder's error when it refuses a write. That is the only
-/// error: every effect still in flight is torn down with the future, the
-/// run is abandoned mid-flight, and the recorder is not told it ended.
+/// Returns the error that ended the run, or a `RecorderFailed` refusal
+/// with the run's `Run` fact when the recorder refuses a write, a code no
+/// result of the run has. A refusal ends nothing: every effect still in
+/// flight is torn down with the future, the run is abandoned mid-flight,
+/// and the recorder is not told it ended.
 pub async fn drive_run(
     run: Run,
     performers: Performers,
     recorder: Arc<dyn RunRecorder>,
     run_id: RunId,
     cancel: CancelHandle,
-) -> Result<RunOutcome, Error> {
+) -> Result<String, Error> {
     drive(run, performers, recorder, run_id, cancel, Arc::default()).await
 }
 
@@ -116,7 +116,7 @@ pub(crate) async fn drive(
     run_id: RunId,
     cancel: CancelHandle,
     stop: Arc<StopSignal>,
-) -> Result<RunOutcome, Error> {
+) -> Result<String, Error> {
     let cap = performers.tool.max_in_flight();
     let mut driver = Driver {
         run,
@@ -155,14 +155,14 @@ enum Woken {
 }
 
 impl Driver {
-    async fn drive(&mut self) -> Result<RunOutcome, Error> {
+    async fn drive(&mut self) -> Result<String, Error> {
         loop {
             match self.run.step() {
-                Step::Done { outcome, events } => {
+                Step::Done { result, events } => {
                     self.commit_events(events).await?;
                     // `Done` is returned only once every effect is
                     // answered, so nothing is in flight.
-                    return self.end(outcome).await;
+                    return self.end(result).await;
                 }
                 Step::Pending {
                     effects,
@@ -228,10 +228,11 @@ impl Driver {
                         // hold aborted futures it has not polled.
                         self.flights.clear();
                         return self
-                            .end(RunOutcome::Failed {
-                                kind: RunErrorKind::Internal,
-                                message: STALLED.to_owned(),
-                            })
+                            .end(Err(Error::new(
+                                ErrorCode::Internal,
+                                STALLED,
+                                ErrorCode::Internal.prose(),
+                            )))
                             .await;
                     }
                     self.await_answer().await?;
@@ -240,10 +241,13 @@ impl Driver {
         }
     }
 
-    /// Ends the run at the recorder with `outcome` and returns it.
-    async fn end(&mut self, outcome: RunOutcome) -> Result<RunOutcome, Error> {
-        self.recorder.end_run(self.run_id, outcome.clone()).await?;
-        Ok(outcome)
+    /// Ends the run at the recorder with `result` and returns it.
+    async fn end(&mut self, result: Result<String, Error>) -> Result<String, Error> {
+        self.recorder
+            .end_run(self.run_id, result.clone())
+            .await
+            .map_err(|error| refused(self.run_id, error))?;
+        result
     }
 
     /// Waits for the next answer, then answers every effect already
@@ -404,13 +408,10 @@ impl Driver {
     /// Appends one step's events to the recorder.
     async fn commit_events(&mut self, events: Vec<Event>) -> Result<(), Error> {
         for event in events {
-            let record = record(
-                event.provenance(),
-                RecordKind::Event,
-                None,
-                serde_json::to_value(&event).map_err(recorder_error)?,
-            );
-            self.append(record).await?;
+            let payload = serde_json::to_value(&event)
+                .map_err(|error| refused(self.run_id, recorder_error(error)))?;
+            self.append(record(event.provenance(), RecordKind::Event, None, payload))
+                .await?;
         }
         Ok(())
     }
@@ -443,7 +444,10 @@ impl Driver {
     }
 
     async fn append(&mut self, record: Record) -> Result<(), Error> {
-        self.recorder.append(self.run_id, record).await
+        self.recorder
+            .append(self.run_id, record)
+            .await
+            .map_err(|error| refused(self.run_id, error))
     }
 }
 

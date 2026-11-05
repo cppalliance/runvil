@@ -339,13 +339,10 @@ fn a_fanout_arm_leaking_a_task_fails_on_the_arms_own_spawn_line() {
         at_line(19),
         "the Worker's `tasks.spawn` line, not Main's fanout line: {error:?}"
     );
+    let message = error.located_message();
     assert!(
-        matches!(
-            trace.outcome(),
-            RunOutcome::Failed { message, .. } if message.ends_with(" (at prompt:19)")
-        ),
-        "the run's message ends with where it failed: {:?}",
-        trace.outcome()
+        message.ends_with(" (at prompt:19)"),
+        "the located message ends with where it failed: {message}"
     );
 }
 

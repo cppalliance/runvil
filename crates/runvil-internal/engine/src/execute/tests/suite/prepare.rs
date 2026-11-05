@@ -8,9 +8,7 @@ use std::collections::BTreeMap;
 use std::num::NonZeroU32;
 use std::sync::{Arc, Mutex};
 
-use crate::RunErrorKind;
 use crate::execute::context::ChainState;
-use crate::execute::run_error_kind;
 use crate::execute::tests::context::test_params;
 use crate::execute::{Effect, EffectAnswer, RunParams};
 use crate::model::ModelBinding;
@@ -19,6 +17,7 @@ use crate::test_support::scenario::Scenario;
 use crate::test_support::scripted_chat::{ScriptedChat, text};
 use runvil_model_client::client::{Completion, CompletionResult};
 use runvil_prompt::test_support::{PromptSource, parse_ok};
+use runvil_types::error::ErrorCode;
 use runvil_types::event::Event;
 use runvil_types::models::{ModelId, ModelInfo, ModelRole, ThinkingMode};
 use runvil_vfs::Origin;
@@ -112,11 +111,7 @@ fn state_of(prompt: &Prompt, params: RunParams) -> ChainState {
 fn refusal(scenario: Scenario) -> String {
     let trace = scenario.run();
     let error = trace.error();
-    assert_eq!(
-        run_error_kind(error.code),
-        RunErrorKind::RequirementsUnmet,
-        "{error}"
-    );
+    assert_eq!(error.code, ErrorCode::RequirementsUnmet, "{error}");
     assert!(
         trace.run_events().is_empty(),
         "a refused run reports no run events: {:?}",
@@ -287,11 +282,7 @@ fn an_empty_map_leaves_the_model_set_empty_and_a_model_call_raises_model_require
     let asking = declaring("", "return models.infer('ping')");
     let trace = Scenario::new(asking).run();
     let error = trace.error();
-    assert_eq!(
-        run_error_kind(error.code),
-        RunErrorKind::RequirementsUnmet,
-        "{error}"
-    );
+    assert_eq!(error.code, ErrorCode::ModelRequired, "{error}");
     assert!(
         error.to_string().contains("model binding required"),
         "{error}"

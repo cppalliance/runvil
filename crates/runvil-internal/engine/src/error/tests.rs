@@ -1,6 +1,6 @@
 //! Tests for the Engine's failure constructors: each one's code, message,
-//! prose, location, and facts, the kind and message each ends a run with,
-//! and the Lua error table each renders as.
+//! prose, location, and facts, the code and located message each ends a
+//! run with, and the Lua error table each renders as.
 
 use std::num::NonZeroU32;
 
@@ -10,18 +10,13 @@ use runvil_types::ids::TaskId;
 use serde_json::Value;
 
 use super::*;
-use crate::RunErrorKind;
-use crate::execute::RunOutcome;
 
 #[path = "tests-chain.rs"]
 mod chain;
 
-/// The kind and message `error` ends a run with.
-fn failed(error: &Error) -> (RunErrorKind, String) {
-    match crate::execute::outcome(error) {
-        RunOutcome::Failed { kind, message } => (kind, message),
-        other => panic!("a failure ends a run as failed, got {other:?}"),
-    }
+/// The code and located message `error` ends a run with.
+fn failed(error: &Error) -> (ErrorCode, String) {
+    (error.code, error.located_message())
 }
 
 /// The task id `path` names.
@@ -55,7 +50,7 @@ fn an_internal_fault_is_located_at_its_rust_call_site_and_ends_its_message_there
     assert_eq!(
         failed(&error),
         (
-            RunErrorKind::Internal,
+            ErrorCode::Internal,
             format!(
                 "internal invariant violated: a test invariant (at {}:{expected_line})",
                 file!()
@@ -74,7 +69,10 @@ fn a_lua_failure_keeps_its_text_and_reads_as_lua() {
     assert_eq!((error.at.clone(), error.facts.len()), (None, 0));
     assert_eq!(
         failed(&error),
-        (RunErrorKind::Lua, "messages must not be empty".to_owned())
+        (
+            ErrorCode::LuaRuntime,
+            "messages must not be empty".to_owned()
+        )
     );
     assert_eq!(error_kind(&error), ErrorKind::Lua);
 }
@@ -87,10 +85,8 @@ fn a_cancel_has_no_location_and_reads_as_canceled() {
         error.message,
         "canceled: the run was canceled or this call was stopped"
     );
-    assert_eq!(
-        failed(&error),
-        (RunErrorKind::Internal, error.message.clone())
-    );
+    assert!(error.is_canceled());
+    assert_eq!(failed(&error), (ErrorCode::Canceled, error.message.clone()));
     assert_eq!(error_kind(&error), ErrorKind::Canceled);
     assert_eq!(error_fields(&error), Vec::new());
 }
@@ -104,7 +100,10 @@ fn an_unsupported_version_names_the_major_only_in_its_message() {
         "unsupported runvil version: 3 (this build supports major 0)"
     );
     assert!(error.facts.is_empty());
-    assert_eq!(failed(&error), (RunErrorKind::Parse, error.message.clone()));
+    assert_eq!(
+        failed(&error),
+        (ErrorCode::UnsupportedVersion, error.message.clone())
+    );
     assert_eq!(error_kind(&error), ErrorKind::Internal);
 }
 
@@ -120,7 +119,7 @@ fn a_refusal_notice_is_the_prose_and_the_whole_message_without_a_cause() {
     );
     assert_eq!(
         failed(&error),
-        (RunErrorKind::RequirementsUnmet, notice.to_owned())
+        (ErrorCode::RequirementsUnmet, notice.to_owned())
     );
     assert_eq!(error_kind(&error), ErrorKind::Internal);
 }
@@ -137,7 +136,7 @@ fn a_missing_model_names_its_section() {
     );
     assert_eq!(
         failed(&error),
-        (RunErrorKind::RequirementsUnmet, error.message.clone())
+        (ErrorCode::ModelRequired, error.message.clone())
     );
     assert_eq!(error_kind(&error), ErrorKind::ModelRequired);
     assert_eq!(error_fields(&error), Vec::new());
@@ -162,7 +161,7 @@ fn context_exhaustion_holds_its_reason_and_renders_it() {
         );
         assert_eq!(
             failed(&error),
-            (RunErrorKind::ContextExhausted, message.to_owned())
+            (ErrorCode::ContextExhausted, message.to_owned())
         );
         assert_eq!(error_kind(&error), ErrorKind::ContextExhausted);
         assert_eq!(error_fields(&error), vec![field("reason", reason)]);
@@ -170,7 +169,7 @@ fn context_exhaustion_holds_its_reason_and_renders_it() {
 }
 
 #[test]
-fn a_spent_quota_and_the_call_depth_cap_are_quotas_that_lua_reads_as_lua() {
+fn a_spent_quota_and_the_call_depth_cap_keep_their_codes_and_lua_reads_both_as_lua() {
     for (resource, tag, text) in [
         (
             QuotaResource::LogEvent,
@@ -187,7 +186,7 @@ fn a_spent_quota_and_the_call_depth_cap_are_quotas_that_lua_reads_as_lua() {
         assert_eq!(error.code, ErrorCode::LuaQuota);
         assert_eq!(error.message, text);
         assert_eq!(error.facts.get(&FactKey::Reason), Some(&Value::from(tag)));
-        assert_eq!(failed(&error), (RunErrorKind::Quota, text.to_owned()));
+        assert_eq!(failed(&error), (ErrorCode::LuaQuota, text.to_owned()));
         assert_eq!(
             (error_kind(&error), error_fields(&error)),
             (ErrorKind::Lua, Vec::new())
@@ -199,7 +198,10 @@ fn a_spent_quota_and_the_call_depth_cap_are_quotas_that_lua_reads_as_lua() {
     assert_eq!(error.message, text);
     assert_eq!(error.facts.get(&FactKey::Reason), None);
     assert_eq!(error.facts.get(&FactKey::Limit), Some(&Value::from(8)));
-    assert_eq!(failed(&error), (RunErrorKind::Quota, text.to_owned()));
+    assert_eq!(
+        failed(&error),
+        (ErrorCode::CallDepthExceeded, text.to_owned())
+    );
     assert_eq!(
         (error_kind(&error), error_fields(&error)),
         (ErrorKind::Lua, Vec::new())
@@ -219,7 +221,10 @@ fn leaked_tasks_are_named_in_spawn_order_and_joined_in_the_table() {
         error.facts.get(&FactKey::Tasks),
         Some(&Value::from(vec!["1.2", "1.10"]))
     );
-    assert_eq!(failed(&error), (RunErrorKind::Lua, error.message.clone()));
+    assert_eq!(
+        failed(&error),
+        (ErrorCode::TasksLive, error.message.clone())
+    );
     assert_eq!(error_kind(&error), ErrorKind::TasksLive);
     assert_eq!(error_fields(&error), vec![field("tasks", "1.2, 1.10")]);
 }
@@ -251,7 +256,7 @@ fn a_task_failure_names_its_task_in_its_fact_and_its_table() {
         assert_eq!(error.message, message);
         assert_eq!(error.prose, code.prose());
         assert_eq!(error.facts.get(&FactKey::Task), Some(&Value::from("1.3")));
-        assert_eq!(failed(&error), (RunErrorKind::Lua, message.to_owned()));
+        assert_eq!(failed(&error), (code, message.to_owned()));
         assert_eq!(error_kind(&error), kind);
         assert_eq!(error_fields(&error), vec![field("task", "1.3")]);
     }
@@ -274,7 +279,7 @@ fn a_store_failure_takes_the_stores_code_and_facts_under_its_own_message() {
     assert_eq!((error.code, &error.facts), (expected.code, &expected.facts));
     assert_eq!(error.message, crate::lua::store_error_message(&op, &cause));
     assert_eq!(error.prose, ErrorCode::Anchor.prose());
-    assert_eq!(failed(&error), (RunErrorKind::Vfs, error.message.clone()));
+    assert_eq!(failed(&error), (ErrorCode::Anchor, error.message.clone()));
     assert_eq!(error_kind(&error), ErrorKind::Store);
     assert_eq!(
         error_fields(&error),
@@ -283,14 +288,17 @@ fn a_store_failure_takes_the_stores_code_and_facts_under_its_own_message() {
 }
 
 #[test]
-fn a_determinism_violation_is_a_store_kind_that_lua_reads_as_internal() {
+fn a_determinism_violation_is_a_store_code_that_lua_reads_as_internal() {
     let error = determinism("a.md: claimed by 1 and 2");
     assert_eq!(error.code, ErrorCode::Determinism);
     assert_eq!(
         error.message,
         "store determinism violation: a.md: claimed by 1 and 2"
     );
-    assert_eq!(failed(&error), (RunErrorKind::Vfs, error.message.clone()));
+    assert_eq!(
+        failed(&error),
+        (ErrorCode::Determinism, error.message.clone())
+    );
     assert_eq!(
         (error_kind(&error), error_fields(&error)),
         (ErrorKind::Internal, Vec::new())
@@ -325,7 +333,7 @@ fn a_refused_tool_call_names_the_tool_and_its_text_is_its_prose() {
         assert_eq!(error.code, code);
         assert_eq!(error.prose, error.message, "{code:?}");
         assert_eq!(error.facts.get(&FactKey::Name), Some(&Value::from(name)));
-        assert_eq!(failed(error), (RunErrorKind::Tool, error.message.clone()));
+        assert_eq!(failed(error), (code, error.message.clone()));
         assert_eq!(error_kind(error), kind);
         assert_eq!(error_fields(error), vec![field("name", name)]);
     }
@@ -347,16 +355,19 @@ fn a_refused_tool_call_names_the_tool_and_its_text_is_its_prose() {
 }
 
 #[test]
-fn an_unconverged_tool_loop_is_a_tool_kind() {
+fn an_unconverged_tool_loop_ends_a_run_with_its_own_code() {
     let error = tool_loop_exhausted();
     assert_eq!(error.code, ErrorCode::ToolLoopExhausted);
     assert_eq!(error.message, "tool-call loop did not converge");
-    assert_eq!(failed(&error), (RunErrorKind::Tool, error.message.clone()));
+    assert_eq!(
+        failed(&error),
+        (ErrorCode::ToolLoopExhausted, error.message.clone())
+    );
     assert_eq!(error_kind(&error), ErrorKind::ToolLoopExhausted);
 }
 
 #[test]
-fn broken_tool_sets_end_a_run_as_a_binding_failure_with_an_internal_table() {
+fn broken_tool_sets_end_a_run_with_their_own_code_and_an_internal_table() {
     let error = tool_sets("the sets broke a rule".to_owned());
     assert_eq!(error.code, ErrorCode::ToolSetsInvalid);
     assert_eq!(error.message, "the sets broke a rule");
@@ -364,7 +375,7 @@ fn broken_tool_sets_end_a_run_as_a_binding_failure_with_an_internal_table() {
     assert!(error.facts.is_empty(), "{:?}", error.facts);
     assert_eq!(
         failed(&error),
-        (RunErrorKind::Binding, error.message.clone())
+        (ErrorCode::ToolSetsInvalid, error.message.clone())
     );
     assert_eq!(
         (error_kind(&error), error_fields(&error)),

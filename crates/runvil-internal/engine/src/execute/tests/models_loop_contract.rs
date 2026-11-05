@@ -99,7 +99,7 @@ fn a_light_userdata_compactor_is_named_userdata_as_lua_names_it() {
 fn the_arity_error_still_raises_when_the_author_has_rebound_error() {
     // A shim raise that read the global `error` would call the author's
     // no-op instead of raising. Had that sent a round, the run would wait
-    // on nothing but the held round, and the cancel ends it `Cancelled`;
+    // on nothing but the held round, and the cancel ends it canceled;
     // had it spun in the block, nextest's timeout ends the test.
     let gateway = ScriptedChat::new(vec![text("unreachable")]);
     let source = one_section(
@@ -116,9 +116,9 @@ fn the_arity_error_still_raises_when_the_author_has_rebound_error() {
     driving.cancel();
     let trace = driving.finish();
     assert!(
-        !matches!(trace.outcome(), RunOutcome::Cancelled),
+        !matches!(trace.result(), Err(error) if error.is_canceled()),
         "the raise ends the call before the cancel: {:?}",
-        trace.outcome()
+        trace.result()
     );
     assert_eq!(
         trace.text(),

@@ -9,9 +9,8 @@
 
 use std::sync::Arc;
 
-use harness::record::{
-    Record, RecordKind, RecorderFuture, RunId, RunMeta, RunOutcome, RunRecorder,
-};
+use harness::record::{Record, RecordKind, RecorderFuture, RunId, RunMeta, RunRecorder};
+use runvil::error::Error;
 use runvil::event::Event;
 
 use crate::conversation::Conversation;
@@ -62,8 +61,8 @@ impl RunRecorder for ConversationRecorder {
         })
     }
 
-    fn end_run(&self, run: RunId, outcome: RunOutcome) -> RecorderFuture<'_, ()> {
-        self.inner.end_run(run, outcome)
+    fn end_run(&self, run: RunId, result: Result<String, Error>) -> RecorderFuture<'_, ()> {
+        self.inner.end_run(run, result)
     }
 }
 

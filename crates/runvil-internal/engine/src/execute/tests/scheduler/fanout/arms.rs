@@ -22,9 +22,9 @@ fn pre_canceled_fanout_returns_canceled() {
     driving.cancel();
     let trace = driving.finish();
     assert!(
-        matches!(trace.outcome(), RunOutcome::Cancelled),
+        trace.error().is_canceled(),
         "a pre-canceled fanout must cancel the run, got {:?}",
-        trace.outcome()
+        trace.result()
     );
 }
 

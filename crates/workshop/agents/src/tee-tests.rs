@@ -5,9 +5,10 @@
 use std::sync::{Arc, Mutex};
 
 use harness::record::{
-    MemoryRecorder, Record, RecordKind, RecorderFuture, RunId, RunMeta, RunOutcome, RunRecorder,
-    RunSeed, recorder_error,
+    MemoryRecorder, Record, RecordKind, RecorderFuture, RunId, RunMeta, RunRecorder, RunSeed,
+    recorder_error,
 };
+use runvil::error::Error;
 use runvil::event::Event;
 use runvil::ids::Provenance;
 
@@ -73,8 +74,8 @@ impl RunRecorder for Watching {
         self.inner.append(run, record)
     }
 
-    fn end_run(&self, run: RunId, outcome: RunOutcome) -> RecorderFuture<'_, ()> {
-        self.inner.end_run(run, outcome)
+    fn end_run(&self, run: RunId, result: Result<String, Error>) -> RecorderFuture<'_, ()> {
+        self.inner.end_run(run, result)
     }
 }
 

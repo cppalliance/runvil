@@ -7,7 +7,6 @@ use std::sync::Arc;
 use std::task::{Context, Poll, Wake, Waker};
 use std::thread::{self, Thread};
 
-use runvil::RunOutcome;
 use runvil::cancel::CancelHandle;
 use runvil::effect::Effect;
 
@@ -50,11 +49,11 @@ fn one_parent_cancel_ends_every_run_holding_one_of_its_children() -> TestResult 
 
     parent.cancel();
 
-    let mut outcomes = Vec::new();
+    let mut canceled = Vec::new();
     for driver in drivers {
-        outcomes.push(driver.finish()?.outcome);
+        canceled.push(driver.finish()?.error()?.is_canceled());
     }
-    assert_eq!(outcomes, [RunOutcome::Cancelled, RunOutcome::Cancelled]);
+    assert_eq!(canceled, [true, true], "both runs end with the cancel");
     Ok(())
 }
 
@@ -75,9 +74,8 @@ fn a_canceled_future_wakes_when_another_thread_cancels_the_run() -> TestResult {
         .join()
         .map_err(|_| "the canceling thread panicked")?;
     assert!(handle.is_canceled());
-    assert_eq!(
-        driver.finish()?.outcome,
-        RunOutcome::Cancelled,
+    assert!(
+        driver.finish()?.error()?.is_canceled(),
         "the run reads the flag the caller handed its params"
     );
     Ok(())

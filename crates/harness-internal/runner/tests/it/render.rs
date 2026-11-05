@@ -9,7 +9,7 @@
 use std::fmt::Write as _;
 use std::sync::{Arc, Mutex};
 
-use harness_runner::recorder::{MemoryRecorder, Record, RecordKind, RunOutcome};
+use harness_runner::recorder::{MemoryRecorder, Record, RecordKind};
 use harness_runner::{Harness, HostContext};
 use runvil::error::{Error, ErrorCode};
 use runvil::model::{Completion, CompletionResult, ToolCall};
@@ -338,11 +338,8 @@ async fn run(
     let report = render_harness(&recorder, broker, seen, config)
         .run(request(source))
         .await
-        .expect("the run reaches an outcome");
-    let final_text = match report.outcome {
-        RunOutcome::Completed { final_text } => final_text,
-        other => panic!("the run completes: {other:?}"),
-    };
+        .expect("the run is reported");
+    let final_text = report.result.expect("the run completes");
     (final_text, recorder.records(report.run_id))
 }
 

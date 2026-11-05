@@ -294,7 +294,7 @@ impl Scenario {
     /// Leaves every effect `held` matches unanswered while the run keeps
     /// stepping, so a cancel can land between steps. Each held effect the
     /// run withdraws is answered `Dropped`, so the step that decides the
-    /// run's outcome drops them all.
+    /// run's result drops them all.
     pub(crate) fn hold(mut self, held: impl Fn(&Effect) -> bool + 'static) -> Scenario {
         self.hold = Some(Box::new(held));
         self
@@ -350,7 +350,7 @@ impl Scenario {
         });
         Driving {
             run,
-            outcome: None,
+            result: None,
             answers,
             parsed: events.len(),
             events,

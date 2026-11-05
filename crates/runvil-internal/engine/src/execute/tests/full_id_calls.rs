@@ -80,10 +80,10 @@ fn a_script_calls_effect_record_and_result_name_the_tool_by_its_id() {
         id,
         EffectAnswer::ToolCall(Ok(ToolOutput::trusted("echoed: hi"))),
     );
-    let Step::Done { outcome, events } = run.step() else {
+    let Step::Done { result, events } = run.step() else {
         panic!("the answered call ends the run");
     };
-    assert_eq!(text_of(outcome), "echoed: hi");
+    assert_eq!(text_of(result), "echoed: hi");
     let aliases: Vec<&str> = events
         .iter()
         .filter_map(|event| match event {

@@ -136,9 +136,9 @@ fn an_erroring_section_reports_started_but_not_finished() {
     let trace = scheduler_scenario(md).run();
 
     assert!(
-        matches!(trace.outcome(), RunOutcome::Failed { .. }),
+        !trace.error().is_canceled(),
         "the erroring section fails the run, got {:?}",
-        trace.outcome()
+        trace.result()
     );
     let observed = sequence(&trace);
     assert!(

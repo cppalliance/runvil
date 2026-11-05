@@ -2,9 +2,9 @@
 //! record stream is events, then effects, then answers per step; a cancel
 //! drops every outstanding effect with one `Dropped` answer each; a
 //! performer that panics drops its effect rather than stranding the run;
-//! a run left with nothing to await ends recorded as an internal failure;
-//! and a refused recorder write ends the drive with the recorder's error
-//! and tears down the performers still out. The Vfs effect the loop
+//! a run left with nothing to await ends recorded with an `Internal`
+//! error; and a refused recorder write ends the drive with the recorder's
+//! error and tears down the performers still out. The Vfs effect the loop
 //! answers inline has its own module, `vfs`, the `Chat` effect the
 //! inference broker answers has `broker`, and the tool-call cap has `cap`.
 
@@ -14,17 +14,16 @@ use std::time::Duration;
 
 use harness_runner::display_chain;
 use harness_runner::effect_loop::drive_run;
-use harness_runner::recorder::{
-    MemoryRecorder, Record, RecordKind, RunErrorKind, RunId, RunMeta, RunOutcome, RunRecorder,
-};
+use harness_runner::recorder::{MemoryRecorder, Record, RecordKind, RunId, RunMeta, RunRecorder};
 use runvil::Step;
 use runvil::cancel::CancelHandle;
+use runvil::error::{Error, ErrorCode};
 use runvil::vfs::{MemoryBackend, Origin, VfsRef};
 use serde_json::json;
 
 use crate::support::{
     ClosingTool, PanickingTool, PendingTimer, PendingTool, TEST_SEED, TIMED_MAIN, TextTool, WAITS,
-    run, run_over, run_with_child, run_with_child_and_cancel, unused,
+    assert_canceled, run, run_over, run_with_child, run_with_child_and_cancel, unused,
 };
 
 #[path = "effect_loop-broker.rs"]
@@ -104,7 +103,7 @@ async fn records_are_events_then_effects_then_answers_per_step() {
     performers.tool = Arc::new(TextTool("hi"));
     let vfs = VfsRef::builder().store("/", MemoryBackend::new()).build();
 
-    let outcome = drive_run(
+    let result = drive_run(
         run_over(
             &format!("store.write('notes.md', 'kept')\n{WAITS}"),
             vfs.clone(),
@@ -114,14 +113,8 @@ async fn records_are_events_then_effects_then_answers_per_step() {
         run_id,
         CancelHandle::new(),
     )
-    .await
-    .unwrap();
-    assert_eq!(
-        outcome,
-        RunOutcome::Completed {
-            final_text: "hi".to_owned()
-        }
-    );
+    .await;
+    assert_eq!(result, Ok("hi".to_owned()));
     let store = vfs.acquire_store(Origin::new("effect loop test")).unwrap();
     assert_eq!(
         store.read("notes.md").unwrap(),
@@ -180,8 +173,8 @@ async fn records_are_events_then_effects_then_answers_per_step() {
         json!({ "ToolCall": { "Ok": { "text": "hi", "trust": "trusted" } } })
     );
 
-    // The run ended once, with the loop's outcome.
-    assert_eq!(recorder.outcome(run_id), Some(outcome));
+    // The run ended once, with the loop's result.
+    assert_eq!(recorder.result(run_id), Some(result));
 }
 
 /// The answer records of `records`, in loop order.
@@ -219,16 +212,15 @@ async fn a_cancel_writes_one_dropped_answer_per_outstanding_effect() {
 
     // Two effects are out when the cancel lands: the main section's
     // timeout timer and its child's tool call.
-    let outcome = drive_run(
+    let result = drive_run(
         run_with_child_and_cancel(TIMED_MAIN, WAITS, &cancel),
         performers,
         recorder.clone(),
         run_id,
         cancel,
     )
-    .await
-    .unwrap();
-    assert_eq!(outcome, RunOutcome::Cancelled);
+    .await;
+    assert_canceled(&result);
 
     let records = recorder.records(run_id);
     assert_one_answer_per_effect(&records);
@@ -266,7 +258,7 @@ async fn a_cancel_writes_one_dropped_answer_per_outstanding_effect() {
         timer_dropped.load(Ordering::SeqCst),
         "the parked timer's performer was aborted and joined before the run ended"
     );
-    assert_eq!(recorder.outcome(run_id), Some(RunOutcome::Cancelled));
+    assert_eq!(recorder.result(run_id), Some(result));
 }
 
 #[tokio::test]
@@ -277,7 +269,7 @@ async fn a_panicking_performer_drops_its_effect_instead_of_stranding_the_run() {
 
     // No cancel fires: only the lost performer's own drop can end the
     // wait, so a loop that never hears from it hangs here.
-    let outcome = tokio::time::timeout(
+    let result = tokio::time::timeout(
         Duration::from_secs(5),
         drive_run(
             run(WAITS),
@@ -288,12 +280,10 @@ async fn a_panicking_performer_drops_its_effect_instead_of_stranding_the_run() {
         ),
     )
     .await
-    .expect("a lost performer does not strand the loop")
-    .unwrap();
-    assert_eq!(
-        outcome,
-        RunOutcome::Cancelled,
-        "the chain resumed with the canceled error of a dropped effect"
+    .expect("a lost performer does not strand the loop");
+    assert!(
+        result.as_ref().is_err_and(Error::is_canceled),
+        "the chain resumed with the canceled error of a dropped effect: {result:?}"
     );
 
     let records = recorder.records(run_id);
@@ -301,7 +291,7 @@ async fn a_panicking_performer_drops_its_effect_instead_of_stranding_the_run() {
     let answers = answers(&records);
     assert_eq!(answers.len(), 1, "the one panicked tool call");
     assert_eq!(answers[0].payload, json!("Dropped"));
-    assert_eq!(recorder.outcome(run_id), Some(RunOutcome::Cancelled));
+    assert_eq!(recorder.result(run_id), Some(result));
 }
 
 #[tokio::test(start_paused = true)]
@@ -329,6 +319,11 @@ async fn a_refused_recorder_write_returns_the_recorder_error_and_aborts_the_park
     )
     .await
     .expect_err("a refused write ends the drive");
+    assert_eq!(
+        error.code,
+        ErrorCode::RecorderFailed,
+        "a refusal: {error:?}"
+    );
     assert!(
         display_chain(&error).contains(&format!("run {run_id} has ended")),
         "the chain names the recorder's reason: {}",
@@ -359,7 +354,7 @@ async fn a_refused_recorder_write_returns_the_recorder_error_and_aborts_the_park
 async fn an_ended_run_refuses_the_first_write_before_any_performer_starts() {
     let (recorder, run_id) = begun_log().await;
     recorder
-        .end_run(run_id, RunOutcome::Cancelled)
+        .end_run(run_id, Err(Error::canceled()))
         .await
         .unwrap();
     let mut performers = unused();
@@ -376,6 +371,11 @@ async fn an_ended_run_refuses_the_first_write_before_any_performer_starts() {
     )
     .await
     .expect_err("an ended run refuses its first write");
+    assert_eq!(
+        error.code,
+        ErrorCode::RecorderFailed,
+        "a refusal: {error:?}"
+    );
     assert!(
         display_chain(&error).contains(&format!("run {run_id} has ended")),
         "the chain names the recorder's reason: {}",
@@ -385,7 +385,7 @@ async fn an_ended_run_refuses_the_first_write_before_any_performer_starts() {
 }
 
 #[tokio::test]
-async fn a_run_left_with_nothing_to_await_ends_recorded_as_an_internal_failure() {
+async fn a_run_left_with_nothing_to_await_ends_recorded_with_an_internal_error() {
     let (recorder, run_id) = begun_log().await;
     // The test steps the run once and keeps its tool call from the loop:
     // the run waits on an effect the loop never saw, the fault a lost
@@ -396,26 +396,24 @@ async fn a_run_left_with_nothing_to_await_ends_recorded_as_an_internal_failure()
     };
     assert_eq!(effects.len(), 1, "the one tool call the loop never sees");
 
-    let outcome = drive_run(
+    let result = drive_run(
         lost,
         unused(),
         recorder.clone(),
         run_id,
         CancelHandle::new(),
     )
-    .await
-    .expect("a stall is the run's outcome");
+    .await;
+    let error = result.as_ref().expect_err("a stall ends the run");
+    assert_eq!(error.code, ErrorCode::Internal);
     assert_eq!(
-        outcome,
-        RunOutcome::Failed {
-            kind: RunErrorKind::Internal,
-            message: "the effect loop has nothing to await for a pending run".to_owned(),
-        }
+        error.located_message(),
+        "the effect loop has nothing to await for a pending run"
     );
     assert_eq!(
-        recorder.outcome(run_id),
-        Some(outcome),
-        "the recorder ends the stalled run with its outcome"
+        recorder.result(run_id),
+        Some(result.clone()),
+        "the recorder ends the stalled run with its result"
     );
     assert!(
         recorder.records(run_id).is_empty(),

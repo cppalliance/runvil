@@ -10,11 +10,12 @@
 //! goes on, the Host steers it through the [`RunControl`] it took from
 //! `Harness::control` before the run started.
 //!
-//! Every run gets a record and ends with one outcome: completed, failed
-//! with a kind and a message, or canceled. The record begins before
-//! anything else, so a run canceled before it starts, or one whose model
-//! cannot be resolved, is recorded too. The only error [`Harness::run`]
-//! returns is a `RecorderFailed` failure: a recorder that refuses a write.
+//! Every run gets a record and ends with its result: the final text, or
+//! the error that ended it, where a cancel is the error whose code is
+//! `canceled`. The record begins before anything else, so a run canceled
+//! before it starts, or one whose model cannot be resolved, is recorded
+//! too. The only error [`Harness::run`] returns is a `RecorderFailed`
+//! refusal: a recorder that refuses a write.
 //!
 //! The crate's `run-prompt` example runs one prompt from start to end.
 
@@ -54,18 +55,16 @@ pub mod plugin {
 }
 
 pub mod record {
-    //! The recorder that receives every effect, answer, and event of a run,
-    //! an in-memory recorder, the seed each run's meta records, and the
-    //! Engine's outcome each run ends with, with the kind of a failed one.
+    //! The recorder that receives every effect, answer, and event of a run
+    //! and the result each run ends with, an in-memory recorder, and the
+    //! seed each run's meta records.
 
     pub use harness_runner::recorder::MemoryRecorder;
     pub use harness_runner::recorder::Record;
     pub use harness_runner::recorder::RecordKind;
     pub use harness_runner::recorder::RecorderFuture;
-    pub use harness_runner::recorder::RunErrorKind;
     pub use harness_runner::recorder::RunId;
     pub use harness_runner::recorder::RunMeta;
-    pub use harness_runner::recorder::RunOutcome;
     pub use harness_runner::recorder::RunRecorder;
     pub use harness_runner::recorder::recorder_error;
     pub use runvil::RunSeed;

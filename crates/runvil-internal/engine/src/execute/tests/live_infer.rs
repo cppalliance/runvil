@@ -59,8 +59,8 @@ fn unread_h1_prose_stays_inert_and_explicit_infer_requires_a_model() {
     let trace = Scenario::new(reading.build()).run();
     let error = trace.error();
     assert_eq!(
-        run_error_kind(error.code),
-        RunErrorKind::RequirementsUnmet,
+        error.code,
+        ErrorCode::ModelRequired,
         "expected ModelRequired, got {error}"
     );
     assert!(
@@ -203,9 +203,9 @@ fn canceled_nested_infer_does_not_report_model_turn_failed() {
     cancel.cancel();
     let trace = driving.finish();
     assert!(
-        matches!(trace.outcome(), RunOutcome::Cancelled),
+        trace.error().is_canceled(),
         "canceling an in-flight infer must cancel the run: {:?}",
-        trace.outcome()
+        trace.result()
     );
     assert!(
         matches!(

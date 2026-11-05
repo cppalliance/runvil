@@ -11,7 +11,7 @@ use std::task::{Poll, Waker};
 
 use async_trait::async_trait;
 use harness::pack::{HostContext, HostServices, PackRegistry};
-use harness::record::{MemoryRecorder, RecordKind, RunOutcome};
+use harness::record::{MemoryRecorder, RecordKind};
 use harness::vfs::VfsRef;
 use harness::{BoxFuture, Harness, HostSnapshot, InferenceBroker, RunRequest};
 use runvil::effect::Round;
@@ -213,13 +213,8 @@ async fn input_ask_returns_what_the_hosts_input_broker_answers_byte_for_byte() {
     let report = harness
         .run(request("desk-asks-1", ASKS))
         .await
-        .expect("the run reaches an outcome");
-    assert_eq!(
-        report.outcome,
-        RunOutcome::Completed {
-            final_text: "Hello, desk.".to_owned()
-        }
-    );
+        .expect("the run is reported");
+    assert_eq!(report.result, Ok("Hello, desk.".to_owned()));
 }
 
 #[tokio::test]
@@ -231,10 +226,8 @@ async fn stopping_an_in_flight_round_drops_the_call_and_the_prompts_pcall_catche
         control.stop_round();
     });
     assert_eq!(
-        report.expect("the run reaches an outcome").outcome,
-        RunOutcome::Completed {
-            final_text: "canceled".to_owned()
-        }
+        report.expect("the run is reported").result,
+        Ok("canceled".to_owned())
     );
 }
 
@@ -252,11 +245,18 @@ async fn a_run_canceled_before_it_begins_is_recorded_as_canceled_before_its_pars
     let report = harness
         .run(request("desk-patient", PATIENT))
         .await
-        .expect("the run reaches an outcome");
-    assert_eq!(report.outcome, RunOutcome::Cancelled);
+        .expect("the run is reported");
+    assert!(
+        report
+            .result
+            .as_ref()
+            .is_err_and(runvil::error::Error::is_canceled),
+        "the run ends canceled: {:?}",
+        report.result
+    );
     assert_eq!(
-        recorder.outcome(report.run_id),
-        Some(RunOutcome::Cancelled),
+        recorder.result(report.run_id),
+        Some(report.result),
         "the recorder holds the canceled run"
     );
     assert!(
@@ -283,7 +283,7 @@ async fn a_hosts_own_broker_streams_a_section_round_under_the_round_id_the_run_r
     let report = harness
         .run(request("desk-chats-1", CHATS))
         .await
-        .expect("the run reaches an outcome");
+        .expect("the run is reported");
 
     let records = recorder.records(report.run_id);
     let reply = records

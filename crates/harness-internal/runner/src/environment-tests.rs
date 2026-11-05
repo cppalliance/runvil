@@ -93,7 +93,6 @@ async fn a_model_list_the_broker_cannot_fetch_keeps_the_brokers_failure() {
         format!("the model catalog could not be fetched: {phrase}")
     );
     assert_eq!(error.prose, phrase, "the broker's prose stays");
-    assert_eq!(model_kind(&error), RunErrorKind::Completion);
 }
 
 #[tokio::test]
@@ -116,5 +115,4 @@ async fn a_selection_the_list_lacks_is_an_unmet_requirement_naming_the_selection
         error.facts.get(&FactKey::Reason),
         Some(&json!("model_absent"))
     );
-    assert_eq!(model_kind(&error), RunErrorKind::RequirementsUnmet);
 }

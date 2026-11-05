@@ -190,7 +190,7 @@ fn request(source: &str) -> RunRequest {
 
 /// A recorder over `inner` that raises the run's cancel as a run is
 /// ended, before the end reaches `inner`: a cancel that lands after the
-/// outcome is chosen and before it is recorded.
+/// result is chosen and before it is recorded.
 struct CancelsAtEnd {
     inner: Arc<MemoryRecorder>,
     control: OnceLock<RunControl>,
@@ -205,11 +205,11 @@ impl RunRecorder for CancelsAtEnd {
         self.inner.append(run, record)
     }
 
-    fn end_run(&self, run: RunId, outcome: RunOutcome) -> RecorderFuture<'_, ()> {
+    fn end_run(&self, run: RunId, result: Result<String, Error>) -> RecorderFuture<'_, ()> {
         if let Some(control) = self.control.get() {
             control.cancel();
         }
-        self.inner.end_run(run, outcome)
+        self.inner.end_run(run, result)
     }
 }
 
@@ -229,16 +229,15 @@ async fn a_pack_whose_ready_resolves_late_has_its_tools_in_the_run() {
     .await
     .expect("the Harness waits on the Pack's ready");
     let prepared = prepared.expect("the snapshot after the wait offers the Pack's tool");
-    let outcome = drive_run(
+    let result = drive_run(
         prepared.run,
         prepared.performers,
         recorder.clone(),
         prepared.run_id,
         CancelHandle::new(),
     )
-    .await
-    .unwrap();
-    assert_eq!(completed(outcome), "hi");
+    .await;
+    assert_eq!(completed(result), "hi");
 }
 
 #[tokio::test]
@@ -263,17 +262,16 @@ async fn every_starting_pack_is_asked_to_be_ready_before_any_of_them_answers() {
         "the Harness asks both Packs before either is ready, so neither waits behind the other",
     );
     let prepared = prepared.expect("a Pack-free prompt is prepared");
-    let outcome = drive_run(
+    let result = drive_run(
         prepared.run,
         prepared.performers,
         recorder.clone(),
         prepared.run_id,
         CancelHandle::new(),
     )
-    .await
-    .unwrap();
+    .await;
     assert_eq!(
-        completed(outcome),
+        completed(result),
         "2 offered",
         "both Packs' tools reach the run once both are ready"
     );
@@ -284,13 +282,13 @@ async fn a_declared_pack_whose_ready_fails_refuses_the_run_naming_its_reason() {
     let reason = "the fixture server refused the handshake";
     let (host, _moves, _startup) = slow_host(Phase::Failed(reason));
     let recorder = recorder();
-    let (run_id, outcome) = prepare_and_drive(DECLARES_SLOW, services(&recorder, host)).await;
+    let (run_id, result) = prepare_and_drive(DECLARES_SLOW, services(&recorder, host)).await;
     assert_eq!(
-        recorder.outcome(run_id).as_ref(),
-        Some(&outcome),
+        recorder.result(run_id).as_ref(),
+        Some(&result),
         "the recorder holds the refusal as the run's failure"
     );
-    let notice = refusal(outcome);
+    let notice = refusal(result);
     assert!(
         notice.contains(&format!("- slow is unavailable: {reason}")),
         "the notice names the Pack and its ready failure: {notice}"
@@ -312,10 +310,10 @@ async fn an_undeclared_pack_whose_ready_fails_raises_its_reason_when_the_prompt_
     let offers_slow = "---\nname: offers-slow\ndescription: d\nrunvil: 0\n---\n\n\
         # Title\n\n## Only\n\n```lua\ntools.offer('slow')\nreturn 'offered'\n```\n";
     let (host, _moves, _startup) = slow_host(Phase::Failed("the fixture server is down"));
-    let outcome = drive_over(offers_slow, host).await;
-    let RunOutcome::Failed { message, .. } = &outcome else {
-        panic!("offering an unavailable Pack fails the run: {outcome:?}");
-    };
+    let message = drive_over(offers_slow, host)
+        .await
+        .expect_err("offering an unavailable Pack fails the run")
+        .located_message();
     assert!(
         message.contains(
             "tools.offer: the slow Pack is unavailable in this run: \
@@ -338,10 +336,10 @@ async fn an_undeclared_third_party_pack_that_never_gets_ready_holds_no_run_up() 
     wide.provide(&STARTUPS, Arc::new(startups)).unwrap();
     let stuck = PackInfo::new("tests/stuck", construct_starting);
     let host = HostContext::new(registry(&[stuck]), wide);
-    let outcome = tokio::time::timeout(PATIENCE, drive_over(COUNTS_OFFERED, host))
+    let result = tokio::time::timeout(PATIENCE, drive_over(COUNTS_OFFERED, host))
         .await
         .expect("no run waits on a Pack it does not hold");
-    assert_eq!(completed(outcome), "0 offered");
+    assert_eq!(completed(result), "0 offered");
 }
 
 #[tokio::test]
@@ -382,11 +380,11 @@ async fn a_cancel_while_a_declared_pack_is_still_starting_ends_the_run_canceled_
     .expect("the cancel ends the wait");
 
     let report = report.expect("a canceled run is reported");
-    assert_eq!(report.outcome, RunOutcome::Cancelled);
+    crate::support::assert_canceled(&report.result);
     crate::support::assert_not_completed(&report.output);
     assert_eq!(
-        recorder.outcome(report.run_id),
-        Some(RunOutcome::Cancelled),
+        recorder.result(report.run_id),
+        Some(report.result),
         "the recorder holds the cancel, not a refusal of the unready Pack"
     );
 }
@@ -415,13 +413,13 @@ async fn a_refusal_after_a_cancel_cut_the_wait_short_ends_the_run_canceled_with_
     .expect("the cancel ends the wait");
 
     let report = report.expect("a canceled run is reported");
-    assert_eq!(
-        report.outcome,
-        RunOutcome::Cancelled,
-        "the missing web Pack would refuse the run, but the cancel came first"
+    assert!(
+        report.result.as_ref().is_err_and(Error::is_canceled),
+        "the missing web Pack would refuse the run, but the cancel came first: {:?}",
+        report.result
     );
     let run_id = report.run_id;
-    assert_eq!(recorder.outcome(run_id), Some(RunOutcome::Cancelled));
+    assert_eq!(recorder.result(run_id), Some(report.result));
     let events = recorded_parse_events(&recorder, run_id);
     assert!(
         matches!(events.last(), Some(Event::ParseSucceeded { .. })),
@@ -451,21 +449,15 @@ async fn a_cancel_that_lands_while_a_refusal_is_recorded_leaves_the_report_holdi
         .expect("a refused run ends at once")
         .expect("a refused run is reported");
     let run_id = report.run_id;
-    assert!(
-        matches!(
-            report.outcome,
-            RunOutcome::Failed {
-                kind: RunErrorKind::RequirementsUnmet,
-                ..
-            }
-        ),
-        "the refusal was decided before the cancel landed: {:?}",
-        report.outcome
+    assert_eq!(
+        report.result.as_ref().map_err(|error| error.code),
+        Err(ErrorCode::RequirementsUnmet),
+        "the refusal was decided before the cancel landed"
     );
     assert_eq!(
-        inner.outcome(run_id),
-        Some(report.outcome),
-        "the recorder holds the report's outcome"
+        inner.result(run_id),
+        Some(report.result),
+        "the recorder holds the report's result"
     );
 }
 

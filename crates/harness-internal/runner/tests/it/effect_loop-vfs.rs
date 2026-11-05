@@ -11,14 +11,15 @@ use std::thread::ThreadId;
 use std::time::Duration;
 
 use harness_runner::effect_loop::drive_run;
-use harness_runner::recorder::{MemoryRecorder, Record, RecordKind, RunId, RunOutcome};
+use harness_runner::recorder::{MemoryRecorder, Record, RecordKind, RunId};
 use runvil::cancel::CancelHandle;
 use runvil::vfs::VfsRef;
 use serde_json::json;
 
 use super::{answers, assert_one_answer_per_effect, begun_log, kinds};
 use crate::support::{
-    GatedTool, HookedBackend, TextTool, WAITS, run_of_sections, run_over, run_with_child, unused,
+    GatedTool, HookedBackend, TextTool, WAITS, assert_canceled, run_of_sections, run_over,
+    run_with_child, unused,
 };
 
 #[tokio::test]
@@ -28,7 +29,7 @@ async fn a_run_of_only_vfs_operations_completes_with_one_answer_per_effect() {
     // Every effect of every step is a Vfs effect, so no performer is ever
     // out: a loop that awaited an answer, or reported a stall, after
     // answering them inline would fail the run here.
-    let outcome = drive_run(
+    let result = drive_run(
         run_over(
             "store.write('a.md', '1')\n\
              store.append('a.md', '2')\n\
@@ -40,13 +41,11 @@ async fn a_run_of_only_vfs_operations_completes_with_one_answer_per_effect() {
         run_id,
         CancelHandle::new(),
     )
-    .await
-    .expect("answering every effect inline is not a stall");
+    .await;
     assert_eq!(
-        outcome,
-        RunOutcome::Completed {
-            final_text: "12".to_owned()
-        }
+        result,
+        Ok("12".to_owned()),
+        "answering every effect inline is not a stall"
     );
 
     let records = recorder.records(run_id);
@@ -160,7 +159,7 @@ async fn a_vfs_chain_keeps_stepping_while_a_tool_call_is_parked() {
         run_id,
         CancelHandle::new(),
     );
-    let (outcome, before_gate) = tokio::time::timeout(Duration::from_secs(5), async {
+    let (result, before_gate) = tokio::time::timeout(Duration::from_secs(5), async {
         tokio::join!(
             drive,
             open_gate_after_the_second_write(&recorder, run_id, &gate)
@@ -168,12 +167,7 @@ async fn a_vfs_chain_keeps_stepping_while_a_tool_call_is_parked() {
     })
     .await
     .expect("the loop kept stepping the Vfs chain while the tool call was parked");
-    assert_eq!(
-        outcome.unwrap(),
-        RunOutcome::Completed {
-            final_text: "opened".to_owned()
-        }
-    );
+    assert_eq!(result, Ok("opened".to_owned()));
 
     let before_gate_answers = answers(&before_gate);
     assert_eq!(
@@ -200,23 +194,22 @@ async fn a_backend_that_panics_drops_its_effect_instead_of_unwinding_the_run() {
     // The panic is caught where the operation runs and answered
     // `Dropped`; the run resumes with the canceled error of a dropped
     // effect and ends, and the loop returns normally.
-    let outcome = drive_run(
+    let result = drive_run(
         run_over("store.write('a.md', 'x')\nreturn 'ok'", vfs),
         unused(),
         recorder.clone(),
         run_id,
         CancelHandle::new(),
     )
-    .await
-    .unwrap();
-    assert_eq!(outcome, RunOutcome::Cancelled);
+    .await;
+    assert_canceled(&result);
 
     let records = recorder.records(run_id);
     assert_one_answer_per_effect(&records);
     let answers = answers(&records);
     assert_eq!(answers.len(), 1, "the one write");
     assert_eq!(answers[0].payload, json!("Dropped"));
-    assert_eq!(recorder.outcome(run_id), Some(RunOutcome::Cancelled));
+    assert_eq!(recorder.result(run_id), Some(result));
 }
 
 /// Main spawns Slow, whose write stays out, and Fast, waits on Fast,
@@ -247,21 +240,15 @@ async fn a_vfs_effect_withdrawn_in_the_step_that_issued_it_is_dropped_unperforme
         )
         .build();
 
-    let outcome = drive_run(
+    let result = drive_run(
         run_of_sections(&WITHDRAWS_A_WRITE, vfs),
         unused(),
         recorder.clone(),
         run_id,
         CancelHandle::new(),
     )
-    .await
-    .unwrap();
-    assert_eq!(
-        outcome,
-        RunOutcome::Completed {
-            final_text: "fast".to_owned()
-        }
-    );
+    .await;
+    assert_eq!(result, Ok("fast".to_owned()));
     assert!(
         !written.load(Ordering::SeqCst),
         "the withdrawn write never reached the backend"

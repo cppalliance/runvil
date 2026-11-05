@@ -139,9 +139,9 @@ enum Phase {
     /// No chain has started: the next step checks that the run can start,
     /// then starts the H1 pass or the walk.
     Fresh,
-    /// Chains run; the outcome is undecided.
+    /// Chains run; the result is undecided.
     Running,
-    /// The outcome is decided and the run's end boundary reported, unless
+    /// The result is decided and the run's end boundary reported, unless
     /// the run ended before it started and so reported nothing; `Done`
     /// waits on the outstanding effects.
     Ending(Result<String>),
@@ -172,7 +172,7 @@ pub(crate) struct Scheduler {
     /// chains holding slots now.
     admission: Admission,
     /// Where the step loop stands: not started, running, ending with the
-    /// outcome held until the orphans are answered, or done.
+    /// result held until the orphans are answered, or done.
     phase: Phase,
     /// The run's scope, taken where the run acquires its root identity:
     /// closed when the run reaches `Done` or is dropped before it, so a
@@ -180,9 +180,6 @@ pub(crate) struct Scheduler {
     /// root-start sites (`h1::start_h1` and `walk::start_root_walk`) are its
     /// only writers, each at the acquisition that opens the run's identity.
     scope: Option<ScopeHandle>,
-    /// The error behind the failed outcome the last `Done` carried.
-    #[cfg(test)]
-    failure: Option<crate::Error>,
 }
 
 impl Drop for Scheduler {
@@ -204,8 +201,6 @@ impl Scheduler {
             admission: Admission::default(),
             phase: Phase::Fresh,
             scope: None,
-            #[cfg(test)]
-            failure: None,
         }
     }
 
@@ -223,7 +218,7 @@ impl Scheduler {
         Arc::clone(self.ctx.prompt())
     }
 
-    /// Whether the run's outcome is decided: its end boundary is reported,
+    /// Whether the run's result is decided: its end boundary is reported,
     /// or the run ended before it started, so at most the orphans' answers
     /// stand between the run and `Done`.
     #[cfg(test)]

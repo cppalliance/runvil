@@ -12,10 +12,10 @@ use std::sync::atomic::Ordering;
 use runvil_types::ids::{ChainId, TaskId};
 use runvil_vfs::{MemoryBackend, Origin, VfsRef, detail};
 
+use crate::Result;
 use crate::execute::run::EffectId;
 use crate::heading_address::{SectionIndex, SectionPos};
 use crate::lua::{Answer, Request, ToolSet, VfsOp};
-use crate::{Error, Result};
 
 use super::chain::ChainStart;
 use super::chain_record::{CallDepth, ChainKind};
@@ -105,11 +105,6 @@ impl Scheduler {
     /// walk and its `call` children advance.
     pub(crate) fn turns_for_test(&self) -> u32 {
         self.ctx.turns().load(Ordering::Relaxed)
-    }
-
-    /// Takes the error behind the failed outcome the last `Done` carried.
-    pub(crate) fn take_failure_for_test(&mut self) -> Option<Error> {
-        self.failure.take()
     }
 
     /// Starts a chain over the top-level slice at `index`, as a jump out

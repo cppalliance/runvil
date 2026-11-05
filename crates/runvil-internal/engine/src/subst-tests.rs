@@ -313,14 +313,10 @@ fn a_failure_is_placed_on_its_placeholders_line_of_the_prose() {
 }
 
 #[test]
-fn a_failure_classifies_as_the_authors_program_failing_and_lua_reads_it_as_lua() {
+fn a_failure_is_a_substitution_error_that_lua_reads_as_lua() {
     let error = run("{{ var.nope }}").expect_err("a missing key fails the substitution");
     assert_eq!(error.code, ErrorCode::Substitution);
     assert_eq!(reason(&error), Some("missing_key"));
-    assert_eq!(
-        crate::execute::run_error_kind(error.code),
-        crate::RunErrorKind::Lua
-    );
     assert_eq!(runvil_lua::error_kind(&error), runvil_lua::ErrorKind::Lua);
     assert_eq!(runvil_lua::error_fields(&error), Vec::new());
 }

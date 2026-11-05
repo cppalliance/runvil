@@ -87,7 +87,7 @@ fn with_input(input: Option<Arc<dyn AskBroker>>) -> HostServices {
 }
 
 /// Prepares `source` under `services` and drives the run to its end.
-async fn drive_prompt(source: &str, services: Services) -> RunOutcome {
+async fn drive_prompt(source: &str, services: Services) -> Result<String, Error> {
     prepare_and_drive(source, services).await.1
 }
 
@@ -169,12 +169,12 @@ async fn a_failed_ask_raises_at_the_call_site_where_pcall_catches_it() {
     let recorder = recorder();
     let catches = "local ok, err = pcall(input.ask)\n\
         return tostring(ok) .. '|' .. err.kind .. '|' .. tostring(err)";
-    let outcome = drive_prompt(
+    let result = drive_prompt(
         &user_input_prompt(REQUIRED, catches),
         user_input_services(&recorder, Some(Arc::new(Failing))),
     )
     .await;
-    let text = completed(outcome);
+    let text = completed(result);
     assert!(text.starts_with("false|tool|"), "a tool failure: {text}");
     assert!(
         text.contains("the operator's window closed"),
@@ -189,15 +189,18 @@ async fn a_failed_ask_raises_at_the_call_site_where_pcall_catches_it() {
 #[tokio::test]
 async fn an_uncaught_failed_ask_ends_the_run_as_a_tool_failure() {
     let recorder = recorder();
-    let outcome = drive_prompt(
+    let error = drive_prompt(
         &user_input_prompt(REQUIRED, "return (input.ask())"),
         user_input_services(&recorder, Some(Arc::new(Failing))),
     )
-    .await;
-    let RunOutcome::Failed { kind, message } = outcome else {
-        panic!("an uncaught failed ask fails the run: {outcome:?}");
-    };
-    assert_eq!(kind, RunErrorKind::Tool);
+    .await
+    .expect_err("an uncaught failed ask fails the run");
+    assert_eq!(
+        error.code,
+        ErrorCode::ToolBackend,
+        "the broker's tool failure"
+    );
+    let message = error.located_message();
     assert!(
         message.contains("the operator's window closed"),
         "the broker's message reaches the run's failure: {message}"
@@ -209,12 +212,12 @@ async fn input_ask_with_an_argument_raises() {
     let recorder = recorder();
     let passes_one = "local ok, err = pcall(input.ask, 1)\n\
         return tostring(ok) .. '|' .. tostring(err)";
-    let outcome = drive_prompt(
+    let result = drive_prompt(
         &user_input_prompt(REQUIRED, passes_one),
         user_input_services(&recorder, Some(Arc::new(Scripted("unused")))),
     )
     .await;
-    let text = completed(outcome);
+    let text = completed(result);
     assert!(text.starts_with("false|"), "the call raised: {text}");
     assert!(
         text.contains("input.ask takes no arguments"),
@@ -225,7 +228,7 @@ async fn input_ask_with_an_argument_raises() {
 #[tokio::test]
 async fn the_ask_tool_read_by_id_runs_beside_the_untouched_prelude_and_engine_globals() {
     let recorder = recorder();
-    let outcome = drive_prompt(
+    let result = drive_prompt(
         &user_input_prompt(
             REQUIRED,
             "local ask = tools.get('user-input/ask')\n\
@@ -236,7 +239,7 @@ async fn the_ask_tool_read_by_id_runs_beside_the_untouched_prelude_and_engine_gl
     )
     .await;
     assert_eq!(
-        completed(outcome),
+        completed(result),
         "hello|user-input/ask|function|function|function|nil",
         "the tool object is the ask tool, no tool is a global, and input, store, and \
          tools are the Pack's and the Engine's"
@@ -248,12 +251,12 @@ async fn a_prompt_that_does_not_declare_user_input_has_no_input_global() {
     let recorder = recorder();
     let reaches = "local ok, err = pcall(function() return input.ask() end)\n\
         return tostring(ok) .. '|' .. tostring(err)";
-    let outcome = drive_prompt(
+    let result = drive_prompt(
         &user_input_prompt("", reaches),
         user_input_services(&recorder, Some(Arc::new(Scripted("unused")))),
     )
     .await;
-    let text = completed(outcome);
+    let text = completed(result);
     assert!(text.starts_with("false|"), "the call raised: {text}");
     assert!(
         text.contains("attempt to index a nil value (global 'input')"),

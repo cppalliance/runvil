@@ -6,7 +6,7 @@
 use std::sync::Arc;
 
 use harness::pack::HostServices;
-use harness::record::{RunOutcome, RunRecorder};
+use harness::record::RunRecorder;
 use harness::{Harness, RunReport, RunRequest, display_chain};
 use plugin_user_input::{INPUT_BROKER, InputBroker};
 use runvil::error::Error;
@@ -77,13 +77,13 @@ impl Conversation {
         let message = match result {
             Ok(report) => {
                 self.note_run(report.run_id);
-                match report.outcome {
-                    RunOutcome::Completed { .. } => return,
-                    RunOutcome::Cancelled => {
+                match report.result {
+                    Ok(_) => return,
+                    Err(error) if error.is_canceled() => {
                         self.report(FailureKind::Canceled, CANCELED.to_owned());
                         return;
                     }
-                    RunOutcome::Failed { message, .. } => message,
+                    Err(error) => error.located_message(),
                 }
             }
             Err(error) => display_chain(&error),

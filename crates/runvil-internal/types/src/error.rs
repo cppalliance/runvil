@@ -55,6 +55,14 @@ impl Error {
         )
     }
 
+    /// Whether this error is a cancel rather than a failure: its code is
+    /// [`ErrorCode::Canceled`]. A run that ends with an error ends canceled
+    /// exactly when this holds.
+    #[must_use]
+    pub fn is_canceled(&self) -> bool {
+        self.code == ErrorCode::Canceled
+    }
+
     /// Appends `cause`, and each cause under it, to the message after `: `,
     /// skipping any text the message already holds. A cause whose text
     /// starts with the message's end and then `: ` adds only what follows.
@@ -79,6 +87,66 @@ impl Error {
             next = current.source();
         }
         self
+    }
+
+    /// Returns the self-contained text of the failure: the message, with
+    /// its causes, then where the failure happened.
+    ///
+    /// A structure, fence, or list failure, the parser's own, ends with its
+    /// prompt name, line, and column, each when known, as
+    /// `(prompt {name}, line {line}, column {column})`. A frontmatter failure
+    /// ends with its line and column alone, each when known, as
+    /// `(line {line}, column {column})`: it predates the prompt's name, and
+    /// its `Name` fact, when it has one, is a refused Pack's id. Any other
+    /// failure with a location ends with it as `(at {file}:{line})`: its
+    /// prompt file and line, or for an internal fault the Rust source file
+    /// and line of the broken invariant.
+    #[must_use]
+    pub fn located_message(&self) -> String {
+        let mut rendered = self.message.clone();
+        if let Some(location) = location(self) {
+            rendered.push_str(" (");
+            rendered.push_str(&location);
+            rendered.push(')');
+        }
+        rendered
+    }
+}
+
+/// Where the failure happened, for the end of its located message, or
+/// `None` when the failure has no location or the parser found none of its
+/// parts.
+fn location(error: &Error) -> Option<String> {
+    match error.code {
+        ErrorCode::FrontmatterInvalid
+        | ErrorCode::StructureInvalid
+        | ErrorCode::FenceInvalid
+        | ErrorCode::ListEmptyItem => {
+            let parts: Vec<String> = [
+                error
+                    .facts
+                    .get(&FactKey::Name)
+                    .filter(|_| error.code != ErrorCode::FrontmatterInvalid)
+                    .and_then(serde_json::Value::as_str)
+                    .map(|name| format!("prompt {name}")),
+                error
+                    .at
+                    .as_ref()
+                    .map(|at| format!("line {}", at.start_line)),
+                error
+                    .at
+                    .as_ref()
+                    .map(|at| format!("column {}", at.start_column)),
+            ]
+            .into_iter()
+            .flatten()
+            .collect();
+            (!parts.is_empty()).then(|| parts.join(", "))
+        }
+        _ => error
+            .at
+            .as_ref()
+            .map(|at| format!("at {}", coordinates(at))),
     }
 }
 

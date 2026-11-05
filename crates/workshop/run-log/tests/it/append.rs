@@ -1,10 +1,11 @@
 //! The write path: a run begins, records append in loop order, the run ends.
 
+use std::num::NonZeroU32;
+
 use harness::record::RunSeed;
+use runvil::error::{Error, ErrorCode, FactKey, Location};
 use serde_json::json;
-use workshop_run_log::{
-    LogError, Record, RecordFilter, RecordKind, RunErrorKind, RunId, RunLog, RunMeta, RunOutcome,
-};
+use workshop_run_log::{LogError, Record, RecordFilter, RecordKind, RunId, RunLog, RunMeta};
 
 /// Every record of a run, in loop order.
 const ALL: RecordFilter = RecordFilter {
@@ -57,7 +58,7 @@ async fn a_run_with_three_records_round_trips_through_an_in_memory_log() {
     assert_eq!(row.meta, meta());
     assert_eq!(row.agent, AGENT, "the agent is stored beside the meta");
     assert_eq!(row.ended_at, None);
-    assert_eq!(row.outcome, None);
+    assert_eq!(row.result, None);
 
     let records = log.records(run, ALL).await.unwrap();
     assert_eq!(records.len(), 3);
@@ -192,54 +193,70 @@ async fn a_filter_selects_by_kind_and_keeps_the_last_n() {
 }
 
 #[tokio::test]
-async fn end_run_fills_ended_at_and_outcome() {
+async fn end_run_fills_ended_at_and_the_result() {
     let mut log = RunLog::in_memory().await.unwrap();
     let run = log.begin_run(meta(), AGENT).await.unwrap();
-    log.end_run(
-        run,
-        RunOutcome::Completed {
-            final_text: "done".to_owned(),
-        },
-    )
-    .await
-    .unwrap();
+    log.end_run(run, Ok("done".to_owned())).await.unwrap();
 
     let row = log.run(run).await.unwrap();
     assert!(row.ended_at.is_some_and(|at| at >= row.meta.started_at));
-    assert_eq!(
-        row.outcome,
-        Some(RunOutcome::Completed {
-            final_text: "done".to_owned(),
-        })
-    );
+    assert_eq!(row.result, Some(Ok("done".to_owned())));
 }
 
 #[tokio::test]
-async fn a_failed_outcome_keeps_its_kind_and_message() {
+async fn a_failed_run_keeps_its_code_and_located_message() {
     let mut log = RunLog::in_memory().await.unwrap();
     let run = log.begin_run(meta(), AGENT).await.unwrap();
-    let outcome = RunOutcome::Failed {
-        kind: RunErrorKind::Tool,
-        message: "expected a reply, got nothing".to_owned(),
-    };
-    log.end_run(run, outcome.clone()).await.unwrap();
-    assert_eq!(log.run(run).await.unwrap().outcome, Some(outcome));
-
-    let run = log.begin_run(meta(), AGENT).await.unwrap();
-    log.end_run(run, RunOutcome::Cancelled).await.unwrap();
-    assert_eq!(
-        log.run(run).await.unwrap().outcome,
-        Some(RunOutcome::Cancelled)
+    let mut error = Error::new(
+        ErrorCode::ToolBackend,
+        "expected a reply, got nothing",
+        "the tool's own prose",
     );
+    error.at = Some(Location::line("prompt.md", NonZeroU32::new(7).unwrap()));
+    error.facts.insert(FactKey::Path, json!("/notes.md"));
+    log.end_run(run, Err(error.clone())).await.unwrap();
+
+    let Some(Err(read)) = log.run(run).await.unwrap().result else {
+        panic!("a failed run reads back as an error");
+    };
+    assert_eq!(read.code, error.code);
+    assert_eq!(read.located_message(), error.located_message());
+    assert!(
+        read.located_message().ends_with("(at prompt.md:7)"),
+        "the location reads back inside the message: {read:?}"
+    );
+    assert_eq!(
+        read.prose,
+        error.code.prose(),
+        "the prose is the code's default"
+    );
+    assert_eq!(read.at, None, "the location is stored only in the message");
+    assert!(read.facts.is_empty(), "facts are not stored: {read:?}");
+}
+
+#[tokio::test]
+async fn a_canceled_run_reads_back_as_a_cancel() {
+    let mut log = RunLog::in_memory().await.unwrap();
+    let run = log.begin_run(meta(), AGENT).await.unwrap();
+    log.end_run(run, Err(Error::canceled())).await.unwrap();
+
+    let Some(Err(read)) = log.run(run).await.unwrap().result else {
+        panic!("a canceled run reads back as an error");
+    };
+    assert!(
+        read.is_canceled(),
+        "the error read back is a cancel: {read:?}"
+    );
+    assert_eq!(read.located_message(), Error::canceled().located_message());
 }
 
 #[tokio::test]
 async fn a_run_ends_exactly_once() {
     let mut log = RunLog::in_memory().await.unwrap();
     let run = log.begin_run(meta(), AGENT).await.unwrap();
-    log.end_run(run, RunOutcome::Cancelled).await.unwrap();
+    log.end_run(run, Err(Error::canceled())).await.unwrap();
 
-    let again = log.end_run(run, RunOutcome::Cancelled).await;
+    let again = log.end_run(run, Err(Error::canceled())).await;
     assert!(matches!(again, Err(LogError::RunEnded(id)) if id == run));
 
     let late = log.append(run, record(RecordKind::Event, 0, None)).await;
@@ -254,7 +271,7 @@ async fn an_unknown_run_is_refused() {
     let appended = log.append(ghost, record(RecordKind::Event, 0, None)).await;
     assert!(matches!(appended, Err(LogError::UnknownRun(id)) if id == ghost));
 
-    let ended = log.end_run(ghost, RunOutcome::Cancelled).await;
+    let ended = log.end_run(ghost, Err(Error::canceled())).await;
     assert!(matches!(ended, Err(LogError::UnknownRun(id)) if id == ghost));
 
     let read = log.run(ghost).await;
@@ -323,12 +340,12 @@ async fn a_log_on_disk_keeps_its_rows_across_reopen() {
         log.append(run, record(RecordKind::Event, 0, None))
             .await
             .unwrap();
-        log.end_run(run, RunOutcome::Cancelled).await.unwrap();
+        log.end_run(run, Err(Error::canceled())).await.unwrap();
         run
     };
 
     let log = RunLog::open(&path).await.unwrap();
     let row = log.run(run).await.unwrap();
-    assert_eq!(row.outcome, Some(RunOutcome::Cancelled));
+    assert!(matches!(row.result, Some(Err(error)) if error.is_canceled()));
     assert_eq!(log.records(run, ALL).await.unwrap().len(), 1);
 }

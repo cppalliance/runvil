@@ -17,7 +17,7 @@ use runvil::model::{Completion, CompletionResult, ModelId, ModelInfo, ModelRole,
 use runvil::timestamp::Timestamp;
 use runvil::tools::{ToolCatalog, ToolId, ToolInfo, ToolOutput};
 use runvil::vfs::perform_vfs_op;
-use runvil::{Prompt, Run, RunOutcome, RunParams, RunSeed, Step};
+use runvil::{Prompt, Run, RunParams, RunSeed, Step};
 
 /// Writes a note, asks the default model to reply, and shouts the reply.
 pub const GREETER: &str = concat!(
@@ -108,7 +108,7 @@ pub fn greet() -> Result<String, Box<dyn Error>> {
     // 5. Step until Done, logging each step's events and answering each
     //    effect exactly once: an effect the step withdraws is dropped
     //    instead of performed.
-    let outcome = loop {
+    let result = loop {
         match run.step() {
             Step::Pending {
                 effects,
@@ -124,21 +124,20 @@ pub fn greet() -> Result<String, Box<dyn Error>> {
                     }
                 }
             }
-            Step::Done { outcome, events } => {
+            Step::Done { result, events } => {
                 log.extend(events);
-                break outcome;
+                break result;
             }
         }
     };
 
     // 6. The tool's output is the run's final text, and the log opens with
-    //    the parse events.
+    //    the parse events. A run that ends with an error reports its
+    //    located message.
     assert!(log.starts_with(&parse_events));
     assert!(!cancel.is_canceled());
-    let RunOutcome::Completed { final_text } = outcome else {
-        return Err(format!("the greeter did not finish: {outcome:?}").into());
-    };
-    Ok(final_text)
+    result
+        .map_err(|error| format!("the greeter did not finish: {}", error.located_message()).into())
 }
 
 fn main() -> Result<(), Box<dyn Error>> {

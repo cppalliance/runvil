@@ -55,15 +55,15 @@ fn records(trace: &Trace) -> Vec<EffectRecord> {
 }
 
 /// Asserts `md` issues an effect when run without preludes, and that with
-/// `preludes` it instead fails as a Lua failure naming every fragment,
-/// before it issues any effect.
+/// `preludes` it instead fails with a Lua runtime error naming every
+/// fragment, before it issues any effect.
 #[track_caller]
 fn assert_fails_before_any_effect(md: &str, preludes: Vec<Prelude>, fragments: &[&str]) {
     let control = prelude_run(md, Vec::new());
     assert!(
-        matches!(control.outcome(), RunOutcome::Completed { .. }),
+        control.result().is_ok(),
         "without preludes the prompt succeeds: {:?}",
-        control.outcome()
+        control.result()
     );
     assert!(
         !control.effects().is_empty(),
@@ -71,7 +71,7 @@ fn assert_fails_before_any_effect(md: &str, preludes: Vec<Prelude>, fragments: &
     );
     let trace = prelude_run(md, preludes);
     let error = trace.error();
-    assert_eq!(run_error_kind(error.code), RunErrorKind::Lua, "{error:?}");
+    assert_eq!(error.code, ErrorCode::LuaRuntime, "{error:?}");
     let message = error.to_string();
     for fragment in fragments {
         assert!(
@@ -198,16 +198,12 @@ fn a_prelude_write_across_two_arms_ends_the_run_with_determinism_caught_or_not()
         "pcall(function() store.write('seeded.txt', 'seed') end)",
     ] {
         let trace = prelude_run(md, vec![prelude("seeder", source)]);
-        let (kind, message) = match trace.outcome() {
-            RunOutcome::Failed { kind, message } => (*kind, message),
-            other => {
-                panic!("the second arm's install-time write ends the run: `{source}`: {other:?}")
-            }
-        };
-        assert_eq!(kind, RunErrorKind::Vfs, "`{source}`: {message}");
+        let error = trace.error();
+        let message = error.located_message();
+        assert_eq!(error.code, ErrorCode::Determinism, "`{source}`: {message}");
         assert!(
             message.starts_with("store determinism violation: "),
-            "the conflict wins over the prelude's own outcome: `{source}`: {message}"
+            "the conflict wins over the prelude's own result: `{source}`: {message}"
         );
     }
 }

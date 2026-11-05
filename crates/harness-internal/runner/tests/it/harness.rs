@@ -1,7 +1,8 @@
 //! The per-run Harness: `run` begins the run's record, resolves the
 //! launch model through the Host's broker, prepares the request's source,
 //! drives the run as one future, and reads the declared output; source
-//! that fails to parse is a recorded failed run; a Vfs effect is answered
+//! that fails to parse, and a run that fails after it starts, are each a
+//! recorded failed run, never an error of `run`; a Vfs effect is answered
 //! inline as it is issued; and one run completes under a thread-parking
 //! executor with no runtime behind it. How a stop and a cancel reach the
 //! effects in flight sits in the `stop` child module, how a stop reaches
@@ -19,9 +20,9 @@ use std::thread::{self, Thread, ThreadId};
 use std::time::Duration;
 
 use harness_runner::environment::HostSnapshot;
-use harness_runner::recorder::{MemoryRecorder, Record, RecordKind, RunErrorKind, RunOutcome};
+use harness_runner::recorder::{MemoryRecorder, Record, RecordKind};
 use harness_runner::{Harness, HostContext, RunControl, RunReport, RunRequest};
-use runvil::error::Error;
+use runvil::error::{Error, ErrorCode};
 use runvil::vfs::VfsRef;
 use runvil_plugin::{HostServices, PackRegistry};
 use serde_json::{Value, json};
@@ -149,6 +150,10 @@ const FILES: &str = "---\nname: files\ndescription: d\nrunvil: 0\n\
 /// A prompt with unclosed frontmatter, so it does not parse.
 const UNCLOSED: &str = "---\nname: unclosed\ndescription: d\nrunvil: 0\n\n# Title\n";
 
+/// A prompt whose one section writes a store file and then raises.
+const RAISES: &str = "---\nname: raises\ndescription: d\nrunvil: 0\n---\n\n\
+    # Title\n\n## Only\n\n```lua\nstore.write('a.md', '1')\nerror('the section gives up')\n```\n";
+
 /// A prompt that writes two store files and reads them back.
 const WRITES_TWICE: &str = "---\nname: writes\ndescription: d\nrunvil: 0\n---\n\n\
     # Title\n\n## Only\n\n```lua\n\
@@ -164,7 +169,7 @@ const INFERS_AND_STORES: &str = "---\nname: infers\ndescription: d\nrunvil: 0\n\
     return models.infer('asked') .. '|' .. store.read('note.md')\n```\n";
 
 #[tokio::test]
-async fn run_returns_the_declared_output_and_the_outcome_under_the_requests_name() {
+async fn run_returns_the_declared_output_and_the_result_under_the_requests_name() {
     let recorder = Arc::new(MemoryRecorder::new());
     let report = plain_harness(&recorder, ScriptedBroker::replying())
         .run(RunRequest {
@@ -172,20 +177,15 @@ async fn run_returns_the_declared_output_and_the_outcome_under_the_requests_name
             ..request(FILES)
         })
         .await
-        .expect("the run reaches an outcome");
+        .expect("the run is reported");
 
-    assert_eq!(
-        report.outcome,
-        RunOutcome::Completed {
-            final_text: "done".to_owned()
-        }
-    );
+    assert_eq!(report.result, Ok("done".to_owned()));
     assert_eq!(report.output, Ok("seen: # Paper".to_owned()));
     let run_id = report.run_id;
     assert_eq!(
-        recorder.outcome(run_id),
-        Some(report.outcome.clone()),
-        "the recorder ends the run with the reported outcome"
+        recorder.result(run_id),
+        Some(report.result.clone()),
+        "the recorder ends the run with the reported result"
     );
     let meta = recorder.meta(run_id).expect("the recorder began the run");
     assert_eq!(meta.name, NAME, "the metadata holds the request's name");
@@ -233,14 +233,14 @@ async fn source_that_fails_to_parse_ends_as_a_recorded_failed_run_with_its_parse
     let report = plain_harness(&recorder, ScriptedBroker::replying())
         .run(request(UNCLOSED))
         .await
-        .expect("a parse failure is the run's outcome, not an error");
+        .expect("a parse failure is the run's result, not an error");
 
     let run_id = report.run_id;
-    let RunOutcome::Failed { kind, .. } = &report.outcome else {
-        panic!("the run failed: {:?}", report.outcome);
-    };
-    assert_eq!(*kind, RunErrorKind::Parse);
-    assert_eq!(recorder.outcome(run_id), Some(report.outcome.clone()));
+    assert_eq!(
+        report.result.as_ref().map_err(|error| error.code),
+        Err(ErrorCode::FrontmatterInvalid)
+    );
+    assert_eq!(recorder.result(run_id), Some(report.result.clone()));
     assert_not_completed(&report.output);
     let records = recorder.records(run_id);
     assert!(
@@ -256,6 +256,34 @@ async fn source_that_fails_to_parse_ends_as_a_recorded_failed_run_with_its_parse
     assert_eq!(
         records.last().map(|record| record.payload["kind"].clone()),
         Some(json!("parse_failed"))
+    );
+}
+
+#[tokio::test]
+async fn a_run_that_fails_after_it_starts_is_a_recorded_failed_run_not_an_error() {
+    let recorder = Arc::new(MemoryRecorder::new());
+    let report = plain_harness(&recorder, ScriptedBroker::replying())
+        .run(request(RAISES))
+        .await
+        .expect("a run's own failure is its result, not an error");
+
+    let error = report.result.as_ref().expect_err("the section raised");
+    assert_eq!(
+        error.code,
+        ErrorCode::LuaRuntime,
+        "the run's own code, not a refusal"
+    );
+    assert!(
+        error.located_message().contains("the section gives up"),
+        "{error:?}"
+    );
+    let run_id = report.run_id;
+    assert_eq!(recorder.result(run_id), Some(report.result.clone()));
+    assert_not_completed(&report.output);
+    assert_eq!(
+        answers_to(&recorder.records(run_id), "Vfs"),
+        [json!({ "Vfs": { "Ok": "Unit" } })],
+        "the run starts and performs its write before it raises"
     );
 }
 
@@ -276,14 +304,9 @@ async fn a_vfs_effect_is_answered_inline_on_the_thread_that_polls_the_run() {
             ..request(WRITES_TWICE)
         })
         .await
-        .expect("the run reaches an outcome");
+        .expect("the run is reported");
 
-    assert_eq!(
-        report.outcome,
-        RunOutcome::Completed {
-            final_text: "12".to_owned()
-        }
-    );
+    assert_eq!(report.result, Ok("12".to_owned()));
     assert_eq!(
         *ran_on.lock().unwrap(),
         vec![thread::current().id(); 2],
@@ -332,12 +355,7 @@ fn one_run_completes_on_the_tests_own_thread_under_a_thread_parking_block_on() {
     let run = plain_harness(&recorder, broker).run(request(INFERS_AND_STORES));
     assert_send(&run);
 
-    let report = block_on(Box::pin(run)).expect("the run reaches an outcome with no runtime");
-    assert_eq!(
-        report.outcome,
-        RunOutcome::Completed {
-            final_text: "re: asked|kept".to_owned()
-        }
-    );
+    let report = block_on(Box::pin(run)).expect("the run is reported with no runtime");
+    assert_eq!(report.result, Ok("re: asked|kept".to_owned()));
     assert_eq!(rounds.lock().unwrap().len(), 1, "the one infer");
 }

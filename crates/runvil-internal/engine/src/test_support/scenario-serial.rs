@@ -9,9 +9,8 @@ use runvil_types::ids::{Provenance, TaskId};
 
 use super::super::perform_locally;
 use super::super::scripted_chat::{ScriptedReply, text};
-use crate::execute::{
-    Effect, EffectAnswer, EffectId, EffectRecord, IssuedEffect, Run, RunOutcome, Step,
-};
+use crate::Error;
+use crate::execute::{Effect, EffectAnswer, EffectId, EffectRecord, IssuedEffect, Run, Step};
 
 /// The answer a `Chat` effect gets from the scripted model's `reply`,
 /// built as [`ScriptedChat::complete_now`] builds it.
@@ -73,12 +72,12 @@ pub(crate) fn infer_prompt(effect: &Effect) -> String {
         .to_owned()
 }
 
-/// The text of a run that succeeded; panics on any other outcome.
+/// The text of a run that succeeded; panics on the error a run ended with.
 #[track_caller]
-pub(crate) fn text_of(outcome: RunOutcome) -> String {
-    match outcome {
-        RunOutcome::Completed { final_text } => final_text,
-        other => panic!("the run succeeds: {other:?}"),
+pub(crate) fn text_of(result: Result<String, Error>) -> String {
+    match result {
+        Ok(text) => text,
+        Err(error) => panic!("the run succeeds: {error:?}"),
     }
 }
 
@@ -101,7 +100,7 @@ pub(crate) enum Batching {
 /// Everything one driven run produced, in the forms the properties
 /// compare.
 pub(crate) struct Outcome {
-    pub(crate) result: RunOutcome,
+    pub(crate) result: Result<String, Error>,
     pub(crate) events: Vec<Event>,
     pub(crate) effects: Vec<(Provenance, EffectRecord)>,
 }
@@ -130,8 +129,8 @@ impl Outcome {
     #[track_caller]
     pub(crate) fn text(&self) -> &str {
         match &self.result {
-            RunOutcome::Completed { final_text } => final_text,
-            other => panic!("the run succeeds: {other:?}"),
+            Ok(text) => text,
+            Err(error) => panic!("the run succeeds: {error:?}"),
         }
     }
 }
@@ -145,12 +144,12 @@ pub(crate) fn drive_batched(mut run: Run, batching: Batching) -> Outcome {
     loop {
         match run.step() {
             Step::Done {
-                outcome,
+                result,
                 events: more,
             } => {
                 events.extend(more);
                 return Outcome {
-                    result: outcome,
+                    result,
                     events,
                     effects,
                 };

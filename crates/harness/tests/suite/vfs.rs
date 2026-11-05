@@ -146,10 +146,7 @@ async fn a_hosts_edit_of_a_file_the_run_read_conflicts_while_the_run_waits_on_it
         vfs: vfs.clone(),
         host: HostSnapshot::default(),
     };
-    let report = harness
-        .run(request)
-        .await
-        .expect("the run reaches an outcome");
+    let report = harness.run(request).await.expect("the run is reported");
 
     assert!(matches!(
         edited.lock().unwrap().take(),

@@ -5,8 +5,10 @@ use std::io;
 use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use runvil::error::Error;
+
 use crate::error::LogError;
-use crate::record::{Record, RunId, RunMeta, RunOutcome, Seq};
+use crate::record::{Record, RunId, RunMeta, Seq};
 use crate::schema;
 
 /// An open run log: one connection to one Turso database holding the
@@ -116,22 +118,33 @@ impl RunLog {
         Ok(seq)
     }
 
-    /// Closes `run` with `outcome`, stamping `ended_at` with the wall
-    /// clock. A run closes exactly once.
+    /// Closes `run` with its `result`, stamping `ended_at` with the wall
+    /// clock. A run closes exactly once. `Ok` stores the final text under
+    /// the status `completed`. `Err` stores the error's code tag and its
+    /// located message under the status `canceled` when the error is a
+    /// cancel, and `failed` otherwise.
     ///
     /// # Errors
     /// Returns [`LogError::UnknownRun`] when `run` was never begun here,
     /// [`LogError::RunEnded`] when it has already closed, and
     /// [`LogError::Database`] when the database refuses the write.
-    pub async fn end_run(&mut self, run: RunId, outcome: RunOutcome) -> Result<(), LogError> {
+    pub async fn end_run(
+        &mut self,
+        run: RunId,
+        result: Result<String, Error>,
+    ) -> Result<(), LogError> {
         self.require_open(run).await?;
-        let kind = outcome.as_str();
-        let (final_text, error_kind, error_message) = match outcome {
-            RunOutcome::Completed { final_text } => (Some(final_text), None, None),
-            RunOutcome::Failed { kind, message } => {
-                (None, Some(kind.as_str().to_owned()), Some(message))
+        let (status, final_text, error_code, error_message) = match result {
+            Ok(final_text) => ("completed", Some(final_text), None, None),
+            Err(error) => {
+                let status = if error.is_canceled() {
+                    "canceled"
+                } else {
+                    "failed"
+                };
+                let message = error.located_message();
+                (status, None, Some(error.code.tag()), Some(message))
             }
-            RunOutcome::Cancelled => (None, None, None),
         };
         let changed = self
             .conn
@@ -140,9 +153,9 @@ impl RunLog {
                 (
                     run.get(),
                     now_ms(),
-                    kind,
+                    status,
                     final_text,
-                    error_kind,
+                    error_code,
                     error_message,
                 ),
             )

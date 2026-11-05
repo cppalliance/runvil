@@ -14,21 +14,21 @@
 //! Harness never skips a record. A Host that prefers to keep running logs
 //! the failure inside its recorder and returns `Ok`.
 //!
-//! A run's end is the Engine's [`RunOutcome`], as the run's last step
-//! returned it. A run that ends before the Engine runs it ends with an
-//! outcome of the same type: canceled, when a cancel comes before or
-//! during the model lookup, or failed with the Engine's kind for the
-//! failure, when the model lookup fails, the prompt does not parse, or its
-//! input cannot be put in place. A run the effect loop loses track of
-//! ends as failed with the kind `Internal`.
+//! A run ends with its result: the final text, or the error that ended
+//! it, where a cancel is the error whose code is `canceled`. A run the
+//! Engine runs ends with the result its last step returned. A run that
+//! ends before the Engine runs it ends with an error of its own: the
+//! cancel, when a cancel comes before or during the model lookup, or the
+//! failure itself, when the model lookup fails, the prompt does not
+//! parse, or its input cannot be put in place. A run the effect loop
+//! loses track of ends with an `Internal` error.
 
 use std::fmt;
 use std::future::Future;
 use std::pin::Pin;
 
 use runvil::RunSeed;
-use runvil::error::{Error, ErrorCode};
-pub use runvil::{RunErrorKind, RunOutcome};
+use runvil::error::{Error, ErrorCode, FactKey};
 
 #[path = "recorder-memory.rs"]
 mod memory;
@@ -53,13 +53,44 @@ pub fn recorder_error(cause: impl Into<Box<dyn std::error::Error + Send + Sync>>
     Error::new(code, "the run recorder failed", code.prose()).with_cause(&*cause)
 }
 
+/// Whether `error` is a recorder's refusal, which ends no run, rather than
+/// the result a run ended with: its code is `RecorderFailed`.
+///
+/// It tells the two apart in what `prepare` and the effect loop return.
+/// Both pass every recorder error through [`refused`], and no result of
+/// theirs has that code: the Engine turns a caller code into `Internal`,
+/// and the failures they make themselves are parse, input, and `Internal`
+/// failures.
+pub(crate) fn is_refusal(error: &Error) -> bool {
+    error.code == ErrorCode::RecorderFailed
+}
+
+/// A recorder's refusal of a write for run `run`: `RecorderFailed` with
+/// the run's `Run` fact, the refusal built with [`recorder_error`] when
+/// the recorder returned another code.
+pub(crate) fn refused(run: RunId, error: Error) -> Error {
+    let error = if is_refusal(&error) {
+        error
+    } else {
+        recorder_error(error)
+    };
+    of_run(run, error)
+}
+
+/// `error` with run `run`'s id as its `Run` fact.
+pub(crate) fn of_run(run: RunId, mut error: Error) -> Error {
+    error.facts.insert(FactKey::Run, run.get().into());
+    error
+}
+
 /// The storage that the Harness writes each run's history to.
 ///
 /// For each run, the Harness calls [`begin_run`](Self::begin_run) once,
 /// then [`append`](Self::append) for every record, then
 /// [`end_run`](Self::end_run) once. The recorder issues each run's
 /// [`RunId`]. If a write returns an error, the Harness stops the run it
-/// belongs to.
+/// belongs to and hands the error on as a `RecorderFailed` refusal,
+/// whatever code the recorder gave it.
 pub trait RunRecorder: Send + Sync {
     /// Opens a run's history and returns its id.
     ///
@@ -75,13 +106,14 @@ pub trait RunRecorder: Send + Sync {
     /// Returns the recorder's own failure, built with [`recorder_error`].
     fn append(&self, run: RunId, record: Record) -> RecorderFuture<'_, ()>;
 
-    /// Closes a run with its outcome. The Harness calls it once for each
-    /// run it began.
+    /// Closes a run with its result: the run's final text, or the error
+    /// that ended it, where a cancel is the error whose code is
+    /// `canceled`. The Harness calls it once for each run it began.
     ///
     /// # Errors
     ///
     /// Returns the recorder's own failure, built with [`recorder_error`].
-    fn end_run(&self, run: RunId, outcome: RunOutcome) -> RecorderFuture<'_, ()>;
+    fn end_run(&self, run: RunId, result: Result<String, Error>) -> RecorderFuture<'_, ()>;
 }
 
 /// The id a recorder assigns to a run.

@@ -1,12 +1,12 @@
 //! Run preparation: a prompt whose requirements the environment cannot
-//! meet is prepared, and its run's first step ends it as failed with the
-//! Engine's own notice; a prompt that does not parse fails preparation
-//! under the `Parse` kind; each leaves only its parse events at the
-//! recorder; each run's begin draws a fresh seed and start, both handed
-//! to the recorder under the run's name; and the
-//! prepared tool performer sends a `ToolCall` effect to the Pack its id
-//! names. The run's optional input broker - one of its own services, lent
-//! to every tool call and behind the fixture ask Pack - sits in the
+//! meet is prepared, and its run's first step ends it with the Engine's
+//! own notice; a prompt that does not parse fails preparation with the
+//! parse failure, which its run ends with; each leaves only its parse
+//! events at the recorder; each run's begin draws a fresh seed and start,
+//! both handed to the recorder under the run's name; and the prepared tool
+//! performer sends a `ToolCall` effect to the Pack its id names. The
+//! run's optional input broker - one of its own services, lent to every
+//! tool call and behind the fixture ask Pack - sits in the
 //! `input` child module, the run's services meeting a Pack's needs sit in
 //! the `host_services` child module, a Pack's prelude reaching the
 //! prepared run sits in the `prelude` child module, the prompt's declared
@@ -16,13 +16,12 @@
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use harness_runner::HostContext;
 use harness_runner::effect_loop::drive_run;
 use harness_runner::prepare::{Prepared, Services, begin, prepare};
 use harness_runner::recorder::{
-    MemoryRecorder, Record, RecordKind, RecorderFuture, RunErrorKind, RunId, RunMeta, RunOutcome,
-    RunRecorder,
+    MemoryRecorder, Record, RecordKind, RecorderFuture, RunId, RunMeta, RunRecorder,
 };
-use harness_runner::{HostContext, display_chain};
 use runvil::cancel::CancelHandle;
 use runvil::error::{Error, ErrorCode, FactKey};
 use runvil::event::Event;
@@ -201,32 +200,25 @@ fn unix_millis_now() -> i64 {
 }
 
 /// The final text of a completed run.
-fn completed(outcome: RunOutcome) -> String {
-    match outcome {
-        RunOutcome::Completed { final_text } => final_text,
-        other => panic!("the run completes: {other:?}"),
-    }
+fn completed(result: Result<String, Error>) -> String {
+    result.expect("the run completes")
 }
 
 #[tokio::test]
 async fn an_unmet_requirement_ends_the_prepared_run_as_failed_with_the_engines_notice() {
     let recorder = recorder();
-    let (run_id, outcome) = prepare_and_drive(NEEDS_WEB, services(&recorder, bare())).await;
+    let (run_id, result) = prepare_and_drive(NEEDS_WEB, services(&recorder, bare())).await;
 
-    let notice = "the environment cannot satisfy this prompt:\n\
-        - missing required Pack: web (at prompt:5)";
     assert_eq!(
-        outcome,
-        RunOutcome::Failed {
-            kind: RunErrorKind::RequirementsUnmet,
-            message: notice.to_owned(),
-        },
-        "the failure is the engine's notice, verbatim, on the `uses:` line"
+        recorder.result(run_id),
+        Some(result.clone()),
+        "the recorder holds the refusal as the run's failure"
     );
     assert_eq!(
-        recorder.outcome(run_id),
-        Some(outcome),
-        "the recorder holds the refusal as the run's failure"
+        refusal(result),
+        "the environment cannot satisfy this prompt:\n\
+         - missing required Pack: web (at prompt:5)",
+        "the failure is the engine's notice, verbatim, on the `uses:` line"
     );
     let events = recorded_parse_events(&recorder, run_id);
     assert!(
@@ -236,7 +228,7 @@ async fn an_unmet_requirement_ends_the_prepared_run_as_failed_with_the_engines_n
 }
 
 #[tokio::test]
-async fn a_prompt_that_does_not_parse_fails_preparation_and_its_run_ends_as_a_parse_failure() {
+async fn a_prompt_that_does_not_parse_fails_preparation_and_its_run_ends_with_the_parse_failure() {
     let recorder = recorder();
     let error = begin_and_prepare(UNCLOSED, services(&recorder, bare()))
         .await
@@ -247,14 +239,16 @@ async fn a_prompt_that_does_not_parse_fails_preparation_and_its_run_ends_as_a_pa
         ErrorCode::FrontmatterInvalid,
         "the failure is the parse failure"
     );
+    assert_eq!(
+        error.located_message(),
+        "frontmatter was not closed with --- (line 1, column 1)",
+        "the parse failure keeps its location"
+    );
     let run_id = run_of(&error);
     assert_eq!(
-        recorder.outcome(run_id),
-        Some(RunOutcome::Failed {
-            kind: RunErrorKind::Parse,
-            message: display_chain(&error),
-        }),
-        "the recorder holds the parse failure under the Parse kind"
+        recorder.result(run_id),
+        Some(Err(error)),
+        "the recorder holds the very failure preparation returned"
     );
     let events = recorded_parse_events(&recorder, run_id);
     assert!(
@@ -265,7 +259,7 @@ async fn a_prompt_that_does_not_parse_fails_preparation_and_its_run_ends_as_a_pa
 
 /// A recorder that begins runs in memory and refuses every append with a
 /// store error of its own.
-struct RefusingAppends(MemoryRecorder);
+pub(crate) struct RefusingAppends(pub(crate) MemoryRecorder);
 
 impl RunRecorder for RefusingAppends {
     fn begin_run(&self, meta: RunMeta) -> RecorderFuture<'_, RunId> {
@@ -277,8 +271,8 @@ impl RunRecorder for RefusingAppends {
         Box::pin(async move { Err(Error::new(code, "the disk is full", code.prose())) })
     }
 
-    fn end_run(&self, run: RunId, outcome: RunOutcome) -> RecorderFuture<'_, ()> {
-        self.0.end_run(run, outcome)
+    fn end_run(&self, run: RunId, result: Result<String, Error>) -> RecorderFuture<'_, ()> {
+        self.0.end_run(run, result)
     }
 }
 
@@ -340,7 +334,7 @@ async fn two_prepared_runs_draw_different_seeds_and_both_begin_at_the_recorder()
             meta.prompt_hash
         );
         assert_eq!(
-            recorder.outcome(prepared.run_id),
+            recorder.result(prepared.run_id),
             None,
             "a prepared run stays open for the loop"
         );
@@ -363,56 +357,54 @@ async fn a_prepared_run_drives_to_its_end_under_its_own_performers() {
     } = begin_and_prepare(PLAIN, services(&recorder, bare()))
         .await
         .unwrap();
-    let outcome = drive_run(
+    let result = drive_run(
         run,
         performers,
         recorder.clone(),
         run_id,
         CancelHandle::new(),
     )
-    .await
-    .unwrap();
-    assert_eq!(completed(outcome.clone()), "plain");
+    .await;
+    assert_eq!(completed(result.clone()), "plain");
     assert_eq!(
-        recorder.outcome(run_id),
-        Some(outcome),
+        recorder.result(run_id),
+        Some(result),
         "the loop ends the run preparation began"
     );
 }
 
 /// Prepares `source` with `services` and drives the run to its end,
-/// returning the run's id at the recorder beside its outcome.
-pub(crate) async fn prepare_and_drive(source: &str, services: Services) -> (RunId, RunOutcome) {
+/// returning the run's id at the recorder beside its result.
+pub(crate) async fn prepare_and_drive(
+    source: &str,
+    services: Services,
+) -> (RunId, Result<String, Error>) {
     let recorder = Arc::clone(&services.recorder);
     let prepared = begin_and_prepare(source, services).await.unwrap();
-    let outcome = drive_run(
+    let result = drive_run(
         prepared.run,
         prepared.performers,
         recorder,
         prepared.run_id,
         CancelHandle::new(),
     )
-    .await
-    .unwrap();
-    (prepared.run_id, outcome)
+    .await;
+    (prepared.run_id, result)
 }
 
 /// Prepares `source` over `host` and drives the run to its end.
-pub(crate) async fn drive_over(source: &str, host: HostContext) -> RunOutcome {
+pub(crate) async fn drive_over(source: &str, host: HostContext) -> Result<String, Error> {
     prepare_and_drive(source, services(&recorder(), host))
         .await
         .1
 }
 
-/// The notice of a run its first step refused, after asserting that the
-/// outcome is a `RequirementsUnmet` failure.
+/// The located notice of a run its first step refused, after asserting
+/// that the run ended with a `RequirementsUnmet` failure.
 #[track_caller]
-pub(crate) fn refusal(outcome: RunOutcome) -> String {
-    match outcome {
-        RunOutcome::Failed {
-            kind: RunErrorKind::RequirementsUnmet,
-            message,
-        } => message,
+pub(crate) fn refusal(result: Result<String, Error>) -> String {
+    match result {
+        Err(error) if error.code == ErrorCode::RequirementsUnmet => error.located_message(),
         other => panic!("the run's first step refuses it: {other:?}"),
     }
 }

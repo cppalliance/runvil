@@ -5,7 +5,7 @@ use super::*;
 use std::sync::Arc;
 
 use harness::pack::{HostContext, HostServices, PackRegistry};
-use harness::record::{MemoryRecorder, RunOutcome};
+use harness::record::MemoryRecorder;
 use harness::vfs::VfsRef;
 use harness::{BoxFuture, Harness, HostSnapshot, InferenceBroker, RunRequest};
 use plugin_user_input::{INPUT_BROKER, InputBroker};
@@ -302,18 +302,16 @@ async fn an_ask_is_answered_when_the_registry_receives_the_text() {
             .expect("the wait completes");
     };
     let (report, ()) = tokio::join!(harness.run(request), answer);
-    let report = report.expect("the run reaches an outcome");
+    let report = report.expect("the run reaches its result");
     assert_eq!(
-        report.outcome,
-        RunOutcome::Completed {
-            final_text: GNARLY.to_owned()
-        },
+        report.result,
+        Ok(GNARLY.to_owned()),
         "the operator's text is the section's return value, byte-exact"
     );
     assert_eq!(
-        recorder.outcome(report.run_id),
-        Some(report.outcome),
-        "the recorder holds the operator's text in the run's outcome"
+        recorder.result(report.run_id),
+        Some(report.result),
+        "the recorder holds the operator's text in the run's result"
     );
     assert!(
         registry.unresolved().is_empty(),

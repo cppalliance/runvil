@@ -26,8 +26,9 @@ use std::sync::Arc;
 use criterion::{Criterion, criterion_group, criterion_main};
 use runvil_engine::test_support::scripted_chat::{ScriptedChat, ScriptedReply};
 use runvil_engine::test_support::{drive, perform_locally};
-use runvil_engine::{Effect, EffectAnswer, Run, RunOutcome, RunParams};
+use runvil_engine::{Effect, EffectAnswer, Run, RunParams};
 use runvil_prompt::Prompt;
+use runvil_types::error::{Error, ErrorCode};
 use runvil_types::models::{ModelCatalog, ModelId, ModelInfo, ModelRole, ThinkingMode};
 use runvil_types::seed::RunSeed;
 use runvil_types::timestamp::Timestamp;
@@ -81,12 +82,12 @@ fn parse_loop_prompt() -> Prompt {
 /// Runs `prompt` on a `context`-token window, on the serial driver: every
 /// effect is performed in process, and every round is answered by `chat`.
 /// A prompt the run's start checks refuse ends with the refusal.
-fn run_once(prompt: &Prompt, chat: &ScriptedChat, context: u32) -> RunOutcome {
+fn run_once(prompt: &Prompt, chat: &ScriptedChat, context: u32) -> Result<String, Error> {
     let model = bench_catalog(context).models()[0].clone();
     let ctx = RunParams::new(EXECUTION, SEED, Timestamp::UNIX_EPOCH)
         .with_models(BTreeMap::from([(ModelRole::Default, model)]));
     let run = Run::new(Arc::new(prompt.clone()), "", ctx);
-    let (outcome, _) = drive(run, |_, effect| {
+    let (result, _) = drive(run, |_, effect| {
         perform_locally(effect, &mut |round| {
             let Effect::Chat {
                 binding,
@@ -101,7 +102,7 @@ fn run_once(prompt: &Prompt, chat: &ScriptedChat, context: u32) -> RunOutcome {
             EffectAnswer::Chat(answer.map(Box::new))
         })
     });
-    outcome
+    result
 }
 
 /// One `models.loop` turn end to end: parse is excluded, so the measurement
@@ -111,11 +112,8 @@ fn models_loop(c: &mut Criterion) {
     let prompt = parse_loop_prompt();
     c.bench_function("models_loop", |b| {
         b.iter(|| {
-            let outcome = run_once(&prompt, &chat, 131_072);
-            assert!(
-                matches!(outcome, RunOutcome::Completed { .. }),
-                "the loop bench run succeeds: {outcome:?}"
-            );
+            let result = run_once(&prompt, &chat, 131_072);
+            assert!(result.is_ok(), "the loop bench run succeeds: {result:?}");
         });
     });
     assert!(
@@ -132,13 +130,13 @@ fn compactors_fail(c: &mut Criterion) {
     let prompt = parse_loop_prompt();
     c.bench_function("compactors_fail", |b| {
         b.iter(|| {
-            let RunOutcome::Failed { kind, message } = run_once(&prompt, &chat, 1) else {
-                panic!("a one-token window must exhaust at the precheck");
-            };
+            let error = run_once(&prompt, &chat, 1)
+                .expect_err("a one-token window must exhaust at the precheck");
             assert_eq!(
-                kind,
-                runvil_engine::RunErrorKind::ContextExhausted,
-                "the default compactor is compactors.fail: {message}"
+                error.code,
+                ErrorCode::ContextExhausted,
+                "the default compactor is compactors.fail: {}",
+                error.located_message()
             );
         });
     });

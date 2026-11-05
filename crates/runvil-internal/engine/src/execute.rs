@@ -6,13 +6,11 @@
 //!
 //! # Module layout
 //!
-//! The run's outcome type ([`RunOutcome`]) is defined here; the rest lives in
-//! focused private children:
+//! [`perform_vfs_op`] is defined here; the rest lives in focused private
+//! children:
 //!
 //! - `context` - the ambient run state: the run-wide `SharedState` and
 //!   each chain's `ChainState`.
-//! - `error` - the stable [`RunErrorKind`] of a failed outcome, and the
-//!   kind and message an Engine failure ends a run with.
 //! - `fill` - the fill function, which builds the model set from the
 //!   caller's role map when the run is built.
 //! - `infer` - the nested-inference round's answer.
@@ -41,7 +39,6 @@
 //! - `walk_target` - the walk-target resolution helpers.
 
 pub(crate) mod context;
-mod error;
 mod fill;
 mod infer;
 mod params;
@@ -55,10 +52,6 @@ mod turn;
 mod walk_target;
 
 // Public API surface.
-pub use error::RunErrorKind;
-pub(crate) use error::outcome;
-#[cfg(test)]
-pub(crate) use error::run_error_kind;
 pub use params::{RunLimits, RunParams};
 #[cfg(test)]
 pub(crate) use run::{AnswerRecord, ChatAnswerRecord, EffectRecord};
@@ -93,56 +86,6 @@ pub fn perform_vfs_op(
     op: VfsOp,
 ) -> std::result::Result<VfsOutcome, runvil_vfs::VfsError> {
     crate::lua::run_store_op(access, op)
-}
-
-/// The outcome of a run, which the caller reads out of [`Step::Done`].
-///
-/// Every outcome is a value of this enum. That includes a prompt that
-/// declines its task: a decline is not an error and not a cancellation, so
-/// the run still completes, with the prompt's reason for declining as the
-/// [`Completed`](RunOutcome::Completed) text. The variant tells code what
-/// happened, and the payload explains it to people and models.
-///
-/// Closed on purpose, like [`Step`]: a new outcome breaks every caller's
-/// build rather than reach code that cannot handle it.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum RunOutcome {
-    /// The run completed.
-    Completed {
-        /// The run's final text.
-        final_text: String,
-    },
-    /// The run failed.
-    Failed {
-        /// The failure's stable classification; [`RunErrorKind`] documents
-        /// each kind.
-        kind: RunErrorKind,
-        /// The failure's self-contained message, with the text of each
-        /// cause it keeps and then where it happened, when known: the
-        /// prompt name, line, and column for a failure in the prompt's
-        /// structure, fences, or lists, the line and column for one in its
-        /// frontmatter, and `(at {file}:{line})` for any other.
-        message: String,
-    },
-    /// The caller canceled the run or dropped an effect the run was waiting
-    /// on and the canceled error went uncaught, or a block raised a caught
-    /// `canceled` error value with no `task` again after another
-    /// suspending call. A raised value that names its `task` is that task's
-    /// cancellation, which fails the run as `Lua`.
-    Cancelled,
-}
-
-impl RunOutcome {
-    /// The text that names this outcome: `completed`, `failed`, or
-    /// `cancelled`.
-    #[must_use]
-    pub const fn as_str(&self) -> &'static str {
-        match self {
-            Self::Completed { .. } => "completed",
-            Self::Failed { .. } => "failed",
-            Self::Cancelled => "cancelled",
-        }
-    }
 }
 
 #[cfg(test)]

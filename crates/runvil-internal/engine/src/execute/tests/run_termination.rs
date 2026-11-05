@@ -44,9 +44,9 @@ fn canceling_a_run_settles_every_live_task_with_one_terminal_before_the_run_ends
     let trace = driving.finish();
 
     assert!(
-        matches!(trace.outcome(), RunOutcome::Cancelled),
+        trace.error().is_canceled(),
         "the test driver's cancel ends the run as canceled: {:?}",
-        trace.outcome()
+        trace.result()
     );
     assert!(
         matches!(

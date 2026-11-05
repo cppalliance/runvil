@@ -76,8 +76,8 @@ fn vfs_observations(op: &VfsOp) -> Option<(Lifecycle, Lifecycle)> {
 /// spot rather than resuming it into Lua, so no author `pcall` can catch
 /// it. Every other failure returns as the call's answer as a store
 /// failure with the model-facing message rendered for the operation and
-/// the store's code and facts, which ends the run as a
-/// `RunErrorKind::Vfs` error if it aborts the chunk uncaught.
+/// the store's code and facts, which ends the run with that code if it
+/// aborts the chunk uncaught.
 fn classify_vfs_failure(op: &VfsOp, cause: &VfsError) -> Error {
     match cause {
         VfsError::Conflict { detail, .. } => error::determinism(detail),

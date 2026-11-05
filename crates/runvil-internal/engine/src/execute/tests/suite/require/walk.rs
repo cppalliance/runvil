@@ -2,8 +2,7 @@
 //! library it runs under the section rules, and the two placements that
 //! keep a returning library away from the walk.
 
-use crate::RunErrorKind;
-use crate::execute::run_error_kind;
+use runvil_types::error::ErrorCode;
 
 use super::*;
 
@@ -44,7 +43,7 @@ fn the_walk_fails_the_run_on_a_library_that_returns_a_table() {
     );
     let trace = require_case(source).run();
     let error = trace.error();
-    assert_eq!(run_error_kind(error.code), RunErrorKind::Lua, "{error}");
+    assert_eq!(error.code, ErrorCode::LuaRuntime, "{error}");
     assert!(
         error
             .to_string()

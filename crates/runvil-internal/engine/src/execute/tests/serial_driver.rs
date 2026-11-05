@@ -57,8 +57,8 @@ fn the_driver_runs_a_literal_prompt_with_no_effect() {
     // events open and close with the run's boundaries.
     let md = "---\nname: t\ndescription: d\nrunvil: 0\n---\n\n# Title\n\n## Only\n\n```lua\nreturn 'hello'\n```\n";
     let run = Run::new(Arc::new(parse(md)), "", test_params(EXECUTION));
-    let (outcome, events) = drive(run, |_, effect| panic!("no effect is issued: {effect:?}"));
-    assert_eq!(text_of(outcome), "hello");
+    let (result, events) = drive(run, |_, effect| panic!("no effect is issued: {effect:?}"));
+    assert_eq!(text_of(result), "hello");
     assert!(
         matches!(events.first(), Some(Event::RunStarted { .. })),
         "the events open with the run's start: {events:?}"
@@ -78,10 +78,10 @@ fn the_driver_performs_store_and_model_effects_and_keeps_the_events_in_order() {
         store.write('notes.md', 'kept')\n\
         return store.read('notes.md') .. '/' .. models.infer('ask')\n\
         ```\n";
-    let (outcome, events) = drive(model_run(md), |_, effect| {
+    let (result, events) = drive(model_run(md), |_, effect| {
         perform_locally(effect, &mut echo_chat)
     });
-    assert_eq!(text_of(outcome), "kept/r(ask)");
+    assert_eq!(text_of(result), "kept/r(ask)");
     let order: Vec<&str> = events
         .iter()
         .filter_map(|event| match event {
@@ -123,13 +123,13 @@ fn a_three_arm_fanout_fed_its_answers_in_reverse_order_packs_results_in_collecti
     for issued in effects.into_iter().rev() {
         run.resume(issued.id, echo_chat(&issued.effect));
     }
-    let (outcome, events) = match run.step() {
-        Step::Done { outcome, events } => (outcome, events),
+    let (result, events) = match run.step() {
+        Step::Done { result, events } => (result, events),
         other @ Step::Pending { .. } => {
             panic!("every arm is answered, so the fanout completes: {other:?}")
         }
     };
-    assert_eq!(text_of(outcome), "0.1|0.0.0=r(a)|0.1.0=r(b)|0.2.0=r(c)");
+    assert_eq!(text_of(result), "0.1|0.0.0=r(a)|0.1.0=r(b)|0.2.0=r(c)");
     assert_eq!(
         succeeded(&events),
         ["0.2", "0.1", "0.0"],

@@ -11,7 +11,6 @@ use runvil_types::error::ErrorCode;
 
 use crate::test_support::at_line;
 use crate::test_support::scenario::Scenario;
-use crate::{RunErrorKind, RunOutcome};
 
 /// The prompt whose one section `Only` holds the Markdown `body`.
 fn only(body: &str) -> String {
@@ -173,14 +172,8 @@ fn an_uncaught_read_error_fails_the_run() {
         at_line(12),
         "the placeholder's line, not the read's: {error:?}"
     );
-    assert!(
-        matches!(
-            trace.outcome(),
-            RunOutcome::Failed { kind: RunErrorKind::Lua, message } if message.ends_with(" (at prompt:12)")
-        ),
-        "{:?}",
-        trace.outcome()
-    );
+    let message = error.located_message();
+    assert!(message.ends_with(" (at prompt:12)"), "{message}");
 }
 
 #[test]

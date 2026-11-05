@@ -2,9 +2,9 @@
 //! the walk, `call`, and fanout arms and the line its failed read-back is
 //! placed on, bare globals in prose, and the `sys` metadata.
 
+use runvil_types::error::ErrorCode;
+
 use super::*;
-use crate::RunErrorKind;
-use crate::execute::run_error_kind;
 use crate::test_support::at_line;
 
 /// The `tasks` global is the task namespace (`tasks.spawn` and the
@@ -151,8 +151,8 @@ fn var_write_of_a_function_fails_the_run() {
     let trace = Scenario::new(one_section("var.f = function() end")).run();
     let error = trace.error();
     assert_eq!(
-        run_error_kind(error.code),
-        RunErrorKind::Lua,
+        error.code,
+        ErrorCode::LuaRuntime,
         "the guard raises in Lua: {error}"
     );
     assert!(
@@ -286,8 +286,8 @@ fn missing_bare_global_in_prose_errors() {
     let trace = Scenario::new(source.build()).run();
     let error = trace.error();
     assert_eq!(
-        run_error_kind(error.code),
-        RunErrorKind::Lua,
+        error.code,
+        ErrorCode::Substitution,
         "the Lua read of `prose` raises the substitution failure: {error}"
     );
     assert!(
@@ -318,8 +318,8 @@ fn bare_global_holding_json_null_in_prose_is_the_null_value_failure() {
     let trace = Scenario::new(source.build()).run();
     let error = trace.error();
     assert_eq!(
-        run_error_kind(error.code),
-        RunErrorKind::Lua,
+        error.code,
+        ErrorCode::Substitution,
         "the Lua read of `prose` raises the substitution failure: {error}"
     );
     let rendered = error.to_string();

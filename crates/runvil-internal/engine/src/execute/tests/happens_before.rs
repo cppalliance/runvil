@@ -17,8 +17,7 @@
 //! tests below pin the invariant around them.
 //! The two concurrency traces sit in `concurrency`.
 
-use crate::RunErrorKind;
-use crate::execute::RunOutcome;
+use crate::Error;
 use crate::test_support::rig::{Rig, RigTrace};
 use crate::test_support::scenario::{Batching, TestStore, drive_batched};
 use crate::test_support::seeded::Seeded;
@@ -265,7 +264,7 @@ fn trace_scenario(source: &str, store: &TestStore) -> Scenario {
 #[track_caller]
 fn serial_results(
     scenario: impl Fn(&TestStore) -> Scenario,
-) -> Vec<(Batching, RunOutcome, TestStore)> {
+) -> Vec<(Batching, Result<String, Error>, TestStore)> {
     let mut results = Vec::new();
     for batching in BATCHINGS {
         let store = TestStore::new();
@@ -292,21 +291,16 @@ fn shuffled_results(scenario: impl Fn(&TestStore) -> Scenario) -> Vec<(Seeded, R
 }
 
 /// The text of a successful result, or `None`.
-fn ok_text(result: &RunOutcome) -> Option<&str> {
-    match result {
-        RunOutcome::Completed { final_text: text } => Some(text),
-        _ => None,
-    }
+fn ok_text(result: &Result<String, Error>) -> Option<&str> {
+    result.as_ref().ok().map(String::as_str)
 }
 
 /// Whether a result is the fatal determinism violation.
-fn is_determinism(result: &RunOutcome) -> bool {
+fn is_determinism(result: &Result<String, Error>) -> bool {
     matches!(
         result,
-        RunOutcome::Failed {
-            kind: RunErrorKind::Vfs,
-            message,
-        } if message.starts_with("store determinism violation: ")
+        Err(error) if error.code == ErrorCode::Determinism
+            && error.located_message().starts_with("store determinism violation: ")
     )
 }
 
@@ -341,7 +335,7 @@ fn assert_every_interleaving_leaves(
         }
     }
     for (seeded, rig) in shuffled_results(&scenario) {
-        let result = rig.trace().outcome();
+        let result = rig.trace().result();
         seeded.check_eq(&ok_text(result), &Some(expected), format!("{result:?}"));
         if let Some((path, contents)) = file {
             let left = rig.trace().read(path);
@@ -365,7 +359,7 @@ fn assert_every_interleaving_conflicts(scenario: impl Fn(&TestStore) -> Scenario
         );
     }
     for (seeded, rig) in shuffled_results(&scenario) {
-        let result = rig.trace().outcome();
+        let result = rig.trace().result();
         seeded.check(
             is_determinism(result),
             format!("expected determinism, got {result:?}"),
@@ -414,8 +408,9 @@ fn join_any_joins_the_task_it_returns_and_only_that_task() {
     // legal texts.
     let gateway = ScriptedChat::new(vec![text("ra"), text("rb")]);
     let pass = |store: &TestStore| trace_scenario(TRACE_5_PASS, store).chat(&gateway);
-    let legal =
-        |result: &RunOutcome| matches!(ok_text(result), Some("written by a" | "written by b"));
+    let legal = |result: &Result<String, Error>| {
+        matches!(ok_text(result), Some("written by a" | "written by b"))
+    };
     for (batching, result, _) in serial_results(pass) {
         assert!(
             legal(&result),
@@ -423,7 +418,7 @@ fn join_any_joins_the_task_it_returns_and_only_that_task() {
         );
     }
     for (seeded, rig) in shuffled_results(pass) {
-        let result = rig.trace().outcome();
+        let result = rig.trace().result();
         seeded.check(legal(result), format!("an illegal verdict: {result:?}"));
     }
 

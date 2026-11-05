@@ -1,7 +1,7 @@
 //! A stop and a cancel reaching the effects in flight: `stop_round` drops
 //! a chat round, a tool call, and a timer and leaves the run's cancel
 //! flag clear, so a `pcall` keeps the run alive while an uncaught drop
-//! ends it `Cancelled`; two calls one round requested are in flight at
+//! ends it canceled; two calls one round requested are in flight at
 //! once and one stop drops both; a prompt shaped like `chat` returns to its
 //! question after a stop during a tool call; and a stop leaves a question
 //! to the operator, or any call whose tool info survives stops, open,
@@ -12,17 +12,17 @@ use std::sync::atomic::Ordering;
 
 use harness_runner::Harness;
 use harness_runner::recorder::MemoryRecorder;
+use runvil::error::Error;
 use runvil::model::{Completion, CompletionResult, ToolCall};
 use runvil_plugin::HostServices;
 use serde_json::json;
 
-use super::{
-    PendingTimer, RunOutcome, answers_to, answers_where, calls, request, run_beside, until,
-};
+use super::{PendingTimer, answers_to, answers_where, calls, request, run_beside, until};
 use crate::scripted::{
     Held, HeldTimer, MODEL, Operator, ScriptedBroker, held_broker, hold_host, reply,
     surviving_hold_host,
 };
+use crate::support::assert_canceled;
 
 /// The fixture ask tool's id, under the asker's Pack id.
 const ASK_TOOL: &str = "user-input/ask";
@@ -114,13 +114,11 @@ async fn a_stop_drops_a_chat_round_a_tool_call_and_a_timer_and_a_pcall_keeps_the
         control.stop_round();
     })
     .await
-    .expect("the run reaches an outcome");
+    .expect("the run is reported");
 
     assert_eq!(
-        report.outcome,
-        RunOutcome::Completed {
-            final_text: "false:canceled|chat:false:canceled|tool:false:canceled".to_owned()
-        },
+        report.result,
+        Ok("false:canceled|chat:false:canceled|tool:false:canceled".to_owned()),
         "the main's pcall caught its dropped wait, each child's pcall caught its dropped \
          call, and the run went on to its end"
     );
@@ -156,11 +154,11 @@ async fn an_uncaught_stopped_round_ends_the_run_canceled() {
         control.stop_round();
     })
     .await
-    .expect("the run reaches an outcome");
+    .expect("the run is reported");
 
-    assert_eq!(report.outcome, RunOutcome::Cancelled);
+    assert_canceled(&report.result);
     let run_id = report.run_id;
-    assert_eq!(recorder.outcome(run_id), Some(RunOutcome::Cancelled));
+    assert_eq!(recorder.result(run_id), Some(report.result));
     assert_eq!(
         answers_to(&recorder.records(run_id), "Chat"),
         [json!("Dropped")]
@@ -217,13 +215,11 @@ async fn two_calls_in_one_round_are_in_flight_at_once_and_a_stop_drops_both() {
         control.stop_round();
     })
     .await
-    .expect("the run reaches an outcome");
+    .expect("the run is reported");
 
     assert_eq!(
-        report.outcome,
-        RunOutcome::Completed {
-            final_text: "false:canceled".to_owned()
-        },
+        report.result,
+        Ok("false:canceled".to_owned()),
         "the loop's pcall caught the dropped batch"
     );
     assert_eq!(held.dropped(), 2, "the stop tore both calls down");
@@ -268,12 +264,12 @@ async fn a_chat_shaped_prompt_returns_to_its_question_after_a_stop_during_a_tool
         control.cancel();
     })
     .await
-    .expect("the run reaches an outcome");
+    .expect("the run is reported");
 
-    assert_eq!(
-        report.outcome,
-        RunOutcome::Cancelled,
-        "the cancel ended the run waiting on its second question"
+    assert!(
+        report.result.as_ref().is_err_and(Error::is_canceled),
+        "the cancel ended the run waiting on its second question: {:?}",
+        report.result
     );
     assert_eq!(tool.dropped(), 1, "the stopped tool call was torn down");
     assert_eq!(
@@ -337,13 +333,11 @@ async fn a_stop_leaves_a_question_to_the_operator_open() {
         },
     )
     .await
-    .expect("the run reaches an outcome");
+    .expect("the run is reported");
 
     assert_eq!(
-        report.outcome,
-        RunOutcome::Completed {
-            final_text: "kept".to_owned()
-        },
+        report.result,
+        Ok("kept".to_owned()),
         "the question survived the stop and its answer ended the run"
     );
     let records = recorder.records(report.run_id);
@@ -378,9 +372,9 @@ async fn a_stop_leaves_any_tool_call_whose_info_survives_stops_in_flight() {
         control.cancel();
     })
     .await
-    .expect("the run reaches an outcome");
+    .expect("the run is reported");
 
-    assert_eq!(report.outcome, RunOutcome::Cancelled);
+    assert_canceled(&report.result);
     assert_eq!(tool.dropped(), 1, "the cancel tore the surviving call down");
 }
 
@@ -402,9 +396,9 @@ async fn a_cancel_drops_a_question_to_the_operator() {
         },
     )
     .await
-    .expect("the run reaches an outcome");
+    .expect("the run is reported");
 
-    assert_eq!(report.outcome, RunOutcome::Cancelled);
+    assert_canceled(&report.result);
     assert_eq!(
         operator.abandoned.load(Ordering::SeqCst),
         1,

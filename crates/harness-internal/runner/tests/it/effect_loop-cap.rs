@@ -12,7 +12,7 @@ use std::time::Duration;
 
 use harness_runner::effect_loop::drive_run;
 use harness_runner::performers::{BoxFuture, ToolPerformer};
-use harness_runner::recorder::{MemoryRecorder, RecordKind, RunId, RunOutcome};
+use harness_runner::recorder::{MemoryRecorder, RecordKind, RunId};
 use runvil::cancel::CancelHandle;
 use runvil::effect::ToolCallOrigin;
 use runvil::error::Error;
@@ -28,7 +28,7 @@ use tokio::sync::{Notify, Semaphore};
 
 use super::begun_log;
 use crate::scripted::{Kept, MODEL, ScriptedBroker, reply};
-use crate::support::{EXECUTION, TEST_SEED, unused};
+use crate::support::{EXECUTION, TEST_SEED, assert_canceled, unused};
 
 /// How long a test waits for a run before it fails.
 const PATIENCE: Duration = Duration::from_secs(10);
@@ -238,13 +238,13 @@ impl Rig {
 
     /// Drives a run over `sections` under the rig's cancel flag, with
     /// `broker` and the rig's tool, beside `steer`, and returns the run's
-    /// outcome. Fails when the two outlast [`PATIENCE`].
+    /// result. Fails when the two outlast [`PATIENCE`].
     async fn drive(
         &self,
         sections: &str,
         broker: ScriptedBroker,
         steer: impl Future<Output = ()>,
-    ) -> RunOutcome {
+    ) -> Result<String, Error> {
         let mut performers = unused();
         performers.broker = Arc::new(broker);
         performers.tool = self.tool.clone();
@@ -255,10 +255,10 @@ impl Rig {
             self.run_id,
             self.cancel.clone(),
         );
-        let (outcome, ()) = tokio::time::timeout(PATIENCE, async { tokio::join!(drive, steer) })
+        let (result, ()) = tokio::time::timeout(PATIENCE, async { tokio::join!(drive, steer) })
             .await
             .expect("the run ends in time");
-        outcome.expect("the drive reaches an outcome")
+        result
     }
 
     /// Whether the run has recorded a tool call whose `name` is `name`.
@@ -290,12 +290,6 @@ impl Rig {
     }
 }
 
-fn completed(final_text: &str) -> RunOutcome {
-    RunOutcome::Completed {
-        final_text: final_text.to_owned(),
-    }
-}
-
 #[tokio::test]
 async fn the_cap_holds_extra_calls_until_one_lands() {
     let rig = Rig::with_cap(2).await;
@@ -308,7 +302,7 @@ async fn the_cap_holds_extra_calls_until_one_lands() {
         Box::pin(async move { answer })
     });
 
-    let outcome = rig
+    let result = rig
         .drive(&looping("Only", "go", "done"), broker, async {
             until("two calls start", || rig.tool.started().len() >= 2).await;
             settle().await;
@@ -323,7 +317,7 @@ async fn the_cap_holds_extra_calls_until_one_lands() {
         })
         .await;
 
-    assert_eq!(outcome, completed("done"));
+    assert_eq!(result, Ok("done".to_owned()));
     assert_eq!(rig.tool.started(), ["c1", "c2", "c3"]);
     assert_eq!(rig.tool_call_answers().len(), 3);
 }
@@ -349,7 +343,7 @@ async fn waiting_calls_start_oldest_first() {
         looping("B", "b", "b done")
     );
 
-    let outcome = rig
+    let result = rig
         .drive(&sections, broker, async {
             until("B's call is issued", || rig.recorded("b1")).await;
             settle().await;
@@ -358,7 +352,7 @@ async fn waiting_calls_start_oldest_first() {
         })
         .await;
 
-    assert_eq!(outcome, completed("joined"));
+    assert_eq!(result, Ok("joined".to_owned()));
     assert_eq!(
         rig.tool.started(),
         ["a1", "a2", "a3", "b1"],
@@ -387,9 +381,9 @@ async fn a_call_withdrawn_in_the_step_that_issued_it_never_starts() {
     });
     let sections = format!("{MAIN_CANCELS}{}", looping("Child", "go", "child done"));
 
-    let outcome = rig.drive(&sections, broker, async {}).await;
+    let result = rig.drive(&sections, broker, async {}).await;
 
-    assert_eq!(outcome, completed("canceled"));
+    assert_eq!(result, Ok("canceled".to_owned()));
     assert!(
         rig.tool.started().is_empty(),
         "a withdrawn call never starts: {:?}",
@@ -418,9 +412,9 @@ async fn canceling_a_task_drops_its_waiting_and_running_calls() {
     });
     let sections = format!("{MAIN_CANCELS}{}", looping("Child", "go", "child done"));
 
-    let outcome = rig.drive(&sections, broker, async {}).await;
+    let result = rig.drive(&sections, broker, async {}).await;
 
-    assert_eq!(outcome, completed("canceled"));
+    assert_eq!(result, Ok("canceled".to_owned()));
     assert_eq!(rig.tool.started(), ["c1"], "the waiting call never started");
     assert_eq!(rig.tool.torn_down(), 1, "the running call was torn down");
     assert_eq!(
@@ -441,14 +435,14 @@ async fn a_cancel_drops_waiting_calls_without_starting_them() {
         Box::pin(async move { answer })
     });
 
-    let outcome = rig
+    let result = rig
         .drive(&looping("Only", "go", "done"), broker, async {
             until("one call starts", || !rig.tool.started().is_empty()).await;
             rig.cancel.cancel();
         })
         .await;
 
-    assert_eq!(outcome, RunOutcome::Cancelled);
+    assert_canceled(&result);
     assert_eq!(rig.tool.started(), ["c1"], "the waiting call never started");
     assert_eq!(
         rig.tool_call_answers(),

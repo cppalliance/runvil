@@ -69,7 +69,7 @@ impl Seeded {
 }
 
 #[test]
-fn seeded_failure_messages_name_the_seed() {
+fn seeded_draws_replay_and_a_failing_check_names_the_seed() {
     let mut rng = Seeded::new(0x5EED);
     let mut replay = Seeded::new(rng.seed());
     let draw = rng.next_u64();

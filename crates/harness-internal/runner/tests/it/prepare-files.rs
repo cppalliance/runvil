@@ -3,18 +3,16 @@
 //! view wherever the handle mounts the store; a Host-seeded store
 //! satisfies the declaration; text with no declared file and a declared
 //! file with neither text nor a seeded copy each refuse the run and end it
-//! under the `RequirementsUnmet` kind, and a store that refuses the write
-//! ends it under the `Vfs` kind; and the
-//! declared `output:` path comes back on the prepared run for the caller
-//! to read once the run completes.
+//! with a `RequirementsUnmet` failure, and a store that refuses the write
+//! ends it with the store's refusal; and the declared `output:` path comes
+//! back on the prepared run for the caller to read once the run completes.
 
 use std::sync::Arc;
 
-use harness_runner::display_chain;
 use harness_runner::effect_loop::drive_run;
 use harness_runner::files::read_output;
 use harness_runner::prepare::Prepared;
-use harness_runner::recorder::{MemoryRecorder, RunErrorKind, RunOutcome};
+use harness_runner::recorder::MemoryRecorder;
 use runvil::cancel::CancelHandle;
 use runvil::error::{Error, ErrorCode, FactKey};
 use runvil::event::Event;
@@ -47,18 +45,15 @@ async fn prepare_over(
     (recorder, prepared)
 }
 
-/// Checks that `error` is an input refusal whose run ended under `kind`
-/// with the cause chain as its message, and that the recorder holds only
-/// the run's parse events. Returns the refusal.
-fn refused(recorder: &MemoryRecorder, error: Error, kind: RunErrorKind) -> Error {
+/// Checks that `error` is an input refusal whose run ended with it as its
+/// result, and that the recorder holds only the run's parse events.
+/// Returns the refusal.
+fn refused(recorder: &MemoryRecorder, error: Error) -> Error {
     let run_id = run_of(&error);
     assert_eq!(
-        recorder.outcome(run_id),
-        Some(RunOutcome::Failed {
-            kind,
-            message: display_chain(&error),
-        }),
-        "the recorder holds the refusal under the {kind:?} kind"
+        recorder.result(run_id),
+        Some(Err(error.clone())),
+        "the recorder holds the refusal as the run's result"
     );
     let events = recorded_parse_events(recorder, run_id);
     assert!(
@@ -74,16 +69,15 @@ async fn the_input_text_is_staged_at_the_declared_path_and_the_output_path_comes
     let (recorder, prepared) = prepare_over(FILES, &vfs, Some("# Paper")).await;
     let prepared = prepared.expect("a supplied declared input prepares");
     assert_eq!(prepared.output_path.as_deref(), Some("report.md"));
-    let outcome = drive_run(
+    let result = drive_run(
         prepared.run,
         prepared.performers,
         recorder.clone(),
         prepared.run_id,
         CancelHandle::new(),
     )
-    .await
-    .unwrap();
-    assert_eq!(completed(outcome), "done");
+    .await;
+    assert_eq!(completed(result), "done");
     assert_eq!(read_output(&vfs, "report.md").unwrap(), "seen: # Paper");
 }
 
@@ -117,11 +111,7 @@ async fn a_host_seeded_store_satisfies_the_declared_input() {
 #[tokio::test]
 async fn input_text_for_a_prompt_that_declares_no_input_is_refused() {
     let (recorder, prepared) = prepare_over(PLAIN, &VfsRef::default(), Some("# Paper")).await;
-    let source = refused(
-        &recorder,
-        prepared.expect_err("undeclared input refuses"),
-        RunErrorKind::RequirementsUnmet,
-    );
+    let source = refused(&recorder, prepared.expect_err("undeclared input refuses"));
     assert_eq!(source.code, ErrorCode::RequirementsUnmet);
     assert_eq!(
         source.message,
@@ -137,11 +127,7 @@ async fn input_text_for_a_prompt_that_declares_no_input_is_refused() {
 #[tokio::test]
 async fn a_declared_input_neither_supplied_nor_in_the_store_is_refused() {
     let (recorder, prepared) = prepare_over(FILES, &VfsRef::default(), None).await;
-    let source = refused(
-        &recorder,
-        prepared.expect_err("a missing input refuses"),
-        RunErrorKind::RequirementsUnmet,
-    );
+    let source = refused(&recorder, prepared.expect_err("a missing input refuses"));
     assert_eq!(source.code, ErrorCode::RequirementsUnmet);
     assert_eq!(
         source.facts.get(&FactKey::Reason),
@@ -161,11 +147,7 @@ async fn a_store_that_refuses_the_staging_write_refuses_the_run() {
         .policy(ModePolicy::new(Mode::Ask))
         .build();
     let (recorder, prepared) = prepare_over(FILES, &vfs, Some("# Paper")).await;
-    let source = refused(
-        &recorder,
-        prepared.expect_err("a refused write refuses"),
-        RunErrorKind::Vfs,
-    );
+    let source = refused(&recorder, prepared.expect_err("a refused write refuses"));
     assert_eq!(
         source.code,
         ErrorCode::ApprovalRequired,

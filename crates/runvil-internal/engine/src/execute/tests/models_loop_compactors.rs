@@ -13,7 +13,6 @@ use runvil_prompt::test_support::one_section;
 use super::gateway::overflowing;
 use super::models_loop::loop_scenario;
 use super::*;
-use crate::RunErrorKind;
 
 #[test]
 fn an_omitted_compactor_defaults_to_fail_with_typed_precheck_exhaustion() {
@@ -89,11 +88,7 @@ fn an_uncaught_compactors_fail_with_a_callers_reason_ends_the_run_as_context_exh
     );
     let trace = loop_scenario(source).chat(&gateway).run();
     let error = trace.error();
-    assert_eq!(
-        run_error_kind(error.code),
-        RunErrorKind::ContextExhausted,
-        "{error}"
-    );
+    assert_eq!(error.code, ErrorCode::ContextExhausted, "{error}");
     assert!(
         error.to_string().contains("manual"),
         "the run's message holds the caller's reason, got: {error}"
@@ -118,11 +113,7 @@ fn an_uncaught_direct_compactors_fail_ends_the_run_as_context_exhausted() {
     );
     let trace = loop_scenario(source).chat(&gateway).run();
     let error = trace.error();
-    assert_eq!(
-        run_error_kind(error.code),
-        RunErrorKind::ContextExhausted,
-        "{error}"
-    );
+    assert_eq!(error.code, ErrorCode::ContextExhausted, "{error}");
     assert!(
         error.to_string().contains("manual"),
         "the run's message holds the caller's reason, got: {error}"
@@ -220,9 +211,9 @@ fn cancel_during_a_looping_compactor_returns_promptly() {
         .cancel_when(|effect| matches!(effect, Effect::Chat { .. }))
         .run();
     assert!(
-        matches!(trace.outcome(), RunOutcome::Cancelled),
+        trace.error().is_canceled(),
         "expected the canceled run, got {:?}",
-        trace.outcome()
+        trace.result()
     );
     assert_eq!(
         gateway.call_count(),

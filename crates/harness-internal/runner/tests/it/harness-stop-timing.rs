@@ -15,8 +15,8 @@ use runvil_plugin::{HostServices, PackRegistry};
 use serde_json::json;
 
 use super::{
-    HookedBackend, PendingTimer, RunOutcome, answers_to, answers_where, calls, plain_harness,
-    request, run_beside, until,
+    HookedBackend, PendingTimer, answers_to, answers_where, calls, plain_harness, request,
+    run_beside, until,
 };
 use crate::asker::ASKER;
 use crate::scripted::{Held, HeldTimer, Operator, ScriptedBroker, held_broker};
@@ -110,13 +110,11 @@ async fn a_stop_drops_a_timed_join_any_and_its_pcall_resumes_while_the_joined_ta
         answers.send("kept".to_owned()).unwrap();
     })
     .await
-    .expect("the run reaches an outcome");
+    .expect("the run is reported");
 
     assert_eq!(
-        report.outcome,
-        RunOutcome::Completed {
-            final_text: "false:canceled|re: after|kept".to_owned()
-        },
+        report.result,
+        Ok("false:canceled|re: after|kept".to_owned()),
         "the wait raised the canceled error, and the child's question outlived the stop"
     );
     assert_eq!(timer.dropped(), 1, "the stopped timer was torn down");
@@ -159,13 +157,11 @@ async fn a_stop_seen_before_a_steps_effects_start_drops_the_round_in_flight_and_
         |_control| async {},
     )
     .await
-    .expect("the run reaches an outcome");
+    .expect("the run is reported");
 
     assert_eq!(
-        report.outcome,
-        RunOutcome::Completed {
-            final_text: "chat:false:canceled".to_owned()
-        },
+        report.result,
+        Ok("chat:false:canceled".to_owned()),
         "the child's pcall caught its dropped round, and the main joined the child"
     );
     let records = recorder.records(report.run_id);
@@ -203,13 +199,11 @@ async fn a_stop_with_only_a_question_open_spares_the_round_after_its_answer() {
         answers.send("kept".to_owned()).unwrap();
     })
     .await
-    .expect("the run reaches an outcome");
+    .expect("the run is reported");
 
     assert_eq!(
-        report.outcome,
-        RunOutcome::Completed {
-            final_text: "re: kept".to_owned()
-        },
+        report.result,
+        Ok("re: kept".to_owned()),
         "the round after the answer completed"
     );
     assert_eq!(
@@ -243,13 +237,11 @@ async fn a_stop_raised_with_nothing_in_flight_changes_nothing_for_the_next_effec
             ..request(WRITES_THEN_INFERS)
         })
         .await
-        .expect("the run reaches an outcome");
+        .expect("the run is reported");
 
     assert_eq!(
-        report.outcome,
-        RunOutcome::Completed {
-            final_text: "re: after".to_owned()
-        },
+        report.result,
+        Ok("re: after".to_owned()),
         "the round after the stop completed"
     );
     assert_eq!(

@@ -153,7 +153,7 @@ fn a_rounds_catalog_calls_are_issued_in_one_step_and_append_in_call_order() {
     );
     run.resume(next[0].0, chat_answer(&text("done")));
     let result = match run.step() {
-        Step::Done { outcome, .. } => outcome,
+        Step::Done { result, .. } => result,
         other @ Step::Pending { .. } => panic!("the reply ends the section: {other:?}"),
     };
     assert_eq!(text_of(result), "c1=first|c2=second");
@@ -225,7 +225,7 @@ fn adhoc_calls_run_alone_between_their_neighbors() {
     );
     run.resume(next, chat_answer(&text("done")));
     let result = match run.step() {
-        Step::Done { outcome, .. } => outcome,
+        Step::Done { result, .. } => result,
         other @ Step::Pending { .. } => panic!("the reply ends the section: {other:?}"),
     };
     assert_eq!(text_of(result), "c1,c2,c3,c4|grabbed b");
@@ -281,7 +281,7 @@ fn canceling_a_task_parked_on_a_batch_orphans_every_call() {
     assert!(issued.is_empty(), "both orphans are discarded: {issued:?}");
     run.resume(linger, chat_answer(&text("done")));
     let result = match run.step() {
-        Step::Done { outcome, .. } => outcome,
+        Step::Done { result, .. } => result,
         other @ Step::Pending { .. } => panic!("Main's second round ends the run: {other:?}"),
     };
     assert_eq!(text_of(result), "canceled");

@@ -10,7 +10,7 @@ use std::time::Duration;
 
 use harness_runner::performers::{BoxFuture, InferenceBroker, Performers, Timer, ToolPerformer};
 use harness_runner::recorder::{
-    MemoryRecorder, Record, RecorderFuture, RunId, RunMeta, RunOutcome, RunRecorder, recorder_error,
+    MemoryRecorder, Record, RecorderFuture, RunId, RunMeta, RunRecorder, recorder_error,
 };
 use runvil::cancel::CancelHandle;
 use runvil::effect::{Round, ToolCallOrigin};
@@ -44,6 +44,16 @@ pub(crate) fn assert_not_completed(output: &Result<String, Error>) {
     assert_eq!(
         error.facts.get(&FactKey::Reason),
         Some(&json!("not_completed"))
+    );
+}
+
+/// Asserts a run's `result` is a cancel: the error whose code is
+/// `canceled`.
+#[track_caller]
+pub(crate) fn assert_canceled(result: &Result<String, Error>) {
+    assert!(
+        result.as_ref().is_err_and(Error::is_canceled),
+        "the run ends canceled: {result:?}"
     );
 }
 
@@ -261,7 +271,7 @@ impl ToolPerformer for ClosingTool {
         let run_id = self.run_id;
         Box::pin(async move {
             recorder
-                .end_run(run_id, RunOutcome::Cancelled)
+                .end_run(run_id, Err(Error::canceled()))
                 .await
                 .expect("the open run ends");
             Ok(ToolOutput::trusted("late"))
@@ -342,10 +352,10 @@ impl RunRecorder for FailingRecorder {
         })
     }
 
-    fn end_run(&self, run: RunId, outcome: RunOutcome) -> RecorderFuture<'_, ()> {
+    fn end_run(&self, run: RunId, result: Result<String, Error>) -> RecorderFuture<'_, ()> {
         Box::pin(async move {
             self.count()?;
-            self.inner.end_run(run, outcome).await
+            self.inner.end_run(run, result).await
         })
     }
 }

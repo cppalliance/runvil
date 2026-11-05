@@ -145,9 +145,9 @@ fn cancel_during_a_looping_adhoc_tool_handler_returns_promptly() {
         .cancel_when(|effect| matches!(effect, Effect::Chat { .. }))
         .run();
     assert!(
-        matches!(trace.outcome(), RunOutcome::Cancelled),
+        trace.error().is_canceled(),
         "expected the canceled run, got {:?}",
-        trace.outcome()
+        trace.result()
     );
 }
 

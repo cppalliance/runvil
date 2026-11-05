@@ -9,7 +9,7 @@ use std::sync::{Arc, Mutex};
 
 use harness_runner::effect_loop::drive_run;
 use harness_runner::performers::{BoxFuture, InferenceBroker, Performers};
-use harness_runner::recorder::{RecordKind, RunOutcome};
+use harness_runner::recorder::RecordKind;
 use runvil::cancel::CancelHandle;
 use runvil::effect::Round;
 use runvil::error::Error;
@@ -133,20 +133,17 @@ async fn each_round_resumes_the_run_with_the_brokers_completion() {
     let (recorder, run_id) = begun_log().await;
     let (performers, _rounds) = recording();
 
-    let outcome = drive_run(
+    let result = drive_run(
         infers_then_chats(),
         performers,
         recorder.clone(),
         run_id,
         CancelHandle::new(),
     )
-    .await
-    .unwrap();
+    .await;
     assert_eq!(
-        outcome,
-        RunOutcome::Completed {
-            final_text: "re: infer round|re: chat round".to_owned()
-        },
+        result,
+        Ok("re: infer round|re: chat round".to_owned()),
         "the program saw each round's reply as the broker wrote it"
     );
     let replies: Vec<Value> = recorder

@@ -6,7 +6,7 @@
 use std::sync::Arc;
 
 use harness_runner::effect_loop::drive_run;
-use harness_runner::recorder::{MemoryRecorder, RunOutcome};
+use harness_runner::recorder::MemoryRecorder;
 use runvil::cancel::CancelHandle;
 use runvil::error::{Error, ErrorCode};
 use runvil::tools::tool_error;
@@ -80,21 +80,17 @@ async fn a_tool_writes_through_its_context_and_the_calling_script_reads_it_back(
     let prepared = begin_and_prepare(CALLS_RECORD, services(&recorder, building(CONTEXT)))
         .await
         .unwrap();
-    let outcome = drive_run(
+    let result = drive_run(
         prepared.run,
         prepared.performers,
         recorder.clone(),
         prepared.run_id,
         CancelHandle::new(),
     )
-    .await
-    .unwrap();
-    let RunOutcome::Completed { final_text } = outcome else {
-        panic!("the run completes: {outcome:?}");
-    };
+    .await;
     assert_eq!(
-        final_text,
-        format!("Script|{WRITTEN}"),
+        result,
+        Ok(format!("Script|{WRITTEN}")),
         "the tool's origin names the script, and the section reads the file the tool wrote"
     );
 }

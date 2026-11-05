@@ -15,7 +15,7 @@ use runvil::packs::RosterEntry;
 use runvil::timestamp::Timestamp;
 use runvil::tools::tool_error;
 use runvil::vfs::{Origin, VfsRef};
-use runvil::{Prompt, Run, RunOutcome, RunParams, RunSeed, Step};
+use runvil::{Prompt, Run, RunParams, RunSeed, Step};
 use runvil_plugin::{
     HostServices, Pack, PackFuture, PackId, PackInfo, PackRegistry, ServiceId, ServiceKey,
     ToolContext, ToolId, ToolInfo, ToolOutput,
@@ -230,9 +230,8 @@ fn refusal(run: &HostRunContext, prompt: &Prompt) -> String {
     .with_packs(run.roster());
     match Run::new(Arc::new(prompt.clone()), "", ctx).step() {
         Step::Done {
-            outcome: RunOutcome::Failed { message, .. },
-            ..
-        } => message,
+            result: Err(error), ..
+        } => error.located_message(),
         other => panic!("the run's first step refuses it: {other:?}"),
     }
 }

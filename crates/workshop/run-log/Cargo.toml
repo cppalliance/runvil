@@ -10,6 +10,10 @@ repository.workspace = true
 # The recorder trait and the record values the log stores and returns,
 # through the Harness's public API.
 harness.workspace = true
+# The Engine's public API: the error a run ends with and its code, which
+# the log stores and rebuilds, since `harness::record` re-exports neither.
+# The fidelity suite also round-trips the Engine's events through the log.
+runvil.workspace = true
 serde_json.workspace = true
 shared-error-source = { workspace = true, features = ["database", "json"] }
 thiserror.workspace = true
@@ -17,8 +21,6 @@ tokio = { workspace = true, features = ["fs", "sync"] }
 turso.workspace = true
 
 [dev-dependencies]
-# The fidelity suite round-trips the Engine's events through the log.
-runvil.workspace = true
 tempfile.workspace = true
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 

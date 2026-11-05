@@ -9,6 +9,7 @@ use std::sync::Arc;
 use runvil_model_client::detail::tool_schema_new;
 use runvil_model_client::model::{ModelInvocation, Temperature};
 use runvil_types::cancel::CancelHandle;
+use runvil_types::error::ErrorCode;
 use runvil_types::event::{Event, ReplyOrigin};
 use runvil_types::ids::RoundId;
 use runvil_types::tools::ToolId;
@@ -273,13 +274,12 @@ fn done_is_withheld_while_a_store_effect_is_outstanding_and_delivered_after_drop
     );
     run.resume(id, EffectAnswer::Dropped);
     let step = run.step();
-    let Step::Done { outcome, .. } = step else {
+    let Step::Done { result, .. } = step else {
         panic!("Done follows the last answer, got {step:?}");
     };
-    assert_eq!(
-        outcome,
-        RunOutcome::Cancelled,
-        "the canceled run reports as canceled"
+    assert!(
+        matches!(&result, Err(error) if error.is_canceled()),
+        "the canceled run reports as canceled: {result:?}"
     );
 }
 
@@ -290,13 +290,12 @@ fn a_dropped_answer_resumes_a_waiting_chain_with_the_canceled_error() {
     assert!(matches!(effect, Effect::Vfs { .. }));
     run.resume(id, EffectAnswer::Dropped);
     let step = run.step();
-    let Step::Done { outcome, .. } = step else {
+    let Step::Done { result, .. } = step else {
         panic!("the dropped store operation ends the run, got {step:?}");
     };
-    assert_eq!(
-        outcome,
-        RunOutcome::Cancelled,
-        "the chain resumed with the canceled error and the run reports it"
+    assert!(
+        matches!(&result, Err(error) if error.is_canceled()),
+        "the chain resumed with the canceled error and the run reports it: {result:?}"
     );
 }
 
@@ -316,10 +315,7 @@ fn an_orphaned_effects_real_answer_is_discarded_and_still_counts_as_the_answer()
     assert!(
         matches!(
             run.step(),
-            Step::Done {
-                outcome: RunOutcome::Cancelled,
-                ..
-            }
+            Step::Done { result: Err(error), .. } if error.is_canceled()
         ),
         "Done follows the orphan's answer"
     );
@@ -337,13 +333,12 @@ fn an_answer_for_an_unissued_effect_is_an_internal_error() {
     };
     assert!(ended(&events));
     run.resume(id, EffectAnswer::Dropped);
-    let Step::Done { outcome, .. } = run.step() else {
+    let Step::Done { result, .. } = run.step() else {
         panic!("Done follows the orphan's answer");
     };
-    let RunOutcome::Failed { kind, message } = outcome else {
-        panic!("an unknown id fails the run, got {outcome:?}");
-    };
-    assert_eq!(kind, crate::execute::RunErrorKind::Internal);
+    let error = result.expect_err("an unknown id fails the run");
+    assert_eq!(error.code, ErrorCode::Internal, "{error:?}");
+    let message = error.located_message();
     assert!(
         message.contains("did not issue"),
         "the failure names the unknown id: {message}"
@@ -355,12 +350,12 @@ fn an_answer_of_the_wrong_kind_for_a_pending_effect_fails_loudly() {
     let mut run = run_of("return store.exists('x')", run_params());
     let (id, _) = only_effect(run.step());
     run.resume(id, EffectAnswer::Timer);
-    let Step::Done { outcome, .. } = run.step() else {
+    let Step::Done { result, .. } = run.step() else {
         panic!("the mismatch ends the run with nothing outstanding");
     };
-    let RunOutcome::Failed { message, .. } = outcome else {
-        panic!("a wrong-kind answer fails the run, got {outcome:?}");
-    };
+    let error = result.expect_err("a wrong-kind answer fails the run");
+    assert_eq!(error.code, ErrorCode::Internal, "{error:?}");
+    let message = error.located_message();
     assert!(
         message.contains("effect's own kind"),
         "the mismatch is a loud invariant failure: {message}"
@@ -403,10 +398,13 @@ fn a_child_cancel_handles_cancel_is_observed_by_the_instruction_hook() {
     });
     let step = run.step();
     canceller.join().expect("the canceller thread finishes");
-    let Step::Done { outcome, events } = step else {
+    let Step::Done { result, events } = step else {
         panic!("the hook aborts the loop and nothing is outstanding, got {step:?}");
     };
-    assert_eq!(outcome, RunOutcome::Cancelled);
+    assert!(
+        matches!(&result, Err(error) if error.is_canceled()),
+        "{result:?}"
+    );
     assert!(ended(&events), "the end boundary is on the final step");
 }
 
@@ -416,13 +414,12 @@ fn params_without_a_caller_handle_share_their_one_flag_with_the_run() {
     let params_flag = ctx.cancel.clone();
     let mut run = run_of("return 'x'", ctx);
     params_flag.cancel();
-    let Step::Done { outcome, .. } = run.step() else {
+    let Step::Done { result, .. } = run.step() else {
         panic!("the canceled run has nothing outstanding");
     };
-    assert_eq!(
-        outcome,
-        RunOutcome::Cancelled,
-        "the run polls the flag the params minted"
+    assert!(
+        matches!(&result, Err(error) if error.is_canceled()),
+        "the run polls the flag the params minted: {result:?}"
     );
 }
 

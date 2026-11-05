@@ -14,9 +14,7 @@ use runvil::model::{Completion, CompletionResult, ToolCall};
 use runvil_plugin::HostServices;
 use serde_json::json;
 
-use super::{
-    PendingTimer, RunOutcome, answers_to, answers_where, calls, request, run_beside, until,
-};
+use super::{PendingTimer, answers_to, answers_where, calls, request, run_beside, until};
 use crate::scripted::{Held, MODEL, Operator, ScriptedBroker, hold_host, reply};
 
 /// The held tool's id.
@@ -133,13 +131,11 @@ async fn a_stop_drops_waiting_calls_without_starting_them() {
         },
     )
     .await
-    .expect("the run reaches an outcome");
+    .expect("the run is reported");
 
     assert_eq!(
-        report.outcome,
-        RunOutcome::Completed {
-            final_text: "false:canceled".to_owned()
-        },
+        report.result,
+        Ok("false:canceled".to_owned()),
         "the loop's pcall caught the dropped batch"
     );
     assert_eq!(held.started(), 10, "the waiting call never started");
@@ -189,13 +185,11 @@ async fn a_stop_starts_a_waiting_call_that_survives_stops() {
         },
     )
     .await
-    .expect("the run reaches an outcome");
+    .expect("the run is reported");
 
     assert_eq!(
-        report.outcome,
-        RunOutcome::Completed {
-            final_text: "false:canceled".to_owned()
-        },
+        report.result,
+        Ok("false:canceled".to_owned()),
         "the batch answers with its first failure in call order"
     );
     assert_eq!(held.started(), 10);
@@ -227,13 +221,11 @@ async fn canceling_a_task_drops_its_question_to_the_operator() {
 
     let report = run_beside(harness, request(CANCELS_AN_ASKER), |_control| async {})
         .await
-        .expect("the run reaches an outcome");
+        .expect("the run is reported");
 
     assert_eq!(
-        report.outcome,
-        RunOutcome::Completed {
-            final_text: "canceled".to_owned()
-        },
+        report.result,
+        Ok("canceled".to_owned()),
         "the run went on past the canceled task"
     );
     assert_eq!(

@@ -9,7 +9,7 @@
 
 use std::sync::Arc;
 
-use crate::execute::RunOutcome;
+use crate::Error;
 use crate::execute::run::{Effect, IssuedEffect, Run, Step};
 use crate::execute::tests::context::{parse, test_params};
 use crate::prompt::Prompt;
@@ -248,12 +248,12 @@ fn answer_holding(run: &mut Run, effects: Vec<IssuedEffect>, held: &mut Vec<Effe
 /// Drives the `HELD_STORE` run over `vfs` to `Done`, keeping every
 /// effect, and returns the run itself too, so both the run and every
 /// store view it handed out are still alive when the caller asserts.
-fn drive_holding_effects(vfs: &VfsRef) -> (Run, RunOutcome, Vec<Effect>) {
+fn drive_holding_effects(vfs: &VfsRef) -> (Run, Result<String, Error>, Vec<Effect>) {
     let mut run = held_store_run(vfs);
     let mut held = Vec::new();
     loop {
         match run.step() {
-            Step::Done { outcome, .. } => return (run, outcome, held),
+            Step::Done { result, .. } => return (run, result, held),
             Step::Pending { effects, .. } => answer_holding(&mut run, effects, &mut held),
         }
     }
@@ -263,10 +263,10 @@ fn drive_holding_effects(vfs: &VfsRef) -> (Run, RunOutcome, Vec<Effect>) {
 fn a_run_ends_its_scope_at_done_while_the_caller_still_holds_its_store_views()
 -> Result<(), VfsError> {
     let vfs = VfsRef::default();
-    let (run, outcome, held) = drive_holding_effects(&vfs);
+    let (run, result, held) = drive_holding_effects(&vfs);
     assert!(
-        matches!(&outcome, RunOutcome::Completed { final_text: text } if text == "from the run"),
-        "the run succeeds: {outcome:?}"
+        matches!(&result, Ok(text) if text == "from the run"),
+        "the run succeeds: {result:?}"
     );
     assert!(
         held.iter()

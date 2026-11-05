@@ -1,8 +1,8 @@
 //! Exit rules: the section walk's (fall-through, explicit return, the
-//! generic result, H1-only prompts, the version gate, cross-section store
-//! persistence) and the `models.loop` shim's (the terminal reply, the
-//! model's clean empty exit after tool work, and the empty rounds that
-//! raise `empty_model_reply`).
+//! generic result, H1-only prompts, the version gate, a caller code ending
+//! the run as an internal error, cross-section store persistence) and the
+//! `models.loop` shim's (the terminal reply, the model's clean empty exit
+//! after tool work, and the empty rounds that raise `empty_model_reply`).
 
 use runvil_prompt::test_support::{PromptSource, one_section, prompt};
 use runvil_types::error::{ErrorCode, FactKey, Location};
@@ -96,13 +96,13 @@ fn unsupported_major_one_is_refused() {
     // Major 1 is unsupported: the gate refuses it and names the
     // declared version rather than silently degrading to major 0.
     let trace = Scenario::new(ran_under("runvil: 1\n")).run();
+    let error = trace.error();
     assert_eq!(
-        trace.outcome(),
-        &RunOutcome::Failed {
-            kind: RunErrorKind::Parse,
-            message: "unsupported runvil version: 1 (this build supports major 0) (at prompt:4)"
-                .to_owned(),
-        },
+        (error.code, error.located_message()),
+        (
+            ErrorCode::UnsupportedVersion,
+            "unsupported runvil version: 1 (this build supports major 0) (at prompt:4)".to_owned()
+        ),
         "the gate refuses major 1 by name, on its `runvil:` line"
     );
 }
@@ -178,12 +178,55 @@ fn missing_version_is_not_a_runvil_prompt() {
         "the Parse message must name the missing version, got: {error}"
     );
     assert_eq!(
-        trace.outcome(),
-        &RunOutcome::Failed {
-            kind: RunErrorKind::Parse,
-            message: "not a runvil prompt: no runvil version (prompt t)".to_owned(),
-        },
-        "the outcome's message names the prompt the failure's location named"
+        error.located_message(),
+        "not a runvil prompt: no runvil version (prompt t)",
+        "the located message names the prompt the failure's location named"
+    );
+}
+
+// --- A caller code ends the run as an internal error ---
+
+#[test]
+fn a_raised_error_table_with_a_caller_code_ends_the_run_with_an_internal_error() {
+    // A shim's own raise is an error table that keeps no error behind it,
+    // so the code its `code` field names is the code it is read back as.
+    let source = one_section(
+        "local ok, err = pcall(models.infer, 'a', 'b')
+         assert(not ok and err.kind == 'lua', tostring(err))
+         err.code = 'recorder_failed'
+         err.message = 'the recorder refused the write'
+         error(err)",
+    );
+    let trace = Scenario::new(source).run();
+    let error = trace.error();
+    assert_eq!(
+        (error.code, error.prose.as_str(), error.located_message()),
+        (
+            ErrorCode::Internal,
+            ErrorCode::Internal.prose(),
+            "the recorder refused the write (at prompt:16)".to_owned()
+        ),
+        "the caller code becomes internal and keeps the table's message and line"
+    );
+}
+
+#[test]
+fn a_model_error_with_a_caller_code_ends_the_run_with_an_internal_error() {
+    let refused =
+        runvil_types::error::failure(ErrorCode::RecorderFailed, "the recorder refused the round");
+    let trace = Scenario::new(one_section("return models.infer('hi')"))
+        .bound()
+        .chat_with(move |_| EffectAnswer::Chat(Err(refused.clone())))
+        .run();
+    let error = trace.error();
+    assert_eq!(
+        (error.code, error.message.as_str(), error.prose.as_str()),
+        (
+            ErrorCode::Internal,
+            "the recorder refused the round",
+            ErrorCode::Internal.prose()
+        ),
+        "the model error keeps its message under the internal code"
     );
 }
 

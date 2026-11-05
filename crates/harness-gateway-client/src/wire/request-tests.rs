@@ -16,7 +16,7 @@ use runvil::model::{
 };
 use runvil::timestamp::Timestamp;
 use runvil::tools::{ToolCatalog, ToolId, ToolInfo, ToolOutput};
-use runvil::{Prompt, Run, RunOutcome, RunParams, RunSeed, Step};
+use runvil::{Prompt, Run, RunParams, RunSeed, Step};
 use serde_json::json;
 
 use super::*;
@@ -75,10 +75,10 @@ fn tool_round(offered: &[Offered]) -> Round {
         .with_models(BTreeMap::from([(ModelRole::Default, model)]));
     let mut run = Run::new(Arc::new(prompt), "", ctx);
     let mut rounds = Vec::new();
-    let outcome = loop {
+    let result = loop {
         let effects = match run.step() {
             Step::Pending { effects, .. } => effects,
-            Step::Done { outcome, .. } => break outcome,
+            Step::Done { result, .. } => break result,
         };
         for IssuedEffect { id, effect, .. } in effects {
             let answer = match effect {
@@ -115,9 +115,10 @@ fn tool_round(offered: &[Offered]) -> Round {
             run.resume(id, answer);
         }
     };
-    assert!(
-        matches!(&outcome, RunOutcome::Completed { final_text } if final_text == "done"),
-        "the round runs to its terminal reply: {outcome:?}"
+    assert_eq!(
+        result,
+        Ok("done".to_owned()),
+        "the round runs to its terminal reply"
     );
     assert_eq!(rounds.len(), 2, "one tool round, then the terminal round");
     rounds.pop().expect("the terminal round was recorded")
