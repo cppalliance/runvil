@@ -18,7 +18,7 @@ fn the_cancellation_hook_fires_inside_a_resumed_coroutine() {
     // main-state hook installed at construction cannot bite here. The
     // VM installs its hook on the block coroutine via `Thread::set_hook`;
     // no instruction ceiling applies, so if that install regressed, this
-    // pre-cancelled loop would hang the test instead of aborting.
+    // pre-canceled loop would hang the test instead of aborting.
     let handle = CancelHandle::new();
     handle.cancel();
     let vm = scheduler_vm(&ModelSet::default(), None);
@@ -26,17 +26,17 @@ fn the_cancellation_hook_fires_inside_a_resumed_coroutine() {
     let program = compile_block("while true do end");
     match vm.start_block_coro(&program) {
         Err(error) => assert!(
-            error == crate::error::interrupted(),
+            error == crate::Error::canceled(),
             "the per-coroutine hook must observe cancellation: {error:?}"
         ),
-        other => panic!("a cancelled infinite loop can only fail, got {other:?}"),
+        other => panic!("a canceled infinite loop can only fail, got {other:?}"),
     }
 }
 
 #[test]
 fn every_block_coroutine_has_the_cancellation_hook() {
     // One VM installs the hook on every block coroutine it starts, not
-    // only the first: under a cancelled run, each block's first hook
+    // only the first: under a canceled run, each block's first hook
     // firing aborts it. A thread that missed the install would let the
     // second block hang (the loop) or finish (the bounded for), so either
     // block escaping cancellation fails this test.
@@ -51,10 +51,10 @@ fn every_block_coroutine_has_the_cancellation_hook() {
         let program = compile_block(source);
         match vm.start_block_coro(&program) {
             Err(error) => assert!(
-                error == crate::error::interrupted(),
-                "block {source:?} must abort on the cancelled run: {error:?}"
+                error == crate::Error::canceled(),
+                "block {source:?} must abort on the canceled run: {error:?}"
             ),
-            other => panic!("a cancelled block can only fail, got {other:?}"),
+            other => panic!("a canceled block can only fail, got {other:?}"),
         }
     }
 }

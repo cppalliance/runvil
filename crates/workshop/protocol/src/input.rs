@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 ///
 /// `{"type":"input_required","token":"..."}` announces an open wait: the
 /// SPA pins its input box to the token and answers with an
-/// `input_response` frame. `{"type":"input_cancelled","token":"..."}`
+/// `input_response` frame. `{"type":"input_canceled","token":"..."}`
 /// announces a wait that died unresolved, so the SPA never holds a
 /// prompt against a dead token - cancellation is an outcome on the wire,
 /// never silence.
@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 /// Delivery: durable - the server's wait registry retains every
 /// unresolved wait and the session resends it on reconnect, so a push
 /// lost to a dead socket is repaired by the resent set: a live wait
-/// reappears, and a cancelled one vanishes by its absence.
+/// reappears, and a canceled one vanishes by its absence.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(tag = "type")]
 #[non_exhaustive]
@@ -26,8 +26,8 @@ pub enum InputFrame {
         token: String,
     },
     /// A wait died unresolved: the prompt for `token` is stale.
-    #[serde(rename = "input_cancelled")]
-    Cancelled {
+    #[serde(rename = "input_canceled")]
+    Canceled {
         /// The token whose wait is gone.
         token: String,
     },

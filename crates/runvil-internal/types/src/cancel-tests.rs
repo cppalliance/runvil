@@ -38,17 +38,14 @@ impl Counter {
 const _: () = assert_send_sync::<CancelHandle>();
 
 #[test]
-fn a_fresh_handle_is_not_cancelled_and_its_clones_share_one_flag() {
+fn a_fresh_handle_is_not_canceled_and_its_clones_share_one_flag() {
     let a = CancelHandle::new();
     let b = CancelHandle::default();
     let c = a.clone();
-    assert!(!a.is_cancelled() && !b.is_cancelled() && !c.is_cancelled());
+    assert!(!a.is_canceled() && !b.is_canceled() && !c.is_canceled());
     a.cancel();
-    assert!(
-        a.is_cancelled() && c.is_cancelled(),
-        "clones share the flag"
-    );
-    assert!(!b.is_cancelled(), "an unrelated handle is untouched");
+    assert!(a.is_canceled() && c.is_canceled(), "clones share the flag");
+    assert!(!b.is_canceled(), "an unrelated handle is untouched");
 }
 
 #[test]
@@ -56,16 +53,16 @@ fn cancel_is_idempotent_and_irreversible() {
     let handle = CancelHandle::new();
     handle.cancel();
     handle.cancel();
-    assert!(handle.is_cancelled());
+    assert!(handle.is_canceled());
 }
 
 #[test]
 fn a_child_observes_its_parents_cancel() {
     let parent = CancelHandle::new();
     let child = parent.child();
-    assert!(!child.is_cancelled());
+    assert!(!child.is_canceled());
     parent.cancel();
-    assert!(child.is_cancelled(), "parent cancel reaches the child");
+    assert!(child.is_canceled(), "parent cancel reaches the child");
 }
 
 #[test]
@@ -74,15 +71,15 @@ fn a_parent_does_not_observe_its_childs_cancel() {
     let child = parent.child();
     let sibling = parent.child();
     child.cancel();
-    assert!(child.is_cancelled());
-    assert!(!parent.is_cancelled(), "child cancel never reaches up");
+    assert!(child.is_canceled());
+    assert!(!parent.is_canceled(), "child cancel never reaches up");
     assert!(
-        !sibling.is_cancelled(),
+        !sibling.is_canceled(),
         "child cancel never reaches siblings"
     );
     // The sibling still tracks the parent afterwards.
     parent.cancel();
-    assert!(sibling.is_cancelled());
+    assert!(sibling.is_canceled());
 }
 
 #[test]
@@ -91,8 +88,8 @@ fn cloning_a_child_shares_the_childs_flag_not_the_parents() {
     let child = parent.child();
     let child_clone = child.clone();
     child.cancel();
-    assert!(child_clone.is_cancelled());
-    assert!(!parent.is_cancelled());
+    assert!(child_clone.is_canceled());
+    assert!(!parent.is_canceled());
 }
 
 #[test]
@@ -101,7 +98,7 @@ fn cancel_propagates_down_a_grandchild_chain() {
     let child = parent.child();
     let grandchild = child.child();
     parent.cancel();
-    assert!(child.is_cancelled() && grandchild.is_cancelled());
+    assert!(child.is_canceled() && grandchild.is_canceled());
 }
 
 #[test]
@@ -110,19 +107,19 @@ fn a_middle_cancel_reaches_below_but_not_above() {
     let middle = root.child();
     let leaf = middle.child();
     middle.cancel();
-    assert!(leaf.is_cancelled(), "a leaf observes an ancestor's cancel");
+    assert!(leaf.is_canceled(), "a leaf observes an ancestor's cancel");
     assert!(
-        !root.is_cancelled(),
+        !root.is_canceled(),
         "the root never observes a descendant's cancel"
     );
 }
 
 #[test]
-fn a_child_of_a_cancelled_parent_is_born_cancelled() {
+fn a_child_of_a_canceled_parent_is_born_canceled() {
     let parent = CancelHandle::new();
     parent.cancel();
-    assert!(parent.child().is_cancelled());
-    assert!(parent.child().child().is_cancelled());
+    assert!(parent.child().is_canceled());
+    assert!(parent.child().child().is_canceled());
 }
 
 #[test]
@@ -135,13 +132,13 @@ fn a_cancel_on_one_thread_is_observed_on_another() {
     let (done_tx, done_rx) = mpsc::channel();
     let poller = thread::spawn(move || {
         ready_tx.send(()).expect("main thread is waiting");
-        while !child.is_cancelled() {
+        while !child.is_canceled() {
             thread::yield_now();
         }
         done_tx.send(()).expect("main thread is waiting");
     });
     ready_rx.recv().expect("poller signals readiness");
-    assert!(!parent.is_cancelled());
+    assert!(!parent.is_canceled());
     parent.cancel();
     done_rx
         .recv()
@@ -156,7 +153,7 @@ fn a_parents_cancel_wakes_a_waiter_on_its_child() {
     let counter = Arc::new(Counter::default());
     let waker = Waker::from(Arc::clone(&counter));
     let mut cx = Context::from_waker(&waker);
-    let mut waiting = pin!(child.cancelled());
+    let mut waiting = pin!(child.canceled());
     assert_eq!(waiting.as_mut().poll(&mut cx), Poll::Pending);
     // Re-polling registers the same waker once more, not twice.
     assert_eq!(waiting.as_mut().poll(&mut cx), Poll::Pending);
@@ -177,7 +174,7 @@ fn a_childs_cancel_does_not_wake_a_waiter_on_its_parent() {
     let counter = Arc::new(Counter::default());
     let waker = Waker::from(Arc::clone(&counter));
     let mut cx = Context::from_waker(&waker);
-    let mut waiting = pin!(parent.cancelled());
+    let mut waiting = pin!(parent.canceled());
     assert_eq!(waiting.as_mut().poll(&mut cx), Poll::Pending);
     child.cancel();
     assert_eq!(counter.wakes(), 0, "a child's cancel never reaches up");
@@ -195,7 +192,7 @@ fn a_waiter_dropped_before_cancel_leaves_no_waker_on_any_ancestor() {
     let counter = Arc::new(Counter::default());
     let waker = Waker::from(Arc::clone(&counter));
     let mut cx = Context::from_waker(&waker);
-    let mut waiting = leaf.cancelled();
+    let mut waiting = leaf.canceled();
     assert_eq!(Pin::new(&mut waiting).poll(&mut cx), Poll::Pending);
     assert_eq!(registered(&root), 1, "a poll registers up the chain");
     drop(waiting);
@@ -217,8 +214,8 @@ fn dropping_one_of_two_waiters_polled_by_one_task_leaves_the_other_woken() {
     let counter = Arc::new(Counter::default());
     let waker = Waker::from(Arc::clone(&counter));
     let mut cx = Context::from_waker(&waker);
-    let mut first = task.cancelled();
-    let mut second = task.cancelled();
+    let mut first = task.canceled();
+    let mut second = task.canceled();
     assert_eq!(Pin::new(&mut first).poll(&mut cx), Poll::Pending);
     assert_eq!(Pin::new(&mut second).poll(&mut cx), Poll::Pending);
     drop(first);
@@ -239,7 +236,7 @@ fn a_waiter_re_polled_with_a_new_waker_is_woken_through_the_new_waker_only() {
     let new = Arc::new(Counter::default());
     let old_waker = Waker::from(Arc::clone(&old));
     let new_waker = Waker::from(Arc::clone(&new));
-    let mut waiting = task.cancelled();
+    let mut waiting = task.canceled();
     assert_eq!(
         Pin::new(&mut waiting).poll(&mut Context::from_waker(&old_waker)),
         Poll::Pending
@@ -254,19 +251,19 @@ fn a_waiter_re_polled_with_a_new_waker_is_woken_through_the_new_waker_only() {
 }
 
 #[test]
-fn a_waiter_on_a_cancelled_handle_is_ready_at_its_first_poll() {
+fn a_waiter_on_a_canceled_handle_is_ready_at_its_first_poll() {
     let handle = CancelHandle::new();
     handle.cancel();
     let mut cx = Context::from_waker(Waker::noop());
-    assert_eq!(pin!(handle.cancelled()).poll(&mut cx), Poll::Ready(()));
+    assert_eq!(pin!(handle.canceled()).poll(&mut cx), Poll::Ready(()));
 }
 
 #[test]
 fn debug_output_names_the_flag_state() {
     let handle = CancelHandle::new();
     let before = format!("{handle:?}");
-    assert!(before.contains("cancelled: false"), "{before}");
+    assert!(before.contains("canceled: false"), "{before}");
     handle.cancel();
     let after = format!("{handle:?}");
-    assert!(after.contains("cancelled: true"), "{after}");
+    assert!(after.contains("canceled: true"), "{after}");
 }

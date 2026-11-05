@@ -176,7 +176,7 @@ pub(crate) fn install_shims(
         adhoc_handler_captures(lua, adhoc_handler_depth)?;
     let hook = cancel_hook.clone();
     let cancel_requested = lua
-        .create_function(move |_, ()| Ok(hook.is_cancelled()))
+        .create_function(move |_, ()| Ok(hook.is_canceled()))
         .map_err(error::lua)?;
     let is_model_handle = lua
         .create_function(|_, value: Value| Ok(crate::models::is_handle(&value)))

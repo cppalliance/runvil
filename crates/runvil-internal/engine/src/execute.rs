@@ -124,9 +124,9 @@ pub enum RunOutcome {
         /// frontmatter, and `(at {file}:{line})` for any other.
         message: String,
     },
-    /// The caller cancelled the run or dropped an effect the run was waiting
-    /// on and the cancelled error went uncaught, or a block raised a caught
-    /// `cancelled` error value with no `task` again after another
+    /// The caller canceled the run or dropped an effect the run was waiting
+    /// on and the canceled error went uncaught, or a block raised a caught
+    /// `canceled` error value with no `task` again after another
     /// suspending call. A raised value that names its `task` is that task's
     /// cancellation, which fails the run as `Lua`.
     Cancelled,

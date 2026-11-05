@@ -29,7 +29,7 @@
 //! to `Done`. A stop aborts every effect in flight except tool calls that
 //! survive stops and answers each `Dropped`, leaving the cancel flag
 //! clear, so the run decides what a dropped call means: a `pcall` catches
-//! it, and an uncaught one ends the run cancelled. The loop also looks for
+//! it, and an uncaught one ends the run canceled. The loop also looks for
 //! a stop before it starts a step's effects, and lowers each stop it sees
 //! once it has dropped what the stop reached, none included, so a stop
 //! never reaches an effect started after the loop saw it. A drop made
@@ -171,9 +171,9 @@ impl Driver {
                 } => {
                     // The run reads this same flag, so its next step tears
                     // every chain down.
-                    let cancelled = self.cancel.is_cancelled();
+                    let canceled = self.cancel.is_canceled();
                     self.commit_events(events).await?;
-                    if cancelled {
+                    if canceled {
                         // Every effect issued in this step is moot before
                         // it is performed, and every effect in flight is
                         // moot too. Record each effect and answer it
@@ -277,11 +277,11 @@ impl Driver {
     /// stop wake the loop as they are raised and a future wakes it as it
     /// lands, so a fully suspended run costs no wakeups while it waits.
     async fn wake(&mut self) -> Woken {
-        let mut cancelled = self.cancel.cancelled();
+        let mut canceled = self.cancel.canceled();
         let stop = &self.stop;
         let flights = &mut self.flights;
         poll_fn(|cx| {
-            if Pin::new(&mut cancelled).poll(cx).is_ready() {
+            if Pin::new(&mut canceled).poll(cx).is_ready() {
                 return Poll::Ready(Woken::Cancel);
             }
             if stop.poll_raised(cx).is_ready() {
@@ -451,7 +451,7 @@ impl Driver {
 /// the effect carries and returns the answer to record and resume the run
 /// with. A panic out of the backend is caught here, logged against `id`
 /// and `provenance`, and answered `Dropped`, so it ends the run as a
-/// cancelled one and never unwinds the loop.
+/// canceled one and never unwinds the loop.
 ///
 /// The access is this function's own parameter, so it drops when the
 /// function returns. The drop is hygiene only: claims follow

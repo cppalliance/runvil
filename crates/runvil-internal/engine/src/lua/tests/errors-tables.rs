@@ -54,13 +54,10 @@ fn at_call(text: &str) -> String {
 #[test]
 fn an_engine_failure_answered_through_the_envelope_is_the_table_its_code_names() {
     assert_eq!(
-        caught_engine_failure(
-            crate::error::task_cancelled(&task("0.1")),
-            &["code", "task"]
-        ),
+        caught_engine_failure(crate::error::task_canceled(&task("0.1")), &["code", "task"]),
         format!(
-            "cancelled|task_cancelled|0.1|{}",
-            at_call(ErrorCode::TaskCancelled.prose())
+            "canceled|task_canceled|0.1|{}",
+            at_call(ErrorCode::TaskCanceled.prose())
         )
     );
     let leaked = crate::error::tasks_live(&[task("0.1"), task("0.2")]);

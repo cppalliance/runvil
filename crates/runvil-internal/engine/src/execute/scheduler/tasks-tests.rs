@@ -10,8 +10,8 @@ use runvil_vfs::{Origin, VfsRef};
 
 use super::super::ChainIndex;
 use super::{Stop, TaskArena, TaskBacking, TaskState};
-use crate::error;
 use crate::execute::run::EffectId;
+use crate::{Error, error};
 
 fn chain(raw: u32) -> ChainIndex {
     ChainIndex::for_test(raw)
@@ -52,17 +52,17 @@ fn timer(arena: &mut TaskArena, owner: ChainIndex, index: u32) -> TaskId {
 #[test]
 fn stopping_a_running_task_ends_it_and_returns_its_backing_and_target() {
     let mut arena = TaskArena::default();
-    let (cancelled, cancelled_backing) = spawn(&mut arena, chain(0), 0);
+    let (canceled, canceled_backing) = spawn(&mut arena, chain(0), 0);
     let (abandoned, abandoned_backing) = spawn(&mut arena, chain(0), 1);
     assert_eq!(
-        arena.stop(&cancelled, Stop::Cancelled),
-        Some((cancelled_backing, "worker 0".to_owned()))
+        arena.stop(&canceled, Stop::Canceled),
+        Some((canceled_backing, "worker 0".to_owned()))
     );
     assert_eq!(
         arena.stop(&abandoned, Stop::Abandoned),
         Some((abandoned_backing, "worker 1".to_owned()))
     );
-    assert_eq!(arena.state_of(&cancelled), Some(TaskState::Cancelled));
+    assert_eq!(arena.state_of(&canceled), Some(TaskState::Canceled));
     assert_eq!(arena.state_of(&abandoned), Some(TaskState::Abandoned));
 }
 
@@ -70,16 +70,16 @@ fn stopping_a_running_task_ends_it_and_returns_its_backing_and_target() {
 fn stopping_a_task_that_is_not_live_returns_none_and_changes_nothing() {
     let mut arena = TaskArena::default();
     let (done, _) = spawn(&mut arena, chain(0), 0);
-    let (cancelled, _) = spawn(&mut arena, chain(0), 1);
+    let (canceled, _) = spawn(&mut arena, chain(0), 1);
     assert!(arena.complete(&done, Ok("text".to_owned())).is_some());
-    assert!(arena.stop(&cancelled, Stop::Cancelled).is_some());
-    for stop in [Stop::Cancelled, Stop::Abandoned] {
+    assert!(arena.stop(&canceled, Stop::Canceled).is_some());
+    for stop in [Stop::Canceled, Stop::Abandoned] {
         assert_eq!(arena.stop(&done, stop), None);
-        assert_eq!(arena.stop(&cancelled, stop), None);
+        assert_eq!(arena.stop(&canceled, stop), None);
         assert_eq!(arena.stop(&task(9), stop), None, "task 9 has no entry");
     }
     assert_eq!(arena.state_of(&done), Some(TaskState::Done { ok: true }));
-    assert_eq!(arena.state_of(&cancelled), Some(TaskState::Cancelled));
+    assert_eq!(arena.state_of(&canceled), Some(TaskState::Canceled));
     assert_eq!(arena.state_of(&task(9)), None);
 }
 
@@ -110,13 +110,13 @@ fn a_completed_task_is_done_and_its_outcome_is_taken_once() {
 #[test]
 fn a_refused_delivery_leaves_the_entry_unchanged() {
     let mut arena = TaskArena::default();
-    let (cancelled, _) = spawn(&mut arena, chain(0), 0);
+    let (canceled, _) = spawn(&mut arena, chain(0), 0);
     let (abandoned, _) = spawn(&mut arena, chain(0), 1);
     let (running, _) = spawn(&mut arena, chain(0), 2);
-    assert!(arena.stop(&cancelled, Stop::Cancelled).is_some());
+    assert!(arena.stop(&canceled, Stop::Canceled).is_some());
     assert!(arena.stop(&abandoned, Stop::Abandoned).is_some());
     for (task, state) in [
-        (&cancelled, TaskState::Cancelled),
+        (&canceled, TaskState::Canceled),
         (&abandoned, TaskState::Abandoned),
         (&running, TaskState::Running),
     ] {
@@ -128,29 +128,25 @@ fn a_refused_delivery_leaves_the_entry_unchanged() {
 #[test]
 fn completing_a_task_that_is_not_live_changes_nothing() {
     let mut arena = TaskArena::default();
-    let (cancelled, _) = spawn(&mut arena, chain(0), 0);
-    assert!(arena.stop(&cancelled, Stop::Cancelled).is_some());
-    assert!(arena.complete(&cancelled, Ok("late".to_owned())).is_none());
+    let (canceled, _) = spawn(&mut arena, chain(0), 0);
+    assert!(arena.stop(&canceled, Stop::Canceled).is_some());
+    assert!(arena.complete(&canceled, Ok("late".to_owned())).is_none());
     assert!(arena.complete(&task(9), Ok("unknown".to_owned())).is_none());
-    assert_eq!(arena.state_of(&cancelled), Some(TaskState::Cancelled));
+    assert_eq!(arena.state_of(&canceled), Some(TaskState::Canceled));
     assert_eq!(arena.state_of(&task(9)), None);
 }
 
 #[test]
 fn an_ended_or_delivered_task_keeps_its_entry() {
     let mut arena = TaskArena::default();
-    let (cancelled, _) = spawn(&mut arena, chain(0), 0);
+    let (canceled, _) = spawn(&mut arena, chain(0), 0);
     let (abandoned, _) = spawn(&mut arena, chain(0), 1);
     let (delivered, _) = spawn(&mut arena, chain(0), 2);
-    assert!(arena.stop(&cancelled, Stop::Cancelled).is_some());
+    assert!(arena.stop(&canceled, Stop::Canceled).is_some());
     assert!(arena.stop(&abandoned, Stop::Abandoned).is_some());
-    assert!(
-        arena
-            .complete(&delivered, Err(error::interrupted()))
-            .is_some()
-    );
+    assert!(arena.complete(&delivered, Err(Error::canceled())).is_some());
     assert!(arena.take_delivery(&delivered).is_err());
-    for task in [&cancelled, &abandoned, &delivered] {
+    for task in [&canceled, &abandoned, &delivered] {
         assert_eq!(arena.owner_of(task), Some(chain(0)), "{task}");
     }
     assert_eq!(
@@ -206,6 +202,6 @@ fn live_author_tasks_lists_an_owners_live_tasks_in_spawn_order_without_timers() 
     let (ended, _) = spawn(&mut arena, chain(0), 3);
     spawn(&mut arena, chain(5), 4);
     let (first, _) = spawn(&mut arena, chain(0), 0);
-    assert!(arena.stop(&ended, Stop::Cancelled).is_some());
+    assert!(arena.stop(&ended, Stop::Canceled).is_some());
     assert_eq!(arena.live_author_tasks(chain(0)), [first, second, tenth]);
 }

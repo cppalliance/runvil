@@ -12,7 +12,7 @@
 //! still report how a task ended.
 //!
 //! The [`TaskArena`] owns every entry and enforces the lifecycle: a task
-//! moves only from `Running` to `Done`, `Cancelled`, or `Abandoned`, and
+//! moves only from `Running` to `Done`, `Canceled`, or `Abandoned`, and
 //! from `Done` to `Delivered`. It checks ownership, and a chain's view of
 //! the task it runs inside, and it lists an owner's tasks in spawn order
 //! two ways: the author-visible tasks, and every live task with the
@@ -61,8 +61,8 @@ pub(super) enum EntryState {
     /// The owner took the outcome through a wait. `ok` is the outcome's,
     /// kept so `status` still reports it after the wait took it.
     Delivered { ok: bool },
-    /// The owner cancelled the task.
-    Cancelled,
+    /// The owner canceled the task.
+    Canceled,
     /// The owner ended while the task was live, so the Engine ended it.
     Abandoned,
 }
@@ -82,7 +82,7 @@ impl EntryState {
                 ok: outcome.is_ok(),
             },
             EntryState::Delivered { ok } => TaskState::Delivered { ok: *ok },
-            EntryState::Cancelled => TaskState::Cancelled,
+            EntryState::Canceled => TaskState::Canceled,
             EntryState::Abandoned => TaskState::Abandoned,
         }
     }
@@ -101,8 +101,8 @@ pub(crate) enum TaskState {
     /// The owner took the outcome through a wait. Whether the task ended
     /// well, carried so `status` can report it after the outcome is gone.
     Delivered { ok: bool },
-    /// The owner cancelled the task.
-    Cancelled,
+    /// The owner canceled the task.
+    Canceled,
     /// The owner ended while the task was live, so the Engine ended it.
     Abandoned,
 }
@@ -147,8 +147,8 @@ impl TaskEntry {
 /// How a live task ends before its own chain or request does.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum Stop {
-    /// The owner cancelled the task.
-    Cancelled,
+    /// The owner canceled the task.
+    Canceled,
     /// The owner ended while the task was live.
     Abandoned,
 }
@@ -237,7 +237,7 @@ impl TaskArena {
     /// order, or `None` when every member is still running. Every member
     /// must be a task `caller` owns, and none may be delivered already. An
     /// `Abandoned` member cannot pass the ownership check (its owner has
-    /// ended), so the terminal arm only ever sees `Done` and `Cancelled`.
+    /// ended), so the terminal arm only ever sees `Done` and `Canceled`.
     pub(super) fn first_terminal(
         &self,
         caller: ChainIndex,
@@ -250,7 +250,7 @@ impl TaskArena {
                     return Err(error::task_consumed(task));
                 }
                 EntryState::Running => {}
-                EntryState::Done(_) | EntryState::Cancelled | EntryState::Abandoned => {
+                EntryState::Done(_) | EntryState::Canceled | EntryState::Abandoned => {
                     if first.is_none() {
                         first = Some(task.clone());
                     }
@@ -278,7 +278,7 @@ impl TaskArena {
 
     /// Takes a terminal task's outcome as its delivery: a `Done` entry's
     /// outcome moves out and the entry to `Delivered`, so it is taken once.
-    /// A cancelled entry yields the `cancelled` error value and stays,
+    /// A canceled entry yields the `canceled` error value and stays,
     /// having no result to consume. An abandoned entry has no live owner to
     /// wait on it, so its delivery is a scheduler bug.
     pub(super) fn take_delivery(&mut self, task: &TaskId) -> Result<String> {
@@ -293,7 +293,7 @@ impl TaskArena {
                 };
                 outcome
             }
-            EntryState::Cancelled => Err(error::task_cancelled(task)),
+            EntryState::Canceled => Err(error::task_canceled(task)),
             EntryState::Abandoned => Err(error::internal(
                 "an abandoned task's owner ended, so no wait can deliver it",
             )),
@@ -303,7 +303,7 @@ impl TaskArena {
         }
     }
 
-    /// Stops a running task: its entry moves to `Cancelled` or `Abandoned`,
+    /// Stops a running task: its entry moves to `Canceled` or `Abandoned`,
     /// and its backing and target come back for the scheduler to end. A
     /// task that isn't live, or has no entry, is left as it is and yields
     /// `None`.
@@ -313,7 +313,7 @@ impl TaskArena {
             return None;
         }
         entry.state = match stop {
-            Stop::Cancelled => EntryState::Cancelled,
+            Stop::Canceled => EntryState::Canceled,
             Stop::Abandoned => EntryState::Abandoned,
         };
         Some((entry.backing, entry.target.clone()))

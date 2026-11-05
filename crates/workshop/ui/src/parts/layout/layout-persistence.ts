@@ -175,7 +175,7 @@ export function startLayoutPersistence(
   );
   // Teardown order matters: the subscriptions die first so no layout
   // change can re-arm the timer between the two steps; then any armed
-  // save is cancelled unsaved.
+  // save is canceled unsaved.
   store.add(toDisposable(cancel));
   return store;
 }

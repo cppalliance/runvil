@@ -44,7 +44,7 @@ async fn next_wait(waits: &mut broadcast::Receiver<WaitFrame>) -> WaitFrame {
 async fn required(waits: &mut broadcast::Receiver<WaitFrame>) -> String {
     match next_wait(waits).await {
         WaitFrame::Required { token } => token,
-        frame @ WaitFrame::Cancelled { .. } => panic!("expected a required frame, got {frame:?}"),
+        frame @ WaitFrame::Canceled { .. } => panic!("expected a required frame, got {frame:?}"),
     }
 }
 
@@ -122,7 +122,7 @@ async fn a_completed_report_reports_nothing_and_ends_the_conversation() {
 }
 
 #[tokio::test]
-async fn a_close_with_a_question_open_cancels_it_and_reports_the_interrupt() {
+async fn a_close_with_a_question_open_cancels_it_and_reports_the_cancel() {
     let table = Conversations::new();
     let conversation = table.open("ask");
     let recorder = Arc::new(MemoryRecorder::new());
@@ -142,7 +142,7 @@ async fn a_close_with_a_question_open_cancels_it_and_reports_the_interrupt() {
     );
     assert_eq!(
         next_wait(&mut waits).await,
-        WaitFrame::Cancelled { token },
+        WaitFrame::Canceled { token },
         "the open question dies as an outcome"
     );
     ended(run).await;
@@ -150,8 +150,8 @@ async fn a_close_with_a_question_open_cancels_it_and_reports_the_interrupt() {
     let reports = reports(&mut errors);
     assert_eq!(
         reports.iter().map(|report| report.kind).collect::<Vec<_>>(),
-        [FailureKind::Interrupted],
-        "a cancelled report is the interrupt's one report"
+        [FailureKind::Canceled],
+        "a canceled report is the cancel's one report"
     );
     assert_eq!(conversation.state(), SessionState::Closed);
     assert!(conversation.unresolved_waits().is_empty());
@@ -161,7 +161,7 @@ async fn a_close_with_a_question_open_cancels_it_and_reports_the_interrupt() {
 }
 
 #[tokio::test]
-async fn a_close_before_the_run_starts_ends_its_recorded_run_cancelled() {
+async fn a_close_before_the_run_starts_ends_its_recorded_run_canceled() {
     let table = Conversations::new();
     let conversation = table.open("early");
     let recorder = Arc::new(MemoryRecorder::new());
@@ -181,7 +181,7 @@ async fn a_close_before_the_run_starts_ends_its_recorded_run_cancelled() {
             .iter()
             .map(|report| report.kind)
             .collect::<Vec<_>>(),
-        [FailureKind::Interrupted]
+        [FailureKind::Canceled]
     );
     assert_eq!(conversation.state(), SessionState::Closed);
 }
@@ -214,7 +214,7 @@ async fn a_stop_with_only_a_question_open_leaves_it_open_and_its_token_answers()
             waits.try_recv(),
             Err(broadcast::error::TryRecvError::Empty | broadcast::error::TryRecvError::Closed)
         ),
-        "no cancelled frame: the stop never touched the question"
+        "no canceled frame: the stop never touched the question"
     );
     assert!(reports(&mut errors).is_empty(), "a stop is never an error");
     let run = conversation.run_id().expect("the recorder began the run");

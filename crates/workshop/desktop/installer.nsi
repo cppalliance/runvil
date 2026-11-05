@@ -402,13 +402,13 @@ Function PageLeaveReinstall
 
  ${If} $0 <> 0
  ${OrIf} ${FileExists} "$INSTDIR\${MAINBINARYNAME}.exe"
- ; User cancelled wix uninstaller? return to select un/reinstall page
+ ; User canceled wix uninstaller? return to select un/reinstall page
  ${If} $WixMode = 1
  ${AndIf} $0 = 1602
  Abort
  ${EndIf}
 
- ; User cancelled NSIS uninstaller? return to select un/reinstall page
+ ; User canceled NSIS uninstaller? return to select un/reinstall page
  ${If} $0 = 1
  Abort
  ${EndIf}

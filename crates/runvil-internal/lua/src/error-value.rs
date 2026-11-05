@@ -99,10 +99,10 @@ pub enum ErrorKind {
     /// A section ended while tasks it owns were still live; includes
     /// `tasks`, the ids joined by `, `.
     TasksLive,
-    /// The run was cancelled, the caller dropped a call the run was waiting
-    /// on, or a wait delivered a task its owner cancelled (that value
+    /// The run was canceled, the caller dropped a call the run was waiting
+    /// on, or a wait delivered a task its owner canceled (that value
     /// includes `task`).
-    Cancelled,
+    Canceled,
     /// A store operation's own failure; includes `reason` and the
     /// [`VfsError`](runvil_vfs::VfsError) variant's fields.
     Store,
@@ -131,7 +131,7 @@ impl ErrorKind {
         ErrorKind::TaskNotOwned,
         ErrorKind::TaskConsumed,
         ErrorKind::TasksLive,
-        ErrorKind::Cancelled,
+        ErrorKind::Canceled,
         ErrorKind::Store,
         ErrorKind::Lua,
         ErrorKind::Internal,
@@ -153,7 +153,7 @@ impl ErrorKind {
             ErrorKind::TaskNotOwned => "task_not_owned",
             ErrorKind::TaskConsumed => "task_consumed",
             ErrorKind::TasksLive => "tasks_live",
-            ErrorKind::Cancelled => "cancelled",
+            ErrorKind::Canceled => "canceled",
             ErrorKind::Store => "store",
             ErrorKind::Lua => "lua",
             ErrorKind::Internal => "internal",
@@ -176,7 +176,7 @@ impl ErrorKind {
             "task_not_owned" => Some(ErrorKind::TaskNotOwned),
             "task_consumed" => Some(ErrorKind::TaskConsumed),
             "tasks_live" => Some(ErrorKind::TasksLive),
-            "cancelled" => Some(ErrorKind::Cancelled),
+            "canceled" => Some(ErrorKind::Canceled),
             "store" => Some(ErrorKind::Store),
             "lua" => Some(ErrorKind::Lua),
             "internal" => Some(ErrorKind::Internal),

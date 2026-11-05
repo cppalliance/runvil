@@ -66,8 +66,8 @@ impl ErrorCode {
             ErrorCode::TaskConsumed => {
                 "The task's result was already delivered. Wait on each task only once."
             }
-            ErrorCode::TaskCancelled => {
-                "The task was cancelled before it finished, so it has no result. Handle the \
+            ErrorCode::TaskCanceled => {
+                "The task was canceled before it finished, so it has no result. Handle the \
                  cancellation where the task is waited on."
             }
             ErrorCode::ContextOverflow => {
@@ -205,7 +205,7 @@ impl ErrorCode {
                 "The environment does not provide what the prompt needs. Supply the missing Packs or \
                  models, or change what the prompt declares."
             }
-            ErrorCode::Interrupted => "The operation was cancelled.",
+            ErrorCode::Canceled => "The operation was canceled.",
             ErrorCode::Internal => "An internal error occurred. Retrying will not help.",
             ErrorCode::RecorderFailed => "The run could not be recorded, so it stopped.",
             ErrorCode::PluginLoadFailed => {

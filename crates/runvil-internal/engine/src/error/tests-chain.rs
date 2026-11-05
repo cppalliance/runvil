@@ -154,22 +154,21 @@ fn the_lua_crates_failures_end_a_run_with_their_own_kind_and_text() {
             "lua log event quota exceeded".to_owned(),
         ),
         (
-            task_cancelled(&"0.1".parse().expect("the test task id parses")),
+            task_canceled(&"0.1".parse().expect("the test task id parses")),
             RunErrorKind::Lua,
-            "task `0.1` was cancelled".to_owned(),
+            "task `0.1` was canceled".to_owned(),
         ),
         (not_found, RunErrorKind::Vfs, "not found: a.md".to_owned()),
     ] {
         assert_eq!(failed(&failure), (kind, message));
     }
     assert_eq!(
-        crate::execute::outcome(&interrupted()),
+        crate::execute::outcome(&Error::canceled()),
         RunOutcome::Failed {
             kind: RunErrorKind::Internal,
-            message: interrupted().message,
+            message: Error::canceled().message,
         },
-        "an interruption, which the scheduler ends as cancelled before it reaches a failed \
-         outcome"
+        "a cancel, which the scheduler ends as canceled before it reaches a failed outcome"
     );
 }
 

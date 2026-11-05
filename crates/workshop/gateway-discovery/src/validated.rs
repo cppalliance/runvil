@@ -28,9 +28,9 @@ const LIVENESS_BUDGET: Duration = Duration::from_secs(2);
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 #[non_exhaustive]
 pub enum ValidationError {
-    /// The caller cancelled validation.
-    #[error("connection validation was cancelled")]
-    Cancelled,
+    /// The caller canceled validation.
+    #[error("connection validation was canceled")]
+    Canceled,
     /// The connection failed one of the liveness or authority checks.
     #[error(transparent)]
     Stale(#[from] StaleReason),
@@ -87,7 +87,7 @@ impl ValidatedConnection {
     /// Validates a raw connection while observing caller cancellation.
     ///
     /// # Errors
-    /// Returns [`ValidationError::Cancelled`] when cancellation wins, or
+    /// Returns [`ValidationError::Canceled`] when cancellation wins, or
     /// [`ValidationError::Stale`] when a liveness or authority check fails.
     pub fn validate_cancellable(
         connection: GatewayDiscoveryFile,
@@ -265,7 +265,7 @@ fn validate_before_with(
     }
     let address = format!("127.0.0.1:{}", connection.port);
     match prove_connection(&address, &connection.api_key, deadline) {
-        ConnectionProbe::Cancelled | ConnectionProbe::HealthFailed => {
+        ConnectionProbe::Canceled | ConnectionProbe::HealthFailed => {
             return Err(StaleReason::HealthFailed);
         }
         ConnectionProbe::KeyRejected => return Err(StaleReason::KeyRejected),
@@ -290,21 +290,21 @@ fn validate_cancellable_with(
     mut observe_process: impl FnMut(u32) -> Option<ProcessIdentity>,
     prove_connection: impl FnOnce(&str, &str, Duration, &CancellationToken) -> ConnectionProbe,
 ) -> Result<ValidatedConnection, ValidationError> {
-    if cancellation.is_cancelled() {
-        return Err(ValidationError::Cancelled);
+    if cancellation.is_canceled() {
+        return Err(ValidationError::Canceled);
     }
     if connection.validation_error().is_some() {
         return Err(StaleReason::Invalid.into());
     }
     let Some(before_observation) = cancellation.run_if_active(|| observe_process(connection.pid))
     else {
-        return Err(ValidationError::Cancelled);
+        return Err(ValidationError::Canceled);
     };
     let Some(before) = before_observation else {
         return Err(StaleReason::ProcessDead.into());
     };
-    if cancellation.is_cancelled() {
-        return Err(ValidationError::Cancelled);
+    if cancellation.is_canceled() {
+        return Err(ValidationError::Canceled);
     }
     if !image_name_matches(&before.image, image_name) {
         return Err(StaleReason::ImageMismatch.into());
@@ -314,24 +314,24 @@ fn validate_cancellable_with(
     }
     let address = format!("127.0.0.1:{}", connection.port);
     let proof = prove_connection(&address, &connection.api_key, LIVENESS_BUDGET, cancellation);
-    if cancellation.is_cancelled() || proof == ConnectionProbe::Cancelled {
-        return Err(ValidationError::Cancelled);
+    if cancellation.is_canceled() || proof == ConnectionProbe::Canceled {
+        return Err(ValidationError::Canceled);
     }
     match proof {
         ConnectionProbe::HealthFailed => return Err(StaleReason::HealthFailed.into()),
         ConnectionProbe::KeyRejected => return Err(StaleReason::KeyRejected.into()),
         ConnectionProbe::Accepted => {}
-        ConnectionProbe::Cancelled => return Err(ValidationError::Cancelled),
+        ConnectionProbe::Canceled => return Err(ValidationError::Canceled),
     }
     let Some(after_observation) = cancellation.run_if_active(|| observe_process(connection.pid))
     else {
-        return Err(ValidationError::Cancelled);
+        return Err(ValidationError::Canceled);
     };
     let Some(after) = after_observation else {
         return Err(StaleReason::ProcessChanged.into());
     };
-    if cancellation.is_cancelled() {
-        return Err(ValidationError::Cancelled);
+    if cancellation.is_canceled() {
+        return Err(ValidationError::Canceled);
     }
     if before != after {
         return Err(StaleReason::ProcessChanged.into());

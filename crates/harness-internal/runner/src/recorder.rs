@@ -16,7 +16,7 @@
 //!
 //! A run's end is the Engine's [`RunOutcome`], as the run's last step
 //! returned it. A run that ends before the Engine runs it ends with an
-//! outcome of the same type: cancelled, when a cancel comes before or
+//! outcome of the same type: canceled, when a cancel comes before or
 //! during the model lookup, or failed with the Engine's kind for the
 //! failure, when the model lookup fails, the prompt does not parse, or its
 //! input cannot be put in place. A run the effect loop loses track of

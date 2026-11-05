@@ -176,7 +176,7 @@ fn one_of_every_event_variant() -> Vec<(Event, Seam)> {
             Seam::Observed,
         ),
         (
-            Event::TaskCancelled {
+            Event::TaskCanceled {
                 execution: "run".to_owned(),
                 section: "A".to_owned(),
                 provenance: provenance(),

@@ -24,7 +24,7 @@ pub(crate) struct Retained {
 /// Renders one [`TaskStatus`] as the plain Lua status table. Absent
 /// optional fields are never set, so they resume as nil; `ok` is absent
 /// while the task runs, the outcome once it is done, and `false` for a
-/// cancelled or abandoned task; `tasks` is always a sequence of id
+/// canceled or abandoned task; `tasks` is always a sequence of id
 /// strings, empty when the task owns nothing live.
 fn task_status_table(lua: &Lua, status: TaskStatus) -> mlua::Result<mlua::Table> {
     let table = lua.create_table()?;
@@ -40,7 +40,7 @@ fn task_status_table(lua: &Lua, status: TaskStatus) -> mlua::Result<mlua::Table>
             }
         }
         TaskPhase::Done { ok } => table.raw_set("ok", ok)?,
-        TaskPhase::Cancelled | TaskPhase::Abandoned => table.raw_set("ok", false)?,
+        TaskPhase::Canceled | TaskPhase::Abandoned => table.raw_set("ok", false)?,
     }
     table.raw_set("turns", status.turns)?;
     table.raw_set("tasks", task_id_sequence(lua, &status.tasks)?)?;

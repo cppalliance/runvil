@@ -14,9 +14,9 @@ mod source;
 #[derive(Debug)]
 enum FakeResponse {
     Completed(CommandResult),
-    CompletedAndInterrupted,
-    InterruptedBeforeStart,
-    InterruptedAfterStart,
+    CompletedAndCanceled,
+    CanceledBeforeStart,
+    CanceledAfterStart,
     SpawnFailed(io::ErrorKind, &'static str),
 }
 
@@ -25,7 +25,7 @@ struct FakeRunner {
     responses: VecDeque<FakeResponse>,
     commands: Vec<CommandSpec>,
     last_command_started: bool,
-    interruption_observed: bool,
+    cancel_observed: bool,
 }
 
 impl FakeRunner {
@@ -34,7 +34,7 @@ impl FakeRunner {
             responses: responses.into(),
             commands: Vec::new(),
             last_command_started: false,
-            interruption_observed: false,
+            cancel_observed: false,
         }
     }
 }
@@ -43,14 +43,14 @@ impl CommandRunner for FakeRunner {
     fn run(
         &mut self,
         command: &CommandSpec,
-        interrupt_policy: InterruptPolicy,
+        cancel_policy: CancelPolicy,
     ) -> io::Result<CommandResult> {
         self.commands.push(command.clone());
         self.last_command_started = false;
-        if interrupt_policy == InterruptPolicy::RejectExisting && self.interruption_observed {
+        if cancel_policy == CancelPolicy::RejectExisting && self.cancel_observed {
             return Err(io::Error::new(
                 io::ErrorKind::Interrupted,
-                "interrupted before child start",
+                "canceled before child start",
             ));
         }
         match self.responses.pop_front().expect("unexpected command") {
@@ -58,23 +58,23 @@ impl CommandRunner for FakeRunner {
                 self.last_command_started = true;
                 Ok(result)
             }
-            FakeResponse::CompletedAndInterrupted => {
+            FakeResponse::CompletedAndCanceled => {
                 self.last_command_started = true;
-                self.interruption_observed = true;
+                self.cancel_observed = true;
                 Ok(CommandResult {
                     success: true,
                     stdout: String::new(),
                     stderr: String::new(),
                 })
             }
-            FakeResponse::InterruptedBeforeStart => {
-                self.interruption_observed = true;
-                Err(io::Error::new(io::ErrorKind::Interrupted, "interrupted"))
+            FakeResponse::CanceledBeforeStart => {
+                self.cancel_observed = true;
+                Err(io::Error::new(io::ErrorKind::Interrupted, "canceled"))
             }
-            FakeResponse::InterruptedAfterStart => {
+            FakeResponse::CanceledAfterStart => {
                 self.last_command_started = true;
-                self.interruption_observed = true;
-                Err(io::Error::new(io::ErrorKind::Interrupted, "interrupted"))
+                self.cancel_observed = true;
+                Err(io::Error::new(io::ErrorKind::Interrupted, "canceled"))
             }
             FakeResponse::SpawnFailed(kind, message) => Err(io::Error::new(kind, message)),
         }
@@ -84,8 +84,8 @@ impl CommandRunner for FakeRunner {
         self.last_command_started
     }
 
-    fn interruption_observed(&self) -> bool {
-        self.interruption_observed
+    fn cancel_observed(&self) -> bool {
+        self.cancel_observed
     }
 }
 

@@ -1,6 +1,6 @@
 //! Tests for `ErrorCode` numbering, `Location` ranges, the cause chain
-//! `with_cause` appends, and how `place` locates an error and
-//! `coordinates` formats its location.
+//! `with_cause` appends, the text of `Error::canceled`, and how `place`
+//! locates an error and `coordinates` formats its location.
 
 use std::collections::BTreeSet;
 use std::fmt;
@@ -59,6 +59,18 @@ fn with_cause_adds_only_what_follows_text_the_message_ends_with() {
     assert_eq!(unrelated.message, "read failed: disk gone: sector 9");
 }
 
+#[test]
+fn a_canceled_failure_keeps_its_message_and_the_default_prose() {
+    let error = Error::canceled();
+    assert_eq!(error.code, ErrorCode::Canceled);
+    assert_eq!(
+        error.message,
+        "canceled: the run was canceled or this call was stopped"
+    );
+    assert_eq!(error.prose, ErrorCode::Canceled.prose());
+    assert!(error.at.is_none() && error.facts.is_empty(), "{error:?}");
+}
+
 /// Every code, in declaration order.
 const ALL: [ErrorCode; 68] = [
     ErrorCode::FrontmatterInvalid,
@@ -75,7 +87,7 @@ const ALL: [ErrorCode; 68] = [
     ErrorCode::TasksLive,
     ErrorCode::TaskNotOwned,
     ErrorCode::TaskConsumed,
-    ErrorCode::TaskCancelled,
+    ErrorCode::TaskCanceled,
     ErrorCode::ContextOverflow,
     ErrorCode::RateLimited,
     ErrorCode::QuotaExhausted,
@@ -124,7 +136,7 @@ const ALL: [ErrorCode; 68] = [
     ErrorCode::Backend,
     ErrorCode::Determinism,
     ErrorCode::RequirementsUnmet,
-    ErrorCode::Interrupted,
+    ErrorCode::Canceled,
     ErrorCode::Internal,
     ErrorCode::RecorderFailed,
     ErrorCode::PluginLoadFailed,
@@ -149,7 +161,7 @@ fn family(code: ErrorCode) -> u16 {
         ErrorCode::TasksLive
         | ErrorCode::TaskNotOwned
         | ErrorCode::TaskConsumed
-        | ErrorCode::TaskCancelled => 3,
+        | ErrorCode::TaskCanceled => 3,
         ErrorCode::ContextOverflow
         | ErrorCode::RateLimited
         | ErrorCode::QuotaExhausted
@@ -197,7 +209,7 @@ fn family(code: ErrorCode) -> u16 {
         | ErrorCode::Conflict
         | ErrorCode::Backend
         | ErrorCode::Determinism => 6,
-        ErrorCode::RequirementsUnmet | ErrorCode::Interrupted | ErrorCode::Internal => 7,
+        ErrorCode::RequirementsUnmet | ErrorCode::Canceled | ErrorCode::Internal => 7,
         ErrorCode::RecorderFailed | ErrorCode::PluginLoadFailed | ErrorCode::NoOutput => 8,
     }
 }

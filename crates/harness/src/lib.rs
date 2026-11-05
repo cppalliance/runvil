@@ -11,8 +11,8 @@
 //! `Harness::control` before the run started.
 //!
 //! Every run gets a record and ends with one outcome: completed, failed
-//! with a kind and a message, or cancelled. The record begins before
-//! anything else, so a run cancelled before it starts, or one whose model
+//! with a kind and a message, or canceled. The record begins before
+//! anything else, so a run canceled before it starts, or one whose model
 //! cannot be resolved, is recorded too. The only error [`Harness::run`]
 //! returns is a `RecorderFailed` failure: a recorder that refuses a write.
 //!

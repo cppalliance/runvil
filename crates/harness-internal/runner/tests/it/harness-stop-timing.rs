@@ -1,5 +1,5 @@
 //! What a stop reaches depends on when the loop sees it: a stop
-//! interrupts a timed `tasks.join_any` while the task it joins keeps
+//! drops a timed `tasks.join_any` while the task it joins keeps
 //! waiting; a stop seen before a step's effects start drops the round in
 //! flight and the run steps its chain on; a stop with only a question to
 //! the operator open spares the round after its answer; and a stop raised
@@ -79,7 +79,7 @@ fn stopping_store(harness: &Harness) -> VfsRef {
 }
 
 #[tokio::test]
-async fn a_stop_interrupts_a_timed_join_any_and_its_pcall_resumes_while_the_joined_task_waits() {
+async fn a_stop_drops_a_timed_join_any_and_its_pcall_resumes_while_the_joined_task_waits() {
     let (operator, answers) = Operator::new();
     let asked = Arc::clone(&operator.asked);
     let timer = Arc::new(Held::default());
@@ -103,7 +103,7 @@ async fn a_stop_interrupts_a_timed_join_any_and_its_pcall_resumes_while_the_join
         .await;
         control.stop_round();
         until(
-            "the interrupted wait's pcall resumes and the main infers",
+            "the dropped wait's pcall resumes and the main infers",
             || rounds.lock().unwrap().len() == 1,
         )
         .await;
@@ -115,9 +115,9 @@ async fn a_stop_interrupts_a_timed_join_any_and_its_pcall_resumes_while_the_join
     assert_eq!(
         report.outcome,
         RunOutcome::Completed {
-            final_text: "false:cancelled|re: after|kept".to_owned()
+            final_text: "false:canceled|re: after|kept".to_owned()
         },
-        "the wait raised the cancelled error, and the child's question outlived the stop"
+        "the wait raised the canceled error, and the child's question outlived the stop"
     );
     assert_eq!(timer.dropped(), 1, "the stopped timer was torn down");
     assert_eq!(
@@ -164,7 +164,7 @@ async fn a_stop_seen_before_a_steps_effects_start_drops_the_round_in_flight_and_
     assert_eq!(
         report.outcome,
         RunOutcome::Completed {
-            final_text: "chat:false:cancelled".to_owned()
+            final_text: "chat:false:canceled".to_owned()
         },
         "the child's pcall caught its dropped round, and the main joined the child"
     );

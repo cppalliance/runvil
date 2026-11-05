@@ -171,7 +171,7 @@ pub mod cancel {
     //! Cancel handles that stop runs and tasks from any thread.
 
     pub use runvil_types::cancel::CancelHandle;
-    pub use runvil_types::cancel::Cancelled;
+    pub use runvil_types::cancel::Canceled;
 }
 
 pub mod timestamp {

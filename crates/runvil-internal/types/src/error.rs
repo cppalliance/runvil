@@ -44,6 +44,17 @@ impl Error {
         }
     }
 
+    /// The failure of a canceled run, of a call whose effect the caller
+    /// dropped, or of a block that re-raised a caught `canceled` error value
+    /// with no `task` after another suspending call.
+    #[must_use]
+    pub fn canceled() -> Error {
+        failure(
+            ErrorCode::Canceled,
+            "canceled: the run was canceled or this call was stopped",
+        )
+    }
+
     /// Appends `cause`, and each cause under it, to the message after `: `,
     /// skipping any text the message already holds. A cause whose text
     /// starts with the message's end and then `: ` adds only what follows.
@@ -250,8 +261,8 @@ pub enum ErrorCode {
     TaskNotOwned = 302,
     /// A wait named a task whose result was already delivered.
     TaskConsumed = 303,
-    /// A wait delivered a task its owner cancelled.
-    TaskCancelled = 304,
+    /// A wait delivered a task its owner canceled.
+    TaskCanceled = 304,
 
     /// The request exceeds the model's context window.
     ContextOverflow = 401,
@@ -352,8 +363,8 @@ pub enum ErrorCode {
 
     /// The environment falls short of what the prompt needs.
     RequirementsUnmet = 701,
-    /// The run was cancelled, or the call it waited on was dropped.
-    Interrupted = 702,
+    /// The run was canceled, or the call it waited on was dropped.
+    Canceled = 702,
     /// An internal invariant broke; nothing the prompt can fix.
     Internal = 703,
 

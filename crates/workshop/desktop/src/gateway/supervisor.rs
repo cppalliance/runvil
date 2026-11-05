@@ -102,7 +102,7 @@ pub(crate) fn supervise(
                         }
                     }
                 }
-                Ok(_) | Err(SidecarError::Cancelled) => SupervisionProbe::Missing,
+                Ok(_) | Err(SidecarError::Canceled) => SupervisionProbe::Missing,
                 Err(error) => {
                     eprintln!("could not re-resolve the local gateway: {error}");
                     SupervisionProbe::Missing
@@ -116,8 +116,8 @@ pub(crate) fn supervise(
                 validate_recovery(recovery, cancellation)
             },
             |identity, cancellation| {
-                if cancellation.is_cancelled() {
-                    anyhow::bail!("gateway publication was cancelled");
+                if cancellation.is_canceled() {
+                    anyhow::bail!("gateway publication was canceled");
                 }
                 if updater.publication_closed() {
                     anyhow::bail!("gateway publication is closed");
@@ -128,7 +128,7 @@ pub(crate) fn supervise(
                 {
                     Ok(())
                 } else {
-                    anyhow::bail!("gateway publication was cancelled")
+                    anyhow::bail!("gateway publication was canceled")
                 }
             },
             |delay, cancellation| cancellation.wait_timeout(delay),
@@ -176,11 +176,11 @@ pub(super) fn run_supervision<Identity, Probe, Recover, Publish, Wait, Error>(
 {
     let mut retry_delay = SUPERVISION_BASE_DELAY;
     loop {
-        if cancellation.is_cancelled() {
+        if cancellation.is_canceled() {
             return;
         }
         let observation = probe(&current, cancellation);
-        if cancellation.is_cancelled() {
+        if cancellation.is_canceled() {
             return;
         }
         match observation {
@@ -194,7 +194,7 @@ pub(super) fn run_supervision<Identity, Probe, Recover, Publish, Wait, Error>(
             SupervisionProbe::Replacement(mut identity) => match publish(&identity, cancellation) {
                 Ok(()) => {
                     identity.publication_succeeded();
-                    if cancellation.is_cancelled() {
+                    if cancellation.is_canceled() {
                         return;
                     }
                     current = identity;
@@ -206,11 +206,11 @@ pub(super) fn run_supervision<Identity, Probe, Recover, Publish, Wait, Error>(
                 }
             },
             SupervisionProbe::Missing => match recover(cancellation) {
-                Ok(_) if cancellation.is_cancelled() => return,
+                Ok(_) if cancellation.is_canceled() => return,
                 Ok(mut identity) => match publish(&identity, cancellation) {
                     Ok(()) => {
                         identity.publication_succeeded();
-                        if cancellation.is_cancelled() {
+                        if cancellation.is_canceled() {
                             return;
                         }
                         current = identity;
@@ -230,7 +230,7 @@ pub(super) fn run_supervision<Identity, Probe, Recover, Publish, Wait, Error>(
                 }
             },
         }
-        if cancellation.is_cancelled() || wait(retry_delay, cancellation) {
+        if cancellation.is_canceled() || wait(retry_delay, cancellation) {
             return;
         }
         retry_delay = retry_delay.saturating_mul(2).min(SUPERVISION_MAX_DELAY);

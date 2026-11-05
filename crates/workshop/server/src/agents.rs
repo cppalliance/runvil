@@ -366,8 +366,8 @@ impl AgentSessions {
         self.inner.conversations.get(&ConversationId::new(id))
     }
 
-    /// Ends the conversation with this id: its run is cancelled, pending
-    /// waits die as `input_cancelled`, and the conversation leaves the
+    /// Ends the conversation with this id: its run is canceled, pending
+    /// waits die as `input_canceled`, and the conversation leaves the
     /// table at once. Returns whether a conversation was ended.
     #[must_use]
     pub fn close(&self, id: &str) -> bool {

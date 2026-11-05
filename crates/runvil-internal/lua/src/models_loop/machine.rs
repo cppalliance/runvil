@@ -111,7 +111,7 @@ pub(super) enum Input<V> {
     /// or raised value, and whether the run's cancel flag was set.
     Called {
         outcome: std::result::Result<V, V>,
-        cancelled: bool,
+        canceled: bool,
     },
     /// The `adhoc_tool_done` answer: the call's text, or the value to
     /// raise.
@@ -197,8 +197,8 @@ impl<V: Clone> Machine<V> {
                 Ok(round) => self.judge(*round, compacted),
                 Err(failure) => Then::Raise(failure),
             },
-            (Phase::Compacting(reason, snapshot), Input::Called { outcome, cancelled }) => {
-                match settle(&self.list, snapshot, outcome, cancelled, Some(reason)) {
+            (Phase::Compacting(reason, snapshot), Input::Called { outcome, canceled }) => {
+                match settle(&self.list, snapshot, outcome, canceled, Some(reason)) {
                     Ok(snapshot) => self.chat(Some(snapshot)),
                     Err(refusal) => refusal,
                 }
@@ -213,8 +213,8 @@ impl<V: Clone> Machine<V> {
                 self.phase = Phase::Handling;
                 Then::Handle { handler, args }
             }
-            (Phase::Handling, Input::Called { outcome, cancelled }) => match outcome {
-                Err(failure) if cancelled => Then::Raise(failure),
+            (Phase::Handling, Input::Called { outcome, canceled }) => match outcome {
+                Err(failure) if canceled => Then::Raise(failure),
                 Ok(value) => {
                     self.phase = Phase::Reporting(None);
                     Then::Report(Some(value))
@@ -392,12 +392,12 @@ pub(super) fn settle<V>(
     list: &MessageList,
     snapshot: Snapshot,
     outcome: std::result::Result<V, V>,
-    cancelled: bool,
+    canceled: bool,
     overflow: Option<OverflowReason>,
 ) -> std::result::Result<Snapshot, Then<V>> {
     list.set_compacting(false);
     let refusal = match outcome {
-        Err(failure) if cancelled => Then::Raise(failure),
+        Err(failure) if canceled => Then::Raise(failure),
         Err(failure) => Then::RaiseNormalized(failure),
         Ok(_) => match check(list, &snapshot, overflow) {
             Ok(()) => return Ok(snapshot),

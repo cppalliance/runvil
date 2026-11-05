@@ -295,7 +295,7 @@ async fn resolve_model(
     let resolving = pin!(current_model(host, broker));
     // The cancel arm is polled first, so a cancel raised before the run,
     // or before a listing that is ready at once, wins.
-    match select(cancel.cancelled(), resolving).await {
+    match select(cancel.canceled(), resolving).await {
         Either::Left(((), _)) => Err(RunOutcome::Cancelled),
         Either::Right((resolved, _)) => resolved.map_err(|error| RunOutcome::Failed {
             kind: model_kind(&error),

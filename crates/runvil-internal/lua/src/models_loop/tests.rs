@@ -7,7 +7,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use mlua::{Function, Lua, MultiValue, Value};
 use runvil_model_client::model::{ModelBinding, ModelId, ModelInvocation};
-use runvil_types::error::{ErrorCode, FactKey};
+use runvil_types::error::{Error, ErrorCode, FactKey};
 use runvil_types::metrics::ToolCallEvent;
 use runvil_types::tools::ToolId;
 use serde_json::json;
@@ -276,7 +276,7 @@ fn a_step_failing_on_a_full_heap_after_an_overflow_leaves_no_flag_set() {
 #[test]
 fn envelope_failure_keeps_an_error_table_and_wraps_anything_else() {
     let lua = Lua::new();
-    let table = error_table(&lua, &crate::interrupted()).unwrap();
+    let table = error_table(&lua, &Error::canceled()).unwrap();
     let kept = envelope_failure(&lua, Value::Table(table.clone())).unwrap();
     assert_eq!(kept.to_pointer(), table.to_pointer());
     let boom = Value::String(lua.create_string("boom").unwrap());

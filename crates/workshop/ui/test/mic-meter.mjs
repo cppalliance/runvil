@@ -292,7 +292,7 @@ test("disposing the meter removes its slot and stops drawing", async () => {
     h.emit(chunkAt(0.5));
     h.meter.dispose();
     assert.equal(h.element.isConnected, false, "the slot leaves the bar");
-    assert.equal(frames.size, 0, "the pending frame is cancelled");
+    assert.equal(frames.size, 0, "the pending frame is canceled");
     const before = requested;
     h.emit(chunkAt(0.5));
     assert.equal(requested, before, "a disposed meter requests no frame");

@@ -168,7 +168,7 @@ fn cancellation_at_health_probe_start_prevents_the_probe() {
     release.send(()).expect("release health probe boundary");
     let result = worker.join().expect("health worker joins");
 
-    assert!(matches!(result, Err(HealthError::Cancelled)));
+    assert!(matches!(result, Err(HealthError::Canceled)));
     assert_eq!(
         probes.load(Ordering::SeqCst),
         0,
@@ -211,7 +211,7 @@ fn cancellation_joins_a_blocked_health_wait_without_another_probe() {
         started.elapsed() < Duration::from_millis(250),
         "cancellation bounds the blocked health wait"
     );
-    assert!(matches!(result, Err(HealthError::Cancelled)));
+    assert!(matches!(result, Err(HealthError::Canceled)));
     assert_eq!(
         probes.load(Ordering::SeqCst),
         1,

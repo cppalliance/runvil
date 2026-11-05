@@ -1,7 +1,7 @@
 //! The constructors of the universal failures this crate raises, each the
-//! one source of its failure's text. The Engine raises `lua_runtime`,
-//! `interrupted`, the task refusals, and `internal_at`'s failures through
-//! these same constructors.
+//! one source of its failure's text. The Engine raises `lua_runtime`, the
+//! task refusals, and `internal_at`'s failures through these same
+//! constructors.
 
 use std::borrow::Cow;
 use std::num::NonZeroU32;
@@ -23,17 +23,6 @@ mod tests;
 #[must_use]
 pub fn lua_runtime(message: impl Into<String>) -> Error {
     failure(ErrorCode::LuaRuntime, message)
-}
-
-/// The failure of a run that was cancelled, of a call whose effect the
-/// caller dropped, or of a block that raised a caught `cancelled` error
-/// value with no `task` again after another suspending call.
-#[must_use]
-pub fn interrupted() -> Error {
-    failure(
-        ErrorCode::Interrupted,
-        "interrupted: the run was cancelled or this call was stopped",
-    )
 }
 
 /// `compactors.fail` exhausted the model's context window, with `reason`:
@@ -92,13 +81,13 @@ pub fn task_consumed(task: &TaskId) -> Error {
     )
 }
 
-/// The failure a wait delivers for `task`, which its owner cancelled
+/// The failure a wait delivers for `task`, which its owner canceled
 /// instead of letting it end on its own.
 #[must_use]
-pub fn task_cancelled(task: &TaskId) -> Error {
+pub fn task_canceled(task: &TaskId) -> Error {
     task_failure(
-        ErrorCode::TaskCancelled,
-        format!("task `{task}` was cancelled"),
+        ErrorCode::TaskCanceled,
+        format!("task `{task}` was canceled"),
         task,
     )
 }

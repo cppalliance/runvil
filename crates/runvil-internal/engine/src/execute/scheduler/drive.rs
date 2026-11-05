@@ -16,7 +16,7 @@ use runvil_vfs::Origin;
 
 use crate::execute::RunOutcome;
 use crate::execute::run::{EffectAnswer, EffectId, Step};
-use crate::{Result, error};
+use crate::{Error, Result, error};
 
 use super::chain::ChainStep;
 use super::effects::Arrival;
@@ -29,13 +29,13 @@ impl Scheduler {
     /// first call checks that the run can start, then starts the H1 pass
     /// when the prompt has H1 blocks, else the root chain over the prompt's
     /// sections. A run that cannot start ends with that failure, or as
-    /// cancelled when its cancel flag is already set, and reports no run
+    /// canceled when its cancel flag is already set, and reports no run
     /// events.
     pub(crate) fn step(&mut self) -> Step {
         if matches!(self.phase, Phase::Fresh) {
             if let Err(error) = self.check_start() {
-                let error = if self.ctx.cancel().is_cancelled() {
-                    error::interrupted()
+                let error = if self.ctx.cancel().is_canceled() {
+                    Error::canceled()
                 } else {
                     error
                 };
@@ -107,7 +107,7 @@ impl Scheduler {
         }
     }
 
-    /// The outcome the run ends with for `result`: an interruption that
+    /// The outcome the run ends with for `result`: a `Canceled` failure that
     /// reached the end is a cancellation, and any other error a failure.
     #[cfg_attr(
         not(test),
@@ -119,7 +119,7 @@ impl Scheduler {
     fn outcome(&mut self, result: Result<String>) -> RunOutcome {
         match result {
             Ok(final_text) => RunOutcome::Completed { final_text },
-            Err(error) if error.code == ErrorCode::Interrupted => RunOutcome::Cancelled,
+            Err(error) if error.code == ErrorCode::Canceled => RunOutcome::Cancelled,
             Err(error) => {
                 let outcome = crate::execute::outcome(&error);
                 #[cfg(test)]
@@ -238,8 +238,8 @@ impl Scheduler {
     /// queued siblings before they start.
     fn drain(&mut self) {
         loop {
-            if self.ctx.cancel().is_cancelled() {
-                self.end(Err(error::interrupted()));
+            if self.ctx.cancel().is_canceled() {
+                self.end(Err(Error::canceled()));
                 return;
             }
             let Some(id) = self.ready.pop_front() else {

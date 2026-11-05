@@ -91,7 +91,7 @@ end
 /// instructions, so a long-running or infinite loop is legal and only the
 /// flag aborts it. The flag is the run's synchronous [`CancelHandle`],
 /// installed once by the executor through [`set_cancel`](Self::set_cancel);
-/// a VM no executor claimed (a test fixture) is never cancelled.
+/// a VM no executor claimed (a test fixture) is never canceled.
 ///
 /// Instruction hooks are per-coroutine in PUC Lua: the hook installed on the
 /// main state at construction never fires inside a resumed coroutine, so
@@ -127,15 +127,15 @@ impl CancelHook {
 
     /// Returns whether the installed cancel flag is set, `false` when no
     /// executor installed one.
-    pub(crate) fn is_cancelled(&self) -> bool {
-        cancelled(&self.cancel)
+    pub(crate) fn is_canceled(&self) -> bool {
+        canceled(&self.cancel)
     }
 }
 
 /// Returns whether `cancel` holds a set flag, the hook's poll of one
 /// `OnceLock` read and a handful of atomic loads.
-fn cancelled(cancel: &OnceLock<CancelHandle>) -> bool {
-    cancel.get().is_some_and(CancelHandle::is_cancelled)
+fn canceled(cancel: &OnceLock<CancelHandle>) -> bool {
+    cancel.get().is_some_and(CancelHandle::is_canceled)
 }
 
 /// Builds the every-Nth-instruction hook body shared by the main state and
@@ -146,10 +146,10 @@ fn cancel_poll(
     move |_lua, _debug| {
         // Cooperative cancellation: abort a long-running Lua block promptly
         // when the run's CancelHandle is signaled (mapped to
-        // an `Interrupted` failure at the VM's failure boundary).
-        if cancelled(&cancel) {
+        // a `Canceled` failure at the VM's failure boundary).
+        if canceled(&cancel) {
             return Err(mlua::Error::RuntimeError(
-                "lua execution cancelled".to_string(),
+                "lua execution canceled".to_string(),
             ));
         }
         Ok(VmState::Continue)

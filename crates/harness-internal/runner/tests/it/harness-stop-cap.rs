@@ -1,7 +1,7 @@
 //! A stop under the real performer's default cap of 10: the stop drops
 //! the calls waiting for a slot without starting them, and a waiting call
 //! that survives stops starts once the stop frees a slot. A task's early
-//! end spares no call that survives stops: cancelling a task drops its
+//! end spares no call that survives stops: canceling a task drops its
 //! question to the operator while the run goes on.
 
 use std::fmt::Write as _;
@@ -84,7 +84,7 @@ const CANCELS_AN_ASKER: &str = "---\nname: cancels\ndescription: d\nrunvil: 0\n\
     models.infer('wait')\n\
     tasks.cancel(t)\n\
     models.infer('after')\n\
-    return 'cancelled'\n```\n\n\
+    return 'canceled'\n```\n\n\
     ## Child\n\n```lua\nreturn (input.ask())\n```\n";
 
 /// A broker that answers the `wait` round once `operator` has been asked,
@@ -138,7 +138,7 @@ async fn a_stop_drops_waiting_calls_without_starting_them() {
     assert_eq!(
         report.outcome,
         RunOutcome::Completed {
-            final_text: "false:cancelled".to_owned()
+            final_text: "false:canceled".to_owned()
         },
         "the loop's pcall caught the dropped batch"
     );
@@ -194,7 +194,7 @@ async fn a_stop_starts_a_waiting_call_that_survives_stops() {
     assert_eq!(
         report.outcome,
         RunOutcome::Completed {
-            final_text: "false:cancelled".to_owned()
+            final_text: "false:canceled".to_owned()
         },
         "the batch answers with its first failure in call order"
     );
@@ -214,7 +214,7 @@ async fn a_stop_starts_a_waiting_call_that_survives_stops() {
 }
 
 #[tokio::test]
-async fn cancelling_a_task_drops_its_question_to_the_operator() {
+async fn canceling_a_task_drops_its_question_to_the_operator() {
     let (operator, _answers) = Operator::new();
     let recorder = Arc::new(MemoryRecorder::new());
     let harness = Harness::new(
@@ -232,14 +232,14 @@ async fn cancelling_a_task_drops_its_question_to_the_operator() {
     assert_eq!(
         report.outcome,
         RunOutcome::Completed {
-            final_text: "cancelled".to_owned()
+            final_text: "canceled".to_owned()
         },
-        "the run went on past the cancelled task"
+        "the run went on past the canceled task"
     );
     assert_eq!(
         operator.abandoned.load(Ordering::SeqCst),
         1,
-        "cancelling the task tore its question down"
+        "canceling the task tore its question down"
     );
     let records = recorder.records(report.run_id);
     assert_eq!(

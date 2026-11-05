@@ -328,8 +328,8 @@ initZones({
   window.__TAURI_DIALOG__ = { calls: [], answer: null };
   await Commands.execute("workbench.action.files.openFile");
   await flush();
-  check("a cancelled Open File grants nothing", grants.length === 0);
-  check("a cancelled Open File opens no editor", addedPanels.length === 0);
+  check("a canceled Open File grants nothing", grants.length === 0);
+  check("a canceled Open File opens no editor", addedPanels.length === 0);
 
   window.__TAURI_DIALOG__.answer = "C:\\picked\\notes.txt";
   await Commands.execute("workbench.action.files.openFile");
@@ -358,7 +358,7 @@ initZones({
     window.__TAURI_DIALOG__.calls.at(-1)?.kind === "open" &&
       window.__TAURI_DIALOG__.calls.at(-1)?.directory === true,
   );
-  check("a cancelled Open Folder grants nothing", grants.length === grantsBefore);
+  check("a canceled Open Folder grants nothing", grants.length === grantsBefore);
 
   window.__TAURI_DIALOG__.answer = "C:\\picked-dir";
   await Commands.execute("workbench.action.files.openFolder");
@@ -415,8 +415,8 @@ initZones({
   const writesBefore = writeCalls.length;
   await Commands.execute("workbench.action.files.saveAs");
   await flush();
-  check("a cancelled Save As writes nothing", writeCalls.length === writesBefore);
-  check("a cancelled Save As keeps the panel's path", panel.filePath() === "C:\\project\\a.txt");
+  check("a canceled Save As writes nothing", writeCalls.length === writesBefore);
+  check("a canceled Save As keeps the panel's path", panel.filePath() === "C:\\project\\a.txt");
 
   window.__TAURI_DIALOG__.answer = "C:\\elsewhere\\b.txt";
   await Commands.execute("workbench.action.files.saveAs");
@@ -498,8 +498,8 @@ initZones({
   const cancel = [...(overlay?.querySelectorAll("button") ?? [])].find((b) => b.textContent === "Cancel");
   cancel.click();
   await flush();
-  check("cancelling the revert keeps the edits", surface.text() === "edited" && panel.isDirty());
-  check("cancelling the revert reloads nothing", reads === 1);
+  check("canceling the revert keeps the edits", surface.text() === "edited" && panel.isDirty());
+  check("canceling the revert reloads nothing", reads === 1);
 
   await Commands.execute("workbench.action.files.revert");
   await flush();

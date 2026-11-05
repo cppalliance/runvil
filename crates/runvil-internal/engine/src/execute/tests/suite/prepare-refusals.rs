@@ -1,7 +1,7 @@
 //! The run's first step refusing an unsatisfiable prompt with the
 //! model-readable notice, and running a satisfiable one; the version check
 //! running before the requirements; and a refusal after the run's cancel
-//! fired ending the run cancelled.
+//! fired ending the run canceled.
 
 use runvil_types::cancel::CancelHandle;
 use runvil_types::error::ErrorCode;
@@ -172,25 +172,24 @@ fn an_unsupported_version_is_reported_before_an_unmet_requirement() {
 }
 
 /// `scenario`, with its run's cancel flag set before the run is built.
-fn cancelled_before_it_starts(scenario: Scenario) -> Scenario {
+fn canceled_before_it_starts(scenario: Scenario) -> Scenario {
     let cancel = CancelHandle::new();
     cancel.cancel();
     scenario.params(move |ctx| ctx.with_cancel(cancel))
 }
 
 #[test]
-fn a_refusal_after_the_runs_cancel_fired_ends_the_run_cancelled_with_no_run_events() {
+fn a_refusal_after_the_runs_cancel_fired_ends_the_run_canceled_with_no_run_events() {
     let model = current_model(32_000, ThinkingMode::Switchable);
     let unsupported = DECLARES_LONG_CONTEXT.replace("runvil: 0", "runvil: 7");
     for (source, refused_for) in [
         (DECLARES_LONG_CONTEXT, "an unmet requirement"),
         (unsupported.as_str(), "an unsupported version"),
     ] {
-        let trace =
-            cancelled_before_it_starts(under_model(source, "cancelled", model.clone())).run();
+        let trace = canceled_before_it_starts(under_model(source, "canceled", model.clone())).run();
         assert!(
             matches!(trace.outcome(), RunOutcome::Cancelled),
-            "{refused_for} after a cancel ends the run cancelled, got {:?}",
+            "{refused_for} after a cancel ends the run canceled, got {:?}",
             trace.outcome()
         );
         assert!(
@@ -202,9 +201,9 @@ fn a_refusal_after_the_runs_cancel_fired_ends_the_run_cancelled_with_no_run_even
 }
 
 #[test]
-fn a_run_that_passes_its_start_checks_after_a_cancel_starts_and_ends_cancelled() {
+fn a_run_that_passes_its_start_checks_after_a_cancel_starts_and_ends_canceled() {
     let model = current_model(200_000, ThinkingMode::Always);
-    let trace = cancelled_before_it_starts(under_model(DECLARES_STRONG, "started", model)).run();
+    let trace = canceled_before_it_starts(under_model(DECLARES_STRONG, "started", model)).run();
     assert!(
         matches!(trace.outcome(), RunOutcome::Cancelled),
         "got {:?}",

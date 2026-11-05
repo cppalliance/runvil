@@ -51,7 +51,7 @@ fn reply_event() -> Event {
 
 /// The four failure kinds the session reports on its error channel: a
 /// failed model turn and a failed tool call the program survived, a run
-/// that ended in error, and the synthetic terminal of an interrupt. Each
+/// that ended in error, and the synthetic terminal of a cancel. Each
 /// must release the turn-dispatch Thinking push with a terminal,
 /// non-thinking status; the survived turns keep the boundary as their
 /// label because the agent is still running, and only a run that ended
@@ -77,7 +77,7 @@ fn every_error_report_pushes_a_terminal_failure_status() {
             "agent run failed: kaboom",
             "Agent failed",
         ),
-        (FailureKind::Interrupted, "run cancelled", "Agent failed"),
+        (FailureKind::Canceled, "run canceled", "Agent failed"),
     ];
 
     for (kind, message, label) in reports {

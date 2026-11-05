@@ -85,7 +85,7 @@ pub trait Pack: Send + Sync {
     ///   [`ToolOutput::untrusted`].
     /// - `call` is cancellation-aware. The Harness drops the returned
     ///   future on a stop, when the run ends (a cancel included), and when
-    ///   the task that made the call ends early: it is cancelled, its owner
+    ///   the task that made the call ends early: it is canceled, its owner
     ///   ends, or an ancestor is aborted. Only a stop spares a call whose
     ///   tool's info sets `survives_stop`. After a stop or a task's
     ///   early end, the run goes on.
@@ -98,7 +98,7 @@ pub trait Pack: Send + Sync {
     /// Returns an [`Error`] with a tool code, built with
     /// [`tool_error`](crate::tool_error) so its prose is safe to show the
     /// model, when the call rejects the arguments, its backend refuses, its
-    /// transport fails, or the run is cancelled.
+    /// transport fails, or the run is canceled.
     fn call<'a>(
         &'a self,
         cx: ToolContext<'a>,

@@ -221,10 +221,10 @@ fn cancellation_joins_a_blocked_launch_race_without_launching() {
         started.elapsed() < Duration::from_millis(250),
         "cancellation bounds the blocked launch race"
     );
-    assert!(matches!(result, Err(SidecarError::Cancelled)));
+    assert!(matches!(result, Err(SidecarError::Canceled)));
     assert!(
         !crate::paths::gateway_discovery_file_path(dir.path()).exists(),
-        "the cancelled loser never publishes or launches"
+        "the canceled loser never publishes or launches"
     );
     drop(winner);
 }

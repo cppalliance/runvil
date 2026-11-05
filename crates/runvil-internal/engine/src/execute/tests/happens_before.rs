@@ -13,7 +13,7 @@
 //! Trace 2 stays in the fanout suites, which pin the unconditional
 //! conflict directly. The only outcomes that may differ between
 //! interleavings are the ones the plan admits as recorded nondeterminism:
-//! which task `join_any` returns, and how far a cancelled task got; the
+//! which task `join_any` returns, and how far a canceled task got; the
 //! tests below pin the invariant around them.
 //! The two concurrency traces sit in `concurrency`.
 
@@ -212,7 +212,7 @@ const TRACE_10_FAIL: &str = "---\nname: t\ndescription: d\nrunvil: 0\n---\n\n\
     return models.infer('slow')\n\
     ```\n";
 
-/// Trace 11: cancellation. However far the cancelled task got, the join
+/// Trace 11: cancellation. However far the canceled task got, the join
 /// at delivery makes its completed write readable.
 const TRACE_11: &str = "---\nname: t\ndescription: d\nrunvil: 0\n---\n\n\
     # Cancel\n\n\
@@ -460,7 +460,7 @@ fn a_timed_join_joins_the_members_it_delivers_and_a_later_join_the_rest() {
 }
 
 #[test]
-fn a_cancelled_tasks_partial_write_is_readable_after_the_join() {
+fn a_canceled_tasks_partial_write_is_readable_after_the_join() {
     // The shuffled rig holds the task's model round, so the cancel lands
     // while the round is out.
     assert_every_interleaving_reads(

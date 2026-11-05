@@ -46,7 +46,7 @@ fn short(list: &MessageList) {
 #[test]
 fn an_overflow_flags_the_list_and_a_raising_compactor_restores_and_clears_it() {
     let list = long_list();
-    for (outcome, cancelled, expected) in [
+    for (outcome, canceled, expected) in [
         (Err("failure"), false, "normalize failure"),
         (Err("abort"), true, "raise abort"),
     ] {
@@ -57,7 +57,7 @@ fn an_overflow_flags_the_list_and_a_raising_compactor_restores_and_clears_it() {
         );
         assert!(list.compacting(), "the flag is set around the compactor");
         short(&list);
-        assert_eq!(show(&machine.step(called(outcome, cancelled))), expected);
+        assert_eq!(show(&machine.step(called(outcome, canceled))), expected);
         assert!(
             !list.compacting(),
             "the flag clears when the compactor raises"

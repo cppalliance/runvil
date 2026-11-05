@@ -3,7 +3,7 @@
 // log order; ephemeral deltas coalesce into pending items by their
 // superseding reply id, per channel, and the durable event replaces
 // them; late deltas after their round settled are dropped; the input pin
-// follows input_required / input_cancelled / respond; a session
+// follows input_required / input_canceled / respond; a session
 // acknowledgment resets the pin and a new session id resets the
 // transcript; errors fold as items. The turn's liveness rides along: an
 // injected clock stamps each thought's start and end, `generating` and
@@ -56,7 +56,7 @@ function makeWire() {
     event: new Emitter(),
     delta: new Emitter(),
     inputRequired: new Emitter(),
-    inputCancelled: new Emitter(),
+    inputCanceled: new Emitter(),
     error: new Emitter(),
     disconnect: new Emitter(),
   };
@@ -66,7 +66,7 @@ function makeWire() {
     onEvent: emitters.event.event,
     onDelta: emitters.delta.event,
     onInputRequired: emitters.inputRequired.event,
-    onInputCancelled: emitters.inputCancelled.event,
+    onInputCanceled: emitters.inputCanceled.event,
     onError: emitters.error.event,
     onDisconnect: emitters.disconnect.event,
     launched: [],
@@ -105,7 +105,7 @@ function makeWire() {
       delta: (kind, content, reply) =>
         emitters.delta.fire({ type: "agent_delta", kind, content, reply }),
       inputRequired: (token) => emitters.inputRequired.fire(token),
-      inputCancelled: (token) => emitters.inputCancelled.fire(token),
+      inputCanceled: (token) => emitters.inputCanceled.fire(token),
       error: (message) => emitters.error.fire(message),
     },
     disposeEmitters: () => {
@@ -263,7 +263,7 @@ await assertNoLeaks(lifecycle, () => {
     service.dispose();
   }
 
-  // --- The input pin: required, respond, cancelled --------------------------
+  // --- The input pin: required, respond, canceled ---------------------------
 
   {
     const wire = makeWire();
@@ -275,7 +275,7 @@ await assertNoLeaks(lifecycle, () => {
     check("nothing went out without a pin", wire.responses.length === 0);
     wire.fire.inputRequired("tok1");
     check("input_required pins its token", service.pendingInputToken === "tok1");
-    wire.fire.inputCancelled("other");
+    wire.fire.inputCanceled("other");
     check("a foreign token's cancellation leaves the pin", service.pendingInputToken === "tok1");
     check("respond sends the pinned token with the text byte-exact", service.respond("hi  ") === true);
     check(
@@ -284,8 +284,8 @@ await assertNoLeaks(lifecycle, () => {
     );
     check("a spent token unpins", service.pendingInputToken === null);
     wire.fire.inputRequired("tok2");
-    wire.fire.inputCancelled("tok2");
-    check("input_cancelled unpins its own token", service.pendingInputToken === null);
+    wire.fire.inputCanceled("tok2");
+    check("input_canceled unpins its own token", service.pendingInputToken === null);
     check(
       "the pin change event fired for every transition",
       isDeepStrictEqual(pins, ["tok1", null, "tok2", null]),
@@ -317,7 +317,7 @@ await assertNoLeaks(lifecycle, () => {
     service.dispose();
   }
 
-  // --- A cancelled wait leaves wherever it sits in the open waits ------------
+  // --- A canceled wait leaves wherever it sits in the open waits -------------
 
   {
     const openTwo = () => {
@@ -328,12 +328,12 @@ await assertNoLeaks(lifecycle, () => {
       return { wire, service };
     };
     const oldest = openTwo();
-    oldest.wire.fire.inputCancelled("tok1");
-    check("cancelling the oldest wait pins the next", oldest.service.pendingInputToken === "tok2");
+    oldest.wire.fire.inputCanceled("tok1");
+    check("canceling the oldest wait pins the next", oldest.service.pendingInputToken === "tok2");
     oldest.service.dispose();
     const newer = openTwo();
-    newer.wire.fire.inputCancelled("tok2");
-    check("cancelling a newer wait keeps the oldest pinned", newer.service.pendingInputToken === "tok1");
+    newer.wire.fire.inputCanceled("tok2");
+    check("canceling a newer wait keeps the oldest pinned", newer.service.pendingInputToken === "tok1");
     newer.service.dispose();
   }
 
@@ -563,7 +563,7 @@ await assertNoLeaks(lifecycle, () => {
     // Each wait closes before its result lands, as it does in the shipped
     // UI; a cancel, not a respond, so generating is still off and only the
     // result can turn it on.
-    wire.fire.inputCancelled("tok1");
+    wire.fire.inputCanceled("tok1");
     wire.fire.event("tool_call_update", "operator answer", { tool_call_id: "c1" });
     check(
       "a tool_call_update answering a model batch call turns generating on",
@@ -571,7 +571,7 @@ await assertNoLeaks(lifecycle, () => {
     );
     wire.fire.inputRequired("tok2");
     check("input_required turns generating off", service.generating === false);
-    wire.fire.inputCancelled("tok2");
+    wire.fire.inputCanceled("tok2");
     wire.fire.event("user_message", "second turn");
     wire.fire.event("tool_call_update", "stray", { tool_call_id: "c1" });
     check(
@@ -810,12 +810,12 @@ await assertNoLeaks(lifecycle, () => {
       local.kind === "error" &&
         local.title === "Connection failed" &&
         local.message ===
-          "The connection was interrupted. Please check your network connection and try again.",
+          "The connection was lost. Please check your network connection and try again.",
     );
     check(
       "the local failure announces the message as shown",
       heard[1] ===
-        "The connection was interrupted. Please check your network connection and try again.",
+        "The connection was lost. Please check your network connection and try again.",
     );
     service.dispose();
   }

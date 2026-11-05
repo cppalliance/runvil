@@ -27,7 +27,7 @@ fn no_task_reports(records: &[(String, Observation)]) -> bool {
             Observation::TaskStarted { .. }
                 | Observation::TaskSucceeded { .. }
                 | Observation::TaskFailed { .. }
-                | Observation::TaskCancelled { .. }
+                | Observation::TaskCanceled { .. }
                 | Observation::TaskAbandoned { .. }
         )
     })
@@ -64,7 +64,7 @@ fn a_chain_ending_with_live_author_tasks_fails_as_tasks_live_naming_the_ids() {
         assert_eq!(
             rig.task_state_for_test(&task(id)),
             Some(TaskState::Abandoned),
-            "a leaked task's entry is Abandoned, not Done or Cancelled"
+            "a leaked task's entry is Abandoned, not Done or Canceled"
         );
     }
     let records = TaskRecorder::replayed(rig.trace()).records();
@@ -395,7 +395,7 @@ fn aborting_a_chain_abandons_the_tasks_it_owns() {
     // A fatal sibling arm makes the fanout shim cancel the spawning arm
     // before it resumes; the abort takes the arm's task with it: the
     // task's entry is Abandoned because its owner was aborted. The task
-    // was never admitted - the arm was cancelled while its spawn was
+    // was never admitted - the arm was canceled while its spawn was
     // still queued - so it reports no start and no terminal, and its
     // chain never runs its block.
     let md = "---\nname: t\ndescription: d\nrunvil: 0\n---\n\n\
@@ -440,7 +440,7 @@ fn aborting_a_chain_abandons_the_tasks_it_owns() {
                 Observation::TaskStarted { .. }
                     | Observation::TaskSucceeded { .. }
                     | Observation::TaskFailed { .. }
-                    | Observation::TaskCancelled { .. }
+                    | Observation::TaskCanceled { .. }
                     | Observation::TaskAbandoned { .. }
             )),
         "the abandoned task never ran, so it reports nothing: {records:?}"
@@ -454,7 +454,7 @@ fn aborting_a_chain_abandons_the_tasks_it_owns() {
     assert_eq!(
         records
             .iter()
-            .filter(|(_, event)| *event == Observation::TaskCancelled { task: task("0.0") })
+            .filter(|(_, event)| *event == Observation::TaskCanceled { task: task("0.0") })
             .count(),
         1,
         "the fanout shim cancels the spawning arm exactly once: {records:?}"

@@ -233,13 +233,13 @@ async fn stopping_an_in_flight_round_drops_the_call_and_the_prompts_pcall_catche
     assert_eq!(
         report.expect("the run reaches an outcome").outcome,
         RunOutcome::Completed {
-            final_text: "cancelled".to_owned()
+            final_text: "canceled".to_owned()
         }
     );
 }
 
 #[tokio::test]
-async fn a_run_cancelled_before_it_begins_is_recorded_as_cancelled_before_its_parse() {
+async fn a_run_canceled_before_it_begins_is_recorded_as_canceled_before_its_parse() {
     let recorder = Arc::new(MemoryRecorder::new());
     let harness = Harness::new(
         recorder.clone(),
@@ -257,7 +257,7 @@ async fn a_run_cancelled_before_it_begins_is_recorded_as_cancelled_before_its_pa
     assert_eq!(
         recorder.outcome(report.run_id),
         Some(RunOutcome::Cancelled),
-        "the recorder holds the cancelled run"
+        "the recorder holds the canceled run"
     );
     assert!(
         recorder.records(report.run_id).is_empty(),

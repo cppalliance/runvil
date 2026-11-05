@@ -17,7 +17,7 @@ use super::tasks::TaskRecorder;
 use super::*;
 
 /// The spawner starts `Child` and waits on it; the child parks on a model
-/// round the test never answers, so the run is cancelled with the task
+/// round the test never answers, so the run is canceled with the task
 /// live.
 const CHILD_PARKED_ON_ROUND: &str = "---\nname: t\ndescription: d\nrunvil: 0\n---\n\n\
     # Termination\n\n\
@@ -33,8 +33,8 @@ const CHILD_PARKED_ON_ROUND: &str = "---\nname: t\ndescription: d\nrunvil: 0\n--
     ```\n";
 
 #[test]
-fn cancelling_a_run_settles_every_live_task_with_one_terminal_before_the_run_ends() {
-    // The child's round is held, and the run is cancelled once only that
+fn canceling_a_run_settles_every_live_task_with_one_terminal_before_the_run_ends() {
+    // The child's round is held, and the run is canceled once only that
     // round is outstanding.
     let mut driving = scheduler_scenario(CHILD_PARKED_ON_ROUND)
         .hold(|effect| matches!(effect, Effect::Chat { .. }))
@@ -45,7 +45,7 @@ fn cancelling_a_run_settles_every_live_task_with_one_terminal_before_the_run_end
 
     assert!(
         matches!(trace.outcome(), RunOutcome::Cancelled),
-        "the test driver's cancel ends the run as cancelled: {:?}",
+        "the test driver's cancel ends the run as canceled: {:?}",
         trace.outcome()
     );
     assert!(
@@ -76,7 +76,7 @@ fn cancelling_a_run_settles_every_live_task_with_one_terminal_before_the_run_end
     let run_end = records
         .iter()
         .position(|(_, observation)| *observation == Observation::RunFailed)
-        .expect("a cancelled run reports RUN_FAILED");
+        .expect("a canceled run reports RUN_FAILED");
     let last_terminal = records
         .iter()
         .rposition(|(_, observation)| {
@@ -84,7 +84,7 @@ fn cancelling_a_run_settles_every_live_task_with_one_terminal_before_the_run_end
                 observation,
                 Observation::TaskSucceeded { .. }
                     | Observation::TaskFailed { .. }
-                    | Observation::TaskCancelled { .. }
+                    | Observation::TaskCanceled { .. }
                     | Observation::TaskAbandoned { .. }
             )
         })

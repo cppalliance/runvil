@@ -177,7 +177,7 @@ fn a_join_any_delivery_of_a_finished_member_retains_nothing() {
 #[test]
 fn a_status_answer_derives_ok_from_the_phase() {
     // `ok` is absent while the task runs, the outcome once it is done,
-    // and false for a task that was cancelled or abandoned.
+    // and false for a task that was canceled or abandoned.
     let lua = Lua::new();
     for (state, expected) in [
         (
@@ -189,7 +189,7 @@ fn a_status_answer_derives_ok_from_the_phase() {
         ),
         (TaskPhase::Done { ok: true }, "true"),
         (TaskPhase::Done { ok: false }, "false"),
-        (TaskPhase::Cancelled, "false"),
+        (TaskPhase::Canceled, "false"),
         (TaskPhase::Abandoned, "false"),
     ] {
         let status = TaskStatus {
@@ -318,23 +318,23 @@ fn an_adhoc_tool_call_answer_for_an_unregistered_alias_is_an_error() {
 }
 
 #[test]
-fn a_cancelled_answer_round_trips_as_the_cancelled_kind_and_retains_the_typed_error() {
+fn a_canceled_answer_round_trips_as_the_canceled_kind_and_retains_the_typed_error() {
     let lua = Lua::new();
     let (envelope, retained) =
-        answer_envelope(&lua, Err(crate::interrupted())).expect("the envelope renders");
+        answer_envelope(&lua, Err(Error::canceled())).expect("the envelope renders");
     assert_eq!(
         retained,
-        Some(crate::interrupted()),
+        Some(Error::canceled()),
         "the typed error is retained"
     );
     let (ok, result) = echo_through_lua(&lua, envelope);
     assert!(!ok);
     let (kind, message) = failure_parts(&lua, result);
-    assert_eq!(kind, "cancelled");
+    assert_eq!(kind, "canceled");
     assert_eq!(
         message,
-        ErrorCode::Interrupted.prose(),
-        "an interruption keeps its default prose"
+        ErrorCode::Canceled.prose(),
+        "a cancel keeps its default prose"
     );
 }
 

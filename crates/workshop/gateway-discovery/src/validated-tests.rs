@@ -265,7 +265,7 @@ fn cancellation_inside_the_first_identity_probe_prevents_observation() {
         started.elapsed() < Duration::from_millis(250),
         "cancellation wakes the in-progress process identity probe"
     );
-    assert!(matches!(result, Err(ValidationError::Cancelled)));
+    assert!(matches!(result, Err(ValidationError::Canceled)));
     assert_eq!(
         observations.load(Ordering::SeqCst),
         0,
@@ -310,7 +310,7 @@ fn cancellation_during_validation_prevents_the_second_identity_observation() {
         started.elapsed() < Duration::from_millis(250),
         "cancellation bounds the blocked validation"
     );
-    assert!(matches!(result, Err(ValidationError::Cancelled)));
+    assert!(matches!(result, Err(ValidationError::Canceled)));
     assert_eq!(
         observations.load(Ordering::SeqCst),
         1,

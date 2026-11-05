@@ -24,7 +24,7 @@ const RETRY_INTERVAL: Duration = Duration::from_millis(25);
 /// the whole budget.
 const ATTEMPT_TIMEOUT: Duration = Duration::from_secs(2);
 
-/// Per-attempt I/O budget while a supervisor may be cancelled.
+/// Per-attempt I/O budget while a supervisor may be canceled.
 const CANCELLABLE_ATTEMPT_TIMEOUT: Duration = Duration::from_millis(100);
 /// Maximum accepted response head for the two-request validation proof.
 const RESPONSE_HEAD_LIMIT: usize = 16 * 1024;
@@ -35,9 +35,9 @@ const RESPONSE_BODY_LIMIT: usize = 64 * 1024;
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
 pub enum HealthError {
-    /// The caller cancelled the health wait.
-    #[error("the health wait was cancelled")]
-    Cancelled,
+    /// The caller canceled the health wait.
+    #[error("the health wait was canceled")]
+    Canceled,
 
     /// The URL is not an `http://` URL.
     #[error("health probe needs an http:// URL, got {url}")]
@@ -98,8 +98,8 @@ enum KeyProbe {
 pub(crate) enum ConnectionProbe {
     /// Health answered and the bearer was accepted.
     Accepted,
-    /// The caller cancelled validation.
-    Cancelled,
+    /// The caller canceled validation.
+    Canceled,
     /// Health failed, including a bearer probe that became unreachable.
     HealthFailed,
     /// Health answered but the bearer was rejected.
@@ -163,7 +163,7 @@ pub fn wait_for_health(base_url: &str, timeout: Duration) -> Result<(), HealthEr
 /// or the caller cancels the wait.
 ///
 /// # Errors
-/// Returns [`HealthError::Cancelled`] when `cancellation` is signalled, plus
+/// Returns [`HealthError::Canceled`] when `cancellation` is signalled, plus
 /// the URL and timeout failures documented by [`wait_for_health`].
 pub fn wait_for_health_cancellable(
     base_url: &str,
@@ -214,13 +214,13 @@ fn wait_for_health_cancellable_with_start(
         let attempt_deadline = (Instant::now() + attempt_timeout).min(deadline);
         before_probe();
         let Some(attempt) = cancellation.run_if_active(|| probe(address, attempt_deadline)) else {
-            return Err(HealthError::Cancelled);
+            return Err(HealthError::Canceled);
         };
         match attempt {
             Ok(()) => return Ok(()),
             Err(error) => {
-                if cancellation.is_cancelled() {
-                    return Err(HealthError::Cancelled);
+                if cancellation.is_canceled() {
+                    return Err(HealthError::Canceled);
                 }
                 if Instant::now() >= deadline {
                     return Err(HealthError::Timeout {
@@ -230,7 +230,7 @@ fn wait_for_health_cancellable_with_start(
                     });
                 }
                 if cancellation.wait_timeout(RETRY_INTERVAL) {
-                    return Err(HealthError::Cancelled);
+                    return Err(HealthError::Canceled);
                 }
             }
         }

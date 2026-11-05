@@ -59,7 +59,7 @@
     "reply": 2
   },
   "input_required": { "type": "input_required", "token": "a1b2c3" },
-  "input_cancelled": { "type": "input_cancelled", "token": "a1b2c3" },
+  "input_canceled": { "type": "input_canceled", "token": "a1b2c3" },
   "input_response": { "type": "input_response", "token": "a1b2c3", "text": "two words" },
   "launch": { "type": "launch", "agent": "chat" },
   "attach": { "type": "attach", "session": "a1b2" },

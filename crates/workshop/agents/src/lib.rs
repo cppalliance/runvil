@@ -30,7 +30,7 @@
 //!   the record, the live broadcast, and the transcript agree event for
 //!   event, and each event takes its `reply` from its own round.
 //! - A dying input wait is an outcome, never silence: every path out of
-//!   an unresolved wait removes the entry and pushes a durable cancelled
+//!   an unresolved wait removes the entry and pushes a durable canceled
 //!   frame.
 //! - A conversation's channels close when it ends, so whatever holds only
 //!   its receivers ends with it.

@@ -428,7 +428,7 @@ fn cancel_during_in_flight_tool_call_returns_promptly() {
     let trace = driving.finish();
     assert!(
         matches!(trace.outcome(), RunOutcome::Cancelled),
-        "expected the cancelled run, got {:?}",
+        "expected the canceled run, got {:?}",
         trace.outcome()
     );
     assert!(

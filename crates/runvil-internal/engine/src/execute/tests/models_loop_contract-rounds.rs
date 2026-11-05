@@ -196,7 +196,7 @@ fn a_handler_raising_mid_batch_leaves_the_list_untouched_and_raises_its_own_tabl
 }
 
 #[test]
-fn a_dropped_model_issued_call_raises_cancelled_at_the_loop_call_site() {
+fn a_dropped_model_issued_call_raises_canceled_at_the_loop_call_site() {
     let source = one_section(
         "tools.offer('tools/echo')
          messages:user('asked')
@@ -225,7 +225,7 @@ fn a_dropped_model_issued_call_raises_cancelled_at_the_loop_call_site() {
         Step::Done { outcome, .. } => outcome,
         other @ Step::Pending { .. } => panic!("the caught drop ends the section: {other:?}"),
     };
-    assert_eq!(text_of(result), "false:cancelled|1|user");
+    assert_eq!(text_of(result), "false:canceled|1|user");
 }
 
 #[test]
@@ -251,7 +251,7 @@ fn an_adhoc_tools_first_return_value_is_its_text_and_nil_is_empty() {
 }
 
 #[test]
-fn an_adhoc_tool_cancelled_mid_handler_reports_no_failed_tool_call() {
+fn an_adhoc_tool_canceled_mid_handler_reports_no_failed_tool_call() {
     // The cancel lands between steps once the first round is answered, so
     // the step that hands the model's call to the looping handler runs
     // with the flag already set.
@@ -275,13 +275,13 @@ fn an_adhoc_tool_cancelled_mid_handler_reports_no_failed_tool_call() {
     let trace = driving.finish();
     assert!(
         matches!(trace.outcome(), RunOutcome::Cancelled),
-        "expected the cancelled run, got {:?}",
+        "expected the canceled run, got {:?}",
         trace.outcome()
     );
     assert_eq!(
         trace_loop_events(&trace),
         vec![detail::MODEL_TURN_COMPLETED.to_string()],
-        "the round completed and the cancelled handler reported nothing"
+        "the round completed and the canceled handler reported nothing"
     );
 }
 

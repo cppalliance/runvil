@@ -198,7 +198,7 @@ async fn a_backend_that_panics_drops_its_effect_instead_of_unwinding_the_run() {
         .build();
 
     // The panic is caught where the operation runs and answered
-    // `Dropped`; the run resumes with the cancelled error of a dropped
+    // `Dropped`; the run resumes with the canceled error of a dropped
     // effect and ends, and the loop returns normally.
     let outcome = drive_run(
         run_over("store.write('a.md', 'x')\nreturn 'ok'", vfs),

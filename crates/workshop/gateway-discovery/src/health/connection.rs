@@ -91,17 +91,17 @@ pub(super) fn probe_connection_with_probe(
         let Some(attempt) =
             cancellation.run_if_active(|| probe(address, bearer_path, bearer, attempt_deadline))
         else {
-            return ConnectionProbe::Cancelled;
+            return ConnectionProbe::Canceled;
         };
         match attempt {
             ConnectionAttempt::Accepted => return ConnectionProbe::Accepted,
             ConnectionAttempt::KeyRejected => return ConnectionProbe::KeyRejected,
-            ConnectionAttempt::ProofInterrupted => return ConnectionProbe::HealthFailed,
+            ConnectionAttempt::ProofIncomplete => return ConnectionProbe::HealthFailed,
             ConnectionAttempt::HealthFailed if Instant::now() >= deadline => {
                 return ConnectionProbe::HealthFailed;
             }
             ConnectionAttempt::HealthFailed if cancellation.wait_timeout(RETRY_INTERVAL) => {
-                return ConnectionProbe::Cancelled;
+                return ConnectionProbe::Canceled;
             }
             ConnectionAttempt::HealthFailed => {}
         }
@@ -114,7 +114,7 @@ pub(super) enum ConnectionAttempt {
     Accepted,
     HealthFailed,
     KeyRejected,
-    ProofInterrupted,
+    ProofIncomplete,
 }
 
 /// Checks health and bearer acceptance over one socket. Once health has
@@ -151,10 +151,10 @@ pub(super) fn probe_connection_once(
     )
     .is_err()
     {
-        return ConnectionAttempt::ProofInterrupted;
+        return ConnectionAttempt::ProofIncomplete;
     }
     let Ok(bearer_head) = read_framed_response_head(&mut stream, deadline) else {
-        return ConnectionAttempt::ProofInterrupted;
+        return ConnectionAttempt::ProofIncomplete;
     };
     if response_status(&bearer_head).is_some_and(|code| (200..300).contains(&code)) {
         ConnectionAttempt::Accepted

@@ -311,9 +311,9 @@ events! {
             /// The task's id.
             task: TaskId,
         },
-        /// A task ended because its owner cancelled it on purpose. The event
+        /// A task ended because its owner canceled it on purpose. The event
         /// is reported once per task, under the task's target section.
-        TaskCancelled {
+        TaskCanceled {
             /// The task's id.
             task: TaskId,
         },

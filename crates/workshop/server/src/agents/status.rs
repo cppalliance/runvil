@@ -117,7 +117,7 @@ fn failure_label(kind: FailureKind) -> &'static str {
     match kind {
         FailureKind::ModelTurnFailed => "Model turn failed",
         FailureKind::ToolCallFailed => "Tool call failed",
-        FailureKind::RunFailed | FailureKind::Interrupted => RUN_FAILED_LABEL,
+        FailureKind::RunFailed | FailureKind::Canceled => RUN_FAILED_LABEL,
     }
 }
 

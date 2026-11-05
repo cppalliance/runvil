@@ -71,7 +71,7 @@ fn join_any_returns_nil_when_the_timer_wins_and_the_member_keeps_running() {
 #[test]
 fn join_any_cancels_the_timer_when_a_member_wins() {
     // The child returns at once; the wait's 30s timer is held and never
-    // fires: the shim cancels it, its entry is `Cancelled`, and the run
+    // fires: the shim cancels it, its entry is `Canceled`, and the run
     // ends without waiting on it or leaking it.
     let md = tasks_prompt(
         "local t = tasks.spawn('## Child')\n\
@@ -85,12 +85,12 @@ fn join_any_cancels_the_timer_when_a_member_wins() {
     assert_eq!(
         rig.trace().text(),
         "done",
-        "a cancelled timer is not a leaked task"
+        "a canceled timer is not a leaked task"
     );
     assert_eq!(
         rig.task_state_for_test(&task("0.1")),
-        Some(TaskState::Cancelled),
-        "the member's win cancelled the timer"
+        Some(TaskState::Canceled),
+        "the member's win canceled the timer"
     );
     let recorder = TaskRecorder::replayed(rig.trace());
     assert!(
@@ -146,7 +146,7 @@ fn join_returns_timed_out_with_the_unfinished_members_absent() {
 fn join_cancels_the_timer_when_every_member_finishes() {
     // Both members return at once under a held 30s timer: every entry is
     // present, `timed_out` is false, and the timer (the owner's third
-    // child) is cancelled rather than waited out or leaked.
+    // child) is canceled rather than waited out or leaked.
     let md = tasks_prompt(
         "local a = tasks.spawn('## Alpha')\n\
          local b = tasks.spawn('## Beta')\n\
@@ -161,11 +161,11 @@ fn join_cancels_the_timer_when_every_member_finishes() {
     assert_eq!(
         rig.trace().text(),
         "done",
-        "a cancelled timer is not a leaked task"
+        "a canceled timer is not a leaked task"
     );
     assert_eq!(
         rig.task_state_for_test(&task("0.2")),
-        Some(TaskState::Cancelled)
+        Some(TaskState::Canceled)
     );
 }
 

@@ -28,13 +28,13 @@ fn withdrawals(step: Step) -> (Vec<(EffectId, Effect)>, Vec<EffectId>) {
 
 /// Main spawns Child and waits on one model round while Child parks on a
 /// tool-call batch, then cancels Child and lingers on a second round.
-const CANCELLED_CHILD: &str = "---\nname: loop\ndescription: d\nrunvil: 0\n---\n\n# Loop\n\n\
+const CANCELED_CHILD: &str = "---\nname: loop\ndescription: d\nrunvil: 0\n---\n\n# Loop\n\n\
      ## Main\n\n```lua\n\
      local t = tasks.spawn('## Child')\n\
      models.infer('wait')\n\
      tasks.cancel(t)\n\
      models.infer('linger')\n\
-     return 'cancelled'\n```\n\n\
+     return 'canceled'\n```\n\n\
      ## Child\n\n```lua\n\
      tools.offer('tools/echo')\n\
      messages:user('go')\n\
@@ -52,11 +52,11 @@ fn echo_run(source: &str, cancel: &CancelHandle) -> Run {
         .into_run()
 }
 
-/// A run of [`CANCELLED_CHILD`] under the cancel flag `cancel`, past its
+/// A run of [`CANCELED_CHILD`] under the cancel flag `cancel`, past its
 /// first steps and Child's render, with the ids of Main's `wait` round and
 /// Child's loop round.
-fn cancelled_child(cancel: &CancelHandle) -> (Run, EffectId, EffectId) {
-    let mut run = echo_run(CANCELLED_CHILD, cancel);
+fn canceled_child(cancel: &CancelHandle) -> (Run, EffectId, EffectId) {
+    let mut run = echo_run(CANCELED_CHILD, cancel);
     let (rounds, withdrawn) = step_past_renders(&mut run);
     assert!(
         withdrawn.is_empty(),
@@ -93,8 +93,8 @@ fn tool_call_ids(effects: &[(EffectId, Effect)]) -> Vec<EffectId> {
 }
 
 #[test]
-fn cancelling_a_task_withdraws_its_unanswered_tool_calls() {
-    let (mut run, infer, round) = cancelled_child(&CancelHandle::new());
+fn canceling_a_task_withdraws_its_unanswered_tool_calls() {
+    let (mut run, infer, round) = canceled_child(&CancelHandle::new());
     run.resume(round, two_echoes());
     let (issued, withdrawn) = withdrawals(run.step());
     let calls = tool_call_ids(&issued);
@@ -125,12 +125,12 @@ fn cancelling_a_task_withdraws_its_unanswered_tool_calls() {
         Step::Done { outcome, .. } => outcome,
         other @ Step::Pending { .. } => panic!("Main's second round ends the run: {other:?}"),
     };
-    assert_eq!(text_of(result), "cancelled");
+    assert_eq!(text_of(result), "canceled");
 }
 
 #[test]
 fn a_call_issued_and_withdrawn_in_one_step_is_listed_twice() {
-    let (mut run, infer, round) = cancelled_child(&CancelHandle::new());
+    let (mut run, infer, round) = canceled_child(&CancelHandle::new());
     run.resume(round, two_echoes());
     run.resume(infer, chat_answer(&text("go")));
     let (issued, withdrawn) = withdrawals(run.step());
@@ -152,13 +152,13 @@ fn a_call_issued_and_withdrawn_in_one_step_is_listed_twice() {
         Step::Done { outcome, .. } => outcome,
         other @ Step::Pending { .. } => panic!("Main's second round ends the run: {other:?}"),
     };
-    assert_eq!(text_of(result), "cancelled");
+    assert_eq!(text_of(result), "canceled");
 }
 
 #[test]
 fn the_step_that_decides_the_run_withdraws_every_outstanding_effect() {
     let cancel = CancelHandle::new();
-    let (mut run, infer, round) = cancelled_child(&cancel);
+    let (mut run, infer, round) = canceled_child(&cancel);
     run.resume(round, two_echoes());
     let (issued, _) = withdrawals(run.step());
     let calls = tool_call_ids(&issued);
@@ -185,13 +185,13 @@ fn the_step_that_decides_the_run_withdraws_every_outstanding_effect() {
     };
     assert!(
         matches!(result, RunOutcome::Cancelled),
-        "the run ends cancelled: {result:?}"
+        "the run ends canceled: {result:?}"
     );
 }
 
 /// Main spawns A and then B, each parked on a one-call batch, waits on a
 /// model round, then cancels B before A and lingers on a second round.
-const CANCELLED_PAIR: &str = "---\nname: loop\ndescription: d\nrunvil: 0\n---\n\n# Loop\n\n\
+const CANCELED_PAIR: &str = "---\nname: loop\ndescription: d\nrunvil: 0\n---\n\n# Loop\n\n\
      ## Main\n\n```lua\n\
      local a = tasks.spawn('## A')\n\
      local b = tasks.spawn('## B')\n\
@@ -199,7 +199,7 @@ const CANCELLED_PAIR: &str = "---\nname: loop\ndescription: d\nrunvil: 0\n---\n\
      tasks.cancel(b)\n\
      tasks.cancel(a)\n\
      models.infer('linger')\n\
-     return 'cancelled'\n```\n\n\
+     return 'canceled'\n```\n\n\
      ## A\n\n```lua\n\
      tools.offer('tools/echo')\n\
      messages:user('a')\n\
@@ -213,7 +213,7 @@ const CANCELLED_PAIR: &str = "---\nname: loop\ndescription: d\nrunvil: 0\n---\n\
 
 #[test]
 fn one_step_lists_every_tasks_withdrawn_calls_in_effect_id_order() {
-    let mut run = echo_run(CANCELLED_PAIR, &CancelHandle::new());
+    let mut run = echo_run(CANCELED_PAIR, &CancelHandle::new());
     let (rounds, _) = step_past_renders(&mut run);
     let asking = |user: &str| {
         rounds
@@ -257,7 +257,7 @@ fn one_step_lists_every_tasks_withdrawn_calls_in_effect_id_order() {
         Step::Done { outcome, .. } => outcome,
         other @ Step::Pending { .. } => panic!("Main's second round ends the run: {other:?}"),
     };
-    assert_eq!(text_of(result), "cancelled");
+    assert_eq!(text_of(result), "canceled");
 }
 
 /// Main spawns Store, Call, and Fast, waits on Fast under a timeout, then

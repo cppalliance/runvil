@@ -1,7 +1,7 @@
 //! The save-timeout behavior on the workspace routes: a
 //! `PUT /workspace/file` whose write outlasts the route deadline answers
 //! a 408 whose body is the JSON error envelope, and the blocking write -
-//! abandoned, not cancelled - still lands on disk once the test releases
+//! abandoned, not canceled - still lands on disk once the test releases
 //! it.
 
 use std::time::Duration;
@@ -64,7 +64,7 @@ async fn a_write_that_outlasts_its_deadline_answers_408_and_still_lands() {
     .expect("the envelope serializes");
     assert_eq!(envelope, expected, "the 408 body is the wire envelope");
 
-    // The write was abandoned by the deadline, not cancelled: releasing the
+    // The write was abandoned by the deadline, not canceled: releasing the
     // stall lets it land on disk.
     stall.release();
     stall.await_completion();

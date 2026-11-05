@@ -11,7 +11,7 @@
 //! transcript by a per-client cursor (the event broadcast is only the
 //! wakeup, so a lagged receiver loses nothing), ephemeral `agent_delta`
 //! frames from the conversation's delta channel (drops repair via the
-//! superseding event), the durable `input_required` / `input_cancelled`
+//! superseding event), the durable `input_required` / `input_canceled`
 //! wait frames, and ephemeral `error` frames reporting a failed model
 //! round the program survived or a run that ended in error.
 //! `{"type":"input_response",...}` answers a wait and dispatches the
@@ -337,7 +337,7 @@ async fn answer_input(
             Activity::Thinking,
         ),
         // A response racing a close is normal: the dead wait already
-        // announced its `input_cancelled`.
+        // announced its `input_canceled`.
         Err(WaitError::UnknownToken) => {
             tracing::debug!(
                 conversation = %conversation.id(),

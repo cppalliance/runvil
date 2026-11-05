@@ -1,4 +1,4 @@
-//! Subprocess coverage for Workshop build interruption and staging cleanup.
+//! Subprocess coverage for Workshop build cancellation and staging cleanup.
 
 use std::fs::{self, File};
 use std::path::{Path, PathBuf};
@@ -41,7 +41,7 @@ impl Drop for StagingGuard {
 }
 
 #[test]
-fn platform_interrupt_after_staging_kills_child_cleans_and_fails() {
+fn cancel_signal_after_staging_kills_child_cleans_and_fails() {
     let repository = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .and_then(Path::parent)
@@ -93,24 +93,24 @@ fn platform_interrupt_after_staging_kills_child_cleans_and_fails() {
         .env("BUILD_WORKSHOP_BLOCKED_MARKER", &blocked_marker)
         .stdout(Stdio::from(stdout))
         .stderr(Stdio::from(stderr));
-    configure_interruptible_process_group(&mut command);
+    configure_signal_process_group(&mut command);
     let mut orchestrator = command.spawn().expect("start build orchestrator");
 
     wait_for_path(&blocked_marker, &mut orchestrator, &stderr_path);
     assert!(staged.exists(), "Gateway sidecar was not staged");
-    send_platform_interrupt(orchestrator.id(), &temp);
+    send_cancel_signal(orchestrator.id(), &temp);
 
     let status = wait_for_exit(&mut orchestrator, &stderr_path);
-    assert!(!status.success(), "interrupted orchestrator succeeded");
+    assert!(!status.success(), "canceled orchestrator succeeded");
     assert!(
         !staged.exists(),
-        "interrupted orchestrator left staging at {}",
+        "canceled orchestrator left staging at {}",
         staged.display()
     );
     let stderr = fs::read_to_string(stderr_path).expect("orchestrator stderr");
     assert!(
-        stderr.contains("Workshop build interrupted"),
-        "missing interruption diagnostic: {stderr}"
+        stderr.contains("Workshop build canceled"),
+        "missing cancellation diagnostic: {stderr}"
     );
 }
 
@@ -149,7 +149,7 @@ fn wait_for_exit(child: &mut Child, stderr_path: &Path) -> ExitStatus {
     }
     terminate_after_timeout(child);
     let stderr = fs::read_to_string(stderr_path).unwrap_or_default();
-    panic!("orchestrator did not exit after interruption\n{stderr}");
+    panic!("orchestrator did not exit after cancellation\n{stderr}");
 }
 
 fn terminate_after_timeout(child: &mut Child) {
@@ -201,10 +201,10 @@ goto blocked
 }
 
 #[cfg(unix)]
-fn configure_interruptible_process_group(_command: &mut Command) {}
+fn configure_signal_process_group(_command: &mut Command) {}
 
 #[cfg(windows)]
-fn configure_interruptible_process_group(command: &mut Command) {
+fn configure_signal_process_group(command: &mut Command) {
     use std::os::windows::process::CommandExt as _;
 
     const CREATE_NEW_PROCESS_GROUP: u32 = 0x0000_0200;
@@ -212,7 +212,7 @@ fn configure_interruptible_process_group(command: &mut Command) {
 }
 
 #[cfg(unix)]
-fn send_platform_interrupt(process_id: u32, _temp: &TempDir) {
+fn send_cancel_signal(process_id: u32, _temp: &TempDir) {
     let status = Command::new("kill")
         .arg("-INT")
         .arg(process_id.to_string())
@@ -225,8 +225,8 @@ fn send_platform_interrupt(process_id: u32, _temp: &TempDir) {
 }
 
 #[cfg(windows)]
-fn send_platform_interrupt(process_id: u32, temp: &TempDir) {
-    let sender = temp.path().join("send-interrupt.ps1");
+fn send_cancel_signal(process_id: u32, temp: &TempDir) {
+    let sender = temp.path().join("send-cancel-signal.ps1");
     if let Err(error) = fs::write(
         &sender,
         r#"Add-Type -TypeDefinition @"
@@ -241,7 +241,7 @@ if (-not [ConsoleSignal]::GenerateConsoleCtrlEvent(1, [uint32]$args[0])) {
 }
 "#,
     ) {
-        panic!("could not write interrupt sender: {error}");
+        panic!("could not write the cancel signal sender: {error}");
     }
     let status = Command::new("powershell.exe")
         .arg("-NoLogo")
@@ -255,7 +255,7 @@ if (-not [ConsoleSignal]::GenerateConsoleCtrlEvent(1, [uint32]$args[0])) {
         .status();
     let status = match status {
         Ok(status) => status,
-        Err(error) => panic!("could not send console interrupt: {error}"),
+        Err(error) => panic!("could not send the cancel signal: {error}"),
     };
-    assert!(status.success(), "could not send console interrupt");
+    assert!(status.success(), "could not send the cancel signal");
 }

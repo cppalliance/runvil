@@ -232,14 +232,14 @@ impl Conversation {
 
     /// Cancels the run for good: the state is `Closing` at once, every
     /// effect in flight is answered `Dropped`, open waits die as
-    /// cancelled, and the state is `Closed` once the run has ended. A
+    /// canceled, and the state is `Closed` once the run has ended. A
     /// close before the run is handed its Harness ends that run before it
     /// begins. Idempotent.
     pub fn close(&self) {
         let control = lock(&self.core.control);
         self.core
             .state
-            .send_modify(|state| *state = state.interrupted());
+            .send_modify(|state| *state = state.canceled());
         if let Some(control) = control.as_ref() {
             control.cancel();
         }

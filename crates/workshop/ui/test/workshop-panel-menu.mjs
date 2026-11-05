@@ -9,7 +9,7 @@
 // on the status bar; a failed revoke paints a status-bar error and
 // announces nothing; the header "+" button is a keyboard-focusable
 // button; in the desktop app it opens the native folder picker and the
-// picked path is granted (a cancelled pick grants nothing); in a plain
+// picked path is granted (a canceled pick grants nothing); in a plain
 // browser it opens a dialog whose labeled path input gates the Add button
 // until text is typed, Enter submits the typed path (and is inert while
 // the field is empty), and a grant the server refuses paints a status-bar
@@ -244,8 +244,8 @@ panelA.dispose();
   );
   check("the desktop add opens no typed-path dialog", panelB.element.querySelector(".ws-workspace-add-overlay") === null);
 
-  // A cancelled pick resolves null: nothing grants.
-  check("a cancelled pick grants nothing", grants.length === 0);
+  // A canceled pick resolves null: nothing grants.
+  check("a canceled pick grants nothing", grants.length === 0);
 
   const changesBefore = workspaceChanges;
   window.__TAURI_DIALOG__.answer = "C:\\picked";

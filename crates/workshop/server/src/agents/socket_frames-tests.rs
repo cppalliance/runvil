@@ -24,10 +24,10 @@ fn input_frames_map_conversation_waits_to_wire_shapes() {
             },
         ),
         (
-            WaitFrame::Cancelled {
+            WaitFrame::Canceled {
                 token: "token-b".to_owned(),
             },
-            InputFrame::Cancelled {
+            InputFrame::Canceled {
                 token: "token-b".to_owned(),
             },
         ),

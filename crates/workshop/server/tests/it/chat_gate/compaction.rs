@@ -135,7 +135,9 @@ async fn collect_reply(socket: &mut JsonSocket, reply: &str) -> Option<String> {
                 Some("input_required") => {
                     wait = frame["token"].as_str().map(str::to_owned);
                 }
-                Some("error") => panic!("no error frame may interrupt the reply: {frame}"),
+                Some("error") => {
+                    panic!("no error frame may come between the reply's frames: {frame}")
+                }
                 _ => {}
             }
         }

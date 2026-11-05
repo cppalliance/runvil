@@ -1,4 +1,4 @@
-//! A stalled browser send is cancelled within the bounded cleanup.
+//! A stalled browser send is canceled within the bounded cleanup.
 
 use super::*;
 

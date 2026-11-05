@@ -19,7 +19,7 @@
 //   never buffered here; each names the `reply` id of the durable event
 //   that will supersede it, so the renderer coalesces chunks by that id
 //   and the completed-reply event is the repair path.
-// - `input_required` / `input_cancelled` are durable through the server's
+// - `input_required` / `input_canceled` are durable through the server's
 //   wait registry: unresolved waits are resent on every attach, so a
 //   consumer re-pins from the resent set after each session acknowledgment
 //   and a stale prompt vanishes by its token's absence.
@@ -93,9 +93,9 @@ export class AgentSocket extends Disposable {
   /** Fires with the wait token an `input_response` must echo. */
   readonly onInputRequired: Event<string> = this._onInputRequired.event;
 
-  private readonly _onInputCancelled = this._register(new Emitter<string>());
+  private readonly _onInputCanceled = this._register(new Emitter<string>());
   /** Fires with the token of a wait that died unresolved. */
-  readonly onInputCancelled: Event<string> = this._onInputCancelled.event;
+  readonly onInputCanceled: Event<string> = this._onInputCanceled.event;
 
   private readonly _onError = this._register(new Emitter<string>());
   /** Fires for every server error frame, message as sent. */
@@ -182,7 +182,7 @@ export class AgentSocket extends Disposable {
    * Fires the session's turn-cancel. The server answers with nothing -
    * cancellation is a stop reason, not an error - so the caller settles
    * its own view; pending waits announce their deaths as
-   * `input_cancelled`. False when the socket is down.
+   * `input_canceled`. False when the socket is down.
    */
   cancelTurn(): boolean {
     return this.sendFrame({ type: "cancel" } satisfies AgentCancelFrame);
@@ -249,8 +249,8 @@ export class AgentSocket extends Disposable {
       case "input_required":
         this._onInputRequired.fire(frame.token);
         return;
-      case "input_cancelled":
-        this._onInputCancelled.fire(frame.token);
+      case "input_canceled":
+        this._onInputCanceled.fire(frame.token);
         return;
       case "error":
         this._onError.fire(frame.message !== "" ? frame.message : "the agent session failed");

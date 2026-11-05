@@ -293,7 +293,7 @@ async fn a_panicking_performer_drops_its_effect_instead_of_stranding_the_run() {
     assert_eq!(
         outcome,
         RunOutcome::Cancelled,
-        "the chain resumed with the cancelled error of a dropped effect"
+        "the chain resumed with the canceled error of a dropped effect"
     );
 
     let records = recorder.records(run_id);

@@ -170,7 +170,7 @@ async fn a_stalled_gateway_reads_unreachable_within_the_probe_bound() {
 }
 
 #[tokio::test]
-async fn a_binding_replacement_interrupts_a_stalled_probe() {
+async fn a_binding_replacement_cancels_a_stalled_probe() {
     let (stalled, accepted) = stalled_gateway().await;
     let healthy =
         serve(axum::Router::new().route("/health", get(|| async { StatusCode::OK }))).await;
@@ -202,7 +202,7 @@ async fn a_binding_replacement_interrupts_a_stalled_probe() {
 }
 
 #[tokio::test]
-async fn shutdown_interrupts_a_stalled_refresh() {
+async fn shutdown_cancels_a_stalled_refresh() {
     let refreshing = Arc::new(Notify::new());
     let app = axum::Router::new()
         .route("/health", get(|| async { StatusCode::OK }))

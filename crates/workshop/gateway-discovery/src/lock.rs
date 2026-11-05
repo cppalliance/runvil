@@ -113,7 +113,7 @@ pub fn launch_or_attach(run_dir: &Path, timeout: Duration) -> Result<LaunchDecis
 /// Settles a launch race while observing caller cancellation.
 ///
 /// # Errors
-/// Returns [`SidecarError::Cancelled`] when cancellation wins, plus the
+/// Returns [`SidecarError::Canceled`] when cancellation wins, plus the
 /// file, lock, and timeout failures documented by [`launch_or_attach`].
 pub fn launch_or_attach_cancellable(
     run_dir: &Path,
@@ -201,15 +201,15 @@ fn launch_or_attach_named_cancellable_with(
     cancellation: &CancellationToken,
     mut wait: impl FnMut(Duration) -> bool,
 ) -> Result<LaunchDecision, SidecarError> {
-    if cancellation.is_cancelled() {
-        return Err(SidecarError::Cancelled);
+    if cancellation.is_canceled() {
+        return Err(SidecarError::Canceled);
     }
     std::fs::create_dir_all(run_dir).map_err(|source| SidecarError::CreateDir {
         path: run_dir.to_owned(),
         source,
     })?;
-    if cancellation.is_cancelled() {
-        return Err(SidecarError::Cancelled);
+    if cancellation.is_canceled() {
+        return Err(SidecarError::Canceled);
     }
     let lock_path = lock_file_path(run_dir);
     let lock = OpenOptions::new()
@@ -224,15 +224,15 @@ fn launch_or_attach_named_cancellable_with(
         })?;
     let deadline = Instant::now() + timeout;
     loop {
-        if cancellation.is_cancelled() {
-            return Err(SidecarError::Cancelled);
+        if cancellation.is_canceled() {
+            return Err(SidecarError::Canceled);
         }
         match lock.try_lock() {
             Ok(()) => {
                 let resolution =
                     stale::resolve_named_cancellable(run_dir, image_name, cancellation)?;
-                if cancellation.is_cancelled() {
-                    return Err(SidecarError::Cancelled);
+                if cancellation.is_canceled() {
+                    return Err(SidecarError::Canceled);
                 }
                 return Ok(match resolution {
                     Resolution::Attach(file) => LaunchDecision::Attach(file),
@@ -242,14 +242,14 @@ fn launch_or_attach_named_cancellable_with(
                 });
             }
             Err(TryLockError::WouldBlock) => {
-                if cancellation.is_cancelled() {
-                    return Err(SidecarError::Cancelled);
+                if cancellation.is_canceled() {
+                    return Err(SidecarError::Canceled);
                 }
                 if let Ok(Some(file)) = GatewayDiscoveryFile::read(run_dir)
                     && stale::is_live_cancellable(&file, image_name, cancellation)?
                 {
-                    if cancellation.is_cancelled() {
-                        return Err(SidecarError::Cancelled);
+                    if cancellation.is_canceled() {
+                        return Err(SidecarError::Canceled);
                     }
                     return Ok(LaunchDecision::Attach(file));
                 }
@@ -257,7 +257,7 @@ fn launch_or_attach_named_cancellable_with(
                     return Err(SidecarError::LaunchTimeout { timeout });
                 }
                 if wait(RETRY_INTERVAL) {
-                    return Err(SidecarError::Cancelled);
+                    return Err(SidecarError::Canceled);
                 }
             }
             Err(TryLockError::Error(source)) => {

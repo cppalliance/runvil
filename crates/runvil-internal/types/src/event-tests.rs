@@ -95,7 +95,7 @@ fn lifecycle_of(event: &Event) -> Option<Lifecycle> {
         | Event::TaskStarted { .. }
         | Event::TaskSucceeded { .. }
         | Event::TaskFailed { .. }
-        | Event::TaskCancelled { .. }
+        | Event::TaskCanceled { .. }
         | Event::TaskAbandoned { .. }
         | Event::Thinking { .. }
         | Event::AssistantReply { .. }
@@ -160,7 +160,7 @@ fn task_samples() -> Vec<Event> {
             provenance: provenance("0.1", 1),
             task: task("0.1"),
         },
-        Event::TaskCancelled {
+        Event::TaskCanceled {
             execution: "run-1".to_owned(),
             section: "Worker".to_owned(),
             provenance: provenance("0.2", 1),

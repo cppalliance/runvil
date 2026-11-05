@@ -6,7 +6,7 @@
 //! table are exposed; a writable `var` table is provided for the block to
 //! populate; an always-on `store` table gives the block the run's virtual
 //! files; and an every-Nth-instruction hook polls the run's cancel flag, so
-//! even an unbounded loop aborts promptly once the run is cancelled.
+//! even an unbounded loop aborts promptly once the run is canceled.
 //! Direct `print` and `warn` are unavailable. A persistent `log(message)`
 //! callback accepts one bounded, single-line UTF-8 string and reports it
 //! through the run's emitter as an `Event::Lua` checkpoint. A persistent
@@ -31,7 +31,7 @@
 //! that store failure, never as a Lua runtime error.
 //!
 //! The VM also holds `tasks`, the shims for spawning,
-//! waiting on, checking, noting, and cancelling tasks. Each Pack the
+//! waiting on, checking, noting, and canceling tasks. Each Pack the
 //! prompt declares can contribute a prelude, Lua that defines globals once
 //! per VM before `require` installs ([`install_preludes`] states the
 //! rules). The `input` table that `user-input` defines is one such global:
@@ -134,8 +134,8 @@ pub use crate::engine_globals::{
     install_ui, run_store_op, store_error_message, store_failure, store_probe_message,
 };
 pub use crate::error::{
-    QuotaResource, context_exhausted, internal, internal_at, interrupted, lua_quota, lua_runtime,
-    task_cancelled, task_consumed, task_not_owned, tool_loop_exhausted,
+    QuotaResource, context_exhausted, internal, internal_at, lua_quota, lua_runtime, task_canceled,
+    task_consumed, task_not_owned, tool_loop_exhausted,
 };
 #[cfg(any(test, feature = "test-support"))]
 pub use crate::error_value::store_error_value_fields;

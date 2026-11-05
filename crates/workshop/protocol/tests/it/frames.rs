@@ -147,14 +147,14 @@ fn an_input_required_frame_serializes_with_its_token() {
 }
 
 #[test]
-fn an_input_cancelled_frame_serializes_with_its_token() {
-    let frame = serde_json::to_value(InputFrame::Cancelled {
+fn an_input_canceled_frame_serializes_with_its_token() {
+    let frame = serde_json::to_value(InputFrame::Canceled {
         token: "a1b2c3".to_owned(),
     })
     .expect("the frame serializes");
     assert_eq!(
         frame,
-        serde_json::json!({"type": "input_cancelled", "token": "a1b2c3"}),
+        serde_json::json!({"type": "input_canceled", "token": "a1b2c3"}),
         "the wire shape matches the workshop protocol's frame taxonomy"
     );
 }

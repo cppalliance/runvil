@@ -51,7 +51,7 @@ const MAIN_CANCELS: &str = "## Main\n\n```lua\n\
     models.infer('wait')\n\
     tasks.cancel(t)\n\
     models.infer('linger')\n\
-    return 'cancelled'\n```\n\n";
+    return 'canceled'\n```\n\n";
 
 /// Main spawns A, then B, and joins both.
 const MAIN_JOINS: &str = "## Main\n\n```lua\n\
@@ -389,7 +389,7 @@ async fn a_call_withdrawn_in_the_step_that_issued_it_never_starts() {
 
     let outcome = rig.drive(&sections, broker, async {}).await;
 
-    assert_eq!(outcome, completed("cancelled"));
+    assert_eq!(outcome, completed("canceled"));
     assert!(
         rig.tool.started().is_empty(),
         "a withdrawn call never starts: {:?}",
@@ -402,7 +402,7 @@ async fn a_call_withdrawn_in_the_step_that_issued_it_never_starts() {
 }
 
 #[tokio::test]
-async fn cancelling_a_task_drops_its_waiting_and_running_calls() {
+async fn canceling_a_task_drops_its_waiting_and_running_calls() {
     let rig = Rig::with_cap(1).await;
     let tool = Arc::clone(&rig.tool);
     let broker = answering(move |last| match last {
@@ -420,7 +420,7 @@ async fn cancelling_a_task_drops_its_waiting_and_running_calls() {
 
     let outcome = rig.drive(&sections, broker, async {}).await;
 
-    assert_eq!(outcome, completed("cancelled"));
+    assert_eq!(outcome, completed("canceled"));
     assert_eq!(rig.tool.started(), ["c1"], "the waiting call never started");
     assert_eq!(rig.tool.torn_down(), 1, "the running call was torn down");
     assert_eq!(

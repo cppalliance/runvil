@@ -78,14 +78,14 @@ fn cancel_kills_the_wait_and_its_token() {
     registry.cancel(&token);
     assert!(
         receiver.try_recv().is_err(),
-        "a cancelled wait's receiver resolves dead rather than hanging"
+        "a canceled wait's receiver resolves dead rather than hanging"
     );
     assert_eq!(
         registry.complete(&token, "late".to_owned()),
         Err(WaitError::UnknownToken),
-        "a cancelled token is dead to completion"
+        "a canceled token is dead to completion"
     );
-    // Cancelling again is the normal cancel-races-completion no-op.
+    // Canceling again is the normal cancel-races-completion no-op.
     registry.cancel(&token);
 }
 
@@ -184,12 +184,12 @@ async fn the_broker_announces_the_wait_and_resolves_with_the_operator_text() {
             socket.try_recv(),
             Err(broadcast::error::TryRecvError::Empty)
         ),
-        "a completed wait dies silently: no cancelled frame follows"
+        "a completed wait dies silently: no canceled frame follows"
     );
 }
 
 #[tokio::test]
-async fn a_dropped_broker_future_removes_the_wait_and_emits_cancelled() {
+async fn a_dropped_broker_future_removes_the_wait_and_emits_canceled() {
     let (broker, registry, frames) = broker_fixture();
     let mut socket = frames.subscribe();
     let call = tokio::spawn(async move { broker.wait().await });
@@ -207,13 +207,13 @@ async fn a_dropped_broker_future_removes_the_wait_and_emits_cancelled() {
     let frame = socket.recv().await.expect("the cancellation frame arrives");
     assert_eq!(
         frame,
-        WaitFrame::Cancelled { token },
+        WaitFrame::Canceled { token },
         "the client is told exactly which prompt died"
     );
 }
 
 #[tokio::test]
-async fn a_registry_cancel_fails_the_broker_call_and_emits_cancelled() {
+async fn a_registry_cancel_fails_the_broker_call_and_emits_canceled() {
     let (broker, registry, frames) = broker_fixture();
     let mut socket = frames.subscribe();
     let call = tokio::spawn(async move { broker.wait().await });
@@ -222,8 +222,8 @@ async fn a_registry_cancel_fails_the_broker_call_and_emits_cancelled() {
     let error = call
         .await
         .expect("the task joins")
-        .expect_err("a cancelled wait fails the broker call");
-    assert_eq!(error.to_string(), "the user-input wait was cancelled");
+        .expect_err("a canceled wait fails the broker call");
+    assert_eq!(error.to_string(), "the user-input wait was canceled");
     assert_eq!(
         error.code,
         runvil::error::ErrorCode::ToolBackend,
@@ -232,7 +232,7 @@ async fn a_registry_cancel_fails_the_broker_call_and_emits_cancelled() {
     let frame = socket.recv().await.expect("the cancellation frame arrives");
     assert_eq!(
         frame,
-        WaitFrame::Cancelled { token },
+        WaitFrame::Canceled { token },
         "cancellation is an outcome on the wire, not silence"
     );
 }

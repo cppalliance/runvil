@@ -71,12 +71,6 @@ fn the_typed_failures_keep_their_text_and_name_their_facts() {
     let exhausted = context_exhausted("manual");
     assert_eq!(exhausted.message, "context exhausted: manual");
     assert_eq!(error_fields(&exhausted), vec![string("reason", "manual")]);
-    let interruption = interrupted();
-    assert_eq!(
-        interruption.message,
-        "interrupted: the run was cancelled or this call was stopped"
-    );
-    assert_eq!(error_kind(&interruption), ErrorKind::Cancelled);
     assert_eq!(
         tool_loop_exhausted().message,
         "tool-call loop did not converge"
@@ -88,7 +82,7 @@ fn a_task_failure_names_its_task() {
     for (error, kind) in [
         (task_not_owned(&task("0.1")), ErrorKind::TaskNotOwned),
         (task_consumed(&task("0.1")), ErrorKind::TaskConsumed),
-        (task_cancelled(&task("0.1")), ErrorKind::Cancelled),
+        (task_canceled(&task("0.1")), ErrorKind::Canceled),
     ] {
         assert_eq!(error.facts.get(&FactKey::Task), Some(&Value::from("0.1")));
         assert_eq!(
@@ -98,8 +92,8 @@ fn a_task_failure_names_its_task() {
         );
     }
     assert_eq!(
-        task_cancelled(&task("0.1")).message,
-        "task `0.1` was cancelled"
+        task_canceled(&task("0.1")).message,
+        "task `0.1` was canceled"
     );
 }
 

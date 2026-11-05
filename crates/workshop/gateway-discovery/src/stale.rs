@@ -73,7 +73,7 @@ pub fn resolve(run_dir: &Path) -> Result<Resolution, SidecarError> {
 /// Cancellation never classifies or deletes the current file.
 ///
 /// # Errors
-/// Returns [`SidecarError::Cancelled`] when cancellation wins, plus the
+/// Returns [`SidecarError::Canceled`] when cancellation wins, plus the
 /// read and remove failures documented by [`resolve`].
 pub fn resolve_cancellable(
     run_dir: &Path,
@@ -166,12 +166,12 @@ fn resolve_named_cancellable_with_effects(
     mut before_remove: impl FnMut(),
     mut remove: impl FnMut(&Path) -> Result<(), SidecarError>,
 ) -> Result<Resolution, SidecarError> {
-    if cancellation.is_cancelled() {
-        return Err(SidecarError::Cancelled);
+    if cancellation.is_canceled() {
+        return Err(SidecarError::Canceled);
     }
     let file = match GatewayDiscoveryFile::read(run_dir) {
         Ok(Some(file)) => file,
-        Ok(None) if cancellation.is_cancelled() => return Err(SidecarError::Cancelled),
+        Ok(None) if cancellation.is_canceled() => return Err(SidecarError::Canceled),
         Ok(None) => return Ok(Resolution::Absent),
         Err(SidecarError::Parse { .. } | SidecarError::Invalid { .. }) => {
             before_remove();
@@ -182,7 +182,7 @@ fn resolve_named_cancellable_with_effects(
     };
     match validate(file, image_name, cancellation) {
         Ok(validated) => Ok(Resolution::Attach(validated.into_gateway_discovery_file())),
-        Err(ValidationError::Cancelled) => Err(SidecarError::Cancelled),
+        Err(ValidationError::Canceled) => Err(SidecarError::Canceled),
         Err(ValidationError::Stale(reason)) => {
             before_remove();
             remove_stale_if_active(run_dir, cancellation, &mut remove)?;
@@ -198,7 +198,7 @@ fn remove_stale_if_active(
 ) -> Result<(), SidecarError> {
     cancellation
         .run_if_active(|| remove(run_dir))
-        .unwrap_or(Err(SidecarError::Cancelled))
+        .unwrap_or(Err(SidecarError::Canceled))
 }
 
 /// Whether the gateway discovery file in `run_dir` names a live gateway right
@@ -236,7 +236,7 @@ pub(crate) fn is_live_cancellable(
     match ValidatedConnection::validate_named_cancellable(file.clone(), image_name, cancellation) {
         Ok(_) => Ok(true),
         Err(ValidationError::Stale(_)) => Ok(false),
-        Err(ValidationError::Cancelled) => Err(SidecarError::Cancelled),
+        Err(ValidationError::Canceled) => Err(SidecarError::Canceled),
     }
 }
 

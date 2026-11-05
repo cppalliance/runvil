@@ -7,7 +7,7 @@
 //! both - the shim lists the timer's id in its `join_any` set, and the
 //! timer's firing completes its entry and wakes the waiter exactly as a
 //! task chain's end does. Cancel is the ordinary cancel arm: the entry
-//! moves to `Cancelled` and the sleep is dropped through the shared
+//! moves to `Canceled` and the sleep is dropped through the shared
 //! in-flight abort path.
 //!
 //! The timer is never author-visible. The shim keeps its id, `pending`
@@ -70,7 +70,7 @@ impl Scheduler {
     ///
     /// # Errors
     /// Returns an `Internal` failure when `task`'s entry isn't live - a
-    /// cancelled or abandoned timer's effect is aborted and its late firing
+    /// canceled or abandoned timer's effect is aborted and its late firing
     /// discarded before it reaches here - or when the woken owner has no
     /// suspended block.
     pub(super) fn fire_timer(&mut self, task: &TaskId) -> Result<()> {

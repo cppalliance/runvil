@@ -334,7 +334,7 @@ async function waitFor(condition) {
 }
 
 // The scripted wire behind the real service: only the frames dictation cares
-// about are driven (input_required, input_cancelled, agent_session).
+// about are driven (input_required, input_canceled, agent_session).
 function makeWire() {
   const emitters = {
     agents: new Emitter(),
@@ -342,7 +342,7 @@ function makeWire() {
     event: new Emitter(),
     delta: new Emitter(),
     inputRequired: new Emitter(),
-    inputCancelled: new Emitter(),
+    inputCanceled: new Emitter(),
     error: new Emitter(),
     disconnect: new Emitter(),
   };
@@ -352,7 +352,7 @@ function makeWire() {
     onEvent: emitters.event.event,
     onDelta: emitters.delta.event,
     onInputRequired: emitters.inputRequired.event,
-    onInputCancelled: emitters.inputCancelled.event,
+    onInputCanceled: emitters.inputCanceled.event,
     onError: emitters.error.event,
     onDisconnect: emitters.disconnect.event,
     responses: [],
@@ -368,7 +368,7 @@ function makeWire() {
     },
     fire: {
       inputRequired: (token) => emitters.inputRequired.fire(token),
-      inputCancelled: (token) => emitters.inputCancelled.fire(token),
+      inputCanceled: (token) => emitters.inputCanceled.fire(token),
       session: (session) => emitters.session.fire({ type: "agent_session", session, agent: "chat" }),
     },
   };
@@ -583,7 +583,7 @@ await assertNoLeaks(lifecycle, async () => {
 
     const second = await startTake();
     check("a second take starts on the reusable fixture socket", second === socket);
-    wire.fire.inputCancelled("fixture");
+    wire.fire.inputCanceled("fixture");
     const clear = socket.sent
       .filter((event) => event.type === "input_audio_buffer.clear")
       .at(-1);
@@ -728,27 +728,27 @@ await assertNoLeaks(lifecycle, async () => {
       input.getText() === "hello" && !editable() && recording(),
     );
 
-    wire.fire.inputCancelled("tok1");
-    check("a cancelled wait dims the recording LED", !status.recording);
+    wire.fire.inputCanceled("tok1");
+    check("a canceled wait dims the recording LED", !status.recording);
     check(
-      "a cancelled wait releases the mic button to idle",
+      "a canceled wait releases the mic button to idle",
       mic.getAttribute("data-mic") === "idle" &&
         mic.getAttribute("aria-pressed") === "false" &&
         mic.title === "Voice Input (Ctrl+Shift+Space)",
     );
-    check("a cancelled wait keeps the reusable Realtime socket open", !socket.closed);
+    check("a canceled wait keeps the reusable Realtime socket open", !socket.closed);
     check(
-      "a cancelled wait lifts the take lock and drops the interim",
+      "a canceled wait lifts the take lock and drops the interim",
       !recording() && input.getText() === "",
     );
-    check("a cancelled wait disables the input again", !editable());
+    check("a canceled wait disables the input again", !editable());
     socket.message({ type: "final", text: "LATE FINAL" });
     check("a final arriving after the discard writes nothing", input.getText() === "");
 
     wire.fire.inputRequired("tok2");
     const reopened = await startTake();
     check("a fresh wait lets the mic start a fresh take", reopened !== null);
-    wire.fire.inputCancelled("tok2");
+    wire.fire.inputCanceled("tok2");
     check("clearing the second take dims the recording LED", !status.recording);
 
     // A new session resets the pin: the take dies with it.
@@ -1015,7 +1015,7 @@ await assertNoLeaks(lifecycle, async () => {
     input.setText("First test alpha");
     const socket = await startTake();
     socket?.message(producerHypothesis("rollback_spacing", "Second test beta"));
-    wire.fire.inputCancelled("rollback-spacing");
+    wire.fire.inputCanceled("rollback-spacing");
     check(
       "rolling back a composed hypothesis removes its owned separator",
       input.getText() === "First test alpha",
@@ -1046,7 +1046,7 @@ await assertNoLeaks(lifecycle, async () => {
       "a delayed take inserts at the selection current when startup succeeds",
       input.getText() === "edited spoken tail",
     );
-    wire.fire.inputCancelled("delayed-start");
+    wire.fire.inputCanceled("delayed-start");
     check(
       "delayed prompt rollback preserves edits made during startup",
       input.getText() === "edited live tail" && !recording(),
@@ -1211,7 +1211,7 @@ await assertNoLeaks(lifecycle, async () => {
     socket.message({ type: "interim", committed: "hello", tentative: "" });
     mic.click();
     check("the stop dims the recording LED while the final is awaited", !status.recording && !editable());
-    wire.fire.inputCancelled("tok1");
+    wire.fire.inputCanceled("tok1");
     check("a wait dying in the stop window keeps the Realtime session reusable", !socket.closed);
     check(
       "a wait dying in the stop window lifts the take lock and drops the interim",
@@ -1343,7 +1343,7 @@ await assertNoLeaks(lifecycle, async () => {
       () =>
         socket.sent.filter((event) => event.type === "input_audio_buffer.commit").length === 1,
     );
-    wire.fire.inputCancelled("tok1");
+    wire.fire.inputCanceled("tok1");
 
     wire.fire.inputRequired("tok2");
     await startTake();
@@ -1736,7 +1736,7 @@ await assertNoLeaks(lifecycle, async () => {
       startedB === b.realtime && b.mic.getAttribute("data-mic") === "recording",
     );
     check("the first view now reads blocked", a.mic.getAttribute("data-mic") === "blocked");
-    b.wire.fire.inputCancelled("wait-b");
+    b.wire.fire.inputCanceled("wait-b");
     await waitFor(() => a.mic.getAttribute("data-mic") === "idle");
     check("a discarded take frees the microphone for the first view again", a.mic.getAttribute("data-mic") === "idle");
 

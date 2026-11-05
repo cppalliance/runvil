@@ -17,7 +17,7 @@ pub(crate) fn service_cause(error: &ServiceError) -> &'static str {
         ServiceError::TransportSend(_) => "the request could not be sent to the server",
         ServiceError::TransportClosed => "the connection to the server closed",
         ServiceError::UnexpectedResponse => "the server answered with an unexpected response type",
-        ServiceError::Cancelled { .. } => "the request was cancelled",
+        ServiceError::Cancelled { .. } => "the request was canceled",
         ServiceError::Timeout { .. } => "the request timed out",
         _ => "the request failed",
     }

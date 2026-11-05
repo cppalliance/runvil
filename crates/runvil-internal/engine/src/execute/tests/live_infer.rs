@@ -186,7 +186,7 @@ fn nested_lua_infer_emits_a_model_turn_observation() {
 }
 
 #[test]
-fn cancelled_nested_infer_does_not_report_model_turn_failed() {
+fn canceled_nested_infer_does_not_report_model_turn_failed() {
     let gateway = ScriptedChat::new(vec![text("too late")]);
     let source = PromptSource::new().h1("
         local writer = models.get('default')
@@ -204,7 +204,7 @@ fn cancelled_nested_infer_does_not_report_model_turn_failed() {
     let trace = driving.finish();
     assert!(
         matches!(trace.outcome(), RunOutcome::Cancelled),
-        "cancelling an in-flight infer must interrupt the run: {:?}",
+        "canceling an in-flight infer must cancel the run: {:?}",
         trace.outcome()
     );
     assert!(

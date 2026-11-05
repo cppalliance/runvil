@@ -214,7 +214,7 @@ fn cancellation_during_resolve_leaves_the_gateway_discovery_file_untouched() {
             |_, _, cancellation| {
                 entered.send(()).expect("announce blocked resolve");
                 let _ = cancellation.wait_timeout(std::time::Duration::from_secs(30));
-                Err(crate::ValidationError::Cancelled)
+                Err(crate::ValidationError::Canceled)
             },
         )
     });
@@ -230,7 +230,7 @@ fn cancellation_during_resolve_leaves_the_gateway_discovery_file_untouched() {
         started.elapsed() < std::time::Duration::from_millis(250),
         "cancellation bounds the blocked resolve"
     );
-    assert!(matches!(result, Err(SidecarError::Cancelled)));
+    assert!(matches!(result, Err(SidecarError::Canceled)));
     assert!(
         gateway_discovery_file_path(dir.path()).exists(),
         "cancellation never classifies or deletes the gateway discovery file"
@@ -274,7 +274,7 @@ fn cancellation_immediately_before_invalid_file_removal_preserves_the_file() {
     release.send(()).expect("release invalid-file removal");
     let result = worker.join().expect("resolve worker joins");
 
-    assert!(matches!(result, Err(SidecarError::Cancelled)));
+    assert!(matches!(result, Err(SidecarError::Canceled)));
     assert_eq!(
         removals.load(std::sync::atomic::Ordering::SeqCst),
         0,
@@ -282,7 +282,7 @@ fn cancellation_immediately_before_invalid_file_removal_preserves_the_file() {
     );
     assert!(
         gateway_discovery_file_path(dir.path()).exists(),
-        "the cancelled invalid file remains untouched"
+        "the canceled invalid file remains untouched"
     );
 }
 
@@ -321,7 +321,7 @@ fn cancellation_immediately_before_failed_validation_removal_preserves_the_file(
     release.send(()).expect("release stale-file removal");
     let result = worker.join().expect("resolve worker joins");
 
-    assert!(matches!(result, Err(SidecarError::Cancelled)));
+    assert!(matches!(result, Err(SidecarError::Canceled)));
     assert_eq!(
         removals.load(std::sync::atomic::Ordering::SeqCst),
         0,
@@ -329,7 +329,7 @@ fn cancellation_immediately_before_failed_validation_removal_preserves_the_file(
     );
     assert!(
         gateway_discovery_file_path(dir.path()).exists(),
-        "the cancelled stale file remains untouched"
+        "the canceled stale file remains untouched"
     );
 }
 

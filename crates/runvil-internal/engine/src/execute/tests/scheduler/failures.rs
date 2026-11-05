@@ -93,7 +93,7 @@ fn sequential_fanouts_may_write_one_path() {
 #[test]
 fn fatal_arm_aborts_queued_siblings() {
     // With the ceiling at 1 the siblings stay queued, and once the first
-    // arm fails fatally they are cancelled before admission - proven by
+    // arm fails fatally they are canceled before admission - proven by
     // the store side-channel only the fatal arm ever wrote to, and by the
     // terminal observations: one FAILED, nothing else. The start event
     // fires at admission, so the queued siblings never report one.
@@ -111,7 +111,7 @@ fn fatal_arm_aborts_queued_siblings() {
 
     let error = trace.error();
     assert!(
-        error.code != ErrorCode::Interrupted,
+        error.code != ErrorCode::Canceled,
         "expected a fatal arm error, got {error}"
     );
     let log = trace.read("log.txt").expect("the fatal arm wrote its item");
@@ -143,7 +143,7 @@ fn fatal_arm_aborts_an_in_flight_sibling() {
     // held infer are both live when the failure lands. The fanout shim
     // cancels the live sibling before it re-raises, so the cancel orphans
     // the sibling's effect, drops its round, and fires the
-    // sibling's TaskCancelled BEFORE the parent's chunk failure - a shim
+    // sibling's TaskCanceled BEFORE the parent's chunk failure - a shim
     // that raised first would leak the sibling into `tasks_live`. The
     // sibling's round is never answered, so the run cannot have waited
     // on it.
@@ -162,7 +162,7 @@ fn fatal_arm_aborts_an_in_flight_sibling() {
     let error = rig.trace().error();
 
     assert!(
-        error.code != ErrorCode::Interrupted,
+        error.code != ErrorCode::Canceled,
         "expected a fatal arm error, got {error}"
     );
     assert!(
@@ -177,9 +177,9 @@ fn fatal_arm_aborts_an_in_flight_sibling() {
         recorder.events()
     );
     assert_eq!(
-        terminal_count(rig.trace(), task_cancelled),
+        terminal_count(rig.trace(), task_canceled),
         1,
-        "the in-flight sibling reports cancelled: {:?}",
+        "the in-flight sibling reports canceled: {:?}",
         recorder.events()
     );
     assert_eq!(
@@ -189,10 +189,10 @@ fn fatal_arm_aborts_an_in_flight_sibling() {
         recorder.events()
     );
     let events = rig.trace().events();
-    let cancelled_at = events
+    let canceled_at = events
         .iter()
-        .position(task_cancelled)
-        .expect("the sibling's cancelled event fired");
+        .position(task_canceled)
+        .expect("the sibling's canceled event fired");
     let parent_failed_at = events
         .iter()
         .position(|event| {
@@ -200,7 +200,7 @@ fn fatal_arm_aborts_an_in_flight_sibling() {
         })
         .expect("the parent's chunk failed on the fanout error");
     assert!(
-        cancelled_at < parent_failed_at,
+        canceled_at < parent_failed_at,
         "the sibling abort precedes the parent's resume with the error: {:?}",
         recorder.events()
     );
@@ -243,10 +243,10 @@ fn a_caught_fanout_failure_lets_the_caller_continue() {
 }
 
 #[test]
-fn cancellation_while_suspended_in_a_fanout_arm_interrupts_the_run() {
+fn cancellation_while_suspended_in_a_fanout_arm_cancels_the_run() {
     // Cancellation while suspended in an arm: both arms are parked on held
     // infers when the cancel lands between steps, so the run drops their
-    // rounds and ends cancelled. The arms are task chains stranded by the
+    // rounds and ends canceled. The arms are task chains stranded by the
     // run's end: they started, and the run's end settles each with one
     // `abandoned` terminal naming the run's end - not a cancel or a
     // failure of the arm's own.
@@ -267,7 +267,7 @@ fn cancellation_while_suspended_in_a_fanout_arm_interrupts_the_run() {
 
     assert!(
         matches!(rig.trace().outcome(), RunOutcome::Cancelled),
-        "cancelling suspended arms must interrupt the run, got {:?}",
+        "canceling suspended arms must cancel the run, got {:?}",
         rig.trace().outcome()
     );
     assert_eq!(
@@ -283,7 +283,7 @@ fn cancellation_while_suspended_in_a_fanout_arm_interrupts_the_run() {
         recorder.events()
     );
     assert_eq!(
-        terminal_count(rig.trace(), task_cancelled) + terminal_count(rig.trace(), task_failed),
+        terminal_count(rig.trace(), task_canceled) + terminal_count(rig.trace(), task_failed),
         0,
         "a stranded arm reports no cancel or failure of its own: {:?}",
         recorder.events()
@@ -310,9 +310,9 @@ fn a_spawn_failure_mid_fanout_cancels_the_queued_arms() {
     // error exactly once, and nothing is left live for the chain-end leak
     // check. The first arm was still queued for admission - the spawn
     // failure lands before the drain admits anything - so it never runs
-    // its block, and no TaskStarted or TaskCancelled fires for it: a task
+    // its block, and no TaskStarted or TaskCanceled fires for it: a task
     // that never ran reports no start and no terminal, though its entry
-    // still reaches Cancelled.
+    // still reaches Canceled.
     let gateway = ScriptedChat::new(vec![text("after-answer")]);
     let md = "---\nname: t\ndescription: d\nrunvil: 0\n---\n\n\
         # Fanout\n\n\
@@ -338,8 +338,8 @@ fn a_spawn_failure_mid_fanout_cancels_the_queued_arms() {
     );
     assert_eq!(
         rig.task_state_for_test(&task("0.0")),
-        Some(TaskState::Cancelled),
-        "the shim cancelled the spawned arm before it re-raised"
+        Some(TaskState::Canceled),
+        "the shim canceled the spawned arm before it re-raised"
     );
     let recorder = recorded(rig.trace());
     assert_eq!(
@@ -349,7 +349,7 @@ fn a_spawn_failure_mid_fanout_cancels_the_queued_arms() {
         recorder.events()
     );
     assert_eq!(
-        terminal_count(rig.trace(), task_cancelled),
+        terminal_count(rig.trace(), task_canceled),
         0,
         "a task that never started reports no terminal: {:?}",
         recorder.events()
@@ -366,7 +366,7 @@ fn a_spawn_failure_mid_fanout_cancels_the_queued_arms() {
             .iter()
             .any(|(section, event)| section == "Worker"
                 && event == &detail::LUA_CHUNK_STARTED.to_string()),
-        "the cancelled arm never ran its block: {:?}",
+        "the canceled arm never ran its block: {:?}",
         recorder.events()
     );
 }

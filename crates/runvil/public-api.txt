@@ -60,7 +60,7 @@ auto runvil::RunParams: Freeze, !RefUnwindSafe, Send, Sync, Unpin, !UnwindSafe
 auto runvil::RunSeed: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::Step: Freeze, !RefUnwindSafe, Send, Sync, Unpin, !UnwindSafe
 auto runvil::cancel::CancelHandle: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
-auto runvil::cancel::Cancelled: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
+auto runvil::cancel::Canceled: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::effect::Effect: Freeze, !RefUnwindSafe, Send, Sync, Unpin, !UnwindSafe
 auto runvil::effect::EffectAnswer: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::effect::EffectId: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
@@ -156,7 +156,7 @@ derives runvil::RunParams: Debug
 derives runvil::RunSeed: Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize
 derives runvil::Step: Debug
 derives runvil::cancel::CancelHandle: Clone, Debug, Default
-derives runvil::cancel::Cancelled: Debug
+derives runvil::cancel::Canceled: Debug
 derives runvil::effect::Effect: Debug
 derives runvil::effect::EffectAnswer: Debug
 derives runvil::effect::EffectId: Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd
@@ -264,8 +264,8 @@ impl core::fmt::Display for runvil::vfs::PathReason
 impl core::fmt::Display for runvil::vfs::VfsError
 impl core::fmt::Display for runvil::vfs::VfsPath
 impl core::fmt::Display for runvil::vfs::VfsPathBuf
-impl core::future::future::Future for runvil::cancel::Cancelled
-impl core::future::future::Future for runvil::cancel::Cancelled { type Output = () }
+impl core::future::future::Future for runvil::cancel::Canceled
+impl core::future::future::Future for runvil::cancel::Canceled { type Output = () }
 impl core::iter::traits::exact_size::ExactSizeIterator for runvil::prompt::ArgsDeclIter<'_>
 impl core::ops::drop::Drop for runvil::vfs::Access
 impl core::str::traits::FromStr for runvil::ids::ChainId
@@ -352,9 +352,9 @@ pub fn runvil::RunParams::with_tools(self, tools: runvil::tools::ToolCatalog) ->
 pub fn runvil::RunParams::with_ui(self, snapshot: serde_json::value::Value) -> runvil::RunParams
 pub fn runvil::RunParams::with_vfs(self, vfs: runvil::vfs::VfsRef) -> runvil::RunParams
 pub fn runvil::cancel::CancelHandle::cancel(&self)
-pub fn runvil::cancel::CancelHandle::cancelled(&self) -> runvil::cancel::Cancelled
+pub fn runvil::cancel::CancelHandle::canceled(&self) -> runvil::cancel::Canceled
 pub fn runvil::cancel::CancelHandle::child(&self) -> runvil::cancel::CancelHandle
-pub fn runvil::cancel::CancelHandle::is_cancelled(&self) -> bool
+pub fn runvil::cancel::CancelHandle::is_canceled(&self) -> bool
 pub fn runvil::cancel::CancelHandle::new() -> Self
 pub fn runvil::effect::Effect::record(&self) -> serde_json::value::Value
 pub fn runvil::effect::EffectAnswer::record(&self) -> serde_json::value::Value
@@ -363,6 +363,7 @@ pub fn runvil::effect::Round::new(id: runvil::ids::RoundId, origin: runvil::even
 pub fn runvil::effect::ToolCallOrigin::new(execution: impl core::convert::Into<alloc::string::String>, section: impl core::convert::Into<alloc::string::String>, caller: runvil::effect::ToolCaller) -> runvil::effect::ToolCallOrigin
 pub fn runvil::effect::ToolCallOrigin::with_entry(self, entry: impl core::convert::Into<alloc::string::String>) -> runvil::effect::ToolCallOrigin
 pub fn runvil::effect::ToolCallOrigin::with_model(self, model: impl core::convert::Into<alloc::string::String>) -> runvil::effect::ToolCallOrigin
+pub fn runvil::error::Error::canceled() -> runvil::error::Error
 pub fn runvil::error::Error::new(code: runvil::error::ErrorCode, message: impl core::convert::Into<alloc::string::String>, prose: impl core::convert::Into<alloc::string::String>) -> runvil::error::Error
 pub fn runvil::error::Error::with_cause(self, cause: &dyn core::error::Error + 'static) -> runvil::error::Error
 pub fn runvil::error::ErrorCode::from_tag(tag: &str) -> core::option::Option<runvil::error::ErrorCode>
@@ -701,6 +702,7 @@ pub runvil::error::ErrorCode::Anchor = 609
 pub runvil::error::ErrorCode::ApprovalRequired = 611
 pub runvil::error::ErrorCode::Backend = 621
 pub runvil::error::ErrorCode::CallDepthExceeded = 204
+pub runvil::error::ErrorCode::Canceled = 702
 pub runvil::error::ErrorCode::Conflict = 620
 pub runvil::error::ErrorCode::ContextExhausted = 414
 pub runvil::error::ErrorCode::ContextOverflow = 401
@@ -711,7 +713,6 @@ pub runvil::error::ErrorCode::EmptyReply = 411
 pub runvil::error::ErrorCode::FenceInvalid = 103
 pub runvil::error::ErrorCode::FrontmatterInvalid = 101
 pub runvil::error::ErrorCode::Internal = 703
-pub runvil::error::ErrorCode::Interrupted = 702
 pub runvil::error::ErrorCode::InvalidParts = 413
 pub runvil::error::ErrorCode::InvalidPath = 607
 pub runvil::error::ErrorCode::InvalidRange = 608
@@ -747,7 +748,7 @@ pub runvil::error::ErrorCode::ScopeEnded = 612
 pub runvil::error::ErrorCode::ServerError = 408
 pub runvil::error::ErrorCode::StructureInvalid = 102
 pub runvil::error::ErrorCode::Substitution = 205
-pub runvil::error::ErrorCode::TaskCancelled = 304
+pub runvil::error::ErrorCode::TaskCanceled = 304
 pub runvil::error::ErrorCode::TaskConsumed = 303
 pub runvil::error::ErrorCode::TaskNotOwned = 302
 pub runvil::error::ErrorCode::TasksLive = 301
@@ -924,11 +925,11 @@ pub runvil::event::Event::TaskAbandoned::provenance: runvil::ids::Provenance
 pub runvil::event::Event::TaskAbandoned::reason: runvil::ids::AbandonReason
 pub runvil::event::Event::TaskAbandoned::section: alloc::string::String
 pub runvil::event::Event::TaskAbandoned::task: runvil::ids::TaskId
-pub runvil::event::Event::TaskCancelled { .. }
-pub runvil::event::Event::TaskCancelled::execution: alloc::string::String
-pub runvil::event::Event::TaskCancelled::provenance: runvil::ids::Provenance
-pub runvil::event::Event::TaskCancelled::section: alloc::string::String
-pub runvil::event::Event::TaskCancelled::task: runvil::ids::TaskId
+pub runvil::event::Event::TaskCanceled { .. }
+pub runvil::event::Event::TaskCanceled::execution: alloc::string::String
+pub runvil::event::Event::TaskCanceled::provenance: runvil::ids::Provenance
+pub runvil::event::Event::TaskCanceled::section: alloc::string::String
+pub runvil::event::Event::TaskCanceled::task: runvil::ids::TaskId
 pub runvil::event::Event::TaskFailed { .. }
 pub runvil::event::Event::TaskFailed::execution: alloc::string::String
 pub runvil::event::Event::TaskFailed::provenance: runvil::ids::Provenance
@@ -1272,7 +1273,7 @@ pub struct runvil::Run { /* private fields */ }
 pub struct runvil::RunParams { /* private fields */ }
 pub struct runvil::RunSeed(/* private fields */)
 pub struct runvil::cancel::CancelHandle { /* private fields */ }
-pub struct runvil::cancel::Cancelled { /* private fields */ }
+pub struct runvil::cancel::Canceled { /* private fields */ }
 pub struct runvil::effect::EffectId(/* private fields */)
 pub struct runvil::error::Error { .. }
 pub struct runvil::error::Location { .. }

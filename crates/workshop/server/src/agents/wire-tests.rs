@@ -368,7 +368,7 @@ fn the_shared_fixture_pins_exactly_the_agreed_case_list() {
             "agents",
             "attach",
             "cancel",
-            "input_cancelled",
+            "input_canceled",
             "input_required",
             "input_response",
             "launch",
@@ -417,8 +417,8 @@ fn server_to_client_agent_frames_match_the_shared_fixture() {
         fixture["input_required"]
     );
     assert_eq!(
-        wire(&InputFrame::Cancelled { token: token() }),
-        fixture["input_cancelled"]
+        wire(&InputFrame::Canceled { token: token() }),
+        fixture["input_canceled"]
     );
 }
 

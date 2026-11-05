@@ -83,7 +83,7 @@ async fn a_recorder_that_refuses_its_nth_call_ends_the_drive_with_a_recorder_err
 #[tokio::test]
 async fn a_recorder_that_refuses_an_answer_aborts_the_performers_still_out() {
     // Two effects are out in the first step, a timer that never fires and
-    // a tool call that answers at once. A run cancelled after the answer
+    // a tool call that answers at once. A run canceled after the answer
     // lands shows which call records it: the first answer in the stream.
     let dry = Arc::new(FailingRecorder::never_failing());
     let dry_run = dry.inner().begin_run(meta()).await.unwrap();

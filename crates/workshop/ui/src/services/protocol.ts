@@ -263,8 +263,8 @@ export interface InputRequiredFrame {
  * cancellation is an outcome on the wire, never silence, so the SPA never
  * holds a prompt against a dead token.
  */
-export interface InputCancelledFrame {
-  type: "input_cancelled";
+export interface InputCanceledFrame {
+  type: "input_canceled";
   token: string;
 }
 
@@ -293,7 +293,7 @@ export interface InputResponseFrame {
 /**
  * The client frame firing the session's turn-cancel. Cancellation is a
  * stop reason, never an error: the server answers with nothing, pending
- * waits die as `input_cancelled`, and the relaunched agent returns to
+ * waits die as `input_canceled`, and the relaunched agent returns to
  * waiting.
  */
 export interface AgentCancelFrame {
@@ -438,7 +438,7 @@ export const AGENT_FRAME_GUARDS = {
     reply: isNumber,
   }),
   input_required: frame<InputRequiredFrame>("input_required", { token: isString }),
-  input_cancelled: frame<InputCancelledFrame>("input_cancelled", { token: isString }),
+  input_canceled: frame<InputCanceledFrame>("input_canceled", { token: isString }),
   error: frame<ErrorFrame>("error", { message: isString, id: isAnything }),
 };
 

@@ -4,7 +4,7 @@
 // Bundles the TS modules with esbuild and drives them against jsdom built
 // from the real index.html. Covers: the Menubar releasing its
 // document-level listeners and popovers, EditorPanel disposing its surface
-// child and dirty subscription, ActivityIndicator cancelling its LED decay timer,
+// child and dirty subscription, ActivityIndicator canceling its LED decay timer,
 // and the generic panel tab dropping its title subscription (emitter delivery
 // stops after the root disposes). A final section drives WorkshopSocket
 // against a scripted fake WebSocket: emitter fan-out and unsubscribe, a
@@ -286,7 +286,7 @@ const lateTab = mountEditorTab();
 check("the dirty subscription is severed after disposal", !lateTab.element.classList.contains("ws-tab--dirty"));
 lateTab.dispose();
 
-// ActivityIndicator: the armed decay timer was cancelled, so the pulse never decays.
+// ActivityIndicator: the armed decay timer was canceled, so the pulse never decays.
 await sleep(400);
 check(
   "disposal cancels the LED decay timer",

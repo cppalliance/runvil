@@ -2,7 +2,7 @@
 //! returns when the recorder refuses: a model list the broker cannot
 //! fetch ends the recorded run as a `Completion` failure, a list without
 //! the selection as a `RequirementsUnmet` failure, and a cancel before
-//! `run` or while the broker holds its list as cancelled, each before the
+//! `run` or while the broker holds its list as canceled, each before the
 //! prompt is parsed; a recorder that refuses a write is a
 //! `RecorderFailed` failure naming the run id it issued; and a broker
 //! that panics answers its round `Dropped`.
@@ -126,7 +126,7 @@ async fn a_selection_absent_from_the_model_list_ends_the_recorded_run_as_an_unme
 }
 
 #[tokio::test]
-async fn a_cancel_while_the_broker_holds_its_list_ends_the_recorded_run_cancelled() {
+async fn a_cancel_while_the_broker_holds_its_list_ends_the_recorded_run_canceled() {
     let recorder = Arc::new(FailingRecorder::never_failing());
     let broker = ScriptedBroker::replying().listing(Listing::Holds);
     let listings = broker.listings();
@@ -149,7 +149,7 @@ async fn a_cancel_while_the_broker_holds_its_list_ends_the_recorded_run_cancelle
 }
 
 #[tokio::test]
-async fn a_cancel_before_run_ends_the_recorded_run_cancelled_against_a_ready_listing() {
+async fn a_cancel_before_run_ends_the_recorded_run_canceled_against_a_ready_listing() {
     let recorder = Arc::new(FailingRecorder::never_failing());
     let harness = harness_over(&recorder, ScriptedBroker::replying());
     harness.control().cancel();
@@ -259,7 +259,7 @@ async fn a_panicking_broker_answers_its_round_dropped() {
         assert_eq!(
             report.outcome,
             RunOutcome::Completed {
-                final_text: "false:cancelled".to_owned()
+                final_text: "false:canceled".to_owned()
             },
             "a panic in the {what}: the pcall caught the dropped round"
         );

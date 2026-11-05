@@ -74,7 +74,7 @@ export function qualifiedTool(call: ToolCallRow): string | null {
  * and its turn is generating. An ask call is also loading while it waits
  * for the operator's answer, because `generating` is off during a wait;
  * that wait can only be in the last turn, so an ask left unanswered in an
- * earlier turn (a cancelled wait) is not loading.
+ * earlier turn (a canceled wait) is not loading.
  */
 export function isToolLoading(kind: ToolKind, hasResult: boolean, turn: TurnState): boolean {
   if (hasResult) {

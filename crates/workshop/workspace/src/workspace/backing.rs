@@ -94,7 +94,7 @@ impl Workspace {
     ///
     /// The path resolves to its grant key before the switch guard is
     /// taken, so a slow canonicalize never holds up a switch and a revoke
-    /// cancelled while resolving changes nothing. The removal and its
+    /// canceled while resolving changes nothing. The removal and its
     /// mirror hold the guard, so the revoke lands whole in the workspace
     /// open when it completes, and is refused after the shutdown close.
     ///

@@ -47,7 +47,7 @@ pub(super) struct WriteDone(mpsc::Sender<()>);
 impl Drop for WriteDone {
     fn drop(&mut self) {
         // The write may have been abandoned by the route deadline and never
-        // cancelled; a failed send just means the test stopped listening.
+        // canceled; a failed send just means the test stopped listening.
         let _ = self.0.send(());
     }
 }

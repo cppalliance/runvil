@@ -67,7 +67,7 @@ fn exit_joins_a_supervisor_blocked_in_validation_before_publication() {
                 SupervisionProbe::Replacement(current.clone())
             },
             |_| -> anyhow::Result<TestIdentity> {
-                panic!("cancelled validation cannot start recovery")
+                panic!("canceled validation cannot start recovery")
             },
             |_, _| {
                 worker_publications.fetch_add(1, Ordering::SeqCst);
@@ -87,7 +87,7 @@ fn exit_joins_a_supervisor_blocked_in_validation_before_publication() {
     assert_eq!(
         publications.load(Ordering::SeqCst),
         0,
-        "cancelled validation cannot publish into the snapshot"
+        "canceled validation cannot publish into the snapshot"
     );
 }
 
@@ -112,7 +112,7 @@ fn exit_joins_a_supervisor_blocked_in_health_wait_before_resolve() {
             |_, _, cancellation| {
                 entered.send(()).expect("announce blocked health wait");
                 let _ = cancellation.wait_timeout(Duration::from_secs(30));
-                Err(workshop_server_api::discovery::HealthError::Cancelled)
+                Err(workshop_server_api::discovery::HealthError::Canceled)
             },
             |_, _| {
                 worker_resolves.fetch_add(1, Ordering::SeqCst);
@@ -120,7 +120,7 @@ fn exit_joins_a_supervisor_blocked_in_health_wait_before_resolve() {
             },
             || None,
         );
-        assert!(result.is_err(), "the cancelled health wait is rejected");
+        assert!(result.is_err(), "the canceled health wait is rejected");
         worker_finished.store(true, Ordering::SeqCst);
     })
     .expect("spawn test supervisor");
@@ -132,7 +132,7 @@ fn exit_joins_a_supervisor_blocked_in_health_wait_before_resolve() {
     assert_eq!(
         resolves.load(Ordering::SeqCst),
         0,
-        "cancelled health waiting cannot start a later resolve"
+        "canceled health waiting cannot start a later resolve"
     );
 }
 
@@ -163,9 +163,9 @@ fn exit_joins_a_supervisor_blocked_in_launch_race_before_spawn() {
                 worker_launches.fetch_add(1, Ordering::SeqCst);
                 Ok(42)
             },
-            |_, _, _| anyhow::bail!("the cancelled launch cannot wait for health"),
+            |_, _, _| anyhow::bail!("the canceled launch cannot wait for health"),
         );
-        assert!(result.is_err(), "the cancelled launch race is rejected");
+        assert!(result.is_err(), "the canceled launch race is rejected");
         worker_finished.store(true, Ordering::SeqCst);
     })
     .expect("spawn test supervisor");
@@ -177,7 +177,7 @@ fn exit_joins_a_supervisor_blocked_in_launch_race_before_spawn() {
     assert_eq!(
         launches.load(Ordering::SeqCst),
         0,
-        "cancelled launch racing cannot create a process"
+        "canceled launch racing cannot create a process"
     );
 }
 
@@ -208,9 +208,9 @@ fn exit_joins_a_supervisor_blocked_inside_launch_without_process_creation() {
                 worker_launches.fetch_add(1, Ordering::SeqCst);
                 Ok(42)
             },
-            |_, _, _| anyhow::bail!("the cancelled launch cannot wait for health"),
+            |_, _, _| anyhow::bail!("the canceled launch cannot wait for health"),
         );
-        assert!(result.is_err(), "the cancelled launch is rejected");
+        assert!(result.is_err(), "the canceled launch is rejected");
         worker_finished.store(true, Ordering::SeqCst);
     })
     .expect("spawn test supervisor");
@@ -222,7 +222,7 @@ fn exit_joins_a_supervisor_blocked_inside_launch_without_process_creation() {
     assert_eq!(
         launches.load(Ordering::SeqCst),
         0,
-        "the cancelled launch has no post-cancel effect"
+        "the canceled launch has no post-cancel effect"
     );
 }
 
@@ -237,12 +237,12 @@ fn exit_joins_a_supervisor_blocked_inside_publication_without_replacement() {
         let result = run_effect_if_active(&cancellation, "gateway publication", |cancellation| {
             entered.send(()).expect("announce blocked publication");
             if cancellation.wait_timeout(Duration::from_secs(30)) {
-                anyhow::bail!("gateway publication was cancelled");
+                anyhow::bail!("gateway publication was canceled");
             }
             worker_publications.fetch_add(1, Ordering::SeqCst);
             Ok(())
         });
-        assert!(result.is_err(), "the cancelled publication is rejected");
+        assert!(result.is_err(), "the canceled publication is rejected");
         worker_finished.store(true, Ordering::SeqCst);
     })
     .expect("spawn test supervisor");

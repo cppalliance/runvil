@@ -358,7 +358,7 @@ fn a_recorded_render_answer_fed_to_a_fresh_run_sends_the_same_chat_tools() {
 }
 
 #[test]
-fn a_dropped_render_answers_its_round_as_cancelled_and_fixes_no_tools() {
+fn a_dropped_render_answers_its_round_as_canceled_and_fixes_no_tools() {
     let source = one_section(
         "tools.offer('tools/echo')
          messages:user('asked')
@@ -377,7 +377,7 @@ fn a_dropped_render_answers_its_round_as_cancelled_and_fixes_no_tools() {
             other => panic!("only renders and the round are issued: {other:?}"),
         }
     });
-    assert_eq!(text_of(result), "false:cancelled|done");
+    assert_eq!(text_of(result), "false:canceled|done");
     assert_eq!(
         kinds(&issued),
         ["render", "render", "chat"],

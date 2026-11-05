@@ -18,7 +18,7 @@
 // layout change after the Open still saves; a refused Open reloads and
 // applies nothing; after a
 // successful Save As exactly three workspace writes store the live
-// layout envelope, expanded set, and closed stack; a cancelled or
+// layout envelope, expanded set, and closed stack; a canceled or
 // refused Save As writes nothing; and Duplicate writes nothing. The fake
 // dock contains a real WorkshopTreePanel as its "tree" panel and a real
 // WindowTitle reads the roots beside it, so the switch's roots traffic
@@ -530,7 +530,7 @@ const SAVED_PATH = "C:\\work\\Gamma.rvwork";
   answerQueue.push({ status: 200, body: { ...CURRENT, path: SAVED_PATH, name: "Gamma" } });
   await Commands.execute("workbench.action.saveWorkspaceAs");
   await flush();
-  check("a cancelled save-as writes nothing", storage.sets.length === setsBefore);
+  check("a canceled save-as writes nothing", storage.sets.length === setsBefore);
 
   window.__TAURI_DIALOG__.answer = "C:\\work\\Alpha.rvwork";
   answerQueue.push(

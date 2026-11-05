@@ -40,14 +40,14 @@
 //! is refused before the run starts with a line naming the Pack and
 //! `runvil/input-broker`.
 //!
-//! # Failed and cancelled waits
+//! # Failed and canceled waits
 //!
 //! A broker failure is an [`Error`], and it becomes the ask call's
 //! error unchanged. It raises at the script's `input.ask()` call as a Lua
 //! error of kind `"tool"` whose message is the broker's message, so
 //! `pcall` catches it; uncaught, it ends the run as a tool failure. The
 //! message reaches the prompt, where the model can read it too, so a
-//! broker writes it for that audience. Cancelling the run drops the ask
+//! broker writes it for that audience. Canceling the run drops the ask
 //! tool's pending wait.
 //!
 //! # Prompt-side rules
@@ -138,7 +138,7 @@ end
 /// - [`wait`](InputBroker::wait) returns the operator's text byte-exact,
 ///   as the operator sent it.
 /// - A wait whose future is dropped, as happens when the run is
-///   cancelled, must close any prompt it opened for the operator. It must
+///   canceled, must close any prompt it opened for the operator. It must
 ///   not panic.
 /// - [`wait`](InputBroker::wait) must not block while it is polled. The
 ///   Harness polls it inside the run's own future, beside every other

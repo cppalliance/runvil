@@ -224,7 +224,7 @@ impl Driving {
         true
     }
 
-    /// Sets the run's cancel flag between steps, as a caller cancelling a
+    /// Sets the run's cancel flag between steps, as a caller canceling a
     /// run it steps would. A run that is done ignores it.
     pub(crate) fn cancel(&mut self) {
         if self.outcome.is_none() {

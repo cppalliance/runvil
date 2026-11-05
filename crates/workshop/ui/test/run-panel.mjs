@@ -535,7 +535,7 @@ check(
   !dragEl.classList.contains(OVER) && dragEl.querySelector(".ws-run-panel__rows") !== null,
 );
 
-// A drag that ends with no drop on the panel (cancelled, or released
+// A drag that ends with no drop on the panel (canceled, or released
 // elsewhere) is the source row's dragend bubbling up to the window. It
 // clears the mark and the enter/leave depth count, so the next drag starts
 // from zero instead of needing extra leaves to clear.

@@ -43,8 +43,8 @@ impl RunControl {
     /// only the model sees, that is the info its section's render gave it.
     /// Every other effect in flight is aborted and answered `Dropped`. The
     /// run's cancel flag stays clear.
-    /// A `pcall` around a dropped call catches its cancelled error.
-    /// Otherwise, the error ends the run cancelled.
+    /// A `pcall` around a dropped call catches its canceled error.
+    /// Otherwise, the error ends the run canceled.
     ///
     /// A stop also drops the tool calls waiting for a slot, unstarted,
     /// except those that survive stops, which start once a slot frees.
@@ -60,10 +60,10 @@ impl RunControl {
     /// Cancels the run.
     ///
     /// Every effect in flight, tool calls that survive stops included, is
-    /// answered `Dropped`, and the run ends cancelled. Every tool call
+    /// answered `Dropped`, and the run ends canceled. Every tool call
     /// waiting for a slot is answered `Dropped` too, unstarted. A cancel
     /// raised before the run begins still gives the run a record, which
-    /// ends cancelled before the prompt is parsed. Calling `cancel` more
+    /// ends canceled before the prompt is parsed. Calling `cancel` more
     /// than once is the same as calling it once.
     pub fn cancel(&self) {
         self.cancel.cancel();
@@ -83,7 +83,7 @@ impl RunControl {
 impl fmt::Debug for RunControl {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("RunControl")
-            .field("cancelled", &self.cancel.is_cancelled())
+            .field("canceled", &self.cancel.is_canceled())
             .field("stop_raised", &self.stop.raised.load(Ordering::SeqCst))
             .finish()
     }

@@ -238,7 +238,7 @@ impl RoundId {
 /// was still running.
 ///
 /// A task ends with its owner. The `abandoned` terminal state is separate
-/// from `cancelled`, because losing an owner and being stopped on purpose
+/// from `canceled`, because losing an owner and being stopped on purpose
 /// are different facts for a log and a UI. The reason says which kind of
 /// owner end it was, so a report can say more than "abandoned".
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -259,7 +259,7 @@ pub enum AbandonReason {
     /// sibling failed fatally or because the owner's own owner ended first.
     OwnerAborted,
     /// The run itself ended while the task was live, because the caller
-    /// cancelled the run or an answer was fatal. The Engine ended the task
+    /// canceled the run or an answer was fatal. The Engine ended the task
     /// with the run.
     RunTerminated,
 }

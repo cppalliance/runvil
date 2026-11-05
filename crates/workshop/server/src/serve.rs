@@ -25,7 +25,7 @@ use workshop_support::Config;
 /// binary's join forever. (Held WebSockets detach from the drain at upgrade.)
 const SHUTDOWN_GRACE: Duration = Duration::from_secs(5);
 
-/// How long either ending waits for the runtime to tear down. Cancelled
+/// How long either ending waits for the runtime to tear down. Canceled
 /// async tasks collapse at their next yield, but a wedged blocking task
 /// would otherwise hold the runtime's drop - and with it the embedding
 /// binary's join - open indefinitely.
@@ -323,7 +323,7 @@ fn serve_thread(
     let _ = stopped.send(outcome);
     // A graceful serve-return is not quiescence: sessions that detached at
     // upgrade can still be running, so both endings take the bounded
-    // teardown - cancelled tasks collapse at their next yield, and a wedged
+    // teardown - canceled tasks collapse at their next yield, and a wedged
     // blocking task is abandoned so it cannot park the embedding binary.
     // Never `process::exit` here - this crate runs inside embedding binaries.
     runtime.shutdown_timeout(RUNTIME_TEARDOWN);

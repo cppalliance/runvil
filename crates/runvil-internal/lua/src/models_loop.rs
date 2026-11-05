@@ -231,7 +231,7 @@ fn compact(
             ));
         };
         let outcome = if truthy(&ok) { Ok(value) } else { Err(value) };
-        let then = settle(&compacted, snapshot, outcome, hook.is_cancelled(), None)
+        let then = settle(&compacted, snapshot, outcome, hook.is_canceled(), None)
             .map_or_else(|refusal| refusal, |_| Then::Return);
         act(lua, then)
     })?;
@@ -267,7 +267,7 @@ fn read_input(
     match phase {
         Phase::Compacting(..) | Phase::Handling => Ok(Input::Called {
             outcome: if ok { Ok(value) } else { Err(value) },
-            cancelled: hook.is_cancelled(),
+            canceled: hook.is_canceled(),
         }),
         Phase::Chatting(_) => Ok(Input::Answered(answer(lua, ok, value, |round| {
             lua.unpack::<AnyUserData>(round)?

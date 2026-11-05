@@ -23,7 +23,7 @@
 // box is empty and stays pressable whatever the state, so a click while
 // blocked names the blocker on the status bar instead of the control
 // silently disappearing. A take follows the wait it dictates into: when the
-// pinned wait dies - spent by a send, cancelled by the server, or reset
+// pinned wait dies - spent by a send, canceled by the server, or reset
 // by a new session - the live take is discarded, because a take that
 // cannot be sent is a trap.
 

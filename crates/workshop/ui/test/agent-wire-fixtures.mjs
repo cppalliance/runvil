@@ -73,7 +73,7 @@ const CASES = [
   "agents",
   "attach",
   "cancel",
-  "input_cancelled",
+  "input_canceled",
   "input_required",
   "input_response",
   "launch",
@@ -128,7 +128,7 @@ const INBOUND = {
   agent_delta_text: [],
   agent_delta_reasoning: [],
   input_required: [],
-  input_cancelled: [],
+  input_canceled: [],
 };
 const inbound = Object.entries(INBOUND).map(([name, optional]) => [name, fixture[name], optional]);
 inbound.push(["error (workshop-frames.json)", workshopFixture.error, ["id"]]);
@@ -160,13 +160,13 @@ await assertNoLeaks(lifecycle, async () => {
   const events = [];
   const deltas = [];
   const required = [];
-  const cancelled = [];
+  const canceled = [];
   socket.onAgents((list) => agents.push(list));
   socket.onSession((frame) => sessions.push(frame));
   socket.onEvent((frame) => events.push(frame));
   socket.onDelta((frame) => deltas.push(frame));
   socket.onInputRequired((token) => required.push(token));
-  socket.onInputCancelled((token) => cancelled.push(token));
+  socket.onInputCanceled((token) => canceled.push(token));
   const errors = [];
   socket.onError((message) => errors.push(message));
   socket.connect();
@@ -180,7 +180,7 @@ await assertNoLeaks(lifecycle, async () => {
   wire.message(fixture.agent_delta_text);
   wire.message(fixture.agent_delta_reasoning);
   wire.message(fixture.input_required);
-  wire.message(fixture.input_cancelled);
+  wire.message(fixture.input_canceled);
 
   check(
     "the agents fixture frame delivers its list verbatim",
@@ -210,8 +210,8 @@ await assertNoLeaks(lifecycle, async () => {
     isDeepStrictEqual(required, [fixture.input_required.token]),
   );
   check(
-    "the input_cancelled fixture frame delivers its token",
-    isDeepStrictEqual(cancelled, [fixture.input_cancelled.token]),
+    "the input_canceled fixture frame delivers its token",
+    isDeepStrictEqual(canceled, [fixture.input_canceled.token]),
   );
   wire.message(workshopFixture.error);
   check(
@@ -223,7 +223,7 @@ await assertNoLeaks(lifecycle, async () => {
   // Every required field of every inbound frame, plus the nested required
   // fields of an event: a copy without it fails its guard and is dropped,
   // with one warning naming its type.
-  const handled = [agents, sessions, events, deltas, required, cancelled, errors];
+  const handled = [agents, sessions, events, deltas, required, canceled, errors];
   const handledCounts = () => handled.map((calls) => calls.length);
   const before = handledCounts();
   const removals = [];

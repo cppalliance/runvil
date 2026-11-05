@@ -43,7 +43,7 @@ fn nested_call_and_inference_run_end_to_end_on_a_current_thread_runtime() {
 }
 
 #[test]
-fn cancellation_while_suspended_on_infer_interrupts_the_run() {
+fn cancellation_while_suspended_on_infer_cancels_the_run() {
     // The round is held, so its reply never arrives, and the cancel lands
     // once the round is issued.
     let gateway = ScriptedChat::new(vec![text("too late")]);
@@ -60,7 +60,7 @@ fn cancellation_while_suspended_on_infer_interrupts_the_run() {
 
     assert!(
         matches!(trace.outcome(), RunOutcome::Cancelled),
-        "cancelling a suspended infer must interrupt the run, got {:?}",
+        "canceling a suspended infer must cancel the run, got {:?}",
         trace.outcome()
     );
     assert!(

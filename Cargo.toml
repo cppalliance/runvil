@@ -135,7 +135,7 @@ sha2 = "0.11"
 # Loads plugin dynamic libraries without linking them into Cargo builds.
 libloading = "0.8"
 socket2 = { version = "0.6", features = ["all"] }
-# Cross-platform console interruption for the Workshop build orchestrator.
+# Cross-platform Ctrl-C handling for the Workshop build orchestrator.
 ctrlc = "3.5"
 # Thin process-image shims for the Workshop gateway discovery reader's stale
 # detection; both are already in the tree transitively.

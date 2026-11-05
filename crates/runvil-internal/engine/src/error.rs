@@ -19,9 +19,7 @@ use std::borrow::Cow;
 
 #[cfg(test)]
 pub(crate) use runvil_lua::{context_exhausted, lua_quota, tool_loop_exhausted};
-pub(crate) use runvil_lua::{
-    internal, interrupted, lua_runtime, task_cancelled, task_consumed, task_not_owned,
-};
+pub(crate) use runvil_lua::{internal, lua_runtime, task_canceled, task_consumed, task_not_owned};
 pub(crate) use runvil_types::error::Error;
 use runvil_types::error::{ErrorCode, FactKey, failure, with_fact};
 use runvil_types::ids::TaskId;

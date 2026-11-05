@@ -18,7 +18,7 @@ pub struct CancellationToken {
 
 #[derive(Debug, Default)]
 struct CancellationState {
-    cancelled: AtomicBool,
+    canceled: AtomicBool,
     effect: Mutex<()>,
     waiter: Mutex<()>,
     wake: Condvar,
@@ -38,7 +38,7 @@ impl CancellationToken {
             .waiter
             .lock()
             .unwrap_or_else(PoisonError::into_inner);
-        self.state.cancelled.store(true, Ordering::SeqCst);
+        self.state.canceled.store(true, Ordering::SeqCst);
         self.state.wake.notify_all();
         drop(waiter);
 
@@ -55,16 +55,16 @@ impl CancellationToken {
 
     /// Whether cancellation has been requested.
     #[must_use]
-    pub fn is_cancelled(&self) -> bool {
-        self.state.cancelled.load(Ordering::SeqCst)
+    pub fn is_canceled(&self) -> bool {
+        self.state.canceled.load(Ordering::SeqCst)
     }
 
     /// Waits for cancellation or until `timeout` elapses.
     ///
-    /// Returns `true` when the token is cancelled.
+    /// Returns `true` when the token is canceled.
     #[must_use]
     pub fn wait_timeout(&self, timeout: Duration) -> bool {
-        if self.is_cancelled() {
+        if self.is_canceled() {
             return true;
         }
         let waiter = self
@@ -72,15 +72,15 @@ impl CancellationToken {
             .waiter
             .lock()
             .unwrap_or_else(PoisonError::into_inner);
-        if self.is_cancelled() {
+        if self.is_canceled() {
             return true;
         }
         let (_waiter, _) = self
             .state
             .wake
-            .wait_timeout_while(waiter, timeout, |()| !self.is_cancelled())
+            .wait_timeout_while(waiter, timeout, |()| !self.is_canceled())
             .unwrap_or_else(PoisonError::into_inner);
-        self.is_cancelled()
+        self.is_canceled()
     }
 
     /// Runs `operation` only while the token remains active.
@@ -96,7 +96,7 @@ impl CancellationToken {
             .effect
             .lock()
             .unwrap_or_else(PoisonError::into_inner);
-        if self.is_cancelled() {
+        if self.is_canceled() {
             return None;
         }
         let result = operation();
@@ -134,7 +134,7 @@ mod tests {
 
         let started = Instant::now();
         cancellation.cancel();
-        worker.join().expect("the cancelled operation joins");
+        worker.join().expect("the canceled operation joins");
 
         assert!(
             started.elapsed() < Duration::from_millis(250),
@@ -143,7 +143,7 @@ mod tests {
         assert_eq!(
             effects.load(Ordering::SeqCst),
             0,
-            "the cancelled operation performs no later effect"
+            "the canceled operation performs no later effect"
         );
     }
 }

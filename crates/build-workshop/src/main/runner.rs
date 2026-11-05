@@ -1,4 +1,4 @@
-//! The real subprocess runner and its interrupt controller.
+//! The real subprocess runner and its cancel controller.
 
 use std::io::{self, Read as _};
 use std::process::{Child, Command, ExitStatus, Stdio};
@@ -8,14 +8,14 @@ use std::thread;
 use std::time::Duration;
 
 use super::{
-    CommandResult, CommandRunner, CommandSpec, InterruptController, InterruptPolicy,
-    InterruptState, OutputMode, ProcessRunner,
+    CancelController, CancelPolicy, CancelState, CommandResult, CommandRunner, CommandSpec,
+    OutputMode, ProcessRunner,
 };
 
-impl InterruptController {
+impl CancelController {
     fn isolated() -> Self {
         Self {
-            state: Arc::new(InterruptState {
+            state: Arc::new(CancelState {
                 generation: AtomicUsize::new(0),
                 active_child: Mutex::new(None),
                 termination_error: Mutex::new(None),
@@ -69,40 +69,39 @@ impl InterruptController {
     }
 }
 
-static PROCESS_INTERRUPT: OnceLock<Result<InterruptController, Arc<anyhow::Error>>> =
-    OnceLock::new();
+static PROCESS_CANCEL: OnceLock<Result<CancelController, Arc<anyhow::Error>>> = OnceLock::new();
 
-pub(super) fn install_interrupt_handler() -> Result<InterruptController, Arc<anyhow::Error>> {
-    match PROCESS_INTERRUPT.get_or_init(|| {
-        let interrupt = InterruptController::isolated();
-        let handler_interrupt = interrupt.clone();
-        ctrlc::set_handler(move || handler_interrupt.request()).map_err(|error| {
+pub(super) fn install_cancel_handler() -> Result<CancelController, Arc<anyhow::Error>> {
+    match PROCESS_CANCEL.get_or_init(|| {
+        let cancel = CancelController::isolated();
+        let handler_cancel = cancel.clone();
+        ctrlc::set_handler(move || handler_cancel.request()).map_err(|error| {
             Arc::new(anyhow::anyhow!(
-                "cannot install the interrupt handler: {error}"
+                "cannot install the Ctrl-C handler: {error}"
             ))
         })?;
-        Ok(interrupt)
+        Ok(cancel)
     }) {
-        Ok(interrupt) => Ok(interrupt.clone()),
+        Ok(cancel) => Ok(cancel.clone()),
         Err(error) => Err(Arc::clone(error)),
     }
 }
 
 impl ProcessRunner {
-    pub(super) fn new(interrupt: InterruptController) -> Self {
+    pub(super) fn new(cancel: CancelController) -> Self {
         Self {
-            interrupt,
+            cancel,
             last_command_started: false,
         }
     }
 
-    fn interrupted_error(&self) -> io::Error {
-        match self.interrupt.take_termination_error() {
+    fn canceled_error(&self) -> io::Error {
+        match self.cancel.take_termination_error() {
             Some(error) => io::Error::new(
                 io::ErrorKind::Interrupted,
-                format!("interrupted; active child termination failed: {error}"),
+                format!("canceled; active child termination failed: {error}"),
             ),
-            None => io::Error::new(io::ErrorKind::Interrupted, "interrupted"),
+            None => io::Error::new(io::ErrorKind::Interrupted, "canceled"),
         }
     }
 
@@ -133,12 +132,12 @@ impl CommandRunner for ProcessRunner {
     fn run(
         &mut self,
         command: &CommandSpec,
-        interrupt_policy: InterruptPolicy,
+        cancel_policy: CancelPolicy,
     ) -> io::Result<CommandResult> {
         self.last_command_started = false;
-        let generation = self.interrupt.generation();
-        if interrupt_policy == InterruptPolicy::RejectExisting && generation != 0 {
-            return Err(self.interrupted_error());
+        let generation = self.cancel.generation();
+        if cancel_policy == CancelPolicy::RejectExisting && generation != 0 {
+            return Err(self.canceled_error());
         }
 
         let mut process = Command::new(&command.program);
@@ -151,23 +150,23 @@ impl CommandRunner for ProcessRunner {
         }
 
         {
-            let mut active_child = self.interrupt.lock_active_child();
-            if self.interrupt.generation() != generation {
-                return Err(self.interrupted_error());
+            let mut active_child = self.cancel.lock_active_child();
+            if self.cancel.generation() != generation {
+                return Err(self.canceled_error());
             }
             if active_child.is_some() {
                 return Err(io::Error::other(
                     "another build subprocess is already active",
                 ));
             }
-            self.interrupt.clear_termination_error();
+            self.cancel.clear_termination_error();
             *active_child = Some(process.spawn()?);
             self.last_command_started = true;
         }
 
         loop {
             let completed = {
-                let mut active_child = self.interrupt.lock_active_child();
+                let mut active_child = self.cancel.lock_active_child();
                 let child = active_child
                     .as_mut()
                     .ok_or_else(|| io::Error::other("active build subprocess disappeared"))?;
@@ -178,8 +177,8 @@ impl CommandRunner for ProcessRunner {
             };
             if let Some((child, status)) = completed {
                 let result = Self::finish_child(child, status, command.output_mode)?;
-                if self.interrupt.generation() != generation {
-                    return Err(self.interrupted_error());
+                if self.cancel.generation() != generation {
+                    return Err(self.canceled_error());
                 }
                 return Ok(result);
             }
@@ -191,7 +190,7 @@ impl CommandRunner for ProcessRunner {
         self.last_command_started
     }
 
-    fn interruption_observed(&self) -> bool {
-        self.interrupt.generation() != 0
+    fn cancel_observed(&self) -> bool {
+        self.cancel.generation() != 0
     }
 }

@@ -71,8 +71,8 @@ async fn a_panicking_render_answers_dropped_and_the_log_holds_the_render_and_its
     .await;
     let (entry, ended) = text.split_once(' ').expect("the run returns its entry");
     assert_eq!(
-        ended, "false:cancelled",
-        "the dropped render ends its round cancelled, and the pcall catches it"
+        ended, "false:canceled",
+        "the dropped render ends its round canceled, and the pcall catches it"
     );
     assert_eq!(
         answered(&records, "Render"),

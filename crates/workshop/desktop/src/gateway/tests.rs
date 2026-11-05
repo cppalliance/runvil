@@ -57,7 +57,7 @@ fn assert_bounded_supervisor_shutdown(supervisor: GatewaySupervisor, finished: &
     assert_eq!(
         supervisor.shutdown(),
         SupervisorShutdown::Joined,
-        "Workshop exit joins the cancelled supervisor within its budget"
+        "Workshop exit joins the canceled supervisor within its budget"
     );
     assert!(
         finished.load(Ordering::SeqCst),

@@ -109,9 +109,9 @@ fn batched(texts: &[&str]) -> Input<V> {
     Input::Batched(Ok(texts.iter().copied().map(str::to_owned).collect()))
 }
 
-/// A raw `pcall`'s `outcome`, under the cancel flag `cancelled`.
-fn called(outcome: Result<V, V>, cancelled: bool) -> Input<V> {
-    Input::Called { outcome, cancelled }
+/// A raw `pcall`'s `outcome`, under the cancel flag `canceled`.
+fn called(outcome: Result<V, V>, canceled: bool) -> Input<V> {
+    Input::Called { outcome, canceled }
 }
 
 /// A `models.loop` call capped at `cap` rounds over `list`, at its first
@@ -386,13 +386,13 @@ fn cancellation_raises_a_failed_handler_or_compactor_raw_and_a_return_still_wins
              exceeding the model's context window",
         ),
     ];
-    for (outcome, cancelled, expected) in cases {
+    for (outcome, canceled, expected) in cases {
         let mut machine = chatting(2, &list);
         assert_eq!(
             show(&machine.step(answered(overflow.clone()))),
             "compact compactor provider"
         );
-        assert_eq!(show(&machine.step(called(outcome, cancelled))), expected);
+        assert_eq!(show(&machine.step(called(outcome, canceled))), expected);
     }
 }
 

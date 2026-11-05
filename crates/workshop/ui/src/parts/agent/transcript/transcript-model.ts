@@ -339,7 +339,7 @@ function draftTurn(turn: number, entries: readonly Entry[]): RowDraft[] {
             waiting.set(call.id, draft);
           }
           if (draft.family === "ask") {
-            // An ask stands alone, after the group it interrupts.
+            // An ask stands alone, after the group it splits.
             flush();
             drafts.push({ row: "ask", draft });
           } else {

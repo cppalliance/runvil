@@ -22,7 +22,7 @@
 //! reports that ended run, and its caller reads the events recorded so
 //! far from the recorder. An environment that cannot satisfy the prompt
 //! fails no preparation: the run is built, and its first step ends it
-//! with the Engine's model-readable notice, or as cancelled when the
+//! with the Engine's model-readable notice, or as canceled when the
 //! run's cancel fired first, as when a cancel cuts the wait short while a
 //! needed Pack is still starting. The effect loop records that end like
 //! any other, and the record holds no run event after the parse events.
@@ -209,7 +209,7 @@ pub async fn begin(recorder: &dyn RunRecorder, name: &str, source: &str) -> Resu
 /// error as the reason. A cancel ends the wait, and each Pack is
 /// snapshotted as it stands. A prompt the environment cannot satisfy is
 /// prepared all the same: the run's first step ends it with the Engine's
-/// notice, or as cancelled when the run's cancel fired first.
+/// notice, or as canceled when the run's cancel fired first.
 ///
 /// # Errors
 /// Returns the parse failure when the source does not parse and the input
@@ -293,7 +293,7 @@ pub async fn prepare(
     // real directories and the declared store, goes to the params as
     // given; the run's Packs are picked from the prompt's `uses:` entries;
     // the snapshot is taken once each of them is ready or the run is
-    // cancelled, its catalog is what the run offers, its roster gives each
+    // canceled, its catalog is what the run offers, its roster gives each
     // Pack's object in the run's Lua and is what the run's first step
     // checks the declared Packs against, its preludes go to every section
     // VM, and the snapshot itself stays here as the tool performer,

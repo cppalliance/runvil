@@ -74,7 +74,7 @@ impl TaskRecorder {
                 Observation::TaskStarted { task: seen, .. }
                 | Observation::TaskSucceeded { task: seen }
                 | Observation::TaskFailed { task: seen }
-                | Observation::TaskCancelled { task: seen }
+                | Observation::TaskCanceled { task: seen }
                 | Observation::TaskAbandoned { task: seen, .. } => seen == task,
                 _ => false,
             })

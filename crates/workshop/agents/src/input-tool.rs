@@ -14,14 +14,14 @@ use super::{WaitFrame, WaitRegistry};
 
 /// Turns a dying wait into an outcome: unless disarmed by a delivered
 /// value, dropping the guard removes the wait from the registry and
-/// pushes [`WaitFrame::Cancelled`] for its token. The Harness drops the
+/// pushes [`WaitFrame::Canceled`] for its token. The Harness drops the
 /// performer's future when it drops the effect on a close, so this guard
-/// is what keeps a cancelled run from leaking its wait or leaving the
+/// is what keeps a canceled run from leaking its wait or leaving the
 /// client prompting against a dead token.
 struct WaitGuard {
     /// The registry the wait entry is removed from.
     registry: Arc<WaitRegistry>,
-    /// Where the cancelled frame is pushed.
+    /// Where the canceled frame is pushed.
     frames: broadcast::Sender<WaitFrame>,
     /// The dying wait's token.
     token: String,
@@ -41,7 +41,7 @@ impl Drop for WaitGuard {
         // No receiver means no socket is attached; the reconnect resend
         // repairs the client anyway, because this wait is absent from the
         // resent set.
-        let _ = self.frames.send(WaitFrame::Cancelled {
+        let _ = self.frames.send(WaitFrame::Canceled {
             token: std::mem::take(&mut self.token),
         });
     }
@@ -56,14 +56,14 @@ impl Drop for WaitGuard {
 /// durable [`WaitFrame::Required`], and suspends on the receiver until
 /// the conversation delivers the operator's answer or the wait dies. A
 /// dying wait is an outcome, never silence: a future dropped by a close
-/// removes the entry and pushes [`WaitFrame::Cancelled`], so the client
+/// removes the entry and pushes [`WaitFrame::Canceled`], so the client
 /// never pins its input box to a dead token.
 #[derive(Debug)]
 pub struct SessionInputBroker {
     /// The conversation's wait registry, shared with the conversation
     /// that completes and cancels waits.
     registry: Arc<WaitRegistry>,
-    /// Where the required and cancelled frames are pushed; the agent
+    /// Where the required and canceled frames are pushed; the agent
     /// socket forwards them to its client.
     frames: broadcast::Sender<WaitFrame>,
 }
@@ -82,9 +82,9 @@ impl InputBroker for SessionInputBroker {
     /// Opens a wait, announces it, and suspends until it resolves.
     ///
     /// On cancellation - the future dropped mid-await, or the wait
-    /// cancelled out of the registry - the drop guard removes the wait and
-    /// pushes [`WaitFrame::Cancelled`], so no path leaks a wait or a stale
-    /// prompt. A wait cancelled out of the registry resolves here as the
+    /// canceled out of the registry - the drop guard removes the wait and
+    /// pushes [`WaitFrame::Canceled`], so no path leaks a wait or a stale
+    /// prompt. A wait canceled out of the registry resolves here as the
     /// broker's failure policy: an [`Error`] with the code
     /// [`ToolBackend`](ErrorCode::ToolBackend) the run raises at the Lua
     /// call site.
@@ -107,13 +107,13 @@ impl InputBroker for SessionInputBroker {
                 guard.armed = false;
                 Ok(text)
             }
-            // The sender died without a value: the wait was cancelled out
-            // of the registry. The still-armed guard pushes the cancelled
+            // The sender died without a value: the wait was canceled out
+            // of the registry. The still-armed guard pushes the canceled
             // frame on scope exit, so this path clears the client's prompt
             // too.
             Err(_) => Err(tool_error(
                 ErrorCode::ToolBackend,
-                "the user-input wait was cancelled",
+                "the user-input wait was canceled",
             )),
         }
     }

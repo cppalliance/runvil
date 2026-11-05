@@ -125,9 +125,9 @@ fn task_failed(event: &Event) -> bool {
     matches!(event, Event::TaskFailed { .. })
 }
 
-/// Whether `event` reports a task its owner cancelled.
-fn task_cancelled(event: &Event) -> bool {
-    matches!(event, Event::TaskCancelled { .. })
+/// Whether `event` reports a task its owner canceled.
+fn task_canceled(event: &Event) -> bool {
+    matches!(event, Event::TaskCanceled { .. })
 }
 
 /// Whether `event` reports a task the run's end abandoned.

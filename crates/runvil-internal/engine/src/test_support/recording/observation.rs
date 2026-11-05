@@ -208,8 +208,8 @@ pub(crate) enum Observation {
         /// The task's id.
         task: TaskId,
     },
-    /// Terminal: the task was cancelled on purpose by its owner.
-    TaskCancelled {
+    /// Terminal: the task was canceled on purpose by its owner.
+    TaskCanceled {
         /// The task's id.
         task: TaskId,
     },
@@ -280,7 +280,7 @@ impl Observation {
             Observation::TaskStarted { .. } => "Task started",
             Observation::TaskSucceeded { .. } => "Task succeeded",
             Observation::TaskFailed { .. } => "Task failed",
-            Observation::TaskCancelled { .. } => "Task cancelled",
+            Observation::TaskCanceled { .. } => "Task canceled",
             Observation::TaskAbandoned { .. } => "Task abandoned",
             Observation::Lua(_) | Observation::Other(_) => return None,
         };

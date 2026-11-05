@@ -142,7 +142,7 @@ export class CommandCenter extends Disposable {
       if (event.button === 0) {
         // The press's default action moves focus to this button, and it
         // lands after open() has already focused the quick input's box;
-        // cancelling it keeps the panel's keyboard focus.
+        // canceling it keeps the panel's keyboard focus.
         event.preventDefault();
         open();
       }

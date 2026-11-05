@@ -20,7 +20,7 @@ use crate::state::{FailureKind, SessionState};
 use crate::tee::ConversationRecorder;
 
 /// The report of a run a close or an uncaught stop cut short.
-const INTERRUPTED: &str = "the agent run was interrupted";
+const CANCELED: &str = "the agent run was canceled";
 
 impl Conversation {
     /// The recorder the run writes through: every call goes on to
@@ -80,7 +80,7 @@ impl Conversation {
                 match report.outcome {
                     RunOutcome::Completed { .. } => return,
                     RunOutcome::Cancelled => {
-                        self.report(FailureKind::Interrupted, INTERRUPTED.to_owned());
+                        self.report(FailureKind::Canceled, CANCELED.to_owned());
                         return;
                     }
                     RunOutcome::Failed { message, .. } => message,

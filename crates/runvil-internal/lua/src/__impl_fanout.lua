@@ -79,7 +79,7 @@ end
 -- as they end. A `tool_loop_exhausted` arm
 -- becomes the incomplete stub and the fanout continues; any other arm
 -- failure cancels the live arms and re-raises. No arm outlives the call:
--- every arm is delivered or cancelled before the function returns or
+-- every arm is delivered or canceled before the function returns or
 -- raises.
 local function fanout(...)
   local argc = select("#", ...)

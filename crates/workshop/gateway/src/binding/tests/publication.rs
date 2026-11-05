@@ -53,7 +53,7 @@ fn cancellation_wakes_a_replacement_contending_on_the_publication_lock() {
         started.elapsed() < Duration::from_millis(250),
         "cancellation wakes publication lock contention"
     );
-    assert!(!published, "the cancelled replacement is not published");
+    assert!(!published, "the canceled replacement is not published");
     assert_eq!(
         binding.snapshot().generation(),
         original.generation(),

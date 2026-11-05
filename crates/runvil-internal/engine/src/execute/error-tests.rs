@@ -71,7 +71,7 @@ const CODE_KINDS: [(ErrorCode, RunErrorKind); 68] = [
     (ErrorCode::TasksLive, RunErrorKind::Lua),
     (ErrorCode::TaskNotOwned, RunErrorKind::Lua),
     (ErrorCode::TaskConsumed, RunErrorKind::Lua),
-    (ErrorCode::TaskCancelled, RunErrorKind::Lua),
+    (ErrorCode::TaskCanceled, RunErrorKind::Lua),
     (ErrorCode::ContextOverflow, RunErrorKind::Completion),
     (ErrorCode::RateLimited, RunErrorKind::Completion),
     (ErrorCode::QuotaExhausted, RunErrorKind::Completion),
@@ -123,7 +123,7 @@ const CODE_KINDS: [(ErrorCode, RunErrorKind); 68] = [
         ErrorCode::RequirementsUnmet,
         RunErrorKind::RequirementsUnmet,
     ),
-    (ErrorCode::Interrupted, RunErrorKind::Internal),
+    (ErrorCode::Canceled, RunErrorKind::Internal),
     (ErrorCode::Internal, RunErrorKind::Internal),
     (ErrorCode::RecorderFailed, RunErrorKind::Internal),
     (ErrorCode::PluginLoadFailed, RunErrorKind::Internal),
@@ -290,10 +290,10 @@ fn any_other_located_failure_ends_with_its_file_and_line() {
         "lua compilation error at x (line 2): y (at agents/a.md:2)",
         "the suffix adds the file to the line the message names"
     );
-    let interrupted = crate::error::interrupted();
+    let canceled = Error::canceled();
     assert_eq!(
-        failure_message(&interrupted),
-        interrupted.message,
+        failure_message(&canceled),
+        canceled.message,
         "a failure with no location ends with its own text"
     );
 }

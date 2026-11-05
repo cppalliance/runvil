@@ -43,7 +43,7 @@ pub enum RunErrorKind {
     /// author's program broke where the Engine cannot fix it: a Pack prelude
     /// that did not load, a chain that ended with tasks still live, a
     /// task reached for by a chain that does not own it, a task result
-    /// waited on twice, a wait delivering a cancelled task that surfaced
+    /// waited on twice, a wait delivering a canceled task that surfaced
     /// uncaught, and a failed `{{ }}` substitution.
     Lua,
     /// A Lua quota ran out: the `log()` event budget or the `log()` byte
@@ -120,10 +120,10 @@ impl RunErrorKind {
 /// Returns the stable classification of a failure with `code`.
 ///
 /// A leaked task, a task reached for by a chain that does not own it, a
-/// result waited on twice, a wait's delivery of a cancelled task surfacing
+/// result waited on twice, a wait's delivery of a canceled task surfacing
 /// uncaught, and a failed `{{ }}` substitution are the author's program
-/// failing, as any Lua fault is. A cancelled run ends as
-/// `RunOutcome::Cancelled`, so an interruption that reaches a failure is an
+/// failing, as any Lua fault is. A canceled run ends as
+/// `RunOutcome::Cancelled`, so a cancel that reaches a failure is an
 /// Engine fault, as is a failure only the Harness raises.
 pub(crate) fn run_error_kind(code: ErrorCode) -> RunErrorKind {
     match code {
@@ -140,7 +140,7 @@ pub(crate) fn run_error_kind(code: ErrorCode) -> RunErrorKind {
         | ErrorCode::TasksLive
         | ErrorCode::TaskNotOwned
         | ErrorCode::TaskConsumed
-        | ErrorCode::TaskCancelled
+        | ErrorCode::TaskCanceled
         | ErrorCode::Substitution => RunErrorKind::Lua,
         ErrorCode::RequirementsUnmet | ErrorCode::ModelRequired => RunErrorKind::RequirementsUnmet,
         ErrorCode::ContextOverflow
@@ -164,7 +164,7 @@ pub(crate) fn run_error_kind(code: ErrorCode) -> RunErrorKind {
         | ErrorCode::ToolBackend
         | ErrorCode::ToolTransport
         | ErrorCode::ToolOther => RunErrorKind::Tool,
-        ErrorCode::Internal | ErrorCode::Interrupted => RunErrorKind::Internal,
+        ErrorCode::Internal | ErrorCode::Canceled => RunErrorKind::Internal,
         ErrorCode::NotFound
         | ErrorCode::AlreadyExists
         | ErrorCode::NotADirectory

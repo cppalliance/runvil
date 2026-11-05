@@ -145,7 +145,7 @@ function makeWire() {
     event: new Emitter(),
     delta: new Emitter(),
     inputRequired: new Emitter(),
-    inputCancelled: new Emitter(),
+    inputCanceled: new Emitter(),
     error: new Emitter(),
     disconnect: new Emitter(),
   };
@@ -155,7 +155,7 @@ function makeWire() {
     onEvent: emitters.event.event,
     onDelta: emitters.delta.event,
     onInputRequired: emitters.inputRequired.event,
-    onInputCancelled: emitters.inputCancelled.event,
+    onInputCanceled: emitters.inputCanceled.event,
     onError: emitters.error.event,
     onDisconnect: emitters.disconnect.event,
     responses: [],
@@ -187,7 +187,7 @@ function makeWire() {
       delta: (kind, content, reply) =>
         emitters.delta.fire({ type: "agent_delta", kind, content, reply }),
       inputRequired: (token) => emitters.inputRequired.fire(token),
-      inputCancelled: (token) => emitters.inputCancelled.fire(token),
+      inputCanceled: (token) => emitters.inputCanceled.fire(token),
       error: (message) => emitters.error.fire(message),
       disconnect: () => emitters.disconnect.fire(),
       session: (session) => emitters.session.fire({ type: "agent_session", session, agent: "chat" }),
@@ -897,7 +897,7 @@ await assertNoLeaks(lifecycle, async () => {
       "a send on a downed socket opens the popup titled Connection failed",
       popup()?.querySelector(".ws-chat-error__title")?.textContent === "Connection failed" &&
         popup().querySelector(".ws-chat-error__message")?.textContent ===
-          "The connection was interrupted. Please check your network connection and try again." &&
+          "The connection was lost. Please check your network connection and try again." &&
         input.getText() === "hello",
     );
     wire.fire.session("fresh");
@@ -1108,8 +1108,8 @@ await assertNoLeaks(lifecycle, async () => {
       "Enter that commits an IME composition does not submit",
       wire.responses.length === 2 && input.getText() === "変換中",
     );
-    wire.fire.inputCancelled("tok3");
-    check("a cancelled wait returns the input to disabled", !editable());
+    wire.fire.inputCanceled("tok3");
+    check("a canceled wait returns the input to disabled", !editable());
     dispose();
   }
 
@@ -1207,7 +1207,7 @@ await assertNoLeaks(lifecycle, async () => {
       "the placeholder stays stable when the input opens",
       placeholder() === "Plan, Build, / for skills, @ for context",
     );
-    wire.fire.inputCancelled("tok");
+    wire.fire.inputCanceled("tok");
     check(
       "the placeholder stays stable when the input closes",
       placeholder() === "Plan, Build, / for skills, @ for context",
@@ -1317,7 +1317,7 @@ await assertNoLeaks(lifecycle, async () => {
     send.click();
     check("a click on Stop cancels the turn through the wire", wire.cancels === 1);
     check(
-      "the service settles its own view of the cancelled turn: generating is off",
+      "the service settles its own view of the canceled turn: generating is off",
       service.generating === false && send.getAttribute("data-state") !== "stop",
     );
     check(

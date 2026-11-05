@@ -201,9 +201,9 @@ async fn a_dropped_call_makes_the_server_receive_a_cancel_for_its_request_id() {
     .expect("dropping the call tells the server");
 
     let recorded = fixture.shared.recorded.lock().expect("lock");
-    assert_eq!(recorded.cancelled.len(), 1);
+    assert_eq!(recorded.canceled.len(), 1);
     assert_eq!(
-        Some(recorded.cancelled[0]["requestId"].clone()),
+        Some(recorded.canceled[0]["requestId"].clone()),
         recorded.hang_id
     );
 }

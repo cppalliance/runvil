@@ -119,13 +119,13 @@ impl RunParams {
     ///
     /// The caller keeps its own clone of `handle` and cancels the run by
     /// setting it, from any thread. The flag `new` created is the run's
-    /// alone, so a run built without this call cannot be cancelled.
+    /// alone, so a run built without this call cannot be canceled.
     ///
     /// The flag is a synchronous [`CancelHandle`] that the Engine polls
     /// between chain steps and from the Lua instruction hook, so running
     /// Lua code sees it too. The next [`step`](super::Run::step) tears down
     /// every chain and lists every effect still outstanding in its
-    /// `withdrawn`. The run then reports itself as cancelled once every
+    /// `withdrawn`. The run then reports itself as canceled once every
     /// outstanding effect is answered. Cancellation is a request that later
     /// steps complete: the caller answers each effect it abandons with
     /// [`EffectAnswer::Dropped`](super::EffectAnswer::Dropped).

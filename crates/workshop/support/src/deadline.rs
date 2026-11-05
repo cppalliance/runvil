@@ -28,7 +28,7 @@ pub const DEADLINE_ELAPSED_CODE: &str = "deadline_elapsed";
 
 /// The user-visible message a deadline-elapsed failure answers with: the
 /// elapsed deadline in seconds, and that the abandoned operation may
-/// still complete - a blocking write cannot be cancelled.
+/// still complete - a blocking write cannot be canceled.
 #[must_use]
 pub fn deadline_elapsed_message(limit: Duration) -> String {
     format!(

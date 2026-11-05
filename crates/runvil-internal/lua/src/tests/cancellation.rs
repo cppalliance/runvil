@@ -1,6 +1,6 @@
-//! Cooperative cancellation: the cancellation hook aborts a cancelled block,
+//! Cooperative cancellation: the cancellation hook aborts a canceled block,
 //! and the coroutine shim's `pcall` and `xpcall` neither swallow
-//! cancellation nor change an uncancelled failure.
+//! cancellation nor change an uncanceled failure.
 
 use super::*;
 
@@ -11,8 +11,8 @@ fn long_running_lua_block_cancels_cooperatively() {
     // An unbounded loop that, without cooperative cancellation, would run
     // forever: no instruction ceiling ends it. With the cancel flag set, the
     // very first instruction-hook firing aborts it; the hook's error is the
-    // raw cancellation message, which the VM classifies as an
-    // `Interrupted` failure once the flag is observed set.
+    // raw cancellation message, which the VM classifies as a
+    // `Canceled` failure once the flag is observed set.
     let program = LuaProgram::compile(
         "local n = 0\nwhile true do n = n + 1 end",
         "prompt",
@@ -35,20 +35,20 @@ fn long_running_lua_block_cancels_cooperatively() {
     let outcome = func.call::<()>(());
 
     assert!(
-        hook.is_cancelled(),
+        hook.is_canceled(),
         "the hook reports the installed flag as set"
     );
     let raw = outcome
-        .expect_err("a cancelled loop cannot finish")
+        .expect_err("a canceled loop cannot finish")
         .to_string();
     assert!(
-        raw.contains("lua execution cancelled"),
+        raw.contains("lua execution canceled"),
         "the hook aborts the chunk under the cancel flag, got {raw}"
     );
 }
 
 #[test]
-fn a_pre_cancelled_run_aborts_a_tight_loop_promptly() {
+fn a_pre_canceled_run_aborts_a_tight_loop_promptly() {
     use runvil_types::cancel::CancelHandle;
 
     // No instruction ceiling aborts a runaway block; the cancel flag,
@@ -64,15 +64,15 @@ fn a_pre_cancelled_run_aborts_a_tight_loop_promptly() {
 
     vm.teardown();
     assert!(
-        outcome.as_ref().err() == Some(&crate::interrupted()),
-        "expected Interrupted, got {outcome:?}"
+        outcome.as_ref().err() == Some(&Error::canceled()),
+        "expected Canceled, got {outcome:?}"
     );
 }
 
 /// Starts `source` as a block coroutine on a shim VM whose run is already
-/// cancelled.
+/// canceled.
 #[track_caller]
-fn start_cancelled_block(source: &str) -> Result<CoroStep> {
+fn start_canceled_block(source: &str) -> Result<CoroStep> {
     let handle = runvil_types::cancel::CancelHandle::new();
     handle.cancel();
     let vm = TestVm::new().shims().build();
@@ -81,22 +81,21 @@ fn start_cancelled_block(source: &str) -> Result<CoroStep> {
 }
 
 #[test]
-fn a_cancelled_run_unwinds_through_an_author_pcall_loop() {
-    let outcome =
-        start_cancelled_block("while true do pcall(function() while true do end end) end");
+fn a_canceled_run_unwinds_through_an_author_pcall_loop() {
+    let outcome = start_canceled_block("while true do pcall(function() while true do end end) end");
     assert!(
-        outcome.as_ref().err() == Some(&crate::interrupted()),
+        outcome.as_ref().err() == Some(&Error::canceled()),
         "an author pcall must not swallow cancellation, got {outcome:?}"
     );
 }
 
 #[test]
-fn a_cancelled_run_unwinds_through_an_author_xpcall_loop() {
-    let outcome = start_cancelled_block(
+fn a_canceled_run_unwinds_through_an_author_xpcall_loop() {
+    let outcome = start_canceled_block(
         "while true do xpcall(function() while true do end end, function(e) return e end) end",
     );
     assert!(
-        outcome.as_ref().err() == Some(&crate::interrupted()),
+        outcome.as_ref().err() == Some(&Error::canceled()),
         "an author xpcall with a message handler must not swallow cancellation, got {outcome:?}"
     );
 }
@@ -117,12 +116,12 @@ fn a_pcall_failure_without_a_cancel_flag_still_returns_false_and_the_error() {
 }
 
 #[test]
-fn a_cancelled_run_skips_a_looping_xpcall_message_handler() {
-    let outcome = start_cancelled_block(
+fn a_canceled_run_skips_a_looping_xpcall_message_handler() {
+    let outcome = start_canceled_block(
         "xpcall(function() while true do end end, function() while true do end end)",
     );
     assert!(
-        outcome.as_ref().err() == Some(&crate::interrupted()),
+        outcome.as_ref().err() == Some(&Error::canceled()),
         "a message handler must not run under cancellation, got {outcome:?}"
     );
 }

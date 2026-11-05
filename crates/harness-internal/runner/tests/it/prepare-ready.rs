@@ -5,7 +5,7 @@
 //! offering it raises its reason, an undeclared third-party Pack that
 //! never gets ready holds no run up, a built Pack with no tools still
 //! reaches the prompt's Lua, a cancel during the wait ends the run as
-//! cancelled in both the report and the record, even when the run's first
+//! canceled in both the report and the record, even when the run's first
 //! step would refuse it, a cancel that lands while a refusal is recorded
 //! leaves the report holding what the record holds, and a Pack that keeps
 //! the default `ready` serves as before.
@@ -360,7 +360,7 @@ async fn an_undeclared_builtin_with_no_tools_has_an_object_the_prompt_can_offer(
 }
 
 #[tokio::test]
-async fn a_cancel_while_a_declared_pack_is_still_starting_ends_the_run_cancelled_in_report_and_record()
+async fn a_cancel_while_a_declared_pack_is_still_starting_ends_the_run_canceled_in_report_and_record()
  {
     let (host, _moves, startup) = slow_host(Phase::Starting);
     let recorder = recorder();
@@ -381,7 +381,7 @@ async fn a_cancel_while_a_declared_pack_is_still_starting_ends_the_run_cancelled
     .await
     .expect("the cancel ends the wait");
 
-    let report = report.expect("a cancelled run is reported");
+    let report = report.expect("a canceled run is reported");
     assert_eq!(report.outcome, RunOutcome::Cancelled);
     crate::support::assert_not_completed(&report.output);
     assert_eq!(
@@ -392,7 +392,7 @@ async fn a_cancel_while_a_declared_pack_is_still_starting_ends_the_run_cancelled
 }
 
 #[tokio::test]
-async fn a_refusal_after_a_cancel_cut_the_wait_short_ends_the_run_cancelled_with_no_run_events() {
+async fn a_refusal_after_a_cancel_cut_the_wait_short_ends_the_run_canceled_with_no_run_events() {
     let (host, _moves, startup) = slow_host(Phase::Starting);
     let recorder = recorder();
     let harness = Harness::new(
@@ -414,7 +414,7 @@ async fn a_refusal_after_a_cancel_cut_the_wait_short_ends_the_run_cancelled_with
     .await
     .expect("the cancel ends the wait");
 
-    let report = report.expect("a cancelled run is reported");
+    let report = report.expect("a canceled run is reported");
     assert_eq!(
         report.outcome,
         RunOutcome::Cancelled,

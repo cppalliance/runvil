@@ -255,7 +255,7 @@ fn done_is_withheld_while_a_store_effect_is_outstanding_and_delivered_after_drop
         matches!(effect, Effect::Vfs { .. }),
         "the store call is one store effect: {effect:?}"
     );
-    // The run is cancelled while the store operation is out. The next step
+    // The run is canceled while the store operation is out. The next step
     // tears the run down and reports its end, but the effect still owes
     // its answer, so `Done` waits.
     cancel.cancel();
@@ -279,12 +279,12 @@ fn done_is_withheld_while_a_store_effect_is_outstanding_and_delivered_after_drop
     assert_eq!(
         outcome,
         RunOutcome::Cancelled,
-        "the cancelled run reports as cancelled"
+        "the canceled run reports as canceled"
     );
 }
 
 #[test]
-fn a_dropped_answer_resumes_a_waiting_chain_with_the_cancelled_error() {
+fn a_dropped_answer_resumes_a_waiting_chain_with_the_canceled_error() {
     let mut run = run_of("return store.exists('x')", run_params());
     let (id, effect) = only_effect(run.step());
     assert!(matches!(effect, Effect::Vfs { .. }));
@@ -296,7 +296,7 @@ fn a_dropped_answer_resumes_a_waiting_chain_with_the_cancelled_error() {
     assert_eq!(
         outcome,
         RunOutcome::Cancelled,
-        "the chain resumed with the cancelled error and the run reports it"
+        "the chain resumed with the canceled error and the run reports it"
     );
 }
 
@@ -417,7 +417,7 @@ fn params_without_a_caller_handle_share_their_one_flag_with_the_run() {
     let mut run = run_of("return 'x'", ctx);
     params_flag.cancel();
     let Step::Done { outcome, .. } = run.step() else {
-        panic!("the cancelled run has nothing outstanding");
+        panic!("the canceled run has nothing outstanding");
     };
     assert_eq!(
         outcome,

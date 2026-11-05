@@ -214,8 +214,8 @@ impl LuaProgram {
     /// mapping rewrote, of `file`, when it has no location yet, and the
     /// quota and the runtime failure get the author prose of the failure's
     /// own text. Cancellation is the VM's to classify: a chunk the
-    /// instruction hook aborted under the run's cancel flag is an
-    /// `Interrupted` failure before the raw error reaches here.
+    /// instruction hook aborted under the run's cancel flag is a
+    /// `Canceled` failure before the raw error reaches here.
     pub(crate) fn map_runtime_error_among(
         &self,
         error: &mlua::Error,

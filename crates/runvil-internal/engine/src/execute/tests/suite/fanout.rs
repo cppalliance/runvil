@@ -36,7 +36,7 @@ const WORKER_SECTION: &str = "Worker";
 
 /// Asserts the caller section started exactly two tasks, the worker section
 /// reported exactly two task successes, and no other task terminal (failed,
-/// cancelled, or abandoned) fired anywhere.
+/// canceled, or abandoned) fired anywhere.
 fn assert_two_arms_all_succeeded(records: &[Record]) {
     let events: Vec<(&str, &str)> = records
         .iter()
@@ -62,7 +62,7 @@ fn assert_two_arms_all_succeeded(records: &[Record]) {
     assert_eq!(
         events.len(),
         started + succeeded,
-        "each arm must pair one start with one success and emit no failed, cancelled, or abandoned event: {events:?}"
+        "each arm must pair one start with one success and emit no failed, canceled, or abandoned event: {events:?}"
     );
 }
 

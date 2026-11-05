@@ -25,8 +25,8 @@ pub(crate) use author::{
     prompt_file, set_call_line, set_prompt_file,
 };
 pub use universal::{
-    context_exhausted, internal_at, interrupted, lua_quota, lua_runtime, task_cancelled,
-    task_consumed, task_not_owned, tool_loop_exhausted,
+    context_exhausted, internal_at, lua_quota, lua_runtime, task_canceled, task_consumed,
+    task_not_owned, tool_loop_exhausted,
 };
 pub(crate) use universal::{lua_compile, tool};
 

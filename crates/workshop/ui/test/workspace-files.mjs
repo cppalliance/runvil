@@ -8,7 +8,7 @@
 // with a scripted fetch. Covers: the catalog wiring (the rows' ids and
 // labels: File > 2_open and 3_workspace, in the palette, no
 // always-false precondition, Duplicate with its ellipsis); a
-// cancelled picker performing no fetch; a successful open posting the
+// canceled picker performing no fetch; a successful open posting the
 // picked path to /workspace/file/open, firing the
 // runvil:workspace-changed invalidation, emitting the
 // runvil:workspace-opened Tauri event with the path, and recording
@@ -239,7 +239,7 @@ check("the contribution registers without a malformed descriptor", consoleErrors
   check("Duplicate Workspace reaches the command palette", palette.includes("workbench.action.duplicateWorkspace"));
 }
 
-// --- A cancelled picker performs no fetch -------------------------------------
+// --- A canceled picker performs no fetch --------------------------------------
 
 {
   window.__TAURI_DIALOG__.answer = null;
@@ -252,9 +252,9 @@ check("the contribution registers without a malformed descriptor", consoleErrors
     Array.isArray(pick?.filters) &&
       pick.filters.some((f) => f.name === "Runvil Workspace" && f.extensions.join(",") === "rvwork"),
   );
-  check("a cancelled picker performs no fetch", fetches.length === 0);
-  check("a cancelled picker emits nothing", window.__TAURI_EVENTS__.emitted.length === 0);
-  check("a cancelled picker records nothing", recentStore.list.length === 0);
+  check("a canceled picker performs no fetch", fetches.length === 0);
+  check("a canceled picker emits nothing", window.__TAURI_EVENTS__.emitted.length === 0);
+  check("a canceled picker records nothing", recentStore.list.length === 0);
 }
 
 // --- Success: post, invalidate, emit, record ----------------------------------
@@ -313,7 +313,7 @@ check("the contribution registers without a malformed descriptor", consoleErrors
   await Commands.execute("workbench.action.openWorkspace", 42);
   await flush();
   check("a run with a non-string argument still reaches the picker", window.__TAURI_DIALOG__.calls.length === picksBefore + 1);
-  check("a cancelled picker after a non-string argument posts nothing", postsSince(fetchesBefore).length === 0);
+  check("a canceled picker after a non-string argument posts nothing", postsSince(fetchesBefore).length === 0);
 
   await Commands.execute("workbench.action.openWorkspace");
   await flush();
@@ -433,10 +433,10 @@ check("the contribution registers without a malformed descriptor", consoleErrors
     Array.isArray(pick?.filters) &&
       pick.filters.some((f) => f.name === "Runvil Workspace" && f.extensions.join(",") === "rvwork"),
   );
-  check("a cancelled save picker posts nothing", postsSince(fetchesBefore).length === 0);
-  check("a cancelled save picker emits nothing", window.__TAURI_EVENTS__.emitted.length === emittedBefore);
-  check("a cancelled save picker records nothing", recentStore.list.length === recentBefore);
-  check("a cancelled save picker invalidates nothing", workspaceChanges === changesBefore);
+  check("a canceled save picker posts nothing", postsSince(fetchesBefore).length === 0);
+  check("a canceled save picker emits nothing", window.__TAURI_EVENTS__.emitted.length === emittedBefore);
+  check("a canceled save picker records nothing", recentStore.list.length === recentBefore);
+  check("a canceled save picker invalidates nothing", workspaceChanges === changesBefore);
 }
 
 // --- Save As: a bare name gains .rvwork once and switches ------------------------

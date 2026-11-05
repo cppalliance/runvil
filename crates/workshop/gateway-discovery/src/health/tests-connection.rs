@@ -204,16 +204,16 @@ fn an_unbounded_declared_body_is_rejected_without_draining() {
 
 #[test]
 fn cancellation_joins_a_real_slow_drip_probe_without_retrying() {
-    let listener = TcpListener::bind("127.0.0.1:0").expect("bind cancelled-drip fixture");
+    let listener = TcpListener::bind("127.0.0.1:0").expect("bind canceled-drip fixture");
     let address = listener
         .local_addr()
-        .expect("cancelled-drip address")
+        .expect("canceled-drip address")
         .to_string();
     let connections = Arc::new(AtomicUsize::new(0));
     let server_connections = Arc::clone(&connections);
     let (entered, blocked) = mpsc::channel();
     std::thread::spawn(move || {
-        let (mut stream, _) = listener.accept().expect("accept cancelled-drip probe");
+        let (mut stream, _) = listener.accept().expect("accept canceled-drip probe");
         server_connections.fetch_add(1, Ordering::SeqCst);
         let mut request = [0_u8; 1024];
         let _ = stream.read(&mut request);
@@ -244,7 +244,7 @@ fn cancellation_joins_a_real_slow_drip_probe_without_retrying() {
     cancellation.cancel();
     let result = worker.join().expect("the real probe worker joins");
 
-    assert_eq!(result, ConnectionProbe::Cancelled);
+    assert_eq!(result, ConnectionProbe::Canceled);
     assert!(
         started.elapsed() < Duration::from_millis(500),
         "the attempt deadline bounds joined cancellation during real I/O"
@@ -292,7 +292,7 @@ fn cancellation_at_validation_probe_start_prevents_the_probe() {
     cancellation.cancel();
     let result = worker.join().expect("validation worker joins");
 
-    assert_eq!(result, ConnectionProbe::Cancelled);
+    assert_eq!(result, ConnectionProbe::Canceled);
     assert_eq!(
         probes.load(Ordering::SeqCst),
         0,

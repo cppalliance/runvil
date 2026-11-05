@@ -167,7 +167,7 @@ fn a_model_only_tool_is_still_offerable_alone_and_with_its_pack() {
 }
 
 #[test]
-fn cancellation_interrupts_a_slow_script_tools_call() {
+fn cancellation_cancels_a_slow_script_tools_call() {
     let md = "---\nname: t\ndescription: d\nrunvil: 0\n---\n\n\
         # ToolCall\n\n\
         ## Only\n\n\
@@ -188,7 +188,7 @@ fn cancellation_interrupts_a_slow_script_tools_call() {
 
     assert!(
         matches!(trace.outcome(), RunOutcome::Cancelled),
-        "cancelling a suspended tools.call must interrupt the run, got {:?}",
+        "canceling a suspended tools.call must cancel the run, got {:?}",
         trace.outcome()
     );
     assert_eq!(

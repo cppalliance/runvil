@@ -4,11 +4,11 @@
 //! steps and from the Lua instruction hook rather than awaiting a
 //! cancellation; the caller sets that flag from whichever thread it likes.
 //! [`CancelHandle`] is that flag, arranged as a tree so a run-level cancel
-//! reaches every task while one task can be cancelled without touching its
+//! reaches every task while one task can be canceled without touching its
 //! siblings or its owner.
 //!
 //! This is the handle the Engine's `RunParams` holds. A caller that must
-//! wait on the flag itself awaits [`CancelHandle::cancelled`], a std-only
+//! wait on the flag itself awaits [`CancelHandle::canceled`], a std-only
 //! future the cancel itself wakes, in place of a timer that polls the flag.
 
 use std::fmt;
@@ -22,7 +22,7 @@ use std::task::{Context, Poll, Waker};
 #[path = "cancel-tests.rs"]
 mod tests;
 
-/// The source of each [`Cancelled`]'s registration key.
+/// The source of each [`Canceled`]'s registration key.
 static NEXT_WAITER: AtomicU64 = AtomicU64::new(0);
 
 /// A cloneable cancellation flag in a parent-child tree.
@@ -30,20 +30,20 @@ static NEXT_WAITER: AtomicU64 = AtomicU64::new(0);
 /// # Semantics
 ///
 /// - **Shared state.** [`Clone`] produces another handle over the *same*
-///   flag. Cancelling any clone cancels every clone.
+///   flag. Canceling any clone cancels every clone.
 /// - **Downward propagation.** [`child`](Self::child) mints a handle that
-///   reports cancelled when its own flag is set *or* any ancestor's is. A
+///   reports canceled when its own flag is set *or* any ancestor's is. A
 ///   child's cancel reaches only that child and its descendants. Children
-///   nest to any depth. A child minted after its parent is cancelled starts
-///   cancelled.
+///   nest to any depth. A child minted after its parent is canceled starts
+///   canceled.
 /// - **Idempotent and permanent.** Repeated calls to
 ///   [`cancel`](Self::cancel) have the effect of one, and once
-///   [`is_cancelled`](Self::is_cancelled) returns `true`, it always returns
+///   [`is_canceled`](Self::is_canceled) returns `true`, it always returns
 ///   `true`.
 /// - **Upward links.** A child holds its parent, and every link points
 ///   upward. The links form a tree, and dropping a handle just releases its
 ///   reference.
-/// - **Awaitable.** [`cancelled`](Self::cancelled) returns a future that
+/// - **Awaitable.** [`canceled`](Self::canceled) returns a future that
 ///   the cancel wakes, for a caller that waits on the flag alongside other
 ///   event sources. Checking the flag stays a plain read. Each waiter
 ///   stores one waker on every node up its chain. A cancel drops the
@@ -60,9 +60,9 @@ pub struct CancelHandle {
 /// One flag in the tree. `parent` is `None` at the root.
 #[derive(Default)]
 struct Node {
-    cancelled: AtomicBool,
+    canceled: AtomicBool,
     parent: Option<Arc<Node>>,
-    /// The wakers of the [`Cancelled`] futures waiting on this node or on
+    /// The wakers of the [`Canceled`] futures waiting on this node or on
     /// a descendant, one per waiter key: a waiter registers on every node
     /// up its chain, since a cancel anywhere on the chain completes it,
     /// and a node holds wakers (never handles), so the tree still has no
@@ -77,10 +77,10 @@ impl Node {
         std::iter::successors(Some(self), |node| node.parent.as_deref())
     }
 
-    fn is_cancelled(&self) -> bool {
+    fn is_canceled(&self) -> bool {
         let mut node = self;
         loop {
-            if node.cancelled.load(Ordering::Acquire) {
+            if node.canceled.load(Ordering::Acquire) {
                 return true;
             }
             match &node.parent {
@@ -118,23 +118,23 @@ impl Node {
     }
 }
 
-/// A future that completes when the handle it came from reports cancelled.
+/// A future that completes when the handle it came from reports canceled.
 ///
-/// Returned by [`CancelHandle::cancelled`]. The future is `Unpin` and owns
+/// Returned by [`CancelHandle::canceled`]. The future is `Unpin` and owns
 /// its handle, so the caller can hold it across awaits or select over it
 /// alongside other event sources. It waits for as long as the cancel takes,
 /// and the cancel that sets the flag is its one wake-up.
 #[derive(Debug)]
 #[must_use = "futures do nothing unless polled"]
-pub struct Cancelled {
+pub struct Canceled {
     waiter: Waiter,
 }
 
-/// A [`Cancelled`]'s handle and registration key. Dropping it removes the
+/// A [`Canceled`]'s handle and registration key. Dropping it removes the
 /// key's entries from every node up the chain.
 ///
-/// The `Drop` sits here rather than on `Cancelled` because a `Drop` impl
-/// on `Cancelled` would enter the facade's public API listing.
+/// The `Drop` sits here rather than on `Canceled` because a `Drop` impl
+/// on `Canceled` would enter the facade's public API listing.
 #[derive(Debug)]
 struct Waiter {
     handle: CancelHandle,
@@ -149,7 +149,7 @@ impl Drop for Waiter {
     }
 }
 
-impl Future for Cancelled {
+impl Future for Canceled {
     type Output = ();
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<()> {
@@ -159,7 +159,7 @@ impl Future for Cancelled {
         for node in waiter.handle.inner.chain() {
             node.register(waiter.key, cx.waker());
         }
-        if waiter.handle.is_cancelled() {
+        if waiter.handle.is_canceled() {
             Poll::Ready(())
         } else {
             Poll::Pending
@@ -177,30 +177,30 @@ impl CancelHandle {
         Self::default()
     }
 
-    /// Returns a new child handle that reports cancelled when this handle or
-    /// any ancestor is cancelled. A cancel on the child reaches only the
+    /// Returns a new child handle that reports canceled when this handle or
+    /// any ancestor is canceled. A cancel on the child reaches only the
     /// child and its descendants.
     ///
     /// The usual pattern gives a run the root handle and each task a child
-    /// from `root.child()`, so cancelling the run cancels every task.
+    /// from `root.child()`, so canceling the run cancels every task.
     #[must_use]
     pub fn child(&self) -> CancelHandle {
         CancelHandle {
             inner: Arc::new(Node {
-                cancelled: AtomicBool::new(false),
+                canceled: AtomicBool::new(false),
                 parent: Some(Arc::clone(&self.inner)),
                 wakers: Mutex::new(Vec::new()),
             }),
         }
     }
 
-    /// Marks this handle (and every clone and descendant) cancelled and
-    /// wakes every [`cancelled`](Self::cancelled) future waiting on it or
+    /// Marks this handle (and every clone and descendant) canceled and
+    /// wakes every [`canceled`](Self::canceled) future waiting on it or
     /// on a descendant.
     ///
     /// Idempotent and permanent.
     pub fn cancel(&self) {
-        self.inner.cancelled.store(true, Ordering::Release);
+        self.inner.canceled.store(true, Ordering::Release);
         let wakers = std::mem::take(
             &mut *self
                 .inner
@@ -213,13 +213,13 @@ impl CancelHandle {
         }
     }
 
-    /// Returns a future that completes when this handle reports cancelled.
+    /// Returns a future that completes when this handle reports canceled.
     ///
     /// The future is ready on its first poll if the handle is already
-    /// cancelled. Otherwise it completes when a cancel lands on this handle
+    /// canceled. Otherwise it completes when a cancel lands on this handle
     /// or on an ancestor, and that cancel wakes it.
-    pub fn cancelled(&self) -> Cancelled {
-        Cancelled {
+    pub fn canceled(&self) -> Canceled {
+        Canceled {
             waiter: Waiter {
                 handle: self.clone(),
                 key: NEXT_WAITER.fetch_add(1, Ordering::Relaxed),
@@ -233,8 +233,8 @@ impl CancelHandle {
     /// Monotonic: once it returns `true`, it returns `true` on every later
     /// call.
     #[must_use]
-    pub fn is_cancelled(&self) -> bool {
-        self.inner.is_cancelled()
+    pub fn is_canceled(&self) -> bool {
+        self.inner.is_canceled()
     }
 }
 
@@ -247,7 +247,7 @@ impl fmt::Debug for CancelHandle {
             node = parent;
         }
         f.debug_struct("CancelHandle")
-            .field("cancelled", &self.is_cancelled())
+            .field("canceled", &self.is_canceled())
             .field("depth", &depth)
             .finish()
     }

@@ -143,7 +143,7 @@ pub(crate) async fn next_wait_token(socket: &mut JsonSocket) -> String {
         .recv_until(Duration::from_secs(10), |frame| {
             assert_ne!(
                 frame["type"], "error",
-                "no error frame may interrupt: {frame}"
+                "no error frame may come between: {frame}"
             );
             frame["type"] == "input_required"
         })
@@ -197,7 +197,7 @@ pub(crate) async fn collect_turn(socket: &mut JsonSocket) -> Turn {
                         .expect("the wait announces its token")
                         .to_owned(),
                 ),
-                Some("error") => panic!("no error frame may interrupt a turn: {frame}"),
+                Some("error") => panic!("no error frame may come between a turn's frames: {frame}"),
                 // Status frames interleave freely.
                 _ => {}
             }

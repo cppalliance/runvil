@@ -17,7 +17,7 @@ use crate::websocket::send_frame;
 pub(super) fn input_frame(frame: WaitFrame) -> InputFrame {
     match frame {
         WaitFrame::Required { token } => InputFrame::Required { token },
-        WaitFrame::Cancelled { token } => InputFrame::Cancelled { token },
+        WaitFrame::Canceled { token } => InputFrame::Canceled { token },
     }
 }
 

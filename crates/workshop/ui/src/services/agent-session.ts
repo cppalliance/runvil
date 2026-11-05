@@ -36,7 +36,7 @@ export interface AgentSessionWire {
   readonly onEvent: Event<AgentEventFrame>;
   readonly onDelta: Event<AgentDeltaFrame>;
   readonly onInputRequired: Event<string>;
-  readonly onInputCancelled: Event<string>;
+  readonly onInputCanceled: Event<string>;
   readonly onError: Event<string>;
   /** Fires when the socket drops; the socket reconnects on its own. */
   readonly onDisconnect: Event<void>;
@@ -149,7 +149,7 @@ type StreamKind = "reply" | "reasoning";
 /** The title and message of the local failure a send on a down socket folds. */
 const CONNECTION_FAILED_TITLE = "Connection failed";
 const CONNECTION_FAILED_MESSAGE =
-  "The connection was interrupted. Please check your network connection and try again.";
+  "The connection was lost. Please check your network connection and try again.";
 
 /**
  * Parses a `tool_call` event's content - the JSON array of the batch's
@@ -288,7 +288,7 @@ export class AgentSessionService extends Disposable {
       }),
     );
     this._register(
-      wire.onInputCancelled((token) => {
+      wire.onInputCanceled((token) => {
         // Only the announced wait dies, wherever it sits; the oldest
         // wait still open keeps or takes the pin.
         this.openWaits = this.openWaits.filter((open) => open !== token);

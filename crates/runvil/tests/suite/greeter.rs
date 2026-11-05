@@ -62,7 +62,7 @@ fn trusted_tool_output_reaches_the_calling_lua_unchanged() -> TestResult {
 }
 
 #[test]
-fn a_cancel_from_another_thread_ends_the_run_cancelled_once_held_effects_drop() -> TestResult {
+fn a_cancel_from_another_thread_ends_the_run_canceled_once_held_effects_drop() -> TestResult {
     let cancel = CancelHandle::new();
     let handed = cancel.clone();
     let mut driver = Scenario::tool(shout(), [])
@@ -73,7 +73,7 @@ fn a_cancel_from_another_thread_ends_the_run_cancelled_once_held_effects_drop() 
 
     std::thread::spawn(move || cancel.cancel())
         .join()
-        .map_err(|_| "the cancelling thread panicked")?;
+        .map_err(|_| "the canceling thread panicked")?;
 
     assert!(
         driver.pump()? == 0 && driver.held() == 0,

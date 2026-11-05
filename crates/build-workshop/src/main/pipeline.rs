@@ -5,8 +5,8 @@ use std::io;
 use std::path::PathBuf;
 
 use super::{
-    BuildEnvironment, BuildError, BuildRequest, CommandRunner, CommandSpec,
-    GATEWAY_SIDECAR_VARIABLE, InterruptPolicy, OutputMode, Profile, StepError, valid_target_triple,
+    BuildEnvironment, BuildError, BuildRequest, CancelPolicy, CommandRunner, CommandSpec,
+    GATEWAY_SIDECAR_VARIABLE, OutputMode, Profile, StepError, valid_target_triple,
 };
 
 /// Where the staged Gateway sidecar comes from this run.
@@ -59,7 +59,7 @@ pub(super) fn build_workshop(
         &mut staging_started,
     );
     let mut primary = match primary {
-        Err(error) if error.interrupted && !staging_started => {
+        Err(error) if error.canceled && !staging_started => {
             return Err(BuildError {
                 primary: error.message,
                 cleanup: None,
@@ -67,10 +67,10 @@ pub(super) fn build_workshop(
         }
         result => result,
     };
-    if primary.is_ok() && runner.interruption_observed() {
+    if primary.is_ok() && runner.cancel_observed() {
         primary = Err(StepError {
-            message: "Workshop build interrupted after child completion".to_owned(),
-            interrupted: true,
+            message: "Workshop build canceled after child completion".to_owned(),
+            canceled: true,
             command_started: true,
         });
     }
@@ -87,14 +87,14 @@ pub(super) fn build_workshop(
             runner,
             &sidecar_command(environment, "remove", &target, None),
             "Gateway sidecar cleanup",
-            InterruptPolicy::AllowExisting,
+            CancelPolicy::AllowExisting,
         )
         .map(|_| ())
     };
-    if primary.is_ok() && cleanup.is_ok() && runner.interruption_observed() {
+    if primary.is_ok() && cleanup.is_ok() && runner.cancel_observed() {
         primary = Err(StepError {
-            message: "Workshop build interrupted after child completion".to_owned(),
-            interrupted: true,
+            message: "Workshop build canceled after child completion".to_owned(),
+            canceled: true,
             command_started: true,
         });
     }
@@ -183,7 +183,7 @@ fn discover_host_target(
             output_mode: OutputMode::Capture,
         },
         "Cargo host discovery",
-        InterruptPolicy::RejectExisting,
+        CancelPolicy::RejectExisting,
     )?;
     output
         .lines()
@@ -192,7 +192,7 @@ fn discover_host_target(
         .map(str::to_owned)
         .ok_or_else(|| StepError {
             message: "Cargo host triple was absent or malformed in `cargo -vV` output".to_owned(),
-            interrupted: false,
+            canceled: false,
             command_started: true,
         })
 }
@@ -217,7 +217,7 @@ fn build_products(
                      `node tools/fetch-gateway-sidecar.mjs --target {target}` to stage the release \
                      gateway-pin/pin.json names, or pass --gateway-binary"
                 ),
-                interrupted: false,
+                canceled: false,
                 command_started: false,
             });
         }
@@ -227,7 +227,7 @@ fn build_products(
         runner,
         &sidecar_command(environment, "stage", target, Some(staged_source)),
         "Gateway sidecar staging",
-        InterruptPolicy::RejectExisting,
+        CancelPolicy::RejectExisting,
     ) {
         Ok(_) => *staging_started = true,
         Err(error) => {
@@ -259,7 +259,7 @@ fn build_workshop_product(
         runner,
         &cargo_command(environment, request, "workshop", env),
         "Workshop build",
-        InterruptPolicy::RejectExisting,
+        CancelPolicy::RejectExisting,
     )?;
     Ok(())
 }
@@ -329,21 +329,21 @@ fn run_checked(
     runner: &mut impl CommandRunner,
     command: &CommandSpec,
     label: &str,
-    interrupt_policy: InterruptPolicy,
+    cancel_policy: CancelPolicy,
 ) -> Result<String, StepError> {
-    let result = runner.run(command, interrupt_policy);
+    let result = runner.run(command, cancel_policy);
     let command_started = runner.last_command_started();
     let result = result.map_err(|error| {
         if error.kind() == io::ErrorKind::Interrupted {
             StepError {
-                message: format!("{label} interrupted: {error}"),
-                interrupted: true,
+                message: format!("{label} canceled: {error}"),
+                canceled: true,
                 command_started,
             }
         } else {
             StepError {
                 message: format!("{label} could not start: {error}"),
-                interrupted: false,
+                canceled: false,
                 command_started,
             }
         }
@@ -358,7 +358,7 @@ fn run_checked(
     };
     Err(StepError {
         message: format!("{label} failed{detail}"),
-        interrupted: false,
+        canceled: false,
         command_started,
     })
 }

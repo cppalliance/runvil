@@ -32,7 +32,7 @@ fn a_task_refusal_renders_its_kind_and_its_task_field() {
     for (code, kind) in [
         (ErrorCode::TaskNotOwned, ErrorKind::TaskNotOwned),
         (ErrorCode::TaskConsumed, ErrorKind::TaskConsumed),
-        (ErrorCode::TaskCancelled, ErrorKind::Cancelled),
+        (ErrorCode::TaskCanceled, ErrorKind::Canceled),
     ] {
         let refusal = error(code, &[(FactKey::Task, Value::from("1.2"))]);
         assert_eq!(
@@ -41,10 +41,10 @@ fn a_task_refusal_renders_its_kind_and_its_task_field() {
             "{code:?}"
         );
     }
-    let interrupted = error(ErrorCode::Interrupted, &[]);
+    let canceled = error(ErrorCode::Canceled, &[]);
     assert_eq!(
-        rendered(&interrupted),
-        (ErrorKind::Cancelled, "the prose".to_owned(), Vec::new())
+        rendered(&canceled),
+        (ErrorKind::Canceled, "the prose".to_owned(), Vec::new())
     );
 }
 

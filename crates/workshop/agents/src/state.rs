@@ -13,10 +13,10 @@ pub enum SessionState {
 }
 
 impl SessionState {
-    /// The state after a close is requested. A closed conversation stays
-    /// closed: a late request has nothing left to interrupt.
+    /// The state after a close cancels the session. A closed conversation
+    /// stays closed: it has nothing left to cancel.
     #[must_use]
-    pub fn interrupted(self) -> Self {
+    pub fn canceled(self) -> Self {
         match self {
             Self::Alive | Self::Closing => Self::Closing,
             Self::Closed => Self::Closed,
@@ -47,9 +47,9 @@ pub enum FailureKind {
     ToolCallFailed,
     /// The run itself ended in error.
     RunFailed,
-    /// The run ended cancelled: a close, or a stop the program did not
+    /// The run ended canceled: a close, or a stop the program did not
     /// catch, cut it short before it finished on its own.
-    Interrupted,
+    Canceled,
 }
 
 /// One operator-facing failure report: the kind is the fact code acts
@@ -86,12 +86,8 @@ mod tests {
                 SessionState::Closed,
             ),
         ];
-        for (start, after_interrupt, after_done) in cases {
-            assert_eq!(
-                start.interrupted(),
-                after_interrupt,
-                "{start:?} interrupted"
-            );
+        for (start, after_cancel, after_done) in cases {
+            assert_eq!(start.canceled(), after_cancel, "{start:?} canceled");
             assert_eq!(start.done(), after_done, "{start:?} done");
         }
     }

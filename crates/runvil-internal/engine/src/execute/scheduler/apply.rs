@@ -11,9 +11,9 @@
 //! operation's outcome. A timer's firing completes its
 //! entry and wakes the waiter instead of resuming a chain, and a render's
 //! answer freezes the section entry's sets and dispatches the round that
-//! issued it. A `Dropped` answer resumes the chain with the cancelled
+//! issued it. A `Dropped` answer resumes the chain with the canceled
 //! error, whatever it was parked on; for a render, that is the round's
-//! cancelled answer. A tool call's answer, of either kind, also ends the
+//! canceled answer. A tool call's answer, of either kind, also ends the
 //! call's identity: what the tool did is joined back into the chain, and
 //! the call's access refuses every later operation.
 
@@ -96,7 +96,7 @@ impl Scheduler {
     /// once the whole batch has landed. A timer's firing completes its entry
     /// and wakes its waiter instead, and a render's answer is applied by
     /// [`ChainOps::accept_render`]. A `Dropped` answer is the caller
-    /// giving the effect up: the chain resumes with the cancelled error.
+    /// giving the effect up: the chain resumes with the canceled error.
     /// Every answer to a tool call, `Dropped` included, first ends the
     /// call's identity through [`Scheduler::end_tool_call`], so whatever
     /// the tool did happens before the chain's next step and nothing it
@@ -128,7 +128,7 @@ impl Scheduler {
         };
         let answer = match (resume, answer) {
             (Continuation::Timer(task), EffectAnswer::Dropped) => return self.drop_timer(&task),
-            (_, EffectAnswer::Dropped) => Err(error::interrupted()),
+            (_, EffectAnswer::Dropped) => Err(Error::canceled()),
             (Continuation::Infer(round), EffectAnswer::Chat(result)) => self
                 .with_chain(chain, |ops| ops.accept_infer(round, result))
                 .map(Answer::Infer),
@@ -214,10 +214,10 @@ impl Scheduler {
         detail::end_access(scope, owner, exec);
     }
 
-    /// Applies a dropped timer: `task`'s entry moves to `Cancelled`. While
+    /// Applies a dropped timer: `task`'s entry moves to `Canceled`. While
     /// the run's cancel flag is clear, the caller gave up the timeout and
     /// the run goes on, so the chain parked on the timer leaves its wait
-    /// with the cancelled error, as a dropped `Chat` or `ToolCall` does: a
+    /// with the canceled error, as a dropped `Chat` or `ToolCall` does: a
     /// timed `tasks.join` or `tasks.join_any` raises it. A timer whose
     /// entry isn't live, or that nothing waits on, is dropped silently.
     /// Under a run cancel the drop wakes no one, since the cancel tears
@@ -226,13 +226,13 @@ impl Scheduler {
         let Some(owner) = self.tasks.owner_of(task) else {
             return Ok(());
         };
-        if self.tasks.stop(task, Stop::Cancelled).is_none() {
+        if self.tasks.stop(task, Stop::Canceled).is_none() {
             return Ok(());
         }
-        if self.ctx.cancel().is_cancelled() || !self.chains[owner].end_wait_for(task) {
+        if self.ctx.cancel().is_canceled() || !self.chains[owner].end_wait_for(task) {
             return Ok(());
         }
-        self.wake_from_wait(owner, Err(error::interrupted()))
+        self.wake_from_wait(owner, Err(Error::canceled()))
     }
 }
 

@@ -134,7 +134,7 @@ impl mlua::UserData for ChatResult {}
 ///
 /// `outcome` is the task's final text, or its failure as the error value
 /// the shim hands back (`ok = false`): the task chain's own error, or the
-/// `cancelled` value for a task its owner cancelled (an abandoned task is
+/// `canceled` value for a task its owner canceled (an abandoned task is
 /// never delivered, since its owner has ended). The delivery itself
 /// succeeded; a wait that fails outright (a task the caller does not own,
 /// a result already delivered) fails the request instead, with no
@@ -166,21 +166,21 @@ pub enum TaskPhase {
         /// Whether the task returned rather than failed.
         ok: bool,
     },
-    /// The owner cancelled the task.
-    Cancelled,
+    /// The owner canceled the task.
+    Canceled,
     /// The task's owner ended while the task was live.
     Abandoned,
 }
 
 impl TaskPhase {
-    /// The tag `tasks.status` reports: `running`, `done`, `cancelled`, or
+    /// The tag `tasks.status` reports: `running`, `done`, `canceled`, or
     /// `abandoned`.
     #[must_use]
     pub(crate) fn tag(&self) -> &'static str {
         match self {
             TaskPhase::Running { .. } => "running",
             TaskPhase::Done { .. } => "done",
-            TaskPhase::Cancelled => "cancelled",
+            TaskPhase::Canceled => "canceled",
             TaskPhase::Abandoned => "abandoned",
         }
     }

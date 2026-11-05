@@ -11,7 +11,7 @@ use super::super::tests::every_store_failure;
 use super::super::{error_table, install_error_value, retained_error};
 use super::raised_from;
 use crate::error::{
-    QuotaResource, context_exhausted, internal, lua_quota, lua_runtime, task_cancelled,
+    QuotaResource, context_exhausted, internal, lua_quota, lua_runtime, task_canceled,
     task_consumed, task_not_owned, tool, tool_loop_exhausted,
 };
 
@@ -44,7 +44,7 @@ fn located_by_their_fields() -> Vec<Error> {
         ),
         task_not_owned(&task("0.4")),
         task_consumed(&task("0.5")),
-        task_cancelled(&task("0.6")),
+        task_canceled(&task("0.6")),
         lua_runtime("a refused edit"),
         tool_loop_exhausted(),
     ];
@@ -148,8 +148,8 @@ fn a_shim_built_table_gets_the_code_its_kind_gives_unless_its_fields_name_one() 
     for (kind, fields, code) in [
         ("lua", vec![("message", "x")], ErrorCode::LuaRuntime),
         ("store", vec![("reason", "not_found")], ErrorCode::NotFound),
-        ("cancelled", vec![("task", "0.1")], ErrorCode::TaskCancelled),
-        ("cancelled", vec![], ErrorCode::Interrupted),
+        ("canceled", vec![("task", "0.1")], ErrorCode::TaskCanceled),
+        ("canceled", vec![], ErrorCode::Canceled),
         ("tool_loop_exhausted", vec![], ErrorCode::ToolLoopExhausted),
         ("lua", vec![("code", "lua_quota")], ErrorCode::LuaQuota),
     ] {
@@ -180,9 +180,9 @@ fn a_table_with_no_usable_code_reads_back_as_the_failure_its_kind_names() {
         ),
         ("context_exhausted", vec![], ErrorCode::LuaRuntime),
         (
-            "cancelled",
+            "canceled",
             vec![("task", "not a task")],
-            ErrorCode::Interrupted,
+            ErrorCode::Canceled,
         ),
         (
             "task_consumed",
@@ -203,12 +203,12 @@ fn a_table_with_no_usable_code_reads_back_as_the_failure_its_kind_names() {
             .expect("the code field sets");
         assert_eq!(read_back(&lua, &table).code, code, "{kind} {fields:?}");
     }
-    let table = shim_table(&lua, "cancelled", &[("task", "0.1"), ("message", "gone")]);
+    let table = shim_table(&lua, "canceled", &[("task", "0.1"), ("message", "gone")]);
     table
         .raw_set("code", Value::Nil)
         .expect("the code field clears");
     let back = read_back(&lua, &table);
-    assert_eq!(back.code, ErrorCode::TaskCancelled);
+    assert_eq!(back.code, ErrorCode::TaskCanceled);
     assert_eq!(back.facts.get(&FactKey::Task), Some(&"0.1".into()));
     assert_eq!(back.message, "gone");
 }

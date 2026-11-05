@@ -1,4 +1,4 @@
-//! What a fanout arm runs with and hands back: a pre-cancelled fanout, an
+//! What a fanout arm runs with and hands back: a pre-canceled fanout, an
 //! arm infer with no model binding, a library the arm requires seeing
 //! `item`, jumps from an arm into child walks, a hash collection in sorted
 //! key order, and sealed results.
@@ -6,9 +6,9 @@
 use super::*;
 
 #[test]
-fn pre_cancelled_fanout_returns_interrupted() {
-    // A fanout entered under an already-cancelled handle fails the run with
-    // an interruption instead of running the arms.
+fn pre_canceled_fanout_returns_canceled() {
+    // A fanout entered under an already-canceled handle cancels the run
+    // instead of running the arms.
     let md = "---\nname: t\ndescription: d\nrunvil: 0\n---\n\n\
         # Fanout\n\n\
         ## Parent\n\n\
@@ -23,7 +23,7 @@ fn pre_cancelled_fanout_returns_interrupted() {
     let trace = driving.finish();
     assert!(
         matches!(trace.outcome(), RunOutcome::Cancelled),
-        "a pre-cancelled fanout must interrupt the run, got {:?}",
+        "a pre-canceled fanout must cancel the run, got {:?}",
         trace.outcome()
     );
 }

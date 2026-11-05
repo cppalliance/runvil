@@ -144,7 +144,7 @@ pub(crate) fn report_output(
     })
 }
 
-/// The output failure of a run that failed or was cancelled, possibly
+/// The output failure of a run that failed or was canceled, possibly
 /// before it began: `NoOutput` with the `Reason` fact `not_completed`.
 pub(crate) fn not_completed() -> Error {
     reasoned(

@@ -131,8 +131,8 @@ async fn reconnect_replays_the_log_and_resends_the_pending_wait() {
 }
 
 /// Collects one turn as [`collect_turn`] does, refusing any
-/// `input_cancelled` frame on the way.
-async fn collect_turn_with_no_cancelled_wait(socket: &mut JsonSocket) -> Turn {
+/// `input_canceled` frame on the way.
+async fn collect_turn_with_no_canceled_wait(socket: &mut JsonSocket) -> Turn {
     let mut deltas = Vec::new();
     let mut events = Vec::new();
     let mut waits = Vec::new();
@@ -154,7 +154,7 @@ async fn collect_turn_with_no_cancelled_wait(socket: &mut JsonSocket) -> Turn {
                         .expect("the wait announces its token")
                         .to_owned(),
                 ),
-                Some("input_cancelled") => panic!("a stop cancels no question: {frame}"),
+                Some("input_canceled") => panic!("a stop cancels no question: {frame}"),
                 Some("error") => panic!("a stop is never an error: {frame}"),
                 _ => {}
             }
@@ -191,7 +191,7 @@ async fn a_cancel_with_only_a_question_open_leaves_it_open_and_its_token_still_a
     // The original token still answers the question the stop left open,
     // and the turn it starts is a full one.
     answer(&mut socket, &token, "after cancel").await;
-    let turn = collect_turn_with_no_cancelled_wait(&mut socket).await;
+    let turn = collect_turn_with_no_canceled_wait(&mut socket).await;
     assert_eq!(
         delta_text(&turn),
         "echo:after cancel",
@@ -216,7 +216,7 @@ async fn a_stop_keeps_the_conversations_one_run_while_transcript_indices_continu
     let open = wait_after(&mut socket, &first).await;
     socket.send_json(&json!({ "type": "cancel" })).await;
     answer(&mut socket, &open, "pong").await;
-    let second = collect_turn_with_no_cancelled_wait(&mut socket).await;
+    let second = collect_turn_with_no_canceled_wait(&mut socket).await;
 
     assert_eq!(delta_text(&second), "echo:pong");
     let indices: Vec<u64> = first

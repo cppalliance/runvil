@@ -4,7 +4,7 @@
 // are desktop-only rows (precondition !isWeb): their pickers are the
 // native Tauri dialogs. Open Folder and Add Folder to Workspace share
 // the tree's Add Folder flow, which falls back to a typed-path dialog in
-// a plain browser. A cancelled picker is always a no-op.
+// a plain browser. A canceled picker is always a no-op.
 
 import { open, save } from "@tauri-apps/plugin-dialog";
 

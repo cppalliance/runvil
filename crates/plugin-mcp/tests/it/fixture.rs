@@ -35,7 +35,7 @@ pub(crate) struct Recorded {
     /// Every JSON-RPC message, requests and notifications, in order.
     pub(crate) seen: Vec<Seen>,
     /// The `params` of each `notifications/cancelled`.
-    pub(crate) cancelled: Vec<Value>,
+    pub(crate) canceled: Vec<Value>,
     /// The JSON-RPC id of the `hang` call.
     pub(crate) hang_id: Option<Value>,
     /// How many `DELETE` requests ended a session.
@@ -176,7 +176,7 @@ async fn post_mcp(State(shared): State<Arc<Shared>>, headers: HeaderMap, body: B
                 .recorded
                 .lock()
                 .expect("lock")
-                .cancelled
+                .canceled
                 .push(message["params"].clone());
             shared.cancel_arrived.notify_one();
         }

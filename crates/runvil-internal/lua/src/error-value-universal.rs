@@ -14,8 +14,8 @@ use super::{ErrorField, ErrorKind};
 /// `model_failure`, or `empty_model_reply` for an empty reply, and a round
 /// with no model is `model_required`; every Lua-phase failure, an exhausted
 /// quota and the call-depth cap included, is `lua`; a store operation's own
-/// failure is `store`; a cancelled task's delivery is `cancelled`, as an
-/// interruption is; and a failure outside the prompt the author cannot act
+/// failure is `store`; a canceled task's delivery is `canceled`, as any
+/// other cancel is; and a failure outside the prompt the author cannot act
 /// on (a parse failure, a failed tool freeze, a refused requirement, a
 /// determinism violation, an internal fault) is `internal`.
 fn kind_of(code: ErrorCode) -> ErrorKind {
@@ -40,7 +40,7 @@ fn kind_of(code: ErrorCode) -> ErrorKind {
         | ErrorCode::Unavailable
         | ErrorCode::InvalidParts => ErrorKind::ModelFailure,
         ErrorCode::ModelRequired => ErrorKind::ModelRequired,
-        ErrorCode::Interrupted | ErrorCode::TaskCancelled => ErrorKind::Cancelled,
+        ErrorCode::Canceled | ErrorCode::TaskCanceled => ErrorKind::Canceled,
         ErrorCode::ToolLoopExhausted => ErrorKind::ToolLoopExhausted,
         ErrorCode::TasksLive => ErrorKind::TasksLive,
         ErrorCode::TaskNotOwned => ErrorKind::TaskNotOwned,
@@ -100,7 +100,7 @@ fn string_fact(code: ErrorCode) -> Option<(&'static str, FactKey)> {
         ErrorCode::OutOfScopeTool | ErrorCode::UnboundTool | ErrorCode::ModelOnlyTool => {
             Some(("name", FactKey::Name))
         }
-        ErrorCode::TaskNotOwned | ErrorCode::TaskConsumed | ErrorCode::TaskCancelled => {
+        ErrorCode::TaskNotOwned | ErrorCode::TaskConsumed | ErrorCode::TaskCanceled => {
             Some(("task", FactKey::Task))
         }
         _ => None,
@@ -143,7 +143,7 @@ pub fn error_kind(error: &Error) -> ErrorKind {
 /// `kind`, `code`, and `message`, from its facts: `reason` for context exhaustion,
 /// `finish_reason` for an empty reply when the backend gave one, `name` for
 /// a refused tool call, `tasks` for leaked tasks, `task` for a task
-/// operation's refusal or a cancelled task's delivery, and a store
+/// operation's refusal or a canceled task's delivery, and a store
 /// failure's `reason` and fields. Every other code's table has no fields,
 /// whatever facts it holds.
 #[must_use]

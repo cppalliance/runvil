@@ -84,7 +84,7 @@ macro_rules! task_lifecycle_variants {
             | Event::TaskStarted { .. }
             | Event::TaskSucceeded { .. }
             | Event::TaskFailed { .. }
-            | Event::TaskCancelled { .. }
+            | Event::TaskCanceled { .. }
             | Event::TaskAbandoned { .. }
     };
 }
@@ -244,12 +244,12 @@ fn forward_task(event: Event, observer: &dyn Observer) {
             task,
             ..
         } => observer.observe(&execution, &section, Observation::TaskFailed { task }),
-        Event::TaskCancelled {
+        Event::TaskCanceled {
             execution,
             section,
             task,
             ..
-        } => observer.observe(&execution, &section, Observation::TaskCancelled { task }),
+        } => observer.observe(&execution, &section, Observation::TaskCanceled { task }),
         Event::TaskAbandoned {
             execution,
             section,

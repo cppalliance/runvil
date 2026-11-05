@@ -46,14 +46,14 @@
 //! `runvil/user-input` Pack, whose `input.ask()` waits on the
 //! session. Three frames make up that conversation: the server
 //! pushes [`InputFrame::Required`] when a wait opens and
-//! [`InputFrame::Cancelled`] when one dies unresolved, and the client
+//! [`InputFrame::Canceled`] when one dies unresolved, and the client
 //! answers with an `input_response` frame parsed as [`InputResponse`].
 //! Both pushed frames are durable: the wait registry retains every
 //! unresolved wait and the session resends it on reconnect, so a push
 //! lost to a dead socket is repaired by the resent set - a live wait
 //! reappears, and a stale prompt is dropped because its token is absent.
 //! Cancellation is an explicit outcome: every path out of an unresolved
-//! wait pushes `input_cancelled` for its token. The server's agent socket
+//! wait pushes `input_canceled` for its token. The server's agent socket
 //! routes these frames; this crate pins their shapes and classification.
 //!
 //! # Delivery contract

@@ -132,7 +132,7 @@ pub(super) fn task_lifecycle(records: &[(String, Observation)]) -> Vec<(&'static
             Observation::TaskStarted { task, .. } => Some(("started", task.clone())),
             Observation::TaskSucceeded { task } => Some(("succeeded", task.clone())),
             Observation::TaskFailed { task } => Some(("failed", task.clone())),
-            Observation::TaskCancelled { task } => Some(("cancelled", task.clone())),
+            Observation::TaskCanceled { task } => Some(("canceled", task.clone())),
             Observation::TaskAbandoned { task, .. } => Some(("abandoned", task.clone())),
             _ => None,
         })

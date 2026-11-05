@@ -11,10 +11,10 @@
 //! `reply` id of the durable event that will supersede it.
 //! `{"type":"cancel"}` fires the session's turn-cancel: cancellation is a
 //! stop reason, never an error - no error frame follows, pending waits die
-//! as `input_cancelled`, and the relaunched agent returns to waiting.
-//! Frames already in flight from the cancelled run may still arrive
+//! as `input_canceled`, and the relaunched agent returns to waiting.
+//! Frames already in flight from the canceled run may still arrive
 //! between the cancel and the relaunch: a defined grace window, absorbed
-//! by the reply-id coalescing (the cancelled round never settles, so its
+//! by the reply-id coalescing (the canceled round never settles, so its
 //! deltas fall to the round that eventually does), never a protocol
 //! violation. The three client requests parse as [`SessionRequest`].
 //!

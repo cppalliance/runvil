@@ -11,8 +11,8 @@
 //! until the conversation completes the wait with the operator's answer
 //! or the wait dies. A dying wait is an outcome, never silence: every
 //! path out of an unresolved wait - the future dropped by a close, the
-//! wait cancelled out of the registry - removes the entry and pushes a
-//! durable [`WaitFrame::Cancelled`], so a client never pins its input box
+//! wait canceled out of the registry - removes the entry and pushes a
+//! durable [`WaitFrame::Canceled`], so a client never pins its input box
 //! to a dead token. Unresolved waits are retained across socket loss and
 //! re-announced on reconnect: conversations outlive sockets.
 //!
@@ -33,7 +33,7 @@ pub use tool::SessionInputBroker;
 /// channel for its attached client to render.
 ///
 /// `Required` announces an open wait: the client pins its input box to
-/// the token and answers with the operator's text. `Cancelled` announces
+/// the token and answers with the operator's text. `Canceled` announces
 /// a wait that died unresolved, so the client never holds a prompt
 /// against a dead token - cancellation is an outcome, never silence.
 ///
@@ -42,7 +42,7 @@ pub use tool::SessionInputBroker;
 /// re-announces them from
 /// [`Conversation::unresolved_waits()`](crate::Conversation::unresolved_waits)
 /// on reconnect and after lag, so a push lost to a dead socket is
-/// repaired by the resent set - a live wait reappears, and a cancelled
+/// repaired by the resent set - a live wait reappears, and a canceled
 /// one vanishes by its absence.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum WaitFrame {
@@ -52,7 +52,7 @@ pub enum WaitFrame {
         token: String,
     },
     /// A wait died unresolved: the prompt for `token` is stale.
-    Cancelled {
+    Canceled {
         /// The token whose wait is gone.
         token: String,
     },
@@ -64,7 +64,7 @@ struct Wait {
     /// The unguessable token an `input_response` must echo.
     token: String,
     /// Resumes the suspended call; dropping it without a value resolves
-    /// the call as cancelled.
+    /// the call as canceled.
     sender: oneshot::Sender<String>,
 }
 
@@ -135,7 +135,7 @@ impl WaitRegistry {
     ///
     /// # Errors
     /// Returns [`WaitError::UnknownToken`] when no unresolved wait holds
-    /// `token` - never created, already completed, cancelled, or its
+    /// `token` - never created, already completed, canceled, or its
     /// suspended call dropped concurrently. The undelivered `value` is
     /// discarded with the error: a dead wait has no consumer left.
     pub fn complete(&self, token: &str, value: String) -> Result<(), WaitError> {
@@ -151,9 +151,9 @@ impl WaitRegistry {
     }
 
     /// Kills the wait holding `token`: the entry is removed and the
-    /// suspended call resolves as cancelled.
+    /// suspended call resolves as canceled.
     ///
-    /// Cancelling a token with no wait is a no-op, because a cancel
+    /// Canceling a token with no wait is a no-op, because a cancel
     /// racing the wait's own completion is normal.
     pub fn cancel(&self, token: &str) {
         self.lock().retain(|wait| wait.token != token);
@@ -176,7 +176,7 @@ impl WaitRegistry {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 pub enum WaitError {
     /// No unresolved wait holds the token: never created, already
-    /// completed (tokens are single-use), cancelled, or its suspended
+    /// completed (tokens are single-use), canceled, or its suspended
     /// call dropped concurrently.
     #[error("no unresolved wait holds this token")]
     UnknownToken,

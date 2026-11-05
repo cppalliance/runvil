@@ -45,7 +45,7 @@ impl WaitClock for SystemClock {
 }
 
 /// Settles and performs a cancellable launch. Boot passes a token that is
-/// never cancelled.
+/// never canceled.
 pub(in crate::gateway) fn launch_and_attach_cancellable(
     run_dir: &Path,
     exe: &Path,
@@ -84,15 +84,15 @@ where
         .context("settle the gateway launch race")?
     {
         LaunchDecision::Attach(file) => {
-            if cancellation.is_cancelled() {
-                anyhow::bail!("gateway attachment was cancelled");
+            if cancellation.is_canceled() {
+                anyhow::bail!("gateway attachment was canceled");
             }
             Ok(boot::RecoveryLaunch::Attached(file))
         }
         LaunchDecision::Launch(lock) => {
             let child_pid = run_effect_if_active(cancellation, "gateway launch", |cancellation| {
-                if cancellation.is_cancelled() {
-                    anyhow::bail!("gateway launch was cancelled");
+                if cancellation.is_canceled() {
+                    anyhow::bail!("gateway launch was canceled");
                 }
                 spawn(exe, cancellation).with_context(|| format!("spawn {}", exe.display()))
             })?;
@@ -112,7 +112,7 @@ pub(in crate::gateway) fn run_effect_if_active<T>(
 ) -> anyhow::Result<T> {
     match cancellation.run_if_active(|| operation(cancellation)) {
         Some(result) => result,
-        None => anyhow::bail!("{phase} was cancelled"),
+        None => anyhow::bail!("{phase} was canceled"),
     }
 }
 
@@ -160,8 +160,8 @@ where
     let deadline = clock.now() + timeout;
     let mut last_probe_error = None;
     loop {
-        if cancellation.is_cancelled() {
-            anyhow::bail!("the launched gateway wait was cancelled");
+        if cancellation.is_canceled() {
+            anyhow::bail!("the launched gateway wait was canceled");
         }
         // Sampled before the read: a launched gateway that hands off to a
         // running owner exits only after the owner publishes, so the read
@@ -172,18 +172,18 @@ where
             let url = format!("http://127.0.0.1:{}", file.port);
             match health(&url, remaining.min(HEALTH_PROBE_WINDOW), cancellation) {
                 Ok(()) => {
-                    if cancellation.is_cancelled() {
-                        anyhow::bail!("the launched gateway wait was cancelled");
+                    if cancellation.is_canceled() {
+                        anyhow::bail!("the launched gateway wait was canceled");
                     }
                     match resolve(run_dir, cancellation) {
                         Ok(Resolution::Attach(validated)) => {
-                            if cancellation.is_cancelled() {
-                                anyhow::bail!("the launched gateway wait was cancelled");
+                            if cancellation.is_canceled() {
+                                anyhow::bail!("the launched gateway wait was canceled");
                             }
                             return Ok(validated);
                         }
-                        Err(SidecarError::Cancelled) => {
-                            anyhow::bail!("the launched gateway wait was cancelled");
+                        Err(SidecarError::Canceled) => {
+                            anyhow::bail!("the launched gateway wait was canceled");
                         }
                         Ok(Resolution::Stale(reason)) => {
                             last_probe_error =
@@ -200,8 +200,8 @@ where
                         Ok(_) => {}
                     }
                 }
-                Err(workshop_server_api::discovery::HealthError::Cancelled) => {
-                    anyhow::bail!("the launched gateway wait was cancelled");
+                Err(workshop_server_api::discovery::HealthError::Canceled) => {
+                    anyhow::bail!("the launched gateway wait was canceled");
                 }
                 Err(error) => {
                     last_probe_error = Some(
@@ -218,8 +218,8 @@ where
                 workshop_server_api::discovery::gateway_log_path(state_dir).display()
             );
         }
-        if cancellation.is_cancelled() {
-            anyhow::bail!("the launched gateway wait was cancelled");
+        if cancellation.is_canceled() {
+            anyhow::bail!("the launched gateway wait was canceled");
         }
         if clock.now() >= deadline {
             let failure = format!(
@@ -231,7 +231,7 @@ where
             });
         }
         if clock.pause(RECOVERY_POLL_INTERVAL, cancellation) {
-            anyhow::bail!("the launched gateway wait was cancelled");
+            anyhow::bail!("the launched gateway wait was canceled");
         }
     }
 }

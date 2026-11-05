@@ -11,7 +11,7 @@
 // as empty); expansion tracking; a burst of expand/collapse coalescing
 // into one writer call with the same shape; a throwing writer leaving
 // the in-memory set intact; replaceExpanded replacing the set, firing
-// onDidChange, cancelling a pending write, and writing nothing itself;
+// onDidChange, canceling a pending write, and writing nothing itself;
 // the listing cache; root invalidation dropping only the roots listing;
 // and roots(): concurrent callers share one fetch, a cached listing
 // answers without one, an invalidation during an in-flight load makes

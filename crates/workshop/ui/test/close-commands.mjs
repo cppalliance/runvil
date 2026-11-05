@@ -14,7 +14,7 @@
 // prompts, and Cancel, Escape, or a failed save keep it open while the
 // command settles; a second Close while the prompt is up declines; Close
 // Others activates and prompts each unsaved editor in turn, closes nothing
-// when either is cancelled (a save already made stands), and closes every
+// when either is canceled (a save already made stands), and closes every
 // other closable panel once both are answered, sparing the non-closable
 // one; an editor edited after its confirmation voids the batch; a panel
 // that leaves the dock mid-batch is skipped without disturbing the group;
@@ -340,7 +340,7 @@ const unsaved = await openDoc("unsaved.txt");
 const other = await openDoc("other.txt");
 surfaces.get("unsaved.txt").type("draft\n");
 
-const cancelled = track(Commands.execute(CLOSE, { panelId: unsaved.id }));
+const canceled = track(Commands.execute(CLOSE, { panelId: unsaved.id }));
 await flush();
 check(
   "Close on an unsaved inactive editor activates it and prompts instead of closing",
@@ -349,7 +349,7 @@ check(
 check("the prompt offers Cancel", clickPrompt(unsaved, "Cancel"));
 await flush();
 check("Cancel keeps the unsaved editor open and dirty", isOpen(unsaved) && isDirty(unsaved));
-check("Close settles after Cancel", cancelled.settled);
+check("Close settles after Cancel", canceled.settled);
 
 const escaped = track(Commands.execute(CLOSE, { panelId: unsaved.id }));
 await flush();
@@ -411,7 +411,7 @@ check("the second unsaved editor waits its turn", promptsIn(two) === 0);
 clickPrompt(one, "Cancel");
 await flush();
 check(
-  "cancelling the first prompt closes nothing and never prompts the second",
+  "canceling the first prompt closes nothing and never prompts the second",
   [keep, ...others, fixed].every(isOpen) && promptsIn(two) === 0,
 );
 check("Close Others settles after the first Cancel", cancelFirst.settled);
@@ -427,7 +427,7 @@ check(
 );
 clickPrompt(two, "Cancel");
 await flush();
-check("cancelling the second prompt closes nothing", [keep, ...others, fixed].every(isOpen));
+check("canceling the second prompt closes nothing", [keep, ...others, fixed].every(isOpen));
 check(
   "a save made before the Cancel stands",
   writes.length === writesBefore + 1 && writes.at(-1)?.text === "one\n" && !isDirty(one),

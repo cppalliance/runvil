@@ -1,5 +1,5 @@
 //! A `Chat`, `ToolCall`, or `Timer` effect the caller drops while the
-//! run's cancel flag is clear: the chain resumes with the cancelled error,
+//! run's cancel flag is clear: the chain resumes with the canceled error,
 //! which a `pcall` catches so the run continues, and which ends the run
 //! `Cancelled` when nothing catches it. A `Chat` drop is covered for both
 //! kinds of round, a nested `models.infer` round and a `models.loop` round.
@@ -72,7 +72,7 @@ fn drop_next(run: &mut Run) -> (EffectRecord, AnswerRecord) {
 }
 
 #[test]
-fn a_dropped_chat_or_tool_call_resumes_a_pcall_with_the_cancelled_error_and_the_run_continues() {
+fn a_dropped_chat_or_tool_call_resumes_a_pcall_with_the_canceled_error_and_the_run_continues() {
     let cancel = CancelHandle::new();
     let mut run = bound_run(
         "local chat_ok, chat_err = pcall(models.infer, 'dropped')\n\
@@ -99,7 +99,7 @@ fn a_dropped_chat_or_tool_call_resumes_a_pcall_with_the_cancelled_error_and_the_
         "the record holds the call and its dropped answer: {tool:?}"
     );
     assert!(
-        !cancel.is_cancelled(),
+        !cancel.is_canceled(),
         "the drops left the run's cancel flag clear"
     );
     let (id, effect) = only_effect(run.step());
@@ -116,7 +116,7 @@ fn a_dropped_chat_or_tool_call_resumes_a_pcall_with_the_cancelled_error_and_the_
     let RunOutcome::Completed { final_text: text } = outcome else {
         panic!("a caught drop leaves the run to succeed: {outcome:?}");
     };
-    assert_eq!(text, "false:cancelled|false:cancelled|kept");
+    assert_eq!(text, "false:canceled|false:canceled|kept");
     let turns: Vec<u32> = events
         .iter()
         .filter_map(|event| match event {
@@ -132,7 +132,7 @@ fn a_dropped_chat_or_tool_call_resumes_a_pcall_with_the_cancelled_error_and_the_
 }
 
 #[test]
-fn a_dropped_loop_round_resumes_a_pcall_with_the_cancelled_error_and_the_run_continues() {
+fn a_dropped_loop_round_resumes_a_pcall_with_the_canceled_error_and_the_run_continues() {
     let cancel = CancelHandle::new();
     let mut run = bound_run(
         "messages:user('asked')\n\
@@ -162,7 +162,7 @@ fn a_dropped_loop_round_resumes_a_pcall_with_the_cancelled_error_and_the_run_con
         "the record holds the loop round and its dropped answer: {records:?}"
     );
     assert!(
-        !cancel.is_cancelled(),
+        !cancel.is_canceled(),
         "the drop left the run's cancel flag clear"
     );
     let (id, effect) = only_effect(run.step());
@@ -184,7 +184,7 @@ fn a_dropped_loop_round_resumes_a_pcall_with_the_cancelled_error_and_the_run_con
         panic!("a caught drop leaves the run to succeed: {outcome:?}");
     };
     assert_eq!(
-        text, "false:cancelled|1|2:kept",
+        text, "false:canceled|1|2:kept",
         "the dropped round appended nothing, and the answered one appended its reply"
     );
     let turns: Vec<u32> = events
@@ -202,7 +202,7 @@ fn a_dropped_loop_round_resumes_a_pcall_with_the_cancelled_error_and_the_run_con
 }
 
 #[test]
-fn an_uncaught_dropped_chat_or_tool_call_ends_the_run_cancelled() {
+fn an_uncaught_dropped_chat_or_tool_call_ends_the_run_canceled() {
     for body in [
         "return models.infer('dropped')",
         "messages:user('dropped')\nreturn models.loop()",
@@ -215,7 +215,7 @@ fn an_uncaught_dropped_chat_or_tool_call_ends_the_run_cancelled() {
         };
         assert!(
             matches!(outcome, RunOutcome::Cancelled),
-            "{body}: the cancelled error ends the run cancelled: {outcome:?}"
+            "{body}: the canceled error ends the run canceled: {outcome:?}"
         );
     }
 }
@@ -269,14 +269,14 @@ fn parked_wait(run: &mut Run) -> (EffectId, EffectId) {
 }
 
 #[test]
-fn a_dropped_timer_raises_the_cancelled_error_into_a_timed_waits_pcall_and_the_run_continues() {
+fn a_dropped_timer_raises_the_canceled_error_into_a_timed_waits_pcall_and_the_run_continues() {
     for wait in ["tasks.join_any", "tasks.join"] {
         let cancel = CancelHandle::new();
         let mut run = timed_run(&caught_wait(wait), &cancel);
         let (timer, chat) = parked_wait(&mut run);
         run.resume(timer, EffectAnswer::Dropped);
         assert!(
-            !cancel.is_cancelled(),
+            !cancel.is_canceled(),
             "{wait}: the drop left the run's cancel flag clear"
         );
         let Step::Pending { effects, .. } = run.step() else {
@@ -294,14 +294,14 @@ fn a_dropped_timer_raises_the_cancelled_error_into_a_timed_waits_pcall_and_the_r
             panic!("{wait}: a caught drop leaves the run to succeed: {outcome:?}");
         };
         assert_eq!(
-            out, "false:cancelled|child",
-            "{wait}: the wait raised the cancelled error and the child kept running"
+            out, "false:canceled|child",
+            "{wait}: the wait raised the canceled error and the child kept running"
         );
     }
 }
 
 #[test]
-fn an_uncaught_dropped_timer_ends_the_run_cancelled() {
+fn an_uncaught_dropped_timer_ends_the_run_canceled() {
     for wait in ["tasks.join_any", "tasks.join"] {
         let mut run = timed_run(
             &format!(
@@ -331,13 +331,13 @@ fn an_uncaught_dropped_timer_ends_the_run_cancelled() {
         };
         assert!(
             matches!(outcome, RunOutcome::Cancelled),
-            "{wait}: the cancelled error ends the run cancelled: {outcome:?}"
+            "{wait}: the canceled error ends the run canceled: {outcome:?}"
         );
     }
 }
 
 #[test]
-fn under_a_run_cancel_a_dropped_timer_ends_the_run_cancelled_without_resuming_the_wait() {
+fn under_a_run_cancel_a_dropped_timer_ends_the_run_canceled_without_resuming_the_wait() {
     let cancel = CancelHandle::new();
     let mut run = timed_run(&caught_wait("tasks.join_any"), &cancel);
     let (timer, chat) = parked_wait(&mut run);

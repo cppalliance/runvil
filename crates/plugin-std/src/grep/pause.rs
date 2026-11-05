@@ -1,4 +1,4 @@
-//! The pause that lets a running search be cancelled.
+//! The pause that lets a running search be canceled.
 //!
 //! The Harness polls a call's future inside its effect loop, and a cancel
 //! or a stop drops that future. A future that never returns `Pending`

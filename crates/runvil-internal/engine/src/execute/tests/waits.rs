@@ -5,7 +5,7 @@
 //! `tasks.cancel` round-trip; ownership is enforced (`task_not_owned`,
 //! with the self exception for `status` and `note`); a delivered task's
 //! second wait raises `task_consumed`; cancel is idempotent and reports
-//! `TaskCancelled` exactly once.
+//! `TaskCanceled` exactly once.
 
 use runvil_types::event::Event;
 
@@ -187,7 +187,7 @@ fn status_reports_a_parked_task_and_then_a_finished_one() {
 #[test]
 fn a_non_owner_is_refused_with_task_not_owned() {
     // The child may read and annotate its own task (the self exception),
-    // but waiting on or cancelling it is the owner's alone, and a task id
+    // but waiting on or canceling it is the owner's alone, and a task id
     // the caller never spawned is refused the same way.
     let md = tasks_prompt(
         "local t = tasks.spawn('## Child')\n\
@@ -246,15 +246,15 @@ fn waiting_on_a_delivered_task_raises_task_consumed() {
 }
 
 #[test]
-fn cancel_ends_a_parked_task_idempotently_and_reports_task_cancelled_once() {
+fn cancel_ends_a_parked_task_idempotently_and_reports_task_canceled_once() {
     // The child parks on a store write; the owner cancels it twice (the
     // second is a no-op), reads the terminal state, and ends with no live
-    // task - so no `tasks_live`. A wait on the cancelled entry delivers
-    // `ok = false` with a `cancelled` error value.
+    // task - so no `tasks_live`. A wait on the canceled entry delivers
+    // `ok = false` with a `canceled` error value.
     //
-    // The rig holds the child's write until the child's `TaskCancelled` is
+    // The rig holds the child's write until the child's `TaskCanceled` is
     // reported, then releases it, so the write's answer lands on the
-    // cancelled task while the run is still live. The owner's own yields
+    // canceled task while the run is still live. The owner's own yields
     // are `exists`: the one before the cancel lets the child run, and the
     // one after it keeps the run undecided past the step that cancels.
     let child_write = |effect: &Effect| matches!(effect, Effect::Vfs { op: VfsOp::Write { path, .. }, .. } if path == "child-park");
@@ -266,11 +266,11 @@ fn cancel_ends_a_parked_task_idempotently_and_reports_task_cancelled_once() {
          store.exists('park')\n\
          local s = tasks.status(t)\n\
          log('state=' .. s.state .. ' ok=' .. tostring(s.ok))\n\
-         assert(tasks.ready(t), 'a cancelled task is ready')\n\
+         assert(tasks.ready(t), 'a canceled task is ready')\n\
          local _, ok, err = tasks.join_any({ t })\n\
-         assert(not ok and err.kind == 'cancelled', tostring(err))\n\
+         assert(not ok and err.kind == 'canceled', tostring(err))\n\
          assert(err.task == t.task, tostring(err.task))\n\
-         assert(err.reason == nil, 'a cancelled delivery leaves reason nil')\n\
+         assert(err.reason == nil, 'a canceled delivery leaves reason nil')\n\
          assert(#tasks.pending() == 0, 'nothing is pending')\n\
          return 'done'",
         &[("Child", "store.write('child-park', 'x')\nreturn 'never'")],
@@ -279,7 +279,7 @@ fn cancel_ends_a_parked_task_idempotently_and_reports_task_cancelled_once() {
     while !rig
         .events()
         .iter()
-        .any(|event| matches!(event, Event::TaskCancelled { .. }))
+        .any(|event| matches!(event, Event::TaskCanceled { .. }))
     {
         assert!(rig.step(), "the run stopped before the child's cancel");
     }
@@ -288,7 +288,7 @@ fn cancel_ends_a_parked_task_idempotently_and_reports_task_cancelled_once() {
     assert_eq!(
         rig.trace().text(),
         "done",
-        "a cancelled task is not a leaked one"
+        "a canceled task is not a leaked one"
     );
     let effects = rig.trace().effects();
     assert!(
@@ -296,23 +296,23 @@ fn cancel_ends_a_parked_task_idempotently_and_reports_task_cancelled_once() {
             effect,
             EffectRecord::Vfs { op: VfsOp::Write { path, .. } } if path == "child-park"
         ) && *answer != AnswerRecord::Dropped),
-        "the released write reaches the cancelled task with a real answer: {effects:?}"
+        "the released write reaches the canceled task with a real answer: {effects:?}"
     );
     assert_eq!(
         rig.task_state_for_test(&task("0.0")),
-        Some(TaskState::Cancelled)
+        Some(TaskState::Canceled)
     );
     let recorder = TaskRecorder::replayed(rig.trace());
     assert_eq!(
         recorder.logs("Main"),
-        vec!["state=cancelled ok=false".to_owned()]
+        vec!["state=canceled ok=false".to_owned()]
     );
     let records = recorder.records();
     assert_eq!(
         records
             .iter()
             .filter(|(section, event)| {
-                section == "Child" && *event == Observation::TaskCancelled { task: task("0.0") }
+                section == "Child" && *event == Observation::TaskCanceled { task: task("0.0") }
             })
             .count(),
         1,
@@ -325,7 +325,7 @@ fn cancel_ends_a_parked_task_idempotently_and_reports_task_cancelled_once() {
                 | Observation::TaskFailed { .. }
                 | Observation::TaskAbandoned { .. }
         )),
-        "a cancelled task reports no other terminal event: {records:?}"
+        "a canceled task reports no other terminal event: {records:?}"
     );
 }
 
@@ -365,7 +365,7 @@ fn pending_lists_the_callers_live_tasks_in_spawn_order() {
         trace.text(),
         "tasks.pending takes no arguments, got table|tasks.pending takes no arguments, got table|\
          tasks.pending takes no arguments, got table",
-        "every argument is refused and the cancelled tasks do not leak"
+        "every argument is refused and the canceled tasks do not leak"
     );
 }
 
@@ -374,7 +374,7 @@ fn the_waits_old_names_are_not_defined() {
     // The waits are `join_any` and `join`: a prompt calling
     // `tasks.when_any` or `tasks.when_all` reaches a nil field, so the
     // call fails as a plain string error, never a shim's structured one.
-    // The spawned children are cancelled, so nothing stays live at chain
+    // The spawned children are canceled, so nothing stays live at chain
     // end.
     let md = tasks_prompt(
         "local a = tasks.spawn('## Child')\n\

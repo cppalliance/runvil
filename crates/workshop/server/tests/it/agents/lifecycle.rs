@@ -109,13 +109,13 @@ async fn teardown_cancels_pending_waits_and_leaks_none() {
     );
 
     assert!(state.agents().close(&session), "the session closes");
-    let cancelled = socket
+    let canceled = socket
         .recv_until(Duration::from_secs(10), |frame| {
-            frame["type"] == "input_cancelled"
+            frame["type"] == "input_canceled"
         })
         .await;
     assert_eq!(
-        cancelled["token"], *token,
+        canceled["token"], *token,
         "teardown announces the dying wait instead of leaking it"
     );
     assert!(

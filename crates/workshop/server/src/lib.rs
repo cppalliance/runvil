@@ -55,8 +55,8 @@
 //!   `/v1/realtime` applies a stricter same-origin check that requires a
 //!   browser `Origin` to match the request's own authority. The
 //!   cross-site guard stays the security boundary.
-//! - Every unresolved wait that is dropped yields a cancelled frame,
-//!   which the agent socket renders as `input_cancelled`.
+//! - Every unresolved wait that is dropped yields a canceled frame,
+//!   which the agent socket renders as `input_canceled`.
 
 mod agents;
 mod app;

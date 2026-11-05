@@ -45,7 +45,7 @@ fn handshake_cause(error: &ClientInitializeError) -> String {
         ClientInitializeError::NoCompatibleProtocolVersion { .. } => {
             "the server and this client share no protocol version".to_owned()
         }
-        ClientInitializeError::Cancelled => "the handshake was cancelled".to_owned(),
+        ClientInitializeError::Cancelled => "the handshake was canceled".to_owned(),
         _ => "the server's answer was not a valid initialize result".to_owned(),
     }
 }

@@ -159,8 +159,8 @@ impl HostContext {
     /// one that will not be ready, by FQN.
     ///
     /// A cancel on `cancel` ends the wait with no failures, so each Pack
-    /// is snapshotted as it stands, and a run cancelled here ends
-    /// cancelled whatever the snapshot holds.
+    /// is snapshotted as it stands, and a run canceled here ends
+    /// canceled whatever the snapshot holds.
     pub(crate) async fn wait_ready(
         &self,
         packs: &RunPacks,
@@ -172,9 +172,9 @@ impl HostContext {
             Some(async move { (*fqn, pack.ready().await) })
         });
         let joined = pin!(join_all(waits));
-        // The cancel arm is polled first, so a run cancelled already does
+        // The cancel arm is polled first, so a run canceled already does
         // not wait.
-        match select(cancel.cancelled(), joined).await {
+        match select(cancel.canceled(), joined).await {
             Either::Left(((), _)) => BTreeMap::new(),
             Either::Right((results, _)) => results
                 .into_iter()

@@ -141,7 +141,7 @@ export class TreeStateService implements IDisposable {
    * Replaces the expanded set wholesale with a workspace's stored value
    * (Open Workspace from File) and fires onDidChange. Writes nothing: the
    * paths came from the file, and a write armed by an earlier interactive
-   * change is cancelled so the previous workspace's set never lands in
+   * change is canceled so the previous workspace's set never lands in
    * the newly opened file.
    */
   replaceExpanded(paths: readonly string[]): void {

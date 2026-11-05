@@ -191,7 +191,7 @@ fn an_exhausted_arm_becomes_the_incomplete_stub_and_its_sibling_still_lands() {
         recorder.events()
     );
     assert_eq!(
-        terminal_count(&trace, task_cancelled),
+        terminal_count(&trace, task_canceled),
         0,
         "an exhausted arm cancels nothing: {:?}",
         recorder.events()
@@ -206,7 +206,7 @@ fn two_arms_writing_one_path_terminate_the_run_with_a_determinism_violation() {
     // The violation is fatal to the whole run at the answer boundary -
     // the loser never resumes into Lua, so no author pcall can catch it -
     // and every arm still parked when the fatal answer lands drops
-    // unarmed, reporting cancelled rather than failed.
+    // unarmed, reporting canceled rather than failed.
     //
     // The winner's answer may land before or after the loser's: either
     // interleaving satisfies the contract - both arms started, no arm

@@ -1,4 +1,4 @@
-//! Unit tests for failure, interruption, and sidecar cleanup paths.
+//! Unit tests for failure, cancellation, and sidecar cleanup paths.
 //!
 //! With the Gateway a separate product, every case here names its sidecar
 //! up front, so the first command a run issues is the staging script. The
@@ -113,10 +113,10 @@ fn stage_failure_is_followed_by_cleanup() {
 }
 
 #[test]
-fn interruption_before_staging_does_not_run_removal() {
+fn cancellation_before_staging_does_not_run_removal() {
     let test_environment = environment();
     let environment = &test_environment.environment;
-    let mut runner = FakeRunner::with_responses(vec![FakeResponse::InterruptedBeforeStart]);
+    let mut runner = FakeRunner::with_responses(vec![FakeResponse::CanceledBeforeStart]);
 
     let error = build_workshop(
         &BuildRequest {
@@ -127,12 +127,10 @@ fn interruption_before_staging_does_not_run_removal() {
         environment,
         &mut runner,
     )
-    .expect_err("staging interruption");
+    .expect_err("staging cancellation");
 
     assert!(
-        error
-            .primary
-            .contains("Gateway sidecar staging interrupted"),
+        error.primary.contains("Gateway sidecar staging canceled"),
         "{error}"
     );
     assert_eq!(error.cleanup, None);
@@ -177,12 +175,12 @@ fn a_given_sidecar_is_staged_first_with_its_target() {
 }
 
 #[test]
-fn interruption_during_staging_runs_target_cleanup_once() {
+fn cancellation_during_staging_runs_target_cleanup_once() {
     let test_environment = environment();
     let environment = &test_environment.environment;
     let triple = "x86_64-pc-windows-msvc";
     let mut runner =
-        FakeRunner::with_responses(vec![FakeResponse::InterruptedAfterStart, success("")]);
+        FakeRunner::with_responses(vec![FakeResponse::CanceledAfterStart, success("")]);
 
     let error = build_workshop(
         &BuildRequest {
@@ -193,12 +191,10 @@ fn interruption_during_staging_runs_target_cleanup_once() {
         environment,
         &mut runner,
     )
-    .expect_err("staging interruption");
+    .expect_err("staging cancellation");
 
     assert!(
-        error
-            .primary
-            .contains("Gateway sidecar staging interrupted"),
+        error.primary.contains("Gateway sidecar staging canceled"),
         "{error}"
     );
     let removals = runner
@@ -210,13 +206,13 @@ fn interruption_during_staging_runs_target_cleanup_once() {
 }
 
 #[test]
-fn interruption_raced_with_completion_runs_cleanup_once() {
+fn cancellation_raced_with_completion_runs_cleanup_once() {
     let test_environment = environment();
     let environment = &test_environment.environment;
     let triple = "x86_64-pc-windows-msvc";
     let mut runner = FakeRunner::with_responses(vec![
         success(""),
-        FakeResponse::CompletedAndInterrupted,
+        FakeResponse::CompletedAndCanceled,
         success(""),
     ]);
 
@@ -231,10 +227,7 @@ fn interruption_raced_with_completion_runs_cleanup_once() {
     )
     .expect_err("Workshop completion race");
 
-    assert!(
-        error.primary.contains("Workshop build interrupted"),
-        "{error}"
-    );
+    assert!(error.primary.contains("Workshop build canceled"), "{error}");
     let removals = runner
         .commands
         .iter()
@@ -244,12 +237,12 @@ fn interruption_raced_with_completion_runs_cleanup_once() {
 }
 
 #[test]
-fn interruption_preserves_cleanup_failure_diagnostics() {
+fn cancellation_preserves_cleanup_failure_diagnostics() {
     let test_environment = environment();
     let environment = &test_environment.environment;
     let mut runner = FakeRunner::with_responses(vec![
         success(""),
-        FakeResponse::InterruptedAfterStart,
+        FakeResponse::CanceledAfterStart,
         failure("remove broke"),
     ]);
 
@@ -262,12 +255,9 @@ fn interruption_preserves_cleanup_failure_diagnostics() {
         environment,
         &mut runner,
     )
-    .expect_err("Workshop interruption and cleanup failure");
+    .expect_err("Workshop cancellation and cleanup failure");
 
-    assert!(
-        error.primary.contains("Workshop build interrupted"),
-        "{error}"
-    );
+    assert!(error.primary.contains("Workshop build canceled"), "{error}");
     let cleanup = error.cleanup.expect("cleanup diagnostic");
     assert!(
         cleanup.contains("Gateway sidecar cleanup failed"),

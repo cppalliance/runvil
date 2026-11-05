@@ -37,17 +37,17 @@ async fn a_replacement_published_while_chat_waits_keeps_the_wait_and_answers_on_
     let replacement = spawn_gateway(recording_gateway(Arc::clone(&replacement_requests))).await;
     replace_gateway(&state, &replacement, 1_757_000_000);
 
-    // The original token still answers: nothing cancelled the wait.
+    // The original token still answers: nothing canceled the wait.
     answer(&mut socket, &token, "after replacement").await;
     let reply = socket
         .recv_until(Duration::from_secs(10), |frame| {
             assert_ne!(
-                frame["type"], "input_cancelled",
+                frame["type"], "input_canceled",
                 "a replacement retires no wait: {frame}"
             );
             assert_ne!(
                 frame["type"], "error",
-                "no error frame may interrupt: {frame}"
+                "no error frame may come between: {frame}"
             );
             frame["type"] == "agent_event" && frame["event"]["kind"] == "agent_message"
         })

@@ -12,9 +12,9 @@ use super::universal::field_facts;
 use super::{ErrorField, ErrorKind, is_error_table};
 
 /// The code a table of `kind` stands for when it names none, where
-/// `field` reads one of its string fields: a `cancelled` table with a
+/// `field` reads one of its string fields: a `canceled` table with a
 /// `task` field that parses is that task's cancellation and without one
-/// an interruption; a `task_not_owned` or `task_consumed` table is its
+/// a cancel; a `task_not_owned` or `task_consumed` table is its
 /// task refusal only with such a field; a `context_exhausted` table is
 /// context exhaustion only with a `reason`; a `store` table is the store
 /// code its `reason` tag names, or `Backend`; and a kind whose failure
@@ -25,8 +25,8 @@ fn kind_code(kind: ErrorKind, field: impl Fn(&str) -> Option<String>) -> ErrorCo
         ErrorKind::ToolLoopExhausted => ErrorCode::ToolLoopExhausted,
         ErrorKind::ContextExhausted if field("reason").is_some() => ErrorCode::ContextExhausted,
         ErrorKind::EmptyModelReply => ErrorCode::EmptyReply,
-        ErrorKind::Cancelled if task() => ErrorCode::TaskCancelled,
-        ErrorKind::Cancelled => ErrorCode::Interrupted,
+        ErrorKind::Canceled if task() => ErrorCode::TaskCanceled,
+        ErrorKind::Canceled => ErrorCode::Canceled,
         ErrorKind::Tool => ErrorCode::ToolOther,
         ErrorKind::TaskNotOwned if task() => ErrorCode::TaskNotOwned,
         ErrorKind::TaskConsumed if task() => ErrorCode::TaskConsumed,

@@ -48,14 +48,14 @@ fn calls_slow_tool(effect: &Effect) -> bool {
 }
 
 #[test]
-fn run_with_a_pre_cancelled_handle_fails_as_cancelled() {
+fn run_with_a_pre_canceled_handle_fails_as_canceled() {
     use runvil_prompt::test_support::prompt;
     use runvil_types::cancel::CancelHandle;
 
     // The explicit-cancel wiring of the public entry point: a handle passed
     // through `RunParams::with_cancel` is installed around the whole run body, so
     // the section's Lua instruction hook observes it and the run ends
-    // cancelled.
+    // canceled.
     let source = prompt("", &[("Loop", "local n = 0\nwhile true do n = n + 1 end")]);
     let handle = CancelHandle::new();
     handle.cancel();
@@ -64,7 +64,7 @@ fn run_with_a_pre_cancelled_handle_fails_as_cancelled() {
         .run();
     assert!(
         matches!(trace.outcome(), RunOutcome::Cancelled),
-        "a pre-cancelled handle must end the run cancelled, got {:?}",
+        "a pre-canceled handle must end the run canceled, got {:?}",
         trace.outcome()
     );
 }

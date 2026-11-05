@@ -80,18 +80,18 @@ fn a_lua_failure_keeps_its_text_and_reads_as_lua() {
 }
 
 #[test]
-fn an_interruption_has_no_location_and_reads_as_cancelled() {
-    let error = interrupted();
-    assert_eq!(error.code, ErrorCode::Interrupted);
+fn a_cancel_has_no_location_and_reads_as_canceled() {
+    let error = Error::canceled();
+    assert_eq!(error.code, ErrorCode::Canceled);
     assert_eq!(
         error.message,
-        "interrupted: the run was cancelled or this call was stopped"
+        "canceled: the run was canceled or this call was stopped"
     );
     assert_eq!(
         failed(&error),
         (RunErrorKind::Internal, error.message.clone())
     );
-    assert_eq!(error_kind(&error), ErrorKind::Cancelled);
+    assert_eq!(error_kind(&error), ErrorKind::Canceled);
     assert_eq!(error_fields(&error), Vec::new());
 }
 
@@ -241,10 +241,10 @@ fn a_task_failure_names_its_task_in_its_fact_and_its_table() {
             "task `1.3` was already delivered: a task's result is taken by one wait",
         ),
         (
-            task_cancelled(&id),
-            ErrorCode::TaskCancelled,
-            ErrorKind::Cancelled,
-            "task `1.3` was cancelled",
+            task_canceled(&id),
+            ErrorCode::TaskCanceled,
+            ErrorKind::Canceled,
+            "task `1.3` was canceled",
         ),
     ] {
         assert_eq!(error.code, code);

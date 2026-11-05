@@ -308,8 +308,8 @@ impl SectionVm<Uninjected> {
 impl<S> SectionVm<S> {
     /// Installs the run's cancel flag on this VM's instruction hook: every
     /// block coroutine the VM starts polls it, and a set flag aborts the
-    /// running chunk as an `Interrupted` failure. A VM without one is never
-    /// cancelled. The first install wins.
+    /// running chunk as a `Canceled` failure. A VM without one is never
+    /// canceled. The first install wins.
     pub fn set_cancel(&self, cancel: runvil_types::cancel::CancelHandle) {
         self.cancel_hook.set_cancel(cancel);
     }

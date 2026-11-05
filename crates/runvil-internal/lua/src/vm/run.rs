@@ -7,7 +7,7 @@ use runvil_types::error::{ErrorCode, place};
 
 use super::{JUMP_SLOT_POISONED, Jump, SectionVm};
 use crate::coro::{StashedFailure, block_guard, take_failure};
-use crate::error::{self, Error, Result, interrupted, prompt_file, set_call_line};
+use crate::error::{self, Error, Result, prompt_file, set_call_line};
 use crate::error_value::{ErrorKind, error_kind};
 use crate::program::LuaProgram;
 use crate::protocol::{Answer, Request, Retained, YieldParse, render_envelope};
@@ -128,7 +128,7 @@ impl SectionVm {
     /// answer owned is substituted back, so the Rust caller receives the
     /// structured error rather than a string. A block that caught the
     /// table and failed with anything else, its message text included,
-    /// keeps its own error. A block that was cancelled or spent an Engine
+    /// keeps its own error. A block that was canceled or spent an Engine
     /// quota keeps that failure whatever it raised.
     ///
     /// # Errors
@@ -195,7 +195,7 @@ impl SectionVm {
     /// [`block_failure`](Self::block_failure) does, except that a raise of
     /// `retained`'s error table, the answer's own, is the answer's typed
     /// error, placed as [`kept_failure`] places a table's, unless the block
-    /// was cancelled or spent an Engine quota.
+    /// was canceled or spent an Engine quota.
     fn answered_block_failure(
         &self,
         program: &LuaProgram,
@@ -228,14 +228,14 @@ impl SectionVm {
     }
 
     /// Maps one chunk's Lua failure to its typed outcome: a chunk the
-    /// instruction hook aborted under the run's cancel flag is an
-    /// `Interrupted` failure, whatever the raw error says; everything
+    /// instruction hook aborted under the run's cancel flag is a
+    /// `Canceled` failure, whatever the raw error says; everything
     /// else maps through `LuaProgram::map_runtime_error_among` of `program`
     /// and of every library block `require` loaded into this VM, in the
     /// VM's prompt file.
     pub(crate) fn map_chunk_failure(&self, program: &LuaProgram, error: &mlua::Error) -> Error {
-        if self.cancel_hook.is_cancelled() {
-            return interrupted();
+        if self.cancel_hook.is_canceled() {
+            return Error::canceled();
         }
         match self.library_programs.lock() {
             Ok(libraries) => {
@@ -249,7 +249,7 @@ impl SectionVm {
 /// Whether `mapped` is a cancellation or an exhausted Engine quota, which
 /// keep their mapping whatever the block raised.
 fn is_fatal(mapped: &Error) -> bool {
-    matches!(mapped.code, ErrorCode::Interrupted | ErrorCode::LuaQuota)
+    matches!(mapped.code, ErrorCode::Canceled | ErrorCode::LuaQuota)
 }
 
 /// The failure a block keeps, given what the guard `stashed` and the

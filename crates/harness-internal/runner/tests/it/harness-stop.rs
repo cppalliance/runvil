@@ -119,9 +119,9 @@ async fn a_stop_drops_a_chat_round_a_tool_call_and_a_timer_and_a_pcall_keeps_the
     assert_eq!(
         report.outcome,
         RunOutcome::Completed {
-            final_text: "false:cancelled|chat:false:cancelled|tool:false:cancelled".to_owned()
+            final_text: "false:canceled|chat:false:canceled|tool:false:canceled".to_owned()
         },
-        "the main's pcall caught its interrupted wait, each child's pcall caught its dropped \
+        "the main's pcall caught its dropped wait, each child's pcall caught its dropped \
          call, and the run went on to its end"
     );
     for (held, what) in [(&chat, "round"), (&tool, "tool call"), (&timer, "timer")] {
@@ -139,7 +139,7 @@ async fn a_stop_drops_a_chat_round_a_tool_call_and_a_timer_and_a_pcall_keeps_the
 }
 
 #[tokio::test]
-async fn an_uncaught_stopped_round_ends_the_run_cancelled() {
+async fn an_uncaught_stopped_round_ends_the_run_canceled() {
     let chat = Arc::new(Held::default());
     let recorder = Arc::new(MemoryRecorder::new());
     let harness = Harness::new(
@@ -222,7 +222,7 @@ async fn two_calls_in_one_round_are_in_flight_at_once_and_a_stop_drops_both() {
     assert_eq!(
         report.outcome,
         RunOutcome::Completed {
-            final_text: "false:cancelled".to_owned()
+            final_text: "false:canceled".to_owned()
         },
         "the loop's pcall caught the dropped batch"
     );

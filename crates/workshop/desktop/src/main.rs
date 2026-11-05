@@ -434,7 +434,7 @@ mod tests {
     fn the_window_grants_both_native_pickers() {
         // Open Workspace from File... uses the open picker; Save Workspace
         // As... and Duplicate Workspace... use the save picker. A missing
-        // grant fails silently in the webview as a cancelled dialog.
+        // grant fails silently in the webview as a canceled dialog.
         for permission in ["dialog:allow-open", "dialog:allow-save"] {
             assert!(
                 WINDOW_PERMISSIONS.contains(&permission),

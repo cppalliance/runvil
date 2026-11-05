@@ -131,7 +131,7 @@ end
 -- before the caller's next step, so its store writes are visible from
 -- the very next operation. `opts.timeout` (seconds) returns nil when
 -- nothing finished in time; the members keep running, and a later wait
--- joins them. When a member wins, the timer is cancelled.
+-- joins them. When a member wins, the timer is canceled.
 local function tasks_join_any(set, opts)
   local ids = task_set(set, "tasks.join_any")
   local timeout = wait_timeout(opts, "tasks.join_any")
@@ -158,7 +158,7 @@ end
 -- `opts.timeout` (seconds), one timer spans every round: when it fires,
 -- `timed_out` is true and the unfinished members' entries are absent
 -- (a later wait joins them); when every member finishes first, the timer
--- is cancelled.
+-- is canceled.
 local function tasks_join(set, opts)
   local ids = task_set(set, "tasks.join")
   local timeout = wait_timeout(opts, "tasks.join")
@@ -255,7 +255,7 @@ local function tasks_concurrency(limit)
   return result
 end
 
--- tasks.cancel(task): end a task the caller owns. Idempotent: cancelling
+-- tasks.cancel(task): end a task the caller owns. Idempotent: canceling
 -- a task that already ended does nothing.
 local function tasks_cancel(task)
   local ok, result = yield({ op = "cancel", task = task_id(task, "tasks.cancel") })

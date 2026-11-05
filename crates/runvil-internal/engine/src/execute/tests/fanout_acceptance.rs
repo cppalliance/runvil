@@ -89,7 +89,7 @@ fn a_fatal_arm_gives_every_started_arm_exactly_one_terminal() {
     // its infer while `slow` is parked on a held round and `queued` has
     // not been admitted. The shim cancels the live sibling and re-raises,
     // so the started arms report exactly one terminal each (`failed`,
-    // `cancelled`), the queued arm never starts and reports nothing, and
+    // `canceled`), the queued arm never starts and reports nothing, and
     // the run never waits on the held round.
     let gateway = ScriptedChat::new(vec![text("boom-answer")]);
     let md = "---\nname: t\ndescription: d\nrunvil: 0\n---\n\n\
@@ -124,7 +124,7 @@ fn a_fatal_arm_gives_every_started_arm_exactly_one_terminal() {
         terminals_per_started_task(&records),
         BTreeMap::from([
             (task("0.0"), vec!["failed"]),
-            (task("0.1"), vec!["cancelled"]),
+            (task("0.1"), vec!["canceled"]),
         ]),
         "each started arm has exactly one terminal and the queued arm never started: {:?}",
         task_lifecycle(&records)

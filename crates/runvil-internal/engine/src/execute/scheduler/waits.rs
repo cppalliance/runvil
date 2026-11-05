@@ -7,7 +7,7 @@
 //! exactly one wait; a second wait raises `task_consumed`), and it joins
 //! the task: everything the task did happens before the owner's next
 //! step, so its store writes are visible from the very next operation. A
-//! `Cancelled` entry delivers `ok = false` with the `cancelled` error
+//! `Canceled` entry delivers `ok = false` with the `canceled` error
 //! value and stays as it is, since it holds no result to consume - but
 //! its delivery still joins its partial writes. An `Abandoned` entry is
 //! never delivered: a task is abandoned because its owner ended, and only
@@ -23,8 +23,8 @@
 //! own status is not reportable, and a note outside a task with an entry
 //! (the main walk and its `call` children) records nothing.
 //!
-//! Cancel is idempotent: a live task's entry moves to `Cancelled`, its
-//! backing chain aborts with everything it owns, and `TaskCancelled` fires
+//! Cancel is idempotent: a live task's entry moves to `Canceled`, its
+//! backing chain aborts with everything it owns, and `TaskCanceled` fires
 //! once under its target; a task already in a terminal state is left as it
 //! is and reports nothing.
 
@@ -51,7 +51,7 @@ fn task_phase(state: TaskState) -> TaskPhase {
             blocked: None,
         },
         TaskState::Done { ok } | TaskState::Delivered { ok } => TaskPhase::Done { ok },
-        TaskState::Cancelled => TaskPhase::Cancelled,
+        TaskState::Canceled => TaskPhase::Canceled,
         TaskState::Abandoned => TaskPhase::Abandoned,
     }
 }
@@ -91,7 +91,7 @@ impl Scheduler {
     /// Delivers a terminal task to its owner: the join first, then the
     /// arena's [`take_delivery`](super::tasks::TaskArena::take_delivery).
     /// The delivery is the join: everything the task did happens before the
-    /// owner's next step, so its store writes - a cancelled task's partial
+    /// owner's next step, so its store writes - a canceled task's partial
     /// writes included - are visible from the very next operation.
     fn deliver(&mut self, task: &TaskId) -> TaskDelivery {
         if let Some(owner) = self.tasks.owner_of(task) {
@@ -217,18 +217,18 @@ impl Scheduler {
         self.answer_inline(id, answer.map(|()| Answer::Cancel))
     }
 
-    /// Cancels a live task `caller` owns: the entry moves to `Cancelled`, the
+    /// Cancels a live task `caller` owns: the entry moves to `Canceled`, the
     /// backing ends (a chain with everything it owns, a request dropped),
-    /// and `TaskCancelled` fires once under the target - except for an
+    /// and `TaskCanceled` fires once under the target - except for an
     /// internal timer, whose cancel is the wait shim's own bookkeeping and
     /// reports nothing, and a task that was never admitted, which has no
     /// start event and reports no terminal. A task already in a terminal
     /// state is left as it is.
     fn cancel_task(&mut self, caller: ChainIndex, task: &TaskId) -> Result<()> {
         self.tasks.owned(caller, task)?;
-        if let Some((backing, target)) = self.tasks.stop(task, Stop::Cancelled) {
+        if let Some((backing, target)) = self.tasks.stop(task, Stop::Canceled) {
             self.end_backing(backing, &target, |execution, section, provenance| {
-                Event::TaskCancelled {
+                Event::TaskCanceled {
                     execution,
                     section,
                     provenance,

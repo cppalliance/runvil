@@ -342,7 +342,7 @@ impl ChainOps<'_> {
         };
         let counts = self.section_call_counts()?;
         // The attempt counts at dispatch - before the tool runs, so a
-        // cancelled dispatch still counts.
+        // canceled dispatch still counts.
         let counted = binding.id().to_string();
         counts.increment(&counted)?;
         let prompt = self.prompt();

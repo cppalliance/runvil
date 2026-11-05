@@ -146,7 +146,7 @@ fn cancel_during_a_looping_adhoc_tool_handler_returns_promptly() {
         .run();
     assert!(
         matches!(trace.outcome(), RunOutcome::Cancelled),
-        "expected the cancelled run, got {:?}",
+        "expected the canceled run, got {:?}",
         trace.outcome()
     );
 }

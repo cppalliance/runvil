@@ -64,7 +64,7 @@ pub fn answer(effect: Effect) -> EffectAnswer {
 /// # Panics
 ///
 /// Panics when the log does not open with the parse events, or when the
-/// run was cancelled.
+/// run was canceled.
 pub fn greet() -> Result<String, Box<dyn Error>> {
     // 1. Parse the greeter, and start the log with its parse events before
     //    checking the result.
@@ -134,7 +134,7 @@ pub fn greet() -> Result<String, Box<dyn Error>> {
     // 6. The tool's output is the run's final text, and the log opens with
     //    the parse events.
     assert!(log.starts_with(&parse_events));
-    assert!(!cancel.is_cancelled());
+    assert!(!cancel.is_canceled());
     let RunOutcome::Completed { final_text } = outcome else {
         return Err(format!("the greeter did not finish: {outcome:?}").into());
     };

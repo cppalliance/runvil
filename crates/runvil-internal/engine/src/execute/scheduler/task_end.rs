@@ -217,7 +217,7 @@ impl Scheduler {
     }
 
     /// Moves every task `from` owns to `to`: the H1 hand-off, so a task the
-    /// pass spawned is waited on, inspected, cancelled, or leaked by the
+    /// pass spawned is waited on, inspected, canceled, or leaked by the
     /// walk exactly as if the walk had spawned it. The pass's admission
     /// accounting moves with the owner links: the slots the pass's tasks
     /// hold count against the walk from here, under the limit the walk

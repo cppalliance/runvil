@@ -23,7 +23,7 @@ mod pipeline;
 mod runner;
 
 use pipeline::build_workshop;
-use runner::install_interrupt_handler;
+use runner::install_cancel_handler;
 
 /// The environment variable naming a Gateway binary to stage, so CI can
 /// point at a staged file without passing a flag through Tauri.
@@ -88,33 +88,33 @@ trait CommandRunner {
     fn run(
         &mut self,
         command: &CommandSpec,
-        interrupt_policy: InterruptPolicy,
+        cancel_policy: CancelPolicy,
     ) -> io::Result<CommandResult>;
 
     fn last_command_started(&self) -> bool;
 
-    fn interruption_observed(&self) -> bool;
+    fn cancel_observed(&self) -> bool;
 }
 
 #[derive(Debug)]
 struct ProcessRunner {
-    interrupt: InterruptController,
+    cancel: CancelController,
     last_command_started: bool,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum InterruptPolicy {
+enum CancelPolicy {
     RejectExisting,
     AllowExisting,
 }
 
 #[derive(Clone, Debug)]
-struct InterruptController {
-    state: Arc<InterruptState>,
+struct CancelController {
+    state: Arc<CancelState>,
 }
 
 #[derive(Debug)]
-struct InterruptState {
+struct CancelState {
     generation: AtomicUsize,
     active_child: Mutex<Option<Child>>,
     termination_error: Mutex<Option<String>>,
@@ -177,7 +177,7 @@ struct BuildError {
 #[derive(Debug, Eq, PartialEq)]
 struct StepError {
     message: String,
-    interrupted: bool,
+    canceled: bool,
     command_started: bool,
 }
 
@@ -284,14 +284,14 @@ fn main() -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
-    let interrupt = match install_interrupt_handler() {
-        Ok(interrupt) => interrupt,
+    let cancel = match install_cancel_handler() {
+        Ok(cancel) => cancel,
         Err(error) => {
             eprintln!("build-workshop failed: {error}");
             return ExitCode::FAILURE;
         }
     };
-    match build_workshop(&request, &environment, &mut ProcessRunner::new(interrupt)) {
+    match build_workshop(&request, &environment, &mut ProcessRunner::new(cancel)) {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
             eprintln!("build-workshop failed: {error}");

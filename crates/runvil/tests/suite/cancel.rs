@@ -1,5 +1,5 @@
 //! Stopping runs from any thread, by a parent cancel or a handle's
-//! `Cancelled` future.
+//! `Canceled` future.
 
 use std::future::Future;
 use std::pin::Pin;
@@ -59,13 +59,13 @@ fn one_parent_cancel_ends_every_run_holding_one_of_its_children() -> TestResult 
 }
 
 #[test]
-fn a_cancelled_future_wakes_when_another_thread_cancels_the_run() -> TestResult {
+fn a_canceled_future_wakes_when_another_thread_cancels_the_run() -> TestResult {
     let handle = CancelHandle::new();
     let handed = handle.clone();
     let driver = Scenario::default()
         .params(move |ctx| ctx.with_cancel(handed.clone()))
         .start(&note("'hello'"))?;
-    let waiting = handle.cancelled();
+    let waiting = handle.canceled();
 
     let remote = handle.clone();
     let canceller = thread::spawn(move || remote.cancel());
@@ -73,8 +73,8 @@ fn a_cancelled_future_wakes_when_another_thread_cancels_the_run() -> TestResult 
     block_on(waiting);
     canceller
         .join()
-        .map_err(|_| "the cancelling thread panicked")?;
-    assert!(handle.is_cancelled());
+        .map_err(|_| "the canceling thread panicked")?;
+    assert!(handle.is_canceled());
     assert_eq!(
         driver.finish()?.outcome,
         RunOutcome::Cancelled,

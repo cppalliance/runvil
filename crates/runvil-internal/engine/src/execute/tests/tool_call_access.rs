@@ -6,7 +6,7 @@
 //! read every file with no conflict. The fork orders the chain's earlier
 //! writes before the tool's reads, the end joins the tool's writes into
 //! the chain before its next step, a task's call forks from the task, a
-//! dropped answer and a cancelled task's call are joined like any other,
+//! dropped answer and a canceled task's call are joined like any other,
 //! and an access used after its call has ended is refused.
 
 use std::fmt;
@@ -219,7 +219,7 @@ fn a_tool_that_writes_and_is_answered_dropped_is_still_joined() {
         files_run(md),
         files_answers(Reply::Dropped, &mut Identities::default()),
     );
-    assert_eq!(text_of(result), "false:cancelled|tool wrote this");
+    assert_eq!(text_of(result), "false:canceled|tool wrote this");
 }
 
 #[test]
@@ -250,7 +250,7 @@ fn an_access_kept_past_its_answer_is_refused() {
 }
 
 #[test]
-fn a_cancelled_tasks_tool_call_is_joined_and_its_later_writes_are_refused() {
+fn a_canceled_tasks_tool_call_is_joined_and_its_later_writes_are_refused() {
     // The driver performs the task's call at once but holds its answer, so
     // the cancel finds the task parked on it. The owner reads what the tool
     // wrote before the cancel; the tool's write once the owner has returned,

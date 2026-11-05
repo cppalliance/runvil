@@ -19,7 +19,7 @@
 // geometry (native geometry is the desktop app's to apply, never the page's),
 // and records the file in the recent-files store. Failures paint the
 // status bar, exactly as the other file actions do; success is silent,
-// the refreshed tree being its own confirmation; a cancelled picker is
+// the refreshed tree being its own confirmation; a canceled picker is
 // a no-op. A 408 paints too, but the route deadline abandons only the
 // answer, not a switch that already committed, so the page then asks the
 // server where it stands and follows it (resyncAfterTimeout).
@@ -222,7 +222,7 @@ function writeLiveWorkspaceState(): void {
 
 /**
  * The native picker filtered to .rvwork. Answers the picked path, or
- * null when the picker was cancelled (it answers a non-string then).
+ * null when the picker was canceled (it answers a non-string then).
  */
 async function pickWorkspaceFile(): Promise<string | null> {
   const { open } = await import("@tauri-apps/plugin-dialog");
@@ -236,7 +236,7 @@ async function pickWorkspaceFile(): Promise<string | null> {
  * event, and the recent entry. With a string `path` argument (an Open
  * Recent row or a Ctrl+P hit) the picker is skipped and the argument is
  * the file; otherwise the native picker filtered to .rvwork supplies it.
- * A cancelled picker is a no-op; a refusal reports and changes nothing
+ * A canceled picker is a no-op; a refusal reports and changes nothing
  * on the page; a timeout reports and then resyncs.
  */
 async function openWorkspaceFromFile(path?: unknown): Promise<void> {
@@ -288,7 +288,7 @@ async function currentWorkspaceName(): Promise<string> {
  * One save-picker switch, shared by Save As and Duplicate: the native
  * save dialog seeded with the current name, the extension normalized,
  * the switch posted, `afterSwitch` run against the new file, then the
- * page's announcement. A cancelled picker answers null and is a no-op;
+ * page's announcement. A canceled picker answers null and is a no-op;
  * a refusal reports and changes nothing; a timeout reports and then
  * resyncs.
  */

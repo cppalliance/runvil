@@ -33,7 +33,7 @@ impl GatewayBinding {
         cancellation: &crate::discovery::CancellationToken,
         mut wait: impl FnMut(&crate::discovery::CancellationToken, Duration) -> bool,
     ) -> Result<bool, GatewayPublicationError> {
-        if cancellation.is_cancelled() {
+        if cancellation.is_canceled() {
             return if self.publication_closed() {
                 Err(GatewayPublicationError::PublicationClosed)
             } else {
@@ -54,7 +54,7 @@ impl GatewayBinding {
                         }
                     }
                 };
-                if cancellation.is_cancelled() {
+                if cancellation.is_canceled() {
                     return Ok(false);
                 }
                 self.commit(&mut publication, snapshot).map(|()| true)

@@ -63,7 +63,7 @@ impl Conversations {
     }
 
     /// Ends the conversation with this id: it leaves the table at once,
-    /// and its run is cancelled. Returns whether a conversation was
+    /// and its run is canceled. Returns whether a conversation was
     /// ended. A handle still held sees the state reach `Closed` once the
     /// run's outstanding effects are answered `Dropped`.
     #[must_use]

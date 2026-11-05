@@ -4,7 +4,7 @@
 //! [`find`] is a pure function of its [`Source`]: it reads no clock, keeps
 //! nothing between calls, and returns what it found without writing any
 //! text. It yields to the executor now and then, so a running search can
-//! be cancelled.
+//! be canceled.
 
 mod collect;
 
