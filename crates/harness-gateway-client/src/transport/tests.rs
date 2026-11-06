@@ -8,6 +8,7 @@ use super::*;
 
 mod env;
 mod limits;
+mod pool;
 mod streaming;
 
 /// Serves `app` on a loopback port and returns its `/v1` root.

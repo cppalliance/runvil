@@ -5,18 +5,19 @@
 //!
 //! The Workshop broker holds the server's [`Registry`] and reads the
 //! gateway through it on every call, as the search provider does, so a
-//! replaced gateway serves the next round. It keeps the Gateway broker of
-//! the last generation it served under. A model list first waits until
-//! the menu's catalog holds a chat-capable model, so a conversation
-//! launched before the Gateway's catalog arrives starts its run only once
-//! it can bind one.
+//! replaced gateway serves the next round. It builds a Gateway broker per
+//! call; the Gateway client's shared connection pool makes that a few
+//! clones and keeps connections alive across rounds. A model list first
+//! waits until the menu's catalog holds a chat-capable model, so a
+//! conversation launched before the Gateway's catalog arrives starts its
+//! run only once it can bind one.
 //!
 //! Each round reads the dropdown's pick through the registry as it is
 //! sent, so a model picked between rounds serves the next one; a round
 //! already in flight finishes on its model.
 
 use std::num::NonZeroU32;
-use std::sync::{Arc, Mutex, PoisonError};
+use std::sync::Arc;
 
 use harness::{BoxFuture, InferenceBroker};
 use harness_gateway_client::{GatewayBroker, StreamDelta};
@@ -40,37 +41,22 @@ pub(super) struct WorkshopBroker {
     /// The subsystem registry the gateway and menu handles are read
     /// through.
     registry: Registry,
-    /// The broker built for the last generation served under, shared with
-    /// the model lists still waiting.
-    cached: Arc<Mutex<Option<(u64, GatewayBroker)>>>,
 }
 
 impl WorkshopBroker {
     /// Builds the broker over the server's subsystem registry.
     pub(super) fn new(registry: Registry) -> Self {
-        Self {
-            registry,
-            cached: Arc::new(Mutex::new(None)),
-        }
+        Self { registry }
     }
 
-    /// The Gateway broker for the current generation, built on the first
-    /// call under it. No usable gateway fails as `Unavailable` with the
-    /// code's fixed phrase, so no URL or key reaches the message.
+    /// A Gateway broker for the current generation. No usable gateway
+    /// fails as `Unavailable` with the code's fixed phrase, so no URL or
+    /// key reaches the message.
     fn current(&self) -> Result<GatewayBroker, Error> {
         let unavailable = ErrorCode::Unavailable;
         let gateway = usable_gateway(&self.registry)
             .ok_or_else(|| completion_error(unavailable, phrase(unavailable)))?;
-        // A poisoned lock holds a pair written whole by one store.
-        let mut cached = self.cached.lock().unwrap_or_else(PoisonError::into_inner);
-        if let Some((generation, broker)) = cached.as_ref()
-            && *generation == gateway.generation
-        {
-            return Ok(broker.clone());
-        }
-        let broker = GatewayBroker::new(gateway.endpoint, gateway.key);
-        *cached = Some((gateway.generation, broker.clone()));
-        Ok(broker)
+        Ok(GatewayBroker::new(gateway.endpoint, gateway.key))
     }
 
     /// Resolves once the menu's catalog holds a chat-capable model, at
