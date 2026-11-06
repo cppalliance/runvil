@@ -228,7 +228,7 @@ fn a_parse_failure_run_raises_names_the_prompt_and_its_file() {
     let code = ErrorCode::StructureInvalid;
     let message = "not a runvil prompt: no runvil version";
     let stamped = crate::prompt::detail::with_prompt_context(
-        crate::prompt::detail::parse_error(code, message),
+        runvil_types::error::failure(code, message),
         "greeter",
         "agents/greeter.md",
     );
