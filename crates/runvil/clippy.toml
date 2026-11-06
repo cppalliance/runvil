@@ -10,6 +10,11 @@
 allow-unwrap-in-tests = true
 allow-expect-in-tests = true
 
+# Size limits sit on functions (here) and on types (build-xtask's
+# type-size check). A file has no length limit.
+too-many-lines-threshold = 100
+too-many-arguments-threshold = 7
+
 # The first seven entries are the root file's process-global installers. The
 # rest are the determinism bans: no Engine code, tests included, sleeps, reads
 # the wall clock, waits with a timeout, or draws entropy from the OS. No entry

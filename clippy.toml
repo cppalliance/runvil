@@ -1,6 +1,11 @@
 allow-unwrap-in-tests = true
 allow-expect-in-tests = true
 
+# Size limits sit on functions (here) and on types (build-xtask's
+# type-size check). A file has no length limit.
+too-many-lines-threshold = 100
+too-many-arguments-threshold = 7
+
 # Process-global installers. Only a binary entry point may call one, under
 # `#[expect(clippy::disallowed_methods, reason = ...)]`. No entry names a
 # `replacement`, because no alternative takes the same arguments and returns
