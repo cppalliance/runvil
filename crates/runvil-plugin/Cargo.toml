@@ -19,8 +19,5 @@ serde_json.workspace = true
 # tests; Plugin crates enable it from `[dev-dependencies]` only.
 test-support = []
 
-[build-dependencies]
-build-ceiling.workspace = true
-
 [lints]
 workspace = true

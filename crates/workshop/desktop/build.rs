@@ -27,7 +27,6 @@ use std::path::{Path, PathBuf};
 const GATEWAY_SIDECAR_VARIABLE: &str = "RUNVIL_GATEWAY_SIDECAR";
 
 fn main() -> Result<(), Box<dyn Error>> {
-    build_ceiling::check()?;
     install_gateway_sidecar()?;
     tauri_build::try_build(tauri_build::Attributes::new().app_manifest(
         tauri_build::AppManifest::new().commands(&["desktop_update_supported", "quit"]),

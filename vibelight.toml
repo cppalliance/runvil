@@ -3,7 +3,6 @@
 workspace = true
 follow = ["**"]
 exclude = [
-    "crates/build-ceiling",  # build tooling
     "crates/build-ui",  # build tooling
     "crates/build-user-guide",  # build tooling
     "crates/build-workshop",  # run by the cargo alias `workshop`

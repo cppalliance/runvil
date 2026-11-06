@@ -24,8 +24,5 @@ runvil-lua = { workspace = true, features = ["test-support"] }
 # `runvil-engine` enables it from `[dev-dependencies]` only.
 test-support = []
 
-[build-dependencies]
-build-ceiling.workspace = true
-
 [lints]
 workspace = true

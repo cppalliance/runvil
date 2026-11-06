@@ -18,8 +18,5 @@ workshop-server.workspace = true
 [dev-dependencies]
 workshop-server-api = { path = ".", features = ["test-fixtures"] }
 
-[build-dependencies]
-build-ceiling.workspace = true
-
 [lints]
 workspace = true

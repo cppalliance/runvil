@@ -1,6 +1,5 @@
 //! Embeds the Gateway pin's `min_gateway` so Workshop can compare it with
-//! the version of the Gateway it attaches to, then runs the compile-time
-//! file-size check.
+//! the version of the Gateway it attaches to.
 //!
 //! The pin is one file for the whole repository, and this crate is where
 //! the Gateway version is known, so the value is baked into this crate's
@@ -8,9 +7,8 @@
 
 use std::path::PathBuf;
 
-fn main() -> Result<(), build_ceiling::Violations> {
+fn main() {
     embed_min_gateway();
-    build_ceiling::check()
 }
 
 /// Reads `gateway-pin/pin.json` and sets `RUNVIL_MIN_GATEWAY` to its

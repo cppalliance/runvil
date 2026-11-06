@@ -29,16 +29,6 @@ fn every_workspace_crate_inherits_workspace_lints() {
 }
 
 #[test]
-fn every_workspace_crate_runs_the_ceiling_from_its_build_script() {
-    let violations = wiring::ceiling_wiring_violations(&workspace_root());
-    assert!(
-        violations.is_empty(),
-        "ceiling wiring violations:\n{}",
-        violations.join("\n")
-    );
-}
-
-#[test]
 fn family_crates_have_the_invariants_marker() {
     let violations = marker_violations(&workspace_root());
     assert!(

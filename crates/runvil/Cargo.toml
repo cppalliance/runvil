@@ -23,8 +23,5 @@ runvil-vfs.workspace = true
 # as JSON.
 serde_json.workspace = true
 
-[build-dependencies]
-build-ceiling.workspace = true
-
 [lints]
 workspace = true

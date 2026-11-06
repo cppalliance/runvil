@@ -24,7 +24,6 @@ repository = "https://github.com/cppalliance/runvil"
 
 [workspace.dependencies]
 bytes = "1"
-build-ceiling = { path = "crates/build-ceiling" }
 runvil = { path = "crates/runvil" }
 runvil-engine = { path = "crates/runvil-internal/engine" }
 runvil-plugin = { path = "crates/runvil-plugin" }

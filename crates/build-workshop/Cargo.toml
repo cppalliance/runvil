@@ -17,8 +17,5 @@ ctrlc.workspace = true
 [dev-dependencies]
 tempfile.workspace = true
 
-[build-dependencies]
-build-ceiling.workspace = true
-
 [lints]
 workspace = true

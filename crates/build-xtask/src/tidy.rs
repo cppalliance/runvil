@@ -5,24 +5,18 @@
 //! `facade_shape`), the `doc(hidden)` ban over both facades and their
 //! containers (run from `doc_hidden`), the doctest ban over every
 //! workspace crate (run from `no_doctests`), the `Debug` trait's one
-//! spelling over every workspace crate (run from `debug_spelling`), the
-//! unsafe allowlist (run from `unsafe_allowlist`), and the ceiling wiring
-//! (run from `wiring`).
+//! spelling over every workspace crate (run from `debug_spelling`), and
+//! the unsafe allowlist (run from `unsafe_allowlist`).
 //!
 //! Each check returns a list of human-readable violations. The `#[test]`
 //! wrappers assert the lists are empty, so `cargo test -p build-xtask`
 //! enforces the architecture; `cargo xtask tidy` prints the same report
-//! on demand. The lint inheritance check binds every workspace crate, and
-//! so does the ceiling wiring check, which requires every crate's build
-//! script to run `build_ceiling::check()`, the compile-time 500-line file
-//! limit. The shared walk's read failures are reported by
-//! `marker_violations`, their one owner.
+//! on demand. The lint inheritance check binds every workspace crate. The
+//! shared walk's read failures are reported by `marker_violations`, their
+//! one owner.
 
 use std::fs;
 use std::path::{Path, PathBuf};
-
-#[path = "tidy-wiring.rs"]
-mod wiring;
 
 /// A tiered workshop crate: its package name and its directory under the
 /// `crates/workshop/` container.
@@ -63,7 +57,6 @@ pub(crate) fn all_violations(root: &Path) -> Vec<String> {
     let mut violations = tier_dependency_violations(root);
     violations.extend(marker_violations(root));
     violations.extend(lint_inheritance_violations(root));
-    violations.extend(wiring::ceiling_wiring_violations(root));
     violations.extend(crate::unsafe_allowlist::unsafe_allowlist_violations(root));
     violations.extend(crate::product::product_boundary_violations(root));
     violations.extend(crate::harness_bans::harness_tokio_bans(

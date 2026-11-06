@@ -50,16 +50,16 @@ const SHIM_SOURCE: &str = include_str!("__impl_coro.lua");
 const TASKS_CHUNK_NAME: &str = "@crates/runvil-internal/lua/src/__impl_tasks.lua";
 
 /// The `tasks` namespace source: spawn, the waits, the checks, note, and
-/// cancel, split from the shim chunk so neither chunk outgrows the file
-/// ceiling. It runs over the shim chunk's failure helpers.
+/// cancel, in a chunk of its own beside the shim chunk. It runs over the
+/// shim chunk's failure helpers.
 const TASKS_SOURCE: &str = include_str!("__impl_tasks.lua");
 
 /// The `fanout` chunk's name.
 const FANOUT_CHUNK_NAME: &str = "@crates/runvil-internal/lua/src/__impl_fanout.lua";
 
 /// The `fanout` shim source: Lua over the task protocol (`spawn`,
-/// `join_any`, `cancel`), split from the shim chunk for the same
-/// file-ceiling reason. It runs over the shim chunk's failure helpers plus
+/// `join_any`, `cancel`), in a chunk of its own beside the shim chunk. It
+/// runs over the shim chunk's failure helpers plus
 /// the collection enumerator and the item renderer; the scheduler's
 /// admission limit, not a captured cap, bounds how many arms run at once.
 const FANOUT_SOURCE: &str = include_str!("__impl_fanout.lua");

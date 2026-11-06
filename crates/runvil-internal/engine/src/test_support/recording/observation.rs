@@ -4,9 +4,8 @@
 //! expected sequences spell, and the stable trace rendering a recorder
 //! stores.
 //!
-//! Kept beside the recorder rather than in it so each file stays inside
-//! the repository's line ceiling; the recorder re-exports this module's
-//! public items, so a suite names `recording::Observation`.
+//! The recorder re-exports this module's public items, so a suite names
+//! `recording::Observation`.
 
 use std::fmt;
 

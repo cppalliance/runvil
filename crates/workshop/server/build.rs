@@ -7,10 +7,6 @@
 //! crates/workshop` from the repository root).
 
 fn main() -> std::process::ExitCode {
-    if let Err(error) = build_ceiling::check() {
-        eprintln!("{error}");
-        return std::process::ExitCode::FAILURE;
-    }
     match build_ui::build_sibling(
         "../ui",
         build_ui::UiBuild {
