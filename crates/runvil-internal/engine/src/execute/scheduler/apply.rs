@@ -21,7 +21,7 @@ use runvil_types::error::{ErrorCode, place};
 use runvil_types::event::lifecycle::{self, Lifecycle};
 use runvil_types::ids::{RoundId, TaskId};
 use runvil_types::tools::ToolOutput;
-use runvil_vfs::{ExecId, VfsError, detail};
+use runvil_vfs::{ExecId, VfsError};
 
 use crate::execute::infer::accept_infer;
 use crate::lua::{
@@ -207,11 +207,8 @@ impl Scheduler {
         let Some(scope) = &self.scope else {
             return;
         };
-        let owner = self.chains[chain]
-            .access()
-            .ok()
-            .map(|access| detail::access_id(access));
-        detail::end_access(scope, owner, exec);
+        let owner = self.chains[chain].access().ok().map(|access| access.id());
+        scope.end_access(owner, exec);
     }
 
     /// Applies a dropped timer: `task`'s entry moves to `Canceled`. While

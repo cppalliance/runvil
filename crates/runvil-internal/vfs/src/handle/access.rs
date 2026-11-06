@@ -4,12 +4,12 @@
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
 use super::Access;
-#[cfg(doc)]
-use super::VfsRef;
 use super::claims::Claims;
 use super::forward::StoreScoped;
 use super::scope::Scope;
 use super::store_view::{relativize_error, validate_store_path};
+#[cfg(doc)]
+use super::{ScopeHandle, VfsRef};
 use crate::error::VfsError;
 use crate::observe::{OpEvent, Origin};
 use crate::path::{VfsPath, canonicalize};
@@ -20,9 +20,9 @@ impl Access {
     /// The spawn is the fork: the child gets a fresh [`ExecId`] and a
     /// shared snapshot of this capability's clock plus its own entry,
     /// while this capability's entry advances, so its later accesses are
-    /// not ordered before the child's. [`crate::detail::access_join`] is
-    /// the matching join. `origin` labels the child's operation events,
-    /// as in [`VfsRef::acquire`].
+    /// not ordered before the child's. [`ScopeHandle::join`] is the
+    /// matching join. `origin` labels the child's operation events, as in
+    /// [`VfsRef::acquire`].
     ///
     /// # Errors
     /// Returns an error when the backend refuses to acquire the child's
@@ -32,7 +32,7 @@ impl Access {
     /// never ran. Returns [`VfsError::ScopeEnded`], before the fork, when
     /// the run or the tool call that owned this capability has ended.
     ///
-    /// Crate-internal: backs [`crate::detail::access_spawn`].
+    /// Crate-internal: backs [`ScopeHandle::spawn`].
     pub(crate) fn spawn(&self, origin: Origin) -> Result<Access, VfsError> {
         self.scope
             .refuse_if_closed(&self.root)
@@ -78,21 +78,11 @@ impl Access {
     }
 
     /// The identity every operation through this capability is
-    /// attributed to. Crate-internal: the Engine reads it through
-    /// [`crate::detail::access_id`].
-    pub(crate) const fn exec_id(&self) -> ExecId {
+    /// attributed to, as [`ScopeHandle::join`] and
+    /// [`ScopeHandle::end_access`] name it.
+    #[must_use]
+    pub const fn id(&self) -> ExecId {
         self.id
-    }
-
-    /// The scope this identity belongs to. Crate-internal: backs
-    /// [`crate::detail::scope_handle`].
-    pub(crate) const fn scope(&self) -> &Arc<Scope> {
-        &self.scope
-    }
-
-    /// Crate-internal: backs [`crate::detail::access_join`].
-    pub(crate) fn join(&self, child: ExecId) {
-        self.scope.join(self.id, child);
     }
 
     /// The claims-table half of one operation: refuses once the run that

@@ -79,7 +79,7 @@ fn vm_setup_hands_the_vm_the_runs_argv_in_the_mode_the_caller_asks_for() {
     let prompt = test_prompt();
     let ctx = test_state(&prompt).with_args("{\"query\":\"papers\"}");
     let sys = json!({});
-    let access = fresh_access();
+    let (access, scope) = fresh_access();
     let requested = ctx.argv().cloned();
     let expected = requested.as_deref();
     assert!(
@@ -87,13 +87,29 @@ fn vm_setup_hands_the_vm_the_runs_argv_in_the_mode_the_caller_asks_for() {
         "the fixture's args must derive an argv, or neither mode is observable"
     );
     let selection = Arc::new(Mutex::new(None));
-    let frozen = ctx.vm_setup(&sys, VmSeed::default(), &access, &selection, "Only", false);
+    let frozen = ctx.vm_setup(
+        &sys,
+        VmSeed::default(),
+        &access,
+        &scope,
+        &selection,
+        "Only",
+        false,
+    );
     assert!(
         matches!(frozen.argv, Argv::Frozen(value) if value == expected),
         "an unprivileged constructor must get the run's argv frozen: {:?}",
         frozen.argv
     );
-    let writable = ctx.vm_setup(&sys, VmSeed::default(), &access, &selection, "Only", true);
+    let writable = ctx.vm_setup(
+        &sys,
+        VmSeed::default(),
+        &access,
+        &scope,
+        &selection,
+        "Only",
+        true,
+    );
     assert!(
         matches!(writable.argv, Argv::Writable(value) if value == expected),
         "the H1 pass's flag must get the run's argv writable: {:?}",

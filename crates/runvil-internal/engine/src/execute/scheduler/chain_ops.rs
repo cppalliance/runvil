@@ -1,11 +1,12 @@
 //! The one-chain view: the requests that touch only their own chain run
 //! in a [`ChainOps`], which borrows that chain and the effect table
-//! mutably and owns nothing. A request in the view can change only its own
-//! chain and the effect table: it can't reach another chain, the task
-//! arena, admission, or the ready queue, and the compiler enforces that.
+//! mutably, reads the run's scope handle, and owns nothing. A request in
+//! the view can change only its own chain and the effect table: it can't
+//! reach another chain, the task arena, admission, or the ready queue, and
+//! the compiler enforces that.
 //! [`Scheduler::with_chain`] is the only way into the view. The view's
 //! requests sit beside the arms they belong to, in the eight
-//! `impl ChainOps<'_>` blocks this crate holds: the shared `prompt`,
+//! `impl ChainOps` blocks this crate holds: the shared `prompt`, `scope`,
 //! `answer`, `issue`, and `number_round` live here in `chain_ops`, and the
 //! arms live in `apply`, `chat`, `dispatch`, `tool_call`, its `adhoc` and
 //! `discovery` children, and `walk`.
@@ -13,11 +14,12 @@
 use std::sync::Arc;
 
 use runvil_types::event::ReplyOrigin;
+use runvil_vfs::ScopeHandle;
 
-use crate::Result;
 use crate::execute::run::{Effect, EffectId, Round};
 use crate::lua::Answer;
 use crate::prompt::Prompt;
+use crate::{Result, error};
 
 use super::{Chain, ChainIndex, Continuation, EffectTable, Scheduler};
 
@@ -32,6 +34,9 @@ pub(super) struct ChainOps<'a> {
     pub(super) chain: &'a mut Chain,
     /// The effect table the view's leaf arms issue into.
     effects: &'a mut EffectTable,
+    /// The handle on the run's scope, which forks the chain's access and
+    /// derives its store view.
+    scope: Option<&'a ScopeHandle>,
     /// Whether the view delivered an answer to the chain, which
     /// [`Scheduler::with_chain`] requeues once.
     answered: bool,
@@ -51,6 +56,7 @@ impl Scheduler {
             id,
             chain: &mut self.chains[id],
             effects: &mut self.effects,
+            scope: self.scope.as_ref(),
             answered: false,
         };
         let result = f(&mut ops);
@@ -61,13 +67,25 @@ impl Scheduler {
     }
 }
 
-impl ChainOps<'_> {
+impl<'a> ChainOps<'a> {
     /// The prompt's shared handle: the chain resolves its walk position
     /// against this clone so the tree borrow never pins the chain. The
     /// chain's own context fork is the source, which is the one `ChainState`
     /// the chain reads the prompt from.
     pub(super) fn prompt(&self) -> Arc<Prompt> {
         Arc::clone(self.chain.ctx.prompt())
+    }
+
+    /// The handle on the run's scope, which forks the chain's access and
+    /// derives its store view. It borrows from the scheduler rather than
+    /// the view, so it outlives a borrow of the chain.
+    ///
+    /// # Errors
+    /// Returns an `Internal` failure when the run holds no scope handle,
+    /// which every chain's start rules out.
+    pub(super) fn scope(&self) -> Result<&'a ScopeHandle> {
+        self.scope
+            .ok_or(error::internal("the run holds no scope handle"))
     }
 
     /// Delivers `answer` to the chain's suspended block: the inline-answer

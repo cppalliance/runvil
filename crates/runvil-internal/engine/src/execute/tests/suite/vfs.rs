@@ -63,10 +63,8 @@ const MISSING_OUTPUT: &str = concat!(
 /// The store view derived from a fresh access on the run's handle: the
 /// caller's seeding and extraction half of the seed-run-extract round trip.
 fn fresh_store_view(vfs: &VfsRef, origin: &str) -> Access {
-    let access = vfs
-        .acquire(Origin::new(origin))
-        .expect("the caller's backend acquires");
-    runvil_vfs::detail::store_view(&access).expect("the handle declares a store")
+    vfs.acquire_store(Origin::new(origin))
+        .expect("the handle declares a store")
 }
 
 /// The test's extraction rule: a declared output the run did not leave

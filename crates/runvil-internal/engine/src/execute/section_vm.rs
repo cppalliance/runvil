@@ -22,7 +22,7 @@ use std::sync::{Arc, Mutex};
 
 use runvil_types::emitter::Emitter;
 use runvil_types::packs::Prelude;
-use runvil_vfs::Access;
+use runvil_vfs::{Access, ScopeHandle};
 
 use crate::lua::{Library, LibraryKey, ProseState, SectionText, SectionVm, Uninjected};
 use crate::model::ModelBinding;
@@ -65,6 +65,9 @@ pub(crate) struct SectionVmSetup<'a> {
     /// (a fanout arm included). The store closures share it, so every
     /// store op is attributed to the chain step's identity.
     pub(crate) access: &'a Arc<Access>,
+    /// The handle on the run's scope, which derives the `store` table's
+    /// view of `access`; the VM keeps the view and never the handle.
+    pub(crate) scope: &'a ScopeHandle,
     /// The section's current-model selection: it starts on the `default`
     /// binding, or on nothing when the caller supplied no model, and
     /// `models.use` rewrites it.
@@ -178,7 +181,7 @@ where
         + 'static,
     P: Fn(&str, Option<NonZeroU32>, ProseState<'_>) -> mlua::Result<String> + Send + Sync + 'static,
 {
-    vm.install_engine_globals(setup.emitter, setup.section_name)?;
+    vm.install_engine_globals(setup.emitter, setup.section_name, setup.scope)?;
     if let Some(snapshot) = setup.ui {
         crate::lua::install_ui(vm.lua(), Arc::clone(snapshot))?;
     }

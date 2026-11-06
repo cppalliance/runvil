@@ -80,4 +80,5 @@ fn the_handle_and_capability_are_send_and_sync() {
     assert_send_sync::<VfsRef>();
     assert_send_sync::<Access>();
     assert_send_sync::<AcquireContext>();
+    assert_send_sync::<ScopeHandle>();
 }

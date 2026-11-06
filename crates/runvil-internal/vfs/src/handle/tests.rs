@@ -7,7 +7,7 @@ use std::sync::atomic::Ordering;
 use std::sync::{Arc, Mutex, PoisonError};
 
 use super::claims::PRUNE_AT;
-use super::{Access, VfsRef};
+use super::{Access, ScopeHandle, VfsRef};
 use crate::error::VfsError;
 use crate::observe::{OpEvent, Origin};
 use crate::path::VfsPath;

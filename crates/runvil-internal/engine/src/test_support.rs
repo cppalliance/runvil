@@ -97,16 +97,15 @@ pub(crate) fn with_author_prose(error: crate::Error, line: u32) -> crate::Error 
     error
 }
 
-/// A fresh default handle's access capability, for tests that inject Engine
-/// values into a standalone VM.
+/// A fresh default handle's access capability beside the handle on its
+/// scope, for tests that inject Engine values into a standalone VM.
 #[cfg(test)]
 #[track_caller]
-pub(crate) fn fresh_access() -> std::sync::Arc<runvil_vfs::Access> {
-    std::sync::Arc::new(
-        runvil_vfs::VfsRef::default()
-            .acquire(runvil_vfs::Origin::new("test fixture"))
-            .expect("the stock backend acquires"),
-    )
+pub(crate) fn fresh_access() -> (std::sync::Arc<runvil_vfs::Access>, runvil_vfs::ScopeHandle) {
+    let (access, scope) = runvil_vfs::VfsRef::default()
+        .acquire_scope(runvil_vfs::Origin::new("test fixture"))
+        .expect("the stock backend acquires");
+    (std::sync::Arc::new(access), scope)
 }
 
 /// Performs one effect locally, with no I/O: a store operation runs on the

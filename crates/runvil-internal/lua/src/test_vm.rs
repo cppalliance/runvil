@@ -2,8 +2,10 @@
 //! section setup builds one, through construction, the run's limits,
 //! Engine injection, and the persistent Engine globals, with the control
 //! globals and coroutine shims on request, handed back with named handles
-//! to what the VM shares; the one-shot [`run_chunk`]; the tool fixtures as
-//! data; and the scope a VM's offers resolve to.
+//! to what the VM shares; the access fixture; the one-shot [`run_chunk`];
+//! the tool fixtures as data; and the scope a VM's offers resolve to.
+
+mod access;
 
 use std::collections::BTreeMap;
 use std::ops::Deref;
@@ -15,13 +17,14 @@ use runvil_types::emitter::Emitter;
 use runvil_types::seed::RunSeed;
 use runvil_types::tools::{ToolCatalog, ToolId, ToolInfo};
 use runvil_types::untrusted::GuardNonce;
-use runvil_vfs::{Access, Origin, VfsRef};
 use serde_json::{Value as Json, json};
 
 use crate::error::{self, Result};
 use crate::section::scalar_return;
 use crate::tests::recording::null_emitter;
 use crate::{Argv, OfferedTool, RosterEntry, SectionText, SectionVm, ToolSet};
+
+pub(crate) use access::{ScopedAccess, fresh_access};
 
 /// The one guard-nonce seed of every test VM.
 pub(crate) const TEST_SEED: RunSeed = RunSeed::from_bytes([0x73; 32]);
@@ -34,18 +37,6 @@ pub(crate) const TEST_SECTION: &str = "Test";
 #[track_caller]
 pub(crate) fn test_nonce() -> GuardNonce {
     GuardNonce::from_seed(&TEST_SEED)
-}
-
-/// A fresh default handle's access capability: the store is declared at
-/// the root and the vended identity is the test's own, so seeding through
-/// the store view and the VM's store ops never meet a second live identity.
-#[track_caller]
-pub(crate) fn fresh_access() -> Arc<Access> {
-    Arc::new(
-        VfsRef::default()
-            .acquire(Origin::new("lua test fixture"))
-            .expect("the stock backend acquires"),
-    )
 }
 
 /// The result of running a section's Lua block with [`run_chunk`].
@@ -75,7 +66,7 @@ pub(crate) fn run_chunk(
     source: &str,
     args: &str,
     sys: &Json,
-    access: &Arc<Access>,
+    access: &ScopedAccess,
     emitter: &Emitter,
     section: &str,
 ) -> Result<LuaOutcome> {
@@ -84,9 +75,9 @@ pub(crate) fn run_chunk(
         emitter,
         section,
     )?
-    .inject_test_values(args, sys, access)
+    .inject_test_values(args, sys, &access.access)
     .map_err(|failure| failure.teardown(emitter, section))?;
-    vm.install_engine_globals(emitter, section)?;
+    vm.install_engine_globals(emitter, section, &access.scope)?;
     let returned: MultiValue = vm.lua().load(source).eval().map_err(error::lua)?;
     let returned = scalar_return(returned)?;
     let var = vm.var()?;
@@ -247,7 +238,7 @@ type Selection = Arc<Mutex<Option<ModelBinding>>>;
 pub(crate) struct TestVm<'a> {
     tools: ToolSet,
     models: ModelSet,
-    access: Option<Arc<Access>>,
+    access: Option<ScopedAccess>,
     emitter: Emitter,
     section: &'a str,
     args: &'a str,
@@ -292,9 +283,10 @@ impl<'a> TestVm<'a> {
         self
     }
 
-    /// The VFS access the `store` table operates through.
+    /// The VFS access the `store` table operates through, beside the
+    /// handle on its scope.
     #[track_caller]
-    pub(crate) fn access(mut self, access: Arc<Access>) -> Self {
+    pub(crate) fn access(mut self, access: ScopedAccess) -> Self {
         self.access = Some(access);
         self
     }
@@ -381,7 +373,7 @@ impl<'a> TestVm<'a> {
     #[track_caller]
     pub(crate) fn build(mut self) -> BuiltVm {
         let (mut vm, selection, access) = self.run_injection();
-        vm.install_engine_globals(&self.emitter, self.section)
+        vm.install_engine_globals(&self.emitter, self.section, &access.scope)
             .expect("the Engine globals install");
         if self.shims {
             vm.install_control_globals(|_| {
@@ -404,7 +396,7 @@ impl<'a> TestVm<'a> {
     /// injection, handing back the VM beside its selection (which starts on
     /// the default binding, if any) and the access it shares.
     #[track_caller]
-    fn run_injection(&mut self) -> (SectionVm, Selection, Arc<Access>) {
+    fn run_injection(&mut self) -> (SectionVm, Selection, ScopedAccess) {
         let tools = Arc::new(std::mem::take(&mut self.tools));
         let set = Arc::new(std::mem::take(&mut self.models));
         let selection = Arc::new(Mutex::new(set.binding("default").cloned()));
@@ -425,7 +417,7 @@ impl<'a> TestVm<'a> {
             .inject_values(
                 self.args,
                 self.sys.unwrap_or(&empty),
-                &access,
+                &access.access,
                 self.var,
                 self.argv,
                 &selection,
@@ -441,8 +433,9 @@ pub(crate) struct BuiltVm {
     vm: SectionVm,
     /// The section's current-model selection, which injection received.
     pub(crate) selection: Selection,
-    /// The access the VM's `store` table operates through.
-    pub(crate) access: Arc<Access>,
+    /// The access the VM's `store` table operates through, beside the
+    /// handle on its scope.
+    pub(crate) access: ScopedAccess,
     emitter: Emitter,
     section: String,
 }

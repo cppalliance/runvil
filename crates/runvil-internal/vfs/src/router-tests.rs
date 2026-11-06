@@ -166,7 +166,7 @@ fn closing_an_access_reports_a_mount_release_failure_that_dropping_swallows() ->
     let mount = TestFs::default().on_release(move |_| Err(refusal()));
     let vfs = VfsRef::builder().mount("/m", mount.clone()).build();
     let closed = access(&vfs)?;
-    let id = crate::detail::access_id(&closed);
+    let id = closed.id();
     closed.write("/m/f.txt", b"x")?;
     assert_eq!(closed.close(), Err(refusal()));
     assert!(
@@ -177,7 +177,7 @@ fn closing_an_access_reports_a_mount_release_failure_that_dropping_swallows() ->
     access(&vfs)?.close()?;
     // Dropping one that did releases once and swallows the failure.
     let dropped = access(&vfs)?;
-    let id = crate::detail::access_id(&dropped);
+    let id = dropped.id();
     dropped.write("/m/g.txt", b"x")?;
     drop(dropped);
     let releases = mount

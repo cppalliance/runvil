@@ -53,12 +53,12 @@ impl Scheduler {
         let blocks: &[Block] =
             crate::prompt::detail::entry(prompt).map_or(&[], |section| section.blocks());
         let origin = prompt_origin(prompt, prompt.title(), blocks);
-        let access = self
+        let (access, scope) = self
             .ctx
             .vfs()
-            .acquire(origin)
+            .acquire_scope(origin)
             .map_err(|cause| error::store(&cause))?;
-        self.scope = Some(runvil_vfs::detail::scope_handle(&access));
+        self.scope = Some(scope);
         self.start_root_chain(
             ChainKind::Root,
             after_h1,
@@ -104,9 +104,11 @@ impl ChainOps<'_> {
     ///
     /// # Errors
     /// Returns the failure of frame construction, as documented on
-    /// [`SectionContext::new`].
+    /// [`SectionContext::new`], or an `Internal` failure when the run holds
+    /// no scope handle.
     fn enter_section(&mut self) -> Result<bool> {
         let prompt = self.prompt();
+        let scope = self.scope()?;
         let chain = &mut *self.chain;
         if chain.kind.is_h1() {
             // The H1 pass enters its frame exactly once: section 0 under
@@ -117,6 +119,7 @@ impl ChainOps<'_> {
             let frame = SectionContext::new_h1(
                 &chain.ctx,
                 chain.access()?,
+                scope,
                 &chain.selection,
                 &section_id,
                 &chain.task,
@@ -137,6 +140,7 @@ impl ChainOps<'_> {
         let frame = SectionContext::new(
             &chain.ctx,
             chain.access()?,
+            scope,
             &chain.selection,
             chain.walk.current(),
             &section_id,

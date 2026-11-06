@@ -62,9 +62,9 @@ fn section_vm_preserves_one_environment_across_all_phases() {
     let vm = TestVm::new()
         .args("input")
         .sys(&sys)
-        .access(access)
+        .access(access.clone())
         .inject();
-    vm.install_engine_globals(&null_emitter(), "Test")
+    vm.install_engine_globals(&null_emitter(), "Test", &access.scope)
         .expect("Engine globals must install");
     run_scalar(&vm, &first, &null_emitter(), "Test")
         .expect("the first chunk must run with the full environment");
@@ -106,7 +106,7 @@ fn a_refused_injection_hands_back_the_vm_for_its_teardown() {
         .inject_values(
             "",
             &json!({}),
-            &fresh_access(),
+            &fresh_access().access,
             Some(&json!(5)),
             Argv::Frozen(None),
             &Arc::new(Mutex::new(None)),
@@ -168,6 +168,7 @@ fn section_vm_value_injection_bypasses_chunk_global_metatables() {
          args .. ',' .. type(fixtures_search) .. ',' .. tools.get('fixtures/search').id",
     );
     let bindings = fixture_set(&[("search", "search the web")]);
+    let access = fresh_access();
     let vm = SectionVm::new_for_section(
         &test_nonce(),
         &Arc::new(bindings),
@@ -176,10 +177,10 @@ fn section_vm_value_injection_bypasses_chunk_global_metatables() {
         "Test",
     )
     .expect("VM must build")
-    .inject_test_values("private input", &json!({}), &fresh_access())
+    .inject_test_values("private input", &json!({}), &access.access)
     .expect("Engine values must inject");
     let observer = null_emitter();
-    vm.install_engine_globals(&observer, "Test")
+    vm.install_engine_globals(&observer, "Test", &access.scope)
         .expect("Engine globals must install");
     run_scalar(&vm, &intercept, &null_emitter(), "Test").expect("the intercepting chunk must run");
 
@@ -196,12 +197,14 @@ fn section_vm_reports_store_operations_in_each_chunk() {
     let write = program("store.write('state.txt', args)");
     let read = program("return store.read('state.txt')");
     let recorder = Recorder::default();
+    let access = fresh_access();
     let vm = TestVm::new()
         .section("Gather")
         .args("private input")
+        .access(access.clone())
         .inject();
     let observer = recorder.emitter().clone();
-    vm.install_engine_globals(&observer, "Gather")
+    vm.install_engine_globals(&observer, "Gather", &access.scope)
         .expect("Engine globals must install");
 
     run_scalar(&vm, &write, recorder.emitter(), "Gather").expect("first chunk write must run");
@@ -256,7 +259,7 @@ fn section_vms_isolate_mutated_globals() {
     let seed = program("counter = 0");
     let increment = program("counter = counter + 1; return counter");
     let access = fresh_access();
-    let first = TestVm::new().access(Arc::clone(&access)).build();
+    let first = TestVm::new().access(access.clone()).build();
     run_scalar(&first, &seed, &null_emitter(), "First").expect("first VM must seed");
     let second = TestVm::new().access(access).build();
     run_scalar(&second, &seed, &null_emitter(), "Second").expect("second VM must seed");
@@ -287,12 +290,13 @@ fn section_lifecycle_reports_are_ordered_exact_and_payload_free() {
     let prologue = program("var.value = args");
     let epilog = program("return 'epilog done'");
     let recorder = Recorder::default();
+    let access = fresh_access();
     let vm = SectionVm::new(&test_nonce(), recorder.emitter(), "Gather")
         .expect("VM must build")
-        .inject_test_values("private input", &json!({}), &fresh_access())
+        .inject_test_values("private input", &json!({}), &access.access)
         .expect("Engine values must inject");
     let observer = recorder.emitter().clone();
-    vm.install_engine_globals(&observer, "Gather")
+    vm.install_engine_globals(&observer, "Gather", &access.scope)
         .expect("Engine globals must install");
     run_scalar(&vm, &first, recorder.emitter(), "Gather").expect("the first chunk must run");
     run_scalar(&vm, &prologue, recorder.emitter(), "Gather").expect("prologue must run");

@@ -189,12 +189,14 @@ impl Scheduler {
         // stats the store root through a throwaway capability, so a handle
         // with no declaration fails here rather than on the first store call,
         // and a declared-but-failing backend's error fails the run.
-        let probe = self
+        let (probe, scope) = self
             .ctx
             .vfs()
-            .acquire(Origin::new("store mount probe"))
+            .acquire_scope(Origin::new("store mount probe"))
             .map_err(|cause| error::store(&cause))?;
-        runvil_vfs::detail::probe_store(&probe).map_err(|cause| error::store(&cause))?;
+        scope
+            .probe_store(&probe)
+            .map_err(|cause| error::store(&cause))?;
         if let Some(refusal) = self.ctx.refusal() {
             return Err(refusal.clone());
         }

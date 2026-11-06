@@ -104,8 +104,8 @@ impl Scheduler {
 
     /// Joins `task` into `owner`: merges the task's final clock into the
     /// owner's access, so everything the task did happens before the
-    /// owner's next step. A timer (no identity) and an owner already
-    /// ended (no access) need no join.
+    /// owner's next step. A timer (no identity), an owner already ended
+    /// (no access), and a run whose scope has ended need no join.
     pub(super) fn join_task(&self, owner: ChainIndex, task: &TaskId) {
         let Some(exec) = self.tasks.exec_of(task) else {
             return;
@@ -113,15 +113,20 @@ impl Scheduler {
         let Ok(access) = self.chains[owner].access() else {
             return;
         };
-        runvil_vfs::detail::access_join(access, exec);
+        if let Some(scope) = &self.scope {
+            scope.join(access.id(), exec);
+        }
     }
 
     /// Joins every task `owner` owns into `access`: the chain-end join,
     /// so the chain's own final clock transitively covers everything its
     /// tasks did even when no wait delivered them.
     pub(super) fn join_owned_tasks(&self, owner: ChainIndex, access: &Access) {
+        let Some(scope) = &self.scope else {
+            return;
+        };
         for exec in self.tasks.execs_owned_by(owner) {
-            runvil_vfs::detail::access_join(access, exec);
+            scope.join(access.id(), exec);
         }
     }
 

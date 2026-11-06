@@ -106,12 +106,12 @@ fn every_store_operation_reports_its_exact_success_and_failure() {
         source: &'static str,
         success: Observation,
         failure: Observation,
-        prepare: fn(&Arc<Access>),
+        prepare: fn(&ScopedAccess),
     }
 
-    fn empty(_access: &Arc<Access>) {}
+    fn empty(_access: &ScopedAccess) {}
 
-    fn existing(access: &Arc<Access>) {
+    fn existing(access: &ScopedAccess) {
         store_view(access)
             .write("a.txt", b"old")
             .expect("the memory store can prepare a file");

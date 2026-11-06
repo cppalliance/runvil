@@ -48,7 +48,7 @@ fn issue_tool_call(table: &mut EffectTable, chain: ChainIndex) -> (EffectId, Exe
     let access = VfsRef::default()
         .acquire(Origin::new("effects-test"))
         .expect("the default backend acquires");
-    let exec = runvil_vfs::detail::access_id(&access);
+    let exec = access.id();
     let tool = ToolId::parse("example/test/echo").expect("a fixture id is a tool id");
     let binding = ToolBinding::from_info(
         "echo",

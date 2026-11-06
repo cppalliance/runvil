@@ -37,18 +37,14 @@ const DECLARES_NOTHING: &str = concat!(
 #[test]
 fn two_runs_writing_the_same_store_path_do_not_conflict() {
     let (ctx_a, ctx_b) = (test_params("run-a"), test_params("run-b"));
-    let access_a = ctx_a
+    let store_a = ctx_a
         .vfs
-        .acquire(Origin::new("run-a"))
-        .expect("run a acquires");
-    let access_b = ctx_b
+        .acquire_store(Origin::new("run-a"))
+        .expect("run a's handle declares a store");
+    let store_b = ctx_b
         .vfs
-        .acquire(Origin::new("run-b"))
-        .expect("run b acquires");
-    let store_a =
-        runvil_vfs::detail::store_view(&access_a).expect("run a's handle declares a store");
-    let store_b =
-        runvil_vfs::detail::store_view(&access_b).expect("run b's handle declares a store");
+        .acquire_store(Origin::new("run-b"))
+        .expect("run b's handle declares a store");
     // Both writes proceed while both accesses are live: each run's store
     // is its own storage under its own claims table.
     store_a.write("paper.md", b"from a").expect("run a writes");

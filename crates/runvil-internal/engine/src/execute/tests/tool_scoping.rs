@@ -118,7 +118,7 @@ fn a_section_offer_by_id_scopes_the_tool_and_dispatches_it() {
         "Only",
     )
     .expect("the section VM builds")
-    .inject_test_values("", &json!({}), &fresh_access())
+    .inject_test_values("", &json!({}), &fresh_access().0)
     .expect("values must inject");
 
     // The section's `tools.offer` lands in its offers; the scope

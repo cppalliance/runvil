@@ -154,6 +154,7 @@ pub mod vfs {
     pub use runvil_vfs::PathReason;
     pub use runvil_vfs::Policy;
     pub use runvil_vfs::RealBackend;
+    pub use runvil_vfs::ScopeHandle;
     pub use runvil_vfs::Stat;
     pub use runvil_vfs::Verdict;
     pub use runvil_vfs::Vfs;

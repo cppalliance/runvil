@@ -92,11 +92,11 @@ use std::sync::Arc;
 
 use runvil_types::cancel::CancelHandle;
 use runvil_vfs::Origin;
-use runvil_vfs::detail::ScopeHandle;
+use runvil_vfs::ScopeHandle;
 
-use crate::Result;
 use crate::lua::Answer;
 use crate::prompt::{Block, Prompt};
+use crate::{Result, error};
 
 use super::context::ChainState;
 use super::run::EffectAnswer;
@@ -174,11 +174,14 @@ pub(crate) struct Scheduler {
     /// Where the step loop stands: not started, running, ending with the
     /// result held until the orphans are answered, or done.
     phase: Phase,
-    /// The run's scope, taken where the run acquires its root identity:
-    /// closed when the run reaches `Done` or is dropped before it, so a
-    /// store view the caller still holds never outlives the run. The two
-    /// root-start sites (`h1::start_h1` and `walk::start_root_walk`) are its
-    /// only writers, each at the acquisition that opens the run's identity.
+    /// The handle on the run's scope, which the acquisition of the run's
+    /// root identity returns: every fork, join, and end of the run's
+    /// identities and every store view of their accesses goes through it,
+    /// and it closes the scope when the run reaches `Done` or is dropped
+    /// before it, so a store view the caller still holds never outlives the
+    /// run. The two root-start sites (`h1::start_h1` and
+    /// `walk::start_root_walk`) are its only writers in a shipped Engine,
+    /// each at the acquisition that opens the run's identity.
     scope: Option<ScopeHandle>,
 }
 
@@ -208,8 +211,21 @@ impl Scheduler {
     /// its next operation, and its claims stop conflicting.
     fn end_scope(&mut self) {
         if let Some(scope) = self.scope.take() {
-            runvil_vfs::detail::end_scope(&scope);
+            scope.end();
         }
+    }
+
+    /// The handle on the run's scope, for a fork of one of the run's
+    /// accesses.
+    ///
+    /// # Errors
+    /// Returns an `Internal` failure when the run holds no scope handle:
+    /// before its root identity is acquired, when no access exists to fork,
+    /// or after the run ended.
+    fn run_scope(&self) -> Result<&ScopeHandle> {
+        self.scope
+            .as_ref()
+            .ok_or(error::internal("the run holds no scope handle"))
     }
 
     /// The prompt's shared handle: a chain resolves its walk position

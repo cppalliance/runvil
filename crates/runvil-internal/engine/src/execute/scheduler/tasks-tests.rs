@@ -29,7 +29,7 @@ fn chain_backing(raw: u32) -> TaskBacking {
         .expect("the default backend acquires");
     TaskBacking::Chain {
         chain: chain(raw),
-        exec: runvil_vfs::detail::access_id(&access),
+        exec: access.id(),
     }
 }
 

@@ -13,14 +13,14 @@
 //! # Scopes, fork and join
 //!
 //! [`VfsRef::acquire`] starts a *scope*: the acquired [`Access`] is the
-//! root identity, and every identity [`Access::spawn`] forks joins the
-//! scope. Each identity holds a vector clock, and every admitted access
+//! root identity, and every identity [`ScopeHandle::spawn`] forks joins
+//! the scope. Each identity holds a vector clock, and every admitted access
 //! records an *epoch* - its identity paired with its own clock entry at
 //! that moment - on each region it touches. One epoch is ordered before
 //! another identity's next step exactly when the other's clock has seen
 //! the epoch's entry, so conflicts follow happens-before (FastTrack-style,
 //! Flanagan and Freund, PLDI 2009) instead of liveness: a spawn forks the
-//! parent's clock into the child, and a join - [`crate::detail::access_join`] -
+//! parent's clock into the child, and a join - [`ScopeHandle::join`] -
 //! merges the child's final clock back into the owner's. An identity's own
 //! entry lives outside the shared snapshot, so a spawn reuses the parent's
 //! map read-only and records the parent's entry as one frozen fork step:
@@ -28,7 +28,7 @@
 //! released during a scope's life. An identity ends when its last
 //! [`Access`] drops, its final clock stays in the scope for late joins,
 //! and a scope ends with its last identity or when its run closes it
-//! through [`crate::detail::end_scope`], whichever comes first; its
+//! through [`ScopeHandle::end`], whichever comes first; its
 //! claims are then ignored and purged lazily, and a closed scope's
 //! accesses refuse every later operation. Two live scopes never order each other, so their
 //! claims always conflict. See the reference docs on the facade for the
@@ -45,6 +45,7 @@ mod operations;
 mod prune;
 mod region;
 mod scope;
+mod scope_handle;
 mod store_view;
 #[cfg(test)]
 mod tests;
@@ -61,6 +62,7 @@ use crate::traits::{AcquireContext, AllowAll, ExecId, Policy, Vfs, VfsAccess};
 pub(crate) use case_fold::CaseFolds;
 use claims::Claims;
 pub(crate) use scope::Scope;
+pub use scope_handle::ScopeHandle;
 
 /// One mounted filesystem instance: its backend and the ledger of who is
 /// touching what. The two are separately `Arc`-shareable so `overlay()`
@@ -202,6 +204,22 @@ impl VfsRef {
             &AcquireContext::new(ExecId::vend(), Scope::start()),
             Some(origin),
         )
+    }
+
+    /// Acquires an `Access` capability for a new serial thread of
+    /// execution, beside the [`ScopeHandle`] on the scope it starts.
+    ///
+    /// This is [`VfsRef::acquire`] plus the authority over the new scope:
+    /// the scope handle forks, joins, and ends the scope's identities,
+    /// derives their store views, and ends the scope. No other call returns
+    /// a scope handle, so an `Access` alone never carries that authority.
+    ///
+    /// # Errors
+    /// Returns an error when the backend refuses to acquire the identity.
+    pub fn acquire_scope(&self, origin: Origin) -> Result<(Access, ScopeHandle), VfsError> {
+        let access = self.acquire(origin)?;
+        let scope = ScopeHandle::new(&access.scope);
+        Ok((access, scope))
     }
 
     /// Acquires a store view for a new serial thread of execution.

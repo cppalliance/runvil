@@ -11,7 +11,6 @@ use std::sync::Arc;
 use std::sync::atomic::AtomicU32;
 
 use runvil_types::ids::TaskId;
-use runvil_vfs::detail;
 
 use crate::execute::section_context::TaskSeed;
 use crate::lua::Answer;
@@ -111,15 +110,17 @@ impl Scheduler {
         // runs ahead of the id allocation and the arena push rather than
         // orphaning a started chain that is neither enqueued nor entered
         // in the arena.
-        let access = detail::access_spawn(
-            &spawner_access,
-            prompt_origin(&prompt, worker.name(), worker.blocks()),
-        )
-        .map_err(|cause| error::store(&cause))?;
+        let access = self
+            .run_scope()?
+            .spawn(
+                &spawner_access,
+                prompt_origin(&prompt, worker.name(), worker.blocks()),
+            )
+            .map_err(|cause| error::store(&cause))?;
         // The task's happens-before identity, recorded before the access
         // moves into the chain: every delivery joins it, and the chain
         // end joins it last.
-        let exec = detail::access_id(&access);
+        let exec = access.id();
         // The task's id is the spawner's next child id; the task is its
         // chain, named from the other side.
         let lineage = self.chains[id].next_child_id()?;

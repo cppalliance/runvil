@@ -10,7 +10,7 @@ use std::sync::{Arc, LazyLock, Mutex, PoisonError};
 use mlua::{FromLuaMulti, Function, IntoLuaMulti, Lua, Table};
 use runvil_types::emitter::Emitter;
 use runvil_types::event::lifecycle::{self, Lifecycle};
-use runvil_vfs::{Access, VfsError};
+use runvil_vfs::{Access, ScopeHandle, VfsError};
 
 use crate::error::{self, Error, Result, author_prose};
 use crate::error_value::store_error;
@@ -234,7 +234,9 @@ fn record_store_conflict<T>(
 /// error value of kind `store`, so it aborts the chunk and a `pcall` caller
 /// reads `err.kind`, `err.reason`, and the variant's fields.
 ///
-/// Every closure captures an `Arc` clone of the section's store view.
+/// Every closure captures an `Arc` clone of the section's store view,
+/// which `scope`, the handle on the scope `access` belongs to, derives
+/// once; the table keeps the view and never the handle.
 /// The view locks the backend per call and is synchronous, so nothing is
 /// held across an await. The view carries the caller's identity, which is
 /// what the claims model attributes operations to: a fanout arm's view is
@@ -260,6 +262,7 @@ pub(crate) fn install_store_table(
     lua: &Lua,
     globals: &mlua::Table,
     access: &Arc<Access>,
+    scope: &ScopeHandle,
     emitter: &Emitter,
     section: &str,
     conflict: &Arc<Mutex<Option<String>>>,
@@ -270,7 +273,8 @@ pub(crate) fn install_store_table(
     // run on every operation through it.
     let shared = StoreShared {
         view: Arc::new(
-            runvil_vfs::detail::store_view(access)
+            scope
+                .store_view(access)
                 .map_err(|cause| store_failure(&cause, store_probe_message(&cause)))?,
         ),
         reporter: Arc::new(StoreReporter {

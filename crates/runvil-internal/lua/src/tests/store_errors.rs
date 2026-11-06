@@ -6,14 +6,13 @@ use super::*;
 
 #[test]
 fn a_store_install_without_a_store_names_why_in_its_message() {
-    let access = Arc::new(
-        VfsRef::new(runvil_vfs::MemoryBackend::new())
-            .acquire(Origin::new("no store test"))
-            .expect("a handle without a store still acquires"),
+    let access = ScopedAccess::acquire(
+        &VfsRef::new(runvil_vfs::MemoryBackend::new()),
+        Origin::new("no store test"),
     );
-    let vm = TestVm::new().access(access).inject();
+    let vm = TestVm::new().access(access.clone()).inject();
     let error = vm
-        .install_engine_globals(&null_emitter(), "Test")
+        .install_engine_globals(&null_emitter(), "Test", &access.scope)
         .expect_err("a handle without a store cannot install the store table");
     assert_eq!(
         error.code,

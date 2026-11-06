@@ -10,7 +10,7 @@ use std::sync::Arc;
 use std::sync::atomic::Ordering;
 
 use runvil_types::ids::{ChainId, TaskId};
-use runvil_vfs::{MemoryBackend, Origin, VfsRef, detail};
+use runvil_vfs::{MemoryBackend, Origin, VfsRef};
 
 use crate::Result;
 use crate::execute::run::EffectId;
@@ -44,14 +44,17 @@ impl Scheduler {
                 .next_child_id()
                 .expect("the wedged chain has a child id left");
             let task = TaskId::from(lineage.clone());
-            let access = detail::access_spawn(
-                self.chains[owner]
-                    .access()
-                    .expect("the wedged chain holds its access"),
-                Origin::at("wedge", self.ctx.prompt().title(), 1),
-            )
-            .expect("the wedged chain's access forks");
-            let exec = detail::access_id(&access);
+            let access = self
+                .run_scope()
+                .expect("the run holds its scope handle")
+                .spawn(
+                    self.chains[owner]
+                        .access()
+                        .expect("the wedged chain holds its access"),
+                    Origin::at("wedge", self.ctx.prompt().title(), 1),
+                )
+                .expect("the wedged chain's access forks");
+            let exec = access.id();
             let wedge = self
                 .start_chain(ChainStart {
                     lineage,
@@ -158,7 +161,9 @@ impl Scheduler {
     /// Dispatches `op` again for the chain at arena index 0, whose block
     /// is suspended on a store request, through an access from a handle
     /// that declares no store: the store-view failure the run's start
-    /// probe otherwise rules out.
+    /// probe otherwise rules out. The access's own scope handle replaces
+    /// the run's, since a scope handle derives store views for its own
+    /// scope alone.
     ///
     /// # Errors
     /// Returns the dispatch's store failure.
@@ -168,10 +173,11 @@ impl Scheduler {
             .iter()
             .next()
             .expect("the run has started a chain");
-        let access = VfsRef::new(MemoryBackend::new())
-            .acquire(Origin::new("no store"))
+        let (access, scope) = VfsRef::new(MemoryBackend::new())
+            .acquire_scope(Origin::new("no store"))
             .expect("a memory backend acquires");
         self.chains[id].access = Some(Arc::new(access));
+        self.scope = Some(scope);
         self.dispatch(id, Request::Store { op })
     }
 

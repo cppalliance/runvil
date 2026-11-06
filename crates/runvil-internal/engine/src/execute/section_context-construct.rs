@@ -11,7 +11,7 @@ use std::sync::{Arc, Mutex};
 
 use runvil_types::event::lifecycle;
 use runvil_types::ids::TaskId;
-use runvil_vfs::Access;
+use runvil_vfs::{Access, ScopeHandle};
 
 use crate::execute::context::ChainState;
 use crate::execute::section_vm::{self, VmSeed};
@@ -77,7 +77,8 @@ impl SectionContext {
     /// is the entering chain's `sys.taskid`. `var` is the walk's current
     /// `var` table, seeded into the section's VM. `seed` holds a spawned
     /// chain's `item` and `sys.index` on its first entry and is empty on
-    /// every other entry.
+    /// every other entry. `scope` is the handle on the run's scope, which
+    /// derives the `store` table's view of `access`.
     ///
     /// # Errors
     /// Returns an `Internal` failure when `pos` is past its slice, and
@@ -85,11 +86,12 @@ impl SectionContext {
     /// for which failures tear the VM down).
     #[expect(
         clippy::too_many_arguments,
-        reason = "the frame takes the two chain-owned handles (access and selection) beside the section entry's own deltas, and each stays a separate borrow"
+        reason = "the frame takes the two chain-owned handles (access and selection) and the run's scope handle beside the section entry's own deltas, and each stays a separate borrow"
     )]
     pub(crate) fn new(
         ctx: &ChainState,
         access: &Arc<Access>,
+        scope: &ScopeHandle,
         selection: &Arc<Mutex<Option<ModelBinding>>>,
         pos: &SectionPos,
         section_id: &str,
@@ -132,6 +134,7 @@ impl SectionContext {
                 item: seed.item.as_ref(),
             },
             access,
+            scope,
             selection,
             section.name(),
             false,
@@ -165,6 +168,7 @@ impl SectionContext {
     pub(crate) fn new_h1(
         ctx: &ChainState,
         access: &Arc<Access>,
+        scope: &ScopeHandle,
         selection: &Arc<Mutex<Option<ModelBinding>>>,
         section_id: &str,
         task_id: &TaskId,
@@ -185,7 +189,15 @@ impl SectionContext {
         // describes; the executor reads the value back at the freeze (see
         // the scheduler's H1-to-walk handoff).
         let sys_json = sys.to_json();
-        let setup = ctx.vm_setup(&sys_json, VmSeed::default(), access, selection, title, true);
+        let setup = ctx.vm_setup(
+            &sys_json,
+            VmSeed::default(),
+            access,
+            scope,
+            selection,
+            title,
+            true,
+        );
         // Setup runs on the bare VM and tears it down itself on failure:
         // the frame does not exist yet, so its `Drop` cannot own this path.
         let vm = section_vm::setup_section_vm(vm, &setup, read, resolve, render)?;

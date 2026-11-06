@@ -19,7 +19,6 @@
 //!   `cargo test -p build-xtask` enforces the product and container
 //!   boundaries.
 
-pub mod detail;
 mod error;
 mod glob;
 mod handle;
@@ -36,7 +35,7 @@ mod traits;
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
 pub use error::{PathReason, VfsError};
-pub use handle::{Access, VfsRef};
+pub use handle::{Access, ScopeHandle, VfsRef};
 pub use memory::MemoryBackend;
 pub use observe::{OpEvent, OpSink, Origin};
 pub use path::{VfsPath, VfsPathBuf};

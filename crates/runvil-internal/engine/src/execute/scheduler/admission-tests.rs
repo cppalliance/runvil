@@ -57,7 +57,7 @@ impl Tree {
             .expect("the default backend acquires");
         let backing = TaskBacking::Chain {
             chain: id,
-            exec: runvil_vfs::detail::access_id(&access),
+            exec: access.id(),
         };
         let task = self.chains[id].task.clone();
         self.tasks

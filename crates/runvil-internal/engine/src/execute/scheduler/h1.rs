@@ -46,12 +46,12 @@ impl Scheduler {
             self.ctx.prompt().title(),
             crate::prompt::detail::h1_blocks(self.ctx.prompt()),
         );
-        let access = self
+        let (access, scope) = self
             .ctx
             .vfs()
-            .acquire(origin)
+            .acquire_scope(origin)
             .map_err(|cause| error::store(&cause))?;
-        self.scope = Some(runvil_vfs::detail::scope_handle(&access));
+        self.scope = Some(scope);
         // The pass's one frame takes the root lineage's entry 0, and the
         // walk that follows continues its counters (see `Chain::lineage`).
         // Its admission limit is the run's ceiling.

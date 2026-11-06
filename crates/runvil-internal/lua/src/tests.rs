@@ -26,7 +26,7 @@ use crate::error::{Error, Result};
 use crate::hardening::install_cancel_hook;
 use crate::section::resolve_section_target;
 use crate::test_vm::{
-    BuiltVm, LuaOutcome, TEST_SECTION, TestVm, fresh_access, run_chunk, test_nonce,
+    BuiltVm, LuaOutcome, ScopedAccess, TEST_SECTION, TestVm, fresh_access, run_chunk, test_nonce,
 };
 use crate::var::{guarded_var, var_snapshot_table, var_to_json};
 use crate::vm::DEFAULT_LUA_LOG_EVENTS;
@@ -54,8 +54,11 @@ mod tool_scoping;
 
 /// The store view derived from a test's access: the same view the `store`
 /// table's closures operate through, for seeding and extraction.
-fn store_view(access: &Access) -> Access {
-    runvil_vfs::detail::store_view(access).expect("the handle declares a store")
+fn store_view(access: &ScopedAccess) -> Access {
+    access
+        .scope
+        .store_view(&access.access)
+        .expect("the handle declares a store")
 }
 
 /// The fields every event carries ahead of its payload, sorted: its
@@ -180,13 +183,10 @@ impl VfsAccess for FailingAccess {
 /// The access a failing backend vends, for tests driving the error path:
 /// the failing backend declared as the store, so the store view derives
 /// and every operation reaches the backend's refusal.
-fn failing_access() -> Arc<Access> {
-    Arc::new(
-        VfsRef::builder()
-            .store("/", FailingBackend)
-            .build()
-            .acquire(Origin::new("failing backend test"))
-            .expect("the failing backend still acquires"),
+fn failing_access() -> ScopedAccess {
+    ScopedAccess::acquire(
+        &VfsRef::builder().store("/", FailingBackend).build(),
+        Origin::new("failing backend test"),
     )
 }
 
@@ -203,7 +203,7 @@ fn run(source: &str, args: &str) -> Result<LuaOutcome> {
 
 /// Runs a chunk against a caller-supplied access, so a test can inspect the
 /// store through the same identity after the chunk has run.
-fn run_with(source: &str, access: &Arc<Access>) -> Result<LuaOutcome> {
+fn run_with(source: &str, access: &ScopedAccess) -> Result<LuaOutcome> {
     run_chunk(
         source,
         "",

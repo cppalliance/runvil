@@ -100,7 +100,7 @@ fn run_pair(
         lead(&first)?;
         let first_id = first.id;
         drop(first);
-        parent.join(first_id);
+        parent.scope.join(parent.id, first_id);
         let second = parent.spawn(test_origin())?;
         return Ok(trail(&second));
     }

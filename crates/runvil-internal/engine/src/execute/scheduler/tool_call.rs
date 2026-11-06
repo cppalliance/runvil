@@ -44,7 +44,6 @@ use std::sync::Arc;
 use std::sync::atomic::Ordering;
 
 use runvil_types::tools::ToolId;
-use runvil_vfs::detail;
 
 use crate::execute::run::{Effect, ToolCallOrigin, ToolCaller};
 use crate::lua::{
@@ -364,12 +363,14 @@ impl ChainOps<'_> {
         // chain's, so two calls in flight at once never share one sequence
         // of claims. A refused fork fails the call at its caller, and the
         // counts already taken stay taken.
-        let access = detail::access_spawn(
-            chain.access()?,
-            prompt_origin(&prompt, &binding.id().to_string(), chain.blocks(&prompt)),
-        )
-        .map_err(|cause| error::store(&cause))?;
-        let exec = detail::access_id(&access);
+        let access = self
+            .scope()?
+            .spawn(
+                chain.access()?,
+                prompt_origin(&prompt, &binding.id().to_string(), chain.blocks(&prompt)),
+            )
+            .map_err(|cause| error::store(&cause))?;
+        let exec = access.id();
         let effect = Effect::ToolCall {
             tool: binding.id().clone(),
             alias: binding.alias().to_owned(),

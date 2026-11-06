@@ -19,7 +19,7 @@ use runvil_types::event::Event;
 use runvil_types::ids::{ChainId, TaskId};
 use runvil_types::packs::Prelude;
 use runvil_types::untrusted::GuardNonce;
-use runvil_vfs::{Access, VfsRef};
+use runvil_vfs::{Access, ScopeHandle, VfsRef};
 
 use crate::Error;
 use crate::lua::{Argv, ToolSet};
@@ -391,17 +391,23 @@ impl ChainState {
     /// the run-wide inputs from this context; the constructor supplies only
     /// its own deltas: the `sys` JSON, the seed, the chain step's access
     /// capability (the walk's own, a call chain's borrowed parent
-    /// capability, a task chain's spawned one), the section's current-model
-    /// selection, the section name, and whether `argv` installs writable.
+    /// capability, a task chain's spawned one) and the handle on the run's
+    /// scope, the section's current-model selection, the section name, and
+    /// whether `argv` installs writable.
     ///
     /// `argv_writable` picks the [`Argv`] mode that
     /// [`SectionVmSetup::argv`] describes; the H1 pass is the only
     /// production caller that passes `true`.
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "each input is one of the constructor's own deltas, borrowed separately for the setup's life"
+    )]
     pub(super) fn vm_setup<'a>(
         &'a self,
         sys: &'a serde_json::Value,
         seed: VmSeed<'a>,
         access: &'a Arc<Access>,
+        scope: &'a ScopeHandle,
         selection: &'a Arc<Mutex<Option<ModelBinding>>>,
         section_name: &'a str,
         argv_writable: bool,
@@ -416,6 +422,7 @@ impl ChainState {
             argv,
             sys,
             access,
+            scope,
             selection,
             seed,
             emitter: &self.reporting.emitter,

@@ -96,7 +96,7 @@ fn an_ended_identity_keeps_no_clock_snapshot() -> Result<(), VfsError> {
     arm.write("/arm.txt", b"arm")?;
     let arm_id = arm.id;
     drop(arm);
-    parent.join(arm_id);
+    parent.scope.join(parent.id, arm_id);
     let child = parent.spawn(test_origin())?;
     child.write("/child.txt", b"child")?;
     let child_id = child.id;
@@ -140,7 +140,7 @@ fn a_join_makes_a_finished_arms_writes_readable() -> Result<(), VfsError> {
     arm_one.write("/evidence.md", b"one\n")?;
     let arm_one_id = arm_one.id;
     drop(arm_one);
-    parent.join(arm_one_id);
+    parent.scope.join(parent.id, arm_one_id);
     let arm_two = parent.spawn(test_origin())?;
     arm_two.append("/evidence.md", b"two\n")?;
     assert_eq!(arm_two.read("/evidence.md")?, b"one\ntwo\n");

@@ -1,5 +1,4 @@
-use super::{access_spawn, end_scope, probe_store, scope_handle, store_view};
-use crate::test_support::{TestFs, access, handle};
+use crate::test_support::{TestFs, access, handle, test_origin};
 use crate::{Access, MemoryBackend, Origin, PathReason, VfsError, VfsRef};
 
 /// A base at `/` beside a store declared at `/my/store`: the shape
@@ -14,8 +13,12 @@ fn stock() -> VfsRef {
 /// The chain's access and its store view, in one scope.
 #[track_caller]
 fn chain(vfs: &VfsRef) -> (Access, Access) {
-    let access = access(vfs).expect("the stock backend acquires");
-    let view = store_view(&access).expect("the handle declares a store");
+    let (access, scope) = vfs
+        .acquire_scope(test_origin())
+        .expect("the stock backend acquires");
+    let view = scope
+        .store_view(&access)
+        .expect("the handle declares a store");
     (access, view)
 }
 
@@ -23,17 +26,18 @@ fn chain(vfs: &VfsRef) -> (Access, Access) {
 fn an_ended_scope_refuses_spawns_views_and_arm_operations_and_frees_its_claims()
 -> Result<(), VfsError> {
     let vfs = stock();
-    let (access, view) = chain(&vfs);
+    let (access, scope) = vfs.acquire_scope(test_origin())?;
+    let view = scope.store_view(&access)?;
     view.write("a.txt", b"run")?;
-    let arm = access_spawn(&access, Origin::new("arm"))?;
-    end_scope(&scope_handle(&access));
+    let arm = scope.spawn(&access, Origin::new("arm"))?;
+    scope.end();
     let ended = |result: Result<Access, VfsError>| match result {
         Err(VfsError::ScopeEnded { path }) => assert_eq!(path, "/"),
         other => panic!("expected an ended-run refusal, got {other:?}"),
     };
-    ended(access_spawn(&access, Origin::new("late arm")));
-    ended(store_view(&access));
-    ended(store_view(&arm));
+    ended(scope.spawn(&access, Origin::new("late arm")));
+    ended(scope.store_view(&access));
+    ended(scope.store_view(&arm));
     match arm.read("/my/store/a.txt") {
         Err(VfsError::ScopeEnded { path }) => assert_eq!(path, "/my/store/a.txt"),
         other => panic!("expected an ended-run refusal, got {other:?}"),
@@ -47,6 +51,63 @@ fn an_ended_scope_refuses_spawns_views_and_arm_operations_and_frees_its_claims()
     let (_other, other_view) = chain(&vfs);
     other_view.write("a.txt", b"next")?;
     assert_eq!(other_view.read("a.txt")?, b"next");
+    Ok(())
+}
+
+#[test]
+#[should_panic(expected = "the access belongs to another scope than this scope handle's")]
+fn a_scope_handle_refuses_to_fork_another_scopes_access() {
+    let vfs = stock();
+    let (_mine, scope) = vfs
+        .acquire_scope(test_origin())
+        .expect("the stock backend acquires");
+    let theirs = access(&vfs).expect("the stock backend acquires");
+    let _refused = scope.spawn(&theirs, test_origin());
+}
+
+#[test]
+#[should_panic(expected = "the access belongs to another scope than this scope handle's")]
+fn a_scope_handle_refuses_a_store_view_of_another_scopes_access() {
+    let vfs = stock();
+    let (_mine, scope) = vfs
+        .acquire_scope(test_origin())
+        .expect("the stock backend acquires");
+    let theirs = access(&vfs).expect("the stock backend acquires");
+    let _refused = scope.store_view(&theirs);
+}
+
+#[test]
+#[should_panic(expected = "the access belongs to another scope than this scope handle's")]
+fn a_scope_handle_refuses_to_probe_through_another_scopes_access() {
+    let vfs = stock();
+    let (_mine, scope) = vfs
+        .acquire_scope(test_origin())
+        .expect("the stock backend acquires");
+    let theirs = access(&vfs).expect("the stock backend acquires");
+    let _refused = scope.probe_store(&theirs);
+}
+
+#[test]
+fn a_scope_handle_leaves_every_other_scope_alone() -> Result<(), VfsError> {
+    let vfs = stock();
+    let (_mine, mine) = vfs.acquire_scope(test_origin())?;
+    let (theirs, their_scope) = vfs.acquire_scope(test_origin())?;
+    let call = their_scope.spawn(&theirs, test_origin())?;
+    call.write("/x.txt", b"call")?;
+    // Another scope's handle names identities it never held: its join
+    // orders nothing, and its ends end nothing.
+    mine.join(theirs.id(), call.id());
+    mine.end_access(Some(theirs.id()), call.id());
+    mine.end();
+    assert!(matches!(
+        theirs.read("/x.txt"),
+        Err(VfsError::Conflict { .. })
+    ));
+    call.write("/y.txt", b"still live")?;
+    // The scope's own handle orders the call's writes before the root's
+    // next step.
+    their_scope.join(theirs.id(), call.id());
+    assert_eq!(theirs.read("/x.txt")?, b"call");
     Ok(())
 }
 
@@ -129,8 +190,7 @@ fn errors_report_paths_in_the_callers_relative_form() -> Result<(), VfsError> {
     view.write("f.txt", b"one")?;
     // A second chain's write races, and the diagnosis names the
     // logical path, never the canonical one.
-    let other_access = access(&vfs)?;
-    let other = store_view(&other_access).expect("the handle declares a store");
+    let (_other_access, other) = chain(&vfs);
     match other.write("f.txt", b"two") {
         Err(VfsError::Conflict { path, detail }) => {
             assert_eq!(path, "f.txt");
@@ -204,10 +264,12 @@ fn the_store_probe_acquires_the_store_backend() {
         })
     });
     let vfs = VfsRef::builder().store("/my/store", refusing).build();
-    let access = access(&vfs).expect("the router acquires lazily");
+    let (access, scope) = vfs
+        .acquire_scope(test_origin())
+        .expect("the router acquires lazily");
     // Deriving the view alone never reaches the store backend.
-    assert!(store_view(&access).is_ok());
-    match probe_store(&access) {
+    assert!(scope.store_view(&access).is_ok());
+    match scope.probe_store(&access) {
         Err(VfsError::Backend { message }) => assert!(message.contains("refuses"), "{message}"),
         other => panic!("expected the backend's refusal, got {other:?}"),
     }
@@ -221,21 +283,22 @@ fn the_store_probe_treats_a_missing_store_root_as_success() -> Result<(), VfsErr
         .mount("/data", MemoryBackend::new())
         .build();
     let vfs = VfsRef::builder().store("/", inner).build();
-    let access = access(&vfs)?;
+    let (access, scope) = vfs.acquire_scope(test_origin())?;
     assert!(matches!(access.stat("/"), Err(VfsError::NotFound { .. })));
-    probe_store(&access)
+    scope.probe_store(&access)
 }
 
 #[test]
 fn one_chain_never_conflicts_with_itself_through_its_view() -> Result<(), VfsError> {
     let vfs = stock();
-    let (access, view) = chain(&vfs);
+    let (access, scope) = vfs.acquire_scope(test_origin())?;
+    let view = scope.store_view(&access)?;
     view.write("a.txt", b"one")?;
     view.append("a.txt", b"two")?;
     assert_eq!(view.read("a.txt")?, b"onetwo");
     // A second view over the same chain shares the identity and the
     // scope, so its operations never race the first view's.
-    let also = store_view(&access).expect("the handle declares a store");
+    let also = scope.store_view(&access)?;
     assert_eq!(also.read("a.txt")?, b"onetwo");
     also.write("b.txt", b"three")?;
     // The chain's plain capability reads the same storage.
@@ -352,10 +415,8 @@ fn the_outermost_declaration_counts() -> Result<(), VfsError> {
     // itself: the mounting handle declares no store, so no view.
     let inner = VfsRef::builder().store("/s", MemoryBackend::new()).build();
     let outer = VfsRef::builder().mount("/inner", inner).build();
-    assert!(matches!(
-        store_view(&access(&outer)?),
-        Err(VfsError::NoStore)
-    ));
+    let (access, scope) = outer.acquire_scope(test_origin())?;
+    assert!(matches!(scope.store_view(&access), Err(VfsError::NoStore)));
 
     // The outer builder's own declaration is the one the view uses.
     let inner = VfsRef::builder().store("/s", MemoryBackend::new()).build();
@@ -363,8 +424,10 @@ fn the_outermost_declaration_counts() -> Result<(), VfsError> {
         .mount("/inner", inner)
         .store("/outer-store", MemoryBackend::new())
         .build();
-    let access = access(&outer)?;
-    let view = store_view(&access).expect("the outer handle declares a store");
+    let (access, scope) = outer.acquire_scope(test_origin())?;
+    let view = scope
+        .store_view(&access)
+        .expect("the outer handle declares a store");
     view.write("a.txt", b"outer")?;
     drop(view);
     assert!(access.exists("/outer-store/a.txt")?);

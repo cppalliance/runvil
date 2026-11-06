@@ -411,13 +411,15 @@ impl TestStore {
     }
 
     pub(crate) fn read(&self, path: &str) -> Result<String, VfsError> {
-        let access = self.vfs().acquire(Origin::new("TestStore::read"))?;
-        runvil_vfs::detail::store_view(&access)?.read_string(path)
+        self.vfs()
+            .acquire_store(Origin::new("TestStore::read"))?
+            .read_string(path)
     }
 
     pub(crate) fn glob(&self, pattern: &str) -> Result<Vec<String>, VfsError> {
-        let access = self.vfs().acquire(Origin::new("TestStore::glob"))?;
-        runvil_vfs::detail::store_view(&access)?.glob(pattern)
+        self.vfs()
+            .acquire_store(Origin::new("TestStore::glob"))?
+            .glob(pattern)
     }
 }
 

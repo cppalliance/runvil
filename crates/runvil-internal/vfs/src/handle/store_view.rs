@@ -213,7 +213,8 @@ impl Access {
     /// this access's identity, scope, claims table, policy, and op
     /// sink. The view applies the store's strict logical-path rules
     /// and reports error paths in the caller's logical form.
-    /// Crate-internal: backs [`crate::detail::store_view`].
+    /// Crate-internal: backs [`crate::ScopeHandle::store_view`] and
+    /// [`crate::VfsRef::acquire_store`].
     ///
     /// # Errors
     /// Returns [`VfsError::NoStore`] when the handle declares no store,
@@ -276,7 +277,7 @@ impl Access {
     /// with no policy check, claim, or event, so a lazily acquiring
     /// router opens the serving mount's session. A root the backend
     /// reports missing passes. Crate-internal: backs
-    /// [`crate::detail::probe_store`].
+    /// [`crate::ScopeHandle::probe_store`].
     pub(crate) fn probe_root(&self) -> Result<(), VfsError> {
         match self.inner().stat(&self.root) {
             Ok(_) | Err(VfsError::NotFound { .. }) => Ok(()),

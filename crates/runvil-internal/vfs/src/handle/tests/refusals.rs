@@ -7,7 +7,6 @@ use std::sync::atomic::AtomicUsize;
 
 use super::*;
 use crate::MemoryBackend;
-use crate::detail::{end_access, scope_handle};
 
 /// The error a refusing backend's acquire returns: the trait's contract
 /// allows refusal, so the handle must surface it as an error rather
@@ -100,11 +99,11 @@ fn an_ended_identity_refuses_operations_spawns_and_views_while_the_scope_stays_o
         .mount("/", MemoryBackend::new())
         .store("/my/store", MemoryBackend::new())
         .build();
-    let owner = access(&vfs)?;
-    let call = owner.spawn(test_origin())?;
+    let (owner, scope) = vfs.acquire_scope(test_origin())?;
+    let call = scope.spawn(&owner, test_origin())?;
     call.write("/a.txt", b"call")?;
-    let view = call.store_view()?;
-    end_access(&scope_handle(&owner), Some(owner.id), call.id);
+    let view = scope.store_view(&call)?;
+    scope.end_access(Some(owner.id()), call.id());
     refused(call.read("/a.txt"), "/a.txt");
     refused(call.write("/b.txt", b"late"), "/b.txt");
     refused(view.write("b.md", b"late"), "b.md");

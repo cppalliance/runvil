@@ -8,6 +8,7 @@ use std::sync::{Arc, PoisonError};
 
 use mlua::Value;
 use runvil_types::emitter::Emitter;
+use runvil_vfs::ScopeHandle;
 use serde_json::Value as Json;
 
 use super::{JUMP_SLOT_POISONED, SectionVm, pack_sequence};
@@ -29,7 +30,9 @@ impl SectionVm {
     /// Called once after Engine injection.
     /// The closures capture owned strings, a clone of the emitter, and Arc
     /// clones of the log budget counters and the store view, so they stay
-    /// valid across every chunk this VM runs.
+    /// valid across every chunk this VM runs. `scope` is the handle on the
+    /// scope of the access Engine injection received: it derives the store
+    /// view, and the VM keeps none of it.
     /// The direct store closures record a claims-model conflict into the
     /// VM's slot for the executor to read with
     /// [`take_store_conflict`](Self::take_store_conflict).
@@ -37,7 +40,16 @@ impl SectionVm {
     /// # Errors
     /// Returns a `LuaRuntime` failure if the globals cannot be installed, or
     /// the store's failure if the handle declares no store.
-    pub fn install_engine_globals(&self, emitter: &Emitter, section: &str) -> Result<()> {
+    ///
+    /// # Panics
+    /// Panics when the injected access belongs to another scope than
+    /// `scope`'s.
+    pub fn install_engine_globals(
+        &self,
+        emitter: &Emitter,
+        section: &str,
+        scope: &ScopeHandle,
+    ) -> Result<()> {
         install_log(
             &self.lua,
             emitter,
@@ -49,6 +61,7 @@ impl SectionVm {
             &self.lua,
             &self.lua.globals(),
             &self.state.access,
+            scope,
             emitter,
             section,
             &self.store_conflict,

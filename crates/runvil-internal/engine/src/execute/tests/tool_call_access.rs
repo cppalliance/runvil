@@ -12,7 +12,6 @@
 use std::fmt;
 
 use runvil_vfs::ExecId;
-use runvil_vfs::detail::access_id;
 
 use super::models_loop::loop_models;
 use super::*;
@@ -125,7 +124,7 @@ fn files_answers(
 ) -> impl FnMut(EffectId, &Effect) -> EffectAnswer + '_ {
     move |_, effect| match effect {
         Effect::ToolCall { access, args, .. } => {
-            seen.tools.push(access_id(access));
+            seen.tools.push(access.id());
             let output = use_access(access, args);
             match reply {
                 Reply::Output => EffectAnswer::ToolCall(output),
@@ -134,7 +133,7 @@ fn files_answers(
         }
         other => {
             if let Effect::Vfs { access, .. } = other {
-                seen.stores.push(access_id(access));
+                seen.stores.push(access.id());
             }
             perform_store(other)
         }

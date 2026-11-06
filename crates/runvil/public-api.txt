@@ -133,6 +133,7 @@ auto runvil::vfs::OpEvent: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::vfs::Origin: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::vfs::PathReason: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::vfs::RealBackend: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
+auto runvil::vfs::ScopeHandle: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::vfs::Stat: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::vfs::Verdict: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::vfs::VfsError: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
@@ -226,6 +227,7 @@ derives runvil::vfs::OpEvent: Debug
 derives runvil::vfs::Origin: Clone, Debug, Eq, Hash, PartialEq
 derives runvil::vfs::PathReason: Clone, Copy, Debug, Eq, PartialEq
 derives runvil::vfs::RealBackend: Clone, Debug
+derives runvil::vfs::ScopeHandle: Clone, Debug
 derives runvil::vfs::Stat: Clone, Debug, Eq, Hash, PartialEq
 derives runvil::vfs::Verdict: Clone, Debug, Eq, PartialEq
 derives runvil::vfs::VfsError: Clone, Debug, Eq, PartialEq
@@ -308,6 +310,7 @@ pub const fn runvil::ids::RoundId::new(id: u64) -> Self
 pub const fn runvil::model::ModelRole::as_str(self) -> &'static str
 pub const fn runvil::timestamp::Timestamp::from_unix_millis(millis: i64) -> Self
 pub const fn runvil::timestamp::Timestamp::unix_millis(self) -> i64
+pub const fn runvil::vfs::Access::id(&self) -> runvil::vfs::ExecId
 pub const runvil::model::ModelId::GATEWAY: &'static str
 pub const runvil::model::ModelRole::ALL: [runvil::model::ModelRole; 5]
 pub const runvil::model::Role::ALL: &'static [runvil::model::Role]
@@ -550,6 +553,12 @@ pub fn runvil::vfs::Policy::check(&self, op: runvil::vfs::Op, path: &runvil::vfs
 pub fn runvil::vfs::RealBackend::identity() -> runvil::vfs::RealBackend
 pub fn runvil::vfs::RealBackend::rooted(dir: impl core::convert::AsRef<std::path::Path>) -> core::result::Result<runvil::vfs::RealBackend, runvil::vfs::VfsError>
 pub fn runvil::vfs::RealBackend::with_writability(self, writability: runvil::vfs::Writability) -> runvil::vfs::RealBackend
+pub fn runvil::vfs::ScopeHandle::end(&self)
+pub fn runvil::vfs::ScopeHandle::end_access(&self, owner: core::option::Option<runvil::vfs::ExecId>, child: runvil::vfs::ExecId)
+pub fn runvil::vfs::ScopeHandle::join(&self, owner: runvil::vfs::ExecId, child: runvil::vfs::ExecId)
+pub fn runvil::vfs::ScopeHandle::probe_store(&self, access: &runvil::vfs::Access) -> core::result::Result<(), runvil::vfs::VfsError>
+pub fn runvil::vfs::ScopeHandle::spawn(&self, parent: &runvil::vfs::Access, origin: runvil::vfs::Origin) -> core::result::Result<runvil::vfs::Access, runvil::vfs::VfsError>
+pub fn runvil::vfs::ScopeHandle::store_view(&self, access: &runvil::vfs::Access) -> core::result::Result<runvil::vfs::Access, runvil::vfs::VfsError>
 pub fn runvil::vfs::Stat::new(file_type: runvil::vfs::FileType, size: u64) -> runvil::vfs::Stat
 pub fn runvil::vfs::Stat::with_created(self, created: core::option::Option<std::time::SystemTime>) -> runvil::vfs::Stat
 pub fn runvil::vfs::Stat::with_mode(self, mode: core::option::Option<u32>) -> runvil::vfs::Stat
@@ -580,6 +589,7 @@ pub fn runvil::vfs::VfsPath::as_str(&self) -> &str
 pub fn runvil::vfs::VfsPath::to_buf(&self) -> runvil::vfs::VfsPathBuf
 pub fn runvil::vfs::VfsPathBuf::as_str(&self) -> &str
 pub fn runvil::vfs::VfsRef::acquire(&self, origin: runvil::vfs::Origin) -> core::result::Result<runvil::vfs::Access, runvil::vfs::VfsError>
+pub fn runvil::vfs::VfsRef::acquire_scope(&self, origin: runvil::vfs::Origin) -> core::result::Result<(runvil::vfs::Access, runvil::vfs::ScopeHandle), runvil::vfs::VfsError>
 pub fn runvil::vfs::VfsRef::acquire_store(&self, origin: runvil::vfs::Origin) -> core::result::Result<runvil::vfs::Access, runvil::vfs::VfsError>
 pub fn runvil::vfs::VfsRef::builder() -> runvil::vfs::VfsRefBuilder
 pub fn runvil::vfs::VfsRef::new(backend: impl runvil::vfs::Vfs + 'static) -> runvil::vfs::VfsRef
@@ -1269,6 +1279,7 @@ pub struct runvil::vfs::ExecId(/* private fields */)
 pub struct runvil::vfs::ModeHandle { /* private fields */ }
 pub struct runvil::vfs::ModePolicy { /* private fields */ }
 pub struct runvil::vfs::OpEvent<'a> { /* private fields */ }
+pub struct runvil::vfs::ScopeHandle(/* private fields */)
 pub struct runvil::vfs::VfsPath { /* private fields */ }
 pub struct runvil::vfs::VfsPathBuf(/* private fields */)
 pub struct runvil::vfs::VfsRef { /* private fields */ }

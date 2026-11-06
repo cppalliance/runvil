@@ -231,13 +231,13 @@ impl ChainOps<'_> {
     ///
     /// # Errors
     /// Returns an `Internal` failure when the live chain's access
-    /// capability is gone, which only the chain-end paths take, or a store
-    /// failure when the handle the chain's access came from declares no store,
-    /// which the run's start probe already ruled out, placed on the store
-    /// call's line.
+    /// capability is gone, which only the chain-end paths take, or when the
+    /// run holds no scope handle, or a store failure when the handle the
+    /// chain's access came from declares no store, which the run's start
+    /// probe already ruled out, placed on the store call's line.
     fn dispatch_vfs(&mut self, op: VfsOp) -> Result<()> {
         let access = Arc::clone(self.chain.access()?);
-        let view = Arc::new(runvil_vfs::detail::store_view(&access).map_err(|cause| {
+        let view = Arc::new(self.scope()?.store_view(&access).map_err(|cause| {
             let chain = &*self.chain;
             let line = chain.frame().ok().and_then(|frame| frame.vm().call_line());
             place(error::store(&cause), chain.ctx.prompt().file(), line)
