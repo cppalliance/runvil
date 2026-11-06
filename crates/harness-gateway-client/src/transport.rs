@@ -17,10 +17,10 @@ use runvil::model::{Completion, CompletionOptions, Message, ToolSchema};
 use crate::config::{GatewayEndpoint, SecretString, invalid_env, missing_env};
 use crate::failure::{elapsed, transport_failure, unavailable};
 use crate::wire::classify::classify_http_failure;
-use crate::wire::delta::StreamDelta;
 use crate::wire::read::{ChunkSource, read_body_capped, read_completion_stream};
 use crate::wire::request::build_request_body;
 use crate::wire::stream::escape_controls;
+use harness::StreamDelta;
 
 /// A client that sends chat completion requests to one gateway URL.
 ///

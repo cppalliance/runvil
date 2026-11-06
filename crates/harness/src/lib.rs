@@ -27,6 +27,7 @@ pub use harness_runner::display_chain;
 pub use harness_runner::environment::HostSnapshot;
 pub use harness_runner::performers::BoxFuture;
 pub use harness_runner::performers::InferenceBroker;
+pub use harness_runner::performers::StreamDelta;
 pub use harness_runner::performers::Timer;
 
 pub mod pack {

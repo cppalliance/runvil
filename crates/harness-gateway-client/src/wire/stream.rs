@@ -27,9 +27,9 @@ use runvil::model::{Completion, RawExchange};
 use serde_json::{Map, Value};
 
 use super::classify::classify_stream_error;
-use super::delta::StreamDelta;
 use super::parse::{normalize, response_metadata};
 use crate::failure::{decoded, malformed};
+use harness::StreamDelta;
 
 /// Splits a raw SSE byte stream into `data:` payloads.
 ///

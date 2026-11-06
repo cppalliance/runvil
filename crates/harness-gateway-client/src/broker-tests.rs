@@ -8,7 +8,7 @@
 use std::num::NonZeroU32;
 use std::sync::{Arc, Mutex};
 
-use harness::InferenceBroker;
+use harness::{InferenceBroker, StreamDelta};
 use runvil::effect::Round;
 use runvil::event::ReplyOrigin;
 use runvil::ids::RoundId;
@@ -19,7 +19,6 @@ use runvil::model::{
 use serde_json::Value;
 
 use super::GatewayBroker;
-use crate::StreamDelta;
 use crate::config::{GatewayEndpoint, SecretString};
 use crate::transport::tests::{content_chunk, serve, sse_app, sse_body};
 
@@ -100,6 +99,7 @@ async fn chat_streaming_hands_each_piece_to_its_callback_in_wire_order() {
             vec![Message::user("hi")],
             Vec::new(),
             CompletionOptions::new("m"),
+            round(ReplyOrigin::Chat),
             on_piece,
         )
         .await
@@ -177,6 +177,7 @@ async fn every_round_whole_or_streamed_is_labeled_with_the_model_its_request_nam
                 vec![Message::user("hi")],
                 Vec::new(),
                 CompletionOptions::new("routed-to"),
+                round(ReplyOrigin::Chat),
                 on_piece,
             )
             .await

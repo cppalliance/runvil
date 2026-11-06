@@ -2,17 +2,17 @@
 //! the Gateway client, and the Gateway's model list.
 //!
 //! The Harness takes only a round's finished reply, so the broker's
-//! `InferenceBroker` round returns it whole. A Host that shows the reply
-//! as it forms runs the round through [`GatewayBroker::chat_streaming`]
-//! instead, which hands each live piece to the Host's callback as it
-//! arrives, so no fragment ever reaches the Host's recorder. Either way
+//! `chat` round returns it whole. A Host that shows the reply as it forms
+//! runs the round through [`InferenceBroker::chat_streaming`] instead,
+//! which hands each live piece to the Host's callback as it arrives, so no
+//! fragment ever reaches the Host's recorder. Either way
 //! the completion names the model the round's options sent it to, so a
 //! Host that routes a round to another model sees that model on its reply.
 
 use std::fmt;
 use std::sync::Arc;
 
-use harness::{BoxFuture, InferenceBroker};
+use harness::{BoxFuture, InferenceBroker, StreamDelta};
 use runvil::effect::Round;
 use runvil::error::Error;
 use runvil::model::{
@@ -22,7 +22,6 @@ use runvil::model::{
 use crate::catalog::fetch_model_catalog;
 use crate::config::{GatewayEndpoint, SecretString};
 use crate::transport::GatewayChat;
-use crate::wire::delta::StreamDelta;
 
 /// A model broker that sends the Harness's model rounds to the Runvil
 /// Gateway and lists the Gateway's models.
@@ -74,46 +73,6 @@ impl GatewayBroker {
             key,
         }
     }
-
-    /// Runs one model round and passes each piece of the reply to
-    /// `on_piece` as it arrives.
-    ///
-    /// The round is the same one `InferenceBroker::chat` runs. `on_piece`
-    /// receives the pieces in the order the stream delivers them. The
-    /// returned completion holds the whole reply.
-    ///
-    /// `on_piece` is called inline as each piece is read, so it must not
-    /// block.
-    pub fn chat_streaming(
-        &self,
-        _binding: ModelBinding,
-        messages: Vec<Message>,
-        tools: Vec<ToolSchema>,
-        options: CompletionOptions,
-        on_piece: Arc<dyn Fn(StreamDelta) + Send + Sync>,
-    ) -> BoxFuture<Result<Box<Completion>, Error>> {
-        self.round(messages, tools, options, move |piece| on_piece(piece))
-    }
-
-    /// One round on the client, handing each live piece to `on_piece`.
-    fn round(
-        &self,
-        messages: Vec<Message>,
-        tools: Vec<ToolSchema>,
-        options: CompletionOptions,
-        on_piece: impl Fn(StreamDelta) + Send + Sync + 'static,
-    ) -> BoxFuture<Result<Box<Completion>, Error>> {
-        let client = self.client.clone();
-        Box::pin(async move {
-            // An empty advertisement sends no `tools` field at all, the
-            // plain chat-completions shape.
-            let tools = (!tools.is_empty()).then_some(tools.as_slice());
-            client
-                .complete(&messages, tools, &options, on_piece)
-                .await
-                .map(Box::new)
-        })
-    }
 }
 
 impl InferenceBroker for GatewayBroker {
@@ -131,8 +90,47 @@ impl InferenceBroker for GatewayBroker {
         options: CompletionOptions,
         _round: Round,
     ) -> BoxFuture<Result<Box<Completion>, Error>> {
-        self.round(messages, tools, options, |_| {})
+        round(self.client.clone(), messages, tools, options, |_| {})
     }
+
+    fn chat_streaming(
+        &self,
+        _binding: ModelBinding,
+        messages: Vec<Message>,
+        tools: Vec<ToolSchema>,
+        options: CompletionOptions,
+        _round: Round,
+        on_piece: Arc<dyn Fn(StreamDelta) + Send + Sync>,
+    ) -> BoxFuture<Result<Box<Completion>, Error>> {
+        round(
+            self.client.clone(),
+            messages,
+            tools,
+            options,
+            move |piece| {
+                on_piece(piece);
+            },
+        )
+    }
+}
+
+/// One round on `client`, handing each live piece to `on_piece`.
+fn round(
+    client: GatewayChat,
+    messages: Vec<Message>,
+    tools: Vec<ToolSchema>,
+    options: CompletionOptions,
+    on_piece: impl Fn(StreamDelta) + Send + Sync + 'static,
+) -> BoxFuture<Result<Box<Completion>, Error>> {
+    Box::pin(async move {
+        // An empty advertisement sends no `tools` field at all, the plain
+        // chat-completions shape.
+        let tools = (!tools.is_empty()).then_some(tools.as_slice());
+        client
+            .complete(&messages, tools, &options, on_piece)
+            .await
+            .map(Box::new)
+    })
 }
 
 #[cfg(test)]

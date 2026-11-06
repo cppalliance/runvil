@@ -9,7 +9,6 @@
 //! `[DONE]` rule, and the one turn rule set.
 
 pub(crate) mod classify;
-pub(crate) mod delta;
 mod parse;
 pub(crate) mod read;
 pub(crate) mod request;

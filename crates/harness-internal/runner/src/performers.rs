@@ -21,6 +21,9 @@
 //! design, so the loop answers it inline through the Engine's store
 //! operation.
 //!
+//! A broker may also stream a round's live pieces to a caller through
+//! [`InferenceBroker::chat_streaming`]; the effect loop never does.
+//!
 //! The runner supplies the tool performer itself: the run's snapshot of
 //! the Host's Packs, taken at preparation. The Host supplies the
 //! [`InferenceBroker`] and the [`Timer`].
@@ -66,8 +69,9 @@ pub trait InferenceBroker: Send + Sync {
     /// built from `binding`. `round` holds the round's run-wide id and the
     /// path that dispatched it.
     ///
-    /// The Harness takes only the finished reply. A broker that shows the
-    /// reply as it forms streams it on its own.
+    /// The Harness takes only the finished reply. A caller that shows the
+    /// reply as it forms runs the round through
+    /// [`chat_streaming`](InferenceBroker::chat_streaming) instead.
     fn chat(
         &self,
         binding: ModelBinding,
@@ -76,6 +80,45 @@ pub trait InferenceBroker: Send + Sync {
         options: CompletionOptions,
         round: Round,
     ) -> BoxFuture<Result<Box<Completion>, Error>>;
+
+    /// Runs the same round as [`chat`](InferenceBroker::chat) and passes
+    /// each piece of the reply to `on_piece` as it arrives.
+    ///
+    /// `on_piece` receives the pieces in the order the model sends them,
+    /// and the returned completion holds the whole reply. `on_piece` is
+    /// called inline as each piece is read, so it must not block.
+    ///
+    /// The Harness never calls this method, so no piece reaches the run's
+    /// record. The default runs `chat` and sends no pieces; a broker that
+    /// can stream overrides it.
+    fn chat_streaming(
+        &self,
+        binding: ModelBinding,
+        messages: Vec<Message>,
+        tools: Vec<ToolSchema>,
+        options: CompletionOptions,
+        round: Round,
+        on_piece: Arc<dyn Fn(StreamDelta) + Send + Sync>,
+    ) -> BoxFuture<Result<Box<Completion>, Error>> {
+        let _ = on_piece;
+        self.chat(binding, messages, tools, options, round)
+    }
+}
+
+/// One piece of a streamed model reply, delivered as it arrives.
+///
+/// [`InferenceBroker::chat_streaming`] passes each piece to its callback as
+/// soon as the broker decodes it. Answer text and reasoning arrive as
+/// separate variants, so a caller can show them differently. Tool calls
+/// appear only in the finished completion.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum StreamDelta {
+    /// A fragment of the assistant's answer text.
+    Text(String),
+    /// A fragment of the model's reasoning text. It stays separate from the
+    /// answer.
+    Reasoning(String),
 }
 
 /// The tool calls a run has in flight at once unless its performer says
