@@ -24,6 +24,7 @@ mod product;
 mod site;
 mod test_support_leak;
 mod tidy;
+mod type_size;
 mod unsafe_allowlist;
 
 use std::path::Path;

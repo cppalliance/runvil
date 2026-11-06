@@ -5,8 +5,9 @@
 //! `facade_shape`), the `doc(hidden)` ban over both facades and their
 //! containers (run from `doc_hidden`), the doctest ban over every
 //! workspace crate (run from `no_doctests`), the `Debug` trait's one
-//! spelling over every workspace crate (run from `debug_spelling`), and
-//! the unsafe allowlist (run from `unsafe_allowlist`).
+//! spelling over every workspace crate (run from `debug_spelling`), the
+//! unsafe allowlist (run from `unsafe_allowlist`), and the type-size
+//! limits over every workspace crate (run from `type_size`).
 //!
 //! Each check returns a list of human-readable violations. The `#[test]`
 //! wrappers assert the lists are empty, so `cargo test -p build-xtask`
@@ -68,6 +69,7 @@ pub(crate) fn all_violations(root: &Path) -> Vec<String> {
     violations.extend(crate::doc_hidden::doc_hidden_violations(root));
     violations.extend(crate::no_doctests::no_doctests_violations(root));
     violations.extend(crate::debug_spelling::debug_spelling_violations(root));
+    violations.extend(crate::type_size::type_size_violations(root));
     violations
 }
 
