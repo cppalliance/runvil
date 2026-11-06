@@ -1,9 +1,10 @@
 //! The classifier a Rust callback's failure runs through on its way to
-//! author code, and the `normalize_failure` capture built on it.
+//! author code, and `normalized`, the function the shim's
+//! `normalize_failure` capture is made from.
 
 use std::num::NonZeroU32;
 
-use mlua::{Function, Lua, Value};
+use mlua::{Lua, Value};
 use runvil_types::error::Error;
 
 use super::error_table;
@@ -62,18 +63,6 @@ fn traceback_line(error: &mlua::Error) -> Option<NonZeroU32> {
         mlua::Error::WithContext { cause, .. } => traceback_line(cause),
         _ => None,
     }
-}
-
-/// Builds the `normalize_failure(value)` chunk capture for the shim's
-/// `pcall` and `xpcall` replacements: a Rust callback's failure (mlua's
-/// wrapped error) becomes the error table its classification names; any
-/// other caught value - a string, an author's own table, an error table
-/// already built - passes through unchanged.
-///
-/// # Errors
-/// Returns an `mlua` error if the function cannot be created.
-pub(crate) fn install_normalize_failure(lua: &Lua) -> mlua::Result<Function> {
-    lua.create_function(normalized)
 }
 
 /// Returns what `normalize_failure` returns for `value`: a Rust callback's
