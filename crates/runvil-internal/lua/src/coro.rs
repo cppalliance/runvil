@@ -31,7 +31,7 @@ use runvil_model_client::model::ModelBinding;
 
 use crate::engine_globals::route_store_to_shims;
 use crate::error::{self, Result};
-use crate::error_value::{install_error_value, install_normalize_failure};
+use crate::error_value::{install_error_value, normalized};
 use crate::hardening::CancelHook;
 use crate::models::{LuaModelHandle, selection_poisoned};
 use crate::program::LuaProgram;
@@ -171,7 +171,7 @@ pub(crate) fn install_shims(
     let compactors: Table = globals.raw_get("compactors").map_err(error::lua)?;
     let error_value = install_error_value(lua).map_err(error::lua)?;
     let stash_failure = stash_failure_capture(lua)?;
-    let normalize_failure = install_normalize_failure(lua).map_err(error::lua)?;
+    let normalize_failure = lua.create_function(normalized).map_err(error::lua)?;
     let (enter_adhoc_handler, leave_adhoc_handler) =
         adhoc_handler_captures(lua, adhoc_handler_depth)?;
     let hook = cancel_hook.clone();

@@ -16,7 +16,7 @@
 //!
 //! [`ErrorKind`] names the closed vocabulary of kinds; [`error_kind`] and
 //! [`error_fields`] render a universal error into the shape;
-//! [`install_normalize_failure`] is the capture the shim's `pcall` and
+//! [`normalized`] is the capture the shim's `pcall` and
 //! `xpcall` replacements run a caught value through (so a Rust callback's
 //! failure, which mlua raises as an opaque userdata, takes the same shape);
 //! and [`raised_from`] reads a table back into a universal error when a
@@ -42,7 +42,7 @@ use runvil_types::error::{Error, ErrorCode, FactKey, coordinates};
 
 use crate::error::accepted_tags;
 
-pub(crate) use classify::{install_normalize_failure, normalized};
+pub(crate) use classify::normalized;
 pub(crate) use raised::raised_from;
 pub use store::store_error;
 #[cfg(any(test, feature = "test-support"))]
