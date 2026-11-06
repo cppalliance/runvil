@@ -4,13 +4,13 @@ overview: Remove three pieces of Engine surface that carry no weight - a public 
 todos:
   - id: op-sink
     content: "Stop exporting the `OpSink` alias from `runvil-vfs` and narrow it to `pub(crate)`, in its own commit"
-    status: pending
+    status: completed
   - id: parse-error
     content: "Delete `runvil_prompt::detail::parse_error` and point its two callers at `runvil_types::error::failure`, in its own commit"
-    status: pending
+    status: completed
   - id: normalize-failure
     content: "Inline `install_normalize_failure` into `install_shims` in `runvil-lua`, in its own commit, and finish with the full gate set"
-    status: pending
+    status: completed
 isProject: false
 ---
 
@@ -111,7 +111,7 @@ No new test, because no behavior changes. The existing tests cover each call sit
 
 <step-1>
 
-### Step 1: Stop exporting OpSink [pending]
+### Step 1: Stop exporting OpSink [completed]
 
 - Component: `op-sink`
 - Tests:
@@ -126,7 +126,7 @@ Commit: one commit. Suggested subject: ``Stop exporting `OpSink` from `runvil-vf
 
 <step-2>
 
-### Step 2: Delete prompt::detail::parse_error [pending]
+### Step 2: Delete prompt::detail::parse_error [completed]
 
 - Component: `parse-error`
 - Tests:
@@ -141,7 +141,7 @@ Commit: one commit. Suggested subject: ``Delete `prompt::detail::parse_error` ``
 
 <step-3>
 
-### Step 3: Inline install_normalize_failure [pending]
+### Step 3: Inline install_normalize_failure [completed]
 
 - Component: `normalize-failure`
 - Tests:
