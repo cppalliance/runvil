@@ -6,18 +6,9 @@
 
 use std::num::NonZeroU32;
 
-use runvil_types::error::{Error, ErrorCode};
+use runvil_types::error::Error;
 
 use crate::{Block, Prompt, Section};
-
-/// Builds a parse failure with no location, for a failure the Engine
-/// raises about a parsed prompt.
-///
-/// Its prose is the code's default until [`with_prompt_context`] writes it.
-#[must_use]
-pub fn parse_error(code: ErrorCode, message: impl Into<String>) -> Error {
-    crate::error::failure(code, message)
-}
 
 /// Gives a parse failure the Engine raises about a parsed prompt the
 /// prompt's frontmatter `name` as its `Name` fact, its place in the

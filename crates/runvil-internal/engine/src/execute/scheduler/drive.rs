@@ -9,7 +9,7 @@
 //! every issued effect has its answer, so every effect the caller was
 //! handed has exactly one answer.
 
-use runvil_types::error::{ErrorCode, place};
+use runvil_types::error::{ErrorCode, failure, place};
 use runvil_types::event::lifecycle;
 use runvil_types::ids::AbandonReason;
 use runvil_vfs::Origin;
@@ -173,7 +173,7 @@ impl Scheduler {
                 prompt.file(),
                 crate::prompt::detail::key_line(prompt, "runvil"),
             )),
-            None => Some(crate::prompt::detail::parse_error(
+            None => Some(failure(
                 ErrorCode::StructureInvalid,
                 "not a runvil prompt: no runvil version",
             )),
