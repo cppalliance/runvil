@@ -109,7 +109,7 @@ impl<'a> OpEvent<'a> {
 ///
 /// The sink must be cheap. Store operations call it from the blocking
 /// pool, inline with the operation.
-pub type OpSink = Arc<dyn Fn(OpEvent<'_>) + Send + Sync>;
+pub(crate) type OpSink = Arc<dyn Fn(OpEvent<'_>) + Send + Sync>;
 
 #[cfg(test)]
 mod tests {
