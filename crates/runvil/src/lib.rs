@@ -151,7 +151,6 @@ pub mod vfs {
     pub use runvil_vfs::Op;
     pub use runvil_vfs::OpEvent;
     pub use runvil_vfs::Origin;
-    pub use runvil_vfs::ParsePathReasonError;
     pub use runvil_vfs::PathReason;
     pub use runvil_vfs::Policy;
     pub use runvil_vfs::RealBackend;

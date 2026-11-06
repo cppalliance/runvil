@@ -203,24 +203,23 @@ fn every_variant_has_its_own_stable_tag() {
 }
 
 #[test]
-fn a_path_reason_parses_from_its_own_tag() {
-    for reason in PathReason::ALL {
-        assert_eq!(reason.tag().parse::<PathReason>(), Ok(*reason));
+fn every_path_reason_has_its_own_stable_tag() {
+    let reasons = [
+        (PathReason::Empty, "empty"),
+        (PathReason::Absolute, "absolute"),
+        (PathReason::Traversal, "traversal"),
+        (PathReason::Control, "control"),
+        (PathReason::EmptySegment, "empty_segment"),
+        (PathReason::Backslash, "backslash"),
+        (PathReason::ReservedName, "reserved_name"),
+        (PathReason::UnsafeSuffix, "unsafe_suffix"),
+        (PathReason::TooLong, "too_long"),
+        (PathReason::Wildcard, "wildcard"),
+        (PathReason::IntoDescendant, "into_descendant"),
+    ];
+    for (reason, tag) in reasons {
+        assert_eq!(reason.tag(), tag, "{reason:?}");
     }
-}
-
-#[test]
-fn a_path_reason_parse_refuses_other_text_and_lists_every_tag() {
-    let Err(error) = "Empty".parse::<PathReason>() else {
-        panic!("tags parse case-sensitively");
-    };
-    assert_eq!(error.input(), "Empty");
-    let text = error.to_string();
-    assert!(
-        text.starts_with("invalid path reason `Empty`: required one of "),
-        "{text}"
-    );
-    for reason in PathReason::ALL {
-        assert!(text.contains(&format!("`{}`", reason.tag())), "{text}");
-    }
+    let distinct: BTreeSet<&str> = reasons.iter().map(|(reason, _)| reason.tag()).collect();
+    assert_eq!(distinct.len(), reasons.len(), "no two reasons share a tag");
 }

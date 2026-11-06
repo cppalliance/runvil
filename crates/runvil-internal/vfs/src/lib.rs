@@ -35,7 +35,7 @@ mod traits;
 
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
-pub use error::{ParsePathReasonError, PathReason, VfsError};
+pub use error::{PathReason, VfsError};
 pub use handle::{Access, VfsRef};
 pub use memory::MemoryBackend;
 pub use observe::{OpEvent, OpSink, Origin};

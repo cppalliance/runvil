@@ -7,7 +7,7 @@ use std::fmt;
 #[path = "error-reason.rs"]
 mod reason;
 
-pub use reason::{ParsePathReasonError, PathReason};
+pub use reason::PathReason;
 
 /// The single error type returned by every virtual filesystem operation.
 ///

@@ -1,8 +1,7 @@
 //! [`PathReason`], why a path or glob pattern was refused before any
-//! backend saw it, and the error its tag parse returns.
+//! backend saw it.
 
 use std::fmt;
-use std::str::FromStr;
 
 /// Why a path or glob pattern was rejected before any backend saw it.
 ///
@@ -46,26 +45,9 @@ pub enum PathReason {
 }
 
 impl PathReason {
-    /// Every reason, in declaration order.
-    pub(crate) const ALL: &'static [PathReason] = &[
-        PathReason::Empty,
-        PathReason::Absolute,
-        PathReason::Traversal,
-        PathReason::Control,
-        PathReason::EmptySegment,
-        PathReason::Backslash,
-        PathReason::ReservedName,
-        PathReason::UnsafeSuffix,
-        PathReason::TooLong,
-        PathReason::Wildcard,
-        PathReason::IntoDescendant,
-    ];
-
     /// Returns the short tag for this reason, such as `empty` or `too_long`.
     ///
     /// A store error value holds this tag in its `rule` field.
-    /// [`PathReason::from_tag`] parses the same word back, so the two
-    /// round-trip.
     #[must_use]
     pub fn tag(self) -> &'static str {
         match self {
@@ -80,27 +62,6 @@ impl PathReason {
             PathReason::TooLong => "too_long",
             PathReason::Wildcard => "wildcard",
             PathReason::IntoDescendant => "into_descendant",
-        }
-    }
-
-    /// Parses a tag from [`PathReason::tag`] back into its reason.
-    ///
-    /// Returns `None` for any other string.
-    #[must_use]
-    pub fn from_tag(tag: &str) -> Option<PathReason> {
-        match tag {
-            "empty" => Some(PathReason::Empty),
-            "absolute" => Some(PathReason::Absolute),
-            "traversal" => Some(PathReason::Traversal),
-            "control" => Some(PathReason::Control),
-            "empty_segment" => Some(PathReason::EmptySegment),
-            "backslash" => Some(PathReason::Backslash),
-            "reserved_name" => Some(PathReason::ReservedName),
-            "unsafe_suffix" => Some(PathReason::UnsafeSuffix),
-            "too_long" => Some(PathReason::TooLong),
-            "wildcard" => Some(PathReason::Wildcard),
-            "into_descendant" => Some(PathReason::IntoDescendant),
-            _ => None,
         }
     }
 }
@@ -125,45 +86,3 @@ impl fmt::Display for PathReason {
         formatter.write_str(text)
     }
 }
-
-impl FromStr for PathReason {
-    type Err = ParsePathReasonError;
-
-    /// Parses a reason from its exact tag, as [`PathReason::from_tag`]
-    /// does.
-    fn from_str(tag: &str) -> Result<PathReason, ParsePathReasonError> {
-        PathReason::from_tag(tag).ok_or_else(|| ParsePathReasonError {
-            input: tag.to_owned(),
-        })
-    }
-}
-
-/// The error returned when text is not a [`PathReason`] tag.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ParsePathReasonError {
-    /// The rejected text.
-    input: String,
-}
-
-impl ParsePathReasonError {
-    /// Returns the rejected text.
-    #[must_use]
-    pub fn input(&self) -> &str {
-        &self.input
-    }
-}
-
-impl fmt::Display for ParsePathReasonError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "invalid path reason `{}`: required one of ", self.input)?;
-        for (position, reason) in PathReason::ALL.iter().enumerate() {
-            if position > 0 {
-                f.write_str(", ")?;
-            }
-            write!(f, "`{}`", reason.tag())?;
-        }
-        Ok(())
-    }
-}
-
-impl std::error::Error for ParsePathReasonError {}

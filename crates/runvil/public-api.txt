@@ -131,7 +131,6 @@ auto runvil::vfs::ModePolicy: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSa
 auto runvil::vfs::Op: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::vfs::OpEvent: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::vfs::Origin: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
-auto runvil::vfs::ParsePathReasonError: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::vfs::PathReason: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::vfs::RealBackend: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::vfs::Stat: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
@@ -225,7 +224,6 @@ derives runvil::vfs::ModePolicy: Debug
 derives runvil::vfs::Op: Clone, Copy, Debug, Eq, Hash, PartialEq
 derives runvil::vfs::OpEvent: Debug
 derives runvil::vfs::Origin: Clone, Debug, Eq, Hash, PartialEq
-derives runvil::vfs::ParsePathReasonError: Clone, Debug, Eq, PartialEq
 derives runvil::vfs::PathReason: Clone, Copy, Debug, Eq, PartialEq
 derives runvil::vfs::RealBackend: Clone, Debug
 derives runvil::vfs::Stat: Clone, Debug, Eq, Hash, PartialEq
@@ -241,7 +239,6 @@ derives runvil::vfs::Writability: Clone, Copy, Debug, Eq, Hash, PartialEq
 impl core::convert::From<runvil::ids::ChainId> for runvil::ids::TaskId
 impl core::convert::From<runvil::vfs::VfsPath> for runvil::vfs::VfsPathBuf
 impl core::error::Error for runvil::error::Error
-impl core::error::Error for runvil::vfs::ParsePathReasonError
 impl core::error::Error for runvil::vfs::VfsError
 impl core::fmt::Display for runvil::RunSeed
 impl core::fmt::Display for runvil::effect::EffectId
@@ -254,7 +251,6 @@ impl core::fmt::Display for runvil::packs::PackId
 impl core::fmt::Display for runvil::prompt::ArgType
 impl core::fmt::Display for runvil::timestamp::Timestamp
 impl core::fmt::Display for runvil::tools::ToolId
-impl core::fmt::Display for runvil::vfs::ParsePathReasonError
 impl core::fmt::Display for runvil::vfs::PathReason
 impl core::fmt::Display for runvil::vfs::VfsError
 impl core::fmt::Display for runvil::vfs::VfsPath
@@ -275,8 +271,6 @@ impl core::str::traits::FromStr for runvil::packs::PackId
 impl core::str::traits::FromStr for runvil::packs::PackId { type Err = runvil::error::Error }
 impl core::str::traits::FromStr for runvil::tools::ToolId
 impl core::str::traits::FromStr for runvil::tools::ToolId { type Err = runvil::error::Error }
-impl core::str::traits::FromStr for runvil::vfs::PathReason
-impl core::str::traits::FromStr for runvil::vfs::PathReason { type Err = runvil::vfs::ParsePathReasonError }
 impl runvil::vfs::Policy for runvil::vfs::AllowAll
 impl runvil::vfs::Policy for runvil::vfs::ModePolicy
 impl runvil::vfs::Vfs for runvil::vfs::MemoryBackend
@@ -551,8 +545,6 @@ pub fn runvil::vfs::OpEvent::origin(&self) -> &'a runvil::vfs::Origin
 pub fn runvil::vfs::OpEvent::path(&self) -> &'a runvil::vfs::VfsPath
 pub fn runvil::vfs::Origin::at(label: impl core::convert::Into<alloc::string::String>, file: impl core::convert::Into<alloc::string::String>, line: u32) -> runvil::vfs::Origin
 pub fn runvil::vfs::Origin::new(label: impl core::convert::Into<alloc::string::String>) -> runvil::vfs::Origin
-pub fn runvil::vfs::ParsePathReasonError::input(&self) -> &str
-pub fn runvil::vfs::PathReason::from_tag(tag: &str) -> core::option::Option<runvil::vfs::PathReason>
 pub fn runvil::vfs::PathReason::tag(self) -> &'static str
 pub fn runvil::vfs::Policy::check(&self, op: runvil::vfs::Op, path: &runvil::vfs::VfsPath) -> runvil::vfs::Verdict
 pub fn runvil::vfs::RealBackend::identity() -> runvil::vfs::RealBackend
@@ -1277,7 +1269,6 @@ pub struct runvil::vfs::ExecId(/* private fields */)
 pub struct runvil::vfs::ModeHandle { /* private fields */ }
 pub struct runvil::vfs::ModePolicy { /* private fields */ }
 pub struct runvil::vfs::OpEvent<'a> { /* private fields */ }
-pub struct runvil::vfs::ParsePathReasonError { /* private fields */ }
 pub struct runvil::vfs::VfsPath { /* private fields */ }
 pub struct runvil::vfs::VfsPathBuf(/* private fields */)
 pub struct runvil::vfs::VfsRef { /* private fields */ }
