@@ -11,9 +11,11 @@
 //!   import.
 //! - Only `runvil_plugin` is public. The mirrored C types stay private, and
 //!   unit tests pin them to the same layout numbers as
-//!   `runvil_plugin::abi`.
+//!   `runvil-plugin-sys`.
 //! - The entry point never unwinds: it has no `unwrap`, `expect`, or
 //!   indexing that can panic.
+//! - `RV_PLUGIN_LOAD` loads only when the `RvHost` table reports exactly
+//!   version 0.2, and checks that before it reads `args`.
 //! - `RV_PLUGIN_LOAD` describes the Plugin exactly once, as `test-plugin`
 //!   at `0.1.0`, and sets the instance pointer only when that succeeds. A
 //!   failing load frees what it made.
@@ -49,6 +51,8 @@ const RV_PLUGIN_UNLOAD: RvVerb = 2;
 
 /// The contract's major version, which the `RvHost` table must report.
 const RV_API_MAJOR: u32 = 0;
+/// The contract's minor version, which the `RvHost` table must report.
+const RV_API_MINOR: u32 = 2;
 
 /// The name this Plugin gives `describe_plugin`.
 const NAME: &str = "test-plugin";
@@ -79,7 +83,7 @@ struct RvPluginInfo {
     version: RvStr,
 }
 
-/// The functions a Plugin may call back during a call.
+/// What the `RvHost` table reports on every call: the contract version.
 #[repr(C)]
 #[derive(Debug)]
 struct RvHost {
@@ -91,10 +95,24 @@ struct RvHost {
     api_minor: u32,
     /// Zero.
     reserved: u32,
+}
+
+/// The arguments of `RV_PLUGIN_LOAD`: the functions the Plugin may call
+/// while it loads, each taking `ctx` first.
+#[repr(C)]
+#[derive(Debug)]
+struct RvLoadArgs {
+    /// `size_of::<RvLoadArgs>()`.
+    size: u32,
+    /// Zero.
+    reserved: u32,
+    /// The loader's context for this load, which the Plugin passes back and
+    /// never reads through.
+    ctx: *mut c_void,
     /// Declines the load. This Plugin never calls it.
-    refuse: unsafe extern "C" fn(*const RvCall, RvStr) -> RvStatus,
-    /// Names the Plugin, exactly once, during `RV_PLUGIN_LOAD`.
-    describe_plugin: unsafe extern "C" fn(*const RvCall, *const RvPluginInfo) -> RvStatus,
+    refuse: unsafe extern "C" fn(ctx: *mut c_void, reason: RvStr) -> RvStatus,
+    /// Names the Plugin, exactly once.
+    describe_plugin: unsafe extern "C" fn(ctx: *mut c_void, info: *const RvPluginInfo) -> RvStatus,
 }
 
 /// One call into the Plugin's entry point.
@@ -105,14 +123,15 @@ struct RvCall {
     size: u32,
     /// The operation.
     verb: RvVerb,
-    /// The functions the Plugin may call during this call.
+    /// What the `RvHost` table reports on every call.
     host: *const RvHost,
     /// The Plugin instance: NULL going into `RV_PLUGIN_LOAD`, which may
     /// set it.
     plugin: *mut c_void,
-    /// The per-run Pack instance; always NULL in version 0.1.
+    /// The per-run Pack instance; NULL until the Pack verbs exist.
     pack_run: *mut c_void,
-    /// The verb's own arguments; NULL for both version 0.1 verbs.
+    /// The verb's own arguments: an `RvLoadArgs` for `RV_PLUGIN_LOAD`, and
+    /// NULL for `RV_PLUGIN_UNLOAD`.
     args: *const c_void,
 }
 
@@ -155,11 +174,13 @@ fn size_of_u32<T>() -> u32 {
     u32::try_from(size_of::<T>()).unwrap_or(u32::MAX)
 }
 
-/// The fixture's Plugin entry point.
+/// The fixture's Plugin entry point, speaking contract 0.2.
 ///
 /// # Safety
 /// `call` must point to a valid `RvCall` whose `host` points to a valid
-/// `RvHost`, as the C contract requires.
+/// `RvHost`, and whose `args`, for `RV_PLUGIN_LOAD`, is NULL or points to
+/// an `RvLoadArgs` at least as long as its `size` says, as the C contract
+/// requires.
 #[unsafe(no_mangle)]
 #[expect(
     private_interfaces,
@@ -181,27 +202,39 @@ pub unsafe extern "C" fn runvil_plugin(call: *mut RvCall) -> RvStatus {
     }
 }
 
-/// Handles `RV_PLUGIN_LOAD`: checks the `RvHost` version, makes the
-/// instance, describes the Plugin once, and only then hands the instance
-/// to the loader.
+/// Handles `RV_PLUGIN_LOAD`: checks the `RvHost` version, then the load
+/// arguments, makes the instance, describes the Plugin once through its
+/// `ctx`, and only then hands the instance to the loader.
 ///
 /// # Safety
-/// `call` points to a valid `RvCall` whose `host` points to a valid
-/// `RvHost`, as the entry point's own safety contract requires.
+/// `call` points to a valid `RvCall` whose `host` and `args` are as the
+/// entry point's own safety contract requires.
 unsafe fn load(call: *mut RvCall) -> RvStatus {
     // SAFETY: the caller guarantees `call` is valid.
-    let host = unsafe { (*call).host };
+    let (host, args) = unsafe { ((*call).host, (*call).args.cast::<RvLoadArgs>()) };
     // The version check comes first and reads only `size` until the table
     // is known to be long enough, so a short table is never read past its
-    // end. It also runs before anything is allocated.
+    // end. It also runs before `args` is read and before anything is
+    // allocated, because another version's `args` has another shape.
     // SAFETY: the caller guarantees `host` points to a valid `RvHost`.
     if unsafe { (*host).size } < size_of_u32::<RvHost>() {
         return RV_ERR_UNSUPPORTED;
     }
-    // SAFETY: as above, and the table is long enough to hold `api_major`.
-    if unsafe { (*host).api_major } != RV_API_MAJOR {
+    // SAFETY: as above, and the table is long enough to hold the version.
+    let version = unsafe { ((*host).api_major, (*host).api_minor) };
+    if version != (RV_API_MAJOR, RV_API_MINOR) {
         return RV_ERR_UNSUPPORTED;
     }
+    if args.is_null() {
+        return RV_ERR_MISUSE;
+    }
+    // SAFETY: the caller guarantees a non-NULL `args` points to an
+    // `RvLoadArgs`, whose first field, `size`, is readable on its own.
+    if unsafe { (*args).size } < size_of_u32::<RvLoadArgs>() {
+        return RV_ERR_UNSUPPORTED;
+    }
+    // SAFETY: `size` says the loader wrote a whole `RvLoadArgs`.
+    let args = unsafe { &*args };
 
     let instance = Box::new(Instance::new());
     let info = RvPluginInfo {
@@ -216,10 +249,9 @@ unsafe fn load(call: *mut RvCall) -> RvStatus {
             len: VERSION.len(),
         },
     };
-    // SAFETY: the table is valid and long enough to hold `describe_plugin`,
-    // `call` is the call it answers, and `info` and its strings outlive
-    // the call.
-    let status = unsafe { ((*host).describe_plugin)(call, &raw const info) };
+    // SAFETY: `describe_plugin` and `ctx` are the load's own arguments,
+    // and `info` and its strings outlive the call.
+    let status = unsafe { (args.describe_plugin)(args.ctx, &raw const info) };
     if status != RV_OK {
         // `instance` drops here, so a failing load frees what it made.
         return status;

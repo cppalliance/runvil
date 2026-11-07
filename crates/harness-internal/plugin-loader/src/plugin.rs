@@ -7,8 +7,8 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use runvil_plugin::abi::PluginEntry;
 use runvil_plugin::{Error, FactKey, PackRegistry};
+use runvil_plugin_sys::PluginEntry;
 
 use crate::host::send_load;
 use crate::load::{Instance, Loaded, load_error, open_entry, plugin_files};
@@ -31,7 +31,7 @@ mod tests;
 /// initialization code, and each `runvil_plugin` it calls has no way to be
 /// checked, because Rust cannot check the C contract. So a Host points it
 /// only at a directory of libraries it trusts, and each `runvil_plugin`
-/// must follow the contract in `runvil_plugin::abi` and must not unwind.
+/// must follow the contract in `runvil-plugin-sys` and must not unwind.
 ///
 /// # Errors
 /// Returns the I/O error when `directory`, or the metadata of an entry in
@@ -99,7 +99,7 @@ fn load_library(path: &Path) -> Result<Plugin, Error> {
 /// at once, and no RV_PLUGIN_UNLOAD is sent.
 ///
 /// # Safety
-/// `entry` must follow the C contract in `runvil_plugin::abi` and must not
+/// `entry` must follow the C contract in `runvil-plugin-sys` and must not
 /// unwind, and `library`, when there is one, must be the library `entry`
 /// came from.
 unsafe fn load(
@@ -109,19 +109,19 @@ unsafe fn load(
 ) -> Result<Plugin, Error> {
     // SAFETY: the caller guarantees `entry` follows the C contract and does
     // not unwind.
-    let (described, instance) = unsafe { send_load(entry) }?;
+    let (described, instance, ctx) = unsafe { send_load(entry) }?;
     Ok(Plugin {
         name: described.name,
         version: described.version,
         source,
-        _loaded: Loaded::new(Instance::new(entry, instance), library),
+        _loaded: Loaded::new(Instance::new(entry, instance, ctx), library),
     })
 }
 
 /// Loads a Plugin linked into the Host by sending `entry` RV_PLUGIN_LOAD,
 /// and returns it. Its Packs will go into `packs`; in this MVP no Plugin
 /// inserts any. `entry` must follow the C contract in
-/// `runvil_plugin::abi`, as a library's must.
+/// `runvil-plugin-sys`, as a library's must.
 ///
 /// This safe function runs foreign code: it calls `entry` with no way to
 /// check it, so a Host passes only an entry point it trusts, and `entry`
@@ -129,7 +129,7 @@ unsafe fn load(
 ///
 /// # Errors
 /// Returns the `PluginLoadFailed` failure, with no `Path` fact, when the
-/// Plugin refuses, misuses the `RvHost` functions, or does not describe
+/// Plugin refuses, misuses the load functions, or does not describe
 /// itself.
 #[expect(
     unused_variables,

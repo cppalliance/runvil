@@ -1,6 +1,7 @@
-//! Tests for the `RvHost` boundary: what `describe_plugin` and `refuse`
-//! accept, what they answer RV_ERR_MISUSE, which call they answer, and
-//! which failure the loader reports when a Plugin misuses the table.
+//! Tests for the load boundary: the `RvHost` table, what `describe_plugin`
+//! and `refuse` accept, what they answer RV_ERR_MISUSE, which `ctx` they
+//! answer, and which failure the loader reports when a Plugin misuses
+//! them.
 
 use std::sync::atomic::Ordering;
 
@@ -14,16 +15,24 @@ macro_rules! bad_name {
     };
 }
 
-/// The reason of a failure caused by a misused `RvHost` table.
+/// The reason of a failure caused by misused load functions.
 macro_rules! misuse_reason {
     ($detail:expr) => {
-        concat!("the Plugin misused the RvHost table: ", $detail)
+        concat!("the Plugin misused the load functions: ", $detail)
     };
 }
 
-/// Defines a test whose fake load runs `$misuse`, an `RvHost` call that
-/// must answer RV_ERR_MISUSE, and then returns RV_OK. The load must fail
-/// with `$detail`, and a failed load is never unloaded.
+/// What a load function handed a `ctx` other than the open load's is
+/// reported as.
+macro_rules! other_ctx {
+    () => {
+        "a load function was handed a ctx other than the open RV_PLUGIN_LOAD call's"
+    };
+}
+
+/// Defines a test whose fake load runs `$misuse`, a load function call
+/// that must answer RV_ERR_MISUSE, and then returns RV_OK. The load must
+/// fail with `$detail`, and a failed load is never unloaded.
 macro_rules! misuse_test {
     ($test:ident, $detail:expr, |$call:ident| $misuse:expr) => {
         #[test]
@@ -173,8 +182,8 @@ misuse_test!(
     "describe_plugin was handed a NULL info",
     |call| {
         // SAFETY: the loader's function accepts a NULL info and answers
-        // misuse; the call is live.
-        unsafe { (host(call).describe_plugin)(call, ptr::null()) }
+        // misuse; the call's `ctx` is the open load's.
+        unsafe { crate::host::describe_plugin(ctx(call), ptr::null()) }
     }
 );
 
@@ -184,8 +193,8 @@ misuse_test!(
     |call| {
         // SAFETY: the loader's function answers misuse for a misaligned
         // info without reading it, so address 1 is safe to hand it; the
-        // call is live.
-        unsafe { (host(call).describe_plugin)(call, ptr::without_provenance(1)) }
+        // call's `ctx` is the open load's.
+        unsafe { crate::host::describe_plugin(ctx(call), ptr::without_provenance(1)) }
     }
 );
 
@@ -223,27 +232,52 @@ misuse_test!(
 );
 
 misuse_test!(
-    a_call_other_than_the_open_one_is_misuse,
-    "an RvHost function was handed a call other than the open RV_PLUGIN_LOAD call",
+    a_ctx_other_than_the_open_loads_is_misuse,
+    other_ctx!(),
     |call| {
-        let mut other = RvCall {
-            size: 0,
-            verb: RV_PLUGIN_LOAD,
-            host: ptr::null(),
-            plugin: ptr::null_mut(),
-            pack_run: ptr::null_mut(),
-            args: ptr::null(),
-        };
-        let other: *const RvCall = &raw mut other;
+        let mut other = 0_u64;
+        let other: *mut c_void = (&raw mut other).cast();
         describe_as(call, other, &info(rv_str("acme-url"), rv_str("1.0.0")))
     }
 );
 
-misuse_test!(
-    a_null_call_is_misuse,
-    "an RvHost function was handed a call other than the open RV_PLUGIN_LOAD call",
-    |call| refuse_as(call, ptr::null(), rv_str("no"))
-);
+misuse_test!(a_null_ctx_is_misuse, other_ctx!(), |call| refuse_as(
+    call,
+    ptr::null_mut(),
+    rv_str("no")
+));
+
+// A Plugin that stays loaded while `the_ctx_of_another_loaded_plugin_is_misuse`
+// loads a second one, which hands this one's `ctx` to its load functions.
+fake!(kept, |call| describe(call, "kept-one", "1.0.0"));
+
+#[test]
+fn the_ctx_of_another_loaded_plugin_is_misuse() {
+    let kept = loaded(kept::entry);
+    fake!(
+        plug,
+        {
+            pub(super) static SEEN: AtomicUsize = AtomicUsize::new(0);
+        },
+        |call| {
+            let kept_ctx = super::kept::LOAD_CTX.load(Ordering::SeqCst);
+            let status = describe_as(call, kept_ctx, &info(rv_str("acme-url"), rv_str("1.0.0")));
+            SEEN.store(status as usize, Ordering::SeqCst);
+            RV_OK
+        }
+    );
+    let failure = failure(plug::entry);
+    assert_eq!(failure.message, misuse_reason!(other_ctx!()));
+    assert_eq!(reason(&failure), Some("misuse"));
+    assert_eq!(plug::SEEN.load(Ordering::SeqCst), RV_ERR_MISUSE as usize);
+    assert_ne!(
+        plug::LOAD_CTX.load(Ordering::SeqCst),
+        kept::LOAD_CTX.load(Ordering::SeqCst),
+        "two loads with a Plugin still loaded get two ctx pointers"
+    );
+    assert_eq!(kept.name(), "kept-one", "the kept Plugin is untouched");
+    assert_eq!(kept::UNLOADS.load(Ordering::SeqCst), 0);
+}
 
 #[test]
 fn a_name_and_a_version_of_exactly_64_bytes_are_accepted() {
@@ -350,19 +384,19 @@ fn a_misuse_is_reported_even_when_a_good_description_follows() {
 }
 
 #[test]
-fn an_rvhost_function_called_from_another_thread_is_misuse() {
+fn a_load_function_called_from_another_thread_during_the_load_is_misuse() {
     fake!(
         plug,
         {
             pub(super) static SEEN: AtomicUsize = AtomicUsize::new(0);
         },
         |call| {
-            let address = call as usize;
+            let address = ctx(call) as usize;
             let (described, refused) = std::thread::spawn(move || {
-                let call = ptr::with_exposed_provenance_mut::<RvCall>(address);
+                let ctx = ptr::with_exposed_provenance_mut::<c_void>(address);
                 (
-                    describe(call, "acme-url", "1.0.0"),
-                    refuse(call, "from another thread"),
+                    describe_with(ctx, "acme-url", "1.0.0"),
+                    refuse_with(ctx, "from another thread"),
                 )
             })
             .join()
@@ -384,21 +418,24 @@ fn an_rvhost_function_called_from_another_thread_is_misuse() {
 }
 
 #[test]
-fn an_rvhost_function_called_after_the_load_returned_is_misuse() {
+fn a_late_call_through_a_ctx_stashed_during_a_successful_load_is_misuse() {
     fake!(plug, |call| describe(call, "acme-url", "1.0.0"));
-    let _plugin = loaded(plug::entry);
-    let stale = plug::LAST_CALL
-        .load(Ordering::SeqCst)
-        .cast::<RvCall>()
-        .cast_const();
-    let info = info(rv_str("other"), rv_str("2.0.0"));
-    // SAFETY: the loader's functions never dereference the call, so a
-    // stale pointer is safe to hand them, and `info` is live.
-    let described = unsafe { (HOST.describe_plugin)(stale, &raw const info) };
-    // SAFETY: as above.
-    let refused = unsafe { (HOST.refuse)(stale, rv_str("too late")) };
-    assert_eq!(described, RV_ERR_MISUSE);
-    assert_eq!(refused, RV_ERR_MISUSE);
+    let plugin = loaded(plug::entry);
+    let stashed = plug::LOAD_CTX.load(Ordering::SeqCst);
+    assert!(!stashed.is_null(), "the load was handed a ctx");
+    assert_eq!(describe_with(stashed, "other", "2.0.0"), RV_ERR_MISUSE);
+    assert_eq!(refuse_with(stashed, "too late"), RV_ERR_MISUSE);
+    assert_eq!(plugin.name(), "acme-url", "the late calls changed nothing");
+    assert_eq!(plug::UNLOADS.load(Ordering::SeqCst), 0);
+}
+
+#[test]
+fn a_late_call_through_a_rejected_loads_ctx_is_misuse() {
+    fake!(plug, |call| refuse(call, "no"));
+    drop(failure(plug::entry));
+    let stashed = plug::LOAD_CTX.load(Ordering::SeqCst);
+    assert!(!stashed.is_null(), "the load was handed a ctx");
+    assert_eq!(describe_with(stashed, "acme-url", "1.0.0"), RV_ERR_MISUSE);
 }
 
 #[test]
@@ -421,9 +458,10 @@ fn the_load_call_carries_the_contract_fields() {
 }
 
 #[test]
-fn the_table_reports_version_0_1() {
+fn the_table_reports_version_0_2_in_16_bytes() {
     assert_eq!(HOST.api_major, 0);
-    assert_eq!(HOST.api_minor, 1);
+    assert_eq!(HOST.api_minor, 2);
     assert_eq!(HOST.reserved, 0);
+    assert_eq!(HOST.size, 16);
     assert_eq!(usize::try_from(HOST.size), Ok(size_of::<RvHost>()));
 }

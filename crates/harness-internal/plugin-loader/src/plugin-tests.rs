@@ -180,7 +180,7 @@ fn the_last_arc_may_drop_on_another_thread() {
 }
 
 #[test]
-fn the_last_arc_may_drop_in_a_thread_local_destructor_after_the_session_is_gone() {
+fn the_last_arc_may_drop_in_a_thread_local_destructor() {
     thread_local! {
         static HOLDER: RefCell<Option<Arc<Plugin>>> = const { RefCell::new(None) };
     }
@@ -191,11 +191,10 @@ fn the_last_arc_may_drop_in_a_thread_local_destructor_after_the_session_is_gone(
     fake!(toucher, |call| describe(call, "toucher", "1.0.0"));
     let plugin = loaded(plug::entry);
     std::thread::spawn(move || {
-        // `HOLDER` registers its destructor first, with the only `Arc`.
+        // `HOLDER` holds the only `Arc`, so the Plugin unloads in its
+        // destructor when the thread exits, after this thread's load has
+        // used the loader's thread-local slot.
         HOLDER.with(|holder| *holder.borrow_mut() = Some(plugin));
-        // This load is the first use of the loader's own thread-local
-        // session on this thread, so that destructor registers second and
-        // runs first when the thread exits, before `HOLDER` drops the `Arc`.
         drop(loaded(toucher::entry));
     })
     .join()
@@ -205,12 +204,12 @@ fn the_last_arc_may_drop_in_a_thread_local_destructor_after_the_session_is_gone(
     assert_eq!(
         plug::UNLOAD_STATUS.load(Ordering::SeqCst) - 1,
         RV_ERR_MISUSE as usize,
-        "with no session slot left, the RvHost functions answer misuse"
+        "in a thread-local destructor, the load functions answer misuse"
     );
 }
 
 #[test]
-fn an_rvhost_function_called_during_unload_is_misuse() {
+fn a_load_function_called_during_unload_through_the_loads_ctx_is_misuse() {
     fake!(plug, |call| describe(call, "acme-url", "1.0.0"));
     drop(loaded(plug::entry));
     let tried = plug::UNLOAD_STATUS.load(Ordering::SeqCst);
@@ -243,7 +242,7 @@ fn a_load_that_sets_an_instance_and_then_fails_with_a_status_is_never_unloaded()
 }
 
 #[test]
-fn a_load_that_sets_an_instance_and_misuses_the_table_is_never_unloaded() {
+fn a_load_that_sets_an_instance_and_misuses_the_load_functions_is_never_unloaded() {
     fake!(plug, |call| {
         set_plugin(call, instance(0x5150));
         describe(call, "BAD", "1.0.0");

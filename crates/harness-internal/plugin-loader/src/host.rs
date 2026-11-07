@@ -1,17 +1,19 @@
-//! The `RvHost` table every call hands a Plugin, the functions in it, and
-//! the two verb senders. A thread-local session ties the functions to the
-//! one `RV_PLUGIN_LOAD` call they may answer.
+//! The `RvHost` table every call hands a Plugin, the load functions each
+//! RV_PLUGIN_LOAD's `RvLoadArgs` carries, and the two verb senders. Each
+//! load's `ctx` is a heap allocation holding that load's session, and a
+//! thread-local slot names the one `ctx` the load functions may answer.
 
 use std::cell::Cell;
 use std::ffi::c_void;
 use std::mem::size_of;
-use std::{ptr, slice};
+use std::ptr::{self, NonNull};
+use std::slice;
 
-use runvil_plugin::abi::{
-    PluginEntry, RV_API_MAJOR, RV_API_MINOR, RV_ERR_MISUSE, RV_ERR_REFUSED, RV_OK, RV_PLUGIN_LOAD,
-    RV_PLUGIN_UNLOAD, RvCall, RvHost, RvPluginInfo, RvStatus, RvStr,
-};
 use runvil_plugin::{Error, PackId};
+use runvil_plugin_sys::{
+    PluginEntry, RV_API_MAJOR, RV_API_MINOR, RV_ERR_MISUSE, RV_ERR_REFUSED, RV_OK, RV_PLUGIN_LOAD,
+    RV_PLUGIN_UNLOAD, RvCall, RvHost, RvLoadArgs, RvPluginInfo, RvStatus, RvStr,
+};
 
 use crate::load::load_error;
 
@@ -25,52 +27,59 @@ pub(crate) static HOST: RvHost = RvHost {
     api_major: RV_API_MAJOR,
     api_minor: RV_API_MINOR,
     reserved: 0,
-    refuse,
-    describe_plugin,
 };
 
 thread_local! {
-    /// The RV_PLUGIN_LOAD call running on this thread, as a `Session` that
-    /// is idle when none is. A `Cell`, so no borrow is ever held and no
-    /// borrow check can fail: `answer` takes the session out while it
-    /// works, and `send_load` and `send_unload` swap it.
-    static SESSION: Cell<Session> = const { Cell::new(Session::idle()) };
+    /// The session of the RV_PLUGIN_LOAD call running on this thread, which
+    /// its `ctx` points at, or `None` when no load is running. A `Cell`, so
+    /// no borrow is ever held and no borrow check can fail: `answer` takes
+    /// it out while it works, and `send_load` and `send_unload` swap it.
+    static OPEN: Cell<Option<NonNull<Session>>> = const { Cell::new(None) };
 }
 
-/// What one RV_PLUGIN_LOAD has reported so far, or an idle session when no
-/// RV_PLUGIN_LOAD call is running.
+/// What one RV_PLUGIN_LOAD has reported so far.
+#[derive(Default)]
 struct Session {
-    /// The address of the open call, compared and never dereferenced; it
-    /// is `None` while the session is idle.
-    call: Option<*const RvCall>,
     described: Option<Described>,
     refusal: Option<String>,
     misuse: Option<&'static str>,
 }
 
-impl Session {
-    /// A session with no call open.
-    const fn idle() -> Session {
-        Session {
-            call: None,
-            described: None,
-            refusal: None,
-            misuse: None,
+/// The `ctx` of one RV_PLUGIN_LOAD call: a heap allocation holding its
+/// session. It is freed when it drops: as the rejected load returns, or,
+/// for a load that succeeds, after its RV_PLUGIN_UNLOAD returns. So while a
+/// Plugin is loaded, its `ctx` is the address of no other load's.
+pub(crate) struct LoadCtx {
+    session: NonNull<Session>,
+}
+
+impl LoadCtx {
+    /// Allocates a `ctx` with an empty session.
+    fn new() -> LoadCtx {
+        LoadCtx {
+            session: NonNull::from(Box::leak(Box::<Session>::default())),
         }
     }
 
-    /// A session open on `call`, with nothing reported yet.
-    fn open(call: *const RvCall) -> Session {
-        Session {
-            call: Some(call),
-            ..Session::idle()
-        }
+    /// The pointer the load's `RvLoadArgs` carries.
+    fn as_ctx(&self) -> *mut c_void {
+        self.session.as_ptr().cast()
+    }
+
+    /// Takes what the load reported. Called only after `send_load` closed
+    /// the session, so no slot holds it and nothing else reaches it.
+    fn take_session(&mut self) -> Session {
+        // SAFETY: `session` is the live allocation `new` made, and once its
+        // load returned no slot holds it, so this is its only access.
+        std::mem::take(unsafe { self.session.as_mut() })
     }
 }
 
-impl Default for Session {
-    fn default() -> Session {
-        Session::idle()
+impl Drop for LoadCtx {
+    fn drop(&mut self) {
+        // SAFETY: `session` came from `Box::leak` in `new`, and this drop
+        // is its only free.
+        drop(unsafe { Box::from_raw(self.session.as_ptr()) });
     }
 }
 
@@ -150,40 +159,47 @@ const fn size_field<T>() -> u32 {
     size_of::<T>() as u32
 }
 
-/// Answers an `RvHost` function. `f` runs only when this thread has an
-/// RV_PLUGIN_LOAD call open and `call` is its address; otherwise the
-/// answer is RV_ERR_MISUSE, and an open session on this thread records
-/// the misuse. A thread whose session slot is already destroyed has no
-/// session, so it answers RV_ERR_MISUSE too. Nothing here dereferences
-/// `call`.
+/// Answers a load function. `f` runs on the session only when this thread
+/// has an RV_PLUGIN_LOAD call open and `ctx` is its `ctx`; otherwise the
+/// answer is RV_ERR_MISUSE, and an open load on this thread records the
+/// misuse. Nothing here reads through `ctx` itself, so a stale, freed, or
+/// made-up `ctx` is only compared.
 ///
-/// The session is out of its slot while `f` runs, so an `RvHost` function
-/// that `f` somehow reached would find an idle session and answer
-/// RV_ERR_MISUSE.
-fn answer(call: *const RvCall, f: impl FnOnce(&mut Session) -> RvStatus) -> RvStatus {
-    SESSION
-        .try_with(|cell| {
-            let mut session = cell.take();
-            let status = match session.call {
-                Some(open) if ptr::eq(open, call) => f(&mut session),
-                Some(_) => {
+/// The session is out of its slot while `f` runs, so a load function that
+/// `f` somehow reached would find no open load and answer RV_ERR_MISUSE.
+fn answer(ctx: *mut c_void, f: impl FnOnce(&mut Session) -> RvStatus) -> RvStatus {
+    OPEN.try_with(|cell| {
+        let open = cell.take();
+        let status = match open {
+            Some(open) => {
+                let is_open_ctx = ptr::eq(open.as_ptr().cast::<c_void>(), ctx);
+                // SAFETY: only `send_load` fills the slot, with the live
+                // session of the load it has open on this thread, and it
+                // empties the slot before that session can be freed. The
+                // slot is empty while this runs, so nothing else reaches
+                // the session meanwhile.
+                let session = unsafe { &mut *open.as_ptr() };
+                if is_open_ctx {
+                    f(session)
+                } else {
                     session.misuse.get_or_insert(
-                        "an RvHost function was handed a call other than the open RV_PLUGIN_LOAD call",
+                        "a load function was handed a ctx other than the open RV_PLUGIN_LOAD call's",
                     );
                     RV_ERR_MISUSE
                 }
-                None => RV_ERR_MISUSE,
-            };
-            cell.set(session);
-            status
-        })
-        .unwrap_or(RV_ERR_MISUSE)
+            }
+            None => RV_ERR_MISUSE,
+        };
+        cell.set(open);
+        status
+    })
+    .unwrap_or(RV_ERR_MISUSE)
 }
 
 /// Records the Plugin's refusal, validated; returns RV_ERR_REFUSED, or
-/// RV_ERR_MISUSE for a call it doesn't answer or a second refusal.
-unsafe extern "C" fn refuse(call: *const RvCall, reason: RvStr) -> RvStatus {
-    answer(call, |session| {
+/// RV_ERR_MISUSE for a `ctx` it doesn't answer or a second refusal.
+pub(crate) unsafe extern "C" fn refuse(ctx: *mut c_void, reason: RvStr) -> RvStatus {
+    answer(ctx, |session| {
         if session.refusal.is_some() {
             session.misuse.get_or_insert("refuse was called twice");
             return RV_ERR_MISUSE;
@@ -205,8 +221,11 @@ unsafe extern "C" fn refuse(call: *const RvCall, reason: RvStr) -> RvStatus {
 
 /// Records the Plugin's description once, validated; returns RV_OK or
 /// RV_ERR_MISUSE.
-unsafe extern "C" fn describe_plugin(call: *const RvCall, info: *const RvPluginInfo) -> RvStatus {
-    answer(call, |session| {
+pub(crate) unsafe extern "C" fn describe_plugin(
+    ctx: *mut c_void,
+    info: *const RvPluginInfo,
+) -> RvStatus {
+    answer(ctx, |session| {
         // SAFETY: the contract makes `info` point at a readable
         // `RvPluginInfo` during this call.
         match unsafe { describe(session, info) } {
@@ -264,32 +283,46 @@ unsafe fn describe(session: &mut Session, info: *const RvPluginInfo) -> Result<(
     Ok(())
 }
 
-/// Sends RV_PLUGIN_LOAD through `entry` with a session open on this thread, then
-/// closes it. On success, returns the description and the instance
-/// pointer the Plugin set.
+/// Sends RV_PLUGIN_LOAD through `entry` with a fresh `ctx` open on this
+/// thread, then closes it. On success, returns the description, the
+/// instance pointer the Plugin set, and the `ctx`, which the caller keeps
+/// until RV_PLUGIN_UNLOAD returns. On failure, the `ctx` is freed before
+/// this returns.
 ///
 /// # Safety
-/// `entry` must follow the C contract in `runvil_plugin::abi`, and must
-/// not unwind.
-pub(crate) unsafe fn send_load(entry: PluginEntry) -> Result<(Described, *mut c_void), Error> {
+/// `entry` must follow the C contract in `runvil-plugin-sys`, and must not
+/// unwind.
+pub(crate) unsafe fn send_load(
+    entry: PluginEntry,
+) -> Result<(Described, *mut c_void, LoadCtx), Error> {
+    let mut ctx = LoadCtx::new();
+    let args = RvLoadArgs {
+        size: size_field::<RvLoadArgs>(),
+        reserved: 0,
+        ctx: ctx.as_ctx(),
+        refuse,
+        describe_plugin,
+    };
     let mut call = RvCall {
         size: size_field::<RvCall>(),
         verb: RV_PLUGIN_LOAD,
         host: &raw const HOST,
         plugin: ptr::null_mut(),
         pack_run: ptr::null_mut(),
-        args: ptr::null(),
+        args: (&raw const args).cast(),
     };
     let call_ptr = &raw mut call;
     // A load inside a load, on one thread, keeps the outer session.
-    let outer = SESSION.with(|cell| cell.replace(Session::open(call_ptr.cast_const())));
+    let outer = OPEN.with(|cell| cell.replace(Some(ctx.session)));
     // SAFETY: the caller guarantees `entry` follows the contract, and
-    // `call_ptr` points at a live `RvCall` that nothing else uses.
+    // `call_ptr` points at a live `RvCall` that nothing else uses, whose
+    // `args` is live for the call.
     let status = unsafe { entry(call_ptr) };
     // Everything that touches the slot while `entry` runs (`answer`,
     // `send_load`, and `send_unload`) puts back what it replaced, so this
-    // swap returns the session opened above.
-    let session = SESSION.with(|cell| cell.replace(outer));
+    // swap closes the session opened above.
+    OPEN.with(|cell| cell.set(outer));
+    let session = ctx.take_session();
     if let Some(reason) = session.refusal {
         return Err(load_error(
             "refused",
@@ -299,7 +332,7 @@ pub(crate) unsafe fn send_load(entry: PluginEntry) -> Result<(Described, *mut c_
     if let Some(reason) = session.misuse {
         return Err(load_error(
             "misuse",
-            format!("the Plugin misused the RvHost table: {reason}"),
+            format!("the Plugin misused the load functions: {reason}"),
         ));
     }
     if status != RV_OK {
@@ -309,7 +342,7 @@ pub(crate) unsafe fn send_load(entry: PluginEntry) -> Result<(Described, *mut c_
         ));
     }
     match session.described {
-        Some(described) => Ok((described, call.plugin)),
+        Some(described) => Ok((described, call.plugin, ctx)),
         None => Err(load_error(
             "undescribed",
             "RV_PLUGIN_LOAD returned without describing the Plugin".to_owned(),
@@ -317,10 +350,10 @@ pub(crate) unsafe fn send_load(entry: PluginEntry) -> Result<(Described, *mut c_
     }
 }
 
-/// Sends RV_PLUGIN_UNLOAD through `entry` with `plugin`. No session is open, so
-/// any `RvHost` function the Plugin calls answers RV_ERR_MISUSE. The
-/// status is ignored, because a Plugin that is going away has no one to
-/// tell.
+/// Sends RV_PLUGIN_UNLOAD through `entry` with `plugin` and NULL `args`. No
+/// load is open on this thread meanwhile, so any load function the Plugin
+/// calls answers RV_ERR_MISUSE. The status is ignored, because a Plugin
+/// that is going away has no one to tell.
 ///
 /// # Safety
 /// `entry` must follow the C contract and must not unwind, and `plugin`
@@ -336,12 +369,11 @@ pub(crate) unsafe fn send_unload(entry: PluginEntry, plugin: *mut c_void) {
     };
     // An unload inside a load, on one thread, must not see the load's
     // session. The last `Arc` of a Plugin may drop inside a thread-local
-    // destructor that runs after this one's slot is destroyed. Such a thread
-    // has no session to hide, and `answer` treats its destroyed slot as "no
-    // session", so the unload still goes out.
-    let outer = SESSION.try_with(Cell::take).unwrap_or_default();
+    // destructor; `try_with` keeps such an unload going out even on a
+    // thread whose slot is gone, which `answer` treats as no open load.
+    let outer = OPEN.try_with(Cell::take).unwrap_or_default();
     // SAFETY: the caller guarantees `entry` follows the contract and
     // `plugin` is the live instance, and `call` is a live `RvCall`.
     let _status = unsafe { entry(&raw mut call) };
-    let _restored = SESSION.try_with(|cell| cell.set(outer));
+    let _restored = OPEN.try_with(|cell| cell.set(outer));
 }

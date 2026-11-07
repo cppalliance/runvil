@@ -6,10 +6,10 @@ use std::ffi::{OsStr, c_void};
 use std::io;
 use std::path::{Path, PathBuf};
 
-use runvil_plugin::abi::PluginEntry;
 use runvil_plugin::{Error, ErrorCode, FactKey};
+use runvil_plugin_sys::PluginEntry;
 
-use crate::host::send_unload;
+use crate::host::{LoadCtx, send_unload};
 
 #[cfg(test)]
 #[path = "load-tests.rs"]
@@ -132,18 +132,25 @@ pub(crate) fn open_entry(path: &Path) -> Result<(libloading::Library, PluginEntr
     Ok((library, entry))
 }
 
-/// A live Plugin instance: the entry point and the pointer RV_PLUGIN_LOAD set.
-/// Dropping it sends RV_PLUGIN_UNLOAD once.
+/// A live Plugin instance: the entry point, the pointer RV_PLUGIN_LOAD set,
+/// and the `ctx` that load was handed. Dropping it sends RV_PLUGIN_UNLOAD
+/// once, and fields drop after `Drop::drop`, so the `ctx` is freed only
+/// after RV_PLUGIN_UNLOAD returns.
 pub(crate) struct Instance {
     entry: PluginEntry,
     plugin: *mut c_void,
+    _ctx: LoadCtx,
 }
 
 impl Instance {
     /// Takes ownership of the instance `plugin` that a successful
-    /// RV_PLUGIN_LOAD through `entry` set.
-    pub(crate) fn new(entry: PluginEntry, plugin: *mut c_void) -> Instance {
-        Instance { entry, plugin }
+    /// RV_PLUGIN_LOAD through `entry` set, and of the `ctx` it was handed.
+    pub(crate) fn new(entry: PluginEntry, plugin: *mut c_void, ctx: LoadCtx) -> Instance {
+        Instance {
+            entry,
+            plugin,
+            _ctx: ctx,
+        }
     }
 }
 
@@ -156,8 +163,10 @@ impl Drop for Instance {
     }
 }
 
-// SAFETY: the `# Threads and lifetime` section of `runvil_plugin::abi` lets
-// RV_PLUGIN_UNLOAD come on any thread, and the loader never reads `plugin`.
+// SAFETY: the `# Threads and lifetime` section of `runvil-plugin-sys` lets
+// RV_PLUGIN_UNLOAD come on any thread, the loader never reads `plugin`, and
+// after its load returned the loader only frees the `ctx`, which any thread
+// may do.
 unsafe impl Send for Instance {}
 // SAFETY: `Instance` has no method that takes `&self`, so sharing it
 // between threads exposes nothing.

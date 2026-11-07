@@ -14,8 +14,9 @@
 //! It calls [`PackRegistry::insert`] once for each Pack it offers, with the
 //! sub-object of `config` under that Pack's id (`null` when the key is
 //! missing), and returns the first error. A Plugin can also be a C entry
-//! point with the shape in [`abi`]: a dynamic library exports it as
-//! `runvil_plugin`, or a Plugin crate links it in under a name of its own.
+//! point that follows the C contract in the `runvil-plugin-sys` crate: a
+//! dynamic library exports it as `runvil_plugin`, or a Plugin crate links
+//! it in under a name of its own.
 //! The Harness loads these entry points when a Host inserts them; they
 //! insert no Packs yet.
 //! `runvil/subagents` is a built-in Pack every registry holds, which
@@ -87,7 +88,6 @@
 //!   [`HostServices`], so a later C verb can pass them serialized. A fact
 //!   joins [`RenderContext`] only as plain data.
 
-pub mod abi;
 mod context;
 mod pack;
 mod registry;

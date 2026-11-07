@@ -2271,6 +2271,7 @@ version = "0.3.0"
 dependencies = [
  "libloading 0.8.9",
  "runvil-plugin",
+ "runvil-plugin-sys",
 ]
 
 [[package]]
@@ -4776,6 +4777,11 @@ dependencies = [
  "runvil-vfs",
  "serde_json",
 ]
+
+[[package]]
+name = "runvil-plugin-sys"
+version = "0.2.0"
+source = "git+https://github.com/cppalliance/runvil-plugin-api?rev=63a2403761b925b1f52bcf361c97b4fb04c04d74#63a2403761b925b1f52bcf361c97b4fb04c04d74"
 
 [[package]]
 name = "runvil-prompt"
