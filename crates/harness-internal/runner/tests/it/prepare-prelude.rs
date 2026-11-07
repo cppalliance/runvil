@@ -1,5 +1,5 @@
 //! A Pack's prelude through preparation: the prelude its `PackInfo` names
-//! reaches every section VM of the prepared run, and each tool call a
+//! reaches every section VM of the run, and each tool call a
 //! prelude function makes is recorded as a `ToolCall` effect attributed to
 //! the calling script and its section. Preludes run in the prompt's
 //! declaration order.
@@ -44,18 +44,8 @@ fn script_call(value: &str, section: &str, entry: &str) -> serde_json::Value {
 #[tokio::test]
 async fn a_preludes_tool_calls_are_recorded_as_script_calls_from_the_section_that_made_each() {
     let recorder = recorder();
-    let prepared = begin_and_prepare(SPEAKS, services(&recorder, building(SPEAKER)))
-        .await
-        .unwrap();
-    let run_id = prepared.run_id;
-    let result = drive_run(
-        prepared.run,
-        prepared.performers,
-        recorder.clone(),
-        run_id,
-        CancelHandle::new(),
-    )
-    .await;
+    let (run_id, result) =
+        prepare_and_drive(SPEAKS, building(SPEAKER), setup_over(&recorder)).await;
     assert_eq!(
         completed(result),
         "two|true",

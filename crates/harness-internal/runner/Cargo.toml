@@ -23,9 +23,6 @@ runvil.workspace = true
 # is the untrusted-envelope nonce's source, so it must be unguessable.
 rand.workspace = true
 serde_json.workspace = true
-# The prompt's content hash for the run row, so a transcript can be
-# matched to the exact text that produced it.
-sha2.workspace = true
 tracing.workspace = true
 
 [dev-dependencies]

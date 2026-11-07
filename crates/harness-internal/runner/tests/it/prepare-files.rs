@@ -4,24 +4,19 @@
 //! satisfies the declaration; text with no declared file and a declared
 //! file with neither text nor a seeded copy each refuse the run and end it
 //! with a `RequirementsUnmet` failure, and a store that refuses the write
-//! ends it with the store's refusal; and the declared `output:` path comes
-//! back on the prepared run for the caller to read once the run completes.
+//! ends it with the store's refusal; and the report carries what a
+//! completed run left at the declared `output:` path.
 
 use std::sync::Arc;
 
-use harness_runner::effect_loop::drive_run;
 use harness_runner::files::read_output;
-use harness_runner::prepare::Prepared;
 use harness_runner::recorder::MemoryRecorder;
-use runvil::cancel::CancelHandle;
-use runvil::event::Event;
+use harness_runner::{RunReport, RunSetup};
 use runvil::vfs::{MemoryBackend, Mode, ModePolicy, Origin, VfsRef};
 use runvil::{Error, ErrorCode, ErrorFact};
 use serde_json::json;
 
-use super::{
-    PLAIN, bare, begin_and_prepare, completed, recorded_parse_events, recorder, run_of, services,
-};
+use super::{PLAIN, assert_no_records, bare, completed, recorder, report_of, run_of, setup_over};
 
 /// A prompt declaring `paper.md` as its input and `report.md` as its
 /// output, whose one section writes the output from the input.
@@ -31,53 +26,45 @@ const FILES: &str = "---\nname: files\ndescription: d\nrunvil: 0\n\
     # Title\n\n## Only\n\n```lua\n\
     store.write('report.md', 'seen: ' .. store.read('paper.md'))\nreturn 'done'\n```\n";
 
-/// Prepares `source` over `vfs` with `input_text` and returns the result.
-async fn prepare_over(
+/// Runs `source` over `vfs` with `input_text` and returns the recorder
+/// beside the run's report.
+async fn run_over(
     source: &str,
     vfs: &VfsRef,
     input_text: Option<&str>,
-) -> (Arc<MemoryRecorder>, Result<Prepared, Error>) {
+) -> (Arc<MemoryRecorder>, RunReport) {
     let recorder = recorder();
-    let mut services = services(&recorder, bare());
-    services.vfs = vfs.clone();
-    services.input_text = input_text.map(str::to_owned);
-    let prepared = begin_and_prepare(source, services).await;
-    (recorder, prepared)
+    let setup = RunSetup {
+        vfs: vfs.clone(),
+        input_text: input_text.map(str::to_owned),
+        ..setup_over(&recorder)
+    };
+    let report = report_of(source, bare(), setup).await;
+    (recorder, report)
 }
 
-/// Checks that `error` is an input refusal whose run ended with it as its
-/// result, and that the recorder holds only the run's parse events.
+/// Checks that `report` is of a run its input refused, whose record ended
+/// with the refusal as its result and holds nothing before that end.
 /// Returns the refusal.
-fn refused(recorder: &MemoryRecorder, error: Error) -> Error {
+fn refused(recorder: &MemoryRecorder, report: RunReport) -> Error {
+    let error = report.result.expect_err("the input refuses the run");
     let run_id = run_of(&error);
+    assert_eq!(run_id, report.run_id, "the refusal names its run");
     assert_eq!(
         recorder.result(run_id),
         Some(Err(error.clone())),
         "the recorder holds the refusal as the run's result"
     );
-    let events = recorded_parse_events(recorder, run_id);
-    assert!(
-        matches!(events.last(), Some(Event::ParseSucceeded { .. })),
-        "the prompt parsed before its input was refused: {events:?}"
-    );
+    assert_no_records(recorder, run_id);
     error
 }
 
 #[tokio::test]
-async fn the_input_text_is_staged_at_the_declared_path_and_the_output_path_comes_back() {
+async fn the_input_text_is_staged_at_the_declared_path_and_the_output_comes_back() {
     let vfs = VfsRef::default();
-    let (recorder, prepared) = prepare_over(FILES, &vfs, Some("# Paper")).await;
-    let prepared = prepared.expect("a supplied declared input prepares");
-    assert_eq!(prepared.output_path.as_deref(), Some("report.md"));
-    let result = drive_run(
-        prepared.run,
-        prepared.performers,
-        recorder.clone(),
-        prepared.run_id,
-        CancelHandle::new(),
-    )
-    .await;
-    assert_eq!(completed(result), "done");
+    let (_recorder, report) = run_over(FILES, &vfs, Some("# Paper")).await;
+    assert_eq!(completed(report.result), "done");
+    assert_eq!(report.output, Ok("seen: # Paper".to_owned()));
     assert_eq!(read_output(&vfs, "report.md").unwrap(), "seen: # Paper");
 }
 
@@ -87,8 +74,8 @@ async fn a_store_mounted_away_from_the_root_is_staged_by_its_logical_path() {
         .mount("/", MemoryBackend::new())
         .store("/store", MemoryBackend::new())
         .build();
-    let (_recorder, prepared) = prepare_over(FILES, &vfs, Some("# Paper")).await;
-    prepared.expect("a supplied declared input prepares");
+    let (_recorder, report) = run_over(FILES, &vfs, Some("# Paper")).await;
+    completed(report.result);
     let access = vfs.acquire(Origin::new("prepare files test")).unwrap();
     assert_eq!(access.read("/store/paper.md").unwrap(), b"# Paper");
     assert!(
@@ -104,14 +91,14 @@ async fn a_host_seeded_store_satisfies_the_declared_input() {
         .unwrap()
         .write("paper.md", b"# Seeded")
         .unwrap();
-    let (_recorder, prepared) = prepare_over(FILES, &vfs, None).await;
-    prepared.expect("an input the store already holds prepares");
+    let (_recorder, report) = run_over(FILES, &vfs, None).await;
+    assert_eq!(report.output, Ok("seen: # Seeded".to_owned()));
 }
 
 #[tokio::test]
 async fn input_text_for_a_prompt_that_declares_no_input_is_refused() {
-    let (recorder, prepared) = prepare_over(PLAIN, &VfsRef::default(), Some("# Paper")).await;
-    let source = refused(&recorder, prepared.expect_err("undeclared input refuses"));
+    let (recorder, report) = run_over(PLAIN, &VfsRef::default(), Some("# Paper")).await;
+    let source = refused(&recorder, report);
     assert_eq!(source.code, ErrorCode::RequirementsUnmet);
     assert_eq!(
         source.message,
@@ -126,8 +113,8 @@ async fn input_text_for_a_prompt_that_declares_no_input_is_refused() {
 
 #[tokio::test]
 async fn a_declared_input_neither_supplied_nor_in_the_store_is_refused() {
-    let (recorder, prepared) = prepare_over(FILES, &VfsRef::default(), None).await;
-    let source = refused(&recorder, prepared.expect_err("a missing input refuses"));
+    let (recorder, report) = run_over(FILES, &VfsRef::default(), None).await;
+    let source = refused(&recorder, report);
     assert_eq!(source.code, ErrorCode::RequirementsUnmet);
     assert_eq!(
         source.facts.get(&ErrorFact::Reason),
@@ -146,8 +133,8 @@ async fn a_store_that_refuses_the_staging_write_refuses_the_run() {
         .store("/", MemoryBackend::new())
         .policy(ModePolicy::new(Mode::Ask))
         .build();
-    let (recorder, prepared) = prepare_over(FILES, &vfs, Some("# Paper")).await;
-    let source = refused(&recorder, prepared.expect_err("a refused write refuses"));
+    let (recorder, report) = run_over(FILES, &vfs, Some("# Paper")).await;
+    let source = refused(&recorder, report);
     assert_eq!(
         source.code,
         ErrorCode::ApprovalRequired,
@@ -163,7 +150,13 @@ async fn a_store_that_refuses_the_staging_write_refuses_the_run() {
 }
 
 #[tokio::test]
-async fn a_prompt_without_an_output_declaration_has_no_output_path() {
-    let (_recorder, prepared) = prepare_over(PLAIN, &VfsRef::default(), None).await;
-    assert_eq!(prepared.unwrap().output_path, None);
+async fn a_prompt_without_an_output_declaration_reports_no_output() {
+    let (_recorder, report) = run_over(PLAIN, &VfsRef::default(), None).await;
+    completed(report.result);
+    let error = report.output.expect_err("an undeclared output has no text");
+    assert_eq!(error.code, ErrorCode::NoOutput);
+    assert_eq!(
+        error.facts.get(&ErrorFact::Reason),
+        Some(&json!("undeclared"))
+    );
 }

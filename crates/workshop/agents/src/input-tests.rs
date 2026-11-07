@@ -6,8 +6,7 @@ use std::sync::Arc;
 
 use harness::pack::{HostServices, PackRegistry, Packs};
 use harness::record::MemoryRecorder;
-use harness::vfs::VfsRef;
-use harness::{BoxFuture, Harness, HostSnapshot, InferenceBroker, RunRequest};
+use harness::{BoxFuture, Harness, Host, InferenceBroker, RunSetup};
 use plugin_user_input::{INPUT_BROKER, InputBroker};
 use runvil::effect::Round;
 use runvil::model::{
@@ -270,7 +269,12 @@ async fn an_ask_is_answered_when_the_registry_receives_the_text() {
     let mut packs = PackRegistry::new();
     plugin_user_input::install(&mut packs, serde_json::Value::Null)
         .expect("a new registry takes the Pack");
-    let host = Packs::new(packs, HostServices::new());
+    let host = Arc::new(Host {
+        packs: Packs::new(packs, HostServices::new()),
+        prompts: Arc::new(|_: &str| -> Result<String, runvil::Error> { Ok(source.to_owned()) }),
+        timer: Arc::new(TokioTimer),
+    });
+    let prompt = host.parse("ask").expect("the agent parses");
     let (broker, registry, frames) = broker_fixture();
     let mut socket = frames.subscribe();
     let recorder = Arc::new(MemoryRecorder::new());
@@ -279,29 +283,18 @@ async fn an_ask_is_answered_when_the_registry_receives_the_text() {
     services
         .provide(&INPUT_BROKER, broker)
         .expect("an empty map takes the broker");
-    let harness = Harness::new(
-        recorder.clone(),
-        Arc::new(NoChat),
-        Arc::new(TokioTimer),
-        Arc::new(host),
+    let setup = RunSetup {
         services,
-    );
-    let request = RunRequest {
-        name: "conversation-1".to_owned(),
-        source: source.to_owned(),
-        file: "prompt".to_owned(),
-        args: String::new(),
-        input_text: None,
-        vfs: VfsRef::default(),
-        host: HostSnapshot::default(),
+        ..RunSetup::new(recorder.clone(), Arc::new(NoChat))
     };
+    let harness = Harness::new(host, prompt, setup);
     let answer = async {
         let token = required_token(&mut socket).await;
         registry
             .complete(&token, GNARLY.to_owned())
             .expect("the wait completes");
     };
-    let (report, ()) = tokio::join!(harness.run(request), answer);
+    let (report, ()) = tokio::join!(harness.run(), answer);
     let report = report.expect("the run reaches its result");
     assert_eq!(
         report.result,

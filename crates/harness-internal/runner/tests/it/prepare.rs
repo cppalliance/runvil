@@ -1,29 +1,25 @@
-//! Run preparation: a prompt whose requirements the environment cannot
-//! meet is prepared, and its run's first step ends it with the Engine's
-//! own notice; a prompt that does not parse fails preparation with the
-//! parse failure, which its run ends with; each leaves only its parse
-//! events at the recorder; each run's begin draws a fresh seed and start,
-//! both handed to the recorder under the run's name; and the prepared tool
-//! performer sends a `ToolCall` effect to the Pack its id names. The
-//! run's optional input broker - one of its own services, lent to every
-//! tool call and behind the fixture ask Pack - sits in the
-//! `input` child module, the run's services meeting a Pack's needs sit in
-//! the `host_services` child module, a Pack's prelude reaching the
-//! prepared run sits in the `prelude` child module, the prompt's declared
-//! input and output files sit in the `files` child module, and the wait
-//! for each Pack to be ready sits in the `ready` child module.
+//! Run preparation through `Harness::run`: a prompt whose requirements
+//! the environment cannot meet is prepared, and its run's first step ends
+//! it with the Engine's own notice and no record before its end; a
+//! recorder that refuses the run's first record fails the run naming it;
+//! each run's begin draws a fresh seed and start, both handed to the
+//! recorder; and the run's tool performer sends a `ToolCall` effect to
+//! the Pack its id names. The run's optional input broker - one of its
+//! own services, lent to every tool call and behind the fixture ask Pack -
+//! sits in the `input` child module, the run's services meeting a Pack's
+//! needs sit in the `host_services` child module, a Pack's prelude
+//! reaching the prepared run sits in the `prelude` child module, the
+//! prompt's declared input and output files sit in the `files` child
+//! module, and the wait for each Pack to be ready sits in the `ready`
+//! child module.
 
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use harness_runner::Packs;
-use harness_runner::effect_loop::drive_run;
-use harness_runner::prepare::{Prepared, Services, begin, prepare};
 use harness_runner::recorder::{
     MemoryRecorder, Record, RecordKind, RecorderFuture, RunId, RunMeta, RunRecorder,
 };
-use runvil::cancel::CancelHandle;
-use runvil::event::Event;
+use harness_runner::{Packs, RunReport, RunSetup};
 use runvil::make_tool_error;
 use runvil::{Error, ErrorCode, ErrorFact};
 use runvil_plugin::{
@@ -31,6 +27,8 @@ use runvil_plugin::{
 };
 use serde_json::{Value, json};
 
+use crate::harness::launch;
+use crate::scripted::ScriptedBroker;
 use crate::support::{Unused, registry};
 
 #[path = "prepare-files.rs"]
@@ -49,9 +47,6 @@ mod ready;
 const NEEDS_WEB: &str = "---\nname: needs-web\ndescription: d\nrunvil: 0\n\
     uses:\n  - web\n---\n\n# Title\n\n## Only\n\nDone.\n";
 
-/// A prompt with unclosed frontmatter, so it does not parse.
-const UNCLOSED: &str = "---\nname: unclosed\ndescription: d\nrunvil: 0\n\n# Title\n";
-
 /// A Pack-free prompt whose one section returns a constant.
 const PLAIN: &str = "---\nname: plain\ndescription: d\nrunvil: 0\n---\n\n\
     # Title\n\n## Only\n\n```lua\nreturn 'plain'\n```\n";
@@ -66,64 +61,43 @@ fn recorder() -> Arc<MemoryRecorder> {
     Arc::new(MemoryRecorder::new())
 }
 
-/// The events the recorder holds for `run_id`, after asserting they are
-/// only events and open with the parse. A run that failed preparation, or
-/// that its first step refused, records nothing after its parse events.
-fn recorded_parse_events(recorder: &MemoryRecorder, run_id: RunId) -> Vec<Event> {
+/// Asserts the recorder holds no record for `run_id`: a run that failed
+/// preparation, or that its first step refused, records nothing before
+/// its end.
+#[track_caller]
+fn assert_no_records(recorder: &MemoryRecorder, run_id: RunId) {
     let records = recorder.records(run_id);
     assert!(
-        records
-            .iter()
-            .all(|record| record.kind == RecordKind::Event),
-        "a run that never started records only events"
+        records.is_empty(),
+        "a run that never started records nothing: {records:?}"
     );
-    let events: Vec<Event> = records
-        .into_iter()
-        .map(|record| serde_json::from_value(record.payload).unwrap())
-        .collect();
-    assert!(
-        matches!(events.first(), Some(Event::ParseStarted { .. })),
-        "the events open with the parse: {events:?}"
-    );
-    events
 }
 
-/// A Host with no Packs but the built-in.
+/// A Host's Packs with none but the built-in.
 pub(crate) fn bare() -> Packs {
     Packs::new(registry(&[]), HostServices::new())
 }
 
-/// A Host that built `info` beside the built-in.
+/// A Host's Packs: `info` beside the built-in.
 pub(crate) fn building(info: PackInfo) -> Packs {
     Packs::new(registry(&[info]), HostServices::new())
 }
 
-/// The preparation services over `recorder` and `host`, with no run
-/// services and the performers no test here reaches.
-pub(crate) fn services(recorder: &Arc<MemoryRecorder>, host: Packs) -> Services {
-    Services {
-        host: Arc::new(host),
-        services: HostServices::new(),
-        vfs: runvil::vfs::VfsRef::default(),
-        input_text: None,
-        cancel: CancelHandle::new(),
-        recorder: recorder.clone(),
-        broker: Arc::new(Unused),
-        timer: Arc::new(Unused),
-        name: "session-1".to_owned(),
-        file: "prompt".to_owned(),
-        model: None,
-        ui: None,
-    }
+/// The setup of a run recorded through `recorder` and served by the
+/// scripted broker. It selects no model, so the run binds the broker's
+/// one model, and it holds no run services, no input, and a fresh memory
+/// store.
+pub(crate) fn setup_over(recorder: &Arc<MemoryRecorder>) -> RunSetup {
+    RunSetup::new(recorder.clone(), Arc::new(ScriptedBroker::replying()))
 }
 
-/// Begins a run of `source` under the name `services` holds at the
-/// recorder it holds, then prepares the run with no arguments.
-pub(crate) async fn begin_and_prepare(source: &str, services: Services) -> Result<Prepared, Error> {
-    let begun = begin(&*services.recorder, &services.name, source)
+/// Runs `source` with `setup` on a Host over `packs` and a timer no test
+/// here reaches, and returns the run's report.
+pub(crate) async fn report_of(source: &str, packs: Packs, setup: RunSetup) -> RunReport {
+    launch(packs, Unused, source, setup)
+        .run()
         .await
-        .expect("the memory recorder begins the run");
-    prepare(source, "", begun, services).await
+        .expect("the run is reported")
 }
 
 /// The run a preparation failure names in its `Run` fact.
@@ -207,7 +181,7 @@ fn completed(result: Result<String, Error>) -> String {
 #[tokio::test]
 async fn an_unmet_requirement_ends_the_prepared_run_as_failed_with_the_engines_notice() {
     let recorder = recorder();
-    let (run_id, result) = prepare_and_drive(NEEDS_WEB, services(&recorder, bare())).await;
+    let (run_id, result) = prepare_and_drive(NEEDS_WEB, bare(), setup_over(&recorder)).await;
 
     assert_eq!(
         recorder.result(run_id),
@@ -220,41 +194,7 @@ async fn an_unmet_requirement_ends_the_prepared_run_as_failed_with_the_engines_n
          - missing required Pack: web (at prompt:5)",
         "the failure is the engine's notice, verbatim, on the `uses:` line"
     );
-    let events = recorded_parse_events(&recorder, run_id);
-    assert!(
-        matches!(events.last(), Some(Event::ParseSucceeded { .. })),
-        "the parse events, then the end, with no run event between: {events:?}"
-    );
-}
-
-#[tokio::test]
-async fn a_prompt_that_does_not_parse_fails_preparation_and_its_run_ends_with_the_parse_failure() {
-    let recorder = recorder();
-    let error = begin_and_prepare(UNCLOSED, services(&recorder, bare()))
-        .await
-        .expect_err("a prompt without a closed frontmatter does not parse");
-
-    assert_eq!(
-        error.code,
-        ErrorCode::FrontmatterInvalid,
-        "the failure is the parse failure"
-    );
-    assert_eq!(
-        error.located_message(),
-        "frontmatter was not closed with --- (line 1, column 1)",
-        "the parse failure keeps its location"
-    );
-    let run_id = run_of(&error);
-    assert_eq!(
-        recorder.result(run_id),
-        Some(Err(error)),
-        "the recorder holds the very failure preparation returned"
-    );
-    let events = recorded_parse_events(&recorder, run_id);
-    assert!(
-        matches!(events.last(), Some(Event::ParseFailed { .. })),
-        "the events end with the failed parse: {events:?}"
-    );
+    assert_no_records(&recorder, run_id);
 }
 
 /// A recorder that begins runs in memory and refuses every append with a
@@ -277,32 +217,37 @@ impl RunRecorder for RefusingAppends {
 }
 
 #[tokio::test]
-async fn a_refused_parse_event_fails_preparation_as_a_recorder_failure_naming_the_run() {
-    let mut services = services(&recorder(), bare());
-    services.recorder = Arc::new(RefusingAppends(MemoryRecorder::new()));
-    let error = begin_and_prepare(PLAIN, services)
+async fn a_refused_first_record_fails_the_run_as_a_recorder_failure_naming_the_run() {
+    let refusing = Arc::new(RefusingAppends(MemoryRecorder::new()));
+    let setup = RunSetup::new(refusing.clone(), Arc::new(ScriptedBroker::replying()));
+    let error = launch(bare(), Unused, PLAIN, setup)
+        .run()
         .await
-        .expect_err("the first parse event is refused");
+        .expect_err("the run's first record is refused");
     assert_eq!(error.code, ErrorCode::RecorderFailed);
-    assert_eq!(error.message, "the run recorder failed: the disk is full");
+    assert_eq!(
+        error.message,
+        "the run could not be recorded: the run recorder failed: the disk is full"
+    );
     assert_eq!(run_of(&error), RunId::from_raw(1));
+    assert_eq!(
+        refusing.0.result(RunId::from_raw(1)),
+        None,
+        "a refused run is not recorded to its end"
+    );
 }
 
 #[tokio::test]
-async fn two_prepared_runs_draw_different_seeds_and_both_begin_at_the_recorder() {
+async fn two_runs_draw_different_seeds_and_both_begin_at_the_recorder_at_the_wall_clock() {
     let recorder = recorder();
     let before = unix_millis_now();
-    let first = begin_and_prepare(PLAIN, services(&recorder, bare()))
-        .await
-        .unwrap();
-    let second = begin_and_prepare(PLAIN, services(&recorder, bare()))
-        .await
-        .unwrap();
+    let first = report_of(PLAIN, bare(), setup_over(&recorder)).await;
+    let second = report_of(PLAIN, bare(), setup_over(&recorder)).await;
     let after = unix_millis_now();
 
     assert_ne!(
         first.run_id, second.run_id,
-        "each preparation begins its own run"
+        "each run begins its own record"
     );
     let first_meta = recorder
         .meta(first.run_id)
@@ -312,89 +257,47 @@ async fn two_prepared_runs_draw_different_seeds_and_both_begin_at_the_recorder()
         .expect("the recorder began the run");
     assert_ne!(
         first_meta.seed, second_meta.seed,
-        "each preparation draws its own seed"
+        "each run draws its own seed"
     );
     assert!(
         first_meta.started_at <= second_meta.started_at,
-        "each preparation reads the clock as it begins its run: {first_meta:?} then {second_meta:?}"
+        "each run reads the clock as it begins: {first_meta:?} then {second_meta:?}"
     );
-    for prepared in [&first, &second] {
-        let meta = recorder
-            .meta(prepared.run_id)
-            .expect("the recorder began the run");
+    for meta in [&first_meta, &second_meta] {
         assert!(
             (before..=after).contains(&meta.started_at),
-            "the start is the wall clock at preparation: {} not in {before}..={after}",
+            "the start is the wall clock at the begin: {} not in {before}..={after}",
             meta.started_at
         );
-        assert_eq!(meta.name, "session-1", "the metadata holds the run's name");
-        assert!(
-            meta.prompt_hash.starts_with("sha256:"),
-            "the prompt hash names its algorithm: {}",
-            meta.prompt_hash
-        );
-        assert_eq!(
-            recorder.result(prepared.run_id),
-            None,
-            "a prepared run stays open for the loop"
-        );
     }
-    assert_eq!(
-        recorder.meta(first.run_id).unwrap().prompt_hash,
-        recorder.meta(second.run_id).unwrap().prompt_hash,
-        "the same prompt text hashes the same"
-    );
 }
 
 #[tokio::test]
-async fn a_prepared_run_drives_to_its_end_under_its_own_performers() {
+async fn a_prepared_run_drives_to_its_end_and_the_recorder_holds_its_result() {
     let recorder = recorder();
-    let Prepared {
-        run,
-        run_id,
-        performers,
-        ..
-    } = begin_and_prepare(PLAIN, services(&recorder, bare()))
-        .await
-        .unwrap();
-    let result = drive_run(
-        run,
-        performers,
-        recorder.clone(),
-        run_id,
-        CancelHandle::new(),
-    )
-    .await;
+    let (run_id, result) = prepare_and_drive(PLAIN, bare(), setup_over(&recorder)).await;
     assert_eq!(completed(result.clone()), "plain");
     assert_eq!(
         recorder.result(run_id),
         Some(result),
-        "the loop ends the run preparation began"
+        "the loop ends the run the Harness began"
     );
 }
 
-/// Prepares `source` with `services` and drives the run to its end,
-/// returning the run's id at the recorder beside its result.
+/// Runs `source` with `setup` on a Host over `packs`, returning the run's
+/// id at the recorder beside its result.
 pub(crate) async fn prepare_and_drive(
     source: &str,
-    services: Services,
+    packs: Packs,
+    setup: RunSetup,
 ) -> (RunId, Result<String, Error>) {
-    let recorder = Arc::clone(&services.recorder);
-    let prepared = begin_and_prepare(source, services).await.unwrap();
-    let result = drive_run(
-        prepared.run,
-        prepared.performers,
-        recorder,
-        prepared.run_id,
-        CancelHandle::new(),
-    )
-    .await;
-    (prepared.run_id, result)
+    let report = report_of(source, packs, setup).await;
+    (report.run_id, report.result)
 }
 
-/// Prepares `source` over `host` and drives the run to its end.
-pub(crate) async fn drive_over(source: &str, host: Packs) -> Result<String, Error> {
-    prepare_and_drive(source, services(&recorder(), host))
+/// Runs `source` on a Host over `packs` and returns the run's result.
+pub(crate) async fn drive_over(source: &str, packs: Packs) -> Result<String, Error> {
+    prepare_and_drive(source, packs, setup_over(&recorder()))
         .await
         .1
 }

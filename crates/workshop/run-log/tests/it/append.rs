@@ -19,8 +19,6 @@ const AGENT: &str = "chat";
 /// A run's opening row as the Harness would write it.
 fn meta() -> RunMeta {
     RunMeta {
-        name: "session-1".to_owned(),
-        prompt_hash: "sha256:abc".to_owned(),
         seed: RunSeed::from_bytes([0xfe; 32]),
         flags: 0,
         started_at: 1_700_000_000_000,
@@ -36,6 +34,34 @@ fn record(kind: RecordKind, task_seq: u32, effect_id: Option<u64>) -> Record {
         effect_id,
         payload: json!({ "task_seq": task_seq }),
     }
+}
+
+#[tokio::test]
+async fn a_new_log_has_neither_a_name_nor_a_prompt_hash_column() {
+    let dir = tempfile::TempDir::new().unwrap();
+    let path = dir.path().join("runs.db");
+    drop(RunLog::open(&path).await.unwrap());
+
+    let database = turso::Builder::new_local(path.to_str().unwrap())
+        .build()
+        .await
+        .unwrap();
+    let conn = database.connect().unwrap();
+    let mut rows = conn.query("PRAGMA table_info(runs)", ()).await.unwrap();
+    let mut columns = Vec::new();
+    while let Some(row) = rows.next().await.unwrap() {
+        columns.push(row.get::<String>(1).unwrap());
+    }
+    assert!(
+        columns.iter().any(|column| column == "agent"),
+        "the pragma lists the runs table's columns: {columns:?}"
+    );
+    assert!(
+        !columns
+            .iter()
+            .any(|column| column == "name" || column == "prompt_hash"),
+        "the runs table holds neither the run's name nor a prompt hash: {columns:?}"
+    );
 }
 
 #[tokio::test]

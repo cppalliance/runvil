@@ -6,14 +6,14 @@
 use std::sync::{Arc, Mutex, PoisonError};
 
 use async_trait::async_trait;
+use harness::RunSetup;
 use harness::record::MemoryRecorder;
 use harness::vfs::{Origin, VfsError, VfsRef};
-use harness::{Harness, HostSnapshot, RunRequest};
 use runvil::Error;
 use runvil::vfs::{MemoryBackend, Op, Policy, Verdict, VfsPath};
 
-use crate::asker::{AskBroker, asker_host, broker_services};
-use crate::support::{Clock, Offline};
+use crate::asker::{AskBroker, asker_packs, broker_services};
+use crate::support::{Offline, launch};
 
 /// Reads the notes, asks the operator, and writes the approved notes.
 const REVIEW: &str = concat!(
@@ -130,23 +130,15 @@ async fn a_hosts_edit_of_a_file_the_run_read_conflicts_while_the_run_waits_on_it
         vfs: vfs.clone(),
         outcome: Arc::clone(&edited),
     });
-    let harness = Harness::new(
-        Arc::new(MemoryRecorder::new()),
-        Arc::new(Offline),
-        Arc::new(Clock),
-        asker_host(),
-        broker_services(operator),
-    );
-    let request = RunRequest {
-        name: "desk-review-1".to_owned(),
-        source: REVIEW.to_owned(),
-        file: "prompt".to_owned(),
-        args: String::new(),
-        input_text: None,
+    let setup = RunSetup {
+        services: broker_services(operator),
         vfs: vfs.clone(),
-        host: HostSnapshot::default(),
+        ..RunSetup::new(Arc::new(MemoryRecorder::new()), Arc::new(Offline))
     };
-    let report = harness.run(request).await.expect("the run is reported");
+    let report = launch(asker_packs(), REVIEW, setup)
+        .run()
+        .await
+        .expect("the run is reported");
 
     assert!(matches!(
         edited.lock().unwrap().take(),

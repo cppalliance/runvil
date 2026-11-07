@@ -61,14 +61,15 @@ impl Pack for Greeter {
     }
 }
 
-/// Prepares [`GREETS`] with `run` as the run's services and drives the
-/// run to its end, returning the recorder and the run's id beside its
-/// result.
+/// Runs [`GREETS`] with `run` as the run's services to its end,
+/// returning the recorder and the run's id beside its result.
 async fn drive_greeter(run: HostServices) -> (Arc<MemoryRecorder>, RunId, Result<String, Error>) {
     let recorder = recorder();
-    let mut services = services(&recorder, building(GREETER));
-    services.services = run;
-    let (run_id, result) = prepare_and_drive(GREETS, services).await;
+    let setup = RunSetup {
+        services: run,
+        ..setup_over(&recorder)
+    };
+    let (run_id, result) = prepare_and_drive(GREETS, building(GREETER), setup).await;
     (recorder, run_id, result)
 }
 

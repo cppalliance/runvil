@@ -8,13 +8,12 @@ use std::fmt::Write as _;
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
 
-use harness_runner::Harness;
+use harness_runner::RunSetup;
 use harness_runner::recorder::MemoryRecorder;
 use runvil::model::{Completion, CompletionResult, ToolCall};
-use runvil_plugin::HostServices;
 use serde_json::json;
 
-use super::{PendingTimer, answers_to, answers_where, calls, request, run_beside, until};
+use super::{PendingTimer, answers_to, answers_where, calls, launch, run_beside, setup, until};
 use crate::scripted::{Held, MODEL, Operator, ScriptedBroker, hold_host, reply};
 
 /// The held tool's id.
@@ -111,25 +110,20 @@ fn holds_back(operator: &Operator) -> ScriptedBroker {
 async fn a_stop_drops_waiting_calls_without_starting_them() {
     let held = Arc::new(Held::default());
     let recorder = Arc::new(MemoryRecorder::new());
-    let harness = Harness::new(
-        recorder.clone(),
-        Arc::new(calls_once(vec!["harness_hold"; 11])),
-        Arc::new(PendingTimer::default()),
-        Arc::new(hold_host(&held)),
-        HostServices::new(),
+    let harness = launch(
+        hold_host(&held),
+        PendingTimer::default(),
+        &loops_offering(&[HOLD_TOOL]),
+        setup(recorder.clone(), calls_once(vec!["harness_hold"; 11])),
     );
     let watched = Arc::clone(&held);
 
-    let report = run_beside(
-        harness,
-        request(&loops_offering(&[HOLD_TOOL])),
-        |control| async move {
-            until("ten calls are in flight", || watched.started() >= 10).await;
-            settle().await;
-            assert_eq!(watched.started(), 10, "the eleventh call waits for a slot");
-            control.stop_round();
-        },
-    )
+    let report = run_beside(harness, |control| async move {
+        until("ten calls are in flight", || watched.started() >= 10).await;
+        settle().await;
+        assert_eq!(watched.started(), 10, "the eleventh call waits for a slot");
+        control.stop_round();
+    })
     .await
     .expect("the run is reported");
 
@@ -156,34 +150,32 @@ async fn a_stop_starts_a_waiting_call_that_survives_stops() {
     let recorder = Arc::new(MemoryRecorder::new());
     let mut wire_names = vec!["harness_hold"; 10];
     wire_names.push("user-input_ask");
-    let harness = Harness::new(
-        recorder.clone(),
-        Arc::new(calls_once(wire_names)),
-        Arc::new(PendingTimer::default()),
-        Arc::new(hold_host(&held)),
-        operator.services(),
+    let harness = launch(
+        hold_host(&held),
+        PendingTimer::default(),
+        &loops_offering(&[HOLD_TOOL, ASK_TOOL]),
+        RunSetup {
+            services: operator.services(),
+            ..setup(recorder.clone(), calls_once(wire_names))
+        },
     );
     let watched = Arc::clone(&held);
 
-    let report = run_beside(
-        harness,
-        request(&loops_offering(&[HOLD_TOOL, ASK_TOOL])),
-        |control| async move {
-            until("ten holds are in flight", || watched.started() >= 10).await;
-            settle().await;
-            assert_eq!(
-                asked.load(Ordering::SeqCst),
-                0,
-                "the question waits behind the ten holds"
-            );
-            control.stop_round();
-            until("the stop frees a slot for the question", || {
-                asked.load(Ordering::SeqCst) == 1
-            })
-            .await;
-            answers.send("kept".to_owned()).unwrap();
-        },
-    )
+    let report = run_beside(harness, |control| async move {
+        until("ten holds are in flight", || watched.started() >= 10).await;
+        settle().await;
+        assert_eq!(
+            asked.load(Ordering::SeqCst),
+            0,
+            "the question waits behind the ten holds"
+        );
+        control.stop_round();
+        until("the stop frees a slot for the question", || {
+            asked.load(Ordering::SeqCst) == 1
+        })
+        .await;
+        answers.send("kept".to_owned()).unwrap();
+    })
     .await
     .expect("the run is reported");
 
@@ -211,15 +203,17 @@ async fn a_stop_starts_a_waiting_call_that_survives_stops() {
 async fn canceling_a_task_drops_its_question_to_the_operator() {
     let (operator, _answers) = Operator::new();
     let recorder = Arc::new(MemoryRecorder::new());
-    let harness = Harness::new(
-        recorder.clone(),
-        Arc::new(holds_back(&operator)),
-        Arc::new(PendingTimer::default()),
-        Arc::new(hold_host(&Arc::default())),
-        operator.services(),
+    let harness = launch(
+        hold_host(&Arc::default()),
+        PendingTimer::default(),
+        CANCELS_AN_ASKER,
+        RunSetup {
+            services: operator.services(),
+            ..setup(recorder.clone(), holds_back(&operator))
+        },
     );
 
-    let report = run_beside(harness, request(CANCELS_AN_ASKER), |_control| async {})
+    let report = run_beside(harness, |_control| async {})
         .await
         .expect("the run is reported");
 

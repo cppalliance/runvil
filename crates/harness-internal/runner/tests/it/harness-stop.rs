@@ -10,14 +10,13 @@
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
 
-use harness_runner::Harness;
 use harness_runner::recorder::MemoryRecorder;
+use harness_runner::{Harness, RunSetup};
 use runvil::Error;
 use runvil::model::{Completion, CompletionResult, ToolCall};
-use runvil_plugin::HostServices;
 use serde_json::json;
 
-use super::{PendingTimer, answers_to, answers_where, calls, request, run_beside, until};
+use super::{PendingTimer, answers_to, answers_where, calls, launch, run_beside, setup, until};
 use crate::scripted::{
     Held, HeldTimer, MODEL, Operator, ScriptedBroker, held_broker, hold_host, reply,
     surviving_hold_host,
@@ -96,16 +95,15 @@ async fn a_stop_drops_a_chat_round_a_tool_call_and_a_timer_and_a_pcall_keeps_the
     let tool = Arc::new(Held::default());
     let timer = Arc::new(Held::default());
     let recorder = Arc::new(MemoryRecorder::new());
-    let harness = Harness::new(
-        recorder.clone(),
-        Arc::new(held_broker(&chat)),
-        Arc::new(HeldTimer(Arc::clone(&timer))),
-        Arc::new(hold_host(&tool)),
-        HostServices::new(),
+    let harness = launch(
+        hold_host(&tool),
+        HeldTimer(Arc::clone(&timer)),
+        STOPS_ALL,
+        setup(recorder.clone(), held_broker(&chat)),
     );
     let in_flight = [Arc::clone(&chat), Arc::clone(&tool), Arc::clone(&timer)];
 
-    let report = run_beside(harness, request(STOPS_ALL), |control| async move {
+    let report = run_beside(harness, |control| async move {
         until(
             "a chat round, a tool call, and a timer are all in flight",
             || in_flight.iter().all(|held| held.started() == 1),
@@ -140,16 +138,15 @@ async fn a_stop_drops_a_chat_round_a_tool_call_and_a_timer_and_a_pcall_keeps_the
 async fn an_uncaught_stopped_round_ends_the_run_canceled() {
     let chat = Arc::new(Held::default());
     let recorder = Arc::new(MemoryRecorder::new());
-    let harness = Harness::new(
-        recorder.clone(),
-        Arc::new(held_broker(&chat)),
-        Arc::new(PendingTimer::default()),
-        Arc::new(hold_host(&Arc::default())),
-        HostServices::new(),
+    let harness = launch(
+        hold_host(&Arc::default()),
+        PendingTimer::default(),
+        STOPS_UNCAUGHT,
+        setup(recorder.clone(), held_broker(&chat)),
     );
     let watched = Arc::clone(&chat);
 
-    let report = run_beside(harness, request(STOPS_UNCAUGHT), |control| async move {
+    let report = run_beside(harness, |control| async move {
         until("the round is in flight", || watched.started() == 1).await;
         control.stop_round();
     })
@@ -201,16 +198,15 @@ fn calls_hold_twice() -> ScriptedBroker {
 async fn two_calls_in_one_round_are_in_flight_at_once_and_a_stop_drops_both() {
     let held = Arc::new(Held::default());
     let recorder = Arc::new(MemoryRecorder::new());
-    let harness = Harness::new(
-        recorder.clone(),
-        Arc::new(calls_hold_twice()),
-        Arc::new(PendingTimer::default()),
-        Arc::new(hold_host(&held)),
-        HostServices::new(),
+    let harness = launch(
+        hold_host(&held),
+        PendingTimer::default(),
+        LOOPS_ONCE,
+        setup(recorder.clone(), calls_hold_twice()),
     );
     let watched = Arc::clone(&held);
 
-    let report = run_beside(harness, request(LOOPS_ONCE), |control| async move {
+    let report = run_beside(harness, |control| async move {
         until("both calls are in flight", || watched.started() == 2).await;
         control.stop_round();
     })
@@ -237,16 +233,18 @@ async fn a_chat_shaped_prompt_returns_to_its_question_after_a_stop_during_a_tool
     let (operator, answers) = Operator::new();
     let asked = Arc::clone(&operator.asked);
     let recorder = Arc::new(MemoryRecorder::new());
-    let harness = Harness::new(
-        recorder.clone(),
-        Arc::new(calls_hold_once()),
-        Arc::new(PendingTimer::default()),
-        Arc::new(hold_host(&tool)),
-        operator.services(),
+    let harness = launch(
+        hold_host(&tool),
+        PendingTimer::default(),
+        CHATS,
+        RunSetup {
+            services: operator.services(),
+            ..setup(recorder.clone(), calls_hold_once())
+        },
     );
     let watched = Arc::clone(&tool);
 
-    let report = run_beside(harness, request(CHATS), |control| async move {
+    let report = run_beside(harness, |control| async move {
         until("the prompt asks its first question", || {
             asked.load(Ordering::SeqCst) == 1
         })
@@ -293,15 +291,17 @@ async fn a_chat_shaped_prompt_returns_to_its_question_after_a_stop_during_a_tool
     );
 }
 
-/// A Harness on `operator` with the fixture ask Pack and a broker no
-/// round reaches.
+/// A Harness running [`ASKS`] on `operator` with the fixture ask Pack and
+/// a broker no round reaches.
 fn asking_harness(recorder: &Arc<MemoryRecorder>, operator: &Arc<Operator>) -> Harness {
-    Harness::new(
-        recorder.clone(),
-        Arc::new(ScriptedBroker::replying()),
-        Arc::new(PendingTimer::default()),
-        Arc::new(hold_host(&Arc::default())),
-        operator.services(),
+    launch(
+        hold_host(&Arc::default()),
+        PendingTimer::default(),
+        ASKS,
+        RunSetup {
+            services: operator.services(),
+            ..setup(recorder.clone(), ScriptedBroker::replying())
+        },
     )
 }
 
@@ -312,26 +312,22 @@ async fn a_stop_leaves_a_question_to_the_operator_open() {
     let abandoned = Arc::clone(&operator.abandoned);
     let recorder = Arc::new(MemoryRecorder::new());
 
-    let report = run_beside(
-        asking_harness(&recorder, &operator),
-        request(ASKS),
-        |control| async move {
-            until("the prompt asks its question", || {
-                asked.load(Ordering::SeqCst) == 1
-            })
-            .await;
-            control.stop_round();
-            for _ in 0..16 {
-                tokio::task::yield_now().await;
-            }
-            assert_eq!(
-                abandoned.load(Ordering::SeqCst),
-                0,
-                "the stop left the question open"
-            );
-            answers.send("kept".to_owned()).unwrap();
-        },
-    )
+    let report = run_beside(asking_harness(&recorder, &operator), |control| async move {
+        until("the prompt asks its question", || {
+            asked.load(Ordering::SeqCst) == 1
+        })
+        .await;
+        control.stop_round();
+        for _ in 0..16 {
+            tokio::task::yield_now().await;
+        }
+        assert_eq!(
+            abandoned.load(Ordering::SeqCst),
+            0,
+            "the stop left the question open"
+        );
+        answers.send("kept".to_owned()).unwrap();
+    })
     .await
     .expect("the run is reported");
 
@@ -349,16 +345,15 @@ async fn a_stop_leaves_a_question_to_the_operator_open() {
 async fn a_stop_leaves_any_tool_call_whose_info_survives_stops_in_flight() {
     let tool = Arc::new(Held::default());
     let recorder = Arc::new(MemoryRecorder::new());
-    let harness = Harness::new(
-        recorder.clone(),
-        Arc::new(ScriptedBroker::replying()),
-        Arc::new(PendingTimer::default()),
-        Arc::new(surviving_hold_host(&tool)),
-        HostServices::new(),
+    let harness = launch(
+        surviving_hold_host(&tool),
+        PendingTimer::default(),
+        HOLDS,
+        setup(recorder.clone(), ScriptedBroker::replying()),
     );
     let watched = Arc::clone(&tool);
 
-    let report = run_beside(harness, request(HOLDS), |control| async move {
+    let report = run_beside(harness, |control| async move {
         until("the held call is in flight", || watched.started() == 1).await;
         control.stop_round();
         for _ in 0..16 {
@@ -384,17 +379,13 @@ async fn a_cancel_drops_a_question_to_the_operator() {
     let asked = Arc::clone(&operator.asked);
     let recorder = Arc::new(MemoryRecorder::new());
 
-    let report = run_beside(
-        asking_harness(&recorder, &operator),
-        request(ASKS),
-        |control| async move {
-            until("the prompt asks its question", || {
-                asked.load(Ordering::SeqCst) == 1
-            })
-            .await;
-            control.cancel();
-        },
-    )
+    let report = run_beside(asking_harness(&recorder, &operator), |control| async move {
+        until("the prompt asks its question", || {
+            asked.load(Ordering::SeqCst) == 1
+        })
+        .await;
+        control.cancel();
+    })
     .await
     .expect("the run is reported");
 

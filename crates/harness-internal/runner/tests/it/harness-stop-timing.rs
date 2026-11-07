@@ -5,18 +5,18 @@
 //! the operator open spares the round after its answer; and a stop raised
 //! with nothing in flight changes nothing.
 
-use std::sync::Arc;
 use std::sync::atomic::Ordering;
+use std::sync::{Arc, OnceLock};
 
 use harness_runner::recorder::MemoryRecorder;
-use harness_runner::{Harness, Packs, RunRequest};
+use harness_runner::{Packs, RunControl, RunSetup};
 use runvil::vfs::VfsRef;
-use runvil_plugin::{HostServices, PackRegistry};
+use runvil_plugin::HostServices;
 use serde_json::json;
 
 use super::{
-    HookedBackend, PendingTimer, answers_to, answers_where, calls, plain_harness, request,
-    run_beside, until,
+    HookedBackend, PendingTimer, answers_to, answers_where, calls, launch, no_packs, run_beside,
+    setup, until,
 };
 use crate::asker::ASKER;
 use crate::scripted::{Held, HeldTimer, Operator, ScriptedBroker, held_broker};
@@ -66,16 +66,26 @@ const WRITES_THEN_INFERS: &str = "---\nname: writes-infers\ndescription: d\nrunv
 
 /// A Host that built only the fixture ask Pack, as `user-input`, beside
 /// the built-in.
-fn asker_host() -> Arc<Packs> {
-    Arc::new(Packs::new(registry(&[ASKER]), HostServices::new()))
+fn asker_host() -> Packs {
+    Packs::new(registry(&[ASKER]), HostServices::new())
 }
 
-/// A store whose every write raises a stop through `harness`'s control.
-fn stopping_store(harness: &Harness) -> VfsRef {
-    let control = harness.control();
-    VfsRef::builder()
-        .store("/", HookedBackend::new(move || control.stop_round()))
-        .build()
+/// A store whose every write raises a stop through the control the
+/// returned slot holds, once the test puts the run's control there.
+fn stopping_store() -> (VfsRef, Arc<OnceLock<RunControl>>) {
+    let slot = Arc::new(OnceLock::<RunControl>::new());
+    let control = Arc::clone(&slot);
+    let vfs = VfsRef::builder()
+        .store(
+            "/",
+            HookedBackend::new(move || {
+                if let Some(control) = control.get() {
+                    control.stop_round();
+                }
+            }),
+        )
+        .build();
+    (vfs, slot)
 }
 
 #[tokio::test]
@@ -86,16 +96,18 @@ async fn a_stop_drops_a_timed_join_any_and_its_pcall_resumes_while_the_joined_ta
     let broker = ScriptedBroker::replying();
     let rounds = broker.rounds();
     let recorder = Arc::new(MemoryRecorder::new());
-    let harness = Harness::new(
-        recorder.clone(),
-        Arc::new(broker),
-        Arc::new(HeldTimer(Arc::clone(&timer))),
+    let harness = launch(
         asker_host(),
-        operator.services(),
+        HeldTimer(Arc::clone(&timer)),
+        STOPS_TIMED_JOIN,
+        RunSetup {
+            services: operator.services(),
+            ..setup(recorder.clone(), broker)
+        },
     );
     let watched = Arc::clone(&timer);
 
-    let report = run_beside(harness, request(STOPS_TIMED_JOIN), |control| async move {
+    let report = run_beside(harness, |control| async move {
         until(
             "the child's question and the wait's timer are in flight",
             || asked.load(Ordering::SeqCst) == 1 && watched.started() == 1,
@@ -135,29 +147,25 @@ async fn a_stop_seen_before_a_steps_effects_start_drops_the_round_in_flight_and_
 {
     let chat = Arc::new(Held::default());
     let recorder = Arc::new(MemoryRecorder::new());
-    let harness = Harness::new(
-        recorder.clone(),
-        Arc::new(held_broker(&chat)),
-        Arc::new(PendingTimer::default()),
-        Arc::new(Packs::new(PackRegistry::new(), HostServices::new())),
-        HostServices::new(),
+    let (vfs, stops) = stopping_store();
+    let harness = launch(
+        no_packs(),
+        PendingTimer::default(),
+        STOPS_BEFORE_A_STEP,
+        RunSetup {
+            vfs,
+            ..setup(recorder.clone(), held_broker(&chat))
+        },
     );
-    let vfs = stopping_store(&harness);
+    stops.set(harness.control()).unwrap();
 
     // The write and the child's round are issued in one step, and the
     // write runs inline and raises the stop. The loop sees the stop before
     // the next step's effects start, and that step issues none: the main
     // only waits on the child, whose dropped round is all that can wake it.
-    let report = run_beside(
-        harness,
-        RunRequest {
-            vfs,
-            ..request(STOPS_BEFORE_A_STEP)
-        },
-        |_control| async {},
-    )
-    .await
-    .expect("the run is reported");
+    let report = run_beside(harness, |_control| async {})
+        .await
+        .expect("the run is reported");
 
     assert_eq!(
         report.result,
@@ -179,15 +187,17 @@ async fn a_stop_with_only_a_question_open_spares_the_round_after_its_answer() {
     let broker = ScriptedBroker::replying();
     let rounds = broker.rounds();
     let recorder = Arc::new(MemoryRecorder::new());
-    let harness = Harness::new(
-        recorder.clone(),
-        Arc::new(broker),
-        Arc::new(PendingTimer::default()),
+    let harness = launch(
         asker_host(),
-        operator.services(),
+        PendingTimer::default(),
+        ASKS_THEN_INFERS,
+        RunSetup {
+            services: operator.services(),
+            ..setup(recorder.clone(), broker)
+        },
     );
 
-    let report = run_beside(harness, request(ASKS_THEN_INFERS), |control| async move {
+    let report = run_beside(harness, |control| async move {
         until("the prompt asks its question", || {
             asked.load(Ordering::SeqCst) == 1
         })
@@ -227,17 +237,20 @@ async fn a_stop_raised_with_nothing_in_flight_changes_nothing_for_the_next_effec
     let broker = ScriptedBroker::replying();
     let rounds = broker.rounds();
     let recorder = Arc::new(MemoryRecorder::new());
-    let harness = plain_harness(&recorder, broker);
     // The write runs inline, so nothing is in flight when it raises the stop.
-    let vfs = stopping_store(&harness);
-
-    let report = harness
-        .run(RunRequest {
+    let (vfs, stops) = stopping_store();
+    let harness = launch(
+        no_packs(),
+        PendingTimer::default(),
+        WRITES_THEN_INFERS,
+        RunSetup {
             vfs,
-            ..request(WRITES_THEN_INFERS)
-        })
-        .await
-        .expect("the run is reported");
+            ..setup(recorder.clone(), broker)
+        },
+    );
+    stops.set(harness.control()).unwrap();
+
+    let report = harness.run().await.expect("the run is reported");
 
     assert_eq!(
         report.result,

@@ -22,7 +22,7 @@ use runvil_plugin::{
 };
 use serde_json::{Value, json};
 
-use super::{HostRunContext, Packs};
+use super::{Packs, RunPacks};
 use crate::performers::ToolPerformer;
 
 #[path = "packs-tests-pick.rs"]
@@ -180,7 +180,7 @@ fn begin(
     services: HostServices,
     failures: BTreeMap<&'static str, String>,
     prompt: &Prompt,
-) -> HostRunContext {
+) -> RunPacks {
     let packs = host.pick(prompt);
     host.begin_run(&packs, services, failures)
 }
@@ -221,7 +221,7 @@ fn unavailable_for(reason: &str) -> RosterEntry {
 
 /// The refusal notice the first step of a run of `prompt` over `run`'s
 /// roster fails with.
-fn refusal(run: &HostRunContext, prompt: &Prompt) -> String {
+fn refusal(run: &RunPacks, prompt: &Prompt) -> String {
     let ctx = RunParams::new(RunSeed::from_bytes([0; 32]), Timestamp::UNIX_EPOCH)
         .with_packs(run.roster());
     match Run::new(Arc::new(prompt.clone()), "", ctx).step() {

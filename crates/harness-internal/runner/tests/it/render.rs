@@ -21,7 +21,7 @@ use runvil_plugin::{
 use serde_json::{Value, json};
 use tokio::sync::Semaphore;
 
-use crate::harness::request;
+use crate::harness::{launch, setup};
 use crate::scripted::{MODEL, ScriptedBroker, reply, scripted_model};
 use crate::support::PendingTimer;
 
@@ -264,24 +264,25 @@ impl Drop for HeldCall {
     }
 }
 
-/// A Harness over `recorder` and `broker`, with the render Pack built
-/// from `config` over `seen` and a timer no test here reaches.
+/// A Harness running `source` over `recorder` and `broker`, with the
+/// render Pack built from `config` over `seen` and a timer no test here
+/// reaches.
 fn render_harness(
     recorder: &Arc<MemoryRecorder>,
     broker: ScriptedBroker,
     seen: &Arc<Seen>,
     config: Value,
+    source: &str,
 ) -> Harness {
     let mut services = HostServices::new();
     services.provide(&SEEN, Arc::clone(seen)).unwrap();
     let mut packs = PackRegistry::new();
     packs.insert(RENDERER, config).unwrap();
-    Harness::new(
-        recorder.clone(),
-        Arc::new(broker),
-        Arc::new(PendingTimer::default()),
-        Arc::new(Packs::new(packs, services)),
-        HostServices::new(),
+    launch(
+        Packs::new(packs, services),
+        PendingTimer::default(),
+        source,
+        setup(recorder.clone(), broker),
     )
 }
 
@@ -335,8 +336,8 @@ async fn run(
     config: Value,
 ) -> (String, Vec<Record>) {
     let recorder = Arc::new(MemoryRecorder::new());
-    let report = render_harness(&recorder, broker, seen, config)
-        .run(request(source))
+    let report = render_harness(&recorder, broker, seen, config, source)
+        .run()
         .await
         .expect("the run is reported");
     let final_text = report.result.expect("the run completes");

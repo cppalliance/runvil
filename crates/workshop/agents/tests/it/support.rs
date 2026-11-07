@@ -1,5 +1,5 @@
-//! Shared fixtures: an offline broker, and a per-run Harness built from
-//! what a conversation hands it.
+//! Shared fixtures: an offline broker, and a Host and a per-run setup
+//! built from what a conversation hands it.
 
 // clippy.toml's allow-expect-in-tests covers #[test] functions only, not
 // the helpers they share; failing a test by panicking with the invariant
@@ -13,8 +13,7 @@ use std::sync::Arc;
 
 use harness::pack::{HostServices, PackRegistry, Packs};
 use harness::record::MemoryRecorder;
-use harness::vfs::VfsRef;
-use harness::{BoxFuture, Harness, HostSnapshot, InferenceBroker, RunRequest};
+use harness::{BoxFuture, Host, InferenceBroker, RunSetup};
 use runvil::effect::Round;
 use runvil::model::{
     Completion, CompletionOptions, Message, ModelBinding, ModelCatalog, ToolSchema,
@@ -22,6 +21,9 @@ use runvil::model::{
 };
 use runvil::{Error, ErrorCode};
 use workshop_agents::{Conversation, TokioTimer};
+
+/// The name the fixture Host finds its one agent by.
+pub(crate) const AGENT: &str = "fixture";
 
 /// Lists no model and refuses every round as `Unavailable`.
 struct Offline;
@@ -54,32 +56,35 @@ pub(crate) fn prompt(lua: &str) -> String {
     )
 }
 
-/// The run's Harness, recording into `recorder` through the
-/// conversation's tee, and its request over `source`.
-pub(crate) fn harness_for(
+/// A Host with the operator-input Pack that finds `source` as [`AGENT`],
+/// beside the run's setup, recording into `recorder` through the
+/// conversation's tee.
+pub(crate) fn run_for(
     conversation: &Conversation,
     recorder: Arc<MemoryRecorder>,
     source: String,
-) -> (Harness, RunRequest) {
+) -> (Arc<Host>, RunSetup) {
     let mut packs = PackRegistry::new();
     plugin_user_input::install(&mut packs, serde_json::Value::Null)
         .expect("a new registry takes the Pack");
-    let host = Packs::new(packs, HostServices::new());
-    let harness = Harness::new(
-        conversation.recorder(recorder),
-        Arc::new(Offline),
-        Arc::new(TokioTimer),
-        Arc::new(host),
-        conversation.run_services(),
-    );
-    let request = RunRequest {
-        name: conversation.id().to_string(),
-        source,
-        file: "prompt".to_owned(),
-        args: String::new(),
-        input_text: None,
-        vfs: VfsRef::default(),
-        host: HostSnapshot::default(),
+    let host = Arc::new(Host {
+        packs: Packs::new(packs, HostServices::new()),
+        prompts: Arc::new(move |name: &str| {
+            if name == AGENT {
+                return Ok(source.clone());
+            }
+            let code = ErrorCode::NotFound;
+            Err(Error::new(
+                code,
+                format!("no agent named {name}"),
+                code.prose(),
+            ))
+        }),
+        timer: Arc::new(TokioTimer),
+    });
+    let setup = RunSetup {
+        services: conversation.run_services(),
+        ..RunSetup::new(conversation.recorder(recorder), Arc::new(Offline))
     };
-    (harness, request)
+    (host, setup)
 }

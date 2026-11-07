@@ -5,9 +5,6 @@
 
 use std::sync::Arc;
 
-use harness_runner::effect_loop::drive_run;
-use harness_runner::recorder::MemoryRecorder;
-use runvil::cancel::CancelHandle;
 use runvil::make_tool_error;
 use runvil::{Error, ErrorCode};
 use runvil_plugin::{
@@ -15,7 +12,7 @@ use runvil_plugin::{
 };
 use serde_json::{Value, json};
 
-use crate::prepare::{begin_and_prepare, building, services};
+use crate::prepare::{building, drive_over};
 
 /// What the fixture tool writes to `/from-tool.md`.
 const WRITTEN: &str = "written through the context";
@@ -78,20 +75,8 @@ impl Pack for Record {
 
 #[tokio::test]
 async fn a_tool_writes_through_its_context_and_the_calling_script_reads_it_back() {
-    let recorder = Arc::new(MemoryRecorder::new());
-    let prepared = begin_and_prepare(CALLS_RECORD, services(&recorder, building(CONTEXT)))
-        .await
-        .unwrap();
-    let result = drive_run(
-        prepared.run,
-        prepared.performers,
-        recorder.clone(),
-        prepared.run_id,
-        CancelHandle::new(),
-    )
-    .await;
     assert_eq!(
-        result,
+        drive_over(CALLS_RECORD, building(CONTEXT)).await,
         Ok(format!("Script|{WRITTEN}")),
         "the tool's origin names the script, and the section reads the file the tool wrote"
     );

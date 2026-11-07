@@ -70,7 +70,7 @@ struct Built {
 /// The Packs one run holds, picked by [`Packs::pick`] from its
 /// prompt's `uses:` entries, and what the pick cannot resolve.
 #[derive(Debug)]
-pub(crate) struct RunPacks {
+pub(crate) struct Picked {
     /// The FQN of each of the run's Packs: the declared ones the Host
     /// built, then every `runvil` Pack whose Pack id no entry takes.
     fqns: Vec<&'static str>,
@@ -119,7 +119,7 @@ impl Packs {
     /// not build is missing, or unavailable naming each other vendor's
     /// Pack of that id; a `vendor/name` the Host did not build is
     /// unavailable.
-    pub(crate) fn pick(&self, prompt: &Prompt) -> RunPacks {
+    pub(crate) fn pick(&self, prompt: &Prompt) -> Picked {
         let uses = prompt.frontmatter().uses();
         let mut fqns = Vec::new();
         let mut unresolved = BTreeMap::new();
@@ -139,7 +139,7 @@ impl Packs {
                 fqns.push(*fqn);
             }
         }
-        RunPacks { fqns, unresolved }
+        Picked { fqns, unresolved }
     }
 
     /// Why each Pack `prompt` declares can serve no run of this Host: not
@@ -201,7 +201,7 @@ impl Packs {
     /// canceled whatever the snapshot holds.
     pub(crate) async fn wait_ready(
         &self,
-        packs: &RunPacks,
+        packs: &Picked,
         cancel: &CancelHandle,
     ) -> BTreeMap<&'static str, String> {
         let waits = packs.fqns.iter().filter_map(|fqn| {
@@ -242,11 +242,11 @@ impl Packs {
     /// performs the run's tool calls.
     pub(crate) fn begin_run(
         &self,
-        packs: &RunPacks,
+        packs: &Picked,
         services: HostServices,
         failures: BTreeMap<&'static str, String>,
-    ) -> HostRunContext {
-        HostRunContext::snapshot(
+    ) -> RunPacks {
+        RunPacks::snapshot(
             packs
                 .fqns
                 .iter()
@@ -275,7 +275,7 @@ impl fmt::Debug for Packs {
 /// One run's frozen snapshot of its Packs, by Pack id, its one tool
 /// catalog, and the run's own services. It performs the run's renders and
 /// tool calls.
-pub(crate) struct HostRunContext {
+pub(crate) struct RunPacks {
     services: HostServices,
     packs: BTreeMap<PackId, PackState>,
     catalog: ToolCatalog,
@@ -292,7 +292,7 @@ enum PackState {
     NeedsUnmet(Vec<ServiceId>),
 }
 
-impl HostRunContext {
+impl RunPacks {
     /// Takes the snapshot of the run's `packs`, which share no Pack id,
     /// with `services` as the run's own.
     ///
@@ -309,7 +309,7 @@ impl HostRunContext {
         services: HostServices,
         mut failures: BTreeMap<&'static str, String>,
         unresolved: &BTreeMap<PackId, Option<String>>,
-    ) -> HostRunContext {
+    ) -> RunPacks {
         let mut seen = BTreeSet::new();
         // The input arrives in pick order, declared Packs first, so the
         // catalog is built after `packs` is collected, from these lists
@@ -352,7 +352,7 @@ impl HostRunContext {
                 tracing::warn!(%error, "the run's catalog failed after per-tool validation");
                 ToolCatalog::default()
             });
-        HostRunContext {
+        RunPacks {
             services,
             packs,
             catalog,
@@ -425,7 +425,7 @@ impl HostRunContext {
     }
 }
 
-impl ToolPerformer for HostRunContext {
+impl ToolPerformer for RunPacks {
     fn call(
         &self,
         tool: ToolId,
@@ -485,7 +485,7 @@ impl ToolPerformer for HostRunContext {
     }
 }
 
-impl fmt::Debug for HostRunContext {
+impl fmt::Debug for RunPacks {
     /// Shows the run's services, each Pack's name and state, and its
     /// catalog's tool ids.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -501,7 +501,7 @@ impl fmt::Debug for HostRunContext {
                 (name, state)
             })
             .collect();
-        f.debug_struct("HostRunContext")
+        f.debug_struct("RunPacks")
             .field("services", &self.services)
             .field("packs", &packs)
             .field("catalog", &self.catalog)

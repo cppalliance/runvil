@@ -1,6 +1,6 @@
 //! Fixtures shared by the runner's suites: a one-section prompt, a run
-//! over it, fake performers that answer by script, and a Pack registry
-//! holding a suite's Packs.
+//! over it, fake performers that answer by script, a Pack registry
+//! holding a suite's Packs, and a Host over them.
 
 use std::fmt::Write as _;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
@@ -12,6 +12,7 @@ use harness_runner::performers::{BoxFuture, InferenceBroker, Performers, Timer, 
 use harness_runner::recorder::{
     MemoryRecorder, Record, RecorderFuture, RunId, RunMeta, RunRecorder, make_recorder_error,
 };
+use harness_runner::{Host, Packs};
 use runvil::cancel::CancelHandle;
 use runvil::effect::{Round, ToolCallOrigin};
 use runvil::model::{
@@ -62,6 +63,30 @@ pub(crate) fn registry(infos: &[PackInfo]) -> PackRegistry {
         packs.insert(*info, Value::Null).unwrap();
     }
     packs
+}
+
+/// A Host over `packs` that sleeps through `timer`. Its finder serves no
+/// prompt: a suite parses its own with [`parsed`], so a prompt the Host's
+/// Packs cannot serve still reaches the run.
+pub(crate) fn host_over(packs: Packs, timer: impl Timer + 'static) -> Arc<Host> {
+    Arc::new(Host {
+        packs,
+        prompts: Arc::new(|name: &str| -> Result<String, Error> {
+            let code = ErrorCode::NotFound;
+            Err(Error::new(
+                code,
+                format!("no prompt named {name}"),
+                code.prose(),
+            ))
+        }),
+        timer: Arc::new(timer),
+    })
+}
+
+/// `source` parsed as the prompt named `prompt`.
+pub(crate) fn parsed(source: &str) -> Prompt {
+    let (prompt, _parse_events) = Prompt::parse(&|_: &str| Ok(source.to_owned()), "prompt");
+    prompt.expect("the suite's prompt parses")
 }
 
 /// A section body that calls the fixture wait tool by its full id and

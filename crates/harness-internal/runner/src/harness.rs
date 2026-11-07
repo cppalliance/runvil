@@ -1,11 +1,12 @@
-//! The per-run Harness: one object per run over everything the Host
-//! supplies, which drives that one run as a single future.
+//! The per-run Harness: one object per run of a parsed prompt, which
+//! drives that one run as a single future.
 //!
-//! A Host builds a [`Harness`] from its recorder, inference broker, timer,
-//! built Packs, and the run's services, takes the run's [`RunControl`], and
-//! awaits [`Harness::run`] on whatever executor it likes. The run begins
-//! its record, resolves the launch model through the broker, prepares the
-//! request's source, drives the run through the effect loop, and reads the
+//! A launcher builds a [`Harness`] from the Host it shares behind an
+//! `Arc`, the prompt `Host::parse` returned, and the run's own
+//! [`RunSetup`], takes the run's [`RunControl`], and awaits
+//! [`Harness::run`] on whatever executor it likes. The run begins its
+//! record, resolves the run's model through the setup's broker, prepares
+//! the prompt, drives the run through the effect loop, and reads the
 //! declared output file of a completed run. Every performer future is
 //! polled inside that one future, and every VFS operation runs inline in
 //! it, so the Harness starts no task and names no runtime. The stop and
@@ -17,72 +18,46 @@ use std::pin::pin;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::task::{Context, Poll};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use futures_util::future::{Either, select};
 use futures_util::task::AtomicWaker;
 use runvil::cancel::CancelHandle;
 use runvil::model::ModelInfo;
-use runvil::vfs::VfsRef;
-use runvil::{Error, ErrorCode, ErrorFact};
-use runvil_plugin::HostServices;
+use runvil::timestamp::Timestamp;
+use runvil::{Error, ErrorCode, ErrorFact, Prompt};
 
 use crate::effect_loop::drive;
-use crate::environment::{HostSnapshot, current_model};
+use crate::environment::current_model;
 use crate::files::{make_not_completed_error, report_output};
-use crate::packs::Packs;
-use crate::performers::{InferenceBroker, Timer};
-use crate::prepare::{Services, begin, prepare};
-use crate::recorder::{RunId, RunRecorder, is_refusal};
+use crate::host::Host;
+use crate::performers::{InferenceBroker, Performers};
+use crate::prepare::{begin, prepare};
+use crate::recorder::{RunId, is_refusal};
+use crate::setup::RunSetup;
 
 /// Drives one run of a prompt for a Host.
 ///
-/// It holds what the Host supplies for the run: a recorder, an inference
-/// broker, a timer, the Host's built Packs, and the run's own
-/// services. [`Harness::run`] consumes it.
+/// It holds what the run needs: the Host it shares with every other run,
+/// the parsed prompt, and the run's own setup. [`Harness::run`] consumes
+/// it.
 pub struct Harness {
-    recorder: Arc<dyn RunRecorder>,
-    broker: Arc<dyn InferenceBroker>,
-    timer: Arc<dyn Timer>,
-    host: Arc<Packs>,
-    services: HostServices,
+    host: Arc<Host>,
+    prompt: Prompt,
+    setup: RunSetup,
     control: RunControl,
 }
 
 impl fmt::Debug for Harness {
+    /// Shows the Host, the prompt's file, the setup, and the control.
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Harness")
             .field("host", &self.host)
-            .field("services", &self.services)
+            .field("prompt", &self.prompt.file())
+            .field("setup", &self.setup)
             .field("control", &self.control)
-            .finish_non_exhaustive()
+            .finish()
     }
-}
-
-/// The inputs to one run: the prompt's source and arguments, its declared
-/// input text, the filesystem it works in, and the Host state it reads.
-#[derive(Debug, Clone)]
-pub struct RunRequest {
-    /// The run's name. It becomes the `name` field of the run metadata.
-    pub name: String,
-    /// The prompt's Markdown source. The Harness reads the prompt only
-    /// from this text.
-    pub source: String,
-    /// The file the source came from, as the Host names it, such as
-    /// `agents/research.md`, or `prompt` when it came from no file. The
-    /// run's failures name it, so a reader can open the file.
-    pub file: String,
-    /// The run's argument text.
-    pub args: String,
-    /// Text written to the prompt's declared `input:` file before the run
-    /// starts.
-    pub input_text: Option<String>,
-    /// The run's whole filesystem: the store that holds the prompt's
-    /// declared files, plus any real directories mounted into it.
-    pub vfs: VfsRef,
-    /// The Host state the run reads: its selected model and the workspace
-    /// roots it has granted. The run resolves its model from the
-    /// selection, and the prompt's `ui()` global serves this state.
-    pub host: HostSnapshot,
 }
 
 /// How one run ended, and what it left at its declared output file.
@@ -123,29 +98,22 @@ fn unrecorded(run: Option<RunId>, refusal: &Error) -> Error {
 }
 
 impl Harness {
-    /// Creates a Harness for one run.
+    /// A Harness for one run of `prompt` on `host`, with `setup` as the
+    /// run's own inputs.
     ///
-    /// The Harness records the run through `recorder`. It resolves the
-    /// run's model and gets the model's replies through `broker`. It sleeps
-    /// through `timer`. Its tool calls go to the Packs of `host` that the
-    /// run's prompt picks, and each call is lent `services`, the run's
-    /// own, such as its input broker. A run has at most 10 tool calls in
-    /// flight; the rest wait and start oldest first. All of this work
-    /// happens in [`Harness::run`].
+    /// The run is recorded through `setup.recorder`. It resolves its model
+    /// and gets the model's replies through `setup.broker`, and it sleeps
+    /// through `host.timer`. Its tool calls go to the Packs of
+    /// `host.packs` that the prompt picks, and each call is lent
+    /// `setup.services`. A run has at most 10 tool calls in flight; the
+    /// rest wait and start oldest first. All of this work happens in
+    /// [`Harness::run`].
     #[must_use]
-    pub fn new(
-        recorder: Arc<dyn RunRecorder>,
-        broker: Arc<dyn InferenceBroker>,
-        timer: Arc<dyn Timer>,
-        host: Arc<Packs>,
-        services: HostServices,
-    ) -> Harness {
+    pub fn new(host: Arc<Host>, prompt: Prompt, setup: RunSetup) -> Harness {
         Harness {
-            recorder,
-            broker,
-            timer,
             host,
-            services,
+            prompt,
+            setup,
             control: RunControl::new(CancelHandle::new()),
         }
     }
@@ -159,32 +127,34 @@ impl Harness {
         self.control.clone()
     }
 
-    /// Runs `request` to its end and reports how it ended.
+    /// Runs the prompt to its end and reports how it ended; the only error
+    /// is `RecorderFailed`.
     ///
     /// It begins the run's record, resolves the run's model through the
-    /// inference broker, prepares the prompt from its source, waits for
-    /// the Host's Packs to be ready, drives the run, and reads the declared
-    /// output file if the run completed. The returned future is `Send`.
-    /// Its only runtime needs are those of the Host's performers and Packs.
+    /// setup's broker, puts the prompt's declared input in place, waits
+    /// for the Host's Packs to be ready, drives the run, and reads the
+    /// declared output file if the run completed. The returned future is
+    /// `Send`. Its only runtime needs are those of the Host's performers
+    /// and Packs.
     ///
     /// Every run gets a record and ends with its result, which the report
     /// carries beside the run's id: the final text, or the error that
     /// ended the run, where a cancel is the error whose code is
     /// `canceled`. The record begins before anything else, so a run that
-    /// ends before it starts is recorded too. A cancel raised before
+    /// ends before it starts is recorded too, and it holds the run's own
+    /// records only, never the prompt's parse. A cancel raised before
     /// calling `run`, or while the broker lists its models, ends the run
     /// canceled. A model list the broker fails to fetch ends it with the
     /// broker's failure, and a list that omits the selected model with a
-    /// `RequirementsUnmet` failure. A source that fails to parse ends it
-    /// with the parse failure, a declared input file the Harness fails to
-    /// put in place with the input's failure, and an environment that
-    /// falls short of the prompt's requirements, which the run's first
-    /// step finds, with a `RequirementsUnmet` failure. An environment that
-    /// falls short after a cancel is raised, as when the cancel cuts short
-    /// the wait for a Pack that is still starting, ends the run canceled
-    /// instead. A run that is pending with nothing to await,
-    /// which means the Harness lost track of an effect, ends with an
-    /// `Internal` error.
+    /// `RequirementsUnmet` failure. A declared input file the Harness
+    /// fails to put in place ends it with the input's failure, and an
+    /// environment that falls short of the prompt's requirements, which
+    /// the run's first step finds, with a `RequirementsUnmet` failure. An
+    /// environment that falls short after a cancel is raised, as when the
+    /// cancel cuts short the wait for a Pack that is still starting, ends
+    /// the run canceled instead. A run that is pending with nothing to
+    /// await, which means the Harness lost track of an effect, ends with
+    /// an `Internal` error.
     ///
     /// # Errors
     /// Returns `RecorderFailed` when the recorder refuses a write. That is
@@ -192,39 +162,30 @@ impl Harness {
     /// message holds the refusal after `the run could not be recorded: `,
     /// and its `Run` fact is the run the recorder issued, absent when the
     /// recorder refused to begin the run.
-    pub async fn run(self, request: RunRequest) -> Result<RunReport, Error> {
-        Box::pin(self.run_to_end(request)).await
+    pub async fn run(self) -> Result<RunReport, Error> {
+        Box::pin(self.run_to_end()).await
     }
 
-    async fn run_to_end(self, request: RunRequest) -> Result<RunReport, Error> {
+    async fn run_to_end(self) -> Result<RunReport, Error> {
         let Harness {
-            recorder,
-            broker,
-            timer,
-            host: packs,
-            services,
+            host,
+            prompt,
+            setup,
             control,
         } = self;
-        let RunRequest {
-            name,
-            source,
-            file,
-            args,
-            input_text,
-            vfs,
-            host,
-        } = request;
+        let cancel = control.cancel_handle();
 
-        let begun = begin(&*recorder, &name, &source)
+        let (run_id, params) = begin(&setup, now_timestamp())
             .await
             .map_err(|refusal| unrecorded(None, &refusal))?;
-        let run_id = begun.run_id;
         let recorded = |refusal: Error| unrecorded(Some(run_id), &refusal);
 
-        let model = match resolve_model(&host, &*broker, control.cancel_handle()).await {
+        let selected = setup.selected_model.as_deref();
+        let model = match resolve_model(selected, &*setup.broker, cancel).await {
             Ok(model) => model,
             Err(error) => {
-                recorder
+                setup
+                    .recorder
                     .end_run(run_id, Err(error.clone()))
                     .await
                     .map_err(recorded)?;
@@ -236,21 +197,12 @@ impl Harness {
             }
         };
 
-        let services = Services {
-            host: packs,
-            services,
-            vfs: vfs.clone(),
-            input_text,
-            cancel: control.cancel_handle().clone(),
-            recorder: Arc::clone(&recorder),
-            broker,
-            timer,
-            name,
-            file,
-            model,
-            ui: Some(host.ui()),
-        };
-        let prepared = match prepare(&source, &args, begun, services).await {
+        let output_path = prompt
+            .frontmatter()
+            .output()
+            .map(|decl| decl.path().to_owned());
+        let prepared = prepare(&host, prompt, &setup, run_id, params, model, cancel).await;
+        let (run, packs) = match prepared {
             Ok(prepared) => prepared,
             Err(refusal) if is_refusal(&refusal) => return Err(recorded(refusal)),
             Err(error) => {
@@ -262,12 +214,17 @@ impl Harness {
             }
         };
 
+        let performers = Performers {
+            broker: Arc::clone(&setup.broker),
+            tool: Arc::new(packs),
+            timer: Arc::clone(&host.timer),
+        };
         let result = match drive(
-            prepared.run,
-            prepared.performers,
-            recorder,
+            run,
+            performers,
+            Arc::clone(&setup.recorder),
             run_id,
-            control.cancel_handle().clone(),
+            cancel.clone(),
             Arc::clone(control.stop_signal()),
         )
         .await
@@ -275,13 +232,25 @@ impl Harness {
             Err(refusal) if is_refusal(&refusal) => return Err(recorded(refusal)),
             result => result,
         };
-        let output = report_output(&vfs, prepared.output_path.as_deref(), &result);
+        let output = report_output(&setup.vfs, output_path.as_deref(), &result);
         Ok(RunReport {
             run_id,
             result,
             output,
         })
     }
+}
+
+/// The system clock now as the Engine's `Timestamp`: the Harness's stamp for
+/// a run's `started_at`, since the Engine reads no clock of its own. A
+/// clock before the epoch or beyond `i64` milliseconds (neither reachable
+/// on a real machine) saturates to the epoch rather than refusing the launch.
+fn now_timestamp() -> Timestamp {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .ok()
+        .and_then(|elapsed| i64::try_from(elapsed.as_millis()).ok())
+        .map_or(Timestamp::UNIX_EPOCH, Timestamp::from_unix_millis)
 }
 
 /// A handle that drops a run's in-flight round or cancels the run, from
@@ -337,7 +306,7 @@ impl RunControl {
     /// answered `Dropped`, and the run ends canceled. Every tool call
     /// waiting for a slot is answered `Dropped` too, unstarted. A cancel
     /// raised before the run begins still gives the run a record, which
-    /// ends canceled before the prompt is parsed. Calling `cancel` more
+    /// ends canceled before the run starts. Calling `cancel` more
     /// than once is the same as calling it once.
     pub fn cancel(&self) {
         self.cancel.cancel();
@@ -406,16 +375,16 @@ impl StopSignal {
     }
 }
 
-/// Resolves the Host's current model through `broker`, or returns the
-/// error that ends the run instead: the cancel when `cancel` fires first,
-/// and the lookup's failure when the broker's list cannot be fetched or
-/// lacks the selection.
+/// Resolves the run's model, the one `selected` names, through `broker`,
+/// or returns the error that ends the run instead: the cancel when
+/// `cancel` fires first, and the lookup's failure when the broker's list
+/// cannot be fetched or lacks the selection.
 async fn resolve_model(
-    host: &HostSnapshot,
+    selected: Option<&str>,
     broker: &dyn InferenceBroker,
     cancel: &CancelHandle,
 ) -> Result<Option<ModelInfo>, Error> {
-    let resolving = pin!(current_model(host, broker));
+    let resolving = pin!(current_model(selected, broker));
     // The cancel arm is polled first, so a cancel raised before the run,
     // or before a listing that is ready at once, wins.
     match select(cancel.canceled(), resolving).await {

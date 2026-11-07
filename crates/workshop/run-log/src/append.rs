@@ -75,9 +75,7 @@ impl RunLog {
             .execute(
                 schema::INSERT_RUN,
                 (
-                    meta.name,
                     agent,
-                    meta.prompt_hash,
                     meta.seed.to_string(),
                     i64::from(meta.flags),
                     meta.started_at,

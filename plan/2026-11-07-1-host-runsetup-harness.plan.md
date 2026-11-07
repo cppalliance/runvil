@@ -74,6 +74,8 @@ flowchart LR
   - After changing the `runvil` facade's surface, regenerate `crates/runvil/public-api.txt` with `cargo +NIGHTLY xtask api --bless`.
   - Source: `crates/build-xtask/src/api.rs:1-35`, `AGENTS.md:46-50`.
 - **Every step's commit leaves the whole workspace building** and the tests of every package it touches passing.
+- **Pre-existing doc slip:** `RunReport::output` and `files::report_output` call the `Reason` fact `make_not_completed_error`; the value is `not_completed` (`crates/harness-internal/runner/src/harness.rs`, `files.rs`).
+- **Pre-existing race:** the agent socket subscribes to a conversation's failure reports only after `launch` has spawned `drive` (`crates/workshop/server/src/agents/socket.rs:376-423`), so a failure reported first, such as a parse failure, can miss that client.
 - **The Workshop's language guide is outside this repository.** Its pages live in `runvil-docs/src/language`, and the guide is switched off in `crates/workshop/server/src/agents/language_guide.rs`. If those pages mention `sys.execution`, they need their own update; this plan doesn't touch them.
 
 ## Open questions
@@ -420,7 +422,7 @@ crates/runvil-internal/engine/src/execute/tests/suite/exec_flow/globals.rs
 
 <step-2>
 
-2. **Harness runs a parsed Prompt with a RunSetup** (points: 10) - Add `RunSetup` in a new `src/setup.rs`. Change `Harness::new` to take `Arc<Host>`, the `Prompt`, and the `RunSetup`, and change `Harness::run` to take no request.
+2. [done] **Harness runs a parsed Prompt with a RunSetup** (points: 10) - Add `RunSetup` in a new `src/setup.rs`. Change `Harness::new` to take `Arc<Host>`, the `Prompt`, and the `RunSetup`, and change `Harness::run` to take no request.
    - Preparation no longer parses.
      - `begin` begins the record at `setup.recorder`, with a start time the caller passes. In this step the caller reads it from the system clock, the way `now_timestamp` in `src/prepare.rs` does today.
      - `prepare` resolves the model from `setup.selected_model`, stages the input, picks and snapshots the Packs, and builds the `Run`. It no longer calls `RunParams::with_provenance_start`.

@@ -3,13 +3,15 @@
 //! `user-input`, `subagents`, and `mcp` Packs, and the ask is the fixed
 //! `user-input/ask` of vendor `runvil`. A prompt declaring `web` or the built-in
 //! `subagents` prepares over the server's built Packs, a Host without the
-//! search provider builds web as unavailable and refuses the prompt
-//! naming that service, and outside a runtime the services leave the
-//! runtime out. The `mcp.json` reader returns the `mcpServers` object as
-//! it stands, or an empty one, and a prompt declaring `mcp` prepares,
+//! search provider builds web as unavailable and refuses the prompt as it
+//! parses, naming that service, and outside a runtime the services leave
+//! the runtime out. The `mcp.json` reader returns the `mcpServers` object
+//! as it stands, or an empty one, and a prompt declaring `mcp` prepares,
 //! because the one mcp Pack reads the runtime the server provides. The
 //! servers value is the mcp Pack's configuration, so one it refuses
-//! refuses a prompt requiring `mcp`.
+//! refuses a prompt requiring `mcp` as it parses. The Host's finder
+//! refuses an unknown agent as `NotFound` and an unreadable one as `Io`,
+//! each with the launch refusal's own text.
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -17,7 +19,7 @@ use std::time::Duration;
 use harness::pack::{HostServices, Packs};
 use harness::record::MemoryRecorder;
 use harness::vfs::VfsRef;
-use harness::{BoxFuture, Harness, HostSnapshot, InferenceBroker, RunRequest};
+use harness::{BoxFuture, Host, InferenceBroker, RunSetup};
 use plugin_web::SEARCH_PROVIDER;
 use runvil::ToolId;
 use runvil::effect::Round;
@@ -28,11 +30,11 @@ use runvil::model::{
 use runvil::{Error, ErrorCode};
 use runvil_plugin::{ServiceKey, TOKIO_RUNTIME};
 use serde_json::json;
-use workshop_agents::{Conversations, SessionState, TokioTimer};
+use workshop_agents::{Conversations, SessionState, TokioTimer, load_agent};
 use workshop_registry::Registry;
 
 use super::wire::AskTool;
-use super::{host_packs, read_mcp_servers, services, with_plugins};
+use super::{agent_finder, host_packs, read_mcp_servers, services, with_plugins};
 
 /// The runtime's key, built from the Plugin contract's name as any Host
 /// builds it.
@@ -49,7 +51,7 @@ fn requiring(pack: &str) -> String {
 
 /// Lists no model and refuses every round as `Unavailable`, so a run
 /// binds no model and nothing is fetched.
-struct OfflineBroker;
+pub(super) struct OfflineBroker;
 
 impl InferenceBroker for OfflineBroker {
     fn models(&self) -> BoxFuture<Result<ModelCatalog, Error>> {
@@ -69,47 +71,56 @@ impl InferenceBroker for OfflineBroker {
     }
 }
 
-/// Runs the prompt `source` as one conversation over `host` and the
-/// default in-memory filesystem, then reads the conversation's state and
-/// the result of its one run.
-async fn run_prompt(host: &Arc<Packs>, source: String) -> Option<Result<String, Error>> {
-    run_prompt_over(host, source, VfsRef::default()).await
+/// Runs the prompt `source` as one conversation over `packs` and the
+/// default in-memory filesystem; see [`run_prompt_over`].
+async fn run_prompt(packs: Packs, source: String) -> Result<Result<String, Error>, String> {
+    run_prompt_over(packs, source, VfsRef::default()).await
 }
 
-/// Runs the prompt `source` as [`run_prompt`] does, over the filesystem
-/// `vfs`.
+/// Runs the prompt `source` as one conversation on a Host over `packs`
+/// and the filesystem `vfs`, then reads the conversation's state and how
+/// it ended: the result of its one run, or the message of the run-failed
+/// report when the Host refused the prompt as it parsed it and no run
+/// began.
 pub(super) async fn run_prompt_over(
-    host: &Arc<Packs>,
+    packs: Packs,
     source: String,
     vfs: VfsRef,
-) -> Option<Result<String, Error>> {
+) -> Result<Result<String, Error>, String> {
     let recorder = Arc::new(MemoryRecorder::new());
     let conversation = Conversations::new().open("browses");
-    let harness = Harness::new(
-        conversation.recorder(recorder.clone()),
-        Arc::new(OfflineBroker),
-        Arc::new(TokioTimer),
-        Arc::clone(host),
-        conversation.run_services(),
-    );
-    let request = RunRequest {
-        name: conversation.id().to_string(),
-        source,
-        file: "prompt".to_owned(),
-        args: String::new(),
-        input_text: None,
+    let mut errors = conversation.subscribe_errors();
+    let host = Arc::new(Host {
+        packs,
+        prompts: Arc::new(move |_: &str| -> Result<String, Error> { Ok(source.clone()) }),
+        timer: Arc::new(TokioTimer),
+    });
+    let setup = RunSetup {
+        services: conversation.run_services(),
         vfs,
-        host: HostSnapshot::default(),
+        ..RunSetup::new(
+            conversation.recorder(recorder.clone()),
+            Arc::new(OfflineBroker),
+        )
     };
-    tokio::time::timeout(Duration::from_secs(10), conversation.run(harness, request))
-        .await
-        .expect("the run ends in time");
+    tokio::time::timeout(
+        Duration::from_secs(10),
+        conversation.run(host, "browses", setup),
+    )
+    .await
+    .expect("the run ends in time");
     assert_eq!(
         conversation.state(),
         SessionState::Closed,
         "the conversation ends with its run"
     );
-    recorder.result(conversation.run_id().expect("the recorder began the run"))
+    match conversation.run_id() {
+        Some(run) => Ok(recorder.result(run).expect("the recorder ended the run")),
+        None => Err(errors
+            .try_recv()
+            .expect("a prompt refused before its run is reported")
+            .message),
+    }
 }
 
 /// An `mcp.json` file in a new directory holding `text`.
@@ -131,8 +142,8 @@ async fn every_run_holds_the_packs_the_three_plugins_add_and_the_builtin() {
         return table.concat(names, ',')\n```\n";
     let (host, _ask) = host_packs(&Registry::new(), None);
     assert_eq!(
-        run_prompt(&Arc::new(host), lists.to_owned()).await,
-        Some(Ok("web,user-input,subagents,mcp,std".to_owned())),
+        run_prompt(host, lists.to_owned()).await,
+        Ok(Ok("web,user-input,subagents,mcp,std".to_owned())),
         "a run that declares nothing holds every runvil Pack the server built"
     );
 }
@@ -141,8 +152,8 @@ async fn every_run_holds_the_packs_the_three_plugins_add_and_the_builtin() {
 async fn a_prompt_declaring_web_prepares_on_the_servers_built_packs() {
     let (host, _ask) = host_packs(&Registry::new(), None);
     assert_eq!(
-        run_prompt(&Arc::new(host), requiring("web")).await,
-        Some(Ok("browsed".to_owned())),
+        run_prompt(host, requiring("web")).await,
+        Ok(Ok("browsed".to_owned())),
         "the server adds web and provides both services its construct reads"
     );
 }
@@ -151,8 +162,8 @@ async fn a_prompt_declaring_web_prepares_on_the_servers_built_packs() {
 async fn a_prompt_declaring_subagents_prepares_on_the_servers_built_packs() {
     let (host, _ask) = host_packs(&Registry::new(), None);
     assert_eq!(
-        run_prompt(&Arc::new(host), requiring("subagents")).await,
-        Some(Ok("browsed".to_owned())),
+        run_prompt(host, requiring("subagents")).await,
+        Ok(Ok("browsed".to_owned())),
         "the server's Host builds the built-in subagents"
     );
 }
@@ -165,12 +176,10 @@ async fn a_host_without_the_search_provider_refuses_a_prompt_requiring_web() {
         .expect("an empty map takes the runtime");
     let (host, _ask) = with_plugins(runtime_only, json!({}));
 
-    let result = run_prompt(&Arc::new(host), requiring("web")).await;
-    let Some(Err(error)) = result else {
-        panic!("the run is refused as it prepares: {result:?}");
+    let result = run_prompt(host, requiring("web")).await;
+    let Err(message) = result else {
+        panic!("the Host refuses the prompt as it parses: {result:?}");
     };
-    assert_eq!(error.code, ErrorCode::RequirementsUnmet);
-    let message = error.located_message();
     assert!(
         message.contains(
             "- web is unavailable: web needs runvil/search-provider, and this host provides none"
@@ -202,6 +211,23 @@ fn outside_a_runtime_the_services_leave_the_runtime_out() {
     );
 }
 
+#[test]
+fn the_finder_refuses_an_unknown_agent_as_not_found_and_an_unreadable_one_as_io() {
+    let dir = tempfile::TempDir::new().expect("tempdir");
+    // Discovery lists `broken`, but its bytes are not UTF-8, so its read
+    // fails.
+    std::fs::write(dir.path().join("broken.md"), [0xff, 0xfe]).expect("write fixture");
+    let finder = agent_finder(dir.path().to_path_buf());
+
+    for (name, code) in [("missing", ErrorCode::NotFound), ("broken", ErrorCode::Io)] {
+        let error = finder(name).expect_err("the finder refuses the agent");
+        let refusal = load_agent(dir.path(), name).expect_err("the launch check refuses it too");
+        assert_eq!(error.code, code, "{name}");
+        assert_eq!(error.message, refusal.to_string(), "{name}");
+        assert_eq!(error.prose, code.prose(), "{name}");
+    }
+}
+
 #[tokio::test]
 async fn a_prompt_declaring_mcp_prepares_on_the_runtime_the_server_provides() {
     // The server's own `services` provides the runtime, and `plugin-mcp`
@@ -209,8 +235,8 @@ async fn a_prompt_declaring_mcp_prepares_on_the_runtime_the_server_provides() {
     // run over both shows the two keys name the same service.
     let (host, _ask) = host_packs(&Registry::new(), None);
     assert_eq!(
-        run_prompt(&Arc::new(host), requiring("mcp")).await,
-        Some(Ok("browsed".to_owned())),
+        run_prompt(host, requiring("mcp")).await,
+        Ok(Ok("browsed".to_owned())),
         "the server adds mcp once, and its construct finds the server's runtime"
     );
 }
@@ -221,12 +247,10 @@ async fn the_servers_value_is_the_mcp_packs_configuration() {
     // the construct refuses, so only that value reaching it fails the run.
     let (host, _ask) = with_plugins(services(&Registry::new()), json!([]));
 
-    let result = run_prompt(&Arc::new(host), requiring("mcp")).await;
-    let Some(Err(error)) = result else {
-        panic!("the run is refused as it prepares: {result:?}");
+    let result = run_prompt(host, requiring("mcp")).await;
+    let Err(message) = result else {
+        panic!("the Host refuses the prompt as it parses: {result:?}");
     };
-    assert_eq!(error.code, ErrorCode::RequirementsUnmet);
-    let message = error.located_message();
     assert!(
         message.contains("- mcp is unavailable: the MCP configuration must be a JSON object"),
         "the refusal names the mcp Pack and its configuration rule: {message}"

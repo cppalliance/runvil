@@ -28,10 +28,8 @@ fn assert_refused(error: &runvil::Error, run: i64, reason: &str) {
     assert_eq!(error.facts.get(&ErrorFact::Run), Some(&json!(run)));
 }
 
-fn meta(name: &str) -> RunMeta {
+fn meta() -> RunMeta {
     RunMeta {
-        name: name.to_owned(),
-        prompt_hash: "sha256:00".to_owned(),
         seed: TEST_SEED,
         flags: 0,
         started_at: 1_700_000_000_000,
@@ -63,7 +61,7 @@ fn labels(records: &[Record]) -> Vec<String> {
 #[tokio::test]
 async fn records_come_back_in_append_order() {
     let recorder = MemoryRecorder::new();
-    let run = recorder.begin_run(meta("one")).await.unwrap();
+    let run = recorder.begin_run(meta()).await.unwrap();
 
     let appended = [
         record(RecordKind::Event, 0, "started"),
@@ -85,8 +83,8 @@ async fn records_come_back_in_append_order() {
 #[tokio::test]
 async fn two_interleaved_runs_keep_their_own_records() {
     let recorder = MemoryRecorder::new();
-    let first = recorder.begin_run(meta("first")).await.unwrap();
-    let second = recorder.begin_run(meta("second")).await.unwrap();
+    let first = recorder.begin_run(meta()).await.unwrap();
+    let second = recorder.begin_run(meta()).await.unwrap();
 
     recorder
         .append(first, record(RecordKind::Event, 0, "first-a"))
@@ -117,9 +115,9 @@ async fn two_interleaved_runs_keep_their_own_records() {
 #[tokio::test]
 async fn run_ids_start_at_one_and_are_distinct() {
     let recorder = MemoryRecorder::new();
-    let first = recorder.begin_run(meta("first")).await.unwrap();
-    let second = recorder.begin_run(meta("second")).await.unwrap();
-    let third = recorder.begin_run(meta("third")).await.unwrap();
+    let first = recorder.begin_run(meta()).await.unwrap();
+    let second = recorder.begin_run(meta()).await.unwrap();
+    let third = recorder.begin_run(meta()).await.unwrap();
 
     assert_eq!(first, RunId::from_raw(1), "the first run is run 1");
     assert_eq!(second, RunId::from_raw(2));
@@ -129,16 +127,16 @@ async fn run_ids_start_at_one_and_are_distinct() {
 #[tokio::test]
 async fn a_run_keeps_the_meta_it_began_with() {
     let recorder = MemoryRecorder::new();
-    let run = recorder.begin_run(meta("kept")).await.unwrap();
+    let run = recorder.begin_run(meta()).await.unwrap();
 
-    assert_eq!(recorder.meta(run), Some(meta("kept")));
+    assert_eq!(recorder.meta(run), Some(meta()));
     assert_eq!(recorder.meta(RunId::from_raw(99)), None);
 }
 
 #[tokio::test]
 async fn result_is_none_while_a_run_is_open_and_set_when_it_ends() {
     let recorder = MemoryRecorder::new();
-    let run = recorder.begin_run(meta("open")).await.unwrap();
+    let run = recorder.begin_run(meta()).await.unwrap();
     assert_eq!(recorder.result(run), None, "a fresh run is open");
 
     recorder
@@ -158,8 +156,8 @@ async fn result_is_none_while_a_run_is_open_and_set_when_it_ends() {
 #[tokio::test]
 async fn ending_one_run_leaves_the_other_open() {
     let recorder = MemoryRecorder::new();
-    let first = recorder.begin_run(meta("first")).await.unwrap();
-    let second = recorder.begin_run(meta("second")).await.unwrap();
+    let first = recorder.begin_run(meta()).await.unwrap();
+    let second = recorder.begin_run(meta()).await.unwrap();
 
     recorder.end_run(first, canceled()).await.unwrap();
 
@@ -183,7 +181,7 @@ async fn an_unknown_run_has_no_records_and_no_result() {
 #[tokio::test]
 async fn an_append_to_an_unknown_run_fails() {
     let recorder = MemoryRecorder::new();
-    recorder.begin_run(meta("known")).await.unwrap();
+    recorder.begin_run(meta()).await.unwrap();
 
     let error = recorder
         .append(RunId::from_raw(99), record(RecordKind::Event, 0, "lost"))
@@ -218,7 +216,7 @@ async fn ending_an_unknown_run_fails() {
 #[tokio::test]
 async fn an_append_after_end_run_fails_and_changes_nothing() {
     let recorder = MemoryRecorder::new();
-    let run = recorder.begin_run(meta("ended")).await.unwrap();
+    let run = recorder.begin_run(meta()).await.unwrap();
     recorder
         .append(run, record(RecordKind::Event, 0, "before"))
         .await
@@ -246,7 +244,7 @@ async fn an_append_after_end_run_fails_and_changes_nothing() {
 #[tokio::test]
 async fn a_second_end_run_fails_and_keeps_the_first_result() {
     let recorder = MemoryRecorder::new();
-    let run = recorder.begin_run(meta("twice")).await.unwrap();
+    let run = recorder.begin_run(meta()).await.unwrap();
     recorder.end_run(run, canceled()).await.unwrap();
 
     let code = ErrorCode::Internal;
@@ -274,7 +272,7 @@ async fn an_arc_dyn_recorder_drives_a_whole_run() {
     let memory = Arc::new(MemoryRecorder::new());
     let recorder: Arc<dyn RunRecorder> = memory.clone();
 
-    let run = recorder.begin_run(meta("dyn")).await.unwrap();
+    let run = recorder.begin_run(meta()).await.unwrap();
     recorder
         .append(
             run,

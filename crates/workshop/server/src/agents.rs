@@ -5,25 +5,24 @@
 //! conversations. The `/ws` workshop socket sits outside this subsystem;
 //! the two share only [`crate::websocket`].
 //!
-//! Each launch opens a conversation in `workshop-agents` and builds that
-//! conversation's one run its own [`Harness`]: over the conversation's
+//! The server builds one [`Host`] at startup: its `Packs`, built from the
+//! web, user-input, and mcp Plugins, the last over the servers of the
+//! configured `mcp.json`, and the built-in subagents; a finder that reads
+//! each agent from the agents folder through `load_agent`; and the tokio
+//! timer. Each launch opens a conversation in `workshop-agents` and builds
+//! that conversation's one run its own [`RunSetup`]: the conversation's
 //! recorder tee on a handle of the run log's [`TursoRecorder`] that names
-//! the launched agent, a per-run broker over
-//! the server's inference broker ([`broker`]), the tokio timer, the
-//! server's [`Packs`], built from the web, user-input, and mcp
-//! Plugins, the last over the servers of the configured `mcp.json`, and
-//! the built-in subagents, and the conversation's own services, which
-//! hold its input broker. The Harness reaches the gateway
-//! only through that broker, which follows the live gateway binding and
-//! sends each round to the dropdown's current pick. Each run's
-//! filesystem is an in-memory root, with the language guide demo's
-//! read-only mount beside it while that demo's switch is on
-//! (`language_guide`). The
-//! run's request carries the Host snapshot ([`bindings`]): the menu's
-//! pick and the workspace's granted roots, read once the menu's catalog
-//! holds a chat-capable model. Status-bar reporting stays in the server
-//! (`status`): a per-conversation reporter derives it from the
-//! conversation's events, deltas, and failure reports.
+//! the launched agent, a per-run broker over the server's inference broker
+//! ([`broker`]), and the conversation's own services, which hold its input
+//! broker. The run reaches the gateway only through that broker, which
+//! follows the live gateway binding and sends each round to the dropdown's
+//! current pick. Each run's filesystem is an in-memory root, with the
+//! language guide demo's read-only mount beside it while that demo's
+//! switch is on (`language_guide`). The run's setup carries the Host state
+//! ([`bindings`]): the menu's pick and the workspace's granted roots, read
+//! once the menu's catalog holds a chat-capable model. Status-bar
+//! reporting stays in the server (`status`): a per-conversation reporter
+//! derives it from the conversation's events, deltas, and failure reports.
 //!
 //! **Registry carve-out.** Conversations survive socket disconnect and
 //! sockets attach and detach (`socket`), so the launcher keeps the
@@ -50,9 +49,9 @@ use std::sync::Arc;
 
 use harness::pack::{HostServices, PackRegistry, Packs};
 use harness::record::RunId;
-use harness::{Harness, RunRequest};
+use harness::{Host, RunSetup};
 use plugin_web::SEARCH_PROVIDER;
-use runvil::ToolId;
+use runvil::{Error, ErrorCode, ToolId};
 use runvil_plugin::ServiceKey;
 use serde_json::{Map, Value};
 use workshop_agents::{
@@ -63,7 +62,7 @@ use workshop_registry::Registry;
 use workshop_run_log::TursoRecorder;
 use workshop_support::{Config, ReconnectBackoff};
 
-use bindings::host_snapshot;
+use bindings::with_host_state;
 use broker::{RunBroker, WorkshopBroker};
 use gateway::usable_gateway;
 use search::GatewaySearchProvider;
@@ -195,12 +194,33 @@ fn services(registry: &Registry) -> HostServices {
     services
 }
 
+/// The Host finder over the agents folder at `agents_path`: the source
+/// `load_agent` reads for each name, or its refusal as [`agent_error`].
+fn agent_finder(agents_path: PathBuf) -> impl Fn(&str) -> Result<String, Error> + Send + Sync {
+    move |name: &str| {
+        load_agent(&agents_path, name)
+            .map(|(_file, source)| source)
+            .map_err(|refusal| agent_error(&refusal))
+    }
+}
+
+/// The Host finder's failure for an agent `load_agent` refused: the
+/// refusal's display text, under `NotFound` for an agent discovery does
+/// not list and `Io` for one whose source cannot be read.
+fn agent_error(refusal: &LaunchError) -> Error {
+    let code = match refusal {
+        LaunchError::UnknownAgent { .. } => ErrorCode::NotFound,
+        _ => ErrorCode::Io,
+    };
+    Error::new(code, refusal.to_string(), code.prose())
+}
+
 /// The server's launcher of agent conversations: discovery, launch,
 /// lookup, and close, plus the server-side work a launch wires up - the
-/// run's Harness and the status reporter.
+/// run's setup and the status reporter.
 ///
 /// Typed and construction-phased: the registry, the server's backoff, the
-/// run log, and the built Packs every run shares are captured when
+/// run log, and the Host every run shares are captured when
 /// the composition root builds it, and the other subsystems are read
 /// through the registry at the point of use, so this handle never holds
 /// another subsystem's handle.
@@ -223,8 +243,10 @@ struct Inner {
     recorder: Arc<TursoRecorder>,
     /// The inference broker behind each run's broker.
     broker: WorkshopBroker,
-    /// The built Packs every run takes its snapshot of.
-    host: Arc<Packs>,
+    /// What every run shares: the built Packs every run takes its
+    /// snapshot of, the finder that reads each agent from the agents
+    /// folder, and the tokio timer.
+    host: Arc<Host>,
     /// The ask tool, `user-input/ask` of vendor `runvil`, which a
     /// script's ask result is recognized by; `None` only if the
     /// user-input Plugin was refused.
@@ -252,10 +274,16 @@ impl AgentSessions {
     /// the state directory when the first run starts.
     #[must_use]
     pub fn new(config: &Config, registry: Registry, backoff: ReconnectBackoff) -> Self {
-        let (host, ask) = host_packs(&registry, config.agents.mcp.as_deref());
+        let (packs, ask) = host_packs(&registry, config.agents.mcp.as_deref());
+        let agents_path = config.agents.path.clone();
+        let host = Host {
+            packs,
+            prompts: Arc::new(agent_finder(agents_path.clone())),
+            timer: Arc::new(TokioTimer),
+        };
         Self {
             inner: Arc::new(Inner {
-                agents_path: config.agents.path.clone(),
+                agents_path,
                 recorder: Arc::new(TursoRecorder::new(
                     config.server.state_dir.join(HARNESS_STATE_DIR),
                 )),
@@ -295,10 +323,11 @@ impl AgentSessions {
         }
         // The folder walk and the source read are filesystem work, so
         // they run on the blocking pool; a worker that cannot report is
-        // the same unreadable state as an unreadable file.
+        // the same unreadable state as an unreadable file. The run reads
+        // the agent again through the Host's finder when it parses it.
         let agents_path = self.inner.agents_path.clone();
         let agent = name.to_owned();
-        let (file, source) = tokio::task::spawn_blocking(move || load_agent(&agents_path, &agent))
+        tokio::task::spawn_blocking(move || load_agent(&agents_path, &agent))
             .await
             .unwrap_or_else(|join| {
                 Err(LaunchError::Unreadable {
@@ -311,47 +340,42 @@ impl AgentSessions {
             self.inner.registry.push(),
             self.inner.backoff.clone(),
         );
-        tokio::spawn(self.clone().drive(conversation.clone(), file, source));
+        tokio::spawn(self.clone().drive(conversation.clone()));
         Ok(conversation)
     }
 
-    /// Runs `conversation`'s one run over `source`, read from `file`. The request's Host
-    /// snapshot is read once the menu's catalog holds a chat-capable
-    /// model, so a pick made while the catalog was empty is the one the
-    /// run binds; a close during that wait ends the run before it begins.
-    async fn drive(self, conversation: Conversation, file: String, source: String) {
+    /// Runs `conversation`'s one run of its agent. The setup's selected
+    /// model and workspace roots are read once the menu's catalog holds a
+    /// chat-capable model, so a pick made while the catalog was empty is
+    /// the one the run binds; a close during that wait ends the run before
+    /// it begins.
+    async fn drive(self, conversation: Conversation) {
         tokio::select! {
             () = conversation.closing() => {}
             () = self.inner.broker.chat_model_ready() => {}
         }
-        let request = RunRequest {
-            name: conversation.id().to_string(),
-            source,
-            file,
-            args: String::new(),
-            input_text: None,
-            vfs: language_guide::run_vfs(),
-            host: host_snapshot(&self.inner.registry),
-        };
+        let setup = with_host_state(&self.inner.registry, self.setup_for(&conversation));
         conversation
-            .run(self.harness_for(&conversation), request)
+            .run(Arc::clone(&self.inner.host), conversation.agent(), setup)
             .await;
     }
 
-    /// The Harness for `conversation`'s run.
-    fn harness_for(&self, conversation: &Conversation) -> Harness {
-        Harness::new(
-            conversation.recorder(Arc::new(
-                self.inner.recorder.for_agent(conversation.agent()),
-            )),
-            Arc::new(RunBroker::new(
-                self.inner.broker.clone(),
-                conversation.clone(),
-            )),
-            Arc::new(TokioTimer),
-            Arc::clone(&self.inner.host),
-            conversation.run_services(),
-        )
+    /// The setup of `conversation`'s run before the Host state is read:
+    /// its recorder tee over a run-log handle naming its agent, its broker,
+    /// its own services, and its filesystem.
+    fn setup_for(&self, conversation: &Conversation) -> RunSetup {
+        let recorder = conversation.recorder(Arc::new(
+            self.inner.recorder.for_agent(conversation.agent()),
+        ));
+        let broker = Arc::new(RunBroker::new(
+            self.inner.broker.clone(),
+            conversation.clone(),
+        ));
+        RunSetup {
+            services: conversation.run_services(),
+            vfs: language_guide::run_vfs(),
+            ..RunSetup::new(recorder, broker)
+        }
     }
 
     /// The ask tool's vendor and id, which a socket frames a script's ask

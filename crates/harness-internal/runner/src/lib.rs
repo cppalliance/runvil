@@ -1,17 +1,24 @@
-//! harness-runner - the per-run Harness and the effect loop it drives: a
-//! [`Harness`] begins the run at its recorder with the inputs the Engine
-//! refuses to draw itself, resolves the launch model through the Host's
-//! broker, prepares an Engine `Run` from the prompt's source (putting the
-//! declared input file in place, taking the run's snapshot of the Host's
-//! [`Packs`]), steps it, performs each chat, render,
-//! tool-call, and timer effect through its performer and answers each Vfs
-//! effect inline, feeds the answers back, hands every event, effect, and
-//! answer to the run's recorder, ends the run there with its result, the
-//! final text or the error that ended it, and reads the declared output
-//! file, all inside the one future [`Harness::run`] returns. A cancel is
-//! the error whose code is `canceled`. A recorder that refuses a write is
-//! the only way a run ends without a recorded result, and that refusal,
-//! a `RecorderFailed` error, is the only error [`Harness::run`] returns.
+//! harness-runner - the per-run Harness and the effect loop it drives. A
+//! Host builds one [`Host`] at startup, holding its built [`Packs`], how
+//! it finds prompts, and its timer, and [`Host::parse`] finds a prompt by
+//! its name, parses it, and checks its `uses:` list against those Packs.
+//! A launcher hands each run a [`RunSetup`] with everything that run gets
+//! on top of the Host. A [`Harness`] over the Host, the parsed prompt,
+//! and the setup begins the run at the setup's recorder with the inputs
+//! the Engine refuses to draw itself, resolves the run's model through
+//! the setup's broker, prepares an Engine `Run` (putting the declared
+//! input file in place, taking the run's snapshot of the Host's Packs),
+//! steps it, performs each chat, render, tool-call, and timer effect
+//! through its performer and answers each Vfs effect inline, feeds the
+//! answers back, hands every event, effect, and answer to the run's
+//! recorder, ends the run there with its result, the final text or the
+//! error that ended it, and reads the declared output file, all inside
+//! the one future [`Harness::run`] returns. A cancel is the error whose
+//! code is `canceled`. A recorder that refuses a write is the only way a
+//! run ends without a recorded result, and that refusal, a
+//! `RecorderFailed` error, is the only error [`Harness::run`] returns. A
+//! prompt that fails to parse is its caller's error and leaves no run
+//! record.
 //!
 //! ## Invariants
 //!
@@ -22,6 +29,9 @@
 //!   Host's own runtime. The crate's async needs come from `futures-util`,
 //!   and `tokio` and `tokio-util` appear only under `[dev-dependencies]`
 //!   (enforced by the Harness tokio ban in `cargo test -p build-xtask`).
+//! - The Harness reads each [`RunSetup`] field once per run: the input is
+//!   staged in, the run works in, and the declared output is read from
+//!   the one filesystem the setup holds.
 //! - The recorder is written in loop order: a step's events before the
 //!   step's effects are issued, each effect before its performer starts,
 //!   each answer before the run resumes with it. Every effect record has
@@ -39,21 +49,23 @@
 
 mod display_chain;
 pub mod effect_loop;
-pub mod environment;
+mod environment;
 pub mod files;
 mod harness;
 mod host;
 mod packs;
 pub mod performers;
-pub mod prepare;
+mod prepare;
 pub mod recorder;
 mod recorder_memory;
+mod setup;
 
 pub use display_chain::display_chain;
-pub use harness::{Harness, RunControl, RunReport, RunRequest};
+pub use harness::{Harness, RunControl, RunReport};
 pub use host::Host;
 pub use packs::Packs;
 pub use recorder::{
     MemoryRecorder, Record, RecordKind, RecorderFuture, RunId, RunMeta, RunRecorder,
     make_recorder_error,
 };
+pub use setup::RunSetup;

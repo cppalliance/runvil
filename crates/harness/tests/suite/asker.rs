@@ -41,13 +41,13 @@ pub(crate) trait AskBroker: Send + Sync {
     async fn wait(&self) -> Result<String, Error>;
 }
 
-/// A Host that built the fixture, as `user-input`.
-pub(crate) fn asker_host() -> Arc<Packs> {
+/// A Host's Packs: the fixture, built as `user-input`.
+pub(crate) fn asker_packs() -> Packs {
     let mut packs = PackRegistry::new();
     if let Err(error) = packs.insert(ASKER, Value::Null) {
         panic!("a new registry takes the fixture: {error}");
     }
-    Arc::new(Packs::new(packs, HostServices::new()))
+    Packs::new(packs, HostServices::new())
 }
 
 /// Run services holding `broker` as the run's input broker.

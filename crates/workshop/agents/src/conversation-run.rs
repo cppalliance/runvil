@@ -1,16 +1,17 @@
-//! What a conversation hands its run's Harness, and how it takes the
-//! run's report: the recorder tee, the run's own services holding the
-//! conversation's input broker, the live pieces of the run's own rounds,
-//! and the drive that ends the conversation with its run.
+//! What a conversation hands its run's setup, and how it runs the agent
+//! and takes the run's report: the recorder tee, the run's own services
+//! holding the conversation's input broker, the live pieces of the run's
+//! own rounds, and the drive that parses the agent, runs it, and ends the
+//! conversation with its run.
 
 use std::sync::Arc;
 
 use harness::pack::HostServices;
 use harness::record::RunRecorder;
-use harness::{Harness, RunReport, RunRequest, display_chain};
+use harness::{Harness, Host, RunReport, RunSetup, display_chain};
 use plugin_user_input::{INPUT_BROKER, InputBroker};
-use runvil::Error;
 use runvil::ids::RoundId;
+use runvil::{Error, Prompt};
 use tokio::sync::broadcast;
 
 use super::{Conversation, lock};
@@ -55,10 +56,29 @@ impl Conversation {
         services
     }
 
-    /// Drives the conversation's one run to its end: holds `harness`'s
-    /// control, so a stop or a close reaches the run, awaits the run over
-    /// `request`, reports how it ended, and ends the conversation.
-    pub async fn run(&self, harness: Harness, request: RunRequest) {
+    /// Parses the agent `name` on `host` on the blocking pool, then runs
+    /// it with `setup`. A parse failure is reported as a run failure with
+    /// its located message; no run is recorded.
+    ///
+    /// The run's Harness control is held while the run goes on, so a stop
+    /// or a close reaches the run. The conversation ends with its run, or
+    /// with the parse failure.
+    pub async fn run(&self, host: Arc<Host>, name: &str, setup: RunSetup) {
+        let prompt = match parse(&host, name).await {
+            Ok(prompt) => prompt,
+            Err(message) => {
+                tracing::warn!(
+                    conversation = %self.core.id,
+                    agent = %self.core.agent,
+                    %message,
+                    "agent failed to parse"
+                );
+                self.report(FailureKind::RunFailed, message);
+                self.end();
+                return;
+            }
+        };
+        let harness = Harness::new(host, prompt, setup);
         {
             let mut control = lock(&self.core.control);
             let held = control.insert(harness.control());
@@ -66,7 +86,7 @@ impl Conversation {
                 held.cancel();
             }
         }
-        let result = harness.run(request).await;
+        let result = harness.run().await;
         self.take_report(result);
         self.end();
     }
@@ -111,5 +131,17 @@ impl Conversation {
                 reply: round.get(),
             });
         }
+    }
+}
+
+/// The agent `name` parsed on `host` on the blocking pool, since finding
+/// it reads the agents folder, or the message of why it did not parse: the
+/// parse failure's located message, or the blocking task's failure.
+async fn parse(host: &Arc<Host>, name: &str) -> Result<Prompt, String> {
+    let host = Arc::clone(host);
+    let name = name.to_owned();
+    match tokio::task::spawn_blocking(move || host.parse(&name)).await {
+        Ok(parsed) => parsed.map_err(|error| error.located_message()),
+        Err(join) => Err(format!("the agent could not be parsed: {join}")),
     }
 }

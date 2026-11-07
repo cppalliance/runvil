@@ -26,14 +26,19 @@ const ALL: RecordFilter = RecordFilter {
 /// The agent the Host launched.
 const AGENT: &str = "chat";
 
-/// A run's opening row as the Harness would write it.
-fn meta(name: &str) -> RunMeta {
+/// When a test's first run starts.
+const FIRST: i64 = 1_700_000_000_000;
+
+/// When a test's second run starts, so a read tells the two runs apart.
+const SECOND: i64 = 1_700_000_000_001;
+
+/// A run's opening row as the Harness would write it, starting at
+/// `started_at`.
+fn meta(started_at: i64) -> RunMeta {
     RunMeta {
-        name: name.to_owned(),
-        prompt_hash: "sha256:abc".to_owned(),
         seed: RunSeed::from_bytes([0xfe; 32]),
         flags: 0,
-        started_at: 1_700_000_000_000,
+        started_at,
     }
 }
 
@@ -76,7 +81,7 @@ async fn a_whole_run_goes_in_through_the_recorder_and_reads_back_through_the_log
         "building the recorder and its handle touches no file; the first run does"
     );
 
-    let run = recorder.begin_run(meta("session-1")).await.unwrap();
+    let run = recorder.begin_run(meta(FIRST)).await.unwrap();
     recorder
         .append(run, record(RecordKind::Effect, 0, Some(7), "a"))
         .await
@@ -94,7 +99,7 @@ async fn a_whole_run_goes_in_through_the_recorder_and_reads_back_through_the_log
 
     let log = read_back(&path).await;
     let row = log.run(run).await.unwrap();
-    assert_eq!(row.meta, meta("session-1"));
+    assert_eq!(row.meta, meta(FIRST));
     assert_eq!(row.agent, AGENT, "the handle writes its agent");
     assert_eq!(row.result, Some(Ok("done".to_owned())));
     assert!(row.ended_at.is_some());
@@ -135,17 +140,17 @@ async fn each_handle_writes_its_own_agent_into_the_shared_log() {
     let chat = turso.for_agent("chat");
     let echo = turso.for_agent("echo");
 
-    let first = chat.begin_run(meta("session-1")).await.unwrap();
-    let second = echo.begin_run(meta("session-2")).await.unwrap();
+    let first = chat.begin_run(meta(FIRST)).await.unwrap();
+    let second = echo.begin_run(meta(SECOND)).await.unwrap();
     assert_ne!(first, second, "both handles write one log");
     chat.end_run(first, Err(Error::canceled())).await.unwrap();
     echo.end_run(second, Err(Error::canceled())).await.unwrap();
     drop((chat, echo, turso));
 
     let log = read_back(&path).await;
-    for (run, name, agent) in [(first, "session-1", "chat"), (second, "session-2", "echo")] {
+    for (run, started_at, agent) in [(first, FIRST, "chat"), (second, SECOND, "echo")] {
         let row = log.run(run).await.unwrap();
-        assert_eq!(row.meta.name, name);
+        assert_eq!(row.meta.started_at, started_at);
         assert_eq!(row.agent, agent, "run {run} names its own handle's agent");
     }
 }
@@ -158,14 +163,14 @@ async fn a_failed_open_is_retried_by_the_next_call() {
     let turso = Arc::new(TursoRecorder::new(&state));
     let recorder = turso.for_agent(AGENT);
 
-    let error = recorder.begin_run(meta("session-1")).await.unwrap_err();
+    let error = recorder.begin_run(meta(FIRST)).await.unwrap_err();
     assert!(
         log_failure(&error).starts_with("run log file: "),
         "the directory cannot be created: {error:?}"
     );
 
     fs::remove_file(&state).unwrap();
-    let run = recorder.begin_run(meta("session-1")).await.unwrap();
+    let run = recorder.begin_run(meta(FIRST)).await.unwrap();
     recorder
         .append(run, record(RecordKind::Event, 0, None, "a"))
         .await
@@ -189,7 +194,7 @@ async fn the_same_file_reopens_with_its_rows() {
 
     let first = Arc::new(TursoRecorder::new(&state));
     let handle = first.for_agent(AGENT);
-    let earlier = handle.begin_run(meta("session-1")).await.unwrap();
+    let earlier = handle.begin_run(meta(FIRST)).await.unwrap();
     handle
         .append(earlier, record(RecordKind::Event, 0, None, "first"))
         .await
@@ -203,7 +208,7 @@ async fn the_same_file_reopens_with_its_rows() {
     let second = Arc::new(TursoRecorder::new(&state));
     let later = second
         .for_agent(AGENT)
-        .begin_run(meta("session-2"))
+        .begin_run(meta(SECOND))
         .await
         .unwrap();
     assert_ne!(later, earlier, "a reopened file issues a fresh run id");
@@ -212,11 +217,11 @@ async fn the_same_file_reopens_with_its_rows() {
 
     let log = read_back(&path).await;
     let kept = log.run(earlier).await.unwrap();
-    assert_eq!(kept.meta.name, "session-1");
+    assert_eq!(kept.meta.started_at, FIRST);
     assert!(matches!(kept.result, Some(Err(error)) if error.is_canceled()));
     assert_eq!(log.records(earlier, ALL).await.unwrap().len(), 1);
     let open = log.run(later).await.unwrap();
-    assert_eq!(open.meta.name, "session-2");
+    assert_eq!(open.meta.started_at, SECOND);
     assert_eq!(open.result, None);
 }
 
@@ -235,7 +240,7 @@ async fn a_write_the_log_refuses_reaches_the_caller_as_a_recorder_error() {
         "{error:?}"
     );
 
-    let run = recorder.begin_run(meta("session-1")).await.unwrap();
+    let run = recorder.begin_run(meta(FIRST)).await.unwrap();
     recorder.end_run(run, Err(Error::canceled())).await.unwrap();
     let error = recorder
         .end_run(run, Err(Error::canceled()))
@@ -249,7 +254,7 @@ async fn a_write_the_log_refuses_reaches_the_caller_as_a_recorder_error() {
 
 /// Begins a run for `owner`, appends three events, and ends it.
 async fn whole_run(recorder: &impl RunRecorder, owner: &str) -> RunId {
-    let run = recorder.begin_run(meta(owner)).await.unwrap();
+    let run = recorder.begin_run(meta(FIRST)).await.unwrap();
     for task_seq in 0..3 {
         recorder
             .append(run, record(RecordKind::Event, task_seq, None, owner))

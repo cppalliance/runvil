@@ -44,8 +44,6 @@ impl Timer for SleepTimer {
 /// A run's opening metadata.
 fn meta() -> RunMeta {
     RunMeta {
-        name: "session-1".to_owned(),
-        prompt_hash: "sha256:fixture".to_owned(),
         seed: TEST_SEED,
         flags: 0,
         started_at: 0,

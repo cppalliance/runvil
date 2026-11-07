@@ -1,6 +1,5 @@
-//! Tests for the Host snapshot and for model resolution: nothing to
-//! resolve, a model list the broker cannot fetch, and a selection the list
-//! lacks.
+//! Tests for model resolution: nothing to resolve, a model list the broker
+//! cannot fetch, and a selection the list lacks.
 
 use runvil::effect::Round;
 use runvil::model::{
@@ -33,28 +32,11 @@ impl InferenceBroker for EmptyBroker {
     }
 }
 
-#[test]
-fn the_host_snapshot_serves_the_first_root_and_the_selection() {
-    let host = HostSnapshot {
-        selected_model: Some("gpt".to_owned()),
-        workspace_roots: vec![PathBuf::from("/w/one"), PathBuf::from("/w/two")],
-    };
-    let ui = host.ui();
-    assert_eq!(ui["selected_model"], "gpt");
-    assert_eq!(
-        ui["workspace_root"],
-        PathBuf::from("/w/one").display().to_string()
-    );
-    let empty = HostSnapshot::default().ui();
-    assert!(empty["selected_model"].is_null());
-    assert!(empty["workspace_root"].is_null());
-}
-
 #[tokio::test]
 async fn no_selection_and_an_empty_broker_catalog_bind_no_model() {
     // No selection and a broker that lists nothing: nothing to resolve,
     // so the roles stay unbound rather than the run failing.
-    let model = current_model(&HostSnapshot::default(), &EmptyBroker)
+    let model = current_model(None, &EmptyBroker)
         .await
         .expect("an empty list is not a failure");
     assert!(model.is_none());
@@ -83,7 +65,7 @@ impl InferenceBroker for UnlistedBroker {
 
 #[tokio::test]
 async fn a_model_list_the_broker_cannot_fetch_keeps_the_brokers_failure() {
-    let error = current_model(&HostSnapshot::default(), &UnlistedBroker)
+    let error = current_model(None, &UnlistedBroker)
         .await
         .expect_err("a failed listing fails the lookup");
     let phrase = phrase(ErrorCode::Transport);
@@ -97,11 +79,7 @@ async fn a_model_list_the_broker_cannot_fetch_keeps_the_brokers_failure() {
 
 #[tokio::test]
 async fn a_selection_the_list_lacks_is_an_unmet_requirement_naming_the_selection() {
-    let host = HostSnapshot {
-        selected_model: Some("absent".to_owned()),
-        ..HostSnapshot::default()
-    };
-    let error = current_model(&host, &EmptyBroker)
+    let error = current_model(Some("absent"), &EmptyBroker)
         .await
         .expect_err("an absent selection fails the lookup");
     assert_eq!(error.code, ErrorCode::RequirementsUnmet);

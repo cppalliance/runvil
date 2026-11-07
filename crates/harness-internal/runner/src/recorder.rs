@@ -19,9 +19,9 @@
 //! Engine runs ends with the result its last step returned. A run that
 //! ends before the Engine runs it ends with an error of its own: the
 //! cancel, when a cancel comes before or during the model lookup, or the
-//! failure itself, when the model lookup fails, the prompt does not
-//! parse, or its input cannot be put in place. A run the effect loop
-//! loses track of ends with an `Internal` error.
+//! failure itself, when the model lookup fails or the prompt's input
+//! cannot be put in place. A run the effect loop loses track of ends with
+//! an `Internal` error.
 
 use std::fmt;
 use std::future::Future;
@@ -56,7 +56,7 @@ pub fn make_recorder_error(cause: impl Into<Box<dyn std::error::Error + Send + S
 /// It tells the two apart in what `prepare` and the effect loop return.
 /// Both pass every recorder error through [`refused`], and no result of
 /// theirs has that code: the Engine turns a caller code into `Internal`,
-/// and the failures they make themselves are parse, input, and `Internal`
+/// and the failures they make themselves are input and `Internal`
 /// failures.
 pub(crate) fn is_refusal(error: &Error) -> bool {
     error.code == ErrorCode::RecorderFailed
@@ -143,11 +143,6 @@ impl fmt::Display for RunId {
 /// What the Harness knows about a run when it begins.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RunMeta {
-    /// The run's name, as the Host requested it.
-    pub name: String,
-    /// A content hash of the prompt file, so a transcript can be matched
-    /// to the exact text that produced it.
-    pub prompt_hash: String,
     /// The seed the Harness drew and passed to the Engine. A replay passes
     /// it back, and the run's id derives from it.
     pub seed: RunSeed,

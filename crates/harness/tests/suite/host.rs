@@ -10,10 +10,8 @@ use std::sync::{Arc, Mutex, PoisonError};
 use std::task::{Poll, Waker};
 
 use async_trait::async_trait;
-use harness::pack::{HostServices, PackRegistry, Packs};
 use harness::record::{MemoryRecorder, RecordKind};
-use harness::vfs::VfsRef;
-use harness::{BoxFuture, Harness, HostSnapshot, InferenceBroker, RunRequest};
+use harness::{BoxFuture, Harness, InferenceBroker, RunSetup};
 use runvil::effect::Round;
 use runvil::event::ReplyOrigin;
 use runvil::model::{
@@ -21,8 +19,8 @@ use runvil::model::{
     ModelInfo, ThinkingMode, ToolSchema,
 };
 
-use crate::asker::{AskBroker, asker_host, broker_services};
-use crate::support::{Clock, Offline};
+use crate::asker::{AskBroker, asker_packs, broker_services};
+use crate::support::{Offline, launch, no_packs};
 
 /// Asks the operator once and returns the answer.
 const ASKS: &str = concat!(
@@ -53,20 +51,6 @@ const CHATS: &str = concat!(
     "return messages[#messages].content\n",
     "```\n",
 );
-
-/// A request for the run `name` over `source`, with no arguments, no
-/// input text, and a fresh store.
-fn request(name: &str, source: &str) -> RunRequest {
-    RunRequest {
-        name: name.to_owned(),
-        source: source.to_owned(),
-        file: "prompt".to_owned(),
-        args: String::new(),
-        input_text: None,
-        vfs: VfsRef::default(),
-        host: HostSnapshot::default(),
-    }
-}
 
 /// The one stub model the stuck and streaming brokers list.
 fn stub_catalog() -> Result<ModelCatalog, Box<dyn Error>> {
@@ -140,22 +124,16 @@ impl InferenceBroker for Stuck {
     }
 }
 
-/// A Harness over a stuck broker listing `catalog`, beside the flag its
-/// first round raises.
-fn stuck_harness(catalog: ModelCatalog) -> (Harness, Arc<Started>) {
+/// A Harness running `source` over a stuck broker listing `catalog`,
+/// beside the flag its first round raises.
+fn stuck_harness(catalog: ModelCatalog, source: &str) -> (Harness, Arc<Started>) {
     let started = Arc::new(Started(Mutex::new((false, None))));
     let broker = Stuck {
         catalog,
         started: Arc::clone(&started),
     };
-    let harness = Harness::new(
-        Arc::new(MemoryRecorder::new()),
-        Arc::new(broker),
-        Arc::new(Clock),
-        Arc::new(Packs::new(PackRegistry::new(), HostServices::new())),
-        HostServices::new(),
-    );
-    (harness, started)
+    let setup = RunSetup::new(Arc::new(MemoryRecorder::new()), Arc::new(broker));
+    (launch(no_packs(), source, setup), started)
 }
 
 /// Lists the stub model, and replies `You said: <last message>` in two
@@ -202,16 +180,13 @@ impl InferenceBroker for Streaming {
 
 #[tokio::test]
 async fn input_ask_returns_what_the_hosts_input_broker_answers_byte_for_byte() {
-    let harness = Harness::new(
-        Arc::new(MemoryRecorder::new()),
-        Arc::new(Offline),
-        Arc::new(Clock),
-        asker_host(),
-        broker_services(Arc::new(Operator("Hello, desk."))),
-    );
+    let setup = RunSetup {
+        services: broker_services(Arc::new(Operator("Hello, desk."))),
+        ..RunSetup::new(Arc::new(MemoryRecorder::new()), Arc::new(Offline))
+    };
 
-    let report = harness
-        .run(request("desk-asks-1", ASKS))
+    let report = launch(asker_packs(), ASKS, setup)
+        .run()
         .await
         .expect("the run is reported");
     assert_eq!(report.result, Ok("Hello, desk.".to_owned()));
@@ -219,9 +194,10 @@ async fn input_ask_returns_what_the_hosts_input_broker_answers_byte_for_byte() {
 
 #[tokio::test]
 async fn stopping_an_in_flight_round_drops_the_call_and_the_prompts_pcall_catches_it() {
-    let (harness, round_started) = stuck_harness(stub_catalog().expect("the stub catalog builds"));
+    let (harness, round_started) =
+        stuck_harness(stub_catalog().expect("the stub catalog builds"), PATIENT);
     let control = harness.control();
-    let (report, ()) = tokio::join!(harness.run(request("desk-patient", PATIENT)), async {
+    let (report, ()) = tokio::join!(harness.run(), async {
         round_started.wait().await;
         control.stop_round();
     });
@@ -232,20 +208,15 @@ async fn stopping_an_in_flight_round_drops_the_call_and_the_prompts_pcall_catche
 }
 
 #[tokio::test]
-async fn a_run_canceled_before_it_begins_is_recorded_as_canceled_before_its_parse() {
+async fn a_run_canceled_before_it_begins_is_recorded_as_canceled_before_it_starts() {
     let recorder = Arc::new(MemoryRecorder::new());
-    let harness = Harness::new(
-        recorder.clone(),
-        Arc::new(Offline),
-        Arc::new(Clock),
-        Arc::new(Packs::new(PackRegistry::new(), HostServices::new())),
-        HostServices::new(),
+    let harness = launch(
+        no_packs(),
+        PATIENT,
+        RunSetup::new(recorder.clone(), Arc::new(Offline)),
     );
     harness.control().cancel();
-    let report = harness
-        .run(request("desk-patient", PATIENT))
-        .await
-        .expect("the run is reported");
+    let report = harness.run().await.expect("the run is reported");
     assert!(
         report
             .result
@@ -261,7 +232,7 @@ async fn a_run_canceled_before_it_begins_is_recorded_as_canceled_before_its_pars
     );
     assert!(
         recorder.records(report.run_id).is_empty(),
-        "the run ended before its prompt was parsed"
+        "the run ended before it started"
     );
 }
 
@@ -273,17 +244,12 @@ async fn a_hosts_own_broker_streams_a_section_round_under_the_round_id_the_run_r
         catalog: stub_catalog().expect("the stub catalog builds"),
         window,
     };
-    let harness = Harness::new(
-        recorder.clone(),
-        Arc::new(broker),
-        Arc::new(Clock),
-        Arc::new(Packs::new(PackRegistry::new(), HostServices::new())),
-        HostServices::new(),
+    let harness = launch(
+        no_packs(),
+        CHATS,
+        RunSetup::new(recorder.clone(), Arc::new(broker)),
     );
-    let report = harness
-        .run(request("desk-chats-1", CHATS))
-        .await
-        .expect("the run is reported");
+    let report = harness.run().await.expect("the run is reported");
 
     let records = recorder.records(report.run_id);
     let reply = records

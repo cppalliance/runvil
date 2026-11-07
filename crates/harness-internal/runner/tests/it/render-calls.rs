@@ -152,29 +152,31 @@ async fn two_models_get_their_own_renders_and_a_stop_spares_only_the_surviving_c
             )],
         ),
     ]);
-    let harness = render_harness(&recorder, broker, &seen, json!({ "surviving": [MODEL] }));
+    let harness = render_harness(
+        &recorder,
+        broker,
+        &seen,
+        json!({ "surviving": [MODEL] }),
+        &prompt(&ON_TWO_MODELS),
+    );
     let watched = Arc::clone(&seen);
-    let report = run_beside(
-        harness,
-        request(&prompt(&ON_TWO_MODELS)),
-        |control| async move {
-            until("both held calls are in flight", || {
-                watched.calls().len() == 2
-            })
-            .await;
-            control.stop_round();
-            until("the stop drops a call", || !watched.dropped().is_empty()).await;
-            for _ in 0..16 {
-                tokio::task::yield_now().await;
-            }
-            assert_eq!(
-                watched.dropped(),
-                ["n"],
-                "the stop drops only the call whose rendered tool does not survive stops"
-            );
-            watched.open();
-        },
-    )
+    let report = run_beside(harness, |control| async move {
+        until("both held calls are in flight", || {
+            watched.calls().len() == 2
+        })
+        .await;
+        control.stop_round();
+        until("the stop drops a call", || !watched.dropped().is_empty()).await;
+        for _ in 0..16 {
+            tokio::task::yield_now().await;
+        }
+        assert_eq!(
+            watched.dropped(),
+            ["n"],
+            "the stop drops only the call whose rendered tool does not survive stops"
+        );
+        watched.open();
+    })
     .await
     .expect("the run is reported");
 

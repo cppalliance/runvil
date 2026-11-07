@@ -21,23 +21,21 @@ impl RunLog {
             return Err(LogError::UnknownRun(run));
         };
         let meta = RunMeta {
-            name: row.get(0)?,
-            prompt_hash: row.get(2)?,
-            seed: to_seed(row.get::<String>(3)?)?,
-            flags: to_u32(row.get(4)?, "flags")?,
-            started_at: row.get(5)?,
+            seed: to_seed(row.get::<String>(1)?)?,
+            flags: to_u32(row.get(2)?, "flags")?,
+            started_at: row.get(3)?,
         };
-        let agent = row.get(1)?;
-        let ended_at: Option<i64> = row.get(6)?;
-        let result = match row.get::<Option<String>>(7)? {
+        let agent = row.get(0)?;
+        let ended_at: Option<i64> = row.get(4)?;
+        let result = match row.get::<Option<String>>(5)? {
             None => None,
             Some(status) => {
-                let error_code: Option<String> = row.get(9)?;
+                let error_code: Option<String> = row.get(7)?;
                 Some(parse_result(
                     &status,
-                    row.get(8)?,
+                    row.get(6)?,
                     error_code.as_deref(),
-                    row.get(10)?,
+                    row.get(8)?,
                 )?)
             }
         };

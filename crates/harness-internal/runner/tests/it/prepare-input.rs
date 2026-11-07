@@ -86,17 +86,20 @@ fn with_input(input: Option<Arc<dyn AskBroker>>) -> HostServices {
     input.map_or_else(HostServices::new, broker_services)
 }
 
-/// Prepares `source` under `services` and drives the run to its end.
-async fn drive_prompt(source: &str, services: Services) -> Result<String, Error> {
-    prepare_and_drive(source, services).await.1
+/// Runs `source` on a Host over `packs` with `setup` and returns the
+/// run's result.
+async fn drive_prompt(source: &str, packs: Packs, setup: RunSetup) -> Result<String, Error> {
+    prepare_and_drive(source, packs, setup).await.1
 }
 
 /// What the probe's one call saw, on a run with `input` as its broker.
 async fn probe_sees(input: Option<Arc<dyn AskBroker>>) -> String {
     let recorder = recorder();
-    let mut services = services(&recorder, building(PROBE));
-    services.services = with_input(input);
-    completed(drive_prompt(PROBES, services).await)
+    let setup = RunSetup {
+        services: with_input(input),
+        ..setup_over(&recorder)
+    };
+    completed(drive_prompt(PROBES, building(PROBE), setup).await)
 }
 
 #[tokio::test]
@@ -130,27 +133,26 @@ fn user_input_prompt(declaration: &str, lua: &str) -> String {
     )
 }
 
-/// The preparation services over `recorder` with the fixture ask Pack
-/// built as `user-input` and `input` as the run's broker.
-fn user_input_services(
+/// Runs `source` over `recorder` on a Host with the fixture ask Pack
+/// built as `user-input`, with `input` as the run's broker, and returns
+/// the run's result.
+async fn drive_asking(
+    source: &str,
     recorder: &Arc<MemoryRecorder>,
     input: Option<Arc<dyn AskBroker>>,
-) -> Services {
-    let mut services = services(recorder, building(ASKER));
-    services.services = with_input(input);
-    services
+) -> Result<String, Error> {
+    let setup = RunSetup {
+        services: with_input(input),
+        ..setup_over(recorder)
+    };
+    drive_prompt(source, building(ASKER), setup).await
 }
 
 #[tokio::test]
 async fn a_required_user_input_declaration_on_a_host_without_a_broker_is_refused() {
     let recorder = recorder();
-    let notice = refusal(
-        drive_prompt(
-            &user_input_prompt(REQUIRED, ASKS_ONCE),
-            user_input_services(&recorder, None),
-        )
-        .await,
-    );
+    let notice =
+        refusal(drive_asking(&user_input_prompt(REQUIRED, ASKS_ONCE), &recorder, None).await);
     assert!(
         notice.contains(
             "- user-input is unavailable: the run lacks the services it needs: \
@@ -169,9 +171,10 @@ async fn a_failed_ask_raises_at_the_call_site_where_pcall_catches_it() {
     let recorder = recorder();
     let catches = "local ok, err = pcall(input.ask)\n\
         return tostring(ok) .. '|' .. err.kind .. '|' .. tostring(err)";
-    let result = drive_prompt(
+    let result = drive_asking(
         &user_input_prompt(REQUIRED, catches),
-        user_input_services(&recorder, Some(Arc::new(Failing))),
+        &recorder,
+        Some(Arc::new(Failing)),
     )
     .await;
     let text = completed(result);
@@ -189,9 +192,10 @@ async fn a_failed_ask_raises_at_the_call_site_where_pcall_catches_it() {
 #[tokio::test]
 async fn an_uncaught_failed_ask_ends_the_run_as_a_tool_failure() {
     let recorder = recorder();
-    let error = drive_prompt(
+    let error = drive_asking(
         &user_input_prompt(REQUIRED, "return (input.ask())"),
-        user_input_services(&recorder, Some(Arc::new(Failing))),
+        &recorder,
+        Some(Arc::new(Failing)),
     )
     .await
     .expect_err("an uncaught failed ask fails the run");
@@ -212,9 +216,10 @@ async fn input_ask_with_an_argument_raises() {
     let recorder = recorder();
     let passes_one = "local ok, err = pcall(input.ask, 1)\n\
         return tostring(ok) .. '|' .. tostring(err)";
-    let result = drive_prompt(
+    let result = drive_asking(
         &user_input_prompt(REQUIRED, passes_one),
-        user_input_services(&recorder, Some(Arc::new(Scripted("unused")))),
+        &recorder,
+        Some(Arc::new(Scripted("unused"))),
     )
     .await;
     let text = completed(result);
@@ -228,14 +233,15 @@ async fn input_ask_with_an_argument_raises() {
 #[tokio::test]
 async fn the_ask_tool_read_by_id_runs_beside_the_untouched_prelude_and_engine_globals() {
     let recorder = recorder();
-    let result = drive_prompt(
+    let result = drive_asking(
         &user_input_prompt(
             REQUIRED,
             "local ask = tools.get('user-input/ask')\n\
              return tools.call(ask) .. '|' .. ask.id .. '|' .. type(input.ask) .. '|' \
              .. type(store.read) .. '|' .. type(tools.call) .. '|' .. type(user_input_ask)",
         ),
-        user_input_services(&recorder, Some(Arc::new(Scripted("hello")))),
+        &recorder,
+        Some(Arc::new(Scripted("hello"))),
     )
     .await;
     assert_eq!(
@@ -251,9 +257,10 @@ async fn a_prompt_that_does_not_declare_user_input_has_no_input_global() {
     let recorder = recorder();
     let reaches = "local ok, err = pcall(function() return input.ask() end)\n\
         return tostring(ok) .. '|' .. tostring(err)";
-    let result = drive_prompt(
+    let result = drive_asking(
         &user_input_prompt("", reaches),
-        user_input_services(&recorder, Some(Arc::new(Scripted("unused")))),
+        &recorder,
+        Some(Arc::new(Scripted("unused"))),
     )
     .await;
     let text = completed(result);

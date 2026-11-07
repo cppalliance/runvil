@@ -1,6 +1,7 @@
 //! A conversation over its one run: the run's report becomes the
-//! conversation's failure report, a stop keeps a question open, a close
-//! cancels the run, and the conversation ends with its run.
+//! conversation's failure report, an agent that fails to parse is a
+//! run-failed report with no run recorded, a stop keeps a question open, a
+//! close cancels the run, and the conversation ends with its run.
 
 // clippy.toml's allow-expect-in-tests covers #[test] functions only, not
 // the helpers they share; failing a test by panicking with the invariant
@@ -13,25 +14,25 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use harness::record::MemoryRecorder;
+use harness::record::{MemoryRecorder, RunId};
 use tokio::sync::broadcast;
 use workshop_agents::{
     Conversation, Conversations, FailureKind, SessionFailure, SessionState, WaitFrame,
 };
 
-use crate::support::{harness_for, prompt};
+use crate::support::{AGENT, prompt, run_for};
 
 const DEADLINE: Duration = Duration::from_secs(10);
 
-/// Runs the conversation's one run over `lua` on its own task.
+/// Runs the conversation's one run over `source` on its own task.
 fn start(
     conversation: &Conversation,
     recorder: &Arc<MemoryRecorder>,
-    lua: &str,
+    source: String,
 ) -> tokio::task::JoinHandle<()> {
-    let (harness, request) = harness_for(conversation, Arc::clone(recorder), prompt(lua));
+    let (host, setup) = run_for(conversation, Arc::clone(recorder), source);
     let conversation = conversation.clone();
-    tokio::spawn(async move { conversation.run(harness, request).await })
+    tokio::spawn(async move { conversation.run(host, AGENT, setup).await })
 }
 
 async fn next_wait(waits: &mut broadcast::Receiver<WaitFrame>) -> WaitFrame {
@@ -68,7 +69,7 @@ async fn a_failed_report_becomes_a_run_failed_report_and_ends_the_conversation()
     let mut errors = conversation.subscribe_errors();
     let mut events = conversation.subscribe_events();
 
-    ended(start(&conversation, &recorder, "error('kaboom')")).await;
+    ended(start(&conversation, &recorder, prompt("error('kaboom')"))).await;
 
     let reports = reports(&mut errors);
     assert_eq!(reports.len(), 1, "one report: {reports:?}");
@@ -103,13 +104,49 @@ async fn a_failed_report_becomes_a_run_failed_report_and_ends_the_conversation()
 }
 
 #[tokio::test]
+async fn an_agent_that_fails_to_parse_reports_a_run_failure_and_records_no_run() {
+    let table = Conversations::new();
+    let conversation = table.open("unclosed");
+    let recorder = Arc::new(MemoryRecorder::new());
+    let mut errors = conversation.subscribe_errors();
+    let unclosed = "---\nname: unclosed\ndescription: d\nrunvil: 0\n\n# Title\n".to_owned();
+    let (host, _setup) = run_for(&conversation, Arc::clone(&recorder), unclosed.clone());
+    let parse_failure = host
+        .parse(AGENT)
+        .expect_err("a frontmatter that is never closed does not parse");
+
+    ended(start(&conversation, &recorder, unclosed)).await;
+
+    let reports = reports(&mut errors);
+    assert_eq!(
+        reports,
+        [SessionFailure {
+            kind: FailureKind::RunFailed,
+            message: parse_failure.located_message(),
+        }],
+        "the parse failure's located message is the one run-failed report"
+    );
+    assert_eq!(conversation.run_id(), None, "no run began");
+    assert_eq!(
+        recorder.meta(RunId::from_raw(1)),
+        None,
+        "the recorder holds no run"
+    );
+    assert_eq!(conversation.state(), SessionState::Closed);
+    assert!(
+        table.get(conversation.id()).is_none(),
+        "the conversation ends with its parse failure"
+    );
+}
+
+#[tokio::test]
 async fn a_completed_report_reports_nothing_and_ends_the_conversation() {
     let table = Conversations::new();
     let conversation = table.open("done");
     let recorder = Arc::new(MemoryRecorder::new());
     let mut errors = conversation.subscribe_errors();
 
-    ended(start(&conversation, &recorder, "return 'done'")).await;
+    ended(start(&conversation, &recorder, prompt("return 'done'"))).await;
 
     assert!(
         reports(&mut errors).is_empty(),
@@ -128,7 +165,7 @@ async fn a_close_with_a_question_open_cancels_it_and_reports_the_cancel() {
     let recorder = Arc::new(MemoryRecorder::new());
     let mut errors = conversation.subscribe_errors();
     let mut waits = conversation.subscribe_waits();
-    let run = start(&conversation, &recorder, "return (input.ask())");
+    let run = start(&conversation, &recorder, prompt("return (input.ask())"));
     let token = required(&mut waits).await;
 
     assert!(
@@ -171,7 +208,7 @@ async fn a_close_before_the_run_starts_ends_its_recorded_run_canceled() {
     let mut errors = conversation.subscribe_errors();
 
     conversation.close();
-    ended(start(&conversation, &recorder, "return 'never'")).await;
+    ended(start(&conversation, &recorder, prompt("return 'never'"))).await;
 
     let run = conversation.run_id().expect("the recorder began the run");
     assert!(matches!(
@@ -180,7 +217,7 @@ async fn a_close_before_the_run_starts_ends_its_recorded_run_canceled() {
     ));
     assert!(
         recorder.records(run).is_empty(),
-        "the run ended before its prompt was parsed"
+        "the run ended before it started"
     );
     assert_eq!(
         reports(&mut errors)
@@ -199,7 +236,7 @@ async fn a_stop_with_only_a_question_open_leaves_it_open_and_its_token_answers()
     let recorder = Arc::new(MemoryRecorder::new());
     let mut errors = conversation.subscribe_errors();
     let mut waits = conversation.subscribe_waits();
-    let run = start(&conversation, &recorder, "return (input.ask())");
+    let run = start(&conversation, &recorder, prompt("return (input.ask())"));
     let token = required(&mut waits).await;
 
     conversation.stop_round();

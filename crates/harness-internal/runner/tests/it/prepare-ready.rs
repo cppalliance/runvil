@@ -17,14 +17,9 @@ use std::sync::OnceLock;
 use std::time::Duration;
 
 use futures_util::FutureExt as _;
-use harness_runner::environment::HostSnapshot;
-use harness_runner::recorder::{Record, RecorderFuture, RunMeta, RunRecorder};
-use harness_runner::{Harness, RunControl, RunRequest};
-use runvil::vfs::VfsRef;
+use harness_runner::RunControl;
 use runvil_plugin::ServiceKey;
 use tokio::sync::{Notify, watch};
-
-use crate::scripted::{MODEL, ScriptedBroker};
 
 /// How long a test waits for a run before it fails.
 const PATIENCE: Duration = Duration::from_secs(10);
@@ -172,22 +167,6 @@ fn slow_host(phase: Phase) -> (Packs, watch::Sender<Phase>, Arc<Startup>) {
     (host, moves, startup)
 }
 
-/// A request to run `source` under the scripted broker's model.
-fn request(source: &str) -> RunRequest {
-    RunRequest {
-        name: "session-1".to_owned(),
-        source: source.to_owned(),
-        file: "prompt".to_owned(),
-        args: String::new(),
-        input_text: None,
-        vfs: VfsRef::default(),
-        host: HostSnapshot {
-            selected_model: Some(MODEL.to_owned()),
-            ..HostSnapshot::default()
-        },
-    }
-}
-
 /// A recorder over `inner` that raises the run's cancel as a run is
 /// ended, before the end reaches `inner`: a cancel that lands after the
 /// result is chosen and before it is recorded.
@@ -217,36 +196,28 @@ impl RunRecorder for CancelsAtEnd {
 async fn a_pack_whose_ready_resolves_late_has_its_tools_in_the_run() {
     let (host, moves, startup) = slow_host(Phase::Starting);
     let recorder = recorder();
-    let (prepared, ()) = tokio::time::timeout(PATIENCE, async {
-        tokio::join!(
-            begin_and_prepare(CALLS_SLOW, services(&recorder, host)),
-            async {
-                startup.asked.notified().await;
-                moves.send(Phase::Ready).unwrap();
-            }
-        )
+    let (report, ()) = tokio::time::timeout(PATIENCE, async {
+        tokio::join!(report_of(CALLS_SLOW, host, setup_over(&recorder)), async {
+            startup.asked.notified().await;
+            moves.send(Phase::Ready).unwrap();
+        })
     })
     .await
     .expect("the Harness waits on the Pack's ready");
-    let prepared = prepared.expect("the snapshot after the wait offers the Pack's tool");
-    let result = drive_run(
-        prepared.run,
-        prepared.performers,
-        recorder.clone(),
-        prepared.run_id,
-        CancelHandle::new(),
-    )
-    .await;
-    assert_eq!(completed(result), "hi");
+    assert_eq!(
+        completed(report.result),
+        "hi",
+        "the snapshot after the wait offers the Pack's tool"
+    );
 }
 
 #[tokio::test]
 async fn every_starting_pack_is_asked_to_be_ready_before_any_of_them_answers() {
     let (host, handles) = starting_host(&[SLOW, SLOWER], Phase::Starting);
     let recorder = recorder();
-    let (prepared, ()) = tokio::time::timeout(PATIENCE, async {
+    let (report, ()) = tokio::time::timeout(PATIENCE, async {
         tokio::join!(
-            begin_and_prepare(COUNTS_OFFERED, services(&recorder, host)),
+            report_of(COUNTS_OFFERED, host, setup_over(&recorder)),
             async {
                 for (_, startup) in &handles {
                     startup.asked.notified().await;
@@ -261,17 +232,8 @@ async fn every_starting_pack_is_asked_to_be_ready_before_any_of_them_answers() {
     .expect(
         "the Harness asks both Packs before either is ready, so neither waits behind the other",
     );
-    let prepared = prepared.expect("a Pack-free prompt is prepared");
-    let result = drive_run(
-        prepared.run,
-        prepared.performers,
-        recorder.clone(),
-        prepared.run_id,
-        CancelHandle::new(),
-    )
-    .await;
     assert_eq!(
-        completed(result),
+        completed(report.result),
         "2 offered",
         "both Packs' tools reach the run once both are ready"
     );
@@ -282,7 +244,7 @@ async fn a_declared_pack_whose_ready_fails_refuses_the_run_naming_its_reason() {
     let reason = "the fixture server refused the handshake";
     let (host, _moves, _startup) = slow_host(Phase::Failed(reason));
     let recorder = recorder();
-    let (run_id, result) = prepare_and_drive(DECLARES_SLOW, services(&recorder, host)).await;
+    let (run_id, result) = prepare_and_drive(DECLARES_SLOW, host, setup_over(&recorder)).await;
     assert_eq!(
         recorder.result(run_id).as_ref(),
         Some(&result),
@@ -362,16 +324,10 @@ async fn a_cancel_while_a_declared_pack_is_still_starting_ends_the_run_canceled_
  {
     let (host, _moves, startup) = slow_host(Phase::Starting);
     let recorder = recorder();
-    let harness = Harness::new(
-        recorder.clone(),
-        Arc::new(ScriptedBroker::replying()),
-        Arc::new(Unused),
-        Arc::new(host),
-        HostServices::new(),
-    );
+    let harness = launch(host, Unused, CALLS_SLOW, setup_over(&recorder));
     let control = harness.control();
     let (report, ()) = tokio::time::timeout(PATIENCE, async {
-        tokio::join!(harness.run(request(CALLS_SLOW)), async {
+        tokio::join!(harness.run(), async {
             startup.asked.notified().await;
             control.cancel();
         })
@@ -393,18 +349,12 @@ async fn a_cancel_while_a_declared_pack_is_still_starting_ends_the_run_canceled_
 async fn a_refusal_after_a_cancel_cut_the_wait_short_ends_the_run_canceled_with_no_run_events() {
     let (host, _moves, startup) = slow_host(Phase::Starting);
     let recorder = recorder();
-    let harness = Harness::new(
-        recorder.clone(),
-        Arc::new(ScriptedBroker::replying()),
-        Arc::new(Unused),
-        Arc::new(host),
-        HostServices::new(),
-    );
-    let control = harness.control();
     let declares_slow_and_web = "---\nname: slow-and-web\ndescription: d\nrunvil: 0\n\
         uses:\n  - slow\n  - web\n---\n\n# Title\n\n## Only\n\nDone.\n";
+    let harness = launch(host, Unused, declares_slow_and_web, setup_over(&recorder));
+    let control = harness.control();
     let (report, ()) = tokio::time::timeout(PATIENCE, async {
-        tokio::join!(harness.run(request(declares_slow_and_web)), async {
+        tokio::join!(harness.run(), async {
             startup.asked.notified().await;
             control.cancel();
         })
@@ -420,11 +370,7 @@ async fn a_refusal_after_a_cancel_cut_the_wait_short_ends_the_run_canceled_with_
     );
     let run_id = report.run_id;
     assert_eq!(recorder.result(run_id), Some(report.result));
-    let events = recorded_parse_events(&recorder, run_id);
-    assert!(
-        matches!(events.last(), Some(Event::ParseSucceeded { .. })),
-        "the parse events, then the end, with no run event between: {events:?}"
-    );
+    assert_no_records(&recorder, run_id);
 }
 
 #[tokio::test]
@@ -435,16 +381,11 @@ async fn a_cancel_that_lands_while_a_refusal_is_recorded_leaves_the_report_holdi
         inner: inner.clone(),
         control: OnceLock::new(),
     });
-    let harness = Harness::new(
-        recorder.clone(),
-        Arc::new(ScriptedBroker::replying()),
-        Arc::new(Unused),
-        Arc::new(bare()),
-        HostServices::new(),
-    );
+    let setup = RunSetup::new(recorder.clone(), Arc::new(ScriptedBroker::replying()));
+    let harness = launch(bare(), Unused, NEEDS_WEB, setup);
     recorder.control.set(harness.control()).unwrap();
 
-    let report = tokio::time::timeout(PATIENCE, harness.run(request(NEEDS_WEB)))
+    let report = tokio::time::timeout(PATIENCE, harness.run())
         .await
         .expect("a refused run ends at once")
         .expect("a refused run is reported");

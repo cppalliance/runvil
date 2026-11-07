@@ -1,34 +1,37 @@
-//! The per-run Harness: `run` begins the run's record, resolves the
-//! launch model through the Host's broker, prepares the request's source,
-//! drives the run as one future, and reads the declared output; source
-//! that fails to parse, and a run that fails after it starts, are each a
-//! recorded failed run, never an error of `run`; a Vfs effect is answered
-//! inline as it is issued; and one run completes under a thread-parking
-//! executor with no runtime behind it. How a stop and a cancel reach the
-//! effects in flight sits in the `stop` child module, how a stop reaches
-//! the tool calls waiting for a slot and how a task's early end drops its
-//! stop-surviving call while the run goes on in the `stop_cap` child
-//! module, how what a stop reaches depends on when the loop sees it in the
-//! `stop_timing` child module, and the runs that end before the prompt is
-//! parsed and the one error `run` returns in the `errors` child module.
+//! The per-run Harness: `run` begins the run's record, resolves the run's
+//! model through the setup's broker, prepares the parsed prompt, drives
+//! the run as one future, and reads the declared output; the record holds
+//! the run's own events and no parse event; the `ui()` snapshot serves the
+//! setup's selection and first workspace root; a run that fails after it
+//! starts is a recorded failed run, never an error of `run`; a Vfs effect
+//! is answered inline as it is issued; and one run completes under a
+//! thread-parking executor with no runtime behind it. How a stop and a
+//! cancel reach the effects in flight sits in the `stop` child module, how
+//! a stop reaches the tool calls waiting for a slot and how a task's early
+//! end drops its stop-surviving call while the run goes on in the
+//! `stop_cap` child module, how what a stop reaches depends on when the
+//! loop sees it in the `stop_timing` child module, and the runs that end
+//! before they start and the one error `run` returns in the `errors` child
+//! module.
 
 use std::future::Future;
+use std::path::PathBuf;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll, Wake, Waker};
 use std::thread::{self, Thread, ThreadId};
 use std::time::Duration;
 
-use harness_runner::environment::HostSnapshot;
-use harness_runner::recorder::{MemoryRecorder, Record, RecordKind};
-use harness_runner::{Harness, Packs, RunControl, RunReport, RunRequest};
+use harness_runner::performers::{InferenceBroker, Timer};
+use harness_runner::recorder::{MemoryRecorder, Record, RecordKind, RunRecorder};
+use harness_runner::{Harness, Packs, RunControl, RunReport, RunSetup};
 use runvil::vfs::VfsRef;
 use runvil::{Error, ErrorCode};
 use runvil_plugin::{HostServices, PackRegistry};
 use serde_json::{Value, json};
 
 use crate::scripted::{Kept, MODEL, ScriptedBroker};
-use crate::support::{HookedBackend, PendingTimer, assert_not_completed};
+use crate::support::{HookedBackend, PendingTimer, assert_not_completed, host_over, parsed};
 
 #[path = "harness-errors.rs"]
 mod errors;
@@ -39,38 +42,46 @@ mod stop_cap;
 #[path = "harness-stop-timing.rs"]
 mod stop_timing;
 
-/// The request's name: the run metadata's `name`.
-const NAME: &str = "harness-test";
-
 /// How long a test waits for a run before it fails.
 const PATIENCE: Duration = Duration::from_secs(10);
 
-/// A request to run `source` under [`NAME`] with [`MODEL`] selected, no
-/// arguments, no input text, and a fresh memory store.
-pub(crate) fn request(source: &str) -> RunRequest {
-    RunRequest {
-        name: NAME.to_owned(),
-        source: source.to_owned(),
-        file: "prompt".to_owned(),
-        args: String::new(),
-        input_text: None,
-        vfs: VfsRef::default(),
-        host: HostSnapshot {
-            selected_model: Some(MODEL.to_owned()),
-            ..HostSnapshot::default()
-        },
+/// The setup of a run recorded through `recorder` and served by `broker`,
+/// with [`MODEL`] selected, no arguments, no input text, and a fresh
+/// memory store.
+pub(crate) fn setup(
+    recorder: Arc<dyn RunRecorder>,
+    broker: impl InferenceBroker + 'static,
+) -> RunSetup {
+    RunSetup {
+        selected_model: Some(MODEL.to_owned()),
+        ..RunSetup::new(recorder, Arc::new(broker))
     }
 }
 
-/// A Harness over `recorder` and `broker` with no Packs, no Host
-/// services, and a timer no test here reaches.
-fn plain_harness(recorder: &Arc<MemoryRecorder>, broker: ScriptedBroker) -> Harness {
-    Harness::new(
-        recorder.clone(),
-        Arc::new(broker),
-        Arc::new(PendingTimer::default()),
-        Arc::new(Packs::new(PackRegistry::new(), HostServices::new())),
-        HostServices::new(),
+/// A Harness running `source` with `setup` on a Host over `packs` that
+/// sleeps through `timer`.
+pub(crate) fn launch(
+    packs: Packs,
+    timer: impl Timer + 'static,
+    source: &str,
+    setup: RunSetup,
+) -> Harness {
+    Harness::new(host_over(packs, timer), parsed(source), setup)
+}
+
+/// A Host's Packs with none but the built-in and no Host services.
+pub(crate) fn no_packs() -> Packs {
+    Packs::new(PackRegistry::new(), HostServices::new())
+}
+
+/// A Harness running `source` over `recorder` and `broker` with no Packs,
+/// no run services, and a timer no test here reaches.
+fn plain_harness(recorder: &Arc<MemoryRecorder>, broker: ScriptedBroker, source: &str) -> Harness {
+    launch(
+        no_packs(),
+        PendingTimer::default(),
+        source,
+        setup(recorder.clone(), broker),
     )
 }
 
@@ -87,11 +98,10 @@ pub(crate) async fn until(what: &str, condition: impl Fn() -> bool) {
     panic!("{what}");
 }
 
-/// Runs `request` on `harness` beside `steer`, which is handed the run's
-/// control, and returns the run's result.
+/// Runs `harness` beside `steer`, which is handed the run's control, and
+/// returns the run's result.
 pub(crate) async fn run_beside<F>(
     harness: Harness,
-    request: RunRequest,
     steer: impl FnOnce(RunControl) -> F,
 ) -> Result<RunReport, Error>
 where
@@ -99,7 +109,7 @@ where
 {
     let control = harness.control();
     let (result, ()) = tokio::time::timeout(PATIENCE, async {
-        tokio::join!(harness.run(request), steer(control))
+        tokio::join!(harness.run(), steer(control))
     })
     .await
     .expect("the run ends in time");
@@ -146,9 +156,6 @@ const FILES: &str = "---\nname: files\ndescription: d\nrunvil: 0\n\
     # Title\n\n## Only\n\n```lua\n\
     store.write('report.md', 'seen: ' .. store.read('paper.md'))\nreturn 'done'\n```\n";
 
-/// A prompt with unclosed frontmatter, so it does not parse.
-const UNCLOSED: &str = "---\nname: unclosed\ndescription: d\nrunvil: 0\n\n# Title\n";
-
 /// A prompt whose one section writes a store file and then raises.
 const RAISES: &str = "---\nname: raises\ndescription: d\nrunvil: 0\n---\n\n\
     # Title\n\n## Only\n\n```lua\nstore.write('a.md', '1')\nerror('the section gives up')\n```\n";
@@ -167,16 +174,24 @@ const INFERS_AND_STORES: &str = "---\nname: infers\ndescription: d\nrunvil: 0\n\
     store.write('note.md', 'kept')\n\
     return models.infer('asked') .. '|' .. store.read('note.md')\n```\n";
 
+/// A prompt that returns the `ui()` snapshot's two fields.
+const READS_UI: &str = "---\nname: reads-ui\ndescription: d\nrunvil: 0\n---\n\n\
+    # Title\n\n## Only\n\n```lua\n\
+    return tostring(ui().selected_model) .. '|' .. tostring(ui().workspace_root)\n```\n";
+
 #[tokio::test]
-async fn run_returns_the_declared_output_and_the_result_under_the_requests_name() {
+async fn a_staged_input_and_a_declared_output_round_trip_beside_the_recorded_result() {
     let recorder = Arc::new(MemoryRecorder::new());
-    let report = plain_harness(&recorder, ScriptedBroker::replying())
-        .run(RunRequest {
+    let harness = launch(
+        no_packs(),
+        PendingTimer::default(),
+        FILES,
+        RunSetup {
             input_text: Some("# Paper".to_owned()),
-            ..request(FILES)
-        })
-        .await
-        .expect("the run is reported");
+            ..setup(recorder.clone(), ScriptedBroker::replying())
+        },
+    );
+    let report = harness.run().await.expect("the run is reported");
 
     assert_eq!(report.result, Ok("done".to_owned()));
     assert_eq!(report.output, Ok("seen: # Paper".to_owned()));
@@ -186,16 +201,9 @@ async fn run_returns_the_declared_output_and_the_result_under_the_requests_name(
         Some(report.result.clone()),
         "the recorder ends the run with the reported result"
     );
-    let meta = recorder.meta(run_id).expect("the recorder began the run");
-    assert_eq!(meta.name, NAME, "the metadata holds the request's name");
 
     let records = recorder.records(run_id);
     let kinds: Vec<RecordKind> = records.iter().map(|record| record.kind).collect();
-    assert_eq!(
-        kinds.first(),
-        Some(&RecordKind::Event),
-        "the parse's events lead"
-    );
     assert_eq!(
         kinds.last(),
         Some(&RecordKind::Event),
@@ -218,42 +226,77 @@ async fn run_returns_the_declared_output_and_the_result_under_the_requests_name(
 }
 
 #[tokio::test]
-async fn source_that_fails_to_parse_ends_as_a_recorded_failed_run_with_its_parse_events() {
+async fn a_runs_record_starts_with_its_own_events_and_holds_no_parse_event() {
     let recorder = Arc::new(MemoryRecorder::new());
-    let report = plain_harness(&recorder, ScriptedBroker::replying())
-        .run(request(UNCLOSED))
+    let report = plain_harness(&recorder, ScriptedBroker::replying(), WRITES_TWICE)
+        .run()
         .await
-        .expect("a parse failure is the run's result, not an error");
+        .expect("the run is reported");
+    assert_eq!(report.result, Ok("12".to_owned()));
 
-    let run_id = report.run_id;
+    let records = recorder.records(report.run_id);
+    let first = records.first().expect("the run recorded its events");
+    assert_eq!(first.kind, RecordKind::Event);
     assert_eq!(
-        report.result.as_ref().map_err(|error| error.code),
-        Err(ErrorCode::FrontmatterInvalid)
+        first.payload["kind"], "run_started",
+        "the run's own start leads"
     );
-    assert_eq!(recorder.result(run_id), Some(report.result.clone()));
-    assert_not_completed(&report.output);
-    let records = recorder.records(run_id);
+    assert_eq!(
+        (first.task_id.as_str(), first.task_seq),
+        ("0", 0),
+        "the root task counts from zero, with no parse events before it"
+    );
+    let parse_events: Vec<&Value> = records
+        .iter()
+        .filter(|record| record.kind == RecordKind::Event)
+        .map(|record| &record.payload["kind"])
+        .filter(|kind| kind.as_str().is_some_and(|kind| kind.starts_with("parse_")))
+        .collect();
     assert!(
-        records
-            .iter()
-            .all(|record| record.kind == RecordKind::Event),
-        "a run that failed to parse records only the parse's events"
+        parse_events.is_empty(),
+        "the record holds no parse event: {parse_events:?}"
     );
-    assert_eq!(
-        records.first().map(|record| record.payload["kind"].clone()),
-        Some(json!("parse_started"))
+}
+
+#[tokio::test]
+async fn the_ui_snapshot_serves_the_selected_model_and_the_first_workspace_root() {
+    let recorder = Arc::new(MemoryRecorder::new());
+    let first = PathBuf::from("/w/one");
+    let harness = launch(
+        no_packs(),
+        PendingTimer::default(),
+        READS_UI,
+        RunSetup {
+            workspace_roots: vec![first.clone(), PathBuf::from("/w/two")],
+            ..setup(recorder.clone(), ScriptedBroker::replying())
+        },
     );
+    let report = harness.run().await.expect("the run is reported");
     assert_eq!(
-        records.last().map(|record| record.payload["kind"].clone()),
-        Some(json!("parse_failed"))
+        report.result,
+        Ok(format!("{MODEL}|{}", first.display())),
+        "the selection and the first root"
+    );
+
+    let harness = launch(
+        no_packs(),
+        PendingTimer::default(),
+        READS_UI,
+        RunSetup::new(recorder.clone(), Arc::new(ScriptedBroker::replying())),
+    );
+    let report = harness.run().await.expect("the run is reported");
+    assert_eq!(
+        report.result,
+        Ok("nil|nil".to_owned()),
+        "no selection and no roots read as nil"
     );
 }
 
 #[tokio::test]
 async fn a_run_that_fails_after_it_starts_is_a_recorded_failed_run_not_an_error() {
     let recorder = Arc::new(MemoryRecorder::new());
-    let report = plain_harness(&recorder, ScriptedBroker::replying())
-        .run(request(RAISES))
+    let report = plain_harness(&recorder, ScriptedBroker::replying(), RAISES)
+        .run()
         .await
         .expect("a run's own failure is its result, not an error");
 
@@ -288,13 +331,16 @@ async fn a_vfs_effect_is_answered_inline_on_the_thread_that_polls_the_run() {
         )
         .build();
     let recorder = Arc::new(MemoryRecorder::new());
-    let report = plain_harness(&recorder, ScriptedBroker::replying())
-        .run(RunRequest {
+    let harness = launch(
+        no_packs(),
+        PendingTimer::default(),
+        WRITES_TWICE,
+        RunSetup {
             vfs,
-            ..request(WRITES_TWICE)
-        })
-        .await
-        .expect("the run is reported");
+            ..setup(recorder.clone(), ScriptedBroker::replying())
+        },
+    );
+    let report = harness.run().await.expect("the run is reported");
 
     assert_eq!(report.result, Ok("12".to_owned()));
     assert_eq!(
@@ -342,7 +388,7 @@ fn one_run_completes_on_the_tests_own_thread_under_a_thread_parking_block_on() {
     let recorder = Arc::new(MemoryRecorder::new());
     let broker = ScriptedBroker::replying();
     let rounds = broker.rounds();
-    let run = plain_harness(&recorder, broker).run(request(INFERS_AND_STORES));
+    let run = plain_harness(&recorder, broker, INFERS_AND_STORES).run();
     assert_send(&run);
 
     let report = block_on(Box::pin(run)).expect("the run is reported with no runtime");

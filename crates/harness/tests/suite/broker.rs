@@ -1,14 +1,12 @@
-//! The inference broker a Host hands `Harness::new`: a section's own
+//! The inference broker a launcher hands each run's `RunSetup`: a section's own
 //! round reaches it with origin `Chat`, and a nested `models.infer` round
 //! with origin `Infer`, each under its run-wide round id.
 
 use std::num::NonZeroU32;
 use std::sync::{Arc, Mutex, PoisonError};
 
-use harness::pack::{HostServices, PackRegistry, Packs};
 use harness::record::MemoryRecorder;
-use harness::vfs::VfsRef;
-use harness::{BoxFuture, Harness, HostSnapshot, InferenceBroker, RunRequest};
+use harness::{BoxFuture, InferenceBroker, RunSetup};
 use runvil::Error;
 use runvil::effect::Round;
 use runvil::event::ReplyOrigin;
@@ -18,7 +16,7 @@ use runvil::model::{
     ModelInfo, ThinkingMode, ToolSchema,
 };
 
-use crate::support::Clock;
+use crate::support::{launch, no_packs};
 
 /// The one model the scripted broker lists and the Host selects.
 const MODEL: &str = "scripted-model";
@@ -84,26 +82,12 @@ async fn a_sections_round_reaches_the_broker_as_chat_and_a_nested_infer_round_as
         catalog,
         rounds: Mutex::new(Vec::new()),
     });
-    let harness = Harness::new(
-        Arc::new(MemoryRecorder::new()),
-        broker.clone(),
-        Arc::new(Clock),
-        Arc::new(Packs::new(PackRegistry::new(), HostServices::new())),
-        HostServices::new(),
-    );
-    let report = harness
-        .run(RunRequest {
-            name: "rounds-1".to_owned(),
-            source: INFERS_THEN_CHATS.to_owned(),
-            file: "prompt".to_owned(),
-            args: String::new(),
-            input_text: None,
-            vfs: VfsRef::default(),
-            host: HostSnapshot {
-                selected_model: Some(MODEL.to_owned()),
-                ..HostSnapshot::default()
-            },
-        })
+    let setup = RunSetup {
+        selected_model: Some(MODEL.to_owned()),
+        ..RunSetup::new(Arc::new(MemoryRecorder::new()), broker.clone())
+    };
+    let report = launch(no_packs(), INFERS_THEN_CHATS, setup)
+        .run()
         .await
         .expect("the run is reported");
 

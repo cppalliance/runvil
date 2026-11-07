@@ -2,20 +2,25 @@
 //!
 //! A Host makes a [`pack::PackRegistry`], calls each Plugin it links,
 //! which inserts its Packs into the registry, and builds one
-//! [`pack::Packs`] over it, which builds every Pack the registry
-//! holds. It builds them once and builds one Harness for each run.
-//! [`Harness::new`] takes the Host's recorder, inference broker, timer,
-//! built Packs, and the run's own services. [`Harness::run`]
-//! runs the prompt to its end and returns its [`RunReport`]. While the run
-//! goes on, the Host steers it through the [`RunControl`] it took from
-//! `Harness::control` before the run started.
+//! [`pack::Packs`] over it, which builds every Pack the registry holds.
+//! It builds one [`Host`] at startup over those Packs, a
+//! [`PromptFinder`], and its timer, and shares it behind an `Arc`.
+//! [`Host::parse`] finds a prompt by its name and parses it. For each run
+//! the launcher builds a [`RunSetup`] with the run's recorder, inference
+//! broker, services, filesystem, model selection, workspace roots,
+//! arguments, and input text, and [`Harness::new`] takes the Host, the
+//! parsed prompt, and that setup. [`Harness::run`] runs the prompt to its
+//! end and returns its [`RunReport`]. While the run goes on, the launcher
+//! steers it through the [`RunControl`] it took from `Harness::control`
+//! before the run started.
 //!
 //! Every run gets a record and ends with its result: the final text, or
 //! the error that ended it, where a cancel is the error whose code is
 //! `canceled`. The record begins before anything else, so a run canceled
 //! before it starts, or one whose model cannot be resolved, is recorded
 //! too. The only error [`Harness::run`] returns is a `RecorderFailed`
-//! refusal: a recorder that refuses a write.
+//! refusal: a recorder that refuses a write. A prompt that fails to parse
+//! is the caller's error from [`Host::parse`] and leaves no run record.
 //!
 //! The crate's `run-prompt` example runs one prompt from start to end.
 
@@ -23,9 +28,8 @@ pub use harness_runner::Harness;
 pub use harness_runner::Host;
 pub use harness_runner::RunControl;
 pub use harness_runner::RunReport;
-pub use harness_runner::RunRequest;
+pub use harness_runner::RunSetup;
 pub use harness_runner::display_chain;
-pub use harness_runner::environment::HostSnapshot;
 pub use harness_runner::performers::BoxFuture;
 pub use harness_runner::performers::InferenceBroker;
 pub use harness_runner::performers::Timer;

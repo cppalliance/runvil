@@ -5,13 +5,15 @@
 //! the recorder tee every run of a conversation writes through.
 //!
 //! A conversation is one launched agent and its one run. The server
-//! builds that run's Harness from what the [`Conversation`] hands it - the
-//! recorder tee and a clone of the Host's services with the
-//! conversation's input broker - streams the run's own rounds into it
-//! through [`Conversation::publish_delta`], and drives it with
-//! [`Conversation::run`]. A stop drops the round in
-//! flight and keeps the run going; a close cancels the run, and the
-//! conversation ends when the run does.
+//! builds that run's `RunSetup` from what the [`Conversation`] hands it -
+//! the recorder tee and the run's services holding the conversation's
+//! input broker - streams the run's own rounds into it through
+//! [`Conversation::publish_delta`], and hands it to
+//! [`Conversation::run`], which parses the agent on the server's Host and
+//! drives the run. An agent that fails to parse is reported as a failed
+//! run and records none. A stop drops the round in flight and keeps the
+//! run going; a close cancels the run, and the conversation ends when the
+//! run does.
 //!
 //! ## Invariants
 //!

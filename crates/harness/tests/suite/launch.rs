@@ -4,13 +4,12 @@
 
 use std::sync::Arc;
 
-use harness::pack::{HostServices, PackRegistry, Packs};
 use harness::record::MemoryRecorder;
 use harness::vfs::{Origin, VfsRef};
-use harness::{Harness, HostSnapshot, RunRequest};
+use harness::{Harness, RunSetup};
 use runvil::{ErrorCode, ErrorFact};
 
-use crate::support::{Clock, Offline};
+use crate::support::{Offline, launch, no_packs};
 
 /// A prompt that reads its declared input and writes its declared output.
 const SHOUTS: &str = concat!(
@@ -22,33 +21,21 @@ const SHOUTS: &str = concat!(
     "```\n",
 );
 
-fn harness() -> Harness {
-    Harness::new(
-        Arc::new(MemoryRecorder::new()),
-        Arc::new(Offline),
-        Arc::new(Clock),
-        Arc::new(Packs::new(PackRegistry::new(), HostServices::new())),
-        HostServices::new(),
-    )
-}
-
-fn request(source: &str, vfs: VfsRef) -> RunRequest {
-    RunRequest {
-        name: "shouts-1".to_owned(),
-        source: source.to_owned(),
-        file: "prompt".to_owned(),
-        args: String::new(),
-        input_text: Some("hello".to_owned()),
+/// A Harness running `source` over `vfs` with `hello` as its input.
+fn harness(source: &str, vfs: VfsRef) -> Harness {
+    let setup = RunSetup {
         vfs,
-        host: HostSnapshot::default(),
-    }
+        input_text: Some("hello".to_owned()),
+        ..RunSetup::new(Arc::new(MemoryRecorder::new()), Arc::new(Offline))
+    };
+    launch(no_packs(), source, setup)
 }
 
 #[tokio::test]
 async fn a_run_over_a_prompt_string_reports_its_output() {
     let vfs = VfsRef::default();
-    let report = harness()
-        .run(request(SHOUTS, vfs.clone()))
+    let report = harness(SHOUTS, vfs.clone())
+        .run()
         .await
         .expect("the run is reported");
     assert!(
@@ -73,8 +60,8 @@ async fn a_run_over_a_prompt_string_reports_its_output() {
 #[tokio::test]
 async fn a_run_that_does_not_complete_reports_no_output() {
     let failing = SHOUTS.replace("store.write", "error('no shout') store.write");
-    let report = harness()
-        .run(request(&failing, VfsRef::default()))
+    let report = harness(&failing, VfsRef::default())
+        .run()
         .await
         .expect("the run is reported");
     assert_eq!(

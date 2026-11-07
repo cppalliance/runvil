@@ -26,8 +26,9 @@ serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
 # `sync` for the conversation's broadcasts and state watch and the wait
-# registry's `oneshot`; `time` for the timer every run sleeps on.
-tokio = { workspace = true, features = ["sync", "time"] }
+# registry's `oneshot`; `time` for the timer every run sleeps on; `rt`
+# for the blocking pool a conversation parses its agent on.
+tokio = { workspace = true, features = ["rt", "sync", "time"] }
 tracing.workspace = true
 
 [dev-dependencies]
