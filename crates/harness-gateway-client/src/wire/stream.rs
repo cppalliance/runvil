@@ -487,5 +487,5 @@ pub fn escape_controls(body: &str, max: usize) -> String {
 mod tests;
 
 #[cfg(test)]
-#[path = "stream-metrics-tests.rs"]
+#[path = "stream-tests-metrics.rs"]
 mod metrics_tests;

@@ -25,7 +25,6 @@
 )]
 
 #[cfg(test)]
-#[path = "fakes-tests.rs"]
 mod fakes;
 mod host;
 mod load;
