@@ -28,7 +28,7 @@ struct SeamRecorder {
 }
 
 impl Observer for SeamRecorder {
-    fn observe(&self, _execution: &str, section: &str, event: Observation) {
+    fn observe(&self, section: &str, event: Observation) {
         self.observed
             .lock()
             .expect("the recorder mutex is not poisoned")
@@ -37,7 +37,6 @@ impl Observer for SeamRecorder {
 
     fn on_assistant_reply(&self, report: ReplyReport<'_>) {
         let ReplyReport {
-            execution,
             section,
             turn,
             text,
@@ -50,13 +49,12 @@ impl Observer for SeamRecorder {
             .lock()
             .expect("the recorder mutex is not poisoned")
             .push(format!(
-                "{execution}/{section}: reply origin={origin:?} turn={turn} text={text} finish={finish_reason:?} model={model}"
+                "{section}: reply origin={origin:?} turn={turn} text={text} finish={finish_reason:?} model={model}"
             ));
     }
 
     fn on_thinking(&self, report: ThinkingReport<'_>) {
         let ThinkingReport {
-            execution,
             section,
             turn,
             model,
@@ -66,13 +64,12 @@ impl Observer for SeamRecorder {
             .lock()
             .expect("the recorder mutex is not poisoned")
             .push(format!(
-                "{execution}/{section}: thinking turn={turn} model={model} text={text}"
+                "{section}: thinking turn={turn} model={model} text={text}"
             ));
     }
 
     fn on_assistant_tool_calls(&self, report: ToolCallsReport<'_>) {
         let ToolCallsReport {
-            execution,
             section,
             turn,
             model,
@@ -82,14 +79,13 @@ impl Observer for SeamRecorder {
             .lock()
             .expect("the recorder mutex is not poisoned")
             .push(format!(
-                "{execution}/{section}: calls turn={turn} model={model} n={}",
+                "{section}: calls turn={turn} model={model} n={}",
                 calls.len()
             ));
     }
 
     fn on_tool_result(&self, report: ToolResultReport<'_>) {
         let ToolResultReport {
-            execution,
             section,
             turn,
             tool_call_id,
@@ -101,13 +97,13 @@ impl Observer for SeamRecorder {
             .lock()
             .expect("the recorder mutex is not poisoned")
             .push(format!(
-                "{execution}/{section}: result turn={turn} id={tool_call_id} alias={alias} content={content} trust={trust:?}"
+                "{section}: result turn={turn} id={tool_call_id} alias={alias} content={content} trust={trust:?}"
             ));
     }
 }
 
 impl DebugCapture for SeamRecorder {
-    fn on_event(&self, _execution: &str, _section: &str, turn_index: u32, event: DebugEvent) {
+    fn on_event(&self, _section: &str, turn_index: u32, event: DebugEvent) {
         let kind = match event {
             DebugEvent::Request { .. } => "request",
             DebugEvent::Response { .. } => "response",
@@ -124,19 +120,16 @@ fn each_event_group_reaches_its_seam_in_batch_order() {
     let recorder = SeamRecorder::default();
     let events = vec![
         Event::SectionStarted {
-            execution: "run".to_owned(),
             section: "A".to_owned(),
             provenance: provenance(),
         },
         Event::Request {
-            execution: "run".to_owned(),
             section: "A".to_owned(),
             provenance: provenance(),
             turn: 1,
             body: serde_json::json!({}),
         },
         Event::Response {
-            execution: "run".to_owned(),
             section: "A".to_owned(),
             provenance: provenance(),
             turn: 1,
@@ -145,7 +138,6 @@ fn each_event_group_reaches_its_seam_in_batch_order() {
             reasoning_content: None,
         },
         Event::AssistantReply {
-            execution: "run".to_owned(),
             section: "A".to_owned(),
             provenance: provenance(),
             turn: 1,
@@ -157,7 +149,6 @@ fn each_event_group_reaches_its_seam_in_batch_order() {
             origin: ReplyOrigin::Chat,
         },
         Event::Thinking {
-            execution: "run".to_owned(),
             section: "A".to_owned(),
             provenance: provenance(),
             turn: 1,
@@ -166,13 +157,11 @@ fn each_event_group_reaches_its_seam_in_batch_order() {
             text: "hmm".to_owned(),
         },
         Event::Lua {
-            execution: "run".to_owned(),
             section: "A".to_owned(),
             provenance: provenance(),
             message: "note".to_owned(),
         },
         Event::TaskSucceeded {
-            execution: "run".to_owned(),
             section: "W".to_owned(),
             provenance: provenance(),
             task: "0.1".parse().expect("a task id parses"),
@@ -190,8 +179,8 @@ fn each_event_group_reaches_its_seam_in_batch_order() {
     assert_eq!(
         *recorder.content.lock().expect("not poisoned"),
         vec![
-            "run/A: reply origin=Chat turn=1 text=hi finish=Some(\"stop\") model=m".to_owned(),
-            "run/A: thinking turn=1 model=m text=hmm".to_owned(),
+            "A: reply origin=Chat turn=1 text=hi finish=Some(\"stop\") model=m".to_owned(),
+            "A: thinking turn=1 model=m text=hmm".to_owned(),
         ]
     );
     assert_eq!(
@@ -207,7 +196,6 @@ fn a_reply_forwards_its_origin_to_the_observer() {
     let recorder = SeamRecorder::default();
     forward(
         vec![Event::AssistantReply {
-            execution: "run".to_owned(),
             section: "A".to_owned(),
             provenance: provenance(),
             turn: 1,
@@ -222,23 +210,19 @@ fn a_reply_forwards_its_origin_to_the_observer() {
     );
     assert_eq!(
         *recorder.content.lock().expect("not poisoned"),
-        vec![
-            "run/A: reply origin=Infer turn=1 text=inferred finish=Some(\"stop\") model=m"
-                .to_owned(),
-        ],
+        vec!["A: reply origin=Infer turn=1 text=inferred finish=Some(\"stop\") model=m".to_owned(),],
         "the observer must see the reply's origin"
     );
 }
 
 #[test]
 fn a_tool_result_forwards_its_coordinates_and_trust_to_the_observer() {
-    // Each report names its own event's run and section and its trust
-    // level: swapping the coordinates, dropping one, or inverting the
-    // trust mapping would change these lines.
+    // Each report names its own event's section and its trust level:
+    // swapping the coordinates, dropping one, or inverting the trust
+    // mapping would change these lines.
     let recorder = SeamRecorder::default();
-    let result = |execution: &str, trusted: bool| Event::ToolResult {
-        execution: execution.to_owned(),
-        section: "A".to_owned(),
+    let result = |section: &str, trusted: bool| Event::ToolResult {
+        section: section.to_owned(),
         provenance: provenance(),
         turn: 2,
         tool_call_id: "call_1".to_owned(),
@@ -248,18 +232,14 @@ fn a_tool_result_forwards_its_coordinates_and_trust_to_the_observer() {
         content: "found".to_owned(),
         trusted,
     };
-    forward(
-        vec![result("run-1", true), result("run-2", false)],
-        &recorder,
-    );
+    forward(vec![result("A", true), result("B", false)], &recorder);
     assert_eq!(
         *recorder.content.lock().expect("not poisoned"),
         vec![
-            "run-1/A: result turn=2 id=call_1 alias=search content=found trust=Trusted".to_owned(),
-            "run-2/A: result turn=2 id=call_1 alias=search content=found trust=Untrusted"
-                .to_owned(),
+            "A: result turn=2 id=call_1 alias=search content=found trust=Trusted".to_owned(),
+            "B: result turn=2 id=call_1 alias=search content=found trust=Untrusted".to_owned(),
         ],
-        "the observer must see each result's own run and trust level"
+        "the observer must see each result's own section and trust level"
     );
 }
 
@@ -269,19 +249,16 @@ fn a_library_load_forwards_its_library_to_the_observer() {
     forward(
         vec![
             Event::LuaLibraryLoadStarted {
-                execution: "run".to_owned(),
                 section: "A".to_owned(),
                 provenance: provenance(),
                 library: "## shared_stuff".to_owned(),
             },
             Event::LuaLibraryLoadSucceeded {
-                execution: "run".to_owned(),
                 section: "A".to_owned(),
                 provenance: provenance(),
                 library: "## shared_stuff".to_owned(),
             },
             Event::LuaLibraryLoadFailed {
-                execution: "run".to_owned(),
                 section: "B".to_owned(),
                 provenance: provenance(),
                 library: "## helpers".to_owned(),
@@ -314,7 +291,6 @@ fn debug_events_are_dropped_without_a_capture() {
     let recorder = SeamRecorder::default();
     forward(
         vec![Event::Request {
-            execution: "run".to_owned(),
             section: "A".to_owned(),
             provenance: provenance(),
             turn: 1,

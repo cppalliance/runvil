@@ -29,7 +29,7 @@ use runvil_plugin::HostServices;
 use crate::effect_loop::drive;
 use crate::environment::{HostSnapshot, current_model};
 use crate::files::{make_not_completed_error, report_output};
-use crate::host::HostContext;
+use crate::packs::Packs;
 use crate::performers::{InferenceBroker, Timer};
 use crate::prepare::{Services, begin, prepare};
 use crate::recorder::{RunId, RunRecorder, is_refusal};
@@ -43,7 +43,7 @@ pub struct Harness {
     recorder: Arc<dyn RunRecorder>,
     broker: Arc<dyn InferenceBroker>,
     timer: Arc<dyn Timer>,
-    host: Arc<HostContext>,
+    host: Arc<Packs>,
     services: HostServices,
     control: RunControl,
 }
@@ -62,8 +62,7 @@ impl fmt::Debug for Harness {
 /// input text, the filesystem it works in, and the Host state it reads.
 #[derive(Debug, Clone)]
 pub struct RunRequest {
-    /// The run's name. It becomes the `execution` field of every event and
-    /// the `name` field of the run metadata.
+    /// The run's name. It becomes the `name` field of the run metadata.
     pub name: String,
     /// The prompt's Markdown source. The Harness reads the prompt only
     /// from this text.
@@ -138,7 +137,7 @@ impl Harness {
         recorder: Arc<dyn RunRecorder>,
         broker: Arc<dyn InferenceBroker>,
         timer: Arc<dyn Timer>,
-        host: Arc<HostContext>,
+        host: Arc<Packs>,
         services: HostServices,
     ) -> Harness {
         Harness {

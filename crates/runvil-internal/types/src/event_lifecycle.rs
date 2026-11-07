@@ -13,17 +13,16 @@ use crate::event::Event;
 use crate::ids::Provenance;
 
 /// A payload-free lifecycle boundary: the constructor of one [`Event`]
-/// variant that takes only the three coordinates.
-pub type Lifecycle = fn(String, String, Provenance) -> Event;
+/// variant that takes only the two coordinates.
+pub type Lifecycle = fn(String, Provenance) -> Event;
 
 /// Declares one constant per payload-free lifecycle variant, each the
-/// variant's constructor over the three coordinates.
+/// variant's constructor over the two coordinates.
 macro_rules! lifecycle_constants {
     ($($name:ident => $variant:ident),* $(,)?) => {
         $(
             #[doc = concat!("The [`Event::", stringify!($variant), "`] boundary.")]
-            pub const $name: Lifecycle = |execution, section, provenance| Event::$variant {
-                execution,
+            pub const $name: Lifecycle = |section, provenance| Event::$variant {
                 section,
                 provenance,
             };
@@ -89,7 +88,7 @@ mod tests {
     fn every_constant_builds_the_variant_it_is_named_for() {
         let provenance = Provenance::new("0".parse().expect("a task id parses"), 0);
         for (variant, build) in ALL {
-            let event = build("run".to_owned(), "S".to_owned(), provenance.clone());
+            let event = build("S".to_owned(), provenance.clone());
             let json = serde_json::to_value(&event).expect("an event serializes");
             let mut expected = String::new();
             for (index, ch) in variant.chars().enumerate() {
@@ -103,7 +102,6 @@ mod tests {
                 }
             }
             assert_eq!(json["kind"], expected, "{variant} builds its own kind");
-            assert_eq!(event.execution(), "run");
             assert_eq!(event.section(), "S");
             assert_eq!(event.provenance(), &provenance);
         }

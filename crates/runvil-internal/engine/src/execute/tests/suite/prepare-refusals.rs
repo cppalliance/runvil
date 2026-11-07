@@ -34,7 +34,7 @@ const DECLARES_STRONG: &str = concat!(
 #[test]
 fn the_first_step_refuses_an_unsatisfiable_prompt_with_a_model_readable_notice() {
     let model = current_model(32_000, ThinkingMode::Never);
-    let notice = refusal(under_model(DECLARES_STRONG, "refuse", model));
+    let notice = refusal(under_model(DECLARES_STRONG, model));
     // The notice is written to be read by a model: it names the role,
     // each failed check, and required versus actual.
     assert!(
@@ -61,7 +61,7 @@ fn the_first_step_refuses_an_unsatisfiable_prompt_with_a_model_readable_notice()
 fn a_run_whose_role_map_meets_the_prompt_runs() {
     // The declared role's requirements are met by the model that fills it.
     let model = current_model(200_000, ThinkingMode::Always);
-    let trace = under_model(DECLARES_STRONG, "satisfied", model).run();
+    let trace = under_model(DECLARES_STRONG, model).run();
     assert_eq!(trace.text(), "done");
 }
 
@@ -88,7 +88,7 @@ const DECLARES_NO_THINKING: &str = concat!(
 fn a_no_thinking_role_on_a_switchable_model_runs_and_asks_for_thinking_off() {
     let gateway = ScriptedChat::new(vec![text("pong")]);
     let model = current_model(32_000, ThinkingMode::Switchable);
-    let trace = under_model(DECLARES_NO_THINKING, "switchable", model)
+    let trace = under_model(DECLARES_NO_THINKING, model)
         .chat(&gateway)
         .run();
     // An unmet requirement would refuse the run, so the reply also shows
@@ -104,7 +104,7 @@ fn a_no_thinking_role_on_a_switchable_model_runs_and_asks_for_thinking_off() {
 #[test]
 fn a_no_thinking_role_on_an_always_thinking_model_is_refused() {
     let model = current_model(32_000, ThinkingMode::Always);
-    let notice = refusal(under_model(DECLARES_NO_THINKING, "always", model));
+    let notice = refusal(under_model(DECLARES_NO_THINKING, model));
     assert!(
         notice.contains(
             "- role 'small': requires 'thinking: false'; \
@@ -135,7 +135,7 @@ const DECLARES_LONG_CONTEXT: &str = concat!(
 fn an_unmet_requirement_produces_the_model_readable_notice() {
     let model = current_model(32_000, ThinkingMode::Switchable);
     assert_eq!(
-        refusal(under_model(DECLARES_LONG_CONTEXT, "notice", model)),
+        refusal(under_model(DECLARES_LONG_CONTEXT, model)),
         "the environment cannot satisfy this prompt:\n\
          - role 'creative': requires a context of at least 200000 tokens; \
          the model filling it provides 32000"
@@ -146,7 +146,7 @@ fn an_unmet_requirement_produces_the_model_readable_notice() {
 fn an_unsupported_version_is_reported_before_an_unmet_requirement() {
     let source = DECLARES_LONG_CONTEXT.replace("runvil: 0", "runvil: 7");
     let model = current_model(32_000, ThinkingMode::Switchable);
-    let trace = under_model(&source, "version-first", model).run();
+    let trace = under_model(&source, model).run();
     let error = trace.error();
     assert_eq!(
         (error.code, error.message.as_str()),
@@ -186,7 +186,7 @@ fn a_refusal_after_the_runs_cancel_fired_ends_the_run_canceled_with_no_run_event
         (DECLARES_LONG_CONTEXT, "an unmet requirement"),
         (unsupported.as_str(), "an unsupported version"),
     ] {
-        let trace = canceled_before_it_starts(under_model(source, "canceled", model.clone())).run();
+        let trace = canceled_before_it_starts(under_model(source, model.clone())).run();
         assert!(
             trace.error().is_canceled(),
             "{refused_for} after a cancel ends the run canceled, got {:?}",
@@ -203,7 +203,7 @@ fn a_refusal_after_the_runs_cancel_fired_ends_the_run_canceled_with_no_run_event
 #[test]
 fn a_run_that_passes_its_start_checks_after_a_cancel_starts_and_ends_canceled() {
     let model = current_model(200_000, ThinkingMode::Always);
-    let trace = canceled_before_it_starts(under_model(DECLARES_STRONG, "started", model)).run();
+    let trace = canceled_before_it_starts(under_model(DECLARES_STRONG, model)).run();
     assert!(trace.error().is_canceled(), "got {:?}", trace.result());
     assert!(
         matches!(trace.run_events().first(), Some(Event::RunStarted { .. })),

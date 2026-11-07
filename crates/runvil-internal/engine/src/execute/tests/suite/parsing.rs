@@ -39,7 +39,7 @@ const VALID_FIXTURES: &[ValidFixture] = &[
 #[test]
 fn valid_prompt_files_parse_through_the_public_api() {
     for fixture in VALID_FIXTURES {
-        let prompt = Prompt::parse(fixture.source, fixture.name, fixture.name)
+        let prompt = Prompt::parse(&|_: &str| Ok(fixture.source.to_owned()), fixture.name)
             .0
             .unwrap_or_else(|error| panic!("fixture {} failed to parse: {error}", fixture.name));
         // Call the verifier directly so its own assertion and source line remain
@@ -142,9 +142,6 @@ fn verify_prologue_prose_epilog(prompt: &Prompt) {
     assert!(fallback.prologue().is_none());
     assert!(fallback.epilog().is_none());
 }
-
-const POSITIVE_PARSE: &str = "fixture-positive-prompts";
-
 fn collect_markdown(directory: &Path, files: &mut Vec<PathBuf>) {
     for entry in fs::read_dir(directory).expect("read repository prompt directory") {
         let path = entry.expect("read repository prompt entry").path();
@@ -168,7 +165,7 @@ fn every_prompt_under_parses(directory: &Path) {
 
     for path in files {
         let source = fs::read_to_string(&path).expect("read prompt fixture");
-        Prompt::parse(&source, &path.display().to_string(), POSITIVE_PARSE)
+        Prompt::parse(&|_: &str| Ok(source.clone()), &path.display().to_string())
             .0
             .unwrap_or_else(|error| panic!("{} must parse: {error}", path.display()));
     }

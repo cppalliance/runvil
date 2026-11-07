@@ -144,7 +144,7 @@ impl Pack for Starting {
 /// A Host that built a [`Starting`] Pack for each of `fqns`, in order,
 /// every startup standing at `phase`, beside each Pack's handle in `fqns`
 /// order.
-fn starting_host(fqns: &[&'static str], phase: Phase) -> (HostContext, Vec<StartupHandle>) {
+fn starting_host(fqns: &[&'static str], phase: Phase) -> (Packs, Vec<StartupHandle>) {
     let mut startups = BTreeMap::new();
     let mut handles = Vec::new();
     let mut infos = Vec::new();
@@ -161,12 +161,12 @@ fn starting_host(fqns: &[&'static str], phase: Phase) -> (HostContext, Vec<Start
     }
     let mut wide = HostServices::new();
     wide.provide(&STARTUPS, Arc::new(startups)).unwrap();
-    (HostContext::new(registry(&infos), wide), handles)
+    (Packs::new(registry(&infos), wide), handles)
 }
 
 /// A Host that built [`SLOW`], whose startup stands at `phase`, beside
 /// the sender that moves it and the startup the Pack shares.
-fn slow_host(phase: Phase) -> (HostContext, watch::Sender<Phase>, Arc<Startup>) {
+fn slow_host(phase: Phase) -> (Packs, watch::Sender<Phase>, Arc<Startup>) {
     let (host, mut handles) = starting_host(&[SLOW], phase);
     let (moves, startup) = handles.pop().unwrap();
     (host, moves, startup)
@@ -335,7 +335,7 @@ async fn an_undeclared_third_party_pack_that_never_gets_ready_holds_no_run_up() 
     let mut wide = HostServices::new();
     wide.provide(&STARTUPS, Arc::new(startups)).unwrap();
     let stuck = PackInfo::new("tests/stuck", construct_starting);
-    let host = HostContext::new(registry(&[stuck]), wide);
+    let host = Packs::new(registry(&[stuck]), wide);
     let result = tokio::time::timeout(PATIENCE, drive_over(COUNTS_OFFERED, host))
         .await
         .expect("no run waits on a Pack it does not hold");
@@ -349,7 +349,7 @@ async fn an_undeclared_builtin_with_no_tools_has_an_object_the_prompt_can_offer(
         local stub = tools.packs.get('subagents')\n\
         tools.offer('subagents')\n\
         return stub.name .. ':' .. #stub.tools\n```\n";
-    let host = HostContext::new(registry(&[]), HostServices::new());
+    let host = Packs::new(registry(&[]), HostServices::new());
     assert_eq!(
         completed(drive_over(reads_stub, host).await),
         "subagents:0",

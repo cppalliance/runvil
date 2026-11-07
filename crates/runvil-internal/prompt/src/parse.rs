@@ -10,28 +10,27 @@ use runvil_types::event_lifecycle;
 
 use crate::frontmatter::SplitSource;
 use crate::sections::{self, Heading, SectionWalker};
-use crate::{Block, Frontmatter, Prompt, Result, contract, error, fence, frontmatter, position};
+use crate::{
+    Block, Frontmatter, Prompt, PromptFinder, Result, contract, error, fence, frontmatter, position,
+};
 
 impl Prompt {
-    /// Parses the full source text of a prompt file into a [`Prompt`] and
-    /// returns the events reported during parsing alongside the result.
+    /// Finds the prompt `name` through `finder` and parses it, returning
+    /// the events reported while parsing. A find failure is the parse
+    /// result. `name` names the prompt in failures and in
+    /// [`Prompt::file`].
     ///
-    /// The caller supplies `file`, the name of the file the source came
-    /// from, such as `agents/research.md`, or `prompt` when it came from no
-    /// file. [`Prompt::file`] returns it, so a failure can name the file.
-    /// The caller also supplies `execution`, an identifier that every event
-    /// carries. Every event is reported under task `0` because parsing happens
-    /// before any run starts.
-    ///
-    /// The events come in this order: `ParseStarted`, then a
-    /// `LuaCompilationStarted` event and a `LuaCompilationSucceeded` or
-    /// `LuaCompilationFailed` event for each Lua block the parser compiles,
-    /// then `ParseSucceeded` or `ParseFailed`. They exist only for the caller
-    /// to log.
+    /// Every event is reported under task `0` because parsing happens
+    /// before any run starts. The events come in this order:
+    /// `ParseStarted`, then a `LuaCompilationStarted` event and a
+    /// `LuaCompilationSucceeded` or `LuaCompilationFailed` event for each
+    /// Lua block the parser compiles, then `ParseSucceeded` or
+    /// `ParseFailed`. A find failure reports only `ParseStarted` and
+    /// `ParseFailed`. The events exist only for the caller to log.
     ///
     /// # Errors
-    /// On failure, the first element of the pair is an [`Error`] whose code
-    /// is:
+    /// On failure, the first element of the pair is the error `finder`
+    /// returned, unchanged, or an [`Error`] whose code is:
     ///
     /// - `FrontmatterInvalid` when the `---` delimiters are missing, the
     ///   frontmatter fails to decode, a `uses:` entry is neither a Pack id
@@ -67,27 +66,20 @@ impl Prompt {
     /// - `Internal` when the parser fails through no fault of the prompt:
     ///   one of its own invariants breaks, or the Lua compiler cannot start.
     ///
-    /// The failure's location, when known, is in `file`, except that an
+    /// The failure's location, when known, is in `name`, except that an
     /// `Internal` failure is located at the Rust source position of the
     /// fault. A failure found past the frontmatter, other than an
     /// `Internal` one, has the prompt's frontmatter name as its `Name` fact.
     pub fn parse(
-        input: &str,
-        file: &str,
-        execution: &str,
+        finder: &dyn PromptFinder,
+        name: &str,
     ) -> (std::result::Result<Prompt, Error>, Vec<Event>) {
         let sink = EventSink::default();
-        let emitter = Emitter::root(sink.clone(), execution, false);
+        let emitter = Emitter::root(sink.clone(), false);
         emitter.report("Prompt", event_lifecycle::PARSE_STARTED);
-        // Everything past the frontmatter postdates the prompt's name, so a
-        // failure from there on names it.
-        let (name, result) = match Self::parse_frontmatter(input) {
-            Ok((frontmatter, split)) => (
-                Some(frontmatter.name().to_owned()),
-                Self::parse_body(frontmatter, split, file, &emitter),
-            ),
-            Err(error) => (None, Err(error)),
-        };
+        let result = finder
+            .find(name)
+            .and_then(|source| Self::parse_source(&source, name, &emitter));
         emitter.report(
             "Prompt",
             if result.is_ok() {
@@ -96,9 +88,26 @@ impl Prompt {
                 event_lifecycle::PARSE_FAILED
             },
         );
-        let result =
-            result.map_err(|error| error::with_prompt_context(error, name.as_deref(), file));
         (result, sink.take())
+    }
+
+    /// Parses `input`, the source of the prompt `file`, and adds the
+    /// prompt's context to a failure.
+    fn parse_source(
+        input: &str,
+        file: &str,
+        emitter: &Emitter,
+    ) -> std::result::Result<Prompt, Error> {
+        // Everything past the frontmatter postdates the prompt's name, so a
+        // failure from there on names it.
+        let (name, result) = match Self::parse_frontmatter(input) {
+            Ok((frontmatter, split)) => (
+                Some(frontmatter.name().to_owned()),
+                Self::parse_body(frontmatter, split, file, emitter),
+            ),
+            Err(error) => (None, Err(error)),
+        };
+        result.map_err(|error| error::with_prompt_context(error, name.as_deref(), file))
     }
 
     /// Splits the frontmatter from the body, decodes it, and checks its

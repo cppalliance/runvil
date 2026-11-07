@@ -9,7 +9,7 @@ use std::sync::Arc;
 use std::sync::atomic::Ordering;
 
 use harness_runner::recorder::MemoryRecorder;
-use harness_runner::{Harness, HostContext, RunRequest};
+use harness_runner::{Harness, Packs, RunRequest};
 use runvil::vfs::VfsRef;
 use runvil_plugin::{HostServices, PackRegistry};
 use serde_json::json;
@@ -66,8 +66,8 @@ const WRITES_THEN_INFERS: &str = "---\nname: writes-infers\ndescription: d\nrunv
 
 /// A Host that built only the fixture ask Pack, as `user-input`, beside
 /// the built-in.
-fn asker_host() -> Arc<HostContext> {
-    Arc::new(HostContext::new(registry(&[ASKER]), HostServices::new()))
+fn asker_host() -> Arc<Packs> {
+    Arc::new(Packs::new(registry(&[ASKER]), HostServices::new()))
 }
 
 /// A store whose every write raises a stop through `harness`'s control.
@@ -139,7 +139,7 @@ async fn a_stop_seen_before_a_steps_effects_start_drops_the_round_in_flight_and_
         recorder.clone(),
         Arc::new(held_broker(&chat)),
         Arc::new(PendingTimer::default()),
-        Arc::new(HostContext::new(PackRegistry::new(), HostServices::new())),
+        Arc::new(Packs::new(PackRegistry::new(), HostServices::new())),
         HostServices::new(),
     );
     let vfs = stopping_store(&harness);

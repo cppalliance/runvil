@@ -36,7 +36,6 @@ fn session_event(event: &Event) -> SessionEvent {
 
 fn reply_event() -> Event {
     Event::AssistantReply {
-        execution: "run".to_owned(),
         section: "chat".to_owned(),
         provenance: Provenance::new(TaskId::from(ChainId::root()), 0),
         turn: 1,
@@ -174,7 +173,6 @@ fn a_lifecycle_event_pushes_nothing() {
     let (push, mut status_rx, _guards) = wired_push();
     let backoff = ReconnectBackoff::new();
     let started = Event::SectionStarted {
-        execution: "run".to_owned(),
         section: "chat".to_owned(),
         provenance: Provenance::new(TaskId::from(ChainId::root()), 0),
     };

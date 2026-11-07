@@ -11,8 +11,6 @@ use super::models_loop::{loop_model_name, loop_scenario};
 use super::*;
 use crate::execute::run::{EffectRecord, ToolCallOrigin, ToolCaller};
 use crate::test_support::rig::{Rig, RigTrace};
-use crate::test_support::scenario::EXECUTION;
-
 /// Runs `source` over the loop models with `echo` in the catalog, its
 /// model rounds answered by `replies` in order.
 #[track_caller]
@@ -53,7 +51,7 @@ fn models(rig: &RigTrace) -> Vec<Option<String>> {
 
 /// The origin of a script call made by the entry `entry` of `section`.
 fn script_call(section: &str, entry: &str) -> ToolCallOrigin {
-    ToolCallOrigin::new(EXECUTION, section, ToolCaller::Script).with_entry(entry)
+    ToolCallOrigin::new(section, ToolCaller::Script).with_entry(entry)
 }
 
 /// A section that offers `echo` and an adhoc `grab` whose handler runs
@@ -98,7 +96,7 @@ fn a_model_calls_origin_names_its_rounds_model_and_a_script_calls_names_none() {
     assert_eq!(
         origins(&rig),
         vec![
-            ToolCallOrigin::new(EXECUTION, "Only", ToolCaller::Model)
+            ToolCallOrigin::new("Only", ToolCaller::Model)
                 .with_entry("0.1")
                 .with_model(loop_model_name("default")),
             script_call("Only", "0.1"),

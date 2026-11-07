@@ -10,7 +10,7 @@
 //! recorder tee on a handle of the run log's [`TursoRecorder`] that names
 //! the launched agent, a per-run broker over
 //! the server's inference broker ([`broker`]), the tokio timer, the
-//! server's [`HostContext`], built from the web, user-input, and mcp
+//! server's [`Packs`], built from the web, user-input, and mcp
 //! Plugins, the last over the servers of the configured `mcp.json`, and
 //! the built-in subagents, and the conversation's own services, which
 //! hold its input broker. The Harness reaches the gateway
@@ -48,7 +48,7 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use harness::pack::{HostContext, HostServices, PackRegistry};
+use harness::pack::{HostServices, PackRegistry, Packs};
 use harness::record::RunId;
 use harness::{Harness, RunRequest};
 use plugin_web::SEARCH_PROVIDER;
@@ -81,7 +81,7 @@ const RUNTIME: ServiceKey<tokio::runtime::Handle> = ServiceKey::new(runvil_plugi
 /// The server's built Packs over its Host-wide [`services`], beside the
 /// ask tool's vendor and id. `mcp` is the `[agents] mcp` setting: the mcp
 /// Pack is built over the servers of the file it names.
-fn host_context(registry: &Registry, mcp: Option<&Path>) -> (HostContext, Option<AskTool>) {
+fn host_packs(registry: &Registry, mcp: Option<&Path>) -> (Packs, Option<AskTool>) {
     with_plugins(services(registry), read_mcp_servers(mcp))
 }
 
@@ -147,7 +147,7 @@ fn read_mcp_servers(setting: Option<&Path>) -> Value {
 /// those Packs and the built-in `subagents`. The ask tool is the fixed
 /// `user-input/ask` of the `runvil/user-input` Pack, so its vendor is
 /// `runvil`, and `None` only if the user-input Plugin was refused.
-fn with_plugins(services: HostServices, servers: Value) -> (HostContext, Option<AskTool>) {
+fn with_plugins(services: HostServices, servers: Value) -> (Packs, Option<AskTool>) {
     let mut packs = PackRegistry::new();
     if let Err(error) = plugin_web::install(&mut packs, Value::Null) {
         tracing::warn!(%error, "the web Plugin inserted no Pack");
@@ -172,7 +172,7 @@ fn with_plugins(services: HostServices, servers: Value) -> (HostContext, Option<
     if let Err(error) = plugin_std::install(&mut packs, Value::Null) {
         tracing::warn!(%error, "the std Plugin inserted no Pack");
     }
-    (HostContext::new(packs, services), ask)
+    (Packs::new(packs, services), ask)
 }
 
 /// The Host-wide services `web`'s construct reads: the search provider
@@ -224,7 +224,7 @@ struct Inner {
     /// The inference broker behind each run's broker.
     broker: WorkshopBroker,
     /// The built Packs every run takes its snapshot of.
-    host: Arc<HostContext>,
+    host: Arc<Packs>,
     /// The ask tool, `user-input/ask` of vendor `runvil`, which a
     /// script's ask result is recognized by; `None` only if the
     /// user-input Plugin was refused.
@@ -252,7 +252,7 @@ impl AgentSessions {
     /// the state directory when the first run starts.
     #[must_use]
     pub fn new(config: &Config, registry: Registry, backoff: ReconnectBackoff) -> Self {
-        let (host, ask) = host_context(&registry, config.agents.mcp.as_deref());
+        let (host, ask) = host_packs(&registry, config.agents.mcp.as_deref());
         Self {
             inner: Arc::new(Inner {
                 agents_path: config.agents.path.clone(),

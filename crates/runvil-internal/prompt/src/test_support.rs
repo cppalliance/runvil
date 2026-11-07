@@ -154,7 +154,7 @@ fn trimmed(text: &str) -> String {
     lines.flat_map(|line| [line, "\n"]).collect()
 }
 
-/// Parses `src` under the execution id `test`.
+/// Parses `src` as the prompt `prompt`.
 ///
 /// # Panics
 ///
@@ -166,13 +166,13 @@ fn trimmed(text: &str) -> String {
     reason = "a test may call it only to assert that the source parses"
 )]
 pub fn parse_ok(src: &str) -> Prompt {
-    match Prompt::parse(src, "prompt", "test").0 {
+    match Prompt::parse(&|_: &str| Ok(src.to_owned()), "prompt").0 {
         Ok(prompt) => prompt,
         Err(error) => panic!("expected a parse, got {error:?}\n{}", excerpt(src)),
     }
 }
 
-/// Parses `src` under the execution id `test`, expecting it to fail.
+/// Parses `src` as the prompt `prompt`, expecting it to fail.
 ///
 /// # Panics
 ///
@@ -180,7 +180,7 @@ pub fn parse_ok(src: &str) -> Prompt {
 #[track_caller]
 #[must_use]
 pub fn parse_err(src: &str) -> Error {
-    match Prompt::parse(src, "prompt", "test").0 {
+    match Prompt::parse(&|_: &str| Ok(src.to_owned()), "prompt").0 {
         Ok(prompt) => panic!(
             "expected an error, parsed `{}`\n{}",
             prompt.title,

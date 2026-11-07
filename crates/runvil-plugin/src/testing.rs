@@ -37,7 +37,7 @@ impl TestCall {
         let access = VfsRef::default()
             .acquire(Origin::new("plugin test"))
             .expect("a fresh memory filesystem acquires");
-        let origin = ToolCallOrigin::new("plugin-test", "Test", ToolCaller::Script);
+        let origin = ToolCallOrigin::new("Test", ToolCaller::Script);
         TestCall {
             tool,
             access,
@@ -54,10 +54,10 @@ impl TestCall {
     }
 
     /// Returns the call with `caller` as the origin's caller, keeping its
-    /// execution and section.
+    /// section.
     #[must_use]
     pub fn with_caller(mut self, caller: ToolCaller) -> TestCall {
-        self.origin = ToolCallOrigin::new("plugin-test", "Test", caller);
+        self.origin = ToolCallOrigin::new("Test", caller);
         self
     }
 

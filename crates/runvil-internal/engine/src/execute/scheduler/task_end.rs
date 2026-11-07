@@ -47,18 +47,16 @@ impl Scheduler {
             ));
         };
         let owner = entry.owner;
-        emitter.emit(&entry.target, |execution, section, provenance| {
+        emitter.emit(&entry.target, |section, provenance| {
             let task = task.clone();
             if succeeded {
                 Event::TaskSucceeded {
-                    execution,
                     section,
                     provenance,
                     task,
                 }
             } else {
                 Event::TaskFailed {
-                    execution,
                     section,
                     provenance,
                     task,
@@ -153,16 +151,14 @@ impl Scheduler {
             let Some((backing, target)) = self.tasks.stop(&task, Stop::Abandoned) else {
                 continue;
             };
-            let chain_backed =
-                self.end_backing(backing, &target, |execution, section, provenance| {
-                    Event::TaskAbandoned {
-                        execution,
-                        section,
-                        provenance,
-                        task: task.clone(),
-                        reason,
-                    }
-                });
+            let chain_backed = self.end_backing(backing, &target, |section, provenance| {
+                Event::TaskAbandoned {
+                    section,
+                    provenance,
+                    task: task.clone(),
+                    reason,
+                }
+            });
             if chain_backed {
                 leaked.push(task);
             }
@@ -184,7 +180,7 @@ impl Scheduler {
         &mut self,
         backing: TaskBacking,
         target: &str,
-        terminal: impl FnOnce(String, String, Provenance) -> Event,
+        terminal: impl FnOnce(String, Provenance) -> Event,
     ) -> bool {
         let chain = match backing {
             TaskBacking::Chain { chain, .. } => chain,

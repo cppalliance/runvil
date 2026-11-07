@@ -24,7 +24,7 @@ use runvil::{Prompt, Run, RunParams};
 use serde_json::{Value, json};
 
 use super::begun_log;
-use crate::support::{EXECUTION, TEST_SEED, unused};
+use crate::support::{TEST_SEED, unused};
 
 /// A program that infers once and then chats once: the nested round
 /// first, then the section's own round over its message list.
@@ -41,7 +41,8 @@ const INFERS_THEN_CHATS: &str = "---\nname: runner-broker\ndescription: infers t
 /// A run over [`INFERS_THEN_CHATS`] with the `default` role filled by one
 /// current model.
 fn infers_then_chats() -> Run {
-    let (prompt, _parse_events) = Prompt::parse(INFERS_THEN_CHATS, "prompt", EXECUTION);
+    let (prompt, _parse_events) =
+        Prompt::parse(&|_: &str| Ok(INFERS_THEN_CHATS.to_owned()), "prompt");
     let prompt = Arc::new(prompt.expect("the broker fixture parses"));
     let model = ModelInfo::new(
         ModelId::gateway("m").expect("the model id is valid"),
@@ -49,7 +50,7 @@ fn infers_then_chats() -> Run {
         NonZeroU32::new(131_072).expect("131072 is non-zero"),
         ThinkingMode::Never,
     );
-    let ctx = RunParams::new(EXECUTION, TEST_SEED, Timestamp::UNIX_EPOCH)
+    let ctx = RunParams::new(TEST_SEED, Timestamp::UNIX_EPOCH)
         .with_models(BTreeMap::from([(ModelRole::Default, model)]));
     Run::new(prompt, "", ctx)
 }

@@ -21,6 +21,7 @@ pub use runvil_engine::RunLimits;
 pub use runvil_engine::RunParams;
 pub use runvil_engine::Step;
 pub use runvil_prompt::Prompt;
+pub use runvil_prompt::PromptFinder;
 pub use runvil_types::seed::RunSeed;
 
 /* Universal Error types

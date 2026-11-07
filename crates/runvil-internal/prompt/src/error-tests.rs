@@ -18,7 +18,7 @@ const FILE: &str = "agents/demo.md";
 /// The failure parsing `src` from [`FILE`] returns.
 #[track_caller]
 fn failure_of(src: &str) -> Error {
-    match Prompt::parse(src, FILE, "test").0 {
+    match Prompt::parse(&|_: &str| Ok(src.to_owned()), FILE).0 {
         Ok(prompt) => panic!("expected a failure, parsed `{}`", prompt.title()),
         Err(error) => error,
     }
@@ -254,7 +254,7 @@ fn a_lua_compile_failure_is_located_at_the_line_its_diagnostic_names() {
     // its second line, file line 12.
     let source = "local a = 1\nlocal b =";
     let error = failure_of(&in_section(&format!("```lua\n{source}\n```\n")));
-    let emitter = Emitter::root(EventSink::default(), "test", false);
+    let emitter = Emitter::root(EventSink::default(), false);
     let start = NonZeroU32::new(11).expect("11 is non-zero");
     let Err(compiled) =
         LuaProgram::compile(source, FILE, "section `S` prologue", start, &emitter, "S")

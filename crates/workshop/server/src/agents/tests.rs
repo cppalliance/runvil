@@ -14,7 +14,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use harness::pack::{HostContext, HostServices};
+use harness::pack::{HostServices, Packs};
 use harness::record::MemoryRecorder;
 use harness::vfs::VfsRef;
 use harness::{BoxFuture, Harness, HostSnapshot, InferenceBroker, RunRequest};
@@ -32,7 +32,7 @@ use workshop_agents::{Conversations, SessionState, TokioTimer};
 use workshop_registry::Registry;
 
 use super::wire::AskTool;
-use super::{host_context, read_mcp_servers, services, with_plugins};
+use super::{host_packs, read_mcp_servers, services, with_plugins};
 
 /// The runtime's key, built from the Plugin contract's name as any Host
 /// builds it.
@@ -72,14 +72,14 @@ impl InferenceBroker for OfflineBroker {
 /// Runs the prompt `source` as one conversation over `host` and the
 /// default in-memory filesystem, then reads the conversation's state and
 /// the result of its one run.
-async fn run_prompt(host: &Arc<HostContext>, source: String) -> Option<Result<String, Error>> {
+async fn run_prompt(host: &Arc<Packs>, source: String) -> Option<Result<String, Error>> {
     run_prompt_over(host, source, VfsRef::default()).await
 }
 
 /// Runs the prompt `source` as [`run_prompt`] does, over the filesystem
 /// `vfs`.
 pub(super) async fn run_prompt_over(
-    host: &Arc<HostContext>,
+    host: &Arc<Packs>,
     source: String,
     vfs: VfsRef,
 ) -> Option<Result<String, Error>> {
@@ -129,7 +129,7 @@ async fn every_run_holds_the_packs_the_three_plugins_add_and_the_builtin() {
           names[#names + 1] = tools.packs.get(id).name\n\
         end\n\
         return table.concat(names, ',')\n```\n";
-    let (host, _ask) = host_context(&Registry::new(), None);
+    let (host, _ask) = host_packs(&Registry::new(), None);
     assert_eq!(
         run_prompt(&Arc::new(host), lists.to_owned()).await,
         Some(Ok("web,user-input,subagents,mcp,std".to_owned())),
@@ -139,7 +139,7 @@ async fn every_run_holds_the_packs_the_three_plugins_add_and_the_builtin() {
 
 #[tokio::test]
 async fn a_prompt_declaring_web_prepares_on_the_servers_built_packs() {
-    let (host, _ask) = host_context(&Registry::new(), None);
+    let (host, _ask) = host_packs(&Registry::new(), None);
     assert_eq!(
         run_prompt(&Arc::new(host), requiring("web")).await,
         Some(Ok("browsed".to_owned())),
@@ -149,7 +149,7 @@ async fn a_prompt_declaring_web_prepares_on_the_servers_built_packs() {
 
 #[tokio::test]
 async fn a_prompt_declaring_subagents_prepares_on_the_servers_built_packs() {
-    let (host, _ask) = host_context(&Registry::new(), None);
+    let (host, _ask) = host_packs(&Registry::new(), None);
     assert_eq!(
         run_prompt(&Arc::new(host), requiring("subagents")).await,
         Some(Ok("browsed".to_owned())),
@@ -181,7 +181,7 @@ async fn a_host_without_the_search_provider_refuses_a_prompt_requiring_web() {
 
 #[test]
 fn the_ask_is_the_runvil_vendors_fixed_user_input_ask_tool() {
-    let (_host, ask) = host_context(&Registry::new(), None);
+    let (_host, ask) = host_packs(&Registry::new(), None);
     assert_eq!(
         ask,
         Some(AskTool {
@@ -207,7 +207,7 @@ async fn a_prompt_declaring_mcp_prepares_on_the_runtime_the_server_provides() {
     // The server's own `services` provides the runtime, and `plugin-mcp`
     // reads it through a key of its own even with no servers, so only a
     // run over both shows the two keys name the same service.
-    let (host, _ask) = host_context(&Registry::new(), None);
+    let (host, _ask) = host_packs(&Registry::new(), None);
     assert_eq!(
         run_prompt(&Arc::new(host), requiring("mcp")).await,
         Some(Ok("browsed".to_owned())),

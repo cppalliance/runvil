@@ -1,5 +1,5 @@
 //! Test-only read-back of the events this crate's seams emit, in the shape
-//! the suites assert on: `(execution, section, Observation)` records.
+//! the suites assert on: `(section, Observation)` records.
 //!
 //! The Engine reports as [`Event`] values through an [`Emitter`]; a suite
 //! that wants to assert on the boundaries a VM crossed drains the emitter's
@@ -137,31 +137,20 @@ pub(crate) struct Recorder {
 
 impl Default for Recorder {
     fn default() -> Self {
-        Self::for_execution("lua-test")
-    }
-}
-
-impl Recorder {
-    /// A recorder whose emitter reports under `execution`.
-    pub(super) fn for_execution(execution: &str) -> Self {
         let sink = EventSink::default();
-        let emitter = Emitter::root(sink.clone(), execution, false);
+        let emitter = Emitter::root(sink.clone(), false);
         Self {
             sink,
             emitter,
             seen: Mutex::new(Vec::new()),
         }
     }
+}
 
+impl Recorder {
     /// The emitter the seams under test report through.
     pub(crate) fn emitter(&self) -> &Emitter {
         &self.emitter
-    }
-
-    /// A second emitter over the same sink reporting under another
-    /// execution id, for a test that interleaves runs.
-    pub(super) fn emitter_for(&self, execution: &str) -> Emitter {
-        Emitter::root(self.sink.clone(), execution, false)
     }
 
     /// Every event reported so far, in order.
@@ -178,20 +167,6 @@ impl Recorder {
     /// so a suite can assert on fields the fold to [`Observation`] drops.
     pub(super) fn serialized(&self) -> Vec<serde_json::Value> {
         self.events().iter().map(serialize).collect()
-    }
-
-    /// Every report so far as `(execution, section, observation)`.
-    pub(super) fn records(&self) -> Vec<(String, String, Observation)> {
-        self.events()
-            .iter()
-            .map(|event| {
-                (
-                    event.execution().to_owned(),
-                    event.section().to_owned(),
-                    observation(event),
-                )
-            })
-            .collect()
     }
 
     /// Every report so far as `(section, observation)`.
@@ -261,5 +236,5 @@ impl Recorder {
 /// An emitter whose events nobody reads: the silent stand-in a test passes
 /// where it has nothing to assert about the boundaries.
 pub(crate) fn null_emitter() -> Emitter {
-    Emitter::root(EventSink::default(), "lua-test", false)
+    Emitter::root(EventSink::default(), false)
 }

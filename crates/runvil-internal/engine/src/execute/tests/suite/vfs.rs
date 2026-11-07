@@ -14,7 +14,7 @@ use crate::execute::run::{Effect, IssuedEffect, Run, Step};
 use crate::execute::tests::context::{parse, test_params};
 use crate::prompt::Prompt;
 use crate::test_support::perform_locally;
-use crate::test_support::scenario::{EXECUTION, Scenario};
+use crate::test_support::scenario::Scenario;
 use crate::test_support::temp_root::TempRoot;
 use runvil_prompt::test_support::{parse_ok, prompt};
 use runvil_vfs::{Access, Origin, RealBackend, VfsError, VfsRef};
@@ -106,10 +106,10 @@ fn seed_declared_input(vfs: &VfsRef, prompt: &Prompt, contents: &str) {
 /// through the handle. Returns the run's text
 /// and the handle.
 #[track_caller]
-fn seeded_run(source: &str, name: &str, contents: &str) -> (String, VfsRef) {
+fn seeded_run(source: &str, contents: &str) -> (String, VfsRef) {
     let vfs = VfsRef::default();
     seed_declared_input(&vfs, &parse_ok(source), contents);
-    let trace = Scenario::new(source).name(name).vfs(vfs.clone()).run();
+    let trace = Scenario::new(source).vfs(vfs.clone()).run();
     (trace.text().to_owned(), vfs)
 }
 
@@ -125,7 +125,7 @@ fn an_end_to_end_run_threads_one_vfs_ref_through_every_section() {
             ("Second", "return store.read('handoff.txt')"),
         ],
     );
-    let trace = Scenario::new(source).name("vfs-e2e").run();
+    let trace = Scenario::new(source).run();
     assert_eq!(trace.text(), "across the reset");
     // Extraction after the run takes a fresh access: the run's identities
     // dropped with it, so nothing the run touched can conflict here.
@@ -139,7 +139,7 @@ fn an_end_to_end_run_threads_one_vfs_ref_through_every_section() {
 
 #[test]
 fn a_caller_seeds_and_extracts_through_the_runs_handle_with_no_real_files() {
-    let (text, vfs) = seeded_run(ROUND_TRIP_PROMPT, "vfs-round-trip", "the paper body");
+    let (text, vfs) = seeded_run(ROUND_TRIP_PROMPT, "the paper body");
     assert_eq!(text, "done");
     let store = fresh_store_view(&vfs, "round-trip extraction");
     let report = extract_declared_output(&store, &parse_ok(ROUND_TRIP_PROMPT))
@@ -151,7 +151,7 @@ fn a_caller_seeds_and_extracts_through_the_runs_handle_with_no_real_files() {
 fn a_missing_declared_output_is_a_contract_error_naming_the_prompts_promise() {
     // The executor does not enforce the declaration; the run succeeds and
     // the caller's extraction is where the broken promise surfaces.
-    let (text, vfs) = seeded_run(MISSING_OUTPUT, "vfs-missing-output", "the paper body");
+    let (text, vfs) = seeded_run(MISSING_OUTPUT, "the paper body");
     assert_eq!(text, "read: the paper body");
     let store = fresh_store_view(&vfs, "missing-output extraction");
     let error = extract_declared_output(&store, &parse_ok(MISSING_OUTPUT))
@@ -180,7 +180,6 @@ fn fanout_interleaving_is_invariant_across_memory_and_real_backends() {
     // Both arms drive the raw caller-supplied handle contract, so the
     // caller's own backend serves the declared store in each.
     let memory = Scenario::new(FANOUT_STORE_WRITES)
-        .name("vfs-invariance-memory")
         .vfs(VfsRef::default())
         .run();
 
@@ -191,10 +190,7 @@ fn fanout_interleaving_is_invariant_across_memory_and_real_backends() {
             RealBackend::rooted(temp.path()).expect("the temp dir roots the real backend"),
         )
         .build();
-    let real = Scenario::new(FANOUT_STORE_WRITES)
-        .name("vfs-invariance-real")
-        .vfs(real_vfs)
-        .run();
+    let real = Scenario::new(FANOUT_STORE_WRITES).vfs(real_vfs).run();
 
     assert_eq!(
         memory.text(),
@@ -226,7 +222,7 @@ const HELD_STORE: &str = "---\nname: held-store\ndescription: d\nrunvil: 0\n---\
 
 /// Starts the `HELD_STORE` run over `vfs`.
 fn held_store_run(vfs: &VfsRef) -> Run {
-    let ctx = test_params(EXECUTION).with_vfs(vfs.clone());
+    let ctx = test_params().with_vfs(vfs.clone());
     Run::new(Arc::new(parse(HELD_STORE)), "", ctx)
 }
 

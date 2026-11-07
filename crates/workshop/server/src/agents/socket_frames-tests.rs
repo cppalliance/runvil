@@ -89,7 +89,6 @@ fn ask() -> AskTool {
 fn operator_message(text: &str) -> Event {
     let ask = ask();
     Event::ToolResult {
-        execution: "run".to_owned(),
         section: "chat".to_owned(),
         provenance: provenance(),
         turn: 0,
@@ -121,7 +120,6 @@ fn framed_entries_take_gap_free_wire_indices_past_unframed_ones() {
     let hello = operator_message("hello");
     let again = operator_message("again");
     let lifecycle = Event::SectionStarted {
-        execution: "run".to_owned(),
         section: "chat".to_owned(),
         provenance: provenance(),
     };

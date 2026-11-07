@@ -139,7 +139,7 @@ fn forward_impl(events: Vec<Event>, observer: &dyn Observer, debug: Option<&dyn 
 /// When `event` is a variant none of the groups above claims.
 pub(crate) fn forward_one(event: Event, observer: &dyn Observer, debug: Option<&dyn DebugCapture>) {
     if let Some(observation) = unit_observation(&event) {
-        observer.observe(event.execution(), event.section(), observation);
+        observer.observe(event.section(), observation);
         return;
     }
     match event {
@@ -158,51 +158,23 @@ pub(crate) fn forward_one(event: Event, observer: &dyn Observer, debug: Option<&
 fn forward_lifecycle(event: Event, observer: &dyn Observer) {
     match event {
         Event::ModelMetadataDegraded {
-            execution,
-            section,
-            message,
-            ..
+            section, message, ..
         } => observer.observe(
-            &execution,
             &section,
             Observation::Other(format!("Model metadata degraded: {message}")),
         ),
         Event::LuaLibraryLoadStarted {
-            execution,
-            section,
-            library,
-            ..
-        } => observer.observe(
-            &execution,
-            &section,
-            Observation::LuaLibraryLoadStarted { library },
-        ),
+            section, library, ..
+        } => observer.observe(&section, Observation::LuaLibraryLoadStarted { library }),
         Event::LuaLibraryLoadSucceeded {
-            execution,
-            section,
-            library,
-            ..
-        } => observer.observe(
-            &execution,
-            &section,
-            Observation::LuaLibraryLoadSucceeded { library },
-        ),
+            section, library, ..
+        } => observer.observe(&section, Observation::LuaLibraryLoadSucceeded { library }),
         Event::LuaLibraryLoadFailed {
-            execution,
-            section,
-            library,
-            ..
-        } => observer.observe(
-            &execution,
-            &section,
-            Observation::LuaLibraryLoadFailed { library },
-        ),
+            section, library, ..
+        } => observer.observe(&section, Observation::LuaLibraryLoadFailed { library }),
         Event::Lua {
-            execution,
-            section,
-            message,
-            ..
-        } => observer.observe(&execution, &section, Observation::Lua(message)),
+            section, message, ..
+        } => observer.observe(&section, Observation::Lua(message)),
         _ => forward_task(event, observer),
     }
 }
@@ -211,7 +183,6 @@ fn forward_lifecycle(event: Event, observer: &dyn Observer) {
 fn forward_task(event: Event, observer: &dyn Observer) {
     match event {
         Event::TaskStarted {
-            execution,
             section,
             task,
             target,
@@ -221,7 +192,6 @@ fn forward_task(event: Event, observer: &dyn Observer) {
             var,
             ..
         } => observer.observe(
-            &execution,
             &section,
             Observation::TaskStarted {
                 task,
@@ -232,35 +202,21 @@ fn forward_task(event: Event, observer: &dyn Observer) {
                 var,
             },
         ),
-        Event::TaskSucceeded {
-            execution,
-            section,
-            task,
-            ..
-        } => observer.observe(&execution, &section, Observation::TaskSucceeded { task }),
-        Event::TaskFailed {
-            execution,
-            section,
-            task,
-            ..
-        } => observer.observe(&execution, &section, Observation::TaskFailed { task }),
-        Event::TaskCanceled {
-            execution,
-            section,
-            task,
-            ..
-        } => observer.observe(&execution, &section, Observation::TaskCanceled { task }),
+        Event::TaskSucceeded { section, task, .. } => {
+            observer.observe(&section, Observation::TaskSucceeded { task });
+        }
+        Event::TaskFailed { section, task, .. } => {
+            observer.observe(&section, Observation::TaskFailed { task });
+        }
+        Event::TaskCanceled { section, task, .. } => {
+            observer.observe(&section, Observation::TaskCanceled { task });
+        }
         Event::TaskAbandoned {
-            execution,
             section,
             task,
             reason,
             ..
-        } => observer.observe(
-            &execution,
-            &section,
-            Observation::TaskAbandoned { task, reason },
-        ),
+        } => observer.observe(&section, Observation::TaskAbandoned { task, reason }),
         // Routed here by `forward_one` for this group alone; `Event` is
         // `#[non_exhaustive]` in `runvil-types`.
         _ => {}
@@ -271,21 +227,18 @@ fn forward_task(event: Event, observer: &dyn Observer) {
 fn forward_content(event: Event, observer: &dyn Observer) {
     match event {
         Event::Thinking {
-            execution,
             section,
             turn,
             model,
             text,
             ..
         } => observer.on_thinking(ThinkingReport {
-            execution: &execution,
             section: &section,
             turn,
             model: &model,
             text: &text,
         }),
         Event::AssistantReply {
-            execution,
             section,
             turn,
             text,
@@ -295,7 +248,6 @@ fn forward_content(event: Event, observer: &dyn Observer) {
             origin,
             ..
         } => observer.on_assistant_reply(ReplyReport {
-            execution: &execution,
             section: &section,
             turn,
             text: &text,
@@ -305,21 +257,18 @@ fn forward_content(event: Event, observer: &dyn Observer) {
             origin,
         }),
         Event::AssistantToolCalls {
-            execution,
             section,
             turn,
             model,
             calls,
             ..
         } => observer.on_assistant_tool_calls(ToolCallsReport {
-            execution: &execution,
             section: &section,
             turn,
             model: &model,
             calls: &calls,
         }),
         Event::ToolResult {
-            execution,
             section,
             turn,
             tool_call_id,
@@ -328,7 +277,6 @@ fn forward_content(event: Event, observer: &dyn Observer) {
             trusted,
             ..
         } => observer.on_tool_result(ToolResultReport {
-            execution: &execution,
             section: &section,
             turn,
             tool_call_id: &tool_call_id,
@@ -351,18 +299,16 @@ fn forward_content(event: Event, observer: &dyn Observer) {
 fn forward_debug(event: Event, debug: Option<&dyn DebugCapture>) {
     match event {
         Event::Request {
-            execution,
             section,
             turn,
             body,
             ..
         } => {
             if let Some(capture) = debug {
-                capture.on_event(&execution, &section, turn, DebugEvent::request(body));
+                capture.on_event(&section, turn, DebugEvent::request(body));
             }
         }
         Event::Response {
-            execution,
             section,
             turn,
             body,
@@ -372,7 +318,6 @@ fn forward_debug(event: Event, debug: Option<&dyn DebugCapture>) {
         } => {
             if let Some(capture) = debug {
                 capture.on_event(
-                    &execution,
                     &section,
                     turn,
                     DebugEvent::response(body, finish_reason, reasoning_content),

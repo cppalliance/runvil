@@ -12,17 +12,17 @@
 //! in [`event_lifecycle`](crate::event_lifecycle) for the Engine's emit
 //! sites.
 //!
-//! Every variant includes three coordinates before its payload: `execution`
-//! (the caller-chosen run identifier), `section` (the reporting H2 heading
-//! or agent name), and `provenance` (the [`Provenance`] replay key: the
-//! nearest enclosing task and the item's position within it). A caller can
-//! key every event by `provenance` alone, without inspecting the payload.
+//! Every variant includes two coordinates before its payload: `section`
+//! (the reporting H2 heading or agent name) and `provenance` (the
+//! [`Provenance`] replay key: the nearest enclosing task and the item's
+//! position within it). A caller can key every event by `provenance`
+//! alone, without inspecting the payload.
 //!
 //! # Sensitivity
 //! Lifecycle variants have no payload beyond their coordinates and, for
 //! the library loads, the library's heading, all author-controlled
-//! (`execution` is caller chosen, `section` and `library` are
-//! prompt-authored heading text); the exception is
+//! (`section` and `library` are prompt-authored heading text); the
+//! exception is
 //! `ModelMetadataDegraded`, whose message may quote values from a
 //! backend's response. Content variants hold model-, tool-, or
 //! user-authored text; task variants hold the author's spawn seeds; debug
@@ -31,7 +31,7 @@
 //!
 //! # Serialized form
 //! One event serializes to one JSON object tagged by `kind` (the variant
-//! name in `snake_case`) with the three coordinates and then the payload
+//! name in `snake_case`) with the two coordinates and then the payload
 //! fields beside it.
 
 use serde::{Deserialize, Serialize};
@@ -44,7 +44,7 @@ use crate::tools::ToolId;
 #[path = "event-tests.rs"]
 mod tests;
 
-/// Declares the event enum with the three coordinates stamped on every
+/// Declares the event enum with the two coordinates stamped on every
 /// variant ahead of its own fields, and the coordinate accessors over all
 /// of them. The macro exists so the coordinates are written once and can
 /// never be left off a variant.
@@ -71,8 +71,6 @@ macro_rules! events {
             $(
                 $(#[$variant_meta])*
                 $variant {
-                    /// The caller-chosen run identifier.
-                    execution: String,
                     /// The reporting scope: the prompt's H2 heading text,
                     /// or an agent's name.
                     section: String,
@@ -88,14 +86,6 @@ macro_rules! events {
         }
 
         impl $name {
-            /// The caller-chosen run identifier this event belongs to.
-            #[must_use]
-            pub fn execution(&self) -> &str {
-                match self {
-                    $( $name::$variant { execution, .. } )|* => execution,
-                }
-            }
-
             /// The reporting scope this event was reported under.
             #[must_use]
             pub fn section(&self) -> &str {
@@ -148,8 +138,8 @@ events! {
     /// - Content variants hold what a model, a tool, or a user produced.
     /// - Debug variants hold the raw model-turn bodies.
     ///
-    /// Every variant has three coordinates ahead of its payload:
-    /// `execution`, `section`, and `provenance`. An event serializes to one
+    /// Every variant has two coordinates ahead of its payload: `section`
+    /// and `provenance`. An event serializes to one
     /// JSON object tagged by `kind`, the variant name in `snake_case`, with
     /// the coordinates and the payload fields beside it.
     pub enum Event {

@@ -120,13 +120,11 @@ fn payload_samples() -> Vec<Event> {
 fn lifecycle_payload_samples() -> Vec<Event> {
     vec![
         Event::Lua {
-            execution: "run-1".to_owned(),
             section: "Gather".to_owned(),
             provenance: provenance("0", 1),
             message: "checkpoint".to_owned(),
         },
         Event::ModelMetadataDegraded {
-            execution: "run-1".to_owned(),
             section: "Gather".to_owned(),
             provenance: provenance("0", 8),
             turn: 2,
@@ -138,7 +136,6 @@ fn lifecycle_payload_samples() -> Vec<Event> {
 fn task_samples() -> Vec<Event> {
     vec![
         Event::TaskStarted {
-            execution: "run-1".to_owned(),
             section: "Gather".to_owned(),
             provenance: provenance("0", 2),
             task: task("0.0"),
@@ -149,25 +146,21 @@ fn task_samples() -> Vec<Event> {
             var: json!({ "topic": "leap days" }),
         },
         Event::TaskSucceeded {
-            execution: "run-1".to_owned(),
             section: "Worker".to_owned(),
             provenance: provenance("0.0", 1),
             task: task("0.0"),
         },
         Event::TaskFailed {
-            execution: "run-1".to_owned(),
             section: "Worker".to_owned(),
             provenance: provenance("0.1", 1),
             task: task("0.1"),
         },
         Event::TaskCanceled {
-            execution: "run-1".to_owned(),
             section: "Worker".to_owned(),
             provenance: provenance("0.2", 1),
             task: task("0.2"),
         },
         Event::TaskAbandoned {
-            execution: "run-1".to_owned(),
             section: "Worker".to_owned(),
             provenance: provenance("0.0", 4),
             task: task("0.0"),
@@ -178,7 +171,6 @@ fn task_samples() -> Vec<Event> {
 
 fn content_samples() -> Vec<Event> {
     let reply = |seq, origin| Event::AssistantReply {
-        execution: "run-1".to_owned(),
         section: "Gather".to_owned(),
         provenance: provenance("0", seq),
         turn: 2,
@@ -191,7 +183,6 @@ fn content_samples() -> Vec<Event> {
     };
     vec![
         Event::Thinking {
-            execution: "run-1".to_owned(),
             section: "Gather".to_owned(),
             provenance: provenance("0", 14),
             turn: 2,
@@ -202,7 +193,6 @@ fn content_samples() -> Vec<Event> {
         reply(3, ReplyOrigin::Chat),
         reply(7, ReplyOrigin::Infer),
         Event::AssistantToolCalls {
-            execution: "run-1".to_owned(),
             section: "Gather".to_owned(),
             provenance: provenance("0", 4),
             turn: 2,
@@ -215,7 +205,6 @@ fn content_samples() -> Vec<Event> {
             ],
         },
         Event::ToolResult {
-            execution: "run-1".to_owned(),
             section: "Gather".to_owned(),
             provenance: provenance("0", 5),
             turn: 2,
@@ -232,14 +221,12 @@ fn content_samples() -> Vec<Event> {
 fn debug_samples() -> Vec<Event> {
     vec![
         Event::Request {
-            execution: "run-1".to_owned(),
             section: "Gather".to_owned(),
             provenance: provenance("0", 16),
             turn: 2,
             body: json!({ "messages": [] }),
         },
         Event::Response {
-            execution: "run-1".to_owned(),
             section: "Gather".to_owned(),
             provenance: provenance("0", 6),
             turn: 2,
@@ -253,11 +240,7 @@ fn debug_samples() -> Vec<Event> {
 #[test]
 fn every_variant_round_trips_through_serde() {
     for (_, build) in lifecycle::ALL {
-        round_trips(&build(
-            "run-1".to_owned(),
-            "Gather".to_owned(),
-            provenance("0", 0),
-        ));
+        round_trips(&build("Gather".to_owned(), provenance("0", 0)));
     }
     for event in payload_samples() {
         round_trips(&event);
@@ -265,16 +248,30 @@ fn every_variant_round_trips_through_serde() {
 }
 
 #[test]
+fn no_serialized_event_has_an_execution_key() {
+    let lifecycles = lifecycle::ALL
+        .iter()
+        .map(|(_, build)| build("Gather".to_owned(), provenance("0", 0)));
+    for event in lifecycles.chain(payload_samples()) {
+        let value = serde_json::to_value(&event).expect("every event converts to a JSON value");
+        assert!(
+            value.get("execution").is_none(),
+            "an event names no run label: {value}"
+        );
+    }
+}
+
+#[test]
 fn every_payload_free_variant_maps_to_its_lifecycle_constant() {
-    let coordinates = || ("run-1".to_owned(), "Gather".to_owned(), provenance("0", 0));
+    let coordinates = || ("Gather".to_owned(), provenance("0", 0));
     for (variant, build) in lifecycle::ALL {
-        let (execution, section, provenance) = coordinates();
-        let event = build(execution, section, provenance);
+        let (section, provenance) = coordinates();
+        let event = build(section, provenance);
         let mapped = lifecycle_of(&event)
             .unwrap_or_else(|| panic!("{variant} is mapped to no lifecycle constant"));
-        let (execution, section, provenance) = coordinates();
+        let (section, provenance) = coordinates();
         assert_eq!(
-            mapped(execution, section, provenance),
+            mapped(section, provenance),
             event,
             "{variant} is mapped to another variant's constant"
         );
@@ -295,7 +292,6 @@ fn a_reply_origin_defaults_to_chat() {
 #[test]
 fn a_reply_serializes_its_origin_and_its_round() {
     let event = Event::AssistantReply {
-        execution: "run-1".to_owned(),
         section: "Gather".to_owned(),
         provenance: provenance("0", 20),
         turn: 1,
@@ -321,7 +317,7 @@ fn a_reply_serializes_its_origin_and_its_round() {
 fn a_tool_result_without_a_vendor_keeps_its_logged_shape() {
     // A result with no vendor writes no `vendor` key, and that line reads
     // back with no vendor.
-    let line = r#"{"kind":"tool_result","execution":"run-1","section":"Gather","provenance":{"task":"0","seq":5},"turn":2,"tool_call_id":"","alias":"read_file","tool":"files/read","content":"hi","trusted":true}"#;
+    let line = r#"{"kind":"tool_result","section":"Gather","provenance":{"task":"0","seq":5},"turn":2,"tool_call_id":"","alias":"read_file","tool":"files/read","content":"hi","trusted":true}"#;
     let event: Event = serde_json::from_str(line).expect("a tool result without a vendor parses");
     assert!(matches!(
         &event,
@@ -332,34 +328,31 @@ fn a_tool_result_without_a_vendor_keeps_its_logged_shape() {
 
 #[test]
 fn a_serialized_event_is_tagged_by_kind_with_its_coordinates_beside_the_payload() {
-    // The tag and the three coordinates sit beside the payload in every
+    // The tag and the two coordinates sit beside the payload in every
     // event's serialized form, so a caller can key an event by them
     // without inspecting the payload.
     let event = Event::VfsWriteSucceeded {
-        execution: "run-1".to_owned(),
         section: "Gather".to_owned(),
         provenance: provenance("0.2", 9),
     };
     assert_wire(
         &event,
-        r#"{"kind":"vfs_write_succeeded","execution":"run-1","section":"Gather","provenance":{"task":"0.2","seq":9}}"#,
+        r#"{"kind":"vfs_write_succeeded","section":"Gather","provenance":{"task":"0.2","seq":9}}"#,
     );
     let succeeded = Event::TaskSucceeded {
-        execution: "run-1".to_owned(),
         section: "Worker".to_owned(),
         provenance: provenance("0.1", 10),
         task: task("0.1"),
     };
     assert_wire(
         &succeeded,
-        r#"{"kind":"task_succeeded","execution":"run-1","section":"Worker","provenance":{"task":"0.1","seq":10},"task":"0.1"}"#,
+        r#"{"kind":"task_succeeded","section":"Worker","provenance":{"task":"0.1","seq":10},"task":"0.1"}"#,
     );
 }
 
 #[test]
 fn a_degraded_metadata_report_serializes_its_turn_and_message_under_its_kind() {
     let event = Event::ModelMetadataDegraded {
-        execution: "run-1".to_owned(),
         section: "Gather".to_owned(),
         provenance: provenance("0", 3),
         turn: 1,
@@ -367,7 +360,7 @@ fn a_degraded_metadata_report_serializes_its_turn_and_message_under_its_kind() {
     };
     assert_wire(
         &event,
-        r#"{"kind":"model_metadata_degraded","execution":"run-1","section":"Gather","provenance":{"task":"0","seq":3},"turn":1,"message":"completion response named no string `model`; recorded as empty"}"#,
+        r#"{"kind":"model_metadata_degraded","section":"Gather","provenance":{"task":"0","seq":3},"turn":1,"message":"completion response named no string `model`; recorded as empty"}"#,
     );
 }
 
@@ -375,33 +368,26 @@ fn a_degraded_metadata_report_serializes_its_turn_and_message_under_its_kind() {
 fn every_event_exposes_its_coordinates() {
     let events = [
         Event::SectionFinished {
-            execution: "run-1".to_owned(),
             section: "Gather".to_owned(),
             provenance: provenance("0", 11),
         },
         Event::Lua {
-            execution: "run-1".to_owned(),
             section: "Gather".to_owned(),
             provenance: provenance("0", 12),
             message: "hello".to_owned(),
         },
         Event::TaskSucceeded {
-            execution: "run-1".to_owned(),
             section: "Worker".to_owned(),
             provenance: provenance("0.1", 0),
             task: task("0.1"),
         },
         Event::Request {
-            execution: "run-1".to_owned(),
             section: "Gather".to_owned(),
             provenance: provenance("0", 13),
             turn: 4,
             body: json!({ "messages": [] }),
         },
     ];
-    for event in &events {
-        assert_eq!(event.execution(), "run-1");
-    }
     assert_eq!(events[0].section(), "Gather");
     assert_eq!(events[2].section(), "Worker");
     assert_eq!(events[1].provenance(), &provenance("0", 12));

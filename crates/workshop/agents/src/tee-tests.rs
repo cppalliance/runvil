@@ -33,7 +33,6 @@ fn provenance() -> Provenance {
 
 fn section_started() -> Event {
     Event::SectionStarted {
-        execution: "conversation-1".to_owned(),
         section: "Conversation".to_owned(),
         provenance: provenance(),
     }
@@ -171,12 +170,10 @@ async fn recorded_turn_failures_report_their_kind_and_section() {
     let mut errors = conversation.subscribe_errors();
     let run = tee.begin_run(meta()).await.unwrap();
     let model = Event::ModelTurnFailed {
-        execution: "conversation-1".to_owned(),
         section: "Conversation".to_owned(),
         provenance: provenance(),
     };
     let tool = Event::ToolCallFailed {
-        execution: "conversation-1".to_owned(),
         section: "Lookup".to_owned(),
         provenance: provenance(),
     };

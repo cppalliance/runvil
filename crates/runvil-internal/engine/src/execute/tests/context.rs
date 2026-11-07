@@ -5,7 +5,7 @@ use runvil_prompt::test_support::PromptSource;
 use runvil_types::ids::TaskId;
 
 use super::*;
-use crate::test_support::scenario::{EXECUTION, TEST_SEED, TEST_STARTED_AT};
+use crate::test_support::scenario::{TEST_SEED, TEST_STARTED_AT};
 
 /// The scaffold the fanout-arm capability tests share: a `## Parent` that
 /// fans `### Worker` out over one `alpha` member and returns the first arm's
@@ -35,9 +35,9 @@ pub(super) fn sequence(trace: &Trace) -> Vec<(String, String)> {
         .collect()
 }
 
-/// A [`RunParams`] for the run `name` under the fixed test inputs.
-pub(super) fn test_params(name: impl Into<String>) -> RunParams {
-    RunParams::new(name, TEST_SEED, TEST_STARTED_AT)
+/// A [`RunParams`] under the fixed test inputs.
+pub(super) fn test_params() -> RunParams {
+    RunParams::new(TEST_SEED, TEST_STARTED_AT)
 }
 
 /// Compile-time proof that the public execution types are thread-safe.
@@ -61,39 +61,31 @@ pub(super) fn parse(md: &str) -> Prompt {
     } else {
         md.replacen("---\n\n", "---\n\n# Test prompt\n\n", 1)
     };
-    Prompt::parse(&source, "prompt", EXECUTION).0.unwrap()
+    Prompt::parse(&|_: &str| Ok(source.clone()), "prompt")
+        .0
+        .unwrap()
 }
 
 /// An [`Observer`] that keeps every observation it is handed, in order, so a test
 /// can assert on the whole sequence rather than on a count.
 #[derive(Default)]
-pub(super) struct Recorder(Mutex<Vec<(String, String, String)>>);
+pub(super) struct Recorder(Mutex<Vec<(String, String)>>);
 
 impl Observer for Recorder {
-    fn observe(&self, execution: &str, section: &str, event: Observation) {
+    fn observe(&self, section: &str, event: Observation) {
         self.0
             .lock()
             .expect("the recorder mutex must not be poisoned")
-            .push((execution.to_owned(), section.to_owned(), event.to_string()));
+            .push((section.to_owned(), event.to_string()));
     }
 }
 
 impl Recorder {
-    /// The full correlated records recorded so far, in order.
-    pub(super) fn records(&self) -> Vec<(String, String, String)> {
-        self.0
-            .lock()
-            .expect("the recorder mutex must not be poisoned")
-            .clone()
-    }
-
     /// The observations recorded so far, in order.
     pub(super) fn events(&self) -> Vec<(String, String)> {
         self.0
             .lock()
             .expect("the recorder mutex must not be poisoned")
-            .iter()
-            .map(|(_, section, detail)| (section.clone(), detail.clone()))
-            .collect()
+            .clone()
     }
 }

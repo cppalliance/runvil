@@ -13,7 +13,7 @@ use runvil::vfs::{Access, FileType, Origin, VfsError, VfsRef};
 use workshop_registry::Registry;
 
 use super::mount_at;
-use crate::agents::host_context;
+use crate::agents::host_packs;
 use crate::agents::tests::run_prompt_over;
 
 /// What a test returns: any error from setup or from the VFS fails it.
@@ -146,7 +146,7 @@ return listing .. '\n' .. page
 #[tokio::test]
 async fn a_prompt_sees_the_directory_mapped_under_the_runvil_mount() -> Outcome {
     let directory = local_directory()?;
-    let (host, _ask) = host_context(&Registry::new(), None);
+    let (host, _ask) = host_packs(&Registry::new(), None);
 
     let result = run_prompt_over(
         &Arc::new(host),

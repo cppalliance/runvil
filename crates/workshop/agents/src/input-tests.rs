@@ -4,7 +4,7 @@ use super::*;
 
 use std::sync::Arc;
 
-use harness::pack::{HostContext, HostServices, PackRegistry};
+use harness::pack::{HostServices, PackRegistry, Packs};
 use harness::record::MemoryRecorder;
 use harness::vfs::VfsRef;
 use harness::{BoxFuture, Harness, HostSnapshot, InferenceBroker, RunRequest};
@@ -270,7 +270,7 @@ async fn an_ask_is_answered_when_the_registry_receives_the_text() {
     let mut packs = PackRegistry::new();
     plugin_user_input::install(&mut packs, serde_json::Value::Null)
         .expect("a new registry takes the Pack");
-    let host = HostContext::new(packs, HostServices::new());
+    let host = Packs::new(packs, HostServices::new());
     let (broker, registry, frames) = broker_fixture();
     let mut socket = frames.subscribe();
     let recorder = Arc::new(MemoryRecorder::new());

@@ -287,7 +287,7 @@ fn malformed_section_phases_report_locations_and_safe_boundaries() {
         let src = PromptSource::new()
             .prose("Private section", content)
             .build();
-        let (outcome, events) = Prompt::parse(&src, "prompt", "test");
+        let (outcome, events) = parse_text(&src);
         let recorder = Recorder(events);
         let Err(error) = outcome else {
             panic!("malformed {phase} unexpectedly parsed");
@@ -351,7 +351,7 @@ fn backtick_lines_that_cannot_close_a_lua_fence_leave_it_unclosed() {
 fn successful_section_compilation_reports_fixed_ordered_boundaries() {
     let body = "```lua\nvar.secret = 1\n```\n\nProse.\n\n```lua\nreturn reply\n```";
     let src = PromptSource::new().prose("S", body).build();
-    let (prompt, events) = Prompt::parse(&src, "prompt", "section-programs");
+    let (prompt, events) = parse_text(&src);
     prompt.expect("section programs must compile");
     let recorder = Recorder(events);
 

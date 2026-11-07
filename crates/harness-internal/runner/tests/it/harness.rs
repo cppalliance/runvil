@@ -21,7 +21,7 @@ use std::time::Duration;
 
 use harness_runner::environment::HostSnapshot;
 use harness_runner::recorder::{MemoryRecorder, Record, RecordKind};
-use harness_runner::{Harness, HostContext, RunControl, RunReport, RunRequest};
+use harness_runner::{Harness, Packs, RunControl, RunReport, RunRequest};
 use runvil::vfs::VfsRef;
 use runvil::{Error, ErrorCode};
 use runvil_plugin::{HostServices, PackRegistry};
@@ -39,8 +39,7 @@ mod stop_cap;
 #[path = "harness-stop-timing.rs"]
 mod stop_timing;
 
-/// The request's name: every event's `execution` and the run
-/// metadata's `name`.
+/// The request's name: the run metadata's `name`.
 const NAME: &str = "harness-test";
 
 /// How long a test waits for a run before it fails.
@@ -70,7 +69,7 @@ fn plain_harness(recorder: &Arc<MemoryRecorder>, broker: ScriptedBroker) -> Harn
         recorder.clone(),
         Arc::new(broker),
         Arc::new(PendingTimer::default()),
-        Arc::new(HostContext::new(PackRegistry::new(), HostServices::new())),
+        Arc::new(Packs::new(PackRegistry::new(), HostServices::new())),
         HostServices::new(),
     )
 }
@@ -214,15 +213,6 @@ async fn run_returns_the_declared_output_and_the_result_under_the_requests_name(
             kinds[position + 1],
             RecordKind::Answer,
             "a serial run's answer follows its effect"
-        );
-    }
-    for event in records
-        .iter()
-        .filter(|record| record.kind == RecordKind::Event)
-    {
-        assert_eq!(
-            event.payload["execution"], NAME,
-            "every event names the request's name as its execution"
         );
     }
 }

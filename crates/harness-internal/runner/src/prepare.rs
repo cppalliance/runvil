@@ -47,7 +47,7 @@ use runvil_plugin::HostServices;
 use sha2::{Digest as _, Sha256};
 
 use crate::files::stage_input;
-use crate::host::HostContext;
+use crate::packs::Packs;
 use crate::performers::{InferenceBroker, Performers, Timer};
 use crate::recorder::{
     Record, RecordKind, RunId, RunMeta, RunRecorder, make_recorder_error, of_run, refused,
@@ -60,7 +60,7 @@ use crate::recorder::{
 pub struct Services {
     /// The Host's built Packs, from which the run picks its own and takes
     /// their snapshot.
-    pub host: Arc<HostContext>,
+    pub host: Arc<Packs>,
     /// The run's own services, such as its input broker: every tool call
     /// of the run is lent them.
     pub services: HostServices,
@@ -80,8 +80,7 @@ pub struct Services {
     pub broker: Arc<dyn InferenceBroker>,
     /// Performs the run's `Timer` effects.
     pub timer: Arc<dyn Timer>,
-    /// The run's name, the one it began under: every event's
-    /// `execution`.
+    /// The run's name, the one it began under.
     pub name: String,
     /// The file the prompt's source came from, which the parse records.
     pub file: String,
@@ -197,7 +196,7 @@ pub async fn prepare(
         recorder,
         broker,
         timer,
-        name,
+        name: _,
         file,
         model,
         ui,
@@ -211,7 +210,7 @@ pub async fn prepare(
 
     // Parse-time events are the run's first records, whether or not the
     // parse succeeds.
-    let (prompt, parse_events) = Prompt::parse(source, &file, &name);
+    let (prompt, parse_events) = Prompt::parse(&|_: &str| Ok(source.to_owned()), &file);
     for event in &parse_events {
         let record = event_record(event).map_err(recorded)?;
         recorder.append(run_id, record).await.map_err(recorded)?;
@@ -248,7 +247,7 @@ pub async fn prepare(
     // root task continues the sequence past them, so `(task_id, task_seq)`
     // is unique across every record of the run.
     let provenance_start = u32::try_from(parse_events.len()).unwrap_or(u32::MAX);
-    let mut ctx = RunParams::new(name, seed, started_at)
+    let mut ctx = RunParams::new(seed, started_at)
         .with_cancel(cancel.clone())
         .with_provenance_start(provenance_start);
     if let Some(ui) = ui {

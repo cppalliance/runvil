@@ -1,5 +1,5 @@
 //! The run-level test driver. A [`Scenario`] holds a run's setup as data:
-//! its source, args, run name, seed, params edits, store, tools, model,
+//! its source, args, seed, params edits, store, tools, model,
 //! the sets it fills in before the run starts, the effects it holds, and
 //! the effect that cancels it. It parses the source, builds the run, and
 //! steps it on the calling thread, answering every effect it does not hold
@@ -47,9 +47,6 @@ pub(crate) use super::scenario_serial::{
     Batching, chat_answer, drive_batched, echo_chat, infer_prompt, only_effect, pass_through,
     round_trip, text_of,
 };
-
-/// The run name a test that does not choose one runs under.
-pub(crate) const EXECUTION: &str = "execute-test";
 
 /// The fixed caller inputs every test run shares: a seed and a start instant
 /// a test that does not care about them never has to choose. The tests of
@@ -234,7 +231,6 @@ impl TestStore {
 pub(crate) struct Scenario {
     source: String,
     args: String,
-    name: String,
     seed: RunSeed,
     params: ParamsEdit,
     store: TestStore,
@@ -253,14 +249,13 @@ pub(crate) struct Scenario {
 }
 
 impl Scenario {
-    /// A run of `source` named [`EXECUTION`], under [`TEST_SEED`] and
-    /// [`TEST_STARTED_AT`], with empty args, a fresh memory store, no tools,
-    /// no model, nothing filled in, and no held effect.
+    /// A run of `source` under [`TEST_SEED`] and [`TEST_STARTED_AT`], with
+    /// empty args, a fresh memory store, no tools, no model, nothing filled
+    /// in, and no held effect.
     pub(crate) fn new(source: impl Into<String>) -> Scenario {
         Scenario {
             source: source.into(),
             args: String::new(),
-            name: EXECUTION.to_owned(),
             seed: TEST_SEED,
             params: Box::new(|ctx| ctx),
             store: TestStore::new(),
@@ -278,12 +273,6 @@ impl Scenario {
     /// Sets the args string the run receives.
     pub(crate) fn args(mut self, args: &str) -> Scenario {
         args.clone_into(&mut self.args);
-        self
-    }
-
-    /// Sets the run name, which the source is also parsed under.
-    pub(crate) fn name(mut self, name: &str) -> Scenario {
-        name.clone_into(&mut self.name);
         self
     }
 
@@ -496,12 +485,12 @@ impl Scenario {
     /// events.
     #[track_caller]
     fn params_of(&mut self) -> (Prompt, Vec<Event>, RunParams) {
-        let (parsed, events) = Prompt::parse(&self.source, "prompt", &self.name);
+        let (parsed, events) = Prompt::parse(&|_: &str| Ok(self.source.clone()), "prompt");
         let prompt = match parsed {
             Ok(prompt) => prompt,
             Err(error) => panic!("expected the scenario source to parse, got {error}"),
         };
-        let mut ctx = RunParams::new(self.name.clone(), self.seed, TEST_STARTED_AT)
+        let mut ctx = RunParams::new(self.seed, TEST_STARTED_AT)
             .with_vfs(self.store.vfs())
             .with_models(std::mem::take(&mut self.roles))
             .with_cancel(self.cancel.clone());
@@ -841,20 +830,18 @@ fn records_of(events: &[Event]) -> Vec<Record> {
         .expect("the record lock is not poisoned")
 }
 
-/// One observation: which execution and section emitted it, plus the
-/// rendered event detail.
+/// One observation: which section emitted it, plus the rendered event
+/// detail.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct Record {
-    pub(crate) execution: String,
     pub(crate) section: String,
     pub(crate) detail: String,
 }
 
 impl Record {
     /// Builds an expected record from borrowed parts, for assertions.
-    pub(crate) fn new(execution: &str, section: &str, detail: &str) -> Record {
+    pub(crate) fn new(section: &str, detail: &str) -> Record {
         Record {
-            execution: execution.to_owned(),
             section: section.to_owned(),
             detail: detail.to_owned(),
         }
@@ -866,19 +853,18 @@ impl Record {
 struct RecordObserver(Mutex<Vec<Record>>);
 
 impl Observer for RecordObserver {
-    fn observe(&self, execution: &str, section: &str, event: Observation) {
+    fn observe(&self, section: &str, event: Observation) {
         self.0
             .lock()
             .expect("the record lock is not poisoned")
-            .push(Record::new(execution, section, &event.to_string()));
+            .push(Record::new(section, &event.to_string()));
     }
 }
 
-/// One debug capture: which execution and section the model turn ran in,
-/// its 1-based turn, and the body captured.
+/// One debug capture: which section the model turn ran in, its 1-based
+/// turn, and the body captured.
 #[derive(Clone, Debug)]
 pub(crate) struct Capture {
-    pub(crate) execution: String,
     pub(crate) section: String,
     pub(crate) turn: u32,
     pub(crate) event: DebugEvent,
@@ -889,12 +875,11 @@ pub(crate) struct Capture {
 struct Captures(Mutex<Vec<Capture>>);
 
 impl DebugCapture for Captures {
-    fn on_event(&self, execution: &str, section: &str, turn_index: u32, event: DebugEvent) {
+    fn on_event(&self, section: &str, turn_index: u32, event: DebugEvent) {
         self.0
             .lock()
             .expect("the capture lock is not poisoned")
             .push(Capture {
-                execution: execution.to_owned(),
                 section: section.to_owned(),
                 turn: turn_index,
                 event,

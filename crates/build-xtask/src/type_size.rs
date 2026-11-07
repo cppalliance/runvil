@@ -60,14 +60,6 @@ const ALLOWED: &[Allowed] = &[
     },
     Allowed {
         krate: "crates/runvil-internal/engine",
-        name: "RunParams",
-        limit: Limit::Fields,
-        recorded: 13,
-        reason: "The Engine's whole input for one run, built through `new` and the `with_*` \
-                 methods; each field is one input the caller supplies.",
-    },
-    Allowed {
-        krate: "crates/runvil-internal/engine",
         name: "Scenario",
         limit: Limit::Fields,
         recorded: 14,

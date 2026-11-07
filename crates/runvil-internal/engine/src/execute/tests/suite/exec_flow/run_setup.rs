@@ -7,7 +7,6 @@ use super::*;
 
 use crate::execute::tests::context::test_params;
 use crate::execute::tests::fixtures::echo_tool;
-use crate::test_support::scenario::EXECUTION;
 use runvil_types::error::ErrorCode;
 use runvil_vfs::{VfsError, VfsRef};
 
@@ -53,12 +52,12 @@ impl runvil_vfs::Vfs for RefusingStore {
 #[test]
 fn a_store_backend_that_refuses_its_session_fails_the_run_at_the_first_step() {
     let source = one_section("return 'never runs'");
-    let (prompt, _) = crate::prompt::Prompt::parse(&source, "prompt", EXECUTION);
+    let (prompt, _) = crate::prompt::Prompt::parse(&|_: &str| Ok(source.clone()), "prompt");
     let vfs = VfsRef::builder().store("/", RefusingStore).build();
     let mut run = crate::execute::run::Run::new(
         Arc::new(prompt.expect("the fixture parses")),
         "",
-        test_params(EXECUTION).with_vfs(vfs),
+        test_params().with_vfs(vfs),
     );
     match run.step() {
         crate::execute::run::Step::Done {

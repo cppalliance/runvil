@@ -33,9 +33,6 @@ use crate::model::{ModelInfo, ModelRole};
 ///
 /// The caller supplies the run's clock and randomness through `new`.
 pub struct RunParams {
-    /// The caller's run label, moved into `SharedState::execution` at start
-    /// and read nowhere else.
-    pub(super) name: String,
     /// The run's seed, as the caller supplied it: the source of the
     /// untrusted-envelope nonce and every other in-run random choice.
     pub(super) seed: RunSeed,
@@ -68,8 +65,7 @@ pub struct RunParams {
 }
 
 impl RunParams {
-    /// Builds the params for a run named `name`, with the given `seed` and
-    /// `started_at`.
+    /// Params for one run with the given `seed` and `started_at`.
     ///
     /// The new params have a fresh cancel flag, a `ui` snapshot of `None`,
     /// debug reporting off, default [`RunLimits`], and the default
@@ -81,9 +77,8 @@ impl RunParams {
     /// the instant every section reads as `sys.when`. The caller records
     /// both values, and a replay passes them back verbatim.
     #[must_use]
-    pub fn new(name: impl Into<String>, seed: RunSeed, started_at: Timestamp) -> RunParams {
+    pub fn new(seed: RunSeed, started_at: Timestamp) -> RunParams {
         RunParams {
-            name: name.into(),
             seed,
             started_at,
             provenance_start: 0,
@@ -277,7 +272,6 @@ impl fmt::Debug for RunParams {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut state = f.debug_struct("RunParams");
         state
-            .field("name", &self.name)
             .field("started_at", &self.started_at)
             .field("provenance_start", &self.provenance_start)
             .field("report_debug", &self.report_debug)

@@ -28,7 +28,7 @@ use tokio::sync::{Notify, Semaphore};
 
 use super::begun_log;
 use crate::scripted::{Kept, MODEL, ScriptedBroker, reply};
-use crate::support::{EXECUTION, TEST_SEED, assert_canceled, unused};
+use crate::support::{TEST_SEED, assert_canceled, unused};
 
 /// How long a test waits for a run before it fails.
 const PATIENCE: Duration = Duration::from_secs(10);
@@ -73,7 +73,7 @@ fn looping(section: &str, user: &str, result: &str) -> String {
 /// one model and [`TOOL`] in its catalog, under the cancel flag `cancel`.
 fn run_of(sections: &str, cancel: &CancelHandle) -> Run {
     let source = format!("{PREAMBLE}{sections}");
-    let (prompt, _parse_events) = Prompt::parse(&source, "prompt", EXECUTION);
+    let (prompt, _parse_events) = Prompt::parse(&|_: &str| Ok(source.clone()), "prompt");
     let prompt = Arc::new(prompt.expect("the cap fixture parses"));
     let model = ModelInfo::new(
         ModelId::gateway(MODEL).expect("the model id is valid"),
@@ -87,7 +87,7 @@ fn run_of(sections: &str, cancel: &CancelHandle) -> Run {
         json!({ "type": "object", "properties": { "name": { "type": "string" } } }),
     );
     let catalog = ToolCatalog::new([tool]).expect("the one-tool catalog is valid");
-    let ctx = RunParams::new(EXECUTION, TEST_SEED, Timestamp::UNIX_EPOCH)
+    let ctx = RunParams::new(TEST_SEED, Timestamp::UNIX_EPOCH)
         .with_tools(catalog)
         .with_models(BTreeMap::from([(ModelRole::Default, model)]))
         .with_cancel(cancel.clone());

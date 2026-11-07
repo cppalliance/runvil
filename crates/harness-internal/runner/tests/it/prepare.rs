@@ -16,7 +16,7 @@
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use harness_runner::HostContext;
+use harness_runner::Packs;
 use harness_runner::effect_loop::drive_run;
 use harness_runner::prepare::{Prepared, Services, begin, prepare};
 use harness_runner::recorder::{
@@ -89,18 +89,18 @@ fn recorded_parse_events(recorder: &MemoryRecorder, run_id: RunId) -> Vec<Event>
 }
 
 /// A Host with no Packs but the built-in.
-pub(crate) fn bare() -> HostContext {
-    HostContext::new(registry(&[]), HostServices::new())
+pub(crate) fn bare() -> Packs {
+    Packs::new(registry(&[]), HostServices::new())
 }
 
 /// A Host that built `info` beside the built-in.
-pub(crate) fn building(info: PackInfo) -> HostContext {
-    HostContext::new(registry(&[info]), HostServices::new())
+pub(crate) fn building(info: PackInfo) -> Packs {
+    Packs::new(registry(&[info]), HostServices::new())
 }
 
 /// The preparation services over `recorder` and `host`, with no run
 /// services and the performers no test here reaches.
-pub(crate) fn services(recorder: &Arc<MemoryRecorder>, host: HostContext) -> Services {
+pub(crate) fn services(recorder: &Arc<MemoryRecorder>, host: Packs) -> Services {
     Services {
         host: Arc::new(host),
         services: HostServices::new(),
@@ -393,7 +393,7 @@ pub(crate) async fn prepare_and_drive(
 }
 
 /// Prepares `source` over `host` and drives the run to its end.
-pub(crate) async fn drive_over(source: &str, host: HostContext) -> Result<String, Error> {
+pub(crate) async fn drive_over(source: &str, host: Packs) -> Result<String, Error> {
     prepare_and_drive(source, services(&recorder(), host))
         .await
         .1
@@ -467,7 +467,7 @@ async fn the_packs_split_by_declaration_and_a_script_calls_an_extras_tool_object
         return tostring(declared.required) .. ':' .. declared.tools[1].id .. '|' .. \
           extras[1].name .. ':' .. extra.id .. '|' .. tools.call(extra, { value = 'hi' })\n```\n";
     let extra = echo_pack("runvil/extra", None);
-    let host = HostContext::new(registry(&[TOOLS, extra]), HostServices::new());
+    let host = Packs::new(registry(&[TOOLS, extra]), HostServices::new());
     assert_eq!(
         completed(drive_over(offering, host).await),
         "true:tools/echo|extra:extra/echo|hi",

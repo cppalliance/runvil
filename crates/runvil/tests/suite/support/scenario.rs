@@ -115,16 +115,16 @@ impl Scenario {
         self
     }
 
-    /// Parses `source` as the run `greeter` and builds its params.
+    /// Parses `source` and builds its params.
     pub(crate) fn build(&self, source: &str) -> TestResult<Built> {
-        let (parsed, events) = Prompt::parse(source, "prompt", "greeter");
+        let (parsed, events) = Prompt::parse(&|_: &str| Ok(source.to_owned()), "prompt");
         let prompt = parsed?;
         let roles = match (&self.roles, &self.model) {
             (Some(roles), _) => roles.clone(),
             (None, Some(model)) => BTreeMap::from([(ModelRole::Default, model.clone())]),
             (None, None) => BTreeMap::from([(ModelRole::Default, canned()?)]),
         };
-        let mut ctx = RunParams::new("greeter", TEST_SEED, self.started_at)
+        let mut ctx = RunParams::new(TEST_SEED, self.started_at)
             .with_provenance_start(u32::try_from(events.len())?)
             .with_models(roles);
         if let Some(tool) = &self.tool {

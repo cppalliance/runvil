@@ -31,7 +31,6 @@ macro_rules! unit_events {
     ($($variant:ident),* $(,)?) => {
         vec![$((
             Event::$variant {
-                execution: "run".to_owned(),
                 section: "A".to_owned(),
                 provenance: provenance(),
             },
@@ -99,7 +98,6 @@ fn one_of_every_event_variant() -> Vec<(Event, Seam)> {
     events.extend([
         (
             Event::ModelMetadataDegraded {
-                execution: "run".to_owned(),
                 section: "A".to_owned(),
                 provenance: provenance(),
                 turn: 1,
@@ -109,7 +107,6 @@ fn one_of_every_event_variant() -> Vec<(Event, Seam)> {
         ),
         (
             Event::LuaLibraryLoadStarted {
-                execution: "run".to_owned(),
                 section: "A".to_owned(),
                 provenance: provenance(),
                 library: "## lib".to_owned(),
@@ -118,7 +115,6 @@ fn one_of_every_event_variant() -> Vec<(Event, Seam)> {
         ),
         (
             Event::LuaLibraryLoadSucceeded {
-                execution: "run".to_owned(),
                 section: "A".to_owned(),
                 provenance: provenance(),
                 library: "## lib".to_owned(),
@@ -127,7 +123,6 @@ fn one_of_every_event_variant() -> Vec<(Event, Seam)> {
         ),
         (
             Event::LuaLibraryLoadFailed {
-                execution: "run".to_owned(),
                 section: "A".to_owned(),
                 provenance: provenance(),
                 library: "## lib".to_owned(),
@@ -136,7 +131,6 @@ fn one_of_every_event_variant() -> Vec<(Event, Seam)> {
         ),
         (
             Event::Lua {
-                execution: "run".to_owned(),
                 section: "A".to_owned(),
                 provenance: provenance(),
                 message: "note".to_owned(),
@@ -145,7 +139,6 @@ fn one_of_every_event_variant() -> Vec<(Event, Seam)> {
         ),
         (
             Event::TaskStarted {
-                execution: "run".to_owned(),
                 section: "A".to_owned(),
                 provenance: provenance(),
                 task: task.clone(),
@@ -159,7 +152,6 @@ fn one_of_every_event_variant() -> Vec<(Event, Seam)> {
         ),
         (
             Event::TaskSucceeded {
-                execution: "run".to_owned(),
                 section: "A".to_owned(),
                 provenance: provenance(),
                 task: task.clone(),
@@ -168,7 +160,6 @@ fn one_of_every_event_variant() -> Vec<(Event, Seam)> {
         ),
         (
             Event::TaskFailed {
-                execution: "run".to_owned(),
                 section: "A".to_owned(),
                 provenance: provenance(),
                 task: task.clone(),
@@ -177,7 +168,6 @@ fn one_of_every_event_variant() -> Vec<(Event, Seam)> {
         ),
         (
             Event::TaskCanceled {
-                execution: "run".to_owned(),
                 section: "A".to_owned(),
                 provenance: provenance(),
                 task: task.clone(),
@@ -186,7 +176,6 @@ fn one_of_every_event_variant() -> Vec<(Event, Seam)> {
         ),
         (
             Event::TaskAbandoned {
-                execution: "run".to_owned(),
                 section: "A".to_owned(),
                 provenance: provenance(),
                 task: task.clone(),
@@ -196,7 +185,6 @@ fn one_of_every_event_variant() -> Vec<(Event, Seam)> {
         ),
         (
             Event::Thinking {
-                execution: "run".to_owned(),
                 section: "A".to_owned(),
                 provenance: provenance(),
                 turn: 1,
@@ -208,7 +196,6 @@ fn one_of_every_event_variant() -> Vec<(Event, Seam)> {
         ),
         (
             Event::AssistantReply {
-                execution: "run".to_owned(),
                 section: "A".to_owned(),
                 provenance: provenance(),
                 turn: 1,
@@ -223,7 +210,6 @@ fn one_of_every_event_variant() -> Vec<(Event, Seam)> {
         ),
         (
             Event::AssistantReply {
-                execution: "run".to_owned(),
                 section: "A".to_owned(),
                 provenance: provenance(),
                 turn: 1,
@@ -238,7 +224,6 @@ fn one_of_every_event_variant() -> Vec<(Event, Seam)> {
         ),
         (
             Event::AssistantToolCalls {
-                execution: "run".to_owned(),
                 section: "A".to_owned(),
                 provenance: provenance(),
                 turn: 1,
@@ -254,7 +239,6 @@ fn one_of_every_event_variant() -> Vec<(Event, Seam)> {
         ),
         (
             Event::ToolResult {
-                execution: "run".to_owned(),
                 section: "A".to_owned(),
                 provenance: provenance(),
                 turn: 1,
@@ -269,7 +253,6 @@ fn one_of_every_event_variant() -> Vec<(Event, Seam)> {
         ),
         (
             Event::Request {
-                execution: "run".to_owned(),
                 section: "A".to_owned(),
                 provenance: provenance(),
                 turn: 1,
@@ -279,7 +262,6 @@ fn one_of_every_event_variant() -> Vec<(Event, Seam)> {
         ),
         (
             Event::Response {
-                execution: "run".to_owned(),
                 section: "A".to_owned(),
                 provenance: provenance(),
                 turn: 1,

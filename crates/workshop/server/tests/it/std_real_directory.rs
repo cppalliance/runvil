@@ -105,7 +105,7 @@ fn block_on<F: Future>(future: F) -> F::Output {
 )]
 fn call(pack: &dyn Pack, access: &Access, segment: &str, args: Value) -> ToolOutput {
     let tool = ToolId::parse(&format!("std/{segment}")).expect("a two-segment tool id parses");
-    let origin = ToolCallOrigin::new("std-real-directory", "Test", ToolCaller::Script);
+    let origin = ToolCallOrigin::new("Test", ToolCaller::Script);
     let services = HostServices::new();
     let context = ToolContext::new(&tool, access, &origin, &services);
     block_on(pack.call(context, args)).expect("the call succeeds")

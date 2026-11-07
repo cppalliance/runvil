@@ -33,7 +33,7 @@ const SECTION: &str = "Bench";
 /// An emitter over a sink nobody drains: the bench measures the VM, not
 /// the reports.
 fn emitter() -> Emitter {
-    Emitter::root(EventSink::default(), "bench", false)
+    Emitter::root(EventSink::default(), false)
 }
 
 /// A section VM with Engine values injected, so the section's `messages`

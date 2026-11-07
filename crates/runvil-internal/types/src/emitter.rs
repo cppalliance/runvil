@@ -127,8 +127,8 @@ impl EventSink {
 }
 
 /// One task's handle onto the run's event buffer: every event it pushes is
-/// stamped with the task's next sequence number under the run's execution
-/// id. Cheap to clone; a clone shares the task and the buffer.
+/// stamped with the task's next sequence number. Cheap to clone; a clone
+/// shares the task and the buffer.
 ///
 /// Every report is write-only: the Engine never reads an event back
 /// through this path, so recording every event or dropping them all
@@ -139,8 +139,6 @@ pub struct Emitter {
     sink: EventSink,
     /// The nearest enclosing task of the chain this emitter serves.
     task: TaskId,
-    /// The caller-chosen run identifier stamped on every event.
-    execution: Arc<str>,
     /// Whether the caller asked for raw request/response capture: the model
     /// rounds emit `Request` and `Response` only when it is set, so a run
     /// that did not opt in never clones a body.
@@ -151,25 +149,15 @@ impl Emitter {
     /// Builds the emitter for `task` over `sink`, capturing raw model-turn
     /// bodies when `debug` is set.
     #[must_use]
-    pub fn new(sink: EventSink, task: TaskId, execution: Arc<str>, debug: bool) -> Self {
-        Self {
-            sink,
-            task,
-            execution,
-            debug,
-        }
+    pub fn new(sink: EventSink, task: TaskId, debug: bool) -> Self {
+        Self { sink, task, debug }
     }
 
     /// The root task's emitter over `sink`: the main walk is task `0`,
     /// and so is a prompt's parse, which happens before any run exists.
     #[must_use]
-    pub fn root(sink: EventSink, execution: &str, debug: bool) -> Self {
-        Self::new(
-            sink,
-            TaskId::from(ChainId::root()),
-            Arc::from(execution),
-            debug,
-        )
+    pub fn root(sink: EventSink, debug: bool) -> Self {
+        Self::new(sink, TaskId::from(ChainId::root()), debug)
     }
 
     /// The emitter a spawned chain reports through: the same buffer under
@@ -179,7 +167,6 @@ impl Emitter {
         Self {
             sink: self.sink.clone(),
             task,
-            execution: Arc::clone(&self.execution),
             debug: self.debug,
         }
     }
@@ -188,13 +175,6 @@ impl Emitter {
     #[must_use]
     pub fn task(&self) -> &TaskId {
         &self.task
-    }
-
-    /// The caller-chosen run identifier stamped on every event.
-    #[cfg(test)]
-    #[must_use]
-    pub(crate) fn execution(&self) -> &str {
-        &self.execution
     }
 
     /// Whether the run captures raw model-turn bodies.
@@ -213,12 +193,10 @@ impl Emitter {
     /// Pushes one event built from this task's next coordinates: the
     /// general form every named report below is a case of, for the
     /// variants with a payload and no dedicated method.
-    pub fn emit(&self, section: &str, build: impl FnOnce(String, String, Provenance) -> Event) {
-        let execution = self.execution.to_string();
+    pub fn emit(&self, section: &str, build: impl FnOnce(String, Provenance) -> Event) {
         let section = section.to_owned();
-        self.sink.push(&self.task, |provenance| {
-            build(execution, section, provenance)
-        });
+        self.sink
+            .push(&self.task, |provenance| build(section, provenance));
     }
 
     /// Reports one payload-free lifecycle boundary under `section`.
@@ -230,21 +208,18 @@ impl Emitter {
     /// heading with its markers, into `section`'s environment.
     pub fn library_load(&self, section: &str, library: &str, phase: LibraryLoad) {
         let library = library.to_owned();
-        self.emit(section, |execution, section, provenance| match phase {
+        self.emit(section, |section, provenance| match phase {
             LibraryLoad::Started => Event::LuaLibraryLoadStarted {
-                execution,
                 section,
                 provenance,
                 library,
             },
             LibraryLoad::Succeeded => Event::LuaLibraryLoadSucceeded {
-                execution,
                 section,
                 provenance,
                 library,
             },
             LibraryLoad::Failed => Event::LuaLibraryLoadFailed {
-                execution,
                 section,
                 provenance,
                 library,
@@ -254,8 +229,7 @@ impl Emitter {
 
     /// Reports the author's `log(message)` checkpoint.
     pub fn lua(&self, section: &str, message: &str) {
-        self.emit(section, |execution, section, provenance| Event::Lua {
-            execution,
+        self.emit(section, |section, provenance| Event::Lua {
             section,
             provenance,
             message: message.to_owned(),
@@ -264,8 +238,7 @@ impl Emitter {
 
     /// Reports one completed block of model thinking from `round`.
     pub fn thinking(&self, section: &str, turn: u32, round: RoundId, model: &str, text: &str) {
-        self.emit(section, |execution, section, provenance| Event::Thinking {
-            execution,
+        self.emit(section, |section, provenance| Event::Thinking {
             section,
             provenance,
             turn,
@@ -292,19 +265,16 @@ impl Emitter {
         metrics: Option<&CallMetrics>,
         origin: ReplyOrigin,
     ) {
-        self.emit(section, |execution, section, provenance| {
-            Event::AssistantReply {
-                execution,
-                section,
-                provenance,
-                turn,
-                round,
-                text: text.to_owned(),
-                finish_reason: finish_reason.map(str::to_owned),
-                model: model.to_owned(),
-                metrics: metrics.cloned(),
-                origin,
-            }
+        self.emit(section, |section, provenance| Event::AssistantReply {
+            section,
+            provenance,
+            turn,
+            round,
+            text: text.to_owned(),
+            finish_reason: finish_reason.map(str::to_owned),
+            model: model.to_owned(),
+            metrics: metrics.cloned(),
+            origin,
         });
     }
 
@@ -318,16 +288,13 @@ impl Emitter {
         model: &str,
         calls: &[ToolCallEvent],
     ) {
-        self.emit(section, |execution, section, provenance| {
-            Event::AssistantToolCalls {
-                execution,
-                section,
-                provenance,
-                turn,
-                round,
-                model: model.to_owned(),
-                calls: calls.to_vec(),
-            }
+        self.emit(section, |section, provenance| Event::AssistantToolCalls {
+            section,
+            provenance,
+            turn,
+            round,
+            model: model.to_owned(),
+            calls: calls.to_vec(),
         });
     }
 
@@ -352,19 +319,16 @@ impl Emitter {
         trust: OutputTrust,
     ) {
         let trusted = trust == OutputTrust::Trusted;
-        self.emit(section, |execution, section, provenance| {
-            Event::ToolResult {
-                execution,
-                section,
-                provenance,
-                turn,
-                tool_call_id: tool_call_id.to_owned(),
-                alias: alias.to_owned(),
-                tool: tool.clone(),
-                vendor: vendor.map(str::to_owned),
-                content: content.to_owned(),
-                trusted,
-            }
+        self.emit(section, |section, provenance| Event::ToolResult {
+            section,
+            provenance,
+            turn,
+            tool_call_id: tool_call_id.to_owned(),
+            alias: alias.to_owned(),
+            tool: tool.clone(),
+            vendor: vendor.map(str::to_owned),
+            content: content.to_owned(),
+            trusted,
         });
     }
 
@@ -372,8 +336,7 @@ impl Emitter {
     /// gates on [`captures_debug`](Self::captures_debug) so a run that did
     /// not opt in never clones a body.
     pub fn request(&self, section: &str, turn: u32, body: Value) {
-        self.emit(section, |execution, section, provenance| Event::Request {
-            execution,
+        self.emit(section, |section, provenance| Event::Request {
             section,
             provenance,
             turn,
@@ -391,8 +354,7 @@ impl Emitter {
         finish_reason: Option<String>,
         reasoning_content: Option<String>,
     ) {
-        self.emit(section, |execution, section, provenance| Event::Response {
-            execution,
+        self.emit(section, |section, provenance| Event::Response {
             section,
             provenance,
             turn,
@@ -407,8 +369,6 @@ impl Emitter {
 mod tests {
     //! Tests for `Emitter` sequencing, lifecycle reports, and payload events.
 
-    use std::sync::Arc;
-
     use super::{Emitter, EventSink, LibraryLoad};
     use crate::event::Event;
     use crate::event_lifecycle as lifecycle;
@@ -420,7 +380,7 @@ mod tests {
     }
 
     fn emitter(sink: &EventSink, task: TaskId) -> Emitter {
-        Emitter::new(sink.clone(), task, Arc::from("run-1"), false)
+        Emitter::new(sink.clone(), task, false)
     }
 
     #[test]
@@ -487,7 +447,6 @@ mod tests {
         assert_eq!(
             sink.take(),
             vec![Event::VfsWriteSucceeded {
-                execution: "run-1".to_owned(),
                 section: "Gather".to_owned(),
                 provenance: Provenance::new(root(), 0),
             }]
@@ -515,27 +474,21 @@ mod tests {
         let sink = EventSink::default();
         let walk = emitter(&sink, root());
         let task: TaskId = "0.3".parse().expect("a task id parses");
-        walk.emit("Spawner", |execution, section, provenance| {
-            Event::TaskStarted {
-                execution,
-                section,
-                provenance,
-                task: task.clone(),
-                target: "Worker".to_owned(),
-                input: Some("in".to_owned()),
-                item: Some(serde_json::json!("x")),
-                index: Some(2),
-                var: serde_json::json!({ "k": 1 }),
-            }
+        walk.emit("Spawner", |section, provenance| Event::TaskStarted {
+            section,
+            provenance,
+            task: task.clone(),
+            target: "Worker".to_owned(),
+            input: Some("in".to_owned()),
+            item: Some(serde_json::json!("x")),
+            index: Some(2),
+            var: serde_json::json!({ "k": 1 }),
         });
-        walk.emit("Worker", |execution, section, provenance| {
-            Event::TaskAbandoned {
-                execution,
-                section,
-                provenance,
-                task: task.clone(),
-                reason: AbandonReason::OwnerFailed,
-            }
+        walk.emit("Worker", |section, provenance| Event::TaskAbandoned {
+            section,
+            provenance,
+            task: task.clone(),
+            reason: AbandonReason::OwnerFailed,
         });
         walk.lua("Worker", "checkpoint");
         let events = sink.take();
@@ -563,19 +516,16 @@ mod tests {
             sink.take(),
             vec![
                 Event::LuaLibraryLoadStarted {
-                    execution: "run-1".to_owned(),
                     section: "Main".to_owned(),
                     provenance: stamp(0),
                     library: "## shared_stuff".to_owned(),
                 },
                 Event::LuaLibraryLoadSucceeded {
-                    execution: "run-1".to_owned(),
                     section: "Main".to_owned(),
                     provenance: stamp(1),
                     library: "## shared_stuff".to_owned(),
                 },
                 Event::LuaLibraryLoadFailed {
-                    execution: "run-1".to_owned(),
                     section: "Other".to_owned(),
                     provenance: stamp(2),
                     library: "## helpers".to_owned(),
@@ -632,7 +582,6 @@ mod tests {
         assert_eq!(
             sink.take(),
             vec![Event::ToolResult {
-                execution: "run-1".to_owned(),
                 section: "Chat".to_owned(),
                 provenance: Provenance::new(root(), 0),
                 turn: 2,
@@ -648,15 +597,13 @@ mod tests {
     }
 
     #[test]
-    fn the_root_emitter_reports_under_task_zero_with_its_execution() {
+    fn the_root_emitter_reports_under_task_zero() {
         let sink = EventSink::default();
-        let emitter = Emitter::root(sink.clone(), "parse-1", true);
+        let emitter = Emitter::root(sink.clone(), true);
         assert!(emitter.captures_debug());
-        assert_eq!(emitter.execution(), "parse-1");
         assert_eq!(emitter.task(), &root());
         emitter.report("Prompt", lifecycle::PARSE_STARTED);
         let events = sink.take();
-        assert_eq!(events[0].execution(), "parse-1");
         assert_eq!(events[0].provenance().task, root());
     }
 }

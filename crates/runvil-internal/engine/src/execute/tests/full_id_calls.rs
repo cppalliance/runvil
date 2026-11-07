@@ -12,7 +12,7 @@ use super::models_loop::loop_scenario;
 use super::*;
 use crate::execute::run::{Effect, EffectAnswer, EffectRecord, Step, ToolCallOrigin, ToolCaller};
 use crate::test_support::rig::Rig;
-use crate::test_support::scenario::{EXECUTION, only_effect, text_of};
+use crate::test_support::scenario::{only_effect, text_of};
 
 /// The echo fixture's full id.
 const ECHO_ID: &str = "tools/echo";
@@ -27,7 +27,7 @@ fn echo_id() -> ToolId {
 
 /// The origin of a script call made in the fixture prompt's one section.
 fn script_origin() -> ToolCallOrigin {
-    ToolCallOrigin::new(EXECUTION, "Only", ToolCaller::Script).with_entry("0.1")
+    ToolCallOrigin::new("Only", ToolCaller::Script).with_entry("0.1")
 }
 
 /// A run of the one section `lua` over a catalog of the echo fixture and a

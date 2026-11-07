@@ -10,12 +10,9 @@ use runvil_prompt::test_support::{PromptSource, prompt};
 
 use crate::test_support::scenario::{Record, Scenario};
 
-/// The run name every `require` case runs under.
-const REQUIRE_EXECUTION: &str = "fixture-require";
-
 /// A `require` case over `source`.
 fn require_case(source: String) -> Scenario {
-    Scenario::new(source).name(REQUIRE_EXECUTION)
+    Scenario::new(source)
 }
 
 /// The library-load reports among `records`, as `(section, detail)` pairs

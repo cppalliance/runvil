@@ -8,7 +8,6 @@ use super::fixtures::{echo_tool, failing_tool, scoped_tool};
 use super::models_loop::loop_scenario;
 use super::*;
 use crate::test_support::recording::DebugEvent;
-use crate::test_support::scenario::EXECUTION;
 
 /// The prompt whose one section, `Only`, asks the `default` role about its
 /// prose.
@@ -44,7 +43,6 @@ fn debug_capture_receives_request_and_response_when_set() {
         2,
         "one request and one response: {captures:#?}"
     );
-    assert_eq!(captures[0].execution, EXECUTION);
     assert_eq!(captures[0].section, "Only");
     assert_eq!(captures[0].turn, 1);
     let round = gateway.last_request().expect("infer must reach the model");

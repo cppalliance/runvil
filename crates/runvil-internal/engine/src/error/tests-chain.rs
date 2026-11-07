@@ -185,7 +185,7 @@ fn a_parsed_prompts_located_message_ends_with_its_name_and_position() {
         "---\n",
         "\n# T\n\n## S\n\np\n",
     );
-    let refused = Prompt::parse(frontmatter, "prompt", "test")
+    let refused = Prompt::parse(&|_: &str| Ok(frontmatter.to_owned()), "prompt")
         .0
         .expect_err("a Pack id with spaces must be rejected");
     assert_eq!(
@@ -197,7 +197,7 @@ fn a_parsed_prompts_located_message_ends_with_its_name_and_position() {
         "a frontmatter failure predates the prompt's name"
     );
     let duplicate = "---\nname: dup\ndescription: d\n---\n\n# T\n\n## S\n\np\n\n## S\n\nq\n";
-    let refused = Prompt::parse(duplicate, "prompt", "test")
+    let refused = Prompt::parse(&|_: &str| Ok(duplicate.to_owned()), "prompt")
         .0
         .expect_err("duplicate sibling sections must be rejected");
     assert_eq!(
@@ -212,7 +212,7 @@ fn a_parsed_prompts_located_message_ends_with_its_name_and_position() {
 #[test]
 fn a_refused_uses_list_ends_with_its_line_and_never_names_the_pack_as_the_prompt() {
     let source = "---\nname: x\ndescription: d\nuses: [web, web]\n---\n\n# T\n";
-    let refused = Prompt::parse(source, "prompt", "test")
+    let refused = Prompt::parse(&|_: &str| Ok(source.to_owned()), "prompt")
         .0
         .expect_err("a Pack id declared twice must be refused");
     assert_eq!(

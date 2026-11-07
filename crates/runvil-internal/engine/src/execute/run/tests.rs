@@ -26,14 +26,10 @@ mod drops;
 #[path = "tests-start.rs"]
 mod start;
 
-/// The params for the run `run-test` under fixed caller inputs; nothing
-/// here reads the seed or `sys.when`.
+/// The params for a run under fixed caller inputs; nothing here reads
+/// the seed or `sys.when`.
 fn run_params() -> RunParams {
-    RunParams::new(
-        "run-test",
-        TEST_SEED,
-        runvil_types::timestamp::Timestamp::UNIX_EPOCH,
-    )
+    RunParams::new(TEST_SEED, runvil_types::timestamp::Timestamp::UNIX_EPOCH)
 }
 
 fn binding() -> ModelBinding {
@@ -112,9 +108,9 @@ fn a_chat_record_serializes_its_round_and_its_alias_and_no_model() {
     assert_eq!(round_trip(&record), record);
 }
 
-/// The origin of a call the model made in section `Only` of `run-1`.
+/// The origin of a call the model made in section `Only`.
 fn model_origin() -> ToolCallOrigin {
-    ToolCallOrigin::new("run-1", "Only", ToolCaller::Model)
+    ToolCallOrigin::new("Only", ToolCaller::Model)
 }
 
 #[test]
@@ -156,12 +152,12 @@ fn a_tool_call_record_serializes_its_origin_in_snake_case() {
         tool: ToolId::parse("tools/echo").expect("a valid id"),
         alias: "echo".to_owned(),
         args: json!({}),
-        origin: ToolCallOrigin::new("run-1", "Only", ToolCaller::Script),
+        origin: ToolCallOrigin::new("Only", ToolCaller::Script),
     };
     let wire = serde_json::to_value(&record).expect("a record serializes");
     assert_eq!(
         wire["ToolCall"]["origin"],
-        json!({ "execution": "run-1", "section": "Only", "caller": "script" })
+        json!({ "section": "Only", "caller": "script" })
     );
     assert_eq!(round_trip(&record), record);
 }
@@ -216,7 +212,7 @@ fn prompt_of(body: &str) -> Arc<Prompt> {
     let source = format!(
         "---\nname: t\ndescription: d\nrunvil: 0\n---\n\n# Run\n\n## Only\n\n```lua\n{body}\n```\n"
     );
-    let prompt = Prompt::parse(&source, "prompt", "run-test")
+    let prompt = Prompt::parse(&|_: &str| Ok(source.clone()), "prompt")
         .0
         .expect("the run test prompt parses");
     Arc::new(prompt)

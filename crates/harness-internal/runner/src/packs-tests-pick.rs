@@ -13,7 +13,7 @@ use super::*;
 /// A Host holding `runvil/web`, `acme/web`, and `acme/poop`, each
 /// offering one tool named after its vendor: `web/runvil`, `web/acme`,
 /// and `poop/acme`. `acme/web`'s `ready` answers as `acme_ready` says.
-fn vendors(acme_ready: &str) -> HostContext {
+fn vendors(acme_ready: &str) -> Packs {
     host(&[
         (info("runvil/web"), offering(&["web/runvil"])),
         (
@@ -155,6 +155,45 @@ fn the_roster_covers_every_declared_pack_the_run_cannot_serve() {
          - broken is unavailable: backed needs tests/backend, and this host provides none \
          (at prompt:5)"
     );
+}
+
+#[test]
+fn refusals_name_each_declared_pack_not_installed_or_whose_construct_failed() {
+    let broken = PackInfo::new("acme/broken", backed);
+    let host = host(&[
+        (info("runvil/web"), Value::Null),
+        (info("acme/poop"), Value::Null),
+        (broken, Value::Null),
+    ]);
+    let declares = prompt("uses:\n  - web\n  - nope\n  - acme/gone\n  - poop\n  - acme/broken\n");
+    assert_eq!(
+        host.refusals(&declares),
+        [
+            (name("nope"), "runvil/nope is not installed".to_owned()),
+            (name("gone"), "acme/gone is not installed".to_owned()),
+            (
+                name("poop"),
+                "poop means runvil/poop, which is not installed; write acme/poop to use that Pack"
+                    .to_owned(),
+            ),
+            (
+                name("broken"),
+                "backed needs tests/backend, and this host provides none".to_owned(),
+            ),
+        ],
+        "a bare id means runvil/<id>, and the built runvil/web is no refusal"
+    );
+}
+
+#[test]
+fn refusals_are_empty_when_every_declared_pack_built() {
+    let host = vendors("fails");
+    assert!(
+        host.refusals(&prompt("uses:\n  - web\n  - acme/poop\n"))
+            .is_empty(),
+        "a Pack whose ready fails still built"
+    );
+    assert!(host.refusals(&prompt("")).is_empty());
 }
 
 #[test]

@@ -19,7 +19,7 @@ use crate::test_support::rig::Rig;
 pub(super) struct TaskRecorder(Mutex<Vec<(String, Observation)>>);
 
 impl Observer for TaskRecorder {
-    fn observe(&self, _execution: &str, section: &str, event: Observation) {
+    fn observe(&self, section: &str, event: Observation) {
         self.0
             .lock()
             .expect("the recorder mutex must not be poisoned")

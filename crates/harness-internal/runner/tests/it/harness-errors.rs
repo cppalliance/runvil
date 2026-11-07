@@ -14,7 +14,7 @@ use std::task::Poll;
 use harness_runner::display_chain;
 use harness_runner::environment::HostSnapshot;
 use harness_runner::recorder::{MemoryRecorder, RunId};
-use harness_runner::{Harness, HostContext, RunReport, RunRequest};
+use harness_runner::{Harness, Packs, RunReport, RunRequest};
 use runvil::model::{Completion, phrase};
 use runvil::{Error, ErrorCode, ErrorFact};
 use runvil_plugin::{HostServices, PackRegistry};
@@ -55,7 +55,7 @@ fn harness_over(recorder: &Arc<FailingRecorder>, broker: ScriptedBroker) -> Harn
         recorder.clone(),
         Arc::new(broker),
         Arc::new(PendingTimer::default()),
-        Arc::new(HostContext::new(PackRegistry::new(), HostServices::new())),
+        Arc::new(Packs::new(PackRegistry::new(), HostServices::new())),
         HostServices::new(),
     )
 }

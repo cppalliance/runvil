@@ -10,7 +10,7 @@ use std::fmt::Write as _;
 use std::sync::{Arc, Mutex};
 
 use harness_runner::recorder::{MemoryRecorder, Record, RecordKind};
-use harness_runner::{Harness, HostContext};
+use harness_runner::{Harness, Packs};
 use runvil::make_tool_error;
 use runvil::model::{Completion, CompletionResult, ToolCall};
 use runvil::{Error, ErrorCode};
@@ -280,7 +280,7 @@ fn render_harness(
         recorder.clone(),
         Arc::new(broker),
         Arc::new(PendingTimer::default()),
-        Arc::new(HostContext::new(packs, services)),
+        Arc::new(Packs::new(packs, services)),
         HostServices::new(),
     )
 }

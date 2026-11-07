@@ -2,8 +2,8 @@
 //! [`Harness`] begins the run at its recorder with the inputs the Engine
 //! refuses to draw itself, resolves the launch model through the Host's
 //! broker, prepares an Engine `Run` from the prompt's source (putting the
-//! declared input file in place, taking the run's snapshot of the
-//! [`HostContext`]'s Packs), steps it, performs each chat, render,
+//! declared input file in place, taking the run's snapshot of the Host's
+//! [`Packs`]), steps it, performs each chat, render,
 //! tool-call, and timer effect through its performer and answers each Vfs
 //! effect inline, feeds the answers back, hands every event, effect, and
 //! answer to the run's recorder, ends the run there with its result, the
@@ -29,7 +29,7 @@
 //! - The loop never reads an event to decide anything; control comes
 //!   from the run's own word (`Step` and the effects it withdraws), the
 //!   cancel flag, and the Host's stop.
-//! - A [`HostContext`] builds every Pack its `PackRegistry` holds, and
+//! - A Host's [`Packs`] builds every Pack its `PackRegistry` holds, and
 //!   only those. The registry holds the built-in `runvil/subagents` from
 //!   the start and refuses a duplicate FQN and the built-in's Pack id to
 //!   every other Pack, so no other Pack can take `subagents`.
@@ -43,6 +43,7 @@ pub mod environment;
 pub mod files;
 mod harness;
 mod host;
+mod packs;
 pub mod performers;
 pub mod prepare;
 pub mod recorder;
@@ -50,7 +51,8 @@ mod recorder_memory;
 
 pub use display_chain::display_chain;
 pub use harness::{Harness, RunControl, RunReport, RunRequest};
-pub use host::HostContext;
+pub use host::Host;
+pub use packs::Packs;
 pub use recorder::{
     MemoryRecorder, Record, RecordKind, RecorderFuture, RunId, RunMeta, RunRecorder,
     make_recorder_error,

@@ -6,12 +6,6 @@ use runvil_types::error::ErrorCode;
 
 use crate::test_support::scenario::{Record, Scenario};
 
-const FANOUT_BASIC_EXECUTION: &str = "fixture-fanout-basic";
-const FANOUT_EPILOG_EXECUTION: &str = "fixture-fanout-epilog";
-const FANOUT_STORE_EXECUTION: &str = "fixture-fanout-store";
-const FANOUT_FAILURE_EXECUTION: &str = "fixture-fanout-failure";
-const FANOUT_CROSS_ARM_EXECUTION: &str = "fixture-fanout-cross-arm-append";
-
 const FANOUT_BASIC: &str = include_str!("../../../../tests/prompts/execution/fanout-basic.md");
 const FANOUT_EPILOG: &str = include_str!("../../../../tests/prompts/execution/fanout-epilog.md");
 const FANOUT_STORE_WRITES: &str =
@@ -66,9 +60,7 @@ fn assert_two_arms_all_succeeded(records: &[Record]) {
 
 #[test]
 fn fanout_basic_two_items_prologue_return() {
-    let trace = Scenario::new(FANOUT_BASIC)
-        .name(FANOUT_BASIC_EXECUTION)
-        .run();
+    let trace = Scenario::new(FANOUT_BASIC).run();
     // The index-bearing output pins each arm's `item .. '-' .. sys.index`.
     assert_eq!(trace.text(), "alpha-1\nbeta-2");
     assert_two_arms_all_succeeded(&trace.records());
@@ -76,9 +68,7 @@ fn fanout_basic_two_items_prologue_return() {
 
 #[test]
 fn fanout_epilog_two_items() {
-    let trace = Scenario::new(FANOUT_EPILOG)
-        .name(FANOUT_EPILOG_EXECUTION)
-        .run();
+    let trace = Scenario::new(FANOUT_EPILOG).run();
     assert_eq!(trace.text(), "x-1,y-2");
     assert_two_arms_all_succeeded(&trace.records());
 }
@@ -91,9 +81,7 @@ fn fanout_store_writes_persist_across_arms() {
     // fanout's join_any rounds join every arm before it returns.
     // Interleaving coverage lives in the scheduler's
     // `fanout_arms_interleave_at_io_points_on_one_thread`.
-    let trace = Scenario::new(FANOUT_STORE_WRITES)
-        .name(FANOUT_STORE_EXECUTION)
-        .run();
+    let trace = Scenario::new(FANOUT_STORE_WRITES).run();
     // Both prologue-only arms write distinct paths and the parent reply vector
     // stays list-ordered.
     assert_eq!(trace.text(), "2:alpha,beta");
@@ -116,9 +104,7 @@ fn a_cross_arm_append_terminates_the_run_with_a_determinism_violation() {
     // violation is uncatchable: were it resumed into the arm, the
     // handler would record the catch and the run would return
     // "alpha,beta" instead of failing.
-    let trace = Scenario::new(FANOUT_CROSS_ARM_APPEND)
-        .name(FANOUT_CROSS_ARM_EXECUTION)
-        .run();
+    let trace = Scenario::new(FANOUT_CROSS_ARM_APPEND).run();
     let error = trace.error();
     assert!(
         error.code == ErrorCode::Determinism,
@@ -149,9 +135,7 @@ fn a_cross_arm_append_terminates_the_run_with_a_determinism_violation() {
 
 #[test]
 fn fanout_arm_failure_propagates() {
-    let trace = Scenario::new(FANOUT_ARM_FAILURE)
-        .name(FANOUT_FAILURE_EXECUTION)
-        .run();
+    let trace = Scenario::new(FANOUT_ARM_FAILURE).run();
     let error = trace.error();
     // Assert the stable code first, then the preserved source context.
     assert_eq!(

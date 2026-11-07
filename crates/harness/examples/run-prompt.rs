@@ -7,7 +7,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use harness::pack::{HostContext, HostServices, PackRegistry};
+use harness::pack::{HostServices, PackRegistry, Packs};
 use harness::record::MemoryRecorder;
 use harness::vfs::VfsRef;
 use harness::{BoxFuture, Harness, HostSnapshot, InferenceBroker, RunRequest, Timer};
@@ -67,7 +67,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         recorder.clone(),
         Arc::new(Offline),
         Arc::new(Clock),
-        Arc::new(HostContext::new(PackRegistry::new(), HostServices::new())),
+        Arc::new(Packs::new(PackRegistry::new(), HostServices::new())),
         HostServices::new(),
     );
 

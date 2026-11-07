@@ -1,8 +1,8 @@
 //! A Pack's prelude through preparation: the prelude its `PackInfo` names
 //! reaches every section VM of the prepared run, and each tool call a
 //! prelude function makes is recorded as a `ToolCall` effect attributed to
-//! the calling script, its execution, and its section. Preludes run in
-//! the prompt's declaration order.
+//! the calling script and its section. Preludes run in the prompt's
+//! declaration order.
 
 use super::*;
 
@@ -36,9 +36,7 @@ fn script_call(value: &str, section: &str, entry: &str) -> serde_json::Value {
             "tool": "speaker/echo",
             "alias": "speaker/echo",
             "args": { "value": value },
-            "origin": {
-                "execution": "session-1", "section": section, "caller": "script", "entry": entry
-            },
+            "origin": { "section": section, "caller": "script", "entry": entry },
         }
     })
 }
@@ -83,7 +81,7 @@ async fn a_preludes_tool_calls_are_recorded_as_script_calls_from_the_section_tha
 #[tokio::test]
 async fn preludes_run_in_the_prompts_declaration_order_not_the_registry_order() {
     let infos = ["tests/first", "tests/second"].map(|fqn| echo_pack(fqn, Some("shared = 1\n")));
-    let host = HostContext::new(registry(&infos), HostServices::new());
+    let host = Packs::new(registry(&infos), HostServices::new());
     let declares_second_first = "---\nname: order\ndescription: d\nrunvil: 0\n\
         uses:\n  - tests/second\n  - tests/first\n---\n\n# Title\n\n## Only\n\n```lua\nreturn 'ran'\n```\n";
     let error = drive_over(declares_second_first, host)

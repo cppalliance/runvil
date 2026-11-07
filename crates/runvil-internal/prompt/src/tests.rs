@@ -116,7 +116,12 @@ fn parsed_prompt_value_types_are_equatable() {
     assert_ne!(a, c, "differing section headings must parse unequal");
 }
 
-/// The parse-time events read back as `(execution, section, kind)`.
+/// Parses `src` as the prompt `prompt`, through a finder that returns it.
+fn parse_text(src: &str) -> (std::result::Result<Prompt, Error>, Vec<Event>) {
+    Prompt::parse(&|_: &str| Ok(src.to_owned()), "prompt")
+}
+
+/// The parse-time events read back as `(section, kind)`.
 struct Recorder(Vec<Event>);
 
 /// The `kind` labels the parse reports.
@@ -144,19 +149,6 @@ fn kind(event: &Event) -> String {
 }
 
 impl Recorder {
-    fn records(&self) -> Vec<(String, String, String)> {
-        self.0
-            .iter()
-            .map(|event| {
-                (
-                    event.execution().to_owned(),
-                    event.section().to_owned(),
-                    kind(event),
-                )
-            })
-            .collect()
-    }
-
     fn observations(&self) -> Vec<(String, String)> {
         self.0
             .iter()
@@ -220,10 +212,54 @@ fn parses_single_minimal_section() {
 }
 
 #[test]
-fn parse_records_the_file_the_source_came_from() {
+fn parse_finds_the_source_by_name_and_names_the_prompt_by_it() {
     let src = PromptSource::new().prose("Greet", "Say hi").build();
-    let prompt = Prompt::parse(&src, "agents/research.md", "test")
+    let asked = std::sync::Mutex::new(Vec::new());
+    let finder = |name: &str| {
+        asked
+            .lock()
+            .expect("the finder's log is not poisoned")
+            .push(name.to_owned());
+        Ok(src.clone())
+    };
+    let prompt = Prompt::parse(&finder, "research.md")
         .0
         .expect("the minimal prompt parses");
-    assert_eq!(prompt.file(), "agents/research.md");
+    assert_eq!(prompt.file(), "research.md");
+    assert_eq!(
+        *asked.lock().expect("the finder's log is not poisoned"),
+        ["research.md"],
+        "the finder is asked once, for the prompt's name"
+    );
+}
+
+#[test]
+fn a_finder_error_comes_back_unchanged_after_parse_failed() {
+    let refusal = Error::new(
+        ErrorCode::NotFound,
+        "no prompt named missing.md",
+        "The prompt named missing.md does not exist.",
+    );
+    let (result, events) = Prompt::parse(&|_: &str| Err(refusal.clone()), "missing.md");
+    assert_eq!(result.expect_err("a finder error fails the parse"), refusal);
+    assert_eq!(
+        Recorder(events).observations(),
+        vec![
+            ("Prompt".into(), detail::PARSE_STARTED.to_string()),
+            ("Prompt".into(), detail::PARSE_FAILED.to_string()),
+        ]
+    );
+}
+
+#[test]
+fn a_found_source_that_fails_to_parse_is_located_in_the_named_prompt() {
+    let src = "---\nname: p\ndescription: d\n---\n\n# T\n\n## S\n\n```lua\nreturn 1\n";
+    let error = Prompt::parse(&|_: &str| Ok(src.to_owned()), "research.md")
+        .0
+        .expect_err("an unclosed fence fails");
+    assert_eq!(error.code, ErrorCode::FenceInvalid, "{error:?}");
+    let Some((file, ..)) = location(&error) else {
+        panic!("the failure is located: {error:?}");
+    };
+    assert_eq!(file, "research.md", "{error:?}");
 }

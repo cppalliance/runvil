@@ -8,18 +8,16 @@ use super::*;
 
 /// The coordinates every event carries; only the kind and payload matter
 /// to the numbering and the stamp.
-fn at() -> (String, String, Provenance) {
+fn at() -> (String, Provenance) {
     (
-        "conversation-1".to_owned(),
         "Conversation".to_owned(),
         Provenance::new("0".parse().unwrap(), 0),
     )
 }
 
 fn answered(content: &str) -> Event {
-    let (execution, section, provenance) = at();
+    let (section, provenance) = at();
     Event::ToolResult {
-        execution,
         section,
         provenance,
         turn: 0,
@@ -33,9 +31,8 @@ fn answered(content: &str) -> Event {
 }
 
 fn thinking(round: u64) -> Event {
-    let (execution, section, provenance) = at();
+    let (section, provenance) = at();
     Event::Thinking {
-        execution,
         section,
         provenance,
         turn: 0,
@@ -46,9 +43,8 @@ fn thinking(round: u64) -> Event {
 }
 
 fn reply(round: u64, origin: ReplyOrigin) -> Event {
-    let (execution, section, provenance) = at();
+    let (section, provenance) = at();
     Event::AssistantReply {
-        execution,
         section,
         provenance,
         turn: 0,
@@ -62,9 +58,8 @@ fn reply(round: u64, origin: ReplyOrigin) -> Event {
 }
 
 fn tool_calls(round: u64) -> Event {
-    let (execution, section, provenance) = at();
+    let (section, provenance) = at();
     Event::AssistantToolCalls {
-        execution,
         section,
         provenance,
         turn: 0,

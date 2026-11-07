@@ -287,6 +287,7 @@ impl<'a> core::iter::traits::iterator::Iterator for runvil::prompt::ArgsDeclIter
 impl<'a> core::iter::traits::iterator::Iterator for runvil::prompt::ArgsDeclIter<'a> { type Item = (&'a str, &'a runvil::prompt::ArgDecl) }
 impl<'a> runvil::vfs::OpEvent<'a>
 impl<'de, T> serde_core::de::Deserialize<'de> for runvil::effect::PackToolSets<T> where T: serde_core::de::Deserialize<'de>
+impl<Func> runvil::PromptFinder for Func where Func: core::ops::function::Fn(&str) -> core::result::Result<alloc::string::String, runvil::Error> + core::marker::Send + core::marker::Sync
 impl<T: core::clone::Clone> core::clone::Clone for runvil::effect::PackToolSets<T>
 impl<T: core::cmp::Eq> core::cmp::Eq for runvil::effect::PackToolSets<T>
 impl<T: core::cmp::PartialEq> core::cmp::PartialEq for runvil::effect::PackToolSets<T>
@@ -329,12 +330,13 @@ pub fn runvil::Error::with_cause(self, cause: &dyn core::error::Error + 'static)
 pub fn runvil::ErrorCode::from_tag(tag: &str) -> core::option::Option<runvil::ErrorCode>
 pub fn runvil::Prompt::file(&self) -> &str
 pub fn runvil::Prompt::frontmatter(&self) -> &runvil::prompt::Frontmatter
-pub fn runvil::Prompt::parse(input: &str, file: &str, execution: &str) -> (core::result::Result<runvil::Prompt, runvil::Error>, alloc::vec::Vec<runvil::event::Event>)
+pub fn runvil::Prompt::parse(finder: &dyn runvil::PromptFinder, name: &str) -> (core::result::Result<runvil::Prompt, runvil::Error>, alloc::vec::Vec<runvil::event::Event>)
 pub fn runvil::Prompt::title(&self) -> &str
+pub fn runvil::PromptFinder::find(&self, name: &str) -> core::result::Result<alloc::string::String, runvil::Error>
 pub fn runvil::Run::new(prompt: alloc::sync::Arc<runvil::Prompt>, args: &str, params: runvil::RunParams) -> runvil::Run
 pub fn runvil::Run::resume(&mut self, id: runvil::effect::EffectId, answer: runvil::effect::EffectAnswer)
 pub fn runvil::Run::step(&mut self) -> runvil::Step
-pub fn runvil::RunParams::new(name: impl core::convert::Into<alloc::string::String>, seed: runvil::RunSeed, started_at: runvil::timestamp::Timestamp) -> runvil::RunParams
+pub fn runvil::RunParams::new(seed: runvil::RunSeed, started_at: runvil::timestamp::Timestamp) -> runvil::RunParams
 pub fn runvil::RunParams::with_cancel(self, handle: runvil::cancel::CancelHandle) -> runvil::RunParams
 pub fn runvil::RunParams::with_limits(self, limits: runvil::RunLimits) -> runvil::RunParams
 pub fn runvil::RunParams::with_models(self, models: alloc::collections::btree::map::BTreeMap<runvil::model::ModelRole, runvil::model::ModelInfo>) -> runvil::RunParams
@@ -372,10 +374,9 @@ pub fn runvil::effect::Effect::record(&self) -> serde_json::value::Value
 pub fn runvil::effect::EffectAnswer::record(&self) -> serde_json::value::Value
 pub fn runvil::effect::PackToolSets::new(pack: runvil::packs::PackId, static_set: alloc::vec::Vec<T>, dynamic_set: alloc::vec::Vec<T>) -> runvil::effect::PackToolSets<T>
 pub fn runvil::effect::Round::new(id: runvil::ids::RoundId, origin: runvil::event::ReplyOrigin) -> runvil::effect::Round
-pub fn runvil::effect::ToolCallOrigin::new(execution: impl core::convert::Into<alloc::string::String>, section: impl core::convert::Into<alloc::string::String>, caller: runvil::effect::ToolCaller) -> runvil::effect::ToolCallOrigin
+pub fn runvil::effect::ToolCallOrigin::new(section: impl core::convert::Into<alloc::string::String>, caller: runvil::effect::ToolCaller) -> runvil::effect::ToolCallOrigin
 pub fn runvil::effect::ToolCallOrigin::with_entry(self, entry: impl core::convert::Into<alloc::string::String>) -> runvil::effect::ToolCallOrigin
 pub fn runvil::effect::ToolCallOrigin::with_model(self, model: impl core::convert::Into<alloc::string::String>) -> runvil::effect::ToolCallOrigin
-pub fn runvil::event::Event::execution(&self) -> &str
 pub fn runvil::event::Event::provenance(&self) -> &runvil::ids::Provenance
 pub fn runvil::event::Event::section(&self) -> &str
 pub fn runvil::ids::AbandonReason::why(self) -> &'static str
@@ -766,13 +767,11 @@ pub runvil::effect::Round::id: runvil::ids::RoundId
 pub runvil::effect::Round::origin: runvil::event::ReplyOrigin
 pub runvil::effect::ToolCallOrigin::caller: runvil::effect::ToolCaller
 pub runvil::effect::ToolCallOrigin::entry: core::option::Option<alloc::string::String>
-pub runvil::effect::ToolCallOrigin::execution: alloc::string::String
 pub runvil::effect::ToolCallOrigin::model: core::option::Option<alloc::string::String>
 pub runvil::effect::ToolCallOrigin::section: alloc::string::String
 pub runvil::effect::ToolCaller::Model
 pub runvil::effect::ToolCaller::Script
 pub runvil::event::Event::AssistantReply { .. }
-pub runvil::event::Event::AssistantReply::execution: alloc::string::String
 pub runvil::event::Event::AssistantReply::finish_reason: core::option::Option<alloc::string::String>
 pub runvil::event::Event::AssistantReply::metrics: core::option::Option<runvil::metrics::CallMetrics>
 pub runvil::event::Event::AssistantReply::model: alloc::string::String
@@ -784,146 +783,115 @@ pub runvil::event::Event::AssistantReply::text: alloc::string::String
 pub runvil::event::Event::AssistantReply::turn: u32
 pub runvil::event::Event::AssistantToolCalls { .. }
 pub runvil::event::Event::AssistantToolCalls::calls: alloc::vec::Vec<runvil::metrics::ToolCallEvent>
-pub runvil::event::Event::AssistantToolCalls::execution: alloc::string::String
 pub runvil::event::Event::AssistantToolCalls::model: alloc::string::String
 pub runvil::event::Event::AssistantToolCalls::provenance: runvil::ids::Provenance
 pub runvil::event::Event::AssistantToolCalls::round: runvil::ids::RoundId
 pub runvil::event::Event::AssistantToolCalls::section: alloc::string::String
 pub runvil::event::Event::AssistantToolCalls::turn: u32
 pub runvil::event::Event::Lua { .. }
-pub runvil::event::Event::Lua::execution: alloc::string::String
 pub runvil::event::Event::Lua::message: alloc::string::String
 pub runvil::event::Event::Lua::provenance: runvil::ids::Provenance
 pub runvil::event::Event::Lua::section: alloc::string::String
 pub runvil::event::Event::LuaChunkFailed { .. }
-pub runvil::event::Event::LuaChunkFailed::execution: alloc::string::String
 pub runvil::event::Event::LuaChunkFailed::provenance: runvil::ids::Provenance
 pub runvil::event::Event::LuaChunkFailed::section: alloc::string::String
 pub runvil::event::Event::LuaChunkStarted { .. }
-pub runvil::event::Event::LuaChunkStarted::execution: alloc::string::String
 pub runvil::event::Event::LuaChunkStarted::provenance: runvil::ids::Provenance
 pub runvil::event::Event::LuaChunkStarted::section: alloc::string::String
 pub runvil::event::Event::LuaChunkSucceeded { .. }
-pub runvil::event::Event::LuaChunkSucceeded::execution: alloc::string::String
 pub runvil::event::Event::LuaChunkSucceeded::provenance: runvil::ids::Provenance
 pub runvil::event::Event::LuaChunkSucceeded::section: alloc::string::String
 pub runvil::event::Event::LuaCompilationFailed { .. }
-pub runvil::event::Event::LuaCompilationFailed::execution: alloc::string::String
 pub runvil::event::Event::LuaCompilationFailed::provenance: runvil::ids::Provenance
 pub runvil::event::Event::LuaCompilationFailed::section: alloc::string::String
 pub runvil::event::Event::LuaCompilationStarted { .. }
-pub runvil::event::Event::LuaCompilationStarted::execution: alloc::string::String
 pub runvil::event::Event::LuaCompilationStarted::provenance: runvil::ids::Provenance
 pub runvil::event::Event::LuaCompilationStarted::section: alloc::string::String
 pub runvil::event::Event::LuaCompilationSucceeded { .. }
-pub runvil::event::Event::LuaCompilationSucceeded::execution: alloc::string::String
 pub runvil::event::Event::LuaCompilationSucceeded::provenance: runvil::ids::Provenance
 pub runvil::event::Event::LuaCompilationSucceeded::section: alloc::string::String
 pub runvil::event::Event::LuaLibraryLoadFailed { .. }
-pub runvil::event::Event::LuaLibraryLoadFailed::execution: alloc::string::String
 pub runvil::event::Event::LuaLibraryLoadFailed::library: alloc::string::String
 pub runvil::event::Event::LuaLibraryLoadFailed::provenance: runvil::ids::Provenance
 pub runvil::event::Event::LuaLibraryLoadFailed::section: alloc::string::String
 pub runvil::event::Event::LuaLibraryLoadStarted { .. }
-pub runvil::event::Event::LuaLibraryLoadStarted::execution: alloc::string::String
 pub runvil::event::Event::LuaLibraryLoadStarted::library: alloc::string::String
 pub runvil::event::Event::LuaLibraryLoadStarted::provenance: runvil::ids::Provenance
 pub runvil::event::Event::LuaLibraryLoadStarted::section: alloc::string::String
 pub runvil::event::Event::LuaLibraryLoadSucceeded { .. }
-pub runvil::event::Event::LuaLibraryLoadSucceeded::execution: alloc::string::String
 pub runvil::event::Event::LuaLibraryLoadSucceeded::library: alloc::string::String
 pub runvil::event::Event::LuaLibraryLoadSucceeded::provenance: runvil::ids::Provenance
 pub runvil::event::Event::LuaLibraryLoadSucceeded::section: alloc::string::String
 pub runvil::event::Event::LuaTeardownStarted { .. }
-pub runvil::event::Event::LuaTeardownStarted::execution: alloc::string::String
 pub runvil::event::Event::LuaTeardownStarted::provenance: runvil::ids::Provenance
 pub runvil::event::Event::LuaTeardownStarted::section: alloc::string::String
 pub runvil::event::Event::LuaTeardownSucceeded { .. }
-pub runvil::event::Event::LuaTeardownSucceeded::execution: alloc::string::String
 pub runvil::event::Event::LuaTeardownSucceeded::provenance: runvil::ids::Provenance
 pub runvil::event::Event::LuaTeardownSucceeded::section: alloc::string::String
 pub runvil::event::Event::ModelMetadataDegraded { .. }
-pub runvil::event::Event::ModelMetadataDegraded::execution: alloc::string::String
 pub runvil::event::Event::ModelMetadataDegraded::message: alloc::string::String
 pub runvil::event::Event::ModelMetadataDegraded::provenance: runvil::ids::Provenance
 pub runvil::event::Event::ModelMetadataDegraded::section: alloc::string::String
 pub runvil::event::Event::ModelMetadataDegraded::turn: u32
 pub runvil::event::Event::ModelTurnCompleted { .. }
-pub runvil::event::Event::ModelTurnCompleted::execution: alloc::string::String
 pub runvil::event::Event::ModelTurnCompleted::provenance: runvil::ids::Provenance
 pub runvil::event::Event::ModelTurnCompleted::section: alloc::string::String
 pub runvil::event::Event::ModelTurnFailed { .. }
-pub runvil::event::Event::ModelTurnFailed::execution: alloc::string::String
 pub runvil::event::Event::ModelTurnFailed::provenance: runvil::ids::Provenance
 pub runvil::event::Event::ModelTurnFailed::section: alloc::string::String
 pub runvil::event::Event::ModelTurnTruncated { .. }
-pub runvil::event::Event::ModelTurnTruncated::execution: alloc::string::String
 pub runvil::event::Event::ModelTurnTruncated::provenance: runvil::ids::Provenance
 pub runvil::event::Event::ModelTurnTruncated::section: alloc::string::String
 pub runvil::event::Event::ParseFailed { .. }
-pub runvil::event::Event::ParseFailed::execution: alloc::string::String
 pub runvil::event::Event::ParseFailed::provenance: runvil::ids::Provenance
 pub runvil::event::Event::ParseFailed::section: alloc::string::String
 pub runvil::event::Event::ParseStarted { .. }
-pub runvil::event::Event::ParseStarted::execution: alloc::string::String
 pub runvil::event::Event::ParseStarted::provenance: runvil::ids::Provenance
 pub runvil::event::Event::ParseStarted::section: alloc::string::String
 pub runvil::event::Event::ParseSucceeded { .. }
-pub runvil::event::Event::ParseSucceeded::execution: alloc::string::String
 pub runvil::event::Event::ParseSucceeded::provenance: runvil::ids::Provenance
 pub runvil::event::Event::ParseSucceeded::section: alloc::string::String
 pub runvil::event::Event::Request { .. }
 pub runvil::event::Event::Request::body: serde_json::value::Value
-pub runvil::event::Event::Request::execution: alloc::string::String
 pub runvil::event::Event::Request::provenance: runvil::ids::Provenance
 pub runvil::event::Event::Request::section: alloc::string::String
 pub runvil::event::Event::Request::turn: u32
 pub runvil::event::Event::Response { .. }
 pub runvil::event::Event::Response::body: serde_json::value::Value
-pub runvil::event::Event::Response::execution: alloc::string::String
 pub runvil::event::Event::Response::finish_reason: core::option::Option<alloc::string::String>
 pub runvil::event::Event::Response::provenance: runvil::ids::Provenance
 pub runvil::event::Event::Response::reasoning_content: core::option::Option<alloc::string::String>
 pub runvil::event::Event::Response::section: alloc::string::String
 pub runvil::event::Event::Response::turn: u32
 pub runvil::event::Event::RunFailed { .. }
-pub runvil::event::Event::RunFailed::execution: alloc::string::String
 pub runvil::event::Event::RunFailed::provenance: runvil::ids::Provenance
 pub runvil::event::Event::RunFailed::section: alloc::string::String
 pub runvil::event::Event::RunStarted { .. }
-pub runvil::event::Event::RunStarted::execution: alloc::string::String
 pub runvil::event::Event::RunStarted::provenance: runvil::ids::Provenance
 pub runvil::event::Event::RunStarted::section: alloc::string::String
 pub runvil::event::Event::RunSucceeded { .. }
-pub runvil::event::Event::RunSucceeded::execution: alloc::string::String
 pub runvil::event::Event::RunSucceeded::provenance: runvil::ids::Provenance
 pub runvil::event::Event::RunSucceeded::section: alloc::string::String
 pub runvil::event::Event::SectionFinished { .. }
-pub runvil::event::Event::SectionFinished::execution: alloc::string::String
 pub runvil::event::Event::SectionFinished::provenance: runvil::ids::Provenance
 pub runvil::event::Event::SectionFinished::section: alloc::string::String
 pub runvil::event::Event::SectionStarted { .. }
-pub runvil::event::Event::SectionStarted::execution: alloc::string::String
 pub runvil::event::Event::SectionStarted::provenance: runvil::ids::Provenance
 pub runvil::event::Event::SectionStarted::section: alloc::string::String
 pub runvil::event::Event::TaskAbandoned { .. }
-pub runvil::event::Event::TaskAbandoned::execution: alloc::string::String
 pub runvil::event::Event::TaskAbandoned::provenance: runvil::ids::Provenance
 pub runvil::event::Event::TaskAbandoned::reason: runvil::ids::AbandonReason
 pub runvil::event::Event::TaskAbandoned::section: alloc::string::String
 pub runvil::event::Event::TaskAbandoned::task: runvil::ids::TaskId
 pub runvil::event::Event::TaskCanceled { .. }
-pub runvil::event::Event::TaskCanceled::execution: alloc::string::String
 pub runvil::event::Event::TaskCanceled::provenance: runvil::ids::Provenance
 pub runvil::event::Event::TaskCanceled::section: alloc::string::String
 pub runvil::event::Event::TaskCanceled::task: runvil::ids::TaskId
 pub runvil::event::Event::TaskFailed { .. }
-pub runvil::event::Event::TaskFailed::execution: alloc::string::String
 pub runvil::event::Event::TaskFailed::provenance: runvil::ids::Provenance
 pub runvil::event::Event::TaskFailed::section: alloc::string::String
 pub runvil::event::Event::TaskFailed::task: runvil::ids::TaskId
 pub runvil::event::Event::TaskStarted { .. }
-pub runvil::event::Event::TaskStarted::execution: alloc::string::String
 pub runvil::event::Event::TaskStarted::index: core::option::Option<u64>
 pub runvil::event::Event::TaskStarted::input: core::option::Option<alloc::string::String>
 pub runvil::event::Event::TaskStarted::item: core::option::Option<serde_json::value::Value>
@@ -933,12 +901,10 @@ pub runvil::event::Event::TaskStarted::target: alloc::string::String
 pub runvil::event::Event::TaskStarted::task: runvil::ids::TaskId
 pub runvil::event::Event::TaskStarted::var: serde_json::value::Value
 pub runvil::event::Event::TaskSucceeded { .. }
-pub runvil::event::Event::TaskSucceeded::execution: alloc::string::String
 pub runvil::event::Event::TaskSucceeded::provenance: runvil::ids::Provenance
 pub runvil::event::Event::TaskSucceeded::section: alloc::string::String
 pub runvil::event::Event::TaskSucceeded::task: runvil::ids::TaskId
 pub runvil::event::Event::Thinking { .. }
-pub runvil::event::Event::Thinking::execution: alloc::string::String
 pub runvil::event::Event::Thinking::model: alloc::string::String
 pub runvil::event::Event::Thinking::provenance: runvil::ids::Provenance
 pub runvil::event::Event::Thinking::round: runvil::ids::RoundId
@@ -946,17 +912,14 @@ pub runvil::event::Event::Thinking::section: alloc::string::String
 pub runvil::event::Event::Thinking::text: alloc::string::String
 pub runvil::event::Event::Thinking::turn: u32
 pub runvil::event::Event::ToolCallFailed { .. }
-pub runvil::event::Event::ToolCallFailed::execution: alloc::string::String
 pub runvil::event::Event::ToolCallFailed::provenance: runvil::ids::Provenance
 pub runvil::event::Event::ToolCallFailed::section: alloc::string::String
 pub runvil::event::Event::ToolCallSucceeded { .. }
-pub runvil::event::Event::ToolCallSucceeded::execution: alloc::string::String
 pub runvil::event::Event::ToolCallSucceeded::provenance: runvil::ids::Provenance
 pub runvil::event::Event::ToolCallSucceeded::section: alloc::string::String
 pub runvil::event::Event::ToolResult { .. }
 pub runvil::event::Event::ToolResult::alias: alloc::string::String
 pub runvil::event::Event::ToolResult::content: alloc::string::String
-pub runvil::event::Event::ToolResult::execution: alloc::string::String
 pub runvil::event::Event::ToolResult::provenance: runvil::ids::Provenance
 pub runvil::event::Event::ToolResult::section: alloc::string::String
 pub runvil::event::Event::ToolResult::tool: runvil::ToolId
@@ -965,79 +928,60 @@ pub runvil::event::Event::ToolResult::trusted: bool
 pub runvil::event::Event::ToolResult::turn: u32
 pub runvil::event::Event::ToolResult::vendor: core::option::Option<alloc::string::String>
 pub runvil::event::Event::ToolScopeValidationFailed { .. }
-pub runvil::event::Event::ToolScopeValidationFailed::execution: alloc::string::String
 pub runvil::event::Event::ToolScopeValidationFailed::provenance: runvil::ids::Provenance
 pub runvil::event::Event::ToolScopeValidationFailed::section: alloc::string::String
 pub runvil::event::Event::ToolScopeValidationStarted { .. }
-pub runvil::event::Event::ToolScopeValidationStarted::execution: alloc::string::String
 pub runvil::event::Event::ToolScopeValidationStarted::provenance: runvil::ids::Provenance
 pub runvil::event::Event::ToolScopeValidationStarted::section: alloc::string::String
 pub runvil::event::Event::ToolScopeValidationSucceeded { .. }
-pub runvil::event::Event::ToolScopeValidationSucceeded::execution: alloc::string::String
 pub runvil::event::Event::ToolScopeValidationSucceeded::provenance: runvil::ids::Provenance
 pub runvil::event::Event::ToolScopeValidationSucceeded::section: alloc::string::String
 pub runvil::event::Event::VfsAppendFailed { .. }
-pub runvil::event::Event::VfsAppendFailed::execution: alloc::string::String
 pub runvil::event::Event::VfsAppendFailed::provenance: runvil::ids::Provenance
 pub runvil::event::Event::VfsAppendFailed::section: alloc::string::String
 pub runvil::event::Event::VfsAppendSucceeded { .. }
-pub runvil::event::Event::VfsAppendSucceeded::execution: alloc::string::String
 pub runvil::event::Event::VfsAppendSucceeded::provenance: runvil::ids::Provenance
 pub runvil::event::Event::VfsAppendSucceeded::section: alloc::string::String
 pub runvil::event::Event::VfsDeleteFailed { .. }
-pub runvil::event::Event::VfsDeleteFailed::execution: alloc::string::String
 pub runvil::event::Event::VfsDeleteFailed::provenance: runvil::ids::Provenance
 pub runvil::event::Event::VfsDeleteFailed::section: alloc::string::String
 pub runvil::event::Event::VfsDeleteSucceeded { .. }
-pub runvil::event::Event::VfsDeleteSucceeded::execution: alloc::string::String
 pub runvil::event::Event::VfsDeleteSucceeded::provenance: runvil::ids::Provenance
 pub runvil::event::Event::VfsDeleteSucceeded::section: alloc::string::String
 pub runvil::event::Event::VfsExistsFailed { .. }
-pub runvil::event::Event::VfsExistsFailed::execution: alloc::string::String
 pub runvil::event::Event::VfsExistsFailed::provenance: runvil::ids::Provenance
 pub runvil::event::Event::VfsExistsFailed::section: alloc::string::String
 pub runvil::event::Event::VfsExistsSucceeded { .. }
-pub runvil::event::Event::VfsExistsSucceeded::execution: alloc::string::String
 pub runvil::event::Event::VfsExistsSucceeded::provenance: runvil::ids::Provenance
 pub runvil::event::Event::VfsExistsSucceeded::section: alloc::string::String
 pub runvil::event::Event::VfsGlobFailed { .. }
-pub runvil::event::Event::VfsGlobFailed::execution: alloc::string::String
 pub runvil::event::Event::VfsGlobFailed::provenance: runvil::ids::Provenance
 pub runvil::event::Event::VfsGlobFailed::section: alloc::string::String
 pub runvil::event::Event::VfsGlobSucceeded { .. }
-pub runvil::event::Event::VfsGlobSucceeded::execution: alloc::string::String
 pub runvil::event::Event::VfsGlobSucceeded::provenance: runvil::ids::Provenance
 pub runvil::event::Event::VfsGlobSucceeded::section: alloc::string::String
 pub runvil::event::Event::VfsReadFailed { .. }
-pub runvil::event::Event::VfsReadFailed::execution: alloc::string::String
 pub runvil::event::Event::VfsReadFailed::provenance: runvil::ids::Provenance
 pub runvil::event::Event::VfsReadFailed::section: alloc::string::String
 pub runvil::event::Event::VfsReadNumberedFailed { .. }
-pub runvil::event::Event::VfsReadNumberedFailed::execution: alloc::string::String
 pub runvil::event::Event::VfsReadNumberedFailed::provenance: runvil::ids::Provenance
 pub runvil::event::Event::VfsReadNumberedFailed::section: alloc::string::String
 pub runvil::event::Event::VfsReadNumberedSucceeded { .. }
-pub runvil::event::Event::VfsReadNumberedSucceeded::execution: alloc::string::String
 pub runvil::event::Event::VfsReadNumberedSucceeded::provenance: runvil::ids::Provenance
 pub runvil::event::Event::VfsReadNumberedSucceeded::section: alloc::string::String
 pub runvil::event::Event::VfsReadSucceeded { .. }
-pub runvil::event::Event::VfsReadSucceeded::execution: alloc::string::String
 pub runvil::event::Event::VfsReadSucceeded::provenance: runvil::ids::Provenance
 pub runvil::event::Event::VfsReadSucceeded::section: alloc::string::String
 pub runvil::event::Event::VfsReplaceFailed { .. }
-pub runvil::event::Event::VfsReplaceFailed::execution: alloc::string::String
 pub runvil::event::Event::VfsReplaceFailed::provenance: runvil::ids::Provenance
 pub runvil::event::Event::VfsReplaceFailed::section: alloc::string::String
 pub runvil::event::Event::VfsReplaceSucceeded { .. }
-pub runvil::event::Event::VfsReplaceSucceeded::execution: alloc::string::String
 pub runvil::event::Event::VfsReplaceSucceeded::provenance: runvil::ids::Provenance
 pub runvil::event::Event::VfsReplaceSucceeded::section: alloc::string::String
 pub runvil::event::Event::VfsWriteFailed { .. }
-pub runvil::event::Event::VfsWriteFailed::execution: alloc::string::String
 pub runvil::event::Event::VfsWriteFailed::provenance: runvil::ids::Provenance
 pub runvil::event::Event::VfsWriteFailed::section: alloc::string::String
 pub runvil::event::Event::VfsWriteSucceeded { .. }
-pub runvil::event::Event::VfsWriteSucceeded::execution: alloc::string::String
 pub runvil::event::Event::VfsWriteSucceeded::provenance: runvil::ids::Provenance
 pub runvil::event::Event::VfsWriteSucceeded::section: alloc::string::String
 pub runvil::event::ReplyOrigin::Chat
@@ -1282,6 +1226,7 @@ pub struct runvil::vfs::VfsPath { /* private fields */ }
 pub struct runvil::vfs::VfsPathBuf(/* private fields */)
 pub struct runvil::vfs::VfsRef { /* private fields */ }
 pub struct runvil::vfs::VfsRefBuilder { /* private fields */ }
+pub trait runvil::PromptFinder: core::marker::Send + core::marker::Sync
 pub trait runvil::vfs::Policy: core::marker::Send
 pub trait runvil::vfs::Vfs: core::marker::Send
 pub trait runvil::vfs::VfsAccess: core::marker::Send

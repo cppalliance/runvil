@@ -68,19 +68,15 @@ pub fn answer(effect: Effect) -> EffectAnswer {
 pub fn greet() -> Result<String, Box<dyn Error>> {
     // 1. Parse the greeter, and start the log with its parse events before
     //    checking the result.
-    let (parsed, parse_events) = Prompt::parse(GREETER, "prompt", "greeter");
+    let (parsed, parse_events) = Prompt::parse(&|_: &str| Ok(GREETER.to_owned()), "greeter.md");
     let mut log: Vec<Event> = parse_events.clone();
     let prompt = parsed?;
 
     // 2. Build the params: run events number on from the parse events. A
     //    live caller draws the seed's 32 bytes from a CSPRNG; the example
     //    fixes them.
-    let ctx = RunParams::new(
-        "greeter",
-        RunSeed::from_bytes([7; 32]),
-        Timestamp::UNIX_EPOCH,
-    )
-    .with_provenance_start(u32::try_from(parse_events.len())?);
+    let ctx = RunParams::new(RunSeed::from_bytes([7; 32]), Timestamp::UNIX_EPOCH)
+        .with_provenance_start(u32::try_from(parse_events.len())?);
 
     // 3. Offer the shout tool and give the canned model the `default`
     //    role. The run's first step checks them against the prompt.

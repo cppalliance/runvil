@@ -141,15 +141,26 @@ fn model_only_call_sets_the_flag_and_round_trips_through_serde() {
 #[test]
 fn a_tool_call_origin_keeps_its_logged_shape() {
     use super::{ToolCallOrigin, ToolCaller};
-    let origin = ToolCallOrigin::new("run-1", "Chat", ToolCaller::Model);
-    let line = r#"{"execution":"run-1","section":"Chat","caller":"model"}"#;
+    let origin = ToolCallOrigin::new("Chat", ToolCaller::Model);
+    let line = r#"{"section":"Chat","caller":"model"}"#;
     assert_wire(&origin, line);
+}
+
+#[test]
+fn a_serialized_tool_call_origin_has_no_execution_key() {
+    use super::{ToolCallOrigin, ToolCaller};
+    let origin = ToolCallOrigin::new("Chat", ToolCaller::Script).with_entry("0.1");
+    let value = serde_json::to_value(&origin).expect("an origin converts to a JSON value");
+    assert!(
+        value.get("execution").is_none(),
+        "an origin names no run label: {value}"
+    );
 }
 
 #[test]
 fn a_tool_call_origin_without_entry_or_model_reads_both_as_absent() {
     use super::ToolCallOrigin;
-    let line = r#"{"execution":"run-1","section":"Chat","caller":"script"}"#;
+    let line = r#"{"section":"Chat","caller":"script"}"#;
     let origin: ToolCallOrigin =
         serde_json::from_str(line).expect("an origin without entry or model deserializes");
     assert_eq!(
@@ -163,10 +174,10 @@ fn a_tool_call_origin_without_entry_or_model_reads_both_as_absent() {
 #[test]
 fn a_tool_call_origin_naming_its_entry_and_model_logs_both_after_its_caller() {
     use super::{ToolCallOrigin, ToolCaller};
-    let origin = ToolCallOrigin::new("run-1", "Chat", ToolCaller::Model)
+    let origin = ToolCallOrigin::new("Chat", ToolCaller::Model)
         .with_entry("0.1")
         .with_model("test-model");
-    let line = r#"{"execution":"run-1","section":"Chat","caller":"model","entry":"0.1","model":"test-model"}"#;
+    let line = r#"{"section":"Chat","caller":"model","entry":"0.1","model":"test-model"}"#;
     assert_wire(&origin, line);
 }
 

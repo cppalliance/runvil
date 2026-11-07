@@ -298,7 +298,7 @@ mod tests {
     /// `source` compiled as the block of [`REGION`] in [`FILE`] that starts on
     /// `start`.
     fn compiled(source: &str, start: u32) -> LuaProgram {
-        let emitter = Emitter::root(EventSink::default(), "test", false);
+        let emitter = Emitter::root(EventSink::default(), false);
         LuaProgram::compile(source, FILE, REGION, line(start), &emitter, "S")
             .expect("the block compiles")
     }
@@ -336,7 +336,7 @@ mod tests {
 
     #[test]
     fn a_compile_failure_is_located_on_its_diagnostics_line_with_author_prose() {
-        let emitter = Emitter::root(EventSink::default(), "test", false);
+        let emitter = Emitter::root(EventSink::default(), false);
         let error = LuaProgram::compile(
             "local a = 1\nlocal b =",
             FILE,

@@ -138,7 +138,7 @@ mod tests {
     }
 
     fn model_origin() -> ToolCallOrigin {
-        ToolCallOrigin::new("context-test", "Fetch", ToolCaller::Model)
+        ToolCallOrigin::new("Fetch", ToolCaller::Model)
     }
 
     #[test]

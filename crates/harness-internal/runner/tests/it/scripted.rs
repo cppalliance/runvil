@@ -9,7 +9,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use harness_runner::HostContext;
+use harness_runner::Packs;
 use harness_runner::performers::{BoxFuture, InferenceBroker, Timer};
 use runvil::effect::Round;
 use runvil::make_tool_error;
@@ -253,19 +253,19 @@ impl Pack for HoldPack {
 }
 
 /// A Host holding the hold Pack over `held`.
-pub(crate) fn hold_host(held: &Arc<Held>) -> HostContext {
+pub(crate) fn hold_host(held: &Arc<Held>) -> Packs {
     host_holding(held, false)
 }
 
 /// A Host holding the hold Pack over `held`, its tool marked to
 /// survive a stop.
-pub(crate) fn surviving_hold_host(held: &Arc<Held>) -> HostContext {
+pub(crate) fn surviving_hold_host(held: &Arc<Held>) -> Packs {
     host_holding(held, true)
 }
 
 /// A Host that built the hold Pack over `held` and the fixture ask Pack,
 /// which reach only a run that declares them.
-fn host_holding(held: &Arc<Held>, survives_stop: bool) -> HostContext {
+fn host_holding(held: &Arc<Held>, survives_stop: bool) -> Packs {
     let mut services = HostServices::new();
     services.provide(&HELD, Arc::clone(held)).unwrap();
     let mut packs = PackRegistry::new();
@@ -273,7 +273,7 @@ fn host_holding(held: &Arc<Held>, survives_stop: bool) -> HostContext {
         .insert(HOLD, json!({ "survives_stop": survives_stop }))
         .unwrap();
     packs.insert(ASKER, Value::Null).unwrap();
-    HostContext::new(packs, services)
+    Packs::new(packs, services)
 }
 
 /// The operator: counts each question asked and each one torn down

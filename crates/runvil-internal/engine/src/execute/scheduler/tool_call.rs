@@ -585,8 +585,8 @@ impl ChainOps<'_> {
                 (ToolCaller::Model, frame.vm().messages().last_model())
             }
         };
-        let mut origin = ToolCallOrigin::new(chain.ctx.execution(), chain.section_name(), caller)
-            .with_entry(frame.entry_id());
+        let mut origin =
+            ToolCallOrigin::new(chain.section_name(), caller).with_entry(frame.entry_id());
         origin.model = model;
         // The call runs under an identity of its own, forked from the
         // chain's, so two calls in flight at once never share one sequence

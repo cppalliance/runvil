@@ -13,7 +13,7 @@ use super::models_loop::{LOOP_TO_TEXT, loop_model_name, loop_scenario};
 use super::*;
 use crate::execute::run::{EffectRecord, ToolCallOrigin, ToolCaller};
 use crate::test_support::rig::{Rig, RigTrace};
-use crate::test_support::scenario::{EXECUTION, TEST_SEED};
+use crate::test_support::scenario::TEST_SEED;
 
 #[path = "discovery-refusals.rs"]
 mod refusals;
@@ -129,7 +129,7 @@ fn issued_calls(rig: &RigTrace) -> Vec<EffectRecord> {
 
 /// The origin of a model call made in the one section's entry.
 fn model_origin() -> ToolCallOrigin {
-    ToolCallOrigin::new(EXECUTION, "Only", ToolCaller::Model)
+    ToolCallOrigin::new("Only", ToolCaller::Model)
         .with_entry("0.1")
         .with_model(loop_model_name("default"))
 }

@@ -199,7 +199,7 @@ impl From<&Frontmatter> for ContractResponse {
 async fn contract(Json(body): Json<ContractRequest>) -> Response {
     // The contract needs the tree alone; the parse-time events are not
     // this route's to log.
-    match Prompt::parse(&body.text, &body.name, &body.name).0 {
+    match Prompt::parse(&|_: &str| Ok(body.text.clone()), &body.name).0 {
         Ok(prompt) => (
             StatusCode::OK,
             Json(ContractResponse::from(prompt.frontmatter())),

@@ -24,7 +24,8 @@ const REPLY: &str = "
 
 #[test]
 fn the_smallest_greeter_parses_and_its_title_is_the_h1_text() {
-    let (parsed, _events) = Prompt::parse(&note("'hello'"), "prompt", "greeter");
+    let source = note("'hello'");
+    let (parsed, _events) = Prompt::parse(&|_: &str| Ok(source.clone()), "prompt");
     assert!(parsed.is_ok_and(|prompt| prompt.title() == "Greeter"));
 }
 

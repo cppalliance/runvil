@@ -10,7 +10,6 @@ use super::models_loop::{loop_model_name, loop_scenario};
 use super::*;
 use crate::execute::run::{EffectRecord, ToolCallOrigin, ToolCaller};
 use crate::test_support::rig::Rig;
-use crate::test_support::scenario::EXECUTION;
 use runvil_types::packs::PackId;
 
 /// A catalog tool under any id, described by its id, echoing its `value`
@@ -219,7 +218,7 @@ fn a_script_calls_an_offered_tool_by_its_object_and_by_its_id_without_offering_i
         tool: ToolId::parse("tools/echo").expect("valid id"),
         alias: "tools/echo".to_owned(),
         args: json!({ "value": value }),
-        origin: ToolCallOrigin::new(EXECUTION, "Only", ToolCaller::Script).with_entry("0.1"),
+        origin: ToolCallOrigin::new("Only", ToolCaller::Script).with_entry("0.1"),
     };
     assert_eq!(rig.issued(), vec![call("a"), call("b")]);
 }
@@ -245,7 +244,7 @@ fn rounds_and_calls(records: &[EffectRecord]) -> (Vec<Vec<String>>, Vec<EffectRe
 /// The origin of a model call made in `section`, the first section the
 /// walk enters, on the default loop model.
 fn model_origin(section: &str) -> ToolCallOrigin {
-    ToolCallOrigin::new(EXECUTION, section, ToolCaller::Model)
+    ToolCallOrigin::new(section, ToolCaller::Model)
         .with_entry("0.1")
         .with_model(loop_model_name("default"))
 }

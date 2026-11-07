@@ -38,7 +38,7 @@ impl TraceRecorder {
 }
 
 impl Observer for TraceRecorder {
-    fn observe(&self, _execution: &str, section: &str, event: Observation) {
+    fn observe(&self, section: &str, event: Observation) {
         self.push(format!("{section}: {event}"));
     }
 

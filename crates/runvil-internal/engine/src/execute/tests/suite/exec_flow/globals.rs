@@ -338,7 +338,6 @@ fn sys_exposes_section_metadata() {
                 "Alpha",
                 "
                 assert(sys.section_name == 'Alpha')
-                assert(sys.execution == 'execute-test')
                 assert(sys.section_count == 2)",
             ),
             (
@@ -346,10 +345,21 @@ fn sys_exposes_section_metadata() {
                 "
                 assert(sys.section_name == 'Beta')
                 assert(sys.section_count == 2)
-                assert(sys.execution == 'execute-test')
                 return 'done'",
             ),
         ],
     );
     assert_eq!(Scenario::new(source).run().text(), "done");
+}
+
+/// `sys` holds no run label: reading `sys.execution` in a section raises
+/// the sealed-sys unknown-field error, as any absent `sys` field does.
+#[test]
+fn sys_holds_no_execution_label() {
+    let trace = Scenario::new(prompt("", &[("Only", "return tostring(sys.execution)")])).run();
+    let rendered = trace.error().to_string();
+    assert!(
+        rendered.contains("unknown sys field 'execution'"),
+        "sys.execution is absent in a section: {rendered}"
+    );
 }

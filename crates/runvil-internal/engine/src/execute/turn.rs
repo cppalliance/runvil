@@ -81,9 +81,8 @@ pub(super) fn report_model_turn(
     }
     emitter.report(section, event_lifecycle::MODEL_TURN_COMPLETED);
     for message in completion.metadata_diagnostics() {
-        emitter.emit(section, |execution, section, provenance| {
+        emitter.emit(section, |section, provenance| {
             Event::ModelMetadataDegraded {
-                execution,
                 section,
                 provenance,
                 turn,

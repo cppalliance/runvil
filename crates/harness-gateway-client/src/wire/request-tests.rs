@@ -53,7 +53,7 @@ fn tool_round(offered: &[Offered]) -> Round {
          models.loop()\nreturn messages[#messages].content\n```\n"
     );
     let first_wire_name = format!("example_test_{}", offered[0].0);
-    let (parsed, _parse_events) = Prompt::parse(&source, "prompt", "round");
+    let (parsed, _parse_events) = Prompt::parse(&|_: &str| Ok(source.clone()), "prompt");
     let prompt = parsed.expect("the round prompt parses");
     let tools: Vec<ToolInfo> = offered
         .iter()
@@ -68,7 +68,7 @@ fn tool_round(offered: &[Offered]) -> Round {
         NonZeroU32::new(8_192).expect("8192 is non-zero"),
         ThinkingMode::Never,
     );
-    let ctx = RunParams::new("round", RunSeed::from_bytes([7; 32]), Timestamp::UNIX_EPOCH);
+    let ctx = RunParams::new(RunSeed::from_bytes([7; 32]), Timestamp::UNIX_EPOCH);
     let catalog = ToolCatalog::new(tools).expect("the offered tools are distinct");
     let ctx = ctx
         .with_tools(catalog)

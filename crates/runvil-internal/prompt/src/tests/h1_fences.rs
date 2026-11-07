@@ -136,11 +136,7 @@ fn unrecognized_lua_label_fails_before_any_lua_compiles() {
     let source = "private_payload =";
     let body = format!("```lua extra\n{source}\n```");
     let src = PromptSource::new().h1("local ok = 1").prose("S", &body);
-    let (error, events) = Prompt::parse(
-        &src.title("Private title").build(),
-        "prompt",
-        "parse-failure",
-    );
+    let (error, events) = parse_text(&src.title("Private title").build());
     let recorder = Recorder(events);
     let error = error.expect_err("the label near-miss must fail");
     assert_eq!(error.code, ErrorCode::FenceInvalid, "{error}");
@@ -160,11 +156,7 @@ fn non_exact_lua_opener_fails_before_any_lua_compiles() {
     let source = "private_payload =";
     let body = format!("~~~lua\n{source}\n~~~");
     let src = PromptSource::new().h1("local ok = 1").prose("S", &body);
-    let (error, events) = Prompt::parse(
-        &src.title("Private title").build(),
-        "prompt",
-        "parse-failure",
-    );
+    let (error, events) = parse_text(&src.title("Private title").build());
     let recorder = Recorder(events);
     let error = error.expect_err("the non-exact opener must fail");
     assert_eq!(error.code, ErrorCode::FenceInvalid, "{error}");
@@ -181,15 +173,9 @@ fn non_exact_lua_opener_fails_before_any_lua_compiles() {
 #[test]
 fn successful_parse_reports_only_fixed_boundaries() {
     let source = PromptSource::new().h1("local secret = 42").prose("S", "p");
-    let (prompt, events) = Prompt::parse(&source.title("T").build(), "prompt", "parse-success");
+    let (prompt, events) = parse_text(&source.title("T").build());
     prompt.expect("prompt must parse");
     let recorder = Recorder(events);
-    assert!(
-        recorder
-            .records()
-            .iter()
-            .all(|(execution, _, _)| execution == "parse-success")
-    );
     assert_eq!(
         recorder.observations(),
         vec![

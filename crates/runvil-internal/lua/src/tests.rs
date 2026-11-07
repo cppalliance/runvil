@@ -62,8 +62,8 @@ fn store_view(access: &ScopedAccess) -> Access {
 }
 
 /// The fields every event carries ahead of its payload, sorted: its
-/// `kind` tag and the three coordinates.
-const IDENTITY_FIELDS: [&str; 4] = ["execution", "kind", "provenance", "section"];
+/// `kind` tag and the two coordinates.
+const IDENTITY_FIELDS: [&str; 3] = ["kind", "provenance", "section"];
 
 /// Asserts that every event `recorder` drained serializes to the identity
 /// fields alone, so no argument, path, content, or source text reached a

@@ -39,13 +39,13 @@ fn prompt(front: &str) -> Prompt {
         "---\nname: t\ndescription: d\nrunvil: 0\n{front}---\n\n\
          # Run\n\n## Only\n\n```lua\nreturn 'done'\n```\n"
     );
-    Prompt::parse(&source, "prompt", "requirements-test")
+    Prompt::parse(&|_: &str| Ok(source.clone()), "prompt")
         .0
         .expect("the requirements test prompt parses")
 }
 
 fn params() -> RunParams {
-    RunParams::new("requirements-test", TEST_SEED, Timestamp::UNIX_EPOCH)
+    RunParams::new(TEST_SEED, Timestamp::UNIX_EPOCH)
 }
 
 fn catalog(ids: &[&str]) -> ToolCatalog {

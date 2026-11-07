@@ -18,7 +18,7 @@ use super::*;
 use crate::execute::run::{EffectRecord, PackToolSets, Round, ToolCallOrigin, ToolCaller};
 use crate::lua::VfsOp;
 use crate::test_support::rig::Rig;
-use crate::test_support::scenario::{EXECUTION, round_trip};
+use crate::test_support::scenario::round_trip;
 
 /// Asserts every recorded effect survives the round trip unchanged.
 #[track_caller]
@@ -31,7 +31,7 @@ fn assert_round_trips(records: &[EffectRecord]) {
 /// The origin of a call made by `caller` in the entry `entry` of
 /// `section` of the test run.
 fn origin(section: &str, entry: &str, caller: ToolCaller) -> ToolCallOrigin {
-    ToolCallOrigin::new(EXECUTION, section, caller).with_entry(entry)
+    ToolCallOrigin::new(section, caller).with_entry(entry)
 }
 
 #[test]

@@ -60,8 +60,6 @@ struct SharedState {
     /// store backing every section's Lua `store` table included. Chain
     /// steps acquire or spawn their access capabilities from it.
     vfs: VfsRef,
-    /// The execution identifier stamped on every observation.
-    execution: Arc<str>,
     /// The run's resource limits.
     limits: RunLimits,
     /// The run's event buffer, shared by every chain's emitter, spawned
@@ -144,7 +142,6 @@ impl ChainState {
     #[must_use]
     pub(super) fn root(prompt: Arc<Prompt>, args: &str, params: RunParams) -> Self {
         let RunParams {
-            name,
             seed,
             started_at,
             provenance_start,
@@ -163,7 +160,6 @@ impl ChainState {
         requirements.check_packs(&prompt, &tools, packs.as_ref());
         let refusal = requirements.refusal(&prompt);
         let tool_set = Arc::new(run_tool_set(&prompt, tools, packs.unwrap_or_default()));
-        let execution: Arc<str> = Arc::from(name);
         // The root task's event sequence starts at the params'
         // `provenance_start`: past any parse events the caller put in the
         // stream ahead of the run, or at zero.
@@ -172,7 +168,6 @@ impl ChainState {
         let emitter = Arc::new(Emitter::new(
             events.clone(),
             TaskId::from(ChainId::root()),
-            Arc::clone(&execution),
             report_debug,
         ));
         let derived_argv = derive_argv(&prompt, args).map(Arc::from);
@@ -181,7 +176,6 @@ impl ChainState {
                 prompt,
                 nonce: GuardNonce::from_seed(&seed),
                 vfs,
-                execution,
                 limits,
                 events,
                 cancel,
@@ -251,11 +245,6 @@ impl ChainState {
     /// The run's VFS handle.
     pub(super) fn vfs(&self) -> &VfsRef {
         &self.shared.vfs
-    }
-
-    /// The execution identifier stamped on every observation.
-    pub(super) fn execution(&self) -> &str {
-        &self.shared.execution
     }
 
     /// The run's argument string.
@@ -431,7 +420,7 @@ impl ChainState {
         }
     }
 
-    /// The `sys` for one section entry of this run: the six shared fields
+    /// The `sys` for one section entry of this run: the five shared fields
     /// in one construction, with the constructor supplying only the
     /// section entry's hierarchical id, the entering chain's task id, and
     /// the section name. A task's first entry sets `index` at its own call
@@ -442,7 +431,6 @@ impl ChainState {
             id: id.to_owned(),
             taskid: task_id.clone(),
             section_name: section_name.to_owned(),
-            execution: Arc::clone(&self.shared.execution),
             section_count: self.section_count(),
             index: None,
             model: None,
@@ -470,7 +458,6 @@ impl fmt::Debug for SharedState {
             .field("prompt", &self.prompt)
             .field("nonce", &self.nonce)
             .field("vfs", &"<VfsRef>")
-            .field("execution", &self.execution)
             .field("limits", &self.limits)
             .field("events", &self.events)
             .field("cancel", &self.cancel)
@@ -548,7 +535,7 @@ mod tests {
             "---\nname: t\ndescription: d\nrunvil: 0\n---\n\n",
             "# Title\n\n## Only\n\ndone\n",
         );
-        Prompt::parse(source, "prompt", "run-context-test")
+        Prompt::parse(&|_: &str| Ok(source.to_owned()), "prompt")
             .0
             .expect("the test prompt parses")
     }
@@ -556,11 +543,7 @@ mod tests {
     fn test_state(prompt: &Prompt) -> ChainState {
         state_over(
             prompt,
-            RunParams::new(
-                "run-context-test",
-                TEST_SEED,
-                runvil_types::timestamp::Timestamp::UNIX_EPOCH,
-            ),
+            RunParams::new(TEST_SEED, runvil_types::timestamp::Timestamp::UNIX_EPOCH),
         )
     }
 
@@ -666,12 +649,8 @@ mod tests {
     fn the_root_task_sequence_starts_where_the_params_say() {
         let ctx = state_over(
             &test_prompt(),
-            RunParams::new(
-                "run-context-test",
-                TEST_SEED,
-                runvil_types::timestamp::Timestamp::UNIX_EPOCH,
-            )
-            .with_provenance_start(5),
+            RunParams::new(TEST_SEED, runvil_types::timestamp::Timestamp::UNIX_EPOCH)
+                .with_provenance_start(5),
         );
         ctx.emitter()
             .report("Only", runvil_types::event_lifecycle::SECTION_STARTED);
@@ -706,12 +685,8 @@ mod tests {
         let prompt = test_prompt();
         let info = test_model_with("catalog-model", 65_536, ThinkingMode::Switchable)
             .with_provider("acme");
-        let ctx = RunParams::new(
-            "run-context-test",
-            TEST_SEED,
-            runvil_types::timestamp::Timestamp::UNIX_EPOCH,
-        )
-        .with_models(BTreeMap::from([(ModelRole::Default, info.clone())]));
+        let ctx = RunParams::new(TEST_SEED, runvil_types::timestamp::Timestamp::UNIX_EPOCH)
+            .with_models(BTreeMap::from([(ModelRole::Default, info.clone())]));
         let state = state_over(&prompt, ctx);
         let set = state.model_set();
         let binding = set.binding("default").expect("the filled role binds");
@@ -730,12 +705,8 @@ mod tests {
         };
         let state = state_over(
             &test_prompt(),
-            RunParams::new(
-                "run-context-test",
-                TEST_SEED,
-                runvil_types::timestamp::Timestamp::UNIX_EPOCH,
-            )
-            .with_packs([(web.clone(), usable), (web.clone(), down.clone())]),
+            RunParams::new(TEST_SEED, runvil_types::timestamp::Timestamp::UNIX_EPOCH)
+                .with_packs([(web.clone(), usable), (web.clone(), down.clone())]),
         );
         let tool = ToolId::parse("web/fetch").expect("a static valid tool id");
         assert_eq!(

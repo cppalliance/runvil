@@ -227,9 +227,8 @@ impl Scheduler {
     fn cancel_task(&mut self, caller: ChainIndex, task: &TaskId) -> Result<()> {
         self.tasks.owned(caller, task)?;
         if let Some((backing, target)) = self.tasks.stop(task, Stop::Canceled) {
-            self.end_backing(backing, &target, |execution, section, provenance| {
+            self.end_backing(backing, &target, |section, provenance| {
                 Event::TaskCanceled {
-                    execution,
                     section,
                     provenance,
                     task: task.clone(),

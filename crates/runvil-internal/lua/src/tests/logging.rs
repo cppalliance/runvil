@@ -4,8 +4,6 @@
 
 use super::*;
 
-const EXECUTION: &str = "lua-test";
-
 #[test]
 fn logs_are_correlated_and_ordered_across_chunks() {
     let recorder = Recorder::default();
@@ -31,55 +29,29 @@ fn logs_are_correlated_and_ordered_across_chunks() {
     vm.teardown();
 
     assert_eq!(
-        recorder.records(),
+        recorder.observations(),
         [
+            ("Gather".to_owned(), boundary::LUA_CHUNK_STARTED,),
             (
-                EXECUTION.to_owned(),
-                "Gather".to_owned(),
-                boundary::LUA_CHUNK_STARTED,
-            ),
-            (
-                EXECUTION.to_owned(),
                 "Gather".to_owned(),
                 Observation::Lua("prologue checkpoint".to_owned()),
             ),
+            ("Gather".to_owned(), boundary::LUA_CHUNK_SUCCEEDED,),
+            ("Gather".to_owned(), boundary::LUA_CHUNK_STARTED,),
             (
-                EXECUTION.to_owned(),
-                "Gather".to_owned(),
-                boundary::LUA_CHUNK_SUCCEEDED,
-            ),
-            (
-                EXECUTION.to_owned(),
-                "Gather".to_owned(),
-                boundary::LUA_CHUNK_STARTED,
-            ),
-            (
-                EXECUTION.to_owned(),
                 "Gather".to_owned(),
                 Observation::Lua("epilog checkpoint".to_owned()),
             ),
-            (
-                EXECUTION.to_owned(),
-                "Gather".to_owned(),
-                boundary::LUA_CHUNK_SUCCEEDED,
-            ),
-            (
-                EXECUTION.to_owned(),
-                "Gather".to_owned(),
-                boundary::LUA_TEARDOWN_STARTED,
-            ),
-            (
-                EXECUTION.to_owned(),
-                "Gather".to_owned(),
-                boundary::LUA_TEARDOWN_SUCCEEDED,
-            ),
+            ("Gather".to_owned(), boundary::LUA_CHUNK_SUCCEEDED,),
+            ("Gather".to_owned(), boundary::LUA_TEARDOWN_STARTED,),
+            ("Gather".to_owned(), boundary::LUA_TEARDOWN_SUCCEEDED,),
         ]
     );
 }
 
 #[test]
 fn compatibility_chunk_logs_interleave_with_engine_operations() {
-    let recorder = Recorder::for_execution("compatibility-run");
+    let recorder = Recorder::default();
     let observer = recorder.emitter().clone();
     run_chunk(
         "log('before write')\n\
@@ -94,20 +66,17 @@ fn compatibility_chunk_logs_interleave_with_engine_operations() {
     .expect("compatibility logging must succeed");
 
     assert_eq!(
-        recorder.records(),
+        recorder.observations(),
         [
             (
-                "compatibility-run".to_owned(),
                 "Compatibility".to_owned(),
                 Observation::Lua("before write".to_owned()),
             ),
             (
-                "compatibility-run".to_owned(),
                 "Compatibility".to_owned(),
                 boundary::VFS_WRITE_SUCCEEDED.clone(),
             ),
             (
-                "compatibility-run".to_owned(),
                 "Compatibility".to_owned(),
                 Observation::Lua("after write".to_owned()),
             ),
@@ -155,7 +124,7 @@ fn log_accepts_exactly_one_bounded_control_free_utf8_string() {
             "wrong validation error for {source:?}: {error}"
         );
         assert!(
-            recorder.records().is_empty(),
+            recorder.observations().is_empty(),
             "invalid log input must emit no report"
         );
     }
@@ -187,12 +156,8 @@ fn log_accepts_exactly_one_bounded_control_free_utf8_string() {
     )
     .expect("256 Unicode characters must succeed");
     assert_eq!(
-        recorder.records(),
-        [(
-            EXECUTION.to_owned(),
-            "Validation".to_owned(),
-            Observation::Lua(maximum.clone()),
-        )]
+        recorder.observations(),
+        [("Validation".to_owned(), Observation::Lua(maximum.clone()),)]
     );
 }
 
@@ -224,9 +189,9 @@ fn log_cumulative_byte_budget_is_enforced_before_the_event_budget() {
         "the byte ceiling must surface as a typed LuaQuota: {error:?}"
     );
     let logged = recorder
-        .records()
+        .observations()
         .into_iter()
-        .filter(|(_, _, event)| matches!(event, Observation::Lua(_)))
+        .filter(|(_, event)| matches!(event, Observation::Lua(_)))
         .count();
     assert_eq!(
         logged, 2,
@@ -301,29 +266,29 @@ fn installed_log_persists_across_chunks() {
     vm.teardown();
 
     let details = recorder
-        .records()
+        .observations()
         .into_iter()
-        .map(|(_, _, observation)| observation.to_string())
+        .map(|(_, observation)| observation.to_string())
         .collect::<Vec<_>>();
     assert!(details.contains(&"Lua: first chunk".to_owned()));
     assert!(details.contains(&"Lua: retained call".to_owned()));
 }
 
 #[test]
-fn concurrent_logs_keep_execution_ids_and_local_order() {
+fn concurrent_logs_keep_their_sections_and_local_order() {
     let recorder = Arc::new(Recorder::default());
     let mut workers = Vec::new();
-    for execution in ["execution-a", "execution-b"] {
+    for section in ["Concurrent-a", "Concurrent-b"] {
         let recorder = Arc::clone(&recorder);
         workers.push(std::thread::spawn(move || {
-            let observer = recorder.emitter_for(execution);
+            let observer = recorder.emitter().clone();
             run_chunk(
                 "log('first'); log('second')",
                 "",
                 &json!({}),
                 &fresh_access(),
                 &observer,
-                "Concurrent",
+                section,
             )
             .expect("concurrent log run must succeed");
         }));
@@ -332,18 +297,15 @@ fn concurrent_logs_keep_execution_ids_and_local_order() {
         worker.join().expect("logging worker must finish");
     }
 
-    let records = recorder.records();
-    for execution in ["execution-a", "execution-b"] {
+    let records = recorder.observations();
+    for section in ["Concurrent-a", "Concurrent-b"] {
         assert_eq!(
             records
                 .iter()
-                .filter(|(actual, _, _)| actual == execution)
-                .map(|(_, section, observation)| (section.clone(), observation.to_string()))
+                .filter(|(actual, _)| actual == section)
+                .map(|(_, observation)| observation.to_string())
                 .collect::<Vec<_>>(),
-            [
-                ("Concurrent".to_owned(), "Lua: first".to_owned()),
-                ("Concurrent".to_owned(), "Lua: second".to_owned()),
-            ]
+            ["Lua: first", "Lua: second"]
         );
     }
 }

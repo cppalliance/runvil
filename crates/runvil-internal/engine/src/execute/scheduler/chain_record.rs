@@ -611,13 +611,13 @@ impl Chain {
             "---\nname: t\ndescription: d\nrunvil: 0\n---\n\n",
             "# Title\n\n## Only\n\ndone\n",
         );
-        let prompt = Prompt::parse(source, "prompt", "chain-test")
+        let prompt = Prompt::parse(&|_: &str| Ok(source.to_owned()), "prompt")
             .0
             .expect("the test prompt parses");
         let ctx = ChainState::root(
             Arc::new(prompt),
             "",
-            RunParams::new("chain-test", TEST_SEED, TEST_STARTED_AT),
+            RunParams::new(TEST_SEED, TEST_STARTED_AT),
         );
         Chain {
             task: TaskId::from(lineage.clone()),

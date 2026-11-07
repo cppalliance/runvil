@@ -7,7 +7,7 @@ use super::context::{Recorder, sequence};
 use super::fixtures::{echo_tool, scoped_tool};
 use super::models_loop::{LOOP_TO_TEXT, loop_events, loop_scenario};
 use super::*;
-use crate::test_support::scenario::{EXECUTION, TestStore};
+use crate::test_support::scenario::TestStore;
 
 /// The prompt whose one section, `Only`, raises.
 fn failing_prompt() -> String {
@@ -286,7 +286,7 @@ fn a_one_byte_limit_fails_value_injection_with_teardown_observations() {
 }
 
 #[test]
-fn one_execution_id_spans_parse_and_the_complete_runtime_lifecycle() {
+fn the_records_span_parse_and_the_complete_runtime_lifecycle() {
     let gateway = ScriptedChat::new(vec![text("aliased final")]);
     let (tool, called) = scoped_tool("echo", "Echo a test value.");
     let source = "---\nname: lifecycle\ndescription: Correlated lifecycle fixture\nrunvil: 0\nuses:\n  - tools\n---\n\n\
@@ -310,10 +310,6 @@ fn one_execution_id_spans_parse_and_the_complete_runtime_lifecycle() {
     assert_eq!(called.load(Ordering::SeqCst), 1);
     let records = trace.records();
     assert!(!records.is_empty());
-    assert!(
-        records.iter().all(|record| record.execution == EXECUTION),
-        "every lifecycle record must retain {EXECUTION}: {records:#?}"
-    );
     let details = records
         .iter()
         .map(|record| record.detail.clone())

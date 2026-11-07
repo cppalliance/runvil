@@ -2,7 +2,7 @@
 //!
 //! A Host makes a [`pack::PackRegistry`], calls each Plugin it links,
 //! which inserts its Packs into the registry, and builds one
-//! [`pack::HostContext`] over it, which builds every Pack the registry
+//! [`pack::Packs`] over it, which builds every Pack the registry
 //! holds. It builds them once and builds one Harness for each run.
 //! [`Harness::new`] takes the Host's recorder, inference broker, timer,
 //! built Packs, and the run's own services. [`Harness::run`]
@@ -20,6 +20,7 @@
 //! The crate's `run-prompt` example runs one prompt from start to end.
 
 pub use harness_runner::Harness;
+pub use harness_runner::Host;
 pub use harness_runner::RunControl;
 pub use harness_runner::RunReport;
 pub use harness_runner::RunRequest;
@@ -28,14 +29,15 @@ pub use harness_runner::environment::HostSnapshot;
 pub use harness_runner::performers::BoxFuture;
 pub use harness_runner::performers::InferenceBroker;
 pub use harness_runner::performers::Timer;
+pub use runvil::PromptFinder;
 
 pub mod pack {
-    //! The registry a Host's Plugins insert Packs into, the context that
-    //! builds every Pack the registry holds, the services maps a Host
+    //! The registry a Host's Plugins insert Packs into, the Packs built
+    //! from every Pack the registry holds, the services maps a Host
     //! fills, and the Pack ids. The Plugin crates themselves are the
     //! Host's own dependencies.
 
-    pub use harness_runner::HostContext;
+    pub use harness_runner::Packs;
     pub use runvil_plugin::HostServices;
     pub use runvil_plugin::PackId;
     pub use runvil_plugin::PackOrigin;

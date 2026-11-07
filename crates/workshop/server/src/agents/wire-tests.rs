@@ -62,7 +62,6 @@ fn operator_message(text: &str) -> Event {
 /// projects from, every metrics section populated.
 fn stamped_fixture_event() -> Event {
     Event::AssistantReply {
-        execution: "run".to_owned(),
         section: "chat".to_owned(),
         provenance: provenance(),
         turn: 2,
@@ -160,7 +159,6 @@ fn an_agent_event_frame_has_its_log_index_and_optional_reply_id() {
 #[test]
 fn an_agent_event_frame_renders_tool_call_batches_and_skips_lifecycle_events() {
     let batch = Event::AssistantToolCalls {
-        execution: "run".to_owned(),
         section: "chat".to_owned(),
         provenance: provenance(),
         turn: 1,
@@ -183,7 +181,6 @@ fn an_agent_event_frame_renders_tool_call_batches_and_skips_lifecycle_events() {
     assert_eq!(frame["event"]["model"], "llama-3");
 
     let lifecycle = Event::SectionStarted {
-        execution: "run".to_owned(),
         section: "chat".to_owned(),
         provenance: provenance(),
     };
@@ -196,7 +193,6 @@ fn an_agent_event_frame_renders_tool_call_batches_and_skips_lifecycle_events() {
 #[test]
 fn an_agent_event_frame_keeps_the_model_on_thinking_and_the_call_id_on_tool_results() {
     let thinking = Event::Thinking {
-        execution: "run".to_owned(),
         section: "chat".to_owned(),
         provenance: provenance(),
         turn: 2,
@@ -216,7 +212,6 @@ fn an_agent_event_frame_keeps_the_model_on_thinking_and_the_call_id_on_tool_resu
     );
 
     let result = Event::ToolResult {
-        execution: "run".to_owned(),
         section: "chat".to_owned(),
         provenance: provenance(),
         turn: 2,
@@ -250,7 +245,6 @@ fn tool_result(
     content: &str,
 ) -> Event {
     Event::ToolResult {
-        execution: "run".to_owned(),
         section: "chat".to_owned(),
         provenance: provenance(),
         turn: 2,

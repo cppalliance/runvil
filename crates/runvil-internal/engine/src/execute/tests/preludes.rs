@@ -13,8 +13,6 @@ use super::fixtures::echo_tool;
 use super::*;
 use crate::execute::run::{EffectRecord, ToolCallOrigin, ToolCaller};
 use crate::lua::VfsOp;
-use crate::test_support::scenario::EXECUTION;
-
 /// A prelude contributed by the Pack `id`.
 pub(super) fn prelude(id: &str, source: &str) -> Prelude {
     Prelude::new(PackId::parse(id).expect("a valid Pack id"), source)
@@ -260,7 +258,7 @@ fn a_tool_call_made_inside_a_prelude_function_records_a_script_caller() {
             tool: ToolId::parse("tools/echo").expect("a valid id"),
             alias: "tools/echo".to_owned(),
             args: json!({ "value": "hi" }),
-            origin: ToolCallOrigin::new(EXECUTION, "Only", ToolCaller::Script).with_entry("0.1"),
+            origin: ToolCallOrigin::new("Only", ToolCaller::Script).with_entry("0.1"),
         }]
     );
 }

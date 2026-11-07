@@ -25,7 +25,7 @@ mod tests;
 /// function. The Host makes the registry with
 /// [`new`](PackRegistry::new), which holds the built-ins such as
 /// `runvil/subagents` from the start, and calls each Plugin it links. Then
-/// it hands the registry to `HostContext::new`, which reads it through
+/// it hands the registry to `Packs::new`, which reads it through
 /// [`into_entries`](PackRegistry::into_entries) and calls each Pack's
 /// `construct` once, at startup, to make the one Pack object every run
 /// shares.

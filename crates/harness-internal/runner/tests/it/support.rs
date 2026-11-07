@@ -28,9 +28,6 @@ use runvil::{ToolCatalog, ToolId, ToolInfo, ToolOutput};
 use runvil_plugin::{PackInfo, PackRegistry};
 use serde_json::{Value, json};
 
-/// The run's execution identifier.
-pub(crate) const EXECUTION: &str = "runner-test";
-
 /// The fixed seed every fixture run and recorded meta takes.
 pub(crate) const TEST_SEED: RunSeed = RunSeed::from_bytes([7; 32]);
 
@@ -93,7 +90,7 @@ fn prompt(sections: &[(&str, &str)]) -> Arc<Prompt> {
     for (name, lua) in sections {
         write!(source, "\n## {name}\n\n```lua\n{lua}\n```\n").expect("a String takes any write");
     }
-    let (prompt, _parse_events) = Prompt::parse(&source, "prompt", EXECUTION);
+    let (prompt, _parse_events) = Prompt::parse(&|_: &str| Ok(source.clone()), "prompt");
     Arc::new(prompt.expect("the fixture prompt parses"))
 }
 
@@ -101,7 +98,7 @@ fn prompt(sections: &[(&str, &str)]) -> Arc<Prompt> {
 /// prepared against the fixture [`catalog`], over the run's filesystem
 /// `vfs`, under the cancel flag `cancel`.
 fn prepared(prompt: Arc<Prompt>, vfs: VfsRef, cancel: &CancelHandle) -> Run {
-    let ctx = RunParams::new(EXECUTION, TEST_SEED, Timestamp::UNIX_EPOCH)
+    let ctx = RunParams::new(TEST_SEED, Timestamp::UNIX_EPOCH)
         .with_vfs(vfs)
         .with_tools(catalog())
         .with_cancel(cancel.clone());

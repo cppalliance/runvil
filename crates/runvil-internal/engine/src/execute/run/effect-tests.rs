@@ -433,7 +433,7 @@ fn every_kinds_public_record_is_json_that_round_trips_exactly() {
             tool: ToolId::parse("tools/echo").expect("a fixture tool id"),
             alias: "echo".to_owned(),
             args: json!({ "value": 0.1, "nested": { "b": 1, "a": [true, null] } }),
-            origin: ToolCallOrigin::new("run-1", "Only", ToolCaller::Model).with_entry("0.1"),
+            origin: ToolCallOrigin::new("Only", ToolCaller::Model).with_entry("0.1"),
             access: access(),
             survives_stop: false,
         },

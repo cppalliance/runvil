@@ -20,7 +20,7 @@ fn a_run_whose_only_section_returns_a_literal_is_done_at_its_first_step() {
 #[test]
 fn a_run_that_cannot_start_reports_its_failure_on_the_first_step() {
     let source = "---\nname: t\ndescription: d\nrunvil: 7\n---\n\n# Run\n\n## Only\n\ndone\n";
-    let prompt = Prompt::parse(source, "prompt", "run-test")
+    let prompt = Prompt::parse(&|_: &str| Ok(source.to_owned()), "prompt")
         .0
         .expect("the prompt parses whatever version it declares");
     let mut run = Run::new(Arc::new(prompt), "", run_params());

@@ -69,8 +69,6 @@ pub(super) struct SectionSys {
     /// construction, and the name the frame's `Drop` reports the teardown
     /// boundary and the completion observation under.
     pub(super) section_name: String,
-    /// The run's execution identifier.
-    pub(super) execution: Arc<str>,
     /// The prompt's top-level section count.
     pub(super) section_count: usize,
     /// A spawned chain's `opts.index`, on its first entry only.
@@ -87,7 +85,6 @@ impl SectionSys {
             "id": self.id,
             "taskid": self.taskid.to_string(),
             "section_name": self.section_name,
-            "execution": &*self.execution,
             "section_count": self.section_count,
         });
         if let Some(index) = self.index {
@@ -580,7 +577,6 @@ mod tests {
             id: "0.2.1".to_owned(),
             taskid: TaskId::from(ChainId::root().child(2)),
             section_name: "Draft".to_owned(),
-            execution: Arc::from("run-7"),
             section_count: 3,
             index: None,
             model: None,
@@ -588,7 +584,7 @@ mod tests {
     }
 
     #[test]
-    fn sys_json_holds_the_six_shared_fields_with_a_string_task_id() {
+    fn sys_json_holds_the_five_shared_fields_with_a_string_task_id() {
         assert_eq!(
             sys().to_json(),
             json!({
@@ -596,7 +592,6 @@ mod tests {
                 "id": "0.2.1",
                 "taskid": "0.2",
                 "section_name": "Draft",
-                "execution": "run-7",
                 "section_count": 3,
             })
         );
@@ -629,7 +624,6 @@ mod tests {
                 "id": "0.2.1",
                 "taskid": "0.2",
                 "section_name": "Draft",
-                "execution": "run-7",
                 "section_count": 3,
                 "index": 4,
                 "model": "qwen3",

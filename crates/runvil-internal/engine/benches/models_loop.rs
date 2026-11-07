@@ -33,8 +33,6 @@ use runvil_types::models::{ModelCatalog, ModelId, ModelInfo, ModelRole, Thinking
 use runvil_types::seed::RunSeed;
 use runvil_types::timestamp::Timestamp;
 
-const EXECUTION: &str = "bench";
-
 /// The fixed seed every bench run starts from.
 const SEED: RunSeed = RunSeed::from_bytes([1; 32]);
 
@@ -74,7 +72,7 @@ const LOOP_PROMPT: &str = "---\nname: bench_loop\ndescription: d\nrunvil: 0\n---
 
 /// Parses the loop prompt once for the whole benchmark.
 fn parse_loop_prompt() -> Prompt {
-    Prompt::parse(LOOP_PROMPT, "prompt", EXECUTION)
+    Prompt::parse(&|_: &str| Ok(LOOP_PROMPT.to_owned()), "prompt")
         .0
         .expect("the bench prompt parses")
 }
@@ -84,7 +82,7 @@ fn parse_loop_prompt() -> Prompt {
 /// A prompt the run's start checks refuse ends with the refusal.
 fn run_once(prompt: &Prompt, chat: &ScriptedChat, context: u32) -> Result<String, Error> {
     let model = bench_catalog(context).models()[0].clone();
-    let ctx = RunParams::new(EXECUTION, SEED, Timestamp::UNIX_EPOCH)
+    let ctx = RunParams::new(SEED, Timestamp::UNIX_EPOCH)
         .with_models(BTreeMap::from([(ModelRole::Default, model)]));
     let run = Run::new(Arc::new(prompt.clone()), "", ctx);
     let (result, _) = drive(run, |_, effect| {

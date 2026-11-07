@@ -30,6 +30,7 @@ mod contract;
 pub mod detail;
 mod error;
 mod fence;
+mod finder;
 mod frontmatter;
 mod list;
 mod parse;
@@ -43,6 +44,7 @@ pub mod test_support;
 pub use body_text::BodyText;
 pub use contract::{ArgDecl, ArgType, ArgsDecl, ArgsDeclIter, RoleRequirements};
 use error::Result;
+pub use finder::PromptFinder;
 #[cfg(test)]
 use frontmatter::MAX_TOOL_ITERATIONS;
 pub use frontmatter::{FileDecl, Frontmatter};

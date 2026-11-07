@@ -11,7 +11,7 @@ use super::context::{parse, test_params};
 use super::*;
 use crate::execute::run::Run;
 use crate::test_support::drive;
-use crate::test_support::scenario::{EXECUTION, TEST_SEED, text_of};
+use crate::test_support::scenario::{TEST_SEED, text_of};
 use crate::test_support::seeded::Seeded;
 
 /// A fixed instant with a millisecond fraction, so the rendering exercises
@@ -26,7 +26,7 @@ const DRAWS: u64 = 0x5EED;
 /// Runs `md` with no effects under `seed` and [`STARTED_AT`], returning
 /// the run's result.
 fn run_seeded(md: &str, seed: RunSeed) -> Result<String, crate::Error> {
-    let ctx = RunParams::new(EXECUTION, seed, STARTED_AT);
+    let ctx = RunParams::new(seed, STARTED_AT);
     let (result, _) = drive(Run::new(Arc::new(parse(md)), "", ctx), |_, effect| {
         panic!("no effect is issued: {effect:?}")
     });
@@ -114,7 +114,7 @@ fn sys_when_is_timestamp_to_rfc3339_for_any_started_at() {
         return sys.when\n\
         ```\n";
     let whole_second = Timestamp::from_unix_millis(1_700_000_000_000);
-    let ctx = RunParams::new(EXECUTION, TEST_SEED, whole_second);
+    let ctx = RunParams::new(TEST_SEED, whole_second);
     let (result, _) = drive(Run::new(Arc::new(parse(md)), "", ctx), |_, effect| {
         panic!("no effect is issued: {effect:?}")
     });
@@ -130,7 +130,7 @@ fn sys_when_is_timestamp_to_rfc3339_for_any_started_at() {
 fn a_run_params_debug_shows_no_seed() {
     let mut rng = Seeded::new(DRAWS);
     let seed = rng.run_seed();
-    let ctx = RunParams::new(EXECUTION, seed, STARTED_AT);
+    let ctx = RunParams::new(seed, STARTED_AT);
     let debug = format!("{ctx:?}");
     rng.check(
         !debug.contains(&seed.to_string()) && !debug.to_lowercase().contains("seed"),
@@ -163,8 +163,7 @@ fn the_ui_global_serves_the_snapshot_taken_at_run_start() {
         ```lua\n\
         return ui().selected_model .. '/' .. tostring(ui().workspace_root)\n\
         ```\n";
-    let ctx =
-        test_params(EXECUTION).with_ui(json!({ "selected_model": "m-1", "workspace_root": null }));
+    let ctx = test_params().with_ui(json!({ "selected_model": "m-1", "workspace_root": null }));
     let (result, _) = drive(Run::new(Arc::new(parse(md)), "", ctx), |_, effect| {
         panic!("no effect is issued: {effect:?}")
     });

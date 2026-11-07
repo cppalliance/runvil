@@ -124,7 +124,6 @@ async fn arrays_of_mixed_numbers_round_trip_through_the_log() {
 #[tokio::test]
 async fn a_real_assistant_reply_with_metrics_round_trips_through_the_log() {
     let event = Event::AssistantReply {
-        execution: "run-1".to_owned(),
         section: "chat".to_owned(),
         provenance: provenance().unwrap(),
         turn: 2,

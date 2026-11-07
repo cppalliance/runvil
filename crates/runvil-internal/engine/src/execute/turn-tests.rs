@@ -57,7 +57,7 @@ fn report(completion: Completion) -> Vec<Event> {
 /// when `debug` is set, and returns the events it pushed.
 fn report_with(completion: Completion, debug: bool) -> Vec<Event> {
     let sink = EventSink::default();
-    let emitter = Emitter::root(sink.clone(), "run-1", debug);
+    let emitter = Emitter::root(sink.clone(), debug);
     let _ = report_model_turn(
         &emitter,
         "Chat",

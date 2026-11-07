@@ -5,15 +5,15 @@
 //! [`Event`](runvil_types::event::Event) values a run returns.
 //!
 //! The Engine reports as values and never through a callback. The suites,
-//! though, assert on sequences of `(execution, section, observation)`
-//! records and on the `on_*` content hooks, so this module keeps that
+//! though, assert on sequences of `(section, observation)` records and on
+//! the `on_*` content hooks, so this module keeps that
 //! vocabulary as a test fixture. [`forward()`] replays a returned batch onto
 //! an observer, in order, so the suites hold without rewriting their
 //! assertions. The remaining seams - the raw-body capture, the null
 //! observer, the detail constants - are crate-internal plumbing.
 //!
 //! # Sensitivity
-//! The `execution` and `section` coordinates are author-controlled, and
+//! The `section` coordinate is author-controlled, and
 //! every `on_*` payload is model-, tool-, or user-authored; a recorder
 //! that persists them owns treating them as untrusted.
 
@@ -36,8 +36,8 @@ pub(crate) use observation::detail;
 /// Each method has a default body that discards the report, so a recorder
 /// pays only for the hooks it overrides.
 pub(crate) trait Observer: Send + Sync {
-    /// Records one typed [`Observation`] for `execution` and `section`.
-    fn observe(&self, execution: &str, section: &str, event: Observation);
+    /// Records one typed [`Observation`] for `section`.
+    fn observe(&self, section: &str, event: Observation);
 
     /// Records one completed assistant reply.
     #[expect(unused_variables, reason = "the default body discards the report")]
@@ -60,8 +60,6 @@ pub(crate) trait Observer: Send + Sync {
 /// receives it.
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct ReplyReport<'a> {
-    /// The caller-chosen run identifier.
-    pub(crate) execution: &'a str,
     /// The event's reporting scope.
     pub(crate) section: &'a str,
     /// The model-turn counter the reply was produced under.
@@ -82,8 +80,6 @@ pub(crate) struct ReplyReport<'a> {
 /// [`Observer::on_assistant_tool_calls`] receives it.
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct ToolCallsReport<'a> {
-    /// The caller-chosen run identifier.
-    pub(crate) execution: &'a str,
     /// The event's reporting scope.
     pub(crate) section: &'a str,
     /// The model-turn counter the batch was requested under.
@@ -98,8 +94,6 @@ pub(crate) struct ToolCallsReport<'a> {
 /// receives it.
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct ToolResultReport<'a> {
-    /// The caller-chosen run identifier.
-    pub(crate) execution: &'a str,
     /// The event's reporting scope.
     pub(crate) section: &'a str,
     /// The model-turn counter the call was dispatched under.
@@ -118,8 +112,6 @@ pub(crate) struct ToolResultReport<'a> {
 /// receives it.
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct ThinkingReport<'a> {
-    /// The caller-chosen run identifier.
-    pub(crate) execution: &'a str,
     /// The event's reporting scope.
     pub(crate) section: &'a str,
     /// The model-turn counter the block was produced under.
@@ -135,7 +127,7 @@ pub(crate) struct ThinkingReport<'a> {
 #[cfg(test)]
 #[must_use]
 pub(crate) fn null_emitter() -> runvil_types::emitter::Emitter {
-    runvil_types::emitter::Emitter::root(runvil_types::emitter::EventSink::default(), "test", false)
+    runvil_types::emitter::Emitter::root(runvil_types::emitter::EventSink::default(), false)
 }
 
 /// An [`Observer`] that discards every report: what a suite installs when
@@ -144,7 +136,7 @@ pub(crate) fn null_emitter() -> runvil_types::emitter::Emitter {
 pub(crate) struct NullObserver;
 
 impl Observer for NullObserver {
-    fn observe(&self, _execution: &str, _section: &str, _event: Observation) {}
+    fn observe(&self, _section: &str, _event: Observation) {}
 }
 
 /// The raw model-turn capture a debug suite installs: the two bodies of
@@ -152,7 +144,7 @@ impl Observer for NullObserver {
 pub(crate) trait DebugCapture: Send + Sync {
     /// Receives one capture event for a model turn. `turn_index` is the
     /// 1-based model-turn number within the run.
-    fn on_event(&self, execution: &str, section: &str, turn_index: u32, event: DebugEvent);
+    fn on_event(&self, section: &str, turn_index: u32, event: DebugEvent);
 }
 
 /// One owned capture payload for a model turn: the verbatim wire body.

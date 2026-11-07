@@ -372,18 +372,15 @@ impl Scheduler {
         // The start event fires at admission, on its owner's sequence:
         // the task first runs now, and the payload's seeds are enough to
         // start the same chain again under the same id.
-        emitter.emit(&record.section, |execution, section, provenance| {
-            Event::TaskStarted {
-                execution,
-                section,
-                provenance,
-                task,
-                target,
-                input: record.input,
-                item,
-                index,
-                var,
-            }
+        emitter.emit(&record.section, |section, provenance| Event::TaskStarted {
+            section,
+            provenance,
+            task,
+            target,
+            input: record.input,
+            item,
+            index,
+            var,
         });
         self.ready.push_back(id);
         Ok(())

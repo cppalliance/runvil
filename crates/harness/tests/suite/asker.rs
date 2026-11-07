@@ -6,7 +6,7 @@
 
 use std::sync::Arc;
 
-use harness::pack::{HostContext, HostServices, PackRegistry};
+use harness::pack::{HostServices, PackRegistry, Packs};
 use runvil::make_tool_error;
 use runvil::{Error, ErrorCode};
 use runvil_plugin::{
@@ -42,12 +42,12 @@ pub(crate) trait AskBroker: Send + Sync {
 }
 
 /// A Host that built the fixture, as `user-input`.
-pub(crate) fn asker_host() -> Arc<HostContext> {
+pub(crate) fn asker_host() -> Arc<Packs> {
     let mut packs = PackRegistry::new();
     if let Err(error) = packs.insert(ASKER, Value::Null) {
         panic!("a new registry takes the fixture: {error}");
     }
-    Arc::new(HostContext::new(packs, HostServices::new()))
+    Arc::new(Packs::new(packs, HostServices::new()))
 }
 
 /// Run services holding `broker` as the run's input broker.

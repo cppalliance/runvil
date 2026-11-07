@@ -62,7 +62,7 @@ fn a_tool_calls_origin_is_named_at_runvil_effect() -> TestResult {
         .find_map(|logged| logged.effect_of("ToolCall"))
         .ok_or("the greeter calls its shout tool before it ends")?;
     let origin: ToolCallOrigin = serde_json::from_value(origin["origin"].clone())?;
-    let expected = ToolCallOrigin::new("greeter", "Shout", ToolCaller::Script).with_entry("0.1.0");
+    let expected = ToolCallOrigin::new("Shout", ToolCaller::Script).with_entry("0.1.0");
     assert_eq!(origin, expected);
     Ok(())
 }
