@@ -10,7 +10,7 @@ use std::time::Duration;
 use plugin_web::{
     SearchError, SearchErrorKind, SearchProvider, SearchQuery, SearchResult, SearchResults,
 };
-use runvil::tools::tool_error;
+use runvil::tool_error;
 use runvil::{Error, ErrorCode};
 
 use crate::config::{GatewayEndpoint, SecretString};

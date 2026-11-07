@@ -15,8 +15,8 @@ use harness_runner::recorder::{
 use runvil::Error;
 use runvil::cancel::CancelHandle;
 use runvil::effect::ToolCallOrigin;
-use runvil::tools::{ToolId, ToolOutput};
 use runvil::vfs::Access;
+use runvil::{ToolId, ToolOutput};
 use serde_json::{Value, json};
 
 use crate::support::{

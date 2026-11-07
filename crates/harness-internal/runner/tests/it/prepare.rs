@@ -24,7 +24,7 @@ use harness_runner::recorder::{
 };
 use runvil::cancel::CancelHandle;
 use runvil::event::Event;
-use runvil::tools::tool_error;
+use runvil::tool_error;
 use runvil::{Error, ErrorCode, ErrorFact};
 use runvil_plugin::{
     HostServices, Pack, PackFuture, PackId, PackInfo, ToolContext, ToolId, ToolInfo, ToolOutput,

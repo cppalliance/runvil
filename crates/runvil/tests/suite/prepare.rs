@@ -6,8 +6,8 @@
 use runvil::ErrorCode;
 use runvil::event::Event;
 use runvil::model::{ModelRole, ThinkingMode};
-use runvil::tools::{ToolCatalog, ToolInfo, ToolOutput};
 use runvil::vfs::{MemoryBackend, Origin, RealBackend, VfsError, VfsRef};
+use runvil::{ToolCatalog, ToolInfo, ToolOutput};
 
 use super::support::{Scenario, TempRoot, TestResult, Tool, Trace, model, prompt, text, tool_info};
 

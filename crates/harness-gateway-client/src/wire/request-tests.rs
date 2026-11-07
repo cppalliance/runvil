@@ -15,8 +15,8 @@ use runvil::model::{
     Completion, CompletionResult, ModelId, ModelInfo, ModelRole, ThinkingMode, ToolCall,
 };
 use runvil::timestamp::Timestamp;
-use runvil::tools::{ToolCatalog, ToolId, ToolInfo, ToolOutput};
 use runvil::{Prompt, Run, RunParams, RunSeed, Step};
+use runvil::{ToolCatalog, ToolId, ToolInfo, ToolOutput};
 use serde_json::json;
 
 use super::*;

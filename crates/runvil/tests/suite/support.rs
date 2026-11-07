@@ -11,7 +11,7 @@ use runvil::ErrorCode;
 use runvil::model::{
     CompletionResult, ModelId, ModelInfo, ThinkingMode, ToolCall, completion_error, phrase,
 };
-use runvil::tools::{ToolId, ToolInfo, ToolOutput, tool_error};
+use runvil::{ToolId, ToolInfo, ToolOutput, tool_error};
 use serde_json::Value;
 
 mod scenario;

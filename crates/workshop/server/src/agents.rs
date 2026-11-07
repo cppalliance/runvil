@@ -52,7 +52,7 @@ use harness::pack::{HostContext, HostServices, PackRegistry};
 use harness::record::RunId;
 use harness::{Harness, RunRequest};
 use plugin_web::SEARCH_PROVIDER;
-use runvil::tools::ToolId;
+use runvil::ToolId;
 use runvil_plugin::ServiceKey;
 use serde_json::{Map, Value};
 use workshop_agents::{

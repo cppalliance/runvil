@@ -1,3 +1,4 @@
+#[non_exhaustive] pub enum runvil::OutputTrust
 #[non_exhaustive] pub enum runvil::effect::ToolCaller
 #[non_exhaustive] pub enum runvil::event::Event
 #[non_exhaustive] pub enum runvil::event::ReplyOrigin
@@ -7,7 +8,6 @@
 #[non_exhaustive] pub enum runvil::model::Role
 #[non_exhaustive] pub enum runvil::model::ThinkingMode
 #[non_exhaustive] pub enum runvil::prompt::ArgType
-#[non_exhaustive] pub enum runvil::tools::OutputTrust
 #[non_exhaustive] pub enum runvil::vfs::FileType
 #[non_exhaustive] pub enum runvil::vfs::Mode
 #[non_exhaustive] pub enum runvil::vfs::Op
@@ -18,6 +18,10 @@
 #[non_exhaustive] pub enum runvil::vfs::VfsOutcome
 #[non_exhaustive] pub enum runvil::vfs::Writability
 #[non_exhaustive] pub struct runvil::RunLimits { .. }
+#[non_exhaustive] pub struct runvil::ToolCatalog { /* private fields */ }
+#[non_exhaustive] pub struct runvil::ToolId(/* private fields */)
+#[non_exhaustive] pub struct runvil::ToolInfo { .. }
+#[non_exhaustive] pub struct runvil::ToolOutput { /* private fields */ }
 #[non_exhaustive] pub struct runvil::effect::IssuedEffect { .. }
 #[non_exhaustive] pub struct runvil::effect::PackToolSets<T> { .. }
 #[non_exhaustive] pub struct runvil::effect::Round { .. }
@@ -41,10 +45,6 @@
 #[non_exhaustive] pub struct runvil::model::ToolCall { /* private fields */ }
 #[non_exhaustive] pub struct runvil::model::ToolSchema { /* private fields */ }
 #[non_exhaustive] pub struct runvil::packs::PackId(/* private fields */)
-#[non_exhaustive] pub struct runvil::tools::ToolCatalog { /* private fields */ }
-#[non_exhaustive] pub struct runvil::tools::ToolId(/* private fields */)
-#[non_exhaustive] pub struct runvil::tools::ToolInfo { .. }
-#[non_exhaustive] pub struct runvil::tools::ToolOutput { /* private fields */ }
 #[non_exhaustive] pub struct runvil::vfs::Entry { .. }
 #[non_exhaustive] pub struct runvil::vfs::MemoryBackend { /* private fields */ }
 #[non_exhaustive] pub struct runvil::vfs::Origin { .. }
@@ -53,6 +53,7 @@
 auto runvil::Error: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::ErrorCode: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::ErrorFact: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
+auto runvil::OutputTrust: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::Prompt: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::Run: Freeze, !RefUnwindSafe, Send, Sync, Unpin, !UnwindSafe
 auto runvil::RunLimits: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
@@ -60,6 +61,10 @@ auto runvil::RunParams: Freeze, !RefUnwindSafe, Send, Sync, Unpin, !UnwindSafe
 auto runvil::RunSeed: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::SourceLoc: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::Step: Freeze, !RefUnwindSafe, Send, Sync, Unpin, !UnwindSafe
+auto runvil::ToolCatalog: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
+auto runvil::ToolId: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
+auto runvil::ToolInfo: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
+auto runvil::ToolOutput: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::cancel::CancelHandle: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::cancel::Canceled: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::effect::Effect: Freeze, !RefUnwindSafe, Send, Sync, Unpin, !UnwindSafe
@@ -113,11 +118,6 @@ auto runvil::prompt::FileDecl: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindS
 auto runvil::prompt::Frontmatter: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::prompt::RoleRequirements: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::timestamp::Timestamp: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
-auto runvil::tools::OutputTrust: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
-auto runvil::tools::ToolCatalog: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
-auto runvil::tools::ToolId: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
-auto runvil::tools::ToolInfo: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
-auto runvil::tools::ToolOutput: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::vfs::Access: !Freeze, !RefUnwindSafe, Send, Sync, Unpin, !UnwindSafe
 auto runvil::vfs::AcquireContext: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
 auto runvil::vfs::AllowAll: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindSafe
@@ -147,6 +147,7 @@ auto runvil::vfs::Writability: Freeze, RefUnwindSafe, Send, Sync, Unpin, UnwindS
 derives runvil::Error: Clone, Debug, Eq, PartialEq
 derives runvil::ErrorCode: Clone, Copy, Debug, Eq, Hash, PartialEq
 derives runvil::ErrorFact: Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd
+derives runvil::OutputTrust: Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize
 derives runvil::Prompt: Clone, Debug, Eq, PartialEq
 derives runvil::Run: Debug
 derives runvil::RunLimits: Clone, Copy, Debug, Default, Eq, Hash, PartialEq
@@ -154,6 +155,10 @@ derives runvil::RunParams: Debug
 derives runvil::RunSeed: Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize
 derives runvil::SourceLoc: Clone, Debug, Eq, PartialEq
 derives runvil::Step: Debug
+derives runvil::ToolCatalog: Clone, Debug, Default
+derives runvil::ToolId: Clone, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize
+derives runvil::ToolInfo: Clone, Debug, Deserialize, Eq, PartialEq, Serialize
+derives runvil::ToolOutput: Clone, Debug, Eq, PartialEq
 derives runvil::cancel::CancelHandle: Clone, Debug, Default
 derives runvil::cancel::Canceled: Debug
 derives runvil::effect::Effect: Debug
@@ -207,11 +212,6 @@ derives runvil::prompt::FileDecl: Clone, Debug, Deserialize, Eq, PartialEq
 derives runvil::prompt::Frontmatter: Clone, Debug, Deserialize, Eq, PartialEq
 derives runvil::prompt::RoleRequirements: Clone, Copy, Debug, Deserialize, Eq, PartialEq
 derives runvil::timestamp::Timestamp: Clone, Copy, Debug, Default, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize
-derives runvil::tools::OutputTrust: Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize
-derives runvil::tools::ToolCatalog: Clone, Debug, Default
-derives runvil::tools::ToolId: Clone, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize
-derives runvil::tools::ToolInfo: Clone, Debug, Deserialize, Eq, PartialEq, Serialize
-derives runvil::tools::ToolOutput: Clone, Debug, Eq, PartialEq
 derives runvil::vfs::Access: Debug
 derives runvil::vfs::AcquireContext: Clone, Debug
 derives runvil::vfs::AllowAll: Clone, Copy, Debug, Default, Eq, Hash, PartialEq
@@ -244,6 +244,7 @@ impl core::error::Error for runvil::Error
 impl core::error::Error for runvil::vfs::VfsError
 impl core::fmt::Display for runvil::Error
 impl core::fmt::Display for runvil::RunSeed
+impl core::fmt::Display for runvil::ToolId
 impl core::fmt::Display for runvil::effect::EffectId
 impl core::fmt::Display for runvil::ids::ChainId
 impl core::fmt::Display for runvil::ids::TaskId
@@ -252,7 +253,6 @@ impl core::fmt::Display for runvil::packs::GlobalName
 impl core::fmt::Display for runvil::packs::PackId
 impl core::fmt::Display for runvil::prompt::ArgType
 impl core::fmt::Display for runvil::timestamp::Timestamp
-impl core::fmt::Display for runvil::tools::ToolId
 impl core::fmt::Display for runvil::vfs::PathReason
 impl core::fmt::Display for runvil::vfs::VfsError
 impl core::fmt::Display for runvil::vfs::VfsPath
@@ -261,6 +261,8 @@ impl core::future::future::Future for runvil::cancel::Canceled
 impl core::future::future::Future for runvil::cancel::Canceled { type Output = () }
 impl core::iter::traits::exact_size::ExactSizeIterator for runvil::prompt::ArgsDeclIter<'_>
 impl core::ops::drop::Drop for runvil::vfs::Access
+impl core::str::traits::FromStr for runvil::ToolId
+impl core::str::traits::FromStr for runvil::ToolId { type Err = runvil::Error }
 impl core::str::traits::FromStr for runvil::ids::ChainId
 impl core::str::traits::FromStr for runvil::ids::ChainId { type Err = runvil::Error }
 impl core::str::traits::FromStr for runvil::ids::TaskId
@@ -271,8 +273,6 @@ impl core::str::traits::FromStr for runvil::packs::GlobalName
 impl core::str::traits::FromStr for runvil::packs::GlobalName { type Err = runvil::Error }
 impl core::str::traits::FromStr for runvil::packs::PackId
 impl core::str::traits::FromStr for runvil::packs::PackId { type Err = runvil::Error }
-impl core::str::traits::FromStr for runvil::tools::ToolId
-impl core::str::traits::FromStr for runvil::tools::ToolId { type Err = runvil::Error }
 impl runvil::vfs::Policy for runvil::vfs::AllowAll
 impl runvil::vfs::Policy for runvil::vfs::ModePolicy
 impl runvil::vfs::Vfs for runvil::vfs::MemoryBackend
@@ -342,11 +342,27 @@ pub fn runvil::RunParams::with_packs(self, roster: impl core::iter::traits::coll
 pub fn runvil::RunParams::with_preludes(self, preludes: alloc::vec::Vec<runvil::packs::Prelude>) -> runvil::RunParams
 pub fn runvil::RunParams::with_provenance_start(self, start: u32) -> runvil::RunParams
 pub fn runvil::RunParams::with_report_debug(self, report: bool) -> runvil::RunParams
-pub fn runvil::RunParams::with_tools(self, tools: runvil::tools::ToolCatalog) -> runvil::RunParams
+pub fn runvil::RunParams::with_tools(self, tools: runvil::ToolCatalog) -> runvil::RunParams
 pub fn runvil::RunParams::with_ui(self, snapshot: serde_json::value::Value) -> runvil::RunParams
 pub fn runvil::RunParams::with_vfs(self, vfs: runvil::vfs::VfsRef) -> runvil::RunParams
 pub fn runvil::SourceLoc::line(file: impl core::convert::Into<alloc::string::String>, line: core::num::nonzero::NonZeroU32) -> runvil::SourceLoc
 pub fn runvil::SourceLoc::new(file: impl core::convert::Into<alloc::string::String>, start_line: core::num::nonzero::NonZeroU32, start_column: core::num::nonzero::NonZeroU32, end_line: core::num::nonzero::NonZeroU32, end_column: core::num::nonzero::NonZeroU32) -> core::option::Option<runvil::SourceLoc>
+pub fn runvil::ToolCatalog::get(&self, id: &runvil::ToolId) -> core::option::Option<&runvil::ToolInfo>
+pub fn runvil::ToolCatalog::new(tools: impl core::iter::traits::collect::IntoIterator<Item = runvil::ToolInfo>) -> core::result::Result<Self, runvil::Error>
+pub fn runvil::ToolCatalog::tools(&self) -> &[runvil::ToolInfo]
+pub fn runvil::ToolId::name(&self) -> &str
+pub fn runvil::ToolId::pack(&self) -> runvil::packs::PackId
+pub fn runvil::ToolId::parse(id: &str) -> core::result::Result<runvil::ToolId, runvil::Error>
+pub fn runvil::ToolInfo::describes_tools(self, describes: bool) -> runvil::ToolInfo
+pub fn runvil::ToolInfo::model_only_call(self, model_only: bool) -> runvil::ToolInfo
+pub fn runvil::ToolInfo::new(id: runvil::ToolId, description: impl core::convert::Into<alloc::string::String>, parameters_schema: serde_json::value::Value) -> runvil::ToolInfo
+pub fn runvil::ToolInfo::structured(self, structured: bool) -> runvil::ToolInfo
+pub fn runvil::ToolInfo::survives_stop(self, survives: bool) -> runvil::ToolInfo
+pub fn runvil::ToolInfo::wire_name(self, wire_name: impl core::convert::Into<alloc::string::String>) -> runvil::ToolInfo
+pub fn runvil::ToolOutput::text(&self) -> &str
+pub fn runvil::ToolOutput::trust(&self) -> runvil::OutputTrust
+pub fn runvil::ToolOutput::trusted(text: impl core::convert::Into<alloc::string::String>) -> runvil::ToolOutput
+pub fn runvil::ToolOutput::untrusted(text: impl core::convert::Into<alloc::string::String>) -> runvil::ToolOutput
 pub fn runvil::cancel::CancelHandle::cancel(&self)
 pub fn runvil::cancel::CancelHandle::canceled(&self) -> runvil::cancel::Canceled
 pub fn runvil::cancel::CancelHandle::child(&self) -> runvil::cancel::CancelHandle
@@ -379,7 +395,7 @@ pub fn runvil::metrics::LlamaTimings::new(prompt_n: u32, prompt_ms: f64, prompt_
 pub fn runvil::metrics::LlamaTimings::with_draft_n(self, draft_n: u32) -> runvil::metrics::LlamaTimings
 pub fn runvil::metrics::LlamaTimings::with_draft_n_accepted(self, draft_n_accepted: u32) -> runvil::metrics::LlamaTimings
 pub fn runvil::metrics::ToolCallEvent::new(id: impl core::convert::Into<alloc::string::String>, name: impl core::convert::Into<alloc::string::String>, arguments: serde_json::value::Value) -> runvil::metrics::ToolCallEvent
-pub fn runvil::metrics::ToolCallEvent::with_tool(self, tool: core::option::Option<runvil::tools::ToolId>) -> runvil::metrics::ToolCallEvent
+pub fn runvil::metrics::ToolCallEvent::with_tool(self, tool: core::option::Option<runvil::ToolId>) -> runvil::metrics::ToolCallEvent
 pub fn runvil::metrics::ToolCallEvent::with_vendor(self, vendor: core::option::Option<alloc::string::String>) -> runvil::metrics::ToolCallEvent
 pub fn runvil::metrics::Usage::new(prompt_tokens: u32, completion_tokens: u32, total_tokens: u32) -> runvil::metrics::Usage
 pub fn runvil::metrics::Usage::with_cached_tokens(self, cached_tokens: core::option::Option<u32>) -> runvil::metrics::Usage
@@ -473,7 +489,7 @@ pub fn runvil::model::context_overflow(prompt_tokens: core::option::Option<u32>,
 pub fn runvil::model::empty_reply(reasoning_present: bool) -> runvil::Error
 pub fn runvil::model::phrase(code: runvil::ErrorCode) -> &'static str
 pub fn runvil::packs::GlobalName::parse(s: &str) -> core::result::Result<runvil::packs::GlobalName, runvil::Error>
-pub fn runvil::packs::PackId::contains(&self, tool: &runvil::tools::ToolId) -> bool
+pub fn runvil::packs::PackId::contains(&self, tool: &runvil::ToolId) -> bool
 pub fn runvil::packs::PackId::is_reserved(&self) -> bool
 pub fn runvil::packs::PackId::parse(name: &str) -> core::result::Result<runvil::packs::PackId, runvil::Error>
 pub fn runvil::packs::PackRef::id(&self) -> &runvil::packs::PackId
@@ -504,23 +520,7 @@ pub fn runvil::prompt::Frontmatter::uses(&self) -> &[runvil::packs::PackRef]
 pub fn runvil::prompt::RoleRequirements::min_context(&self) -> core::option::Option<core::num::nonzero::NonZeroU32>
 pub fn runvil::prompt::RoleRequirements::thinking(&self) -> core::option::Option<bool>
 pub fn runvil::timestamp::Timestamp::to_rfc3339(self) -> alloc::string::String
-pub fn runvil::tools::ToolCatalog::get(&self, id: &runvil::tools::ToolId) -> core::option::Option<&runvil::tools::ToolInfo>
-pub fn runvil::tools::ToolCatalog::new(tools: impl core::iter::traits::collect::IntoIterator<Item = runvil::tools::ToolInfo>) -> core::result::Result<Self, runvil::Error>
-pub fn runvil::tools::ToolCatalog::tools(&self) -> &[runvil::tools::ToolInfo]
-pub fn runvil::tools::ToolId::name(&self) -> &str
-pub fn runvil::tools::ToolId::pack(&self) -> runvil::packs::PackId
-pub fn runvil::tools::ToolId::parse(id: &str) -> core::result::Result<runvil::tools::ToolId, runvil::Error>
-pub fn runvil::tools::ToolInfo::describes_tools(self, describes: bool) -> runvil::tools::ToolInfo
-pub fn runvil::tools::ToolInfo::model_only_call(self, model_only: bool) -> runvil::tools::ToolInfo
-pub fn runvil::tools::ToolInfo::new(id: runvil::tools::ToolId, description: impl core::convert::Into<alloc::string::String>, parameters_schema: serde_json::value::Value) -> runvil::tools::ToolInfo
-pub fn runvil::tools::ToolInfo::structured(self, structured: bool) -> runvil::tools::ToolInfo
-pub fn runvil::tools::ToolInfo::survives_stop(self, survives: bool) -> runvil::tools::ToolInfo
-pub fn runvil::tools::ToolInfo::wire_name(self, wire_name: impl core::convert::Into<alloc::string::String>) -> runvil::tools::ToolInfo
-pub fn runvil::tools::ToolOutput::text(&self) -> &str
-pub fn runvil::tools::ToolOutput::trust(&self) -> runvil::tools::OutputTrust
-pub fn runvil::tools::ToolOutput::trusted(text: impl core::convert::Into<alloc::string::String>) -> runvil::tools::ToolOutput
-pub fn runvil::tools::ToolOutput::untrusted(text: impl core::convert::Into<alloc::string::String>) -> runvil::tools::ToolOutput
-pub fn runvil::tools::tool_error(code: runvil::ErrorCode, text: impl core::convert::Into<alloc::string::String>) -> runvil::Error
+pub fn runvil::tool_error(code: runvil::ErrorCode, text: impl core::convert::Into<alloc::string::String>) -> runvil::Error
 pub fn runvil::vfs::Access::append(&self, path: &str, contents: &[u8]) -> core::result::Result<(), runvil::vfs::VfsError>
 pub fn runvil::vfs::Access::close(self) -> core::result::Result<(), runvil::vfs::VfsError>
 pub fn runvil::vfs::Access::copy(&self, from: &str, to: &str) -> core::result::Result<(), runvil::vfs::VfsError>
@@ -610,7 +610,6 @@ pub mod runvil::model
 pub mod runvil::packs
 pub mod runvil::prompt
 pub mod runvil::timestamp
-pub mod runvil::tools
 pub mod runvil::vfs
 pub runvil::Error::at: core::option::Option<runvil::SourceLoc>
 pub runvil::Error::code: runvil::ErrorCode
@@ -699,6 +698,8 @@ pub runvil::ErrorFact::Section
 pub runvil::ErrorFact::Task
 pub runvil::ErrorFact::Tasks
 pub runvil::ErrorFact::ValidUpTo
+pub runvil::OutputTrust::Trusted
+pub runvil::OutputTrust::Untrusted
 pub runvil::RunLimits::lua_log_events: core::num::nonzero::NonZeroU32
 pub runvil::RunLimits::lua_memory_bytes: core::num::nonzero::NonZeroUsize
 pub runvil::RunLimits::max_concurrency: core::num::nonzero::NonZeroUsize
@@ -715,6 +716,14 @@ pub runvil::Step::Pending { .. }
 pub runvil::Step::Pending::effects: alloc::vec::Vec<runvil::effect::IssuedEffect>
 pub runvil::Step::Pending::events: alloc::vec::Vec<runvil::event::Event>
 pub runvil::Step::Pending::withdrawn: alloc::vec::Vec<runvil::effect::EffectId>
+pub runvil::ToolInfo::describes_tools: bool
+pub runvil::ToolInfo::description: alloc::string::String
+pub runvil::ToolInfo::id: runvil::ToolId
+pub runvil::ToolInfo::model_only_call: bool
+pub runvil::ToolInfo::parameters_schema: serde_json::value::Value
+pub runvil::ToolInfo::structured_output: bool
+pub runvil::ToolInfo::survives_stop: bool
+pub runvil::ToolInfo::wire_name: core::option::Option<alloc::string::String>
 pub runvil::effect::Effect::Chat { .. }
 pub runvil::effect::Effect::Chat::after: core::option::Option<(runvil::ids::RoundId, u64)>
 pub runvil::effect::Effect::Chat::binding: runvil::model::ModelBinding
@@ -724,7 +733,7 @@ pub runvil::effect::Effect::Chat::tools: alloc::vec::Vec<runvil::model::ToolSche
 pub runvil::effect::Effect::Render { .. }
 pub runvil::effect::Effect::Render::binding: runvil::model::ModelBinding
 pub runvil::effect::Effect::Render::entry: alloc::string::String
-pub runvil::effect::Effect::Render::offered: alloc::vec::Vec<runvil::effect::PackToolSets<runvil::tools::ToolInfo>>
+pub runvil::effect::Effect::Render::offered: alloc::vec::Vec<runvil::effect::PackToolSets<runvil::ToolInfo>>
 pub runvil::effect::Effect::Timer { .. }
 pub runvil::effect::Effect::Timer::duration: core::time::Duration
 pub runvil::effect::Effect::ToolCall { .. }
@@ -733,7 +742,7 @@ pub runvil::effect::Effect::ToolCall::alias: alloc::string::String
 pub runvil::effect::Effect::ToolCall::args: serde_json::value::Value
 pub runvil::effect::Effect::ToolCall::origin: runvil::effect::ToolCallOrigin
 pub runvil::effect::Effect::ToolCall::survives_stop: bool
-pub runvil::effect::Effect::ToolCall::tool: runvil::tools::ToolId
+pub runvil::effect::Effect::ToolCall::tool: runvil::ToolId
 pub runvil::effect::Effect::Vfs { .. }
 pub runvil::effect::Effect::Vfs::access: alloc::sync::Arc<runvil::vfs::Access>
 pub runvil::effect::Effect::Vfs::op: runvil::vfs::VfsOp
@@ -741,10 +750,10 @@ pub runvil::effect::EffectAnswer::Chat(..)
 pub runvil::effect::EffectAnswer::Chat::0: core::result::Result<alloc::boxed::Box<runvil::model::Completion>, runvil::Error>
 pub runvil::effect::EffectAnswer::Dropped
 pub runvil::effect::EffectAnswer::Render(..)
-pub runvil::effect::EffectAnswer::Render::0: alloc::vec::Vec<runvil::effect::PackToolSets<runvil::tools::ToolInfo>>
+pub runvil::effect::EffectAnswer::Render::0: alloc::vec::Vec<runvil::effect::PackToolSets<runvil::ToolInfo>>
 pub runvil::effect::EffectAnswer::Timer
 pub runvil::effect::EffectAnswer::ToolCall(..)
-pub runvil::effect::EffectAnswer::ToolCall::0: core::result::Result<runvil::tools::ToolOutput, runvil::Error>
+pub runvil::effect::EffectAnswer::ToolCall::0: core::result::Result<runvil::ToolOutput, runvil::Error>
 pub runvil::effect::EffectAnswer::Vfs(..)
 pub runvil::effect::EffectAnswer::Vfs::0: core::result::Result<runvil::vfs::VfsOutcome, runvil::vfs::VfsError>
 pub runvil::effect::IssuedEffect::effect: runvil::effect::Effect
@@ -950,7 +959,7 @@ pub runvil::event::Event::ToolResult::content: alloc::string::String
 pub runvil::event::Event::ToolResult::execution: alloc::string::String
 pub runvil::event::Event::ToolResult::provenance: runvil::ids::Provenance
 pub runvil::event::Event::ToolResult::section: alloc::string::String
-pub runvil::event::Event::ToolResult::tool: runvil::tools::ToolId
+pub runvil::event::Event::ToolResult::tool: runvil::ToolId
 pub runvil::event::Event::ToolResult::tool_call_id: alloc::string::String
 pub runvil::event::Event::ToolResult::trusted: bool
 pub runvil::event::Event::ToolResult::turn: u32
@@ -1058,7 +1067,7 @@ pub runvil::metrics::LlamaTimings::prompt_per_second: f64
 pub runvil::metrics::ToolCallEvent::arguments: serde_json::value::Value
 pub runvil::metrics::ToolCallEvent::id: alloc::string::String
 pub runvil::metrics::ToolCallEvent::name: alloc::string::String
-pub runvil::metrics::ToolCallEvent::tool: core::option::Option<runvil::tools::ToolId>
+pub runvil::metrics::ToolCallEvent::tool: core::option::Option<runvil::ToolId>
 pub runvil::metrics::ToolCallEvent::vendor: core::option::Option<alloc::string::String>
 pub runvil::metrics::Usage::cached_tokens: core::option::Option<u32>
 pub runvil::metrics::Usage::completion_tokens: u32
@@ -1097,16 +1106,6 @@ pub runvil::prompt::ArgType::Boolean
 pub runvil::prompt::ArgType::Integer
 pub runvil::prompt::ArgType::Number
 pub runvil::prompt::ArgType::String
-pub runvil::tools::OutputTrust::Trusted
-pub runvil::tools::OutputTrust::Untrusted
-pub runvil::tools::ToolInfo::describes_tools: bool
-pub runvil::tools::ToolInfo::description: alloc::string::String
-pub runvil::tools::ToolInfo::id: runvil::tools::ToolId
-pub runvil::tools::ToolInfo::model_only_call: bool
-pub runvil::tools::ToolInfo::parameters_schema: serde_json::value::Value
-pub runvil::tools::ToolInfo::structured_output: bool
-pub runvil::tools::ToolInfo::survives_stop: bool
-pub runvil::tools::ToolInfo::wire_name: core::option::Option<alloc::string::String>
 pub runvil::vfs::Entry::description: core::option::Option<alloc::string::String>
 pub runvil::vfs::Entry::name: alloc::string::String
 pub runvil::vfs::Entry::stat: runvil::vfs::Stat

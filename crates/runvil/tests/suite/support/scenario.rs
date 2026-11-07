@@ -17,12 +17,12 @@ use std::collections::{BTreeMap, VecDeque};
 use std::sync::Arc;
 
 use runvil::Error;
+use runvil::ToolCatalog;
 use runvil::effect::{Effect, EffectAnswer, EffectId, IssuedEffect};
 use runvil::event::Event;
 use runvil::ids::Provenance;
 use runvil::model::{Completion, ModelInfo, ModelRole};
 use runvil::timestamp::Timestamp;
-use runvil::tools::ToolCatalog;
 use runvil::vfs::perform_vfs_op;
 use runvil::{Prompt, Run, RunParams, RunSeed, Step};
 use serde_json::{Value, json};

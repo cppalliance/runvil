@@ -15,9 +15,9 @@ use runvil::effect::{Effect, EffectAnswer, IssuedEffect};
 use runvil::event::Event;
 use runvil::model::{Completion, CompletionResult, ModelId, ModelInfo, ModelRole, ThinkingMode};
 use runvil::timestamp::Timestamp;
-use runvil::tools::{ToolCatalog, ToolId, ToolInfo, ToolOutput};
 use runvil::vfs::perform_vfs_op;
 use runvil::{Prompt, Run, RunParams, RunSeed, Step};
+use runvil::{ToolCatalog, ToolId, ToolInfo, ToolOutput};
 
 /// Writes a note, asks the default model to reply, and shouts the reply.
 pub const GREETER: &str = concat!(

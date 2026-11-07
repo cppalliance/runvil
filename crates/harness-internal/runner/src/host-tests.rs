@@ -12,7 +12,7 @@ use std::sync::{Arc, Mutex};
 use runvil::effect::{ToolCallOrigin, ToolCaller};
 use runvil::packs::RosterEntry;
 use runvil::timestamp::Timestamp;
-use runvil::tools::tool_error;
+use runvil::tool_error;
 use runvil::vfs::{Origin, VfsRef};
 use runvil::{Error, ErrorCode};
 use runvil::{Prompt, Run, RunParams, RunSeed, Step};

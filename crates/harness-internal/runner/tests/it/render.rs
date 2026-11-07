@@ -12,7 +12,7 @@ use std::sync::{Arc, Mutex};
 use harness_runner::recorder::{MemoryRecorder, Record, RecordKind};
 use harness_runner::{Harness, HostContext};
 use runvil::model::{Completion, CompletionResult, ToolCall};
-use runvil::tools::tool_error;
+use runvil::tool_error;
 use runvil::{Error, ErrorCode};
 use runvil_plugin::{
     HostServices, ModelInfo, Pack, PackFuture, PackId, PackInfo, PackRegistry, RenderContext,

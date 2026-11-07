@@ -20,9 +20,9 @@ use runvil::model::{
     Completion, CompletionResult, ModelId, ModelInfo, ModelRole, ThinkingMode, ToolCall,
 };
 use runvil::timestamp::Timestamp;
-use runvil::tools::{ToolCatalog, ToolId, ToolInfo, ToolOutput};
 use runvil::vfs::Access;
 use runvil::{Prompt, Run, RunParams};
+use runvil::{ToolCatalog, ToolId, ToolInfo, ToolOutput};
 use serde_json::{Value, json};
 use tokio::sync::{Notify, Semaphore};
 

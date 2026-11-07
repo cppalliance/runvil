@@ -7,10 +7,10 @@
 
 use std::path::Path;
 
+use runvil::ToolId;
 use runvil::event::{Event, ReplyOrigin};
 use runvil::ids::{ChainId, Provenance, RoundId, TaskId};
 use runvil::metrics::{CallMetrics, ClientTiming, LlamaTimings, ToolCallEvent, Usage, VllmMetrics};
-use runvil::tools::ToolId;
 use workshop_protocol::{InputFrame, InputResponse};
 
 use super::*;

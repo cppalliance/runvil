@@ -37,8 +37,8 @@ use runvil::effect::{PackToolSets, Round, ToolCallOrigin};
 use runvil::model::{
     Completion, CompletionOptions, Message, ModelBinding, ModelCatalog, ModelInfo, ToolSchema,
 };
-use runvil::tools::{ToolId, ToolInfo, ToolOutput};
 use runvil::vfs::Access;
+use runvil::{ToolId, ToolInfo, ToolOutput};
 use serde_json::Value;
 
 /// The boxed future a performer returns for the Harness to poll.

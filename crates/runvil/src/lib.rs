@@ -21,11 +21,24 @@ pub use runvil_engine::RunLimits;
 pub use runvil_engine::RunParams;
 pub use runvil_engine::Step;
 pub use runvil_prompt::Prompt;
+pub use runvil_types::seed::RunSeed;
+
+/* Universal Error types
+*/
 pub use runvil_types::error::Error;
 pub use runvil_types::error::ErrorCode;
 pub use runvil_types::error::ErrorFact;
 pub use runvil_types::error::SourceLoc;
-pub use runvil_types::seed::RunSeed;
+
+/* Tool descriptions and catalogs, and the output or error that answers
+   a tool call.
+*/
+pub use runvil_types::tools::OutputTrust;
+pub use runvil_types::tools::ToolCatalog;
+pub use runvil_types::tools::ToolId;
+pub use runvil_types::tools::ToolInfo;
+pub use runvil_types::tools::ToolOutput;
+pub use runvil_types::tools::tool_error;
 
 pub mod effect {
     //! The outside work a run asks for, the answers it takes back, and the
@@ -85,18 +98,6 @@ pub mod model {
     pub use runvil_types::models::ModelInfo;
     pub use runvil_types::models::ModelRole;
     pub use runvil_types::models::ThinkingMode;
-}
-
-pub mod tools {
-    //! Tool descriptions and catalogs, and the output or error that answers
-    //! a tool call.
-
-    pub use runvil_types::tools::OutputTrust;
-    pub use runvil_types::tools::ToolCatalog;
-    pub use runvil_types::tools::ToolId;
-    pub use runvil_types::tools::ToolInfo;
-    pub use runvil_types::tools::ToolOutput;
-    pub use runvil_types::tools::tool_error;
 }
 
 pub mod packs {

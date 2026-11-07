@@ -16,7 +16,7 @@ use runvil::model::{
     Completion, CompletionOptions, CompletionResult, Message, ModelBinding, ModelCatalog, ModelId,
     ModelInfo, ThinkingMode, ToolSchema, completion_error, phrase,
 };
-use runvil::tools::tool_error;
+use runvil::tool_error;
 use runvil::{Error, ErrorCode};
 use runvil_plugin::{
     HostServices, Pack, PackFuture, PackId, PackInfo, PackRegistry, ServiceKey, ToolContext,

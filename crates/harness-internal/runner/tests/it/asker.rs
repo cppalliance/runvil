@@ -6,7 +6,7 @@
 
 use std::sync::Arc;
 
-use runvil::tools::tool_error;
+use runvil::tool_error;
 use runvil::{Error, ErrorCode};
 use runvil_plugin::{
     HostServices, Pack, PackFuture, PackId, PackInfo, ServiceId, ServiceKey, ToolContext, ToolId,
