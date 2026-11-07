@@ -7,9 +7,8 @@ use mlua::{Function, Lua, Table, Value};
 use runvil_types::error::{Error, ErrorCode, FactKey};
 use runvil_types::ids::TaskId;
 
-use super::super::tests::every_store_failure;
-use super::super::{error_table, install_error_value, retained_error};
-use super::raised_from;
+use super::super::{error_table, install_error_value, raised_from, retained_error};
+use super::every_store_failure;
 use crate::error::{
     QuotaResource, context_exhausted, internal, lua_quota, lua_runtime, task_canceled,
     task_consumed, task_not_owned, tool, tool_loop_exhausted,

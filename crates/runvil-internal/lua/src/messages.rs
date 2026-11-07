@@ -12,7 +12,9 @@
 //! record does not hold, so a refused edit raises at the author's call and
 //! leaves the list unchanged. `#messages` counts the records,
 //! `messages[i]`, `pairs`, and `ipairs` read them as read-only views with
-//! metamethods only, and assignment by index is refused. `pairs` stops at
+//! metamethods only, and assignment by index is refused. A view's table
+//! fields are built fresh on every read, so writing into one never reaches
+//! the record. `pairs` stops at
 //! the record count it started with, as the sandbox `pairs` does for a
 //! table, while `ipairs` reads the live list.
 //!
@@ -43,13 +45,6 @@ use crate::bindings::ToolBinding;
 use crate::error::{self, Error, Result, author_refusal, lua_runtime};
 use crate::protocol::{MessageRecord, RecordRole, parse_record};
 use crate::scope::{OfferMode, RenderedTools};
-
-#[path = "messages-snapshot.rs"]
-mod snapshot;
-#[path = "messages-view.rs"]
-mod view;
-
-pub(crate) use snapshot::Snapshot;
 
 /// The refusal of an assignment of the `messages` global.
 pub(crate) const ASSIGNMENT_REFUSAL: &str = "messages is the section's conversation and cannot \
@@ -212,6 +207,68 @@ impl MessageList {
     pub fn attach_rendered_tools(&self, tools: RenderedTools) -> Arc<RenderedTools> {
         Arc::clone(self.state().rendered.get_or_insert_with(|| Arc::new(tools)))
     }
+
+    /// The list's records as they stand.
+    pub(crate) fn snapshot(&self) -> Snapshot {
+        Snapshot(self.state().records.clone())
+    }
+
+    /// Puts the records back; the last send and the frozen sets stay.
+    pub(crate) fn restore(&self, snapshot: Snapshot) {
+        self.state().records = snapshot.0;
+    }
+
+    /// Removes every record; the last send and the frozen sets stay.
+    pub(crate) fn clear(&self) {
+        self.state().records.clear();
+    }
+
+    /// Whether a compactor is running over the list.
+    pub(crate) fn compacting(&self) -> bool {
+        self.state().compacting
+    }
+
+    /// Sets or clears the flag [`MessageList::compacting`] reads.
+    pub(crate) fn set_compacting(&self, compacting: bool) {
+        self.state().compacting = compacting;
+    }
+}
+
+/// The records a compaction started from. A snapshot shares each record
+/// with the list and with every view read from it, so taking one copies no
+/// record, and putting it back restores the list's records exactly.
+#[derive(Debug)]
+pub(crate) struct Snapshot(Vec<Arc<MessageRecord>>);
+
+impl Snapshot {
+    /// A copy of the records in order, as [`MessageList::to_records`]
+    /// copies a list's.
+    pub(crate) fn to_records(&self) -> Vec<MessageRecord> {
+        self.0
+            .iter()
+            .map(|record| MessageRecord::clone(record))
+            .collect()
+    }
+}
+
+/// The fields a view reads, in the order `pairs` visits them.
+const FIELDS: [&str; 5] = ["role", "content", "tool_calls", "tool_call_id", "meta"];
+
+/// A read-only view of one record, which `messages[i]` and iteration
+/// return.
+/// It serializes as the record's JSON form, so a view converts like the
+/// record table it stands for. It holds its record by `Arc`, so reading
+/// one copies nothing until a field is read.
+#[derive(Clone, Debug)]
+struct RecordView(Arc<MessageRecord>);
+
+impl serde::Serialize for RecordView {
+    fn serialize<S: serde::Serializer>(
+        &self,
+        serializer: S,
+    ) -> std::result::Result<S::Ok, S::Error> {
+        self.0.to_json().serialize(serializer)
+    }
 }
 
 /// Whether `replace` can edit `first..=last` on a list of `len` records:
@@ -340,6 +397,62 @@ fn bound(name: &str, value: &Value) -> mlua::Result<i64> {
     })
 }
 
+/// A new view of `record`.
+fn create(lua: &Lua, record: Arc<MessageRecord>) -> mlua::Result<Value> {
+    lua.create_ser_userdata(RecordView(record))
+        .map(Value::UserData)
+}
+
+/// The position in [`FIELDS`] of the field `key` names, if it names one.
+fn field_position(key: &Value) -> Option<usize> {
+    let Value::String(name) = key else {
+        return None;
+    };
+    let name = name.as_bytes();
+    FIELDS.iter().position(|field| field.as_bytes() == &*name)
+}
+
+/// The field `name` of `record`, or nil when the record has none.
+fn field(lua: &Lua, record: &MessageRecord, name: &str) -> mlua::Result<Value> {
+    match name {
+        "role" => lua.to_value(record.role.kind().as_str()),
+        "content" => lua.to_value(&record.content.to_json()),
+        "tool_calls" => match record.tool_calls_json() {
+            Some(calls) => lua.to_value(&calls),
+            None => Ok(Value::Nil),
+        },
+        "tool_call_id" => match record.role.tool_call_id() {
+            Some(id) => lua.to_value(id),
+            None => Ok(Value::Nil),
+        },
+        "meta" => match &record.meta {
+            Some(meta) => lua.to_value(meta),
+            None => Ok(Value::Nil),
+        },
+        _ => Ok(Value::Nil),
+    }
+}
+
+/// The first field of `record` present after `previous` in [`FIELDS`]
+/// order, with its value, or nils past the last.
+fn next_field(
+    lua: &Lua,
+    record: &MessageRecord,
+    previous: &Value,
+) -> mlua::Result<(Option<&'static str>, Value)> {
+    let start = match previous {
+        Value::Nil => 0,
+        key => field_position(key).map_or(FIELDS.len(), |position| position + 1),
+    };
+    for name in &FIELDS[start..] {
+        let value = field(lua, record, name)?;
+        if !value.is_nil() {
+            return Ok((Some(*name), value));
+        }
+    }
+    Ok((None, Value::Nil))
+}
+
 /// The index after `previous` in a `pairs` walk, and a new view of the
 /// live record there, or nils past `extent` or past the live list's end.
 /// `extent` is the record count when the walk began, so a loop that
@@ -359,7 +472,7 @@ fn next_record(
         .filter(|index| *index <= extent)
         .and_then(|index| Some((index, list.record(index)?)))
     {
-        Some((index, record)) => Ok((Some(index), view::create(lua, record)?)),
+        Some((index, record)) => Ok((Some(index), create(lua, record)?)),
         None => Ok((None, Value::Nil)),
     }
 }
@@ -433,7 +546,7 @@ impl UserData for MessageList {
         methods.add_meta_method(
             MetaMethod::Index,
             |lua, this, key: Value| match key_index(&key).and_then(|index| this.record(index)) {
-                Some(record) => view::create(lua, record),
+                Some(record) => create(lua, record),
                 None => Ok(Value::Nil),
             },
         );
@@ -456,6 +569,38 @@ impl UserData for MessageList {
                      or rewrite history with models.compact(compactor, reason)"
                         .to_owned(),
                 ))
+            },
+        );
+    }
+}
+
+impl UserData for RecordView {
+    fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
+        methods.add_meta_method(
+            MetaMethod::Index,
+            |lua, this, key: Value| match field_position(&key) {
+                Some(position) => field(lua, &this.0, FIELDS[position]),
+                None => Ok(Value::Nil),
+            },
+        );
+        methods.add_meta_method(
+            MetaMethod::NewIndex,
+            |_, _, _: (Value, Value)| -> mlua::Result<()> {
+                Err(author_refusal(
+                    "records read from messages are read-only; rewrite history with \
+                     models.compact(compactor, reason)"
+                        .to_owned(),
+                ))
+            },
+        );
+        methods.add_meta_function(
+            MetaMethod::Pairs,
+            |lua, this: AnyUserData| -> mlua::Result<(Function, AnyUserData, Value)> {
+                let record = Arc::clone(&this.borrow::<RecordView>()?.0);
+                let next = lua.create_function(move |lua, (_, previous): (Value, Value)| {
+                    next_field(lua, &record, &previous)
+                })?;
+                Ok((next, this, Value::Nil))
             },
         );
     }

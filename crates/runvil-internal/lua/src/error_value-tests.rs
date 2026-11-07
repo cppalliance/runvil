@@ -12,6 +12,12 @@ use serde_json::Value;
 use super::{ErrorKind, error_table, store_error, store_error_value_fields};
 use crate::error::{internal, lua_runtime};
 
+#[path = "error_value-tests-raised.rs"]
+mod raised;
+
+#[path = "error_value-tests-universal.rs"]
+mod universal;
+
 #[test]
 fn a_tables_message_puts_a_prompt_location_and_never_a_rust_one_before_the_prose() {
     let lua = mlua::Lua::new();
@@ -68,7 +74,7 @@ fn an_unknown_error_kind_names_the_text_and_every_accepted_tag() {
     clippy::too_many_lines,
     reason = "one table holds every variant beside its code"
 )]
-pub(super) fn every_store_failure() -> Vec<(VfsError, ErrorCode)> {
+fn every_store_failure() -> Vec<(VfsError, ErrorCode)> {
     let path = || "a.md".to_owned();
     let text = || "why".to_owned();
     vec![

@@ -86,8 +86,8 @@ mod compactors;
 mod coro;
 mod dispatch;
 mod engine_globals;
+mod engine_globals_store;
 mod error;
-#[path = "error-value.rs"]
 mod error_value;
 mod globals;
 mod hardening;
@@ -130,8 +130,9 @@ pub use crate::collection::render_item;
 pub use crate::compactors::{OverflowReason, UsageAnchor, output_reserve, precheck};
 pub use crate::coro::install_store_shims;
 pub use crate::dispatch::{ScriptReport, ToolDispatch, prepare_dispatch, prepare_model_dispatch};
-pub use crate::engine_globals::{
-    install_ui, run_store_op, store_error_message, store_failure, store_probe_message,
+pub use crate::engine_globals::install_ui;
+pub use crate::engine_globals_store::{
+    run_store_op, store_error_message, store_failure, store_probe_message,
 };
 pub use crate::error::{
     QuotaResource, context_exhausted, internal, internal_at, lua_quota, lua_runtime, task_canceled,

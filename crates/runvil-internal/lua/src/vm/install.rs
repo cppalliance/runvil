@@ -13,7 +13,8 @@ use serde_json::Value as Json;
 
 use super::{JUMP_SLOT_POISONED, SectionVm, pack_sequence};
 use crate::coro::install_shims;
-use crate::engine_globals::{install_log, install_store_table};
+use crate::engine_globals::install_log;
+use crate::engine_globals_store::install_store_table;
 #[cfg(test)]
 use crate::error::Error;
 use crate::error::{self, Result};

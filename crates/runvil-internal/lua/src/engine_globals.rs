@@ -1,11 +1,8 @@
-//! The persistent `log`, `untrusted`, and `store` Engine globals every
-//! section VM gets, and `ui` when the run has an application-state
-//! snapshot. Each is installed once per section and stays valid across
-//! every chunk the VM runs; the other Engine globals install from their own
-//! modules.
-
-#[path = "engine_globals-store.rs"]
-mod store;
+//! The persistent `log` and `untrusted` Engine globals every section VM
+//! gets, and `ui` when the run has an application-state snapshot. Each is
+//! installed once per section and stays valid across every chunk the VM
+//! runs; the other Engine globals, `store` among them, install from their
+//! own modules.
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
@@ -15,9 +12,6 @@ use runvil_types::emitter::Emitter;
 use runvil_types::untrusted::GuardNonce;
 
 use crate::error::{self, QuotaResource, Result, lua_quota};
-
-pub(crate) use store::{install_store_table, route_store_to_shims};
-pub use store::{run_store_op, store_error_message, store_failure, store_probe_message};
 
 /// Maximum number of Unicode scalar values accepted by `log`.
 pub(crate) const LUA_LOG_CHARACTER_LIMIT: usize = 256;

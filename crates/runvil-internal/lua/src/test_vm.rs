@@ -5,8 +5,6 @@
 //! to what the VM shares; the access fixture; the one-shot [`run_chunk`];
 //! the tool fixtures as data; and the scope a VM's offers resolve to.
 
-mod access;
-
 use std::collections::BTreeMap;
 use std::ops::Deref;
 use std::sync::{Arc, Mutex};
@@ -17,14 +15,13 @@ use runvil_types::emitter::Emitter;
 use runvil_types::seed::RunSeed;
 use runvil_types::tools::{ToolCatalog, ToolId, ToolInfo};
 use runvil_types::untrusted::GuardNonce;
+use runvil_vfs::{Access, Origin, ScopeHandle, VfsRef};
 use serde_json::{Value as Json, json};
 
 use crate::error::{self, Result};
 use crate::section::scalar_return;
 use crate::tests::recording::null_emitter;
 use crate::{Argv, OfferedTool, RosterEntry, SectionText, SectionVm, ToolSet};
-
-pub(crate) use access::{ScopedAccess, fresh_access};
 
 /// The one guard-nonce seed of every test VM.
 pub(crate) const TEST_SEED: RunSeed = RunSeed::from_bytes([0x73; 32]);
@@ -37,6 +34,37 @@ pub(crate) const TEST_SECTION: &str = "Test";
 #[track_caller]
 pub(crate) fn test_nonce() -> GuardNonce {
     GuardNonce::from_seed(&TEST_SEED)
+}
+
+/// A test VM's access capability beside the handle on its scope, which
+/// derives the access's store view.
+#[derive(Clone)]
+pub(crate) struct ScopedAccess {
+    /// The capability the VM's `store` table operates through.
+    pub(crate) access: Arc<Access>,
+    /// The handle on the capability's scope.
+    pub(crate) scope: ScopeHandle,
+}
+
+impl ScopedAccess {
+    /// The root capability `vfs` acquires under `origin`, beside the handle
+    /// on the scope it starts.
+    #[track_caller]
+    pub(crate) fn acquire(vfs: &VfsRef, origin: Origin) -> ScopedAccess {
+        let (access, scope) = vfs.acquire_scope(origin).expect("the test handle acquires");
+        ScopedAccess {
+            access: Arc::new(access),
+            scope,
+        }
+    }
+}
+
+/// A fresh default handle's access capability: the store is declared at
+/// the root and the vended identity is the test's own, so seeding through
+/// the store view and the VM's store ops never meet a second live identity.
+#[track_caller]
+pub(crate) fn fresh_access() -> ScopedAccess {
+    ScopedAccess::acquire(&VfsRef::default(), Origin::new("lua test fixture"))
 }
 
 /// The result of running a section's Lua block with [`run_chunk`].

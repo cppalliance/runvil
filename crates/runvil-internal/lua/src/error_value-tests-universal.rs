@@ -4,9 +4,10 @@
 use runvil_types::error::{Error, ErrorCode, FactKey};
 use serde_json::Value;
 
-use super::super::tests::every_store_failure;
-use super::super::{ErrorField, ErrorKind, store_error, store_error_value_fields};
-use super::{error_fields, error_kind};
+use super::super::{
+    ErrorField, ErrorKind, error_fields, error_kind, store_error, store_error_value_fields,
+};
+use super::every_store_failure;
 
 /// An error with `code` and `facts`, whose message and prose say which
 /// they are.
