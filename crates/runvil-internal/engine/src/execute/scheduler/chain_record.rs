@@ -649,7 +649,7 @@ const MAX_CHAINS: usize = u32::MAX as usize;
 /// builds, so every index names a chain; a `#[cfg(test)]` constructor mints
 /// one for tables that only compare indices. The index is the scheduler's
 /// private handle; the chain's identity for authors and callers is its
-/// hierarchical [`ChainId`](runvil_types::ids::ChainId), which never depends
+/// hierarchical [`ChainId`], which never depends
 /// on arena order.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub(in crate::execute::scheduler) struct ChainIndex(u32);

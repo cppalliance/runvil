@@ -267,7 +267,7 @@ impl std::error::Error for VfsError {}
 
 /// Why a path or glob pattern was rejected before any backend saw it.
 ///
-/// Every [`VfsError::InvalidPath`](crate::VfsError::InvalidPath) carries
+/// Every [`VfsError::InvalidPath`] carries
 /// one. Store operations validate each path and report the first nine
 /// reasons. Only glob and rename operations report the last two:
 /// [`PathReason::Wildcard`] for a glob pattern whose wildcard grammar is
