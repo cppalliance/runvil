@@ -66,6 +66,7 @@ use bindings::with_host_state;
 use broker::{RunBroker, WorkshopBroker};
 use gateway::usable_gateway;
 use search::GatewaySearchProvider;
+use socket::Receivers;
 pub(crate) use state::{SessionsState, register};
 use wire::AskTool;
 
@@ -305,8 +306,10 @@ impl AgentSessions {
     }
 
     /// Launches a conversation running the discovered agent `name` and
-    /// returns it. Its run goes until its program returns, fails, or
-    /// [`close`](Self::close) ends it; a stop drops only the round in
+    /// returns it with its channels, subscribed before the run starts so
+    /// the launching socket sees everything the run reports, a parse
+    /// failure included. Its run goes until its program returns, fails,
+    /// or [`close`](Self::close) ends it; a stop drops only the round in
     /// flight.
     ///
     /// A launch with no usable gateway is refused before the agent is
@@ -317,7 +320,7 @@ impl AgentSessions {
     /// registered or its URL or key cannot build, and the conversation's
     /// own [`LaunchError`] otherwise: an unknown agent or an unreadable
     /// agent source.
-    async fn launch(&self, name: &str) -> Result<Conversation, LaunchRefusal> {
+    async fn launch(&self, name: &str) -> Result<(Conversation, Receivers), LaunchRefusal> {
         if usable_gateway(&self.inner.registry).is_none() {
             return Err(LaunchRefusal::GatewayUnusable);
         }
@@ -335,13 +338,14 @@ impl AgentSessions {
                 })
             })?;
         let conversation = self.inner.conversations.open(name);
+        let receivers = Receivers::subscribe(&conversation);
         status::spawn_reporter(
             &conversation,
             self.inner.registry.push(),
             self.inner.backoff.clone(),
         );
         tokio::spawn(self.clone().drive(conversation.clone()));
-        Ok(conversation)
+        Ok((conversation, receivers))
     }
 
     /// Runs `conversation`'s one run of its agent. The setup's selected

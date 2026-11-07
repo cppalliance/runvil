@@ -243,6 +243,30 @@ async fn forward_event(
     }
 }
 
+/// A conversation's four live channels, subscribed together, so the
+/// socket that attaches with them misses nothing sent from that point
+/// on. A receiver still yields what was queued after its channel
+/// closes, so a run that fails and ends before the socket attaches
+/// still reaches it.
+pub(super) struct Receivers {
+    events: broadcast::Receiver<SessionEvent>,
+    deltas: broadcast::Receiver<Delta>,
+    waits: broadcast::Receiver<WaitFrame>,
+    errors: broadcast::Receiver<SessionFailure>,
+}
+
+impl Receivers {
+    /// Subscribes to every live channel of `conversation`.
+    pub(super) fn subscribe(conversation: &Conversation) -> Receivers {
+        Receivers {
+            events: conversation.subscribe_events(),
+            deltas: conversation.subscribe_deltas(),
+            waits: conversation.subscribe_waits(),
+            errors: conversation.subscribe_errors(),
+        }
+    }
+}
+
 /// The four channel subscriptions an attachment holds, passed as one
 /// bundle so [`handle_frame`] can replace them atomically on attach.
 type Subscriptions<'a> = (
@@ -372,9 +396,9 @@ async fn handle_open(
         send_error(socket, None, "agent sessions are unavailable").await;
         return true;
     };
-    let conversation = match open {
+    let (conversation, receivers) = match open {
         Ok(OpenRequest::Launch { agent }) => match agents.launch(&agent).await {
-            Ok(conversation) => conversation,
+            Ok(launched) => launched,
             Err(refusal) => {
                 send_error(socket, None, refusal_text(&refusal)).await;
                 return true;
@@ -385,14 +409,23 @@ async fn handle_open(
                 send_error(socket, None, "unknown agent session").await;
                 return true;
             };
-            conversation
+            let receivers = Receivers::subscribe(&conversation);
+            (conversation, receivers)
         }
         Err(refusal) => {
             send_error(socket, None, refusal.to_string()).await;
             return true;
         }
     };
-    attach(conversation, agents.ask(), attached, subscriptions, socket).await
+    attach(
+        conversation,
+        receivers,
+        agents.ask(),
+        attached,
+        subscriptions,
+        socket,
+    )
+    .await
 }
 
 /// The text of the error frame reporting a refused launch: the refusal
@@ -405,22 +438,30 @@ fn refusal_text(refusal: &LaunchRefusal) -> String {
 }
 
 /// Attaches the socket to `conversation`, framing a script's result from
-/// the `ask` tool as the operator's message: subscribes the four channels
-/// (before the replay, so nothing lands between them unseen),
-/// acknowledges with the session frame, replays the conversation's
-/// transcript from index zero, and re-announces unresolved waits. A
-/// `false` return means the client is gone.
+/// the `ask` tool as the operator's message: takes `receivers` as the
+/// socket's four subscriptions (subscribed before the replay, so
+/// nothing lands between them unseen), acknowledges with the session
+/// frame, replays the conversation's transcript from index zero, and
+/// re-announces unresolved waits. A `false` return means the client is
+/// gone.
 async fn attach(
     conversation: Conversation,
+    receivers: Receivers,
     ask: Option<AskTool>,
     attached: &mut Option<Attached>,
     (events_rx, deltas_rx, input_rx, errors_rx): Subscriptions<'_>,
     socket: &mut WebSocket,
 ) -> bool {
-    *events_rx = Some(conversation.subscribe_events());
-    *deltas_rx = Some(conversation.subscribe_deltas());
-    *input_rx = Some(conversation.subscribe_waits());
-    *errors_rx = Some(conversation.subscribe_errors());
+    let Receivers {
+        events,
+        deltas,
+        waits,
+        errors,
+    } = receivers;
+    *events_rx = Some(events);
+    *deltas_rx = Some(deltas);
+    *input_rx = Some(waits);
+    *errors_rx = Some(errors);
     let acknowledgment = AgentSessionFrame::new(
         conversation.id().to_string(),
         conversation.agent().to_owned(),

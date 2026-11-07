@@ -1,7 +1,7 @@
 //! Session lifecycle over `/agents/ws`: session isolation, status-bus
 //! ordering with the backoff reset, teardown wait cleanup, a terminal
-//! agent failure surfacing as an error frame, and the run log under the
-//! state directory.
+//! agent failure and a parse failure each surfacing as an error frame,
+//! and the run log under the state directory.
 
 use workshop_run_log::{RunId, RunLog};
 
@@ -191,6 +191,37 @@ error('kaboom')
     })
     .await
     .expect("a failed run leaves the registry");
+    socket.close().await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn an_agent_that_fails_to_parse_reaches_the_socket_as_an_error_frame() {
+    let (base, dir, _state) = spawn_agent_server().await;
+    // Readable, so the launch is accepted, but with no frontmatter, so
+    // the run fails at once, before the socket has attached.
+    std::fs::write(dir.path().join("agents").join("broken.md"), "# Broken\n")
+        .expect("the broken agent writes");
+    let mut socket = JsonSocket::connect(&format!("{base}/agents/ws")).await;
+    assert_eq!(
+        socket.recv_json().await,
+        json!({ "type": "agents", "agents": ["broken", "chat", "echo"] }),
+        "the freshly written agent is discovered on this connect"
+    );
+    socket
+        .send_json(&json!({ "type": "launch", "agent": "broken" }))
+        .await;
+    let frame = socket.recv_json().await;
+    assert_eq!(frame["type"], "agent_session", "the launch is acknowledged");
+
+    let error = socket
+        .recv_until(Duration::from_secs(10), |frame| frame["type"] == "error")
+        .await;
+    assert!(
+        error["message"]
+            .as_str()
+            .is_some_and(|message| message.contains("frontmatter delimiter")),
+        "the parse failure reaches the SPA as an error frame: {error}"
+    );
     socket.close().await;
 }
 
