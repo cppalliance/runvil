@@ -83,7 +83,7 @@ pub struct Frontmatter {
 }
 
 /// The largest explicit `max_tool_iterations` a prompt may declare.
-pub(crate) const MAX_TOOL_ITERATIONS: u32 = 1000;
+pub const MAX_TOOL_ITERATIONS: u32 = 1000;
 
 /// Deserializes the `max_tool_iterations` cap: absent, or a positive count no
 /// larger than [`MAX_TOOL_ITERATIONS`].

@@ -4,6 +4,7 @@ use std::collections::BTreeMap;
 use std::fmt;
 use std::num::{NonZero, NonZeroU32, NonZeroUsize};
 
+use runvil_prompt::MAX_TOOL_ITERATIONS;
 use runvil_types::cancel::CancelHandle;
 use runvil_types::packs::{PackId, Prelude};
 use runvil_types::seed::RunSeed;
@@ -338,7 +339,7 @@ impl Default for RunLimits {
     fn default() -> RunLimits {
         RunLimits {
             max_tool_iterations: const { NonZero::new(24).unwrap() },
-            tool_iterations_ceiling: const { NonZero::new(1000).unwrap() },
+            tool_iterations_ceiling: const { NonZero::new(MAX_TOOL_ITERATIONS).unwrap() },
             max_concurrency: const { NonZero::new(8).unwrap() },
             lua_memory_bytes: const { NonZero::new(64 * 1024 * 1024).unwrap() },
             lua_log_events: const { NonZero::new(1024).unwrap() },
@@ -355,6 +356,11 @@ mod tests {
         let defaults = RunLimits::default();
         assert_eq!(defaults.max_tool_iterations.get(), 24);
         assert_eq!(defaults.tool_iterations_ceiling.get(), 1000);
+        assert_eq!(
+            defaults.tool_iterations_ceiling.get(),
+            MAX_TOOL_ITERATIONS,
+            "the default ceiling is the most a prompt may declare"
+        );
         assert_eq!(defaults.max_concurrency.get(), 8);
         assert_eq!(defaults.lua_memory_bytes.get(), 64 * 1024 * 1024);
         assert_eq!(defaults.lua_log_events.get(), 1024);
