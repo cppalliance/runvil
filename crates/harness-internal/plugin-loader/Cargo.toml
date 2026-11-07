@@ -9,10 +9,11 @@ publish = false
 [dependencies]
 # Opens a Plugin's dynamic library and resolves its `runvil_plugin` symbol.
 libloading.workspace = true
-# The C contract's Rust mirror (`runvil_plugin::abi`), the Pack registry the
-# inserts take, `PackId`, which validates a Plugin's name, and the
-# universal error a failed load is.
+# The Pack registry the inserts take, `PackId`, which validates a Plugin's
+# name, and the universal error a failed load is.
 runvil-plugin.workspace = true
+# The C contract every entry point follows, version 0.2, as Rust types.
+runvil-plugin-sys.workspace = true
 
 [lints]
 workspace = true

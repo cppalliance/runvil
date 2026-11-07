@@ -15,10 +15,18 @@ crate-type = ["cdylib", "rlib"]
 # and this fixture proves it.
 
 # Only the end-to-end tests in `tests/it` use these: the loader to insert
-# the built library, and the Plugin contract crate for `PackRegistry::new`.
+# the built library, the Plugin contract crate for `PackRegistry::new`, and
+# `libloading` to open the library the loader already holds and read its
+# counters.
 [dev-dependencies]
 harness-plugin-loader.workspace = true
+libloading.workspace = true
 runvil-plugin.workspace = true
+
+# `RTLD_NOLOAD`, so the end-to-end tests can ask whether a library is still
+# loaded without loading it.
+[target.'cfg(unix)'.dev-dependencies]
+libc.workspace = true
 
 [lints]
 workspace = true
