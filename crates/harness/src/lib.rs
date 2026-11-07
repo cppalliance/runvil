@@ -4,15 +4,17 @@
 //! which inserts its Packs into the registry, and builds one
 //! [`pack::Packs`] over it, which builds every Pack the registry holds.
 //! It builds one [`Host`] at startup over those Packs, a
-//! [`PromptFinder`], and its timer, and shares it behind an `Arc`.
+//! [`PromptFinder`], and its [`Timer`], which also stamps each run's
+//! start as a [`Timestamp`], and shares it behind an `Arc`.
 //! [`Host::parse`] finds a prompt by its name and parses it. For each run
 //! the launcher builds a [`RunSetup`] with the run's recorder, inference
 //! broker, services, filesystem, model selection, workspace roots,
-//! arguments, and input text, and [`Harness::new`] takes the Host, the
-//! parsed prompt, and that setup. [`Harness::run`] runs the prompt to its
-//! end and returns its [`RunReport`]. While the run goes on, the launcher
-//! steers it through the [`RunControl`] it took from `Harness::control`
-//! before the run started.
+//! [`RunLimits`], tool-call cap, arguments, and input text, and
+//! [`Harness::new`] takes the Host, the parsed prompt, and that setup.
+//! [`Harness::run`] runs the prompt to its end and returns its
+//! [`RunReport`]. While the run goes on, the launcher steers it through
+//! the [`RunControl`] it took from `Harness::control` before the run
+//! started.
 //!
 //! Every run gets a record and ends with its result: the final text, or
 //! the error that ended it, where a cancel is the error whose code is
@@ -34,6 +36,8 @@ pub use harness_runner::performers::BoxFuture;
 pub use harness_runner::performers::InferenceBroker;
 pub use harness_runner::performers::Timer;
 pub use runvil::PromptFinder;
+pub use runvil::RunLimits;
+pub use runvil::timestamp::Timestamp;
 
 pub mod pack {
     //! The registry a Host's Plugins insert Packs into, the Packs built

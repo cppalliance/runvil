@@ -91,13 +91,15 @@ fn tool_loop_exhaustion_is_readable_at_the_call_site_after_whole_exchanges() {
 
 #[test]
 fn tool_loop_uses_the_default_cap_when_unspecified() {
-    // A prompt declaring no budget runs the limits default: exactly
-    // `RunLimits::max_tool_iterations` round trips.
-    let default_cap = RunLimits::default().max_tool_iterations.get() as usize;
-    let gateway = ScriptedChat::new(never_converging_script(default_cap));
+    // A prompt declaring no budget runs the limits default under the
+    // default ceiling: exactly 24 round trips.
+    let defaults = RunLimits::default();
+    assert_eq!(defaults.tool_iterations_ceiling.get(), 1000);
+    let gateway = ScriptedChat::new(never_converging_script(25));
     let source = one_section(&format!("tools.offer('tools/echo')\n{LOOP_TO_TEXT}"));
     let trace = loop_scenario(source)
         .offer("echo", echo_tool())
+        .limits(defaults)
         .chat(&gateway)
         .run();
     let error = trace.error();
@@ -105,7 +107,28 @@ fn tool_loop_uses_the_default_cap_when_unspecified() {
         error,
         &placed(crate::error::make_tool_loop_exhausted_error(), 14)
     );
-    assert_eq!(gateway.call_count(), default_cap);
+    assert_eq!(gateway.call_count(), 24);
+}
+
+#[test]
+fn the_ceiling_caps_a_larger_declared_cap() {
+    // A prompt declaring 50 under a ceiling of 10 gives up after 10 round
+    // trips against a model that would go on for all 50.
+    let gateway = ScriptedChat::new(never_converging_script(50));
+    let source = capped(50, &format!("tools.offer('tools/echo')\n{LOOP_TO_TEXT}"));
+    let trace = loop_scenario(source)
+        .offer("echo", echo_tool())
+        .limits(RunLimits {
+            tool_iterations_ceiling: NonZeroU32::new(10).expect("10 is non-zero"),
+            ..RunLimits::default()
+        })
+        .chat(&gateway)
+        .run();
+    assert_eq!(
+        trace.error(),
+        &placed(crate::error::make_tool_loop_exhausted_error(), 15)
+    );
+    assert_eq!(gateway.call_count(), 10);
 }
 
 #[test]

@@ -22,8 +22,8 @@ use runvil::{Error, ErrorCode};
 use serde_json::json;
 
 use crate::support::{
-    ClosingTool, PanickingTool, PendingTimer, PendingTool, TEST_SEED, TIMED_MAIN, TextTool, WAITS,
-    assert_canceled, run, run_over, run_with_child, run_with_child_and_cancel, unused,
+    ClosingTool, PanickingTool, PendingTimer, PendingTool, TEST_SEED, TIMED_MAIN, TextTool, Unused,
+    WAITS, assert_canceled, loop_setup, run, run_over, run_with_child, run_with_child_and_cancel,
 };
 
 #[path = "effect_loop-broker.rs"]
@@ -97,8 +97,6 @@ fn assert_one_answer_per_effect(records: &[Record]) {
 #[tokio::test]
 async fn records_are_events_then_effects_then_answers_per_step() {
     let (recorder, run_id) = begun_log().await;
-    let mut performers = unused();
-    performers.tool = Arc::new(TextTool("hi"));
     let vfs = VfsRef::builder().store("/", MemoryBackend::new()).build();
 
     let result = drive_run(
@@ -106,8 +104,9 @@ async fn records_are_events_then_effects_then_answers_per_step() {
             &format!("store.write('notes.md', 'kept')\n{WAITS}"),
             vfs.clone(),
         ),
-        performers,
-        recorder.clone(),
+        &loop_setup(recorder.clone()),
+        Arc::new(Unused),
+        Arc::new(TextTool("hi")),
         run_id,
         CancelHandle::new(),
     )
@@ -198,9 +197,7 @@ async fn await_raised(flag: &AtomicBool, what: &str) {
 async fn a_cancel_writes_one_dropped_answer_per_outstanding_effect() {
     let (recorder, run_id) = begun_log().await;
     let timer_dropped = Arc::new(AtomicBool::new(false));
-    let mut performers = unused();
-    performers.tool = Arc::new(PendingTool);
-    performers.timer = Arc::new(PendingTimer {
+    let timer = Arc::new(PendingTimer {
         dropped: Arc::clone(&timer_dropped),
     });
     let cancel = CancelHandle::new();
@@ -210,8 +207,9 @@ async fn a_cancel_writes_one_dropped_answer_per_outstanding_effect() {
     // timeout timer and its child's tool call.
     let result = drive_run(
         run_with_child_and_cancel(TIMED_MAIN, WAITS, &cancel),
-        performers,
-        recorder.clone(),
+        &loop_setup(recorder.clone()),
+        timer,
+        Arc::new(PendingTool),
         run_id,
         cancel,
     )
@@ -257,8 +255,6 @@ async fn a_cancel_writes_one_dropped_answer_per_outstanding_effect() {
 #[tokio::test]
 async fn a_panicking_performer_drops_its_effect_instead_of_stranding_the_run() {
     let (recorder, run_id) = begun_log().await;
-    let mut performers = unused();
-    performers.tool = Arc::new(PanickingTool);
 
     // No cancel fires: only the lost performer's own drop can end the
     // wait, so a loop that never hears from it hangs here.
@@ -266,8 +262,9 @@ async fn a_panicking_performer_drops_its_effect_instead_of_stranding_the_run() {
         Duration::from_secs(5),
         drive_run(
             run(WAITS),
-            performers,
-            recorder.clone(),
+            &loop_setup(recorder.clone()),
+            Arc::new(Unused),
+            Arc::new(PanickingTool),
             run_id,
             CancelHandle::new(),
         ),
@@ -291,12 +288,11 @@ async fn a_panicking_performer_drops_its_effect_instead_of_stranding_the_run() {
 async fn a_refused_recorder_write_returns_the_recorder_error_and_aborts_the_parked_performers() {
     let (recorder, run_id) = begun_log().await;
     let timer_dropped = Arc::new(AtomicBool::new(false));
-    let mut performers = unused();
-    performers.tool = Arc::new(ClosingTool {
+    let tool = Arc::new(ClosingTool {
         recorder: Arc::clone(&recorder),
         run_id,
     });
-    performers.timer = Arc::new(PendingTimer {
+    let timer = Arc::new(PendingTimer {
         dropped: Arc::clone(&timer_dropped),
     });
 
@@ -305,8 +301,9 @@ async fn a_refused_recorder_write_returns_the_recorder_error_and_aborts_the_park
     // the main section's timer is still parked at that moment.
     let error = drive_run(
         run_with_child(TIMED_MAIN, WAITS),
-        performers,
-        recorder.clone(),
+        &loop_setup(recorder.clone()),
+        timer,
+        tool,
         run_id,
         CancelHandle::new(),
     )
@@ -350,15 +347,14 @@ async fn an_ended_run_refuses_the_first_write_before_any_performer_starts() {
         .end_run(run_id, Err(Error::canceled()))
         .await
         .unwrap();
-    let mut performers = unused();
-    performers.tool = Arc::new(PendingTool);
 
     // The run's opening events are the first write; nothing is issued
     // after a refused write, so the unused performers are never reached.
     let error = drive_run(
         run(WAITS),
-        performers,
-        recorder.clone(),
+        &loop_setup(recorder.clone()),
+        Arc::new(Unused),
+        Arc::new(PendingTool),
         run_id,
         CancelHandle::new(),
     )
@@ -391,8 +387,9 @@ async fn a_run_left_with_nothing_to_await_ends_recorded_with_an_internal_error()
 
     let result = drive_run(
         lost,
-        unused(),
-        recorder.clone(),
+        &loop_setup(recorder.clone()),
+        Arc::new(Unused),
+        Arc::new(Unused),
         run_id,
         CancelHandle::new(),
     )

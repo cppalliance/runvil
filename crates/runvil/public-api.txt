@@ -705,6 +705,7 @@ pub runvil::RunLimits::lua_log_events: core::num::nonzero::NonZeroU32
 pub runvil::RunLimits::lua_memory_bytes: core::num::nonzero::NonZeroUsize
 pub runvil::RunLimits::max_concurrency: core::num::nonzero::NonZeroUsize
 pub runvil::RunLimits::max_tool_iterations: core::num::nonzero::NonZeroU32
+pub runvil::RunLimits::tool_iterations_ceiling: core::num::nonzero::NonZeroU32
 pub runvil::SourceLoc::end_column: core::num::nonzero::NonZeroU32
 pub runvil::SourceLoc::end_line: core::num::nonzero::NonZeroU32
 pub runvil::SourceLoc::file: alloc::string::String

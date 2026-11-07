@@ -18,20 +18,18 @@ use std::pin::pin;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::task::{Context, Poll};
-use std::time::{SystemTime, UNIX_EPOCH};
 
 use futures_util::future::{Either, select};
 use futures_util::task::AtomicWaker;
 use runvil::cancel::CancelHandle;
 use runvil::model::ModelInfo;
-use runvil::timestamp::Timestamp;
 use runvil::{Error, ErrorCode, ErrorFact, Prompt};
 
 use crate::effect_loop::drive;
 use crate::environment::current_model;
 use crate::files::{make_not_completed_error, report_output};
 use crate::host::Host;
-use crate::performers::{InferenceBroker, Performers};
+use crate::performers::InferenceBroker;
 use crate::prepare::{begin, prepare};
 use crate::recorder::{RunId, is_refusal};
 use crate::setup::RunSetup;
@@ -102,10 +100,11 @@ impl Harness {
     /// run's own inputs.
     ///
     /// The run is recorded through `setup.recorder`. It resolves its model
-    /// and gets the model's replies through `setup.broker`, and it sleeps
-    /// through `host.timer`. Its tool calls go to the Packs of
-    /// `host.packs` that the prompt picks, and each call is lent
-    /// `setup.services`. A run has at most 10 tool calls in flight; the
+    /// and gets the model's replies through `setup.broker`, and it reads
+    /// its start from `host.timer` and sleeps through it. It runs under
+    /// `setup.limits`. Its tool calls go to the Packs of `host.packs` that
+    /// the prompt picks, and each call is lent `setup.services`. A run has
+    /// at most `setup.max_tool_calls_in_flight` tool calls in flight; the
     /// rest wait and start oldest first. All of this work happens in
     /// [`Harness::run`].
     #[must_use]
@@ -175,7 +174,7 @@ impl Harness {
         } = self;
         let cancel = control.cancel_handle();
 
-        let (run_id, params) = begin(&setup, now_timestamp())
+        let (run_id, params) = begin(&setup, host.timer.now())
             .await
             .map_err(|refusal| unrecorded(None, &refusal))?;
         let recorded = |refusal: Error| unrecorded(Some(run_id), &refusal);
@@ -214,15 +213,11 @@ impl Harness {
             }
         };
 
-        let performers = Performers {
-            broker: Arc::clone(&setup.broker),
-            tool: Arc::new(packs),
-            timer: Arc::clone(&host.timer),
-        };
         let result = match drive(
             run,
-            performers,
-            Arc::clone(&setup.recorder),
+            &setup,
+            Arc::clone(&host.timer),
+            Arc::new(packs),
             run_id,
             cancel.clone(),
             Arc::clone(control.stop_signal()),
@@ -239,18 +234,6 @@ impl Harness {
             output,
         })
     }
-}
-
-/// The system clock now as the Engine's `Timestamp`: the Harness's stamp for
-/// a run's `started_at`, since the Engine reads no clock of its own. A
-/// clock before the epoch or beyond `i64` milliseconds (neither reachable
-/// on a real machine) saturates to the epoch rather than refusing the launch.
-fn now_timestamp() -> Timestamp {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .ok()
-        .and_then(|elapsed| i64::try_from(elapsed.as_millis()).ok())
-        .map_or(Timestamp::UNIX_EPOCH, Timestamp::from_unix_millis)
 }
 
 /// A handle that drops a run's in-flight round or cancels the run, from

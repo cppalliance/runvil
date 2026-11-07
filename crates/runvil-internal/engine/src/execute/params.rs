@@ -302,8 +302,16 @@ pub struct RunLimits {
     ///
     /// A tool iteration is one model round of such a call; `models.infer`
     /// rounds do not count. A prompt's frontmatter `max_tool_iterations`
-    /// field overrides this default for that prompt.
+    /// field overrides this default for that prompt, and
+    /// [`tool_iterations_ceiling`](Self::tool_iterations_ceiling) caps
+    /// both.
     pub max_tool_iterations: NonZeroU32,
+    /// The most tool iterations any `models.loop`
+    /// call may run, whatever the prompt's
+    /// `max_tool_iterations` declares; it caps
+    /// `max_tool_iterations` too. The default is
+    /// 1000, the most a prompt may declare.
+    pub tool_iterations_ceiling: NonZeroU32,
     /// The run's concurrency ceiling: the most tasks the scheduler admits
     /// at once across the whole run.
     ///
@@ -324,11 +332,13 @@ pub struct RunLimits {
 }
 
 impl Default for RunLimits {
-    /// Returns limits with the default values: 24 tool iterations, 8
-    /// concurrent tasks, 64 MiB of Lua memory, and 1024 Lua log events.
+    /// Returns limits with the default values: 24 tool iterations under a
+    /// ceiling of 1000, 8 concurrent tasks, 64 MiB of Lua memory, and 1024
+    /// Lua log events.
     fn default() -> RunLimits {
         RunLimits {
             max_tool_iterations: const { NonZero::new(24).unwrap() },
+            tool_iterations_ceiling: const { NonZero::new(1000).unwrap() },
             max_concurrency: const { NonZero::new(8).unwrap() },
             lua_memory_bytes: const { NonZero::new(64 * 1024 * 1024).unwrap() },
             lua_log_events: const { NonZero::new(1024).unwrap() },
@@ -341,9 +351,10 @@ mod tests {
     use super::*;
 
     #[test]
-    fn run_limits_pins_all_four_defaults() {
+    fn run_limits_pins_all_five_defaults() {
         let defaults = RunLimits::default();
         assert_eq!(defaults.max_tool_iterations.get(), 24);
+        assert_eq!(defaults.tool_iterations_ceiling.get(), 1000);
         assert_eq!(defaults.max_concurrency.get(), 8);
         assert_eq!(defaults.lua_memory_bytes.get(), 64 * 1024 * 1024);
         assert_eq!(defaults.lua_log_events.get(), 1024);

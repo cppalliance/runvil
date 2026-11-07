@@ -1,14 +1,20 @@
 //! What one run gets on top of its Host: [`RunSetup`].
 
 use std::fmt;
+use std::num::NonZeroUsize;
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use runvil::RunLimits;
 use runvil::vfs::VfsRef;
 use runvil_plugin::HostServices;
 
 use crate::performers::InferenceBroker;
 use crate::recorder::RunRecorder;
+
+/// The tool calls a run has in flight at once unless its setup says
+/// otherwise.
+const DEFAULT_MAX_TOOL_CALLS_IN_FLIGHT: NonZeroUsize = NonZeroUsize::MIN.saturating_add(9);
 
 /// Everything one run gets on top of its Host. The launcher builds one
 /// per run, and the Harness reads each field once and keeps it for the
@@ -32,12 +38,18 @@ pub struct RunSetup {
     pub args: String,
     /// Text written to the prompt's `input:` file before the run starts.
     pub input_text: Option<String>,
+    /// The run's resource limits.
+    pub limits: RunLimits,
+    /// The most tool calls in flight at once; the
+    /// rest wait and start oldest first.
+    pub max_tool_calls_in_flight: NonZeroUsize,
 }
 
 impl RunSetup {
     /// A setup over `recorder` and `broker`. Every other field starts
-    /// empty: no services, a fresh memory store, no selection, no roots,
-    /// no args, and no input.
+    /// empty or at its default: no services, a fresh memory store, no
+    /// selection, no roots, no args, no input, `RunLimits::default()`, and
+    /// at most 10 tool calls in flight.
     #[must_use]
     pub fn new(recorder: Arc<dyn RunRecorder>, broker: Arc<dyn InferenceBroker>) -> RunSetup {
         RunSetup {
@@ -49,6 +61,8 @@ impl RunSetup {
             workspace_roots: Vec::new(),
             args: String::new(),
             input_text: None,
+            limits: RunLimits::default(),
+            max_tool_calls_in_flight: DEFAULT_MAX_TOOL_CALLS_IN_FLIGHT,
         }
     }
 }
@@ -63,6 +77,8 @@ impl fmt::Debug for RunSetup {
             .field("workspace_roots", &self.workspace_roots)
             .field("args", &self.args)
             .field("input_text", &self.input_text)
+            .field("limits", &self.limits)
+            .field("max_tool_calls_in_flight", &self.max_tool_calls_in_flight)
             .finish_non_exhaustive()
     }
 }

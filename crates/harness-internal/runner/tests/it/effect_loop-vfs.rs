@@ -18,8 +18,8 @@ use serde_json::json;
 
 use super::{answers, assert_one_answer_per_effect, begun_log, kinds};
 use crate::support::{
-    GatedTool, HookedBackend, TextTool, WAITS, assert_canceled, run_of_sections, run_over,
-    run_with_child, unused,
+    GatedTool, HookedBackend, TextTool, Unused, WAITS, assert_canceled, loop_setup,
+    run_of_sections, run_over, run_with_child,
 };
 
 #[tokio::test]
@@ -36,8 +36,9 @@ async fn a_run_of_only_vfs_operations_completes_with_one_answer_per_effect() {
              return store.read('a.md')",
             VfsRef::default(),
         ),
-        unused(),
-        recorder.clone(),
+        &loop_setup(recorder.clone()),
+        Arc::new(Unused),
+        Arc::new(Unused),
         run_id,
         CancelHandle::new(),
     )
@@ -79,8 +80,9 @@ async fn a_vfs_operation_runs_on_the_thread_that_drives_the_loop() {
     // thread; a blocking-pool thread would be another one.
     drive_run(
         run_over("store.write('a.md', 'x')\nreturn 'ok'", vfs),
-        unused(),
-        recorder.clone(),
+        &loop_setup(recorder.clone()),
+        Arc::new(Unused),
+        Arc::new(Unused),
         run_id,
         CancelHandle::new(),
     )
@@ -143,10 +145,10 @@ const WRITES_BESIDE_A_PARKED_CALL: &str = "local t = tasks.spawn('## Child')\n\
 async fn a_vfs_chain_keeps_stepping_while_a_tool_call_is_parked() {
     let (recorder, run_id) = begun_log().await;
     let gate = Arc::new(tokio::sync::Semaphore::new(0));
-    let mut performers = unused();
-    performers.tool = Arc::new(GatedTool {
+    let tool = Arc::new(GatedTool {
         gate: Arc::clone(&gate),
     });
+    let setup = loop_setup(recorder.clone());
 
     // The first write and the child's gated tool call are issued in one
     // step. The loop answers the write inline and steps again, so the
@@ -154,8 +156,9 @@ async fn a_vfs_chain_keeps_stepping_while_a_tool_call_is_parked() {
     // is still parked; only then does the watcher open the gate.
     let drive = drive_run(
         run_with_child(WRITES_BESIDE_A_PARKED_CALL, WAITS),
-        performers,
-        recorder.clone(),
+        &setup,
+        Arc::new(Unused),
+        tool,
         run_id,
         CancelHandle::new(),
     );
@@ -196,8 +199,9 @@ async fn a_backend_that_panics_drops_its_effect_instead_of_unwinding_the_run() {
     // effect and ends, and the loop returns normally.
     let result = drive_run(
         run_over("store.write('a.md', 'x')\nreturn 'ok'", vfs),
-        unused(),
-        recorder.clone(),
+        &loop_setup(recorder.clone()),
+        Arc::new(Unused),
+        Arc::new(Unused),
         run_id,
         CancelHandle::new(),
     )
@@ -242,8 +246,9 @@ async fn a_vfs_effect_withdrawn_in_the_step_that_issued_it_is_dropped_unperforme
 
     let result = drive_run(
         run_of_sections(&WITHDRAWS_A_WRITE, vfs),
-        unused(),
-        recorder.clone(),
+        &loop_setup(recorder.clone()),
+        Arc::new(Unused),
+        Arc::new(Unused),
         run_id,
         CancelHandle::new(),
     )
@@ -284,13 +289,12 @@ fn label(record: &Record) -> String {
 #[tokio::test]
 async fn a_step_with_a_vfs_effect_records_its_inline_answer_before_the_next_effect() {
     let (recorder, run_id) = begun_log().await;
-    let mut performers = unused();
-    performers.tool = Arc::new(TextTool("done"));
 
     drive_run(
         run_with_child(WRITES_BESIDE_A_PARKED_CALL, WAITS),
-        performers,
-        recorder.clone(),
+        &loop_setup(recorder.clone()),
+        Arc::new(Unused),
+        Arc::new(TextTool("done")),
         run_id,
         CancelHandle::new(),
     )

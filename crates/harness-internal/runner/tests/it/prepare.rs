@@ -2,33 +2,39 @@
 //! the environment cannot meet is prepared, and its run's first step ends
 //! it with the Engine's own notice and no record before its end; a
 //! recorder that refuses the run's first record fails the run naming it;
-//! each run's begin draws a fresh seed and start, both handed to the
-//! recorder; and the run's tool performer sends a `ToolCall` effect to
-//! the Pack its id names. The run's optional input broker - one of its
-//! own services, lent to every tool call and behind the fixture ask Pack -
-//! sits in the `input` child module, the run's services meeting a Pack's
-//! needs sit in the `host_services` child module, a Pack's prelude
-//! reaching the prepared run sits in the `prelude` child module, the
-//! prompt's declared input and output files sit in the `files` child
-//! module, and the wait for each Pack to be ready sits in the `ready`
-//! child module.
+//! each run's begin draws a fresh seed and reads its start from the
+//! Host's timer, both handed to the recorder; the setup's limits reach
+//! the prepared run; and the run's tool performer sends a `ToolCall`
+//! effect to the Pack its id names. The run's optional input broker - one
+//! of its own services, lent to every tool call and behind the fixture
+//! ask Pack - sits in the `input` child module, the run's services
+//! meeting a Pack's needs sit in the `host_services` child module, a
+//! Pack's prelude reaching the prepared run sits in the `prelude` child
+//! module, the prompt's declared input and output files sit in the
+//! `files` child module, and the wait for each Pack to be ready sits in
+//! the `ready` child module.
 
+use std::num::NonZeroU32;
 use std::sync::Arc;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+use harness_runner::performers::{BoxFuture, Timer};
 use harness_runner::recorder::{
     MemoryRecorder, Record, RecordKind, RecorderFuture, RunId, RunMeta, RunRecorder,
 };
 use harness_runner::{Packs, RunReport, RunSetup};
 use runvil::make_tool_error;
-use runvil::{Error, ErrorCode, ErrorFact};
+use runvil::model::{Completion, CompletionResult, ToolCall};
+use runvil::timestamp::Timestamp;
+use runvil::{Error, ErrorCode, ErrorFact, RunLimits};
 use runvil_plugin::{
     HostServices, Pack, PackFuture, PackId, PackInfo, ToolContext, ToolId, ToolInfo, ToolOutput,
 };
 use serde_json::{Value, json};
 
 use crate::harness::launch;
-use crate::scripted::ScriptedBroker;
+use crate::scripted::{MODEL, ScriptedBroker};
 use crate::support::{Unused, registry};
 
 #[path = "prepare-files.rs"]
@@ -270,6 +276,79 @@ async fn two_runs_draw_different_seeds_and_both_begin_at_the_recorder_at_the_wal
             meta.started_at
         );
     }
+}
+
+/// A Host's clock that always reads one instant; no test here reaches
+/// its sleep.
+struct PinnedClock(Timestamp);
+
+impl Timer for PinnedClock {
+    fn sleep(&self, _duration: Duration) -> BoxFuture<()> {
+        unreachable!("no test here issues a Timer effect")
+    }
+
+    fn now(&self) -> Timestamp {
+        self.0
+    }
+}
+
+#[tokio::test]
+async fn a_pinned_timer_stamps_the_runs_start() {
+    let recorder = recorder();
+    let pinned = Timestamp::from_unix_millis(1_700_000_000_000);
+    let report = launch(bare(), PinnedClock(pinned), PLAIN, setup_over(&recorder))
+        .run()
+        .await
+        .expect("the run is reported");
+    assert_eq!(completed(report.result), "plain");
+    let meta = recorder
+        .meta(report.run_id)
+        .expect("the recorder began the run");
+    assert_eq!(
+        meta.started_at,
+        pinned.unix_millis(),
+        "the run starts at the Host's clock"
+    );
+}
+
+/// A prompt declaring the fixture Pack whose one section loops over a
+/// model that calls the echo tool every round, and returns how the loop
+/// ended.
+const LOOPS_ON_ECHO: &str = "---\nname: loops\ndescription: d\nrunvil: 0\n\
+    uses:\n  - tests/tools\n---\n\n\
+    # Title\n\n## Only\n\n```lua\n\
+    tools.offer('tools/echo')\nmessages:user('go')\n\
+    local ok, err = pcall(models.loop)\nreturn tostring(ok) .. '|' .. err.kind\n```\n";
+
+#[tokio::test]
+async fn the_setups_limits_reach_the_run() {
+    let calls = Arc::new(AtomicUsize::new(0));
+    let broker = ScriptedBroker::new(move |_round, _messages| {
+        let call = calls.fetch_add(1, Ordering::SeqCst);
+        Box::pin(async move {
+            let echo = ToolCall::from_parts(
+                format!("call_{call}"),
+                "tools_echo",
+                json!({ "value": "hi" }),
+            )?;
+            Completion::from_result(CompletionResult::ToolCalls(vec![echo]), MODEL).map(Box::new)
+        })
+    });
+    let rounds = broker.rounds();
+    let mut limits = RunLimits::default();
+    limits.tool_iterations_ceiling = NonZeroU32::new(2).expect("2 is non-zero");
+    let setup = RunSetup {
+        limits,
+        ..RunSetup::new(recorder(), Arc::new(broker))
+    };
+
+    let report = report_of(LOOPS_ON_ECHO, building(TOOLS), setup).await;
+    assert_eq!(completed(report.result), "false|tool_loop_exhausted");
+    assert_eq!(
+        rounds.lock().unwrap().len(),
+        2,
+        "the setup's ceiling ends the loop after two rounds"
+    );
 }
 
 #[tokio::test]

@@ -733,7 +733,7 @@ pub use harness_runner::environment::HostSnapshot;
 
 <step-3>
 
-3. **Run limits, tool-call cap, and Host clock** (points: 9) - Add `RunLimits::tool_iterations_ceiling`. The Engine's cap for each loop becomes the smaller of the ceiling and the prompt's `max_tool_iterations`, falling back to `limits.max_tool_iterations` when the prompt declares none (`crates/runvil-internal/engine/src/execute/context.rs:328-339`). Regenerate `crates/runvil/public-api.txt`.
+3. [done] **Run limits, tool-call cap, and Host clock** (points: 9) - Add `RunLimits::tool_iterations_ceiling`. The Engine's cap for each loop becomes the smaller of the ceiling and the prompt's `max_tool_iterations`, falling back to `limits.max_tool_iterations` when the prompt declares none (`crates/runvil-internal/engine/src/execute/context.rs:328-339`). Regenerate `crates/runvil/public-api.txt`.
    - Add `limits` and `max_tool_calls_in_flight` to `RunSetup`, and pass `limits` to `RunParams::with_limits`.
    - Change `drive_run` and `drive` to take the setup, the timer, and the tool performer. Remove `Performers` and `ToolPerformer::max_in_flight`, and read the cap from the setup.
    - Add `Timer::now`, with a default that reads the system clock (moving `now_timestamp` out of `src/prepare.rs`). The Harness passes `host.timer.now()` to `begin` as the run's start.

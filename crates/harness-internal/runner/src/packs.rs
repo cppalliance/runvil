@@ -67,7 +67,7 @@ struct Built {
     pack: Result<Arc<dyn Pack>, String>,
 }
 
-/// The Packs one run holds, picked by [`Packs::pick`] from its
+/// The Packs one run holds, picked by `Packs::pick` from its
 /// prompt's `uses:` entries, and what the pick cannot resolve.
 #[derive(Debug)]
 pub(crate) struct Picked {
@@ -111,6 +111,25 @@ impl Packs {
         Packs { built }
     }
 
+    /// Picks the Packs a run of `prompt` holds, waits
+    /// until each is ready or `cancel` fires, and
+    /// takes the run's snapshot of them, lending
+    /// each tool call `services`.
+    ///
+    /// A Pack whose `ready` fails is unavailable to this run, with its
+    /// error as the reason. A cancel ends the wait, and each Pack is
+    /// snapshotted as it stands.
+    pub(crate) async fn snapshot(
+        &self,
+        prompt: &Prompt,
+        services: HostServices,
+        cancel: &CancelHandle,
+    ) -> RunPacks {
+        let picked = self.pick(prompt);
+        let failures = self.wait_ready(&picked, cancel).await;
+        self.begin_run(&picked, services, failures)
+    }
+
     /// Picks the Packs a run of `prompt` holds: each Pack its `uses:`
     /// entries name, plus every `runvil` Pack whose Pack id no entry
     /// takes.
@@ -119,7 +138,7 @@ impl Packs {
     /// not build is missing, or unavailable naming each other vendor's
     /// Pack of that id; a `vendor/name` the Host did not build is
     /// unavailable.
-    pub(crate) fn pick(&self, prompt: &Prompt) -> Picked {
+    fn pick(&self, prompt: &Prompt) -> Picked {
         let uses = prompt.frontmatter().uses();
         let mut fqns = Vec::new();
         let mut unresolved = BTreeMap::new();
@@ -199,7 +218,7 @@ impl Packs {
     /// A cancel on `cancel` ends the wait with no failures, so each Pack
     /// is snapshotted as it stands, and a run canceled here ends
     /// canceled whatever the snapshot holds.
-    pub(crate) async fn wait_ready(
+    async fn wait_ready(
         &self,
         packs: &Picked,
         cancel: &CancelHandle,
@@ -240,7 +259,7 @@ impl Packs {
     /// could not resolve with a reason included, and its declared
     /// preludes, the declared, usable Packs', in declaration order. It also
     /// performs the run's tool calls.
-    pub(crate) fn begin_run(
+    fn begin_run(
         &self,
         packs: &Picked,
         services: HostServices,

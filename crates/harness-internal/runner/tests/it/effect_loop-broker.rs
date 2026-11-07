@@ -7,9 +7,10 @@ use std::collections::BTreeMap;
 use std::num::NonZeroU32;
 use std::sync::{Arc, Mutex};
 
+use harness_runner::RunSetup;
 use harness_runner::effect_loop::drive_run;
-use harness_runner::performers::{BoxFuture, InferenceBroker, Performers};
-use harness_runner::recorder::RecordKind;
+use harness_runner::performers::{BoxFuture, InferenceBroker};
+use harness_runner::recorder::{RecordKind, RunRecorder};
 use runvil::Error;
 use runvil::cancel::CancelHandle;
 use runvil::effect::Round;
@@ -24,7 +25,7 @@ use runvil::{Prompt, Run, RunParams};
 use serde_json::{Value, json};
 
 use super::begun_log;
-use crate::support::{TEST_SEED, unused};
+use crate::support::{TEST_SEED, Unused};
 
 /// A program that infers once and then chats once: the nested round
 /// first, then the section's own round over its message list.
@@ -90,24 +91,24 @@ impl InferenceBroker for RecordingBroker {
     }
 }
 
-/// The recording broker in the run's performers, beside what it saw.
-fn recording() -> (Performers, Arc<Mutex<Vec<Seen>>>) {
+/// A setup recorded through `recorder` whose broker is the recording
+/// broker, beside what it saw.
+fn recording(recorder: Arc<dyn RunRecorder>) -> (RunSetup, Arc<Mutex<Vec<Seen>>>) {
     let broker = RecordingBroker::default();
     let rounds = Arc::clone(&broker.rounds);
-    let mut performers = unused();
-    performers.broker = Arc::new(broker);
-    (performers, rounds)
+    (RunSetup::new(recorder, Arc::new(broker)), rounds)
 }
 
 #[tokio::test]
 async fn the_broker_receives_each_rounds_round() {
     let (recorder, run_id) = begun_log().await;
-    let (performers, rounds) = recording();
+    let (setup, rounds) = recording(recorder);
 
     drive_run(
         infers_then_chats(),
-        performers,
-        recorder,
+        &setup,
+        Arc::new(Unused),
+        Arc::new(Unused),
         run_id,
         CancelHandle::new(),
     )
@@ -132,12 +133,13 @@ async fn the_broker_receives_each_rounds_round() {
 #[tokio::test]
 async fn each_round_resumes_the_run_with_the_brokers_completion() {
     let (recorder, run_id) = begun_log().await;
-    let (performers, _rounds) = recording();
+    let (setup, _rounds) = recording(recorder.clone());
 
     let result = drive_run(
         infers_then_chats(),
-        performers,
-        recorder.clone(),
+        &setup,
+        Arc::new(Unused),
+        Arc::new(Unused),
         run_id,
         CancelHandle::new(),
     )

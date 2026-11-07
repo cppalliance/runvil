@@ -38,7 +38,7 @@
 //! effect is never in flight at a cancel or a stop: it is answered before
 //! the loop waits again. A drop is an answer, recorded like any other, so
 //! every effect record has exactly one answer record. Tool calls beyond the
-//! performer's cap wait unstarted, oldest first, so none starves, and a
+//! setup's cap wait unstarted, oldest first, so none starves, and a
 //! cancel, a stop, or a withdrawal reaches them by the same reach as the
 //! effects in flight. Chat, render, and timer effects never wait and never
 //! count toward the cap.
@@ -74,18 +74,24 @@ use runvil::{Run, Step};
 use tracing::Instrument as _;
 
 use crate::harness::StopSignal;
-use crate::performers::{BoxFuture, Performers};
+use crate::performers::{BoxFuture, InferenceBroker, Timer, ToolPerformer};
 use crate::recorder::{Record, RecordKind, RunId, RunRecorder, make_recorder_error, refused};
+use crate::setup::RunSetup;
 
 /// The message of the failure a stalled run ends with.
 const STALLED: &str = "the effect loop has nothing to await for a pending run";
 
-/// Drives `run` to its end inside the returned future: performs its
-/// effects through `performers`, hands every event, effect, and answer to
-/// `recorder` under `run_id`, and drops every effect in flight when
-/// `cancel` fires. `cancel` must be the flag the run's params were built
-/// with, so the run sees the same cancel. Ends the run at the recorder with
-/// its result, the final text or the error that ended it, and returns it.
+/// Drives `run` to its end: chat effects go to
+/// `setup.broker`, renders and tool calls to `tool`
+/// with at most `setup.max_tool_calls_in_flight`
+/// calls in flight, and timers to `timer`. Every
+/// event, effect, and answer is recorded at
+/// `setup.recorder` under `run_id`. `cancel` must be
+/// the flag `run` was built with.
+///
+/// Every effect in flight is dropped when `cancel` fires, and the run
+/// sees the same cancel. Ends the run at the recorder with its result,
+/// the final text or the error that ended it, and returns it.
 ///
 /// A run that is pending with nothing to await ends with an `Internal`
 /// error, once every future the loop still holds is torn down.
@@ -102,31 +108,34 @@ const STALLED: &str = "the effect loop has nothing to await for a pending run";
 /// and the recorder is not told it ended.
 pub async fn drive_run(
     run: Run,
-    performers: Performers,
-    recorder: Arc<dyn RunRecorder>,
+    setup: &RunSetup,
+    timer: Arc<dyn Timer>,
+    tool: Arc<dyn ToolPerformer>,
     run_id: RunId,
     cancel: CancelHandle,
 ) -> Result<String, Error> {
-    drive(run, performers, recorder, run_id, cancel, Arc::default()).await
+    drive(run, setup, timer, tool, run_id, cancel, Arc::default()).await
 }
 
-/// Drives `run` as [`drive_run`] does, and also drops the effects in
-/// flight, tool calls that survive stops excepted, each time `stop` is raised.
+/// As `drive_run`, and drops the effects in flight
+/// but stop survivors each time `stop` is raised.
 pub(crate) async fn drive(
     run: Run,
-    performers: Performers,
-    recorder: Arc<dyn RunRecorder>,
+    setup: &RunSetup,
+    timer: Arc<dyn Timer>,
+    tool: Arc<dyn ToolPerformer>,
     run_id: RunId,
     cancel: CancelHandle,
     stop: Arc<StopSignal>,
 ) -> Result<String, Error> {
-    let cap = performers.tool.max_in_flight();
     let mut driver = Driver {
         run,
-        performers,
-        recorder,
+        broker: Arc::clone(&setup.broker),
+        tool,
+        timer,
+        recorder: Arc::clone(&setup.recorder),
         run_id,
-        flights: Flights::new(cap),
+        flights: Flights::new(setup.max_tool_calls_in_flight),
         cancel,
         stop,
     };
@@ -136,7 +145,12 @@ pub(crate) async fn drive(
 /// One run being driven.
 struct Driver {
     run: Run,
-    performers: Performers,
+    /// Performs `Chat` effects.
+    broker: Arc<dyn InferenceBroker>,
+    /// Performs `ToolCall` and `Render` effects.
+    tool: Arc<dyn ToolPerformer>,
+    /// Performs `Timer` effects.
+    timer: Arc<dyn Timer>,
     recorder: Arc<dyn RunRecorder>,
     run_id: RunId,
     /// The chat, render, tool-call, and timer effects in flight and the
@@ -359,7 +373,7 @@ impl Driver {
                 round,
                 ..
             } => {
-                let broker = Arc::clone(&self.performers.broker);
+                let broker = Arc::clone(&self.broker);
                 let options = binding.completion_options();
                 let round = async move {
                     let completion = broker.chat(binding, messages, tools, options, round).await;
@@ -372,7 +386,7 @@ impl Driver {
                 binding,
                 offered,
             } => {
-                let performer = Arc::clone(&self.performers.tool);
+                let performer = Arc::clone(&self.tool);
                 let model = binding.render_info();
                 Box::pin(async move {
                     EffectAnswer::Render(performer.render(entry, model, offered).await)
@@ -386,7 +400,7 @@ impl Driver {
                 access,
                 survives_stop,
             } => {
-                let performer = Arc::clone(&self.performers.tool);
+                let performer = Arc::clone(&self.tool);
                 let call = async move {
                     EffectAnswer::ToolCall(performer.call(tool, alias, access, origin, args).await)
                 };
@@ -396,7 +410,7 @@ impl Driver {
             }
             Effect::Vfs { access, op } => return Some((access, op)),
             Effect::Timer { duration } => {
-                let timer = Arc::clone(&self.performers.timer);
+                let timer = Arc::clone(&self.timer);
                 let sleep = async move {
                     timer.sleep(duration).await;
                     EffectAnswer::Timer

@@ -315,16 +315,17 @@ impl ChainState {
     }
 
     /// The resolved tool-loop cap per `models.loop` call: the frontmatter's
-    /// `max_tool_iterations` over the limits default.
+    /// `max_tool_iterations` over the limits default, held to the limits
+    /// ceiling.
     fn max_tool_iterations(&self) -> usize {
-        self.shared
+        let limits = &self.shared.limits;
+        let cap = self
+            .shared
             .prompt
             .frontmatter()
             .max_tool_iterations()
-            .map_or(
-                self.shared.limits.max_tool_iterations.get() as usize,
-                |cap| cap.get() as usize,
-            )
+            .unwrap_or(limits.max_tool_iterations);
+        cap.min(limits.tool_iterations_ceiling).get() as usize
     }
 
     /// The run's top-level section count, reported as `sys.section_count`.
@@ -517,6 +518,7 @@ mod tests {
     //! and the model set a run binds from its filled roles.
 
     use std::collections::BTreeMap;
+    use std::num::NonZeroU32;
 
     use runvil_types::packs::PackId;
     use runvil_types::tools::ToolId;
@@ -583,6 +585,21 @@ mod tests {
             runvil_prompt::detail::sections(&prompt).len()
         );
         assert_eq!(ctx.max_tool_iterations(), 24);
+    }
+
+    #[test]
+    fn the_ceiling_caps_the_limits_default_too() {
+        let limits = RunLimits {
+            max_tool_iterations: NonZeroU32::new(50).expect("50 is non-zero"),
+            tool_iterations_ceiling: NonZeroU32::new(10).expect("10 is non-zero"),
+            ..RunLimits::default()
+        };
+        let ctx = state_over(
+            &test_prompt(),
+            RunParams::new(TEST_SEED, runvil_types::timestamp::Timestamp::UNIX_EPOCH)
+                .with_limits(limits),
+        );
+        assert_eq!(ctx.max_tool_iterations(), 10);
     }
 
     #[test]

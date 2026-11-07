@@ -1,7 +1,7 @@
-//! The tool-call cap: at most the performer's `max_in_flight()` tool calls
-//! run at once, the rest wait and start lowest effect id first, and a
-//! waiting call that a withdrawal, a task cancel, or a run cancel reaches
-//! is answered `Dropped` without ever starting.
+//! The tool-call cap: at most the setup's `max_tool_calls_in_flight` tool
+//! calls run at once, the rest wait and start lowest effect id first, and
+//! a waiting call that a withdrawal, a task cancel, or a run cancel
+//! reaches is answered `Dropped` without ever starting.
 
 use std::collections::BTreeMap;
 use std::future::Future;
@@ -10,6 +10,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 
+use harness_runner::RunSetup;
 use harness_runner::effect_loop::drive_run;
 use harness_runner::performers::{BoxFuture, ToolPerformer};
 use harness_runner::recorder::{MemoryRecorder, RecordKind, RunId};
@@ -28,7 +29,7 @@ use tokio::sync::{Notify, Semaphore};
 
 use super::begun_log;
 use crate::scripted::{Kept, MODEL, ScriptedBroker, reply};
-use crate::support::{TEST_SEED, assert_canceled, unused};
+use crate::support::{TEST_SEED, Unused, assert_canceled};
 
 /// How long a test waits for a run before it fails.
 const PATIENCE: Duration = Duration::from_secs(10);
@@ -95,20 +96,17 @@ fn run_of(sections: &str, cancel: &CancelHandle) -> Run {
 }
 
 /// Parks every call until the test adds a permit to `gate`, then answers
-/// it, with at most `cap` calls in flight. Logs each call's `name`
-/// argument as the call starts, on its first poll, and counts each
-/// started call torn down before it answered.
+/// it. Logs each call's `name` argument as the call starts, on its first
+/// poll, and counts each started call torn down before it answered.
 struct ParkingTool {
-    cap: NonZeroUsize,
     gate: Arc<Semaphore>,
     started: Kept<String>,
     torn_down: Arc<AtomicUsize>,
 }
 
 impl ParkingTool {
-    fn with_cap(cap: usize) -> Arc<Self> {
+    fn new() -> Arc<Self> {
         Arc::new(Self {
-            cap: NonZeroUsize::new(cap).expect("the cap is not zero"),
             gate: Arc::new(Semaphore::new(0)),
             started: Kept::default(),
             torn_down: Arc::default(),
@@ -153,10 +151,6 @@ impl ToolPerformer for ParkingTool {
             torn_down.0 = None;
             Ok(ToolOutput::trusted("opened"))
         })
-    }
-
-    fn max_in_flight(&self) -> NonZeroUsize {
-        self.cap
     }
 }
 
@@ -215,43 +209,47 @@ async fn settle() {
     }
 }
 
-/// One run's recorder, parking tool, and cancel flag, shared by the run
-/// and the test that steers it.
+/// One run's recorder, tool-call cap, parking tool, and cancel flag,
+/// shared by the run and the test that steers it.
 struct Rig {
     recorder: Arc<MemoryRecorder>,
     run_id: RunId,
+    cap: NonZeroUsize,
     tool: Arc<ParkingTool>,
     cancel: CancelHandle,
 }
 
 impl Rig {
-    /// A rig whose tool runs at most `cap` calls at once.
+    /// A rig whose run has at most `cap` tool calls in flight at once.
     async fn with_cap(cap: usize) -> Self {
         let (recorder, run_id) = begun_log().await;
         Self {
             recorder,
             run_id,
-            tool: ParkingTool::with_cap(cap),
+            cap: NonZeroUsize::new(cap).expect("the cap is not zero"),
+            tool: ParkingTool::new(),
             cancel: CancelHandle::new(),
         }
     }
 
-    /// Drives a run over `sections` under the rig's cancel flag, with
-    /// `broker` and the rig's tool, beside `steer`, and returns the run's
-    /// result. Fails when the two outlast [`PATIENCE`].
+    /// Drives a run over `sections` under the rig's cancel flag and cap,
+    /// with `broker` and the rig's tool, beside `steer`, and returns the
+    /// run's result. Fails when the two outlast [`PATIENCE`].
     async fn drive(
         &self,
         sections: &str,
         broker: ScriptedBroker,
         steer: impl Future<Output = ()>,
     ) -> Result<String, Error> {
-        let mut performers = unused();
-        performers.broker = Arc::new(broker);
-        performers.tool = self.tool.clone();
+        let setup = RunSetup {
+            max_tool_calls_in_flight: self.cap,
+            ..RunSetup::new(self.recorder.clone(), Arc::new(broker))
+        };
         let drive = drive_run(
             run_of(sections, &self.cancel),
-            performers,
-            self.recorder.clone(),
+            &setup,
+            Arc::new(Unused),
+            self.tool.clone(),
             self.run_id,
             self.cancel.clone(),
         );

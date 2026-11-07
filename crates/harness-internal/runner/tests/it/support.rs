@@ -8,11 +8,11 @@ use std::sync::{Arc, Mutex};
 use std::task::Poll;
 use std::time::Duration;
 
-use harness_runner::performers::{BoxFuture, InferenceBroker, Performers, Timer, ToolPerformer};
+use harness_runner::performers::{BoxFuture, InferenceBroker, Timer, ToolPerformer};
 use harness_runner::recorder::{
     MemoryRecorder, Record, RecorderFuture, RunId, RunMeta, RunRecorder, make_recorder_error,
 };
-use harness_runner::{Host, Packs};
+use harness_runner::{Host, Packs, RunSetup};
 use runvil::cancel::CancelHandle;
 use runvil::effect::{Round, ToolCallOrigin};
 use runvil::model::{
@@ -208,15 +208,11 @@ impl Timer for Unused {
     }
 }
 
-/// The bundle with every slot unused; a test overrides the kinds it
-/// issues.
-pub(crate) fn unused() -> Performers {
-    let unused = Arc::new(Unused);
-    Performers {
-        broker: unused.clone(),
-        tool: unused.clone(),
-        timer: unused,
-    }
+/// The setup of a run the effect loop drives alone, recorded through
+/// `recorder`, whose broker no test here reaches; a test that issues
+/// `Chat` effects sets its own broker.
+pub(crate) fn loop_setup(recorder: Arc<dyn RunRecorder>) -> RunSetup {
+    RunSetup::new(recorder, Arc::new(Unused))
 }
 
 /// Answers every tool call with the same trusted text.

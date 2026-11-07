@@ -1,5 +1,5 @@
 //! One performer trait for chat effects, one for tool-call and render
-//! effects, and one for timer effects, and the bundle the effect loop
+//! effects, and one for timer effects: the traits the effect loop
 //! performs a run's effects through.
 //!
 //! The Engine issues an [`Effect`](runvil::effect::Effect) as a
@@ -25,18 +25,17 @@
 //! the Host's Packs, taken at preparation. The Host supplies the
 //! [`InferenceBroker`] and the [`Timer`].
 
-use std::fmt;
 use std::future::Future;
-use std::num::NonZeroUsize;
 use std::pin::Pin;
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use runvil::Error;
 use runvil::effect::{PackToolSets, Round, ToolCallOrigin};
 use runvil::model::{
     Completion, CompletionOptions, Message, ModelBinding, ModelCatalog, ModelInfo, ToolSchema,
 };
+use runvil::timestamp::Timestamp;
 use runvil::vfs::Access;
 use runvil::{ToolId, ToolInfo, ToolOutput};
 use serde_json::Value;
@@ -78,10 +77,6 @@ pub trait InferenceBroker: Send + Sync {
     ) -> BoxFuture<Result<Box<Completion>, Error>>;
 }
 
-/// The tool calls a run has in flight at once unless its performer says
-/// otherwise.
-const DEFAULT_MAX_IN_FLIGHT: NonZeroUsize = NonZeroUsize::MIN.saturating_add(9);
-
 /// Performs a `ToolCall` effect: resolves `tool` to an implementation and
 /// calls it with `args`, lending it the call's `access` and `origin`. Also
 /// performs a `Render` effect: the tools each offered Pack shows the model.
@@ -114,41 +109,28 @@ pub trait ToolPerformer: Send + Sync {
     ) -> BoxFuture<Vec<PackToolSets<ToolInfo>>> {
         Box::pin(async move { offered })
     }
-
-    /// The most tool calls the Harness runs at once across the run; calls
-    /// beyond it wait and start oldest first. The default is 10.
-    fn max_in_flight(&self) -> NonZeroUsize {
-        DEFAULT_MAX_IN_FLIGHT
-    }
 }
 
-/// The Host's clock, which performs each `Timer` effect as one sleep.
+/// The Host's clock, which performs each `Timer` effect as one sleep and
+/// stamps each run's start.
 ///
 /// The Harness polls each sleep inside the run's own future, so a timer
 /// must not block while polled. It waits on the Host's own runtime.
 pub trait Timer: Send + Sync {
     /// Resolves once `duration` has passed.
     fn sleep(&self, duration: Duration) -> BoxFuture<()>;
-}
 
-/// The Harness's performers: one for chat effects, one for tool-call and
-/// render effects, and one for timer effects. The loop answers a `Vfs`
-/// effect inline and has no performer for it.
-///
-/// Shared handles, so the loop can move a performer into the future it
-/// starts for each effect while the bundle stays whole.
-#[derive(Clone)]
-pub struct Performers {
-    /// Performs `Chat` effects.
-    pub broker: Arc<dyn InferenceBroker>,
-    /// Performs `ToolCall` and `Render` effects.
-    pub tool: Arc<dyn ToolPerformer>,
-    /// Performs `Timer` effects.
-    pub timer: Arc<dyn Timer>,
-}
-
-impl fmt::Debug for Performers {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Performers").finish_non_exhaustive()
+    /// The time now. The Harness stamps each run's
+    /// `started_at` with it. The default reads the
+    /// system clock.
+    fn now(&self) -> Timestamp {
+        // A clock before the epoch or beyond `i64` milliseconds, neither
+        // reachable on a real machine, saturates to the epoch rather than
+        // refusing the run.
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .ok()
+            .and_then(|elapsed| i64::try_from(elapsed.as_millis()).ok())
+            .map_or(Timestamp::UNIX_EPOCH, Timestamp::from_unix_millis)
     }
 }
