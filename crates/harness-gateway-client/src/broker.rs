@@ -13,8 +13,8 @@ use std::fmt;
 use std::sync::Arc;
 
 use harness::{BoxFuture, InferenceBroker};
+use runvil::Error;
 use runvil::effect::Round;
-use runvil::error::Error;
 use runvil::model::{
     Completion, CompletionOptions, Message, ModelBinding, ModelCatalog, ToolSchema,
 };

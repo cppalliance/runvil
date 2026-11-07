@@ -59,10 +59,13 @@ fn a_schema_build_failure_names_the_alias_and_ends_with_the_refusal() {
          schema must be a JSON object"
     );
     assert_eq!(error.prose, ErrorCode::ToolSchemaInvalid.prose());
-    assert_eq!(error.facts.get(&FactKey::Name), Some(&Value::from("echo")));
     assert_eq!(
-        error.facts.get(&FactKey::Reason),
-        refusal.facts.get(&FactKey::Reason),
+        error.facts.get(&ErrorFact::Name),
+        Some(&Value::from("echo"))
+    );
+    assert_eq!(
+        error.facts.get(&ErrorFact::Reason),
+        refusal.facts.get(&ErrorFact::Reason),
         "the refusal's reason carries over"
     );
     assert_eq!(
@@ -208,7 +211,7 @@ fn a_refused_uses_list_ends_with_its_line_and_never_names_the_pack_as_the_prompt
         .0
         .expect_err("a Pack id declared twice must be refused");
     assert_eq!(
-        refused.facts.get(&FactKey::Name),
+        refused.facts.get(&ErrorFact::Name),
         Some(&Value::from("web")),
         "the refused Pack's id is the failure's name"
     );
@@ -235,7 +238,7 @@ fn a_parse_failure_run_raises_names_the_prompt_and_its_file() {
     assert_eq!((stamped.code, stamped.message.as_str()), (code, message));
     assert_eq!(stamped.at, None);
     assert_eq!(
-        stamped.facts.get(&FactKey::Name),
+        stamped.facts.get(&ErrorFact::Name),
         Some(&Value::from("greeter"))
     );
     assert_eq!(

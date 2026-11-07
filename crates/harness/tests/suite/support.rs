@@ -5,11 +5,11 @@ use std::time::Duration;
 
 use harness::{BoxFuture, InferenceBroker, Timer};
 use runvil::effect::Round;
-use runvil::error::{Error, ErrorCode};
 use runvil::model::{
     Completion, CompletionOptions, Message, ModelBinding, ModelCatalog, ToolSchema,
     completion_error, phrase,
 };
+use runvil::{Error, ErrorCode};
 
 /// Lists no model and refuses every round as `Unavailable`.
 pub(crate) struct Offline;

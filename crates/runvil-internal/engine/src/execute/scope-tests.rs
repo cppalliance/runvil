@@ -5,7 +5,7 @@
 //! tool, are in the `render` child.
 
 use runvil_lua::ToolOutputKind;
-use runvil_types::error::{ErrorCode, FactKey};
+use runvil_types::error::{ErrorCode, ErrorFact};
 use runvil_types::tools::ToolId;
 use serde_json::json;
 
@@ -346,7 +346,7 @@ fn rule_six_fails_a_bad_wire_name_or_a_non_object_schema_alike_in_either_set() {
             let error = merged(&static_tools, &dynamic_tools, &tools)
                 .expect_err("no round could advertise the tool");
             assert_eq!(
-                (error.code, error.facts.get(&FactKey::Name)),
+                (error.code, error.facts.get(&ErrorFact::Name)),
                 (ErrorCode::ToolSchemaInvalid, Some(&Value::from(alias))),
                 "{alias}: {error:?}"
             );

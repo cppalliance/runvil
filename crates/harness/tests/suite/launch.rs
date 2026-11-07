@@ -8,7 +8,7 @@ use harness::pack::{HostContext, HostServices, PackRegistry};
 use harness::record::MemoryRecorder;
 use harness::vfs::{Origin, VfsRef};
 use harness::{Harness, HostSnapshot, RunRequest};
-use runvil::error::{ErrorCode, FactKey};
+use runvil::{ErrorCode, ErrorFact};
 
 use crate::support::{Clock, Offline};
 
@@ -85,7 +85,7 @@ async fn a_run_that_does_not_complete_reports_no_output() {
     let error = report.output.expect_err("a failed run reports no output");
     assert_eq!(error.code, ErrorCode::NoOutput);
     assert_eq!(
-        error.facts.get(&FactKey::Reason),
+        error.facts.get(&ErrorFact::Reason),
         Some(&serde_json::json!("not_completed"))
     );
 }

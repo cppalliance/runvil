@@ -226,7 +226,7 @@ async fn a_registry_cancel_fails_the_broker_call_and_emits_canceled() {
     assert_eq!(error.to_string(), "the user-input wait was canceled");
     assert_eq!(
         error.code,
-        runvil::error::ErrorCode::ToolBackend,
+        runvil::ErrorCode::ToolBackend,
         "the ask call fails as a backend failure"
     );
     let frame = socket.recv().await.expect("the cancellation frame arrives");
@@ -242,7 +242,7 @@ async fn a_registry_cancel_fails_the_broker_call_and_emits_canceled() {
 struct NoChat;
 
 impl InferenceBroker for NoChat {
-    fn models(&self) -> BoxFuture<Result<ModelCatalog, runvil::error::Error>> {
+    fn models(&self) -> BoxFuture<Result<ModelCatalog, runvil::Error>> {
         Box::pin(async { Ok(ModelCatalog::empty()) })
     }
 
@@ -253,7 +253,7 @@ impl InferenceBroker for NoChat {
         _tools: Vec<ToolSchema>,
         _options: CompletionOptions,
         _round: Round,
-    ) -> BoxFuture<Result<Box<Completion>, runvil::error::Error>> {
+    ) -> BoxFuture<Result<Box<Completion>, runvil::Error>> {
         unreachable!("the prompt makes no model round")
     }
 }

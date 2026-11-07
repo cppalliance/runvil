@@ -9,8 +9,8 @@
 
 use std::path::PathBuf;
 
-use runvil::error::{Error, ErrorCode, FactKey};
 use runvil::model::{ModelId, ModelInfo};
+use runvil::{Error, ErrorCode, ErrorFact};
 
 use crate::performers::InferenceBroker;
 
@@ -83,8 +83,8 @@ pub async fn current_model(
             format!("the selected model `{selected}` is absent from the fetched catalog"),
             code.prose(),
         );
-        error.facts.insert(FactKey::Name, selected.into());
-        error.facts.insert(FactKey::Reason, "model_absent".into());
+        error.facts.insert(ErrorFact::Name, selected.into());
+        error.facts.insert(ErrorFact::Reason, "model_absent".into());
         error
     })
 }

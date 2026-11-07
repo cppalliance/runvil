@@ -14,7 +14,6 @@ use harness_runner::recorder::{
 };
 use runvil::cancel::CancelHandle;
 use runvil::effect::{Round, ToolCallOrigin};
-use runvil::error::{Error, ErrorCode, FactKey};
 use runvil::model::{
     Completion, CompletionOptions, Message, ModelBinding, ModelCatalog, ToolSchema,
 };
@@ -24,6 +23,7 @@ use runvil::vfs::{
     Access, AcquireContext, Entry, ExecId, MemoryBackend, Stat, Vfs, VfsAccess, VfsError, VfsPath,
     VfsRef,
 };
+use runvil::{Error, ErrorCode, ErrorFact};
 use runvil::{Prompt, Run, RunParams, RunSeed};
 use runvil_plugin::{PackInfo, PackRegistry};
 use serde_json::{Value, json};
@@ -42,7 +42,7 @@ pub(crate) fn assert_not_completed(output: &Result<String, Error>) {
     };
     assert_eq!(error.code, ErrorCode::NoOutput);
     assert_eq!(
-        error.facts.get(&FactKey::Reason),
+        error.facts.get(&ErrorFact::Reason),
         Some(&json!("not_completed"))
     );
 }
@@ -324,7 +324,7 @@ impl FailingRecorder {
         &self.inner
     }
 
-    fn count(&self) -> Result<(), runvil::error::Error> {
+    fn count(&self) -> Result<(), runvil::Error> {
         let call = self.calls.fetch_add(1, Ordering::SeqCst) + 1;
         if call == self.fail_on {
             return Err(recorder_error(format!(

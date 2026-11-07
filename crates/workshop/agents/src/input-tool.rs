@@ -6,8 +6,8 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use plugin_user_input::InputBroker;
-use runvil::error::{Error, ErrorCode};
 use runvil::tools::tool_error;
+use runvil::{Error, ErrorCode};
 use tokio::sync::broadcast;
 
 use super::{WaitFrame, WaitRegistry};

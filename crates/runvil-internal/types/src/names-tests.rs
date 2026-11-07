@@ -6,7 +6,7 @@ use std::num::NonZeroU32;
 use serde_json::{Value, json};
 
 use super::{GlobalName, is_alias};
-use crate::error::{Error, ErrorCode, FactKey};
+use crate::error::{Error, ErrorCode, ErrorFact};
 use crate::ids::{ChainId, TaskId};
 use crate::models::{ModelCatalog, ModelId, ModelInfo, ThinkingMode};
 use crate::packs::PackId;
@@ -17,7 +17,7 @@ use crate::tools::{ToolCatalog, ToolId, ToolInfo};
 fn assert_invalid_id(error: &Error, rejected: &str, message: &str) {
     assert_eq!(error.code, ErrorCode::InvalidValue, "{error:?}");
     assert_eq!(
-        error.facts.get(&FactKey::Name),
+        error.facts.get(&ErrorFact::Name),
         Some(&Value::from(rejected)),
         "{error:?}"
     );

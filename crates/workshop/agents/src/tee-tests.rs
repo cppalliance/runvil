@@ -8,7 +8,7 @@ use harness::record::{
     MemoryRecorder, Record, RecordKind, RecorderFuture, RunId, RunMeta, RunRecorder, RunSeed,
     recorder_error,
 };
-use runvil::error::Error;
+use runvil::Error;
 use runvil::event::Event;
 use runvil::ids::Provenance;
 

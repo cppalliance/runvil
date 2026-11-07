@@ -14,9 +14,9 @@ use harness_runner::files::read_output;
 use harness_runner::prepare::Prepared;
 use harness_runner::recorder::MemoryRecorder;
 use runvil::cancel::CancelHandle;
-use runvil::error::{Error, ErrorCode, FactKey};
 use runvil::event::Event;
 use runvil::vfs::{MemoryBackend, Mode, ModePolicy, Origin, VfsRef};
+use runvil::{Error, ErrorCode, ErrorFact};
 use serde_json::json;
 
 use super::{
@@ -119,7 +119,7 @@ async fn input_text_for_a_prompt_that_declares_no_input_is_refused() {
     );
     assert_eq!(source.prose, ErrorCode::RequirementsUnmet.prose());
     assert_eq!(
-        source.facts.get(&FactKey::Reason),
+        source.facts.get(&ErrorFact::Reason),
         Some(&json!("input_undeclared"))
     );
 }
@@ -130,11 +130,11 @@ async fn a_declared_input_neither_supplied_nor_in_the_store_is_refused() {
     let source = refused(&recorder, prepared.expect_err("a missing input refuses"));
     assert_eq!(source.code, ErrorCode::RequirementsUnmet);
     assert_eq!(
-        source.facts.get(&FactKey::Reason),
+        source.facts.get(&ErrorFact::Reason),
         Some(&json!("input_missing"))
     );
     assert_eq!(
-        source.facts.get(&FactKey::Path),
+        source.facts.get(&ErrorFact::Path),
         Some(&json!("paper.md")),
         "the refusal names the missing file"
     );
@@ -159,7 +159,7 @@ async fn a_store_that_refuses_the_staging_write_refuses_the_run() {
             .starts_with("the input file `paper.md` could not be staged: "),
         "the message holds the store's refusal: {source:?}"
     );
-    assert_eq!(source.facts.get(&FactKey::Path), Some(&json!("paper.md")));
+    assert_eq!(source.facts.get(&ErrorFact::Path), Some(&json!("paper.md")));
 }
 
 #[tokio::test]

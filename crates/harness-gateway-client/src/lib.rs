@@ -30,7 +30,7 @@
 //! Under the client sits the OpenAI chat-completions wire code. It turns a
 //! round into a request body, a streamed reply into a
 //! [`Completion`](runvil::model::Completion), and a failed response
-//! into the [`Error`](runvil::error::Error) the round fails with.
+//! into the [`Error`](runvil::Error) the round fails with.
 //!
 //! - [`build_request_body`] builds the JSON body that every round sends.
 //! - [`read_completion_stream`] reads a streamed reply from a

@@ -313,7 +313,7 @@ fn a_block_failure_names_the_vms_file_and_its_mapped_line() {
     );
     assert_eq!(
         error.at,
-        Some(runvil_types::error::Location::line(
+        Some(runvil_types::error::SourceLoc::line(
             "agents/a.md",
             NonZeroU32::new(2).expect("2 is non-zero")
         ))
@@ -341,7 +341,7 @@ fn malformed_lua_reports_its_region_and_the_diagnostic() {
 
     assert_eq!(error.code, ErrorCode::LuaCompile);
     assert_eq!(
-        error.facts.get(&runvil_types::error::FactKey::Section),
+        error.facts.get(&runvil_types::error::ErrorFact::Section),
         Some(&Json::from(location))
     );
     assert!(

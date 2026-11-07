@@ -31,7 +31,7 @@ use std::str::FromStr;
 
 use mlua::{AnyUserData, Function, Lua, Table, Value};
 
-use runvil_types::error::{Error, ErrorCode, FactKey, coordinates};
+use runvil_types::error::{Error, ErrorCode, ErrorFact, coordinates};
 use runvil_types::ids::TaskId;
 use serde_json::Value as Json;
 
@@ -198,7 +198,7 @@ impl FromStr for ErrorKind {
             let mut error = Error::new(ErrorCode::InvalidValue, text.clone(), text);
             error
                 .facts
-                .insert(FactKey::Name, serde_json::Value::from(tag));
+                .insert(ErrorFact::Name, serde_json::Value::from(tag));
             error
         })
     }
@@ -310,15 +310,15 @@ fn kind_of(code: ErrorCode) -> ErrorKind {
 /// The one string field a failure with `code` holds and the fact behind
 /// it, which both [`error_fields`] and [`field_facts`] read; `None` for a
 /// code whose table holds no such field.
-fn string_fact(code: ErrorCode) -> Option<(&'static str, FactKey)> {
+fn string_fact(code: ErrorCode) -> Option<(&'static str, ErrorFact)> {
     match code {
-        ErrorCode::ContextExhausted => Some(("reason", FactKey::Reason)),
-        ErrorCode::EmptyReply => Some(("finish_reason", FactKey::FinishReason)),
+        ErrorCode::ContextExhausted => Some(("reason", ErrorFact::Reason)),
+        ErrorCode::EmptyReply => Some(("finish_reason", ErrorFact::FinishReason)),
         ErrorCode::OutOfScopeTool | ErrorCode::UnboundTool | ErrorCode::ModelOnlyTool => {
-            Some(("name", FactKey::Name))
+            Some(("name", ErrorFact::Name))
         }
         ErrorCode::TaskNotOwned | ErrorCode::TaskConsumed | ErrorCode::TaskCanceled => {
-            Some(("task", FactKey::Task))
+            Some(("task", ErrorFact::Task))
         }
         _ => None,
     }
@@ -326,7 +326,7 @@ fn string_fact(code: ErrorCode) -> Option<(&'static str, FactKey)> {
 
 /// The fact `key` of `error` as the string field `name`, or nothing when
 /// the fact is absent or not a string.
-fn string_field(error: &Error, name: &str, key: FactKey) -> Vec<(String, ErrorField)> {
+fn string_field(error: &Error, name: &str, key: ErrorFact) -> Vec<(String, ErrorField)> {
     error
         .facts
         .get(&key)
@@ -338,7 +338,7 @@ fn string_field(error: &Error, name: &str, key: FactKey) -> Vec<(String, ErrorFi
 /// The `Tasks` fact's ids as one string joined by `, `, the `tasks` field
 /// of a `tasks_live` table.
 fn joined_tasks(error: &Error) -> Vec<(String, ErrorField)> {
-    let Some(Json::Array(tasks)) = error.facts.get(&FactKey::Tasks) else {
+    let Some(Json::Array(tasks)) = error.facts.get(&ErrorFact::Tasks) else {
         return Vec::new();
     };
     let joined = tasks
@@ -379,14 +379,17 @@ pub fn error_fields(error: &Error) -> Vec<(String, ErrorField)> {
 /// gives, under its fact, with `tasks` split back into the ids it joins.
 /// A field of another shape, or one the code's table never gives, holds
 /// no fact.
-fn field_facts(code: ErrorCode, fields: &BTreeMap<String, ErrorField>) -> BTreeMap<FactKey, Json> {
+fn field_facts(
+    code: ErrorCode,
+    fields: &BTreeMap<String, ErrorField>,
+) -> BTreeMap<ErrorFact, Json> {
     match code {
         ErrorCode::TasksLive => fields
             .get("tasks")
             .and_then(ErrorField::as_str)
             .map(|joined| {
                 let tasks: Vec<&str> = joined.split(", ").filter(|id| !id.is_empty()).collect();
-                (FactKey::Tasks, Json::from(tasks))
+                (ErrorFact::Tasks, Json::from(tasks))
             })
             .into_iter()
             .collect(),
@@ -403,12 +406,12 @@ fn field_facts(code: ErrorCode, fields: &BTreeMap<String, ErrorField>) -> BTreeM
 
 /// Each store field's name in a Lua error table beside the fact that holds
 /// it in a universal error, in the order a table lists them.
-const STORE_FACTS: [(&str, FactKey); 5] = [
-    ("path", FactKey::Path),
-    ("valid_up_to", FactKey::ValidUpTo),
-    ("rule", FactKey::Rule),
-    ("anchor", FactKey::Anchor),
-    ("count", FactKey::Count),
+const STORE_FACTS: [(&str, ErrorFact); 5] = [
+    ("path", ErrorFact::Path),
+    ("valid_up_to", ErrorFact::ValidUpTo),
+    ("rule", ErrorFact::Rule),
+    ("anchor", ErrorFact::Anchor),
+    ("count", ErrorFact::Count),
 ];
 
 /// Returns the variant's own fields, without `reason`, in the shape
@@ -536,7 +539,7 @@ fn store_fact_fields(error: &Error) -> Vec<(String, ErrorField)> {
 /// hold, the inverse of [`store_fact_fields`]: each store field under its
 /// fact, a string field as a string and an integer field as a number.
 /// `reason` is the code's tag, not a fact.
-fn store_field_facts(fields: &BTreeMap<String, ErrorField>) -> BTreeMap<FactKey, Json> {
+fn store_field_facts(fields: &BTreeMap<String, ErrorField>) -> BTreeMap<ErrorFact, Json> {
     STORE_FACTS
         .iter()
         .filter_map(|&(name, key)| {

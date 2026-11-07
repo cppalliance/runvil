@@ -5,7 +5,7 @@
 //! after tool work, and the empty rounds that raise `empty_model_reply`).
 
 use runvil_prompt::test_support::{PromptSource, one_section, prompt};
-use runvil_types::error::{ErrorCode, FactKey, Location};
+use runvil_types::error::{ErrorCode, ErrorFact, SourceLoc};
 
 use super::context::Recorder;
 use super::fixtures::echo_tool;
@@ -17,7 +17,7 @@ use crate::test_support::scenario::Trace;
 fn finish_reason(error: &runvil_types::error::Error) -> Option<&str> {
     error
         .facts
-        .get(&FactKey::FinishReason)
+        .get(&ErrorFact::FinishReason)
         .and_then(Value::as_str)
 }
 
@@ -123,11 +123,11 @@ fn unsupported_major_is_refused() {
     let line = std::num::NonZeroU32::new(4).expect("4 is non-zero");
     assert_eq!(
         error.at,
-        Some(Location::line("prompt", line)),
+        Some(SourceLoc::line("prompt", line)),
         "the refusal points at the `runvil:` line"
     );
     assert_eq!(
-        error.facts.get(&FactKey::Name).and_then(Value::as_str),
+        error.facts.get(&ErrorFact::Name).and_then(Value::as_str),
         Some("t"),
         "the refusal names the prompt"
     );
@@ -148,8 +148,8 @@ fn unsupported_major_refusal_gets_the_prompt_context() {
         ),
     );
     let line = std::num::NonZeroU32::new(4).expect("4 is non-zero");
-    expected.at = Some(Location::line("prompt", line));
-    expected.facts.insert(FactKey::Name, Value::from("t"));
+    expected.at = Some(SourceLoc::line("prompt", line));
+    expected.facts.insert(ErrorFact::Name, Value::from("t"));
     assert_eq!(
         trace.error(),
         &expected,
@@ -168,7 +168,7 @@ fn missing_version_is_not_a_runvil_prompt() {
     assert_eq!(
         error
             .facts
-            .get(&FactKey::Name)
+            .get(&ErrorFact::Name)
             .and_then(serde_json::Value::as_str),
         Some("t"),
         "the error reports the parsed prompt's frontmatter name"

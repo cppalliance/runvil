@@ -1,6 +1,6 @@
 //! The universal error: one [`Error`] record that can describe any Engine
 //! failure, by a stable [`ErrorCode`], text for people and for the model,
-//! an optional [`Location`], and values named by [`FactKey`].
+//! an optional [`SourceLoc`], and values named by [`ErrorFact`].
 
 use std::collections::BTreeMap;
 use std::fmt;
@@ -22,9 +22,9 @@ pub struct Error {
     /// it can never work.
     pub prose: String,
     /// Where it happened, when known.
-    pub at: Option<Location>,
+    pub at: Option<SourceLoc>,
     /// The values the failure names, such as a path or a task id.
-    pub facts: BTreeMap<FactKey, serde_json::Value>,
+    pub facts: BTreeMap<ErrorFact, serde_json::Value>,
 }
 
 impl Error {
@@ -121,7 +121,7 @@ fn location(error: &Error) -> Option<String> {
             let parts: Vec<String> = [
                 error
                     .facts
-                    .get(&FactKey::Name)
+                    .get(&ErrorFact::Name)
                     .filter(|_| error.code != ErrorCode::FrontmatterInvalid)
                     .and_then(serde_json::Value::as_str)
                     .map(|name| format!("prompt {name}")),
@@ -157,7 +157,7 @@ impl std::error::Error for Error {}
 /// A range in a file, from the start position up to but not including the
 /// end. Lines and columns are 1-based, and columns count characters.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Location {
+pub struct SourceLoc {
     /// The file. Its extension tells its kind, such as `.md` for a prompt or
     /// `.rs` for Rust.
     pub file: String,
@@ -171,7 +171,7 @@ pub struct Location {
     pub end_column: NonZeroU32,
 }
 
-impl Location {
+impl SourceLoc {
     /// Builds a range, or `None` when the end comes before the start.
     #[must_use]
     pub fn new(
@@ -180,8 +180,8 @@ impl Location {
         start_column: NonZeroU32,
         end_line: NonZeroU32,
         end_column: NonZeroU32,
-    ) -> Option<Location> {
-        ((end_line, end_column) >= (start_line, start_column)).then(|| Location {
+    ) -> Option<SourceLoc> {
+        ((end_line, end_column) >= (start_line, start_column)).then(|| SourceLoc {
             file: file.into(),
             start_line,
             start_column,
@@ -193,8 +193,8 @@ impl Location {
     /// Builds the range covering all of `line`, from column 1 up to column 1
     /// of the next line. On line `u32::MAX` the range is empty.
     #[must_use]
-    pub fn line(file: impl Into<String>, line: NonZeroU32) -> Location {
-        Location {
+    pub fn line(file: impl Into<String>, line: NonZeroU32) -> SourceLoc {
+        SourceLoc {
             file: file.into(),
             start_line: line,
             start_column: NonZeroU32::MIN,
@@ -213,7 +213,7 @@ impl Location {
 /// Rust location. Any other error that has a location keeps it, so the
 /// first placement wins; only an empty file in it becomes `file`, since the
 /// parser locates a failure before it knows the file. Otherwise a known
-/// `line` becomes [`Location::line`] in `file`, and with no `line` the
+/// `line` becomes [`SourceLoc::line`] in `file`, and with no `line` the
 /// error comes back unchanged.
 #[must_use]
 pub fn place(mut error: Error, file: &str, line: Option<NonZeroU32>) -> Error {
@@ -223,7 +223,7 @@ pub fn place(mut error: Error, file: &str, line: Option<NonZeroU32>) -> Error {
     match &mut error.at {
         Some(at) if at.file.is_empty() => file.clone_into(&mut at.file),
         Some(_) => {}
-        None => error.at = line.map(|line| Location::line(file, line)),
+        None => error.at = line.map(|line| SourceLoc::line(file, line)),
     }
     error
 }
@@ -236,7 +236,7 @@ pub fn failure(code: ErrorCode, message: impl Into<String>) -> Error {
 
 /// Gives `error` the fact `key` with `value`.
 #[must_use]
-pub fn with_fact(mut error: Error, key: FactKey, value: impl Into<serde_json::Value>) -> Error {
+pub fn with_fact(mut error: Error, key: ErrorFact, value: impl Into<serde_json::Value>) -> Error {
     error.facts.insert(key, value.into());
     error
 }
@@ -244,14 +244,14 @@ pub fn with_fact(mut error: Error, key: FactKey, value: impl Into<serde_json::Va
 /// Formats `at` as `{file}:{line}`: its file and start line, with no
 /// column. This is the only code that formats a location as `file:line`.
 #[must_use]
-pub fn coordinates(at: &Location) -> String {
+pub fn coordinates(at: &SourceLoc) -> String {
     format!("{}:{}", at.file, at.start_line)
 }
 
 /// The name of a fact. Each mirrors a field name in today's Lua error tables,
 /// apart from `Limit`, `Section`, `Chain`, and `Run`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub enum FactKey {
+pub enum ErrorFact {
     /// A file or store path, or a glob pattern, as a string.
     Path,
     /// The name the failure is about, such as a tool alias, a Pack id, or

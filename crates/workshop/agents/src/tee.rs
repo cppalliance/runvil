@@ -10,7 +10,7 @@
 use std::sync::Arc;
 
 use harness::record::{Record, RecordKind, RecorderFuture, RunId, RunMeta, RunRecorder};
-use runvil::error::Error;
+use runvil::Error;
 use runvil::event::Event;
 
 use crate::conversation::Conversation;

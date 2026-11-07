@@ -11,7 +11,7 @@
 use std::future::Future;
 use std::time::{Duration, Instant};
 
-use runvil::error::Error;
+use runvil::Error;
 use runvil::metrics::ClientTiming;
 use runvil::model::Completion;
 use serde_json::Value;

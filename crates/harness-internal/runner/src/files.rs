@@ -8,8 +8,8 @@
 //! each operation like any other. Both are synchronous, like the VFS, and
 //! the Harness runs them inline in the run's future.
 
-use runvil::error::{Error, ErrorCode, FactKey};
 use runvil::vfs::{Origin, VfsError, VfsOp, VfsOutcome, VfsRef, perform_vfs_op, store_error};
+use runvil::{Error, ErrorCode, ErrorFact};
 
 /// Puts the prompt's declared input in place in `vfs`'s store: writes
 /// `text` at `declared`, overwriting any file there, or, when the launch
@@ -41,7 +41,7 @@ pub fn stage_input(
     let store = |source: VfsError| {
         let mut error = store_error(&source);
         error.message = format!("the input file `{path}` could not be staged: {source}");
-        error.facts.insert(FactKey::Path, path.into());
+        error.facts.insert(ErrorFact::Path, path.into());
         error
     };
     let view = vfs
@@ -63,7 +63,7 @@ pub fn stage_input(
                          input text and the store has no such file"
                     ),
                 );
-                error.facts.insert(FactKey::Path, path.into());
+                error.facts.insert(ErrorFact::Path, path.into());
                 Err(error)
             }
             Err(source) => Err(store(source)),
@@ -122,7 +122,7 @@ pub(crate) fn report_output(
         } else {
             format!("the output file `{path}` could not be read: {error}")
         };
-        converted.facts.insert(FactKey::Path, path.into());
+        converted.facts.insert(ErrorFact::Path, path.into());
         converted
     })
 }
@@ -141,7 +141,7 @@ pub(crate) fn not_completed() -> Error {
 /// the code's default prose.
 fn reasoned(code: ErrorCode, reason: &str, message: impl Into<String>) -> Error {
     let mut error = Error::new(code, message, code.prose());
-    error.facts.insert(FactKey::Reason, reason.into());
+    error.facts.insert(ErrorFact::Reason, reason.into());
     error
 }
 
@@ -151,8 +151,8 @@ mod tests {
     //! that replaces it when the run did not complete, the prompt declares no
     //! output, the run left no file, or the store refuses the read.
 
-    use runvil::error::{Error, ErrorCode, FactKey};
     use runvil::vfs::{Origin, VfsRef};
+    use runvil::{Error, ErrorCode, ErrorFact};
     use serde_json::json;
 
     use super::report_output;
@@ -188,7 +188,7 @@ mod tests {
             assert_eq!(error.code, ErrorCode::NoOutput);
             assert_eq!(error.message, "the run did not complete");
             assert_eq!(
-                error.facts.get(&FactKey::Reason),
+                error.facts.get(&ErrorFact::Reason),
                 Some(&json!("not_completed"))
             );
         }
@@ -202,7 +202,7 @@ mod tests {
         assert_eq!(error.message, "the prompt declares no `output:` file");
         assert_eq!(error.prose, ErrorCode::NoOutput.prose());
         assert_eq!(
-            error.facts.get(&FactKey::Reason),
+            error.facts.get(&ErrorFact::Reason),
             Some(&json!("undeclared"))
         );
     }
@@ -216,7 +216,7 @@ mod tests {
             error.message,
             "the run completed without writing its declared output file `report.md`"
         );
-        assert_eq!(error.facts.get(&FactKey::Path), Some(&json!("report.md")));
+        assert_eq!(error.facts.get(&ErrorFact::Path), Some(&json!("report.md")));
     }
 
     #[test]
@@ -232,6 +232,6 @@ mod tests {
             "{error:?}"
         );
         assert_eq!(error.prose, ErrorCode::IsADirectory.prose());
-        assert_eq!(error.facts.get(&FactKey::Path), Some(&json!("out")));
+        assert_eq!(error.facts.get(&ErrorFact::Path), Some(&json!("out")));
     }
 }

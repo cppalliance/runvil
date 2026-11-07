@@ -6,7 +6,7 @@
 //! order changes, would make a replayed run differ from the run that ran.
 
 use harness::record::RunSeed;
-use runvil::error::Error;
+use runvil::Error;
 use runvil::event::{Event, ReplyOrigin};
 use runvil::ids::{Provenance, RoundId, TaskId};
 use runvil::metrics::{CallMetrics, ClientTiming, LlamaTimings, Usage, VllmMetrics};

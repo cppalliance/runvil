@@ -4,7 +4,7 @@
 
 use std::collections::BTreeMap;
 
-use runvil_types::error::Location;
+use runvil_types::error::SourceLoc;
 
 use super::*;
 use serde_json::json;
@@ -56,7 +56,7 @@ fn err_of(prose: &str) -> Error {
 
 /// The `Reason` fact of a substitution failure.
 fn reason(error: &Error) -> Option<&str> {
-    error.facts.get(&FactKey::Reason)?.as_str()
+    error.facts.get(&ErrorFact::Reason)?.as_str()
 }
 
 #[test]
@@ -274,11 +274,11 @@ fn a_failure_is_a_substitution_error_with_its_reason_fact() {
     );
     assert_eq!(
         e.facts,
-        BTreeMap::from([(FactKey::Reason, Value::from("missing_key"))])
+        BTreeMap::from([(ErrorFact::Reason, Value::from("missing_key"))])
     );
     assert_eq!(
         e.at,
-        Some(Location::line("prompt", PROSE_LINE)),
+        Some(SourceLoc::line("prompt", PROSE_LINE)),
         "a placeholder on the prose's first line fails there"
     );
 }

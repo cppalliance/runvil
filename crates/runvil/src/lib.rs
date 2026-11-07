@@ -5,13 +5,13 @@
 //! [`Run::step`] returns [`Step::Pending`] with the effects the run waits on.
 //! The caller performs each effect and hands its answer to [`Run::resume`].
 //! The run ends at [`Step::Done`] with its result: the final text, or the
-//! [`Error`](error::Error) that ended it. A cancel is the error whose code
-//! is [`ErrorCode::Canceled`](error::ErrorCode::Canceled).
+//! [`Error`] that ended it. A cancel is the error whose code
+//! is [`ErrorCode::Canceled`].
 //! Before the run starts, the caller puts on its [`RunParams`] the tools
 //! a run may offer, the Packs it holds, and the role map that fills the
 //! five model roles. The run's first step checks the params against what
 //! the prompt requires, and params that fall short end the run there
-//! with a [`RequirementsUnmet`](error::ErrorCode::RequirementsUnmet)
+//! with a [`RequirementsUnmet`](ErrorCode::RequirementsUnmet)
 //! failure that names every gap.
 //!
 //! The crate's `greeter` example is that whole loop in one program.
@@ -21,6 +21,10 @@ pub use runvil_engine::RunLimits;
 pub use runvil_engine::RunParams;
 pub use runvil_engine::Step;
 pub use runvil_prompt::Prompt;
+pub use runvil_types::error::Error;
+pub use runvil_types::error::ErrorCode;
+pub use runvil_types::error::ErrorFact;
+pub use runvil_types::error::SourceLoc;
 pub use runvil_types::seed::RunSeed;
 
 pub mod effect {
@@ -42,16 +46,6 @@ pub mod event {
 
     pub use runvil_types::event::Event;
     pub use runvil_types::event::ReplyOrigin;
-}
-
-pub mod error {
-    //! The universal error: its code, its text for people and for the model,
-    //! where it happened, and the values it names.
-
-    pub use runvil_types::error::Error;
-    pub use runvil_types::error::ErrorCode;
-    pub use runvil_types::error::FactKey;
-    pub use runvil_types::error::Location;
 }
 
 pub mod ids {

@@ -9,7 +9,7 @@ use async_trait::async_trait;
 use harness::record::MemoryRecorder;
 use harness::vfs::{Origin, VfsError, VfsRef};
 use harness::{Harness, HostSnapshot, RunRequest};
-use runvil::error::Error;
+use runvil::Error;
 use runvil::vfs::{MemoryBackend, Op, Policy, Verdict, VfsPath};
 
 use crate::asker::{AskBroker, asker_host, broker_services};

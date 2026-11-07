@@ -11,8 +11,8 @@ use harness_runner::display_chain;
 use harness_runner::effect_loop::drive_run;
 use harness_runner::recorder::{MemoryRecorder, RecordKind, RunRecorder};
 use runvil::cancel::CancelHandle;
-use runvil::error::{ErrorCode, FactKey};
 use runvil::vfs::VfsRef;
+use runvil::{ErrorCode, ErrorFact};
 use serde_json::json;
 
 use super::{answers, await_raised, cancel_after, meta};
@@ -111,7 +111,7 @@ async fn a_recorder_error_under_another_code_ends_the_drive_as_a_recorder_failur
         "the recorder's `Io` error becomes a refusal, never the run's result"
     );
     assert_eq!(error.message, "the run recorder failed: the disk is full");
-    assert_eq!(error.facts.get(&FactKey::Run), Some(&json!(run_id.get())));
+    assert_eq!(error.facts.get(&ErrorFact::Run), Some(&json!(run_id.get())));
     assert_eq!(
         recorder.0.result(run_id),
         None,

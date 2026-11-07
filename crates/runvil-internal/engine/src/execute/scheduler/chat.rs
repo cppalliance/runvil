@@ -25,7 +25,7 @@
 
 use std::sync::atomic::Ordering;
 
-use runvil_types::error::{ErrorCode, FactKey};
+use runvil_types::error::{ErrorCode, ErrorFact};
 use runvil_types::event::ReplyOrigin;
 use runvil_types::event_lifecycle;
 use runvil_types::ids::RoundId;
@@ -357,7 +357,7 @@ impl ArrivedRound {
                     outcome: ChatOutcome::Empty(Some(error.prose.clone())),
                     finish_reason: error
                         .facts
-                        .get(&FactKey::FinishReason)
+                        .get(&ErrorFact::FinishReason)
                         .and_then(serde_json::Value::as_str)
                         .map(str::to_owned),
                     turn,

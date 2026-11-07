@@ -131,15 +131,15 @@ fn context_overflow_holds_the_counts_it_was_given_as_facts() {
         (both.message.as_str(), both.prose.as_str()),
         ("too big", "too big")
     );
-    assert_eq!(both.facts.get(&FactKey::Count), Some(&Value::from(10)));
-    assert_eq!(both.facts.get(&FactKey::Limit), Some(&Value::from(8)));
+    assert_eq!(both.facts.get(&ErrorFact::Count), Some(&Value::from(10)));
+    assert_eq!(both.facts.get(&ErrorFact::Limit), Some(&Value::from(8)));
 
     let prompt_only = context_overflow(Some(10), None, "too big");
     assert_eq!(
-        prompt_only.facts.get(&FactKey::Count),
+        prompt_only.facts.get(&ErrorFact::Count),
         Some(&Value::from(10))
     );
-    assert_eq!(prompt_only.facts.get(&FactKey::Limit), None);
+    assert_eq!(prompt_only.facts.get(&ErrorFact::Limit), None);
 
     let neither = context_overflow(None, None, "too big");
     assert_eq!(neither.code, ErrorCode::ContextOverflow);
@@ -211,7 +211,7 @@ fn the_shared_empty_reply_owner_builds_the_phrase_and_the_reasoning_specific() {
     assert_eq!(plain.code, ErrorCode::EmptyReply);
     assert_eq!(plain.to_string(), phrase(ErrorCode::EmptyReply));
     assert_eq!(plain.prose, phrase(ErrorCode::EmptyReply));
-    assert_eq!(plain.facts.get(&FactKey::FinishReason), None);
+    assert_eq!(plain.facts.get(&ErrorFact::FinishReason), None);
 
     let reasoned = empty_reply(true);
     let expected = format!(

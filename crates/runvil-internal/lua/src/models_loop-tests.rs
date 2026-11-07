@@ -7,7 +7,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use mlua::{Function, Lua, MultiValue, Value};
 use runvil_model_client::model::{ModelBinding, ModelId, ModelInvocation};
-use runvil_types::error::{Error, ErrorCode, FactKey};
+use runvil_types::error::{Error, ErrorCode, ErrorFact};
 use runvil_types::metrics::ToolCallEvent;
 use runvil_types::tools::ToolId;
 use serde_json::json;
@@ -412,7 +412,7 @@ fn act_names_each_call_return_and_raise_with_its_values() {
     assert_eq!(action(&lua, plain), tagged("raise", vec![value("plain")]));
     let typed = mlua::Error::external(crate::context_exhausted("precheck"));
     let mut new = runvil_model_client::model::completion_error(ErrorCode::EmptyReply, "empty");
-    new.facts.insert(FactKey::FinishReason, "stop".into());
+    new.facts.insert(ErrorFact::FinishReason, "stop".into());
     let raised = [
         (
             Then::RaiseNormalized(Value::Error(Box::new(typed))),

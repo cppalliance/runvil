@@ -21,7 +21,7 @@
 
 use std::collections::BTreeMap;
 
-use runvil::error::Error;
+use runvil::Error;
 use runvil::metrics::ClientTiming;
 use runvil::model::{Completion, RawExchange};
 use serde_json::{Map, Value};

@@ -288,7 +288,7 @@ fn an_uncaught_lua_kind_shim_raise_keeps_the_mapped_runtime_error() {
             );
             assert_eq!(
                 error.at,
-                Some(runvil_types::error::Location::line(
+                Some(runvil_types::error::SourceLoc::line(
                     TEST_FILE,
                     NonZeroU32::new(41).expect("41 is non-zero")
                 )),

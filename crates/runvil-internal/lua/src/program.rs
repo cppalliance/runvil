@@ -272,7 +272,7 @@ mod tests {
 
     use mlua::Lua;
     use runvil_types::emitter::{Emitter, EventSink};
-    use runvil_types::error::{ErrorCode, FactKey, Location};
+    use runvil_types::error::{ErrorCode, ErrorFact, SourceLoc};
     use serde_json::Value;
 
     use super::LuaProgram;
@@ -349,9 +349,9 @@ mod tests {
             error.message,
             format!("lua compilation error at {REGION} (line 11): syntax error: {diagnostic}")
         );
-        assert_eq!(error.at, Some(Location::line(FILE, line(12))));
+        assert_eq!(error.at, Some(SourceLoc::line(FILE, line(12))));
         assert_eq!(
-            error.facts.get(&FactKey::Section),
+            error.facts.get(&ErrorFact::Section),
             Some(&Value::from(REGION))
         );
         assert_eq!(
@@ -386,7 +386,7 @@ mod tests {
             map_chunk_line_to_absolute(&raw.to_string(), &[("line 50", REGION, line(50))]);
         assert_eq!(mapped.code, ErrorCode::LuaRuntime);
         assert_eq!(mapped.message, message, "the message keeps its mapped text");
-        assert_eq!(mapped.at, Some(Location::line(FILE, line(51))));
+        assert_eq!(mapped.at, Some(SourceLoc::line(FILE, line(51))));
         assert_eq!(
             mapped.prose,
             format!("boom. {}", ErrorCode::LuaRuntime.prose())
@@ -432,7 +432,7 @@ mod tests {
             (exhausted.code, &exhausted.message, &exhausted.prose),
             "it keeps its own failure and its prose"
         );
-        assert_eq!(mapped.at, Some(Location::line(FILE, line(6))));
+        assert_eq!(mapped.at, Some(SourceLoc::line(FILE, line(6))));
     }
 
     #[test]
@@ -487,7 +487,7 @@ mod tests {
             (mapped.code, &mapped.message, &mapped.facts),
             (ErrorCode::LuaQuota, &quota.message, &quota.facts)
         );
-        assert_eq!(mapped.at, Some(Location::line(FILE, line(8))));
+        assert_eq!(mapped.at, Some(SourceLoc::line(FILE, line(8))));
         assert_eq!(
             mapped.prose,
             format!(

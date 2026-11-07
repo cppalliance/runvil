@@ -2,8 +2,8 @@
 //! phrase, per token-count form, the in-stream envelope, and a body that
 //! matches nothing.
 
-use runvil::error::{Error, ErrorCode, FactKey};
 use runvil::model::phrase;
+use runvil::{Error, ErrorCode, ErrorFact};
 
 use super::{classify_http_failure, classify_stream_error};
 
@@ -14,14 +14,14 @@ fn code_of(status: u16, body: &str) -> ErrorCode {
 /// The `(prompt_tokens, window)` counts an overflow names as its `Count`
 /// and `Limit` facts.
 fn overflow(error: &Error) -> (Option<u32>, Option<u32>) {
-    let count = |key: FactKey| {
+    let count = |key: ErrorFact| {
         error
             .facts
             .get(&key)
             .and_then(serde_json::Value::as_u64)
             .and_then(|count| u32::try_from(count).ok())
     };
-    (count(FactKey::Count), count(FactKey::Limit))
+    (count(ErrorFact::Count), count(ErrorFact::Limit))
 }
 
 #[test]

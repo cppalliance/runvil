@@ -17,8 +17,8 @@ use harness_runner::effect_loop::drive_run;
 use harness_runner::recorder::{MemoryRecorder, Record, RecordKind, RunId, RunMeta, RunRecorder};
 use runvil::Step;
 use runvil::cancel::CancelHandle;
-use runvil::error::{Error, ErrorCode};
 use runvil::vfs::{MemoryBackend, Origin, VfsRef};
+use runvil::{Error, ErrorCode};
 use serde_json::json;
 
 use crate::support::{

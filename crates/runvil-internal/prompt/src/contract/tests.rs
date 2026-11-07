@@ -3,7 +3,7 @@
 
 use std::num::NonZeroU32;
 
-use runvil_types::error::{ErrorCode, FactKey};
+use runvil_types::error::{ErrorCode, ErrorFact};
 use runvil_types::models::ModelRole;
 
 use super::{ArgType, ArgsDeclIter};
@@ -305,7 +305,7 @@ fn contract_errors_report_their_frontmatter_line_and_column() {
         "the offending scalar's line and column: {error}"
     );
     assert_eq!(
-        error.facts.get(&FactKey::Name),
+        error.facts.get(&ErrorFact::Name),
         None,
         "a frontmatter failure predates the prompt's name"
     );

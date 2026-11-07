@@ -1,7 +1,7 @@
 //! Crate-wide parser tests: frontmatter, headings, fences, lists, breaks, and line mapping.
 
 use runvil_lua::LuaProgram;
-use runvil_types::error::{Error, ErrorCode, FactKey};
+use runvil_types::error::{Error, ErrorCode, ErrorFact};
 use runvil_types::event::Event;
 
 use super::*;
@@ -60,7 +60,7 @@ fn frontmatter_syntax_errors_report_a_position_without_a_name() {
     };
     assert_eq!((file, line), ("prompt", 4), "the malformed line: {error}");
     assert_eq!((end_line, end_column), (line, column), "{error:?}");
-    assert_eq!(error.facts.get(&FactKey::Name), None);
+    assert_eq!(error.facts.get(&ErrorFact::Name), None);
 }
 
 #[test]
@@ -75,7 +75,7 @@ fn structured_errors_report_the_prompt_name_and_source_position() {
     );
     let error = parse_err(src);
     assert_eq!(error.code, ErrorCode::StructureInvalid);
-    assert_eq!(error.facts.get(&FactKey::Name), Some(&"dup".into()));
+    assert_eq!(error.facts.get(&ErrorFact::Name), Some(&"dup".into()));
     assert_eq!(
         location(&error),
         Some(("prompt", 12, 1, 13, 1)),

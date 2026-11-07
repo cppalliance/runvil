@@ -1,6 +1,6 @@
 //! Tests for the wire message constructors and tool schema validation.
 
-use runvil_types::error::{ErrorCode, FactKey};
+use runvil_types::error::{ErrorCode, ErrorFact};
 use runvil_types::metrics::{CallMetrics, Usage};
 use serde_json::{Value, json};
 
@@ -78,7 +78,7 @@ fn a_role_parses_from_its_name_and_a_refusal_lists_the_accepted_roles() {
     let text = "invalid role `wizard`: required one of `system`, `user`, `assistant`, `tool`";
     assert_eq!(error.code, runvil_types::error::ErrorCode::InvalidValue);
     assert_eq!(
-        error.facts.get(&runvil_types::error::FactKey::Name),
+        error.facts.get(&runvil_types::error::ErrorFact::Name),
         Some(&Value::from("wizard"))
     );
     assert_eq!(error.message, text);
@@ -164,7 +164,7 @@ fn from_result_refuses_an_empty_batch_and_duplicate_ids_and_accepts_text() {
     let empty = Completion::from_result(CompletionResult::ToolCalls(Vec::new()), "m")
         .expect_err("an empty batch is refused");
     assert_eq!(empty.code, ErrorCode::EmptyReply);
-    assert_eq!(empty.facts.get(&FactKey::FinishReason), None);
+    assert_eq!(empty.facts.get(&ErrorFact::FinishReason), None);
     let call = ToolCall::from_parts("call_1", "fetch", json_object()).expect("a whole call");
     let twice = CompletionResult::ToolCalls(vec![call.clone(), call.clone()]);
     let duplicate = Completion::from_result(twice, "m").expect_err("a duplicate id is refused");
@@ -281,16 +281,16 @@ fn tool_schema_new_validates_wire_name_and_object_schema() {
 /// tool schema naming the tool, for `reason`.
 #[track_caller]
 fn assert_schema_refused(name: &str, parameters: Value, reason: &str) {
-    use runvil_types::error::{ErrorCode, FactKey};
+    use runvil_types::error::{ErrorCode, ErrorFact};
     let error = tool_schema_new(name, "d", parameters).expect_err("the schema must be refused");
     assert_eq!(error.code, ErrorCode::ToolSchemaInvalid, "{name:?}");
     assert_eq!(
-        error.facts.get(&FactKey::Name),
+        error.facts.get(&ErrorFact::Name),
         Some(&Value::from(name)),
         "{name:?}"
     );
     assert_eq!(
-        error.facts.get(&FactKey::Reason),
+        error.facts.get(&ErrorFact::Reason),
         Some(&Value::from(reason)),
         "{name:?}"
     );

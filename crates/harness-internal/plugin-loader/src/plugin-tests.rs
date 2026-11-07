@@ -6,7 +6,7 @@ use std::cell::RefCell;
 use std::sync::atomic::Ordering;
 use std::sync::{Arc, Mutex};
 
-use runvil_plugin::{ErrorCode, FactKey, PackRegistry};
+use runvil_plugin::{ErrorCode, ErrorFact, PackRegistry};
 
 use crate::fakes::*;
 use crate::plugin::{Plugin, PluginSource, insert_plugin};
@@ -52,7 +52,7 @@ fn a_load_that_returns_ok_without_describing_fails() {
     );
     assert_eq!(reason(&failure), Some("undescribed"));
     assert_eq!(
-        failure.facts.get(&FactKey::Path),
+        failure.facts.get(&ErrorFact::Path),
         None,
         "a linked Plugin has no path"
     );
@@ -67,7 +67,7 @@ fn a_refusal_fails_with_its_reason() {
     assert_eq!(failure.prose, ErrorCode::PluginLoadFailed.prose());
     assert_eq!(reason(&failure), Some("refused"));
     assert_eq!(
-        failure.facts.get(&FactKey::Path),
+        failure.facts.get(&ErrorFact::Path),
         None,
         "a linked Plugin has no path"
     );

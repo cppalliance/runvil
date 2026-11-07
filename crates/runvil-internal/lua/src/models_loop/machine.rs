@@ -19,7 +19,7 @@
 //! snapshot back and raises `context_exhausted`.
 
 use runvil_model_client::model::completion_error;
-use runvil_types::error::{ErrorCode, FactKey};
+use runvil_types::error::{ErrorCode, ErrorFact};
 use runvil_types::metrics::ToolCallEvent;
 
 use crate::compactors::{OverflowReason, estimate_tokens};
@@ -283,7 +283,7 @@ impl<V: Clone> Machine<V> {
             detail.unwrap_or_else(|| EMPTY_MODEL_REPLY.to_owned()),
         );
         if let Some(reason) = round.finish_reason {
-            empty.facts.insert(FactKey::FinishReason, reason.into());
+            empty.facts.insert(ErrorFact::FinishReason, reason.into());
         }
         Then::RaiseNew(empty)
     }

@@ -6,7 +6,7 @@ use std::ffi::{OsStr, c_void};
 use std::io;
 use std::path::{Path, PathBuf};
 
-use runvil_plugin::{Error, ErrorCode, FactKey};
+use runvil_plugin::{Error, ErrorCode, ErrorFact};
 use runvil_plugin_sys::PluginEntry;
 
 use crate::host::{LoadCtx, send_unload};
@@ -198,6 +198,6 @@ impl Loaded {
 pub(crate) fn load_error(reason: &str, message: String) -> Error {
     let code = ErrorCode::PluginLoadFailed;
     let mut error = Error::new(code, message, code.prose());
-    error.facts.insert(FactKey::Reason, reason.into());
+    error.facts.insert(ErrorFact::Reason, reason.into());
     error
 }

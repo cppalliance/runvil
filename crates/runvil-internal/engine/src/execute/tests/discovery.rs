@@ -465,7 +465,7 @@ fn a_scripts_call_of_a_discovery_tools_id_fails_as_an_unknown_id() {
     assert_eq!(
         (
             error.code,
-            error.facts.get(&runvil_types::error::FactKey::Name)
+            error.facts.get(&runvil_types::error::ErrorFact::Name)
         ),
         (ErrorCode::UnboundTool, Some(&Value::from("dynamic/call"))),
         "expected the unbound-tool error, got {error:?}"

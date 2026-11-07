@@ -22,8 +22,8 @@ use std::time::Duration;
 use harness_runner::environment::HostSnapshot;
 use harness_runner::recorder::{MemoryRecorder, Record, RecordKind};
 use harness_runner::{Harness, HostContext, RunControl, RunReport, RunRequest};
-use runvil::error::{Error, ErrorCode};
 use runvil::vfs::VfsRef;
+use runvil::{Error, ErrorCode};
 use runvil_plugin::{HostServices, PackRegistry};
 use serde_json::{Value, json};
 

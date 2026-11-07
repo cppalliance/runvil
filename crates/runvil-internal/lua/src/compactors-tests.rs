@@ -5,7 +5,7 @@ use std::num::NonZeroU32;
 use mlua::Lua;
 use runvil_model_client::client::{Message, Role};
 use runvil_model_client::detail::message_from_validated_parts;
-use runvil_types::error::{ErrorCode, FactKey};
+use runvil_types::error::{ErrorCode, ErrorFact};
 use runvil_types::ids::RoundId;
 use runvil_types::metrics::Usage;
 use serde_json::{Value, json};
@@ -65,7 +65,7 @@ fn raised_reason(error: &mlua::Error) -> &str {
     );
     raised
         .facts
-        .get(&FactKey::Reason)
+        .get(&ErrorFact::Reason)
         .and_then(Value::as_str)
         .expect("a context exhaustion names its reason")
 }
@@ -151,7 +151,7 @@ fn the_fail_policy_invokes_as_typed_exhaustion_for_either_reason() {
         let error = fail_invoked(reason);
         assert_eq!(error.code, ErrorCode::ContextExhausted);
         assert_eq!(
-            error.facts.get(&FactKey::Reason),
+            error.facts.get(&ErrorFact::Reason),
             Some(&Value::from(reason.tag())),
             "the policy holds the invoking reason"
         );

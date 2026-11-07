@@ -14,7 +14,7 @@ use std::sync::{Arc, Mutex, PoisonError};
 
 use runvil_model_client::client::{Completion, CompletionResult, Message, ToolCall, ToolSchema};
 use runvil_model_client::model::{CompletionOptions, completion_error, empty_reply, phrase};
-use runvil_types::error::{Error, ErrorCode, FactKey};
+use runvil_types::error::{Error, ErrorCode, ErrorFact};
 use runvil_types::metrics::CallMetrics;
 use serde_json::Value;
 
@@ -140,7 +140,7 @@ impl ScriptedReply {
                     if let Some(reason) = finish_reason {
                         error
                             .facts
-                            .insert(FactKey::FinishReason, Value::from(reason.as_str()));
+                            .insert(ErrorFact::FinishReason, Value::from(reason.as_str()));
                     }
                     return Err(error);
                 }

@@ -110,9 +110,9 @@ async fn a_selection_the_list_lacks_is_an_unmet_requirement_naming_the_selection
         "the selected model `absent` is absent from the fetched catalog"
     );
     assert_eq!(error.prose, ErrorCode::RequirementsUnmet.prose());
-    assert_eq!(error.facts.get(&FactKey::Name), Some(&json!("absent")));
+    assert_eq!(error.facts.get(&ErrorFact::Name), Some(&json!("absent")));
     assert_eq!(
-        error.facts.get(&FactKey::Reason),
+        error.facts.get(&ErrorFact::Reason),
         Some(&json!("model_absent"))
     );
 }

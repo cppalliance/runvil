@@ -108,7 +108,7 @@ fn a_failed_tool_answer_keeps_the_tools_prose_and_names_coordinates_only_when_lo
     assert_eq!(retained.prose, prose, "the tool's prose is untouched");
     assert_eq!(
         retained.at,
-        NonZeroU32::new(5).map(|line| runvil_types::error::Location::line("agents/a.md", line)),
+        NonZeroU32::new(5).map(|line| runvil_types::error::SourceLoc::line("agents/a.md", line)),
         "the failure is placed on the call line"
     );
     let (_, result) = echo_through_lua(&lua, envelope);

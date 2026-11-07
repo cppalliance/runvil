@@ -2,7 +2,7 @@
 
 use std::num::NonZeroU32;
 
-use runvil::error::Error;
+use runvil::Error;
 use runvil::model::{ModelCatalog, ModelId, ModelInfo, ThinkingMode};
 use serde::Deserialize;
 

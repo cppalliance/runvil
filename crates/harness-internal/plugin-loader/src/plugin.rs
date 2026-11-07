@@ -7,7 +7,7 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use runvil_plugin::{Error, FactKey, PackRegistry};
+use runvil_plugin::{Error, ErrorFact, PackRegistry};
 use runvil_plugin_sys::PluginEntry;
 
 use crate::host::send_load;
@@ -63,7 +63,7 @@ pub fn insert_plugin_dir(packs: &mut PackRegistry, directory: &Path) -> io::Resu
                 );
                 repeat
                     .facts
-                    .insert(FactKey::Name, plugin.name.as_str().into());
+                    .insert(ErrorFact::Name, plugin.name.as_str().into());
                 report.failures.push(with_path(repeat, &path));
                 // It did load, so this drop sends RV_PLUGIN_UNLOAD and then
                 // closes its library, like any other Plugin's.
@@ -80,7 +80,7 @@ pub fn insert_plugin_dir(packs: &mut PackRegistry, directory: &Path) -> io::Resu
 fn with_path(mut error: Error, path: &Path) -> Error {
     error
         .facts
-        .insert(FactKey::Path, path.display().to_string().into());
+        .insert(ErrorFact::Path, path.display().to_string().into());
     error
 }
 

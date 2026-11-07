@@ -9,8 +9,8 @@ use harness::pack::{HostContext, HostServices, PackRegistry};
 use harness::record::MemoryRecorder;
 use harness::vfs::VfsRef;
 use harness::{BoxFuture, Harness, HostSnapshot, InferenceBroker, RunRequest};
+use runvil::Error;
 use runvil::effect::Round;
-use runvil::error::Error;
 use runvil::event::ReplyOrigin;
 use runvil::ids::RoundId;
 use runvil::model::{

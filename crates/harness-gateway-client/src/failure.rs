@@ -8,8 +8,8 @@
 
 use std::fmt::Display;
 
-use runvil::error::{Error, ErrorCode};
 use runvil::model::{completion_error, phrase};
+use runvil::{Error, ErrorCode};
 
 /// A send or read that failed: `Timeout` when `error` was a timeout and
 /// `Transport` otherwise, with `error` appended to the message as its

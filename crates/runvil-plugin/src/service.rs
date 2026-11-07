@@ -17,7 +17,7 @@ use std::hash::{Hash, Hasher};
 use std::marker::PhantomData;
 use std::sync::Arc;
 
-use runvil_types::error::{Error, ErrorCode, FactKey};
+use runvil_types::error::{Error, ErrorCode, ErrorFact};
 use runvil_types::names::GlobalName;
 use serde_json::Value;
 
@@ -234,8 +234,8 @@ impl fmt::Debug for HostServices {
 /// the id and the rule.
 fn refusal(reason: &'static str, message: String, literal: &str) -> Error {
     let mut error = Error::new(ErrorCode::InvalidValue, message.clone(), message);
-    error.facts.insert(FactKey::Name, Value::from(literal));
-    error.facts.insert(FactKey::Reason, Value::from(reason));
+    error.facts.insert(ErrorFact::Name, Value::from(literal));
+    error.facts.insert(ErrorFact::Reason, Value::from(reason));
     error
 }
 
@@ -247,7 +247,7 @@ mod tests {
     use std::collections::HashSet;
     use std::sync::Arc;
 
-    use runvil_types::error::{Error, ErrorCode, FactKey};
+    use runvil_types::error::{Error, ErrorCode, ErrorFact};
     use serde_json::Value;
 
     use super::{HostServices, ServiceId, ServiceKey, TOKIO_RUNTIME};
@@ -258,12 +258,12 @@ mod tests {
     fn assert_refused(error: &Error, reason: &str, literal: &str) {
         assert_eq!(error.code, ErrorCode::InvalidValue, "{error:?}");
         assert_eq!(
-            error.facts.get(&FactKey::Reason),
+            error.facts.get(&ErrorFact::Reason),
             Some(&Value::from(reason)),
             "{error:?}"
         );
         assert_eq!(
-            error.facts.get(&FactKey::Name),
+            error.facts.get(&ErrorFact::Name),
             Some(&Value::from(literal)),
             "{error:?}"
         );

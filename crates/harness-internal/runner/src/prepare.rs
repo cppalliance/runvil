@@ -35,8 +35,8 @@ use std::fmt::{self, Write as _};
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use runvil::Error;
 use runvil::cancel::CancelHandle;
-use runvil::error::Error;
 use runvil::event::Event;
 use runvil::model::{ModelInfo, ModelRole};
 use runvil::prompt::FileDecl;

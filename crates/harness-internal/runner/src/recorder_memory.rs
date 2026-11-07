@@ -2,7 +2,7 @@
 
 use std::sync::{Mutex, MutexGuard, PoisonError};
 
-use runvil::error::{Error, FactKey};
+use runvil::{Error, ErrorFact};
 use serde_json::Value;
 
 use crate::recorder::{Record, RecorderFuture, RunId, RunMeta, RunRecorder, recorder_error};
@@ -104,8 +104,8 @@ fn open_run(runs: &mut [MemoryRun], run: RunId) -> Result<&mut MemoryRun, Error>
 /// cause.
 fn refused(run: RunId, reason: &str, text: String) -> Error {
     let mut error = recorder_error(text);
-    error.facts.insert(FactKey::Reason, Value::from(reason));
-    error.facts.insert(FactKey::Run, Value::from(run.get()));
+    error.facts.insert(ErrorFact::Reason, Value::from(reason));
+    error.facts.insert(ErrorFact::Run, Value::from(run.get()));
     error
 }
 

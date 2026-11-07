@@ -85,8 +85,8 @@ pub(crate) fn placed(error: crate::Error, line: u32) -> crate::Error {
 /// The location of all of `line` of a prompt that came from no file, the
 /// `at` of a failure [`placed`] there.
 #[cfg(test)]
-pub(crate) fn at_line(line: u32) -> Option<runvil_types::error::Location> {
-    std::num::NonZeroU32::new(line).map(|line| runvil_types::error::Location::line("prompt", line))
+pub(crate) fn at_line(line: u32) -> Option<runvil_types::error::SourceLoc> {
+    std::num::NonZeroU32::new(line).map(|line| runvil_types::error::SourceLoc::line("prompt", line))
 }
 
 /// `error` as it crossed into a section's Lua on `line` of a prompt that

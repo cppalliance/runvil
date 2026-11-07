@@ -5,7 +5,7 @@
 
 use std::num::NonZeroU32;
 
-use runvil_types::error::{Error, ErrorCode, FactKey, place};
+use runvil_types::error::{Error, ErrorCode, ErrorFact, place};
 use runvil_vfs::{PathReason, VfsError};
 use serde_json::Value;
 
@@ -56,7 +56,10 @@ fn an_unknown_error_kind_names_the_text_and_every_accepted_tag() {
         .parse::<ErrorKind>()
         .expect_err("a misspelled tag is not a kind");
     assert_eq!(error.code, ErrorCode::InvalidValue);
-    assert_eq!(error.facts.get(&FactKey::Name), Some(&Value::from("stoer")));
+    assert_eq!(
+        error.facts.get(&ErrorFact::Name),
+        Some(&Value::from("stoer"))
+    );
     assert_eq!(error.prose, error.message);
     let message = error.to_string();
     assert!(message.contains("`stoer`"), "the rejected text: {message}");
@@ -204,15 +207,21 @@ fn a_store_failure_keeps_the_lua_table_fields_as_facts() {
         anchor: "x".to_owned(),
         count: 2,
     });
-    assert_eq!(anchor.facts.get(&FactKey::Path), Some(&Value::from("a.md")));
-    assert_eq!(anchor.facts.get(&FactKey::Anchor), Some(&Value::from("x")));
-    assert_eq!(anchor.facts.get(&FactKey::Count), Some(&Value::from(2)));
+    assert_eq!(
+        anchor.facts.get(&ErrorFact::Path),
+        Some(&Value::from("a.md"))
+    );
+    assert_eq!(
+        anchor.facts.get(&ErrorFact::Anchor),
+        Some(&Value::from("x"))
+    );
+    assert_eq!(anchor.facts.get(&ErrorFact::Count), Some(&Value::from(2)));
     let invalid = store_error(&VfsError::InvalidPath {
         path: "../a".to_owned(),
         reason: PathReason::Traversal,
     });
     assert_eq!(
-        invalid.facts.get(&FactKey::Rule),
+        invalid.facts.get(&ErrorFact::Rule),
         Some(&Value::from("traversal"))
     );
     let not_utf8 = store_error(&VfsError::NotUtf8 {
@@ -220,7 +229,7 @@ fn a_store_failure_keeps_the_lua_table_fields_as_facts() {
         valid_up_to: 3,
     });
     assert_eq!(
-        not_utf8.facts.get(&FactKey::ValidUpTo),
+        not_utf8.facts.get(&ErrorFact::ValidUpTo),
         Some(&Value::from(3))
     );
     for error in [

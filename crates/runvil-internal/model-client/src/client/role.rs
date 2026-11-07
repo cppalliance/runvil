@@ -3,7 +3,7 @@
 use std::fmt;
 use std::str::FromStr;
 
-use runvil_types::error::{Error, ErrorCode, FactKey};
+use runvil_types::error::{Error, ErrorCode, ErrorFact};
 use serde_json::Value;
 
 /// Names who speaks one message in a chat-completions conversation.
@@ -63,7 +63,7 @@ impl FromStr for Role {
             roles.join(", ")
         );
         let mut error = Error::new(ErrorCode::InvalidValue, text.clone(), text);
-        error.facts.insert(FactKey::Name, Value::from(name));
+        error.facts.insert(ErrorFact::Name, Value::from(name));
         Err(error)
     }
 }

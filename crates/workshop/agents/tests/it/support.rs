@@ -16,11 +16,11 @@ use harness::record::MemoryRecorder;
 use harness::vfs::VfsRef;
 use harness::{BoxFuture, Harness, HostSnapshot, InferenceBroker, RunRequest};
 use runvil::effect::Round;
-use runvil::error::{Error, ErrorCode};
 use runvil::model::{
     Completion, CompletionOptions, Message, ModelBinding, ModelCatalog, ToolSchema,
     completion_error, phrase,
 };
+use runvil::{Error, ErrorCode};
 use workshop_agents::{Conversation, TokioTimer};
 
 /// Lists no model and refuses every round as `Unavailable`.

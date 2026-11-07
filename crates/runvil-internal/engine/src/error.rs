@@ -20,7 +20,7 @@ use std::borrow::Cow;
 pub(crate) use runvil_lua::{context_exhausted, lua_quota, tool_loop_exhausted};
 pub(crate) use runvil_lua::{internal, lua_runtime, task_canceled, task_consumed, task_not_owned};
 pub(crate) use runvil_types::error::Error;
-use runvil_types::error::{ErrorCode, FactKey, failure, with_fact};
+use runvil_types::error::{ErrorCode, ErrorFact, failure, with_fact};
 use runvil_types::ids::TaskId;
 
 #[cfg(test)]
@@ -79,7 +79,7 @@ pub(crate) fn model_required(section: &str) -> Error {
             ErrorCode::ModelRequired,
             format!("model binding required for section {section}"),
         ),
-        FactKey::Section,
+        ErrorFact::Section,
         section,
     )
 }
@@ -93,7 +93,7 @@ pub(crate) fn call_depth_exceeded(cap: usize) -> Error {
             ErrorCode::CallDepthExceeded,
             format!("recursion exceeded cap of {cap}"),
         ),
-        FactKey::Limit,
+        ErrorFact::Limit,
         cap,
     )
 }
@@ -107,7 +107,11 @@ pub(crate) fn tasks_live(tasks: &[TaskId]) -> Error {
          before it ends",
         ids.join(", ")
     );
-    with_fact(failure(ErrorCode::TasksLive, message), FactKey::Tasks, ids)
+    with_fact(
+        failure(ErrorCode::TasksLive, message),
+        ErrorFact::Tasks,
+        ids,
+    )
 }
 
 /// A store failure with no operation to render, such as a handle

@@ -7,7 +7,7 @@ use std::pin::pin;
 use std::task::{Context, Poll, Waker};
 use std::time::{Duration, Instant};
 
-use runvil::error::ErrorCode;
+use runvil::ErrorCode;
 use runvil::model::{CompletionResult, RawExchange, completion_error};
 use serde_json::json;
 

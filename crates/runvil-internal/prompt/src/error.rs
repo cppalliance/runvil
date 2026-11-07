@@ -12,7 +12,7 @@ use std::ops::Range;
 
 pub(crate) use runvil_lua::internal;
 pub(crate) use runvil_types::error::failure;
-use runvil_types::error::{Error, ErrorCode, FactKey, Location, coordinates, place};
+use runvil_types::error::{Error, ErrorCode, ErrorFact, SourceLoc, coordinates, place};
 use runvil_types::packs::PackId;
 
 /// The parser's result type over the universal [`Error`].
@@ -48,8 +48,8 @@ pub(crate) fn failure_at(
 /// its `Reason` fact and the refused Pack id its `Name` fact.
 pub(crate) fn pack_refusal(reason: &str, pack: &PackId, message: String) -> Error {
     let mut error = failure(ErrorCode::FrontmatterInvalid, message);
-    error.facts.insert(FactKey::Reason, reason.into());
-    error.facts.insert(FactKey::Name, pack.to_string().into());
+    error.facts.insert(ErrorFact::Reason, reason.into());
+    error.facts.insert(ErrorFact::Name, pack.to_string().into());
     error
 }
 
@@ -75,8 +75,8 @@ pub(crate) fn frontmatter_decode(cause: &serde_yaml_ng::Error) -> Error {
             .ok()
             .and_then(NonZeroU32::new)
         {
-            Some(column) => Location::new(String::new(), line, column, line, column),
-            None => Some(Location::line(String::new(), line)),
+            Some(column) => SourceLoc::new(String::new(), line, column, line, column),
+            None => Some(SourceLoc::line(String::new(), line)),
         }
     });
     error
@@ -113,7 +113,7 @@ pub(crate) fn with_prompt_context(error: Error, name: Option<&str>, file: &str) 
     if let Some(name) = name
         && code != ErrorCode::Internal
     {
-        error.facts.insert(FactKey::Name, name.into());
+        error.facts.insert(ErrorFact::Name, name.into());
     }
     error.prose = match (code, &error.at) {
         (ErrorCode::Internal, _) => code.prose().to_owned(),
@@ -125,10 +125,10 @@ pub(crate) fn with_prompt_context(error: Error, name: Option<&str>, file: &str) 
 
 /// Returns the location of `span` within `body`, offset past the
 /// frontmatter lines, or `None` when either end cannot be located.
-fn span_location(body: &str, span: Range<usize>, frontmatter_lines: u32) -> Option<Location> {
+fn span_location(body: &str, span: Range<usize>, frontmatter_lines: u32) -> Option<SourceLoc> {
     let (start_line, start_column) = body_line_column(body, span.start, frontmatter_lines)?;
     let (end_line, end_column) = body_line_column(body, span.end, frontmatter_lines)?;
-    Location::new(
+    SourceLoc::new(
         String::new(),
         start_line,
         start_column,

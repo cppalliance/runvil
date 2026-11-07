@@ -1,4 +1,4 @@
-//! Tests for `ErrorCode` numbering, `Location` ranges, the cause chain
+//! Tests for `ErrorCode` numbering, `SourceLoc` ranges, the cause chain
 //! `with_cause` appends, the text of `Error::canceled` and the errors
 //! `is_canceled` holds for, the location `located_message` ends with, and
 //! how `place` locates an error and `coordinates` formats its location.
@@ -7,7 +7,7 @@ use std::collections::BTreeSet;
 use std::fmt;
 use std::num::NonZeroU32;
 
-use super::{Error, ErrorCode, FactKey, Location, coordinates, failure, place};
+use super::{Error, ErrorCode, ErrorFact, SourceLoc, coordinates, failure, place};
 
 /// A cause with an optional cause of its own.
 #[derive(Debug)]
@@ -325,7 +325,7 @@ fn every_code_has_default_prose_in_whole_sentences() {
 #[test]
 fn a_location_cannot_end_before_it_starts() {
     let at =
-        |sl, sc, el, ec| Location::new("a.md", nonzero(sl), nonzero(sc), nonzero(el), nonzero(ec));
+        |sl, sc, el, ec| SourceLoc::new("a.md", nonzero(sl), nonzero(sc), nonzero(el), nonzero(ec));
     assert!(at(2, 5, 2, 4).is_none());
     assert!(at(2, 5, 1, 9).is_none());
     assert!(at(2, 5, 2, 5).is_some());
@@ -334,13 +334,13 @@ fn a_location_cannot_end_before_it_starts() {
 
 #[test]
 fn a_line_location_covers_the_whole_line() {
-    let line = Location::line("a.md", nonzero(7));
+    let line = SourceLoc::line("a.md", nonzero(7));
     assert_eq!(
         (line.start_line, line.start_column),
         (nonzero(7), nonzero(1))
     );
     assert_eq!((line.end_line, line.end_column), (nonzero(8), nonzero(1)));
-    let last = Location::line("a.md", NonZeroU32::MAX);
+    let last = SourceLoc::line("a.md", NonZeroU32::MAX);
     assert_eq!(
         (last.end_line, last.end_column),
         (NonZeroU32::MAX, nonzero(1))
@@ -353,8 +353,8 @@ fn runtime() -> Error {
 }
 
 /// The range in `file` from line 2, column 5, up to line 4, column 7.
-fn span(file: &str) -> Location {
-    Location::new(file, nonzero(2), nonzero(5), nonzero(4), nonzero(7))
+fn span(file: &str) -> SourceLoc {
+    SourceLoc::new(file, nonzero(2), nonzero(5), nonzero(4), nonzero(7))
         .expect("the range ends after it starts")
 }
 
@@ -376,7 +376,7 @@ fn place_fills_an_empty_file_and_keeps_the_lines_and_columns() {
 #[test]
 fn place_sets_a_line_location_when_there_is_none() {
     let placed = place(runtime(), "a.md", Some(nonzero(7)));
-    assert_eq!(placed.at, Some(Location::line("a.md", nonzero(7))));
+    assert_eq!(placed.at, Some(SourceLoc::line("a.md", nonzero(7))));
 }
 
 #[test]
@@ -389,7 +389,7 @@ fn place_leaves_an_internal_error_unchanged() {
     let code = ErrorCode::Internal;
     let unlocated = Error::new(code, "internal invariant violated: x", code.prose());
     let mut in_rust = unlocated.clone();
-    in_rust.at = Some(Location::line("src/a.rs", nonzero(12)));
+    in_rust.at = Some(SourceLoc::line("src/a.rs", nonzero(12)));
     let mut unfiled = unlocated.clone();
     unfiled.at = Some(span(""));
     for error in [unlocated, in_rust, unfiled] {
@@ -401,7 +401,7 @@ fn place_leaves_an_internal_error_unchanged() {
 fn coordinates_formats_the_file_and_start_line() {
     assert_eq!(coordinates(&span("a.md")), "a.md:2");
     assert_eq!(
-        coordinates(&Location::line("src/a.rs", nonzero(12))),
+        coordinates(&SourceLoc::line("src/a.rs", nonzero(12))),
         "src/a.rs:12"
     );
 }
@@ -410,12 +410,12 @@ fn coordinates_formats_the_file_and_start_line() {
 fn a_parse_failures_located_message_ends_with_the_prompt_name_and_the_start_position() {
     let mut error = failure(ErrorCode::StructureInvalid, "duplicate section");
     assert_eq!(error.located_message(), "duplicate section");
-    error.facts.insert(FactKey::Name, "greeter".into());
+    error.facts.insert(ErrorFact::Name, "greeter".into());
     assert_eq!(
         error.located_message(),
         "duplicate section (prompt greeter)"
     );
-    error.at = Location::new(
+    error.at = SourceLoc::new(
         "agents/greeter.md",
         nonzero(3),
         nonzero(7),
@@ -442,12 +442,12 @@ fn an_internal_failures_located_message_ends_with_its_rust_file_and_line() {
         "internal invariant violated: x",
         "an internal failure with no location ends with its own text"
     );
-    error.at = Some(Location::line("src/a.rs", nonzero(12)));
+    error.at = Some(SourceLoc::line("src/a.rs", nonzero(12)));
     assert_eq!(
         error.located_message(),
         "internal invariant violated: x (at src/a.rs:12)"
     );
-    error.facts.insert(FactKey::Name, "ignored".into());
+    error.facts.insert(ErrorFact::Name, "ignored".into());
     assert_eq!(
         error.located_message(),
         "internal invariant violated: x (at src/a.rs:12)",
@@ -461,8 +461,8 @@ fn any_other_located_failure_ends_with_its_file_and_line() {
         ErrorCode::LuaCompile,
         "lua compilation error at x (line 2): y",
     );
-    error.at = Some(Location::line("agents/a.md", nonzero(2)));
-    error.facts.insert(FactKey::Name, "p".into());
+    error.at = Some(SourceLoc::line("agents/a.md", nonzero(2)));
+    error.facts.insert(ErrorFact::Name, "p".into());
     assert_eq!(
         error.located_message(),
         "lua compilation error at x (line 2): y (at agents/a.md:2)",
@@ -479,13 +479,13 @@ fn any_other_located_failure_ends_with_its_file_and_line() {
 #[test]
 fn a_run_time_invalid_value_takes_the_located_form_not_the_parse_form() {
     let mut error = failure(ErrorCode::InvalidValue, "unknown model role `bogus`");
-    error.facts.insert(FactKey::Name, "bogus".into());
+    error.facts.insert(ErrorFact::Name, "bogus".into());
     assert_eq!(
         error.located_message(),
         "unknown model role `bogus`",
         "the value its `Name` fact holds is no prompt name"
     );
-    error.at = Some(Location::line("agents/a.md", nonzero(9)));
+    error.at = Some(SourceLoc::line("agents/a.md", nonzero(9)));
     assert_eq!(
         error.located_message(),
         "unknown model role `bogus` (at agents/a.md:9)"

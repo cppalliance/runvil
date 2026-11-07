@@ -19,12 +19,12 @@ use axum::routing::{get, post};
 use harness::InferenceBroker;
 use harness_gateway_client::StreamDelta;
 use runvil::effect::Round;
-use runvil::error::{Error, ErrorCode};
 use runvil::event::ReplyOrigin;
 use runvil::ids::RoundId;
 use runvil::model::{
     CompletionOptions, CompletionResult, Message, ModelBinding, ModelId, ModelInvocation, phrase,
 };
+use runvil::{Error, ErrorCode};
 use serde_json::json;
 use workshop_agents::{Conversations, DeltaKind};
 use workshop_gateway::{GatewayBinding, GatewayHandles, GatewayHealth};

@@ -6,7 +6,7 @@ use std::num::NonZeroU32;
 
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
-use runvil::error::{Error, ErrorCode, Location};
+use runvil::{Error, ErrorCode, SourceLoc};
 use tower::ServiceExt as _;
 
 use crate::app::router;
@@ -140,7 +140,7 @@ fn an_internal_parse_failure_names_no_prompt_line() {
         "internal invariant violated: a test fault",
         internal.prose(),
     );
-    error.at = NonZeroU32::new(9).map(|line| Location::line("crates/x/src/lib.rs", line));
+    error.at = NonZeroU32::new(9).map(|line| SourceLoc::line("crates/x/src/lib.rs", line));
     let AppError::PromptParse { message, code } = AppError::prompt_parse(&error) else {
         panic!("a parse failure answers as a prompt-parse wire error");
     };

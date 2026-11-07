@@ -20,7 +20,7 @@ use std::str::FromStr;
 
 use serde_json::Value;
 
-use crate::error::{Error, ErrorCode, FactKey};
+use crate::error::{Error, ErrorCode, ErrorFact};
 
 #[cfg(test)]
 #[path = "names-tests.rs"]
@@ -166,6 +166,6 @@ pub(crate) fn invalid_id(message: String, rejected: &str) -> Error {
         message,
         ErrorCode::InvalidValue.prose(),
     );
-    error.facts.insert(FactKey::Name, Value::from(rejected));
+    error.facts.insert(ErrorFact::Name, Value::from(rejected));
     error
 }

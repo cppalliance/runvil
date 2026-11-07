@@ -12,7 +12,7 @@ use std::sync::atomic::Ordering;
 
 use harness_runner::Harness;
 use harness_runner::recorder::MemoryRecorder;
-use runvil::error::Error;
+use runvil::Error;
 use runvil::model::{Completion, CompletionResult, ToolCall};
 use runvil_plugin::HostServices;
 use serde_json::json;

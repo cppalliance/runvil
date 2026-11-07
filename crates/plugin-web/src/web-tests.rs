@@ -8,8 +8,8 @@ use std::sync::Arc;
 
 use runvil_plugin::testing::TestCall;
 use runvil_plugin::{
-    Error, ErrorCode, FactKey, HostServices, Pack, PackId, PackRegistry, ServiceKey, TOKIO_RUNTIME,
-    ToolId,
+    Error, ErrorCode, ErrorFact, HostServices, Pack, PackId, PackRegistry, ServiceKey,
+    TOKIO_RUNTIME, ToolId,
 };
 use serde_json::{Value, json};
 use tokio::runtime::Handle;
@@ -97,11 +97,11 @@ fn install_returns_the_registrys_refusal() {
     let error = install(&mut packs, Value::Null).expect_err("a second install is refused");
     assert_eq!(error.code, ErrorCode::InvalidValue);
     assert_eq!(
-        error.facts.get(&FactKey::Reason),
+        error.facts.get(&ErrorFact::Reason),
         Some(&Value::from("duplicate_pack"))
     );
     assert_eq!(
-        error.facts.get(&FactKey::Name),
+        error.facts.get(&ErrorFact::Name),
         Some(&Value::from("runvil/web"))
     );
 }

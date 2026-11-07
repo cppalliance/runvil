@@ -1,7 +1,7 @@
 //! Tests for the neutral reply checks, driven through the validating
 //! constructors that run them: each check's kind and exact message.
 
-use runvil_types::error::{ErrorCode, FactKey};
+use runvil_types::error::{ErrorCode, ErrorFact};
 use serde_json::json;
 
 use super::*;
@@ -85,5 +85,5 @@ fn an_empty_tool_call_batch_is_an_empty_reply() {
         .expect_err("an empty batch is refused");
     assert_eq!(error.code, ErrorCode::EmptyReply);
     assert_eq!(error.to_string(), EMPTY_REPLY_PHRASE);
-    assert_eq!(error.facts.get(&FactKey::FinishReason), None);
+    assert_eq!(error.facts.get(&ErrorFact::FinishReason), None);
 }

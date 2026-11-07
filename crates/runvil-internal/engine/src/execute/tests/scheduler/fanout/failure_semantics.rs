@@ -111,7 +111,7 @@ fn an_uncaught_fanout_depth_error_lands_on_the_authors_fanout_line() {
     assert_eq!(
         trace.error().at,
         std::num::NonZeroU32::new(13)
-            .map(|line| runvil_types::error::Location::line("prompt", line)),
+            .map(|line| runvil_types::error::SourceLoc::line("prompt", line)),
         "the run's error points at Alpha's `tasks.fanout(...)` line"
     );
 }

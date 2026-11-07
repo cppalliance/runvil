@@ -3,7 +3,7 @@
 use std::num::NonZeroU32;
 
 use harness::record::RunSeed;
-use runvil::error::{Error, ErrorCode, FactKey, Location};
+use runvil::{Error, ErrorCode, ErrorFact, SourceLoc};
 use serde_json::json;
 use workshop_run_log::{LogError, Record, RecordFilter, RecordKind, RunId, RunLog, RunMeta};
 
@@ -212,8 +212,8 @@ async fn a_failed_run_keeps_its_code_and_located_message() {
         "expected a reply, got nothing",
         "the tool's own prose",
     );
-    error.at = Some(Location::line("prompt.md", NonZeroU32::new(7).unwrap()));
-    error.facts.insert(FactKey::Path, json!("/notes.md"));
+    error.at = Some(SourceLoc::line("prompt.md", NonZeroU32::new(7).unwrap()));
+    error.facts.insert(ErrorFact::Path, json!("/notes.md"));
     log.end_run(run, Err(error.clone())).await.unwrap();
 
     let Some(Err(read)) = log.run(run).await.unwrap().result else {

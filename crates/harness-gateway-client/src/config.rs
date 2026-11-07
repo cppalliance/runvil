@@ -8,7 +8,7 @@
 
 use std::fmt;
 
-use runvil::error::{Error, ErrorCode, FactKey};
+use runvil::{Error, ErrorCode, ErrorFact};
 use serde_json::Value;
 
 /// The setup error for a required environment variable that is not set.
@@ -17,7 +17,7 @@ pub(crate) fn missing_env(name: &str) -> Error {
         "missing_env",
         format!("missing environment variable: {name}"),
     );
-    error.facts.insert(FactKey::Name, Value::from(name));
+    error.facts.insert(ErrorFact::Name, Value::from(name));
     error
 }
 
@@ -28,7 +28,7 @@ pub(crate) fn invalid_env(name: &str) -> Error {
         "invalid_env",
         format!("environment variable is set but not valid Unicode: {name}"),
     );
-    error.facts.insert(FactKey::Name, Value::from(name));
+    error.facts.insert(ErrorFact::Name, Value::from(name));
     error
 }
 
@@ -36,7 +36,7 @@ pub(crate) fn invalid_env(name: &str) -> Error {
 /// variable or the rule to fix.
 fn setup_error(reason: &'static str, message: String) -> Error {
     let mut error = Error::new(ErrorCode::InvalidValue, message.clone(), message);
-    error.facts.insert(FactKey::Reason, Value::from(reason));
+    error.facts.insert(ErrorFact::Reason, Value::from(reason));
     error
 }
 
@@ -68,7 +68,7 @@ impl SecretString {
             );
             error
                 .facts
-                .insert(FactKey::Reason, Value::from("empty_secret"));
+                .insert(ErrorFact::Reason, Value::from("empty_secret"));
             return Err(error);
         }
         Ok(SecretString(secret))

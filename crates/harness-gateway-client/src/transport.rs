@@ -11,7 +11,7 @@ use std::fmt;
 use std::num::NonZeroU64;
 use std::time::{Duration, Instant};
 
-use runvil::error::Error;
+use runvil::Error;
 use runvil::model::{Completion, CompletionOptions, Message, ToolSchema};
 
 use crate::config::{GatewayEndpoint, SecretString, invalid_env, missing_env};
@@ -185,7 +185,7 @@ impl GatewayChat {
     /// `Unavailable`-kind error when the gateway answers 401.
     ///
     /// # Errors
-    /// Returns an [`InvalidValue`](runvil::error::ErrorCode::InvalidValue)
+    /// Returns an [`InvalidValue`](runvil::ErrorCode::InvalidValue)
     /// setup error when `RUNVIL_GATEWAY_URL` is missing or invalid, when
     /// either variable is set to a value that is not valid Unicode, or when
     /// the URL's host is not loopback (a LAN or remote gateway) and

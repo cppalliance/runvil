@@ -10,7 +10,7 @@ use std::task::{Context, Poll, Waker};
 use plugin_std::{NOT_IMPLEMENTED, install};
 use runvil_plugin::testing::TestCall;
 use runvil_plugin::{
-    Error, ErrorCode, FactKey, HostServices, OutputTrust, Pack, PackId, PackRegistry, ToolId,
+    Error, ErrorCode, ErrorFact, HostServices, OutputTrust, Pack, PackId, PackRegistry, ToolId,
     ToolOutput,
 };
 use serde_json::{Value, json};
@@ -119,11 +119,11 @@ fn install_returns_the_registrys_refusal() {
     let error = install(&mut packs, Value::Null).expect_err("a second install is refused");
     assert_eq!(error.code, ErrorCode::InvalidValue);
     assert_eq!(
-        error.facts.get(&FactKey::Reason),
+        error.facts.get(&ErrorFact::Reason),
         Some(&Value::from("duplicate_pack"))
     );
     assert_eq!(
-        error.facts.get(&FactKey::Name),
+        error.facts.get(&ErrorFact::Name),
         Some(&Value::from("runvil/std"))
     );
 }

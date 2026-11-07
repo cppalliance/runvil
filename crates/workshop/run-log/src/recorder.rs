@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use harness::record::{Record, RecorderFuture, RunId, RunMeta, RunRecorder, recorder_error};
-use runvil::error::Error;
+use runvil::Error;
 use tokio::sync::Mutex;
 
 use crate::{LogError, RunLog};

@@ -1,6 +1,6 @@
 //! Describing models and answering their rounds.
 
-use runvil::error::ErrorCode;
+use runvil::ErrorCode;
 use runvil::model::{ModelCatalog, ModelId, ThinkingMode};
 
 use super::support::{Reply, Scenario, TestResult, Trace, fail, model, prompt};

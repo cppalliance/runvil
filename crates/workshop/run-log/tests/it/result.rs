@@ -12,7 +12,7 @@ use std::num::NonZeroU32;
 use std::path::Path;
 
 use harness::record::RunSeed;
-use runvil::error::{Error, ErrorCode, Location};
+use runvil::{Error, ErrorCode, SourceLoc};
 use workshop_run_log::{LogError, RunId, RunLog, RunMeta, RunRow};
 
 /// The agent the Host launched.
@@ -70,7 +70,7 @@ async fn the_status_and_error_code_columns_hold_the_status_and_the_code_tag() {
         "expected /notes.md to exist, found nothing",
         ErrorCode::NotFound.prose(),
     );
-    located.at = Some(Location::line("prompt.md", NonZeroU32::new(3).unwrap()));
+    located.at = Some(SourceLoc::line("prompt.md", NonZeroU32::new(3).unwrap()));
     let failed = ended(&path, Err(located.clone())).await;
     let canceled = ended(&path, Err(Error::canceled())).await;
     let completed = ended(&path, Ok("done".to_owned())).await;

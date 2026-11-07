@@ -13,7 +13,7 @@ use std::borrow::Cow;
 use std::num::NonZeroU32;
 
 use mlua::Lua;
-use runvil_types::error::{ErrorCode, FactKey, Location, failure, place, with_fact};
+use runvil_types::error::{ErrorCode, ErrorFact, SourceLoc, failure, place, with_fact};
 use runvil_types::ids::TaskId;
 
 pub(crate) use runvil_types::error::Error;
@@ -71,7 +71,7 @@ pub fn context_exhausted(reason: &str) -> Error {
     );
     with_fact(
         failure(ErrorCode::ContextExhausted, text),
-        FactKey::Reason,
+        ErrorFact::Reason,
         reason,
     )
 }
@@ -89,7 +89,7 @@ pub fn lua_quota(resource: QuotaResource) -> Error {
             ErrorCode::LuaQuota,
             format!("lua {resource} quota exceeded"),
         ),
-        FactKey::Reason,
+        ErrorFact::Reason,
         tag,
     )
 }
@@ -129,7 +129,7 @@ pub fn task_canceled(task: &TaskId) -> Error {
 
 /// A failure with `code` and `message` about `task`, its `Task` fact.
 fn task_failure(code: ErrorCode, message: String, task: &TaskId) -> Error {
-    with_fact(failure(code, message), FactKey::Task, task.to_string())
+    with_fact(failure(code, message), ErrorFact::Task, task.to_string())
 }
 
 /// The tool-call loop ran its iteration cap without a final text reply.
@@ -152,7 +152,7 @@ pub fn internal_at(
 ) -> Error {
     let text = format!("internal invariant violated: {}", message.into());
     let mut error = failure(ErrorCode::Internal, text);
-    error.at = NonZeroU32::new(site.line()).map(|line| Location::line(site.file(), line));
+    error.at = NonZeroU32::new(site.line()).map(|line| SourceLoc::line(site.file(), line));
     error
 }
 
@@ -166,7 +166,7 @@ pub(crate) fn lua_compile(region: &str, source_line: u32, diagnostic: &str) -> E
             ErrorCode::LuaCompile,
             format!("lua compilation error at {region} (line {source_line}): {diagnostic}"),
         ),
-        FactKey::Section,
+        ErrorFact::Section,
         region,
     )
 }

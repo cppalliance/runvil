@@ -1,8 +1,8 @@
 //! The streamed round end to end: what goes on the wire, and how the
 //! stream comes back as one completion.
 
-use runvil::error::{ErrorCode, FactKey};
 use runvil::model::{CompletionResult, Message};
+use runvil::{ErrorCode, ErrorFact};
 
 use super::*;
 use crate::StreamDelta;
@@ -69,7 +69,7 @@ async fn complete_hard_fails_on_empty_model_reply() {
     assert_eq!(err.code, ErrorCode::EmptyReply);
     assert_eq!(
         err.facts
-            .get(&FactKey::FinishReason)
+            .get(&ErrorFact::FinishReason)
             .and_then(Value::as_str),
         Some("stop"),
         "the finish_reason must survive the conversion into the error"

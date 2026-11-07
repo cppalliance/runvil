@@ -4,7 +4,7 @@
 //! the error a rendered table keeps beside it.
 
 use mlua::{Function, Lua, Table, Value};
-use runvil_types::error::{Error, ErrorCode, FactKey};
+use runvil_types::error::{Error, ErrorCode, ErrorFact};
 use runvil_types::ids::TaskId;
 
 use super::super::{error_table, install_error_value, raised_from, retained_error};
@@ -20,7 +20,7 @@ fn task(path: &str) -> TaskId {
 }
 
 /// An error with `code`, `message`, a prose of its own, and `facts`.
-fn failure(code: ErrorCode, facts: &[(FactKey, serde_json::Value)]) -> Error {
+fn failure(code: ErrorCode, facts: &[(ErrorFact, serde_json::Value)]) -> Error {
     let mut error = Error::new(code, "the message", "the prose");
     error.facts.extend(facts.iter().cloned());
     error
@@ -32,14 +32,20 @@ fn located_by_their_fields() -> Vec<Error> {
         context_exhausted("manual"),
         failure(
             ErrorCode::EmptyReply,
-            &[(FactKey::FinishReason, "length".into())],
+            &[(ErrorFact::FinishReason, "length".into())],
         ),
-        failure(ErrorCode::OutOfScopeTool, &[(FactKey::Name, "echo".into())]),
-        failure(ErrorCode::UnboundTool, &[(FactKey::Name, "echo".into())]),
-        failure(ErrorCode::ModelOnlyTool, &[(FactKey::Name, "echo".into())]),
+        failure(
+            ErrorCode::OutOfScopeTool,
+            &[(ErrorFact::Name, "echo".into())],
+        ),
+        failure(ErrorCode::UnboundTool, &[(ErrorFact::Name, "echo".into())]),
+        failure(
+            ErrorCode::ModelOnlyTool,
+            &[(ErrorFact::Name, "echo".into())],
+        ),
         failure(
             ErrorCode::TasksLive,
-            &[(FactKey::Tasks, serde_json::Value::from(vec!["1", "1.2"]))],
+            &[(ErrorFact::Tasks, serde_json::Value::from(vec!["1", "1.2"]))],
         ),
         task_not_owned(&task("0.4")),
         task_consumed(&task("0.5")),
@@ -208,7 +214,7 @@ fn a_table_with_no_usable_code_reads_back_as_the_failure_its_kind_names() {
         .expect("the code field clears");
     let back = read_back(&lua, &table);
     assert_eq!(back.code, ErrorCode::TaskCanceled);
-    assert_eq!(back.facts.get(&FactKey::Task), Some(&"0.1".into()));
+    assert_eq!(back.facts.get(&ErrorFact::Task), Some(&"0.1".into()));
     assert_eq!(back.message, "gone");
 }
 

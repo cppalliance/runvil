@@ -23,9 +23,9 @@
 //! completion: a malformed section degrades to `None` with a returned
 //! diagnostic naming it.
 
-use runvil::error::{Error, FactKey};
 use runvil::metrics::{CallMetrics, LlamaTimings, Usage, VllmMetrics};
 use runvil::model::{CompletionResult, ToolCall, empty_reply};
+use runvil::{Error, ErrorFact};
 use serde::Deserialize;
 use serde_json::Value;
 
@@ -141,7 +141,7 @@ pub(super) fn normalize(body: &Value) -> Result<NormalizedTurn, Error> {
     if let Some(reason) = finish_reason {
         error
             .facts
-            .insert(FactKey::FinishReason, Value::from(reason));
+            .insert(ErrorFact::FinishReason, Value::from(reason));
     }
     Err(error)
 }
@@ -425,7 +425,7 @@ mod tests {
     //! reasoning side channel.
 
     use super::*;
-    use runvil::error::ErrorCode;
+    use runvil::ErrorCode;
 
     const EMPTY_REPLY_PHRASE: &str = "the model replied with no text and no tool calls";
 
@@ -443,7 +443,7 @@ mod tests {
     fn finish_reason(error: &Error) -> Option<&str> {
         error
             .facts
-            .get(&FactKey::FinishReason)
+            .get(&ErrorFact::FinishReason)
             .and_then(Value::as_str)
     }
 

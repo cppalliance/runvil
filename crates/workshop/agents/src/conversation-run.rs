@@ -9,7 +9,7 @@ use harness::pack::HostServices;
 use harness::record::RunRecorder;
 use harness::{Harness, RunReport, RunRequest, display_chain};
 use plugin_user_input::{INPUT_BROKER, InputBroker};
-use runvil::error::Error;
+use runvil::Error;
 use runvil::ids::RoundId;
 use tokio::sync::broadcast;
 

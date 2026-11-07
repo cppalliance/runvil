@@ -6,7 +6,7 @@ use std::num::NonZeroU32;
 
 use runvil_lua::LuaProgram;
 use runvil_types::emitter::{Emitter, EventSink};
-use runvil_types::error::{Error, ErrorCode, FactKey, Location};
+use runvil_types::error::{Error, ErrorCode, ErrorFact, SourceLoc};
 
 use super::{internal, lua, with_prompt_context};
 use crate::tests::location;
@@ -162,8 +162,8 @@ fn a_refused_uses_list_names_its_reason_and_the_pack_id() {
         assert_eq!(
             error.facts,
             BTreeMap::from([
-                (FactKey::Reason, reason.into()),
-                (FactKey::Name, pack.into())
+                (ErrorFact::Reason, reason.into()),
+                (ErrorFact::Name, pack.into())
             ]),
             "the Pack id is the name, not the prompt's: {entries}"
         );
@@ -182,7 +182,7 @@ fn a_duplicate_sibling_is_structure_invalid_at_its_heading() {
     assert_eq!(error.code, ErrorCode::StructureInvalid);
     assert_eq!(error.message, message);
     assert_eq!(location(&error), Some((FILE, 12, 1, 13, 1)));
-    assert_eq!(error.facts, BTreeMap::from([(FactKey::Name, "x".into())]));
+    assert_eq!(error.facts, BTreeMap::from([(ErrorFact::Name, "x".into())]));
     assert_eq!(
         error.prose,
         prose_at(ErrorCode::StructureInvalid, 12, message)
@@ -221,7 +221,10 @@ fn a_fence_violation_names_the_rule_it_breaks() {
         );
         assert_eq!(
             error.facts,
-            BTreeMap::from([(FactKey::Name, "x".into()), (FactKey::Reason, rule.into())])
+            BTreeMap::from([
+                (ErrorFact::Name, "x".into()),
+                (ErrorFact::Reason, rule.into())
+            ])
         );
         assert_eq!(
             error.prose,
@@ -241,7 +244,7 @@ fn an_empty_list_item_is_list_empty_item_at_its_marker() {
         Some((FILE, 11, 3, 11, 5)),
         "the marker itself, past its indent"
     );
-    assert_eq!(error.facts, BTreeMap::from([(FactKey::Name, "x".into())]));
+    assert_eq!(error.facts, BTreeMap::from([(ErrorFact::Name, "x".into())]));
     assert_eq!(error.prose, prose_at(ErrorCode::ListEmptyItem, 11, message));
 }
 
@@ -266,7 +269,7 @@ fn a_lua_compile_failure_is_located_at_the_line_its_diagnostic_names() {
     assert_eq!(error.code, ErrorCode::LuaCompile);
     assert_eq!(error.message, message);
     assert_eq!(location(&error), Some((FILE, 12, 1, 13, 1)));
-    assert_eq!(error.facts, BTreeMap::from([(FactKey::Name, "x".into())]));
+    assert_eq!(error.facts, BTreeMap::from([(ErrorFact::Name, "x".into())]));
     assert_eq!(error.prose, prose_at(ErrorCode::LuaCompile, 12, &message));
 }
 
@@ -278,7 +281,7 @@ fn a_parser_invariant_failure_is_located_at_its_rust_call_site_with_the_default_
     assert_eq!(error.message, "internal invariant violated: parser: test");
     assert_eq!(
         error.at,
-        Some(Location::line(
+        Some(SourceLoc::line(
             site.file(),
             NonZeroU32::new(site.line()).expect("a line is non-zero")
         )),

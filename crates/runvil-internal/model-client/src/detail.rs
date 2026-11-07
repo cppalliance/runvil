@@ -6,7 +6,7 @@
 //! one that splits a completion into the result the tool loop consumes and
 //! the metadata the round reports.
 
-use runvil_types::error::{Error, ErrorCode, FactKey};
+use runvil_types::error::{Error, ErrorCode, ErrorFact};
 use runvil_types::names::is_alias;
 use serde_json::Value;
 
@@ -97,8 +97,8 @@ fn schema_error(reason: &'static str, message: String, name: &str) -> Error {
         message,
         ErrorCode::ToolSchemaInvalid.prose(),
     );
-    error.facts.insert(FactKey::Name, Value::from(name));
-    error.facts.insert(FactKey::Reason, Value::from(reason));
+    error.facts.insert(ErrorFact::Name, Value::from(name));
+    error.facts.insert(ErrorFact::Reason, Value::from(reason));
     error
 }
 

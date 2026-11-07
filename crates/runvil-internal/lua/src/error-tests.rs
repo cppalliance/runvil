@@ -14,7 +14,7 @@ use std::num::NonZeroU32;
 use std::sync::Arc;
 
 use mlua::{Function, Lua};
-use runvil_types::error::{Error, ErrorCode, FactKey, Location, place};
+use runvil_types::error::{Error, ErrorCode, ErrorFact, SourceLoc, place};
 use runvil_types::ids::TaskId;
 use runvil_types::tools::tool_error;
 use runvil_vfs::VfsError;
@@ -69,7 +69,7 @@ fn a_refusal_crosses_the_mlua_boundary_as_its_typed_failure() {
 #[test]
 fn a_tool_failure_keeps_the_tools_error_under_a_message_that_names_the_call() {
     let mut failure = tool_error(ErrorCode::ToolBackend, "the backend refused");
-    failure.facts.insert(FactKey::Path, Value::from("a.md"));
+    failure.facts.insert(ErrorFact::Path, Value::from("a.md"));
     let error = tool(failure.clone());
     assert_eq!(error.code, ErrorCode::ToolBackend);
     assert_eq!(
@@ -102,7 +102,7 @@ fn author_prose_names_what_failed_and_the_line_becomes_the_location() {
         located.prose,
         format!("boom. {}", ErrorCode::LuaRuntime.prose())
     );
-    assert_eq!(located.at, Some(Location::line("agents/a.md", line(12))));
+    assert_eq!(located.at, Some(SourceLoc::line("agents/a.md", line(12))));
     assert_eq!(located.message, "the message");
     let unlocated = authored_at(lua_runtime("the message"), "agents/a.md", None, "boom");
     assert_eq!(
@@ -194,7 +194,7 @@ fn a_failure_crossing_into_lua_is_placed_and_gets_author_prose_when_the_prompts_
     let lua = Lua::new();
     set_prompt_file(&lua, "agents/a.md");
     set_call_line(&lua, Some(line(9)));
-    let call = Some(Location::line("agents/a.md", line(9)));
+    let call = Some(SourceLoc::line("agents/a.md", line(9)));
     let refusal = authored(&lua, lua_runtime("messages must not be empty"));
     assert_eq!(
         refusal.prose,
@@ -242,7 +242,7 @@ fn an_authored_failure_placed_before_it_crosses_keeps_its_place_and_gets_author_
     let crossed = authored(&lua, placed);
     assert_eq!(
         crossed.at,
-        Some(Location::line("agents/a.md", line(4))),
+        Some(SourceLoc::line("agents/a.md", line(4))),
         "the first placement wins"
     );
     assert_eq!(
@@ -301,7 +301,7 @@ fn a_compile_failure_names_its_region_as_its_section() {
         "lua compilation error at section `S` prologue (line 7): syntax error near '='"
     );
     assert_eq!(
-        error.facts.get(&FactKey::Section),
+        error.facts.get(&ErrorFact::Section),
         Some(&Value::from(region))
     );
     assert_eq!(
@@ -326,7 +326,7 @@ fn the_typed_failures_keep_their_text_and_name_their_facts() {
     ] {
         let quota = lua_quota(resource);
         assert_eq!(quota.message, text);
-        assert_eq!(quota.facts.get(&FactKey::Reason), Some(&Value::from(tag)));
+        assert_eq!(quota.facts.get(&ErrorFact::Reason), Some(&Value::from(tag)));
         assert_eq!(error_kind(&quota), ErrorKind::Lua);
     }
     let exhausted = context_exhausted("manual");
@@ -345,7 +345,7 @@ fn a_task_failure_names_its_task() {
         (task_consumed(&task("0.1")), ErrorKind::TaskConsumed),
         (task_canceled(&task("0.1")), ErrorKind::Canceled),
     ] {
-        assert_eq!(error.facts.get(&FactKey::Task), Some(&Value::from("0.1")));
+        assert_eq!(error.facts.get(&ErrorFact::Task), Some(&Value::from("0.1")));
         assert_eq!(
             (error_kind(&error), error_fields(&error)),
             (kind, vec![string("task", "0.1")]),
@@ -371,7 +371,7 @@ fn an_internal_fault_keeps_its_message_whole_and_its_site() {
     assert_eq!(error.prose, ErrorCode::Internal.prose());
     assert_eq!(
         error.at,
-        Some(Location::line(
+        Some(SourceLoc::line(
             site.file(),
             NonZeroU32::new(site.line()).expect("a line is non-zero")
         ))

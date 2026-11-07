@@ -1,7 +1,7 @@
 //! Tests for the universal error's Lua error value: the kind each code
 //! renders as, the text its table holds, and the fields its facts give.
 
-use runvil_types::error::{Error, ErrorCode, FactKey};
+use runvil_types::error::{Error, ErrorCode, ErrorFact};
 use serde_json::Value;
 
 use super::super::{
@@ -11,7 +11,7 @@ use super::every_store_failure;
 
 /// An error with `code` and `facts`, whose message and prose say which
 /// they are.
-fn error(code: ErrorCode, facts: &[(FactKey, Value)]) -> Error {
+fn error(code: ErrorCode, facts: &[(ErrorFact, Value)]) -> Error {
     let mut error = Error::new(code, "the message", "the prose");
     error.facts.extend(facts.iter().cloned());
     error
@@ -35,7 +35,7 @@ fn a_task_refusal_renders_its_kind_and_its_task_field() {
         (ErrorCode::TaskConsumed, ErrorKind::TaskConsumed),
         (ErrorCode::TaskCanceled, ErrorKind::Canceled),
     ] {
-        let refusal = error(code, &[(FactKey::Task, Value::from("1.2"))]);
+        let refusal = error(code, &[(ErrorFact::Task, Value::from("1.2"))]);
         assert_eq!(
             rendered(&refusal),
             (kind, "the prose".to_owned(), vec![string("task", "1.2")]),
@@ -53,7 +53,7 @@ fn a_task_refusal_renders_its_kind_and_its_task_field() {
 fn leaked_tasks_render_as_one_string_joined_by_commas() {
     let leaked = error(
         ErrorCode::TasksLive,
-        &[(FactKey::Tasks, Value::from(vec!["1", "1.2"]))],
+        &[(ErrorFact::Tasks, Value::from(vec!["1", "1.2"]))],
     );
     assert_eq!(error_kind(&leaked), ErrorKind::TasksLive);
     assert_eq!(error_fields(&leaked), vec![string("tasks", "1, 1.2")]);
@@ -79,7 +79,7 @@ fn every_store_failure_renders_the_fields_its_variant_gives() {
 fn an_empty_reply_holds_its_prose_and_its_finish_reason() {
     let empty = error(
         ErrorCode::EmptyReply,
-        &[(FactKey::FinishReason, Value::from("length"))],
+        &[(ErrorFact::FinishReason, Value::from("length"))],
     );
     assert_eq!(
         rendered(&empty),
@@ -95,7 +95,7 @@ fn an_empty_reply_holds_its_prose_and_its_finish_reason() {
 
 #[test]
 fn a_model_failure_holds_its_prose_and_no_fields() {
-    let failure = error(ErrorCode::Transport, &[(FactKey::Count, Value::from(3))]);
+    let failure = error(ErrorCode::Transport, &[(ErrorFact::Count, Value::from(3))]);
     assert_eq!(
         rendered(&failure),
         (ErrorKind::ModelFailure, "the prose".to_owned(), Vec::new())
@@ -106,7 +106,7 @@ fn a_model_failure_holds_its_prose_and_no_fields() {
 fn context_exhaustion_renders_its_reason() {
     let exhausted = error(
         ErrorCode::ContextExhausted,
-        &[(FactKey::Reason, Value::from("precheck"))],
+        &[(ErrorFact::Reason, Value::from("precheck"))],
     );
     assert_eq!(
         rendered(&exhausted),
@@ -125,7 +125,7 @@ fn a_refused_tool_call_renders_the_name_it_tried() {
         (ErrorCode::UnboundTool, ErrorKind::UnboundTool),
         (ErrorCode::ModelOnlyTool, ErrorKind::ModelOnlyTool),
     ] {
-        let refusal = error(code, &[(FactKey::Name, Value::from("echo"))]);
+        let refusal = error(code, &[(ErrorFact::Name, Value::from("echo"))]);
         assert_eq!(error_kind(&refusal), kind, "{code:?}");
         assert_eq!(
             error_fields(&refusal),
@@ -138,9 +138,9 @@ fn a_refused_tool_call_renders_the_name_it_tried() {
 #[test]
 fn a_code_without_table_fields_renders_none_whatever_facts_it_holds() {
     let facts = [
-        (FactKey::Name, Value::from("echo")),
-        (FactKey::Reason, Value::from("why")),
-        (FactKey::Path, Value::from("a.md")),
+        (ErrorFact::Name, Value::from("echo")),
+        (ErrorFact::Reason, Value::from("why")),
+        (ErrorFact::Path, Value::from("a.md")),
     ];
     for (code, kind) in [
         (ErrorCode::ToolSchemaInvalid, ErrorKind::Internal),

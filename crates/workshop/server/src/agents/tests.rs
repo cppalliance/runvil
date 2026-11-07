@@ -20,12 +20,12 @@ use harness::vfs::VfsRef;
 use harness::{BoxFuture, Harness, HostSnapshot, InferenceBroker, RunRequest};
 use plugin_web::SEARCH_PROVIDER;
 use runvil::effect::Round;
-use runvil::error::{Error, ErrorCode};
 use runvil::model::{
     Completion, CompletionOptions, Message, ModelBinding, ModelCatalog, ToolSchema,
     completion_error, phrase,
 };
 use runvil::tools::ToolId;
+use runvil::{Error, ErrorCode};
 use runvil_plugin::{ServiceKey, TOKIO_RUNTIME};
 use serde_json::json;
 use workshop_agents::{Conversations, SessionState, TokioTimer};

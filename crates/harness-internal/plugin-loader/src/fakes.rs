@@ -96,7 +96,10 @@ pub(crate) fn failure(entry: PluginEntry) -> Error {
 
 /// The `Reason` fact of a load failure.
 pub(crate) fn reason(failure: &Error) -> Option<&str> {
-    failure.facts.get(&runvil_plugin::FactKey::Reason)?.as_str()
+    failure
+        .facts
+        .get(&runvil_plugin::ErrorFact::Reason)?
+        .as_str()
 }
 
 /// `size_of::<T>()` as a contract struct's `u32` size field.

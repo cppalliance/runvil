@@ -21,9 +21,9 @@ use std::task::{Context, Poll};
 use futures_util::future::{Either, select};
 use futures_util::task::AtomicWaker;
 use runvil::cancel::CancelHandle;
-use runvil::error::{Error, ErrorCode, FactKey};
 use runvil::model::ModelInfo;
 use runvil::vfs::VfsRef;
+use runvil::{Error, ErrorCode, ErrorFact};
 use runvil_plugin::HostServices;
 
 use crate::effect_loop::drive;
@@ -101,7 +101,7 @@ pub struct RunReport {
     /// fact `not_completed` or `undeclared`, `NotFound` for a completed
     /// run that left no file, or the store's failure, each with the
     /// declared path as the `Path` fact when there is one.
-    pub output: Result<String, runvil::error::Error>,
+    pub output: Result<String, runvil::Error>,
 }
 
 /// The failure that stops a run before `Harness::run` can record its
@@ -118,7 +118,7 @@ fn unrecorded(run: Option<RunId>, refusal: &Error) -> Error {
         Error::new(code, "the run could not be recorded", code.prose()).with_cause(refusal);
     error.facts.clone_from(&refusal.facts);
     if let Some(run) = run {
-        error.facts.insert(FactKey::Run, run.get().into());
+        error.facts.insert(ErrorFact::Run, run.get().into());
     }
     error
 }

@@ -7,7 +7,7 @@ use std::io;
 use std::path::Path;
 
 use harness_plugin_loader::{PluginReport, PluginSource, insert_plugin_dir};
-use runvil_plugin::{Error, FactKey, PackRegistry};
+use runvil_plugin::{Error, ErrorFact, PackRegistry};
 
 use crate::support::{copy_fixture, remove, scratch};
 
@@ -22,7 +22,7 @@ fn library_source(path: &Path) -> PluginSource {
 }
 
 /// The fact `key` of a load failure, as text.
-fn fact(failure: &Error, key: FactKey) -> Option<&str> {
+fn fact(failure: &Error, key: ErrorFact) -> Option<&str> {
     failure.facts.get(&key)?.as_str()
 }
 
@@ -85,7 +85,7 @@ fn a_garbage_library_fails_at_insert_and_the_fixture_beside_it_still_loads() {
         panic!("one file fails, got {:?}", report.failures());
     };
     let reason = &failure.message;
-    assert_eq!(fact(failure, FactKey::Reason), Some("open"));
+    assert_eq!(fact(failure, ErrorFact::Reason), Some("open"));
     let cause = reason
         .strip_prefix("the library could not be opened: ")
         .unwrap_or_else(|| panic!("the reason starts with the open failure: {reason}"));
@@ -101,7 +101,7 @@ fn a_garbage_library_fails_at_insert_and_the_fixture_beside_it_still_loads() {
     #[cfg(not(windows))]
     assert!(!cause.is_empty(), "{reason}");
     assert_eq!(
-        fact(failure, FactKey::Path),
+        fact(failure, ErrorFact::Path),
         Some(library_path(&garbage).as_str())
     );
     let [plugin] = report.plugins() else {
@@ -142,10 +142,10 @@ fn a_second_copy_with_the_same_plugin_name_fails_as_a_duplicate() {
         failure.message,
         "a Plugin named test-plugin was already loaded from this directory"
     );
-    assert_eq!(fact(failure, FactKey::Reason), Some("duplicate"));
-    assert_eq!(fact(failure, FactKey::Name), Some("test-plugin"));
+    assert_eq!(fact(failure, ErrorFact::Reason), Some("duplicate"));
+    assert_eq!(fact(failure, ErrorFact::Name), Some("test-plugin"));
     assert_eq!(
-        fact(failure, FactKey::Path),
+        fact(failure, ErrorFact::Path),
         Some(library_path(&second).as_str())
     );
     drop(report);

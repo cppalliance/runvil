@@ -32,8 +32,8 @@ use std::pin::Pin;
 use std::sync::Arc;
 use std::time::Duration;
 
+use runvil::Error;
 use runvil::effect::{PackToolSets, Round, ToolCallOrigin};
-use runvil::error::Error;
 use runvil::model::{
     Completion, CompletionOptions, Message, ModelBinding, ModelCatalog, ModelInfo, ToolSchema,
 };

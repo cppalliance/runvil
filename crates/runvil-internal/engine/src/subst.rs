@@ -33,7 +33,7 @@
 
 use std::num::NonZeroU32;
 
-use runvil_types::error::{Error, ErrorCode, FactKey, place};
+use runvil_types::error::{Error, ErrorCode, ErrorFact, place};
 use serde_json::Value;
 
 use crate::Result;
@@ -80,7 +80,7 @@ fn failure(reason: &str, offset: usize, detail: String) -> Error {
         .collect();
     let message = format!("{detail} [{kind} at byte {offset}]");
     let mut error = Error::new(code, message, detail + ". " + code.prose());
-    error.facts.insert(FactKey::Reason, Value::from(reason));
+    error.facts.insert(ErrorFact::Reason, Value::from(reason));
     error
 }
 

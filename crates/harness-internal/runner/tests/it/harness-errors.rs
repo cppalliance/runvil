@@ -15,8 +15,8 @@ use harness_runner::display_chain;
 use harness_runner::environment::HostSnapshot;
 use harness_runner::recorder::{MemoryRecorder, RunId};
 use harness_runner::{Harness, HostContext, RunReport, RunRequest};
-use runvil::error::{Error, ErrorCode, FactKey};
 use runvil::model::{Completion, phrase};
+use runvil::{Error, ErrorCode, ErrorFact};
 use runvil_plugin::{HostServices, PackRegistry};
 
 use super::{PendingTimer, answers_to, plain_harness, request, run_beside, until};
@@ -31,7 +31,7 @@ const PLAIN: &str = "---\nname: plain\ndescription: d\nrunvil: 0\n---\n\n\
 fn run_of(error: &Error) -> Option<RunId> {
     error
         .facts
-        .get(&FactKey::Run)
+        .get(&ErrorFact::Run)
         .and_then(serde_json::Value::as_i64)
         .map(RunId::from_raw)
 }

@@ -16,8 +16,8 @@
 use std::collections::{BTreeMap, VecDeque};
 use std::sync::Arc;
 
+use runvil::Error;
 use runvil::effect::{Effect, EffectAnswer, EffectId, IssuedEffect};
-use runvil::error::Error;
 use runvil::event::Event;
 use runvil::ids::Provenance;
 use runvil::model::{Completion, ModelInfo, ModelRole};

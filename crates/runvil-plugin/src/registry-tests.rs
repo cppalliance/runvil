@@ -8,7 +8,7 @@
 //! Pack id and builds a Pack that offers no tools and carries no prelude
 //! and no needs.
 
-use runvil_types::error::{Error, ErrorCode, FactKey};
+use runvil_types::error::{Error, ErrorCode, ErrorFact};
 use serde_json::{Value, json};
 
 use super::{BUILTIN, PackOrigin, PackRegistry, builtin, pack_id};
@@ -21,12 +21,12 @@ fn refused(result: Result<(), Error>, reason: &str, fqn: &str) -> String {
     let error = result.expect_err("the insert must be refused");
     assert_eq!(error.code, ErrorCode::InvalidValue, "{error:?}");
     assert_eq!(
-        error.facts.get(&FactKey::Reason),
+        error.facts.get(&ErrorFact::Reason),
         Some(&Value::from(reason)),
         "{error:?}"
     );
     assert_eq!(
-        error.facts.get(&FactKey::Name),
+        error.facts.get(&ErrorFact::Name),
         Some(&Value::from(fqn)),
         "{error:?}"
     );

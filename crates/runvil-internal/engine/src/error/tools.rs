@@ -2,7 +2,7 @@
 //! that did not build, frozen sets that broke a rule of the merge that
 //! builds them, and a name the model or a script may not call.
 
-use runvil_types::error::{ErrorCode, FactKey};
+use runvil_types::error::{ErrorCode, ErrorFact};
 use runvil_types::tools::ToolId;
 
 use crate::lua::{DiscoveryTool, OfferMode};
@@ -12,7 +12,7 @@ use super::{Error, failure, with_fact};
 /// A failure with `code` whose text, `text`, is written for the model, so
 /// it is both the message and the prose, about the tool name `name`.
 fn refusal(code: ErrorCode, text: String, name: &str) -> Error {
-    with_fact(Error::new(code, text.clone(), text), FactKey::Name, name)
+    with_fact(Error::new(code, text.clone(), text), ErrorFact::Name, name)
 }
 
 /// A model-facing schema that did not build for the bound tool `alias`:
@@ -25,11 +25,11 @@ pub(crate) fn bind_schema(alias: &str, cause: &Error) -> Error {
             ErrorCode::ToolSchemaInvalid,
             format!("model-facing schema build failure for tool alias {alias:?}"),
         ),
-        FactKey::Name,
+        ErrorFact::Name,
         alias,
     );
-    if let Some(reason) = cause.facts.get(&FactKey::Reason) {
-        error.facts.insert(FactKey::Reason, reason.clone());
+    if let Some(reason) = cause.facts.get(&ErrorFact::Reason) {
+        error.facts.insert(ErrorFact::Reason, reason.clone());
     }
     error.with_cause(cause)
 }

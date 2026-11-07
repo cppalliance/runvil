@@ -23,9 +23,9 @@ use harness_runner::recorder::{
     MemoryRecorder, Record, RecordKind, RecorderFuture, RunId, RunMeta, RunRecorder,
 };
 use runvil::cancel::CancelHandle;
-use runvil::error::{Error, ErrorCode, FactKey};
 use runvil::event::Event;
 use runvil::tools::tool_error;
+use runvil::{Error, ErrorCode, ErrorFact};
 use runvil_plugin::{
     HostServices, Pack, PackFuture, PackId, PackInfo, ToolContext, ToolId, ToolInfo, ToolOutput,
 };
@@ -131,7 +131,7 @@ pub(crate) fn run_of(error: &Error) -> RunId {
     RunId::from_raw(
         error
             .facts
-            .get(&FactKey::Run)
+            .get(&ErrorFact::Run)
             .and_then(Value::as_i64)
             .expect("a preparation failure names its run"),
     )

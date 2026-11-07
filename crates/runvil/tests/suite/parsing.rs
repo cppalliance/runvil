@@ -4,8 +4,8 @@
 use std::fs;
 use std::path::Path;
 
+use runvil::ErrorCode;
 use runvil::Prompt;
-use runvil::error::ErrorCode;
 
 use super::support::TestResult;
 

@@ -1,7 +1,7 @@
 //! Tests for the streaming accumulator and the SSE data-line scanner.
 
-use runvil::error::{ErrorCode, FactKey};
 use runvil::model::CompletionResult;
+use runvil::{ErrorCode, ErrorFact};
 use serde_json::Value;
 
 use super::*;
@@ -247,7 +247,7 @@ fn finish_hard_fails_on_an_empty_model_reply() {
     assert_eq!(
         error
             .facts
-            .get(&FactKey::FinishReason)
+            .get(&ErrorFact::FinishReason)
             .and_then(Value::as_str),
         Some("stop"),
         "the finish_reason must survive the conversion into the error"
@@ -389,8 +389,8 @@ fn error_envelope_naming_a_context_limit_is_a_context_overflow() {
     assert_eq!(error.code, ErrorCode::ContextOverflow);
     assert_eq!(
         (
-            error.facts.get(&FactKey::Count),
-            error.facts.get(&FactKey::Limit)
+            error.facts.get(&ErrorFact::Count),
+            error.facts.get(&ErrorFact::Limit)
         ),
         (Some(&Value::from(5000)), Some(&Value::from(4096)))
     );

@@ -1,7 +1,7 @@
 //! Reading what a prompt declares before it runs.
 
+use runvil::ErrorCode;
 use runvil::Prompt;
-use runvil::error::ErrorCode;
 use runvil::model::{ModelRole, ThinkingMode};
 
 use super::prepare::refusal;

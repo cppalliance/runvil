@@ -66,10 +66,10 @@ use futures_util::future::{AbortHandle, Abortable, Aborted, FutureExt as _};
 use futures_util::stream::{FuturesUnordered, StreamExt as _};
 use runvil::cancel::CancelHandle;
 use runvil::effect::{Effect, EffectAnswer, EffectId, IssuedEffect};
-use runvil::error::{Error, ErrorCode};
 use runvil::event::Event;
 use runvil::ids::Provenance;
 use runvil::vfs::{Access, VfsOp, perform_vfs_op};
+use runvil::{Error, ErrorCode};
 use runvil::{Run, Step};
 use tracing::Instrument as _;
 

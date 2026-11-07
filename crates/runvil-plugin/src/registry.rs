@@ -6,7 +6,7 @@ use std::collections::BTreeMap;
 use std::fmt;
 use std::sync::Arc;
 
-use runvil_types::error::{Error, ErrorCode, FactKey};
+use runvil_types::error::{Error, ErrorCode, ErrorFact};
 use runvil_types::packs::PackId;
 use runvil_types::tools::{ToolInfo, ToolOutput, tool_error};
 use serde_json::Value;
@@ -191,8 +191,8 @@ impl fmt::Debug for PackRegistry {
 /// and the rule.
 fn refusal(reason: &'static str, message: String, fqn: &str) -> Error {
     let mut error = Error::new(ErrorCode::InvalidValue, message.clone(), message);
-    error.facts.insert(FactKey::Name, Value::from(fqn));
-    error.facts.insert(FactKey::Reason, Value::from(reason));
+    error.facts.insert(ErrorFact::Name, Value::from(fqn));
+    error.facts.insert(ErrorFact::Reason, Value::from(reason));
     error
 }
 

@@ -8,7 +8,7 @@
 //! extend it with `: ` and text this repository's own code wrote. Provider
 //! text never enters the prose; a broker appends it to the message only.
 
-use runvil_types::error::{Error, ErrorCode, FactKey};
+use runvil_types::error::{Error, ErrorCode, ErrorFact};
 use serde_json::Value;
 
 /// The specific an empty reply adds to its phrase when the reader dropped a
@@ -73,10 +73,10 @@ pub fn context_overflow(
 ) -> Error {
     let mut error = completion_error(ErrorCode::ContextOverflow, message);
     if let Some(tokens) = prompt_tokens {
-        error.facts.insert(FactKey::Count, Value::from(tokens));
+        error.facts.insert(ErrorFact::Count, Value::from(tokens));
     }
     if let Some(window) = window {
-        error.facts.insert(FactKey::Limit, Value::from(window));
+        error.facts.insert(ErrorFact::Limit, Value::from(window));
     }
     error
 }

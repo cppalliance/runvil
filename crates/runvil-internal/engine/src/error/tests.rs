@@ -5,7 +5,7 @@
 use std::num::NonZeroU32;
 
 use runvil_lua::{ErrorField, ErrorKind, QuotaResource, error_fields, error_kind};
-use runvil_types::error::{ErrorCode, FactKey, Location};
+use runvil_types::error::{ErrorCode, ErrorFact, SourceLoc};
 use runvil_types::ids::TaskId;
 use serde_json::Value;
 
@@ -41,7 +41,7 @@ fn an_internal_fault_is_located_at_its_rust_call_site_and_ends_its_message_there
     assert_eq!(error.prose, ErrorCode::Internal.prose());
     assert_eq!(
         error.at,
-        Some(Location::line(
+        Some(SourceLoc::line(
             file!(),
             NonZeroU32::new(expected_line).expect("a line is non-zero")
         ))
@@ -131,7 +131,7 @@ fn a_missing_model_names_its_section() {
     assert_eq!(error.message, "model binding required for section Only");
     assert_eq!(error.prose, ErrorCode::ModelRequired.prose());
     assert_eq!(
-        error.facts.get(&FactKey::Section),
+        error.facts.get(&ErrorFact::Section),
         Some(&Value::from("Only"))
     );
     assert_eq!(
@@ -156,7 +156,7 @@ fn context_exhaustion_holds_its_reason_and_renders_it() {
         assert_eq!(error.code, ErrorCode::ContextExhausted);
         assert_eq!(error.message, message);
         assert_eq!(
-            error.facts.get(&FactKey::Reason),
+            error.facts.get(&ErrorFact::Reason),
             Some(&Value::from(reason))
         );
         assert_eq!(
@@ -185,7 +185,7 @@ fn a_spent_quota_and_the_call_depth_cap_keep_their_codes_and_lua_reads_both_as_l
         let error = lua_quota(resource);
         assert_eq!(error.code, ErrorCode::LuaQuota);
         assert_eq!(error.message, text);
-        assert_eq!(error.facts.get(&FactKey::Reason), Some(&Value::from(tag)));
+        assert_eq!(error.facts.get(&ErrorFact::Reason), Some(&Value::from(tag)));
         assert_eq!(failed(&error), (ErrorCode::LuaQuota, text.to_owned()));
         assert_eq!(
             (error_kind(&error), error_fields(&error)),
@@ -196,8 +196,8 @@ fn a_spent_quota_and_the_call_depth_cap_keep_their_codes_and_lua_reads_both_as_l
     let error = call_depth_exceeded(8);
     assert_eq!(error.code, ErrorCode::CallDepthExceeded);
     assert_eq!(error.message, text);
-    assert_eq!(error.facts.get(&FactKey::Reason), None);
-    assert_eq!(error.facts.get(&FactKey::Limit), Some(&Value::from(8)));
+    assert_eq!(error.facts.get(&ErrorFact::Reason), None);
+    assert_eq!(error.facts.get(&ErrorFact::Limit), Some(&Value::from(8)));
     assert_eq!(
         failed(&error),
         (ErrorCode::CallDepthExceeded, text.to_owned())
@@ -218,7 +218,7 @@ fn leaked_tasks_are_named_in_spawn_order_and_joined_in_the_table() {
          spawns before it ends"
     );
     assert_eq!(
-        error.facts.get(&FactKey::Tasks),
+        error.facts.get(&ErrorFact::Tasks),
         Some(&Value::from(vec!["1.2", "1.10"]))
     );
     assert_eq!(
@@ -255,7 +255,7 @@ fn a_task_failure_names_its_task_in_its_fact_and_its_table() {
         assert_eq!(error.code, code);
         assert_eq!(error.message, message);
         assert_eq!(error.prose, code.prose());
-        assert_eq!(error.facts.get(&FactKey::Task), Some(&Value::from("1.3")));
+        assert_eq!(error.facts.get(&ErrorFact::Task), Some(&Value::from("1.3")));
         assert_eq!(failed(&error), (code, message.to_owned()));
         assert_eq!(error_kind(&error), kind);
         assert_eq!(error_fields(&error), vec![field("task", "1.3")]);
@@ -332,7 +332,7 @@ fn a_refused_tool_call_names_the_tool_and_its_text_is_its_prose() {
     ] {
         assert_eq!(error.code, code);
         assert_eq!(error.prose, error.message, "{code:?}");
-        assert_eq!(error.facts.get(&FactKey::Name), Some(&Value::from(name)));
+        assert_eq!(error.facts.get(&ErrorFact::Name), Some(&Value::from(name)));
         assert_eq!(failed(error), (code, error.message.clone()));
         assert_eq!(error_kind(error), kind);
         assert_eq!(error_fields(error), vec![field("name", name)]);

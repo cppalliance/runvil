@@ -12,11 +12,11 @@ use harness::record::MemoryRecorder;
 use harness::vfs::VfsRef;
 use harness::{BoxFuture, Harness, HostSnapshot, InferenceBroker, RunRequest, Timer};
 use runvil::effect::Round;
-use runvil::error::{Error, ErrorCode};
 use runvil::model::{
     Completion, CompletionOptions, Message, ModelBinding, ModelCatalog, ToolSchema,
     completion_error, phrase,
 };
+use runvil::{Error, ErrorCode};
 
 /// Reads the line in `name.txt` and writes its greeting to `reply.txt`.
 const GREET: &str = concat!(

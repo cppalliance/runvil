@@ -2,7 +2,7 @@
 //! place of the Lua values it passes along, and a plain list read back
 //! through `records()`.
 
-use runvil_types::error::FactKey;
+use runvil_types::error::ErrorFact;
 
 use super::{Input, Machine, Phase, Then};
 use crate::compactors::OverflowReason;
@@ -38,7 +38,7 @@ fn show(then: &Then<V>) -> String {
         Then::RaiseNormalized(value) => format!("normalize {value}"),
         Then::RaiseNew(raised) => {
             let kind = error_kind(raised);
-            match raised.facts.get(&FactKey::FinishReason) {
+            match raised.facts.get(&ErrorFact::FinishReason) {
                 Some(serde_json::Value::String(reason)) => {
                     format!("new {kind}|{}|{reason}", raised.message)
                 }

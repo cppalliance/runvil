@@ -2,7 +2,7 @@
 //! answer's own error only when the block raised that answer's error table,
 //! placed on the line of the call the answer resumed.
 
-use runvil_types::error::Location;
+use runvil_types::error::SourceLoc;
 
 use super::*;
 use crate::test_vm::{TEST_SECTION, TestVm};
@@ -23,7 +23,7 @@ fn answered_quota(line: u32) -> runvil_types::error::Error {
         quota.message,
         runvil_types::error::ErrorCode::LuaQuota.prose()
     );
-    quota.at = NonZeroU32::new(line).map(|line| Location::line("prompt", line));
+    quota.at = NonZeroU32::new(line).map(|line| SourceLoc::line("prompt", line));
     quota
 }
 

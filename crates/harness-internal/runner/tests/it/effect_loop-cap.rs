@@ -13,9 +13,9 @@ use std::time::Duration;
 use harness_runner::effect_loop::drive_run;
 use harness_runner::performers::{BoxFuture, ToolPerformer};
 use harness_runner::recorder::{MemoryRecorder, RecordKind, RunId};
+use runvil::Error;
 use runvil::cancel::CancelHandle;
 use runvil::effect::ToolCallOrigin;
-use runvil::error::Error;
 use runvil::model::{
     Completion, CompletionResult, ModelId, ModelInfo, ModelRole, ThinkingMode, ToolCall,
 };

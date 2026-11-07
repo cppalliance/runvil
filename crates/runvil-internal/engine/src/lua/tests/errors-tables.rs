@@ -3,7 +3,7 @@
 //! its code names. The Lua crate's own tests pin the way back, a kept
 //! table mapping onto the failure it stands in for.
 
-use runvil_types::error::{ErrorCode, FactKey};
+use runvil_types::error::{ErrorCode, ErrorFact};
 use runvil_types::ids::TaskId;
 
 use crate::lua::{CoroStep, LuaBlockResult};
@@ -105,7 +105,7 @@ fn an_engine_failure_answered_through_the_envelope_is_the_table_its_code_names()
     .with_cause(&std::io::Error::other("a detail the table leaves out"));
     empty
         .facts
-        .insert(FactKey::FinishReason, serde_json::Value::from("length"));
+        .insert(ErrorFact::FinishReason, serde_json::Value::from("length"));
     assert_eq!(
         caught_engine_failure(empty, &["code", "finish_reason"]),
         format!(

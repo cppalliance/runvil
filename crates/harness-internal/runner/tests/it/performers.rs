@@ -12,9 +12,9 @@ use harness_runner::performers::{BoxFuture, Timer, ToolPerformer};
 use harness_runner::recorder::{
     MemoryRecorder, Record, RecordKind, RecorderFuture, RunId, RunMeta, RunRecorder,
 };
+use runvil::Error;
 use runvil::cancel::CancelHandle;
 use runvil::effect::ToolCallOrigin;
-use runvil::error::Error;
 use runvil::tools::{ToolId, ToolOutput};
 use runvil::vfs::Access;
 use serde_json::{Value, json};

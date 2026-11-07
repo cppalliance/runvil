@@ -3,7 +3,7 @@
 
 use std::num::NonZeroU32;
 
-use runvil_types::error::{Error, ErrorCode, FactKey};
+use runvil_types::error::{Error, ErrorCode, ErrorFact};
 use runvil_types::models::{ModelId, ModelInfo, ThinkingMode};
 use serde_json::Value;
 
@@ -60,8 +60,8 @@ fn invalid_temperature(reason: &'static str, message: String) -> Error {
     );
     error
         .facts
-        .insert(FactKey::Name, Value::from("temperature"));
-    error.facts.insert(FactKey::Reason, Value::from(reason));
+        .insert(ErrorFact::Name, Value::from("temperature"));
+    error.facts.insert(ErrorFact::Reason, Value::from(reason));
     error
 }
 
@@ -541,11 +541,11 @@ mod tests {
                 .expect_err("the temperature must be rejected");
             assert_eq!(error.code, ErrorCode::InvalidValue);
             assert_eq!(
-                error.facts.get(&FactKey::Name),
+                error.facts.get(&ErrorFact::Name),
                 Some(&Value::from("temperature"))
             );
             assert!(!error.prose.contains(&error.message), "{error:?}");
-            error.facts.get(&FactKey::Reason).cloned()
+            error.facts.get(&ErrorFact::Reason).cloned()
         };
         assert_eq!(reason(f64::NAN), Some(Value::from("not_finite")));
         assert_eq!(reason(f64::INFINITY), Some(Value::from("not_finite")));

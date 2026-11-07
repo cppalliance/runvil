@@ -3,7 +3,7 @@
 //! isolation case and the start-check refusals that reach engine-only
 //! items sit in `runvil-engine`'s own suite.
 
-use runvil::error::ErrorCode;
+use runvil::ErrorCode;
 use runvil::event::Event;
 use runvil::model::{ModelRole, ThinkingMode};
 use runvil::tools::{ToolCatalog, ToolInfo, ToolOutput};

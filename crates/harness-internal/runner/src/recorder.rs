@@ -28,7 +28,7 @@ use std::future::Future;
 use std::pin::Pin;
 
 use runvil::RunSeed;
-use runvil::error::{Error, ErrorCode, FactKey};
+use runvil::{Error, ErrorCode, ErrorFact};
 
 pub use crate::recorder_memory::MemoryRecorder;
 
@@ -76,7 +76,7 @@ pub(crate) fn refused(run: RunId, error: Error) -> Error {
 
 /// `error` with run `run`'s id as its `Run` fact.
 pub(crate) fn of_run(run: RunId, mut error: Error) -> Error {
-    error.facts.insert(FactKey::Run, run.get().into());
+    error.facts.insert(ErrorFact::Run, run.get().into());
     error
 }
 

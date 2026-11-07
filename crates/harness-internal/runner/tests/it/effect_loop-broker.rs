@@ -10,9 +10,9 @@ use std::sync::{Arc, Mutex};
 use harness_runner::effect_loop::drive_run;
 use harness_runner::performers::{BoxFuture, InferenceBroker, Performers};
 use harness_runner::recorder::RecordKind;
+use runvil::Error;
 use runvil::cancel::CancelHandle;
 use runvil::effect::Round;
-use runvil::error::Error;
 use runvil::event::ReplyOrigin;
 use runvil::ids::RoundId;
 use runvil::model::{

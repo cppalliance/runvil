@@ -3,7 +3,7 @@
 
 use runvil::model::Message;
 
-use runvil::error::{ErrorCode, FactKey};
+use runvil::{ErrorCode, ErrorFact};
 use serde_json::Value;
 
 use super::*;
@@ -15,12 +15,12 @@ use crate::config::invalid_env;
 fn assert_setup_error(error: &Error, reason: &str, variable: Option<&str>) {
     assert_eq!(error.code, ErrorCode::InvalidValue, "{error:?}");
     assert_eq!(
-        error.facts.get(&FactKey::Reason),
+        error.facts.get(&ErrorFact::Reason),
         Some(&Value::from(reason)),
         "{error:?}"
     );
     assert_eq!(
-        error.facts.get(&FactKey::Name),
+        error.facts.get(&ErrorFact::Name),
         variable.map(Value::from).as_ref(),
         "{error:?}"
     );
@@ -236,7 +236,7 @@ fn secret_string_construction_rejects_an_empty_credential() {
     let error = SecretString::new("").expect_err("blank key is rejected");
     assert_eq!(error.code, ErrorCode::InvalidValue);
     assert_eq!(
-        error.facts.get(&FactKey::Reason),
+        error.facts.get(&ErrorFact::Reason),
         Some(&serde_json::Value::from("empty_secret"))
     );
     assert_eq!(error.message, "secret must not be empty");

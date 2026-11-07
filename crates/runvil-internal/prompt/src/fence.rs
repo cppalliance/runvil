@@ -11,7 +11,7 @@ use std::num::NonZeroU32;
 use std::ops::Range;
 
 use pulldown_cmark::{CodeBlockKind, CowStr, Event, Options, Parser, Tag};
-use runvil_types::error::{Error, ErrorCode, FactKey};
+use runvil_types::error::{Error, ErrorCode, ErrorFact};
 
 use crate::{Result, error, position};
 
@@ -172,7 +172,7 @@ pub(crate) fn first_fence_violation(body: &str, frontmatter_lines: u32) -> Optio
         line,
         frontmatter_lines,
     );
-    violation.facts.insert(FactKey::Reason, rule.into());
+    violation.facts.insert(ErrorFact::Reason, rule.into());
     Some(violation)
 }
 
