@@ -8,7 +8,7 @@ Seven terms have exactly one meaning each, everywhere in this repository: code c
 
 - **Engine**: the `runvil` and `runvil-*` crates. The Engine parses a prompt and steps a run. Whenever a run needs a model reply, a Pack's render of the tools a section offers it, a Pack tool's result, a timer, or a file outside a prelude's install, the Engine emits an effect and waits for its caller to answer it. In production the caller is the Harness.
 - **Harness**: the `harness` and `harness-*` crates. The Harness steps the Engine, performs every effect, returns each answer, and records every run through the recorder the Host supplies. Production code runs prompts only through the Harness.
-- **Host**: an application that runs prompts through the Harness, such as Workshop or Papergate. The Host makes every policy decision. It runs prompts only through the Harness; it may also use the Engine's parser and types to read prompts and show events.
+- **Host**: an application that runs prompts through the Harness, such as Workshop or Papergate. The Host makes every policy decision. It may also use the Engine's parser and types to read prompts and show events.
 - **Pack**: code which installs an optional native prelude, an optional Lua prelude, and zero or more tools.
 - **Plugin**: an entry point which installs zero or more Packs.
 - **Static Set**: the tools a section entry renders into the model's tool list at its first loop round, the first round a `models.loop` call sends. It is frozen after that.
@@ -16,64 +16,50 @@ Seven terms have exactly one meaning each, everywhere in this repository: code c
 
 ### Using the terms
 
-- "Host", in any capitalization and as hosts, hosted, or hosting, means only the Host. Other meanings use these words:
-  - "Engine globals" for the Lua globals the Engine installs in every section, and "Engine call" for a call to one
-  - "real files" and "the real filesystem" for the operating system's files
-  - "machine" for the computer something runs on
-  - the part's own name for a program or UI part that embeds another, such as "the desktop app" or "the container element"
-  - "run", "serve", "embed", or "hold" for the verb
-- "Engine", "Harness", and "Plugin" mean only the defined terms. Anything else gets a qualified lowercase name: the Gateway's speech engine, the database, Rust's built-in test harness, a Tauri or ProseMirror plugin. This repository's own checks and test scaffolding are "structural checks", "test support", or "fixtures".
-- Engine crates (`crates/runvil` and `crates/runvil-internal`: docs, comments, tests, strings, and code names) call the code that steps a run and answers its effects "the caller", and never mention the Host or a Host application. They name the Harness only to say that a responsibility belongs to it, never how the Harness performs it or which of its crates or types does. `crates/workshop/ui/test/docs-claims.mjs` enforces the parts a scan can see.
-- Names defined outside this repository are used exactly as defined: the HTTP `Host` header and URL host names, Cargo's host and target vocabulary and `harness = false`, GitHub's self-hosted runners, cargo-dist's `host` step and `host-jobs`, CSS `:host`, and the DOM's `ShadowRoot.host`.
-- Crate names are written as they are, such as `harness-runner` and `runvil-engine`. Code names follow the same terms.
-- Quotations of people stay verbatim.
+- "Host", in any capitalization, means only the Host. Other senses use another word: "machine", "real files", "Engine globals", "Engine call", the part's own name ("the desktop app"), or a verb such as run, serve, embed, or hold.
+- "Engine", "Harness", and "Plugin" mean only the defined terms. Anything else gets a qualified lowercase name, such as the Gateway's speech engine or a Tauri plugin. This repository's own checks are "structural checks", "test support", or "fixtures".
+- Engine crates call the code that steps a run "the caller" and never mention the Host. They name the Harness only to say that a responsibility belongs to it, never how the Harness performs it.
+- Names defined elsewhere keep their own meaning (the HTTP `Host` header, Cargo's `harness = false`), crate names are written as they are, and quotations of people stay verbatim.
 - `crates/workshop/ui/test/docs-claims.mjs` enforces these rules in every `AGENTS.md`, every `## Invariants` crate doc, and every `.cursor/rules` file.
 
 ## Principles
 
 - Design for human review. A reviewer reads one crate at a time: its code, its surface (every item another crate can name, methods, fields, and variants included), and the items it names from other crates. Keep all three small, and prefer more, smaller crates to fewer, larger ones.
-- Do more with less. Prefer simple, foundational primitives over specific solutions: a primitive that naturally enables today's functionality and also generalizes beats a custom mechanism specified as a laundry list of requirements. Generality is the payoff, not a goal.
-- When evaluating how to implement a feature, check whether the existing facilities subsume the work before building new machinery. Prioritize in this order:
-  1. Reuse an existing facility
-  2. Make the smallest improvement to an existing facility which enables the feature.
-  3. Add a new facility. New machinery must have a material benefit beyond tidiness.
-- When improving an existing facility, prefer an improvement that serves a problem class beyond the current case over one that solves only the case at hand, when the general shape costs no more.
-- Error and status messages are designed assuming model consumption: concise, factual, and self-contained, naming what is missing or unmet with required versus actual, because a message may arrive as tool output that a model reasons about.
+- Do more with less. Before building, check whether existing facilities subsume the work: reuse one; else make the smallest improvement that enables the feature, preferring one that serves a problem class beyond this case when it costs no more; else add a new facility, which needs a material benefit beyond tidiness. Prefer simple primitives that generalize over mechanisms specified as a list of requirements.
+- Error and status messages assume a model reads them: concise, factual, and self-contained, naming what is missing or unmet with required versus actual.
 - There are no users and no recorded runs, logs, or stored data to preserve, so backward compatibility does not matter: change formats, schemas, and APIs freely, and never bump a format, schema, or crate version number.
 
 ## Engineering
 
 - Prefer types and compiler checks, then behavior tests and deterministic fault injection. Gate on yes/no properties, never on a score threshold that ordinary work edits.
 - Behavior changes ship with tests in the same change. Preserve product and behavior tests during refactors.
-- A Cargo feature gates a real constraint such as a toolchain requirement or heavy native build. It does not describe product shape. Feature-disabled builds must not leak optional types into core paths.
+- A Cargo feature gates a real constraint such as a toolchain requirement or heavy native build, not product shape. Feature-disabled builds must not leak optional types into core paths.
 - Runtime and serve paths never compile native dependencies or invoke build tools.
 - Unsafe code stays in its explicitly owned boundary.
-- Engine and Harness crates report every failure as the universal `Error` in `runvil-types`, which the `runvil` facade re-exports. A new kind of failure is a new `ErrorCode` variant in its hundreds family, with a number never used before, plus a `FactKey` variant only when no existing key names the value. They add no other error enum or struct, no `thiserror` derive, and no other `impl std::error::Error`; a foreign cause joins the message through `Error::with_cause`. `VfsError` in `runvil-vfs` is the only exception, and test code may define a throwaway error type to exercise `with_cause`. A crate-private marker returned as `Err` and turned into `Error` by its caller, or a type that pairs an `Error` with a value the caller must still release, such as `InjectFailure`, is not another error type.
-- Comments explain a non-obvious constraint, ordering requirement, or workaround. Every platform or external-bug workaround cites its upstream issue URL in the explanatory comment.
-- JSON that reaches a recorder or a replay comparison round-trips exactly - `to_value`, `to_string`, `from_str` yield an identical value, object keys stay canonical (sorted), numbers must be finite. Exact parsing (`float_roundtrip`) carries that guarantee; a value derived and then logged is additionally rounded to its meaningful precision at the source.
+- Engine and Harness crates report every failure as the universal `Error` in `runvil-types`, which `runvil` re-exports. A new failure is a new `ErrorCode` variant in its hundreds family with a never-used number, plus a `FactKey` variant only when no key names the value. No other error enum or struct, `thiserror` derive, or `impl std::error::Error`; a foreign cause joins through `Error::with_cause`. Allowed: `VfsError` in `runvil-vfs`, throwaway test error types, crate-private `Err` markers that the caller turns into `Error`, and pairs such as `InjectFailure`.
+- Comments explain a non-obvious constraint, ordering requirement, or workaround. A platform or external-bug workaround cites its upstream issue URL.
+- JSON that reaches a recorder or a replay comparison round-trips exactly: object keys sorted, numbers finite, parsed with `float_roundtrip`. A value derived and then logged is rounded to its meaningful precision at the source.
 
 ## Verification
 
-- Full suite: `cargo nextest run --locked --workspace --exclude workshop --exclude workshop-server --exclude workshop-server-api --all-features`; workshop crates separately: `cargo nextest run --locked -p workshop -p workshop-server -p workshop-server-api`.
-- Linter: `cargo clippy --workspace --exclude workshop --exclude workshop-server --exclude workshop-server-api --all-targets --all-features` (workshop: `cargo clippy -p workshop -p workshop-server -p workshop-server-api --all-targets`); the gate runs both with `CARGO_BUILD_WARNINGS=deny`. Clippy reports everything `cargo check` does, so never run a standalone `cargo check --workspace` beside the clippy runs.
-- Formatter: `cargo fmt --all --check`.
-- Docs: `cargo doc --workspace --no-deps --all-features --exclude workshop --exclude workshop-server --exclude workshop-server-api` with `RUSTDOCFLAGS="-D warnings"`. Rustdoc lints are not covered by clippy; never skip the docs gate.
-- Facade docs: `RUSTDOCFLAGS="-D warnings" cargo doc -p runvil --no-deps`, without `--all-features`, so the facade's docs build with default features.
-- Facade surface: `cargo +<pinned nightly> xtask api --check`, where the pinned nightly is the one named in `crates/build-xtask/src/api/toolchain.rs`; on any other toolchain it fails at once, naming the nightly it needs. It checks that every path a surface item's signature, fields, bounds, impls, or doc links name is a facade re-export (or std, core, alloc, or an allowlisted crate), that no surface doc text names an internal crate, and that the surface listing matches the committed `crates/runvil/public-api.txt`. Run it with `CARGO_BUILD_WARNINGS` unset (in PowerShell, `Remove-Item Env:CARGO_BUILD_WARNINGS` after the clippy gate set it), because the nightly cargo turns its own warnings into errors while that variable is set.
-- Boundary and structural checks: `cargo test -p build-xtask`. It enforces the product and container boundaries, the Workshop tier graph, the `## Invariants` marker, lint inheritance, and the type-size limits.
-- Wording and rulebook scan: `node --test crates/workshop/ui/test/docs-claims.mjs`. It enforces the Engine wording rule, the rulebook Definitions, and the Pack lifecycle wording (installed, snapshotted, or declared). It needs no `npm ci` and runs from any directory, because the file resolves the repository root from its own path.
+- Tests: `cargo nextest run --locked --workspace --exclude workshop --exclude workshop-server --exclude workshop-server-api --all-features`, and `cargo nextest run --locked -p workshop -p workshop-server -p workshop-server-api`.
+- Lint: `cargo clippy --workspace --exclude workshop --exclude workshop-server --exclude workshop-server-api --all-targets --all-features`, and `cargo clippy -p workshop -p workshop-server -p workshop-server-api --all-targets`, both with `CARGO_BUILD_WARNINGS=deny`. Clippy covers `cargo check`, so never run a standalone `cargo check --workspace`.
+- Format: `cargo fmt --all --check`.
+- Docs: `cargo doc --workspace --no-deps --all-features --exclude workshop --exclude workshop-server --exclude workshop-server-api` and `cargo doc -p runvil --no-deps` (default features), both with `RUSTDOCFLAGS="-D warnings"`. Clippy does not run rustdoc lints, so never skip these.
+- Facade surface: `cargo +<nightly> xtask api --check`, with the nightly named in `crates/build-xtask/src/api/toolchain.rs` and `CARGO_BUILD_WARNINGS` unset (`Remove-Item Env:CARGO_BUILD_WARNINGS` in PowerShell). It fails when the surface names an internal crate or differs from `crates/runvil/public-api.txt`.
+- Structural checks: `cargo test -p build-xtask`.
+- Wording: `node --test crates/workshop/ui/test/docs-claims.mjs`, from any directory, no `npm ci` needed.
 
 ## Structural Rules
 
 - If Cargo rejects a dependency cycle, the design is wrong, not the graph.
-- Engine crates, tests included, never depend on `tokio`, `tokio-util`, `async-trait`, `reqwest`, `getrandom`, or `fastrand`, directly or transitively.
-- No Engine test sleeps, reads the wall clock, waits with a timeout, or draws entropy from the OS.
-- Pseudo-random test input comes only from a fixed seed that the failure prints.
-- Temporary directory names come from the test's name, the process id, and a counter.
-- A module with more than one file keeps its files in a directory named after it, in the standard module layout (`foo.rs` beside `foo/bar.rs`). A directory may hold any number of files, one included. Never move files between a flat sibling form and a directory because of how many files a group holds, and never change a group's layout only to bring it in line with this rule. Existing `foo-bar.rs` siblings wired with `#[path = "foo-bar.rs"] mod bar;` and existing unit-test files (`foo-tests.rs`, `foo/tests.rs`) stay as they are; new code adds no path attribute for layout, and new unit tests go in a `#[cfg(test)] mod tests` block in the file under test. Top-level `tests/` and `benches/` trees follow Cargo target conventions.
-- A file has no length limit. Never split a file, or move code out of one, because of its length; split a file only when it holds a second unrelated concept. Size limits sit on functions and types instead: clippy denies a function over 100 lines or 7 arguments (set in every `clippy.toml`), and `cargo test -p build-xtask` fails a type with more than 25 inherent methods across its `impl` blocks or a struct with more than 12 named fields. Split an oversized type by responsibility; a new entry in the allowlist in `crates/build-xtask/src/type_size.rs` is a plan decision with a reason, never a way to make a change pass.
+- Pseudo-random test input comes only from a fixed seed that the failure prints. Temporary directory names come from the test's name, the process id, and a counter.
+- A file holds one concept and has no length limit. Split a file only when it holds a second unrelated concept. Size limits sit on functions and types, and clippy and `cargo test -p build-xtask` enforce them. Split an oversized type by responsibility; a new entry in the allowlist in `crates/build-xtask/src/type_size.rs` is a plan decision with a reason, never a way to make a change pass.
+- Production code uses the standard module layout: `foo.rs`, with `foo/bar.rs` for its children. No `#[path]`, and no inline `mod` blocks. A module never has exactly one child file (tests aside): merge it, or make it a peer module `foo_bar.rs` declared beside `foo.rs`.
+- Test code goes at the bottom of the file under test in a `#[cfg(test)] mod tests { }` block when practical (if in doubt, beside), and otherwise in `foo-tests.rs` beside it, wired with `#[path = "foo-tests.rs"] mod tests;`. A big test file may split by topic into siblings named after it, `<stem>-<topic>.rs` (so `foo-tests-topic.rs`). These are the only files wired with `#[path]`, apart from the cfg-selected platform files in `crates/runvil-internal/vfs/src/real.rs`, so a hyphen in a file name means test code. Top-level `tests/` and `benches/` trees follow Cargo's conventions.
+- Crates outside the Engine and Harness keep their older layout until their own pass.
 
 ## SPA and CSS Rules
 
-- No raw color, size, or spacing values in Workshop UI component CSS; use the custom properties defined in `@workshop/look` and `ui/src/tokens/component.css`.
-- Every persisted value goes through the `ui-storage` adapter to the server. UI state has two homes by scope: account state (preferences and ephemera alike, such as editor toggles, zoom, recent files, and command history) goes to `ui-state.json` in the state directory (the `workshop-user-state` crate, `/user/state`), and workspace-scoped state (anything that should travel with the `.rvwork` document) goes to the workspace file through the server (`/workspace/file/state`). A new persisted value is a new allow-listed key in one of those two buckets, added on the server first.
+- Workshop UI component CSS uses the custom properties in `@workshop/look` and `ui/src/tokens/component.css`, never raw color, size, or spacing values.
+- Every persisted value goes through the `ui-storage` adapter to the server. Account state (preferences and ephemera such as editor toggles, zoom, recent files, and command history) goes to `ui-state.json` in the state directory (`workshop-user-state`, `/user/state`). Workspace-scoped state, anything that should travel with the `.rvwork` document, goes to the workspace file (`/workspace/file/state`). A new persisted value is a new allow-listed key in one of those two buckets, added on the server first.

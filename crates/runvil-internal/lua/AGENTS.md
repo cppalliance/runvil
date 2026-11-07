@@ -1,4 +1,4 @@
 # runvil-lua
 
-- Engine functions that would create a parser-to-Lua dependency cycle stay in this crate rather than `runvil-prompt`.
-- `prepare_dispatch` is the tool-dispatch body the executor applies: synchronous, it applies the succeeded/failed observation, trust classification, the nonce wrap, and the `ToolResult` report to a bound tool's answer; the executor counts each call when it issues it, and adhoc and discovery tools report in the executor. Nothing in this crate performs a tool call: the executor issues the call as an effect, the Harness performs it, and `prepare_dispatch` (or `prepare_model_dispatch` under the model-issued rule) applies the rules when the answer lands.
+- Engine functions that would create a parser-to-Lua dependency cycle stay here, not in `runvil-prompt`.
+- Nothing in this crate performs a tool call. The executor issues each call as an effect, and `prepare_dispatch` (or `prepare_model_dispatch` for a model-issued call) applies the dispatch rules when the answer lands.
