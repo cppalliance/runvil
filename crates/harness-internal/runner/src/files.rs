@@ -128,7 +128,7 @@ pub(crate) fn report_output(
 }
 
 /// The output failure of a run that failed or was canceled, possibly
-/// before it began: `NoOutput` with the `Reason` fact `make_not_completed_error`.
+/// before it began: `NoOutput` with the `Reason` fact `not_completed`.
 pub(crate) fn make_not_completed_error() -> Error {
     make_reasoned_error(
         ErrorCode::NoOutput,

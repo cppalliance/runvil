@@ -70,7 +70,7 @@ pub struct RunReport {
     pub result: Result<String, Error>,
     /// The text a completed run left at its declared `output:` file, or
     /// the reason the report omits that text: `NoOutput` with the `Reason`
-    /// fact `make_not_completed_error` or `undeclared`, `NotFound` for a completed
+    /// fact `not_completed` or `undeclared`, `NotFound` for a completed
     /// run that left no file, or the store's failure, each with the
     /// declared path as the `Path` fact when there is one.
     pub output: Result<String, runvil::Error>,
